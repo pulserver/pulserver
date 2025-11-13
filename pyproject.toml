@@ -42,11 +42,10 @@ classifiers = [  # Optional
 
 dependencies = [
 "click",
-"numpy<2.0",
-"scipy<1.14",
+"numpy",
+"scipy",
 "numba",
 "pypulseq",
-"pulpy",
 "mri-nufft",
 "mrd-python",
 "ipywidgets",
