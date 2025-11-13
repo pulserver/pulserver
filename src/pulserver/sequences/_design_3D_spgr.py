@@ -2,6 +2,7 @@
 
 __all__ = ["design_3D_spgr"]
 
+import copy
 import numpy as np
 import pypulseq as pp
 
@@ -12,6 +13,7 @@ def design_3D_spgr(
     max_grad: float,
     max_slew: float,
     raster_time: float,
+    ndummy: int = 1
 ):
     """
     Generate a 3D Spoiled Gradient Recalled Echo (SPGR) pulse sequence.
@@ -35,16 +37,12 @@ def design_3D_spgr(
     max_slew : float
         Maximum gradient slew rate in T/m/s.
     raster_time : float
-        Waveform raster time in seconds (the time between successive gradient samples).
-    seqformat : str or bool, optional
-        Output sequence format. If a string is provided, it specifies the desired output format (e.g., 'pulseq', 'bytes').
-        If False, the sequence is returned as an internal object. Default is False.
+        Waveform raster time in seconds (the time between successive rf/gradient samples).
 
     Returns
     -------
-    seq : object or dict
-        The generated SPGR sequence. If `seqformat` is a string, the sequence is returned in the specified format.
-        If `seqformat` is False, the sequence is returned as an internal representation.
+    seq : Sequence
+        The generated SPGR sequence.
 
     Notes
     -----
@@ -54,20 +52,16 @@ def design_3D_spgr(
 
     Examples
     --------
-    Generate a 3D SPGR sequence for a 256x256x128 matrix with a 240x240x120 mm FOV, a 15-degree flip angle, and hardware limits:
+    Generate a 3D SPGR sequence for a 256x256x128 matrix with a 240x240x120 mm FOV, 
+    and a 15-degree flip angle and maxGrad = 40 ``mT/m``, maxSlew = 150 ``T/m/s,
+    rf_raster_time = grad_raster_time = 4 ``us``:
 
-    >>> from pulseforge import SPGR3D
-    >>> SPGR3D([240, 120], [256, 128], 15, 0.04, 150, 4e-6)
+    >>> from pulserver.sequences import design_3D_spgr
+    >>> design_3D_spgr([240, 120], [256, 128], 15.0, 40, 150, 4e-6)
 
-    Generate the same sequence and export it in bytes format:
-
-    >>> SPGR3D([240, 120], [256, 128], 15, 0.04, 150, 4e-6, seqformat='bytes')
-
-    """
-    # RF specs
-    rf_spoiling_inc = 117.0  # RF spoiling increment
-
+    """    
     # Initialize system limits
+    # ========================
     system = pp.Opts(
         max_grad=max_grad,
         grad_unit="mT/m",
@@ -78,29 +72,119 @@ def design_3D_spgr(
     )
 
     # Initialize sequence
+    # ===================
     seq = pp.Sequence(system=system)
 
     # Initialize prescription
     # =======================
-    # 1) FOV
-    if np.isscalar(fov):
-        fov, slab_thickness = fov * 1e-3, fov * 1e-3  # isotropic
-    else:
-        fov, slab_thickness = (
-            fov[0] * 1e-3,
-            fov[1] * 1e-3,
-        )  # in-plane FOV, slab thickness
-        
-    # 2) Matrix size
-    if np.isscalar(npix):
-        Nx, Ny, Nz = npix, npix, npix  # in-plane resolution, slice thickness
-    else:
-        Nx, Ny, Nz = npix[0], npix[0], npix[1]  # in-plane resolution, slice thickness
+    fov, slab_thickness = setup_fov(fov)
+    Nx, Ny, Nz = setup_matrix(npix)
+    NDummy = ndummy
+    
+    # Get RF Spoil increment
+    # ======================
+    rf_spoiling_inc = 117.0  # RF spoiling increment
+    rf_phase = 0
+    rf_inc = 0
+    phase_offset = design_phaseinc_table(Ny+NDummy, Nz, rf_spoiling_inc, rf_phase, rf_inc)
 
     # Initialize events
     # =================
-    # 1) RF pulse
-    rf, gss, _ = pp.make_sinc_pulse(
+    EXC, rf, gss = design_excitation(
+        system, alpha, slab_thickness, phase_offset
+    )
+    SLAB_REPH, gss_reph = design_slabreph(system, gss)
+    ECHO, gx_read, adc = design_readout(
+        system, fov, Nx, phase_offset
+    )
+    PHASE_ENC, gx_pre, gx_rew, gy_pre, gy_rew, gz_pre, gz_rew = design_phaseenc(
+        system, gx_read, fov, slab_thickness, Ny, Nz
+    )
+    CRUSHER, gz_spoil = design_crusher(system, slab_thickness)
+
+    # Register static events
+    # ======================
+    rf, gss = register_excitation(seq, rf, gss)
+    gss_reph = register_slabreph(seq, gss_reph)
+    gx_read, adc = register_readout(seq, gx_read, adc)
+    gx_pre, gx_rew, gy_pre, gy_rew, gz_pre, gz_rew = register_phaseenc(
+        seq, gx_pre, gx_rew, gy_pre, gy_rew, gz_pre, gz_rew
+    )
+    gz_spoil = register_crusher(seq, gz_spoil)
+
+    # Construct sequence
+    # ==================
+    count = 0
+    for y in range(-NDummy, Ny):
+        for z in range(Nz):
+            if count == 0:
+                seq.add_block(*EXC, rf[count], gss)
+            elif count == 1:
+                seq.add_block(EXC[0], rf[count], gss)
+            else:
+                seq.add_block(rf[count], gss)
+
+            if count == 0:
+                seq.add_block(SLAB_REPH, gss_reph)
+
+                # Add prewinder, readout and rewinder
+                seq.add_block(PHASE_ENC, gx_pre, gy_pre[y], gz_pre[z])
+                if y < 0:
+                    seq.add_block(ECHO, gx_read, adc[count], pp.make_label('OFF', 'SET', 1))
+                else:
+                    seq.add_block(ECHO, gx_read, adc[count])
+                seq.add_block(PHASE_ENC, gx_rew, gy_rew[y], gz_rew[z])
+
+                # Add crusher
+                seq.add_block(CRUSHER, gz_spoil)
+            else:
+                seq.add_block(gss_reph)
+
+                # Add prewinder, readout and rewinder
+                seq.add_block(gx_pre, gy_pre[y], gz_pre[z])
+                if y < 0:
+                    seq.add_block(gx_read, adc[count], pp.make_label('OFF', 'SET', 1))
+                else:
+                    seq.add_block(gx_read, adc[count])
+                seq.add_block(gx_rew, gy_rew[y], gz_rew[z])
+
+                # Add crusher
+                seq.add_block(gz_spoil)
+
+            # Update phase increment
+            count += 1
+            
+    seq.set_definition('NDummies', NDummy * Nz)
+
+    return seq
+
+# %% Helpers
+def setup_fov(fov):
+    if np.isscalar(fov):
+        return fov * 1e-3, fov * 1e-3  # isotropic
+    return fov[0] * 1e-3, fov[1] * 1e-3  # in-plane FOV, slab thickness
+
+
+def setup_matrix(npix):
+    if np.isscalar(npix):
+        return npix, npix, npix  # in-plane resolution, slice thickness
+    return npix[0], npix[0], npix[1]  # in-plane resolution, slice thickness
+
+
+def design_phaseinc_table(Ny, Nz, rf_spoiling_inc, rf_phase, rf_inc):
+    phase_offset = []
+    for y in range(Ny):
+        for z in range(Nz):
+            phase_offset.append(np.deg2rad(rf_phase))
+            rf_inc = divmod(rf_inc + rf_spoiling_inc, 360.0)[1]
+            rf_phase = divmod(rf_phase + rf_inc, 360.0)[1]
+    return phase_offset
+
+
+def design_excitation(
+    system, alpha, slab_thickness, phase_offset
+):
+    rf, _rf, gss, _ = [], *pp.make_sinc_pulse(
         flip_angle=np.deg2rad(alpha),
         duration=3e-3,
         slice_thickness=slab_thickness,
@@ -108,90 +192,149 @@ def design_3D_spgr(
         time_bw_product=4,
         system=system,
         return_gz=True,
+        use='excitation',
     )
-    gss_reph = pp.make_trapezoid(
-        channel="z", area=-gss.area / 2, duration=1e-3, system=system
-    )
+
+    # Enable rf spoil
+    for count, _phase_offset in enumerate(phase_offset):
+        rf.append(copy.deepcopy(_rf))
+        rf[-1].phase_offset = _phase_offset
+
+    # Labeling
     EXC = (
         pp.make_label('TRID', 'SET', 1),
         pp.make_label('COREID', 'SET', 1),
         pp.make_label('BLOCKID', 'SET', 1),
     )
-    SLAB_REPH = pp.make_label('BLOCKID', 'SET', 2)
-    
-    # 2) Readout
-    delta_kx, delta_ky, delta_kz = 1 / fov, 1 / fov, 1 / slab_thickness
-    gx_read = pp.make_trapezoid(
-        channel="x", flat_area=Nx * delta_kx, flat_time=3.2e-3, system=system
-    )
-    adc = pp.make_adc(
-        num_samples=Nx, duration=gx_read.flat_time, delay=gx_read.rise_time, system=system
-    )
-    ECHO = pp.make_label('BLOCKID', 'SET', 4)
+    return EXC, rf, gss
 
-    # 3) Phase encoding
+
+def register_excitation(seq, rf, gss):
+    for count, _rf in enumerate(rf):
+        if count == 0:
+            _rf.id, _ = seq.register_rf_event(_rf)
+            _rf_data = seq.rf_library.data[1]
+        else:
+            _rf.id = count + 1
+            seq.rf_library.insert(count+1, (*_rf_data[:-1], _rf.phase_offset))
+    gss.id = seq.register_grad_event(gss)
+    return rf, gss
+
+
+def design_slabreph(system, gss):
+    gss_reph = pp.make_trapezoid(
+        channel='z', area=-gss.area / 2, duration=1e-3, system=system
+    )
+
+    # Labeling
+    SLAB_REPH = pp.make_label('BLOCKID', 'SET', 2)
+    return SLAB_REPH, gss_reph
+
+
+def register_slabreph(seq, gss_reph):
+    gss_reph.id = seq.register_grad_event(gss_reph)
+    return gss_reph
+
+
+def design_readout(system, fov, Nx, phase_offset):
+    delta_kx = 1 / fov
+
+    # Design blocks
+    gx_read = pp.make_trapezoid(
+        channel='x', flat_area=Nx * delta_kx, flat_time=3.2e-3, system=system
+    )
+    adc, _adc = [], pp.make_adc(
+        num_samples=Nx,
+        duration=gx_read.flat_time,
+        delay=gx_read.rise_time,
+        system=system,
+    )
+
+    # Enable rf spoil
+    for count, _phase_offset in enumerate(phase_offset):
+        adc.append(copy.deepcopy(_adc))
+        adc[-1].phase_offset = _phase_offset
+
+    # Labeling
+    ECHO = pp.make_label('BLOCKID', 'SET', 4)
+    return ECHO, gx_read, adc
+
+
+def register_readout(seq, gx_read, adc):
+    gx_read.id = seq.register_grad_event(gx_read)        
+    for count, _adc in enumerate(adc):
+        if count == 0:
+            _adc.id, _ = seq.register_adc_event(_adc)
+            _adc_data = seq.adc_library.data[1]
+        else:
+            _adc.id = count + 1
+            seq.adc_library.insert(count+1, (*_adc_data[:-3], _adc.phase_offset, *_adc_data[-2:]))
+    return gx_read, adc
+
+
+def design_phaseenc(system, gx_read, fov, slab_thickness, Ny, Nz):
+    delta_ky, delta_kz = 1 / fov, 1 / slab_thickness
+
+    # Prewinders and rewinders
+    # ========================
     # X axis
     gx_pre = pp.make_trapezoid(
         channel="x", area=-gx_read.area / 2, duration=1e-3, system=system
     )
     gx_rew = pp.scale_grad(grad=gx_pre, scale=-1.0)
-    
+
     # Y axis
-    gy_phase = pp.make_trapezoid(channel="y", area=delta_ky * Ny, system=system)
-    
+    gy_phase = pp.make_trapezoid(channel='y', area=delta_ky * Ny, system=system)
+
     # Z axis
-    gz_phase = pp.make_trapezoid(channel="z", area=delta_kz * Nz, system=system)
-   
-    PHASE_ENC = pp.make_label('BLOCKID', 'SET', 3)
+    gz_phase = pp.make_trapezoid(channel='z', area=delta_kz * Nz, system=system)
 
-    # 4) Crusher gradient
-    gz_spoil = pp.make_trapezoid(channel="z", area=32 / slab_thickness, system=system)
-    CRUSHER = pp.make_label('BLOCKID', 'SET', 5)
-
-    # Compute variable event settings
-    # ===============================
-    # 1) Phase encoding plan TODO: helper routine
+    # Phase encoding plan
+    # ===================
     pey_steps = ((np.arange(Ny)) - (Ny / 2)) / Ny
     pez_steps = ((np.arange(Nz)) - (Nz / 2)) / Nz
-    encoding_plan = np.meshgrid(pey_steps, pez_steps, indexing="xy")
-    encoding_plan = [enc.ravel() for enc in encoding_plan]
-    
-    # 2) RF and ADC phases
-    # generate rf phases    
-    rf_phase = 0
-    rf_inc = 0
 
-    # Compute event table length
-    # ==========================
-    Nscans = Ny * Nz
+    # Y axis
+    gy_pre = []
+    gy_rew = []
+    for y in range(Ny):
+        gy_pre.append(pp.scale_grad(grad=gy_phase, scale=pey_steps[y]))
+        gy_rew.append(pp.scale_grad(grad=gy_phase, scale=-pey_steps[y]))
 
-    # Construct sequence
-    # ==================
-    for n in range(Nscans):
-        
-        # Update phase
-        rf.phase_offset = rf_phase / 180 * np.pi
-        adc.phase_offset = rf_phase / 180 * np.pi
-        
-        # Add excitation
-        seq.add_block(*EXC, rf, gss)
-        seq.add_block(SLAB_REPH, gss_reph)
-        
-        # Add spatial encoding
-        gy_pre = pp.scale_grad(grad=gy_phase, scale=encoding_plan[0][n])
-        gy_rew = pp.scale_grad(grad=gy_pre, scale=-1.0)
-        gz_pre = pp.scale_grad(grad=gz_phase, scale=encoding_plan[1][n])
-        gz_rew = pp.scale_grad(grad=gz_pre, scale=-1.0)
-        
-        seq.add_block(PHASE_ENC, gx_pre, gy_pre, gz_pre)
-        seq.add_block(ECHO, gx_read, adc)
-        seq.add_block(PHASE_ENC, gx_rew, gy_rew, gz_rew)
-        
-        # Add crusher
-        seq.add_block(CRUSHER, gz_spoil)
-        
-        # Apply phase increment
-        rf_inc = divmod(rf_inc + rf_spoiling_inc, 360.0)[1]
-        rf_phase = divmod(rf_phase + rf_inc, 360.0)[1]
+    # Z axis
+    gz_pre = []
+    gz_rew = []
+    for z in range(Nz):
+        gz_pre.append(pp.scale_grad(grad=gz_phase, scale=pez_steps[z]))
+        gz_rew.append(pp.scale_grad(grad=gz_phase, scale=-pez_steps[z]))
 
-    return seq
+    # Labeling
+    PHASE_ENC = pp.make_label('BLOCKID', 'SET', 3)
+
+    return PHASE_ENC, gx_pre, gx_rew, gy_pre, gy_rew, gz_pre, gz_rew
+
+
+def register_phaseenc(seq, gx_pre, gx_rew, gy_pre, gy_rew, gz_pre, gz_rew):
+    gx_pre.id = seq.register_grad_event(gx_pre)
+    gx_rew.id = seq.register_grad_event(gx_rew)
+
+    Ny, Nz = len(gy_pre), len(gz_pre)
+    for y in range(Ny):
+        gy_pre[y].id = seq.register_grad_event(gy_pre[y])
+        gy_rew[y].id = seq.register_grad_event(gy_rew[y])
+    for z in range(Nz):
+        gz_pre[z].id = seq.register_grad_event(gz_pre[z])
+        gz_rew[z].id = seq.register_grad_event(gz_rew[z])
+
+    return gx_pre, gx_rew, gy_pre, gy_rew, gz_pre, gz_rew
+
+
+def design_crusher(system, slab_thickness):
+    gz_spoil = pp.make_trapezoid(channel='z', area=32 / slab_thickness, system=system)
+    CRUSHER = pp.make_label('BLOCKID', 'SET', 5)
+    return CRUSHER, gz_spoil
+
+
+def register_crusher(seq, gz_spoil):
+    gz_spoil.id = seq.register_grad_event(gz_spoil)
+    return gz_spoil
