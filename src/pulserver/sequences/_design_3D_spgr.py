@@ -3,6 +3,7 @@
 __all__ = ["design_3D_spgr"]
 
 import copy
+
 import numpy as np
 import pypulseq as pp
 
