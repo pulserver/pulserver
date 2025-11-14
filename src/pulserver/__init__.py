@@ -12,7 +12,8 @@ from . import sequences  # noqa
 from . import _server  # noqa
 
 from ._core import Sequence  # noqa
+from ._mrd import ISMRMRDBuilder # noqa
 from ._opts import get_opts  # noqa
 
 __all__.extend(["Opts", "get_opts"])
-__all__.extend(["Sequence", "ParamsParser"])
+__all__.extend(["ISMRMRDBuilder", "Sequence", "ParamsParser"])
