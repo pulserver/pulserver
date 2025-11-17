@@ -139,7 +139,7 @@ class ISMRMRDBuilder:
             center_sample = np.argmax(k_space_zeros)  # first True
         else:
             distances = np.linalg.norm(k_traj_adc, axis=0)  # Euclidean norm per column
-            idx_last = np.argmax(-np.round(distances, 12)[::-1])
+            idx_last = np.argmax(-np.round(distances, 6)[::-1])
             center_sample = len(distances) - 1 - idx_last
 
         # get non uniform trajectory
@@ -559,13 +559,15 @@ class ISMRMRDBuilder:
                 acq.setFlag(flag)
 
         # set scan counter
+        acq.version = 1
         acq.scan_counter = len(self.acquisitions)
 
         # resize trajectory
-        # acq.resize(
-        #     trajectory_dimensions=trajectory.trajectory_dimensions,
-        #     number_of_samples=trajectory.number_of_samples,
-        # )
+        if trajectory.trajectory_dimensions:
+            acq.resize(
+                trajectory_dimensions=trajectory.trajectory_dimensions,
+                number_of_samples=trajectory.number_of_samples,
+            )
 
         # set center sample
         acq.center_sample = trajectory.center_sample
@@ -625,7 +627,7 @@ class ISMRMRDBuilder:
                 if label in self.label_dict:
                     self.label_dict[label] = event.value
             if event.type == "labelinc":
-                label = axis2key(event.label)
+                label = axis2key(event.label)[1]
                 if label in self.label_dict:
                     if self.label_dict[label] is None:
                         self.label_dict[label] = 0
