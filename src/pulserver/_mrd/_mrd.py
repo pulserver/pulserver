@@ -17,6 +17,8 @@ import ismrmrd.xsd as xsd
 
 import pypulseq as pp
 
+from ._mrd_file import write_mrd
+
 
 def __dummy_system__():
     sys = pp.Opts()
@@ -68,27 +70,27 @@ class ISMRMRDBuilder:
 
         return wrapper
     
-    def write(self, filepath: str | pathlib.Path, encoding_index: int = 0) -> None:
+    def write(
+            self, 
+            filepath: str | pathlib.Path, 
+            dataset_name: str = "dataset", 
+            overwrite : bool = True
+        ) -> None:
         """
         Write MRD file to disk.
 
         Parameters
         ----------
-        filepath : str | pathlib.Path
-            Path where to save the MRD file.        
-        encoding_index : int, optional
-            Encoding index of the space to be saved. The default is 0.
+        filepath : str
+            Path to disk position where to store the file.
+        dataset_name : str, optional
+            Path within HDF5 file where to store the dataset.
+            The default is "dataset".
+        overwrite : bool, optional
+            If True, overwrite the file if it is exist. The default is False.
 
         """
-        filepath = pathlib.Path(filepath)
-        os.makedirs(filepath.parent, exist_ok=True)
-        
-        with mrd.Dataset(filepath) as file:
-            file.write_xml_header(self.get_header(encoding_index).toXML('utf-8'))
-            for acq in self.acquisitions:
-                file.append_acquisition(acq)
-            for wav in self.waveforms:
-                file.append_waveform(wav)
+        write_mrd(filepath, dataset_name, self.head, self.acquisitions, self.waveforms, overwrite)
         
     @mode_switch
     def calc_trajectory(self, *events: tuple[SimpleNamespace]):
@@ -202,11 +204,11 @@ class ISMRMRDBuilder:
         self.current_encoding = idx
 
     def set_name(self, value):
-        self.head.measurementInformation[self.current_encoding].sequenceName = value
+        self.head.measurementInformation.sequenceName = value
 
     @mode_switch
     def set_H1resonanceFrequency_Hz(self, gamma: float, B0: float):
-        self.head.experimentalConditions[self.current_encoding].H1resonanceFrequency_Hz = (
+        self.head.experimentalConditions.H1resonanceFrequency_Hz = (
             int(gamma * B0)
         )
 
@@ -377,30 +379,30 @@ class ISMRMRDBuilder:
 
     @mode_switch
     def set_TR(self, value):
-        self.head.sequenceParameters[self.current_encoding].TR.append(value)
+        self.head.sequenceParameters.TR.append(value)
         return value
 
     @mode_switch
     def set_TE(self, value):
-        self.head.sequenceParameters[self.current_encoding].TE.append(value)
+        self.head.sequenceParameters.TE.append(value)
         return value
 
     @mode_switch
     def set_TI(self, value):
-        self.head.sequenceParameters[self.current_encoding].TI.append(value)
+        self.head.sequenceParameters.TI.append(value)
         return value
 
     @mode_switch
     def set_flipAngle_deg(self, value):
-        self.head.sequenceParameters[self.current_encoding].flipAngle_deg.append(value)
+        self.head.sequenceParameters.flipAngle_deg.append(value)
 
     @mode_switch
     def set_sequence_type(self, value):
-        self.head.sequenceParameters[self.current_encoding].sequence_type = value
+        self.head.sequenceParameters.sequence_type = value
 
     @mode_switch
     def set_echo_spacing(self, value):
-        self.head.sequenceParameters[self.current_encoding].echo_spacing.append(value)
+        self.head.sequenceParameters.echo_spacing.append(value)
 
     @mode_switch
     def set_diffusion(
@@ -444,52 +446,52 @@ class ISMRMRDBuilder:
             xsd.diffusionType(gradDir[n], bvalue[n]) for n in range(bvalue.shape[0])
         ]
 
-        self.head.sequenceParameters[self.current_encoding].diffusionDimension = channel
-        self.head.sequenceParameters[self.current_encoding].diffusionScheme = scheme
-        self.head.sequenceParameters[self.current_encoding].diffusion = diffusionParams
+        self.head.sequenceParameters.diffusionDimension = channel
+        self.head.sequenceParameters.diffusionScheme = scheme
+        self.head.sequenceParameters.diffusion = diffusionParams
 
     @mode_switch
     def add_user_param(self, name, value):
         if isinstance(value, float):
             if haskey(
-                name, self.head.userParameters[self.current_encoding].userParameterDouble
+                name, self.head.userParameters.userParameterDouble
             ):
                 setparam(
                     name,
                     value,
-                    self.head.userParameters[self.current_encoding].userParameterDouble,
+                    self.head.userParameters.userParameterDouble,
                 )
             else:
                 el = xsd.userParameterDoubleType(name=name, value=value)
-                self.head.userParameters[self.current_encoding].userParameterDouble.append(
+                self.head.userParameters.userParameterDouble.append(
                     el
                 )
                 return
         if isinstance(value, int):
             if haskey(
-                name, self.head.userParameters[self.current_encoding].userParameterLong
+                name, self.head.userParameters.userParameterLong
             ):
                 setparam(
                     name,
                     value,
-                    self.head.userParameters[self.current_encoding].userParameterLong,
+                    self.head.userParameters.userParameterLong,
                 )
             else:
                 el = xsd.userParameterLongType(name=name, value=value)
-                self.head.userParameters[self.current_encoding].userParameterLong.append(el)
+                self.head.userParameters.userParameterLong.append(el)
                 return
         if isinstance(value, str):
             if haskey(
-                name, self.head.userParameters[self.current_encoding].userParameterString
+                name, self.head.userParameters.userParameterString
             ):
                 setparam(
                     name,
                     value,
-                    self.head.userParameters[self.current_encoding].userParameterString,
+                    self.head.userParameters.userParameterString,
                 )
             else:
                 el = xsd.userParameterStringType(name=name, value=value)
-                self.head.userParameters[self.current_encoding].userParameterString.append(
+                self.head.userParameters.userParameterString.append(
                     el
                 )
                 return
