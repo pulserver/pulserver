@@ -33,12 +33,13 @@ class ISMRMRDBuilder:
         self.mode = mode  # 'dry', 'prep', 'eval', 'rt', 'static
 
         # MRD attributes
-        self.measuremenInformation = []
-        self.experimentalConditions = []
-        self.encoding = []
-        self.sequenceParameters = []
-        self.userParameters = []
-        self.waveformInformations = []
+        self.head = xsd.ismrmrdHeader()
+        self.head.measurementInformation = xsd.measurementInformationType()
+        self.head.experimentalConditions = xsd.experimentalConditionsType()
+        self.head.encoding = []
+        self.head.sequenceParameters = xsd.sequenceParametersType()
+        self.head.userParameters = xsd.userParametersType()
+        self.head.waveformInformations = []
 
         # Arrays
         self.acquisitions = []  # Raw acquisitions
@@ -175,12 +176,6 @@ class ISMRMRDBuilder:
 
     @mode_switch
     def add_encoding(self):
-        exp = xsd.experimentalConditionsType()
-        self.experimentalConditions.append(exp)
-
-        meas = xsd.measurementInformationType()
-        self.measuremenInformation.append(meas)
-
         encoding = xsd.encodingType()
         encoding.encodedSpace = xsd.encodingSpaceType()
         encoding.encodedSpace.matrixSize = xsd.matrixSizeType()
@@ -194,57 +189,51 @@ class ISMRMRDBuilder:
         encoding.trajectoryDescription = xsd.trajectoryDescriptionType()
         encoding.parallelImaging = xsd.parallelImagingType()
 
-        self.encoding.append(encoding)
-        self.current_encoding = len(self.encoding) - 1
-
-        seqParams = xsd.sequenceParametersType()
-        self.sequenceParameters.append(seqParams)
-
-        userParams = xsd.userParametersType()
-        self.userParameters.append(userParams)
+        self.head.encoding.append(encoding)
+        self.current_encoding = len(self.head.encoding) - 1
 
     @mode_switch
     def set_encoding(self, idx):
         if idx < 0:
             raise IndexError("Encoding index out of range")
         if idx >= self.current_encoding:
-            while idx < len(self.encodings):
+            while idx < len(self.head.encodings):
                 self.new_encoding()
         self.current_encoding = idx
 
     def set_name(self, value):
-        self.measuremenInformation[self.current_encoding].sequenceName = value
+        self.head.measurementInformation[self.current_encoding].sequenceName = value
 
     @mode_switch
     def set_H1resonanceFrequency_Hz(self, gamma: float, B0: float):
-        self.experimentalConditions[self.current_encoding].H1resonanceFrequency_Hz = (
+        self.head.experimentalConditions[self.current_encoding].H1resonanceFrequency_Hz = (
             int(gamma * B0)
         )
 
     @mode_switch
     def set_fov(self, dx: float, dy: float, dz: float):
-        self.encoding[self.current_encoding].encodedSpace.fieldOfView_mm.x = dx
-        self.encoding[self.current_encoding].encodedSpace.fieldOfView_mm.y = dy
-        self.encoding[self.current_encoding].encodedSpace.fieldOfView_mm.z = dz
-        self.encoding[self.current_encoding].reconSpace.fieldOfView_mm.x = dx
-        self.encoding[self.current_encoding].reconSpace.fieldOfView_mm.y = dy
-        self.encoding[self.current_encoding].reconSpace.fieldOfView_mm.z = dz
+        self.head.encoding[self.current_encoding].encodedSpace.fieldOfView_mm.x = dx
+        self.head.encoding[self.current_encoding].encodedSpace.fieldOfView_mm.y = dy
+        self.head.encoding[self.current_encoding].encodedSpace.fieldOfView_mm.z = dz
+        self.head.encoding[self.current_encoding].reconSpace.fieldOfView_mm.x = dx
+        self.head.encoding[self.current_encoding].reconSpace.fieldOfView_mm.y = dy
+        self.head.encoding[self.current_encoding].reconSpace.fieldOfView_mm.z = dz
 
     @mode_switch
     def set_matrix(self, nx: int, ny: int, nz: int):
-        self.encoding[self.current_encoding].encodedSpace.matrixSize.x = nx
-        self.encoding[self.current_encoding].encodedSpace.matrixSize.y = ny
-        self.encoding[self.current_encoding].encodedSpace.matrixSize.z = nz
-        self.encoding[self.current_encoding].reconSpace.matrixSize.x = nx
-        self.encoding[self.current_encoding].reconSpace.matrixSize.y = ny
-        self.encoding[self.current_encoding].reconSpace.matrixSize.z = nz
+        self.head.encoding[self.current_encoding].encodedSpace.matrixSize.x = nx
+        self.head.encoding[self.current_encoding].encodedSpace.matrixSize.y = ny
+        self.head.encoding[self.current_encoding].encodedSpace.matrixSize.z = nz
+        self.head.encoding[self.current_encoding].reconSpace.matrixSize.x = nx
+        self.head.encoding[self.current_encoding].reconSpace.matrixSize.y = ny
+        self.head.encoding[self.current_encoding].reconSpace.matrixSize.z = nz
 
     @mode_switch
     def set_limits(
         self, axis: str, maximum: int, minimum: int = 0, center: int | None = None
     ):
-        key = axis2key(axis)
-        limit = getattr(self.encoding[self.current_encoding].encodingLimits, key)
+        key = axis2key(axis)[0]
+        limit = getattr(self.head.encoding[self.current_encoding].encodingLimits, key)
         if limit is None:
             limit = xsd.limitType()
         limit.minimum = minimum
@@ -252,7 +241,7 @@ class ISMRMRDBuilder:
         if center is None:
             center = int(np.ceil(maximum / 2).item())
         limit.center = center
-        setattr(self.encoding[self.current_encoding].encodingLimits, key, limit)
+        setattr(self.head.encoding[self.current_encoding].encodingLimits, key, limit)
 
     @mode_switch
     def set_etl(self, value: int):
@@ -270,7 +259,7 @@ class ISMRMRDBuilder:
             raise ValueError("traj_type must be an Enum")
         if traj_type in xsd.trajectoryType is False:
             raise ValueError("traj_type must be a valid trajectoryType")
-        self.encoding[self.current_encoding].trajectory = traj_type
+        self.head.encoding[self.current_encoding].trajectory = traj_type
 
         # Set trajectory description
         if desc is None:
@@ -290,13 +279,13 @@ class ISMRMRDBuilder:
             if isinstance(v, str):
                 el = xsd.userParameterStringType(name=k, value=v)
                 ustring.append(el)
-        self.encoding[
+        self.head.encoding[
             self.current_encoding
         ].trajectoryDescription.userParameterDouble = udouble
-        self.encoding[self.current_encoding].trajectoryDescription.userParameterLong = (
+        self.head.encoding[self.current_encoding].trajectoryDescription.userParameterLong = (
             ulong
         )
-        self.encoding[
+        self.head.encoding[
             self.current_encoding
         ].trajectoryDescription.userParameterString = ustring
 
@@ -333,7 +322,7 @@ class ISMRMRDBuilder:
         parallelImaging.accelerationFactor.kspace_encoding_step_2 = Rz
         parallelImaging.calibrationMode = calibration_type
         parallelImaging.interleavingDimension = interleaving_dim
-        self.encoding[self.current_encoding].parallelImaging = parallelImaging
+        self.head.encoding[self.current_encoding].parallelImaging = parallelImaging
 
     @mode_switch
     def set_multiband_info(
@@ -380,38 +369,38 @@ class ISMRMRDBuilder:
         multiband.calibration = calibration_type
         multiband.calibration_encoding = calibration_encoding
 
-        if self.encoding[self.current_encoding].parallelImaging is None:
-            self.encoding[self.current_encoding].parallelImaging = (
+        if self.head.encoding[self.current_encoding].parallelImaging is None:
+            self.head.encoding[self.current_encoding].parallelImaging = (
                 xsd.parallelImagingType()
             )
-        self.encoding[self.current_encoding].parallelImaging.multiband = multiband
+        self.head.encoding[self.current_encoding].parallelImaging.multiband = multiband
 
     @mode_switch
     def set_TR(self, value):
-        self.sequenceParameters[self.current_encoding].TR.append(value)
+        self.head.sequenceParameters[self.current_encoding].TR.append(value)
         return value
 
     @mode_switch
     def set_TE(self, value):
-        self.sequenceParameters[self.current_encoding].TE.append(value)
+        self.head.sequenceParameters[self.current_encoding].TE.append(value)
         return value
 
     @mode_switch
     def set_TI(self, value):
-        self.sequenceParameters[self.current_encoding].TI.append(value)
+        self.head.sequenceParameters[self.current_encoding].TI.append(value)
         return value
 
     @mode_switch
     def set_flipAngle_deg(self, value):
-        self.sequenceParameters[self.current_encoding].flipAngle_deg.append(value)
+        self.head.sequenceParameters[self.current_encoding].flipAngle_deg.append(value)
 
     @mode_switch
     def set_sequence_type(self, value):
-        self.sequenceParameters[self.current_encoding].sequence_type = value
+        self.head.sequenceParameters[self.current_encoding].sequence_type = value
 
     @mode_switch
     def set_echo_spacing(self, value):
-        self.sequenceParameters[self.current_encoding].echo_spacing.append(value)
+        self.head.sequenceParameters[self.current_encoding].echo_spacing.append(value)
 
     @mode_switch
     def set_diffusion(
@@ -455,52 +444,52 @@ class ISMRMRDBuilder:
             xsd.diffusionType(gradDir[n], bvalue[n]) for n in range(bvalue.shape[0])
         ]
 
-        self.sequenceParameters[self.current_encoding].diffusionDimension = channel
-        self.sequenceParameters[self.current_encoding].diffusionScheme = scheme
-        self.sequenceParameters[self.current_encoding].diffusion = diffusionParams
+        self.head.sequenceParameters[self.current_encoding].diffusionDimension = channel
+        self.head.sequenceParameters[self.current_encoding].diffusionScheme = scheme
+        self.head.sequenceParameters[self.current_encoding].diffusion = diffusionParams
 
     @mode_switch
     def add_user_param(self, name, value):
         if isinstance(value, float):
             if haskey(
-                name, self.userParameters[self.current_encoding].userParameterDouble
+                name, self.head.userParameters[self.current_encoding].userParameterDouble
             ):
                 setparam(
                     name,
                     value,
-                    self.userParameters[self.current_encoding].userParameterDouble,
+                    self.head.userParameters[self.current_encoding].userParameterDouble,
                 )
             else:
                 el = xsd.userParameterDoubleType(name=name, value=value)
-                self.userParameters[self.current_encoding].userParameterDouble.append(
+                self.head.userParameters[self.current_encoding].userParameterDouble.append(
                     el
                 )
                 return
         if isinstance(value, int):
             if haskey(
-                name, self.userParameters[self.current_encoding].userParameterLong
+                name, self.head.userParameters[self.current_encoding].userParameterLong
             ):
                 setparam(
                     name,
                     value,
-                    self.userParameters[self.current_encoding].userParameterLong,
+                    self.head.userParameters[self.current_encoding].userParameterLong,
                 )
             else:
                 el = xsd.userParameterLongType(name=name, value=value)
-                self.userParameters[self.current_encoding].userParameterLong.append(el)
+                self.head.userParameters[self.current_encoding].userParameterLong.append(el)
                 return
         if isinstance(value, str):
             if haskey(
-                name, self.userParameters[self.current_encoding].userParameterString
+                name, self.head.userParameters[self.current_encoding].userParameterString
             ):
                 setparam(
                     name,
                     value,
-                    self.userParameters[self.current_encoding].userParameterString,
+                    self.head.userParameters[self.current_encoding].userParameterString,
                 )
             else:
                 el = xsd.userParameterStringType(name=name, value=value)
-                self.userParameters[self.current_encoding].userParameterString.append(
+                self.head.userParameters[self.current_encoding].userParameterString.append(
                     el
                 )
                 return
@@ -571,10 +560,10 @@ class ISMRMRDBuilder:
         acq.scan_counter = len(self.acquisitions)
 
         # resize trajectory
-        acq.resize(
-            trajectory_dimensions=trajectory.trajectory_dimensions,
-            number_of_samples=trajectory.number_of_samples,
-        )
+        # acq.resize(
+        #     trajectory_dimensions=trajectory.trajectory_dimensions,
+        #     number_of_samples=trajectory.number_of_samples,
+        # )
 
         # set center sample
         acq.center_sample = trajectory.center_sample
@@ -630,106 +619,45 @@ class ISMRMRDBuilder:
     def set_labels(self, *events):
         for event in events:
             if event.type == "labelset":
-                label = axis2key2(event.label)
+                label = axis2key(event.label)[1]
                 if label in self.label_dict:
                     self.label_dict[label] = event.value
             if event.type == "labelinc":
-                label = axis2key2(event.label)
+                label = axis2key(event.label)
                 if label in self.label_dict:
                     if self.label_dict[label] is None:
                         self.label_dict[label] = 0
                     self.label_dict[label] += event.value
-
-    #######################
-    # Retrieve header
-    #######################
-    def get_header(self, encoding_index=0):
-        hdr = xsd.ismrmrdHeader()
-        if encoding_index < len(self.experimentalConditions):
-            hdr.experimentalConditions = self.experimentalConditions[encoding_index]
-
-        # Copy encodings (encodedSpace, reconSpace, encodingLimits already per encoding)
-        enc = xsd.encodingType()
-        enc.encodedSpace = enc.encodedSpace
-        enc.reconSpace = self.encoding[encoding_index].reconSpace
-        enc.encodingLimits = self.encoding[encoding_index].encodingLimits
-        enc.trajectory = self.encoding[encoding_index].trajectory
-        enc.echoTrainLength = self.encoding[encoding_index].echoTrainLength
-        enc.parallelImaging = self.encoding[encoding_index].parallelImaging
-        hdr.encoding.append(enc)
-
-        # Sequence parameters for selected encoding
-        if encoding_index < len(self.sequenceParameters):
-            hdr.sequenceParameters = self.sequenceParameters[encoding_index]
-
-        # User parameters for selected encoding
-        if encoding_index < len(self.userParameters):
-            hdr.userParameters = self.userParameters[encoding_index]
-
-        # Waveforms for selected encoding
-        if encoding_index < len(self.waveforms):
-            hdr.waveformInformation.extend(self.waveforms[encoding_index])
-
-        return hdr
-
 
 # %% utils
 def axis2key(axis):
     if axis.lower() in _axis2key:
         return _axis2key[axis.lower()]
     else:
-        return axis.lower()
+        return axis.lower(), axis.lower()
 
 
 _axis2key = {
-    "k0": "kspace_encoding_step_0",
-    "acq": "kspace_encoding_step_0",
-    "k1": "kspace_encoding_step_1",
-    "lin": "kspace_encoding_step_1",
-    "k2": "kspace_encoding_step_2",
-    "par": "kspace_encoding_step_2",
-    "avg": "average",
-    "slc": "slice",
-    "eco": "contrast",
-    "phs": "phase",
-    "rep": "repetition",
-    "seg": "segment",
-    "user0": "user_0",
-    "user1": "user_1",
-    "user2": "user_2",
-    "user3": "user_3",
-    "user4": "user_4",
-    "user5": "user_5",
-    "user6": "user_6",
-    "user7": "user_7",
-}
-
-def axis2key2(axis):
-    if axis.lower() in _axis2key:
-        return _axis2key2[axis.lower()]
-    else:
-        return axis.lower()
-
-
-_axis2key2 = {
-    "k1": "kspace_encode_step_1",
-    "lin": "kspace_encode_step_1",
-    "k2": "kspace_encode_step_2",
-    "par": "kspace_encode_step_2",
-    "avg": "average",
-    "slc": "slice",
-    "eco": "contrast",
-    "phs": "phase",
-    "rep": "repetition",
-    "seg": "segment",
-    "user0": "user_0",
-    "user1": "user_1",
-    "user2": "user_2",
-    "user3": "user_3",
-    "user4": "user_4",
-    "user5": "user_5",
-    "user6": "user_6",
-    "user7": "user_7",
+    "k0": ("kspace_encoding_step_0", "kspace_encode_step_0"),
+    "acq": ("kspace_encoding_step_0", "kspace_encode_step_0"),
+    "k1": ("kspace_encoding_step_1", "kspace_encode_step_1"),
+    "lin": ("kspace_encoding_step_1", "kspace_encode_step_1"),
+    "k2": ("kspace_encoding_step_2", "kspace_encode_step_2"),
+    "par": ("kspace_encoding_step_2", "kspace_encode_step_2"),
+    "avg": ("average", "average"),
+    "slc": ("slice", "slice"),
+    "eco": ("contrast", "contrast"),
+    "phs": ("phase", "phase"), 
+    "rep": ("repetition", "repetition"),
+    "seg": ("segment", "segment"),
+    "user0": ("user_0", "user0"),
+    "user1": ("user_1", "user1"),
+    "user2": ("user_2", "user2"),
+    "user3": ("user_3", "user3"),
+    "user4": ("user_4", "user4"),
+    "user5": ("user_5", "user5"),
+    "user6": ("user_6", "user6"),
+    "user7": ("user_7", "user7")
 }
 
 
