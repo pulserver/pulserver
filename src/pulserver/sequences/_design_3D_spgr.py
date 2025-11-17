@@ -314,7 +314,7 @@ def design_readout(system, fov, Nx, dwell_time, phase_offset):
 
     # Design blocks
     gx_read = pp.make_trapezoid(
-        channel="x", flat_area=Nx * delta_kx, flat_time=3.2e-3, system=system
+        channel="x", flat_area=Nx * delta_kx, flat_time=Nx * dwell_time, system=system
     )
     adc, _adc = [], pp.make_adc(
         num_samples=Nx,
@@ -354,7 +354,7 @@ def design_phaseenc(system, gx_read, fov, slab_thickness, Ny, Nz):
     # ========================
     # X axis
     gx_pre = pp.make_trapezoid(
-        channel="x", area=-gx_read.area / 2, duration=1e-3, system=system
+        channel="x", area=-gx_read.area / 2, system=system
     )
     gx_rew = pp.scale_grad(grad=gx_pre, scale=-1.0)
 
