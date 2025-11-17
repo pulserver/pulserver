@@ -1,5 +1,5 @@
 
-__all__ = ["pulserver_get_num_blocks_per_tr", "pulserver_get_block_groups"]
+__all__ = ["pulserver_get_num_blocks_per_tr", "pulserver_get_block_groups", "pulserver_get_segments"]
 
 #%% utils
 def pulserver_get_num_blocks_per_tr(sequences):
@@ -95,7 +95,93 @@ def pulserver_get_block_groups(sequences, num_blocks_per_tr):
             block_groups[n][b].start = block_group_starts[n][b]
             block_groups[n][b].size = block_group_sizes[n][b]
             
-    return  block_groups, block_groups_table 
+    return  block_groups, block_groups_table
+
+class pulserver_Segment:
+    def __init__(self):
+        self.label = None
+        self.start = None
+        self.size = None
+
+def pulserver_get_segments(sequences, num_blocks_per_tr):
+    num_segments_per_tr = []
+    segment_labels = []
+    segment_starts = []
+    segment_ends = []
+    segment_sizes = []
+    segments_table = []
+    
+    for n, seq in enumerate(sequences):
+        num_segments_per_tr.append(0)
+        segment_labels.append([])
+        segment_starts.append([])
+        segment_ends.append([])
+        segment_sizes.append([])
+        segments_table.append([])
+        for b in range(num_blocks_per_tr[n]):
+            block = seq.get_block(b+1)
+            
+            # First block
+            if b == 0:
+                num_segments_per_tr[n] += 1
+                segment_label = None
+                for lbl in block.label.values():
+                    if lbl.label == 'COREID':
+                        segment_label = lbl.value
+                if segment_label is None:
+                    raise RuntimeError("First block in sequence is a segment start by definition and must have a label")
+                current_label = segment_label
+                segment_starts[n].append(b)
+                segments_table[n].append(segment_label)
+                continue
+            else:
+                segment_label = current_label # default
+                if hasattr(block, 'label'):
+                    for lbl in block.label.values():
+                        if lbl.label == 'COREID':
+                            segment_label = lbl.value            
+            
+            # Second to last block in TR
+            if segment_label != current_label:
+                segments_table[n].append(segment_label)
+                
+                # If previous block is new, add its end and its label to the list
+                if current_label not in segment_labels[n]:
+                    segment_labels[n].append(current_label)
+                    segment_ends[n].append(b)
+                    
+                # Update current block
+                current_label = segment_label
+                
+                # If current block is new, add its start to the list
+                if current_label not in segment_labels[n]:
+                    num_segments_per_tr[n] += 1
+                    segment_starts[n].append(b)
+                    
+            # Last block in TR
+            if b == num_blocks_per_tr[n] - 1:
+                if current_label not in segment_labels[n]:
+                    segment_labels[n].append(current_label)
+                    segment_ends[n].append(b+1)
+                    
+    # Get Group sizes
+    for n, num_segments in enumerate(num_segments_per_tr):
+        for b in range(num_segments):
+            segment_sizes[n].append(segment_ends[n][b] - segment_starts[n][b])
+
+    # Transform to structs
+    segments = []
+    for n, num_segments in enumerate(num_segments_per_tr):
+        segments.append([])
+        for b in range(num_segments):
+            segments[n].append(pulserver_Segment())
+            segments[n][b].label = segment_labels[n][b]
+            segments[n][b].start = segment_starts[n][b]
+            segments[n][b].size = segment_sizes[n][b]
+            
+    return  segments, segments_table
+
+    
             
 # %% Planning stage
 
@@ -108,8 +194,16 @@ def pulserver_get_rf(sequences):
     ...
     
 # Pulsegen
-def pulserver_get_segments(sequences):
-    ...
+    
+# In Predownload
+# 
+
+# In Pulsegen:
+#
+# 1) loop over segment definitions (for each TR)
+# 2) for each block group in segment definitions get the concatenated
+#    rf, gx, gy, gz waveforms, the ADC filter indexes and each event time axis
+# 3) use the above to build the segments - initializing each waveform to worst case
 
 
 # %% Real Time stage
