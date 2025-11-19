@@ -57,7 +57,6 @@ static pulseqlib_SeqBlock* getBlock(pulseqlib_SeqFile* seq, int blockIndex, int 
     (idx)==11 ? (flag)->once : 0)
 */
 static pulseqlib_SeqFile* load_seq(char* filePath) {
-    char cwd[1024];
     char seq_path[1024];
     pulseqlib_SeqFile* seq;
     
@@ -66,10 +65,8 @@ static pulseqlib_SeqFile* load_seq(char* filePath) {
     if (!seq) return NULL;
     
     /* Create the full path to the sequence file */
-    if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        snprintf(seq_path, sizeof(seq_path), "%s/%s", cwd, filePath);
-    }
-    
+    snprintf(seq_path, sizeof(seq_path), "%s/%s", TEST_ROOT_DIR, filePath);
+
     /* Initialize the sequence file structure with default values */
     pulseqlib_seqFileInit(seq_path, seq);
     if (!seq) {
@@ -78,7 +75,7 @@ static pulseqlib_SeqFile* load_seq(char* filePath) {
     }
     
     /* Read the sequence data */
-    pulseqlib_readSeq(seq, 0);
+    pulseqlib_readSeq(seq, 1);
     return seq;
 }
 
@@ -111,7 +108,7 @@ static void assert_flag_event(const FlagEvent* flag, int target_idx, int expecte
 MU_TEST(test_rf) {
     int i;
     pulseqlib_SeqBlock* block;
-    pulseqlib_SeqFile* seq = load_seq("tests/expected_output/seq2.seq");
+    pulseqlib_SeqFile* seq = load_seq("expected_output/seq2.seq");
 
     for (i = 0; i < 2; i++){
         block = getBlock(seq, i, 1);
@@ -161,7 +158,7 @@ MU_TEST(test_rf) {
 MU_TEST(test_adc) {
     int i;
     pulseqlib_SeqBlock* block;
-    pulseqlib_SeqFile* seq = load_seq("tests/expected_output/seq2.seq");
+    pulseqlib_SeqFile* seq = load_seq("expected_output/seq2.seq");
 
     for (i = 2; i < 4; i++) {
         block = getBlock(seq, i, 0);
@@ -202,7 +199,7 @@ MU_TEST(test_adc) {
 MU_TEST(test_grad) {
     int i;
     pulseqlib_SeqBlock* block;
-    pulseqlib_SeqFile* seq = load_seq("tests/expected_output/seq2.seq");
+    pulseqlib_SeqFile* seq = load_seq("expected_output/seq2.seq");
 
     for (i = 36; i < 45; i++){
         block = getBlock(seq, i, 1);
@@ -420,7 +417,7 @@ MU_TEST(test_labels) {
 MU_TEST(test_trigger) {
     int i;
     pulseqlib_SeqBlock* block;
-    pulseqlib_SeqFile* seq = load_seq("tests/expected_output/seq2.seq");
+    pulseqlib_SeqFile* seq = load_seq("expected_output/seq2.seq");
 
     for (i = 45; i < 50; i++) {
         block = getBlock(seq, i, 1);
@@ -479,7 +476,7 @@ MU_TEST(test_trigger) {
 MU_TEST(test_delay) {
     int i;
     pulseqlib_SeqBlock* block;
-    pulseqlib_SeqFile* seq = load_seq("tests/expected_output/seq2.seq");
+    pulseqlib_SeqFile* seq = load_seq("expected_output/seq2.seq");
 
     for (i = 50; i < 58; i++) {
         block = getBlock(seq, i, 1);
@@ -537,7 +534,7 @@ MU_TEST(test_delay) {
 
 MU_TEST(test_pure_delay) {
     pulseqlib_SeqBlock* block;
-    pulseqlib_SeqFile* seq = load_seq("tests/expected_output/seq2.seq");
+    pulseqlib_SeqFile* seq = load_seq("expected_output/seq2.seq");
 
     block = getBlock(seq, 58, 1);
     mu_assert(block != NULL, "getBlock should return a valid block");

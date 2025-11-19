@@ -9,7 +9,6 @@
 #include "pulseqlib_methods.h"
 
 static pulseqlib_SeqFile* load_seq(char* filePath) {
-    char cwd[1024];
     char seq_path[1024];
     pulseqlib_SeqFile* seq;
     
@@ -18,9 +17,7 @@ static pulseqlib_SeqFile* load_seq(char* filePath) {
     if (!seq) return NULL;
     
     /* Create the full path to the sequence file */
-    if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        snprintf(seq_path, sizeof(seq_path), "%s/%s", cwd, filePath);
-    }
+    snprintf(seq_path, sizeof(seq_path), "%s/%s", TEST_ROOT_DIR, filePath);
     
     /* Initialize the sequence file structure */
     pulseqlib_seqFileInit(seq_path, seq);
@@ -30,14 +27,14 @@ static pulseqlib_SeqFile* load_seq(char* filePath) {
     }
     
     /* Read the sequence data */
-    pulseqlib_readSeq(seq, 0);
+    pulseqlib_readSeq(seq, 1);
     return seq;
 }
 
 /* END UTILS */
 
 MU_TEST(test_basic) {
-    pulseqlib_SeqFile* seq = load_seq("tests/expected_output/seq1.seq");
+    pulseqlib_SeqFile* seq = load_seq("expected_output/seq1.seq");
     mu_assert(seq != NULL, "Failed to load sequence file");
     mu_assert(seq->versionMajor == 1, "Sequence version major should be 1 (Pulseq v1.x.x)");
     mu_assert(seq->versionMinor == 5, "Sequence version minor should be 5 (Pulseq vx.5.x)");
@@ -48,7 +45,7 @@ MU_TEST(test_basic) {
 }
 
 MU_TEST(test_definitions) {
-    pulseqlib_SeqFile* seq = load_seq("tests/expected_output/seq1.seq");
+    pulseqlib_SeqFile* seq = load_seq("expected_output/seq1.seq");
     mu_assert(seq != NULL, "Failed to load sequence file");
     mu_assert(seq->numDefinitions == 5, "Sequence should have exactly 5 definitions");
     mu_assert(seq->definitionsLibrary != NULL, "Definitions library should not be NULL");
