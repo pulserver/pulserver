@@ -1088,7 +1088,7 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
             }
         }
         
-        /* If using matrix format, we'll convert the quaternions to matrices in pulseq_seqFile */
+        /* If using matrix format, we'll convert the quaternions to matrices in pulseqlib_seqFile */
     }
 
     if (seq->offsets.labelset >= 0){
@@ -1265,7 +1265,7 @@ void seqFileInit(pulseqlib_SeqFile* seq) {
  * @param[in] filePath The path of .seq file on disk.  
  * @param[in, out] seq The uninitialized SeqFile structure.
  */
-void pulseqlib_SeqFileInit(const char* filePath, pulseqlib_SeqFile* seq) {
+void pulseqlib_seqFileInit(const char* filePath, pulseqlib_SeqFile* seq) {
     seqFileInit(seq);
 
     /* Allocate and copy the file path */
@@ -1343,7 +1343,7 @@ void pulseqlib_seqFileReset(pulseqlib_SeqFile* seq) {
  * @param[out] block The pre-allocated block structure to initialize
  * @return 1 if successful, 0 if failed
  */
-void pulpulseqlib_SeqBlockInit(pulseqlib_SeqBlock* block) {
+void pulseqlib_seqBlockInit(pulseqlib_SeqBlock* block) {
     pulseqlib_RFEvent rf;
     pulseqlib_GradEvent gx;
     pulseqlib_GradEvent gy;
@@ -1512,7 +1512,7 @@ void pulseqlib_seqBlockFree(pulseqlib_SeqBlock* block) {
  * @param[in, out] seq The SeqFile structure.
  * @param[in] readBlocks Whether to parse the BlockLibrary or not.   
  */
-void pulseq_readSeq(pulseqlib_SeqFile* seq, const int readBlocks) {
+void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const int readBlocks) {
     FILE* f = fopen(seq->filePath, "r");
     
     if (!f) return;
@@ -1630,7 +1630,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
         return; /* Invalid inputs */
     }
     
-    pulseqlib_getRawBlockContentIDs(&rawBlock, seq, blockIndex, parseExtensions);
+    pulseqlib_getRawBlockContentIDs(seq, blockIndex, parseExtensions, &rawBlock);
 
     /* Set the duration */
     block->duration = rawBlock.block_duration;
@@ -1644,7 +1644,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
         idx = (int)farray[1];
         if (idx > 0) {
             if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                return 0; /* Failed to decompress shape */
+                return; /* Failed to decompress shape */
             }
             block->rf.magShape = shape;
         }
@@ -1652,7 +1652,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
         idx = (int)farray[2];
         if (idx > 0) {
             if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                return 0; /* Failed to decompress shape */
+                return; /* Failed to decompress shape */
             }
             block->rf.phaseShape = shape;
             for (i = 0; i < block->rf.phaseShape.numSamples; i++) {
@@ -1700,7 +1700,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
         idx = (int)farray[3];
         if (idx > 0) {
             if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                return 0; /* Failed to decompress shape */
+                return; /* Failed to decompress shape */
             }
             block->rf.timeShape = shape;
         } else {
@@ -1738,7 +1738,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
             idx = (int)farray[4];
             if (idx > 0) {
                 if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    return 0; /* Failed to decompress shape */
+                    return; /* Failed to decompress shape */
                 }
                 block->gx.waveShape = shape;
             }
@@ -1746,7 +1746,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
             idx = (int)farray[5];
             if (idx > 0) {
                 if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    return 0; /* Failed to decompress shape */
+                    return; /* Failed to decompress shape */
                 }
                 block->gx.timeShape = shape;
             } else {
@@ -1780,7 +1780,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
             idx = (int)farray[4];
             if (idx > 0) {
                 if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    return 0; /* Failed to decompress shape */
+                    return; /* Failed to decompress shape */
                 }
                 block->gy.waveShape = shape;
             }
@@ -1788,7 +1788,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
             idx = (int)farray[5];
             if (idx > 0) {
                 if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    return 0; /* Failed to decompress shape */
+                    return; /* Failed to decompress shape */
                 }
                 block->gy.timeShape = shape;
             } else {
@@ -1822,7 +1822,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
             idx = (int)farray[4];
             if (idx > 0) {
                 if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    return 0; /* Failed to decompress shape */
+                    return; /* Failed to decompress shape */
                 }
                 block->gz.waveShape = shape;
             }
@@ -1830,7 +1830,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
             idx = (int)farray[5];
             if (idx > 0) {
                 if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    return 0; /* Failed to decompress shape */
+                    return; /* Failed to decompress shape */
                 }
                 block->gz.timeShape = shape;
             } else {
@@ -1858,7 +1858,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
         idx = (int)farray[7];
         if (idx > 0) {
             if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                return 0; /* Failed to decompress shape */
+                return; /* Failed to decompress shape */
             }
             block->adc.phaseModulationShape = shape;
         } else {
