@@ -1,6 +1,7 @@
 #ifndef PULSEQLIB_METHODS_H
 #define PULSEQLIB_METHODS_H
 
+#include <math.h>
 #include <stdlib.h>
 
 #include "pulseqlib.h"
@@ -50,12 +51,12 @@
 #endif
 
 /* Constructor, destructor and reset */
-void pulseqlib_SeqFileInit(const char* filePath, pulseqlib_SeqFile* seq);
-void pulseqlib_SeqFileFree(pulseqlib_SeqFile* seq);
-void pulseqlib_SeqFileReset(pulseqlib_SeqFile* seq);
+void pulseqlib_seqFileInit(const char* filePath, pulseqlib_SeqFile* seq);
+void pulseqlib_seqFileFree(pulseqlib_SeqFile* seq);
+void pulseqlib_seqFileReset(pulseqlib_SeqFile* seq);
 
-void pulseqlib_SeqBlockInit(pulseqlib_SeqBlock* block);
-void pulseqlib_SeqBlockFree(pulseqlib_SeqBlock* block);
+void pulseqlib_seqBlockInit(pulseqlib_SeqBlock* block);
+void pulseqlib_seqBlockFree(pulseqlib_SeqBlock* block);
 
 /* Parsing Sequence */
 void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const int readBlocks);
