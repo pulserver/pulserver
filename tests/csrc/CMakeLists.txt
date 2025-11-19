@@ -12,6 +12,11 @@ file(GLOB TEST_SOURCES "*.c")
 # Create an executable for the tests
 add_executable(run_tests ${TEST_SOURCES})
 
+# Define the test root folder at compile time
+target_compile_definitions(run_tests PRIVATE
+    TEST_ROOT_DIR="${CMAKE_SOURCE_DIR}/.."
+)
+
 # Specify the output directory for the compiled test executable
 set_target_properties(run_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
