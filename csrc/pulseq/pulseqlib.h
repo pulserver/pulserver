@@ -336,8 +336,20 @@ typedef struct pulseqlib_RfShimEntry {
 } pulseqlib_RfShimEntry;
 
 
+typedef struct pulseqlib_ShapeLibrary {
+    int open; /**< @brief Flag indicating if the shape library is open */
+    FILE* file; /**< @brief File pointer to the shape library file */
+    int shapesLibrarySize; /**< @brief Number of shape entries. */
+    int* shapeOffsets; /**< @brief Array of file offsets for each shape entry */
+    int* numSamples; /**< @brief Array of number of samples for each shape entry */
+    int byteSwap; /**< @brief Flag indicating if byte swapping is required */
+    char* ioBuffer; /**< @brief Custom I/O buffer for file reading */
+} pulseqlib_ShapeLibrary; /* mirrors Pulseq ShapeLibrary */
+
+
 typedef struct pulseqlib_SeqFile {
     char* filePath; /**< @brief Path to the sequence (.seq) file. */
+    char* shapelibPath; /**< @brief Path to the shape library (.shapes) file. */
     pulseqlib_SectionOffsets offsets; /**< @brief Line position of each section. */
     int isVersionParsed; /**< @brief Flag indicating if the version was parsed successfully. */
     int versionCombined; /**< @brief Combined version number calculated as: 1000000 * versionMajor + 1000 * versionMinor + versionRevision. */
@@ -384,8 +396,7 @@ typedef struct pulseqlib_SeqFile {
     int extensionLUTSize; /**< @brief Size of extension lookup table. */
     int* extensionLUT; /**< @brief Extension lookup table. */
     int isShapesLibraryParsed; /**< @brief Flag indicating if the shapes library was parsed. */
-    int shapesLibrarySize; /**< @brief Number of shape entries. */
-    pulseqlib_ShapeArbitrary* shapesLibrary; /**< @brief Array of arbitrary shape definitions. */
+    pulseqlib_ShapeLibrary shapesLibrary; /**< @brief Shape library structure for managing shape data. */
 } pulseqlib_SeqFile; /* Mirrors Pulseq SeqFile */
 
 

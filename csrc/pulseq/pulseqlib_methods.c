@@ -1,8 +1,20 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "pulseqlib_methods.h"
+
+#define SHAPE_LIBRARY_MAGIC 0x12345678
+#define SHAPE_FILE_BUFFER_SIZE 16384
+
+/* C89-compliant 4-byte swap helper */
+static void swap4(void* v) {
+    char* b = (char*)v;
+    char t;
+    t = b[0]; b[0] = b[3]; b[3] = t;
+    t = b[1]; b[1] = b[2]; b[2] = t;
+}
 
 #define INIT_LIBRARY(seq, fieldPtr, sizeField, flagField) \
     do { \
@@ -165,115 +177,6 @@ int initDefinitionsLibrary(FILE* f, long offset, pulseqlib_Definition** target, 
 
     *target = defs;
     *targetCount = count;
-    return 0;
-}
-
-
-int initShapesLibrary(FILE* f, long offset, pulseqlib_ShapeArbitrary** target, int* targetCount) {
-    char line[MAX_LINE_LENGTH];
-    int maxIndex = -1;
-    int n, i, idx;
-    char* p;
-    pulseqlib_ShapeArbitrary* shapes = NULL;
-
-    if (!f || !offset || !target || !targetCount) {
-        return 1;  /* Invalid arguments */
-    }
-
-    if (fseek(f, offset, SEEK_SET) != 0) {
-        return 1;  /* Seek failed */
-    }
-
-    /* Skip the section header line */
-    if (!fgets(line, sizeof(line), f)) {
-        return 1;
-    }
-
-    /* First pass: find max shape_id and count shapes */
-    while (fgets(line, sizeof(line), f)) {
-        p = line;
-        while (*p == ' ' || *p == '\t') p++;
-        if (*p == '[' || *p == 'e') break;     /* Next section */
-        if (*p == '\0' || *p == '#') continue; /* Skip blank/comment */
-        if (strncmp(p, "shape_id", 8) == 0) {
-            if (sscanf(p + 8, "%d", &idx) == 1) {
-                if (idx > maxIndex) maxIndex = idx;
-            }
-        }
-    }
-
-    if (maxIndex <= 0) {
-        *target = NULL;
-        *targetCount = 0;
-        return 0;
-    }
-
-    shapes = (pulseqlib_ShapeArbitrary*) ALLOC(sizeof(pulseqlib_ShapeArbitrary) * maxIndex);
-    if (!shapes) return 1;
-    for (i = 0; i < maxIndex; i++) {
-        shapes[i].numSamples = 0;
-        shapes[i].numUncompressedSamples = 0;
-        shapes[i].samples = NULL;
-    }
-
-    /* Reset file pointer for second pass */
-    if (fseek(f, offset, SEEK_SET) != 0) {
-        FREE(shapes);
-        return 1;
-    }
-
-    /* Skip the section header line */
-    if (!fgets(line, sizeof(line), f)) {
-        return 1;
-    }
-
-    while (fgets(line, sizeof(line), f)) {
-        p = line;
-        while (*p == ' ' || *p == '\t') p++;
-        if (*p == '[' || *p == 'e') break;     /* Next section */
-        if (*p == '\0' || *p == '#') continue; /* Skip blank/comment */
-        if (strncmp(p, "shape_id", 8) == 0) {
-            if (sscanf(p + 8, "%d", &idx) == 1) {
-                shapes[idx - 1].numSamples = 0;
-                shapes[idx - 1].numUncompressedSamples = 0;
-                shapes[idx - 1].samples = NULL;
-            } 
-        }
-        else if (strncmp(p, "num_samples", 11) == 0) {
-            if (sscanf(p + 11, "%d", &n) == 1) {
-                shapes[idx - 1].numUncompressedSamples = n;
-            }
-        }
-        else {
-            shapes[idx - 1].numSamples++;
-        }
-    }
-
-    /* Adjust numSamples to account for the last sample */
-    for (i = 0; i < maxIndex; i++) {
-        shapes[i].numSamples -= 1;  
-    }
-
-    /* Allocate sample arrays */
-    for (i = 0; i < maxIndex; i++) {
-        int j;
-        n = shapes[i].numSamples;
-        if (n > 0) {
-            shapes[i].samples = (float*) ALLOC(sizeof(float) * n);
-            if (!shapes[i].samples) {
-                for (j = 0; j < i; j++) {
-                    if (shapes[j].samples) FREE(shapes[j].samples);
-                }
-                FREE(shapes);
-                return 1;
-            }
-        } else {
-            shapes[i].samples = NULL;
-        }
-    }
-
-    *target = shapes;
-    *targetCount = maxIndex;
     return 0;
 }
 
@@ -796,70 +699,299 @@ void readAdcLibrary(pulseqlib_SeqFile* seq, FILE* f) {
 }
 
 
+int decompressShape(pulseqlib_ShapeArbitrary* encoded, pulseqlib_ShapeArbitrary* result)
+{
+    int i, rep;
+    const float *packed;
+    int numPacked, numSamples;
+    int countPack = 1;
+    int countUnpack = 1;
+    float* unpacked;
+    
+    /* Validate inputs */
+    if (!encoded || !result) {
+        return 0; /* Invalid inputs */
+    }
+    
+    packed = encoded->samples;
+    numPacked = encoded->numSamples;
+    numSamples = encoded->numUncompressedSamples;
+    
+    /* Input shape is uncompressed - copy it */
+    if (encoded->numSamples == encoded->numUncompressedSamples) {
+        result->numSamples = encoded->numSamples;
+        result->numUncompressedSamples = encoded->numUncompressedSamples;
+        result->samples = (float*)ALLOC(sizeof(float) * encoded->numSamples);
+        if (!result->samples) {
+            return 0; /* Allocation failed */
+        }
+        memcpy(result->samples, encoded->samples, sizeof(float) * encoded->numSamples);
+        return 1; /* Success */
+    }
+
+    unpacked = (float*) ALLOC(sizeof(float) * numSamples);
+    if (unpacked == NULL) {
+        return 0; /* Allocation failed */
+    }
+
+    while (countPack < numPacked) {
+        if (packed[countPack - 1] != packed[countPack]) {
+            unpacked[countUnpack - 1] = packed[countPack - 1];
+            countPack++;
+            countUnpack++;
+        } else {
+            rep = (int)(packed[countPack + 1]) + 2;
+            if (fabsf(packed[countPack + 1] + 2 - (float)rep) > 1e-6f) {
+                /* Malformed shape compression format */
+                FREE(unpacked);
+                return 0; /* Failed */
+            }
+            for (i = countUnpack - 1; i <= countUnpack + rep - 2; i++) {
+                unpacked[i] = packed[countPack - 1];
+            }
+            countPack += 3;
+            countUnpack += rep;
+        }
+    }
+
+    if (countPack == numPacked) {
+        unpacked[countUnpack - 1] = packed[countPack - 1];
+    }
+
+    /* Cumulative sum */
+    for (i = 1; i < numSamples; i++) {
+        unpacked[i] += unpacked[i - 1];
+    }
+
+    result->numSamples = numSamples;
+    result->numUncompressedSamples = numSamples;
+    result->samples = unpacked;
+
+    return 1; /* Success */
+}
+
 void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
-    int ret;
-    const char* shape_section[] = {"[SHAPES]"};
     char line[MAX_LINE_LENGTH];
-    int shapeIndex;
-    int sampleIndex;
-    long pos;
+    int idx;
     char* p;
     float val;
+    FILE* binFile;
+    int maxIndex = -1;
+    int i;
+    int magic;
+    int numShapesHeader;
     
-    /* Check if library was already parsed */
     if (seq->isShapesLibraryParsed) return;
-
-    /* Go to the correct section */
     if (seq->offsets.shapes < 0) {
         seq->isShapesLibraryParsed = 1;
         return;
     }
 
-    /* Preallocate shapes array */
-    ret = initShapesLibrary(f, (seq->offsets).shapes, &seq->shapesLibrary, &seq->shapesLibrarySize);
-    if (ret != 0) {
-        fprintf(stderr, "Error: Failed to initialize shapesLibrary\n");
-        return;
-    }
-
-    /* Second pass: Parse and fill waveform data */
-    pos = seq->offsets.shapes;
-    if (fseek(f, pos, SEEK_SET) != 0) return;
-
-    /* Skip section header line */
-    if (!fgets(line, sizeof(line), f)) {
-        return;
-    }
-
-    /* Actual parsing */
-    while (fgets(line, sizeof(line), f)) {
-        p = line;
-        while (*p == ' ' || *p == '\t') p++;
-
-        if (*p == '\0' || *p == '#') continue;
-        if (*p == '[') break;
-
-        /* Beginning of waveform: parse shape ID */
-        if (strncmp(p, "shape_id", 8) == 0) {
-            if (sscanf(p + 8, "%d", &shapeIndex) == 1) sampleIndex = 0;
+    /* Try to open existing binary file */
+    binFile = fopen(seq->shapelibPath, "rb");
+    if (!binFile) {
+        /* Create binary file from text */
+        binFile = fopen(seq->shapelibPath, "wb");
+        if (!binFile) {
+            fprintf(stderr, "Error: Could not create shape library file %s\n", seq->shapelibPath);
+            return;
         }
 
-        /* Number of uncompressed samples: skip (already stored) */
-        if (strncmp(p, "num_samples", 11) == 0) {
-            continue;
-        }
+        /* Write Header */
+        magic = SHAPE_LIBRARY_MAGIC;
+        numShapesHeader = 0;
+        fwrite(&magic, sizeof(int), 1, binFile);
+        fwrite(&numShapesHeader, sizeof(int), 1, binFile);
 
-        /* Parse waveform sample value */
-        if (shapeIndex > 0 && shapeIndex <= seq->shapesLibrarySize) {
-            if (sscanf(p, "%f", &val) == 1){
-                if(sampleIndex < seq->shapesLibrary[shapeIndex - 1].numSamples) {
-                    seq->shapesLibrary[shapeIndex - 1].samples[sampleIndex++] = val;
+        /* Reset to start of shapes in text file */
+        if (fseek(f, seq->offsets.shapes, SEEK_SET) != 0) { fclose(binFile); return; }
+        if (!fgets(line, sizeof(line), f)) { fclose(binFile); return; } /* Skip header */
+
+        int currentID = -1;
+        int numUncompressed = 0;
+        int count = 0;
+        int capacity = 1024;
+        float* buffer = (float*)ALLOC(sizeof(float) * capacity);
+
+        while (fgets(line, sizeof(line), f)) {
+            p = line;
+            while (*p == ' ' || *p == '\t') p++;
+            if (*p == '[' || *p == 'e') break;
+            if (*p == '\0' || *p == '#') continue;
+
+            if (strncmp(p, "shape_id", 8) == 0) {
+                /* Flush previous shape */
+                if (currentID != -1) {
+                    pulseqlib_ShapeArbitrary compressedShape;
+                    pulseqlib_ShapeArbitrary uncompressedShape;
+                    
+                    compressedShape.samples = buffer;
+                    compressedShape.numSamples = count;
+                    compressedShape.numUncompressedSamples = numUncompressed;
+                    
+                    if (decompressShape(&compressedShape, &uncompressedShape)) {
+                        fwrite(&uncompressedShape.numSamples, sizeof(int), 1, binFile);
+                        fwrite(&uncompressedShape.numSamples, sizeof(int), 1, binFile); /* Stored count is now uncompressed count */
+                        if (uncompressedShape.numSamples > 0) 
+                            fwrite(uncompressedShape.samples, sizeof(float), uncompressedShape.numSamples, binFile);
+                        
+                        if (uncompressedShape.samples) FREE(uncompressedShape.samples);
+                    } else {
+                        /* Error or empty shape */
+                        int zero = 0;
+                        fwrite(&zero, sizeof(int), 1, binFile);
+                        fwrite(&zero, sizeof(int), 1, binFile);
+                    }
+                    numShapesHeader++;
+                }
+                
+                /* Start new shape */
+                if (sscanf(p + 8, "%d", &currentID) == 1) {
+                    /* Valid ID */
+                }
+                count = 0;
+                numUncompressed = 0;
+            }
+            else if (strncmp(p, "num_samples", 11) == 0) {
+                sscanf(p + 11, "%d", &numUncompressed);
+            }
+            else {
+                /* Sample value */
+                if (sscanf(p, "%f", &val) == 1) {
+                    if (count >= capacity) {
+                        capacity *= 2;
+                        float* newBuf = (float*)ALLOC(sizeof(float) * capacity);
+                        if (newBuf) {
+                            memcpy(newBuf, buffer, sizeof(float) * count);
+                            FREE(buffer);
+                            buffer = newBuf;
+                        }
+                    }
+                    if (buffer) buffer[count++] = val;
                 }
             }
         }
+        /* Flush last shape */
+        if (currentID != -1) {
+            pulseqlib_ShapeArbitrary compressedShape;
+            pulseqlib_ShapeArbitrary uncompressedShape;
+            
+            compressedShape.samples = buffer;
+            compressedShape.numSamples = count;
+            compressedShape.numUncompressedSamples = numUncompressed;
+            
+            if (decompressShape(&compressedShape, &uncompressedShape)) {
+                fwrite(&uncompressedShape.numSamples, sizeof(int), 1, binFile);
+                fwrite(&uncompressedShape.numSamples, sizeof(int), 1, binFile);
+                if (uncompressedShape.numSamples > 0) 
+                    fwrite(uncompressedShape.samples, sizeof(float), uncompressedShape.numSamples, binFile);
+                
+                if (uncompressedShape.samples) FREE(uncompressedShape.samples);
+            } else {
+                int zero = 0;
+                fwrite(&zero, sizeof(int), 1, binFile);
+                fwrite(&zero, sizeof(int), 1, binFile);
+            }
+            numShapesHeader++;
+        }
+        FREE(buffer);
+        
+        /* Update header with actual count */
+        fseek(binFile, sizeof(int), SEEK_SET);
+        fwrite(&numShapesHeader, sizeof(int), 1, binFile);
+        
+        fclose(binFile);
+        
+        /* Re-open for reading */
+        binFile = fopen(seq->shapelibPath, "rb");
     }
 
+    if (!binFile) return;
+
+    /* Read Header */
+    if (fread(&magic, sizeof(int), 1, binFile) != 1) { fclose(binFile); return; }
+    
+    if (magic == SHAPE_LIBRARY_MAGIC) {
+        seq->shapesLibrary.byteSwap = 0;
+    } else {
+        swap4(&magic);
+        if (magic == SHAPE_LIBRARY_MAGIC) {
+            seq->shapesLibrary.byteSwap = 1;
+        } else {
+            fprintf(stderr, "Error: Invalid shape library magic number\n");
+            fclose(binFile);
+            return;
+        }
+    }
+
+    if (fread(&numShapesHeader, sizeof(int), 1, binFile) != 1) { fclose(binFile); return; }
+    if (seq->shapesLibrary.byteSwap) swap4(&numShapesHeader);
+
+    seq->shapesLibrary.shapesLibrarySize = numShapesHeader;
+    seq->shapesLibrary.shapeOffsets = (int*)ALLOC(sizeof(int) * numShapesHeader);
+    seq->shapesLibrary.numSamples = (int*)ALLOC(sizeof(int) * numShapesHeader);
+    
+    /* Scan file to fill index */
+    long offset = ftell(binFile);
+    int nu, ns;
+    
+    for (i = 0; i < numShapesHeader; i++) {
+        seq->shapesLibrary.shapeOffsets[i] = (int)offset;
+        if (fread(&nu, sizeof(int), 1, binFile) != 1) break;
+        if (fread(&ns, sizeof(int), 1, binFile) != 1) break;
+        
+        if (seq->shapesLibrary.byteSwap) {
+            swap4(&ns);
+        }
+        
+        seq->shapesLibrary.numSamples[i] = ns; 
+        
+        offset += 2 * sizeof(int) + ns * sizeof(float);
+        fseek(binFile, ns * sizeof(float), SEEK_CUR);
+    }
+
+    seq->shapesLibrary.file = binFile;
+    seq->shapesLibrary.open = 1;
     seq->isShapesLibraryParsed = 1;
+}
+
+
+static int loadShape(const pulseqlib_SeqFile* seq, int index, pulseqlib_ShapeArbitrary* shape) {
+    int j;
+    if (!seq->shapesLibrary.open || index < 0 || index >= seq->shapesLibrary.shapesLibrarySize) return 0;
+    
+    /* Get size from RAM lookup */
+    shape->numSamples = seq->shapesLibrary.numSamples[index];
+    shape->numUncompressedSamples = shape->numSamples;
+
+    /* If no samples, we are done */
+    if (shape->numSamples <= 0) {
+        shape->samples = NULL;
+        return 1;
+    }
+
+    /* Allocate memory for the waveform */
+    shape->samples = (float*)ALLOC(sizeof(float) * shape->numSamples);
+    if (!shape->samples) return 0;
+
+    long offset = seq->shapesLibrary.shapeOffsets[index];
+    /* Skip header (2 ints: numUncompressed, numSamples) */
+    if (fseek(seq->shapesLibrary.file, offset + 2 * sizeof(int), SEEK_SET) != 0) {
+        FREE(shape->samples);
+        return 0;
+    }
+    
+    if (fread(shape->samples, sizeof(float), shape->numSamples, seq->shapesLibrary.file) != (size_t)shape->numSamples) {
+        FREE(shape->samples);
+        return 0;
+    }
+    
+    if (seq->shapesLibrary.byteSwap) {
+        for (j = 0; j < shape->numSamples; j++) {
+            swap4(&(shape->samples[j]));
+        }
+    }
+    return 1;
 }
 
 
@@ -1139,79 +1271,6 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     seq->isExtensionsLibraryParsed = 1;
 }
 
-
-int decompressShape(pulseqlib_ShapeArbitrary* encoded, pulseqlib_ShapeArbitrary* result)
-{
-    int i, rep;
-    const float *packed;
-    int numPacked, numSamples;
-    int countPack = 1;
-    int countUnpack = 1;
-    float* unpacked;
-    
-    /* Validate inputs */
-    if (!encoded || !result) {
-        return 0; /* Invalid inputs */
-    }
-    
-    packed = encoded->samples;
-    numPacked = encoded->numSamples;
-    numSamples = encoded->numUncompressedSamples;
-    
-    /* Input shape is uncompressed - copy it */
-    if (encoded->numSamples == encoded->numUncompressedSamples) {
-        result->numSamples = encoded->numSamples;
-        result->numUncompressedSamples = encoded->numUncompressedSamples;
-        result->samples = (float*)ALLOC(sizeof(float) * encoded->numSamples);
-        if (!result->samples) {
-            return 0; /* Allocation failed */
-        }
-        memcpy(result->samples, encoded->samples, sizeof(float) * encoded->numSamples);
-        return 1; /* Success */
-    }
-
-    unpacked = (float*) ALLOC(sizeof(float) * numSamples);
-    if (unpacked == NULL) {
-        return 0; /* Allocation failed */
-    }
-
-    while (countPack < numPacked) {
-        if (packed[countPack - 1] != packed[countPack]) {
-            unpacked[countUnpack - 1] = packed[countPack - 1];
-            countPack++;
-            countUnpack++;
-        } else {
-            rep = (int)(packed[countPack + 1]) + 2;
-            if (fabsf(packed[countPack + 1] + 2 - (float)rep) > 1e-6f) {
-                /* Malformed shape compression format */
-                FREE(unpacked);
-                return 0; /* Failed */
-            }
-            for (i = countUnpack - 1; i <= countUnpack + rep - 2; i++) {
-                unpacked[i] = packed[countPack - 1];
-            }
-            countPack += 3;
-            countUnpack += rep;
-        }
-    }
-
-    if (countPack == numPacked) {
-        unpacked[countUnpack - 1] = packed[countPack - 1];
-    }
-
-    /* Cumulative sum */
-    for (i = 1; i < numSamples; i++) {
-        unpacked[i] += unpacked[i - 1];
-    }
-
-    result->numSamples = numSamples;
-    result->numUncompressedSamples = numSamples;
-    result->samples = unpacked;
-
-    return 1; /* Success */
-}
-
-
 /******************************************* Public methods *************************************************/
 void seqFileInit(pulseqlib_SeqFile* seq) {
     int i;
@@ -1232,6 +1291,12 @@ void seqFileInit(pulseqlib_SeqFile* seq) {
     seq->offsets.rotations = -1;
     seq->offsets.shapes = -1;
     seq->offsets.signature = -1;
+
+    seq->versionMajor = 0;
+    seq->versionMinor = 0;
+    seq->versionRevision = 0;
+    seq->versionCombined = 0;
+    seq->isVersionParsed = 0;
 
     INIT_LIBRARY(seq, definitionsLibrary, numDefinitions, isDefinitionsLibraryParsed);
     INIT_LIBRARY(seq, blockLibrary, numBlocks, isBlockLibraryParsed);
@@ -1255,7 +1320,14 @@ void seqFileInit(pulseqlib_SeqFile* seq) {
     }
     seq->extensionLUTSize = 0;
     seq->extensionLUT = NULL;
-    INIT_LIBRARY(seq, shapesLibrary, shapesLibrarySize, isShapesLibraryParsed);
+    seq->isShapesLibraryParsed = 0;
+    seq->shapesLibrary.open = 0;
+    seq->shapesLibrary.file = NULL;
+    seq->shapesLibrary.ioBuffer = NULL;
+    seq->shapesLibrary.shapeOffsets = NULL;
+    seq->shapesLibrary.numSamples = NULL;
+    seq->shapesLibrary.shapesLibrarySize = 0;
+    seq->shapesLibrary.byteSwap = 0;
 }
 
 
@@ -1266,245 +1338,94 @@ void seqFileInit(pulseqlib_SeqFile* seq) {
  * @param[in, out] seq The uninitialized SeqFile structure.
  */
 void pulseqlib_seqFileInit(const char* filePath, pulseqlib_SeqFile* seq) {
+    char* ext;
     seqFileInit(seq);
 
     /* Allocate and copy the file path */
-    seq->filePath = (char*) ALLOC(strlen(filePath) + 1);
-    strcpy(seq->filePath, filePath);
+    if (filePath) {
+        seq->filePath = (char*) ALLOC(strlen(filePath) + 1);
+        strcpy(seq->filePath, filePath);
+
+        /* Create path for shape library */
+        seq->shapelibPath = (char*)ALLOC(strlen(filePath) + 8); /* .seq -> .shapes + null */
+        strcpy(seq->shapelibPath, filePath);
+        ext = strrchr(seq->shapelibPath, '.');
+        if (ext && strcmp(ext, ".seq") == 0) {
+            strcpy(ext, ".shapes");
+        } else {
+            strcat(seq->shapelibPath, ".shapes");
+        }
+    } else {
+        seq->filePath = NULL;
+        seq->shapelibPath = NULL;
+    }
 }
 
 
-/**
- * @brief Free SeqFile structure.
- * 
- * @param[in, out] seq The SeqFile structure.
- */
-void pulseqlib_seqFileFree(pulseqlib_SeqFile *seq) {
-    pulseqlib_seqFileReset(seq);
-    FREE(seq->filePath);
-    FREE(seq);
-}
-
-
-/**
- * @brief Reset SeqFile fields.
- * 
- * @param[in, out] seq The SeqFile structure.
- */
-void pulseqlib_seqFileReset(pulseqlib_SeqFile* seq) {
-    int i, j;
+void pulseqlib_seqFileFree(pulseqlib_SeqFile* seq) {
     if (!seq) return;
-    if (seq->isDefinitionsLibraryParsed && seq->definitionsLibrary) {
+    if (seq->filePath) FREE(seq->filePath);
+    if (seq->shapelibPath) FREE(seq->shapelibPath);
+    
+    /* Free libraries */
+    if (seq->definitionsLibrary) {
+        int i, j;
         for (i = 0; i < seq->numDefinitions; i++) {
+            for (j = 0; j < seq->definitionsLibrary[i].valueSize; j++) {
+                FREE(seq->definitionsLibrary[i].value[j]);
+            }
             FREE(seq->definitionsLibrary[i].value);
         }
         FREE(seq->definitionsLibrary);
     }
-    if (seq->isBlockLibraryParsed) {
-        FREE(seq->blockLibrary);
-        FREE(seq->blockIDs);
-        seq->blockIDs = NULL;
-    }
-    if (seq->isRfLibraryParsed)         FREE(seq->rfLibrary);
-    if (seq->isGradLibraryParsed)       FREE(seq->gradLibrary);
-    if (seq->isAdcLibraryParsed)        FREE(seq->adcLibrary);
-    if (seq->isExtensionsLibraryParsed) {
-        FREE(seq->extensionsLibrary);
-        FREE(seq->triggerLibrary);
-        
-        /* Free both rotation libraries to be safe */
-        FREE(seq->rotationQuaternionLibrary);
-        FREE(seq->rotationMatrixLibrary);
-        
-        FREE(seq->labelsetLibrary);
-        FREE(seq->labelincLibrary);
-        FREE(seq->softDelayLibrary);
-        FREE(seq->rfShimLibrary);
-    }
-    if (seq->isShapesLibraryParsed && seq->shapesLibrary) {
-        for (i = 0; i < seq->shapesLibrarySize; i++) {
-            FREE(seq->shapesLibrary[i].samples);
-            seq->shapesLibrary[i].samples = NULL;
-            seq->shapesLibrary[i].numUncompressedSamples = 0;
-            seq->shapesLibrary[i].numSamples = 0;
-        }
-        FREE(seq->shapesLibrary);
-    }
-
-    FREE(seq->extensionLUT);
     
-    seqFileInit(seq);
+    if (seq->blockLibrary) FREE(seq->blockLibrary);
+    if (seq->rfLibrary) FREE(seq->rfLibrary);
+    if (seq->gradLibrary) FREE(seq->gradLibrary);
+    if (seq->adcLibrary) FREE(seq->adcLibrary);
+    if (seq->extensionsLibrary) FREE(seq->extensionsLibrary);
+    if (seq->triggerLibrary) FREE(seq->triggerLibrary);
+    if (seq->rotationQuaternionLibrary) FREE(seq->rotationQuaternionLibrary);
+    if (seq->rotationMatrixLibrary) FREE(seq->rotationMatrixLibrary);
+    if (seq->labelsetLibrary) FREE(seq->labelsetLibrary);
+    if (seq->labelincLibrary) FREE(seq->labelincLibrary);
+    if (seq->softDelayLibrary) FREE(seq->softDelayLibrary);
+    if (seq->rfShimLibrary) FREE(seq->rfShimLibrary);
+    if (seq->extensionLUT) FREE(seq->extensionLUT);
+    if (seq->blockIDs) FREE(seq->blockIDs);
+
+    /* Shapes Library */
+    if (seq->shapesLibrary.open && seq->shapesLibrary.file) {
+        fclose(seq->shapesLibrary.file);
+        seq->shapesLibrary.open = 0;
+    }
+    if (seq->shapesLibrary.ioBuffer) FREE(seq->shapesLibrary.ioBuffer); /* Free the I/O buffer */
+    if (seq->shapesLibrary.shapeOffsets) FREE(seq->shapesLibrary.shapeOffsets);
+    if (seq->shapesLibrary.numSamples) FREE(seq->shapesLibrary.numSamples);
 }
 
-
-/**
- * @brief Initializes a sequence block with default values.
- *
- * @param[out] block The pre-allocated block structure to initialize
- * @return 1 if successful, 0 if failed
- */
 void pulseqlib_seqBlockInit(pulseqlib_SeqBlock* block) {
-    pulseqlib_RFEvent rf;
-    pulseqlib_GradEvent gx;
-    pulseqlib_GradEvent gy;
-    pulseqlib_GradEvent gz;
-    pulseqlib_ADCEvent adc;
-    pulseqlib_TriggerEvent trigger;
-    pulseqlib_RotationEvent rotation;
-    pulseqlib_FlagEvent flag;
-    pulseqlib_LabelEvent labelset;
-    pulseqlib_LabelEvent labelinc;
-    pulseqlib_SoftDelayEvent delay;
-    pulseqlib_RfShimmingEvent rfShimming;
-    
-    /* Check for null pointer */
-    if (!block) return;
-
-    /* Initialize rf Event*/
-    rf.type = 0;
-    gx.type = 0;
-    gy.type = 0;
-    gz.type = 0;
-    adc.type = 0;
-    trigger.type = 0;
-    rotation.type = 0;
-    delay.type = 0;
-    rfShimming.type = 0;
-
-    /* Initialize flag values to 0 */
-    flag.trid = 0;
-    flag.nav = 0;
-    flag.rev = 0;
-    flag.sms = 0;
-    flag.ref = 0;
-    flag.ima = 0;
-    flag.noise = 0;
-    flag.pmc = 0;
-    flag.norot = 0;
-    flag.nopos = 0;
-    flag.noscl = 0;
-    flag.once = 0;
-    
-    /* Initialize label values to 0 */
-    labelset.slc = 0;
-    labelset.seg = 0;
-    labelset.rep = 0;
-    labelset.avg = 0;
-    labelset.set = 0;
-    labelset.eco = 0;
-    labelset.phs = 0;
-    labelset.lin = 0;
-    labelset.par = 0;
-    labelset.acq = 0;
-    labelinc.slc = 0;
-    labelinc.seg = 0;
-    labelinc.rep = 0;
-    labelinc.avg = 0;
-    labelinc.set = 0;
-    labelinc.eco = 0;
-    labelinc.phs = 0;
-    labelinc.lin = 0;
-    labelinc.par = 0;
-    labelinc.acq = 0;
-
-    /* Initialize the block */
-    block->rf = rf;
-    block->gx = gx;
-    block->gy = gy;
-    block->gz = gz;
-    block->adc = adc;
-    block->trigger = trigger;
-    block->rotation = rotation;
-    block->flag = flag;
-    block->labelset = labelset;
-    block->labelinc = labelinc;
-    block->delay = delay;
-    block->rfShimming = rfShimming;
+    if (block) {
+        memset(block, 0, sizeof(pulseqlib_SeqBlock));
+    }
 }
 
-
-/**
- * @brief Frees all resources associated with a SeqBlock.
- *
- * This function deallocates memory for all waveform samples and resets the block.
- *
- * @param[in,out] block The SeqBlock to be freed.
- */
 void pulseqlib_seqBlockFree(pulseqlib_SeqBlock* block) {
-    if (block == 0) return;
-
-    /* RF waveforms */
-    if (block->rf.type > 0){
-        if (block->rf.magShape.samples) {
-            FREE(block->rf.magShape.samples);
-            block->rf.magShape.samples = NULL;
-        }
-        if (block->rf.phaseShape.samples) {
-            FREE(block->rf.phaseShape.samples);
-            block->rf.phaseShape.samples = NULL;
-        }
-        if (block->rf.timeShape.samples) {
-            FREE(block->rf.timeShape.samples);
-            block->rf.timeShape.samples = NULL;
-        }
-    }
-
-    /* GX waveforms */
-    if (block->gx.type > 1){
-        if (block->gx.waveShape.samples) {
-            FREE(block->gx.waveShape.samples);
-            block->gx.waveShape.samples = NULL;
-        }
-        if (block->gx.timeShape.samples) {
-            FREE(block->gx.timeShape.samples);
-            block->gx.timeShape.samples = NULL;
-        }
-    }
-
-    /* GY waveforms */
-    if (block->gy.type > 1){
-        if (block->gy.waveShape.samples) {
-            FREE(block->gy.waveShape.samples);
-            block->gy.waveShape.samples = NULL;
-        }
-        if (block->gy.timeShape.samples) {
-            FREE(block->gy.timeShape.samples);
-            block->gy.timeShape.samples = NULL;
-        }
-    }
-
-    /* GZ waveforms */
-    if (block->gz.type > 1){
-        if (block->gz.waveShape.samples) {
-            FREE(block->gz.waveShape.samples);
-            block->gz.waveShape.samples = NULL;
-        }
-        if (block->gz.timeShape.samples) {
-            FREE(block->gz.timeShape.samples);
-            block->gz.timeShape.samples = NULL;
-        }
-    }
-
-    /* ADC waveform */
-    if (block->adc.type > 0){
-        if (block->adc.phaseModulationShape.samples) {
-            FREE(block->adc.phaseModulationShape.samples);
-            block->adc.phaseModulationShape.samples = NULL;
-        }
-    }
-
-    /* RF shimming arrays */
-    if (block->rfShimming.type > 0){
-        if (block->rfShimming.amplitudes) {
-            FREE(block->rfShimming.amplitudes);
-            block->rfShimming.amplitudes = NULL;
-        }
-        if (block->rfShimming.phases) {
-            FREE(block->rfShimming.phases);
-            block->rfShimming.phases = NULL;
-        }
-    }
+    if (!block) return;
+    if (block->rf.magShape.samples) FREE(block->rf.magShape.samples);
+    if (block->rf.phaseShape.samples) FREE(block->rf.phaseShape.samples);
+    if (block->rf.timeShape.samples) FREE(block->rf.timeShape.samples);
+    if (block->gx.waveShape.samples) FREE(block->gx.waveShape.samples);
+    if (block->gx.timeShape.samples) FREE(block->gx.timeShape.samples);
+    if (block->gy.waveShape.samples) FREE(block->gy.waveShape.samples);
+    if (block->gy.timeShape.samples) FREE(block->gy.timeShape.samples);
+    if (block->gz.waveShape.samples) FREE(block->gz.waveShape.samples);
+    if (block->gz.timeShape.samples) FREE(block->gz.timeShape.samples);
+    if (block->adc.phaseModulationShape.samples) FREE(block->adc.phaseModulationShape.samples);
+    if (block->rfShimming.amplitudes) FREE(block->rfShimming.amplitudes);
+    if (block->rfShimming.phases) FREE(block->rfShimming.phases);
 }
+
 
 /**
  * @brief Read SeqFile content
@@ -1612,7 +1533,7 @@ void pulseqlib_getRawBlockContentIDs(const pulseqlib_SeqFile* seq, const int blo
  * @param[in] parseExtensions Flag indicating whether to parse extensions.
  * @param[in, out] block Pointer to a pre-allocated SeqBlock to fill.
  */
-void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, const int parseExtensions, pulseqlib_SeqBlock* block) {
+void pulseqlib_getBlock(pulseqlib_SeqFile* seq, const int blockIndex, const int parseExtensions, pulseqlib_SeqBlock* block) {
     float* farray;
     int idx;
     int i, labelID, labelValue, extType, extIdx;
@@ -1623,11 +1544,27 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
     int* isRealSample;
     pulseqlib_RfShimEntry rfshim;
     pulseqlib_RawBlock rawBlock;
-    pulseqlib_ShapeArbitrary shape;
     
     /* Check inputs */
     if (!seq || !block || blockIndex < 0 || blockIndex >= seq->numBlocks) {
         return; /* Invalid inputs */
+    }
+    
+    /* Ensure file is open */
+    if (!seq->shapesLibrary.open) {
+        seq->shapesLibrary.file = fopen(seq->shapelibPath, "rb");
+        if (seq->shapesLibrary.file) {
+            seq->shapesLibrary.open = 1;
+            
+            /* Allocate and assign custom buffer to mimic legacy real-time behavior */
+            seq->shapesLibrary.ioBuffer = (char*)ALLOC(SHAPE_FILE_BUFFER_SIZE);
+            if (seq->shapesLibrary.ioBuffer) {
+                setvbuf(seq->shapesLibrary.file, seq->shapesLibrary.ioBuffer, _IOFBF, SHAPE_FILE_BUFFER_SIZE);
+            }
+        } else {
+            fprintf(stderr, "Error: Could not open shape library file %s\n", seq->shapelibPath);
+            return;
+        }
     }
     
     pulseqlib_getRawBlockContentIDs(seq, blockIndex, parseExtensions, &rawBlock);
@@ -1643,25 +1580,15 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
 
         idx = (int)farray[1];
         if (idx > 0) {
-            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                return; /* Failed to decompress shape */
-            }
-            block->rf.magShape = shape;
+            if (!loadShape(seq, idx - 1, &block->rf.magShape)) return;
         }
 
         idx = (int)farray[2];
         if (idx > 0) {
-            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                return; /* Failed to decompress shape */
-            }
-            block->rf.phaseShape = shape;
+            if (!loadShape(seq, idx - 1, &block->rf.phaseShape)) return;
             for (i = 0; i < block->rf.phaseShape.numSamples; i++) {
                 block->rf.phaseShape.samples[i] *= TWO_PI; /* Rescale phase shape to radians */
             }
-        } else {
-            block->rf.phaseShape.numSamples = 0; /* Set phase shape to 0 samples */
-            block->rf.phaseShape.numUncompressedSamples = 0; /* Set phase shape to 0 samples */
-            block->rf.phaseShape.samples = NULL; /* Free phase shape samples */
         }
 
         /* Attempt to detect real-valued RF waveform */
@@ -1699,14 +1626,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
 
         idx = (int)farray[3];
         if (idx > 0) {
-            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                return; /* Failed to decompress shape */
-            }
-            block->rf.timeShape = shape;
-        } else {
-            block->rf.timeShape.numSamples = 0; /* Set time shape to 0 samples */
-            block->rf.timeShape.numUncompressedSamples = 0; /* Set time shape to 0 samples */
-            block->rf.timeShape.samples = NULL; /* Free time shape samples */
+            if (!loadShape(seq, idx - 1, &block->rf.timeShape)) return;
         }
 
         block->rf.center = farray[4];
@@ -1737,22 +1657,12 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
 
             idx = (int)farray[4];
             if (idx > 0) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    return; /* Failed to decompress shape */
-                }
-                block->gx.waveShape = shape;
+                if (!loadShape(seq, idx - 1, &block->gx.waveShape)) return;
             }
 
             idx = (int)farray[5];
             if (idx > 0) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    return; /* Failed to decompress shape */
-                }
-                block->gx.timeShape = shape;
-            } else {
-                block->gx.timeShape.numSamples = 0; /* Set time shape to 0 samples */
-                block->gx.timeShape.numUncompressedSamples = 0; /* Set time shape to 0 samples */
-                block->gx.timeShape.samples = NULL; /* Free time shape samples */
+                if (!loadShape(seq, idx - 1, &block->gx.timeShape)) return;
             }
 
             block->gx.delay = (int)farray[6];
@@ -1779,22 +1689,12 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
 
             idx = (int)farray[4];
             if (idx > 0) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    return; /* Failed to decompress shape */
-                }
-                block->gy.waveShape = shape;
+                if (!loadShape(seq, idx - 1, &block->gy.waveShape)) return;
             }
 
             idx = (int)farray[5];
             if (idx > 0) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    return; /* Failed to decompress shape */
-                }
-                block->gy.timeShape = shape;
-            } else {
-                block->gy.timeShape.numSamples = 0; /* Set time shape to 0 samples */
-                block->gy.timeShape.numUncompressedSamples = 0; /* Set time shape to 0 samples */
-                block->gy.timeShape.samples = NULL; /* Free time shape samples */
+                if (!loadShape(seq, idx - 1, &block->gy.timeShape)) return;
             }
 
             block->gy.delay = (int)farray[6];
@@ -1821,22 +1721,12 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
 
             idx = (int)farray[4];
             if (idx > 0) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    return; /* Failed to decompress shape */
-                }
-                block->gz.waveShape = shape;
+                if (!loadShape(seq, idx - 1, &block->gz.waveShape)) return;
             }
 
             idx = (int)farray[5];
             if (idx > 0) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    return; /* Failed to decompress shape */
-                }
-                block->gz.timeShape = shape;
-            } else {
-                block->gz.timeShape.numSamples = 0; /* Set time shape to 0 samples */
-                block->gz.timeShape.numUncompressedSamples = 0; /* Set time shape to 0 samples */
-                block->gz.timeShape.samples = NULL; /* Free time shape samples */
+                if (!loadShape(seq, idx - 1, &block->gz.timeShape)) return;
             }
 
             block->gz.delay = (int)farray[6];
@@ -1857,14 +1747,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
 
         idx = (int)farray[7];
         if (idx > 0) {
-            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                return; /* Failed to decompress shape */
-            }
-            block->adc.phaseModulationShape = shape;
-        } else {
-            block->adc.phaseModulationShape.numSamples = 0; /* Set phase modulation shape to 0 samples */
-            block->adc.phaseModulationShape.numUncompressedSamples = 0; /* Set phase modulation shape to 0 samples */
-            block->adc.phaseModulationShape.samples = NULL; /* Free phase modulation shape samples */
+            if (!loadShape(seq, idx - 1, &block->adc.phaseModulationShape)) return;
         }
     }
 
@@ -1955,8 +1838,8 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
                 rfshim = seq->rfShimLibrary[extIdx];
                 block->rfShimming.type = 1;
                 block->rfShimming.nChan = rfshim.nChannels;
-                block->rfShimming.amplitudes = ALLOC(sizeof(float) * rfshim.nChannels);
-                block->rfShimming.phases = ALLOC(sizeof(float) * rfshim.nChannels);
+                block->rfShimming.amplitudes = (float*)ALLOC(sizeof(float) * rfshim.nChannels);
+                block->rfShimming.phases = (float*)ALLOC(sizeof(float) * rfshim.nChannels);
                 for (idx = 0; idx < rfshim.nChannels; idx++) {
                     block->rfShimming.amplitudes[idx] = rfshim.values[2 * idx];
                     block->rfShimming.phases[idx] = rfshim.values[2 * idx + 1];
