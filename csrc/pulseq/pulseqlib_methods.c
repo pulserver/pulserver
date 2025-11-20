@@ -935,7 +935,7 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (seq->shapesLibrary.byteSwap) swap4(&numShapesHeader);
     
     seq->shapesLibrary.shapesLibrarySize = numShapesHeader;
-    seq->shapesLibrary.shapeOffsets = (long*)ALLOC(sizeof(long) * numShapesHeader);
+    seq->shapesLibrary.shapeOffsets = (int*)ALLOC(sizeof(int) * numShapesHeader);
     seq->shapesLibrary.numSamples = (int*)ALLOC(sizeof(int) * numShapesHeader);
     
     /* Scan file to fill index */
