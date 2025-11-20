@@ -4,9 +4,41 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <time.h>
 
 #include "pulseqlib.h"
 #include "pulseqlib_methods.h"
+
+/* Helper function to get a block (needed for shape loading test) */
+static pulseqlib_SeqBlock* getBlock(pulseqlib_SeqFile* seq, int blockIndex, int parseExtensions) {
+    pulseqlib_SeqBlock* block;
+
+    /* Allocate memory for the sequence file */
+    block = (pulseqlib_SeqBlock*)ALLOC(sizeof(pulseqlib_SeqBlock));
+    if (!block) return NULL;
+
+    /* Initialize the block with default values */
+    pulseqlib_seqBlockInit(block);
+    
+    /* Get the block using the new API */
+    pulseqlib_getBlock(seq, blockIndex, parseExtensions, block);
+    return block;
+}
+
+/* Helper to clean up .shapes file */
+static void clean_shapes(const char* filePath) {
+    char shapes_path[1024];
+    char* ext;
+    snprintf(shapes_path, sizeof(shapes_path), "%s/%s", TEST_ROOT_DIR, filePath);
+    
+    /* Replace .seq with .shapes */
+    ext = strrchr(shapes_path, '.');
+    if (ext && strcmp(ext, ".seq") == 0) {
+        strcpy(ext, ".shapes");
+        remove(shapes_path);
+    }
+}
 
 static pulseqlib_SeqFile* load_seq(char* filePath) {
     char seq_path[1024];
@@ -73,11 +105,79 @@ MU_TEST(test_definitions) {
     pulseqlib_seqFileFree(seq);
 }
 
+MU_TEST(test_shapes_io) {
+    pulseqlib_SeqBlock* block;
+    pulseqlib_SeqFile* seq;
+    char shapes_path[1024];
+    struct stat attr;
+    time_t mtime_before;
+    FILE* f_handle;
+    pulseqlib_SeqBlock* block2;
+    
+    snprintf(shapes_path, sizeof(shapes_path), "%s/expected_output/seq2.shapes", TEST_ROOT_DIR);
+    
+    /* Ensure clean start */
+    clean_shapes("expected_output/seq2.seq");
+    
+    /* 1. Load sequence (creates .shapes) */
+    seq = load_seq("expected_output/seq2.seq");
+    mu_assert(seq != NULL, "Sequence should load");
+    
+    /* Check initial state - should be closed until needed */
+    mu_assert(seq->shapesLibrary.open == 0, "Shapes library should be closed initially");
+    
+    /* 2. Trigger shape loading */
+    block = getBlock(seq, 0, 1); /* Block 0 has shapes */
+    mu_assert(seq->shapesLibrary.open == 1, "Shapes library should be open after accessing block with shapes");
+    mu_assert(seq->shapesLibrary.file != NULL, "File pointer should be valid");
+    
+    /* 3. Verify persistence of file handle */
+    f_handle = seq->shapesLibrary.file;
+    block2 = getBlock(seq, 1, 1);
+    mu_assert(seq->shapesLibrary.file == f_handle, "File handle should be reused");
+    
+    pulseqlib_seqBlockFree(block);
+    FREE(block);
+    pulseqlib_seqBlockFree(block2);
+    FREE(block2);
+    
+    /* 4. Close and check */
+    /* We manually allocate/free here to check the struct state after pulseqlib_seqFileFree */
+    pulseqlib_seqFileFree(seq);
+    mu_assert(seq->shapesLibrary.open == 0, "Shapes library should be marked closed after free");
+    FREE(seq);
+
+    /* 5. Test Persistence (not recreated) */
+    /* Get timestamp of existing .shapes */
+    if (stat(shapes_path, &attr) == 0) {
+        mtime_before = attr.st_mtime;
+    } else {
+        mu_fail("Could not stat .shapes file");
+    }
+    
+    sleep(1); /* Ensure filesystem time resolution */
+    
+    /* Reload */
+    seq = load_seq("expected_output/seq2.seq");
+    
+    /* Check timestamp again */
+    if (stat(shapes_path, &attr) == 0) {
+        mu_assert(attr.st_mtime == mtime_before, ".shapes file should not be recreated if it exists");
+    }
+    
+    pulseqlib_seqFileFree(seq);
+    FREE(seq);
+    
+    clean_shapes("expected_output/seq2.seq");
+}
+
 MU_TEST_SUITE(test_seqfile_suite) {
     printf("Running test_basic...\n");
     MU_RUN_TEST(test_basic);
     printf("Running test_definitions...\n");
     MU_RUN_TEST(test_definitions);
+    printf("Running test_shapes_io...\n");
+    MU_RUN_TEST(test_shapes_io);
 }
 
 int test_seqfile_main(void) {

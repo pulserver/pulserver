@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <time.h>
 
 #include "pulseqlib.h"
 #include "pulseqlib_methods.h"
@@ -539,6 +541,31 @@ MU_TEST(test_pure_delay) {
     clean_shapes("expected_output/seq2.seq");
 }
 
+MU_TEST(test_waveform_content) {
+    pulseqlib_SeqBlock* block;
+    pulseqlib_SeqFile* seq = load_seq("expected_output/seq2.seq");
+    
+    /* Block 39 is arbitrary gradient Gx with amplitude 1.0 */
+    /* Defined in make_test_sequence.py: waveform=np.array([0, 0.1, 1, 0.1, 0]) */
+    block = getBlock(seq, 39, 1);
+    
+    mu_assert(block->gx.type == 2, "Block 39 should be arbitrary gradient");
+    mu_assert(block->gx.waveShape.numSamples == 5, "Block 39 should have 5 samples");
+    
+    /* Check samples against expected values [0, 0.1, 1, 0.1, 0] */
+    /* We use a small epsilon for floating point comparison */
+    mu_assert(fabs(block->gx.waveShape.samples[0] - 0.0) < 1e-6, "Sample 0 should be 0.0");
+    mu_assert(fabs(block->gx.waveShape.samples[1] - 0.1) < 1e-6, "Sample 1 should be 0.1");
+    mu_assert(fabs(block->gx.waveShape.samples[2] - 1.0) < 1e-6, "Sample 2 should be 1.0");
+    mu_assert(fabs(block->gx.waveShape.samples[3] - 0.1) < 1e-6, "Sample 3 should be 0.1");
+    mu_assert(fabs(block->gx.waveShape.samples[4] - 0.0) < 1e-6, "Sample 4 should be 0.0");
+    
+    pulseqlib_seqBlockFree(block);
+    FREE(block);
+    pulseqlib_seqFileFree(seq);
+    FREE(seq);
+    clean_shapes("expected_output/seq2.seq");
+}
 
 MU_TEST_SUITE(test_seqblock_suite) {
     printf("Running test_rf...\n");
@@ -557,6 +584,8 @@ MU_TEST_SUITE(test_seqblock_suite) {
     MU_RUN_TEST(test_delay);
     printf("Running test_pure_delay...\n");
     MU_RUN_TEST(test_pure_delay);
+    printf("Running test_waveform_content...\n");
+    MU_RUN_TEST(test_waveform_content);
 }
 
 int test_block_main(void) {
