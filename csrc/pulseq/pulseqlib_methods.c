@@ -783,6 +783,7 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     
     if (seq->isShapesLibraryParsed) return;
     if (seq->offsets.shapes < 0) {
+        /* No shapes section, nothing to do */
         seq->isShapesLibraryParsed = 1;
         return;
     }
@@ -909,11 +910,14 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (!binFile) return;
 
     /* Read Header */
-    if (fread(&magic, sizeof(int), 1, binFile) != 1) { fclose(binFile); return; }
+    if (fread(&magic, sizeof(int), 1, binFile) != 1) {
+        fclose(binFile);
+        return;
+    }
     
-    if (magic == SHAPE_LIBRARY_MAGIC) {
-        seq->shapesLibrary.byteSwap = 0;
-    } else {
+    /* Check magic number */
+    if (magic != SHAPE_LIBRARY_MAGIC) {
+        /* Try byte swapping */
         swap4(&magic);
         if (magic == SHAPE_LIBRARY_MAGIC) {
             seq->shapesLibrary.byteSwap = 1;
@@ -923,12 +927,15 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
             return;
         }
     }
-
-    if (fread(&numShapesHeader, sizeof(int), 1, binFile) != 1) { fclose(binFile); return; }
+    
+    if (fread(&numShapesHeader, sizeof(int), 1, binFile) != 1) {
+        fclose(binFile);
+        return;
+    }
     if (seq->shapesLibrary.byteSwap) swap4(&numShapesHeader);
-
+    
     seq->shapesLibrary.shapesLibrarySize = numShapesHeader;
-    seq->shapesLibrary.shapeOffsets = (int*)ALLOC(sizeof(int) * numShapesHeader);
+    seq->shapesLibrary.shapeOffsets = (long*)ALLOC(sizeof(long) * numShapesHeader);
     seq->shapesLibrary.numSamples = (int*)ALLOC(sizeof(int) * numShapesHeader);
     
     /* Scan file to fill index */
@@ -936,29 +943,43 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     int nu, ns;
     
     for (i = 0; i < numShapesHeader; i++) {
-        seq->shapesLibrary.shapeOffsets[i] = (int)offset;
+        seq->shapesLibrary.shapeOffsets[i] = offset;
+        
+        /* Read numUncompressed and numSamples to advance offset */
         if (fread(&nu, sizeof(int), 1, binFile) != 1) break;
         if (fread(&ns, sizeof(int), 1, binFile) != 1) break;
         
         if (seq->shapesLibrary.byteSwap) {
+            swap4(&nu);
             swap4(&ns);
         }
         
-        seq->shapesLibrary.numSamples[i] = ns; 
+        seq->shapesLibrary.numSamples[i] = ns;
         
+        /* Advance by samples size (float = 4 bytes) */
         offset += 2 * sizeof(int) + ns * sizeof(float);
-        fseek(binFile, ns * sizeof(float), SEEK_CUR);
+        if (fseek(binFile, offset, SEEK_SET) != 0) break;
     }
 
-    seq->shapesLibrary.file = binFile;
-    seq->shapesLibrary.open = 1;
+    /* Close the file to support lazy loading / resource management */
+    fclose(binFile);
+    seq->shapesLibrary.file = NULL;
+    seq->shapesLibrary.open = 0;
     seq->isShapesLibraryParsed = 1;
 }
 
 
-static int loadShape(const pulseqlib_SeqFile* seq, int index, pulseqlib_ShapeArbitrary* shape) {
+static int loadShape(pulseqlib_SeqFile* seq, int index, pulseqlib_ShapeArbitrary* shape) {
     int j;
-    if (!seq->shapesLibrary.open || index < 0 || index >= seq->shapesLibrary.shapesLibrarySize) return 0;
+    
+    /* Lazy load: Open file if not open */
+    if (!seq->shapesLibrary.open) {
+        seq->shapesLibrary.file = fopen(seq->shapelibPath, "rb");
+        if (!seq->shapesLibrary.file) return 0;
+        seq->shapesLibrary.open = 1;
+    }
+
+    if (index < 0 || index >= seq->shapesLibrary.shapesLibrarySize) return 0;
     
     /* Get size from RAM lookup */
     shape->numSamples = seq->shapesLibrary.numSamples[index];
@@ -978,17 +999,19 @@ static int loadShape(const pulseqlib_SeqFile* seq, int index, pulseqlib_ShapeArb
     /* Skip header (2 ints: numUncompressed, numSamples) */
     if (fseek(seq->shapesLibrary.file, offset + 2 * sizeof(int), SEEK_SET) != 0) {
         FREE(shape->samples);
+        shape->samples = NULL;
         return 0;
     }
     
     if (fread(shape->samples, sizeof(float), shape->numSamples, seq->shapesLibrary.file) != (size_t)shape->numSamples) {
         FREE(shape->samples);
+        shape->samples = NULL;
         return 0;
     }
     
     if (seq->shapesLibrary.byteSwap) {
         for (j = 0; j < shape->numSamples; j++) {
-            swap4(&(shape->samples[j]));
+            swap4(&shape->samples[j]);
         }
     }
     return 1;
