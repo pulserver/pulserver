@@ -796,6 +796,66 @@ static void initUnsortedIndex(UnsortedIndex* idx) {
     idx->maxID = -1;
 }
 
+static void initUnsortedIndexWithCapacity(UnsortedIndex* idx, int capacity) {
+    int k;
+    idx->capacity = capacity;
+    idx->maxID = -1;
+    if (capacity > 0) {
+        idx->entries = (UnsortedEntry*)ALLOC(sizeof(UnsortedEntry) * capacity);
+        for (k = 0; k < capacity; k++) {
+            idx->entries[k].offset = -1;
+            idx->entries[k].numSamples = 0;
+        }
+    } else {
+        idx->entries = NULL;
+    }
+}
+
+/* Pre-scan the [SHAPES] section to find the maximum shape_id */
+static int findMaxShapeID(FILE* f, long shapesOffset) {
+    char line[MAX_LINE_LENGTH];
+    char* p;
+    int currentID;
+    int maxID = -1;
+    long savedPos;
+    
+    /* Save current position */
+    savedPos = ftell(f);
+    
+    /* Seek to start of shapes section */
+    if (fseek(f, shapesOffset, SEEK_SET) != 0) {
+        fseek(f, savedPos, SEEK_SET);
+        return -1;
+    }
+    
+    /* Skip header line */
+    if (!fgets(line, sizeof(line), f)) {
+        fseek(f, savedPos, SEEK_SET);
+        return -1;
+    }
+    
+    /* Scan for shape_id lines */
+    while (fgets(line, sizeof(line), f)) {
+        p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '[' || *p == 'e') break; /* End of section */
+        if (*p == '\0' || *p == '#') continue;
+        
+        if (strncmp(p, "shape_id", 8) == 0) {
+            if (sscanf(p + 8, "%d", &currentID) == 1) {
+                if (currentID > maxID) {
+                    maxID = currentID;
+                }
+            }
+        }
+    }
+    
+    /* Restore file position */
+    fseek(f, savedPos, SEEK_SET);
+    
+    return maxID;
+}
+
 static void freeUnsortedIndex(UnsortedIndex* idx) {
     if (idx->entries) FREE(idx->entries);
     idx->entries = NULL;
@@ -808,6 +868,8 @@ static void addUnsortedEntry(UnsortedIndex* idx, int id, long offset, int numSam
     int k;
 
     if (id < 0) return;
+    
+    /* With pre-allocation, this should rarely happen */
     if (id >= idx->capacity) {
         newCap = (id + 1) * 2;
         if (newCap < 1024) newCap = 1024;
@@ -818,6 +880,7 @@ static void addUnsortedEntry(UnsortedIndex* idx, int id, long offset, int numSam
         }
         idx->capacity = newCap;
     }
+    
     idx->entries[id].offset = offset;
     idx->entries[id].numSamples = numSamples;
     if (id > idx->maxID) idx->maxID = id;
@@ -864,6 +927,8 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     int id;
     long srcOffset;
     int ns;
+    int maxID;
+    int preAllocCapacity;
     
     pulseqlib_ShapeArbitrary compressedShape;
     pulseqlib_ShapeArbitrary uncompressedShape;
@@ -883,11 +948,29 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
         return;
     }
 
-    /* Reset to start of shapes in text file */
-    if (fseek(f, seq->offsets.shapes, SEEK_SET) != 0) { fclose(tmpFile); return; }
-    if (!fgets(line, sizeof(line), f)) { fclose(tmpFile); return; } /* Skip header */
+    /* Pre-scan to find maximum shape ID for optimal memory allocation */
+    maxID = findMaxShapeID(f, seq->offsets.shapes);
+    if (maxID >= 0) {
+        preAllocCapacity = maxID + 1;
+    } else {
+        /* Fallback if no shapes found or scan failed */
+        preAllocCapacity = 1024;
+    }
+    
+    /* Initialize with pre-computed capacity */
+    initUnsortedIndexWithCapacity(&unsortedIdx, preAllocCapacity);
 
-    initUnsortedIndex(&unsortedIdx);
+    /* Reset to start of shapes in text file */
+    if (fseek(f, seq->offsets.shapes, SEEK_SET) != 0) { 
+        fclose(tmpFile); 
+        freeUnsortedIndex(&unsortedIdx);
+        return; 
+    }
+    if (!fgets(line, sizeof(line), f)) { 
+        fclose(tmpFile); 
+        freeUnsortedIndex(&unsortedIdx);
+        return; 
+    } /* Skip header */
 
     buffer = (float*)ALLOC(sizeof(float) * bufCapacity);
 
