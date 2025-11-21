@@ -796,66 +796,6 @@ static void initUnsortedIndex(UnsortedIndex* idx) {
     idx->maxID = -1;
 }
 
-static void initUnsortedIndexWithCapacity(UnsortedIndex* idx, int capacity) {
-    int k;
-    idx->capacity = capacity;
-    idx->maxID = -1;
-    if (capacity > 0) {
-        idx->entries = (UnsortedEntry*)ALLOC(sizeof(UnsortedEntry) * capacity);
-        for (k = 0; k < capacity; k++) {
-            idx->entries[k].offset = -1;
-            idx->entries[k].numSamples = 0;
-        }
-    } else {
-        idx->entries = NULL;
-    }
-}
-
-/* Pre-scan the [SHAPES] section to find the maximum shape_id */
-static int findMaxShapeID(FILE* f, long shapesOffset) {
-    char line[MAX_LINE_LENGTH];
-    char* p;
-    int currentID;
-    int maxID = -1;
-    long savedPos;
-    
-    /* Save current position */
-    savedPos = ftell(f);
-    
-    /* Seek to start of shapes section */
-    if (fseek(f, shapesOffset, SEEK_SET) != 0) {
-        fseek(f, savedPos, SEEK_SET);
-        return -1;
-    }
-    
-    /* Skip header line */
-    if (!fgets(line, sizeof(line), f)) {
-        fseek(f, savedPos, SEEK_SET);
-        return -1;
-    }
-    
-    /* Scan for shape_id lines */
-    while (fgets(line, sizeof(line), f)) {
-        p = line;
-        while (*p == ' ' || *p == '\t') p++;
-        if (*p == '[' || *p == 'e') break; /* End of section */
-        if (*p == '\0' || *p == '#') continue;
-        
-        if (strncmp(p, "shape_id", 8) == 0) {
-            if (sscanf(p + 8, "%d", &currentID) == 1) {
-                if (currentID > maxID) {
-                    maxID = currentID;
-                }
-            }
-        }
-    }
-    
-    /* Restore file position */
-    fseek(f, savedPos, SEEK_SET);
-    
-    return maxID;
-}
-
 static void freeUnsortedIndex(UnsortedIndex* idx) {
     if (idx->entries) FREE(idx->entries);
     idx->entries = NULL;
@@ -868,8 +808,6 @@ static void addUnsortedEntry(UnsortedIndex* idx, int id, long offset, int numSam
     int k;
 
     if (id < 0) return;
-    
-    /* With pre-allocation, this should rarely happen */
     if (id >= idx->capacity) {
         newCap = (id + 1) * 2;
         if (newCap < 1024) newCap = 1024;
@@ -880,7 +818,6 @@ static void addUnsortedEntry(UnsortedIndex* idx, int id, long offset, int numSam
         }
         idx->capacity = newCap;
     }
-    
     idx->entries[id].offset = offset;
     idx->entries[id].numSamples = numSamples;
     if (id > idx->maxID) idx->maxID = id;
@@ -927,8 +864,6 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     int id;
     long srcOffset;
     int ns;
-    int maxID;
-    int preAllocCapacity;
     
     pulseqlib_ShapeArbitrary compressedShape;
     pulseqlib_ShapeArbitrary uncompressedShape;
@@ -937,17 +872,6 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (seq->offsets.shapes < 0) {
         seq->isShapesLibraryParsed = 1;
         return;
-    }
-
-    /* Check if .shapes file already exists - if so, skip regeneration */
-    {
-        FILE* testFile = fopen(seq->shapelibPath, "rb");
-        if (testFile) {
-            /* File exists and is readable, no need to regenerate */
-            fclose(testFile);
-            seq->isShapesLibraryParsed = 1;
-            return;
-        }
     }
 
     /* 1. Create Temporary Unsorted Library on Disk */
@@ -959,61 +883,11 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
         return;
     }
 
-    /* Pre-scan to find maximum shape ID in [SHAPES] section */
-    maxID = findMaxShapeID(f, seq->offsets.shapes);
-    if (maxID >= 0) {
-        numShapes = maxID + 1;
-    } else {
-        numShapes = 0;
-    }
-    
-    /* Check RF library for maximum shape IDs */
-    for (i = 0; i < seq->rfLibrarySize; i++) {
-        id = (int)seq->rfLibrary[i][1]; /* mag_id */
-        if (id > numShapes) numShapes = id;
-        id = (int)seq->rfLibrary[i][2]; /* phase_id */
-        if (id > numShapes) numShapes = id;
-        id = (int)seq->rfLibrary[i][3]; /* time_shape_id */
-        if (id > numShapes) numShapes = id;
-    }
-    
-    /* Check gradient library for maximum shape IDs */
-    for (i = 0; i < seq->gradLibrarySize; i++) {
-        if ((int)seq->gradLibrary[i][0] == 1) { /* Arbitrary Gradient */
-            id = (int)seq->gradLibrary[i][4]; /* shape_id */
-            if (id > numShapes) numShapes = id;
-            id = (int)seq->gradLibrary[i][5]; /* time_id */
-            if (id > numShapes) numShapes = id;
-        }
-    }
-    
-    /* Check ADC library for maximum shape IDs */
-    for (i = 0; i < seq->adcLibrarySize; i++) {
-        id = (int)seq->adcLibrary[i][7]; /* phase_id */
-        if (id > numShapes) numShapes = id;
-    }
-    
-    /* Use larger of scanned shapes or fallback */
-    if (numShapes < 1024) {
-        preAllocCapacity = 1024;
-    } else {
-        preAllocCapacity = numShapes;
-    }
-    
-    /* Initialize with pre-computed capacity */
-    initUnsortedIndexWithCapacity(&unsortedIdx, preAllocCapacity);
-
     /* Reset to start of shapes in text file */
-    if (fseek(f, seq->offsets.shapes, SEEK_SET) != 0) { 
-        fclose(tmpFile); 
-        freeUnsortedIndex(&unsortedIdx);
-        return; 
-    }
-    if (!fgets(line, sizeof(line), f)) { 
-        fclose(tmpFile); 
-        freeUnsortedIndex(&unsortedIdx);
-        return; 
-    } /* Skip header */
+    if (fseek(f, seq->offsets.shapes, SEEK_SET) != 0) { fclose(tmpFile); return; }
+    if (!fgets(line, sizeof(line), f)) { fclose(tmpFile); return; } /* Skip header */
+
+    initUnsortedIndex(&unsortedIdx);
 
     buffer = (float*)ALLOC(sizeof(float) * bufCapacity);
 
@@ -1036,8 +910,7 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
                         fwrite(uncompressedShape.samples, sizeof(float), uncompressedShape.numSamples, tmpFile);
                     }
                     
-                    /* Store in 0-indexed array (shape_id - 1) */
-                    addUnsortedEntry(&unsortedIdx, currentID - 1, currentTmpOffset, uncompressedShape.numSamples);
+                    addUnsortedEntry(&unsortedIdx, currentID, currentTmpOffset, uncompressedShape.numSamples);
                     currentTmpOffset += uncompressedShape.numSamples * sizeof(float);
 
                     if (uncompressedShape.samples) FREE(uncompressedShape.samples);
@@ -1081,8 +954,7 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
                 fwrite(uncompressedShape.samples, sizeof(float), uncompressedShape.numSamples, tmpFile);
             }
             
-            /* Store in 0-indexed array (shape_id - 1) */
-            addUnsortedEntry(&unsortedIdx, currentID - 1, currentTmpOffset, uncompressedShape.numSamples);
+            addUnsortedEntry(&unsortedIdx, currentID, currentTmpOffset, uncompressedShape.numSamples);
             
             if (uncompressedShape.samples) FREE(uncompressedShape.samples);
         }
@@ -1091,7 +963,7 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     fflush(tmpFile);
 
     /* 2. Build Sorted and Split Library */
-    /* numShapes was already computed earlier to include all referenced IDs */
+    numShapes = unsortedIdx.maxID + 1;
     seq->shapesLibrary.numShapes = numShapes;
     
     /* Allocate split arrays */
