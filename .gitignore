@@ -24,4 +24,3 @@ docs_build/
 jupyter_execute/
 
 src/pulserver/_version.py
-tests/expected_output/*.shapes
