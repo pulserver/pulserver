@@ -347,7 +347,19 @@ typedef struct pulseqlib_ShapeLibrary {
 } pulseqlib_ShapeLibrary; /* mirrors Pulseq ShapeLibrary */
 
 
+typedef struct pulseqlib_SystemParams {
+    float B0; /**< @brief Main magnetic field strength (T) */
+    float maxGrad; /**< @brief Maximum gradient amplitude (Hz/m) */
+    float maxSlew; /**< @brief Maximum gradient slew rate (Hz/m/s) */
+    float rfRasterTime; /**< @brief RF raster time (us) */
+    float gradRasterTime; /**< @brief Gradient raster time (us) */
+    float adcRasterTime; /**< @brief ADC raster time (us) */
+    float blockDurationRaster; /**< @brief Block duration raster time (us) */
+} pulseqlib_SystemParams;
+
+
 typedef struct pulseqlib_SeqFile {
+    pulseqlib_SystemParams system; /**< @brief System parameters. */
     char* filePath; /**< @brief Path to the sequence (.seq) file. */
     char* shapelibPath; /**< @brief Path to the shape library (.shapes) file. */
     pulseqlib_SectionOffsets offsets; /**< @brief Line position of each section. */
@@ -397,6 +409,7 @@ typedef struct pulseqlib_SeqFile {
     int* extensionLUT; /**< @brief Extension lookup table. */
     int isShapesLibraryParsed; /**< @brief Flag indicating if the shapes library was parsed. */
     pulseqlib_ShapeLibrary shapesLibrary; /**< @brief Shape library structure for managing shape data. */
+    int interpolate; /**< @brief Flag indicating if interpolation is required (1) or not (0) */
 } pulseqlib_SeqFile; /* Mirrors Pulseq SeqFile */
 
 
