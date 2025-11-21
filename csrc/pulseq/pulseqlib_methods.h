@@ -25,7 +25,9 @@
 #endif
 
 /* Constructor, destructor and reset */
-void pulseqlib_seqFileInit(const char* filePath, pulseqlib_SeqFile* seq);
+void pulseqlib_systemParamsInit(pulseqlib_SystemParams* params, float B0, float maxGrad, float maxSlew, float rfRasterTime, float gradRasterTime, float adcRasterTime, float blockDurationRaster);
+
+void pulseqlib_seqFileInit(const char* filePath, pulseqlib_SeqFile* seq, const pulseqlib_SystemParams* system);
 void pulseqlib_seqFileFree(pulseqlib_SeqFile* seq);
 void pulseqlib_seqFileReset(pulseqlib_SeqFile* seq);
 

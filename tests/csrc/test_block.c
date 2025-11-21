@@ -43,8 +43,19 @@ static void clean_shapes(const char* filePath) {
 
 static pulseqlib_SeqFile* load_seq(char* filePath) {
     char seq_path[1024];
+    pulseqlib_SystemParams* system;
     pulseqlib_SeqFile* seq;
     
+    /* Allocate memory for the system parameters */
+    system = (pulseqlib_SystemParams*)ALLOC(sizeof(pulseqlib_SystemParams));
+    if (!system) return NULL;
+
+    /* Initialize the system parameters structure with default values */
+    pulseqlib_systemParamsInit(system, 
+        /*B0=*/3.0f, /*max_grad=*/40.0f, /*max_slew=*/150.0f, 
+        /*rf_raster=*/1.0e-6f, /*grad_raster=*/10.0e-6f, /*adc_raster=*/0.1e-6f, /*block_raster=*/10.0e-6f
+    );
+
     /* Allocate memory for the sequence file */
     seq = (pulseqlib_SeqFile*)ALLOC(sizeof(pulseqlib_SeqFile));
     if (!seq) return NULL;
@@ -53,7 +64,7 @@ static pulseqlib_SeqFile* load_seq(char* filePath) {
     snprintf(seq_path, sizeof(seq_path), "%s/%s", TEST_ROOT_DIR, filePath);
 
     /* Initialize the sequence file structure with default values */
-    pulseqlib_seqFileInit(seq_path, seq);
+    pulseqlib_seqFileInit(seq_path, seq, system);
     if (!seq) {
         FREE(seq);
         return NULL;

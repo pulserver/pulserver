@@ -4,6 +4,7 @@
 #include <math.h>
 
 #include "pulseqlib_methods.h"
+#include "pulseqlib_math.h"
 
 #define SHAPE_LIBRARY_MAGIC 0x12345678
 #define SHAPE_FILE_BUFFER_SIZE 16384
@@ -1295,6 +1296,18 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
 }
 
 /******************************************* Public methods *************************************************/
+void pulseqlib_systemParamsInit(pulseqlib_SystemParams* params, float B0, float maxGrad, float maxSlew, 
+                                float rfRasterTime, float gradRasterTime, float adcRasterTime, float blockDurationRaster) {
+    if (!params) return;
+    params->B0 = B0;
+    params->maxGrad = maxGrad;
+    params->maxSlew = maxSlew;
+    params->rfRasterTime = rfRasterTime;
+    params->gradRasterTime = gradRasterTime;
+    params->adcRasterTime = adcRasterTime;
+    params->blockDurationRaster = blockDurationRaster;
+}
+
 void seqFileInit(pulseqlib_SeqFile* seq) {
     int i;
     seq->offsets.scan_cursor = 0;
@@ -1351,6 +1364,10 @@ void seqFileInit(pulseqlib_SeqFile* seq) {
     seq->shapesLibrary.numSamples = NULL;
     seq->shapesLibrary.shapesLibrarySize = 0;
     seq->shapesLibrary.byteSwap = 0;
+    
+    /* Initialize system params to default (0) if not set, though they should be set by caller */
+    memset(&seq->system, 0, sizeof(pulseqlib_SystemParams));
+    seq->interpolate = 0;
 }
 
 
@@ -1359,10 +1376,16 @@ void seqFileInit(pulseqlib_SeqFile* seq) {
  * 
  * @param[in] filePath The path of .seq file on disk.  
  * @param[in, out] seq The uninitialized SeqFile structure.
+ * @param[in] system The system parameters (optional, can be NULL).
  */
-void pulseqlib_seqFileInit(const char* filePath, pulseqlib_SeqFile* seq) {
+void pulseqlib_seqFileInit(const char* filePath, pulseqlib_SeqFile* seq, const pulseqlib_SystemParams* system) {
     char* ext;
     seqFileInit(seq);
+
+    /* Copy system parameters if provided */
+    if (system) {
+        seq->system = *system;
+    }
 
     /* Allocate and copy the file path */
     if (filePath) {
@@ -1469,6 +1492,21 @@ void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const int readBlocks) {
     }
     readDefinitionsLibrary(seq, f); 
     readDefinitions(seq);
+
+    /* Check for raster mismatch if system parameters are set (non-zero rasters) */
+    if (seq->system.rfRasterTime > 0 && seq->system.gradRasterTime > 0 && 
+        seq->system.adcRasterTime > 0 && seq->system.blockDurationRaster > 0) {
+        
+        /* Use a small epsilon for float comparison */
+        float eps = 1e-9f;
+        if (fabs(seq->reservedDefinitionsLibrary.radiofrequencyRasterTime - seq->system.rfRasterTime) > eps ||
+            fabs(seq->reservedDefinitionsLibrary.gradientRasterTime - seq->system.gradRasterTime) > eps ||
+            fabs(seq->reservedDefinitionsLibrary.adcRasterTime - seq->system.adcRasterTime) > eps ||
+            fabs(seq->reservedDefinitionsLibrary.blockDurationRaster - seq->system.blockDurationRaster) > eps) {
+            seq->interpolate = 1;
+        }
+    }
+
     if (readBlocks) {
         readBlockLibrary(seq, f);
     }

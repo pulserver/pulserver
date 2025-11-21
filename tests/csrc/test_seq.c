@@ -42,8 +42,19 @@ static void clean_shapes(const char* filePath) {
 
 static pulseqlib_SeqFile* load_seq(char* filePath) {
     char seq_path[1024];
+    pulseqlib_SystemParams* system;
     pulseqlib_SeqFile* seq;
     
+    /* Allocate memory for the system parameters */
+    system = (pulseqlib_SystemParams*)ALLOC(sizeof(pulseqlib_SystemParams));
+    if (!system) return NULL;
+
+    /* Initialize the system parameters structure with default values */
+    pulseqlib_systemParamsInit(system, 
+        /*B0=*/3.0f, /*max_grad=*/40.0f, /*max_slew=*/150.0f, 
+        /*rf_raster=*/1.0f, /*grad_raster=*/10.0f, /*adc_raster=*/0.1f, /*block_raster=*/10.0f
+    );
+
     /* Allocate memory for the sequence file */
     seq = (pulseqlib_SeqFile*)ALLOC(sizeof(pulseqlib_SeqFile));
     if (!seq) return NULL;
@@ -52,7 +63,7 @@ static pulseqlib_SeqFile* load_seq(char* filePath) {
     snprintf(seq_path, sizeof(seq_path), "%s/%s", TEST_ROOT_DIR, filePath);
     
     /* Initialize the sequence file structure */
-    pulseqlib_seqFileInit(seq_path, seq);
+    pulseqlib_seqFileInit(seq_path, seq, system);
     if (!seq) {
         FREE(seq);
         return NULL;
@@ -171,6 +182,34 @@ MU_TEST(test_shapes_io) {
     clean_shapes("expected_output/seq2.seq");
 }
 
+MU_TEST(test_interpolation_flag) {
+    pulseqlib_SystemParams sys;
+    char seq_path[1024];
+    pulseqlib_SeqFile* seq = load_seq("expected_output/seq1.seq");
+    
+    snprintf(seq_path, sizeof(seq_path), "%s/expected_output/seq1.seq", TEST_ROOT_DIR);
+    
+    /* Case 1: Matching rasters -> interpolate = 0 */
+    mu_assert(seq->interpolate == 0, "Interpolate flag should be 0 for matching rasters");
+    pulseqlib_seqFileFree(seq);
+    FREE(seq);
+    
+    /* Case 2: Mismatching rasters -> interpolate = 1 */
+    /* Change RF raster to 2us */
+    pulseqlib_systemParamsInit(&sys, 
+        /*B0=*/3.0f, /*max_grad=*/40.0f, /*max_slew=*/150.0f, 
+        /*rf_raster=*/2.0f, /*grad_raster=*/10.0f, /*adc_raster=*/0.1f, /*block_raster=*/10.0f
+    );
+    
+    seq = (pulseqlib_SeqFile*)ALLOC(sizeof(pulseqlib_SeqFile));
+    pulseqlib_seqFileInit(seq_path, seq, &sys);
+    pulseqlib_readSeq(seq, 1);
+    
+    mu_assert(seq->interpolate == 1, "Interpolate flag should be 1 for mismatching rasters");
+    pulseqlib_seqFileFree(seq);
+    FREE(seq);
+}
+
 MU_TEST_SUITE(test_seqfile_suite) {
     printf("Running test_basic...\n");
     MU_RUN_TEST(test_basic);
@@ -178,6 +217,8 @@ MU_TEST_SUITE(test_seqfile_suite) {
     MU_RUN_TEST(test_definitions);
     printf("Running test_shapes_io...\n");
     MU_RUN_TEST(test_shapes_io);
+    printf("Running test_interpolation_flag...\n");
+    MU_RUN_TEST(test_interpolation_flag);
 }
 
 int test_seqfile_main(void) {
