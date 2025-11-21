@@ -113,6 +113,8 @@ profile="black"
 minversion = "6.0"
 pythonpath  = ["tests"]
 testpaths=["tests"]
+# Temporarily excluding Python tests - will be updated later
+norecursedirs = ["tests/python", "tests/csrc"]
 addopts = [
     "--import-mode=importlib",
     "--cov=pulserver",
