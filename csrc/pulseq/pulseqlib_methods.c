@@ -771,20 +771,55 @@ int decompressShape(pulseqlib_ShapeArbitrary* encoded, pulseqlib_ShapeArbitrary*
     return 1; /* Success */
 }
 
+#define SHAPE_RF_MAG 1
+#define SHAPE_RF_PHASE 2
+#define SHAPE_RF_TIME 3
+#define SHAPE_GRAD_WAVE 4
+#define SHAPE_GRAD_TIME 5
+#define SHAPE_ADC_PHASE 6
+
+typedef struct {
+    int id;
+    long offset;
+    int numSamples;
+} ShapeIndexEntry;
+
+typedef struct {
+    int count;
+    int capacity;
+    ShapeIndexEntry* entries;
+} pulseqlib_ShapeLibraryUnsorted;
+
+static void addShapeIndex(pulseqlib_ShapeLibraryUnsorted* lib, int id, long offset, int numSamples) {
+    if (lib->count >= lib->capacity) {
+        lib->capacity = lib->capacity == 0 ? 1024 : lib->capacity * 2;
+        ShapeIndexEntry* newEntries = (ShapeIndexEntry*)ALLOC(sizeof(ShapeIndexEntry) * lib->capacity);
+        if (lib->entries) {
+            memcpy(newEntries, lib->entries, sizeof(ShapeIndexEntry) * lib->count);
+            FREE(lib->entries);
+        }
+        lib->entries = newEntries;
+    }
+    lib->entries[lib->count].id = id;
+    lib->entries[lib->count].offset = offset;
+    lib->entries[lib->count].numSamples = numSamples;
+    lib->count++;
+}
+
 void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     char line[MAX_LINE_LENGTH];
-    int idx;
     char* p;
     float val;
     FILE* binFile;
-    int maxIndex = -1;
-    int i;
+    int i, j, k;
     int magic;
+    long indexOffset;
     int numShapesHeader;
+    pulseqlib_ShapeLibraryUnsorted unsortedLib = {0, 0, NULL};
+    int maxID = 0;
     
     if (seq->isShapesLibraryParsed) return;
     if (seq->offsets.shapes < 0) {
-        /* No shapes section, nothing to do */
         seq->isShapesLibraryParsed = 1;
         return;
     }
@@ -799,10 +834,12 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
             return;
         }
 
-        /* Write Header */
+        /* Write Header Placeholder */
         magic = SHAPE_LIBRARY_MAGIC;
+        indexOffset = 0;
         numShapesHeader = 0;
         fwrite(&magic, sizeof(int), 1, binFile);
+        fwrite(&indexOffset, sizeof(long), 1, binFile);
         fwrite(&numShapesHeader, sizeof(int), 1, binFile);
 
         /* Reset to start of shapes in text file */
@@ -814,6 +851,7 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
         int count = 0;
         int capacity = 1024;
         float* buffer = (float*)ALLOC(sizeof(float) * capacity);
+        long currentOffset;
 
         while (fgets(line, sizeof(line), f)) {
             p = line;
@@ -832,19 +870,19 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
                     compressedShape.numUncompressedSamples = numUncompressed;
                     
                     if (decompressShape(&compressedShape, &uncompressedShape)) {
-                        fwrite(&uncompressedShape.numSamples, sizeof(int), 1, binFile);
-                        fwrite(&uncompressedShape.numSamples, sizeof(int), 1, binFile); /* Stored count is now uncompressed count */
+                        currentOffset = ftell(binFile);
                         if (uncompressedShape.numSamples > 0) 
                             fwrite(uncompressedShape.samples, sizeof(float), uncompressedShape.numSamples, binFile);
+                        
+                        addShapeIndex(&unsortedLib, currentID, currentOffset, uncompressedShape.numSamples);
+                        if (currentID > maxID) maxID = currentID;
                         
                         if (uncompressedShape.samples) FREE(uncompressedShape.samples);
                     } else {
                         /* Error or empty shape */
-                        int zero = 0;
-                        fwrite(&zero, sizeof(int), 1, binFile);
-                        fwrite(&zero, sizeof(int), 1, binFile);
+                        addShapeIndex(&unsortedLib, currentID, ftell(binFile), 0);
+                        if (currentID > maxID) maxID = currentID;
                     }
-                    numShapesHeader++;
                 }
                 
                 /* Start new shape */
@@ -883,23 +921,34 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
             compressedShape.numUncompressedSamples = numUncompressed;
             
             if (decompressShape(&compressedShape, &uncompressedShape)) {
-                fwrite(&uncompressedShape.numSamples, sizeof(int), 1, binFile);
-                fwrite(&uncompressedShape.numSamples, sizeof(int), 1, binFile);
+                currentOffset = ftell(binFile);
                 if (uncompressedShape.numSamples > 0) 
                     fwrite(uncompressedShape.samples, sizeof(float), uncompressedShape.numSamples, binFile);
                 
+                addShapeIndex(&unsortedLib, currentID, currentOffset, uncompressedShape.numSamples);
+                if (currentID > maxID) maxID = currentID;
+                
                 if (uncompressedShape.samples) FREE(uncompressedShape.samples);
             } else {
-                int zero = 0;
-                fwrite(&zero, sizeof(int), 1, binFile);
-                fwrite(&zero, sizeof(int), 1, binFile);
+                addShapeIndex(&unsortedLib, currentID, ftell(binFile), 0);
+                if (currentID > maxID) maxID = currentID;
             }
-            numShapesHeader++;
         }
         FREE(buffer);
         
-        /* Update header with actual count */
-        fseek(binFile, sizeof(int), SEEK_SET);
+        /* Write Index */
+        indexOffset = ftell(binFile);
+        numShapesHeader = unsortedLib.count;
+        for (i = 0; i < unsortedLib.count; i++) {
+            fwrite(&unsortedLib.entries[i].id, sizeof(int), 1, binFile);
+            fwrite(&unsortedLib.entries[i].offset, sizeof(long), 1, binFile);
+            fwrite(&unsortedLib.entries[i].numSamples, sizeof(int), 1, binFile);
+        }
+        
+        /* Update header */
+        fseek(binFile, 0, SEEK_SET);
+        fwrite(&magic, sizeof(int), 1, binFile);
+        fwrite(&indexOffset, sizeof(long), 1, binFile);
         fwrite(&numShapesHeader, sizeof(int), 1, binFile);
         
         fclose(binFile);
@@ -908,59 +957,160 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
         binFile = fopen(seq->shapelibPath, "rb");
     }
 
-    if (!binFile) return;
-
-    /* Read Header */
-    if (fread(&magic, sizeof(int), 1, binFile) != 1) {
-        fclose(binFile);
+    if (!binFile) {
+        if (unsortedLib.entries) FREE(unsortedLib.entries);
         return;
     }
+
+    /* Read Header */
+    if (fread(&magic, sizeof(int), 1, binFile) != 1) { fclose(binFile); if (unsortedLib.entries) FREE(unsortedLib.entries); return; }
     
     /* Check magic number */
     if (magic != SHAPE_LIBRARY_MAGIC) {
-        /* Try byte swapping */
         swap4(&magic);
         if (magic == SHAPE_LIBRARY_MAGIC) {
             seq->shapesLibrary.byteSwap = 1;
         } else {
             fprintf(stderr, "Error: Invalid shape library magic number\n");
             fclose(binFile);
+            if (unsortedLib.entries) FREE(unsortedLib.entries);
             return;
         }
     }
     
-    if (fread(&numShapesHeader, sizeof(int), 1, binFile) != 1) {
-        fclose(binFile);
-        return;
+    if (fread(&indexOffset, sizeof(long), 1, binFile) != 1) { fclose(binFile); if (unsortedLib.entries) FREE(unsortedLib.entries); return; }
+    if (fread(&numShapesHeader, sizeof(int), 1, binFile) != 1) { fclose(binFile); if (unsortedLib.entries) FREE(unsortedLib.entries); return; }
+    
+    if (seq->shapesLibrary.byteSwap) {
+        /* swap4(&indexOffset); // long swap needed? Assuming 32-bit long for now or consistent endianness for file offsets */
+        /* If cross-platform endianness is an issue, we need swap8 or swap4 depending on long size. 
+           For now, assuming same machine or little-endian standard. */
+        swap4(&numShapesHeader);
     }
-    if (seq->shapesLibrary.byteSwap) swap4(&numShapesHeader);
     
-    seq->shapesLibrary.shapesLibrarySize = numShapesHeader;
-    seq->shapesLibrary.shapeOffsets = (int*)ALLOC(sizeof(int) * numShapesHeader);
-    seq->shapesLibrary.numSamples = (int*)ALLOC(sizeof(int) * numShapesHeader);
-    
-    /* Scan file to fill index */
-    long offset = ftell(binFile);
-    int nu, ns;
-    
-    for (i = 0; i < numShapesHeader; i++) {
-        seq->shapesLibrary.shapeOffsets[i] = offset;
+    /* If we didn't just create it, read the index */
+    if (unsortedLib.count == 0) {
+        if (fseek(binFile, indexOffset, SEEK_SET) != 0) { fclose(binFile); return; }
         
-        /* Read numUncompressed and numSamples to advance offset */
-        if (fread(&nu, sizeof(int), 1, binFile) != 1) break;
-        if (fread(&ns, sizeof(int), 1, binFile) != 1) break;
+        unsortedLib.capacity = numShapesHeader;
+        unsortedLib.entries = (ShapeIndexEntry*)ALLOC(sizeof(ShapeIndexEntry) * numShapesHeader);
+        unsortedLib.count = numShapesHeader;
         
-        if (seq->shapesLibrary.byteSwap) {
-            swap4(&nu);
-            swap4(&ns);
+        for (i = 0; i < numShapesHeader; i++) {
+            if (fread(&unsortedLib.entries[i].id, sizeof(int), 1, binFile) != 1) break;
+            if (fread(&unsortedLib.entries[i].offset, sizeof(long), 1, binFile) != 1) break;
+            if (fread(&unsortedLib.entries[i].numSamples, sizeof(int), 1, binFile) != 1) break;
+            
+            if (seq->shapesLibrary.byteSwap) {
+                swap4(&unsortedLib.entries[i].id);
+                /* swap4(&unsortedLib.entries[i].offset); */
+                swap4(&unsortedLib.entries[i].numSamples);
+            }
+            if (unsortedLib.entries[i].id > maxID) maxID = unsortedLib.entries[i].id;
         }
-        
-        seq->shapesLibrary.numSamples[i] = ns;
-        
-        /* Advance by samples size (float = 4 bytes) */
-        offset += 2 * sizeof(int) + ns * sizeof(float);
-        if (fseek(binFile, offset, SEEK_SET) != 0) break;
     }
+
+    /* Allocate Split Arrays */
+    seq->shapesLibrary.numShapes = maxID + 1;
+    int size = seq->shapesLibrary.numShapes;
+    
+    seq->shapesLibrary.rfMagOffsets = (unsigned long*)calloc(size, sizeof(unsigned long));
+    seq->shapesLibrary.rfMagNumSamples = (int*)calloc(size, sizeof(int));
+    seq->shapesLibrary.rfMagScale = (float*)calloc(size, sizeof(float));
+    
+    seq->shapesLibrary.rfPhaseOffsets = (unsigned long*)calloc(size, sizeof(unsigned long));
+    seq->shapesLibrary.rfPhaseNumSamples = (int*)calloc(size, sizeof(int));
+    
+    seq->shapesLibrary.rfTimeOffsets = (unsigned long*)calloc(size, sizeof(unsigned long));
+    seq->shapesLibrary.rfTimeNumSamples = (int*)calloc(size, sizeof(int));
+    
+    seq->shapesLibrary.gradWaveOffsets = (unsigned long*)calloc(size, sizeof(unsigned long));
+    seq->shapesLibrary.gradWaveNumSamples = (int*)calloc(size, sizeof(int));
+    seq->shapesLibrary.gradWaveScale = (float*)calloc(size, sizeof(float));
+    
+    seq->shapesLibrary.gradTimeOffsets = (unsigned long*)calloc(size, sizeof(unsigned long));
+    seq->shapesLibrary.gradTimeNumSamples = (int*)calloc(size, sizeof(int));
+    
+    seq->shapesLibrary.adcPhaseOffsets = (unsigned long*)calloc(size, sizeof(unsigned long));
+    seq->shapesLibrary.adcPhaseNumSamples = (int*)calloc(size, sizeof(int));
+
+    /* Build Lookup Map (ID -> Index in Unsorted) for speed */
+    int* idMap = NULL;
+    if (size > 0) {
+        idMap = (int*)malloc(sizeof(int) * size);
+        for(i=0; i<size; i++) idMap[i] = -1;
+        for(i=0; i<unsortedLib.count; i++) {
+            if(unsortedLib.entries[i].id >= 0 && unsortedLib.entries[i].id < size)
+                idMap[unsortedLib.entries[i].id] = i;
+        }
+    }
+
+    /* Populate RF Arrays */
+    for (i = 0; i < seq->rfLibrarySize; i++) {
+        int magShapeID = (int)seq->rfLibrary[i][1];
+        int phaseShapeID = (int)seq->rfLibrary[i][2];
+        int timeShapeID = (int)seq->rfLibrary[i][3];
+        
+        int magID = magShapeID - 1;
+        int phaseID = phaseShapeID - 1;
+        int timeID = timeShapeID - 1;
+        
+        if (magID >= 0 && magID < size && magShapeID < size && idMap && idMap[magShapeID] != -1) {
+            int idx = idMap[magShapeID];
+            seq->shapesLibrary.rfMagOffsets[magID] = unsortedLib.entries[idx].offset;
+            seq->shapesLibrary.rfMagNumSamples[magID] = unsortedLib.entries[idx].numSamples;
+            seq->shapesLibrary.rfMagScale[magID] = 1.0f;
+        }
+        if (phaseID >= 0 && phaseID < size && phaseShapeID < size && idMap && idMap[phaseShapeID] != -1) {
+            int idx = idMap[phaseShapeID];
+            seq->shapesLibrary.rfPhaseOffsets[phaseID] = unsortedLib.entries[idx].offset;
+            seq->shapesLibrary.rfPhaseNumSamples[phaseID] = unsortedLib.entries[idx].numSamples;
+        }
+        if (timeID >= 0 && timeID < size && timeShapeID < size && idMap && idMap[timeShapeID] != -1) {
+            int idx = idMap[timeShapeID];
+            seq->shapesLibrary.rfTimeOffsets[timeID] = unsortedLib.entries[idx].offset;
+            seq->shapesLibrary.rfTimeNumSamples[timeID] = unsortedLib.entries[idx].numSamples;
+        }
+    }
+
+    /* Populate Grad Arrays */
+    for (i = 0; i < seq->gradLibrarySize; i++) {
+        int type = (int)seq->gradLibrary[i][0];
+        if (type == 1) { /* Arbitrary Gradient */
+            int waveShapeID = (int)seq->gradLibrary[i][4];
+            int timeShapeID = (int)seq->gradLibrary[i][5];
+            
+            int waveID = waveShapeID - 1;
+            int timeID = timeShapeID - 1;
+            
+            if (waveID >= 0 && waveID < size && waveShapeID < size && idMap && idMap[waveShapeID] != -1) {
+                int idx = idMap[waveShapeID];
+                seq->shapesLibrary.gradWaveOffsets[waveID] = unsortedLib.entries[idx].offset;
+                seq->shapesLibrary.gradWaveNumSamples[waveID] = unsortedLib.entries[idx].numSamples;
+                seq->shapesLibrary.gradWaveScale[waveID] = 1.0f;
+            }
+            if (timeID >= 0 && timeID < size && timeShapeID < size && idMap && idMap[timeShapeID] != -1) {
+                int idx = idMap[timeShapeID];
+                seq->shapesLibrary.gradTimeOffsets[timeID] = unsortedLib.entries[idx].offset;
+                seq->shapesLibrary.gradTimeNumSamples[timeID] = unsortedLib.entries[idx].numSamples;
+            }
+        }
+    }
+
+    /* Populate ADC Arrays */
+    for (i = 0; i < seq->adcLibrarySize; i++) {
+        int phaseShapeID = (int)seq->adcLibrary[i][7];
+        int phaseID = phaseShapeID - 1;
+        
+        if (phaseID >= 0 && phaseID < size && phaseShapeID < size && idMap && idMap[phaseShapeID] != -1) {
+            int idx = idMap[phaseShapeID];
+            seq->shapesLibrary.adcPhaseOffsets[phaseID] = unsortedLib.entries[idx].offset;
+            seq->shapesLibrary.adcPhaseNumSamples[phaseID] = unsortedLib.entries[idx].numSamples;
+        }
+    }
+
+    if (idMap) FREE(idMap);
+    if (unsortedLib.entries) FREE(unsortedLib.entries);
 
     /* Close the file to support lazy loading / resource management */
     fclose(binFile);
@@ -970,8 +1120,10 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
 }
 
 
-static int loadShape(pulseqlib_SeqFile* seq, int index, pulseqlib_ShapeArbitrary* shape) {
+static int loadShape(pulseqlib_SeqFile* seq, int index, pulseqlib_ShapeArbitrary* shape, int type) {
     int j;
+    unsigned long offset = 0;
+    int numSamples = 0;
     
     /* Lazy load: Open file if not open */
     if (!seq->shapesLibrary.open) {
@@ -980,11 +1132,40 @@ static int loadShape(pulseqlib_SeqFile* seq, int index, pulseqlib_ShapeArbitrary
         seq->shapesLibrary.open = 1;
     }
 
-    if (index < 0 || index >= seq->shapesLibrary.shapesLibrarySize) return 0;
+    if (index < 0 || index >= seq->shapesLibrary.numShapes) return 0;
     
-    /* Get size from RAM lookup */
-    shape->numSamples = seq->shapesLibrary.numSamples[index];
-    shape->numUncompressedSamples = shape->numSamples;
+    /* Select correct array based on type */
+    switch (type) {
+        case SHAPE_RF_MAG:
+            offset = seq->shapesLibrary.rfMagOffsets[index];
+            numSamples = seq->shapesLibrary.rfMagNumSamples[index];
+            break;
+        case SHAPE_RF_PHASE:
+            offset = seq->shapesLibrary.rfPhaseOffsets[index];
+            numSamples = seq->shapesLibrary.rfPhaseNumSamples[index];
+            break;
+        case SHAPE_RF_TIME:
+            offset = seq->shapesLibrary.rfTimeOffsets[index];
+            numSamples = seq->shapesLibrary.rfTimeNumSamples[index];
+            break;
+        case SHAPE_GRAD_WAVE:
+            offset = seq->shapesLibrary.gradWaveOffsets[index];
+            numSamples = seq->shapesLibrary.gradWaveNumSamples[index];
+            break;
+        case SHAPE_GRAD_TIME:
+            offset = seq->shapesLibrary.gradTimeOffsets[index];
+            numSamples = seq->shapesLibrary.gradTimeNumSamples[index];
+            break;
+        case SHAPE_ADC_PHASE:
+            offset = seq->shapesLibrary.adcPhaseOffsets[index];
+            numSamples = seq->shapesLibrary.adcPhaseNumSamples[index];
+            break;
+        default:
+            return 0;
+    }
+
+    shape->numSamples = numSamples;
+    shape->numUncompressedSamples = numSamples;
 
     /* If no samples, we are done */
     if (shape->numSamples <= 0) {
@@ -996,9 +1177,7 @@ static int loadShape(pulseqlib_SeqFile* seq, int index, pulseqlib_ShapeArbitrary
     shape->samples = (float*)ALLOC(sizeof(float) * shape->numSamples);
     if (!shape->samples) return 0;
 
-    long offset = seq->shapesLibrary.shapeOffsets[index];
-    /* Skip header (2 ints: numUncompressed, numSamples) */
-    if (fseek(seq->shapesLibrary.file, offset + 2 * sizeof(int), SEEK_SET) != 0) {
+    if (fseek(seq->shapesLibrary.file, offset, SEEK_SET) != 0) {
         FREE(shape->samples);
         shape->samples = NULL;
         return 0;
@@ -1015,6 +1194,20 @@ static int loadShape(pulseqlib_SeqFile* seq, int index, pulseqlib_ShapeArbitrary
             swap4(&shape->samples[j]);
         }
     }
+    
+    /* Apply scale if applicable */
+    if (type == SHAPE_RF_MAG && seq->shapesLibrary.rfMagScale) {
+        float scale = seq->shapesLibrary.rfMagScale[index];
+        if (scale != 1.0f) {
+            for (j = 0; j < shape->numSamples; j++) shape->samples[j] *= scale;
+        }
+    } else if (type == SHAPE_GRAD_WAVE && seq->shapesLibrary.gradWaveScale) {
+        float scale = seq->shapesLibrary.gradWaveScale[index];
+        if (scale != 1.0f) {
+            for (j = 0; j < shape->numSamples; j++) shape->samples[j] *= scale;
+        }
+    }
+    
     return 1;
 }
 
@@ -1360,9 +1553,23 @@ void seqFileInit(pulseqlib_SeqFile* seq) {
     seq->shapesLibrary.open = 0;
     seq->shapesLibrary.file = NULL;
     seq->shapesLibrary.ioBuffer = NULL;
-    seq->shapesLibrary.shapeOffsets = NULL;
-    seq->shapesLibrary.numSamples = NULL;
-    seq->shapesLibrary.shapesLibrarySize = 0;
+    
+    seq->shapesLibrary.numShapes = 0;
+    seq->shapesLibrary.rfMagOffsets = NULL;
+    seq->shapesLibrary.rfMagNumSamples = NULL;
+    seq->shapesLibrary.rfMagScale = NULL;
+    seq->shapesLibrary.rfPhaseOffsets = NULL;
+    seq->shapesLibrary.rfPhaseNumSamples = NULL;
+    seq->shapesLibrary.rfTimeOffsets = NULL;
+    seq->shapesLibrary.rfTimeNumSamples = NULL;
+    seq->shapesLibrary.gradWaveOffsets = NULL;
+    seq->shapesLibrary.gradWaveNumSamples = NULL;
+    seq->shapesLibrary.gradWaveScale = NULL;
+    seq->shapesLibrary.gradTimeOffsets = NULL;
+    seq->shapesLibrary.gradTimeNumSamples = NULL;
+    seq->shapesLibrary.adcPhaseOffsets = NULL;
+    seq->shapesLibrary.adcPhaseNumSamples = NULL;
+
     seq->shapesLibrary.byteSwap = 0;
     
     /* Initialize system params to default (0) if not set, though they should be set by caller */
@@ -1446,8 +1653,26 @@ void pulseqlib_seqFileFree(pulseqlib_SeqFile* seq) {
         seq->shapesLibrary.open = 0;
     }
     if (seq->shapesLibrary.ioBuffer) FREE(seq->shapesLibrary.ioBuffer); /* Free the I/O buffer */
-    if (seq->shapesLibrary.shapeOffsets) FREE(seq->shapesLibrary.shapeOffsets);
-    if (seq->shapesLibrary.numSamples) FREE(seq->shapesLibrary.numSamples);
+    
+    if (seq->shapesLibrary.rfMagOffsets) FREE(seq->shapesLibrary.rfMagOffsets);
+    if (seq->shapesLibrary.rfMagNumSamples) FREE(seq->shapesLibrary.rfMagNumSamples);
+    if (seq->shapesLibrary.rfMagScale) FREE(seq->shapesLibrary.rfMagScale);
+    
+    if (seq->shapesLibrary.rfPhaseOffsets) FREE(seq->shapesLibrary.rfPhaseOffsets);
+    if (seq->shapesLibrary.rfPhaseNumSamples) FREE(seq->shapesLibrary.rfPhaseNumSamples);
+    
+    if (seq->shapesLibrary.rfTimeOffsets) FREE(seq->shapesLibrary.rfTimeOffsets);
+    if (seq->shapesLibrary.rfTimeNumSamples) FREE(seq->shapesLibrary.rfTimeNumSamples);
+    
+    if (seq->shapesLibrary.gradWaveOffsets) FREE(seq->shapesLibrary.gradWaveOffsets);
+    if (seq->shapesLibrary.gradWaveNumSamples) FREE(seq->shapesLibrary.gradWaveNumSamples);
+    if (seq->shapesLibrary.gradWaveScale) FREE(seq->shapesLibrary.gradWaveScale);
+    
+    if (seq->shapesLibrary.gradTimeOffsets) FREE(seq->shapesLibrary.gradTimeOffsets);
+    if (seq->shapesLibrary.gradTimeNumSamples) FREE(seq->shapesLibrary.gradTimeNumSamples);
+    
+    if (seq->shapesLibrary.adcPhaseOffsets) FREE(seq->shapesLibrary.adcPhaseOffsets);
+    if (seq->shapesLibrary.adcPhaseNumSamples) FREE(seq->shapesLibrary.adcPhaseNumSamples);
 }
 
 void pulseqlib_seqBlockInit(pulseqlib_SeqBlock* block) {
@@ -1641,12 +1866,12 @@ void pulseqlib_getBlock(pulseqlib_SeqFile* seq, const int blockIndex, const int 
 
         idx = (int)farray[1];
         if (idx > 0) {
-            if (!loadShape(seq, idx - 1, &block->rf.magShape)) return;
+            if (!loadShape(seq, idx - 1, &block->rf.magShape, SHAPE_RF_MAG)) return;
         }
 
         idx = (int)farray[2];
         if (idx > 0) {
-            if (!loadShape(seq, idx - 1, &block->rf.phaseShape)) return;
+            if (!loadShape(seq, idx - 1, &block->rf.phaseShape, SHAPE_RF_PHASE)) return;
             for (i = 0; i < block->rf.phaseShape.numSamples; i++) {
                 block->rf.phaseShape.samples[i] *= TWO_PI; /* Rescale phase shape to radians */
             }
@@ -1687,7 +1912,7 @@ void pulseqlib_getBlock(pulseqlib_SeqFile* seq, const int blockIndex, const int 
 
         idx = (int)farray[3];
         if (idx > 0) {
-            if (!loadShape(seq, idx - 1, &block->rf.timeShape)) return;
+            if (!loadShape(seq, idx - 1, &block->rf.timeShape, SHAPE_RF_TIME)) return;
         }
 
         block->rf.center = farray[4];
@@ -1718,12 +1943,12 @@ void pulseqlib_getBlock(pulseqlib_SeqFile* seq, const int blockIndex, const int 
 
             idx = (int)farray[4];
             if (idx > 0) {
-                if (!loadShape(seq, idx - 1, &block->gx.waveShape)) return;
+                if (!loadShape(seq, idx - 1, &block->gx.waveShape, SHAPE_GRAD_WAVE)) return;
             }
 
             idx = (int)farray[5];
             if (idx > 0) {
-                if (!loadShape(seq, idx - 1, &block->gx.timeShape)) return;
+                if (!loadShape(seq, idx - 1, &block->gx.timeShape, SHAPE_GRAD_TIME)) return;
             }
 
             block->gx.delay = (int)farray[6];
@@ -1750,12 +1975,12 @@ void pulseqlib_getBlock(pulseqlib_SeqFile* seq, const int blockIndex, const int 
 
             idx = (int)farray[4];
             if (idx > 0) {
-                if (!loadShape(seq, idx - 1, &block->gy.waveShape)) return;
+                if (!loadShape(seq, idx - 1, &block->gy.waveShape, SHAPE_GRAD_WAVE)) return;
             }
 
             idx = (int)farray[5];
             if (idx > 0) {
-                if (!loadShape(seq, idx - 1, &block->gy.timeShape)) return;
+                if (!loadShape(seq, idx - 1, &block->gy.timeShape, SHAPE_GRAD_TIME)) return;
             }
 
             block->gy.delay = (int)farray[6];
@@ -1782,12 +2007,12 @@ void pulseqlib_getBlock(pulseqlib_SeqFile* seq, const int blockIndex, const int 
 
             idx = (int)farray[4];
             if (idx > 0) {
-                if (!loadShape(seq, idx - 1, &block->gz.waveShape)) return;
+                if (!loadShape(seq, idx - 1, &block->gz.waveShape, SHAPE_GRAD_WAVE)) return;
             }
 
             idx = (int)farray[5];
             if (idx > 0) {
-                if (!loadShape(seq, idx - 1, &block->gz.timeShape)) return;
+                if (!loadShape(seq, idx - 1, &block->gz.timeShape, SHAPE_GRAD_TIME)) return;
             }
 
             block->gz.delay = (int)farray[6];
@@ -1808,7 +2033,7 @@ void pulseqlib_getBlock(pulseqlib_SeqFile* seq, const int blockIndex, const int 
 
         idx = (int)farray[7];
         if (idx > 0) {
-            if (!loadShape(seq, idx - 1, &block->adc.phaseModulationShape)) return;
+            if (!loadShape(seq, idx - 1, &block->adc.phaseModulationShape, SHAPE_ADC_PHASE)) return;
         }
     }
 
