@@ -339,27 +339,34 @@ typedef struct pulseqlib_RfShimEntry {
 typedef struct pulseqlib_ShapeLibrary {
     int open; /**< @brief Flag indicating if the shape library is open */
     FILE* file; /**< @brief File pointer to the shape library file */
-    int numShapes; /**< @brief Number of shape entries (Max ID + 1). */
     
-    unsigned long* rfMagOffsets; /**< @brief File offsets for RF magnitude shapes */
-    int* rfMagNumSamples; /**< @brief Sample counts for RF magnitude shapes */
-    float* rfMagScale; /**< @brief Scaling factors for RF magnitude shapes */
+    int numShapes; /**< @brief Number of shape entries (max ID + 1) */
 
-    unsigned long* rfPhaseOffsets; /**< @brief File offsets for RF phase shapes */
-    int* rfPhaseNumSamples; /**< @brief Sample counts for RF phase shapes */
+    /* RF Magnitude */
+    int* rfMagOffsets;
+    int* rfMagNumSamples;
+    float* rfMagScale;
 
-    unsigned long* rfTimeOffsets; /**< @brief File offsets for RF time shapes */
-    int* rfTimeNumSamples; /**< @brief Sample counts for RF time shapes */
+    /* RF Phase */
+    int* rfPhaseOffsets;
+    int* rfPhaseNumSamples;
 
-    unsigned long* gradWaveOffsets; /**< @brief File offsets for Gradient waveform shapes */
-    int* gradWaveNumSamples; /**< @brief Sample counts for Gradient waveform shapes */
-    float* gradWaveScale; /**< @brief Scaling factors for Gradient waveform shapes */
+    /* RF Time */
+    int* rfTimeOffsets;
+    int* rfTimeNumSamples;
 
-    unsigned long* gradTimeOffsets; /**< @brief File offsets for Gradient time shapes */
-    int* gradTimeNumSamples; /**< @brief Sample counts for Gradient time shapes */
+    /* Gradient Waveform */
+    int* gradWaveOffsets;
+    int* gradWaveNumSamples;
+    float* gradWaveScale;
 
-    unsigned long* adcPhaseOffsets; /**< @brief File offsets for ADC phase modulation shapes */
-    int* adcPhaseNumSamples; /**< @brief Sample counts for ADC phase modulation shapes */
+    /* Gradient Time */
+    int* gradTimeOffsets;
+    int* gradTimeNumSamples;
+
+    /* ADC Phase */
+    int* adcPhaseOffsets;
+    int* adcPhaseNumSamples;
 
     int byteSwap; /**< @brief Flag indicating if byte swapping is required */
     char* ioBuffer; /**< @brief Custom I/O buffer for file reading */
