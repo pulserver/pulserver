@@ -339,9 +339,28 @@ typedef struct pulseqlib_RfShimEntry {
 typedef struct pulseqlib_ShapeLibrary {
     int open; /**< @brief Flag indicating if the shape library is open */
     FILE* file; /**< @brief File pointer to the shape library file */
-    int shapesLibrarySize; /**< @brief Number of shape entries. */
-    int* shapeOffsets; /**< @brief Array of file offsets for each shape entry */
-    int* numSamples; /**< @brief Array of number of samples for each shape entry */
+    int numShapes; /**< @brief Number of shape entries (Max ID + 1). */
+    
+    unsigned long* rfMagOffsets; /**< @brief File offsets for RF magnitude shapes */
+    int* rfMagNumSamples; /**< @brief Sample counts for RF magnitude shapes */
+    float* rfMagScale; /**< @brief Scaling factors for RF magnitude shapes */
+
+    unsigned long* rfPhaseOffsets; /**< @brief File offsets for RF phase shapes */
+    int* rfPhaseNumSamples; /**< @brief Sample counts for RF phase shapes */
+
+    unsigned long* rfTimeOffsets; /**< @brief File offsets for RF time shapes */
+    int* rfTimeNumSamples; /**< @brief Sample counts for RF time shapes */
+
+    unsigned long* gradWaveOffsets; /**< @brief File offsets for Gradient waveform shapes */
+    int* gradWaveNumSamples; /**< @brief Sample counts for Gradient waveform shapes */
+    float* gradWaveScale; /**< @brief Scaling factors for Gradient waveform shapes */
+
+    unsigned long* gradTimeOffsets; /**< @brief File offsets for Gradient time shapes */
+    int* gradTimeNumSamples; /**< @brief Sample counts for Gradient time shapes */
+
+    unsigned long* adcPhaseOffsets; /**< @brief File offsets for ADC phase modulation shapes */
+    int* adcPhaseNumSamples; /**< @brief Sample counts for ADC phase modulation shapes */
+
     int byteSwap; /**< @brief Flag indicating if byte swapping is required */
     char* ioBuffer; /**< @brief Custom I/O buffer for file reading */
 } pulseqlib_ShapeLibrary; /* mirrors Pulseq ShapeLibrary */
