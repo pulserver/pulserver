@@ -3,6 +3,7 @@
 /* Test entry points */
 int test_seqfile_main(void);
 int test_block_main(void);
+int test_math_main(void);
 
 int main(void)
 {
@@ -13,6 +14,9 @@ int main(void)
 
     printf("Running block tests...\n");
     failed += test_block_main();
+
+    printf("Running math tests...\n");
+    failed += test_math_main();
 
     if (failed)
         printf("Some tests FAILED (%d)\n", failed);
