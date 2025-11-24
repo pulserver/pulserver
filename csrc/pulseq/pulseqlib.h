@@ -256,6 +256,15 @@ typedef struct pulseqlib_SeqBlock {
     pulseqlib_RfShimmingEvent rfShimming; /**< @brief RF shimming event */
 } pulseqlib_SeqBlock; /* Mirrors Pulseq SeqBlock */
 
+typedef struct pulseqlib_Opts {
+    float B0; /**< @brief Main magnetic field strength in Tesla for frequency offset calculations */
+    float max_grad; /**< @brief Maximum gradient amplitude in Hz/m */
+    float max_slew; /**< @brief Maximum slew rate in Hz/m/s */
+    float rf_raster_time; /**< @brief RF raster time in us */
+    float grad_raster_time; /**< @brief Gradient raster time in us */
+    float adc_raster_time; /**< @brief ADC raster time in us */
+    float block_duration_raster; /**< @brief Block duration raster time in us */
+} pulseqlib_Opts;
 
 typedef struct pulseqlib_SectionOffsets {
     long scan_cursor;
@@ -404,6 +413,7 @@ typedef struct pulseqlib_BlockDynamic {
 
 
 typedef struct pulseqlib_SeqFile {
+    pulseqlib_Opts opts;
     char* filePath; /**< @brief Path to the sequence (.seq) file. */
     pulseqlib_SectionOffsets offsets; /**< @brief Line position of each section. */
     int isVersionParsed; /**< @brief Flag indicating if the version was parsed successfully. */

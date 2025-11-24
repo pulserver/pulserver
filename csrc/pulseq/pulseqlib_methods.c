@@ -1234,6 +1234,14 @@ void seqFileInit(pulseqlib_SeqFile* seq) {
     seq->offsets.shapes = -1;
     seq->offsets.signature = -1;
 
+    seq->opts.B0 = 0.0f;
+    seq->opts.max_grad = 0.0f;
+    seq->opts.max_slew = 0.0f;
+    seq->opts.rf_raster_time = 1.0f;
+    seq->opts.grad_raster_time = 10.0f;
+    seq->opts.adc_raster_time = 0.1f;
+    seq->opts.block_duration_raster = 10.0f;
+
     INIT_LIBRARY(seq, definitionsLibrary, numDefinitions, isDefinitionsLibraryParsed);
     INIT_LIBRARY(seq, blockLibrary, numBlocks, isBlockLibraryParsed);
     seq->blockIDs = NULL; /* Initialize blockIDs to NULL */
@@ -1541,68 +1549,59 @@ void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const int readBlocks) {
 }
 
 
-/**
- * @brief Get the raw block content IDs from the sequence file.
- *
- * @param[in] seq Pointer to the SeqFile structure.
- * @param[in] blockIndex Index of the block to retrieve.
- * @param[in, out] block Pointer to the block's content IDs and extension data.
- */
-void pulseqlib_getRawBlockContentIDs(const pulseqlib_SeqFile* seq, const int blockIndex, pulseqlib_RawBlock* block) {
-    int i, nextExtID;
+static int getRawBlockContentIDs(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_RawBlock* block, int parseExtensions) {
+    int nextExtID;
+    int extCount;
     float* eventFloat;
     float* extData;
-    int extCount;
 
-    /* Initialize */
-    block->adc = 0;
-    block->rf = 0;
-    block->gx = 0;
-    block->gy = 0;
-    block->gz = 0;
-    block->adc = 0;
+    if (!seq || !block || blockIndex < 0 || blockIndex >= seq->numBlocks) {
+        return 0;
+    }
+
+    block->block_duration = 0;
+    block->rf = -1;
+    block->gx = -1;
+    block->gy = -1;
+    block->gz = -1;
+    block->adc = -1;
     block->extCount = 0;
 
-    /* Sanity check */
-    if (seq == 0 || blockIndex < 0 || blockIndex >= seq->numBlocks) {
-        return;
+    if (!seq->blockLibrary || !seq->blockLibrary[blockIndex]) {
+        return 0;
     }
 
-    /* Access float data row and cast entries to int */
     eventFloat = seq->blockLibrary[blockIndex];
 
-    int duration = (int)(eventFloat[0]);
-    int rfID = (int)(eventFloat[1]) - 1;
-    int gxID = (int)(eventFloat[2]) - 1;
-    int gyID = (int)(eventFloat[3]) - 1;
-    int gzID = (int)(eventFloat[4]) - 1;
-    int adcID  = (int)(eventFloat[5]) - 1;
-    int extID = (int)(eventFloat[6]);
+    block->block_duration = (int)eventFloat[0];
+    block->rf = (int)eventFloat[1] - 1;
+    block->gx = (int)eventFloat[2] - 1;
+    block->gy = (int)eventFloat[3] - 1;
+    block->gz = (int)eventFloat[4] - 1;
+    block->adc = (int)eventFloat[5] - 1;
 
-    block->block_duration = duration;
-    block->rf = rfID;
-    block->gx = gxID;
-    block->gy = gyID;
-    block->gz = gzID;
-    block->adc = adcID;
-
-    /* Handle extensions if present */
-    if (extID > 0 && seq->isExtensionsLibraryParsed) {
-        nextExtID = extID;
-        extCount = 0;
-
-        while (nextExtID > 0 && nextExtID <= seq->extensionsLibrarySize) {
-            extData = seq->extensionsLibrary[nextExtID - 1]; /* [type, ref, next_id] */
-            block->ext[extCount][0] = (int)extData[0];      /* type */
-            block->ext[extCount][1] = (int)extData[1] - 1;  /* ref */
-            nextExtID = (int)extData[2]; /* next in chain */
-            extCount += 1;
-        }
-
-        block->extCount = extCount;
+    if (!parseExtensions) {
+        block->extCount = 0;
+        return 1;
     }
 
-    return;
+    if (!seq->isExtensionsLibraryParsed || !seq->extensionsLibrary || seq->extensionsLibrarySize <= 0) {
+        return 1;
+    }
+
+    nextExtID = (int)eventFloat[6];
+    extCount = 0;
+
+    while (nextExtID > 0 && nextExtID <= seq->extensionsLibrarySize && extCount < MAX_EXTENSIONS_PER_BLOCK) {
+        extData = seq->extensionsLibrary[nextExtID - 1];
+        block->ext[extCount][0] = (int)extData[0];
+        block->ext[extCount][1] = (int)extData[1] - 1;
+        nextExtID = (int)extData[2];
+        extCount += 1;
+    }
+
+    block->extCount = extCount;
+    return 1;
 }
 
 static void pulseqlib_clear_block_labels(pulseqlib_BlockLabels* labels) {
@@ -1697,7 +1696,7 @@ static void pulseqlib_apply_block_dynamic(const pulseqlib_BlockDynamic* dynamic,
 }
 
 
-int pulseqlib_getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, pulseqlib_SeqBlock* block) {
+static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, pulseqlib_SeqBlock* block) {
     float* farray;
     int idx;
     int i;
@@ -1948,7 +1947,8 @@ block_static_fail:
 }
 
 
-void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, float b0, pulseqlib_BlockDynamic* dynamic) {
+static void getBlockDynamic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, pulseqlib_BlockDynamic* dynamic) {
+    float b0 = seq->opts.B0;
     float* farray;
     if (!dynamic) return;
     pulseqlib_clear_block_dynamic(dynamic);
@@ -2058,7 +2058,7 @@ void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, const pulseqlib_Raw
 }
 
 
-void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, pulseqlib_BlockLabels* labels) {
+static void getBlockLabels(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, pulseqlib_BlockLabels* labels) {
     int i;
     pulseqlib_clear_block_labels(labels);
     if (!seq || !raw || !labels) return;
@@ -2122,6 +2122,57 @@ void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, const pulseqlib_RawB
 }
 
 
+int pulseqlib_getBlockStatic(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_SeqBlock* block) {
+    pulseqlib_RawBlock raw;
+    if (!seq || !block) {
+        return 0;
+    }
+    if (!getRawBlockContentIDs(seq, blockIndex, &raw, 1)) {
+        return 0;
+    }
+    return getBlockStatic(seq, &raw, block);
+}
+
+
+void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_BlockDynamic* dynamic) {
+    pulseqlib_RawBlock raw;
+    if (!dynamic) {
+        return;
+    }
+    if (!seq || !getRawBlockContentIDs(seq, blockIndex, &raw, 1)) {
+        pulseqlib_clear_block_dynamic(dynamic);
+        return;
+    }
+    getBlockDynamic(seq, &raw, dynamic);
+}
+
+
+void pulseqlib_getBlockDynamicWithoutExtensions(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_BlockDynamic* dynamic) {
+    pulseqlib_RawBlock raw;
+    if (!dynamic) {
+        return;
+    }
+    if (!seq || !getRawBlockContentIDs(seq, blockIndex, &raw, 0)) {
+        pulseqlib_clear_block_dynamic(dynamic);
+        return;
+    }
+    getBlockDynamic(seq, &raw, dynamic);
+}
+
+
+void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_BlockLabels* labels) {
+    pulseqlib_RawBlock raw;
+    if (!labels) {
+        return;
+    }
+    if (!seq || !getRawBlockContentIDs(seq, blockIndex, &raw, 1)) {
+        pulseqlib_clear_block_labels(labels);
+        return;
+    }
+    getBlockLabels(seq, &raw, labels);
+}
+
+
 /**
  * @brief Retrieves a block from the sequence file.
  *
@@ -2139,15 +2190,17 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, puls
         return; /* Invalid inputs */
     }
 
-    pulseqlib_getRawBlockContentIDs(seq, blockIndex, &rawBlock);
-
-    if (!pulseqlib_getBlockStatic(seq, &rawBlock, block)) {
+    if (!getRawBlockContentIDs(seq, blockIndex, &rawBlock, 1)) {
         return;
     }
 
-    pulseqlib_getBlockDynamic(seq, &rawBlock, 0.0f, &dynamic);
+    if (!getBlockStatic(seq, &rawBlock, block)) {
+        return;
+    }
+
+    getBlockDynamic(seq, &rawBlock, &dynamic);
     pulseqlib_apply_block_dynamic(&dynamic, block);
 
-    pulseqlib_getBlockLabels(seq, &rawBlock, &labels);
+    getBlockLabels(seq, &rawBlock, &labels);
     pulseqlib_apply_block_labels(&labels, block);
 }
