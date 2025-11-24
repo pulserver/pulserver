@@ -11,6 +11,10 @@
         (seq)->flagField = 0; \
     } while (0)
 
+static void seqFileSetDefaults(pulseqlib_SeqFile* seq);
+static void seqFileInit(pulseqlib_SeqFile* seq, const pulseqlib_Opts* opts);
+static void seqFileReset(pulseqlib_SeqFile* seq);
+
 
 typedef struct {
     const char *name;
@@ -1214,8 +1218,28 @@ int decompressShape(pulseqlib_ShapeArbitrary* encoded, pulseqlib_ShapeArbitrary*
 
 
 /******************************************* Public methods *************************************************/
-void seqFileInit(pulseqlib_SeqFile* seq) {
+void pulseqlib_optsInit(pulseqlib_Opts* opts, float B0, float max_grad, float max_slew, float rf_raster_time, float grad_raster_time, float adc_raster_time, float block_duration_raster){
+    if (!opts) return;
+    opts->B0 = B0;
+    opts->max_grad = max_grad;
+    opts->max_slew = max_slew;
+    opts->rf_raster_time = rf_raster_time;
+    opts->grad_raster_time = grad_raster_time;
+    opts->adc_raster_time = adc_raster_time;
+    opts->block_duration_raster = block_duration_raster;
+}
+
+
+void pulseqlib_optsFree(pulseqlib_Opts* opts) {
+    if (!opts) return;
+    memset(opts, 0, sizeof(*opts));
+}
+
+
+static void seqFileSetDefaults(pulseqlib_SeqFile* seq) {
     int i;
+    if (!seq) return;
+
     seq->offsets.scan_cursor = 0;
     seq->offsets.version = -1;
     seq->offsets.definitions = -1;
@@ -1234,17 +1258,17 @@ void seqFileInit(pulseqlib_SeqFile* seq) {
     seq->offsets.shapes = -1;
     seq->offsets.signature = -1;
 
-    seq->opts.B0 = 0.0f;
-    seq->opts.max_grad = 0.0f;
-    seq->opts.max_slew = 0.0f;
-    seq->opts.rf_raster_time = 1.0f;
-    seq->opts.grad_raster_time = 10.0f;
-    seq->opts.adc_raster_time = 0.1f;
-    seq->opts.block_duration_raster = 10.0f;
+    seq->isVersionParsed = 0;
+    seq->versionCombined = 0;
+    seq->versionMajor = 0;
+    seq->versionMinor = 0;
+    seq->versionRevision = 0;
 
     INIT_LIBRARY(seq, definitionsLibrary, numDefinitions, isDefinitionsLibraryParsed);
+    seq->reservedDefinitionsLibrary = (pulseqlib_ReservedDefinitions){0};
+
     INIT_LIBRARY(seq, blockLibrary, numBlocks, isBlockLibraryParsed);
-    seq->blockIDs = NULL; /* Initialize blockIDs to NULL */
+    seq->blockIDs = NULL;
     INIT_LIBRARY(seq, rfLibrary, rfLibrarySize, isRfLibraryParsed);
     INIT_LIBRARY(seq, gradLibrary, gradLibrarySize, isGradLibraryParsed);
     INIT_LIBRARY(seq, adcLibrary, adcLibrarySize, isAdcLibraryParsed);
@@ -1254,53 +1278,36 @@ void seqFileInit(pulseqlib_SeqFile* seq) {
     INIT_LIBRARY(seq, rotationMatrixLibrary, rotationLibrarySize, isExtensionsLibraryParsed);
     INIT_LIBRARY(seq, labelsetLibrary, labelsetLibrarySize, isExtensionsLibraryParsed);
     INIT_LIBRARY(seq, labelincLibrary, labelincLibrarySize, isExtensionsLibraryParsed);
-    for (i = 0; i < 22; i++){
+    for (i = 0; i < 22; i++) {
         seq->isLabelDefined[i] = 0;
+    }
+    memset(&seq->labelLimits, 0, sizeof(seq->labelLimits));
+    for (i = 0; i < 8; i++) {
+        seq->isDelayDefined[i] = 0;
+        seq->extensionMap[i] = -1;
     }
     INIT_LIBRARY(seq, softDelayLibrary, softDelayLibrarySize, isExtensionsLibraryParsed);
     INIT_LIBRARY(seq, rfShimLibrary, rfShimLibrarySize, isExtensionsLibraryParsed);
-    for (i = 0; i < 8; i++){
-        seq->extensionMap[i] = -1;
-    }
     seq->extensionLUTSize = 0;
     seq->extensionLUT = NULL;
     INIT_LIBRARY(seq, shapesLibrary, shapesLibrarySize, isShapesLibraryParsed);
 }
 
 
-/**
- * @brief Initialize SeqFile fields.
- * 
- * @param[in] filePath The path of .seq file on disk.  
- * @param[in, out] seq The uninitialized SeqFile structure.
- */
-void pulseqlib_seqFileInit(const char* filePath, pulseqlib_SeqFile* seq) {
-    seqFileInit(seq);
-
-    /* Allocate and copy the file path */
-    seq->filePath = (char*) ALLOC(strlen(filePath) + 1);
-    strcpy(seq->filePath, filePath);
+static void seqFileInit(pulseqlib_SeqFile* seq, const pulseqlib_Opts* opts) {
+    if (!seq) return;
+    seq->filePath = NULL;
+    seq->opts = *opts;
+    seqFileSetDefaults(seq);
 }
 
 
-/**
- * @brief Free SeqFile structure.
- * 
- * @param[in, out] seq The SeqFile structure.
- */
-void pulseqlib_seqFileFree(pulseqlib_SeqFile *seq) {
-    pulseqlib_seqFileReset(seq);
-    FREE(seq->filePath);
-    FREE(seq);
+void pulseqlib_seqFileInit(pulseqlib_SeqFile* seq, const pulseqlib_Opts* opts) {
+    seqFileInit(seq, opts);
 }
 
 
-/**
- * @brief Reset SeqFile fields.
- * 
- * @param[in, out] seq The SeqFile structure.
- */
-void pulseqlib_seqFileReset(pulseqlib_SeqFile* seq) {
+static void seqFileReset(pulseqlib_SeqFile* seq) {
     int i, j;
     if (!seq) return;
     if (seq->isDefinitionsLibraryParsed && seq->definitionsLibrary) {
@@ -1341,8 +1348,21 @@ void pulseqlib_seqFileReset(pulseqlib_SeqFile* seq) {
     }
 
     FREE(seq->extensionLUT);
+    seq->extensionLUT = NULL;
     
-    seqFileInit(seq);
+    seqFileSetDefaults(seq);
+}
+
+
+void pulseqlib_seqFileFree(pulseqlib_SeqFile *seq) {
+    if (!seq) return;
+    seqFileReset(seq);
+    if (seq->filePath) {
+        FREE(seq->filePath);
+        seq->filePath = NULL;
+    }
+    pulseqlib_optsFree(&seq->opts);
+    FREE(seq);
 }
 
 
@@ -1522,10 +1542,27 @@ void pulseqlib_seqBlockFree(pulseqlib_SeqBlock* block) {
  * @param[in, out] seq The SeqFile structure.
  * @param[in] readBlocks Whether to parse the BlockLibrary or not.   
  */
-void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const int readBlocks) {
-    FILE* f = fopen(seq->filePath, "r");
-    
+void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath, int readBlocks) {
+    FILE* f;
+
+    if (!seq || !filePath) return;
+
+    seqFileReset(seq);
+
+    if (seq->filePath) {
+        FREE(seq->filePath);
+        seq->filePath = NULL;
+    }
+
+    f = fopen(filePath, "r");
     if (!f) return;
+
+    seq->filePath = (char*)ALLOC(strlen(filePath) + 1);
+    if (!seq->filePath) {
+        fclose(f);
+        return;
+    }
+    strcpy(seq->filePath, filePath);
     getSectionOffsets(seq, f);
     readVersion(seq, f);
     if (seq->versionCombined < 1005000) {

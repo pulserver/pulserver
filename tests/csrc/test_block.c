@@ -59,6 +59,7 @@ static pulseqlib_SeqBlock* getBlock(pulseqlib_SeqFile* seq, int blockIndex) {
 static pulseqlib_SeqFile* load_seq(char* filePath) {
     char seq_path[1024];
     pulseqlib_SeqFile* seq;
+    pulseqlib_Opts opts;
     
     /* Allocate memory for the sequence file */
     seq = (pulseqlib_SeqFile*)ALLOC(sizeof(pulseqlib_SeqFile));
@@ -67,15 +68,13 @@ static pulseqlib_SeqFile* load_seq(char* filePath) {
     /* Create the full path to the sequence file */
     snprintf(seq_path, sizeof(seq_path), "%s/%s", TEST_ROOT_DIR, filePath);
 
-    /* Initialize the sequence file structure with default values */
-    pulseqlib_seqFileInit(seq_path, seq);
-    if (!seq) {
-        FREE(seq);
-        return NULL;
-    }
-    
+    /* Initialize runtime options and the sequence structure */
+    pulseqlib_optsInit(&opts, 3.0f, 40.0f, 150.0f, 1.0f, 10.0f, 0.1f, 10.0f);
+    pulseqlib_seqFileInit(seq, &opts);
+    pulseqlib_optsFree(&opts);
+
     /* Read the sequence data */
-    pulseqlib_readSeq(seq, 1);
+    pulseqlib_readSeq(seq, seq_path, 1);
     return seq;
 }
 
