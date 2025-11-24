@@ -26,7 +26,7 @@ static pulseqlib_SeqFile* load_seq(char* filePath) {
     pulseqlib_optsFree(&opts);
 
     /* Read the sequence data */
-    pulseqlib_readSeq(seq, seq_path, 1);
+    pulseqlib_readSeq(seq, seq_path);
     return seq;
 }
 

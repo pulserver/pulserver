@@ -65,14 +65,14 @@ void pulseqlib_seqBlockInit(pulseqlib_SeqBlock* block);
 void pulseqlib_seqBlockFree(pulseqlib_SeqBlock* block);
 
 /* Parsing Sequence */
-void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath, int readBlocks);
+void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath);
 
-/* Getters - to mimic OoP *outputs = obj.func(input), we do func(obj, *outputs, *inputs) */
-int pulseqlib_getBlockStatic(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_SeqBlock* block);
-void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_BlockDynamic* dynamic);
-void pulseqlib_getBlockDynamicWithoutExtensions(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_BlockDynamic* dynamic);
-void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_BlockLabels* labels);
-void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, pulseqlib_SeqBlock* block);
+/* Getters - to mimic OOP *outputs = obj.func(input), we do func(obj, *outputs, *inputs) */
+void pulseqlib_getBlockStatic(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex);
+void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, pulseqlib_BlockDynamic* dynamic, const int blockIndex);
+void pulseqlib_getBlockDynamicWithoutExtensions(const pulseqlib_SeqFile* seq, pulseqlib_BlockDynamic* dynamic, const int blockIndex);
+void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, pulseqlib_BlockLabels* labels, const int blockIndex);
+void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex);
 
 #ifdef __cplusplus
 }

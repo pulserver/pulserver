@@ -1540,9 +1540,9 @@ void pulseqlib_seqBlockFree(pulseqlib_SeqBlock* block) {
  * @brief Read SeqFile content
  * 
  * @param[in, out] seq The SeqFile structure.
- * @param[in] readBlocks Whether to parse the BlockLibrary or not.   
+ * @param[in] filePath The path to the sequence file.
  */
-void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath, int readBlocks) {
+void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath) {
     FILE* f;
 
     if (!seq || !filePath) return;
@@ -1572,9 +1572,7 @@ void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath, int readBlo
     }
     readDefinitionsLibrary(seq, f); 
     readDefinitions(seq);
-    if (readBlocks) {
-        readBlockLibrary(seq, f);
-    }
+    readBlockLibrary(seq, f);
     readRfLibrary(seq, f);
     readGradLibrary(seq, f);
     readAdcLibrary(seq, f);
@@ -2159,19 +2157,21 @@ static void getBlockLabels(const pulseqlib_SeqFile* seq, const pulseqlib_RawBloc
 }
 
 
-int pulseqlib_getBlockStatic(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_SeqBlock* block) {
+void pulseqlib_getBlockStatic(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex) {
     pulseqlib_RawBlock raw;
     if (!seq || !block) {
-        return 0;
+        return;
     }
     if (!getRawBlockContentIDs(seq, blockIndex, &raw, 1)) {
-        return 0;
+        return;
     }
-    return getBlockStatic(seq, &raw, block);
+    if (!getBlockStatic(seq, &raw, block)) {
+        return;
+    }
 }
 
 
-void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_BlockDynamic* dynamic) {
+void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, pulseqlib_BlockDynamic* dynamic, const int blockIndex) {
     pulseqlib_RawBlock raw;
     if (!dynamic) {
         return;
@@ -2184,7 +2184,7 @@ void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, int blockIndex, pul
 }
 
 
-void pulseqlib_getBlockDynamicWithoutExtensions(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_BlockDynamic* dynamic) {
+void pulseqlib_getBlockDynamicWithoutExtensions(const pulseqlib_SeqFile* seq, pulseqlib_BlockDynamic* dynamic, const int blockIndex) {
     pulseqlib_RawBlock raw;
     if (!dynamic) {
         return;
@@ -2197,7 +2197,7 @@ void pulseqlib_getBlockDynamicWithoutExtensions(const pulseqlib_SeqFile* seq, in
 }
 
 
-void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_BlockLabels* labels) {
+void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, pulseqlib_BlockLabels* labels, const int blockIndex) {
     pulseqlib_RawBlock raw;
     if (!labels) {
         return;
@@ -2214,10 +2214,10 @@ void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, int blockIndex, puls
  * @brief Retrieves a block from the sequence file.
  *
  * @param[in] seq Pointer to the SeqFile structure.
- * @param[in] blockIndex Index of the block to retrieve.
  * @param[in, out] block Pointer to a pre-allocated SeqBlock to fill.
+ * @param[in] blockIndex Index of the block to retrieve.
  */
-void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, pulseqlib_SeqBlock* block) {
+void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex) {
     pulseqlib_RawBlock rawBlock;
     pulseqlib_BlockDynamic dynamic;
     pulseqlib_BlockLabels labels;

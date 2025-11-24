@@ -24,7 +24,7 @@ static pulseqlib_SeqBlock* getBlock(pulseqlib_SeqFile* seq, int blockIndex) {
     }
     
     /* Get the block using the new API */
-    pulseqlib_getBlock(seq, blockIndex, block);
+    pulseqlib_getBlock(seq, block, blockIndex);
     return block;
 }
 
@@ -74,7 +74,7 @@ static pulseqlib_SeqFile* load_seq(char* filePath) {
     pulseqlib_optsFree(&opts);
 
     /* Read the sequence data */
-    pulseqlib_readSeq(seq, seq_path, 1);
+    pulseqlib_readSeq(seq, seq_path);
     return seq;
 }
 
