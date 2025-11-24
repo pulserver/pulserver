@@ -51,29 +51,30 @@
 #define HINT_TR2 8
 
 /*********************************************************************      Labels and Flags     ******************************************************************************************/
-/*      Label       |     Type     | Data Mapping | Description                                                                                                                           */                    
-#define SLC 1    /* | counter      |      Yes     | Slice counter (or slab counter for 3D multi-slab sequences) */
-#define SEG 2    /* | counter      |      Yes     | Segment counter e.g. for segmented FLASH or EPI */
-#define REP 3    /* | counter      |      Yes     | Repetition counter */
-#define AVG 4    /* | counter      |      Yes     | Averaging counter */
-#define SET 5    /* | counter      |      Yes     | Flexible counter without firm assignment */
-#define ECO 6    /* | counter      |      Yes     | Echo counter in multi-echo sequences */
-#define PHS 7    /* | counter      |      Yes     | Cardiac phase counter */
-#define LIN 8    /* | counter      |      Yes     | Line counter in 2D and 3D acquisitions */
-#define PAR 9    /* | counter      |      Yes     | Partition counter; it counts phase encoding steps in the 2nd (through-slab) phase encoding direction in 3D sequences */
-#define ACQ 10   /* | counter      |      Yes     | Spectroscopic acquisition counter */
-#define TRID 11  /* | counter      |      No      | Marks the beginning of a repeatable module in the sequence (e.g. TR); modules with different timing should be assigned different TRIDs */
-#define NAV 12   /* | flag         |      Yes     | Navigator data flag */
-#define REV 13   /* | flag         |      Yes     | Flag indicating that the readout direction is reversed */
-#define SMS 14   /* | flag         |      Yes     | Simultaneous multi-slice (SMS) acquisition */
-#define REF 15   /* | flag         |      Yes     | Parallel imaging flag indicating reference / auto-calibration data */
-#define IMA 16   /* | flag         |      Yes     | Parallel imaging flag indicating imaging data within the ACS region */
-#define NOISE 17 /* | flag         |      Yes     | Flag for the noise adjust scan e.g for the parallel imaging acceleration */
-#define PMC 18   /* | flag         |      No      | Flag for the MoCo/PMC Pulseq version marking blocks that can/should be prospectively corrected for motion */
-#define NOROT 19 /* | flag         |      No      | Instructs the interpreter to ignore the rotation of the FOV specified on the UI for the given block(s) */
-#define NOPOS 20 /* | flag         |      No      | Instructs the interpreter to ignore the the FOV offset specified on the UI for the given block(s) */
-#define NOSCL 21 /* | flag         |      No      | Instructs the interpreter to ignore the scaling of the FOV specified on the UI for the given block(s) */
-#define ONCE 22  /* | 3-state flag |      No      | A 3-state flag that instructs the interpreter to alter the sequence when executing multiple repeats as follows: blocks with ONCE==0 are executed on every repetition; ONCE==1: only on the first repetition; ONCE==2: only on the last repetition */
+/*      Label        |     Type     | Data Mapping | Description                                                                                                                           */                    
+#define SLC 1     /* | counter      |      Yes     | Slice counter (or slab counter for 3D multi-slab sequences) */
+#define SEG 2     /* | counter      |      Yes     | Segment counter e.g. for segmented FLASH or EPI */
+#define REP 3     /* | counter      |      Yes     | Repetition counter */
+#define AVG 4     /* | counter      |      Yes     | Averaging counter */
+#define SET 5     /* | counter      |      Yes     | Flexible counter without firm assignment */
+#define ECO 6     /* | counter      |      Yes     | Echo counter in multi-echo sequences */
+#define PHS 7     /* | counter      |      Yes     | Cardiac phase counter */
+#define LIN 8     /* | counter      |      Yes     | Line counter in 2D and 3D acquisitions */
+#define PAR 9     /* | counter      |      Yes     | Partition counter; it counts phase encoding steps in the 2nd (through-slab) phase encoding direction in 3D sequences */
+#define ACQ 10    /* | counter      |      Yes     | Spectroscopic acquisition counter */
+#define TRID 11   /* | counter      |      No      | Marks the beginning of a repeatable module in the sequence (e.g. TR); modules with different timing should be assigned different TRIDs */
+#define COREID 12 /* | counter      |      No      | Marks the beginning of a sequence of Blocks to be played sequentially (Segment) */
+#define NAV 13    /* | flag         |      Yes     | Navigator data flag */
+#define REV 14    /* | flag         |      Yes     | Flag indicating that the readout direction is reversed */
+#define SMS 15    /* | flag         |      Yes     | Simultaneous multi-slice (SMS) acquisition */
+#define REF 16    /* | flag         |      Yes     | Parallel imaging flag indicating reference / auto-calibration data */
+#define IMA 17    /* | flag         |      Yes     | Parallel imaging flag indicating imaging data within the ACS region */
+#define NOISE 18  /* | flag         |      Yes     | Flag for the noise adjust scan e.g for the parallel imaging acceleration */
+#define PMC 19    /* | flag         |      No      | Flag for the MoCo/PMC Pulseq version marking blocks that can/should be prospectively corrected for motion */
+#define NOROT 20  /* | flag         |      No      | Instructs the interpreter to ignore the rotation of the FOV specified on the UI for the given block(s) */
+#define NOPOS 21  /* | flag         |      No      | Instructs the interpreter to ignore the the FOV offset specified on the UI for the given block(s) */
+#define NOSCL 22  /* | flag         |      No      | Instructs the interpreter to ignore the scaling of the FOV specified on the UI for the given block(s) */
+#define ONCE 23   /* | 3-state flag |      No      | A 3-state flag that instructs the interpreter to alter the sequence when executing multiple repeats as follows: blocks with ONCE==0 are executed on every repetition; ONCE==1: only on the first repetition; ONCE==2: only on the last repetition */
 
 /********************************************************* Shapes  ******************************************************/
 typedef struct pulseqlib_ShapeArbitrary {
@@ -163,6 +164,7 @@ typedef struct pulseqlib_LabelOrFlagEvent {
     int par; /**< Partition counter; it counts phase encoding steps in the 2nd (through-slab) phase encoding direction in 3D sequences */
     int acq; /**< Spectroscopic acquisition counter */
     int trid;/**< Marks the beginning of a repeatable module in the sequence (e.g. TR); modules with different timing should be assigned different TRIDs */
+    int coreid; /**< Marks the beginning of a sequence of Blocks to be played sequentially (Segment) */
     int nav; /**< Navigator data flag */
     int rev; /**< Flag indicating that the readout direction is reversed */
     int sms; /**< Simultaneous multi-slice (SMS) acquisition */
@@ -193,6 +195,7 @@ typedef struct pulseqlib_LabelEvent {
 
 typedef struct pulseqlib_FlagEvent {
     int trid; /**< Marks the beginning of a repeatable module in the sequence (e.g. TR); modules with different timing should be assigned different TRIDs */
+    int coreid; /**< Marks the beginning of a sequence of Blocks to be played sequentially (Segment) */
     int nav; /**< Navigator data flag */
     int rev; /**< Flag indicating that the readout direction is reversed */
     int sms; /**< Simultaneous multi-slice (SMS) acquisition */

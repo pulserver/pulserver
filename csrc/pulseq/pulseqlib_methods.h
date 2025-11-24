@@ -6,6 +6,10 @@
 
 #include "pulseqlib.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef DETECT_REAL_RF
     #define  DETECT_REAL_RF 1
 #endif 
@@ -62,7 +66,11 @@ void pulseqlib_seqBlockFree(pulseqlib_SeqBlock* block);
 void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const int readBlocks);
 
 /* Getters */
-void pulseqlib_getRawBlockContentIDs(const pulseqlib_SeqFile* seq, const int blockIndex, const int parseExtensions, pulseqlib_RawBlock* block);
-void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, const int parseExtensions, pulseqlib_SeqBlock* block);
+void pulseqlib_getRawBlockContentIDs(const pulseqlib_SeqFile* seq, const int blockIndex, pulseqlib_RawBlock* block);
+void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, pulseqlib_SeqBlock* block);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* PULSEQLIB_METHODS_H */

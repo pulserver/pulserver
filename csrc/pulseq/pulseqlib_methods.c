@@ -30,6 +30,7 @@ static const TableEntry label_table[] = {
     { "PAR", PAR }, 
     { "ACQ", ACQ }, 
     { "TRID", TRID },
+    { "COREID", COREID },
     { "NAV", NAV },
     { "REV", REV }, 
     { "SMS", SMS }, 
@@ -1373,6 +1374,7 @@ void pulseqlib_seqBlockInit(pulseqlib_SeqBlock* block) {
 
     /* Initialize flag values to 0 */
     flag.trid = 0;
+    flag.coreid = 0;
     flag.nav = 0;
     flag.rev = 0;
     flag.sms = 0;
@@ -1544,10 +1546,9 @@ void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const int readBlocks) {
  *
  * @param[in] seq Pointer to the SeqFile structure.
  * @param[in] blockIndex Index of the block to retrieve.
- * @param[in] parseExtensions Flag indicating whether to parse extensions.
  * @param[in, out] block Pointer to the block's content IDs and extension data.
  */
-void pulseqlib_getRawBlockContentIDs(const pulseqlib_SeqFile* seq, const int blockIndex, const int parseExtensions, pulseqlib_RawBlock* block) {
+void pulseqlib_getRawBlockContentIDs(const pulseqlib_SeqFile* seq, const int blockIndex, pulseqlib_RawBlock* block) {
     int i, nextExtID;
     float* eventFloat;
     float* extData;
@@ -1586,7 +1587,7 @@ void pulseqlib_getRawBlockContentIDs(const pulseqlib_SeqFile* seq, const int blo
     block->adc = adcID;
 
     /* Handle extensions if present */
-    if (parseExtensions && extID > 0 && seq->isExtensionsLibraryParsed) {
+    if (extID > 0 && seq->isExtensionsLibraryParsed) {
         nextExtID = extID;
         extCount = 0;
 
@@ -1609,10 +1610,9 @@ void pulseqlib_getRawBlockContentIDs(const pulseqlib_SeqFile* seq, const int blo
  *
  * @param[in] seq Pointer to the SeqFile structure.
  * @param[in] blockIndex Index of the block to retrieve.
- * @param[in] parseExtensions Flag indicating whether to parse extensions.
  * @param[in, out] block Pointer to a pre-allocated SeqBlock to fill.
  */
-void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, const int parseExtensions, pulseqlib_SeqBlock* block) {
+void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, pulseqlib_SeqBlock* block) {
     float* farray;
     int idx;
     int i, labelID, labelValue, extType, extIdx;
@@ -1630,7 +1630,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
         return; /* Invalid inputs */
     }
     
-    pulseqlib_getRawBlockContentIDs(seq, blockIndex, parseExtensions, &rawBlock);
+    pulseqlib_getRawBlockContentIDs(seq, blockIndex, &rawBlock);
 
     /* Set the duration */
     block->duration = rawBlock.block_duration;
@@ -1922,6 +1922,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, cons
                     case PAR: block->labelset.par = labelValue; break;
                     case ACQ: block->labelset.acq = labelValue; break;
                     case TRID: block->flag.trid = labelValue; break;
+                    case COREID: block->flag.coreid = labelValue; break;
                     case NAV: block->flag.nav = labelValue; break;
                     case REV: block->flag.rev = labelValue; break;
                     case SMS: block->flag.sms = labelValue; break;
