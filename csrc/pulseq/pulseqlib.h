@@ -339,6 +339,70 @@ typedef struct pulseqlib_RfShimEntry {
 } pulseqlib_RfShimEntry;
 
 
+typedef struct pulseqlib_BlockLabels {
+    pulseqlib_LabelEvent labelset; /**< Label set values for the block */
+    pulseqlib_LabelEvent labelinc; /**< Label increment values for the block */
+    pulseqlib_FlagEvent flag; /**< Flag values carried by the block */
+} pulseqlib_BlockLabels;
+
+
+typedef struct pulseqlib_RFDynamic {
+    int present; /**< Non-zero if the block contains an RF event */
+    float amplitude; /**< RF amplitude (Hz) */
+    float freqOffset; /**< Static frequency offset component (Hz) */
+    float freqPPM; /**< Frequency offset coefficient (ppm/T) */
+    float phaseOffset; /**< Static phase offset component (rad) */
+    float phasePPM; /**< Phase offset coefficient (rad/T) */
+    float totalFrequency; /**< Combined frequency offset given a specific B0 (Hz) */
+    float totalPhase; /**< Combined phase offset given a specific B0 (rad) */
+} pulseqlib_RFDynamic;
+
+
+typedef struct pulseqlib_ADCDynamic {
+    int present; /**< Non-zero if the block contains an ADC event */
+    float freqOffset; /**< Static frequency offset component (Hz) */
+    float freqPPM; /**< Frequency offset coefficient (ppm/T) */
+    float phaseOffset; /**< Static phase offset component (rad) */
+    float phasePPM; /**< Phase offset coefficient (rad/T) */
+    float totalFrequency; /**< Combined frequency offset given a specific B0 (Hz) */
+    float totalPhase; /**< Combined phase offset given a specific B0 (rad) */
+} pulseqlib_ADCDynamic;
+
+
+typedef struct pulseqlib_GradDynamic {
+    int present; /**< Non-zero if the block contains a gradient event */
+    int type; /**< Gradient type encoded in the library (TRAP/GRAD) */
+    float amplitude; /**< Gradient amplitude (Hz/m) */
+    int waveShapeId; /**< Identifier of the associated waveform shape (0 if trapezoid) */
+    int timeShapeId; /**< Identifier of the associated time shape (0 if none) */
+} pulseqlib_GradDynamic;
+
+
+typedef struct pulseqlib_RotationDynamic {
+    int present; /**< Non-zero if the block carries a rotation extension */
+    const float* data; /**< Pointer to the rotation coefficients in the sequence library */
+    int length; /**< Number of coefficients pointed to by data (4 for quaternion, 9 for matrix) */
+    int index; /**< Index of the rotation entry in the library */
+} pulseqlib_RotationDynamic;
+
+
+typedef struct pulseqlib_RfShimDynamic {
+    int present; /**< Non-zero if the block carries an RF shimming extension */
+    const pulseqlib_RfShimEntry* entry; /**< Pointer to the RF shimming entry in the sequence library */
+} pulseqlib_RfShimDynamic;
+
+
+typedef struct pulseqlib_BlockDynamic {
+    pulseqlib_RFDynamic rf; /**< RF dynamic parameters */
+    pulseqlib_GradDynamic gx; /**< Gx dynamic parameters */
+    pulseqlib_GradDynamic gy; /**< Gy dynamic parameters */
+    pulseqlib_GradDynamic gz; /**< Gz dynamic parameters */
+    pulseqlib_ADCDynamic adc; /**< ADC dynamic parameters */
+    pulseqlib_RfShimDynamic rfShim; /**< RF shimming parameters */
+    pulseqlib_RotationDynamic rotation; /**< Rotation parameters */
+} pulseqlib_BlockDynamic;
+
+
 typedef struct pulseqlib_SeqFile {
     char* filePath; /**< @brief Path to the sequence (.seq) file. */
     pulseqlib_SectionOffsets offsets; /**< @brief Line position of each section. */

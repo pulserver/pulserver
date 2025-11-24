@@ -67,6 +67,9 @@ void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const int readBlocks);
 
 /* Getters */
 void pulseqlib_getRawBlockContentIDs(const pulseqlib_SeqFile* seq, const int blockIndex, pulseqlib_RawBlock* block);
+int pulseqlib_getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, pulseqlib_SeqBlock* block);
+void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, float b0, pulseqlib_BlockDynamic* dynamic);
+void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, pulseqlib_BlockLabels* labels);
 void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, const int blockIndex, pulseqlib_SeqBlock* block);
 
 #ifdef __cplusplus
