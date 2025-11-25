@@ -5,12 +5,13 @@ project(pulserverlib C)
 
 # Minimal ANSI C89 Pulseq reader library
 file(GLOB PULSEQ "pulseq/*.c" "pulseq/*.h")
+file(GLOB PULSERVER "pulserver/*.c" "pulserver/*.h")
 
 add_library(pulseqlib ${PULSEQ})
 target_include_directories(pulseqlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(pulseqlib m)
 
-# Higher abstraction library (future, placeholder)
-# file(GLOB PULSEG_INTERNAL "pulseg/*.c" "pulseg/*.h")
-# add_library(pulseg pulseg.c ${PULSEG_INTERNAL})
-# target_include_directories(pulseg PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(pulserverlib ${PULSERVER})
+target_include_directories(pulserverlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(pulserverlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/pulseq)
+target_link_libraries(pulserverlib PUBLIC pulseqlib)
