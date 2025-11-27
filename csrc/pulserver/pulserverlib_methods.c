@@ -55,7 +55,7 @@ pulserverlib_Status pulserverlib_segmentLayoutInit(pulserverlib_SegmentLayout* l
 	coreidSizes = NULL;
 	segments = NULL;
 	trIndices = NULL;
-	/** Allocate all working data structures once; break handles early failures */
+	/* Allocate all working data structures once; break handles early failures */
 	do {
 		for (i = 0; i < seq->numBlocks; ++i) {
 			pulseqlib_getBlockLabels(seq, &labels, i);
@@ -470,7 +470,7 @@ pulserverlib_Status pulserverlib_checkMaxSlewRate(
 
 
 /********************* Acoustic checks ****************************/
-/** Compute max RSS amplitude of three arrays */
+/* Compute max RSS amplitude of three arrays */
 float max_rss(float *x, float *y, float *z, int len)
 {
     int t;
@@ -482,7 +482,7 @@ float max_rss(float *x, float *y, float *z, int len)
     return max_amp;
 }
 
-/** Compute Hann window (Tukey alpha=1) */
+/* Compute Hann window (Tukey alpha=1) */
 void compute_hann(float *hann, int len)
 {
     int i;
@@ -491,48 +491,64 @@ void compute_hann(float *hann, int len)
     }
 }
 
-/** Acoustic checker - dynamic allocation for arbitrary TR length */
+/* Acoustic checker - dynamic allocation for arbitrary TR length */
 int pulserverlib_check_acoustics(
     float *gx, float *gy, float *gz, int N_samples, float dt,
     float *esp_min_us, float *esp_max_us, float *max_amp_Gcm, int num_bands,
-    float TR_duration, int N_TR, float window_len_sec, float threshold
+	float TR_duration, int N_TR, float window_len_sec, float threshold, float max_freq
 )
 {
-	/**
+	/*
 	 * Two-level acoustic screening strategy executed on the supplied gradient waveforms.
 	 *
 	 * Phase A (single-TR sliding windows):
 	 *   - Build overlapping windows of length `window_len_sec` converted to samples.
 	 *   - For each window, gather raw gradients, compute the time-domain RSS maximum, remove DC,
 	 *     apply a Hann taper, and perform three real FFTs (one per axis).
-	 *   - Combine the axis FFTs into an RSS spectrum and measure that window's strongest spectral
-	 *     component. Any spectral bin inside a forbidden ESP band that rises above
-	 *     `threshold * window_peak` triggers a time-domain amplitude check against the band limit.
+	 *   - Combine the axis FFTs into an RSS power spectrum, integrate the total spectral energy
+	 *     over the user-selected frequency span (`max_freq < 0` covers the full Nyquist range),
+	 *     and accumulate energy inside each forbidden ESP band. A window is flagged when a band
+	 *     carries more than `threshold` of the window's total energy and the time-domain guard
+	 *     exceeds the permitted amplitude for that band.
 	 *
 	 * Phase B (TR harmonic analysis):
-	 *   - After all windows pass, detrend the entire TR, perform a full-length FFT, and locate the
-	 *     global spectral peak. Each harmonic at multiples of 1/TR is mapped back to the FFT grid
-	 *     so the same thresholding rule can be applied, this time using the TR-global RSS guard.
+	 *   - After all windows pass, detrend the entire TR, perform a full-length FFT, and build the
+	 *     RSS power spectrum across the full repetition within the same frequency span. Forbidden
+	 *     bands that retain more than `threshold` of the TR energy while exceeding the amplitude
+	 *     guard are reported as violations to protect against resonances that emerge only with
+	 *     repeated TRs. Harmonic spikes up to `N_TR` at multiples of 1/TR are also examined when
+	 *     they fall inside the selected frequency band.
 	 *
 	 * Return semantics: 0 = safe, 1 = violation detected, -1 = error (invalid input or allocation).
 	 */
-	int i, w, k, f;
+	int i, w, k, f, harm, bin_idx, bin_start, bin_end, b;
 	int nwindows = 0;
 	int stride = 0;
 	int window_length = 0;
 	int start = 0;
 	int actual_length = 0;
 	float mean_x, mean_y, mean_z;
-	float window_peak;
 	float amp_rss;
-	float freq;
 	int Nfft;
 	float amp_rss_TR = 0.0f;
-	float spectrum_peak_tr = 0.0f;
-	float nyquist;
-	int harm;
 	int violation = 0;
 	int status = -1;
+	float span = 0.0f;
+	float total_power = 0.0f;
+	float freq_scale = 0.0f;
+	float band_power = 0.0f;
+	float power = 0.0f;
+	float freq = 0.0f;
+	float total_power_tr = 0.0f;
+	float freq_scale_tr = 0.0f;
+	float band_ratio = 0.0f;
+	float nyquist = 0.0f;
+	float harmonic_freq = 0.0f;
+	float harmonic_power = 0.0f;
+	float freq_limit_input = 0.0f;
+	int window_max_bin = 0;
+	int tr_max_bin = 0;
+	int candidate_bin = 0;
 
 	float *hann = NULL;
 	float *gxw = NULL;
@@ -544,6 +560,8 @@ int pulserverlib_check_acoustics(
 	float *gx_tr = NULL;
 	float *gy_tr = NULL;
 	float *gz_tr = NULL;
+	float *window_power = NULL;
+	float *tr_power = NULL;
 	kiss_fft_cpx *X = NULL;
 	kiss_fft_cpx *Y = NULL;
 	kiss_fft_cpx *Z = NULL;
@@ -553,13 +571,18 @@ int pulserverlib_check_acoustics(
 	kiss_fft_cpx *Y_tr = NULL;
 	kiss_fft_cpx *Z_tr = NULL;
 
-	/** Sanity check the required inputs */
+	/* Sanity check the required inputs */
 	if(!gx || !gy || !gz || !esp_min_us || !esp_max_us || !max_amp_Gcm) return -1;
 	if(N_samples <= 0 || num_bands <= 0) return -1;
 	if(dt <= 0.0f || window_len_sec <= 0.0f || TR_duration <= 0.0f) return -1;
 	if(threshold < 0.0f) threshold = 0.0f;
+	if(max_freq < 0.0f) {
+		freq_limit_input = -1.0f;
+	} else {
+		freq_limit_input = max_freq;
+	}
 
-	/** Derive FFT window size (clamp to avoid degenerate cases) */
+	/* Derive FFT window size (clamp to avoid degenerate cases) */
 	window_length = (int)(window_len_sec / dt + 0.5f);
 	if(window_length < 2) window_length = 2;
 
@@ -570,21 +593,21 @@ int pulserverlib_check_acoustics(
 	}
 	if(stride < 1) stride = 1;
 
-	/** Determine how many overlapping windows we will inspect */
+	/* Determine how many overlapping windows we will inspect */
 	if(N_samples <= window_length) {
 		nwindows = 1;
 	} else {
-		float span = (float)(N_samples - window_length);
+		span = (float)(N_samples - window_length);
 		nwindows = (int)ceilf(span / (float)stride) + 1;
 	}
 	if(nwindows <= 0) return -1;
 
-	/**
+	/*
 	 * Allocate once, reuse everywhere: any failure jumps to cleanup thanks to the do-while loop
 	 * and the shared `break` statements. This keeps resource handling compact and easy to audit.
 	 */
 	do {
-		/**
+		/*
 		 * Translate the forbidden ESP specification (microsecond ranges and G/cm amplitudes)
 		 * into working frequency bands and mT/m amplitudes so we can compare directly against
 		 * the FFT output and RSS values.
@@ -600,7 +623,7 @@ int pulserverlib_check_acoustics(
 			max_allowed_amp[k] = max_amp_Gcm[k] * 10.0f;
 		}
 
-		/**
+		/*
 		 * Build the Hann taper and allocate per-window working buffers. The same memory is reused
 		 * for every iteration of the sliding-window loop to avoid needless churn.
 		 */
@@ -619,13 +642,16 @@ int pulserverlib_check_acoustics(
 		Z = (kiss_fft_cpx*)ALLOC(sizeof(kiss_fft_cpx) * (Nfft / 2 + 1));
 		if(!X || !Y || !Z) break;
 
+		window_power = (float*)ALLOC(sizeof(float) * (Nfft / 2 + 1));
+		if(!window_power) break;
+
 		cfg = kiss_fftr_alloc(Nfft, 0, NULL, NULL);
 		if(!cfg) break;
 
 		status = 0;
 		violation = 0;
 
-		/** Sweep every candidate window, looking for acoustic violations */
+		/* Sweep every candidate window, looking for acoustic violations */
 		for(w = 0; w < nwindows && !violation; w++) {
 			start = w * stride;
 			if(start >= N_samples) break;
@@ -633,8 +659,9 @@ int pulserverlib_check_acoustics(
 			actual_length = N_samples - start;
 			if(actual_length <= 0) break;
 			if(actual_length > window_length) actual_length = window_length;
+			total_power = 0.0f;
 
-			/**
+			/*
 			 * Copy raw gradients into the working window. Any portion that extends past the
 			 * available samples is zero-padded so the FFT vector length stays fixed and the
 			 * frequency resolution remains uniform, even for edge windows.
@@ -651,14 +678,14 @@ int pulserverlib_check_acoustics(
 				}
 			}
 
-			/**
+			/*
 			 * Measure the RSS peak inside this window. This guard captures the largest mechanical
 			 * drive present in the time domain before any processing and is paired with the spectral
 			 * threshold checks below.
 			 */
 			amp_rss = max_rss(gxw, gyw, gzw, actual_length);
 
-			/**
+			/*
 			 * Remove the DC component so the FFT measures oscillatory energy only. By centring the
 			 * data we prevent strong zero-frequency content from hiding narrow-band resonances.
 			 */
@@ -684,7 +711,7 @@ int pulserverlib_check_acoustics(
 				gzw[i] = 0.0f;
 			}
 
-			/**
+			/*
 			 * Apply a Hann taper to limit spectral leakage before computing the FFT. This reduces
 			 * sidelobe energy so that sharp peaks within forbidden bands stand out clearly.
 			 */
@@ -694,69 +721,68 @@ int pulserverlib_check_acoustics(
 				gzw[i] *= hann[i];
 			}
 
-			/**
-			 * Execute a real FFT for each gradient axis. The resulting complex spectra are converted
-			 * to magnitudes and later combined into an RSS spectrum representing total acoustic drive.
-			 */
+			/* Execute a real FFT for each gradient axis before building the RSS spectrum. */
 			kiss_fftr(cfg, gxw, X);
 			kiss_fftr(cfg, gyw, Y);
 			kiss_fftr(cfg, gzw, Z);
 
-			/**
-			 * Track the largest spectral magnitude observed in this window. This value becomes the
-			 * reference for the relative threshold (e.g., 0.3 * window_peak) applied to each
-			 * forbidden band.
+			freq_scale = 1.0f / (dt * (float)Nfft);
+			window_max_bin = Nfft / 2;
+			if(freq_limit_input >= 0.0f) {
+				candidate_bin = (int)(freq_limit_input / freq_scale);
+				if(candidate_bin < window_max_bin) {
+					window_max_bin = candidate_bin;
+					if(window_max_bin < 0) {
+						window_max_bin = 0;
+					}
+				}
+			}
+			/*
+			 * Build the RSS power spectrum once so we can compute energy fractions per band without
+			 * recomputing magnitudes.
 			 */
-			window_peak = 0.0f;
-			for(f = 0; f <= Nfft / 2; f++) {
-				float S_rss = sqrtf(
+			for(f = 0; f <= window_max_bin; f++) {
+				power =
 					X[f].r * X[f].r + X[f].i * X[f].i +
 					Y[f].r * Y[f].r + Y[f].i * Y[f].i +
-					Z[f].r * Z[f].r + Z[f].i * Z[f].i
-				);
-				if(S_rss > window_peak) window_peak = S_rss;
+					Z[f].r * Z[f].r + Z[f].i * Z[f].i;
+				window_power[f] = power;
+				total_power += power;
 			}
 
+			if(total_power <= 0.0f) continue;
+
 			for(k = 0; k < num_bands && !violation; k++) {
-				float threshold_level;
-				if(window_peak <= 0.0f) continue;
-				threshold_level = threshold * window_peak;
-				/**
-				 * Drill into the spectral bins that sit inside the current forbidden band. A window is
-				 * only flagged when a bin overcomes the relative threshold AND the time-domain guard
-				 * surpasses the maximum permitted amplitude for that band.
-				 */
-				for(f = 0; f <= Nfft / 2; f++) {
-					float S_rss = sqrtf(
-						X[f].r * X[f].r + X[f].i * X[f].i +
-						Y[f].r * Y[f].r + Y[f].i * Y[f].i +
-						Z[f].r * Z[f].r + Z[f].i * Z[f].i
-					);
-					freq = (float)f / (dt * (float)Nfft);
+				band_power = 0.0f;
+				for(f = 0; f <= window_max_bin; f++) {
+					freq = (float)f * freq_scale;
 					if(freq >= f_low[k] && freq <= f_high[k]) {
-						if(S_rss > threshold_level && amp_rss > max_allowed_amp[k]) {
-							violation = 1;
-							break;
-						}
+						band_power += window_power[f];
+					}
+				}
+				if(band_power > 0.0f) {
+					band_ratio = band_power / total_power;
+					if(band_ratio > threshold && amp_rss > max_allowed_amp[k]) {
+						violation = 1;
+						break;
 					}
 				}
 			}
 		}
 
-		/** Also inspect the fundamental TR repetition for narrow-band risk */
+		/* Also inspect the fundamental TR repetition for narrow-band risk */
 		if(!violation && N_TR > 1) {
 			float mean_tx = 0.0f;
 			float mean_ty = 0.0f;
 			float mean_tz = 0.0f;
 			int max_bin;
-			float harmonic_freq;
 
 			if(N_samples < 2) {
 				status = -1;
 				break;
 			}
 
-			/**
+			/*
 			 * Phase B guards against resonances that appear only when multiple TRs are repeated.
 			 * Start by measuring the RSS maximum across the entire TR to serve as the harmonic
 			 * time-domain guard.
@@ -771,7 +797,7 @@ int pulserverlib_check_acoustics(
 				break;
 			}
 
-			/**
+			/*
 			 * Copy the full TR into dedicated buffers and subtract the mean so the harmonic FFT
 			 * reflects purely oscillatory content. A centred waveform keeps the harmonic bins sharp.
 			 */
@@ -793,7 +819,7 @@ int pulserverlib_check_acoustics(
 				gz_tr[i] -= mean_tz;
 			}
 
-			/** Create the FFT plan for the full-length TR and allocate complex output vectors */
+			/* Create the FFT plan for the full-length TR and allocate complex output vectors */
 			cfg_tr = kiss_fftr_alloc(N_samples, 0, NULL, NULL);
 			if(!cfg_tr) {
 				status = -1;
@@ -808,55 +834,95 @@ int pulserverlib_check_acoustics(
 				break;
 			}
 
+			tr_power = (float*)ALLOC(sizeof(float) * (N_samples / 2 + 1));
+			if(!tr_power) {
+				status = -1;
+				break;
+			}
+
 			kiss_fftr(cfg_tr, gx_tr, X_tr);
 			kiss_fftr(cfg_tr, gy_tr, Y_tr);
 			kiss_fftr(cfg_tr, gz_tr, Z_tr);
 
-			/**
-			 * Record the peak spectral magnitude from the full TR transform. Harmonic thresholds
-			 * are expressed relative to this global maximum (e.g., 0.3 * spectrum_peak_tr).
-			 */
 			max_bin = N_samples / 2;
-			spectrum_peak_tr = 0.0f;
-			for(f = 0; f <= max_bin; f++) {
-				float S_rss = sqrtf(
+			freq_scale_tr = 1.0f / (dt * (float)N_samples);
+			tr_max_bin = max_bin;
+			if(freq_limit_input >= 0.0f) {
+				candidate_bin = (int)(freq_limit_input / freq_scale_tr);
+				if(candidate_bin < tr_max_bin) {
+					tr_max_bin = candidate_bin;
+					if(tr_max_bin < 0) {
+						tr_max_bin = 0;
+					}
+				}
+			}
+			nyquist = freq_scale_tr * (float)tr_max_bin;
+			total_power_tr = 0.0f;
+			for(f = 0; f <= tr_max_bin; f++) {
+				power =
 					X_tr[f].r * X_tr[f].r + X_tr[f].i * X_tr[f].i +
 					Y_tr[f].r * Y_tr[f].r + Y_tr[f].i * Y_tr[f].i +
-					Z_tr[f].r * Z_tr[f].r + Z_tr[f].i * Z_tr[f].i
-				);
-				if(S_rss > spectrum_peak_tr) spectrum_peak_tr = S_rss;
+					Z_tr[f].r * Z_tr[f].r + Z_tr[f].i * Z_tr[f].i;
+				tr_power[f] = power;
+				total_power_tr += power;
 			}
 
-			/** Restrict harmonic evaluation to the representable frequency range of the FFT */
-			nyquist = 1.0f / (2.0f * dt);
-			if(spectrum_peak_tr > 0.0f) {
-				/** For each harmonic, look for forbidden-band excitation above the TR guard */
-				for(harm = 1; harm <= N_TR && !violation; harm++) {
-					int bin_idx;
-					float S_harm;
-
-					harmonic_freq = (float)harm / TR_duration;
-					if(harmonic_freq > nyquist) break;
-					if(harmonic_freq <= 0.0f) continue;
-
-					/** Map the harmonic frequency onto the FFT bin grid */
-					bin_idx = (int)lroundf(harmonic_freq * dt * (float)N_samples);
-					if(bin_idx < 0) bin_idx = 0;
-					if(bin_idx > max_bin) bin_idx = max_bin;
-
-					S_harm = sqrtf(
-						X_tr[bin_idx].r * X_tr[bin_idx].r + X_tr[bin_idx].i * X_tr[bin_idx].i +
-						Y_tr[bin_idx].r * Y_tr[bin_idx].r + Y_tr[bin_idx].i * Y_tr[bin_idx].i +
-						Z_tr[bin_idx].r * Z_tr[bin_idx].r + Z_tr[bin_idx].i * Z_tr[bin_idx].i
-					);
-
-					/** Apply the same dual-condition check used in the sliding windows, now per harmonic */
-					for(k = 0; k < num_bands; k++) {
-						if(harmonic_freq >= f_low[k] && harmonic_freq <= f_high[k]) {
-							float threshold_level = threshold * spectrum_peak_tr;
-							if(S_harm > threshold_level && amp_rss_TR > max_allowed_amp[k]) {
-								violation = 1;
-								break;
+			if(total_power_tr > 0.0f) {
+				for(k = 0; k < num_bands && !violation; k++) {
+					band_power = 0.0f;
+					for(f = 0; f <= tr_max_bin; f++) {
+						freq = (float)f * freq_scale_tr;
+						if(freq >= f_low[k] && freq <= f_high[k]) {
+							band_power += tr_power[f];
+						}
+					}
+					if(band_power > 0.0f) {
+						band_ratio = band_power / total_power_tr;
+						if(band_ratio > threshold && amp_rss_TR > max_allowed_amp[k]) {
+							violation = 1;
+							break;
+						}
+					}
+				}
+				if(!violation) {
+					/* Option 3: inspect the first N_TR harmonics for concentrated energy spikes. */
+					for(harm = 1; harm <= N_TR && !violation; harm++) {
+						harmonic_freq = (float)harm / TR_duration;
+						if(harmonic_freq <= 0.0f) {
+							continue;
+						}
+						if(harmonic_freq > nyquist) {
+							break;
+						}
+						bin_idx = (int)(harmonic_freq * dt * (float)N_samples + 0.5f);
+						if(bin_idx < 0) {
+							bin_idx = 0;
+						}
+						if(bin_idx > tr_max_bin) {
+							bin_idx = tr_max_bin;
+						}
+						bin_start = bin_idx - 1;
+						if(bin_start < 0) {
+							bin_start = 0;
+						}
+						bin_end = bin_idx + 1;
+						if(bin_end > tr_max_bin) {
+							bin_end = tr_max_bin;
+						}
+						harmonic_power = 0.0f;
+						for(b = bin_start; b <= bin_end; b++) {
+							harmonic_power += tr_power[b];
+						}
+						if(harmonic_power <= 0.0f) {
+							continue;
+						}
+						band_ratio = harmonic_power / total_power_tr;
+						for(k = 0; k < num_bands; k++) {
+							if(harmonic_freq >= f_low[k] && harmonic_freq <= f_high[k]) {
+								if(band_ratio > threshold && amp_rss_TR > max_allowed_amp[k]) {
+									violation = 1;
+									break;
+								}
 							}
 						}
 					}
@@ -881,6 +947,8 @@ int pulserverlib_check_acoustics(
 	if(X_tr) FREE(X_tr);
 	if(Y_tr) FREE(Y_tr);
 	if(Z_tr) FREE(Z_tr);
+	if(window_power) FREE(window_power);
+	if(tr_power) FREE(tr_power);
 	if(f_low) FREE(f_low);
 	if(f_high) FREE(f_high);
 	if(max_allowed_amp) FREE(max_allowed_amp);
