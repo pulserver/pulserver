@@ -82,6 +82,7 @@ def save_gradient_frequency_view(
     zero_pad_factor=1,
     apply_window=True,
     labels=None,
+    threshold=0.3,
 ):
     """Save frequency-domain view for the RSS of gradient spectra.
 
@@ -90,6 +91,13 @@ def save_gradient_frequency_view(
     multi-TR response so dominant peaks are easier to compare. In
     ``mode="spectrogram"`` it computes sliding-window spectra per channel, combines
     them via RSS, and plots the per-frequency maximum across windows.
+
+    The first subplot always shows the normalized (peak == 1) RSS magnitude so that
+    single- and multi-TR spectra share the same vertical scale. The second subplot
+    visualises the guard metric compared against the supplied ``threshold``: single-TR
+    traces use the band-energy fraction (relative area), while multi-TR traces use the
+    normalized peak amplitude. Points exceeding the threshold are highlighted with
+    crosses: black for the single-TR trace, red for multi-TR traces.
     """
     if tr_samples is None:
         tr_samples = len(gx)
@@ -115,7 +123,8 @@ def save_gradient_frequency_view(
         base_gy = base_gy * window
         base_gz = base_gz * window
 
-    fig, ax = plt.subplots(figsize=(9, 4), constrained_layout=True)
+    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(9, 6), constrained_layout=True)
+    amp_ax, ratio_ax = axes
     sample_rate = 1.0 / float(dt)
     zero_pad_factor = max(1, int(zero_pad_factor))
 
@@ -138,6 +147,9 @@ def save_gradient_frequency_view(
         if pending_labels is not None and len(pending_labels) != len(tr_counts):
             raise ValueError("labels length must match number of TR counts")
 
+        datasets = []
+        color_cycle = ["black", "red", "tab:blue", "tab:green", "tab:orange"]
+
         for idx, tr_int in enumerate(tr_counts):
             gx_concat = np.tile(base_gx, tr_int)
             gy_concat = np.tile(base_gy, tr_int)
@@ -158,26 +170,101 @@ def save_gradient_frequency_view(
             spectrum_x = np.fft.rfft(gx_fft)
             spectrum_y = np.fft.rfft(gy_fft)
             spectrum_z = np.fft.rfft(gz_fft)
-            magnitude = np.sqrt(
-                np.abs(spectrum_x) ** 2 + np.abs(spectrum_y) ** 2 + np.abs(spectrum_z) ** 2
+            power = (
+                np.abs(spectrum_x) ** 2
+                + np.abs(spectrum_y) ** 2
+                + np.abs(spectrum_z) ** 2
             )
+            magnitude = np.sqrt(power)
             if max_freq_hz is not None:
                 max_freq_khz = float(max_freq_hz) / 1e3
                 valid = freq_axis <= max_freq_khz
                 freq_axis = freq_axis[valid]
                 magnitude = magnitude[valid]
+                power = power[valid]
 
             if pending_labels is not None:
                 label = pending_labels[idx]
             else:
                 label = "Single TR" if tr_int == 1 else f"{tr_int} TRs"
-            ax.plot(freq_axis, magnitude, linewidth=1.0, label=label)
+            color = color_cycle[idx % len(color_cycle)]
+            marker_color = "black" if tr_int == 1 else "red"
+            datasets.append(
+                {
+                    "label": label,
+                    "freq": freq_axis,
+                    "magnitude": magnitude,
+                    "power": power,
+                    "color": color,
+                    "marker": marker_color,
+                    "tr_count": tr_int,
+                }
+            )
 
-        ax.set_ylabel("RSS |F| (a.u.)")
-        ax.set_xlabel("Frequency (kHz)")
-        ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
-        if len(tr_counts) > 1:
-            ax.legend()
+        amp_handles = []
+        ratio_handles = []
+        ratio_labels = []
+        for data in datasets:
+            freq_axis = data["freq"]
+            magnitude = data["magnitude"]
+            power = data["power"]
+            color = data["color"]
+            label = data["label"]
+            marker_color = data["marker"]
+            tr_count = data["tr_count"]
+
+            dataset_max = float(np.max(magnitude))
+            if dataset_max <= 0.0:
+                dataset_max = 1.0
+            magnitude_norm = magnitude / dataset_max
+            (line_handle,) = amp_ax.plot(freq_axis, magnitude_norm, linewidth=1.0, color=color, label=label)
+            amp_handles.append(line_handle)
+
+            if tr_count == 1:
+                total_power = float(np.sum(power))
+                if total_power <= 0.0:
+                    total_power = 1.0
+                guard_values = power / total_power
+                guard_label = f"{label} (energy)"
+            else:
+                guard_values = magnitude_norm
+                guard_label = f"{label} (peak)"
+            (ratio_line,) = ratio_ax.plot(freq_axis, guard_values, linewidth=1.0, color=color)
+            ratio_handles.append(ratio_line)
+            ratio_labels.append(guard_label)
+
+            exceed = guard_values > threshold
+            if np.any(exceed):
+                amp_ax.scatter(
+                    freq_axis[exceed],
+                    magnitude_norm[exceed],
+                    marker="x",
+                    color=marker_color,
+                    s=36,
+                    linewidths=1.1,
+                    zorder=3,
+                )
+
+        if len(amp_handles) > 1:
+            amp_ax.legend(loc="upper right")
+
+        threshold_handle = ratio_ax.axhline(
+            threshold,
+            color="gray",
+            linestyle="--",
+            linewidth=1.0,
+        )
+        ratio_handles.append(threshold_handle)
+        ratio_labels.append(f"Threshold {threshold:.2f}")
+        ratio_ax.legend(ratio_handles, ratio_labels, loc="upper right")
+
+        amp_ax.set_ylabel("Normalized RSS |F|")
+        ratio_ax.set_ylabel("Guard metric")
+        ratio_ax.set_xlabel("Frequency (kHz)")
+        for axis in axes:
+            axis.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
+        amp_ax.set_ylim(0.0, 1.05)
+        ratio_ax.set_ylim(0.0, 1.0)
     else:
         if isinstance(n_trs, Sequence) and not isinstance(n_trs, (str, bytes)):
             if len(n_trs) != 1:
@@ -216,13 +303,49 @@ def save_gradient_frequency_view(
             valid = freqs <= float(max_freq_hz)
             freqs = freqs[valid]
             rss_max = rss_max[valid]
-        ax.plot(freqs / 1e3, rss_max, linewidth=1.0, color="black")
-        ax.set_ylabel("RSS max |F| (a.u.)")
-        ax.set_xlabel("Frequency (kHz)")
-        ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
+        freqs_khz = freqs / 1e3
+        max_val = float(np.max(rss_max))
+        if max_val <= 0.0:
+            max_val = 1.0
+        rss_norm = rss_max / max_val
+        amp_ax.plot(freqs_khz, rss_norm, linewidth=1.0, color="black", label="Max RSS")
 
+        guard_values = rss_norm
+        (ratio_line,) = ratio_ax.plot(freqs_khz, guard_values, linewidth=1.0, color="black", label="Max RSS (peak)")
 
-    ax.set_title("Gradient {} (RSS)".format("Spectrum" if mode == "spectrum" else "Spectrogram"))
+        exceed = guard_values > threshold
+        if np.any(exceed):
+            amp_ax.scatter(
+                freqs_khz[exceed],
+                rss_norm[exceed],
+                marker="x",
+                color="black",
+                s=36,
+                linewidths=1.1,
+                zorder=3,
+            )
+
+        threshold_handle = ratio_ax.axhline(
+            threshold,
+            color="gray",
+            linestyle="--",
+            linewidth=1.0,
+        )
+        ratio_ax.legend(
+            [ratio_line, threshold_handle],
+            ["Max RSS (peak)", f"Threshold {threshold:.2f}"],
+            loc="upper right",
+        )
+
+        amp_ax.set_ylabel("Normalized RSS |F|")
+        ratio_ax.set_ylabel("Guard metric")
+        ratio_ax.set_xlabel("Frequency (kHz)")
+        for axis in axes:
+            axis.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
+        amp_ax.set_ylim(0.0, 1.05)
+        ratio_ax.set_ylim(0.0, 1.0)
+
+    amp_ax.set_title("Gradient {} (RSS)".format("Spectrum" if mode == "spectrum" else "Spectrogram"))
     fig.savefig(out_path, dpi=200)
     plt.close(fig)
 
@@ -258,7 +381,7 @@ def make_bssfp_waveform(export=False):
         export_dir = Path(__file__).resolve().parent
         export_dir.mkdir(parents=True, exist_ok=True)
         snapshot_trs = 3
-        multi_tr_spectrum_count = 256*256
+        multi_tr_spectrum_count = 1000
         max_freq_hz = 2000.0 # Gz
         spectrum_zero_pad = 4
         write_gradients(export_dir / "bssfp_waveform.dat", gx, gy, gz)
