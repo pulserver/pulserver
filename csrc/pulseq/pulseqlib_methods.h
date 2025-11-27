@@ -73,6 +73,7 @@ void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, pulseqlib_BlockDyna
 void pulseqlib_getBlockDynamicWithoutExtensions(const pulseqlib_SeqFile* seq, pulseqlib_BlockDynamic* dynamic, const int blockIndex);
 void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, pulseqlib_BlockLabels* labels, const int blockIndex);
 void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex);
+float pulseqlib_getGradLibraryMaxAmplitude(const pulseqlib_SeqFile* seq);
 
 #ifdef __cplusplus
 }

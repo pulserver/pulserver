@@ -2241,3 +2241,23 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block,
     getBlockLabels(seq, &rawBlock, &labels);
     pulseqlib_apply_block_labels(&labels, block);
 }
+
+float pulseqlib_getGradLibraryMaxAmplitude(const pulseqlib_SeqFile* seq) {
+    float maxAmplitude;
+    int i;
+
+    maxAmplitude = 0.0f;
+
+    if (!seq || !seq->isGradLibraryParsed || !seq->gradLibrary || seq->gradLibrarySize <= 0) {
+        return maxAmplitude;
+    }
+
+    for (i = 0; i < seq->gradLibrarySize; ++i) {
+        float amplitude = seq->gradLibrary[i][1];
+        if (amplitude > maxAmplitude) {
+            maxAmplitude = amplitude;
+        }
+    }
+
+    return maxAmplitude;
+}
