@@ -826,14 +826,19 @@ int pulserverlib_check_acoustics(
 
 			max_bin = N_samples / 2;
 			freq_scale_tr = 1.0f / (dt * (float)N_samples);
+			tr_amp_max = 0.0f;
 			for(f = 0; f <= max_bin; f++) {
 				power =
 					X_tr[f].r * X_tr[f].r + X_tr[f].i * X_tr[f].i +
 					Y_tr[f].r * Y_tr[f].r + Y_tr[f].i * Y_tr[f].i +
 					Z_tr[f].r * Z_tr[f].r + Z_tr[f].i * Z_tr[f].i;
+				if(f == 0) {
+					tr_power[f] = 0.0f;
+					continue;
+				}
 				tr_power[f] = power;
 				if(power > 0.0f) {
-					float amp = sqrtf(power);
+					amp = sqrtf(power);
 					if(amp > tr_amp_max) {
 						tr_amp_max = amp;
 					}
