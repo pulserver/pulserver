@@ -41,13 +41,9 @@ classifiers = [  # Optional
 ]
 
 dependencies = [
-"click",
 "numpy",
 "scipy",
-"numba",
 "pypulseq",
-"mri-nufft",
-"mrd-python",
 "ipywidgets",
 ]
 
@@ -55,7 +51,7 @@ dependencies = [
 [project.optional-dependencies] # Optional
 dev = ["black", "isort"]
 test = ["pytest", "pytest-black", "pytest-cov", "pytest-sugar", "pytest-xdist"]
-doc = ["sphinx", "pydata-sphinx-theme", "myst-nb", "matplotlib", "mrtwin", "sphinx-copybutton"]
+doc = ["sphinx", "pydata-sphinx-theme", "myst-nb", "matplotlib", "sphinx-copybutton"]
 # List URLs that are relevant to your project
 # This field corresponds to the "Project-URL" and "Home-Page" metadata fields:
 [project.urls]  # Optional
@@ -63,14 +59,11 @@ doc = ["sphinx", "pydata-sphinx-theme", "myst-nb", "matplotlib", "mrtwin", "sphi
 "Bug Reports" = "https://github.com/INFN-MRI/pulserver/issues"
 "Source" = "https://github.com/INFN-MRI/pulserver"
 
-[project.scripts]  # Optional
-pulserver = "pulserver._cli:cli"
-
 [tool.setuptools.packages.find]
-where=["src"]
+where=["python"]
 
 [tool.setuptools_scm]
-write_to = "src/pulserver/_version.py"
+write_to = "python/pulserver/_version.py"
 version_scheme = "python-simplified-semver"
 local_scheme="no-local-version"
 fallback_version="v99-dev"
@@ -87,8 +80,8 @@ extend-exclude = [
 "*_version.py", 
 "test_*.py", 
 "tests", 
-"src/pulserver/_server",
-"src/pulserver/pulseq/_spsp",
+"python/pulserver/_server",
+"python/pulserver/pulseq/_spsp",
 ]
 
 ignore = [
