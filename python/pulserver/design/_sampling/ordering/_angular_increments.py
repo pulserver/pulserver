@@ -1,7 +1,7 @@
-"""Angular increment generators for MR trajectory ordering. 
+"""Angular increment generators for MR trajectory ordering.
 
 This module provides various angular increment schemes commonly used
-in MRI acquisitions, including golden angle variants and linear spacing. 
+in MRI acquisitions, including golden angle variants and linear spacing.
 
 References
 ----------
@@ -38,7 +38,7 @@ GOLDEN_ANGLE: float = math.pi / GOLDEN_RATIO  # π/φ ≈ 111.246° in radians
 
 class AngularIncrement(ABC):
     """
-    Abstract base class for angular increment generators. 
+    Abstract base class for angular increment generators.
 
     Subclasses must implement `get_angles` which returns the angular
     positions for a given number of spokes/projections.
@@ -53,14 +53,14 @@ class AngularIncrement(ABC):
     @abstractmethod
     def get_angles(self, n: int, start: float = 0.0) -> NDArray[np.floating]:
         """
-        Generate angular positions for n spokes. 
+        Generate angular positions for n spokes.
 
         Parameters
         ----------
         n : int
-            Number of angular positions to generate. 
+            Number of angular positions to generate.
         start : float
-            Starting angle in radians. Default is 0. 
+            Starting angle in radians. Default is 0.
 
         Returns
         -------
@@ -76,7 +76,7 @@ class AngularIncrement(ABC):
         Returns
         -------
         increment : float | NDArray
-            Constant increment (float) or array of increments. 
+            Constant increment (float) or array of increments.
             For variable increment schemes, returns the increment array.
         """
         raise NotImplementedError(
@@ -92,13 +92,13 @@ class LinearIncrement(AngularIncrement):
     """
     Uniform linear angular spacing.
 
-    Divides the angular range evenly among n spokes. 
+    Divides the angular range evenly among n spokes.
 
     Parameters
     ----------
     angular_range : float
         Total angular range to cover in radians.  Default is π (half-circle,
-        appropriate for center-out spokes that cover both directions). 
+        appropriate for center-out spokes that cover both directions).
 
     Examples
     --------
@@ -122,7 +122,7 @@ class LinearIncrement(AngularIncrement):
         if n <= 0:
             return np.array([], dtype=np.float64)
         if n == 1:
-            return np. array([start], dtype=np.float64)
+            return np.array([start], dtype=np.float64)
         increment = self._angular_range / n
         return start + np.arange(n, dtype=np.float64) * increment
 
@@ -138,7 +138,7 @@ class LinearIncrement(AngularIncrement):
 
 class GoldenAngle(AngularIncrement):
     """
-    Standard golden angle increment (~111.246°). 
+    Standard golden angle increment (~111.246°).
 
     The golden angle provides optimal uniform coverage properties and
     allows flexible retrospective binning of data.
@@ -147,11 +147,11 @@ class GoldenAngle(AngularIncrement):
     ----------
     full_circle : bool
         If True, use 2π/φ (~222.5°) for full spoke acquisitions.
-        If False (default), use π/φ (~111. 246°) for half-spoke/center-out. 
+        If False (default), use π/φ (~111. 246°) for half-spoke/center-out.
 
     References
     ----------
-    .. [1] Winkelmann S, et al. IEEE TMI 2007;26(1):68-76. 
+    .. [1] Winkelmann S, et al. IEEE TMI 2007;26(1):68-76.
 
     Examples
     --------
@@ -172,9 +172,9 @@ class GoldenAngle(AngularIncrement):
         """Return whether using full circle (2π) or half circle (π) base."""
         return self._full_circle
 
-    def get_angles(self, n: int, start: float = 0.0) -> NDArray[np. floating]:
+    def get_angles(self, n: int, start: float = 0.0) -> NDArray[np.floating]:
         if n <= 0:
-            return np. array([], dtype=np.float64)
+            return np.array([], dtype=np.float64)
         indices = np.arange(n, dtype=np.float64)
         return start + indices * self._increment
 
@@ -196,15 +196,15 @@ class TinyGoldenAngle(AngularIncrement):
     Parameters
     ----------
     order : int
-        Order of the tiny golden angle (1, 2, 3, ...). 
-        Higher orders give smaller increments. 
-        Order 1 is the standard golden angle. 
+        Order of the tiny golden angle (1, 2, 3, ...).
+        Higher orders give smaller increments.
+        Order 1 is the standard golden angle.
     full_circle : bool
         If True, base on 2π; if False (default), base on π.
 
     References
     ----------
-    ..  [1] Wundrak S, et al. MRM 2016;75(6):2372-2378. 
+    ..  [1] Wundrak S, et al. MRM 2016;75(6):2372-2378.
 
     Examples
     --------
@@ -236,7 +236,7 @@ class TinyGoldenAngle(AngularIncrement):
         The tiny golden angle τ_n is computed using Fibonacci numbers:
         τ_n = π / (F_n + F_{n-2}/F_n * F_{n-1})
 
-        Simplified: τ_n = π * F_{n-1} / F_{n+1} where F_n is Fibonacci. 
+        Simplified: τ_n = π * F_{n-1} / F_{n+1} where F_n is Fibonacci.
         """
         # Generate Fibonacci numbers up to order + 2
         fib = [1, 1]
@@ -247,10 +247,10 @@ class TinyGoldenAngle(AngularIncrement):
         base = 2 * math.pi if full_circle else math.pi
         return base * fib[order - 1] / fib[order + 1]
 
-    def get_angles(self, n: int, start: float = 0.0) -> NDArray[np. floating]:
+    def get_angles(self, n: int, start: float = 0.0) -> NDArray[np.floating]:
         if n <= 0:
-            return np. array([], dtype=np.float64)
-        indices = np.arange(n, dtype=np. float64)
+            return np.array([], dtype=np.float64)
+        indices = np.arange(n, dtype=np.float64)
         return start + indices * self._increment
 
     def get_increment(self) -> float:
@@ -265,18 +265,18 @@ class GoldenMeans2D(AngularIncrement):
     2D golden means for stack-of-stars or similar trajectories.
 
     Uses the 2D golden mean to provide optimal coverage in 2D angular
-    space (e.g., azimuthal angle for stack-of-stars). 
+    space (e.g., azimuthal angle for stack-of-stars).
 
     The 2D golden mean is the real root of x³ = x + 1, approximately 1.32472.
 
     Parameters
     ----------
     full_circle : bool
-        If True, base on 2π; if False (default), base on π. 
+        If True, base on 2π; if False (default), base on π.
 
     References
     ----------
-    .. [1] Chan RW, et al. MRM 2009;61(2):354-363. 
+    .. [1] Chan RW, et al. MRM 2009;61(2):354-363.
     """
 
     # 2D golden mean: real root of x³ = x + 1
@@ -284,17 +284,17 @@ class GoldenMeans2D(AngularIncrement):
 
     def __init__(self, full_circle: bool = False):
         self._full_circle = full_circle
-        base = 2 * math.pi if full_circle else math. pi
+        base = 2 * math.pi if full_circle else math.pi
         self._increment = base / self.GOLDEN_MEAN_2D
 
     @property
     def name(self) -> str:
         return "golden_means_2d"
 
-    def get_angles(self, n: int, start: float = 0.0) -> NDArray[np. floating]:
+    def get_angles(self, n: int, start: float = 0.0) -> NDArray[np.floating]:
         if n <= 0:
-            return np. array([], dtype=np.float64)
-        indices = np.arange(n, dtype=np. float64)
+            return np.array([], dtype=np.float64)
+        indices = np.arange(n, dtype=np.float64)
         return start + indices * self._increment
 
     def get_increment(self) -> float:
@@ -311,7 +311,7 @@ class GoldenMeans3D(AngularIncrement):
     Provides two angular increments for 3D coverage (azimuthal and polar).
     The primary angle returned by get_angles is the azimuthal increment.
 
-    The 3D golden means are based on the real root of x⁴ = x + 1. 
+    The 3D golden means are based on the real root of x⁴ = x + 1.
 
     Parameters
     ----------
@@ -320,7 +320,7 @@ class GoldenMeans3D(AngularIncrement):
 
     References
     ----------
-    .. [1] Chan RW, et al. MRM 2009;61(2):354-363. 
+    .. [1] Chan RW, et al. MRM 2009;61(2):354-363.
     """
 
     # 3D golden mean: real root of x⁴ = x + 1
@@ -328,9 +328,9 @@ class GoldenMeans3D(AngularIncrement):
 
     def __init__(self, full_circle: bool = False):
         self._full_circle = full_circle
-        base = 2 * math.pi if full_circle else math. pi
-        self._increment_azimuthal = base / self. GOLDEN_MEAN_3D
-        self._increment_polar = base / (self.GOLDEN_MEAN_3D ** 2)
+        base = 2 * math.pi if full_circle else math.pi
+        self._increment_azimuthal = base / self.GOLDEN_MEAN_3D
+        self._increment_polar = base / (self.GOLDEN_MEAN_3D**2)
 
     @property
     def name(self) -> str:
@@ -345,7 +345,7 @@ class GoldenMeans3D(AngularIncrement):
         """Get azimuthal angles.  Use get_angles_3d for both angles."""
         if n <= 0:
             return np.array([], dtype=np.float64)
-        indices = np. arange(n, dtype=np.float64)
+        indices = np.arange(n, dtype=np.float64)
         return start + indices * self._increment_azimuthal
 
     def get_angles_3d(
@@ -384,7 +384,7 @@ class RationalGoldenAngle(AngularIncrement):
     Provides exact uniform coverage after a specific number of spokes,
     useful when a fixed number of spokes is known a priori.
 
-    The angle is π * F_n / F_{n+2} where F_n is the nth Fibonacci number. 
+    The angle is π * F_n / F_{n+2} where F_n is the nth Fibonacci number.
 
     Parameters
     ----------
@@ -394,7 +394,7 @@ class RationalGoldenAngle(AngularIncrement):
         - 6: 8/21 * π ≈ 68.6°, uniform after 21 spokes
         - 7: 13/34 * π ≈ 68.8°, uniform after 34 spokes
     full_circle : bool
-        If True, use 2π base; if False (default), use π base. 
+        If True, use 2π base; if False (default), use π base.
 
     Examples
     --------
@@ -403,8 +403,23 @@ class RationalGoldenAngle(AngularIncrement):
     """
 
     # Pre-computed Fibonacci numbers
-    _FIBONACCI: tuple[int, ... ] = (
-        1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987
+    _FIBONACCI: tuple[int, ...] = (
+        1,
+        1,
+        2,
+        3,
+        5,
+        8,
+        13,
+        21,
+        34,
+        55,
+        89,
+        144,
+        233,
+        377,
+        610,
+        987,
     )
 
     def __init__(self, fibonacci_index: int = 7, full_circle: bool = False):
@@ -421,7 +436,7 @@ class RationalGoldenAngle(AngularIncrement):
 
         f_n = self._FIBONACCI[fibonacci_index]
         f_n2 = self._FIBONACCI[fibonacci_index + 2]
-        base = 2 * math.pi if full_circle else math. pi
+        base = 2 * math.pi if full_circle else math.pi
         self._increment = base * f_n / f_n2
         self._uniform_at = f_n2
 
@@ -442,7 +457,7 @@ class RationalGoldenAngle(AngularIncrement):
     def get_angles(self, n: int, start: float = 0.0) -> NDArray[np.floating]:
         if n <= 0:
             return np.array([], dtype=np.float64)
-        indices = np. arange(n, dtype=np.float64)
+        indices = np.arange(n, dtype=np.float64)
         return start + indices * self._increment
 
     def get_increment(self) -> float:

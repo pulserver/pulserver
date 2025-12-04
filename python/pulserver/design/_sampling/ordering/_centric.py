@@ -22,11 +22,11 @@ class CenterOutOrdering(OrderingStrategy):
     Parameters
     ----------
     radial_dims : Sequence[str] | None
-        Dimension(s) to use for radial distance calculation. 
-        If None, uses all dimensions. 
+        Dimension(s) to use for radial distance calculation.
+        If None, uses all dimensions.
     angular_increment : AngularIncrement | None
-        Angular increment scheme for ordering within radial shells. 
-        If None, uses LinearIncrement.  Only used for 2D+ data. 
+        Angular increment scheme for ordering within radial shells.
+        If None, uses LinearIncrement.  Only used for 2D+ data.
     center : dict[str, float] | None
         Custom center coordinates (in index units). If None, uses
         the midpoint of each dimension's index range.
@@ -122,7 +122,7 @@ class CenterOutOrdering(OrderingStrategy):
 
         # Sort by radius first, then by reordered angle
         # Use quantized values to create discrete shells
-        radius_quantized = np.round(radius * 1e6). astype(np. int64)
+        radius_quantized = np.round(radius * 1e6).astype(np.int64)
         angle_quantized = np.round(reordered_angle * 1e6).astype(np.int64)
 
         return np.lexsort((angle_quantized, radius_quantized))
@@ -181,7 +181,7 @@ class CenterOutOrdering(OrderingStrategy):
 
         for r in unique_radii:
             shell_mask = radius_quantized == r
-            n_in_shell = np. sum(shell_mask)
+            n_in_shell = np.sum(shell_mask)
 
             if n_in_shell <= 1:
                 result[shell_mask] = 0.0
@@ -191,7 +191,7 @@ class CenterOutOrdering(OrderingStrategy):
             target_angles = self._angular_increment.get_angles(n_in_shell)
 
             # Sort points in shell by their original angle
-            shell_indices = np. where(shell_mask)[0]
+            shell_indices = np.where(shell_mask)[0]
             shell_angles = angles[shell_mask]
             angle_order = np.argsort(shell_angles)
 
@@ -225,7 +225,7 @@ class FullSpokeOrdering(OrderingStrategy):
         If None, uses all dimensions except spoke_dim.
     angular_increment : AngularIncrement | None
         Angular increment scheme for spoke ordering.
-        If None, uses LinearIncrement. 
+        If None, uses LinearIncrement.
 
     Examples
     --------
@@ -276,16 +276,16 @@ class FullSpokeOrdering(OrderingStrategy):
         dim_labels: tuple[str, ...],
     ) -> NDArray[np.intp]:
         """
-        Compute full-spoke acquisition order. 
+        Compute full-spoke acquisition order.
 
         Parameters
         ----------
         scaling : dict[str, NDArray]
             Scaling factors for each dimension (already masked, 1D arrays).
         indices : dict[str, NDArray]
-            Grid indices for each dimension (already masked, 1D arrays). 
+            Grid indices for each dimension (already masked, 1D arrays).
         dim_labels : tuple[str, ...]
-            Ordered dimension labels. 
+            Ordered dimension labels.
 
         Returns
         -------
@@ -340,7 +340,7 @@ class FullSpokeOrdering(OrderingStrategy):
         # Stack angular dimension indices
         stacked = np.column_stack([indices[d] for d in angular_dims])
         _, inverse = np.unique(stacked, axis=0, return_inverse=True)
-        return inverse. astype(np. intp)
+        return inverse.astype(np.intp)
 
     def _compute_spoke_angles(
         self,
@@ -365,7 +365,7 @@ class FullSpokeOrdering(OrderingStrategy):
             # Use single dimension as angle proxy
             d0 = angular_dims[0]
             center = (np.max(indices[d0]) + np.min(indices[d0])) / 2
-            angles = (indices[d0] - center). astype(np. float64)
+            angles = (indices[d0] - center).astype(np.float64)
 
         return angles
 
@@ -385,7 +385,7 @@ class FullSpokeOrdering(OrderingStrategy):
             spoke_angles[i] = angles[mask][0]
 
         # Sort spokes by their original angle
-        spoke_order = np. argsort(spoke_angles)
+        spoke_order = np.argsort(spoke_angles)
 
         # Get target angles from increment scheme
         target_angles = self._angular_increment.get_angles(n_spokes)

@@ -5,18 +5,18 @@ __all__ = ["LinearOrdering"]
 from typing import Sequence
 
 import numpy as np
-from numpy. typing import NDArray
+from numpy.typing import NDArray
 
 from ._base import OrderingStrategy
 
 
 class LinearOrdering(OrderingStrategy):
     """
-    Linear (sequential) ordering along specified dimension priority. 
+    Linear (sequential) ordering along specified dimension priority.
 
     Acquires points in nested loop order, with the first dimension in
     `dim_priority` being the outermost (slowest varying) loop and the
-    last being the innermost (fastest varying) loop. 
+    last being the innermost (fastest varying) loop.
 
     Parameters
     ----------
@@ -25,8 +25,8 @@ class LinearOrdering(OrderingStrategy):
         default dim_labels order from the trajectory data.
     reverse : bool | dict[str, bool]
         Whether to reverse the ordering for each dimension.
-        If a single bool, applies to all dimensions. 
-        If a dict, maps dimension labels to their reverse flag. 
+        If a single bool, applies to all dimensions.
+        If a dict, maps dimension labels to their reverse flag.
 
     Examples
     --------
@@ -64,8 +64,8 @@ class LinearOrdering(OrderingStrategy):
         self,
         scaling: dict[str, NDArray],
         indices: dict[str, NDArray],
-        dim_labels: tuple[str, ... ],
-    ) -> NDArray[np. intp]:
+        dim_labels: tuple[str, ...],
+    ) -> NDArray[np.intp]:
         """
         Compute linear acquisition order.
 
@@ -98,7 +98,7 @@ class LinearOrdering(OrderingStrategy):
         # to get outer-to-inner ordering
         sort_keys = []
         for dim in reversed(priority):
-            key = indices[dim]. copy()
+            key = indices[dim].copy()
 
             # Handle reverse flag
             if self._should_reverse(dim):
@@ -112,7 +112,7 @@ class LinearOrdering(OrderingStrategy):
         """Check if dimension should be reversed."""
         if isinstance(self._reverse, bool):
             return self._reverse
-        return self._reverse. get(dim, False)
+        return self._reverse.get(dim, False)
 
     def __repr__(self) -> str:
         return f"LinearOrdering(dim_priority={self._dim_priority}, reverse={self._reverse})"
