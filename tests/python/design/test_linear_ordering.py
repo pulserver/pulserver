@@ -6,7 +6,7 @@ import pytest
 from pulserver.design import TrajectoryData, TrajectoryOrderer, LinearOrdering
 
 
-@pytest. fixture
+@pytest.fixture
 def simple_1d_data() -> TrajectoryData:
     """Create simple 1D trajectory data."""
     n = 8
@@ -18,7 +18,7 @@ def simple_1d_data() -> TrajectoryData:
     )
 
 
-@pytest. fixture
+@pytest.fixture
 def simple_2d_data() -> TrajectoryData:
     """Create simple 2D trajectory data (k1 x k2)."""
     n_k1, n_k2 = 4, 3
@@ -36,13 +36,13 @@ def simple_2d_data() -> TrajectoryData:
     )
 
 
-@pytest. fixture
+@pytest.fixture
 def simple_3d_data() -> TrajectoryData:
     """Create simple 3D trajectory data (k1 x k2 x avg)."""
     n_k1, n_k2, n_avg = 3, 3, 2
-    k1, k2, avg = np. meshgrid(
+    k1, k2, avg = np.meshgrid(
         np.linspace(-1, 1, n_k1),
-        np. linspace(-1, 1, n_k2),
+        np.linspace(-1, 1, n_k2),
         np.zeros(n_avg),  # avg doesn't have scaling
         indexing="ij",
     )
@@ -55,9 +55,10 @@ def simple_3d_data() -> TrajectoryData:
     return TrajectoryData(
         scaling={"k1": k1, "k2": k2, "avg": avg},
         indices={"k1": i_k1, "k2": i_k2, "avg": i_avg},
-        mask=np. ones((n_k1, n_k2, n_avg), dtype=bool),
+        mask=np.ones((n_k1, n_k2, n_avg), dtype=bool),
         dim_labels=("k1", "k2", "avg"),
     )
+
 
 class TestLinearOrderingBasic:
     """Basic functionality tests for LinearOrdering."""
@@ -65,7 +66,7 @@ class TestLinearOrderingBasic:
     def test_name(self):
         """Test strategy name."""
         strategy = LinearOrdering()
-        assert strategy. name == "linear"
+        assert strategy.name == "linear"
 
     def test_dim_priority_property(self):
         """Test dim_priority property."""
@@ -85,6 +86,7 @@ class TestLinearOrderingBasic:
         assert "k1" in repr_str
         assert "k2" in repr_str
 
+
 class TestLinearOrdering1D:
     """Tests for 1D linear ordering."""
 
@@ -103,8 +105,9 @@ class TestLinearOrdering1D:
         result = orderer.order(simple_1d_data)
 
         # Should be in sequential descending order
-        expected_indices = np. arange(7, -1, -1)
+        expected_indices = np.arange(7, -1, -1)
         np.testing.assert_array_equal(result.indices["k1"], expected_indices)
+
 
 class TestLinearOrdering2D:
     """Tests for 2D linear ordering."""
@@ -117,19 +120,19 @@ class TestLinearOrdering2D:
         # k1=0: k2=0,1,2; k1=1: k2=0,1,2; etc.
         expected_k1 = [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3]
         expected_k2 = [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2]
-        np.testing. assert_array_equal(result.indices["k1"], expected_k1)
-        np.testing. assert_array_equal(result.indices["k2"], expected_k2)
+        np.testing.assert_array_equal(result.indices["k1"], expected_k1)
+        np.testing.assert_array_equal(result.indices["k2"], expected_k2)
 
     def test_2d_k2_outer_k1_inner(self, simple_2d_data: TrajectoryData):
         """Test 2D ordering with k2 outer, k1 inner (column-by-column)."""
         orderer = TrajectoryOrderer(LinearOrdering(dim_priority=["k2", "k1"]))
         result = orderer.order(simple_2d_data)
 
-        # k2=0: k1=0,1,2,3; k2=1: k1=0,1,2,3; etc. 
+        # k2=0: k1=0,1,2,3; k2=1: k1=0,1,2,3; etc.
         expected_k1 = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3]
         expected_k2 = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2]
         np.testing.assert_array_equal(result.indices["k1"], expected_k1)
-        np.testing. assert_array_equal(result.indices["k2"], expected_k2)
+        np.testing.assert_array_equal(result.indices["k2"], expected_k2)
 
     def test_2d_default_uses_dim_labels_order(self, simple_2d_data: TrajectoryData):
         """Test that default priority follows dim_labels order."""
@@ -140,19 +143,19 @@ class TestLinearOrdering2D:
         expected_k1 = [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3]
         expected_k2 = [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2]
         np.testing.assert_array_equal(result.indices["k1"], expected_k1)
-        np.testing. assert_array_equal(result.indices["k2"], expected_k2)
+        np.testing.assert_array_equal(result.indices["k2"], expected_k2)
 
     def test_2d_reverse_outer_dimension(self, simple_2d_data: TrajectoryData):
         """Test reversing outer dimension only."""
         orderer = TrajectoryOrderer(
             LinearOrdering(dim_priority=["k1", "k2"], reverse={"k1": True})
         )
-        result = orderer. order(simple_2d_data)
+        result = orderer.order(simple_2d_data)
 
         # k1 reversed: k1=3,2,1,0; k2 still ascending within each k1
         expected_k1 = [3, 3, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0]
         expected_k2 = [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2]
-        np. testing.assert_array_equal(result. indices["k1"], expected_k1)
+        np.testing.assert_array_equal(result.indices["k1"], expected_k1)
         np.testing.assert_array_equal(result.indices["k2"], expected_k2)
 
     def test_2d_reverse_inner_dimension(self, simple_2d_data: TrajectoryData):
@@ -166,7 +169,7 @@ class TestLinearOrdering2D:
         expected_k1 = [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3]
         expected_k2 = [2, 1, 0, 2, 1, 0, 2, 1, 0, 2, 1, 0]
         np.testing.assert_array_equal(result.indices["k1"], expected_k1)
-        np. testing.assert_array_equal(result. indices["k2"], expected_k2)
+        np.testing.assert_array_equal(result.indices["k2"], expected_k2)
 
     def test_2d_reverse_all_dimensions(self, simple_2d_data: TrajectoryData):
         """Test reversing all dimensions with bool flag."""
@@ -178,18 +181,17 @@ class TestLinearOrdering2D:
         # Both dimensions reversed
         expected_k1 = [3, 3, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0]
         expected_k2 = [2, 1, 0, 2, 1, 0, 2, 1, 0, 2, 1, 0]
-        np.testing. assert_array_equal(result.indices["k1"], expected_k1)
+        np.testing.assert_array_equal(result.indices["k1"], expected_k1)
         np.testing.assert_array_equal(result.indices["k2"], expected_k2)
+
 
 class TestLinearOrdering3D:
     """Tests for 3D linear ordering."""
 
     def test_3d_ordering(self, simple_3d_data: TrajectoryData):
         """Test 3D ordering with explicit priority."""
-        orderer = TrajectoryOrderer(
-            LinearOrdering(dim_priority=["avg", "k1", "k2"])
-        )
-        result = orderer. order(simple_3d_data)
+        orderer = TrajectoryOrderer(LinearOrdering(dim_priority=["avg", "k1", "k2"]))
+        result = orderer.order(simple_3d_data)
 
         # avg=0: all k1,k2 combos; avg=1: all k1,k2 combos
         # Within each avg: k1 outer, k2 inner
@@ -198,7 +200,7 @@ class TestLinearOrdering3D:
         # First 9 points should have avg=0
         np.testing.assert_array_equal(result.indices["avg"][:9], np.zeros(9))
         # Last 9 points should have avg=1
-        np.testing.assert_array_equal(result.indices["avg"][9:], np. ones(9))
+        np.testing.assert_array_equal(result.indices["avg"][9:], np.ones(9))
 
     def test_3d_partial_priority(self, simple_3d_data: TrajectoryData):
         """Test that partial dim_priority raises error for missing dims."""
@@ -210,6 +212,7 @@ class TestLinearOrdering3D:
         result = orderer.order(simple_3d_data)
         assert result.n_points == 18
 
+
 class TestLinearOrderingEdgeCases:
     """Edge cases and error handling tests."""
 
@@ -218,7 +221,7 @@ class TestLinearOrderingEdgeCases:
         orderer = TrajectoryOrderer(
             LinearOrdering(dim_priority=["k1", "k3"])  # k3 doesn't exist
         )
-        with pytest. raises(ValueError, match="not found in data"):
+        with pytest.raises(ValueError, match="not found in data"):
             orderer.order(simple_2d_data)
 
     def test_with_acceleration(self):
@@ -229,7 +232,7 @@ class TestLinearOrderingEdgeCases:
             np.linspace(-1, 1, n_k2),
             indexing="ij",
         )
-        i_k1, i_k2 = np. meshgrid(np.arange(n_k1), np.arange(n_k2), indexing="ij")
+        i_k1, i_k2 = np.meshgrid(np.arange(n_k1), np.arange(n_k2), indexing="ij")
 
         # R=2 undersampling in k1
         mask = np.zeros((n_k1, n_k2), dtype=bool)
@@ -257,9 +260,9 @@ class TestLinearOrderingEdgeCases:
         result = orderer.order(simple_2d_data)
 
         # For each point, verify scaling matches expected value for that index
-        for i in range(result. n_points):
+        for i in range(result.n_points):
             k1_idx = result.indices["k1"][i]
-            k2_idx = result. indices["k2"][i]
+            k2_idx = result.indices["k2"][i]
 
             # Scaling should be linearly spaced -1 to 1
             expected_k1_scaling = -1 + k1_idx * (2 / 3)  # 4 points: -1, -1/3, 1/3, 1

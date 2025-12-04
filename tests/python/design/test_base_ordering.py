@@ -74,6 +74,7 @@ def reverse_strategy() -> OrderingStrategy:
         name="reverse",
     )
 
+
 class TestTrajectoryData:
     """Tests for TrajectoryData container."""
 
@@ -140,6 +141,7 @@ class TestTrajectoryData:
                 mask=np.ones(16, dtype=bool),  # Wrong shape
             )
 
+
 class TestOrderedTrajectory:
     """Tests for OrderedTrajectory container."""
 
@@ -184,6 +186,7 @@ class TestOrderedTrajectory:
         scaling_arr, _ = result.to_arrays()
         np.testing.assert_array_equal(scaling_arr[0], [0.0, 0.5])  # k1
         np.testing.assert_array_equal(scaling_arr[1], [0.1, 0.2])  # k2
+
 
 class TestTrajectoryOrderer:
     """Tests for TrajectoryOrderer."""
@@ -253,6 +256,7 @@ class TestTrajectoryOrderer:
         # In original data, index 15 has scaling = 1.0, index 0 has scaling = -1.0
         assert result.scaling["k1"][0] == pytest.approx(1.0)
         assert result.scaling["k1"][-1] == pytest.approx(-1.0)
+
 
 class TestCustomOrdering:
     """Tests for CustomOrdering strategy."""
