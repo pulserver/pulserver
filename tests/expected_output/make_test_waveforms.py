@@ -21,12 +21,15 @@ from matplotlib import mlab
 
 _eps = 1e-20
 
+
 def detrend_signal(sig):
     return sig - sig.mean()
+
 
 def filter_signal(sig):
     win = np.hanning(sig.size).astype(np.float32)
     return win * sig
+
 
 def get_rss_spectrum(sig1, sig2, sig3, dt, fmax, M_desired):
     if M_desired < 2:
@@ -49,7 +52,7 @@ def get_rss_spectrum(sig1, sig2, sig3, dt, fmax, M_desired):
     # actual df and kmax for fmax
     df = 1.0 / (dt * Nfft)
     kmax = int(np.floor(fmax / df))
-    
+
     # rfft produces Nfft//2 + 1 bins; ensure kmax does not exceed available bins
     max_bin = Nfft // 2
     if kmax > max_bin:
@@ -62,7 +65,7 @@ def get_rss_spectrum(sig1, sig2, sig3, dt, fmax, M_desired):
             x = np.concatenate([x, np.zeros(Nfft - x.size, dtype=float)])
         # rfft -> bins 0..Nfft//2
         X = np.fft.rfft(x, n=Nfft)
-        return np.abs(X[:kmax+1])
+        return np.abs(X[: kmax + 1])
 
     S1 = rmag(sig1)
     S2 = rmag(sig2)
@@ -72,9 +75,10 @@ def get_rss_spectrum(sig1, sig2, sig3, dt, fmax, M_desired):
     freqs = np.arange(kmax + 1) * df
 
     # RSS across the three magnitude spectra (before any PSD normalization/rescaling)
-    rss = (S1**2 + S2**2 + S3**2)**0.5
+    rss = (S1**2 + S2**2 + S3**2) ** 0.5
 
     return freqs, rss
+
 
 def refer_rss_to_delta(rss):
     rss = np.asarray(rss, dtype=float)
@@ -92,11 +96,12 @@ def refer_rss_to_delta(rss):
     denom = 1.0 - uniform if N > 1 else 1.0
 
     norm_per_bin = (p - uniform) / denom
-    
+
     # clip to [0,1] so small-than-uniform bins map to 0, perfect-delta -> 1
     norm_per_bin = np.clip(norm_per_bin, 0.0, 1.0)
-    
+
     return norm_per_bin
+
 
 def write_gradients(path, gx, gy, gz):
     data = np.stack([gx, gy, gz], axis=1).astype(np.float32)
@@ -105,12 +110,13 @@ def write_gradients(path, gx, gy, gz):
         fp.write(struct.pack("<4i", samples, channels, 0, 0))
         fp.write(data.tobytes(order="C"))
 
+
 def save_gradient_snapshot(out_path, gx, gy, gz, dt, n_trs=1, title=None):
     """Save a 3-row subplot (Gx, Gy, Gz) with TR markers spanning all rows."""
     base_gx = gx.copy()
     base_gy = gy.copy()
     base_gz = gz.copy()
-    
+
     n_trs_int = max(1, int(n_trs))
 
     gx_plot = np.tile(base_gx, n_trs_int)
@@ -231,9 +237,7 @@ def save_gradient_frequency_view(
         base_fft_y = np.fft.rfft(base_gy)
         base_fft_z = np.fft.rfft(base_gz)
         base_power = (
-            np.abs(base_fft_x) ** 2
-            + np.abs(base_fft_y) ** 2
-            + np.abs(base_fft_z) ** 2
+            np.abs(base_fft_x) ** 2 + np.abs(base_fft_y) ** 2 + np.abs(base_fft_z) ** 2
         )
         total_power = float(np.sum(base_power))
 
@@ -321,7 +325,9 @@ def save_gradient_frequency_view(
             if dataset_max <= 0.0:
                 dataset_max = 1.0
             magnitude_norm = magnitude / dataset_max
-            (line_handle,) = amp_ax.plot(freq_axis, magnitude_norm, linewidth=1.0, color=color, label=label)
+            (line_handle,) = amp_ax.plot(
+                freq_axis, magnitude_norm, linewidth=1.0, color=color, label=label
+            )
             amp_handles.append(line_handle)
 
             if tr_count == 1:
@@ -337,7 +343,9 @@ def save_gradient_frequency_view(
                     guard_values = guard_values.copy()
                     guard_values[0] = 0.0
                 guard_label = f"{label} (peak)"
-            (ratio_line,) = ratio_ax.plot(freq_axis, guard_values, linewidth=1.0, color=color)
+            (ratio_line,) = ratio_ax.plot(
+                freq_axis, guard_values, linewidth=1.0, color=color
+            )
             ratio_handles.append(ratio_line)
             ratio_labels.append(guard_label)
 
@@ -422,7 +430,13 @@ def save_gradient_frequency_view(
         amp_ax.plot(freqs_khz, rss_norm, linewidth=1.0, color="black", label="Max RSS")
 
         guard_values = rss_norm
-        (ratio_line,) = ratio_ax.plot(freqs_khz, guard_values, linewidth=1.0, color="black", label="Max RSS (peak)")
+        (ratio_line,) = ratio_ax.plot(
+            freqs_khz,
+            guard_values,
+            linewidth=1.0,
+            color="black",
+            label="Max RSS (peak)",
+        )
 
         exceed = guard_values > threshold
         if np.any(exceed):
@@ -457,7 +471,11 @@ def save_gradient_frequency_view(
         ratio_ax.set_ylim(0.0, 1.0)
 
     if title is None:
-        amp_ax.set_title("Gradient {} (RSS)".format("Spectrum" if mode == "spectrum" else "Spectrogram"))
+        amp_ax.set_title(
+            "Gradient {} (RSS)".format(
+                "Spectrum" if mode == "spectrum" else "Spectrogram"
+            )
+        )
     else:
         amp_ax.set_title(title)
     fig.savefig(out_path, dpi=200)
@@ -472,7 +490,9 @@ def make_bssfp_waveform(export=False):
     # Individual gradient lobes
     samples_phase = int(0.5e-3 / gdt)
     samples_read = int(1.0e-3 / gdt)
-    gph = 30.0 * np.ones(samples_phase, dtype=np.float32)  # 0.5 ms phase encoding; 30 mT/m
+    gph = 30.0 * np.ones(
+        samples_phase, dtype=np.float32
+    )  # 0.5 ms phase encoding; 30 mT/m
     gread = 30.0 * np.ones(samples_read, dtype=np.float32)  # 1.0 ms readout; 30 mT/m
 
     # Build y and z phase encoding and x readout gradients
@@ -492,7 +512,7 @@ def make_bssfp_waveform(export=False):
         export_dir.mkdir(parents=True, exist_ok=True)
         snapshot_trs = 3
         multi_tr_spectrum_count = 256**2
-        max_freq_hz = 2000.0 # Hz
+        max_freq_hz = 2000.0  # Hz
         spectrum_zero_pad = 4
         write_gradients(export_dir / "bssfp_waveform.dat", gx, gy, gz)
         save_gradient_snapshot(
@@ -515,34 +535,35 @@ def make_bssfp_waveform(export=False):
             zero_pad_factor=spectrum_zero_pad,
             n_trs=multi_tr_spectrum_count,
             analytic_multi_tr=True,
-            title="bSSFP Gradient Spectrum (RSS)"
+            title="bSSFP Gradient Spectrum (RSS)",
         )
 
     return gx, gy, gz
 
+
 def make_spgr_waveform(export=False):
     """Generate a simple SPGR-like gradient waveform (single TR)."""
     gdt = 4e-6  # Gradient update time (s)
-    
+
     # Spoiler
     samples_spoiler = int(8e-3 // gdt)
     gspoil = 35.0 * np.ones(samples_spoiler, dtype=np.float32)
-    
+
     # Get base waveform
     gx, gy, gz = make_bssfp_waveform()
-    
+
     # Concatenate
     gx = np.concatenate((gx, gspoil))
     gy = np.concatenate((gy, gspoil))
     gz = np.concatenate((gz, gspoil))
-    
+
     # Export waveforms and visualizations if requested
     if export:
         export_dir = Path(__file__).resolve().parent
         export_dir.mkdir(parents=True, exist_ok=True)
         snapshot_trs = 3
         multi_tr_spectrum_count = 256**2
-        max_freq_hz = 2000.0 # Hz
+        max_freq_hz = 2000.0  # Hz
         spectrum_zero_pad = 4
         write_gradients(export_dir / "spgr_waveform.dat", gx, gy, gz)
         save_gradient_snapshot(
@@ -565,11 +586,12 @@ def make_spgr_waveform(export=False):
             zero_pad_factor=spectrum_zero_pad,
             n_trs=multi_tr_spectrum_count,
             analytic_multi_tr=True,
-            title="SPGR Gradient Spectrum (RSS)"
+            title="SPGR Gradient Spectrum (RSS)",
         )
-        
+
     return gx, gy, gz
-    
+
+
 def make_megre_waveform(export=False):
     gdt = 4e-6  # Gradient update time (s)
     rf_dur = 1.0e-3  # RF pulse duration (s)
@@ -579,7 +601,9 @@ def make_megre_waveform(export=False):
     samples_phase = int(0.5e-3 / gdt)
     samples_read = int(1.0e-3 / gdt)
     samples_spoiler = int(8e-3 // gdt)
-    gph = 30.0 * np.ones(samples_phase, dtype=np.float32)  # 0.5 ms phase encoding; 30 mT/m
+    gph = 30.0 * np.ones(
+        samples_phase, dtype=np.float32
+    )  # 0.5 ms phase encoding; 30 mT/m
     gread = 30.0 * np.ones(samples_read, dtype=np.float32)  # 1.0 ms readout; 30 mT/m
     gspoil = 35.0 * np.ones(samples_spoiler, dtype=np.float32)
 
@@ -593,14 +617,14 @@ def make_megre_waveform(export=False):
     gx = np.concatenate((rf, gx, gspoil))
     gy = np.concatenate((rf, gy, gspoil))
     gz = np.concatenate((rf, gz, gspoil))
-    
+
     # Export waveforms and visualizations if requested
     if export:
         export_dir = Path(__file__).resolve().parent
         export_dir.mkdir(parents=True, exist_ok=True)
         snapshot_trs = 3
         multi_tr_spectrum_count = 256**2
-        max_freq_hz = 2000.0 # Hz
+        max_freq_hz = 2000.0  # Hz
         spectrum_zero_pad = 4
         write_gradients(export_dir / "megre_waveform.dat", gx, gy, gz)
         save_gradient_snapshot(
@@ -623,27 +647,29 @@ def make_megre_waveform(export=False):
             zero_pad_factor=spectrum_zero_pad,
             n_trs=multi_tr_spectrum_count,
             analytic_multi_tr=True,
-            title="ME-GRE Gradient Spectrum (RSS)"
+            title="ME-GRE Gradient Spectrum (RSS)",
         )
-        
+
     return gx, gy, gz
 
-def make_epi_waveform(export=False):
-    ...
-    
-def make_fse_waveform(export=False):
-    ...
-    
-def make_mrf_waveform(export=False):
-    ...
-    
-def make_mprage_waveform(export=False):
-    ...
-    
+
+def make_epi_waveform(export=False): ...
+
+
+def make_fse_waveform(export=False): ...
+
+
+def make_mrf_waveform(export=False): ...
+
+
+def make_mprage_waveform(export=False): ...
+
+
 def main():
     make_bssfp_waveform(export=True)
     make_spgr_waveform(export=True)
     make_megre_waveform(export=True)
+
 
 if __name__ == "__main__":
     main()

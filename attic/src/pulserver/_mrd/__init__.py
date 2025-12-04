@@ -1,7 +1,6 @@
-
 __all__ = []
 
-from ._mrd import * # noqa
+from ._mrd import *  # noqa
 
 from . import _mrd
 

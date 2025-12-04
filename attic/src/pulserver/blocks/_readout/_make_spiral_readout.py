@@ -84,7 +84,7 @@ def make_spiral_readout(
     gx_spiral, gy_spiral, hdr = make_spiral(
         fov, npix, narms, 0, 0, 0, system, fs_npix, trans_dur, spiral_type, mirror
     )
-    
+
     # adc event
     if has_adc:
         num_samples = gx_spiral.waveform.shape[-1] - sum(hdr.idx)

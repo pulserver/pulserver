@@ -6,12 +6,15 @@ import numpy as np
 
 import pypulseq as pp
 
+
 def make_test_sequence(write: bool = False) -> pp.Sequence:
     """Create test sequence for ANSI C89 Pulseq implementation."""
     seq = pp.Sequence()
 
     # real valued RF event
-    rf_shim = SimpleNamespace(type="rf_shim", shim_vector=np.ones(8, dtype=complex)) #t rivial rf shim
+    rf_shim = SimpleNamespace(
+        type="rf_shim", shim_vector=np.ones(8, dtype=complex)
+    )  # t rivial rf shim
     rf_real = pp.make_sinc_pulse(flip_angle=0.5 * np.pi)
 
     # complex valued RF event
@@ -44,23 +47,23 @@ def make_test_sequence(write: bool = False) -> pp.Sequence:
 
     # Extended trapezoid (x)
     gx_ext = pp.make_extended_trapezoid(
-        channel="x", 
-        amplitudes=np.array([0, 0.1, 1, 0.1, 0]), 
-        times=np.array([0, 10e-6, 20e-6, 2e-3 + 20e-6, 2e-3 + 30e-6])
+        channel="x",
+        amplitudes=np.array([0, 0.1, 1, 0.1, 0]),
+        times=np.array([0, 10e-6, 20e-6, 2e-3 + 20e-6, 2e-3 + 30e-6]),
     )
 
     # Extended trapezoid (y)
     gy_ext = pp.make_extended_trapezoid(
-        channel="y", 
-        amplitudes=np.array([0, 0.1, 1, 0.1, 0]), 
-        times=np.array([0, 10e-6, 20e-6, 2e-3 + 20e-6, 2e-3 + 30e-6])
+        channel="y",
+        amplitudes=np.array([0, 0.1, 1, 0.1, 0]),
+        times=np.array([0, 10e-6, 20e-6, 2e-3 + 20e-6, 2e-3 + 30e-6]),
     )
 
     # Extended trapezoid (z)
     gz_ext = pp.make_extended_trapezoid(
-        channel="z", 
-        amplitudes=np.array([0, 0.1, 1, 0.1, 0]), 
-        times=np.array([0, 10e-6, 20e-6, 2e-3 + 20e-6, 2e-3 + 30e-6])
+        channel="z",
+        amplitudes=np.array([0, 0.1, 1, 0.1, 0]),
+        times=np.array([0, 10e-6, 20e-6, 2e-3 + 20e-6, 2e-3 + 30e-6]),
     )
 
     # Add all events to sequence
@@ -95,7 +98,7 @@ def make_test_sequence(write: bool = False) -> pp.Sequence:
     # Soft delays (TE, TR, TI, ESP, RECTIME, T2PREP, TE2, TR2)
     for hint in ("TE", "TR", "TI", "ESP", "RECTIME", "T2PREP", "TE2", "TR2"):
         seq.add_block(pp.make_soft_delay(hint=hint))
-        
+
     # Pure (hard) delay
     seq.add_block(pp.make_delay(1.0))
 
@@ -105,6 +108,6 @@ def make_test_sequence(write: bool = False) -> pp.Sequence:
 
     return seq
 
+
 if __name__ == "__main__":
     make_test_sequence(write=True)
-    

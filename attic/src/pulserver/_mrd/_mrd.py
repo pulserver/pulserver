@@ -30,6 +30,7 @@ def __dummy_system__():
 DUMMY_SYSTEM = __dummy_system__()
 OTHER = xsd.trajectoryType.OTHER
 
+
 class ISMRMRDBuilder:
     def __init__(self, mode="static"):
         self.mode = mode  # 'dry', 'prep', 'eval', 'rt', 'static
@@ -59,7 +60,7 @@ class ISMRMRDBuilder:
             "repetition": None,
             "segment": None,
         }
-        
+
         self.add_encoding()
 
     def mode_switch(func):
@@ -69,13 +70,13 @@ class ISMRMRDBuilder:
             return func(self, *args, **kwargs)
 
         return wrapper
-    
+
     def write(
-            self, 
-            filepath: str | pathlib.Path, 
-            dataset_name: str = "dataset", 
-            overwrite : bool = True
-        ) -> None:
+        self,
+        filepath: str | pathlib.Path,
+        dataset_name: str = "dataset",
+        overwrite: bool = True,
+    ) -> None:
         """
         Write MRD file to disk.
 
@@ -90,8 +91,15 @@ class ISMRMRDBuilder:
             If True, overwrite the file if it is exist. The default is False.
 
         """
-        write_mrd(filepath, dataset_name, self.head, self.acquisitions, self.waveforms, overwrite)
-        
+        write_mrd(
+            filepath,
+            dataset_name,
+            self.head,
+            self.acquisitions,
+            self.waveforms,
+            overwrite,
+        )
+
     @mode_switch
     def calc_trajectory(self, *events: tuple[SimpleNamespace]):
         """
@@ -208,9 +216,7 @@ class ISMRMRDBuilder:
 
     @mode_switch
     def set_H1resonanceFrequency_Hz(self, gamma: float, B0: float):
-        self.head.experimentalConditions.H1resonanceFrequency_Hz = (
-            int(gamma * B0)
-        )
+        self.head.experimentalConditions.H1resonanceFrequency_Hz = int(gamma * B0)
 
     @mode_switch
     def set_fov(self, dx: float, dy: float, dz: float):
@@ -284,9 +290,9 @@ class ISMRMRDBuilder:
         self.head.encoding[
             self.current_encoding
         ].trajectoryDescription.userParameterDouble = udouble
-        self.head.encoding[self.current_encoding].trajectoryDescription.userParameterLong = (
-            ulong
-        )
+        self.head.encoding[
+            self.current_encoding
+        ].trajectoryDescription.userParameterLong = ulong
         self.head.encoding[
             self.current_encoding
         ].trajectoryDescription.userParameterString = ustring
@@ -453,9 +459,7 @@ class ISMRMRDBuilder:
     @mode_switch
     def add_user_param(self, name, value):
         if isinstance(value, float):
-            if haskey(
-                name, self.head.userParameters.userParameterDouble
-            ):
+            if haskey(name, self.head.userParameters.userParameterDouble):
                 setparam(
                     name,
                     value,
@@ -463,14 +467,10 @@ class ISMRMRDBuilder:
                 )
             else:
                 el = xsd.userParameterDoubleType(name=name, value=value)
-                self.head.userParameters.userParameterDouble.append(
-                    el
-                )
+                self.head.userParameters.userParameterDouble.append(el)
                 return
         if isinstance(value, int):
-            if haskey(
-                name, self.head.userParameters.userParameterLong
-            ):
+            if haskey(name, self.head.userParameters.userParameterLong):
                 setparam(
                     name,
                     value,
@@ -481,9 +481,7 @@ class ISMRMRDBuilder:
                 self.head.userParameters.userParameterLong.append(el)
                 return
         if isinstance(value, str):
-            if haskey(
-                name, self.head.userParameters.userParameterString
-            ):
+            if haskey(name, self.head.userParameters.userParameterString):
                 setparam(
                     name,
                     value,
@@ -491,9 +489,7 @@ class ISMRMRDBuilder:
                 )
             else:
                 el = xsd.userParameterStringType(name=name, value=value)
-                self.head.userParameters.userParameterString.append(
-                    el
-                )
+                self.head.userParameters.userParameterString.append(el)
                 return
 
         # if not scalar, default to waveforms
@@ -633,6 +629,7 @@ class ISMRMRDBuilder:
                         self.label_dict[label] = 0
                     self.label_dict[label] += event.value
 
+
 # %% utils
 def axis2key(axis):
     if axis.lower() in _axis2key:
@@ -651,7 +648,7 @@ _axis2key = {
     "avg": ("average", "average"),
     "slc": ("slice", "slice"),
     "eco": ("contrast", "contrast"),
-    "phs": ("phase", "phase"), 
+    "phs": ("phase", "phase"),
     "rep": ("repetition", "repetition"),
     "seg": ("segment", "segment"),
     "user0": ("user_0", "user0"),
@@ -661,7 +658,7 @@ _axis2key = {
     "user4": ("user_4", "user4"),
     "user5": ("user_5", "user5"),
     "user6": ("user_6", "user6"),
-    "user7": ("user_7", "user7")
+    "user7": ("user_7", "user7"),
 }
 
 

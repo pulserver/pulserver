@@ -73,7 +73,7 @@ def design_3D_spgr(
         grad_unit="mT/m",
         max_slew=max_slew,
         slew_unit="T/m/s",
-        grad_raster_time=raster_time, # for simplicty, here we set each board to same raster time
+        grad_raster_time=raster_time,  # for simplicty, here we set each board to same raster time
         rf_raster_time=raster_time,
         block_duration_raster=raster_time,
         adc_raster_time=raster_time,
@@ -141,9 +141,9 @@ def design_3D_spgr(
     prot.set_H1resonanceFrequency_Hz(seq.system.gamma, seq.system.B0)
     prot.set_fov(1e3 * fov, 1e3 * fov, 1e3 * slab_thickness)
     prot.set_matrix(Nx, Ny, Nz)
-    prot.set_limits("k0", Nx-1)
-    prot.set_limits("k1", Ny-1)
-    prot.set_limits("k2", Nz-1)
+    prot.set_limits("k0", Nx - 1)
+    prot.set_limits("k1", Ny - 1)
+    prot.set_limits("k2", Nz - 1)
     prot.set_flipAngle_deg(alpha)
 
     # Compute TE and TR
@@ -289,7 +289,9 @@ def register_excitation(seq, rf, gss):
             _rf_data = seq.rf_library.data[1]
         else:
             _rf.id = count + 1
-            seq.rf_library.insert(count + 1, (*_rf_data[:-1], _rf.phase_offset), _rf.use[0])
+            seq.rf_library.insert(
+                count + 1, (*_rf_data[:-1], _rf.phase_offset), _rf.use[0]
+            )
     gss.id = seq.register_grad_event(gss)
     return rf, gss
 
@@ -353,9 +355,7 @@ def design_phaseenc(system, gx_read, fov, slab_thickness, Ny, Nz):
     # Prewinders and rewinders
     # ========================
     # X axis
-    gx_pre = pp.make_trapezoid(
-        channel="x", area=-gx_read.area / 2, system=system
-    )
+    gx_pre = pp.make_trapezoid(channel="x", area=-gx_read.area / 2, system=system)
     gx_rew = pp.scale_grad(grad=gx_pre, scale=-1.0)
 
     # Y axis
