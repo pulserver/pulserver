@@ -1,8 +1,6 @@
-"""Linear (sequential) ordering strategy."""
+"""Linear ordering strategy."""
 
 __all__ = ["LinearOrdering"]
-
-from typing import Sequence
 
 import numpy as np
 from numpy.typing import NDArray
@@ -12,107 +10,125 @@ from ._base import OrderingStrategy
 
 class LinearOrdering(OrderingStrategy):
     """
-    Linear (sequential) ordering along specified dimension priority.
-
-    Acquires points in nested loop order, with the first dimension in
-    `dim_priority` being the outermost (slowest varying) loop and the
-    last being the innermost (fastest varying) loop.
-
+    Linear (sequential) ordering of coordinates.
+    
+    Orders points sequentially along one or more dimensions. 
+    For multidimensional coordinates, uses lexicographic ordering
+    with configurable axis priority.
+    
     Parameters
     ----------
-    dim_priority : Sequence[str] | None
-        Order of dimensions from outer to inner loop. If None, uses the
-        default dim_labels order from the trajectory data.
-    reverse : bool | dict[str, bool]
-        Whether to reverse the ordering for each dimension.
-        If a single bool, applies to all dimensions.
-        If a dict, maps dimension labels to their reverse flag.
-
+    reverse : bool
+        If True, order from high to low values.  Default is False.
+    axis_priority : tuple[int, ... ] | None
+        For ND coordinates, specifies axis ordering priority.
+        First axis in tuple is primary sort key.
+        If None, uses natural order (0, 1, 2, ...). 
+        
     Examples
     --------
-    >>> # 2D Cartesian: k1 outer loop, k2 inner loop (row-by-row)
-    >>> strategy = LinearOrdering(dim_priority=['k1', 'k2'])
-
-    >>> # Same but k2 varies first (column-by-column)
-    >>> strategy = LinearOrdering(dim_priority=['k2', 'k1'])
-
-    >>> # Reverse k1 direction (top-to-bottom instead of bottom-to-top)
-    >>> strategy = LinearOrdering(dim_priority=['k1', 'k2'], reverse={'k1': True})
-
-    >>> # 3D Cartesian with k2 outer, k1 middle, averaging innermost
-    >>> strategy = LinearOrdering(dim_priority=['k2', 'k1', 'avg'])
+    >>> # Simple 1D linear ordering
+    >>> strategy = LinearOrdering()
+    >>> order = strategy.compute_order(np.array([3, 1, 4, 1, 5, 9, 2, 6]))
+    
+    >>> # Reverse ordering (high to low)
+    >>> strategy = LinearOrdering(reverse=True)
+    
+    >>> # 2D with ky as primary, kz as secondary
+    >>> strategy = LinearOrdering(axis_priority=(0, 1))
+    
+    >>> # 2D with kz as primary, ky as secondary
+    >>> strategy = LinearOrdering(axis_priority=(1, 0))
     """
-
+    
     def __init__(
         self,
-        dim_priority: Sequence[str] | None = None,
-        reverse: bool | dict[str, bool] = False,
+        reverse: bool = False,
+        axis_priority: tuple[int, ...] | None = None,
     ):
-        self._dim_priority = tuple(dim_priority) if dim_priority else None
         self._reverse = reverse
-
+        self._axis_priority = axis_priority
+    
     @property
     def name(self) -> str:
-        return "linear"
-
+        base = "linear"
+        if self._reverse:
+            base += "_reverse"
+        return base
+    
     @property
-    def dim_priority(self) -> tuple[str, ...] | None:
-        """Return the dimension priority (outer to inner)."""
-        return self._dim_priority
-
+    def reverse(self) -> bool:
+        """Return whether ordering is reversed."""
+        return self._reverse
+    
+    @property
+    def axis_priority(self) -> tuple[int, ... ] | None:
+        """Return axis priority for multidimensional ordering."""
+        return self._axis_priority
+    
     def compute_order(
         self,
-        scaling: dict[str, NDArray],
-        indices: dict[str, NDArray],
-        dim_labels: tuple[str, ...],
-    ) -> NDArray[np.intp]:
+        coordinates: NDArray,
+        mask: NDArray[bool] | None = None,
+        n_segments: int = 1,
+    ) -> NDArray[int]:
         """
-        Compute linear acquisition order.
-
+        Compute linear acquisition order. 
+        
         Parameters
         ----------
-        scaling : dict[str, NDArray]
-            Scaling factors for each dimension (already masked, 1D arrays).
-        indices : dict[str, NDArray]
-            Grid indices for each dimension (already masked, 1D arrays).
-        dim_labels : tuple[str, ...]
-            Ordered dimension labels.
-
+        coordinates : NDArray
+            Point coordinates.  Shape: (n_points,) or (n_dims, n_points). 
+        mask : NDArray[bool] | None
+            Sampling mask. If None, all points are sampled. 
+        n_segments : int
+            Number of segments to divide acquisition into. 
+            
         Returns
         -------
-        order : NDArray[np.intp]
-            Indices that sort the points into linear acquisition order.
+        order : NDArray[int]
+            Shape: (n_segments, n_points_per_segment). 
         """
-        priority = self._dim_priority if self._dim_priority else dim_labels
-
-        # Validate that all priority dimensions exist
-        for dim in priority:
-            if dim not in indices:
+        coordinates, mask, n_sampled = self._validate_inputs(
+            coordinates, mask, n_segments
+        )
+        
+        # Extract masked coordinates
+        masked_coords = coordinates[:, mask]
+        n_dims = masked_coords.shape[0]
+        
+        # Compute ordering
+        if n_dims == 1:
+            order = np.argsort(masked_coords[0])
+        else:
+            # Determine axis priority
+            if self._axis_priority is not None:
+                priority = self._axis_priority
+            else:
+                priority = tuple(range(n_dims))
+            
+            # Validate priority
+            if len(priority) != n_dims or set(priority) != set(range(n_dims)):
                 raise ValueError(
-                    f"Dimension '{dim}' in dim_priority not found in data.  "
-                    f"Available: {list(indices. keys())}"
+                    f"axis_priority {priority} invalid for {n_dims} dimensions"
                 )
-
-        # Build sort keys for lexsort
-        # lexsort sorts by last key first, so we need to reverse the priority
-        # to get outer-to-inner ordering
-        sort_keys = []
-        for dim in reversed(priority):
-            key = indices[dim].copy()
-
-            # Handle reverse flag
-            if self._should_reverse(dim):
-                key = -key
-
-            sort_keys.append(key)
-
-        return np.lexsort(sort_keys)
-
-    def _should_reverse(self, dim: str) -> bool:
-        """Check if dimension should be reversed."""
-        if isinstance(self._reverse, bool):
-            return self._reverse
-        return self._reverse.get(dim, False)
-
+            
+            # lexsort uses last key as primary, so reverse the priority
+            keys = [masked_coords[i] for i in reversed(priority)]
+            order = np.lexsort(keys)
+        
+        if self._reverse:
+            order = order[::-1]
+        
+        return self._apply_mask_and_reshape(order, mask, n_segments)
+    
     def __repr__(self) -> str:
-        return f"LinearOrdering(dim_priority={self._dim_priority}, reverse={self._reverse})"
+        parts = []
+        if self._reverse:
+            parts.append("reverse=True")
+        if self._axis_priority is not None:
+            parts.append(f"axis_priority={self._axis_priority}")
+        
+        if parts:
+            return f"LinearOrdering({', '.join(parts)})"
+        return "LinearOrdering()"

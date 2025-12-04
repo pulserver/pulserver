@@ -10,67 +10,76 @@ from ._base import OrderingStrategy
 
 class RandomOrdering(OrderingStrategy):
     """
-    Random (shuffled) ordering.
-
-    Randomly permutes the acquisition order.  Useful for:
-    - Incoherent aliasing artifacts in compressed sensing
-    - Breaking up systematic errors
-    - Randomized benchmarking
-
+    Random (shuffled) ordering of coordinates.
+    
+    Randomly permutes the acquisition order.  Useful for compressed sensing
+    and incoherent sampling patterns.
+    
     Parameters
     ----------
     seed : int | None
         Random seed for reproducibility.  If None, uses non-deterministic
-        random state.
-
+        random state. 
+        
     Examples
     --------
-    >>> # Random ordering (non-reproducible)
-    >>> strategy = RandomOrdering()
-
-    >>> # Reproducible random ordering
+    >>> # Random ordering with fixed seed for reproducibility
     >>> strategy = RandomOrdering(seed=42)
+    >>> order = strategy.compute_order(np.arange(256))
+    
+    >>> # Non-deterministic random ordering
+    >>> strategy = RandomOrdering()
+    >>> order = strategy.compute_order(np.arange(256))
     """
-
+    
     def __init__(self, seed: int | None = None):
         self._seed = seed
-
+    
     @property
     def name(self) -> str:
         return "random"
-
+    
     @property
     def seed(self) -> int | None:
-        """Return the random seed."""
+        """Return random seed."""
         return self._seed
-
+    
     def compute_order(
         self,
-        scaling: dict[str, NDArray],
-        indices: dict[str, NDArray],
-        dim_labels: tuple[str, ...],
-    ) -> NDArray[np.intp]:
+        coordinates: NDArray,
+        mask: NDArray[bool] | None = None,
+        n_segments: int = 1,
+    ) -> NDArray[int]:
         """
         Compute random acquisition order.
-
+        
         Parameters
         ----------
-        scaling : dict[str, NDArray]
-            Scaling factors for each dimension (already masked, 1D arrays).
-        indices : dict[str, NDArray]
-            Grid indices for each dimension (already masked, 1D arrays).
-        dim_labels : tuple[str, ...]
-            Ordered dimension labels.
-
+        coordinates : NDArray
+            Point coordinates.  Shape: (n_points,) or (n_dims, n_points). 
+        mask : NDArray[bool] | None
+            Sampling mask. If None, all points are sampled. 
+        n_segments : int
+            Number of segments to divide acquisition into.
+            
         Returns
         -------
-        order : NDArray[np.intp]
-            Randomly permuted indices.
+        order : NDArray[int]
+            Shape: (n_segments, n_points_per_segment). 
         """
-        n_points = len(indices[dim_labels[0]])
+        coordinates, mask, n_sampled = self._validate_inputs(
+            coordinates, mask, n_segments
+        )
+        
+        # Create random generator
         rng = np.random.default_rng(self._seed)
-        order = rng.permutation(n_points)
-        return order.astype(np.intp)
-
+        
+        # Generate random permutation
+        order = rng.permutation(n_sampled). astype(np.intp)
+        
+        return self._apply_mask_and_reshape(order, mask, n_segments)
+    
     def __repr__(self) -> str:
-        return f"RandomOrdering(seed={self._seed})"
+        if self._seed is not None:
+            return f"RandomOrdering(seed={self._seed})"
+        return "RandomOrdering()"
