@@ -1,9 +1,6 @@
 """Tests for ordering utility functions."""
 
 import numpy as np
-import pytest
-
-from numpy.typing import NDArray
 
 from pulserver.design import (
     apply_order,
@@ -14,7 +11,6 @@ from pulserver.design import (
     CenterOutOrdering,
     RandomOrdering
 )
-
 
 
 class TestApplyOrder:
@@ -199,7 +195,7 @@ class TestComposeOrderings:
         line_indices = np.arange(n_lines_per_shot)
         inner_order = LinearOrdering(). compute_order(
             line_indices.reshape(1, -1), n_segments=1
-        ). ravel()
+        ).ravel()
 
         # Compose
         full_order = compose_orderings(outer_order, inner_order)
@@ -236,7 +232,7 @@ class TestFlattenOrder:
 
         flat = flatten_order(order)
 
-        np.testing. assert_array_equal(flat, order)
+        np.testing.assert_array_equal(flat, order)
 
 
 class TestIntegration:
@@ -307,7 +303,7 @@ class TestIntegration:
         assert outer_order.shape == (n_contrasts, n_shots)
 
         # Inner ordering: center-out within each shot
-        inner_order = CenterOutOrdering(). compute_order(
+        inner_order = CenterOutOrdering().compute_order(
             point_coords, n_segments=1
         ).ravel()
         assert len(inner_order) == n_per_shot
@@ -319,4 +315,4 @@ class TestIntegration:
         # Flatten
         flat = flatten_order(full_order)
         assert len(flat) == n_total
-        assert len(np. unique(flat)) == n_total
+        assert len(np.unique(flat)) == n_total
