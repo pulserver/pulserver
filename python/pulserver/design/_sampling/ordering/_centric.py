@@ -126,8 +126,8 @@ class CenterOutOrdering(OrderingStrategy):
             # Quantize radius to create discrete shells
             # Use relative tolerance based on coordinate range
             radius_range = radius.max() - radius.min() if radius.max() > radius.min() else 1.0
-            radius_quantized = np.round(radius / radius_range * 1e6). astype(np.int64)
-            angle_quantized = np.round(angle * 1e6). astype(np. int64)
+            radius_quantized = np.round(radius / radius_range * 1e6).astype(np.int64)
+            angle_quantized = np.round(angle * 1e6). astype(np.int64)
             
             # Sort by radius (primary), then angle (secondary)
             order = np.lexsort((angle_quantized, radius_quantized))

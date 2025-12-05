@@ -144,7 +144,7 @@ class SpiralOrdering(OrderingStrategy):
         radius_tol = 1e-10
         if radius.max() > radius_tol:
             # Normalize radius to [0, 1]
-            radius_norm = radius / radius. max()
+            radius_norm = radius / radius.max()
             # Estimate number of shells from data
             n_shells = max(1, int(np.sqrt(n_sampled)))
             shell_idx = np.floor(radius_norm * n_shells).astype(int)

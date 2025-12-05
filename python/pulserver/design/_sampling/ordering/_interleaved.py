@@ -89,9 +89,9 @@ class InterleavedOrdering(OrderingStrategy):
         Parameters
         ----------
         coordinates : NDArray
-            Integer coordinates (1D).  Typically slice indices.
+            Integer coordinates (1D). Typically slice indices.
         mask : NDArray[bool] | None
-            Sampling mask.  If None, all points are sampled. 
+            Sampling mask. If None, all points are sampled. 
         n_segments : int
             Number of segments to divide acquisition into. 
             
@@ -112,7 +112,7 @@ class InterleavedOrdering(OrderingStrategy):
             )
         
         # Extract masked coordinates as integers
-        masked_coords = coordinates[0, mask]. astype(int)
+        masked_coords = coordinates[0, mask].astype(int)
         
         # Compute interleave group for each point
         groups = masked_coords % self._n_interleaves

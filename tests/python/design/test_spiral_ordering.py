@@ -3,6 +3,8 @@
 import numpy as np
 import pytest
 
+from numpy.typing import NDArray
+
 from pulserver.design import SpiralOrdering
 
 
@@ -70,7 +72,7 @@ class TestSpiralOrdering2D:
         
         # Distance from center should be small
         dist = np.sqrt(np.sum((first_point - center) ** 2))
-        max_dist = np. sqrt(np.sum((coords[:, 0] - center) ** 2))
+        max_dist = np.sqrt(np.sum((coords[:, 0] - center) ** 2))
         assert dist < max_dist * 0.3
     
     def test_radius_generally_increases(self):
@@ -160,9 +162,9 @@ class TestSpiralOrdering3D:
         strategy = SpiralOrdering()
         # 4x4x4 grid
         k0, k1, k2 = np.meshgrid(
-            np.arange(4) - 1. 5,
-            np.arange(4) - 1. 5,
-            np.arange(4) - 1. 5,
+            np.arange(4) - 1.5,
+            np.arange(4) - 1.5,
+            np.arange(4) - 1.5,
             indexing='ij'
         )
         coords = np.stack([k0.ravel(), k1. ravel(), k2.ravel()])
@@ -235,7 +237,7 @@ class TestSpiralOrderingEdgeCases:
     def test_single_point(self):
         """Test with single point."""
         strategy = SpiralOrdering()
-        coords = np. array([[0], [0]])
+        coords = np.array([[0], [0]])
         
         result = strategy.compute_order(coords)
         
@@ -245,9 +247,9 @@ class TestSpiralOrderingEdgeCases:
     def test_two_points(self):
         """Test with two points."""
         strategy = SpiralOrdering()
-        coords = np. array([[0, 1], [0, 1]])
+        coords = np.array([[0, 1], [0, 1]])
         
-        result = strategy. compute_order(coords)
+        result = strategy.compute_order(coords)
         
         assert result.shape == (1, 2)
         assert set(result[0]) == {0, 1}
@@ -271,8 +273,8 @@ class TestSpiralOrderingEdgeCases:
     
     def test_center_shape_mismatch_raises(self):
         """Test that 1D center raises ValueError for 2D coords."""
-        strategy = SpiralOrdering(center=np.array([0. 0]))
+        strategy = SpiralOrdering(center=np.array([0.0]))
         coords = np.stack([np.arange(4), np.arange(4)])
         
         with pytest.raises(ValueError, match="at least 2 elements"):
-            strategy. compute_order(coords)
+            strategy.compute_order(coords)

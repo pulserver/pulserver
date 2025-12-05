@@ -75,7 +75,7 @@ class RandomOrdering(OrderingStrategy):
         rng = np.random.default_rng(self._seed)
         
         # Generate random permutation
-        order = rng.permutation(n_sampled). astype(np.intp)
+        order = rng.permutation(n_sampled).astype(int)
         
         return self._apply_mask_and_reshape(order, mask, n_segments)
     
