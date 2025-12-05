@@ -169,7 +169,7 @@ class SpiralOrdering(OrderingStrategy):
         n_segments: int,
     ) -> NDArray[int]:
         """Compute center-out order for 1D case."""
-        center = masked_coords. mean()
+        center = masked_coords.mean()
         radius = np.abs(masked_coords[0] - center)
         order = np.argsort(radius)
         return self._apply_mask_and_reshape(order, mask, n_segments)
