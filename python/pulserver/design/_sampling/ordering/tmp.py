@@ -1,17 +1,10 @@
+"""
+"""
 
 import numpy as np
-
 from numpy.typing import NDArray
 
-def make_linear_coords(n1: int) -> np.ndarray:
-    return np.arange(n1)
-
-def make_cartesian_grid(n1: int, n2: int) -> np.ndarray:
-    grid = np.mgrid[:n1, :n2]
-    return np.ravel_multi_index(grid, (n1, n2))
-
-# %% 1D orderings
-def make_interleaved_ordering_1d(n1: int, ngroups: int) -> NDArray:
+def make_interleaved_ordering_1d(n1: int, ngroups: int) -> NDArray[int]:
     """
     Create an 1D interleaved ordering array.
 
@@ -24,8 +17,8 @@ def make_interleaved_ordering_1d(n1: int, ngroups: int) -> NDArray:
 
     Returns
     -------
-    NDArray
-        Ordering array to perform interleaving.
+    NDArray[int]
+        Ordering array to perform interleaving, of shape ``(n1,)``.
         
     Examples
     --------
@@ -53,7 +46,7 @@ def make_interleaved_ordering_1d(n1: int, ngroups: int) -> NDArray:
     return np.concatenate(indexes)
     
 
-def make_centerout_ordering_1d(n1: int) -> NDArray:
+def make_centerout_ordering_1d(n1: int) -> NDArray[int]:
     """
     Create an 1D center-out ordering array.
 
@@ -64,8 +57,8 @@ def make_centerout_ordering_1d(n1: int) -> NDArray:
 
     Returns
     -------
-    NDArray
-        Ordering array to perform 1D center-out sorting.
+    NDArray[int]
+        Ordering array to perform 1D center-out sorting, of shape ``(n1,)``.
         
     Examples
     --------
@@ -90,8 +83,14 @@ def make_centerout_ordering_1d(n1: int) -> NDArray:
     order = np.argsort(np.abs(ax1 - n1 // 2))
     return ax1[order]
     
-# %% 2D orderings
-def make_radial_ordering_2d(n1: int, n2: int, inc: float, theta0: float = 0.0) -> NDArray:
+
+def make_radial_ordering_2d(
+        n1: int, 
+        n2: int, 
+        inc: float, 
+        theta0: float = 0.0,
+        prune: bool = True,
+) -> NDArray[int]:
     """
     Create a 2D radial ordering array.
 
@@ -102,14 +101,18 @@ def make_radial_ordering_2d(n1: int, n2: int, inc: float, theta0: float = 0.0) -
     n2 : int
         Number of radial projections.
     inc : float
-        Radial increment in ``[rad``].
+        Angular increment in ``[rad]``.
     theta0 : float, optional
-        Initial angle in ``[rad]``. The default is ``0.0``.
+        Angular offset in ``[rad]``. The default is ``0.0``.
+    prune : bool, optional
+        If ``True``, remove duplicates from each spoke and make sure
+        final sampling pattern has equal number of samples for each spoke.
+        The default is ``True``.
 
     Returns
     -------
-    NDArray
-        Ordering array to perform 2D radial sorting.
+    NDArray[int]
+        Ordering array to perform 2D radial sorting, of shape ``(n1, n2)``.
         
     Examples
     --------
@@ -126,7 +129,7 @@ def make_radial_ordering_2d(n1: int, n2: int, inc: float, theta0: float = 0.0) -
         
     >>> nencodes = 8
     >>> nspokes = 2
-    >> increment = np.deg2rad(90.0)
+    >>> increment = np.deg2rad(90.0)
     
     >>> ordering = pd.make_radial_ordering_2d(nencodes, nspokes, increment)
     >>> print(ordering.T)
@@ -142,9 +145,19 @@ def make_radial_ordering_2d(n1: int, n2: int, inc: float, theta0: float = 0.0) -
     grid = ax1[:, None] * ax2[None, :] 
     grid = np.stack((np.round(grid.real), np.round(grid.imag))).astype(int) + n1 // 2
     grid = np.clip(grid, 0, n1-1)
-    return np.ravel_multi_index(grid, (n1, n1))
+    indexes = np.ravel_multi_index(grid, (n1, n1))
+    if prune:
+        return _prune_sampling(indexes)
+    return indexes
 
-def make_centerout_ordering_2d(n1: int, n2: int, inc: float, theta0: float = 0.0) -> np.ndarray:
+
+def make_centerout_ordering_2d(
+        n1: int, 
+        n2: int, 
+        inc: float, 
+        theta0: float = 0.0,
+        prune: bool = True,
+) -> NDArray[int]:
     """
     Create a 2D center-out ordering array.
 
@@ -155,14 +168,18 @@ def make_centerout_ordering_2d(n1: int, n2: int, inc: float, theta0: float = 0.0
     n2 : int
         Number of center-out projections.
     inc : float
-        Radial increment in ``[rad``].
+        Angular increment in ``[rad]``.
     theta0 : float, optional
-        Initial angle in ``[rad]``. The default is ``0.0``.
+        Angular offset in ``[rad]``. The default is ``0.0``.
+    prune : bool, optional
+        If ``True``, remove duplicates from each spoke and make sure
+        final sampling pattern has equal number of samples for each spoke.
+        The default is ``True``.
 
     Returns
     -------
-    NDArray
-        Ordering array to perform 2D center-out sorting.
+    NDArray[int]
+        Ordering array to perform 2D center-out sorting, of shape ``(n1 // 2, n2)``.
         
     Examples
     --------
@@ -179,34 +196,102 @@ def make_centerout_ordering_2d(n1: int, n2: int, inc: float, theta0: float = 0.0
         
     >>> nencodes = 8
     >>> nspokes = 4
-    >> increment = np.deg2rad(90.0)
+    >>> increment = np.deg2rad(90.0)
     
     >>> ordering = pd.make_centerout_ordering_2d(nencodes, nspokes, increment)
     >>> print(ordering.T)
-    [[ 4 12 20 28 36 44 52 60]
-     [32 33 34 35 36 37 38 39]]
+    [[36 44 52 60]
+     [36 37 38 39]
+     [36 28 20 12]
+     [36 35 34 33]]
     
-    First line represent the flattened indexes for the ``x`` axis of a ``(8, 8)``
-    matrix; the second the indexes for the ``y`` axis of the same matrix.
-
+    First line represent the flattened indexes for the positive ``x`` axis of a ``(8, 8)``
+    matrix, the second the indexes for the positive ``y``, third is negative ``x`` axis
+    and last is negative ``y`` axis.
+    
     """
     ax1 = np.arange(n1 // 2)
     ax2 = np.exp(1j * (np.arange(n2) * inc + theta0))
     grid = ax1[:, None] * ax2[None, :] 
     grid = np.stack((np.round(grid.real), np.round(grid.imag))).astype(int) + n1 // 2
     grid = np.clip(grid, 0, n1-1)
-    return np.ravel_multi_index(grid, (n1, n1))
+    indexes = np.ravel_multi_index(grid, (n1, n1))
+    if prune:
+        return _prune_sampling(indexes)
+    return indexes
 
-def make_spiral_grid(n1: int, n2: int, inc: float) -> np.ndarray:
+
+def make_spiral_grid(n1: int, n2: int, inc: float, prune: bool = True) -> NDArray[int]:
+    """
+    Create a 2D spiral ordering array.
+
+    Parameters
+    ----------
+    n1 : int
+        Matrix size along radial direction. Usually, ``nx = ny = n1``.
+    n2 : int
+        Number of spiral interleaves.
+    inc : float
+        Angular increment in ``[rad]``.
+    theta0 : float, optional
+        Initial angle in ``[rad]``. The default is ``0.0``.
+    prune : bool, optional
+        If ``True``, remove duplicates from each interleaf and make sure
+        final sampling pattern has equal number of samples for each interleaf.
+        The default is ``True``.
+
+    Returns
+    -------
+    NDArray[int]
+        Ordering array to perform 2D spiral sorting, of shape ``(npts, n2)``,
+        with ``npts = 0.5 * np.pi * n1**2 / n2``
+        
+    Examples
+    --------
+    To perform 2D spiral sorting, we can do as follows.
+    
+    First, we import ``pulserver.design``:
+    
+    >>> import numpy as np
+    >>> import pulserver.design as pd
+    
+    Suppose we have ``(8, 8)`` encoding matrix size (e.g., in ``(ky, kz)`` plane),
+    and we want to arrange the samples in 2 Cartesian spiral shots, with linear increment:
+        
+    >>> nencodes = 8
+    >>> nspokes = 2
+    >>> increment = np.deg2rad(180.0)
+    
+    >>> ordering = pd.make_spiral_grid(nencodes, nspokes, increment)
+    >>> print(ordering.T)
+    [[36 52 53 45 46 38 30 29 21 20 19 27 26 34 42 43 51]
+     [36 28 27 35 43 44 45 37 29 12 11 18 25 33 41 50 59]]
+    
+    First line represent the flattened indexes for first spiral interleaf,
+    while the second represents the flattened indexes for second spiral interleaf.
+    Together, the two interleaves produce a fully sampled ``(ky, kz)`` k-space.
+    
+    """
     indexes = []
-    n20 = int(np.ceil(np.pi * n1 / n2)) # enforce multiple of target n interleaves
+    n20 = int(np.ceil(np.pi * n1)) # enforce multiple of target n interleaves
     inc0 = np.deg2rad(360.0 / n20)
     for n in range(n2):
         _inc = n * inc % (2 * np.pi)
-        _indexes = make_centerout_ordering_2d(n1, n20, inc0, _inc)
+        _indexes = make_centerout_ordering_2d(n1, n20, inc0, _inc, False).T
+        _indexes = np.concatenate((_indexes[:, [0]], _indexes[:,n::n2]), axis=-1).T
         indexes.append(_indexes.ravel())
     
     # # Rearrange in spiral order
     indexes = np.stack(indexes, axis=-1)
     
+    if prune:
+        return _prune_sampling(indexes)
+    
     return indexes
+
+
+def _prune_sampling(input: NDArray[int]) -> NDArray[int]:
+    uniq_cols = [np.unique(input[:,j], return_index=True) for j in range(input.shape[1])]    
+    uniq_cols_sorted = [col[np.argsort(idx)] for col,idx in uniq_cols]
+    m_min = min(len(col) for col in uniq_cols_sorted)
+    return np.column_stack([col[:m_min] for col in uniq_cols_sorted])
