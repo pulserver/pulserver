@@ -1,4 +1,4 @@
-"""From mrseq.utils.sequence_helper.py. 
+"""From mrseq.utils.sequence_helper.py.
 
 https://github.com/PTB-MR/mrseq/blob/main/src/mrseq/utils/sequence_helper.py#L35
 
@@ -205,12 +205,13 @@ License:
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-   
+
 """
 
 __all__ = ["find_gx_flat_time_on_adc_raster"]
 
 import numpy as np
+
 
 def find_gx_flat_time_on_adc_raster(
     n_readout: int,
@@ -256,7 +257,7 @@ def find_gx_flat_time_on_adc_raster(
         gx_flat_time on gradient raster
     adc_dwell_time
         Adc dwell time matching gx_flat_time / n_readout and on adc raster
-        
+
     """
     raster_time_ratio = (n_readout * adc_raster_time) / grad_raster_time
     start_m = int(max(np.floor(adc_dwell_time / adc_raster_time), 1))
@@ -264,17 +265,21 @@ def find_gx_flat_time_on_adc_raster(
     adc_dwell_time_smaller: float | None = None
     for m in np.arange(start_m, 1, -1):
         k = m * raster_time_ratio
-        if np.isclose(k, np.round(k), atol=tol):  # Check if k is "close enough" to an integer
+        if np.isclose(
+            k, np.round(k), atol=tol
+        ):  # Check if k is "close enough" to an integer
             adc_dwell_time_smaller = float(m * adc_raster_time)
             break
     adc_dwell_time_larger: float | None = None
     for n in range(start_m, max_m):
         j = n * raster_time_ratio
-        if np.isclose(j, np.round(j), atol=tol):  # Check if j is "close enough" to an integer
+        if np.isclose(
+            j, np.round(j), atol=tol
+        ):  # Check if j is "close enough" to an integer
             adc_dwell_time_larger = float(n * adc_raster_time)
             break
     if adc_dwell_time_larger is None and adc_dwell_time_smaller is None:
-        raise ValueError('No adc_dwell_time found within search range.')
+        raise ValueError("No adc_dwell_time found within search range.")
 
     # Select value which is closer to original adc_dwell_time
     if adc_dwell_time_smaller is None and adc_dwell_time_larger is not None:
@@ -282,7 +287,9 @@ def find_gx_flat_time_on_adc_raster(
     elif adc_dwell_time_larger is None and adc_dwell_time_smaller is not None:
         adc_dwell_time = adc_dwell_time_smaller
     elif adc_dwell_time_smaller is not None and adc_dwell_time_larger is not None:
-        if np.abs(adc_dwell_time - adc_dwell_time_smaller) < np.abs(adc_dwell_time - adc_dwell_time_larger):
+        if np.abs(adc_dwell_time - adc_dwell_time_smaller) < np.abs(
+            adc_dwell_time - adc_dwell_time_larger
+        ):
             adc_dwell_time = adc_dwell_time_smaller
         else:
             adc_dwell_time = adc_dwell_time_larger

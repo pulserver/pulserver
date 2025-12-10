@@ -1,6 +1,12 @@
 [build-system]
-build-backend = "setuptools.build_meta"
-requires = ["setuptools", "setuptools_scm[toml]", "wheel"]
+build-backend = "scikit_build_core.build"
+requires = [
+  "scikit-build-core>=0.9",
+  "pybind11>=2.12",
+  "setuptools",
+  "setuptools_scm[toml]",
+  "wheel",
+]
 
 
 [project]
@@ -11,9 +17,8 @@ readme = "README.rst"
 requires-python = ">=3.10"
 dynamic = ["version"]
 
-license = {file = "LICENSE"}
+license = {file = "LICENSE.txt"}
 keywords = ["pulseq", "mri", "sequence-design", "pulse-sequences", "mri-sequences"]
-
 
 authors = [
   {name = "Matteo Cencini", email = "matteo.cencini@gmail.com" } # Optional
@@ -58,6 +63,10 @@ doc = ["sphinx", "pydata-sphinx-theme", "myst-nb", "matplotlib", "sphinx-copybut
 "Homepage" = "https://github.com/INFN-MRI/pulserver"
 "Bug Reports" = "https://github.com/INFN-MRI/pulserver/issues"
 "Source" = "https://github.com/INFN-MRI/pulserver"
+
+[tool.scikit-build]
+# Ensure wheels get correct macOS tagging (optional)
+wheel.expand-macos-universal-tags = true
 
 [tool.setuptools.packages.find]
 where=["python"]
