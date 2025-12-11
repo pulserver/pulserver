@@ -126,7 +126,7 @@ def make_caipirinha_sampling(
     Returns
     -------
     mask : NDArray[int]
-        Regular-grid sampling mask of shape ``(nz, ny)``.
+        Regular-grid sampling mask of shape ``(ny, nz)``.
 
     Examples
     --------

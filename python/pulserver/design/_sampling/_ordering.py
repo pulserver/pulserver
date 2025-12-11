@@ -3,9 +3,11 @@
 __all__ = [
     "make_interleaved_ordering_1d",
     "make_centerout_ordering_1d",
+    "make_random_ordering_1d",
     "make_radial_ordering_2d",
     "make_centerout_ordering_2d",
     "make_spiral_ordering_2d",
+    "make_random_ordering_2d",
 ]
 
 import numpy as np
@@ -90,6 +92,24 @@ def make_centerout_ordering_1d(n1: int) -> NDArray[int]:
     ax1 = np.arange(n1)
     order = np.argsort(np.abs(ax1 - n1 // 2))
     return ax1[order]
+
+
+def make_random_ordering_1d(n1: int) -> NDArray[int]:
+    """
+    Create an 1D random ordering array.
+
+    Parameters
+    ----------
+    n1 : int
+        Number of elements in the 1D array to be sorted.
+
+    Returns
+    -------
+    NDArray[int]
+        Ordering array to perform 1D random sorting, of shape ``(n1,)``.
+
+    """
+    return np.random.permutation(n1)
 
 
 def make_radial_ordering_2d(
@@ -213,9 +233,9 @@ def make_centerout_ordering_2d(
      [36 28 20 12]
      [36 35 34 33]]
 
-    First line represent the flattened indexes for the positive ``x`` axis of a ``(8, 8)``
-    matrix, the second the indexes for the positive ``y``, third is negative ``x`` axis
-    and last is negative ``y`` axis.
+    First line represent the flattened indexes for the positive ``x`` axis 
+    of a ``(8, 8)`` matrix, the second the indexes for the positive ``y``, 
+    third is negative ``x`` axis and last is negative ``y`` axis.
 
     """
     ax1 = np.arange(n1 // 2)
@@ -266,7 +286,8 @@ def make_spiral_ordering_2d(
     >>> import pulserver.design as pd
 
     Suppose we have ``(8, 8)`` encoding matrix size (e.g., in ``(ky, kz)`` plane),
-    and we want to arrange the samples in 2 Cartesian spiral shots, with linear increment:
+    and we want to arrange the samples in 2 Cartesian spiral shots, 
+    with linear increment:
 
     >>> nencodes = 8
     >>> nspokes = 2
@@ -298,6 +319,48 @@ def make_spiral_ordering_2d(
         return _prune_sampling(indexes)
 
     return indexes
+
+
+def make_random_ordering_2d(n1: int, n2: int) -> NDArray[int]:
+    """
+    Create a 2D random ordering array.
+
+    Parameters
+    ----------
+    n1 : int
+        Matrix size along first direction.
+    n2 : int
+        Matrix size along second direction.
+
+    Returns
+    -------
+    NDArray[int]
+        Ordering array to perform 2D random sorting, of shape ``(n1, n2)``.
+
+    Examples
+    --------
+    To perform 2D random sorting, we can do as follows.
+
+    First, we import ``pulserver.design``:
+
+    >>> import numpy as np
+    >>> import pulserver.design as pd
+
+    Suppose we have ``(8, 8)`` encoding matrix size (e.g., in ``(ky, kz)`` plane),
+    and we want to randomly permute its elements:
+
+    >>> ny, nz = 8, 8
+    >>> encoding = np.random.rand(ny, nz)
+    >>> ordering = pd.make_random_ordering_2d(8, 8)
+    >>> print(ordering.shape)
+    (8, 8)
+
+    Now, to apply the ordering, we can do as follows:
+
+    >>> encoding = encoding.ravel()[ordering]
+
+    """
+    return np.random.permutation(n1 * n2).reshape(n1, n2)
 
 
 # %% Utilis

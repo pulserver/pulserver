@@ -9,12 +9,12 @@ mask layouts because Poisson-disc sampling is randomized.
 import numpy as np
 import pytest
 
-import pulserver.design as sampling
+import pulserver.design as pd
 
 
 def test_make_regular_sampling_basic():
     # Basic regular sampling without calibration
-    m = sampling.make_regular_sampling(12, 3)
+    m = pd.make_regular_sampling(12, 3)
     expected = np.array([1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0])
     assert isinstance(m, np.ndarray)
     assert m.shape == (12,)
@@ -23,7 +23,7 @@ def test_make_regular_sampling_basic():
 
 def test_make_regular_sampling_with_calib():
     # Regular sampling with calibration region
-    m = sampling.make_regular_sampling(12, 3, calib=4)
+    m = pd.make_regular_sampling(12, 3, calib=4)
     # central 4 values (indices 4..7) should be 1
     center = m[12 // 2 - 4 // 2 : 12 // 2 + 4 // 2]
     assert center.shape == (4,)
@@ -32,7 +32,7 @@ def test_make_regular_sampling_with_calib():
 
 def test_make_caipirinha_sampling_basic_and_shift():
     # Basic CAIPIRINHA sampling on an 8x8 grid with R=(2,2)
-    m = sampling.make_caipirinha_sampling(
+    m = pd.make_caipirinha_sampling(
         (8, 8), accel=(2, 2), shift=0, elliptical=False
     )
     assert m.shape == (8, 8)
@@ -40,7 +40,7 @@ def test_make_caipirinha_sampling_basic_and_shift():
     assert int(np.sum(m)) == 16
 
     # With shift=1 and a 2x2 central calibration, the center block should be ones
-    m_shift = sampling.make_caipirinha_sampling(
+    m_shift = pd.make_caipirinha_sampling(
         (8, 8), accel=(2, 2), shift=1, calib=2, elliptical=False
     )
     assert m_shift.shape == (8, 8)
@@ -51,12 +51,12 @@ def test_make_caipirinha_sampling_basic_and_shift():
 
 def test_make_partial_fourier_sampling_snippet():
     # Matches the snippet provided in the repository
-    mask = sampling.make_partial_fourier_sampling(16, 0.75)
+    mask = pd.make_partial_fourier_sampling(16, 0.75)
     assert mask.sum() == 12
     assert int(mask[-1]) == 0
 
     # undersampling == 1.0 returns all ones
-    full = sampling.make_partial_fourier_sampling(8, 1.0)
+    full = pd.make_partial_fourier_sampling(8, 1.0)
     assert np.array_equal(full, np.ones(8, dtype=int))
 
 
@@ -67,7 +67,7 @@ def test_make_poisson_sampling_vardens_inserts_calib():
     Uses the real CPD bindings provided by the module.
     """
     cy = cz = 20
-    mask = sampling.make_poisson_sampling(
+    mask = pd.make_poisson_sampling(
         (64, 64), accel=(2, 2), calib=cy, nt=1, vardens=True
     )
 
@@ -93,7 +93,7 @@ def test_make_poisson_sampling_ud_multiple_temporal():
     Use real bindings and verify shape and that some sampling points exist across
     the temporal frames.
     """
-    m_t = sampling.make_poisson_sampling((32, 32), accel=(4, 1), nt=3, vardens=False)
+    m_t = pd.make_poisson_sampling((32, 32), accel=(4, 1), nt=3, vardens=False)
 
     assert m_t.ndim == 3
     assert m_t.shape == (32, 32, 3)
@@ -114,5 +114,5 @@ def test_make_poisson_sampling_ud_multiple_temporal():
 )
 def test_make_caipirinha_sampling_counts(shape, accel, expected_total):
     # elliptical=False to avoid corner cropping affecting counts
-    m = sampling.make_caipirinha_sampling(shape, accel=accel, shift=0, elliptical=False)
+    m = pd.make_caipirinha_sampling(shape, accel=accel, shift=0, elliptical=False)
     assert int(np.sum(m)) == expected_total
