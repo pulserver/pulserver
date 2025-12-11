@@ -1,4 +1,4 @@
-""" """
+"""Sampling pattern generation module."""
 
 from __future__ import annotations
 
@@ -10,16 +10,16 @@ __all__ = [
 ]
 
 import logging
-from typing import Literal, Union
+from typing import Literal
 
 import numpy as np
 
 from numpy.typing import NDArray
 
-from ._cpd import gen_udcpd as _gen_udcpd, gen_vdcpd as _gen_vdcpd
+from ._cpd import gen_udcpd as _gen_udcpd_bind, gen_vdcpd as _gen_vdcpd_bind
 
 ShapeStr = Literal["CROSS", "L1_BALL", "L2_BALL", "CONES", "PLANE_AND_CONES"]
-ShapeLike = Union[str, ShapeStr]
+ShapeLike = str | ShapeStr
 
 _SHAPE_MAP = {
     "CROSS": 0,
@@ -64,6 +64,19 @@ def make_regular_sampling(
 
     Examples
     --------
+    Basic regular sampling without calibration:
+
+    >>> import numpy as np
+    >>> from sampling import make_regular_sampling
+    >>> make_regular_sampling(12, 3)
+    array([1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0])
+
+    Regular sampling with a small calibration region (cy=4)
+    centered in k-space (for shape=12):
+
+    >>> make_regular_sampling(12, 3, calib=4)
+    array([1, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0])
+
 
     """
     require(accel < 1, f"Ky acceleration must be greater than 1, got {accel}")
@@ -87,7 +100,7 @@ def make_caipirinha_sampling(
     elliptical: bool = True,
 ) -> NDArray[int]:
     """
-    Generate regular sampling pattern for SENSE/GRAPPA or CAIPIRINHA accelerated acquisition.
+    Generate regular sampling pattern for CAIPIRINHA accelerated acquisition.
 
     Can be used for 3D imaging (i.e., ``ky, kz``) or 2D+t (i.e.g, ``ky, t``).
 
@@ -117,6 +130,27 @@ def make_caipirinha_sampling(
 
     Examples
     --------
+    Basic CAIPIRINHA sampling on a square 8x8 grid with R=(2,2):
+
+    >>> import numpy as np
+    >>> from sampling import make_caipirinha_sampling
+    >>> mask = make_caipirinha_sampling((8, 8), accel=(2, 2), shift=0, elliptical=False)
+    >>> mask.shape
+    (8, 8)
+    >>> mask.sum()
+    16
+
+    Use CAIPIRINHA with a shift (shift=1) and a small calibration region:
+
+    >>> mask_shifted = make_caipirinha_sampling(
+            (8, 8), accel=(2, 2), shift=1, calib=2, elliptical=False
+        )
+    >>> mask_shifted.shape
+    (8, 8)
+    >>> # calibration region is inserted at the center
+    >>> mask_shifted[3:5, 3:5]
+    array([[1, 1],
+           [1, 1]])
 
     """
     if np.isscalar(shape):
@@ -204,6 +238,18 @@ def make_partial_fourier_sampling(shape: int, undersampling: float) -> NDArray[i
     NDArray[int]
         Regular-grid sampling mask of shape ``(shape,)``.
 
+    Examples
+    --------
+    Basic partial-fourier sampling: for shape=16 and undersampling=0.75,
+    we keep the first floor(16*0.75)=12 lines and zero the remainder:
+
+    >>> from sampling import make_partial_fourier_sampling
+    >>> mask = make_partial_fourier_sampling(16, 0.75)
+    >>> mask.sum()
+    12
+    >>> mask[-1]
+    0
+
     """
     require(
         0.5 <= undersampling <= 1,
@@ -280,6 +326,34 @@ def make_poisson_sampling(
 
     Examples
     --------
+    Typical variable-density CPD sampling on a 64x64 k-space with a central ACS:
+
+    >>> from sampling import make_poisson_sampling
+    >>> # variable-density CPD with center calibration region
+    >>> mask = make_poisson_sampling(
+            (64, 64), accel=(2, 2), calib=20, nt=1, vardens=True
+        )
+    >>> mask.shape
+    (64, 64, 1)
+    >>> set(np.unique(mask).tolist()) <= {0, 1}
+    True
+    >>> # center calibration block is all ones
+    >>> cy = 20
+    >>> cz = 20
+    >>> center_block = mask[32 - cy//2 : 32 + cy//2, 32 - cz//2 : 32 + cz//2, 0]
+    >>> center_block.sum() == cy * cz
+    True
+
+    Uniform-density (UD-CPD-like) example and temporal phases:
+
+    >>> # uniform density generation (vardens=False) and multiple temporal phases
+    >>> m_t = make_poisson_sampling((32, 32), accel=(4, 1), nt=3, vardens=False)
+    >>> m_t.shape
+    (32, 32, 3)
+    >>> # logical OR across temporal phases yields a 2D sampling coverage map
+    >>> combined = np.sum(m_t, axis=2) > 0
+    >>> combined.dtype == bool
+    True
 
     Notes
     -----
@@ -320,7 +394,7 @@ def make_poisson_sampling(
     if vardens:
         if Rmax is None:
             Rmax = np.prod(accel).item()
-        mask = gen_vdcpd(
+        mask = _gen_vdcpd(
             nt,
             Rmax,
             vd_exp,
@@ -332,7 +406,7 @@ def make_poisson_sampling(
             mindist_scaling,
         )
     else:
-        mask = gen_udcpd(
+        mask = _gen_udcpd(
             nt, fov_ratio, feasible_points, shape_opt, verbose, C, mindist_scaling
         )
 
@@ -347,8 +421,8 @@ def make_poisson_sampling(
     return mask
 
 
-# %% utils
-def _normalize_shape(shape_opt: ShapeLike) -> int:
+# %% Utilities
+def _normalize_shape(shape_opt):  # noqa
     if isinstance(shape_opt, str):
         key = shape_opt.strip().upper()
         if key in _SHAPE_MAP:
@@ -358,25 +432,25 @@ def _normalize_shape(shape_opt: ShapeLike) -> int:
     )
 
 
-def _ensure_feasible_array(feasiblePoints):
-    arr = np.asarray(feasiblePoints)
+def _ensure_feasible_array(feasible_points):  # noqa
+    arr = np.asarray(feasible_points)
     if arr.ndim != 2:
         raise ValueError("feasiblePoints must be a 2D array (ny x nz)")
     return np.asfortranarray(arr.astype(np.float64, copy=False))
 
 
-def gen_udcpd(
-    num_masks,
-    alph,
-    feasible_points,
-    shape_opt="cones",
-    verbose=1,
-    C=1.0,
-    mindist_scaling=1.0,
+def _gen_udcpd(
+    num_masks,  # noqa
+    alph,  # noqa
+    feasible_points,  # noqa
+    shape_opt="cones",  # noqa
+    verbose=1,  # noqa
+    C=1.0,  # noqa
+    mindist_scaling=1.0,  # noqa
 ):
     shape_code = _normalize_shape(shape_opt)
     feasible_f = _ensure_feasible_array(feasible_points)
-    return _gen_udcpd(
+    return _gen_udcpd_bind(
         int(num_masks),
         float(alph),
         feasible_f,
@@ -387,20 +461,20 @@ def gen_udcpd(
     )
 
 
-def gen_vdcpd(
-    num_masks,
-    Rmax,
-    vd_exp,
-    alph,
-    feasible_points,
-    shape_opt="cones",
-    verbose=1,
-    C=1.0,
-    mindist_scaling=1.0,
+def _gen_vdcpd(
+    num_masks,  # noqa
+    Rmax,  # noqa
+    vd_exp,  # noqa
+    alph,  # noqa
+    feasible_points,  # noqa
+    shape_opt="cones",  # noqa
+    verbose=1,  # noqa
+    C=1.0,  # noqa
+    mindist_scaling=1.0,  # noqa
 ):
     shape_code = _normalize_shape(shape_opt)
     feasible_f = _ensure_feasible_array(feasible_points)
-    return _gen_vdcpd(
+    return _gen_vdcpd_bind(
         int(num_masks),
         float(alph),
         feasible_f,

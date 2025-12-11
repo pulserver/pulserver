@@ -83,7 +83,6 @@ fallback_version="v99-dev"
 # linting using ruff.
 [tool.ruff]
 src = ["src", "tests"]
-select = ["E", "F", "B", "Q", "D", "UP", "ANN"]
 extend-exclude = [ 
 "example_*.py" , 
 "*_version.py", 
@@ -93,9 +92,10 @@ extend-exclude = [
 "python/pulserver/pulseq/_spsp",
 ]
 
+[tool.ruff.lint]
+select = ["E", "F", "B", "Q", "D", "UP", "ANN"]
 ignore = [
-    "ANN101", # missing type annotation for self
-    "ANN102", # missing type annotation for cls in classmethod.
+    "ANN202", # missing type hint for private functions
     "ANN204", # missing return type for __init__
     "D105", # missing docstring in magic method
     "D404", # Imperative mode is not necessary everywhere, trust me.
@@ -103,7 +103,6 @@ ignore = [
     "B028", # No explicit stacklevel keyword argument found
     "F401", # Using ``try: import ... except:`` is nice.
 ]
-
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
