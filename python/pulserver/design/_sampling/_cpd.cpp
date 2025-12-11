@@ -14,6 +14,9 @@ extern "C" {
 #include "cpdlib/vdcpd.h"
 }
 
+// verbose is defined in misc.c
+extern "C" int verbose;
+
 namespace py = pybind11;
 
 /*
@@ -61,13 +64,8 @@ py::array_t<int32_t> gen_udcpd_py(int nt,
     long dims[3];
     validate_and_build_dims(feasible_points_f, nt, dims, ny, nz);
 
-    // Optionally set global verbose if available
-    #ifdef HAVE_VERBOSE_GLOBAL
-    extern int verbose;
+    // Verbosity flag
     verbose = verbose_arg;
-    #else
-    (void)verbose_arg;
-    #endif
 
     const size_t feasiblePointsSize = static_cast<size_t>(ny) * static_cast<size_t>(nz);
     const double *feasible_ptr = feasible_points_f.data(); // Fortran-contiguous double buffer
@@ -132,13 +130,8 @@ py::array_t<int32_t> gen_vdcpd_py(int nt,
     long dims[3];
     validate_and_build_dims(feasible_points_f, nt, dims, ny, nz);
 
-    // Optionally set global verbose if available
-    #ifdef HAVE_VERBOSE_GLOBAL
-    extern int verbose;
+    // Verbosity flag
     verbose = verbose_arg;
-    #else
-    (void)verbose_arg;
-    #endif
 
     const size_t feasiblePointsSize = static_cast<size_t>(ny) * static_cast<size_t>(nz);
     const double *feasible_ptr = feasible_points_f.data(); // Fortran-contiguous double buffer
