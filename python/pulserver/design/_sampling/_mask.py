@@ -1,4 +1,5 @@
 """ """
+
 from __future__ import annotations
 
 __all__ = [
@@ -27,6 +28,7 @@ _SHAPE_MAP = {
     "CONES": 3,
     "PLANE_AND_CONES": 4,
 }
+
 
 def require(condition, msg):  # noqa
     if not condition:
@@ -59,7 +61,7 @@ def make_regular_sampling(
     -------
     mask : np.ndarray
         Regular-grid sampling mask of shape ``(ny,)``.
-        
+
     Examples
     --------
 
@@ -112,7 +114,7 @@ def make_caipirinha_sampling(
     -------
     mask : NDArray[int]
         Regular-grid sampling mask of shape ``(nz, ny)``.
-        
+
     Examples
     --------
 
@@ -125,7 +127,7 @@ def make_caipirinha_sampling(
     # Cast tuple to lists
     shape = list(shape)
     accel = list(accel)
-    
+
     # Validate input
     require(accel[0] >= 1, f"Ky acceleration must be >= 1, got {accel[0]}")
     require(accel[1] >= 1, f"Kz acceleration must be >= 1, got {accel[1]}")
@@ -232,7 +234,7 @@ def make_poisson_sampling(
     nt: int = 1,
     vd_exp: float = 1.0,
     shape_opt: ShapeLike = "L2_BALL",
-    mindist_scale: float = 1.0,
+    mindist_scaling: float = 1.0,
     C: float = 1.0,
     fov_ratio: float = 1.0,
     Rmax: float | None = None,
@@ -259,7 +261,7 @@ def make_poisson_sampling(
         Variable-density falloff exponent. Default ``1.0``.
     shape_opt : {'CROSS','L1_BALL','L2_BALL','CONES','PLANE_AND_CONES'}, optional
         CPD min-distance shape. Default ``'L2_BALL'``.
-    mindist_scale : float, optional
+    mindist_scaling : float, optional
         CPD min-distance scaling. Default ``1.0``.
     C : float, optional
         CPD dt_min / dky_min balance. For nt=1 it has little effect. Default ``1.0``.
@@ -275,22 +277,21 @@ def make_poisson_sampling(
     -------
     mask : np.ndarray
         Binary mask of shape ``(ny, nz, nt)`` (squeezed from CPD output).
-        
+
     Examples
     --------
-        
+
     Notes
     -----
     Based on https://github.com/evanlev/cpd/tree/master
 
     """
-    shape_code = _normalize_shape(shape_opt)
     if np.isscalar(shape):
         shape = [shape, shape]
-        
+
     # Build feasible region
     feasible_points = make_caipirinha_sampling(shape, accel)
-        
+
     # Define elliptical grid
     if elliptical:
         nz, ny = shape
@@ -307,7 +308,7 @@ def make_poisson_sampling(
 
         # cast tuple to list
         calib = list(calib)
-        
+
         # reverse (cz, cy)
         calib.reverse()
 
@@ -315,32 +316,26 @@ def make_poisson_sampling(
             shape[0] // 2 - calib[0] // 2 : shape[0] // 2 + calib[0] // 2,
             shape[1] // 2 - calib[1] // 2 : shape[1] // 2 + calib[1] // 2,
         ] = 0
-        
+
     if vardens:
         if Rmax is None:
             Rmax = np.prod(accel).item()
-        mask = _gen_vdcpd(
-            np.ascontiguousarray(feasible_points, dtype=np.int32),
-            nt=int(nt),
-            fov_ratio=float(fov_ratio),
-            C=float(C),
-            shape_opt=int(shape_code),
-            mindist_scale=float(mindist_scale),
-            vd_exp=float(vd_exp),
-            maxR=int(Rmax),
-            verbose=bool(verbose),
+        mask = gen_vdcpd(
+            nt,
+            Rmax,
+            vd_exp,
+            fov_ratio,
+            feasible_points,
+            shape_opt,
+            verbose,
+            C,
+            mindist_scaling,
         )
     else:
-        mask = _gen_udcpd(
-            np.ascontiguousarray(feasible_points, dtype=np.int32),
-            nt=int(nt),
-            fov_ratio=float(fov_ratio),
-            C=float(C),
-            shape_opt=int(shape_code),
-            mindist_scale=float(mindist_scale),
-            verbose=bool(verbose),
+        mask = gen_udcpd(
+            nt, fov_ratio, feasible_points, shape_opt, verbose, C, mindist_scaling
         )
-        
+
     # Re-insert calibration region
     if calib is not None:
         mask[
@@ -348,7 +343,7 @@ def make_poisson_sampling(
             shape[1] // 2 - calib[1] // 2 : shape[1] // 2 + calib[1] // 2,
             ...,
         ] = 1
-        
+
     return mask
 
 
@@ -360,4 +355,59 @@ def _normalize_shape(shape_opt: ShapeLike) -> int:
             return _SHAPE_MAP[key]
     raise ValueError(
         f"Unknown shape '{shape_opt}'. Expected one of: {', '.join(_SHAPE_MAP.keys())}"
+    )
+
+
+def _ensure_feasible_array(feasiblePoints):
+    arr = np.asarray(feasiblePoints)
+    if arr.ndim != 2:
+        raise ValueError("feasiblePoints must be a 2D array (ny x nz)")
+    return np.asfortranarray(arr.astype(np.float64, copy=False))
+
+
+def gen_udcpd(
+    num_masks,
+    alph,
+    feasible_points,
+    shape_opt="cones",
+    verbose=1,
+    C=1.0,
+    mindist_scaling=1.0,
+):
+    shape_code = _normalize_shape(shape_opt)
+    feasible_f = _ensure_feasible_array(feasible_points)
+    return _gen_udcpd(
+        int(num_masks),
+        float(alph),
+        feasible_f,
+        int(shape_code),
+        int(verbose),
+        float(C),
+        float(mindist_scaling),
+    )
+
+
+def gen_vdcpd(
+    num_masks,
+    Rmax,
+    vd_exp,
+    alph,
+    feasible_points,
+    shape_opt="cones",
+    verbose=1,
+    C=1.0,
+    mindist_scaling=1.0,
+):
+    shape_code = _normalize_shape(shape_opt)
+    feasible_f = _ensure_feasible_array(feasible_points)
+    return _gen_vdcpd(
+        int(num_masks),
+        float(alph),
+        feasible_f,
+        int(shape_code),
+        int(verbose),
+        float(C),
+        float(mindist_scaling),
+        float(Rmax),
+        float(vd_exp),
     )

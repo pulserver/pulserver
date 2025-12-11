@@ -110,6 +110,7 @@ zeroOutKTNeighborsf( double *cpdf, const long sample[],
                                 isZero = 1;
 
                             }
+                            break;
                         }
                         case L2_BALL:
                         {                            

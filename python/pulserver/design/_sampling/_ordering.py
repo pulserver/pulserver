@@ -229,7 +229,9 @@ def make_centerout_ordering_2d(
     return indexes
 
 
-def make_spiral_ordering_2d(n1: int, n2: int, inc: float, prune: bool = True) -> NDArray[int]:
+def make_spiral_ordering_2d(
+    n1: int, n2: int, inc: float, prune: bool = True
+) -> NDArray[int]:
     """
     Create a 2D spiral ordering array.
 
@@ -296,6 +298,7 @@ def make_spiral_ordering_2d(n1: int, n2: int, inc: float, prune: bool = True) ->
         return _prune_sampling(indexes)
 
     return indexes
+
 
 # %% Utilis
 def _prune_sampling(input: NDArray[int]) -> NDArray[int]:

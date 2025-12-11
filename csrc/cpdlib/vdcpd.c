@@ -67,7 +67,7 @@ void genVDCPD(const long dims[], int *pattern,
         /*
         */
         for( long ik = 0 ; ik < f_size ; ik++ ){
-            feasiblePointsReg[ik] = feasiblePoints[ik] && (region[ik] == reg);
+            feasiblePointsReg[ik] = (region[ik] == reg);
         }
         long dims_tmp[DIMS];
         for( unsigned int i = 0 ;i < DIMS ; i++ )
