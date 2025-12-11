@@ -79,7 +79,7 @@ def make_regular_sampling(
 
 
     """
-    require(accel < 1, f"Ky acceleration must be greater than 1, got {accel}")
+    require(accel >= 1, f"Ky acceleration must be >= 1, got {accel}")
 
     # Build mask
     mask = np.zeros(shape, dtype=int)
@@ -177,7 +177,7 @@ def make_caipirinha_sampling(
     r = np.sqrt((y / shape[-1]) ** 2 + (z / shape[-2]) ** 2) < 0.5
 
     if np.all(np.asarray(accel) == 1):
-        return np.ones(shape, dtype=bool)
+        return np.ones(shape, dtype=int)
 
     # Build mask
     rows, cols = np.mgrid[:nz, :ny]
@@ -262,7 +262,7 @@ def make_partial_fourier_sampling(shape: int, undersampling: float) -> NDArray[i
         )
 
     # Generate mask
-    mask = np.ones(shape, dtype=1)
+    mask = np.ones(shape, dtype=int)
 
     # Cut mask
     edge = np.floor(np.asarray(shape) * np.asarray(undersampling))
