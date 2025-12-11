@@ -9,18 +9,18 @@ outputs.
 
 import numpy as np
 
-import pulserver.design as pd
+import pulserver.tools as pt
 
 
 def test_make_interleaved_ordering_1d_even_odd():
-    ordering = pd.make_interleaved_ordering_1d(10, 2)
+    ordering = pt.make_interleaved_ordering_1d(10, 2)
     assert ordering.shape == (10,)
     expected = np.array([0, 2, 4, 6, 8, 1, 3, 5, 7, 9])
     assert np.array_equal(ordering, expected)
 
 
 def test_make_interleaved_ordering_1d_three_groups():
-    ordering = pd.make_interleaved_ordering_1d(9, 3)
+    ordering = pt.make_interleaved_ordering_1d(9, 3)
     assert ordering.shape == (9,)
     expected = np.array([0, 3, 6, 1, 4, 7, 2, 5, 8])
     assert np.array_equal(ordering, expected)
@@ -28,13 +28,13 @@ def test_make_interleaved_ordering_1d_three_groups():
 
 def test_make_centerout_ordering_1d_even_and_odd():
     # even length
-    out_even = pd.make_centerout_ordering_1d(10)
+    out_even = pt.make_centerout_ordering_1d(10)
     assert out_even.shape == (10,)
     # docstring example ordering for n1=10
     assert np.array_equal(out_even, np.array([5, 4, 6, 3, 7, 2, 8, 1, 9, 0]))
 
     # odd length should still include all indices exactly once
-    out_odd = pd.make_centerout_ordering_1d(7)
+    out_odd = pt.make_centerout_ordering_1d(7)
     assert out_odd.shape == (7,)
     assert set(out_odd.tolist()) == set(range(7))
 
@@ -45,7 +45,7 @@ def test_make_random_ordering_1d_is_permutation():
 
     # seed global numpy RNG to make function output deterministic if it uses global state
     np.random.seed(12345)
-    ordering = pd.make_random_ordering_1d(n)
+    ordering = pt.make_random_ordering_1d(n)
     
     assert ordering.shape == (n,)
     assert set(ordering.tolist()) == set(range(n))
@@ -58,7 +58,7 @@ def test_make_random_ordering_2d_is_permutation_and_shape():
     ny, nz = 8, 8
     np.random.seed(0)
     
-    ordering = pd.make_random_ordering_2d(ny, nz)
+    ordering = pt.make_random_ordering_2d(ny, nz)
     assert ordering.shape == (ny, nz)
     
     flat = ordering.ravel()
@@ -71,7 +71,7 @@ def test_make_random_ordering_2d_is_permutation_and_shape():
 def test_make_radial_ordering_2d_basic_properties():
     n1, n2 = 8, 4
     inc = np.deg2rad(45.0)
-    ordering = pd.make_radial_ordering_2d(n1, n2, inc, theta0=0.0, prune=True)
+    ordering = pt.make_radial_ordering_2d(n1, n2, inc, theta0=0.0, prune=True)
     # Should return 2D array with second axis == n2
     assert ordering.ndim == 2
     assert ordering.shape[1] == n2
@@ -86,7 +86,7 @@ def test_make_radial_ordering_2d_basic_properties():
 def test_make_centerout_ordering_2d_basic_properties():
     n1, n2 = 8, 4
     inc = np.deg2rad(90.0)
-    ordering = pd.make_centerout_ordering_2d(n1, n2, inc, theta0=0.0, prune=True)
+    ordering = pt.make_centerout_ordering_2d(n1, n2, inc, theta0=0.0, prune=True)
     assert ordering.ndim == 2
     assert ordering.shape[1] == n2
     assert ordering.min() >= 0
@@ -100,7 +100,7 @@ def test_make_centerout_ordering_2d_basic_properties():
 def test_make_spiral_ordering_2d_basic_properties():
     n1, n2 = 8, 2
     inc = np.deg2rad(180.0)
-    ordering = pd.make_spiral_ordering_2d(n1, n2, inc, prune=True)
+    ordering = pt.make_spiral_ordering_2d(n1, n2, inc, prune=True)
     assert ordering.ndim == 2
     assert ordering.shape[1] == n2
     # All values in valid range

@@ -8,7 +8,6 @@ requires = [
   "wheel",
 ]
 
-
 [project]
 name = "pulserver"
 description = "A PyPulseq-based client/server MR sequence design toolbox."
@@ -52,11 +51,11 @@ dependencies = [
 "ipywidgets",
 ]
 
-
 [project.optional-dependencies] # Optional
 dev = ["black", "isort"]
 test = ["pytest", "pytest-black", "pytest-cov", "pytest-sugar", "pytest-xdist"]
 doc = ["sphinx", "pydata-sphinx-theme", "myst-nb", "matplotlib", "sphinx-copybutton"]
+
 # List URLs that are relevant to your project
 # This field corresponds to the "Project-URL" and "Home-Page" metadata fields:
 [project.urls]  # Optional
