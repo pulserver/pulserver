@@ -1,6 +1,6 @@
 """Slice selection subroutine."""
 
-__all__ = []
+__all__ = ["as_spatial_selective"]
 
 from copy import copy, deepcopy
 from types import SimpleNamespace
@@ -11,10 +11,82 @@ import numpy as np
 from pypulseq import Opts
 from pypulseq.align import align
 from pypulseq.add_gradients import add_gradients
-from pypulseq.make_trapezoid import make_trapezoid
+from pypulseq.make_arbitrary_rf import make_arbitrary_rf
 from pypulseq.make_sinc_pulse import make_sinc_pulse
+from pypulseq.make_trapezoid import make_trapezoid
 from pypulseq.points_to_waveform import points_to_waveform
 from pypulseq.scale_grad import scale_grad
+
+from ._utils import verse
+
+
+def as_spatial_selective(
+        pulse: SimpleNamespace,
+        slice_thickness: float,
+        lobes: int = 1,
+        duration: Union[float, None] = None,
+        bandwidth: float = 0.0,
+        max_grad: float = 0.0,
+        max_slew: float = 0.0,
+        system: Union[Opts, None] = None,
+        time_bw_product: float = 0,
+        apodization: float = 0,
+) -> tuple[SimpleNamespace, SimpleNamespace] | SimpleNamespace:
+    """
+    Transform frequency selective pulse into slice selective pulse.
+
+    Parameters
+    ----------
+    pulse : SimpleNamespace
+        Input RF pulse event.
+    slice_thickness : float
+        DESCRIPTION.
+    lobes : int, optional
+        DESCRIPTION. The default is 1.
+    duration : Union[float, None], optional
+        DESCRIPTION. The default is None.
+    bandwidth : float, optional
+        DESCRIPTION. The default is 0.0.
+    max_grad : float, optional
+        DESCRIPTION. The default is 0.0.
+    max_slew : float, optional
+        DESCRIPTION. The default is 0.0.
+    system : Union[Opts, None], optional
+        DESCRIPTION. The default is None.
+    time_bw_product : float, optional
+        DESCRIPTION. The default is 0.
+    apodization : float, optional
+        DESCRIPTION. The default is 0.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
+    if lobes == 1 or duration == pulse.shape_dur:
+        return _as_spatial_selective(
+            pulse, 
+            slice_thickness,
+            bandwidth,
+            max_grad,
+            max_slew,
+            system,
+            time_bw_product
+            )
+    return _as_adiabatic_spatial_selective(
+        pulse, 
+        slice_thickness,
+        lobes,
+        duration,
+        bandwidth,
+        max_grad,
+        max_slew,
+        system,
+        time_bw_product,
+        apodization
+        )
+    
 
 def _as_spatial_selective(
         pulse: SimpleNamespace, 
@@ -157,13 +229,16 @@ def _as_adiabatic_spatial_selective(
         env_value = pulse.signal[idx]
         
         # Deep copy
-        rf_sub, gz_sub = deepcopy(rf_sub_base), deepcopy(gz_sub_base)
+        rf_sub = deepcopy(rf_sub_base)
 
         # Scale RF by envelope sample
         rf_sub.signal *= env_value
+        
+        # Verse the RF subpulse
+        rf_sub = verse(gz_sub_base, rf_sub)
 
         # Flip gradient polarity every other lobe
-        gz_sub = scale_grad(gz_sub, (-1)**ii)
+        gz_sub = scale_grad(gz_sub_base, (-1)**ii)
 
         # Store blocks
         rf_events.append(rf_sub)
@@ -173,23 +248,31 @@ def _as_adiabatic_spatial_selective(
     aligned_gz_events = align(right=gz_events)
 
     # Combine gradients into single block
-    gz_combined = add_gradients(gz_events, max_grad, max_slew, system)
+    gz_combined = add_gradients(aligned_gz_events, max_grad, max_slew, system)
     
-    # Get full gz_waveform
-    gz_waveform = points_to_waveform(gz_combined.waveform, system.grad_raster_time, gz_combined.tt)
-
     # Concatenate RF signals from all blocks
-    rf_combined = [points_to_waveform(rf.signal, system.rf_raster_time, rf.t) for rf in rf_events]
-    rf_combined = np.concatenate(rf_combined)
+    signal_combined = [points_to_waveform(rf.signal, system.rf_raster_time, rf.t) for rf in rf_events]
+    signal_combined = np.concatenate(signal_combined)
 
-    # Make final arbitrary RF block
-    # rf_block = pp.make_arbitrary_rf(
-    #     signal=rf_combined,
-    #     flip_angle=flip_angle,
-    #     return_gz=False,
-    #     system=system
-    # )
-
-    return rf_combined, gz_combined
+    # Pass to PyPulseq
+    return make_arbitrary_rf(
+        signal_combined, 
+        np.pi, # flip_angle, not used when no_signal_scaling=True
+        1e3, # bandwidth, not used w/o slice selection
+        pulse.delay,
+        dwell,
+        pulse.freq_offset,
+        True, # no_signal_scaling
+        0, # max_grad, not used w/o slice selection
+        0, # max_slew, not used w/o slice selection
+        pulse.phase_offset,
+        False, # return_gz
+        0, # slice_thickness
+        system,
+        1, # time bandwidth product, not used w/o slice selection
+        pulse.use,
+        pulse.freq_ppm,
+        pulse.phase_ppm
+        ), gz_combined
         
 

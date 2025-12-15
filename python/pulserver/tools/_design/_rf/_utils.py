@@ -1,17 +1,29 @@
+"""
+"""
 
+__all__ = ["verse"]
 
-# function rfv = versec(g,rf)
+from copy import deepcopy
 
-# [m n] = size(rf);
-# if m<n,
-#   rf = conj(rf');
-#   [m n] = size(rf);
-# end;
-# k = cumsum(g);
-# k = (m-1)*k/max(k);
-# rfv = [];
-# g = m*g/sum(g);
-# for j=1:n,
-#   rft = g.*interp1([0:m-1],rf(:,j),k);
-#   rfv = [rfv rft];
-# end;
+import numpy as np
+
+from numpy.typing import NDArray
+
+def verse(grad: NDArray[float], rf: NDArray[complex]) -> NDArray[complex]:
+    m = rf.size
+
+    # k = (m-1)*cumsum(g)/max(cumsum(g))
+    k = np.cumsum(grad)
+    k = (m - 1) * k / k.max()
+
+    # Normalize g: g = m*g/sum(g)
+    grad = m * deepcopy(grad) / grad.sum()
+
+    # Interpolate: interp1([0:m-1], rf, k)
+    x = np.arange(m)
+    interpolated = np.interp(k, x, rf)
+
+    # Multiply by g
+    rfv = grad * interpolated
+
+    return rfv
