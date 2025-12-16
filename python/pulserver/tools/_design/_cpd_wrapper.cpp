@@ -183,7 +183,7 @@ py::array_t<int32_t> gen_vdcpd_py(int nt,
 }
 
 
-PYBIND11_MODULE(_cpd, m) {
+PYBIND11_MODULE(_cpd_wrapper, m) {
     m.doc() = "pybind11 bindings for CPD (uniform and variable density)";
     
     m.def("gen_udcpd",

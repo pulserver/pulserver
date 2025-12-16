@@ -11,15 +11,16 @@ namespace py = pybind11;
 // Low-level wrapper that calls the C calc_vds function as-is.
 // Units follow the original C implementation (G/cm, G/cm/s, seconds, /cm).
 // Returns a dict with xgrad, ygrad (1D float64 arrays) and numgrad (int).
-py::dict calc_vds_raw(double slewmax,        // [G/cm/s]
-                      double gradmax,        // [G/cm]
-                      double Tgsample,       // [s]
-                      double Tdsample,       // [s]
-                      int    Ninterleaves,
-                      py::array_t<double, py::array::c_style | py::array::forcecast> fov_coeffs,
-                      double krmax,          // [/cm]
-                      int    ngmax)          // max gradient samples to allocate
-{
+py::dict calc_vds_raw(
+    double slewmax,        // [G/cm/s]
+    double gradmax,        // [G/cm]
+    double Tgsample,       // [s]
+    double Tdsample,       // [s]
+    int    Ninterleaves,
+    const py::array_t<double, py::array::c_style | py::array::forcecast> &fov_coeffs,
+    double krmax,          // [/cm]
+    int    ngmax           // max gradient samples to allocate
+) {
     // Validate inputs
     if (Ninterleaves <= 0) {
         throw std::invalid_argument("Ninterleaves must be > 0");
@@ -76,7 +77,7 @@ py::dict calc_vds_raw(double slewmax,        // [G/cm/s]
     return out;
 }
 
-PYBIND11_MODULE(_vds, m) {
+PYBIND11_MODULE(_vds_wrapper, m) {
     m.doc() = "Pybind11 wrapper for Hargreaves VDS (calc_vds) C implementation. "
               "This is a raw interface with original units (G/cm, G/cm/s).";
     m.def("calc_vds_raw", &calc_vds_raw,
@@ -87,42 +88,6 @@ PYBIND11_MODULE(_vds, m) {
           py::arg("Ninterleaves"),
           py::arg("fov"),
           py::arg("krmax"),
-          py::arg("ngmax"),
-          R"pbdoc(
-              Low-level VDS design. Calls the original C function calc_vds.
-
-              Parameters
-              ----------
-              slewmax : float
-                  Maximum slew rate [G/cm/s]
-              gradmax : float
-                  Maximum gradient amplitude [G/cm]
-              Tgsample : float
-                  Gradient sample period [s]
-              Tdsample : float
-                  Data (ADC) sample period [s]
-              Ninterleaves : int
-                  Number of spiral interleaves
-              fov : 1D array of float
-                  FOV polynomial coefficients (cm), c0 + c1*r + c2*r^2 + ...
-                  where r is normalized radius.
-              krmax : float
-                  Maximum k-space extent [/cm]
-              ngmax : int
-                  Maximum number of gradient samples
-
-              Returns
-              -------
-              dict
-                  {
-                      'xgrad': np.ndarray shape (numgrad,), dtype=float64  # [G/cm]
-                      'ygrad': np.ndarray shape (numgrad,), dtype=float64  # [G/cm]
-                      'numgrad': int
-                  }
-
-              Notes
-              -----
-              This is a thin wrapper. Unit conversion (e.g., to T/m or Hz/m) and
-              k-space/slew integration should be done in a higher-level Python adapter.
-          )pbdoc");
+          py::arg("ngmax")
+    );
 }

@@ -15,8 +15,8 @@ from typing import Literal
 import numpy as np
 from numpy.typing import NDArray
 
-from ._cpd import gen_udcpd as _gen_udcpd_bind
-from ._cpd import gen_vdcpd as _gen_vdcpd_bind
+from ._cpd_wrapper import gen_udcpd as _gen_udcpd_bind
+from ._cpd_wrapper import gen_vdcpd as _gen_vdcpd_bind
 
 ShapeStr = Literal['CROSS', 'L1_BALL', 'L2_BALL', 'CONES', 'PLANE_AND_CONES']
 ShapeLike = str | ShapeStr

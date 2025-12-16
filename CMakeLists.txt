@@ -11,25 +11,36 @@ find_package(Python COMPONENTS Development.Module REQUIRED)
 set(PYTHON_EXT_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/python/pulserver/tools/_design")
 
 # -------------------------
-# Helper function
+# Reliable pybind11 module helper
 # -------------------------
 function(add_pybind_module module_name output_subdir)
     set(options)
-    set(oneValueArgs SOURCES_GLOB)
-    set(multiValueArgs INCLUDES)
+    set(oneValueArgs)
+    set(multiValueArgs SOURCES INCLUDES)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    # Collect sources using GLOB
-    file(GLOB MODULE_SOURCES ${ARG_SOURCES_GLOB})
-
-    # Safety check
-    if(MODULE_SOURCES STREQUAL "")
-        message(FATAL_ERROR "No sources found for module '${module_name}' matching: ${ARG_SOURCES_GLOB}")
-    endif()
+    # Expand sources: support both explicit files and globs
+    set(MODULE_SOURCES_LIST "")
+    foreach(src_pattern IN LISTS ARG_SOURCES)
+        # If pattern contains '*', treat as glob
+        if("${src_pattern}" MATCHES "\\*")
+            file(GLOB EXPANDED ${src_pattern})
+            if(EXPANDED STREQUAL "")
+                message(FATAL_ERROR "Glob '${src_pattern}' for module '${module_name}' matched no files")
+            endif()
+            list(APPEND MODULE_SOURCES_LIST ${EXPANDED})
+        else()
+            if(NOT EXISTS ${src_pattern})
+                message(FATAL_ERROR "Source file '${src_pattern}' does not exist for module '${module_name}'")
+            endif()
+            list(APPEND MODULE_SOURCES_LIST ${src_pattern})
+        endif()
+    endforeach()
 
     # Create the pybind11 module
-    pybind11_add_module(${module_name} ${MODULE_SOURCES})
+    pybind11_add_module(${module_name} ${MODULE_SOURCES_LIST})
 
+    # Include directories
     target_include_directories(${module_name} PRIVATE ${ARG_INCLUDES})
 
     # Output directory
@@ -40,12 +51,14 @@ function(add_pybind_module module_name output_subdir)
 endfunction()
 
 # -------------------------
-# _cpd module (automatic sources)
+# _cpd module
 # -------------------------
-add_pybind_module(_cpd "" 
-    SOURCES_GLOB
-        "${CMAKE_SOURCE_DIR}/python/pulserver/tools/_design/_cpd.cpp"
-        "${CMAKE_SOURCE_DIR}/external/cpdlib/*.c"
+add_pybind_module(_cpd_wrapper "" 
+    SOURCES
+        "${CMAKE_SOURCE_DIR}/python/pulserver/tools/_design/_cpd_wrapper.cpp"
+        "${CMAKE_SOURCE_DIR}/external/cpdlib/misc.c"
+        "${CMAKE_SOURCE_DIR}/external/cpdlib/udcpd.c"
+        "${CMAKE_SOURCE_DIR}/external/cpdlib/vdcpd.c"
     INCLUDES
         ${CMAKE_SOURCE_DIR}/external
 )
@@ -53,10 +66,10 @@ add_pybind_module(_cpd ""
 # -------------------------
 # _vds module
 # -------------------------
-add_pybind_module(_vds "_grad"
-    SOURCES_GLOB
-        "${CMAKE_SOURCE_DIR}/python/pulserver/tools/_design/_grad/_vds.cpp"
-        "${CMAKE_SOURCE_DIR}/external/vds/*.c"
+add_pybind_module(_vds_wrapper "_grad"
+    SOURCES
+        "${CMAKE_SOURCE_DIR}/python/pulserver/tools/_design/_grad/_vds_wrapper.cpp"
+        "${CMAKE_SOURCE_DIR}/external/vds/vds.c"
     INCLUDES
         ${CMAKE_SOURCE_DIR}/external
         ${CMAKE_SOURCE_DIR}/python/pulserver/tools/_design/_grad
