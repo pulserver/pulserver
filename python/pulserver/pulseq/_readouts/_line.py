@@ -1,7 +1,7 @@
 """
 """
 
-__all__ = []
+__all__ = ["LineReadout2D"]
 
 
 from types import SimpleNamespace
@@ -9,15 +9,16 @@ from types import SimpleNamespace
 import numpy as np
 import pypulseq as pp
 
-from .base import calc_kspace_band_jump
+from ...tools import ISMRMRDBuilder
+
+from ._base import calc_kspace_band_jump
 
 
 class LineReadout2D:
-
     def __init__(
         self,
-        fov: float | tuple[float],
-        npix: int | tuple[int],
+        fov: tuple[float],
+        npix: tuple[int],
         oversamp: float = 1.0,
         receive_bandwidth: float = 250.0,
         lbl: str = 'lin',
@@ -26,21 +27,27 @@ class LineReadout2D:
         net_area: float = 0.0,
         system: pp.Opts | None = None,
     ):
-        if np.isscalar(fov):
-            fov_read, fov_phase = fov, fov
-        else:
-            fov_read, fov_phase = fov
-        if np.isscalar(npix):
-            npix_read, npix_phase = npix, npix
-        else:
-            npix_read, npix_phase = npix
+        fov_read, fov_phase = fov
+        npix_read, npix_phase = npix
         if system is None:
             self.system = pp.Opts.default
         else:
             self.system = system
+            
+        # Compute number of samples
+        num_samples = int(np.ceil(oversamp * npix_read))
+        
+        # Compute readout duration based on number of samples and receive bandwidth
+        dwell_time = 1.0 / (2.0 * receive_bandwidth * 1e3)
+        
+        # Round to nearest multiple of ADC raster time
+        dwell_time = self.system.adc_raster_time * np.ceil(dwell_time / self.system.adc_raster_time)
+        dwell_time = dwell_time.item()
+        t_read = dwell_time * num_samples
 
         # Compute frequency encoding area
-
+        kr_area = npix_read / fov_read
+        
         # Compute phase encoding area and scalings
         kp_area, self.kp_scaling = calc_kspace_band_jump(fov_phase, npix_phase)
 
