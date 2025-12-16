@@ -52,7 +52,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies] # Optional
-dev = ["black", "isort"]
+dev = ["ruff", "isort"]
 test = ["pytest", "pytest-black", "pytest-cov", "pytest-sugar", "pytest-xdist"]
 doc = ["sphinx", "pydata-sphinx-theme", "myst-nb", "matplotlib", "sphinx-copybutton"]
 
@@ -76,12 +76,10 @@ version_scheme = "python-simplified-semver"
 local_scheme="no-local-version"
 fallback_version="v99-dev"
 
-# Formatting using black.
-[tool.black]
-
-# linting using ruff.
+# Formatting and linting using ruff.
 [tool.ruff]
 src = ["src", "tests"]
+line-length = 120
 extend-exclude = [ 
 "example_*.py" , 
 "*_version.py", 
@@ -92,22 +90,61 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "B", "Q", "D", "UP", "ANN"]
-ignore = [
-    "ANN202", # missing type hint for private functions
-    "ANN204", # missing return type for __init__
-    "D105", # missing docstring in magic method
-    "D404", # Imperative mode is not necessary everywhere, trust me.
-    "B905", # zip() without an explicit strict= parameter
-    "B028", # No explicit stacklevel keyword argument found
-    "F401", # Using ``try: import ... except:`` is nice.
+select = [
+  "A",   # flake8-builtins
+  "ARG", # flake8-unused-arguments
+  "B",   # flake8-bugbear
+  "C4",  # flake8-comprehensions
+  "COM", # flake8-commas
+  # "D",   # pydocstyle
+  # "E",   # pycodestyle errors
+  "F", # Pyflakes
+  # "FA", # flake8-future-annotations
+  "I", # isort
+  # "N",   # pep8-naming
+  "NPY", # NumPy-specific rules
+  "RUF", # Ruff-specific rules
+  "S",   # flake8-bandit
+  "SIM", # flake8-simplify
+  # "UP",  # pyupgrade
+  "PIE", # flake8-pie
+  "PTH", # flake8-use-pathlib
+  "Q",   # flake8-quotes
+  "W",   # pycodestyle warnings
+  "YTT", # flake8-2020
+  # "ERA", # flake8-eradicate
 ]
+
+ignore = [
+  "B028",   #  explicit "stacklevel" arg in warnings
+  "COM812", #  missing-trailing-comma (conflict with formatter)
+  "PTH123", #  use of Path.open
+  "S101",   #  use of assert
+  "S307",   #  use of possibly insecure eval function
+  "S311",   #  standard pseudo-random generators
+  "S324",   #  insecure hash function
+  "SIM108", #  if-else-block-instead-of-if-exp
+  "SIM115", #  use of context manager
+]
+
+[tool.isort]
+profile="black"
+force-single-line = false
+split-on-trailing-comma = false
+
+[tool.ruff.lint.flake8-quotes]
+docstring-quotes = "double"
+inline-quotes = "single"
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
-[tool.isort]
-profile="black"
+[tool.ruff.format]
+quote-style = "single"
+skip-magic-trailing-comma = false
+
+[tool.typos.default]
+locale = "en-us"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -126,3 +163,9 @@ live_mode = false
 
 [tool.mypy]
 ignore_missing_imports = true
+
+[tool.codespell]
+# Ref: https://github.com/codespell-project/codespell#using-a-config-file
+skip = '.git*'
+check-hidden = true
+ignore-words-list = 'te,fo,nd,maked,datas,iten,itel,tread'

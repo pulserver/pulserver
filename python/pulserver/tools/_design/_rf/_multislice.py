@@ -4,6 +4,7 @@ import numpy as np
 
 from ._slr import dzrf
 
+
 def dz_pins(
     sl_sep,
     sl_thick,
@@ -46,10 +47,10 @@ def dz_pins(
     """
 
     kz_width = tb / sl_thick  # 1/cm, width in k-space we must go
-    
+
     # calculate number of subpulses (odd)
     n_pulses = int(2 * np.floor(np.ceil(kz_width / (1 / sl_sep)) / 2))
-    
+
     # call SLR to get envelope
     rf_soft = dzrf(n_pulses, tb, ptype, ftype, d1, d2)
 

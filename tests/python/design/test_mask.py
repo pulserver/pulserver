@@ -32,9 +32,7 @@ def test_make_regular_sampling_with_calib():
 
 def test_make_caipirinha_sampling_basic_and_shift():
     # Basic CAIPIRINHA sampling on an 8x8 grid with R=(2,2)
-    m = pt.make_caipirinha_sampling(
-        (8, 8), accel=(2, 2), shift=0, elliptical=False
-    )
+    m = pt.make_caipirinha_sampling((8, 8), accel=(2, 2), shift=0, elliptical=False)
     assert m.shape == (8, 8)
     # For 2x2 acceleration on 8x8 regular grid we expect 8*8/(2*2) = 16 samples
     assert int(np.sum(m)) == 16

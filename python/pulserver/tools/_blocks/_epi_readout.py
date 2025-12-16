@@ -1,15 +1,12 @@
 """ """
 
-__all__ = ["make_epi_readout"]
+__all__ = ['make_epi_readout']
 
 import copy
-
 from typing import Union
 
 import numpy as np
-
 import pypulseq as pp
-
 from pypulseq import Opts
 
 from ._utils import find_gx_flat_time_on_adc_raster
@@ -55,9 +52,9 @@ def make_epi_readout(
 
     # Build readout
     if ramp_sampling:
-        gread = pp.make_trapezoid(channel="x", duration=duration, area=kx_area)
+        gread = pp.make_trapezoid(channel='x', duration=duration, area=kx_area)
     else:
-        gread = pp.make_trapezoid("x", flat_time=duration, flat_area=kx_area)
+        gread = pp.make_trapezoid('x', flat_time=duration, flat_area=kx_area)
 
     # Get blip area
     delta_ky = 1 / fov_y  # Base density for given fov
@@ -70,25 +67,25 @@ def make_epi_readout(
     else:
         blip_delay = gread.rise_time + gread.flat_time
     gblip, _, _ = pp.make_extended_trapezoid_area(
-        channel="y", area=ky_blip_area, grad_start=0.0, grad_end=0.0
+        channel='y', area=ky_blip_area, grad_start=0.0, grad_end=0.0
     )
     gblip.delay = blip_delay
 
     # Build prewinder
     gx_prew, _, _ = pp.make_extended_trapezoid_area(
-        channel="x", area=-0.5 * gread.area, grad_start=0.0, grad_end=0.0
+        channel='x', area=-0.5 * gread.area, grad_start=0.0, grad_end=0.0
     )
-    gx_rew = pp.scale_grad(gx_prew, scale=(-1) ** (num_readouts_per_shot + 1))
+    pp.scale_grad(gx_prew, scale=(-1) ** (num_readouts_per_shot + 1))
 
     gy_prew, _, _ = pp.make_extended_trapezoid_area(
-        channel="y", area=-ky_area, grad_start=0.0, grad_end=0.0
+        channel='y', area=-ky_area, grad_start=0.0, grad_end=0.0
     )
-    gy_rew = copy.deepcopy(gy_prew)
+    copy.deepcopy(gy_prew)
 
     # Find scalings
     y_scale = np.arange(-Ny // 2, Ny // 2, Ry) / Ny
-    gprew_scale = y_scale[::num_readouts_per_shot]
-    grew_scale = np.roll(y_scale, -num_readouts_per_shot)[::num_readouts_per_shot]
+    y_scale[::num_readouts_per_shot]
+    np.roll(y_scale, -num_readouts_per_shot)[::num_readouts_per_shot]
 
     # Build ADC
     if ramp_sampling:

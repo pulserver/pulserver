@@ -18,7 +18,6 @@ import logging
 
 import numpy as np
 import pypulseq as pp
-
 from pypulseq.opts import Opts
 
 
@@ -75,23 +74,23 @@ def bSSFP3D(
 
     # RF
     flip_angle = np.deg2rad(flip_angle_deg)
-    phase_inc = np.deg2rad(phase_inc_deg)
+    np.deg2rad(phase_inc_deg)
 
     # ADC dwell time
     adc_dwell_time = 1e-3 / (2.0 * rbw)  # seconds
     readout_dur = Nsamples * adc_dwell_time
 
     # RF parameters
-    rf_dur = params.get("rf_dur", 600.0e-6)  # seconds
-    rf_tbw = params.get("rf_tbw", 1.5)  # time-bandwidth product
+    rf_dur = params.get('rf_dur', 600.0e-6)  # seconds
+    rf_tbw = params.get('rf_tbw', 1.5)  # time-bandwidth product
 
     # set system limits (converted to pypulseq naming)
     if system is None:
         system = Opts(
             max_grad=30,  # mT/m
-            grad_unit="mT/m",
+            grad_unit='mT/m',
             max_slew=140,  # mT/m/ms  (1 T/m/s == 1 mT/m/ms)
-            slew_unit="T/m/s",
+            slew_unit='T/m/s',
             rf_ringdown_time=20e-6,
             rf_dead_time=100e-6,
             adc_dead_time=20e-6,
@@ -112,7 +111,7 @@ def bSSFP3D(
 
     # Readout gradient: flat area = Nx * deltak, flat time = adc duration
     gx = pp.make_trapezoid(
-        channel="x", flat_area=Nx * deltakx, flat_time=readout_dur, system=system
+        channel='x', flat_area=Nx * deltakx, flat_time=readout_dur, system=system
     )
 
     # ADC event synchronized to readout gradient
@@ -121,8 +120,8 @@ def bSSFP3D(
     )
 
     # Prephaser to move the echo to center
-    gx_pre = pp.make_trapezoid(channel="x", area=-gx.area / 2.0, system=system)
-    gx_rew = copy.deepcopy(gx_pre)
+    gx_pre = pp.make_trapezoid(channel='x', area=-gx.area / 2.0, system=system)
+    copy.deepcopy(gx_pre)
 
     # min TR
     minTE = (
@@ -131,12 +130,12 @@ def bSSFP3D(
         + 0.5 * pp.calc_duration(gx, adc)
     )
     minTR = 2 * minTE
-    if TR < minTR:
+    if minTR > TR:
         logging.warning(
-            f"Minimum TR {minTR*1e3:.2f} ms is shorter than requested {TR*1e3:.2f} ms"
+            f'Minimum TR {minTR*1e3:.2f} ms is shorter than requested {TR*1e3:.2f} ms'
         )
         TR = minTR
-        logging.warning(f"New TR is {TR*1e3:.2f} ms")
+        logging.warning(f'New TR is {TR*1e3:.2f} ms')
 
     # Computing TE
     TE = 0.5 * TR
@@ -154,8 +153,8 @@ def bSSFP3D(
         delay = None
 
     # Phase encode areas
-    y_phase_areas = (np.arange(Ny) - Ny / 2.0) * deltaky
-    z_phase_areas = (np.arange(Nz) - Nz / 2.0) * deltakz
+    (np.arange(Ny) - Ny / 2.0) * deltaky
+    (np.arange(Nz) - Nz / 2.0) * deltakz
 
     # Initialize sequence object
     seq = pp.Sequence(system)
@@ -174,7 +173,7 @@ def bSSFP3D(
         0.0,
         (
             TR / 2.0 - pp.calc_duration(gz)
-            if hasattr(pp, "calc_duration")
+            if hasattr(pp, 'calc_duration')
             else max(0.0, TR / 2.0 - gz_dur)
         ),
     )
@@ -200,16 +199,16 @@ def bSSFP3D(
         # phase-encode gradient for first half-block (undo previous PE)
         if i == 0:
             gy_pre_prev = pp.make_trapezoid(
-                channel="y", area=phase_areas[0], system=system
+                channel='y', area=phase_areas[0], system=system
             )
         else:
             gy_pre_prev = pp.make_trapezoid(
-                channel="y", area=phase_areas[i - 1], system=system
+                channel='y', area=phase_areas[i - 1], system=system
             )
 
         # current PE step
         gy = pp.make_trapezoid(
-            channel="y", area=phase_areas[i], system=system, duration=gx_dur
+            channel='y', area=phase_areas[i], system=system, duration=gx_dur
         )
 
         # RF + slice selection + previous PE (first TR-part)

@@ -1,16 +1,16 @@
 """Base Shinnar-LeRoux pulse design."""
 
-__all__ = ["design_slr_pulse"]
+__all__ = ['design_slr_pulse']
 
 from types import SimpleNamespace
 from typing import Union
 
 import numpy as np
 import scipy.signal
-
+from pypulseq import make_arbitrary_rf
 from pypulseq.opts import Opts
 from pypulseq.supported_labels_rf_use import get_supported_rf_uses
-from pypulseq import make_arbitrary_rf
+
 
 def design_slr_pulse(
     flip_angle: float,
@@ -26,7 +26,7 @@ def design_slr_pulse(
     use: str = 'undefined',
     freq_ppm: float = 0,
     phase_ppm: float = 0,
-    filter_type: str = "ls",
+    filter_type: str = 'ls',
     passband_ripple_lvl: float = 0.01,
     stopband_ripple_lvl: float = 0.01,
     cancel_alpha_phs: bool = False,
@@ -65,7 +65,7 @@ def design_slr_pulse(
         PPM phase offset.
     filter_type : str, default="ls"
         Type of filter to use: ``"ms"`` (sinc),
-        ``"pm``, (Parks-McClellan equal-ripple), 
+        ``"pm``, (Parks-McClellan equal-ripple),
         ``"min"`` (minphase using factored pm),
         ``"max"`` (maxphase using factored pm), ``"ls"`` (least squares).
     passband_ripple_lvl : float, default=0.01
@@ -75,20 +75,20 @@ def design_slr_pulse(
     cancel_alpha_phs : bool, default=False
         For 'ex' pulses, absorb the alpha phase
         profile from beta's profile, so they cancel for a flatter
-        total phase. 
+        total phase.
 
     Returns
     -------
     NDArray[complex]
         Radio-frequency pulse event with Shinnar-LeRoux pulse shape.
-        
+
     Reference
     ---------
     Pauly, J., Le Roux, Patrick., Nishimura, D., and Macovski, A.(1991).
         Parameter Relations for the Shinnar-LeRoux Selective Excitation
         Pulse Design Algorithm.
         IEEE Transactions on Medical Imaging, Vol 10, No 1, 53-65.
-        
+
     Notes
     -----
     Adapted from https://github.com/mikgroup/sigpy/blob/main/sigpy/mri/rf/slr.py
@@ -99,7 +99,9 @@ def design_slr_pulse(
 
     valid_pulse_uses = get_supported_rf_uses()
     if use != '' and use not in valid_pulse_uses:
-        raise ValueError(f'Invalid use parameter. Must be one of {valid_pulse_uses}. Passed: {use}')
+        raise ValueError(
+            f'Invalid use parameter. Must be one of {valid_pulse_uses}. Passed: {use}'
+        )
 
     if dwell == 0:
         dwell = system.rf_raster_time
@@ -107,80 +109,84 @@ def design_slr_pulse(
     if bandwidth == 0 and time_bw_product == 0:
         raise ValueError('User must provide bandwidth or time-bandwidth product.')
     if bandwidth != 0 and time_bw_product != 0:
-        raise ValueError('User must provide either bandwidth or time-bandwidth product, not both.')
+        raise ValueError(
+            'User must provide either bandwidth or time-bandwidth product, not both.'
+        )
     if bandwidth == 0:
         bandwidth = time_bw_product / duration
     else:
         time_bw_product = bandwidth * duration
-    
+
     # Calculate number of samples
     n_samples = round(duration / dwell)
-    
+
     # Calculate envelope
     signal = dzrf(
-        n_samples, 
-        time_bw_product, 
-        use2ptype(use), 
-        filter_type, 
-        passband_ripple_lvl, 
-        stopband_ripple_lvl, 
-        cancel_alpha_phs
-        )
-    
+        n_samples,
+        time_bw_product,
+        use2ptype(use),
+        filter_type,
+        passband_ripple_lvl,
+        stopband_ripple_lvl,
+        cancel_alpha_phs,
+    )
+
     # Pass to PyPulseq
     return make_arbitrary_rf(
-        signal, 
+        signal,
         flip_angle,
         bandwidth,
         delay,
         dwell,
         freq_offset,
-        False, # no_signal_scaling
-        0, # max_grad, not used w/o slice selection
-        0, # max_slew, not used w/o slice selection
+        False,  # no_signal_scaling
+        0,  # max_grad, not used w/o slice selection
+        0,  # max_slew, not used w/o slice selection
         phase_offset,
-        False, # return_gz
-        0, # slice_thickness
+        False,  # return_gz
+        0,  # slice_thickness
         system,
         time_bw_product,
         use,
         freq_ppm,
-        phase_ppm
-        )
-    
+        phase_ppm,
+    )
+
+
 # %% Utils
 def use2ptype(use, flip_angle):
-    small_tip = np.rad2deg(flip_angle) <= 45.0        
+    small_tip = np.rad2deg(flip_angle) <= 45.0
     if use == 'refocusing':
         return 'se'
     if use == 'preparation' or use == 'inversion':
         return 'inv'
-    
+
     # excitation, other and undefined
     if small_tip:
         return 'st'
     return 'ex'
 
-def dzrf(n, tb, ptype, ftype, d1, d2, cancel_alpha_phs): # noqa
+
+def dzrf(n, tb, ptype, ftype, d1, d2, cancel_alpha_phs):
     bsf, d1, d2 = calc_ripples(ptype, d1, d2)
 
-    if ftype == "ms":  # sinc
+    if ftype == 'ms':  # sinc
         b = msinc(n, tb / 4)
-    elif ftype == "pm":  # linphase
+    elif ftype == 'pm':  # linphase
         b = dzlp(n, tb, d1, d2)
-    elif ftype == "min":  # minphase
+    elif ftype == 'min':  # minphase
         b = dzmp(n, tb, d1, d2)
         b = b[::-1]
-    elif ftype == "max":  # maxphase
+    elif ftype == 'max':  # maxphase
         b = dzmp(n, tb, d1, d2)
-    elif ftype == "ls":  # least squares
+    elif ftype == 'ls':  # least squares
         b = dzls(n, tb, d1, d2)
     else:
         raise Exception('Filter type ("{}") is not recognized.'.format(ftype))
 
-    if ptype == "st":
+    if ptype == 'st':
         rf = b
-    elif ptype == "ex":
+    elif ptype == 'ex':
         b = bsf * b
         rf = b2rf(b, cancel_alpha_phs)
     else:
@@ -189,22 +195,23 @@ def dzrf(n, tb, ptype, ftype, d1, d2, cancel_alpha_phs): # noqa
 
     return rf
 
-def calc_ripples(ptype, d1, d2): # noqa
-    if ptype == "st":
+
+def calc_ripples(ptype, d1, d2):
+    if ptype == 'st':
         bsf = 1
-    elif ptype == "ex":
+    elif ptype == 'ex':
         bsf = np.sqrt(1 / 2)
         d1 = np.sqrt(d1 / 2)
         d2 = d2 / np.sqrt(2)
-    elif ptype == "se":
+    elif ptype == 'se':
         bsf = 1
         d1 = d1 / 4
         d2 = np.sqrt(d2)
-    elif ptype == "inv":
+    elif ptype == 'inv':
         bsf = 1
         d1 = d1 / 8
         d2 = np.sqrt(d2 / 2)
-    elif ptype == "sat":
+    elif ptype == 'sat':
         bsf = np.sqrt(1 / 2)
         d1 = d1 / 2
         d2 = np.sqrt(d2)
@@ -214,7 +221,7 @@ def calc_ripples(ptype, d1, d2): # noqa
     return bsf, d1, d2
 
 
-def dzls(n, tb, d1, d2): # noqa
+def dzls(n, tb, d1, d2):
     di = dinf(d1, d2)
     w = di / tb
     f = np.asarray([0, (1 - w) * (tb / 2), (1 + w) * (tb / 2), (n / 2)])
@@ -224,7 +231,7 @@ def dzls(n, tb, d1, d2): # noqa
 
     # Create filter
     h = scipy.signal.firls(n + 1, f, m, weight=w)
-    
+
     # Shift the filter half a sample to make it symmetric, like in MATLAB
     c = np.exp(
         1j
@@ -241,7 +248,7 @@ def dzls(n, tb, d1, d2): # noqa
     return h
 
 
-def dzmp(n, tb, d1, d2): # noqa
+def dzmp(n, tb, d1, d2):
     n2 = 2 * n - 1
     di = 0.5 * dinf(2 * d1, 0.5 * d2 * d2)
     w = di / tb
@@ -256,11 +263,11 @@ def dzmp(n, tb, d1, d2): # noqa
     return h
 
 
-def fmp(h): # noqa
+def fmp(h):
     ll = h.size
     lp = 128 * np.exp(np.ceil(np.log(ll) / np.log(2)) * np.log(2))
     padwidths = np.asarray([np.ceil((lp - ll) / 2), np.floor((lp - ll) / 2)])
-    hp = np.pad(h, padwidths.astype(int), "constant")
+    hp = np.pad(h, padwidths.astype(int), 'constant')
     hpf = np.fft.fft(hp)
     hpfs = hpf - np.min(np.real(hpf)) * 1.000001
     hpfmp = mag2mp(np.sqrt(np.abs(hpfs)))
@@ -270,7 +277,7 @@ def fmp(h): # noqa
     return hmp
 
 
-def dzlp(n, tb, d1, d2): # noqa
+def dzlp(n, tb, d1, d2):
     di = dinf(d1, d2)
     w = di / tb
     f = np.asarray([0, (1 - w) * (tb / 2), (1 + w) * (tb / 2), (n / 2)]) / n
@@ -283,27 +290,29 @@ def dzlp(n, tb, d1, d2): # noqa
     return h
 
 
-def msinc(n, m): # noqa
+def msinc(n, m):
     x = np.arange(-n / 2, n / 2, 1) / (n / 2)
     snc = np.sin(m * 2 * np.pi * x + 0.00001) / (m * 2 * np.pi * x + 0.00001)
-    
+
     ms = snc * (0.54 + 0.46 * np.cos(np.pi * x))
     ms = ms * 4 * m / n
 
     return ms
 
 
-def b2rf(b, cancel_alpha_phs=False): # noqa
+def b2rf(b, cancel_alpha_phs=False):
     a = b2a(b)
     if cancel_alpha_phs:
-        b_a_phase = np.fft.fft(b) * np.exp(-1j * np.angle(np.fft.fft(a[np.size(a)::-1])))
+        b_a_phase = np.fft.fft(b) * np.exp(
+            -1j * np.angle(np.fft.fft(a[np.size(a) :: -1]))
+        )
         b = np.fft.ifft(b_a_phase)
     rf = ab2rf(a, b)
 
     return rf
 
 
-def b2a(b): # noqa
+def b2a(b):
     n = np.size(b)
     npad = n * 16
     bcp = np.zeros(npad, dtype=np.complex128)
@@ -320,15 +329,13 @@ def b2a(b): # noqa
     return a
 
 
-def mag2mp(x): # noqa
+def mag2mp(x):
     n = x.size
     xl = np.log(np.abs(x))  # Log of mag spectrum
     xlf = np.fft.fft(xl)
     xlfp = xlf
     xlfp[0] = xlf[0]  # Keep DC the same
-    xlfp[1 : (n // 2) : 1] = (
-        2 * xlf[1 : (n // 2) : 1]
-    )  # Double positive frequencies
+    xlfp[1 : (n // 2) : 1] = 2 * xlf[1 : (n // 2) : 1]  # Double positive frequencies
     xlfp[n // 2] = xlf[n // 2]  # keep half Nyquist the same
     xlfp[n // 2 + 1 : n : 1] = 0  # zero negative frequencies
     xlaf = np.fft.ifft(xlfp)
@@ -337,7 +344,7 @@ def mag2mp(x): # noqa
     return a
 
 
-def ab2rf(a, b): # noqa
+def ab2rf(a, b):
     n = a.size
     rf = np.zeros(n, dtype=np.complex128)
 
@@ -361,7 +368,7 @@ def ab2rf(a, b): # noqa
     return rf
 
 
-def dinf(d1, d2): # noqa
+def dinf(d1, d2):
     a1 = 5.309e-3
     a2 = 7.114e-2
     a3 = -4.761e-1
@@ -372,6 +379,8 @@ def dinf(d1, d2): # noqa
     l10d1 = np.log10(d1)
     l10d2 = np.log10(d2)
 
-    d = (a1 * l10d1 * l10d1 + a2 * l10d1 + a3) * l10d2 + (a4 * l10d1 * l10d1 + a5 * l10d1 + a6)
+    d = (a1 * l10d1 * l10d1 + a2 * l10d1 + a3) * l10d2 + (
+        a4 * l10d1 * l10d1 + a5 * l10d1 + a6
+    )
 
     return d

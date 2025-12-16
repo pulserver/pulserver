@@ -208,7 +208,7 @@ License:
 
 """
 
-__all__ = ["find_gx_flat_time_on_adc_raster"]
+__all__ = ['find_gx_flat_time_on_adc_raster']
 
 import numpy as np
 
@@ -279,7 +279,7 @@ def find_gx_flat_time_on_adc_raster(
             adc_dwell_time_larger = float(n * adc_raster_time)
             break
     if adc_dwell_time_larger is None and adc_dwell_time_smaller is None:
-        raise ValueError("No adc_dwell_time found within search range.")
+        raise ValueError('No adc_dwell_time found within search range.')
 
     # Select value which is closer to original adc_dwell_time
     if adc_dwell_time_smaller is None and adc_dwell_time_larger is not None:

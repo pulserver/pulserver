@@ -1,13 +1,13 @@
 """Sampling ordering generation routines."""
 
 __all__ = [
-    "make_interleaved_ordering_1d",
-    "make_centerout_ordering_1d",
-    "make_random_ordering_1d",
-    "make_radial_ordering_2d",
-    "make_centerout_ordering_2d",
-    "make_spiral_ordering_2d",
-    "make_random_ordering_2d",
+    'make_interleaved_ordering_1d',
+    'make_centerout_ordering_1d',
+    'make_random_ordering_1d',
+    'make_radial_ordering_2d',
+    'make_centerout_ordering_2d',
+    'make_spiral_ordering_2d',
+    'make_random_ordering_2d',
 ]
 
 import numpy as np
@@ -233,8 +233,8 @@ def make_centerout_ordering_2d(
      [36 28 20 12]
      [36 35 34 33]]
 
-    First line represent the flattened indexes for the positive ``x`` axis 
-    of a ``(8, 8)`` matrix, the second the indexes for the positive ``y``, 
+    First line represent the flattened indexes for the positive ``x`` axis
+    of a ``(8, 8)`` matrix, the second the indexes for the positive ``y``,
     third is negative ``x`` axis and last is negative ``y`` axis.
 
     """
@@ -286,7 +286,7 @@ def make_spiral_ordering_2d(
     >>> import pulserver.design as pd
 
     Suppose we have ``(8, 8)`` encoding matrix size (e.g., in ``(ky, kz)`` plane),
-    and we want to arrange the samples in 2 Cartesian spiral shots, 
+    and we want to arrange the samples in 2 Cartesian spiral shots,
     with linear increment:
 
     >>> nencodes = 8

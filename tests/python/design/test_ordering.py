@@ -46,10 +46,10 @@ def test_make_random_ordering_1d_is_permutation():
     # seed global numpy RNG to make function output deterministic if it uses global state
     np.random.seed(12345)
     ordering = pt.make_random_ordering_1d(n)
-    
+
     assert ordering.shape == (n,)
     assert set(ordering.tolist()) == set(range(n))
-    
+
     # ordering should not be the trivial sorted order in general
     assert not np.array_equal(ordering, np.arange(n))
 
@@ -57,13 +57,13 @@ def test_make_random_ordering_1d_is_permutation():
 def test_make_random_ordering_2d_is_permutation_and_shape():
     ny, nz = 8, 8
     np.random.seed(0)
-    
+
     ordering = pt.make_random_ordering_2d(ny, nz)
     assert ordering.shape == (ny, nz)
-    
+
     flat = ordering.ravel()
     assert set(flat.tolist()) == set(range(ny * nz))
-    
+
     # Each position picked exactly once
     assert len(flat) == len(np.unique(flat))
 

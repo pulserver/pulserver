@@ -1,13 +1,13 @@
 """
 """
 
-__all__ = ["verse"]
+__all__ = ['verse']
 
 from copy import deepcopy
 
 import numpy as np
-
 from numpy.typing import NDArray
+
 
 def verse(grad: NDArray[float], rf: NDArray[complex]) -> NDArray[complex]:
     m = rf.size

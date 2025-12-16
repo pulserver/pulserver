@@ -6,8 +6,8 @@ __all__ = []
 from types import SimpleNamespace
 
 import numpy as np
-
 from numpy.typing import NDArray
+
 
 def calc_kspace_line_jump(
     fov: float,
@@ -61,7 +61,7 @@ def calc_kspace_line_jump(
         Signed scaling factors for each intra-readout phase-encoding blip.
         Each entry represents the fraction of ``max_blip_area`` required
         to move from one readout sample to the next.
-        
+
     Examples
     --------
     >>> fov = 0.22  # meters
@@ -88,8 +88,8 @@ def calc_kspace_line_jump(
     center = 0.5 * (indexes.min() + indexes.max())
 
     # Relative ky positions of first and last readout
-    kp_rel_start = (indexes[0]  - center) * delta_k
-    kp_rel_end   = (indexes[-1] - center) * delta_k
+    kp_rel_start = (indexes[0] - center) * delta_k
+    kp_rel_end = (indexes[-1] - center) * delta_k
 
     # Intra-readout jumps
     jumps = np.diff(indexes)
@@ -100,7 +100,7 @@ def calc_kspace_line_jump(
     scaling = jumps / max_jump if max_jump > 0 else np.zeros_like(jumps)
 
     return max_blip_area, kp_rel_start, kp_rel_end, scaling
-  
+
 
 def calc_kspace_band_jump(
     fov: float,
@@ -110,12 +110,12 @@ def calc_kspace_band_jump(
     kp_rel_end: float = 0.0,
 ) -> tuple[float, SimpleNamespace]:
     """
-    Compute k-space band parameters for prewinder/rewinder scaling along a 
+    Compute k-space band parameters for prewinder/rewinder scaling along a
     phase-encoding axis.
 
-    This function computes the maximum absolute k-space offset across all 
-    bands and the scaling factors for prewinder and rewinder gradients 
-    for each band center line. DC (k-space center) is explicitly included 
+    This function computes the maximum absolute k-space offset across all
+    bands and the scaling factors for prewinder and rewinder gradients
+    for each band center line. DC (k-space center) is explicitly included
     as the central index, even if the band is asymmetric.
 
     Parameters
@@ -127,10 +127,10 @@ def calc_kspace_band_jump(
     band_width : int, optional
         Width of each band (number of lines), by default ``1``.
     kp_rel_start : float, optional
-        Readout-intrinsic offset of the first sample relative to band center 
+        Readout-intrinsic offset of the first sample relative to band center
         ``[1/m]``, by default ``0.0``.
     kp_rel_end : float, optional
-        Readout-intrinsic offset of the last sample relative to band center 
+        Readout-intrinsic offset of the last sample relative to band center
         ``[1/m]``, by default ``0.0``.
 
     Returns
@@ -146,9 +146,9 @@ def calc_kspace_band_jump(
     Notes
     -----
     - The function assumes phase-encoding samples are numbered from 0 to npix-1.
-    - All returned offsets are relative to DC (k-space center) explicitly 
+    - All returned offsets are relative to DC (k-space center) explicitly
       included in the band.
-    - Scaling factors are relative to the maximum absolute k-space area, 
+    - Scaling factors are relative to the maximum absolute k-space area,
       so they can be directly applied to a single maximum-area trapezoid.
 
     Examples
@@ -174,7 +174,11 @@ def calc_kspace_band_jump(
     if npix == 1:
         pre_scaling = np.array([1.0])
         rew_scaling = np.array([-1.0])
-        kp_area_max = abs(kp_rel_start) if abs(kp_rel_start) > abs(kp_rel_end) else abs(kp_rel_end)
+        kp_area_max = (
+            abs(kp_rel_start)
+            if abs(kp_rel_start) > abs(kp_rel_end)
+            else abs(kp_rel_end)
+        )
         return kp_area_max, SimpleNamespace(pre=pre_scaling, rew=rew_scaling)
 
     # Relative positions of pixels w.r.t. DC
@@ -184,7 +188,7 @@ def calc_kspace_band_jump(
     band_centers = np.arange(0, npix, band_width) + band_width // 2
 
     # Ensure indices do not exceed npix-1
-    band_centers = np.clip(band_centers, 0, npix-1)
+    band_centers = np.clip(band_centers, 0, npix - 1)
 
     # Area of first and last band center relative to readout
     kp_area_start = scalings[band_centers[0]] * kp_area + kp_rel_start
@@ -199,16 +203,10 @@ def calc_kspace_band_jump(
 
     return kp_area_max, SimpleNamespace(pre=pre_scaling, rew=rew_scaling)
 
-    
 
 def calc_readout_area(
-        fov: float,
-        npix: int,
-        ):
+    fov: float,
+    npix: int,
+):
     delta_k = 1.0 / fov
-    kr_area = npix * delta_k
-    
-
-    
-    
-    
+    npix * delta_k

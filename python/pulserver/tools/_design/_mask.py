@@ -3,34 +3,34 @@
 from __future__ import annotations
 
 __all__ = [
-    "make_regular_sampling",
-    "make_caipirinha_sampling",
-    "make_partial_fourier_sampling",
-    "make_poisson_sampling",
+    'make_regular_sampling',
+    'make_caipirinha_sampling',
+    'make_partial_fourier_sampling',
+    'make_poisson_sampling',
 ]
 
 import logging
 from typing import Literal
 
 import numpy as np
-
 from numpy.typing import NDArray
 
-from ._cpd import gen_udcpd as _gen_udcpd_bind, gen_vdcpd as _gen_vdcpd_bind
+from ._cpd import gen_udcpd as _gen_udcpd_bind
+from ._cpd import gen_vdcpd as _gen_vdcpd_bind
 
-ShapeStr = Literal["CROSS", "L1_BALL", "L2_BALL", "CONES", "PLANE_AND_CONES"]
+ShapeStr = Literal['CROSS', 'L1_BALL', 'L2_BALL', 'CONES', 'PLANE_AND_CONES']
 ShapeLike = str | ShapeStr
 
 _SHAPE_MAP = {
-    "CROSS": 0,
-    "L1_BALL": 1,
-    "L2_BALL": 2,
-    "CONES": 3,
-    "PLANE_AND_CONES": 4,
+    'CROSS': 0,
+    'L1_BALL': 1,
+    'L2_BALL': 2,
+    'CONES': 3,
+    'PLANE_AND_CONES': 4,
 }
 
 
-def require(condition, msg):  # noqa
+def require(condition, msg):
     if not condition:
         logging.error(msg)
         raise ValueError(msg)
@@ -39,7 +39,7 @@ def require(condition, msg):  # noqa
 def make_regular_sampling(
     shape: int,
     accel: int,
-    calib: int = None,
+    calib: int | None = None,
 ) -> NDArray[int]:
     """
     Generate regular sampling pattern for GRAPPA/ARC accelerated acquisition.
@@ -79,7 +79,7 @@ def make_regular_sampling(
 
 
     """
-    require(accel >= 1, f"Ky acceleration must be >= 1, got {accel}")
+    require(accel >= 1, f'Ky acceleration must be >= 1, got {accel}')
 
     # Build mask
     mask = np.zeros(shape, dtype=int)
@@ -163,11 +163,11 @@ def make_caipirinha_sampling(
     accel = list(accel)
 
     # Validate input
-    require(accel[0] >= 1, f"Ky acceleration must be >= 1, got {accel[0]}")
-    require(accel[1] >= 1, f"Kz acceleration must be >= 1, got {accel[1]}")
-    require(shift >= 0, f"CAPIRINHA shift must be positive, got {shift}")
+    require(accel[0] >= 1, f'Ky acceleration must be >= 1, got {accel[0]}')
+    require(accel[1] >= 1, f'Kz acceleration must be >= 1, got {accel[1]}')
+    require(shift >= 0, f'CAPIRINHA shift must be positive, got {shift}')
     require(
-        shift <= accel[1] - 1, f"CAPIRINHA shift must be lower than Rz, got {shift}"
+        shift <= accel[1] - 1, f'CAPIRINHA shift must be lower than Rz, got {shift}'
     )
 
     # Define elliptical grid
@@ -253,12 +253,12 @@ def make_partial_fourier_sampling(shape: int, undersampling: float) -> NDArray[i
     """
     require(
         0.5 <= undersampling <= 1,
-        f"Undersampling must between 0.5 and 1 (inclusive), got {undersampling}",
+        f'Undersampling must between 0.5 and 1 (inclusive), got {undersampling}',
     )
     if undersampling < 0.75:
         logging.warning(
-            f"Undersampling factor = {undersampling} < 0.75 - phase errors will"
-            " likely occur."
+            f'Undersampling factor = {undersampling} < 0.75 - phase errors will'
+            ' likely occur.'
         )
 
     # Generate mask
@@ -279,7 +279,7 @@ def make_poisson_sampling(
     elliptical: bool = True,
     nt: int = 1,
     vd_exp: float = 1.0,
-    shape_opt: ShapeLike = "L2_BALL",
+    shape_opt: ShapeLike = 'L2_BALL',
     mindist_scaling: float = 1.0,
     C: float = 1.0,
     fov_ratio: float = 1.0,
@@ -422,7 +422,7 @@ def make_poisson_sampling(
 
 
 # %% Utilities
-def _normalize_shape(shape_opt):  # noqa
+def _normalize_shape(shape_opt):
     if isinstance(shape_opt, str):
         key = shape_opt.strip().upper()
         if key in _SHAPE_MAP:
@@ -432,21 +432,21 @@ def _normalize_shape(shape_opt):  # noqa
     )
 
 
-def _ensure_feasible_array(feasible_points):  # noqa
+def _ensure_feasible_array(feasible_points):
     arr = np.asarray(feasible_points)
     if arr.ndim != 2:
-        raise ValueError("feasiblePoints must be a 2D array (ny x nz)")
+        raise ValueError('feasiblePoints must be a 2D array (ny x nz)')
     return np.asfortranarray(arr.astype(np.float64, copy=False))
 
 
 def _gen_udcpd(
-    num_masks,  # noqa
-    alph,  # noqa
-    feasible_points,  # noqa
+    num_masks,
+    alph,
+    feasible_points,
     shape_opt="cones",  # noqa
-    verbose=1,  # noqa
-    C=1.0,  # noqa
-    mindist_scaling=1.0,  # noqa
+    verbose=1,
+    C=1.0,
+    mindist_scaling=1.0,
 ):
     shape_code = _normalize_shape(shape_opt)
     feasible_f = _ensure_feasible_array(feasible_points)
@@ -462,15 +462,15 @@ def _gen_udcpd(
 
 
 def _gen_vdcpd(
-    num_masks,  # noqa
-    Rmax,  # noqa
-    vd_exp,  # noqa
-    alph,  # noqa
-    feasible_points,  # noqa
+    num_masks,
+    Rmax,
+    vd_exp,
+    alph,
+    feasible_points,
     shape_opt="cones",  # noqa
-    verbose=1,  # noqa
-    C=1.0,  # noqa
-    mindist_scaling=1.0,  # noqa
+    verbose=1,
+    C=1.0,
+    mindist_scaling=1.0,
 ):
     shape_code = _normalize_shape(shape_opt)
     feasible_f = _ensure_feasible_array(feasible_points)

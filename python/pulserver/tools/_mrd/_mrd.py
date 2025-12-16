@@ -1,19 +1,17 @@
-"""MRD builder."""
+"""MRD builder utilities."""
 
-__all__ = ["ISMRMRDBuilder"]
+__all__ = ['ISMRMRDBuilder', 'DUMMY_SYSTEM']
 
 import copy
 import pathlib
 import warnings
-
+from collections.abc import Sequence
 from enum import Enum
 from types import SimpleNamespace
 
-import numpy as np
-
 import ismrmrd as mrd
 import ismrmrd.xsd as xsd
-
+import numpy as np
 import pypulseq as pp
 
 from ._mrd_file import write_mrd
@@ -31,8 +29,41 @@ OTHER = xsd.trajectoryType.OTHER
 
 
 class ISMRMRDBuilder:
-    def __init__(self, mode="static"):
-        self.mode = mode  # 'dry', 'prep', 'eval', 'rt', 'static
+    """
+    A builder class for ISMRMD Dataset.
+
+    This is used to build a sidecar (ISMR)MRD Dataset containing the Sequence
+    details. It can be then merged with dataset from scanner to obtain
+    an actual ISMRMRD Dataset to be used for reconstruction.
+
+    Attributes
+    ----------
+    passthrough : bool
+        If ``True``, all the methods are converted into passthrough dummy functions.
+        Useful for a quick dry run of sequence creation routine.
+    head : ismrmrd.xsd.ismrmrdHeader
+        The ISMRMRD XML Header describing the Dataset.
+    acquisitions : list[ismrmrd.Acquisition]
+        List of ismrmrd Acquisitions included in the Dataset.
+        These only contains info known at design time - other data must be
+        merged from the actual scan (i.e., data field, actual orientation,
+        timestamps, etc).
+    acquisitions : list[ismrmrd.Waveform]
+        List of ismrmrd Waveforms included in the Dataset.
+        hese only contains info known at design time - other data must be
+        merged from the actual scan.
+    freeWaveformID : int
+        First free Waveform ID for custom Waveform types. It is initialized
+        to ``1024``, as per MRD specs.
+    label_dict : dict
+        Dictionary used to keep track of labels evolution. It is used to enable
+        ``'SET'`` and ``'INC'`` behaviours as in Pulseq, whereas ISMRMRD
+        natively supports ``'SET'`` only.
+
+    """
+
+    def __init__(self, passthrough: bool = False):
+        self.passthrough = passthrough
 
         # MRD attributes
         self.head = xsd.ismrmrdHeader()
@@ -50,21 +81,21 @@ class ISMRMRDBuilder:
         self.freeWaveformID = 1024
 
         self.label_dict = {
-            "kspace_encode_step_1": None,
-            "kspace_encode_step_2": None,
-            "average": None,
-            "slice": None,
-            "contrast": None,
-            "phase": None,
-            "repetition": None,
-            "segment": None,
+            'kspace_encode_step_1': None,
+            'kspace_encode_step_2': None,
+            'average': None,
+            'slice': None,
+            'contrast': None,
+            'phase': None,
+            'repetition': None,
+            'segment': None,
         }
 
         self.add_encoding()
 
     def mode_switch(func):
         def wrapper(self, *args, **kwargs):
-            if self.mode != "rt" and self.mode != "static":
+            if self.passthrough:
                 return None
             return func(self, *args, **kwargs)
 
@@ -73,7 +104,7 @@ class ISMRMRDBuilder:
     def write(
         self,
         filepath: str | pathlib.Path,
-        dataset_name: str = "dataset",
+        dataset_name: str = 'dataset',
         overwrite: bool = True,
     ) -> None:
         """
@@ -102,13 +133,15 @@ class ISMRMRDBuilder:
     @mode_switch
     def calc_trajectory(self, *events: tuple[SimpleNamespace]):
         """
-        Calculate readout header based on input PyPulseq blocks
+        Calculate readout header based on input PyPulseq blocks.
 
         Parameters
         ----------
         *events : tuple[SimpleNamespace]
             List of tuple of events required to get readout.
-            Examples:
+
+        Examples
+        --------
                 * line readout (cartesian): prewind + readout -> calc_trajectory((gx_pre,), (gx, adc))
                 * spiral readout: readout only -> calc_trajectory((spiral_x_grad, spiral_y_grad, adc))
 
@@ -122,8 +155,8 @@ class ISMRMRDBuilder:
         events = [[copy.deepcopy(ev) for ev in event] for event in events]
         for event in events:
             for ev in event:
-                if hasattr(ev, "id"):
-                    delattr(ev, "id")
+                if hasattr(ev, 'id'):
+                    delattr(ev, 'id')
 
         # build sequence based on provided blocks
         seq = pp.Sequence(system=DUMMY_SYSTEM)
@@ -185,6 +218,7 @@ class ISMRMRDBuilder:
 
     @mode_switch
     def add_encoding(self):
+        """Append a new ``Encoding`` space into ``head``."""
         encoding = xsd.encodingType()
         encoding.encodedSpace = xsd.encodingSpaceType()
         encoding.encodedSpace.matrixSize = xsd.matrixSizeType()
@@ -202,9 +236,23 @@ class ISMRMRDBuilder:
         self.current_encoding = len(self.head.encoding) - 1
 
     @mode_switch
-    def set_encoding(self, idx):
+    def set_encoding(self, idx: int):
+        """
+        Set currently active ``Encoding`` space.
+
+        Parameters
+        ----------
+        idx : int
+            Index of desired encoding space in ``head.encoding``.
+
+        Raises
+        ------
+        IndexError
+            If selected index is out of range.
+
+        """
         if idx < 0:
-            raise IndexError("Encoding index out of range")
+            raise IndexError('Encoding index out of range')
         if idx >= self.current_encoding:
             while idx < len(self.head.encodings):
                 self.new_encoding()
@@ -214,11 +262,41 @@ class ISMRMRDBuilder:
         self.head.measurementInformation.sequenceName = value
 
     @mode_switch
-    def set_H1resonanceFrequency_Hz(self, gamma: float, B0: float):
-        self.head.experimentalConditions.H1resonanceFrequency_Hz = int(gamma * B0)
+    def set_H1resonanceFrequency_Hz(self, gamma_bar: float, B0: float):
+        """
+        Set resonant frequency based on nucleus and static field strength.
+
+        Parameters
+        ----------
+        gamma_bar : float
+            Active nucleus gyromagnetic factor in ``Hz/T``.
+        B0 : float
+            Static field strength in ``Hz``.
+
+        """
+        self.head.experimentalConditions.H1resonanceFrequency_Hz = int(gamma_bar * B0)
 
     @mode_switch
     def set_fov(self, dx: float, dy: float, dz: float):
+        """
+        Set current encoding Field Of View.
+
+        Parameters
+        ----------
+        dx : float
+            Field of View along logical ``x``, in units of ``[mm]``.
+        dy : float
+            Field of View along logical ``y``, in units of ``[mm]``.
+        dz : float
+            Field of View along logical ``z``, in units of ``[mm]``.
+
+        Notes
+        -----
+        For 3D imaging, dz is usually given by ``voxel_size_z * num_voxels_z``.
+        For 2D, it is usually ``slice_spacing * num_slices``, with ``slice_spacing``
+        being equal to slice thickness for contiguous non-overlapping slices.
+
+        """
         self.head.encoding[self.current_encoding].encodedSpace.fieldOfView_mm.x = dx
         self.head.encoding[self.current_encoding].encodedSpace.fieldOfView_mm.y = dy
         self.head.encoding[self.current_encoding].encodedSpace.fieldOfView_mm.z = dz
@@ -228,6 +306,19 @@ class ISMRMRDBuilder:
 
     @mode_switch
     def set_matrix(self, nx: int, ny: int, nz: int):
+        """
+        Set current encoding matrix size.
+
+        Parameters
+        ----------
+        nx : int
+            Number of voxels along logical ``x``.
+        ny : int
+            Number of voxels along logical ``y``.
+        nz : int
+            Number of voxels along logical ``z``.
+
+        """
         self.head.encoding[self.current_encoding].encodedSpace.matrixSize.x = nx
         self.head.encoding[self.current_encoding].encodedSpace.matrixSize.y = ny
         self.head.encoding[self.current_encoding].encodedSpace.matrixSize.z = nz
@@ -239,6 +330,22 @@ class ISMRMRDBuilder:
     def set_limits(
         self, axis: str, maximum: int, minimum: int = 0, center: int | None = None
     ):
+        """
+        Set current encoding limits along the specified axis.
+
+        Parameters
+        ----------
+        axis : str
+            Target encoding axis.
+        maximum : int
+            Maximum encoding index along target size.
+        minimum : int, optional
+            Minimum encoding index along target size. The default is ``0``.
+        center : int | None, optional
+            Encoding index corresponding to k-space center along target axis.
+            The default is ``None`` (center of specified range).
+
+        """
         key = axis2key(axis)[0]
         limit = getattr(self.head.encoding[self.current_encoding].encodingLimits, key)
         if limit is None:
@@ -252,6 +359,15 @@ class ISMRMRDBuilder:
 
     @mode_switch
     def set_etl(self, value: int):
+        """
+        Set current encoding Echo Train Length.
+
+        Parameters
+        ----------
+        value : int
+            Echo Train Length factor.
+
+        """
         self.encoding[self.current_encoding].echoTrainLength = value
 
     @mode_switch
@@ -259,13 +375,27 @@ class ISMRMRDBuilder:
         self,
         traj_type: xsd.trajectoryType = OTHER,
         desc: dict | None = None,
-        comment: str = "",
+        comment: str = '',
     ):
+        """
+        Set trajectory metadata for current encoding.
+
+        Parameters
+        ----------
+        traj_type : xsd.trajectoryType, optional
+            Trajectory type. The default is ``OTHER``.
+        desc : dict | None, optional
+            Trajectory description. The default is ``None``.
+        comment : str, optional
+            Addictional comment describing trajectory.
+            The default is ``''``.
+
+        """
         # Set trajectory type
         if isinstance(traj_type, Enum) is False:
-            raise ValueError("traj_type must be an Enum")
+            raise ValueError('traj_type must be an Enum')
         if traj_type in xsd.trajectoryType is False:
-            raise ValueError("traj_type must be a valid trajectoryType")
+            raise ValueError('traj_type must be a valid trajectoryType')
         self.head.encoding[self.current_encoding].trajectory = traj_type
 
         # Set trajectory description
@@ -323,7 +453,7 @@ class ISMRMRDBuilder:
 
         """
         if calibration_type in xsd.calibrationModeType is False:
-            raise ValueError("calibration_type must be a valid calibrationModeType")
+            raise ValueError('calibration_type must be a valid calibrationModeType')
         parallelImaging = xsd.parallelImagingType()
         parallelImaging.accelerationFactor.kspace_encoding_step_1 = Ry
         parallelImaging.accelerationFactor.kspace_encoding_step_2 = Rz
@@ -360,7 +490,7 @@ class ISMRMRDBuilder:
         """
         if calibration_type in xsd.multibandCalibrationType is False:
             raise ValueError(
-                "calibration_type must be a valid multibandCalibrationType"
+                'calibration_type must be a valid multibandCalibrationType'
             )
 
         if isinstance(spacing, float):
@@ -383,31 +513,102 @@ class ISMRMRDBuilder:
         self.head.encoding[self.current_encoding].parallelImaging.multiband = multiband
 
     @mode_switch
-    def set_TR(self, value):
-        self.head.sequenceParameters.TR.append(value)
-        return value
+    def set_TR(self, value: float | Sequence[float]):
+        """
+        Set sequence Repetition Time(s).
+
+        Parameters
+        ----------
+        value : float | Sequence[float]
+            Repetition Time in units of ``[ms]``.
+
+        """
+        if np.isscalar(value):
+            self.head.sequenceParameters.TR.append(value)
+        else:
+            for val in value:
+                self.head.sequenceParameters.TR.append(val)
 
     @mode_switch
-    def set_TE(self, value):
-        self.head.sequenceParameters.TE.append(value)
-        return value
+    def set_TE(self, value: float | Sequence[float]):
+        """
+        Set sequence Echo Time(s).
+
+        Parameters
+        ----------
+        value : float | Sequence[float]
+            Echo Time in units of ``[ms]``.
+
+        """
+        if np.isscalar(value):
+            self.head.sequenceParameters.TE.append(value)
+        else:
+            for val in value:
+                self.head.sequenceParameters.TE.append(val)
 
     @mode_switch
-    def set_TI(self, value):
-        self.head.sequenceParameters.TI.append(value)
-        return value
+    def set_TI(self, value: float | Sequence[float]):
+        """
+        Set sequence Inversion Time(s).
+
+        Parameters
+        ----------
+        value : float | Sequence[float]
+            Inversion Time in units of ``[ms]``.
+
+        """
+        if np.isscalar(value):
+            self.head.sequenceParameters.TI.append(value)
+        else:
+            for val in value:
+                self.head.sequenceParameters.TI.append(val)
 
     @mode_switch
-    def set_flipAngle_deg(self, value):
-        self.head.sequenceParameters.flipAngle_deg.append(value)
+    def set_flipAngle_deg(self, value: float | Sequence[float]):
+        """
+        Set sequence Flip Angle(s).
+
+        Parameters
+        ----------
+        value : float | Sequence[float]
+            Flip Angle in units of ``[deg]``.
+
+        """
+        if np.isscalar(value):
+            self.head.sequenceParameters.flipAngle_deg.append(value)
+        else:
+            for val in value:
+                self.head.sequenceParameters.flipAngle_deg.append(val)
 
     @mode_switch
-    def set_sequence_type(self, value):
+    def set_sequence_type(self, value: str):
+        """
+        Set sequence type.
+
+        Parameters
+        ----------
+        value : str
+            Sequence type.
+
+        """
         self.head.sequenceParameters.sequence_type = value
 
     @mode_switch
-    def set_echo_spacing(self, value):
-        self.head.sequenceParameters.echo_spacing.append(value)
+    def set_echo_spacing(self, value: float | Sequence[float]):
+        """
+        Set sequence Echo Spacing(s).
+
+        Parameters
+        ----------
+        value : float | Sequence[float]
+            Echo Spacing in units of ``[ms]``.
+
+        """
+        if np.isscalar(value):
+            self.head.sequenceParameters.echo_spacing.append(value)
+        else:
+            for val in value:
+                self.head.sequenceParameters.echo_spacing.append(val)
 
     @mode_switch
     def set_diffusion(
@@ -433,13 +634,13 @@ class ISMRMRDBuilder:
 
         """
         if channel in xsd.diffusionDimensionType is False:
-            raise ValueError("channel must be a valid diffusionDimensionType")
+            raise ValueError('channel must be a valid diffusionDimensionType')
 
         direction = np.atleast_2d(direction)
         bvalue = np.atleast_1d(bvalue)
         if bvalue.shape[0] != 1 and bvalue.shape[0] != direction.shape[0]:
             raise ValueError(
-                "Number of bvalues must match number of diffusion directions"
+                'Number of bvalues must match number of diffusion directions'
             )
         if bvalue.shape[0] == 1:
             bvalue = np.repeat(bvalue, direction.shape[0])
@@ -456,7 +657,24 @@ class ISMRMRDBuilder:
         self.head.sequenceParameters.diffusion = diffusionParams
 
     @mode_switch
-    def add_user_param(self, name, value):
+    def add_user_param(self, name: str, value: float | int | str | any):
+        """
+        Add User Parameter as ``name-value`` pair.
+
+        Parameters
+        ----------
+        name : str
+            Input parameter name.
+        value : float | int | str | any
+            Input parameter value. Depending on the type,
+            it will be appended to ``userParameterDouble``, ``userParameterLong``,
+            ``userParameterString`` or serialized as a waveform.
+
+        Returns
+        -------
+        None.
+
+        """
         if isinstance(value, float):
             if haskey(name, self.head.userParameters.userParameterDouble):
                 setparam(
@@ -585,7 +803,7 @@ class ISMRMRDBuilder:
         if user_int is not None:
             if len(user_int) > len(acq.user_int):
                 warnings.warn(
-                    "Length of provided user_int is larger than ismrmrd.Acquisition.user_int - ignoring extra entries",
+                    'Length of provided user_int is larger than ismrmrd.Acquisition.user_int - ignoring extra entries',
                     stacklevel=2,
                 )
             for n in range(len(acq.user_int)):
@@ -593,7 +811,7 @@ class ISMRMRDBuilder:
         if user_float is not None:
             if len(user_float) > len(acq.user_float):
                 warnings.warn(
-                    "Length of provided user_float is larger than ismrmrd.Acquisition.user_float - ignoring extra entries",
+                    'Length of provided user_float is larger than ismrmrd.Acquisition.user_float - ignoring extra entries',
                     stacklevel=2,
                 )
             for n in range(len(acq.user_float)):
@@ -602,7 +820,7 @@ class ISMRMRDBuilder:
         # set trajectory
         rotation = None
         for event in events:
-            if event.type == "rot3D":
+            if event.type == 'rot3D':
                 rotation = event.rot_quaternion
         if trajectory.traj:
             traj = copy.deepcopy(trajectory.traj)
@@ -615,13 +833,22 @@ class ISMRMRDBuilder:
 
         self.acquisitions.append(acq)
 
-    def set_labels(self, *events):
+    def set_labels(self, *events: list[SimpleNamespace]):
+        """
+        Update label dictionary using a Pulseq label event.
+
+        Parameters
+        ----------
+        *events : TYPE
+            List of Pulseq label events.
+
+        """
         for event in events:
-            if event.type == "labelset":
+            if event.type == 'labelset':
                 label = axis2key(event.label)[1]
                 if label in self.label_dict:
                     self.label_dict[label] = event.value
-            if event.type == "labelinc":
+            if event.type == 'labelinc':
                 label = axis2key(event.label)[1]
                 if label in self.label_dict:
                     if self.label_dict[label] is None:
@@ -638,26 +865,26 @@ def axis2key(axis):
 
 
 _axis2key = {
-    "k0": ("kspace_encoding_step_0", "kspace_encode_step_0"),
-    "acq": ("kspace_encoding_step_0", "kspace_encode_step_0"),
-    "k1": ("kspace_encoding_step_1", "kspace_encode_step_1"),
-    "lin": ("kspace_encoding_step_1", "kspace_encode_step_1"),
-    "k2": ("kspace_encoding_step_2", "kspace_encode_step_2"),
-    "par": ("kspace_encoding_step_2", "kspace_encode_step_2"),
-    "avg": ("average", "average"),
-    "slc": ("slice", "slice"),
-    "eco": ("contrast", "contrast"),
-    "phs": ("phase", "phase"),
-    "rep": ("repetition", "repetition"),
-    "seg": ("segment", "segment"),
-    "user0": ("user_0", "user0"),
-    "user1": ("user_1", "user1"),
-    "user2": ("user_2", "user2"),
-    "user3": ("user_3", "user3"),
-    "user4": ("user_4", "user4"),
-    "user5": ("user_5", "user5"),
-    "user6": ("user_6", "user6"),
-    "user7": ("user_7", "user7"),
+    'k0': ('kspace_encoding_step_0', 'kspace_encode_step_0'),
+    'acq': ('kspace_encoding_step_0', 'kspace_encode_step_0'),
+    'k1': ('kspace_encoding_step_1', 'kspace_encode_step_1'),
+    'lin': ('kspace_encoding_step_1', 'kspace_encode_step_1'),
+    'k2': ('kspace_encoding_step_2', 'kspace_encode_step_2'),
+    'par': ('kspace_encoding_step_2', 'kspace_encode_step_2'),
+    'avg': ('average', 'average'),
+    'slc': ('slice', 'slice'),
+    'eco': ('contrast', 'contrast'),
+    'phs': ('phase', 'phase'),
+    'rep': ('repetition', 'repetition'),
+    'seg': ('segment', 'segment'),
+    'user0': ('user_0', 'user0'),
+    'user1': ('user_1', 'user1'),
+    'user2': ('user_2', 'user2'),
+    'user3': ('user_3', 'user3'),
+    'user4': ('user_4', 'user4'),
+    'user5': ('user_5', 'user5'),
+    'user6': ('user_6', 'user6'),
+    'user7': ('user_7', 'user7'),
 }
 
 
