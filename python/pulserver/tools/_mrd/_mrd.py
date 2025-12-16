@@ -406,7 +406,7 @@ class ISMRMRDBuilder:
         udouble = []
         ulong = []
         ustring = []
-        for k, v in desc:
+        for k, v in desc.items():
             if isinstance(v, float):
                 el = xsd.userParameterDoubleType(name=k, value=v)
                 udouble.append(el)
@@ -457,6 +457,7 @@ class ISMRMRDBuilder:
         if calibration_type not in xsd.calibrationModeType:
             raise ValueError('calibration_type must be a valid calibrationModeType')
         parallelImaging = xsd.parallelImagingType()
+        parallelImaging.accelerationFactor = xsd.accelerationFactorType()
         parallelImaging.accelerationFactor.kspace_encoding_step_1 = Ry
         parallelImaging.accelerationFactor.kspace_encoding_step_2 = Rz
         parallelImaging.calibrationMode = calibration_type
