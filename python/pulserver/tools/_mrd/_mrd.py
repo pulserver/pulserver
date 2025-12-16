@@ -1,6 +1,6 @@
 """MRD builder utilities."""
 
-__all__ = ['ISMRMRDBuilder', 'DUMMY_SYSTEM']
+__all__ = ['DUMMY_SYSTEM', 'ISMRMRDBuilder']
 
 import copy
 import pathlib
@@ -368,7 +368,7 @@ class ISMRMRDBuilder:
             Echo Train Length factor.
 
         """
-        self.encoding[self.current_encoding].echoTrainLength = value
+        self.head.encoding[self.current_encoding].echoTrainLength = value
 
     @mode_switch
     def set_trajectory(
@@ -392,9 +392,9 @@ class ISMRMRDBuilder:
 
         """
         # Set trajectory type
-        if isinstance(traj_type, Enum) is False:
+        if not isinstance(traj_type, Enum):
             raise ValueError('traj_type must be an Enum')
-        if traj_type in xsd.trajectoryType is False:
+        if traj_type not in xsd.trajectoryType:
             raise ValueError('traj_type must be a valid trajectoryType')
         self.head.encoding[self.current_encoding].trajectory = traj_type
 
@@ -427,7 +427,7 @@ class ISMRMRDBuilder:
         ].trajectoryDescription.userParameterString = ustring
 
         # Set trajectory comment
-        self.encoding[self.current_encoding].comment = comment
+        self.head.encoding[self.current_encoding].comment = comment
 
     @mode_switch
     def set_parallel_imaging_info(
@@ -452,7 +452,9 @@ class ISMRMRDBuilder:
             The default is ``1`` (no acceleration).
 
         """
-        if calibration_type in xsd.calibrationModeType is False:
+        if not isinstance(calibration_type, Enum):
+            raise ValueError('calibration_type must be an Enum')
+        if calibration_type not in xsd.calibrationModeType:
             raise ValueError('calibration_type must be a valid calibrationModeType')
         parallelImaging = xsd.parallelImagingType()
         parallelImaging.accelerationFactor.kspace_encoding_step_1 = Ry
@@ -488,7 +490,9 @@ class ISMRMRDBuilder:
             The default is ``0.0`` (No CAIPI shift).
 
         """
-        if calibration_type in xsd.multibandCalibrationType is False:
+        if not isinstance(calibration_type, Enum):
+            raise ValueError('calibration_type must be an Enum')
+        if calibration_type not in xsd.multibandCalibrationType:
             raise ValueError(
                 'calibration_type must be a valid multibandCalibrationType'
             )
@@ -633,7 +637,9 @@ class ISMRMRDBuilder:
             Diffusion b-value or array of b-values of shape ``(n,)``.
 
         """
-        if channel in xsd.diffusionDimensionType is False:
+        if not isinstance(channel, Enum):
+            raise ValueError('channel must be an Enum')
+        if channel not in xsd.diffusionDimensionType:
             raise ValueError('channel must be a valid diffusionDimensionType')
 
         direction = np.atleast_2d(direction)
@@ -657,7 +663,7 @@ class ISMRMRDBuilder:
         self.head.sequenceParameters.diffusion = diffusionParams
 
     @mode_switch
-    def add_user_param(self, name: str, value: float | int | str | any):
+    def add_user_param(self, name: str, value: float | int | str | object):
         """
         Add User Parameter as ``name-value`` pair.
 
@@ -665,7 +671,7 @@ class ISMRMRDBuilder:
         ----------
         name : str
             Input parameter name.
-        value : float | int | str | any
+        value : float | int | str | object
             Input parameter value. Depending on the type,
             it will be appended to ``userParameterDouble``, ``userParameterLong``,
             ``userParameterString`` or serialized as a waveform.
@@ -715,14 +721,14 @@ class ISMRMRDBuilder:
     def _add_to_waveform(self, name, value):
         value = np.atleast_2d(value)
         found = False
-        for el in self.waveformInformations:
+        for el in self.head.waveformInformations:
             if el.waveformName == name:
                 found = True
                 waveId = el.waveformType
         if not (found):
             waveId = self.freeWaveformID
             newId = xsd.waveformInformationType(waveformName=name, waveformType=waveId)
-            self.waveformInformations.append(newId)
+            self.head.waveformInformations.append(newId)
             self.freeWaveformID += 1
 
         numChannels = value.shape[0]
@@ -822,7 +828,7 @@ class ISMRMRDBuilder:
         for event in events:
             if event.type == 'rot3D':
                 rotation = event.rot_quaternion
-        if trajectory.traj:
+        if trajectory.traj.size:
             traj = copy.deepcopy(trajectory.traj)
             if rotation is not None:
                 traj = rotation.apply(traj)
