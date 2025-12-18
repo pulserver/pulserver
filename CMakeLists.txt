@@ -69,7 +69,7 @@ add_pybind_module(_cpd_wrapper ""
 add_pybind_module(_vds_wrapper "_grad"
     SOURCES
         "${CMAKE_SOURCE_DIR}/python/pulserver/tools/_design/_grad/_vds_wrapper.cpp"
-        "${CMAKE_SOURCE_DIR}/external/vds/vds.c"
+        "${CMAKE_SOURCE_DIR}/external/vdslib/vds.c"
     INCLUDES
         ${CMAKE_SOURCE_DIR}/external
         ${CMAKE_SOURCE_DIR}/python/pulserver/tools/_design/_grad

@@ -18,7 +18,7 @@ py::dict calc_vds_raw(
     double Tdsample,       // [s]
     int    Ninterleaves,
     const py::array_t<double, py::array::c_style | py::array::forcecast> &fov_coeffs,
-    double krmax,          // [/cm]
+    double krmax,          // [1/cm]
     int    ngmax           // max gradient samples to allocate
 ) {
     // Validate inputs
