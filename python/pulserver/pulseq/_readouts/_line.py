@@ -11,7 +11,7 @@ import pypulseq as pp
 
 from ...tools import ISMRMRDBuilder
 
-from ._base import calc_kspace_band_jump
+from ._base import calc_kspace_band_jump, calc_kspace_readout_params
 
 
 class LineReadout2D:
@@ -26,6 +26,7 @@ class LineReadout2D:
         flyback: bool = False,
         net_area: float = 0.0,
         system: pp.Opts | None = None,
+        other_prewind_events: list[SimpleNamespace] | None = None
     ):
         fov_read, fov_phase = fov
         npix_read, npix_phase = npix
@@ -34,19 +35,22 @@ class LineReadout2D:
         else:
             self.system = system
             
+        # Store prewind events
+        if other_prewind_events is None:
+            other_prewind_events = []
+        self.prewind_events = other_prewind_events
+            
         # Compute number of samples
-        num_samples = int(np.ceil(oversamp * npix_read))
+        kr_area, t_read, num_samples = calc_kspace_readout_params(
+            fov,
+            npix,
+            receive_bandwidth,
+            oversamp,
+            system.adc_raster_time,
+            system.grad_raster_time
+        )
         
-        # Compute readout duration based on number of samples and receive bandwidth
-        dwell_time = 1.0 / (2.0 * receive_bandwidth * 1e3)
-        
-        # Round to nearest multiple of ADC raster time
-        dwell_time = self.system.adc_raster_time * np.ceil(dwell_time / self.system.adc_raster_time)
-        dwell_time = dwell_time.item()
-        t_read = dwell_time * num_samples
-
-        # Compute frequency encoding area
-        kr_area = npix_read / fov_read
+        # Create frequency encoding gradient and ADC
         
         # Compute phase encoding area and scalings
         kp_area, self.kp_scaling = calc_kspace_band_jump(fov_phase, npix_phase)
