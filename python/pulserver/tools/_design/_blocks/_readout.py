@@ -3,6 +3,7 @@
 __all__ = ['make_readout_lobe']
 
 import logging
+
 from types import SimpleNamespace
 
 import numpy as np
@@ -11,7 +12,7 @@ import pypulseq as pp
 from .._params import calc_kspace_readout_params
 
 
-def log_and_raise(msg, exc=ValueError):
+def log_and_raise(msg, exc=ValueError): # noqa
     logging.error(msg)
     raise exc(msg)
 
@@ -142,6 +143,8 @@ def make_readout_lobe(
     ... )
 
     """
+    if system is None:
+        system = pp.Opts.default
     if np.isscalar(deadtime):
         deadtime = (deadtime, deadtime)
 
