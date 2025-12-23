@@ -1,4 +1,4 @@
 """ """
 
 from . import tools  # noqa
-from . import pulseq # noqa
+from . import pulseq  # noqa

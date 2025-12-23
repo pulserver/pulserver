@@ -173,7 +173,7 @@ def _as_adiabatic_spatial_selective(
 
     # Case 2: duration only
     elif duration is not None and lobes is None:
-        lobes = int(round(T / duration))
+        lobes = round(T / duration)
         duration = T / lobes  # recompute exact
 
     # Case 3: both lobes and duration given → validate

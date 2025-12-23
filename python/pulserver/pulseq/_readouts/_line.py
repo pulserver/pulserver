@@ -1,15 +1,13 @@
 """
 """
 
-__all__ = ["LineReadout2D"]
+__all__ = ['LineReadout2D']
 
 
 from types import SimpleNamespace
 
 import numpy as np
 import pypulseq as pp
-
-from ...tools import ISMRMRDBuilder
 
 from ._base import calc_kspace_band_jump, calc_kspace_readout_params
 
@@ -26,7 +24,7 @@ class LineReadout2D:
         flyback: bool = False,
         net_area: float = 0.0,
         system: pp.Opts | None = None,
-        other_prewind_events: list[SimpleNamespace] | None = None
+        other_prewind_events: list[SimpleNamespace] | None = None,
     ):
         fov_read, fov_phase = fov
         npix_read, npix_phase = npix
@@ -34,12 +32,12 @@ class LineReadout2D:
             self.system = pp.Opts.default
         else:
             self.system = system
-            
+
         # Store prewind events
         if other_prewind_events is None:
             other_prewind_events = []
         self.prewind_events = other_prewind_events
-            
+
         # Compute number of samples
         kr_area, t_read, num_samples = calc_kspace_readout_params(
             fov,
@@ -47,11 +45,11 @@ class LineReadout2D:
             receive_bandwidth,
             oversamp,
             system.adc_raster_time,
-            system.grad_raster_time
+            system.grad_raster_time,
         )
-        
+
         # Create frequency encoding gradient and ADC
-        
+
         # Compute phase encoding area and scalings
         kp_area, self.kp_scaling = calc_kspace_band_jump(fov_phase, npix_phase)
 
@@ -124,4 +122,5 @@ class LineReadout2D:
         seq.add_block(phase_encoding, *events)
         return seq
 
-    def add_readout(): ...
+    def add_readout():
+        ...

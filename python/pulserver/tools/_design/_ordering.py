@@ -1,13 +1,13 @@
 """Sampling ordering generation routines."""
 
 __all__ = [
-    'make_interleaved_ordering_1d',
     'make_centerout_ordering_1d',
-    'make_random_ordering_1d',
-    'make_radial_ordering_2d',
     'make_centerout_ordering_2d',
-    'make_spiral_ordering_2d',
+    'make_interleaved_ordering_1d',
+    'make_radial_ordering_2d',
+    'make_random_ordering_1d',
     'make_random_ordering_2d',
+    'make_spiral_ordering_2d',
 ]
 
 import numpy as np

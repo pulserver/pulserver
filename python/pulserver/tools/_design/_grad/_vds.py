@@ -1,17 +1,15 @@
 __all__ = [
-    "fov_constant",
-    "fov_variable",
-    "fov_dual_density",
-    "fov_triple_density",
-    "make_spiral_grad",
+    'fov_constant',
+    'fov_dual_density',
+    'fov_triple_density',
+    'fov_variable',
+    'make_spiral_grad',
 ]
 
 import inspect
 from typing import Callable
 
 import numpy as np
-
-from ._vds_wrapper import calc_vds_raw
 
 
 def make_spiral_grad():
@@ -149,7 +147,7 @@ def fov_variable(
     ...                     degree=6, F_target_m=F_quad_m)
     """
     if undersampling_factor_outer < 1.0:
-        raise ValueError("undersampling_factor_outer must be >= 1.0.")
+        raise ValueError('undersampling_factor_outer must be >= 1.0.')
 
     # Sample kr in 1/cm
     kr = np.linspace(0.0, rmax, num_samples)
@@ -173,8 +171,8 @@ def fov_variable(
             F_m = F_target_m(kr, F_inner_m, undersampling_factor_outer)
         else:
             raise TypeError(
-                "F_target_m must accept either (kr) or "
-                "(kr, F_inner_m, undersampling_factor_outer)."
+                'F_target_m must accept either (kr) or '
+                '(kr, F_inner_m, undersampling_factor_outer).'
             )
 
     # Convert meters -> centimeters

@@ -512,9 +512,9 @@ class ISMRMRDBuilder:
         multiband.calibration_encoding = calibration_encoding
 
         if self.head.encoding[self.current_encoding].parallelImaging is None:
-            self.head.encoding[self.current_encoding].parallelImaging = (
-                xsd.parallelImagingType()
-            )
+            self.head.encoding[
+                self.current_encoding
+            ].parallelImaging = xsd.parallelImagingType()
         self.head.encoding[self.current_encoding].parallelImaging.multiband = multiband
 
     @mode_switch

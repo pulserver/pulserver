@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 __all__ = [
-    'make_regular_sampling',
     'make_caipirinha_sampling',
     'make_partial_fourier_sampling',
     'make_poisson_sampling',
+    'make_regular_sampling',
 ]
 
 import logging
