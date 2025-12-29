@@ -1,0 +1,5 @@
+coverage
+sphinx-book-theme
+sphinx-copybutton
+sphinx-exec-directive
+matplotlib
