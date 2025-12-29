@@ -107,6 +107,8 @@ Pulseq
     pulserver.pulseq.add_gradients
     pulserver.pulseq.align
     pulserver.pulseq.calc_duration
+    pulserver.pulseq.calc_kspace_band_jump
+    pulserver.pulseq.calc_kspace_line_jump
     pulserver.pulseq.calc_kspace_readout_params
     pulserver.pulseq.calc_rf_bandwidth
     pulserver.pulseq.calc_rf_center
@@ -147,13 +149,13 @@ Pulseq
 
 **Acquisition Ordering**
 
-    pulserver.make_centerout_ordering_1d
-    pulserver.make_centerout_ordering_2d
-    pulserver.make_interleaved_ordering_1d
-    pulserver.make_radial_ordering_2d
-    pulserver.make_random_ordering_1d
-    pulserver.make_random_ordering_2d
-    pulserver.make_spiral_ordering_2d
+    pulserver.pulseq.make_centerout_ordering_1d
+    pulserver.pulseq.make_centerout_ordering_2d
+    pulserver.pulseq.make_interleaved_ordering_1d
+    pulserver.pulseq.make_radial_ordering_2d
+    pulserver.pulseq.make_random_ordering_1d
+    pulserver.pulseq.make_random_ordering_2d
+    pulserver.pulseq.make_spiral_ordering_2d
 
 MRD
 """
