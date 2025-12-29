@@ -21,6 +21,21 @@ __all__ = [
     # "split_waveform",
     # "split_waveform_at",
     "traj_to_grad",
+    # "make_adiabatic_inversion",
+    # "make_adiabatic_t2prep",
+    "make_arbitrary_rf",
+    "make_block_pulse",
+    # "make_fermi_pulse",
+    # "make_slr_pulse",
+    # "make_sms_pulse",
+    # "make_spsp_pulse",
+    "make_arbitrary_grad",
+    # "make_epi",
+    "make_extended_trapezoid",
+    "make_extended_trapezoid_area",
+    # "make_spiral",
+    "make_trapezoid",
+    # "make_wave",
     "make_caipirinha_sampling",
     "make_partial_fourier_sampling",
     "make_poisson_disk_sampling",
@@ -35,19 +50,19 @@ __all__ = [
 ]
 
 # %% Core
-from pypulseq import Sequence
-from pypulseq import Opts
+from pypulseq import Sequence # pragma: no cover
+from pypulseq import Opts # pragma: no cover
 
 
 # %% Utilities
-from pypulseq.add_gradients import add_gradients
-from pypulseq.align import align
-from pypulseq.calc_duration import calc_duration
-from pypulseq.calc_rf_bandwidth import calc_rf_bandwidth
-from pypulseq.calc_rf_center import calc_rf_center
-from pypulseq.convert import convert
-from pypulseq.points_to_waveform import points_to_waveform
-from pypulseq.traj_to_grad import traj_to_grad
+from pypulseq.add_gradients import add_gradients # pragma: no cover
+from pypulseq.align import align # pragma: no cover
+from pypulseq.calc_duration import calc_duration # pragma: no cover
+from pypulseq.calc_rf_bandwidth import calc_rf_bandwidth # pragma: no cover
+from pypulseq.calc_rf_center import calc_rf_center # pragma: no cover
+from pypulseq.convert import convert # pragma: no cover
+from pypulseq.points_to_waveform import points_to_waveform # pragma: no cover
+from pypulseq.traj_to_grad import traj_to_grad # pragma: no cover
 
 from .utils import calc_kspace_line_jump
 from .utils import calc_kspace_band_jump
@@ -57,10 +72,25 @@ from .utils import calc_kspace_readout_params
 
 
 # %% RF Pulses
+from pypulseq.make_arbitrary_rf import make_arbitrary_rf # pragma: no cover
+from pypulseq.make_block_pulse import make_block_pulse # pragma: no cover
 
+# from .rf import make_adiabatic_inversion
+# from .rf import make_adiabatic_t2prep
+# from .rf import make_fermi_pulse
+# from .rf import make_slr_pulse
+# from .rf import make_sms_pulse
+# from .rf import make_spsp_pulse
 
 # %% Gradient Waveforms
+from pypulseq.make_arbitrary_grad import make_arbitrary_grad # pragma: no cover
+from pypulseq.make_extended_trapezoid import make_extended_trapezoid # pragma: no cover
+from pypulseq.make_extended_trapezoid_area import make_extended_trapezoid_area # pragma: no cover
+from pypulseq.make_trapezoid import make_trapezoid # pragma: no cover
 
+# from .grad import make_epi
+# from .grad import make_spiral
+# from .grad import make_wave
 
 # %% Sampling Patterns
 from .sampling import make_caipirinha_sampling
@@ -77,16 +107,3 @@ from .ordering import make_radial_ordering_2d
 from .ordering import make_random_ordering_1d
 from .ordering import make_random_ordering_2d
 from .ordering import make_spiral_ordering_2d
-
-
-
-
-
-
-
-
-
-
-
-
-
