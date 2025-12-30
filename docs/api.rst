@@ -104,6 +104,7 @@ Pulseq
 
 **Pulseq Utilities**
 
+    pulserver.pulseq.DUMMY_OPTS
     pulserver.pulseq.add_gradients
     pulserver.pulseq.align
     pulserver.pulseq.calc_duration
@@ -118,6 +119,7 @@ Pulseq
     pulserver.pulseq.split_waveform
     pulserver.pulseq.split_waveform_at
     pulserver.pulseq.traj_to_grad
+    pulserver.pulseq.time_revert_waveform
 
 **RF Pulses**
 

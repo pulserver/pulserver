@@ -8,6 +8,7 @@ This sub-package contains all low-level routines extending Pulseq design toolbox
 __all__ = [
     "Sequence",
     "Opts",
+    "DUMMY_OPTS",
     "add_gradients",
     "align",
     "calc_duration",
@@ -18,8 +19,9 @@ __all__ = [
     "calc_rf_center",
     "convert",
     "points_to_waveform",
-    # "split_waveform",
-    # "split_waveform_at",
+    "split_waveform",
+    "split_waveform_at",
+    "time_revert_waveform",
     "traj_to_grad",
     # "make_adiabatic_inversion",
     # "make_adiabatic_t2prep",
@@ -64,11 +66,13 @@ from pypulseq.convert import convert # pragma: no cover
 from pypulseq.points_to_waveform import points_to_waveform # pragma: no cover
 from pypulseq.traj_to_grad import traj_to_grad # pragma: no cover
 
+from .utils import DUMMY_OPTS
 from .utils import calc_kspace_line_jump
 from .utils import calc_kspace_band_jump
 from .utils import calc_kspace_readout_params
-# from .utils import split_waveform
-# from .utils import split_waveform_at
+from .utils import split_waveform
+from .utils import split_waveform_at
+from .utils import time_revert_waveform
 
 
 # %% RF Pulses
