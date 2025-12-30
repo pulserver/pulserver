@@ -11,6 +11,7 @@ __all__ = [
     "DUMMY_OPTS",
     "add_gradients",
     "align",
+    "calc_waveform_area",
     "calc_duration",
     "calc_kspace_band_jump",
     "calc_kspace_line_jump",
@@ -23,11 +24,10 @@ __all__ = [
     "split_waveform_at",
     "time_revert_waveform",
     "traj_to_grad",
-    # "make_adiabatic_inversion",
+    "make_adiabatic_pulse",
     # "make_adiabatic_t2prep",
     "make_arbitrary_rf",
     "make_block_pulse",
-    # "make_fermi_pulse",
     # "make_slr_pulse",
     # "make_sms_pulse",
     # "make_spsp_pulse",
@@ -76,12 +76,11 @@ from .utils import time_revert_waveform
 
 
 # %% RF Pulses
+from pypulseq.make_adiabatic_pulse import make_adiabatic_pulse # pragma: no cover
 from pypulseq.make_arbitrary_rf import make_arbitrary_rf # pragma: no cover
 from pypulseq.make_block_pulse import make_block_pulse # pragma: no cover
 
-# from .rf import make_adiabatic_inversion
 # from .rf import make_adiabatic_t2prep
-# from .rf import make_fermi_pulse
 # from .rf import make_slr_pulse
 # from .rf import make_sms_pulse
 # from .rf import make_spsp_pulse

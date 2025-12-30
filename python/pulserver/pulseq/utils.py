@@ -8,6 +8,7 @@ sequence construction and waveform manipulation.
 
 __all__ = [
     "DUMMY_OPTS",
+    "calc_waveform_area",
     "calc_kspace_band_jump",
     "calc_kspace_line_jump",
     "calc_kspace_readout_params",
@@ -31,6 +32,41 @@ from pypulseq.split_gradient import split_gradient
 from pypulseq.split_gradient_at import split_gradient_at
 
 DUMMY_OPTS = Opts(max_grad=np.inf, max_slew=np.inf)
+
+def calc_waveform_area(event: SimpleNamespace) -> float | complex:
+    """
+    Compute area of given Pulseq RF or Gradient event. 
+
+    Parameters
+    ----------
+    event : SimpleNamespace
+        Pulseq RF or Gradient event.
+
+    Raises
+    ------
+    ValueError
+        If event is neither RF nor Grad.
+
+    Returns
+    -------
+    float | complex
+        Waveform area.
+
+    """
+    if event.type == 'trap':
+        times = np.cumsum(np.asarray([0.0, event.rise_time, event.flat_time, event.fall_time]))
+        amplitudes = np.asarray([0.0, event.amplitude, event.amplitude, 0.0])
+    elif event.type == 'grad':
+        times = event.tt
+        amplitudes = event.waveform
+    elif event.type == 'rf':
+        times = event.t
+        amplitudes = event.signal
+    else:
+        raise ValueError(f'Only Gradients and RF are allowed - found {event.type}')
+    
+    return np.trapezoid(y=amplitudes, x=times)
+
 
 def calc_kspace_readout_params(
     fov: float,

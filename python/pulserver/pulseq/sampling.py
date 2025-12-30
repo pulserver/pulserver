@@ -1,7 +1,7 @@
 """
 Pulseq sampling functions.
 
-This module contains low-level helper functions to create sampling masks,
+This module contains low-level helper functions to create sampling masks.
 
 """
 from __future__ import annotations
