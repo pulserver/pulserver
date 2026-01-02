@@ -45,9 +45,10 @@ classifiers = [  # Optional
 ]
 
 dependencies = [
-"numpy",
+"numpy>=2.0",
 "scipy",
 "pypulseq",
+"sigpy>=0.1.27"
 "ipywidgets",
 ]
 
