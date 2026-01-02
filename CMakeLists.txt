@@ -8,7 +8,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 find_package(pybind11 CONFIG REQUIRED)
 find_package(Python COMPONENTS Development.Module REQUIRED)
 
-set(PYTHON_EXT_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/python/pulserver/tools/_design")
+set(PYTHON_EXT_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension")
 
 # -------------------------
 # Reliable pybind11 module helper
@@ -55,7 +55,7 @@ endfunction()
 # -------------------------
 add_pybind_module(_cpd_wrapper "" 
     SOURCES
-        "${CMAKE_SOURCE_DIR}/python/pulserver/tools/_design/_cpd_wrapper.cpp"
+        "${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension/_cpd_wrapper.cpp"
         "${CMAKE_SOURCE_DIR}/external/cpdlib/misc.c"
         "${CMAKE_SOURCE_DIR}/external/cpdlib/udcpd.c"
         "${CMAKE_SOURCE_DIR}/external/cpdlib/vdcpd.c"
@@ -66,11 +66,11 @@ add_pybind_module(_cpd_wrapper ""
 # -------------------------
 # _vds module
 # -------------------------
-add_pybind_module(_vds_wrapper "_grad"
+add_pybind_module(_vds_wrapper ""
     SOURCES
-        "${CMAKE_SOURCE_DIR}/python/pulserver/tools/_design/_grad/_vds_wrapper.cpp"
+        "${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension/_vds_wrapper.cpp"
         "${CMAKE_SOURCE_DIR}/external/vdslib/vds.c"
     INCLUDES
         ${CMAKE_SOURCE_DIR}/external
-        ${CMAKE_SOURCE_DIR}/python/pulserver/tools/_design/_grad
+        #${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension
 )

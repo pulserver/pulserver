@@ -48,7 +48,7 @@ dependencies = [
 "numpy>=2.0",
 "scipy",
 "pypulseq",
-"sigpy>=0.1.27"
+"sigpy>=0.1.27",
 "ipywidgets",
 ]
 
@@ -86,8 +86,6 @@ extend-exclude = [
 "*_version.py", 
 "test_*.py", 
 "tests", 
-"python/pulserver/_server",
-"python/pulserver/pulseq/_spsp",
 ]
 
 [tool.ruff.lint]
