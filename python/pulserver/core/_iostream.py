@@ -58,25 +58,26 @@ def write_to_stream(
     seq.set_definition('TotalDuration', sum(seq.block_durations.values()))
 
     # Check whether all gradients in the last block are ramped down properly
-    last_block_id = next(reversed(seq.block_events))
-    last_block = seq.get_block(last_block_id)
-    for channel, event in zip(('x', 'y', 'z'), (last_block.gx, last_block.gy, last_block.gz), strict=False):
-        if (
-            event is not None
-            and event.type == 'grad'
-            and abs(event.last) > seq.system.max_slew * seq.system.grad_raster_time
-        ):
-            warn_msg = f'write(): Gradient on channel {channel} in last sequence block does not ramp down to 0'
-
-            if trace_enabled():
-                trace = seq.block_trace.get(last_block_id, None)
-
-                if hasattr(trace, 'block'):
-                    warn_msg += '\nLast block defined here:\n' + format_trace(trace.block)
-                if hasattr(trace, 'g' + channel):
-                    warn_msg += f'\n`g{channel}` defined here:\n' + format_trace(getattr(trace, 'g' + channel))
-
-            warn(warn_msg, stacklevel=2)
+    if len(seq.block_events):
+        last_block_id = next(reversed(seq.block_events))
+        last_block = seq.get_block(last_block_id)
+        for channel, event in zip(('x', 'y', 'z'), (last_block.gx, last_block.gy, last_block.gz), strict=False):
+            if (
+                event is not None
+                and event.type == 'grad'
+                and abs(event.last) > seq.system.max_slew * seq.system.grad_raster_time
+            ):
+                warn_msg = f'write(): Gradient on channel {channel} in last sequence block does not ramp down to 0'
+    
+                if trace_enabled():
+                    trace = seq.block_trace.get(last_block_id, None)
+    
+                    if hasattr(trace, 'block'):
+                        warn_msg += '\nLast block defined here:\n' + format_trace(trace.block)
+                    if hasattr(trace, 'g' + channel):
+                        warn_msg += f'\n`g{channel}` defined here:\n' + format_trace(getattr(trace, 'g' + channel))
+    
+                warn(warn_msg, stacklevel=2)
 
     # Write the sequence
     stream, signature = _write_to_stream(seq, stream, create_signature, remove_duplicates)
@@ -86,9 +87,8 @@ def write_to_stream(
         seq.signature_type = 'md5'
         seq.signature_file = 'text'
         seq.signature_value = signature
-        return stream, signature
-    else:
-        return stream
+
+    return stream
         
 # %% Internal helpers
 def _write_to_stream(

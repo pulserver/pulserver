@@ -47,8 +47,25 @@ class _PulserverSeqFile {
 public:
     pulseqlib_SeqFile* seq;
 
-    _PulserverSeqFile(const py::bytes& seq_bytes) {
+    _PulserverSeqFile(const py::bytes& seq_bytes,
+                      float B0,
+                      float max_grad,
+                      float max_slew,
+                      float rf_raster_time,
+                      float grad_raster_time,
+                      float adc_raster_time,
+                      float block_duration_raster) {
         seq = (pulseqlib_SeqFile*)ALLOC(sizeof(pulseqlib_SeqFile));
+
+        // Initialize SeqFile with options
+        pulseqlib_Opts opts;
+        pulseqlib_optsInit(&opts, B0, max_grad, max_slew,
+                           rf_raster_time, grad_raster_time,
+                           adc_raster_time, block_duration_raster);
+        pulseqlib_seqFileInit(seq, &opts);
+        pulseqlib_optsFree(&opts);
+
+        // Copy Python bytes into a buffer
         std::string buffer = seq_bytes;
         FMEMOPEN_HANDLE handle = FMEMOPEN_HANDLE_INIT;
         open_buffer_as_file(&handle, (char*)buffer.data(), buffer.size());
@@ -62,13 +79,13 @@ public:
 
     ~_PulserverSeqFile() {
         if (seq) {
-            pulseqlib_seqFileFree(seq);
+            if (seq) pulseqlib_seqFileFree(seq);
         }
     }
 };
 
 PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     py::class_<_PulserverSeqFile>(m, "_PulserverSeqFile")
-        .def(py::init<py::bytes>())
+        .def(py::init<py::bytes, float, float, float, float, float, float, float>())
         ;
 }

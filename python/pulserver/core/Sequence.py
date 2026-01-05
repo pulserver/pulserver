@@ -7,6 +7,7 @@ import copy
 
 import pypulseq as pp
 
+from ._iostream import write_to_stream
 from ._extension._pulseqlib_wrapper import _PulserverSeqFile
 
 class PulserverSequence(pp.Sequence):
@@ -14,7 +15,18 @@ class PulserverSequence(pp.Sequence):
     """
     def __init__(self, seq: pp.Sequence):
         object.__setattr__(self, "_seq", copy.deepcopy(seq))
-        object.__setattr__(self, "_cseq", _PulserverSeqFile(seq))
+        sys = seq.system
+        cseq = _PulserverSeqFile(
+            write_to_stream(seq),
+            float(sys.B0),
+            float(sys.max_grad),
+            float(sys.max_slew),
+            float(sys.rf_raster_time),
+            float(sys.grad_raster_time),
+            float(sys.adc_raster_time),
+            float(sys.block_duration_raster),
+        )
+        object.__setattr__(self, "_cseq", cseq)
 
     def __getattribute__(self, name):
         # Always return PulserverSequence's own attributes/methods first
