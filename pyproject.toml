@@ -12,60 +12,60 @@ requires = [
 name = "pulserver"
 description = "A PyPulseq-based client/server MR sequence design toolbox."
 readme = "README.rst"
-
 requires-python = ">=3.10"
 dynamic = ["version"]
-
 license = {file = "LICENSE.txt"}
-keywords = ["pulseq", "mri", "sequence-design", "pulse-sequences", "mri-sequences"]
-
-authors = [
-  {name = "Matteo Cencini", email = "matteo.cencini@gmail.com" } # Optional
+keywords = [
+  "pulseq", 
+  "mri", 
+  "sequence-design", 
+  "pulse-sequences", 
+  "mri-sequences",
 ]
-
-# Classifiers help users find your project by categorizing it.
-# For a list of valid classifiers, see https://pypi.org/classifiers/
-classifiers = [  # Optional
-  # How mature is this project? Common values are
-  #   3 - Alpha
-  #   4 - Beta
-  #   5 - Production/Stable
+authors = [
+  {name = "Matteo Cencini", email = "matteo.cencini@gmail.com" }
+]
+classifiers = [
   "Development Status :: 3 - Alpha",
-
-  # Indicate who your project is intended for
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
-
-  # Specify the Python versions you support here. In particular, ensure
-  # that you indicate you support Python 3. These classifiers are *not*
-  # checked by "pip install". See instead "python_requires" below.
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
 ]
 
 dependencies = [
-"numpy>=2.0",
-"scipy",
-"pypulseq",
-"sigpy>=0.1.27",
-"ipywidgets",
+  "numpy>=2.0",
+  "scipy",
+  "pypulseq",
+  "sigpy>=0.1.27",
+  "ipywidgets",
 ]
 
-[project.optional-dependencies] # Optional
-dev = ["ruff", "isort"]
-test = ["pytest", "pytest-black", "pytest-cov", "pytest-sugar", "pytest-xdist"]
-doc = ["sphinx", "pydata-sphinx-theme", "myst-nb", "matplotlib", "sphinx-copybutton"]
+[project.optional-dependencies]
+dev = [
+  "ruff", 
+  "isort",
+  "pytest", 
+  "pytest-black", 
+  "pytest-cov", 
+  "pytest-sugar", 
+  "pytest-xdist",
+]
+doc = [
+  "sphinx", 
+  "pydata-sphinx-theme", 
+  "myst-nb", 
+  "matplotlib", 
+  "sphinx-copybutton",
+]
 
-# List URLs that are relevant to your project
-# This field corresponds to the "Project-URL" and "Home-Page" metadata fields:
-[project.urls]  # Optional
+[project.urls] 
 "Homepage" = "https://github.com/INFN-MRI/pulserver"
 "Bug Reports" = "https://github.com/INFN-MRI/pulserver/issues"
 "Source" = "https://github.com/INFN-MRI/pulserver"
 
 [tool.scikit-build]
-# Ensure wheels get correct macOS tagging (optional)
 wheel.expand-macos-universal-tags = true
 
 [tool.setuptools.packages.find]
@@ -77,9 +77,8 @@ version_scheme = "python-simplified-semver"
 local_scheme="no-local-version"
 fallback_version="v99-dev"
 
-# Formatting and linting using ruff.
 [tool.ruff]
-src = ["src", "tests"]
+src = ["python", "tests"]
 line-length = 120
 extend-exclude = [ 
 "example_*.py" , 
@@ -164,7 +163,6 @@ live_mode = false
 ignore_missing_imports = true
 
 [tool.codespell]
-# Ref: https://github.com/codespell-project/codespell#using-a-config-file
 skip = '.git*'
 check-hidden = true
 ignore-words-list = 'te,fo,nd,maked,datas,iten,itel,tread'

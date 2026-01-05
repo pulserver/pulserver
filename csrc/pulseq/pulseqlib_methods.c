@@ -1537,15 +1537,13 @@ void pulseqlib_seqBlockFree(pulseqlib_SeqBlock* block) {
 }
 
 /**
- * @brief Read SeqFile content
+ * @brief Read SeqFile content from buffer.
  * 
  * @param[in, out] seq The SeqFile structure.
- * @param[in] filePath The path to the sequence file.
+ * @param[in] f The FILE buffer.
  */
-void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath) {
-    FILE* f;
-
-    if (!seq || !filePath) return;
+void pulseqlib_readSeqFromBuffer(pulseqlib_SeqFile* seq, FILE* f) {
+    if (!seq || !f) return;
 
     seqFileReset(seq);
 
@@ -1554,20 +1552,10 @@ void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath) {
         seq->filePath = NULL;
     }
 
-    f = fopen(filePath, "r");
-    if (!f) return;
-
-    seq->filePath = (char*)ALLOC(strlen(filePath) + 1);
-    if (!seq->filePath) {
-        fclose(f);
-        return;
-    }
-    strcpy(seq->filePath, filePath);
     getSectionOffsets(seq, f);
     readVersion(seq, f);
     if (seq->versionCombined < 1005000) {
         fprintf(stderr, "Error: Unsupported sequence file version %d.%d.%d\n", seq->versionMajor, seq->versionMinor, seq->versionRevision);
-        fclose(f);
         return;
     }
     readDefinitionsLibrary(seq, f); 
@@ -1577,9 +1565,23 @@ void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath) {
     readGradLibrary(seq, f);
     readAdcLibrary(seq, f);
     readShapesLibrary(seq, f);
-    readExtensionsLibrary(seq, f);      
+    readExtensionsLibrary(seq, f);  
+    return;    
+}
+
+/**
+ * @brief Read SeqFile content from file.
+ * 
+ * @param[in, out] seq The SeqFile structure.
+ * @param[in] filePath The path to the sequence file.
+ */
+void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath) {
+    FILE* f;
+    if (!seq || !filePath) return;
+    f = fopen(filePath, "r");
+    if (!f) return;
+    pulseqlib_readSeqFromBuffer(seq, f);
     fclose(f);
-    
     return;
 }
 

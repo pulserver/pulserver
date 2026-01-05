@@ -8,8 +8,6 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 find_package(pybind11 CONFIG REQUIRED)
 find_package(Python COMPONENTS Development.Module REQUIRED)
 
-set(PYTHON_EXT_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension")
-
 # -------------------------
 # Reliable pybind11 module helper
 # -------------------------
@@ -22,7 +20,6 @@ function(add_pybind_module module_name output_subdir)
     # Expand sources: support both explicit files and globs
     set(MODULE_SOURCES_LIST "")
     foreach(src_pattern IN LISTS ARG_SOURCES)
-        # If pattern contains '*', treat as glob
         if("${src_pattern}" MATCHES "\\*")
             file(GLOB EXPANDED ${src_pattern})
             if(EXPANDED STREQUAL "")
@@ -37,15 +34,17 @@ function(add_pybind_module module_name output_subdir)
         endif()
     endforeach()
 
-    # Create the pybind11 module
+    # Get the directory of the first source file
+    list(GET MODULE_SOURCES_LIST 0 FIRST_SOURCE)
+    get_filename_component(MODULE_OUTPUT_DIR "${FIRST_SOURCE}" DIRECTORY)
+
     pybind11_add_module(${module_name} ${MODULE_SOURCES_LIST})
 
-    # Include directories
     target_include_directories(${module_name} PRIVATE ${ARG_INCLUDES})
 
-    # Output directory
+    # Output directory: use the directory of the first source file
     set_target_properties(${module_name} PROPERTIES
-        LIBRARY_OUTPUT_DIRECTORY "${PYTHON_EXT_OUTPUT_DIR}/${output_subdir}"
+        LIBRARY_OUTPUT_DIRECTORY "${MODULE_OUTPUT_DIR}"
         OUTPUT_NAME "${module_name}"
     )
 endfunction()
@@ -63,6 +62,12 @@ add_pybind_module(_cpd_wrapper ""
         ${CMAKE_SOURCE_DIR}/external
 )
 
+# Install built extensions to the source tree for editable mode
+file(GLOB CPD_WRAPPERS "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/pulseq/_extension/_cpd_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+install(
+    FILES  ${CPD_WRAPPERS} DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension
+)
+
 # -------------------------
 # _vds module
 # -------------------------
@@ -73,4 +78,27 @@ add_pybind_module(_vds_wrapper ""
     INCLUDES
         ${CMAKE_SOURCE_DIR}/external
         #${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension
+)
+
+# Install built extensions to the source tree for editable mode
+file(GLOB VDS_WRAPPERS "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/pulseq/_extension/_vds_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+install(
+    FILES  ${VDS_WRAPPERS} DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension
+)
+
+# -------------------------
+# _pulseqlib module
+# -------------------------
+add_pybind_module(_pulseqlib_wrapper ""
+    SOURCES
+        "${CMAKE_SOURCE_DIR}/python/pulserver/core/_extension/_pulseqlib_wrapper.cpp"
+        "${CMAKE_SOURCE_DIR}/csrc/pulseq/pulseqlib_methods.c"
+    INCLUDES
+        ${CMAKE_SOURCE_DIR}/csrc/pulseq
+)
+
+# Install built extensions to the source tree for editable mode
+file (GLOB PULSEQLIB_WRAPPERS "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/core/_extension/_pulseqlib_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+install(
+    FILES  ${PULSEQLIB_WRAPPERS} DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/core/_extension
 )

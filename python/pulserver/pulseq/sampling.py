@@ -9,7 +9,7 @@ from __future__ import annotations
 __all__ = [
     'make_caipirinha_sampling',
     'make_partial_fourier_sampling',
-    'make_poisson_sampling',
+    'make_poisson_disk_sampling',
     'make_regular_sampling',
 ]
 
@@ -276,7 +276,7 @@ def make_partial_fourier_sampling(shape: int, undersampling: float) -> NDArray[i
     return mask
 
 
-def make_poisson_sampling(
+def make_poisson_disk_sampling(
     shape: int | tuple[int, int],
     accel: float | tuple[float] = 1.0,
     calib: int | tuple[int, int] | None = None,
@@ -332,9 +332,9 @@ def make_poisson_sampling(
     --------
     Typical variable-density CPD sampling on a 64x64 k-space with a central ACS:
 
-    >>> from sampling import make_poisson_sampling
+    >>> from sampling import make_poisson_disk_sampling
     >>> # variable-density CPD with center calibration region
-    >>> mask = make_poisson_sampling(
+    >>> mask = make_poisson_disk_sampling(
             (64, 64), accel=(2, 2), calib=20, nt=1, vardens=True
         )
     >>> mask.shape
@@ -351,7 +351,7 @@ def make_poisson_sampling(
     Uniform-density (UD-CPD-like) example and temporal phases:
 
     >>> # uniform density generation (vardens=False) and multiple temporal phases
-    >>> m_t = make_poisson_sampling((32, 32), accel=(4, 1), nt=3, vardens=False)
+    >>> m_t = make_poisson_disk_sampling((32, 32), accel=(4, 1), nt=3, vardens=False)
     >>> m_t.shape
     (32, 32, 3)
     >>> # logical OR across temporal phases yields a 2D sampling coverage map
