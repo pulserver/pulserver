@@ -11,7 +11,7 @@ add_library(pulseqlib ${PULSEQ})
 target_include_directories(pulseqlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(pulseqlib m)
 
-a# dd_library(pulserverlib ${PULSERVER})
+# dd_library(pulserverlib ${PULSERVER})
 # target_include_directories(pulserverlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # target_include_directories(pulserverlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/pulseq)
 # target_link_libraries(pulserverlib PUBLIC pulseqlib)

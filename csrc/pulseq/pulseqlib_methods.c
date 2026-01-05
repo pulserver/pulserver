@@ -118,7 +118,7 @@ int initStandardLibrary(FILE* f, const long* offsets, int numSections, void** ta
     if (maxIndex <= 0) {
         *target = NULL;
         *targetCount = 0;
-        return 1; /* No entries found */
+        return 0; /* No entries found: treat as empty */
     }
 
     /* Allocate zero-filled 2D array as a single block */
@@ -662,7 +662,7 @@ void readBlockLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     /* Preallocate library */
     ret = initStandardLibrary(f,  &((seq->offsets).blocks), 1, (void**)&seq->blockLibrary, &seq->numBlocks, blockScale.size);
     if (ret != 0) {
-        fprintf(stderr, "Error: Failed to initialize rfLibrary\n");
+        fprintf(stderr, "Error: Failed to initialize blockLibrary\n");
         return;
     }
 
