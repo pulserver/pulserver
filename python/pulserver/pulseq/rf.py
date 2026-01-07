@@ -478,7 +478,7 @@ def make_spsp_pulse(
         For 'ex' pulses, absorb the alpha phase
         profile from beta's spectral profile, so they cancel for a flatter
         total phase.
-    n_lobes : int, default=8
+    n_lobes : int, default=14
         Number of sub-lobes within the given duration.
     flyback : bool, default=False
         If ``True``, use flyback EPI slice selection grad instead of bipolar.
