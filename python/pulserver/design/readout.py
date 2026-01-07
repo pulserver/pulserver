@@ -171,7 +171,7 @@ class BareboneReadout(ReadoutMixin):
         return self._readout_area
     
             
-class LineReadout(ReadoutMixin):
+class LineReadout(BareboneReadout):
     def __init__(
         self,
         system: pp.Opts,
@@ -187,25 +187,16 @@ class LineReadout(ReadoutMixin):
         gx_last: float = 0.0,
         kx_last: float = 0.0,
     ):
-        if rampsamp and flatsamp:
-            raise ValueError('"rampsamp" option is not compatible with "flatsamp" - pick one or neither')
-            
-        # Get readout parameters
-        readout_area, readout_time, num_samples = pp.calc_kspace_readout_params(
+        super().__init__(
+            system,
             fov_m,
             npix,
             receive_bandwidth_Hz,
             oversamp,
-            system.adc_raster_time,
-            system.grad_raster_time,
+            partial_fourier_factor,
+            rampsamp,
+            flatsamp,
         )
-        dwell_time = readout_time / num_samples
-
-        # Make sure partial_fourier leads to integer number of samples
-        act_num_samples = np.ceil(partial_fourier_factor * num_samples).astype(int).item()
-        partial_fourier_factor = act_num_samples / num_samples
-        num_samples = act_num_samples
-        readout_time = num_samples * dwell_time
         
         # Get target initial k-space  (excluding ramp up)
         post_echo_area = readout_area / 2.0
