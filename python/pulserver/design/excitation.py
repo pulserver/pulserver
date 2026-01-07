@@ -9,8 +9,7 @@ __all__ = [
 ]
 
 
-from ... import pulseq as pp
-
+from .. import pulseq as pp
 
 class RFBlockMixin:
     """
@@ -173,15 +172,17 @@ class SoftRFBlockMixin(RFBlockMixin):
         
     @property
     def gzr_first(self):
-        if self.gzr is not None and self.gzr.type == 'trap':
-            return 0.0
-        return self.gzr.first
+        if self.gzr is not None:
+            if self.gzr.type == 'trap':
+                return 0.0
+            return self.gzr.first
     
     @property
     def gzr_last(self):
-        if self.gzr is not None and self.gzr.type == 'trap':
-            return 0.0
-        return self.gzr.last
+        if self.gzr is not None:
+            if self.gzr.type == 'trap':
+                return 0.0
+            return self.gzr.last
         
     def append(self, seq: pp.Sequence | None = None) -> pp.Sequence:
         if seq is None:
@@ -335,6 +336,8 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
         Flip angle in ``[rad]``.
     slice_thickness_m : float
         Slice thickness in ``[m]``.
+    time_bw_product : float, optional
+        Pulse time / bandwidth product. The default is ``4.0``.
     duration_s : float, optional
         Pulse duration in ``[s]``. Default is ``2.0e-3 s``.
     system : pp.Opts | None, optional
@@ -390,6 +393,7 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
         self,
         flip_angle_rad: float,
         slice_thickness_m: float,
+        time_bw_product: float = 4.0,
         duration_s: float = 2.0e-3,
         system: pp.Opts | None = None,
         filter_type: str = 'ls',
@@ -405,6 +409,7 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
             duration=duration_s,
             return_gz=True,
             slice_thickness=slice_thickness_m,
+            time_bw_product=time_bw_product,
             system=system,
             use='excitation',
             filter_type=filter_type,
@@ -414,7 +419,7 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
             absorb_rf_deadtime=truncate_block,
         )
         if truncate_block:
-            gz, _ = pp.split_gradient_at(
+            gz, _ = pp.split_waveform_at(
                 gz, 
                 time_point=gz.delay+gz.rise_time+gz.flat_time,
                 system=system,
@@ -440,6 +445,8 @@ class SmsExcitation(SoftRFBlockMixin):
     slice_separation_m : float, optional
         Slice separation in ``[m]``. Default to contiguous slices
         (``slice_separation_m =  num_slices * slice_thickness_m``).
+    time_bw_product : float, optional
+        Pulse time / bandwidth product. The default is ``4.0``.
     duration_s : float, optional
         Pulse duration in ``[s]``. Default is ``4.0e-3 s``.
     system : pp.Opts | None, optional
@@ -497,6 +504,7 @@ class SmsExcitation(SoftRFBlockMixin):
         num_slices: int,
         slice_thickness_m: float,
         slice_separation_m: float | None = None,
+        time_bw_product: float = 4.0,
         duration_s: float = 4.0e-3,
         system: pp.Opts | None = None,
         filter_type: str = 'ls',
@@ -513,6 +521,7 @@ class SmsExcitation(SoftRFBlockMixin):
             n_slices=num_slices,
             slice_thickness=slice_thickness_m,
             slice_separation=slice_separation_m,
+            time_bw_product=time_bw_product,
             duration=duration_s,
             system=system,
             use='excitation',
@@ -524,7 +533,7 @@ class SmsExcitation(SoftRFBlockMixin):
             absorb_rf_deadtime=truncate_block,
         )
         if truncate_block:
-            gz, _ = pp.split_gradient_at(
+            gz, _ = pp.split_waveform_at(
                 gz, 
                 time_point=gz.delay+gz.rise_time+gz.flat_time,
                 system=system,

@@ -28,9 +28,9 @@ __all__ = [
     # "make_adiabatic_t2prep",
     "make_arbitrary_rf",
     "make_block_pulse",
-    # "make_slr_pulse",
-    # "make_sms_pulse",
-    # "make_spsp_pulse",
+    "make_slr_pulse",
+    "make_sms_pulse",
+    "make_spsp_pulse",
     "make_arbitrary_grad",
     # "make_epi",
     "make_extended_trapezoid",
@@ -80,10 +80,9 @@ from pypulseq.make_adiabatic_pulse import make_adiabatic_pulse # pragma: no cove
 from pypulseq.make_arbitrary_rf import make_arbitrary_rf # pragma: no cover
 from pypulseq.make_block_pulse import make_block_pulse # pragma: no cover
 
-# from .rf import make_adiabatic_t2prep
-# from .rf import make_slr_pulse
-# from .rf import make_sms_pulse
-# from .rf import make_spsp_pulse
+from .rf import make_slr_pulse
+from .rf import make_sms_pulse
+from .rf import make_spsp_pulse
 
 # %% Gradient Waveforms
 from pypulseq.make_arbitrary_grad import make_arbitrary_grad # pragma: no cover
