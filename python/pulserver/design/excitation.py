@@ -27,6 +27,8 @@ class RFBlockMixin:
         RF pulse event phase offset in ``[rad]``.
     phase_ppm : float
         RF pulse event phase offset in ``[ppm]``.
+    duration : float
+        RF segment duraiton in ``[s]``.
     """
     
     @property
@@ -69,6 +71,10 @@ class RFBlockMixin:
     def phase_ppm(self, value_ppm: float):
         self.rf.phase_ppm = value_ppm
         
+    @property
+    def duration(self):
+        return self._duration
+                
     def append(self, seq: pp.Sequence | None = None) -> pp.Sequence:
         """
         Append block to input sequence.
@@ -129,6 +135,8 @@ class SoftRFBlockMixin(RFBlockMixin):
         RF pulse event phase offset in ``[rad]``.
     phase_ppm : float
         RF pulse event phase offset in ``[ppm]``.
+    duration : float
+        RF segment duraiton in ``[s]``.
     """
 
     @property
@@ -203,13 +211,13 @@ class NonselectiveExcitation(RFBlockMixin):
     
     Parameters
     ----------
+    system : pp.Opts
+        Pulseq system limits. 
     flip_angle_rad : float
         Flip angle in ``[rad]``.
     duration_s : float, optional
         Pulse duration in ``[s]``. Default is ``0.5e-3 s``
-    system : pp.Opts | None, optional
-        Pulseq system limits. The default is ``pypulseq.Opts.default``.   
-    
+      
     Attributes
     ----------
     system : pp.Opts
@@ -230,23 +238,24 @@ class NonselectiveExcitation(RFBlockMixin):
         RF pulse event phase offset in ``[rad]``.
     phase_ppm : float
         RF pulse event phase offset in ``[ppm]``.
+    duration : float
+        RF segment duraiton in ``[s]``.
     """
     
     def __init__(
         self,
+        system: pp.Opts,
         flip_angle_rad: float,
         duration_s: float = 0.5e-3,
-        system: pp.Opts | None = None,
     ):
-        if system is None:
-            system = pp.Opts.default
+        self.system = system
         self.rf = pp.make_block_pulse(
+            system=system,
             flip_angle=flip_angle_rad,
             duration=duration_s,
-            system=system,
             use='excitation',
         )
-        self.system = system
+        self._duration = pp.calc_duration(self.rf)
 
 class FrequencySelectiveExcitation(RFBlockMixin):
     r"""
@@ -254,14 +263,14 @@ class FrequencySelectiveExcitation(RFBlockMixin):
     
     Parameters
     ----------
+    system : pp.Opts
+        Pulseq system limits.
     flip_angle_rad : float
         Flip angle in ``[rad]``.
     bandwidth_Hz : float
         Pulse spectral bandwidth in ``[Hz]``.
     duration_s : float
         Pulse duration in ``[s]``.
-    system : pp.Opts | None, optional
-        Pulseq system limits. The default is ``pypulseq.Opts.default``.
     filter_type : str, optional
         Type of filter to use: ``"ms"`` (sinc),
         ``"pm``, (Parks-McClellan equal-ripple),
@@ -299,32 +308,33 @@ class FrequencySelectiveExcitation(RFBlockMixin):
         RF pulse event phase offset in ``[rad]``.
     phase_ppm : float
         RF pulse event phase offset in ``[ppm]``.
+    duration : float
+        RF segment duraiton in ``[s]``.
     """
     def __init__(
         self,
+        system: pp.Opts,
         flip_angle_rad: float,
         bandwidth_Hz: float,
         duration_s: float = 2.0e-3,
-        system: pp.Opts | None = None,
         filter_type: str = 'ls',
         passband_ripple_lvl: float = 0.01,
         stopband_ripple_lvl: float = 0.01,
         cancel_alpha_phs: bool = False,
     ):
-        if system is None:
-            system = pp.Opts.default
+        self.system = system
         self.rf = pp.make_slr_pulse(
+            system=system,
             flip_angle=flip_angle_rad,
             duration=duration_s,
             bandwidth=bandwidth_Hz,
-            system=system,
             use='excitation',
             filter_type=filter_type,
             passband_ripple_lvl=passband_ripple_lvl,
             stopband_ripple_lvl=stopband_ripple_lvl,
             cancel_alpha_phs=cancel_alpha_phs,
         )
-        self.system = system
+        self._duration = pp.calc_duration(self.rf)
 
 class SpatiallySelectiveExcitation(SoftRFBlockMixin):
     r"""
@@ -332,6 +342,8 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
     
     Parameters
     ----------
+    system : pp.Opts
+        Pulseq system limits.
     flip_angle_rad : float
         Flip angle in ``[rad]``.
     slice_thickness_m : float
@@ -340,8 +352,6 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
         Pulse time / bandwidth product. The default is ``4.0``.
     duration_s : float, optional
         Pulse duration in ``[s]``. Default is ``2.0e-3 s``.
-    system : pp.Opts | None, optional
-        Pulseq system limits. The default is ``pypulseq.Opts.default``.
     filter_type : str, optional
         Type of filter to use: ``"ms"`` (sinc),
         ``"pm``, (Parks-McClellan equal-ripple),
@@ -388,29 +398,30 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
         RF pulse event phase offset in ``[rad]``.
     phase_ppm : float
         RF pulse event phase offset in ``[ppm]``.
+    duration : float
+        RF segment duraiton in ``[s]``.
     """
     def __init__(
         self,
+        system: pp.Opts,
         flip_angle_rad: float,
         slice_thickness_m: float,
         time_bw_product: float = 4.0,
         duration_s: float = 2.0e-3,
-        system: pp.Opts | None = None,
         filter_type: str = 'ls',
         passband_ripple_lvl: float = 0.01,
         stopband_ripple_lvl: float = 0.01,
         cancel_alpha_phs: bool = False,
         truncate_block: bool = False,
     ):
-        if system is None:
-            system = pp.Opts.default
+        self.system = system
         rf, gz, gzr = pp.make_slr_pulse(
+            system=system,
             flip_angle=flip_angle_rad,
             duration=duration_s,
             return_gz=True,
             slice_thickness=slice_thickness_m,
             time_bw_product=time_bw_product,
-            system=system,
             use='excitation',
             filter_type=filter_type,
             passband_ripple_lvl=passband_ripple_lvl,
@@ -428,7 +439,9 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
         self.rf = rf
         self.gz = gz
         self.gzr = gzr
-        self.system = system
+        self._duration = pp.calc_duration(rf, gz)
+        if gzr is not None:
+            self._duration += pp.calc_duration(gzr)
             
 class SmsExcitation(SoftRFBlockMixin):
     r"""
@@ -436,6 +449,8 @@ class SmsExcitation(SoftRFBlockMixin):
     
     Parameters
     ----------
+    system : pp.Opts
+        Pulseq system limits.
     flip_angle_rad : float
         Flip angle in ``[rad]``.
     num_slices : int
@@ -449,8 +464,6 @@ class SmsExcitation(SoftRFBlockMixin):
         Pulse time / bandwidth product. The default is ``4.0``.
     duration_s : float, optional
         Pulse duration in ``[s]``. Default is ``4.0e-3 s``.
-    system : pp.Opts | None, optional
-        Pulseq system limits. The default is ``pypulseq.Opts.default``.
     filter_type : str, optional
         Type of filter to use: ``"ms"`` (sinc),
         ``"pm``, (Parks-McClellan equal-ripple),
@@ -497,16 +510,18 @@ class SmsExcitation(SoftRFBlockMixin):
         RF pulse event phase offset in ``[rad]``.
     phase_ppm : float
         RF pulse event phase offset in ``[ppm]``.
+    duration : float
+        RF segment duraiton in ``[s]``.
     """
     def __init__(
         self,
+        system: pp.Opts,
         flip_angle_rad: float,
         num_slices: int,
         slice_thickness_m: float,
         slice_separation_m: float | None = None,
         time_bw_product: float = 4.0,
         duration_s: float = 4.0e-3,
-        system: pp.Opts | None = None,
         filter_type: str = 'ls',
         passband_ripple_lvl: float = 0.01,
         stopband_ripple_lvl: float = 0.01,
@@ -514,16 +529,15 @@ class SmsExcitation(SoftRFBlockMixin):
         reference_phase: str = 'None',
         truncate_block: bool = False,
     ):
-        if system is None:
-            system = pp.Opts.default
+        self.system = system
         rf, gz, gzr = pp.make_sms_pulse(
+            system=system,
             flip_angle=flip_angle_rad,
             n_slices=num_slices,
             slice_thickness=slice_thickness_m,
             slice_separation=slice_separation_m,
             time_bw_product=time_bw_product,
             duration=duration_s,
-            system=system,
             use='excitation',
             filter_type=filter_type,
             passband_ripple_lvl=passband_ripple_lvl,
@@ -542,7 +556,9 @@ class SmsExcitation(SoftRFBlockMixin):
         self.rf = rf
         self.gz = gz
         self.gzr = gzr
-        self.system = system
+        self._duration = pp.calc_duration(rf, gz)
+        if gzr is not None:
+            self._duration += pp.calc_duration(gzr)
             
 class SpspExcitation(SoftRFBlockMixin):
     r"""
@@ -550,6 +566,8 @@ class SpspExcitation(SoftRFBlockMixin):
     
     Parameters
     ----------
+    system : pp.Opts
+        Pulseq system limits.
     flip_angle_rad : float
         Flip angle in ``[rad]``.
     slice_thickness_m : float
@@ -560,8 +578,6 @@ class SpspExcitation(SoftRFBlockMixin):
         Pulse time/spatial_bandwidth product. The default is ``4.0``.
     duration_s : float, optional
         Pulse duration in ``[s]``. Default is ``10.0e-3 s``.
-    system : pp.Opts | None, optional
-        Pulseq system limits. The default is ``pypulseq.Opts.default``.
     spat_filter_type : str, optional
         Type of filter to use for spatial profile: ``"ms"`` (sinc),
         ``"pm``, (Parks-McClellan equal-ripple),
@@ -624,15 +640,17 @@ class SpspExcitation(SoftRFBlockMixin):
         RF pulse event phase offset in ``[rad]``.
     phase_ppm : float
         RF pulse event phase offset in ``[ppm]``.
+    duration : float
+        RF segment duraiton in ``[s]``.
     """
     def __init__(
         self,
+        system: pp.Opts,
         flip_angle_rad: float,
         slice_thickness_m: float,
         freq_bandwidth_Hz: float,
         spat_time_bw_product: float = 4.0,
         duration_s: float = 10.0e-3,
-        system: pp.Opts | None = None,
         spat_filter_type: str = 'ls',
         freq_filter_type: str = 'pm',
         spat_passband_ripple_lvl: float = 0.01,
@@ -644,15 +662,14 @@ class SpspExcitation(SoftRFBlockMixin):
         n_lobes: int = 14,
         flyback: bool = False,
     ):
-        if system is None:
-            system = pp.Opts.default
+        self.system = system
         rf, gz, gzr = pp.make_spsp_pulse(
+            system=system,
             flip_angle=flip_angle_rad,
             slice_thickness=slice_thickness_m,
             freq_bandwidth=freq_bandwidth_Hz,
             duration=duration_s,
             spat_time_bw_product=spat_time_bw_product,
-            system=system,
             use='excitation',
             spat_filter_type=spat_filter_type,
             spat_passband_ripple_lvl=spat_passband_ripple_lvl,
@@ -666,5 +683,5 @@ class SpspExcitation(SoftRFBlockMixin):
         self.rf = rf
         self.gz = gz
         self.gzr = gzr
-        self.system = system
+        self._duration = pp.calc_duration(rf, gz) + pp.calc_duration(gzr)
         

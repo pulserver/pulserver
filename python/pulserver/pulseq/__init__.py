@@ -20,6 +20,7 @@ __all__ = [
     "calc_rf_center",
     "convert",
     "points_to_waveform",
+    "scale_grad",
     "split_waveform",
     "split_waveform_at",
     "time_revert_waveform",
@@ -64,6 +65,7 @@ from pypulseq.calc_rf_bandwidth import calc_rf_bandwidth # pragma: no cover
 from pypulseq.calc_rf_center import calc_rf_center # pragma: no cover
 from pypulseq.convert import convert # pragma: no cover
 from pypulseq.points_to_waveform import points_to_waveform # pragma: no cover
+from pypulseq.scale_grad import scale_grad # pragma: no cover
 from pypulseq.traj_to_grad import traj_to_grad # pragma: no cover
 
 from .utils import DUMMY_OPTS
