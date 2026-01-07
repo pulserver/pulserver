@@ -46,6 +46,7 @@ def make_slr_pulse(
     passband_ripple_lvl: float = 0.01,
     stopband_ripple_lvl: float = 0.01,
     cancel_alpha_phs: bool = False,
+    absorb_rf_deadtime: bool = False,
 ) -> SimpleNamespace | tuple[SimpleNamespace, SimpleNamespace, SimpleNamespace]:
     r"""
     Creates a radio-frequency pulse event and optionally accompanying slice select and slice select rephasing
@@ -99,6 +100,9 @@ def make_slr_pulse(
         For 'ex' pulses, absorb the alpha phase
         profile from beta's profile, so they cancel for a flatter
         total phase.
+    absorb_rf_deadtime : bool, default=False
+        If True, and 'return_gz' is True, extend gz flat time to include
+        rf_dead_time.
 
     Returns
     -------
@@ -189,11 +193,29 @@ def make_slr_pulse(
         # Calculate plateau area
         flat_area = gz.amplitude * gz.flat_time
         
+        # Calculate area offset if gz is extended
+        if absorb_rf_deadtime:
+            area_offset = gz.amplitude * system.rf_dead_time
+        else:
+            area_offset = 0.0
+        total_area = flat_area * (1 - center_pos) + (gz.area - flat_area) + area_offset
+        
+        # Extend gz
+        if absorb_rf_deadtime:
+            gz = pp.make_trapezoid(
+                channel='z',
+                system=system,
+                rise_time=gz.rise_time,
+                flat_time=gz.flat_time + system.rf_dead_time,
+                fall_time=gz.fall_time,
+                amplitude=gz.amplitude,
+            )
+
         # Compensate area between rf peak and end of pulse
         gzr = pp.make_trapezoid(
             channel='z',
             system=system,
-            area=-flat_area * (1 - center_pos) - 0.5 * (gz.area - flat_area),
+            area=-total_area,
         )
         
         return rf, gz, gzr
@@ -223,6 +245,7 @@ def make_sms_pulse(
     stopband_ripple_lvl: float = 0.01,
     cancel_alpha_phs: bool = False,
     reference_phase: str = 'None',
+    absorb_rf_deadtime: bool = False,
 ) -> SimpleNamespace | tuple[SimpleNamespace, SimpleNamespace, SimpleNamespace]:
     r"""
     Creates a multislice radio-frequency pulse event and 
@@ -283,6 +306,9 @@ def make_sms_pulse(
     reference_phase : str, default="None"
         Phase 0 point to use. Can be 'phs_mod' (Wong),
         'amp_mod' (Malik), 'quad_mod' (Grissom), or 'None'.
+    absorb_rf_deadtime : bool, default=False
+        If True, and 'return_gz' is True, extend gz flat time to include
+        rf_dead_time.
 
     Returns
     -------
@@ -375,11 +401,29 @@ def make_sms_pulse(
     # Calculate plateau area
     flat_area = gz.amplitude * gz.flat_time
     
+    # Calculate area offset if gz is extended
+    if absorb_rf_deadtime:
+        area_offset = gz.amplitude * system.rf_dead_time
+    else:
+        area_offset = 0.0
+    total_area = flat_area * (1 - center_pos) + (gz.area - flat_area) + area_offset
+    
+    # Extend gz
+    if absorb_rf_deadtime:
+        gz = pp.make_trapezoid(
+            channel='z',
+            system=system,
+            rise_time=gz.rise_time,
+            flat_time=gz.flat_time + system.rf_dead_time,
+            fall_time=gz.fall_time,
+            amplitude=gz.amplitude,
+        )
+    
     # Compensate area between rf peak and end of pulse
     gzr = pp.make_trapezoid(
         channel='z',
         system=system,
-        area=-flat_area * (1 - center_pos) - 0.5 * (gz.area - flat_area),
+        area=-total_area,
     )
     
     return rf, gz, gzr

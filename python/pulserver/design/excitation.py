@@ -8,6 +8,7 @@ __all__ = [
     "SpspExcitation",
 ]
 
+
 from ... import pulseq as pp
 
 
@@ -107,8 +108,20 @@ class SoftRFBlockMixin(RFBlockMixin):
         ID of underlying Pulseq RF pulse event.
     gz_id : int
         ID of underlying Pulseq selection gradient event.
+    gz_area: float
+        Area of underlying Pulseq selection gradient event (read-only).
+    gz_first: float
+        Initial amplitude of underlying Pulseq selection gradient event (read-only).
+    gz_last: float
+        Final amplitude of underlying Pulseq selection gradient event (read-only).
     gzr_id : int
         ID of underlying Pulseq rephasing gradient event.
+    gzr_area: float
+        Area of underlying Pulseq rephasing gradient event (read-only).
+    gzr_first: float
+        Initial amplitude of underlying Pulseq rephasing gradient event (read-only).
+    gzr_last: float
+        Final amplitude of underlying Pulseq rephasing gradient event (read-only).
     freq_offset : float
         RF pulse event frequency offset in ``[Hz]``.
     freq_ppm : float
@@ -128,12 +141,47 @@ class SoftRFBlockMixin(RFBlockMixin):
         self.gz.id = value
         
     @property
-    def gzr_id(self):
-        return self.gzr.id
+    def gz_area(self):
+        return self.gz.area
     
+    @property
+    def gz_first(self):
+        if self.gz.type == 'trap':
+            return 0.0
+        return self.gz.first
+    
+    @property
+    def gz_last(self):
+        if self.gz.type == 'trap':
+            return 0.0
+        return self.gz.last
+        
+    @property
+    def gzr_id(self):
+        if self.gzr is not None:
+            return self.gzr.id
+
     @gzr_id.setter
     def gzr_id(self, value: int):
-        self.gzr.id = value
+        if self.gzr is not None:
+            self.gzr.id = value
+                 
+    @property
+    def gzr_area(self):
+        if self.gzr is not None:
+            return self.gzr.area
+        
+    @property
+    def gzr_first(self):
+        if self.gzr is not None and self.gzr.type == 'trap':
+            return 0.0
+        return self.gzr.first
+    
+    @property
+    def gzr_last(self):
+        if self.gzr is not None and self.gzr.type == 'trap':
+            return 0.0
+        return self.gzr.last
         
     def append(self, seq: pp.Sequence | None = None) -> pp.Sequence:
         if seq is None:
@@ -143,7 +191,8 @@ class SoftRFBlockMixin(RFBlockMixin):
         seq.add_block(self.rf, self.gz)
         
         # Add slice rephasing
-        seq.add_block(self.gzr)
+        if self.gzr is not None:
+            seq.add_block(self.gzr)
         
         return seq
 
@@ -306,6 +355,11 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
         For ``'ex'`` pulses, absorb the alpha phase
         profile from beta's profile, so they cancel for a flatter
         total phase. Default is ``False``.
+    truncate_block: bool, optional
+        If ``True``, truncate the excitation immediately after rf_deadtime.
+        It can be used to build time-optimized sequences like Fast Spin Echo,
+        in order to efficiently merge e.g., excitation and spoil. The default is
+        ``False``
     
     Attributes
     ----------
@@ -342,6 +396,7 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
         passband_ripple_lvl: float = 0.01,
         stopband_ripple_lvl: float = 0.01,
         cancel_alpha_phs: bool = False,
+        truncate_block: bool = False,
     ):
         if system is None:
             system = pp.Opts.default
@@ -356,7 +411,15 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
             passband_ripple_lvl=passband_ripple_lvl,
             stopband_ripple_lvl=stopband_ripple_lvl,
             cancel_alpha_phs=cancel_alpha_phs,
+            absorb_rf_deadtime=truncate_block,
         )
+        if truncate_block:
+            gz, _ = pp.split_gradient_at(
+                gz, 
+                time_point=gz.delay+gz.rise_time+gz.flat_time,
+                system=system,
+            )
+            gzr = None
         self.rf = rf
         self.gz = gz
         self.gzr = gzr
@@ -397,6 +460,11 @@ class SmsExcitation(SoftRFBlockMixin):
         For ``'ex'`` pulses, absorb the alpha phase
         profile from beta's profile, so they cancel for a flatter
         total phase. Default is ``False``.
+    truncate_block: bool, optional
+        If ``True``, truncate the excitation immediately after rf_deadtime.
+        It can be used to build time-optimized sequences like Fast Spin Echo,
+        in order to efficiently merge e.g., excitation and spoil. The default is
+        ``False``
     
     Attributes
     ----------
@@ -436,6 +504,7 @@ class SmsExcitation(SoftRFBlockMixin):
         stopband_ripple_lvl: float = 0.01,
         cancel_alpha_phs: bool = False,
         reference_phase: str = 'None',
+        truncate_block: bool = False,
     ):
         if system is None:
             system = pp.Opts.default
@@ -452,7 +521,15 @@ class SmsExcitation(SoftRFBlockMixin):
             stopband_ripple_lvl=stopband_ripple_lvl,
             cancel_alpha_phs=cancel_alpha_phs,
             reference_phase=reference_phase,
+            absorb_rf_deadtime=truncate_block,
         )
+        if truncate_block:
+            gz, _ = pp.split_gradient_at(
+                gz, 
+                time_point=gz.delay+gz.rise_time+gz.flat_time,
+                system=system,
+            )
+            gzr = None
         self.rf = rf
         self.gz = gz
         self.gzr = gzr
