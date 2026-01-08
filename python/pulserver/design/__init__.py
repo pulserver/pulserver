@@ -11,6 +11,7 @@ __all__ = [
     "SpatiallySelectiveExcitation",
     "SmsExcitation",
     "SpspExcitation",
+    "line_readout",
 ]
 
 from .excitation import NonselectiveExcitation
@@ -18,3 +19,5 @@ from .excitation import FrequencySelectiveExcitation
 from .excitation import SpatiallySelectiveExcitation
 from .excitation import SmsExcitation
 from .excitation import SpspExcitation
+
+from .readout import line_readout

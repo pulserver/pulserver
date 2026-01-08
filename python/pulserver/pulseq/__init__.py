@@ -8,6 +8,10 @@ This sub-package contains all low-level routines extending Pulseq design toolbox
 __all__ = [
     "Sequence",
     "Opts",
+    "make_adc",
+    "make_delay",
+    "make_digital_output_pulse",
+    "make_trigger",
     "DUMMY_OPTS",
     "add_gradients",
     "align",
@@ -55,6 +59,10 @@ __all__ = [
 # %% Core
 from pypulseq import Sequence # pragma: no cover
 from pypulseq import Opts # pragma: no cover
+from pypulseq.make_adc import make_adc # pragma: no cover
+from pypulseq.make_delay import make_delay # pragma: no cover
+from pypulseq.make_digital_output_pulse import make_digital_output_pulse # pragma: no cover
+from pypulseq.make_trigger import make_trigger # pragma: no cover
 
 
 # %% Utilities
