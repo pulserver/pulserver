@@ -339,10 +339,10 @@ class CartesianGre2D:
     def append(
         self,
         seq: pp.Sequence | None = None,
-        mode: ScanType = 'SCAN',
         y_index: int | None = None,
         z_index: int | None = None,
         label_TR_start: bool = False,
+        mode: ScanType = 'SCAN',
     ) -> pp.Sequence:
         """
         Append block to input sequence.
@@ -352,15 +352,15 @@ class CartesianGre2D:
         seq : pp.Sequence, optional
             Input Pulseq Sequence. If not provided, create a new sequence
             and append the block(s).
-        mode : ScanType, optional
-            Scan mode flag. If ``'SCAN'``, this is an imaging scan.
-            If ``'DUMMY'``, turn off ADC. The default is ``'SCAN'``.
         y_index : int, optional
             Phase encoding line to be acquired.
         z_index : int, optional
             Slice to be acquired.
         label_TR_start : bool, optional
             If ``True``, label the excitation block using ``TRID`` label.
+        mode : ScanType, optional
+            Scan mode flag. If ``'SCAN'``, this is an imaging scan.
+            If ``'DUMMY'``, turn off ADC. The default is ``'SCAN'``.
 
         Returns
         -------
@@ -435,9 +435,10 @@ class CartesianGre2D:
 
     def __call__(
         self,
-        seq: pp.Sequence | None,
-        y_index: int | None,
-        z_index: int | None,
-        mode: ScanType,
+        seq: pp.Sequence | None = None,
+        y_index: int | None = None,
+        z_index: int | None = None,
+        label_TR_start: bool = False,
+        mode: ScanType = 'SCAN',
     ) -> pp.Sequence:
-        return self.append(seq, y_index, z_index, mode)
+        return self.append(seq, y_index, z_index, label_TR_start, mode)
