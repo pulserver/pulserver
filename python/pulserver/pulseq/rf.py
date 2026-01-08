@@ -195,7 +195,7 @@ def make_slr_pulse(
         
         # Calculate area offset if gz is extended
         if absorb_rf_deadtime:
-            area_offset = gz.amplitude * system.rf_dead_time
+            area_offset = gz.amplitude * (system.rf_dead_time + system.rf_ringdown_time)
         else:
             area_offset = 0.0
         total_area = flat_area * (1 - center_pos) + (gz.area - flat_area) + area_offset
@@ -206,7 +206,7 @@ def make_slr_pulse(
                 channel='z',
                 system=system,
                 rise_time=gz.rise_time,
-                flat_time=gz.flat_time + system.rf_dead_time,
+                flat_time=gz.flat_time + system.rf_dead_time + system.rf_ringdown_time,
                 fall_time=gz.fall_time,
                 amplitude=gz.amplitude,
             )
@@ -403,7 +403,7 @@ def make_sms_pulse(
     
     # Calculate area offset if gz is extended
     if absorb_rf_deadtime:
-        area_offset = gz.amplitude * system.rf_dead_time
+        area_offset = gz.amplitude * (system.rf_dead_time + system.rf_ringdown_time)
     else:
         area_offset = 0.0
     total_area = flat_area * (1 - center_pos) + (gz.area - flat_area) + area_offset
@@ -414,7 +414,7 @@ def make_sms_pulse(
             channel='z',
             system=system,
             rise_time=gz.rise_time,
-            flat_time=gz.flat_time + system.rf_dead_time,
+            flat_time=gz.flat_time + system.rf_dead_time + system.rf_ringdown_time,
             fall_time=gz.fall_time,
             amplitude=gz.amplitude,
         )

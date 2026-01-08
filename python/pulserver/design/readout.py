@@ -4,6 +4,7 @@ __all__ = [
     "general_line_readout",
     "line_readout",
     "spoiled_line_readout",
+    "fse_line_readout",
 ]
 
 from types import SimpleNamespace
@@ -398,13 +399,13 @@ def spoiled_line_readout(
     )
     
     # Calculate target spoil area
-    spoil_area = pp.calc_spoil_area(spoiling_angle_rad, spoiling_thickness_m)
+    spoiling_area = pp.calc_spoil_area(spoiling_angle_rad, spoiling_thickness_m)
     
     # Compute residual area to achieve target area
-    gx_spoil_area = spoil_area - metadata.post_echo_area
+    gx_spoil_area = spoiling_area - metadata.post_echo_area
     
     # Calculate spoiler
-    if gx_spoil_area > 0.0:
+    if gx_spoil_area >= 0.0:
         gx_spoil, _, _ = pp.make_extended_trapezoid_area(
             channel='x',
             system=system,
@@ -444,10 +445,110 @@ def fse_line_readout(
     system: pp.Opts,
     fov_m: float,
     npix: int,
-    spoiling_angle_rad : float,
-    spoiling_thickness_m : float | None = None,
+    spoiling_area : float,
     receive_bandwidth_Hz : float = 250e3,
     oversamp: float = 1.0,
     partial_fourier_factor: float = 1.0,
 ) -> tuple[SimpleNamespace, SimpleNamespace]:
-    ...
+    """
+    Create fast spin echo line readout lobe.
+
+    Parameters
+    ----------
+    system : pp.Opts
+        Pulseq system limits. 
+    fov_m : float
+        Field of view along readout direction in ``[m]``.
+    npix : int
+        Image size along readout direction.
+    spoiling_area : float
+        Area of excitation spoiling gradient along readout axis in ``[Hz/m]``.
+        It must at least match the area between echo and end of readout lobe.
+    receive_bandwidth_Hz : float, optional
+        Receive bandwidth in ``[Hz]``. 
+        The default is ``250e-3 Hz``.
+    oversamp : float, optional
+        Readout oversampling factor. 
+        The default is ``1.0``.
+    partial_fourier_factor : float, optional
+        Partial Fourier Factor for asymmeric echo. 
+        The default is ``1.0``.
+    rampsamp : bool, optional
+        If ``True``, sample points on trapezoid ramps. 
+        The default is ``Fals``e.
+
+    Returns
+    -------
+    readout : SimpleNamespace
+        Object containing the following events:
+            - gx_prewind : SimpleNamespace
+                  Prewinder gradient event.
+            - gx_rewind : SimpleNamespace
+                  Rewinder gradient event.
+            - gx_read : SimpleNamespace
+                  Readout gradient event.
+            - adc : SimpleNamespace
+                  Accompanying ADC event
+    metadata : SimpleNamespace
+        Object containing the following additional info
+            - system : pp.Opts
+                  System parameters used to generate event.
+            - encoding_size : int
+                  Image size along readout direction.
+            - encoding_center : int
+                  ADC index corresponding to k-space center along readout direction.
+            - encoding_center_time : float
+                  Sampling time of k-space center along readout direction in ``[s]``.
+            - readout_time : float
+                  Total readout time in ``[s]``.
+
+    """
+    # General line readout without ramps
+    block, metadata = general_line_readout(
+        system, 
+        fov_m, npix,
+        receive_bandwidth_Hz,
+        oversamp,
+        partial_fourier_factor,
+        left_ramp=False,
+        right_ramp=False,
+    )
+    
+    # Get target area for prewinder
+    gx_prewind_area = -metadata.pre_echo_area + spoiling_area
+    gx_rewind_area = spoiling_area - metadata.post_echo_area
+    
+    if gx_prewind_area <= 0.0 or gx_rewind_area <= 0.0:
+        raise ValueError('Increase spoil area!')
+    
+    # Calculate prewinder
+    gx_prewind, _, _ = pp.make_extended_trapezoid_area(
+        channel='x',
+        system=system,
+        area=gx_prewind_area, 
+        grad_start=0.0, 
+        grad_end=block.gx.waveform[0],
+    )
+    
+    # Calculate rewinder
+    gx_rewind, _, _ = pp.make_extended_trapezoid_area(
+        channel='x',
+        system=system,
+        area=gx_rewind_area, 
+        grad_start=block.gx.waveform[-1], 
+        grad_end=0.0,
+    )
+    
+    # Register prewinder and rewinder events
+    block.gx_read = block.gx
+    block.gx_prewind = gx_prewind
+    block.gx_rewind = gx_rewind
+    block.__dict__.pop('gx', None)
+    
+    # Update metadata
+    metadata.encoding_center_time += pp.calc_duration(gx_prewind)
+    metadata.__dict__.pop('pre_readout_area', None)
+    metadata.__dict__.pop('post_readout_area', None)
+    
+    return block, metadata
+ 
