@@ -20,6 +20,7 @@ __all__ = [
     "calc_kspace_band_jump",
     "calc_kspace_line_jump",
     "calc_kspace_readout_params",
+    "calc_spoil_area",
     "calc_rf_bandwidth",
     "calc_rf_center",
     "convert",
@@ -80,6 +81,7 @@ from .utils import DUMMY_OPTS
 from .utils import calc_kspace_line_jump
 from .utils import calc_kspace_band_jump
 from .utils import calc_kspace_readout_params
+from .utils import calc_spoil_area
 from .utils import split_waveform
 from .utils import split_waveform_at
 from .utils import time_revert_waveform

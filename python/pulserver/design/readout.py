@@ -1,8 +1,9 @@
-"""
-"""
+"""Readout design helpers."""
 
 __all__ = [
-    
+    "general_line_readout",
+    "line_readout",
+    "spoiled_line_readout",
 ]
 
 from types import SimpleNamespace
@@ -11,11 +12,12 @@ import numpy as np
 
 from .. import pulseq as pp
 
-def line_readout(
+
+def general_line_readout(
     system: pp.Opts,
     fov_m: float,
     npix: int,
-    receive_bandwidth_Hz = 250e3,
+    receive_bandwidth_Hz : float = 250e3,
     oversamp: float = 1.0,
     partial_fourier_factor: float = 1.0,
     rampsamp: bool = False,
@@ -33,7 +35,7 @@ def line_readout(
         Field of view along readout direction in ``[m]``.
     npix : int
         Image size along readout direction.
-    receive_bandwidth_Hz : TYPE, optional
+    receive_bandwidth_Hz : float, optional
         Receive bandwidth in ``[Hz]``. 
         The default is ``250e-3 Hz``.
     oversamp : float, optional
@@ -149,6 +151,7 @@ def line_readout(
             flat_time=gx_read.flat_time + 2 * system.adc_dead_time,
         )
         _, gx_read, _ = pp.split_waveform(gx_read, system=system)
+        gx_read.delay = 0.0
         adc_delay = system.adc_dead_time
         pre_echo_area_offset = 0.0
         post_echo_area_offset = 0.0
@@ -164,6 +167,7 @@ def line_readout(
             time_point=gx_read.rise_time,
             system=system,
         )
+        gx_read.delay = 0.0
         adc_delay = system.adc_dead_time
         pre_echo_area_offset = 0.0
     elif right_ramp is False:
@@ -201,197 +205,249 @@ def line_readout(
     readout = SimpleNamespace(gx=gx_read, adc=adc)
 
     return readout, metadata
-                    
-# class LineReadout(BareboneReadout):
-#     def __init__(
-#         self,
-#         system: pp.Opts,
-#         fov_m: float,
-#         npix: int,
-#         receive_bandwidth_Hz = 250e-3,
-#         oversamp: float = 1.0,
-#         partial_fourier_factor: float = 1.0,
-#         rampsamp: bool = False,
-#         flatsamp: bool = False,
-#         gx_first: float = 0.0,
-#         kx_first: float = 0.0,
-#         gx_last: float = 0.0,
-#         kx_last: float = 0.0,
-#     ):
-#         super().__init__(
-#             system,
-#             fov_m,
-#             npix,
-#             receive_bandwidth_Hz,
-#             oversamp,
-#             partial_fourier_factor,
-#             rampsamp,
-#             flatsamp,
-#         )
-        
-#         # Get target initial k-space  (excluding ramp up)
-#         post_echo_area = readout_area / 2.0
-#         readout_area = partial_fourier_factor * readout_area
-#         pre_echo_area = readout_area - post_echo_area
-        
-#         # Design readout gradient
-#         if rampsamp:
-#             gx_read = pp.make_trapezoid(
-#                 channel='x',
-#                 system=system,
-#                 area=readout_area,
-#             )
-#             gx_read = pp.make_trapezoid(
-#                 channel='x',
-#                 system=system,
-#                 area=readout_area,
-#                 duration=pp.calc_duration(gx_read) + 2 * system.adc_dead_time
-#             )
-#             post_echo_offset = 0.0
-#             pre_echo_offset = 0.0
-#             adc_delay = system.adc_dead_time
-#         else:
-#             gx_read = pp.make_trapezoid(
-#                 channel='x',
-#                 system=system,
-#                 flat_area=readout_area,
-#             )
-#             post_echo_offset = 0.5 * (gx_read.rise_time * gx_read.amplitude)
-#             pre_echo_offset = 0.5 * (gx_read.fall_time * gx_read.amplitude)
-#             adc_delay = gx_read.rise_time
-            
-#         # Cut ramps if ADC block only includes flat part of trapezoid
-#         if flatsamp:
-#             gx_read = pp.make_trapezoid(
-#                 channel='x',
-#                 system=system,
-#                 flat_area=readout_area,
-#                 flat_time=gx_read.flat_time + 2 * system.adc_dead_time,
-#             )
-#             _, gx_read, _ = pp.split_waveform(gx_read, system=system)
-#             gx_read_first = gx_read.amplitude
-#             gx_read_last = gx_read.amplitude
-#             post_echo_offset = 0.0
-#             pre_echo_offset = 0.0
-#             adc_delay = system.adc_dead_time
-#         else:
-#             gx_read_first = 0.0
-#             gx_read_last = 0.0
-        
-#         # Design Echo filter
-#         adc = pp.make_adc(
-#             system=system,
-#             delay=adc_delay,
-#             num_samples=num_samples,
-#             dwell_time=dwell_time
-#         )
-            
-#         # Compute actual prewinder and rewinder area
-#         post_echo_area += post_echo_offset
-#         pre_echo_area += pre_echo_offset
-                        
-#         # Design prewinder
-#         prewinder_area = -(kx_first + pre_echo_area)
-#         if prewinder_area:
-#             gx_prewind = _design_phasor(
-#                 system=system,
-#                 area=prewinder_area, 
-#                 first=gx_first, 
-#                 last=gx_read_first,
-#             )
-#         else:
-#             gx_prewind = None
-            
-#         # Design rewinder
-#         rewinder_area = kx_last - post_echo_area
-#         if rewinder_area:
-#             gx_rewind = _design_phasor(
-#                 system=system,
-#                 area=rewinder_area, 
-#                 first=gx_read_last, 
-#                 last=gx_last,
-#             )
-#         else:
-#             gx_rewind = None
-            
-#         # Sanitize phasors
-#         gx_prewind, gx_rewind = _sanitize_phasor(
-#             system, 
-#             gx_prewind, 
-#             gx_rewind,
-#         )
-        
-#         # Assign parameters
-#         self.system = system
-#         self.gx_prewind = gx_prewind
-#         self.gx_rewind = gx_rewind
-#         self.gx_read = gx_read
-#         self.adc = adc
+
+
+def line_readout(
+    system: pp.Opts,
+    fov_m: float,
+    npix: int,
+    receive_bandwidth_Hz : float = 250e3,
+    oversamp: float = 1.0,
+    partial_fourier_factor: float = 1.0,
+    rampsamp: bool = False,
+) -> tuple[SimpleNamespace, SimpleNamespace]:
+    """
+    Create balanced line readout lobe.
+
+    Parameters
+    ----------
+    system : pp.Opts
+        Pulseq system limits. 
+    fov_m : float
+        Field of view along readout direction in ``[m]``.
+    npix : int
+        Image size along readout direction.
+    receive_bandwidth_Hz : float, optional
+        Receive bandwidth in ``[Hz]``. 
+        The default is ``250e-3 Hz``.
+    oversamp : float, optional
+        Readout oversampling factor. 
+        The default is ``1.0``.
+    partial_fourier_factor : float, optional
+        Partial Fourier Factor for asymmeric echo. 
+        The default is ``1.0``.
+    rampsamp : bool, optional
+        If ``True``, sample points on trapezoid ramps. 
+        The default is ``Fals``e.
+
+    Returns
+    -------
+    readout : SimpleNamespace
+        Object containing the following events:
+            - gx_prewind : SimpleNamespace
+                  Prewinder gradient event.
+            - gx_rewind : SimpleNamespace
+                  Rewinder gradient event.
+            - gx_read : SimpleNamespace
+                  Readout gradient event.
+            - adc : SimpleNamespace
+                  Accompanying ADC event
+    metadata : SimpleNamespace
+        Object containing the following additional info
+            - system : pp.Opts
+                  System parameters used to generate event.
+            - encoding_size : int
+                  Image size along readout direction.
+            - encoding_center : int
+                  ADC index corresponding to k-space center along readout direction.
+            - encoding_center_time : float
+                  Sampling time of k-space center along readout direction in ``[s]``.
+            - readout_time : float
+                  Total readout time in ``[s]``.
+
+    """
+    # General line readout including ramps
+    block, metadata = general_line_readout(
+        system, 
+        fov_m, npix,
+        receive_bandwidth_Hz,
+        oversamp,
+        partial_fourier_factor,
+        rampsamp,
+    )
     
-#     @property
-#     def amplitude(self):
-#         return self.gx_read.amplitude
-        
-#     @amplitude.setter
-#     def amplitude(self, value: float):
-#         self.gx_read = pp.scale_grad(self.gx_read, scale=value, system=self.system)
-        
-        
+    # Calculate prewinder
+    gx_prewind, _, _ = pp.make_extended_trapezoid_area(
+        channel='x',
+        system=system,
+        area=-metadata.pre_echo_area, 
+        grad_start=0.0, 
+        grad_end=0.0,
+    )
     
-class EPIReadout:
-    ...
-    
-class NonCartesianReadout:
-    ...
-    
-    
-# %% Internal Helpers
-def _design_phasor(system: pp.Opts, area: float, first: float, last: float) -> SimpleNamespace:
-    """Design phasor either as standard or extended trapezoid."""
-    if first == 0.0 and last == 0.0: # standard trapezoid
-        return pp.make_trapezoid(
+    # Calculate rewinder
+    if metadata.pre_echo_area == metadata.post_echo_area:
+        gx_rewind = gx_prewind
+    else:
+        gx_rewind, _, _ = pp.make_extended_trapezoid_area(
             channel='x',
             system=system,
-            area=area,
+            area=-metadata.post_echo_area, 
+            grad_start=0.0, 
+            grad_end=0.0,
+        )
+
+    # Register prewinder and rewinder events
+    block.gx_read = block.gx
+    block.gx_prewind = gx_prewind
+    block.gx_rewind = gx_rewind
+    block.__dict__.pop('gx', None)
+    
+    # Update metadata
+    metadata.encoding_center_time += pp.calc_duration(gx_prewind)
+    metadata.__dict__.pop('pre_readout_area', None)
+    metadata.__dict__.pop('post_readout_area', None)
+    
+    return block, metadata
+
+
+def spoiled_line_readout(
+    system: pp.Opts,
+    fov_m: float,
+    npix: int,
+    spoiling_angle_rad : float,
+    spoiling_thickness_m : float | None = None,
+    receive_bandwidth_Hz : float = 250e3,
+    oversamp: float = 1.0,
+    partial_fourier_factor: float = 1.0,
+) -> tuple[SimpleNamespace, SimpleNamespace]:
+    """
+    Create spoiled line readout lobe.
+
+    Parameters
+    ----------
+    system : pp.Opts
+        Pulseq system limits. 
+    fov_m : float
+        Field of view along readout direction in ``[m]``.
+    npix : int
+        Image size along readout direction.
+    spoiling_angle_rad : float
+        Dephasing angle across given thickness in units of ``[rad]``.
+    spoiling_thickness_m : float
+        Thickness of spoiled slab in ``[m]``.
+    receive_bandwidth_Hz : float, optional
+        Receive bandwidth in ``[Hz]``. 
+        The default is ``250e-3 Hz``.
+    oversamp : float, optional
+        Readout oversampling factor. 
+        The default is ``1.0``.
+    partial_fourier_factor : float, optional
+        Partial Fourier Factor for asymmeric echo. 
+        The default is ``1.0``.
+    rampsamp : bool, optional
+        If ``True``, sample points on trapezoid ramps. 
+        The default is ``Fals``e.
+
+    Returns
+    -------
+    readout : SimpleNamespace
+        Object containing the following events:
+            - gx_prewind : SimpleNamespace
+                  Prewinder gradient event.
+            - gx_spoil : SimpleNamespace
+                  Spoiler gradient event.
+            - gx_read : SimpleNamespace
+                  Readout gradient event.
+            - adc : SimpleNamespace
+                  Accompanying ADC event
+    metadata : SimpleNamespace
+        Object containing the following additional info
+            - system : pp.Opts
+                  System parameters used to generate event.
+            - encoding_size : int
+                  Image size along readout direction.
+            - encoding_center : int
+                  ADC index corresponding to k-space center along readout direction.
+            - encoding_center_time : float
+                  Sampling time of k-space center along readout direction in ``[s]``.
+            - readout_time : float
+                  Total readout time in ``[s]``.
+
+    """
+    if spoiling_thickness_m is None:
+        spoiling_thickness_m = fov_m / npix
+    
+    # General line readout without ramp-down ramp
+    block, metadata = general_line_readout(
+        system, 
+        fov_m, npix,
+        receive_bandwidth_Hz,
+        oversamp,
+        partial_fourier_factor,
+        right_ramp=False,
+    )
+    
+    # Calculate prewinder
+    gx_prewind, _, _ = pp.make_extended_trapezoid_area(
+        channel='x',
+        system=system,
+        area=-metadata.pre_echo_area, 
+        grad_start=0.0, 
+        grad_end=0.0,
+    )
+    
+    # Calculate target spoil area
+    spoil_area = pp.calc_spoil_area(spoiling_angle_rad, spoiling_thickness_m)
+    
+    # Compute residual area to achieve target area
+    gx_spoil_area = spoil_area - metadata.post_echo_area
+    
+    # Calculate spoiler
+    if gx_spoil_area > 0.0:
+        gx_spoil, _, _ = pp.make_extended_trapezoid_area(
+            channel='x',
+            system=system,
+            area=gx_spoil_area, 
+            grad_start=block.gx.waveform[-1], 
+            grad_end=0.0,
         )
     else:
-        return pp.make_extended_trapezoid_area(
+        times = np.cumsum(block.gx.tt)
+        gx_read = pp.make_trapezoid(
             channel='x',
             system=system,
-            area=area, 
-            grad_start=first, 
-            grad_end=last,
+            rise_time=times[1] ,
+            flat_time=times[2],
+            amplitude=block.gx.waveform[-1],
+            delay=block.gx.delay,
         )
+        _, gx_spoil = pp.split_waveform_at(
+            gx_read, time_point=gx_read.delay+gx_read.rise_time+gx_read.flat_time)
+        gx_spoil.delay = 0.0
+
+    # Register prewinder and spoiler events
+    block.gx_read = block.gx
+    block.gx_prewind = gx_prewind
+    block.gx_spoil = gx_spoil
+    block.__dict__.pop('gx', None)
     
-def _sanitize_phasor(
-    system: pp.Opts, 
-    prewinder: SimpleNamespace, 
-    rewinder: SimpleNamespace,
+    # Update metadata
+    metadata.encoding_center_time += pp.calc_duration(gx_prewind)
+    metadata.__dict__.pop('pre_readout_area', None)
+    metadata.__dict__.pop('post_readout_area', None)
+    
+    return block, metadata
+
+
+def fse_line_readout(
+    system: pp.Opts,
+    fov_m: float,
+    npix: int,
+    spoiling_angle_rad : float,
+    spoiling_thickness_m : float | None = None,
+    receive_bandwidth_Hz : float = 250e3,
+    oversamp: float = 1.0,
+    partial_fourier_factor: float = 1.0,
 ) -> tuple[SimpleNamespace, SimpleNamespace]:
-    """Enforce single rescaled phasor if possible."""
-    if prewinder is None or rewinder is None:
-        return prewinder, rewinder
-    if prewinder.type == 'grad' or rewinder.type == 'grad':
-        return prewinder, rewinder
-    
-    # Check if the gradient timings are the same
-    same_rise = prewinder.rise_time == rewinder.rise_time
-    same_flat = prewinder.flat_time == rewinder.flat_time
-    same_fall = prewinder.fall_time == rewinder.fall_time
-    same_delay = prewinder.delay == rewinder.delay
-    
-    # Enforce rewinder as scaled version of prewinder
-    if same_delay and same_rise and same_flat and same_fall:
-        rewinder = pp.scale_grad(
-            prewinder, 
-            rewinder.amplitude / prewinder.amplitude,
-            system=system,
-        )
-        
-    return prewinder, rewinder
-    
-    
-    
-    
-    
-    
+    ...

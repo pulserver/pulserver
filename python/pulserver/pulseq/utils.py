@@ -12,6 +12,7 @@ __all__ = [
     "calc_kspace_band_jump",
     "calc_kspace_line_jump",
     "calc_kspace_readout_params",
+    "calc_spoil_area",
     "split_waveform",
     "split_waveform_at",
     "time_revert_waveform",
@@ -361,6 +362,26 @@ def calc_kspace_band_jump(
 
     return kp_area_max, SimpleNamespace(pre=pre_scaling, rew=rew_scaling)
 
+
+def calc_spoil_area(dephasing_angle_rad: float, thickness_m: float) -> float:
+    """
+    Compute spoiler area to achieve target dephasing angle across given thickness.
+
+    Parameters
+    ----------
+    dephasing_angle_rad : float
+        Dephasing angle across given thickness in units of ``[rad]``.
+    thickness_m : float
+        Thickness of spoiled slab in ``[m]``.
+
+    Returns
+    -------
+    float
+        Spoiler gradient area.
+
+    """
+    return dephasing_angle_rad / (2 * np.pi * thickness_m) # Hz / m
+    
 
 def split_waveform(grad: SimpleNamespace, system: Opts | None = None,
 ) -> tuple[SimpleNamespace, SimpleNamespace, SimpleNamespace]:
