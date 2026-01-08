@@ -1,4 +1,4 @@
-"""Readout design helpers."""
+"""Pulseq Readout design helpers."""
 
 __all__ = [
     "general_line_readout",
@@ -414,12 +414,12 @@ def spoiled_line_readout(
             grad_end=0.0,
         )
     else:
-        times = np.cumsum(block.gx.tt)
+        times = np.diff(block.gx.tt)
         gx_read = pp.make_trapezoid(
             channel='x',
             system=system,
-            rise_time=times[1] ,
-            flat_time=times[2],
+            rise_time=times[0] ,
+            flat_time=times[1],
             amplitude=block.gx.waveform[-1],
             delay=block.gx.delay,
         )

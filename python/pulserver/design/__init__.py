@@ -1,7 +1,7 @@
 """
 Design sub-package.
 
-This sub-package contains all high-level routines containins Sequence blocks.
+This sub-package contains all high-level routines containings Sequence blocks.
 
 """
 
@@ -15,6 +15,9 @@ __all__ = [
     "line_readout",
     "spoiled_line_readout",
     "fse_line_readout",
+    "make_phasor",
+    "make_blip",
+    "make_crusher",
 ]
 
 # %% Excitations
@@ -29,3 +32,8 @@ from .readout import general_line_readout
 from .readout import line_readout
 from .readout import spoiled_line_readout
 from .readout import fse_line_readout
+
+# %% Phasors
+from .phasor import make_phasor
+from .phasor import make_blip
+from .phasor import make_crusher

@@ -1,4 +1,4 @@
-"""Pulseq Excitation modules."""
+"""Pulseq Excitation design helpers."""
 
 __all__ = [
     "NonselectiveExcitation",
