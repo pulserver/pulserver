@@ -303,7 +303,6 @@ def line_readout(
     block.__dict__.pop('gx', None)
 
     # Update metadata
-    metadata.encoding_center_time += pp.calc_duration(gx_prewind)
     metadata.__dict__.pop('pre_readout_area', None)
     metadata.__dict__.pop('post_readout_area', None)
 
@@ -434,7 +433,6 @@ def spoiled_line_readout(
     block.__dict__.pop('gx', None)
 
     # Update metadata
-    metadata.encoding_center_time += pp.calc_duration(gx_prewind)
     metadata.__dict__.pop('pre_readout_area', None)
     metadata.__dict__.pop('post_readout_area', None)
 
@@ -547,7 +545,6 @@ def fse_line_readout(
     block.__dict__.pop('gx', None)
 
     # Update metadata
-    metadata.encoding_center_time += pp.calc_duration(gx_prewind)
     metadata.__dict__.pop('pre_readout_area', None)
     metadata.__dict__.pop('post_readout_area', None)
 

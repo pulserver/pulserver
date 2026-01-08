@@ -36,6 +36,7 @@ __all__ = [
     'make_extended_trapezoid',
     'make_extended_trapezoid_area',
     'make_interleaved_ordering_1d',
+    'make_label',
     'make_partial_fourier_sampling',
     'make_poisson_disk_sampling',
     'make_radial_ordering_2d',
@@ -62,8 +63,6 @@ from pypulseq import (
     Opts,  # pragma: no cover
     Sequence,  # pragma: no cover
 )
-
-# %% Utilities
 from pypulseq.add_gradients import add_gradients  # pragma: no cover
 from pypulseq.align import align  # pragma: no cover
 from pypulseq.calc_duration import calc_duration  # pragma: no cover
@@ -71,11 +70,7 @@ from pypulseq.calc_rf_bandwidth import calc_rf_bandwidth  # pragma: no cover
 from pypulseq.calc_rf_center import calc_rf_center  # pragma: no cover
 from pypulseq.convert import convert  # pragma: no cover
 from pypulseq.make_adc import make_adc  # pragma: no cover
-
-# %% RF Pulses
 from pypulseq.make_adiabatic_pulse import make_adiabatic_pulse  # pragma: no cover
-
-# %% Gradient Waveforms
 from pypulseq.make_arbitrary_grad import make_arbitrary_grad  # pragma: no cover
 from pypulseq.make_arbitrary_rf import make_arbitrary_rf  # pragma: no cover
 from pypulseq.make_block_pulse import make_block_pulse  # pragma: no cover
@@ -87,13 +82,13 @@ from pypulseq.make_extended_trapezoid import make_extended_trapezoid  # pragma: 
 from pypulseq.make_extended_trapezoid_area import (
     make_extended_trapezoid_area,
 )  # pragma: no cover
+from pypulseq.make_label import make_label  # pragma: no cover
 from pypulseq.make_trapezoid import make_trapezoid  # pragma: no cover
 from pypulseq.make_trigger import make_trigger  # pragma: no cover
 from pypulseq.points_to_waveform import points_to_waveform  # pragma: no cover
 from pypulseq.scale_grad import scale_grad  # pragma: no cover
 from pypulseq.traj_to_grad import traj_to_grad  # pragma: no cover
 
-# %% Acquisition Orderings
 from .ordering import (
     make_centerout_ordering_1d,
     make_centerout_ordering_2d,
@@ -108,7 +103,6 @@ from .rf import make_slr_pulse, make_sms_pulse, make_spsp_pulse
 # from .grad import make_epi
 # from .grad import make_spiral
 # from .grad import make_wave
-# %% Sampling Patterns
 from .sampling import (
     make_caipirinha_sampling,
     make_partial_fourier_sampling,

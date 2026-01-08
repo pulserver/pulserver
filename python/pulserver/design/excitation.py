@@ -6,8 +6,13 @@ __all__ = [
     'SmsExcitation',
     'SpatiallySelectiveExcitation',
     'SpspExcitation',
+    'phase_cycling_table',
+    'rf_spoil_table',
 ]
 
+
+import numpy as np
+from numpy.typing import NDArray
 
 from .. import pulseq as pp
 
@@ -684,3 +689,76 @@ class SpspExcitation(SoftRFBlockMixin):
         self.gz = gz
         self.gzr = gzr
         self._duration = pp.calc_duration(rf, gz) + pp.calc_duration(gzr)
+
+
+def rf_spoil_table(num_pulses: int, phase_increment: float) -> NDArray[float]:
+    """
+    Calculate phase increment pattern for RF spoiling.
+
+    Parameters
+    ----------
+    num_pulses : int
+        Number of RF pulses.
+    phase_increment : float
+        Phase increment in radians (float) for quadratic spoiling.
+
+    Returns
+    -------
+    numpy.ndarray
+        Phase increment pattern in radians.
+
+    Examples
+    --------
+    Quadratic phase spoiling with 90-degree increments for 4 RF pulses:
+
+    >>> from pulserver.design import rf_spoil_table
+    >>> rf_spoil_table(4, np.pi / 2)
+    array([ 0.        ,  1.57079633,  4.71238898,  9.42477796])
+
+    Ported from:
+    Shaihan Malik, July 2017
+
+    """
+    pulse_indices = np.arange(num_pulses)
+    phase_pattern = pulse_indices * (pulse_indices + 1) / 2 * phase_increment
+    phase = np.deg2rad(phase_pattern)
+    return np.mod(phase + np.pi, 2 * np.pi) - np.pi
+
+
+def phase_cycling_table(num_pulses: int, phase_increment: float) -> NDArray[float]:
+    """
+    Calculate phase increment pattern for RF cycling.
+
+    Parameters
+    ----------
+    num_pulses : int
+        Number of RF pulses.
+    phase_increment : float
+        Phase increment in radians (float) for phase cycling.
+
+    Returns
+    -------
+    numpy.ndarray
+        Phase increment pattern in radians.
+
+    Examples
+    --------
+    phase cycling for 4 RF pulses:
+
+    >>> from pulserver.design import phase_cycling_table
+    >>> phase_cycling_table(4, np.pi)
+    array([0.        , 3.14159265, 0.        , 3.14159265])
+
+    Ported from:
+    Shaihan Malik, July 2017
+
+    """
+    phase = np.arange(num_pulses) * phase_increment
+    return np.mod(phase + np.pi, 2 * np.pi) - np.pi
+
+
+# %% Internal Helpers
+# def _map_to_0_pi(angles: NDArray[float]) -> NDArray[float]:
+#     angles = np.mod(angles, 360.0)
+#     angles = np.where(angles > 180.0, 360.0 - angles, angles)
+#     return angles

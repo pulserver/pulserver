@@ -6,6 +6,7 @@ This sub-package contains all high-level routines containings Sequence blocks.
 """
 
 __all__ = [
+    'CartesianGre2D',
     'FrequencySelectiveExcitation',
     'NonselectiveExcitation',
     'SmsExcitation',
@@ -17,6 +18,8 @@ __all__ = [
     'make_blip',
     'make_crusher',
     'make_phasor',
+    'phase_cycling_table',
+    'rf_spoil_table',
     'spoiled_line_readout',
 ]
 
@@ -27,7 +30,12 @@ from .excitation import (
     SmsExcitation,
     SpatiallySelectiveExcitation,
     SpspExcitation,
+    phase_cycling_table,
+    rf_spoil_table,
 )
+
+# %% Kernels
+from .kernels import CartesianGre2D
 
 # %% Phasors
 from .phasor import make_blip, make_crusher, make_phasor
