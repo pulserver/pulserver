@@ -1,5 +1,4 @@
-"""
-"""
+"""Spoiled Gradien Echo Kernels"""
 
 __all__ = ['CartesianGre2D']
 
@@ -13,10 +12,85 @@ import numpy as np
 from .. import pulseq as pp
 from . import excitation, phasor, readout
 
-ScanType = Literal['SCAN', 'PRESCAN']
+ScanType = Literal['SCAN', 'DUMMY']
 
 
 class CartesianGre2D:
+    """
+    Cartesian 2D Spoiled Gradient Echo Readout.
+
+    Parameters
+    ----------
+    system : pp.Opts
+        Pulseq system limits.
+    fov_m : tuple[float]
+        Field of view ``(Dx, Dy)`` in ``[m]``.
+    slice_thickness_m : float
+        Slice thickness in ``[m]``.
+    matrix : tuple[int]
+        Image size ``(nx, ny)``.
+    num_slices : int
+        Number of slices.
+    flip_angle_rad : float
+        Flip Angle in ``[deg]``.
+    echo_time_s : float, optional
+        Target Echo Time in ``[s]``. If not provided, use minimum TE.
+    repetition_time_s : float, optional
+        Target Repetition Time in ``[s]``. If not provided, use minimum TR.
+    receive_bandwidth_Hz : float, optional
+        Receive bandwidth in ``[Hz]``.
+        The default is ``250e3 Hz``.
+    parallel_imaging_accel : int, optional
+        Parallel Imaging acceleration factor along ``y`` axis.
+        The default is ``1`` (no acceleration).
+    acr_y_size : int, optional
+        Parallel Imaging Autocalibration Region size along ``y`` axis.
+        The default is ``0``.
+    slice_gap_m : float, optional
+        Slice gap in ``[m]``. The default is ``0.0``.
+    partial_fourier_accel_x : float, optional
+        Partial Fourier Factor along ``x`` axis for asymmeric echo.
+        The default is ``1.0``.
+    partial_fourier_accel_y : float, optional
+        Partial Fourier Factor along ``y`` axis.
+        The default is ``1.0``.
+    readout_oversamp : float, optional
+        Readout oversampling factor.
+        The default is ``1.0``.
+    rf_spoiling_inc_rad : float, optional
+        Phase increment seed for rf spoiling in ``[rad]``. The default corresponds to
+        ``117.0 [deg]``.
+    gx_spoiling_angle_rad : float, optional
+        Dephasing along ``x`` across `slice_thickness_m`` in units of ``[rad]``.
+        The default is ``32 * np.pi``.
+    gz_spoiling_angle_rad : float, optional
+        Dephasing along ``z`` across `slice_thickness_m`` in units of ``[rad]``.
+        The default is ``32 * np.pi``.
+    time_bw_product : float, optional
+        Pulse time / bandwidth product. The default is ``4.0``.
+    rf_duration_s : float, optional
+        Pulse duration in ``[s]``. Default is ``2.0e-3 s``.
+    rf_filter_type : str, optional
+        Type of filter to use: ``"ms"`` (sinc),
+        ``"pm``, (Parks-McClellan equal-ripple),
+        ``"min"`` (minphase using factored pm),
+        ``"max"`` (maxphase using factored pm), ``"ls"`` (least squares).
+        Default is ``"ls"``.
+    rf_passband_ripple_lvl : float, optional
+        Passband ripple level in :math:'M_0^{-1}'.
+        Default is ``0.01``.
+    rf_stopband_ripple_lvl : float, optional
+        Stopband ripple level in :math:'M_0^{-1}'.
+        Default is ``0.01``.
+    rf_cancel_alpha_phs : bool, optional
+        For ``'ex'`` pulses, absorb the alpha phase
+        profile from beta's profile, so they cancel for a flatter
+        total phase. Default is ``False``.
+    dummy_scans : int, optional
+        Dummy scans to achieve Steady State condition. The default is ``32``.
+
+    """
+
     def __init__(
         self,
         system: pp.Opts,
@@ -28,21 +102,21 @@ class CartesianGre2D:
         echo_time_s: float | None = None,
         repetition_time_s: float | None = None,
         receive_bandwidth_Hz: float = 250e3,
-        readout_oversamp: float = 1.0,
-        partial_fourier_accel_x: float = 1.0,
-        partial_fourier_accel_y: float = 1.0,
         parallel_imaging_accel: int = 1,
         acr_y_size: int | None = None,
         slice_gap_m: float = 0.0,
+        partial_fourier_accel_x: float = 1.0,
+        partial_fourier_accel_y: float = 1.0,
+        readout_oversamp: float = 1.0,
+        rf_phase_inc_rad: float | None = None,
+        gx_spoiling_angle: float = 32 * np.pi,
+        gz_spoiling_angle: float = 32 * np.pi,
         time_bw_product: float = 4.0,
         rf_duration_s: float = 2.0e-3,
         rf_filter_type: str = 'ls',
         rf_passband_ripple_lvl: float = 0.01,
         rf_stopband_ripple_lvl: float = 0.01,
         rf_cancel_alpha_phs: bool = False,
-        rf_phase_inc_rad: float | None = None,
-        gx_spoiling_angle: float = 4 * np.pi,
-        gz_spoiling_angle: float = 4 * np.pi,
         dummy_scans: int = 32,
     ):
         # Default
@@ -156,7 +230,7 @@ class CartesianGre2D:
             logging.info(f'TR not selected - using minimum TR: {min_tr * 1e3} ms')
             repetition_time_s = min_tr
             tr_delay = 0.0
-        elif echo_time_s < min_tr:
+        elif repetition_time_s < min_tr:
             logging.warning(
                 f'Target TR (={repetition_time_s * 1e3} ms smaller than minimum {min_tr * 1e3} ms - using minimum'
             )
@@ -173,24 +247,19 @@ class CartesianGre2D:
         # =================
         # 1) Prewind
         if te_delay:
-            gz_slc_reph, item, gx_prewind = pp.align(
+            gz_slc_reph, te_wait, gy_prewind, gx_prewind = pp.align(
                 left=gz_slc_reph,
-                center=[te_wait, gy_prewind],
-                right=gx_prewind,
+                right=[te_wait, gy_prewind, gx_prewind],
             )
-            te_wait, gy_prewind = item
         else:
             gz_slc_reph, gy_prewind, gx_prewind = pp.align(
                 left=gz_slc_reph,
-                center=gy_prewind,
-                right=gx_prewind,
+                right=[gy_prewind, gx_prewind],
             )
 
         # 2) Spoil
-        gz_spoil, gy_prewind, gx_spoil = pp.align(
-            left=gx_spoil,
-            center=gy_rewind,
-            right=gz_spoil,
+        gz_spoil, gy_rewind, gx_spoil = pp.align(
+            left=[gx_spoil, gy_rewind, gz_spoil],
         )
 
         # Scan Table
@@ -267,13 +336,38 @@ class CartesianGre2D:
         self.slice_label = slice_label
         self.count = 0
 
-    def __call__(
+    def append(
         self,
         seq: pp.Sequence | None = None,
+        mode: ScanType = 'SCAN',
         y_index: int | None = None,
         z_index: int | None = None,
-        mode: ScanType = 'SCAN',
+        label_TR_start: bool = False,
     ) -> pp.Sequence:
+        """
+        Append block to input sequence.
+
+        Parameters
+        ----------
+        seq : pp.Sequence, optional
+            Input Pulseq Sequence. If not provided, create a new sequence
+            and append the block(s).
+        mode : ScanType, optional
+            Scan mode flag. If ``'SCAN'``, this is an imaging scan.
+            If ``'DUMMY'``, turn off ADC. The default is ``'SCAN'``.
+        y_index : int, optional
+            Phase encoding line to be acquired.
+        z_index : int, optional
+            Slice to be acquired.
+        label_TR_start : bool, optional
+            If ``True``, label the excitation block using ``TRID`` label.
+
+        Returns
+        -------
+        seq : pp.Sequence
+            Modified Pulseq Sequence with a full SPGR TR.
+
+        """
         if seq is None:
             standalone = True
             seq = pp.Sequence(system=self.system)
@@ -304,7 +398,7 @@ class CartesianGre2D:
         # Add blocks
         # ==========
         # 1) Slice selective excitation
-        if standalone or self.count == self.dummy_scans:
+        if label_TR_start:
             trid_label = pp.make_label(type='SET', label='TRID', value=1)
             seq.add_block(self.rf_exc, self.gz_slc_sel, trid_label)
         else:
@@ -327,7 +421,7 @@ class CartesianGre2D:
                 type='SET', label='SLC', value=self.z_label[z_index]
             )
             seq.add_block(self.gx_read, self.adc, y_label, z_label)
-        elif mode == 'PRESCAN':
+        elif mode == 'DUMMY':
             seq.add_block(self.gx_read)
 
         # 4) Phase encoding rewinder, readout and slice spoil
@@ -338,3 +432,12 @@ class CartesianGre2D:
             seq.add_block(self.tr_wait)
 
         return seq
+
+    def __call__(
+        self,
+        seq: pp.Sequence | None,
+        y_index: int | None,
+        z_index: int | None,
+        mode: ScanType,
+    ) -> pp.Sequence:
+        return self.append(seq, y_index, z_index, mode)

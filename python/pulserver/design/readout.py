@@ -38,7 +38,7 @@ def general_line_readout(
         Image size along readout direction.
     receive_bandwidth_Hz : float, optional
         Receive bandwidth in ``[Hz]``.
-        The default is ``250e-3 Hz``.
+        The default is ``250e3 Hz``.
     oversamp : float, optional
         Readout oversampling factor.
         The default is ``1.0``.
@@ -227,7 +227,7 @@ def line_readout(
         Image size along readout direction.
     receive_bandwidth_Hz : float, optional
         Receive bandwidth in ``[Hz]``.
-        The default is ``250e-3 Hz``.
+        The default is ``250e3 Hz``.
     oversamp : float, optional
         Readout oversampling factor.
         The default is ``1.0``.
@@ -336,7 +336,7 @@ def spoiled_line_readout(
         Thickness of spoiled slab in ``[m]``.
     receive_bandwidth_Hz : float, optional
         Receive bandwidth in ``[Hz]``.
-        The default is ``250e-3 Hz``.
+        The default is ``250e3 Hz``.
     oversamp : float, optional
         Readout oversampling factor.
         The default is ``1.0``.
@@ -345,7 +345,7 @@ def spoiled_line_readout(
         The default is ``1.0``.
     rampsamp : bool, optional
         If ``True``, sample points on trapezoid ramps.
-        The default is ``Fals``e.
+        The default is ``False``.
 
     Returns
     -------
@@ -464,7 +464,7 @@ def fse_line_readout(
         It must at least match the area between echo and end of readout lobe.
     receive_bandwidth_Hz : float, optional
         Receive bandwidth in ``[Hz]``.
-        The default is ``250e-3 Hz``.
+        The default is ``250e3 Hz``.
     oversamp : float, optional
         Readout oversampling factor.
         The default is ``1.0``.
