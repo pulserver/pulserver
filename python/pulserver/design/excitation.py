@@ -1,20 +1,21 @@
 """Pulseq Excitation design helpers."""
 
 __all__ = [
-    "NonselectiveExcitation",
-    "FrequencySelectiveExcitation",
-    "SpatiallySelectiveExcitation",
-    "SmsExcitation",
-    "SpspExcitation",
+    'FrequencySelectiveExcitation',
+    'NonselectiveExcitation',
+    'SmsExcitation',
+    'SpatiallySelectiveExcitation',
+    'SpspExcitation',
 ]
 
 
 from .. import pulseq as pp
 
+
 class RFBlockMixin:
     """
     Base RF Block pulse.
-    
+
     Attributes
     ----------
     rf_id : int
@@ -30,19 +31,19 @@ class RFBlockMixin:
     duration : float
         RF segment duraiton in ``[s]``.
     """
-    
+
     @property
     def rf_id(self):
         return self.rf.id
-    
+
     @rf_id.setter
     def rf_id(self, value: int):
         self.rf.id = value
-        
+
     @property
     def freq_offset(self):
         return self.rf.freq_offset
-    
+
     @freq_offset.setter
     def freq_offset(self, value_Hz: float):
         self.rf.freq_offset = value_Hz
@@ -50,15 +51,15 @@ class RFBlockMixin:
     @property
     def freq_ppm(self):
         return self.rf.freq_ppm
-    
+
     @freq_ppm.setter
     def freq_ppm(self, value_ppm: float):
         self.rf.freq_ppm = value_ppm
-        
+
     @property
     def phase_offset(self):
         return self.rf.phase_offset
-    
+
     @phase_offset.setter
     def phase_offset(self, value_rad: float):
         self.rf.phase_offset = value_rad
@@ -66,15 +67,15 @@ class RFBlockMixin:
     @property
     def phase_ppm(self):
         return self.rf.phase_ppm
-    
+
     @phase_ppm.setter
     def phase_ppm(self, value_ppm: float):
         self.rf.phase_ppm = value_ppm
-        
+
     @property
     def duration(self):
         return self._duration
-                
+
     def append(self, seq: pp.Sequence | None = None) -> pp.Sequence:
         """
         Append block to input sequence.
@@ -93,20 +94,20 @@ class RFBlockMixin:
         """
         if seq is None:
             seq = pp.Sequence(system=self.system)
-        
+
         # Add excitation
         seq.add_block(self.rf)
-        
+
         return seq
-        
+
     def __call__(self, seq: pp.Sequence | None = None) -> pp.Sequence:
         return self.append(seq)
-        
+
 
 class SoftRFBlockMixin(RFBlockMixin):
     """
     Base soft RF Block pulse.
-    
+
     Attributes
     ----------
     rf_id : int
@@ -142,27 +143,27 @@ class SoftRFBlockMixin(RFBlockMixin):
     @property
     def gz_id(self):
         return self.gz.id
-    
+
     @gz_id.setter
     def gz_id(self, value: int):
         self.gz.id = value
-        
+
     @property
     def gz_area(self):
         return self.gz.area
-    
+
     @property
     def gz_first(self):
         if self.gz.type == 'trap':
             return 0.0
         return self.gz.first
-    
+
     @property
     def gz_last(self):
         if self.gz.type == 'trap':
             return 0.0
         return self.gz.last
-        
+
     @property
     def gzr_id(self):
         if self.gzr is not None:
@@ -172,52 +173,53 @@ class SoftRFBlockMixin(RFBlockMixin):
     def gzr_id(self, value: int):
         if self.gzr is not None:
             self.gzr.id = value
-                 
+
     @property
     def gzr_area(self):
         if self.gzr is not None:
             return self.gzr.area
-        
+
     @property
     def gzr_first(self):
         if self.gzr is not None:
             if self.gzr.type == 'trap':
                 return 0.0
             return self.gzr.first
-    
+
     @property
     def gzr_last(self):
         if self.gzr is not None:
             if self.gzr.type == 'trap':
                 return 0.0
             return self.gzr.last
-        
+
     def append(self, seq: pp.Sequence | None = None) -> pp.Sequence:
         if seq is None:
             seq = pp.Sequence(system=self.system)
-        
+
         # Add excitation
         seq.add_block(self.rf, self.gz)
-        
+
         # Add slice rephasing
         if self.gzr is not None:
             seq.add_block(self.gzr)
-        
+
         return seq
+
 
 class NonselectiveExcitation(RFBlockMixin):
     """
     Nonselective RF excitation.
-    
+
     Parameters
     ----------
     system : pp.Opts
-        Pulseq system limits. 
+        Pulseq system limits.
     flip_angle_rad : float
         Flip angle in ``[rad]``.
     duration_s : float, optional
         Pulse duration in ``[s]``. Default is ``0.5e-3 s``
-      
+
     Attributes
     ----------
     system : pp.Opts
@@ -241,7 +243,7 @@ class NonselectiveExcitation(RFBlockMixin):
     duration : float
         RF segment duraiton in ``[s]``.
     """
-    
+
     def __init__(
         self,
         system: pp.Opts,
@@ -257,10 +259,11 @@ class NonselectiveExcitation(RFBlockMixin):
         )
         self._duration = pp.calc_duration(self.rf)
 
+
 class FrequencySelectiveExcitation(RFBlockMixin):
     r"""
     Shinnar-LeRoux frequency selective RF excitation.
-    
+
     Parameters
     ----------
     system : pp.Opts
@@ -287,7 +290,7 @@ class FrequencySelectiveExcitation(RFBlockMixin):
         For ``'ex'`` pulses, absorb the alpha phase
         profile from beta's profile, so they cancel for a flatter
         total phase. Default is ``False``.
-    
+
     Attributes
     ----------
     system : pp.Opts
@@ -311,6 +314,7 @@ class FrequencySelectiveExcitation(RFBlockMixin):
     duration : float
         RF segment duraiton in ``[s]``.
     """
+
     def __init__(
         self,
         system: pp.Opts,
@@ -336,10 +340,11 @@ class FrequencySelectiveExcitation(RFBlockMixin):
         )
         self._duration = pp.calc_duration(self.rf)
 
+
 class SpatiallySelectiveExcitation(SoftRFBlockMixin):
     r"""
     Shinnar-LeRoux spatially (slice or slab) selective RF excitation.
-    
+
     Parameters
     ----------
     system : pp.Opts
@@ -373,7 +378,7 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
         It can be used to build time-optimized sequences like Fast Spin Echo,
         in order to efficiently merge e.g., excitation and spoil. The default is
         ``False``
-    
+
     Attributes
     ----------
     system : pp.Opts
@@ -401,6 +406,7 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
     duration : float
         RF segment duraiton in ``[s]``.
     """
+
     def __init__(
         self,
         system: pp.Opts,
@@ -431,8 +437,8 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
         )
         if truncate_block:
             gz, _ = pp.split_waveform_at(
-                gz, 
-                time_point=gz.delay+gz.rise_time+gz.flat_time,
+                gz,
+                time_point=gz.delay + gz.rise_time + gz.flat_time,
                 system=system,
             )
             gzr = None
@@ -442,11 +448,12 @@ class SpatiallySelectiveExcitation(SoftRFBlockMixin):
         self._duration = pp.calc_duration(rf, gz)
         if gzr is not None:
             self._duration += pp.calc_duration(gzr)
-            
+
+
 class SmsExcitation(SoftRFBlockMixin):
     r"""
     Shinnar-LeRoux multislice RF excitation.
-    
+
     Parameters
     ----------
     system : pp.Opts
@@ -485,7 +492,7 @@ class SmsExcitation(SoftRFBlockMixin):
         It can be used to build time-optimized sequences like Fast Spin Echo,
         in order to efficiently merge e.g., excitation and spoil. The default is
         ``False``
-    
+
     Attributes
     ----------
     system : pp.Opts
@@ -513,6 +520,7 @@ class SmsExcitation(SoftRFBlockMixin):
     duration : float
         RF segment duraiton in ``[s]``.
     """
+
     def __init__(
         self,
         system: pp.Opts,
@@ -548,8 +556,8 @@ class SmsExcitation(SoftRFBlockMixin):
         )
         if truncate_block:
             gz, _ = pp.split_waveform_at(
-                gz, 
-                time_point=gz.delay+gz.rise_time+gz.flat_time,
+                gz,
+                time_point=gz.delay + gz.rise_time + gz.flat_time,
                 system=system,
             )
             gzr = None
@@ -559,11 +567,12 @@ class SmsExcitation(SoftRFBlockMixin):
         self._duration = pp.calc_duration(rf, gz)
         if gzr is not None:
             self._duration += pp.calc_duration(gzr)
-            
+
+
 class SpspExcitation(SoftRFBlockMixin):
     r"""
     Shinnar-LeRoux spectral and spatial selective RF excitation.
-    
+
     Parameters
     ----------
     system : pp.Opts
@@ -602,20 +611,12 @@ class SpspExcitation(SoftRFBlockMixin):
     freq_stopband_ripple_lvl : float, optional
         Spectral stopband ripple level in :math:'M_0^{-1}'.
         Default is ``0.01``.
-    spat_cancel_alpha_phs : bool, optional
-        For ``'ex'`` pulses, absorb the alpha phase
-        spatial profile from beta's spatial profile, so they cancel for a flatter
-        total phase. Default is ``False``.
-    freq_cancel_alpha_phs : bool, optional
-        For ``'ex'`` pulses, absorb the alpha phase
-        spectral profile from beta's spectral profile, so they cancel for a flatter
-        total phase. Default is ``False``.
-    n_lobes : int, optional
+    num_lobes : int, optional
         Number of sub-lobes within the given duration. Default is ``14``.
     flyback : bool, optional
         If ``True``, use flyback EPI slice selection grad instead of bipolar.
         Default is ``False``.
-    
+
     Attributes
     ----------
     system : pp.Opts
@@ -643,6 +644,7 @@ class SpspExcitation(SoftRFBlockMixin):
     duration : float
         RF segment duraiton in ``[s]``.
     """
+
     def __init__(
         self,
         system: pp.Opts,
@@ -657,9 +659,7 @@ class SpspExcitation(SoftRFBlockMixin):
         spat_stopband_ripple_lvl: float = 0.01,
         freq_passband_ripple_lvl: float = 0.01,
         freq_stopband_ripple_lvl: float = 0.01,
-        spat_cancel_alpha_phs: bool = False,
-        freq_cancel_alpha_phs: bool = False,
-        n_lobes: int = 14,
+        num_lobes: int = 14,
         flyback: bool = False,
     ):
         self.system = system
@@ -674,14 +674,13 @@ class SpspExcitation(SoftRFBlockMixin):
             spat_filter_type=spat_filter_type,
             spat_passband_ripple_lvl=spat_passband_ripple_lvl,
             spat_stopband_ripple_lvl=spat_stopband_ripple_lvl,
-            spat_cancel_alpha_phs=spat_cancel_alpha_phs,
             freq_filter_type=freq_filter_type,
             freq_passband_ripple_lvl=freq_passband_ripple_lvl,
             freq_stopband_ripple_lvl=freq_stopband_ripple_lvl,
-            freq_cancel_alpha_phs=freq_cancel_alpha_phs,
+            n_lobes=num_lobes,
+            flyback=flyback,
         )
         self.rf = rf
         self.gz = gz
         self.gzr = gzr
         self._duration = pp.calc_duration(rf, gz) + pp.calc_duration(gzr)
-        

@@ -115,7 +115,8 @@ def make_random_ordering_1d(n1: int) -> NDArray[int]:
         Ordering array to perform 1D random sorting, of shape ``(n1,)``.
 
     """
-    return np.random.permutation(n1)
+    rng = np.random.default_rng()
+    return rng.permutation(n1)
 
 
 def make_radial_ordering_2d(
@@ -366,14 +367,15 @@ def make_random_ordering_2d(n1: int, n2: int) -> NDArray[int]:
     >>> encoding = encoding.ravel()[ordering]
 
     """
-    return np.random.permutation(n1 * n2).reshape(n1, n2)
+    rng = np.random.default_rng()
+    return rng.permutation(n1 * n2).reshape(n1, n2)
 
 
 # %% Internal helpers
-def _prune_sampling(input: NDArray[int]) -> NDArray[int]:
+def _prune_sampling(samples: NDArray[int]) -> NDArray[int]:
     """Prune sampling to remove duplicated indexes."""
     uniq_cols = [
-        np.unique(input[:, j], return_index=True) for j in range(input.shape[1])
+        np.unique(samples[:, j], return_index=True) for j in range(samples.shape[1])
     ]
     uniq_cols_sorted = [col[np.argsort(idx)] for col, idx in uniq_cols]
     m_min = min(len(col) for col in uniq_cols_sorted)

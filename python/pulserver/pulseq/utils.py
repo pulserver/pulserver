@@ -7,15 +7,15 @@ sequence construction and waveform manipulation.
 """
 
 __all__ = [
-    "DUMMY_OPTS",
-    "calc_waveform_area",
-    "calc_kspace_band_jump",
-    "calc_kspace_line_jump",
-    "calc_kspace_readout_params",
-    "calc_spoil_area",
-    "split_waveform",
-    "split_waveform_at",
-    "time_revert_waveform",
+    'DUMMY_OPTS',
+    'calc_kspace_band_jump',
+    'calc_kspace_line_jump',
+    'calc_kspace_readout_params',
+    'calc_spoil_area',
+    'calc_waveform_area',
+    'split_waveform',
+    'split_waveform_at',
+    'time_revert_waveform',
 ]
 
 
@@ -23,9 +23,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import numpy as np
-
 from numpy.typing import NDArray
-
 from pypulseq import Opts
 from pypulseq.make_arbitrary_rf import make_arbitrary_rf
 from pypulseq.make_extended_trapezoid import make_extended_trapezoid
@@ -34,9 +32,10 @@ from pypulseq.split_gradient_at import split_gradient_at
 
 DUMMY_OPTS = Opts(max_grad=np.inf, max_slew=np.inf)
 
+
 def calc_waveform_area(event: SimpleNamespace) -> float | complex:
     """
-    Compute area of given Pulseq RF or Gradient event. 
+    Compute area of given Pulseq RF or Gradient event.
 
     Parameters
     ----------
@@ -55,7 +54,9 @@ def calc_waveform_area(event: SimpleNamespace) -> float | complex:
 
     """
     if event.type == 'trap':
-        times = np.cumsum(np.asarray([0.0, event.rise_time, event.flat_time, event.fall_time]))
+        times = np.cumsum(
+            np.asarray([0.0, event.rise_time, event.flat_time, event.fall_time])
+        )
         amplitudes = np.asarray([0.0, event.amplitude, event.amplitude, 0.0])
     elif event.type == 'grad':
         times = event.tt
@@ -65,7 +66,7 @@ def calc_waveform_area(event: SimpleNamespace) -> float | complex:
         amplitudes = event.signal
     else:
         raise ValueError(f'Only Gradients and RF are allowed - found {event.type}')
-    
+
     return np.trapezoid(y=amplitudes, x=times)
 
 
@@ -380,10 +381,12 @@ def calc_spoil_area(dephasing_angle_rad: float, thickness_m: float) -> float:
         Spoiler gradient area.
 
     """
-    return dephasing_angle_rad / (2 * np.pi * thickness_m) # Hz / m
-    
+    return dephasing_angle_rad / (2 * np.pi * thickness_m)  # Hz / m
 
-def split_waveform(grad: SimpleNamespace, system: Opts | None = None,
+
+def split_waveform(
+    grad: SimpleNamespace,
+    system: Opts | None = None,
 ) -> tuple[SimpleNamespace, SimpleNamespace, SimpleNamespace]:
     """
     Splits a trapezoidal gradient into slew up, flat top and slew down. Returns the individual gradient parts (slew up,
@@ -415,7 +418,7 @@ def split_waveform(grad: SimpleNamespace, system: Opts | None = None,
     ValueError
          If arbitrary gradients are passed.
          If non-gradient event is passed.
-         
+
     Notes
     -----
     This is an alias for `pypulseq.split_gradient`.
@@ -424,18 +427,18 @@ def split_waveform(grad: SimpleNamespace, system: Opts | None = None,
 
 
 def split_waveform_at(
-    event: SimpleNamespace, 
-    time_point: float, 
+    event: SimpleNamespace,
+    time_point: float,
     system: Opts | None = None,
 ) -> SimpleNamespace | tuple[SimpleNamespace, SimpleNamespace]:
     """
-    Splits an event into two events defined by the cut line. 
-    
-    Returns the two event parts by cutting the original 'event' at 'time_point'. 
-    
+    Splits an event into two events defined by the cut line.
+
+    Returns the two event parts by cutting the original 'event' at 'time_point'.
+
     For the input type 'trapezoid' the results are returned as extended
-    trapezoids, for 'arb' and 'rf' as arbitrary gradient / rf objects. 
-    
+    trapezoids, for 'arb' and 'rf' as arbitrary gradient / rf objects.
+
     The delays in the individual events are adapted such
     that add_waveforms(...) produces an event equivalent to 'event'.
 
@@ -465,26 +468,26 @@ def split_waveform_at(
     """
     if system is None:
         system = DUMMY_OPTS
-        
+
     # Build fake gradient for splitting
     if event.type == 'rf':
         event = _as_extended_trapezoid(event, system.rf_raster_time)
-        
+
     # Split waveform
     part1, part2 = split_gradient_at(event, time_point, system)
-    
+
     # Build RF parts
     if event.type == 'rf':
         part1 = _as_extended_trapezoid(part1, system.rf_raster_time)
         part2 = _as_extended_trapezoid(part2, system.rf_raster_time)
-        
+
     return part1, part2
-        
+
 
 def time_revert_waveform(event: SimpleNamespace) -> SimpleNamespace:
     """
     Apply time reversal to a Pulseq event.
-    
+
     Parameters
     ----------
     event : SimpleNamespace
@@ -501,7 +504,7 @@ def time_revert_waveform(event: SimpleNamespace) -> SimpleNamespace:
         output.rise_time = event.fall_time
         output.fall_time = event.rise_time
     if event.type == 'grad':
-        output.waveform = np.flip(event.waveform, axis=-1)  
+        output.waveform = np.flip(event.waveform, axis=-1)
         output.first = event.last
         output.last = event.first
         output.tt = (event.tt[0] + event.tt[-1]) - np.flip(event.tt)
@@ -510,7 +513,7 @@ def time_revert_waveform(event: SimpleNamespace) -> SimpleNamespace:
         output.t = (event.t[0] + event.t[-1]) - np.flip(event.t)
         output.center = (event.t[0] + event.t[-1]) - event.center
     return output
-        
+
 
 # %% Internal helpers
 def _compute_readout_duration(
@@ -528,7 +531,7 @@ def _compute_readout_duration(
     - T is a multiple of both grad_raster_time and adc_raster_time
     - T = num_samples * dwell_time_actual
     - bandwidth_actual = 1 / dwell_time_actual <= target_bw (i.e., we round dwell up)
-    
+
     """
     # Validate
     if grad_raster_time <= 0 or adc_raster_time <= 0 or target_bw <= 0:
@@ -598,18 +601,18 @@ def _as_extended_trapezoid(rf: SimpleNamespace, raster: float) -> SimpleNamespac
     dummy_system.max_slew = np.inf
     dummy_system.grad_raster_time = raster
     return make_extended_trapezoid(
-        channel='z', # not relevant
+        channel='z',  # not relevant
         system=dummy_system,
         amplitudes=rf.signal,
         times=rf.t,
     )
-    
-    
+
+
 def _from_extended_trapezoid(etrap: SimpleNamespace, raster: float) -> SimpleNamespace:
     """Convert Extended Trapezoid RF to Pulseq RF."""
     rf = make_arbitrary_rf(
         signal=etrap.waveform,
-        flip_angle=1.0, # not relevant
+        flip_angle=1.0,  # not relevant
         delay=etrap.delay,
         dwell=raster,
         freq_offset=etrap.freq_offset,
@@ -619,9 +622,8 @@ def _from_extended_trapezoid(etrap: SimpleNamespace, raster: float) -> SimpleNam
         freq_ppm=etrap.freq_ppm,
         phase_ppm=etrap.phase_ppm,
     )
-    
+
     # Replace times
     rf.tt = etrap.t
-    
-    return rf
 
+    return rf

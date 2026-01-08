@@ -1,17 +1,16 @@
 """Serialization of Sequence to binary stream."""
 
-__all__ = ["write_to_stream"]
+__all__ = ['write_to_stream']
 
-import io
 import hashlib
-
+import io
 from warnings import warn
 
 import numpy as np
 import pypulseq as pp
-
-from pypulseq.supported_labels_rf_use import get_supported_rf_uses, get_supported_labels
+from pypulseq.supported_labels_rf_use import get_supported_labels, get_supported_rf_uses
 from pypulseq.utils.tracing import format_trace, trace_enabled
+
 
 def write_to_stream(
     seq: pp.Sequence,
@@ -42,17 +41,20 @@ def write_to_stream(
     signature : str
         If create_signature is True, it returns the written .seq file's signature as a string.
         Note that, if remove_duplicates is True, signature belongs to the
-        deduplicated sequences signature, 
+        deduplicated sequences signature,
         and not the Sequence that is stored in the Sequence object.
-    
+
     """
     stream = io.StringIO()
-    
+
     # Check if there are any timing errors in the sequence
     if check_timing:
         is_ok, error_report = seq.check_timing()
         if not is_ok:
-            warn(f'write(): {len(error_report)} timing errors found in the sequence', stacklevel=2)
+            warn(
+                f'write(): {len(error_report)} timing errors found in the sequence',
+                stacklevel=2,
+            )
 
     # Calculate sequence duration and stored it in the TotalDuration definition
     seq.set_definition('TotalDuration', sum(seq.block_durations.values()))
@@ -61,26 +63,34 @@ def write_to_stream(
     if len(seq.block_events):
         last_block_id = next(reversed(seq.block_events))
         last_block = seq.get_block(last_block_id)
-        for channel, event in zip(('x', 'y', 'z'), (last_block.gx, last_block.gy, last_block.gz), strict=False):
+        for channel, event in zip(
+            ('x', 'y', 'z'), (last_block.gx, last_block.gy, last_block.gz), strict=False
+        ):
             if (
                 event is not None
                 and event.type == 'grad'
                 and abs(event.last) > seq.system.max_slew * seq.system.grad_raster_time
             ):
                 warn_msg = f'write(): Gradient on channel {channel} in last sequence block does not ramp down to 0'
-    
+
                 if trace_enabled():
                     trace = seq.block_trace.get(last_block_id, None)
-    
+
                     if hasattr(trace, 'block'):
-                        warn_msg += '\nLast block defined here:\n' + format_trace(trace.block)
+                        warn_msg += '\nLast block defined here:\n' + format_trace(
+                            trace.block
+                        )
                     if hasattr(trace, 'g' + channel):
-                        warn_msg += f'\n`g{channel}` defined here:\n' + format_trace(getattr(trace, 'g' + channel))
-    
+                        warn_msg += f'\n`g{channel}` defined here:\n' + format_trace(
+                            getattr(trace, 'g' + channel)
+                        )
+
                 warn(warn_msg, stacklevel=2)
 
     # Write the sequence
-    stream, signature = _write_to_stream(seq, stream, create_signature, remove_duplicates)
+    stream, signature = _write_to_stream(
+        seq, stream, create_signature, remove_duplicates
+    )
 
     # Return the sequence md5 signature if requested
     if signature is not None:
@@ -89,12 +99,13 @@ def write_to_stream(
         seq.signature_value = signature
 
     return stream
-        
+
+
 # %% Internal helpers
 def _write_to_stream(
-    seq: pp.Sequence, 
-    stream: io.StringIO, 
-    create_signature: bool, 
+    seq: pp.Sequence,
+    stream: io.StringIO,
+    create_signature: bool,
     remove_duplicates: bool,
 ) -> bytes | tuple[bytes, str]:
     """Serialization routine mirroring Sequence.write()."""
@@ -105,7 +116,7 @@ def _write_to_stream(
 
     # Re-define stream as pseudo output_file
     output_file = stream
-    
+
     # Re-define seq as self
     self = seq
 
@@ -129,7 +140,9 @@ def _write_to_stream(
                 output_file.write(values[block_counter] + ' ')
             elif isinstance(values[block_counter], (int, float)):
                 output_file.write(f'{values[block_counter]:0.9g} ')
-            elif isinstance(values[block_counter], (list, tuple, np.ndarray)):  # e.g. [FOV_x, FOV_y, FOV_z]
+            elif isinstance(
+                values[block_counter], (list, tuple, np.ndarray)
+            ):  # e.g. [FOV_x, FOV_y, FOV_z]
                 for i in range(len(values[block_counter])):
                     if isinstance(values[block_counter][i], (int, float)):
                         output_file.write(f'{values[block_counter][i]:0.9g} ')
@@ -146,7 +159,9 @@ def _write_to_stream(
     id_format_width = '{:' + str(len(str(len(self.block_events)))) + 'd}'
     id_format_str = id_format_width + ' {:3d} {:3d} {:3d} {:3d} {:3d} {:2d} {:2d}\n'
     for block_counter in self.block_events:
-        block_duration = self.block_durations[block_counter] / self.block_duration_raster
+        block_duration = (
+            self.block_durations[block_counter] / self.block_duration_raster
+        )
         block_duration_rounded = round(block_duration)
 
         if abs(block_duration_rounded - block_duration) >= 1e-6:
@@ -164,19 +179,29 @@ def _write_to_stream(
 
     if len(self.rf_library.data) != 0:
         output_file.write('# Format of RF events:\n')
-        output_file.write('# id ampl. mag_id phase_id time_shape_id center delay freqPPm phasePPM freq phase use\n')
-        output_file.write('# ..   Hz      ..       ..            ..     us    us     ppm  rad/MHz   Hz   rad  ..\n')
-        output_file.write(f'# Field "use" is the initial of: {" ".join(get_supported_rf_uses()).strip()}\n')
-        output_file.write('[RF]\n')
-        id_format_str = (
-            '{:.0f} {:12g} {:.0f} {:.0f} {:.0f} {:g} {:g} {:g} {:g} {:g} {:g} {:s}\n'  # Refer lines 20-21
+        output_file.write(
+            '# id ampl. mag_id phase_id time_shape_id center delay freqPPm phasePPM freq phase use\n'
         )
+        output_file.write(
+            '# ..   Hz      ..       ..            ..     us    us     ppm  rad/MHz   Hz   rad  ..\n'
+        )
+        output_file.write(
+            f'# Field "use" is the initial of: {" ".join(get_supported_rf_uses()).strip()}\n'
+        )
+        output_file.write('[RF]\n')
+        id_format_str = '{:.0f} {:12g} {:.0f} {:.0f} {:.0f} {:g} {:g} {:g} {:g} {:g} {:g} {:s}\n'  # Refer lines 20-21
         for k in self.rf_library.data:
             lib_data1 = self.rf_library.data[k][0:4]
             lib_data2 = self.rf_library.data[k][6:10]
             center = self.rf_library.data[k][4] * 1e6  # us
-            delay = round(self.rf_library.data[k][5] / self.rf_raster_time) * self.rf_raster_time * 1e6
-            s = id_format_str.format(k, *lib_data1, center, delay, *lib_data2, self.rf_library.type[k])
+            delay = (
+                round(self.rf_library.data[k][5] / self.rf_raster_time)
+                * self.rf_raster_time
+                * 1e6
+            )
+            s = id_format_str.format(
+                k, *lib_data1, center, delay, *lib_data2, self.rf_library.type[k]
+            )
             output_file.write(s)
         output_file.write('\n')
 
@@ -189,10 +214,16 @@ def _write_to_stream(
         output_file.write(
             '#   time_shape_id of 0 means default timing (stepping with grad_raster starting at 1/2 of grad_raster)\n'
         )
-        output_file.write('# id amplitude first last amp_shape_id time_shape_id delay\n')
-        output_file.write('# ..      Hz/m  Hz/m Hz/m        ..         ..          us\n')
+        output_file.write(
+            '# id amplitude first last amp_shape_id time_shape_id delay\n'
+        )
+        output_file.write(
+            '# ..      Hz/m  Hz/m Hz/m        ..         ..          us\n'
+        )
         output_file.write('[GRADIENTS]\n')
-        id_format_str = '{:.0f} {:12g} {:12g} {:12g} {:.0f} {:.0f} {:.0f}\n'  # Refer lines 20-21
+        id_format_str = (
+            '{:.0f} {:12g} {:12g} {:12g} {:.0f} {:.0f} {:.0f}\n'  # Refer lines 20-21
+        )
         keys = np.array(list(self.grad_library.data.keys()))
         for k in keys[arb_grad_mask]:
             s = id_format_str.format(
@@ -211,7 +242,9 @@ def _write_to_stream(
         keys = np.array(list(self.grad_library.data.keys()))
         id_format_str = '{:2.0f} {:12g} {:3.0f} {:4.0f} {:3.0f} {:3.0f}\n'
         for k in keys[trap_grad_mask]:
-            data = np.copy(self.grad_library.data[k])  # Make a copy to leave the original untouched
+            data = np.copy(
+                self.grad_library.data[k]
+            )  # Make a copy to leave the original untouched
             data[1:] = np.round(1e6 * data[1:])
             """
             Python & Numpy always round to nearest even value - inconsistent with MATLAB Pulseq's .seq files.
@@ -229,7 +262,9 @@ def _write_to_stream(
         output_file.write('[ADC]\n')
         id_format_str = '{:.0f} {:.0f} {:.0f} {:.0f} {:g} {:g} {:g} {:g} {:.0f}\n'  # Refer lines 20-21
         for k in self.adc_library.data:
-            data = np.multiply(self.adc_library.data[k][0:8], [1, 1e9, 1e6, 1, 1, 1, 1, 1])
+            data = np.multiply(
+                self.adc_library.data[k][0:8], [1, 1e9, 1e6, 1, 1, 1, 1, 1]
+            )
             s = id_format_str.format(k, *data)
             output_file.write(s)
         output_file.write('\n')
@@ -247,12 +282,18 @@ def _write_to_stream(
         output_file.write('\n')
 
     if len(self.trigger_library.data) != 0:
-        output_file.write('# Extension specification for digital output and input triggers:\n')
+        output_file.write(
+            '# Extension specification for digital output and input triggers:\n'
+        )
         output_file.write('# id type channel delay (us) duration (us)\n')
-        output_file.write(f'extension TRIGGERS {self.get_extension_type_ID("TRIGGERS")}\n')
+        output_file.write(
+            f'extension TRIGGERS {self.get_extension_type_ID("TRIGGERS")}\n'
+        )
         id_format_str = '{:.0f} {:.0f} {:.0f} {:.0f} {:.0f}\n'  # Refer lines 20-21
         for k in self.trigger_library.data:
-            s = id_format_str.format(k, *np.round(self.trigger_library.data[k] * np.array([1, 1, 1e6, 1e6])))
+            s = id_format_str.format(
+                k, *np.round(self.trigger_library.data[k] * np.array([1, 1, 1e6, 1e6]))
+            )
             output_file.write(s)
         output_file.write('\n')
 
@@ -266,7 +307,9 @@ def _write_to_stream(
         id_format_str = '{:.0f} {:.0f} {}\n'  # Refer lines 20-21
         for k in self.label_set_library.data:
             value = self.label_set_library.data[k][0]
-            label_id = labels[int(self.label_set_library.data[k][1]) - 1]  # label_id is +1 in add_block()
+            label_id = labels[
+                int(self.label_set_library.data[k][1]) - 1
+            ]  # label_id is +1 in add_block()
             s = id_format_str.format(k, value, label_id)
             output_file.write(s)
         output_file.write('\n')
@@ -281,7 +324,9 @@ def _write_to_stream(
         id_format_str = '{:.0f} {:.0f} {}\n'  # See comment at the beginning of this method definition
         for k in self.label_inc_library.data:
             value = self.label_inc_library.data[k][0]
-            label_id = labels[self.label_inc_library.data[k][1] - 1]  # label_id is +1 in add_block()
+            label_id = labels[
+                self.label_inc_library.data[k][1] - 1
+            ]  # label_id is +1 in add_block()
             s = id_format_str.format(k, value, label_id)
             output_file.write(s)
         output_file.write('\n')
@@ -297,26 +342,38 @@ def _write_to_stream(
 
         for k in self.soft_delay_library.data:
             data = self.soft_delay_library.data[k]
-            s = id_format_str.format(k, data[0], np.round(data[1] * 1e6), data[2], data[3])
+            s = id_format_str.format(
+                k, data[0], np.round(data[1] * 1e6), data[2], data[3]
+            )
             output_file.write(s)
         output_file.write('\n')
 
     if len(self.rf_shim_library.data) != 0:
         output_file.write('# Extension specification for RF shimming:\n')
-        output_file.write('# id num_chan factor magn_c1 phase_c1 magn_c2 phase_c2 ...\n')
-        output_file.write(f'extension RF_SHIMS {self.get_extension_type_ID("RF_SHIMS")}\n')
+        output_file.write(
+            '# id num_chan factor magn_c1 phase_c1 magn_c2 phase_c2 ...\n'
+        )
+        output_file.write(
+            f'extension RF_SHIMS {self.get_extension_type_ID("RF_SHIMS")}\n'
+        )
 
         for k in self.rf_shim_library.data:
             shim_vector_length = len(self.rf_shim_library.data[k])
-            id_format_str = '{:d} {:d}' + ''.join(' {:g}' for _ in range(shim_vector_length)) + '\n'
-            s = id_format_str.format(k, int(0.5 * shim_vector_length), *self.rf_shim_library.data[k])
+            id_format_str = (
+                '{:d} {:d}' + ''.join(' {:g}' for _ in range(shim_vector_length)) + '\n'
+            )
+            s = id_format_str.format(
+                k, int(0.5 * shim_vector_length), *self.rf_shim_library.data[k]
+            )
             output_file.write(s)
         output_file.write('\n')
 
     if len(self.rotation_library.data) != 0:
         output_file.write('# Extension specification for rotation events:\n')
         output_file.write('# id RotQuat0 RotQuatX RotQuatY RotQuatZ\n')
-        output_file.write(f'extension ROTATIONS {self.get_extension_type_ID("ROTATIONS")}\n')
+        output_file.write(
+            f'extension ROTATIONS {self.get_extension_type_ID("ROTATIONS")}\n'
+        )
         id_format_str = '{:.0f} {:12g} {:12g} {:12g} {:12g}\n'  # Refer lines 20-21
         for k in self.rotation_library.data:
             s = id_format_str.format(k, *self.rotation_library.data[k])
@@ -357,5 +414,5 @@ def _write_to_stream(
         output_file.write(f'Hash {md5}\n')
 
         return output_file.getvalue().encode('utf-8'), md5
-    
+
     return output_file.getvalue().encode('utf-8')
