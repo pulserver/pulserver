@@ -8,6 +8,7 @@ import copy
 import pypulseq as pp
 
 from ._extension._pulseqlib_wrapper import _PulserverSeqFile
+from ._extension._pulseqlib_wrapper import _get_unique_blocks
 from ._iostream import write_to_stream
 
 
@@ -46,3 +47,6 @@ class PulserverSequence(pp.Sequence):
 
     def __str__(self):
         return str(self._seq)
+    
+def get_unique_blocks(seq: PulserverSequence):
+    return _get_unique_blocks(seq._cseq)

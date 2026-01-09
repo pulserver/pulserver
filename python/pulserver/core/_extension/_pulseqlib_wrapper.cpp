@@ -1,9 +1,11 @@
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #ifdef _WIN32
 #include <io.h>
@@ -84,8 +86,53 @@ public:
     }
 };
 
+static py::tuple _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, int index_max) {
+    if (!seqfile.seq) {
+        throw std::runtime_error("SeqFile pointer is null");
+    }
+
+    const int numBlocks = seqfile.seq->numBlocks;
+
+    int start = (index_min < 0) ? 0 : index_min;
+    int end   = (index_max < 0) ? numBlocks : index_max;
+
+    if (start < 0) start = 0;
+    if (start > numBlocks) start = numBlocks;
+    if (end < start) end = start;
+    if (end > numBlocks) end = numBlocks;
+
+    const int rangeCount = end - start;
+
+    std::vector<int> unique_defs(rangeCount > 0 ? (size_t)rangeCount : 0);
+    std::vector<int> unique_table(numBlocks > 0 ? (size_t)numBlocks : 0, -1);
+
+    int k = 0;
+    if (numBlocks > 0 && rangeCount > 0) {
+        k = pulseqlib_getUniqueBlocks(
+            seqfile.seq,
+            unique_defs.data(),
+            unique_table.data(),
+            index_min,
+            index_max
+        );
+        if (k < 0) k = 0;
+        if (k > rangeCount) k = rangeCount;
+        unique_defs.resize((size_t)k);
+    } else {
+        unique_defs.clear();
+    }
+
+    return py::make_tuple(unique_defs, unique_table);
+}
+
 PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     py::class_<_PulserverSeqFile>(m, "_PulserverSeqFile")
         .def(py::init<py::bytes, float, float, float, float, float, float, float>())
         ;
+    
+    m.def("_get_unique_blocks",
+          &_get_unique_blocks,
+          py::arg("seqfile"),
+          py::arg("index_min") = -1,
+          py::arg("index_max") = -1);
 }
