@@ -50,11 +50,12 @@ class PulserverSequence(pp.Sequence):
         return str(self._seq)
     
 def get_unique_blocks(seq: PulserverSequence):
-    return _get_unique_blocks(seq._cseq)
+    unique_blocs, unique_table, _, _ = _get_unique_blocks(seq._cseq)
+    return unique_blocs, unique_table
 
 def find_tr(seq: PulserverSequence):
-    _, unique_table = get_unique_blocks(seq)
-    tr_size = _find_tr_in_sequence(unique_table)
+    _, unique_table, pure_delay_block, block_durations_us = get_unique_blocks(seq)
+    tr_size = _find_tr_in_sequence(unique_table, pure_delay_block, block_durations_us)
 
     # Extract TR
     tr_seq = pp.Sequence(system=seq.system)
