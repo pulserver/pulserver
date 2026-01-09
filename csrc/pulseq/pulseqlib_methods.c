@@ -2307,151 +2307,170 @@ static size_t next_pow2(size_t x)
  * @param[in] seq Pointer to the SeqFile structure.
  * @param[in, out] uniqueBlockDefs Array of K unique block definitions, each element containing the index of first occurrence.
  * @param[in, out] uniqueBlockTable Array of N elements mapping each block to its unique definition index.
+ * @param[in] index_min Minimum block index to consider (inclusive). If negative, starts from 0.
+ * @param[in] index_max Maximum block index to consider (exclusive). If negative, goes to seq->numBlocks.
  * @return The number of unique blocks K.
  */
-int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, int* uniqueBlockDefs, int* uniqueBlockTable) {
+int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, int* uniqueBlockDefs, int* uniqueBlockTable, int index_min, int index_max) {
     int numBlocks;
+    int startIndex, endIndex, rangeCount;
     int numUniqueBlocks;
     int (*blockDefinitions)[23];
     int* pureDelayBlock;
-    int n, idx;
+    int n, r, idx;
     int noRF, noGx, noGy, noGz, noADC, noExt;
 
     HashEntry *table;
     size_t table_size, mask;
+    size_t t;
+    size_t pos;
+    unsigned long long h;
 
     /* Get number of blocks */
+    if (!seq || !uniqueBlockDefs || !uniqueBlockTable) {
+         return 0;
+     }
     numBlocks = seq->numBlocks;
-    if (numBlocks <= 0 || !uniqueBlockDefs || !uniqueBlockTable) {
-        return 0;
+    if (numBlocks <= 0 || !seq->blockLibrary) return 0;
+
+    /* Determine range of blocks to process */
+    startIndex = (index_min < 0) ? 0 : index_min;
+    endIndex   = (index_max < 0) ? numBlocks : index_max;
+    if (startIndex < 0) startIndex = 0;
+    if (startIndex > numBlocks) startIndex = numBlocks;
+    if (endIndex < startIndex) endIndex = startIndex;
+    if (endIndex > numBlocks) endIndex = numBlocks;
+    rangeCount = endIndex - startIndex;
+
+    for (n = 0; n < numBlocks; ++n) {
+        uniqueBlockTable[n] = -1;
     }
+    if (rangeCount <= 0) return 0;
 
     /* Allocate block definition matrix */
-    blockDefinitions = ALLOC(numBlocks * sizeof(*blockDefinitions));
+    blockDefinitions = ALLOC(rangeCount * sizeof(*blockDefinitions));
     if (!blockDefinitions) {
         return 0;
     }
-    pureDelayBlock = ALLOC(numBlocks * sizeof(int));
+    pureDelayBlock = ALLOC(rangeCount * sizeof(int));
     if (!pureDelayBlock) {
         FREE(blockDefinitions);
         return 0;
     }
 
     /* Build the matrix of block definition */
-    for (n = 0; n < numBlocks; ++n) {
+    for (r = 0; r < rangeCount; ++r) {
+        n = startIndex + r;
+        noRF = noGx = noGy = noGz = noADC = noExt = 1;
 
         /* 1) Duration */
-        blockDefinitions[n][0] = (int)(seq->blockLibrary[n][0]);
+        blockDefinitions[r][0] = (int)(seq->blockLibrary[n][0]);
 
         /* 2) RF */
-        idx = seq->blockLibrary[n][1];
+        idx = (int)(seq->blockLibrary[n][1]) - 1; /* 1-based in file, 0 means none */
         if (idx >= 0 && seq->rfLibrary && idx < seq->rfLibrarySize) {
             noRF = 0;
-            blockDefinitions[n][1] = (int)(seq->rfLibrary[idx][1]); /* mag_id */
-            blockDefinitions[n][2] = (int)(seq->rfLibrary[idx][2]); /* phase_id */
-            blockDefinitions[n][3] = (int)(seq->rfLibrary[idx][3]); /* time_id */
-            blockDefinitions[n][4] = (int)(seq->rfLibrary[idx][5]); /* delay */
-        } else if (idx == -1) {
-            noRF = 1;
-            blockDefinitions[n][1] = -1;
-            blockDefinitions[n][2] = -1;
-            blockDefinitions[n][3] = -1;
-            blockDefinitions[n][4] = -1;
+            blockDefinitions[r][1] = (int)(seq->rfLibrary[idx][1]); /* mag_id */
+            blockDefinitions[r][2] = (int)(seq->rfLibrary[idx][2]); /* phase_id */
+            blockDefinitions[r][3] = (int)(seq->rfLibrary[idx][3]); /* time_id */
+            blockDefinitions[r][4] = (int)(seq->rfLibrary[idx][5]); /* delay */
+        } else {
+            blockDefinitions[r][1] = -1;
+            blockDefinitions[r][2] = -1;
+            blockDefinitions[r][3] = -1;
+            blockDefinitions[r][4] = -1;
         }
 
         /* 3) Gx */
-        idx = seq->blockLibrary[n][2];
+        idx = (int)(seq->blockLibrary[n][2]) - 1; /* 1-based in file, 0 means none */
         if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
             noGx = 0;
-            blockDefinitions[n][5] = (int)(seq->gradLibrary[idx][0]);  /* type */
-            blockDefinitions[n][6] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
-            blockDefinitions[n][7] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
-            blockDefinitions[n][8] = (int)(seq->gradLibrary[idx][4]);  /* fallTime / wave_id */
-            blockDefinitions[n][9] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
-            blockDefinitions[n][10] = (int)(seq->gradLibrary[idx][6]); /* delay */
-        } else if (idx == -1) {
-            noGx = 1;
-            blockDefinitions[n][5] = -1;
-            blockDefinitions[n][6] = -1;
-            blockDefinitions[n][7] = -1;
-            blockDefinitions[n][8] = -1;
-            blockDefinitions[n][9] = -1;
-            blockDefinitions[n][10] = -1;
+            blockDefinitions[r][5] = (int)(seq->gradLibrary[idx][0]);  /* type */
+            blockDefinitions[r][6] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
+            blockDefinitions[r][7] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
+            blockDefinitions[r][8] = (int)(seq->gradLibrary[idx][4]);  /* fallTime / wave_id */
+            blockDefinitions[r][9] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
+            blockDefinitions[r][10] = (int)(seq->gradLibrary[idx][6]); /* delay */
+        } else {
+            blockDefinitions[r][5] = -1;
+            blockDefinitions[r][6] = -1;
+            blockDefinitions[r][7] = -1;
+            blockDefinitions[r][8] = -1;
+            blockDefinitions[r][9] = -1;
+            blockDefinitions[r][10] = -1;
         }
 
         /* 4) Gy */
-        idx = seq->blockLibrary[n][3];
+        idx = (int)(seq->blockLibrary[n][3]) - 1; /* 1-based in file, 0 means none */
         if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
             noGy = 0;
-            blockDefinitions[n][11] = (int)(seq->gradLibrary[idx][0]);  /* type */
-            blockDefinitions[n][12] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
-            blockDefinitions[n][13] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
-            blockDefinitions[n][14] = (int)(seq->gradLibrary[idx][4]);  /* fallTime / wave_id */
-            blockDefinitions[n][15] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
-            blockDefinitions[n][16] = (int)(seq->gradLibrary[idx][6]); /* delay */
-        } else if (idx == -1) {
-            noGy = 1;
-            blockDefinitions[n][11] = -1;
-            blockDefinitions[n][12] = -1;
-            blockDefinitions[n][13] = -1;
-            blockDefinitions[n][14] = -1;
-            blockDefinitions[n][15] = -1;
-            blockDefinitions[n][16] = -1;
+            blockDefinitions[r][11] = (int)(seq->gradLibrary[idx][0]);  /* type */
+            blockDefinitions[r][12] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
+            blockDefinitions[r][13] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
+            blockDefinitions[r][14] = (int)(seq->gradLibrary[idx][4]);  /* fallTime / wave_id */
+            blockDefinitions[r][15] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
+            blockDefinitions[r][16] = (int)(seq->gradLibrary[idx][6]); /* delay */
+        } else {
+            blockDefinitions[r][11] = -1;
+            blockDefinitions[r][12] = -1;
+            blockDefinitions[r][13] = -1;
+            blockDefinitions[r][14] = -1;
+            blockDefinitions[r][15] = -1;
+            blockDefinitions[r][16] = -1;
         }
 
         /* 5) Gz */
-        idx = seq->blockLibrary[n][4];
+        idx = (int)(seq->blockLibrary[n][4]) - 1; /* 1-based in file, 0 means none */
         if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
             noGz = 0;
-            blockDefinitions[n][17] = (int)(seq->gradLibrary[idx][0]);  /* type */
-            blockDefinitions[n][18] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
-            blockDefinitions[n][19] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
-            blockDefinitions[n][20] = (int)(seq->gradLibrary[idx][4]);  /* fallTime / wave_id */
-            blockDefinitions[n][21] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
-            blockDefinitions[n][22] = (int)(seq->gradLibrary[idx][6]); /* delay */
-        } else if (idx == -1) {
-            noGz = 1;
-            blockDefinitions[n][17] = -1;
-            blockDefinitions[n][18] = -1;
-            blockDefinitions[n][19] = -1;
-            blockDefinitions[n][20] = -1;
-            blockDefinitions[n][21] = -1;
-            blockDefinitions[n][22] = -1;
+            blockDefinitions[r][17] = (int)(seq->gradLibrary[idx][0]);  /* type */
+            blockDefinitions[r][18] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
+            blockDefinitions[r][19] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
+            blockDefinitions[r][20] = (int)(seq->gradLibrary[idx][4]);  /* fallTime / wave_id */
+            blockDefinitions[r][21] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
+            blockDefinitions[r][22] = (int)(seq->gradLibrary[idx][6]); /* delay */
+        } else {
+            blockDefinitions[r][17] = -1;
+            blockDefinitions[r][18] = -1;
+            blockDefinitions[r][19] = -1;
+            blockDefinitions[r][20] = -1;
+            blockDefinitions[r][21] = -1;
+            blockDefinitions[r][22] = -1;
         }
 
         /* 6) ADC */
-        idx = seq->blockLibrary[n][5];
+        idx = (int)(seq->blockLibrary[n][5]) - 1; /* 1-based in file, 0 means none */
         if (idx >= 0 && seq->adcLibrary && idx < seq->adcLibrarySize) {
             noADC = 0;
-        } else if (idx == -1) {
+        } else {
             noADC = 1;
         }
 
         /* 7) Extensions */
-        idx = seq->blockLibrary[n][6];
+        idx = (int)(seq->blockLibrary[n][6]) - 1;
         if (idx >= 0 && seq->extensionsLibrary && idx < seq->extensionsLibrarySize) {
             noExt = 0;
-        } else if (idx == -1) {
+        } else {
             noExt = 1;
         }
 
         /* Check for pure delay block */
         if (noRF && noGx && noGy && noGz && noADC && noExt) {
-            pureDelayBlock[n] = 1;
+            pureDelayBlock[r] = 1;
         } else {
-            pureDelayBlock[n] = 0;
+            pureDelayBlock[r] = 0;
         }
     }
 
     /* Pure delay are all equals regarding block uniqueness */
-    for (n = 0; n < numBlocks; ++n) {
-        if (pureDelayBlock[n]) {
-            blockDefinitions[n][0] = 0; /* Set duration to zero for uniqueness check */
+    for (r = 0; r < rangeCount; ++r) {
+        if (pureDelayBlock[r]) {
+            blockDefinitions[r][0] = 0; /* Set duration to zero for uniqueness check */
         }
     }
 
     /* -------- HASH DEDUPLICATION -------- */
-    table_size = next_pow2((size_t)numBlocks * 2);
+    table_size = next_pow2((size_t)rangeCount * 2);
     mask = table_size - 1;
 
     table = (HashEntry *)ALLOC(table_size * sizeof(HashEntry));
@@ -2462,24 +2481,25 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, int* uniqueBlockDefs
     }
 
     /* Initialize hash to zero */
-    for (n = 0; n < table_size; ++n) {
-        table[n].used = 0;
-        table[n].hash = 0;
-        table[n].row_index = 0;
-        table[n].label = 0;
+    for (t = 0; t < table_size; ++t) {
+        table[t].used = 0;
+        table[t].hash = 0;
+        table[t].row_index = 0;
+        table[t].label = 0;
     }
 
     numUniqueBlocks = 0;
 
-    for (n = 0; n < numBlocks; ++n) {
-        unsigned long long h = hash_row(blockDefinitions[n]);
-        size_t pos = (size_t)h & mask;
+    for (r = 0; r < rangeCount; ++r) {
+        h = hash_row(blockDefinitions[r]);
+        pos = (size_t)h & mask;
+        n = startIndex + r;
 
-        for (;;) {
+        while (1) {
             if (!table[pos].used) {
                 table[pos].used = 1;
                 table[pos].hash = h;
-                table[pos].row_index = n;
+                table[pos].row_index = r;
                 table[pos].label = numUniqueBlocks;
 
                 uniqueBlockDefs[numUniqueBlocks] = n;
@@ -2489,9 +2509,7 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, int* uniqueBlockDefs
                 break;
             }
 
-            if (table[pos].hash == h &&
-                rows_equal(blockDefinitions[n],
-                           blockDefinitions[table[pos].row_index])) {
+            if (table[pos].hash == h && rows_equal(blockDefinitions[r], blockDefinitions[table[pos].row_index])) {
                 uniqueBlockTable[n] = table[pos].label;
                 break;
             }
