@@ -125,6 +125,12 @@ static py::tuple _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, i
     return py::make_tuple(unique_defs, unique_table);
 }
 
+static int _find_tr_in_sequence(const std::vector<int>& unique_block_table) {
+    const int n = (int)unique_block_table.size();
+    if (n <= 0) return -1;
+    return pulseqlib_findTRInSequence(unique_block_table.data(), n);
+}
+
 PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     py::class_<_PulserverSeqFile>(m, "_PulserverSeqFile")
         .def(py::init<py::bytes, float, float, float, float, float, float, float>())
@@ -135,4 +141,8 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
           py::arg("seqfile"),
           py::arg("index_min") = -1,
           py::arg("index_max") = -1);
+
+    m.def("_find_tr_in_sequence",
+      &_find_tr_in_sequence,
+      py::arg("unique_block_table"));
 }

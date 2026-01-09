@@ -78,6 +78,7 @@ float pulseqlib_getGradLibraryMaxAmplitude(const pulseqlib_SeqFile* seq);
 
 /* Segment-specific functions*/
 int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, int* uniqueBlockDefs, int* uniqueBlockTable, int index_min, int index_max);
+int pulseqlib_findTRInSequence(const int* uniqueBlockTable, int numBlocks);
 
 #ifdef __cplusplus
 }

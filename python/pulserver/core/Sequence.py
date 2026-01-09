@@ -9,6 +9,7 @@ import pypulseq as pp
 
 from ._extension._pulseqlib_wrapper import _PulserverSeqFile
 from ._extension._pulseqlib_wrapper import _get_unique_blocks
+from ._extension._pulseqlib_wrapper import _find_tr_in_sequence
 from ._iostream import write_to_stream
 
 
@@ -50,3 +51,16 @@ class PulserverSequence(pp.Sequence):
     
 def get_unique_blocks(seq: PulserverSequence):
     return _get_unique_blocks(seq._cseq)
+
+def find_tr(seq: PulserverSequence):
+    _, unique_table = get_unique_blocks(seq)
+    tr_size = _find_tr_in_sequence(unique_table)
+
+    # Extract TR
+    tr_seq = pp.Sequence(system=seq.system)
+    
+    for n in range(tr_size):
+        block = seq._seq.get_block(n+1)
+        tr_seq.add_block(block)
+        
+    return tr_seq

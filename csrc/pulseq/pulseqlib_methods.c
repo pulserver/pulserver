@@ -2524,3 +2524,40 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, int* uniqueBlockDefs
 
     return numUniqueBlocks;
 }
+
+#include <stdio.h>
+
+#define ERROR_CODE -1
+
+/* Compare two arrays element-wise. Returns 1 if equal, 0 otherwise. */
+int array_equal(const int* a, const int* b, unsigned long len)
+{
+    unsigned long i;
+    for (i = 0; i < len; i++) {
+        if (a[i] != b[i]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/**
+ * @brief Detect TR pattern.
+ *
+ * @param[in] uniqueBlockTable Array of numBlocks elements mapping each block to its unique definition index.
+ * @param[in] numBlocks Total number of blocks in the sequence.
+ * @return The TR pattern length.
+ */
+int pulseqlib_findTRInSequence(const int* uniqueBlockTable, int numBlocks)
+{
+    unsigned long L = 0;
+
+    /* Try candidate lengths from 1 up to n/2 */
+    for (L = 1; L <= numBlocks / 2; L++) {
+        if (array_equal(&uniqueBlockTable[0], &uniqueBlockTable[L], L)) {
+            return (int)L; /* pattern length found */
+        }
+    }
+    return (int)L; /* no periodic pattern found */
+}
+
