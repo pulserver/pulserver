@@ -76,6 +76,9 @@ void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, pulseqlib_BlockLabel
 void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex);
 float pulseqlib_getGradLibraryMaxAmplitude(const pulseqlib_SeqFile* seq);
 
+/* Segment-specific functions*/
+int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, int* uniqueBlockDefs, int* uniqueBlockTable);
+
 #ifdef __cplusplus
 }
 #endif

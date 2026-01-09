@@ -2263,3 +2263,246 @@ float pulseqlib_getGradLibraryMaxAmplitude(const pulseqlib_SeqFile* seq) {
 
     return maxAmplitude;
 }
+
+#define M 23   /* number of columns */
+
+typedef struct {
+    unsigned long long hash;
+    int row_index;
+    int label;
+    char used;
+} HashEntry;
+
+static unsigned long long hash_row(const int *row)
+{
+    unsigned long long h = 1469598103934665603ULL;
+    int i;
+
+    for (i = 0; i < M; ++i) {
+        h ^= (unsigned long long)row[i];
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+static int rows_equal(const int *a, const int *b)
+{
+    int i;
+    for (i = 0; i < M; ++i)
+        if (a[i] != b[i])
+            return 0;
+    return 1;
+}
+
+static size_t next_pow2(size_t x)
+{
+    size_t p = 1;
+    while (p < x) p <<= 1;
+    return p;
+}
+
+/**
+ * @brief Obtain unique blocks in sequence.
+ *
+ * @param[in] seq Pointer to the SeqFile structure.
+ * @param[in, out] uniqueBlockDefs Array of K unique block definitions, each element containing the index of first occurrence.
+ * @param[in, out] uniqueBlockTable Array of N elements mapping each block to its unique definition index.
+ * @return The number of unique blocks K.
+ */
+int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, int* uniqueBlockDefs, int* uniqueBlockTable) {
+    int numBlocks;
+    int numUniqueBlocks;
+    int (*blockDefinitions)[23];
+    int* pureDelayBlock;
+    int n, idx;
+    int noRF, noGx, noGy, noGz, noADC, noExt;
+
+    HashEntry *table;
+    size_t table_size, mask;
+
+    /* Get number of blocks */
+    numBlocks = seq->numBlocks;
+    if (numBlocks <= 0 || !uniqueBlockDefs || !uniqueBlockTable) {
+        return 0;
+    }
+
+    /* Allocate block definition matrix */
+    blockDefinitions = ALLOC(numBlocks * sizeof(*blockDefinitions));
+    if (!blockDefinitions) {
+        return 0;
+    }
+    pureDelayBlock = ALLOC(numBlocks * sizeof(int));
+    if (!pureDelayBlock) {
+        FREE(blockDefinitions);
+        return 0;
+    }
+
+    /* Build the matrix of block definition */
+    for (n = 0; n < numBlocks; ++n) {
+
+        /* 1) Duration */
+        blockDefinitions[n][0] = (int)(seq->blockLibrary[n][0]);
+
+        /* 2) RF */
+        idx = seq->blockLibrary[n][1];
+        if (idx >= 0 && seq->rfLibrary && idx < seq->rfLibrarySize) {
+            noRF = 0;
+            blockDefinitions[n][1] = (int)(seq->rfLibrary[idx][1]); /* mag_id */
+            blockDefinitions[n][2] = (int)(seq->rfLibrary[idx][2]); /* phase_id */
+            blockDefinitions[n][3] = (int)(seq->rfLibrary[idx][3]); /* time_id */
+            blockDefinitions[n][4] = (int)(seq->rfLibrary[idx][5]); /* delay */
+        } else if (idx == -1) {
+            noRF = 1;
+            blockDefinitions[n][1] = -1;
+            blockDefinitions[n][2] = -1;
+            blockDefinitions[n][3] = -1;
+            blockDefinitions[n][4] = -1;
+        }
+
+        /* 3) Gx */
+        idx = seq->blockLibrary[n][2];
+        if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
+            noGx = 0;
+            blockDefinitions[n][5] = (int)(seq->gradLibrary[idx][0]);  /* type */
+            blockDefinitions[n][6] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
+            blockDefinitions[n][7] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
+            blockDefinitions[n][8] = (int)(seq->gradLibrary[idx][4]);  /* fallTime / wave_id */
+            blockDefinitions[n][9] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
+            blockDefinitions[n][10] = (int)(seq->gradLibrary[idx][6]); /* delay */
+        } else if (idx == -1) {
+            noGx = 1;
+            blockDefinitions[n][5] = -1;
+            blockDefinitions[n][6] = -1;
+            blockDefinitions[n][7] = -1;
+            blockDefinitions[n][8] = -1;
+            blockDefinitions[n][9] = -1;
+            blockDefinitions[n][10] = -1;
+        }
+
+        /* 4) Gy */
+        idx = seq->blockLibrary[n][3];
+        if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
+            noGy = 0;
+            blockDefinitions[n][11] = (int)(seq->gradLibrary[idx][0]);  /* type */
+            blockDefinitions[n][12] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
+            blockDefinitions[n][13] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
+            blockDefinitions[n][14] = (int)(seq->gradLibrary[idx][4]);  /* fallTime / wave_id */
+            blockDefinitions[n][15] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
+            blockDefinitions[n][16] = (int)(seq->gradLibrary[idx][6]); /* delay */
+        } else if (idx == -1) {
+            noGy = 1;
+            blockDefinitions[n][11] = -1;
+            blockDefinitions[n][12] = -1;
+            blockDefinitions[n][13] = -1;
+            blockDefinitions[n][14] = -1;
+            blockDefinitions[n][15] = -1;
+            blockDefinitions[n][16] = -1;
+        }
+
+        /* 5) Gz */
+        idx = seq->blockLibrary[n][4];
+        if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
+            noGz = 0;
+            blockDefinitions[n][17] = (int)(seq->gradLibrary[idx][0]);  /* type */
+            blockDefinitions[n][18] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
+            blockDefinitions[n][19] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
+            blockDefinitions[n][20] = (int)(seq->gradLibrary[idx][4]);  /* fallTime / wave_id */
+            blockDefinitions[n][21] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
+            blockDefinitions[n][22] = (int)(seq->gradLibrary[idx][6]); /* delay */
+        } else if (idx == -1) {
+            noGz = 1;
+            blockDefinitions[n][17] = -1;
+            blockDefinitions[n][18] = -1;
+            blockDefinitions[n][19] = -1;
+            blockDefinitions[n][20] = -1;
+            blockDefinitions[n][21] = -1;
+            blockDefinitions[n][22] = -1;
+        }
+
+        /* 6) ADC */
+        idx = seq->blockLibrary[n][5];
+        if (idx >= 0 && seq->adcLibrary && idx < seq->adcLibrarySize) {
+            noADC = 0;
+        } else if (idx == -1) {
+            noADC = 1;
+        }
+
+        /* 7) Extensions */
+        idx = seq->blockLibrary[n][6];
+        if (idx >= 0 && seq->extensionsLibrary && idx < seq->extensionsLibrarySize) {
+            noExt = 0;
+        } else if (idx == -1) {
+            noExt = 1;
+        }
+
+        /* Check for pure delay block */
+        if (noRF && noGx && noGy && noGz && noADC && noExt) {
+            pureDelayBlock[n] = 1;
+        } else {
+            pureDelayBlock[n] = 0;
+        }
+    }
+
+    /* Pure delay are all equals regarding block uniqueness */
+    for (n = 0; n < numBlocks; ++n) {
+        if (pureDelayBlock[n]) {
+            blockDefinitions[n][0] = 0; /* Set duration to zero for uniqueness check */
+        }
+    }
+
+    /* -------- HASH DEDUPLICATION -------- */
+    table_size = next_pow2((size_t)numBlocks * 2);
+    mask = table_size - 1;
+
+    table = (HashEntry *)ALLOC(table_size * sizeof(HashEntry));
+    if (!table) {
+        FREE(blockDefinitions);
+        FREE(pureDelayBlock);
+        return 0;
+    }
+
+    /* Initialize hash to zero */
+    for (n = 0; n < table_size; ++n) {
+        table[n].used = 0;
+        table[n].hash = 0;
+        table[n].row_index = 0;
+        table[n].label = 0;
+    }
+
+    numUniqueBlocks = 0;
+
+    for (n = 0; n < numBlocks; ++n) {
+        unsigned long long h = hash_row(blockDefinitions[n]);
+        size_t pos = (size_t)h & mask;
+
+        for (;;) {
+            if (!table[pos].used) {
+                table[pos].used = 1;
+                table[pos].hash = h;
+                table[pos].row_index = n;
+                table[pos].label = numUniqueBlocks;
+
+                uniqueBlockDefs[numUniqueBlocks] = n;
+                uniqueBlockTable[n] = numUniqueBlocks;
+
+                numUniqueBlocks++;
+                break;
+            }
+
+            if (table[pos].hash == h &&
+                rows_equal(blockDefinitions[n],
+                           blockDefinitions[table[pos].row_index])) {
+                uniqueBlockTable[n] = table[pos].label;
+                break;
+            }
+
+            pos = (pos + 1) & mask;
+        }
+    }
+
+    FREE(table);
+    FREE(blockDefinitions);
+    FREE(pureDelayBlock);
+
+    return numUniqueBlocks;
+}
