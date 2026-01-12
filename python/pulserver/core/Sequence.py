@@ -1,5 +1,4 @@
-"""
-"""
+""" """
 
 __all__ = []
 
@@ -7,9 +6,7 @@ import copy
 
 import pypulseq as pp
 
-from ._extension._pulseqlib_wrapper import _PulserverSeqFile
-from ._extension._pulseqlib_wrapper import _get_unique_blocks
-from ._extension._pulseqlib_wrapper import _find_tr_in_sequence
+from ._extension._pulseqlib_wrapper import _find_tr_in_sequence, _get_unique_blocks, _PulserverSeqFile
 from ._iostream import write_to_stream
 
 
@@ -48,20 +45,24 @@ class PulserverSequence(pp.Sequence):
 
     def __str__(self):
         return str(self._seq)
-    
+
+
 def get_unique_blocks(seq: PulserverSequence):
-    unique_blocs, unique_table, _, _ = _get_unique_blocks(seq._cseq)
-    return unique_blocs, unique_table
+    unique_blocks, unique_table, _, _, _, _ = _get_unique_blocks(seq._cseq)
+    return unique_blocks, unique_table
+
 
 def find_tr(seq: PulserverSequence):
-    _, unique_table, pure_delay_block, block_durations_us = _get_unique_blocks(seq._cseq)
+    _, unique_table, pure_delay_block, block_durations_us, num_prep, num_cooldown = (
+        _get_unique_blocks(seq._cseq)
+    )
     tr_size = _find_tr_in_sequence(unique_table, pure_delay_block, block_durations_us)
 
     # Extract TR
     tr_seq = pp.Sequence(system=seq.system)
-    
+
     for n in range(tr_size):
-        block = seq._seq.get_block(n+1)
+        block = seq._seq.get_block(n + 1)
         tr_seq.add_block(block)
-        
+
     return tr_seq

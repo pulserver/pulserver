@@ -2309,6 +2309,8 @@ static size_t next_pow2(size_t x)
  * @param[in, out] uniqueBlockTable Array of N elements mapping each block to its unique definition index.
  * @param[in, out] blockDurations_us Array of N elements containing the duration of each block in microseconds.
  * @param[in, out] pureDelayBlock Mask of N elements indicating which unique blocks are pure delays (1) or not (0).
+ * @param[in, out] numPrep Number of preparation blocks before imaging blocks.
+ * @param[in, out] numCooldown Number of cooldown blocks after imaging blocks.
  * @param[in] index_min Minimum block index to consider (inclusive). If negative, starts from 0.
  * @param[in] index_max Maximum block index to consider (exclusive). If negative, goes to seq->numBlocks.
  * @return The number of unique blocks K.
@@ -2319,6 +2321,8 @@ int pulseqlib_getUniqueBlocks(
     int* uniqueBlockDefs, 
     int* uniqueBlockTable,
     int* pureDelayBlock,
+    int* numPrep,
+    int* numCooldown,
     int index_min, 
     int index_max
 ) {
@@ -2328,12 +2332,15 @@ int pulseqlib_getUniqueBlocks(
     int (*blockDefinitions)[23];
     int n, r, idx;
     int noRF, noGx, noGy, noGz, noADC, noExt;
+    int ctrl;
 
     HashEntry *table;
     size_t table_size, mask;
     size_t t;
     size_t pos;
     unsigned long long h;
+
+    pulseqlib_BlockLabels labels;
 
     /* Get number of blocks */
     if (!seq || !uniqueBlockDefs || !uniqueBlockTable) {
@@ -2525,6 +2532,40 @@ int pulseqlib_getUniqueBlocks(
 
     FREE(table);
     FREE(blockDefinitions);
+
+    /* Determine number of blocks for preparation and cooldown */
+    *numPrep = 0;
+    *numCooldown = 0;
+
+    /* Determine if first block has ONCE == 1 (prep) */
+    pulseqlib_getBlockLabels(seq, &labels, 0);
+    if (labels.flag.once == 1) {
+        ctrl = 0;
+        *numPrep = 1;
+        while (ctrl == 0 && *numPrep < numBlocks) {
+            pulseqlib_getBlockLabels(seq, &labels, *numPrep);
+            if (labels.flag.once == 1) {
+                (*numPrep)++;
+            } else {
+                ctrl = 1;
+            }
+        }
+    }
+
+    /* Determine if last block has ONCE == 1 (cooldown) */
+    pulseqlib_getBlockLabels(seq, &labels, numBlocks - 1);
+    if (labels.flag.once == 2) {
+        ctrl = 0;
+        *numCooldown = 1;
+        while (ctrl == 0 && *numCooldown < numBlocks) {
+            pulseqlib_getBlockLabels(seq, &labels, numBlocks - 1 - *numCooldown);
+            if (labels.flag.once == 2) {
+                (*numCooldown)++;
+            } else {
+                ctrl = 1;
+            }
+        }
+    }
 
     return numUniqueBlocks;
 }

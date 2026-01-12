@@ -82,11 +82,18 @@ int pulseqlib_getUniqueBlocks(
   int* blockDurations_us,
   int* uniqueBlockDefs, 
   int* uniqueBlockTable,
-  int* pureDelayBlock, 
+  int* pureDelayBlock,
+  int* numPrep,
+  int* numCooldown, 
   int index_min, 
   int index_max
 );
-int pulseqlib_findTRInSequence(int numBlocks, int* uniqueBlockTable, int* pureDelayBlock, int* blockDurations_us);
+int pulseqlib_findTRInSequence(
+  int numBlocks, 
+  int* uniqueBlockTable, 
+  int* pureDelayBlock, 
+  int* blockDurations_us
+);
 int pulseqlib_findSegmentsInTR(const pulseqlib_SeqFile* seq, int TR_length, int* segmentIndices);
 
 #ifdef __cplusplus
