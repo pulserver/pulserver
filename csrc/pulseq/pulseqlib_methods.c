@@ -33,8 +33,6 @@ static const TableEntry label_table[] = {
     { "LIN", LIN },
     { "PAR", PAR }, 
     { "ACQ", ACQ }, 
-    { "TRID", TRID },
-    { "COREID", COREID },
     { "NAV", NAV },
     { "REV", REV }, 
     { "SMS", SMS }, 
@@ -46,6 +44,7 @@ static const TableEntry label_table[] = {
     { "NOPOS", NOPOS }, 
     { "NOSCL", NOSCL }, 
     { "ONCE", ONCE },
+    { "TRID", TRID },
     { NULL, -1 }
 };
 
@@ -68,7 +67,6 @@ static const TableEntry hint_table[] = {
     { "RECTIME", HINT_RECTIME },
     { "T2PREP", HINT_T2PREP }, 
     { "TE2", HINT_TE2 },
-    { "TR2", HINT_TR2 },
     { NULL, -1 }
 };
 
@@ -1401,19 +1399,18 @@ void pulseqlib_seqBlockInit(pulseqlib_SeqBlock* block) {
     rfShimming.type = 0;
 
     /* Initialize flag values to 0 */
-    flag.trid = 0;
-    flag.coreid = 0;
-    flag.nav = 0;
-    flag.rev = 0;
-    flag.sms = 0;
-    flag.ref = 0;
-    flag.ima = 0;
-    flag.noise = 0;
-    flag.pmc = 0;
-    flag.norot = 0;
-    flag.nopos = 0;
-    flag.noscl = 0;
-    flag.once = 0;
+    flag.trid = -1;
+    flag.nav = -1;
+    flag.rev = -1;
+    flag.sms = -1;
+    flag.ref = -1;
+    flag.ima = -1;
+    flag.noise = -1;
+    flag.pmc = -1;
+    flag.norot = -1;
+    flag.nopos = -1;
+    flag.noscl = -1;
+    flag.once = -1;
     
     /* Initialize label values to 0 */
     labelset.slc = 0;
@@ -1643,7 +1640,21 @@ static int getRawBlockContentIDs(const pulseqlib_SeqFile* seq, int blockIndex, p
 
 static void pulseqlib_clear_block_labels(pulseqlib_BlockLabels* labels) {
     if (!labels) return;
-    memset(labels, 0, sizeof(*labels));
+    memset(labels, 0, sizeof(*labels)); /* Sets all fields to zero * /
+
+    /* Flags to -1 (undefined) */
+    labels->flag.trid = -1;
+    labels->flag.nav = -1;
+    labels->flag.rev = -1;
+    labels->flag.sms = -1;
+    labels->flag.ref = -1;
+    labels->flag.ima = -1;
+    labels->flag.noise = -1;
+    labels->flag.pmc = -1;
+    labels->flag.norot = -1;
+    labels->flag.nopos = -1;
+    labels->flag.noscl = -1;
+    labels->flag.once = -1;
 }
 
 
@@ -1756,7 +1767,14 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
 
         idx = (int)farray[1];
         if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) goto block_static_fail;
+            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                if (isRealSample) {
+                    FREE(isRealSample);
+                }
+                pulseqlib_seqBlockFree(block);
+                pulseqlib_seqBlockInit(block);
+                return 0;
+            }
             block->rf.magShape = shape;
         } else {
             block->rf.magShape.numSamples = 0;
@@ -1766,7 +1784,14 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
 
         idx = (int)farray[2];
         if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) goto block_static_fail;
+            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                if (isRealSample) {
+                    FREE(isRealSample);
+                }
+                pulseqlib_seqBlockFree(block);
+                pulseqlib_seqBlockInit(block);
+                return 0;
+            }
             block->rf.phaseShape = shape;
             for (i = 0; i < block->rf.phaseShape.numSamples; i++) {
                 block->rf.phaseShape.samples[i] *= TWO_PI;
@@ -1779,7 +1804,14 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
 
         if (DETECT_REAL_RF && block->rf.magShape.numSamples > 0 && block->rf.phaseShape.numSamples > 0) {
             isRealSample = (int*)ALLOC(block->rf.magShape.numSamples * sizeof(int));
-            if (!isRealSample) goto block_static_fail;
+            if (!isRealSample) {
+                if (isRealSample) {
+                    FREE(isRealSample);
+                }
+                pulseqlib_seqBlockFree(block);
+                pulseqlib_seqBlockInit(block);
+                return 0;
+            }
             for (i = 0; i < block->rf.magShape.numSamples; i++) {
                 isRealSample[i] = fabs(block->rf.phaseShape.samples[i]) < 1e-6 || fabs(block->rf.phaseShape.samples[i] - M_PI) < 1e-6;
             }
@@ -1805,7 +1837,14 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
 
         idx = (int)farray[3];
         if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) goto block_static_fail;
+            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                if (isRealSample) {
+                    FREE(isRealSample);
+                }
+                pulseqlib_seqBlockFree(block);
+                pulseqlib_seqBlockInit(block);
+                return 0;
+            }
             block->rf.timeShape = shape;
         } else {
             block->rf.timeShape.numSamples = 0;
@@ -1838,12 +1877,26 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
             block->gx.last = farray[3];
             idx = (int)farray[4];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) goto block_static_fail;
+                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                    if (isRealSample) {
+                        FREE(isRealSample);
+                    }
+                    pulseqlib_seqBlockFree(block);
+                    pulseqlib_seqBlockInit(block);
+                    return 0;
+                }
                 block->gx.waveShape = shape;
             }
             idx = (int)farray[5];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) goto block_static_fail;
+                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                    if (isRealSample) {
+                        FREE(isRealSample);
+                    }
+                    pulseqlib_seqBlockFree(block);
+                    pulseqlib_seqBlockInit(block);
+                    return 0;
+                }
                 block->gx.timeShape = shape;
             } else {
                 block->gx.timeShape.numSamples = 0;
@@ -1871,12 +1924,26 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
             block->gy.last = farray[3];
             idx = (int)farray[4];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) goto block_static_fail;
+                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                    if (isRealSample) {
+                        FREE(isRealSample);
+                    }
+                    pulseqlib_seqBlockFree(block);
+                    pulseqlib_seqBlockInit(block);
+                    return 0;
+                }
                 block->gy.waveShape = shape;
             }
             idx = (int)farray[5];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) goto block_static_fail;
+                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                    if (isRealSample) {
+                        FREE(isRealSample);
+                    }
+                    pulseqlib_seqBlockFree(block);
+                    pulseqlib_seqBlockInit(block);
+                    return 0;
+                }
                 block->gy.timeShape = shape;
             } else {
                 block->gy.timeShape.numSamples = 0;
@@ -1904,12 +1971,26 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
             block->gz.last = farray[3];
             idx = (int)farray[4];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) goto block_static_fail;
+                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                    if (isRealSample) {
+                        FREE(isRealSample);
+                    }
+                    pulseqlib_seqBlockFree(block);
+                    pulseqlib_seqBlockInit(block);
+                    return 0;
+                }
                 block->gz.waveShape = shape;
             }
             idx = (int)farray[5];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) goto block_static_fail;
+                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                    if (isRealSample) {
+                        FREE(isRealSample);
+                    }
+                    pulseqlib_seqBlockFree(block);
+                    pulseqlib_seqBlockInit(block);
+                    return 0;
+                }
                 block->gz.timeShape = shape;
             } else {
                 block->gz.timeShape.numSamples = 0;
@@ -1932,7 +2013,14 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
         block->adc.phaseOffset = farray[6];
         idx = (int)farray[7];
         if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) goto block_static_fail;
+            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                if (isRealSample) {
+                    FREE(isRealSample);
+                }
+                pulseqlib_seqBlockFree(block);
+                pulseqlib_seqBlockInit(block);
+                return 0;
+            }
             block->adc.phaseModulationShape = shape;
         } else {
             block->adc.phaseModulationShape.numSamples = 0;
@@ -1973,14 +2061,6 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
     }
 
     return 1;
-
-block_static_fail:
-    if (isRealSample) {
-        FREE(isRealSample);
-    }
-    pulseqlib_seqBlockFree(block);
-    pulseqlib_seqBlockInit(block);
-    return 0;
 }
 
 
@@ -2123,8 +2203,6 @@ static void getBlockLabels(const pulseqlib_SeqFile* seq, const pulseqlib_RawBloc
                 case LIN: labels->labelset.lin = labelValue; break;
                 case PAR: labels->labelset.par = labelValue; break;
                 case ACQ: labels->labelset.acq = labelValue; break;
-                case TRID: labels->flag.trid = labelValue; break;
-                case COREID: labels->flag.coreid = labelValue; break;
                 case NAV: labels->flag.nav = labelValue; break;
                 case REV: labels->flag.rev = labelValue; break;
                 case SMS: labels->flag.sms = labelValue; break;
@@ -2136,6 +2214,7 @@ static void getBlockLabels(const pulseqlib_SeqFile* seq, const pulseqlib_RawBloc
                 case NOPOS: labels->flag.nopos = labelValue; break;
                 case NOSCL: labels->flag.noscl = labelValue; break;
                 case ONCE: labels->flag.once = labelValue; break;
+                case TRID: labels->flag.trid = labelValue; break;
                 default: break;
             }
         } else if (extType == EXT_LABELINC && seq->labelincLibrary && refIdx < seq->labelincLibrarySize) {
@@ -2332,6 +2411,7 @@ int pulseqlib_getUniqueBlocks(
     int (*blockDefinitions)[23];
     int n, r, idx;
     int noRF, noGx, noGy, noGz, noADC, noExt;
+    int hasPrep, hasCooldown;
     int ctrl;
 
     HashEntry *table;
@@ -2537,14 +2617,36 @@ int pulseqlib_getUniqueBlocks(
     *numPrep = 0;
     *numCooldown = 0;
 
-    /* Determine if first block has ONCE == 1 (prep) */
-    pulseqlib_getBlockLabels(seq, &labels, 0);
-    if (labels.flag.once == 1) {
+    /* Determine If sequence has preparation and cooldown sections */
+    hasPrep = 0;
+    hasCooldown = 0;
+    for (n = 0; n < seq->labelsetLibrarySize; ++n) {
+        if ((int)(seq->labelsetLibrary[n][1]) == ONCE) {
+            if ((int)(seq->labelsetLibrary[n][0]) == 1) {
+                hasPrep = 1;
+            } else if ((int)(seq->labelsetLibrary[n][0]) == 2) {
+                hasCooldown = 1;
+            }
+        }
+    }
+
+    if (!hasPrep && !hasCooldown) {
+        return numUniqueBlocks;
+    }
+
+    /* Preparation must start at first block */
+    if (hasPrep == 1) {
+        pulseqlib_getBlockLabels(seq, &labels, 0);
+        if (labels.flag.once != 1) {
+            return 0;
+        }
+
+        /* Search until we find flags.once == 0 */
         ctrl = 0;
         *numPrep = 1;
         while (ctrl == 0 && *numPrep < numBlocks) {
             pulseqlib_getBlockLabels(seq, &labels, *numPrep);
-            if (labels.flag.once == 1) {
+            if (labels.flag.once != 0) {
                 (*numPrep)++;
             } else {
                 ctrl = 1;
@@ -2552,14 +2654,14 @@ int pulseqlib_getUniqueBlocks(
         }
     }
 
-    /* Determine if last block has ONCE == 1 (cooldown) */
-    pulseqlib_getBlockLabels(seq, &labels, numBlocks - 1);
-    if (labels.flag.once == 2) {
+    /* Search for cooldown */
+    if (hasCooldown == 1) {
+        /* Search until we find flags.once == 2 */
         ctrl = 0;
         *numCooldown = 1;
         while (ctrl == 0 && *numCooldown < numBlocks) {
             pulseqlib_getBlockLabels(seq, &labels, numBlocks - 1 - *numCooldown);
-            if (labels.flag.once == 2) {
+            if (labels.flag.once != 2) {
                 (*numCooldown)++;
             } else {
                 ctrl = 1;

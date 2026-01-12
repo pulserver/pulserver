@@ -523,10 +523,6 @@ MU_TEST(test_delay) {
     mu_assert(block->delay.numID == 6, "Block 56 delay should have numID 6");
     mu_assert(block->delay.hintID == HINT_TE2, "Block 56 delay type should be 'TE2'");
 
-    block = getBlock(seq, 57);
-    mu_assert(block->delay.numID == 7, "Block 57 delay should have numID 7");
-    mu_assert(block->delay.hintID == HINT_TR2, "Block 57 delay type should be 'TR2'");
-
     pulseqlib_seqBlockFree(block);
     pulseqlib_seqFileFree(seq);
 }

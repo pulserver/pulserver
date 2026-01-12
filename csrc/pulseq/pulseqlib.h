@@ -48,7 +48,6 @@
 #define HINT_RECTIME 5
 #define HINT_T2PREP 6
 #define HINT_TE2 7
-#define HINT_TR2 8
 
 /*********************************************************************      Labels and Flags     ******************************************************************************************/
 /*      Label        |     Type     | Data Mapping | Description                                                                                                                           */                    
@@ -62,19 +61,18 @@
 #define LIN 8     /* | counter      |      Yes     | Line counter in 2D and 3D acquisitions */
 #define PAR 9     /* | counter      |      Yes     | Partition counter; it counts phase encoding steps in the 2nd (through-slab) phase encoding direction in 3D sequences */
 #define ACQ 10    /* | counter      |      Yes     | Spectroscopic acquisition counter */
-#define TRID 11   /* | counter      |      No      | Marks the beginning of a repeatable module in the sequence (e.g. TR); modules with different timing should be assigned different TRIDs */
-#define COREID 12 /* | counter      |      No      | Marks the beginning of a sequence of Blocks to be played sequentially (Segment) */
-#define NAV 13    /* | flag         |      Yes     | Navigator data flag */
-#define REV 14    /* | flag         |      Yes     | Flag indicating that the readout direction is reversed */
-#define SMS 15    /* | flag         |      Yes     | Simultaneous multi-slice (SMS) acquisition */
-#define REF 16    /* | flag         |      Yes     | Parallel imaging flag indicating reference / auto-calibration data */
-#define IMA 17    /* | flag         |      Yes     | Parallel imaging flag indicating imaging data within the ACS region */
-#define NOISE 18  /* | flag         |      Yes     | Flag for the noise adjust scan e.g for the parallel imaging acceleration */
-#define PMC 19    /* | flag         |      No      | Flag for the MoCo/PMC Pulseq version marking blocks that can/should be prospectively corrected for motion */
-#define NOROT 20  /* | flag         |      No      | Instructs the interpreter to ignore the rotation of the FOV specified on the UI for the given block(s) */
-#define NOPOS 21  /* | flag         |      No      | Instructs the interpreter to ignore the the FOV offset specified on the UI for the given block(s) */
-#define NOSCL 22  /* | flag         |      No      | Instructs the interpreter to ignore the scaling of the FOV specified on the UI for the given block(s) */
-#define ONCE 23   /* | 3-state flag |      No      | A 3-state flag that instructs the interpreter to alter the sequence when executing multiple repeats as follows: blocks with ONCE==0 are executed on every repetition; ONCE==1: only on the first repetition; ONCE==2: only on the last repetition */
+#define NAV 11    /* | flag         |      Yes     | Navigator data flag */
+#define REV 12    /* | flag         |      Yes     | Flag indicating that the readout direction is reversed */
+#define SMS 13    /* | flag         |      Yes     | Simultaneous multi-slice (SMS) acquisition */
+#define REF 14    /* | flag         |      Yes     | Parallel imaging flag indicating reference / auto-calibration data */
+#define IMA 15    /* | flag         |      Yes     | Parallel imaging flag indicating imaging data within the ACS region */
+#define NOISE 16  /* | flag         |      Yes     | Flag for the noise adjust scan e.g for the parallel imaging acceleration */
+#define PMC 17    /* | flag         |      No      | Flag for the MoCo/PMC Pulseq version marking blocks that can/should be prospectively corrected for motion */
+#define NOROT 18  /* | flag         |      No      | Instructs the interpreter to ignore the rotation of the FOV specified on the UI for the given block(s) */
+#define NOPOS 19  /* | flag         |      No      | Instructs the interpreter to ignore the the FOV offset specified on the UI for the given block(s) */
+#define NOSCL 20  /* | flag         |      No      | Instructs the interpreter to ignore the scaling of the FOV specified on the UI for the given block(s) */
+#define ONCE 21   /* | 3-state flag |      No      | A 3-state flag that instructs the interpreter to alter the sequence when executing multiple repeats as follows: blocks with ONCE==0 are executed on every repetition; ONCE==1: only on the first repetition; ONCE==2: only on the last repetition */
+#define TRID 22   /* | 3-state flag |      No      | If set to 1, marks the limit (beginning or end) of repeatable module in the sequence. If set to 2, marks the limit of a TR segment. */ 
 
 /********************************************************* Shapes  ******************************************************/
 typedef struct pulseqlib_ShapeArbitrary {
@@ -163,8 +161,6 @@ typedef struct pulseqlib_LabelOrFlagEvent {
     int lin; /**< Line counter in 2D and 3D acquisitions */
     int par; /**< Partition counter; it counts phase encoding steps in the 2nd (through-slab) phase encoding direction in 3D sequences */
     int acq; /**< Spectroscopic acquisition counter */
-    int trid;/**< Marks the beginning of a repeatable module in the sequence (e.g. TR); modules with different timing should be assigned different TRIDs */
-    int coreid; /**< Marks the beginning of a sequence of Blocks to be played sequentially (Segment) */
     int nav; /**< Navigator data flag */
     int rev; /**< Flag indicating that the readout direction is reversed */
     int sms; /**< Simultaneous multi-slice (SMS) acquisition */
@@ -176,6 +172,7 @@ typedef struct pulseqlib_LabelOrFlagEvent {
     int nopos; /**< Instructs the interpreter to ignore the the FOV offset specified on the UI for the given block(s) */
     int noscl; /**< Instructs the interpreter to ignore the the FOV scaling specified on the UI for the given block(s) */
     int once; /**< A 3-state flag indicating whether the label is to be used once (0), multiple times (1), or not at all (2) */
+    int trid; /**< If set to 1, marks the limit (beginning or end) of repeatable module in the sequence. If set to 2, marks the limit of a TR segment. */
 } pulseqlib_LabelOrFlagEvent; /* no Pulseq equivalent */
 
 
@@ -194,8 +191,7 @@ typedef struct pulseqlib_LabelEvent {
 
 
 typedef struct pulseqlib_FlagEvent {
-    int trid; /**< Marks the beginning of a repeatable module in the sequence (e.g. TR); modules with different timing should be assigned different TRIDs */
-    int coreid; /**< Marks the beginning of a sequence of Blocks to be played sequentially (Segment) */
+    int trid; /**< If set to 1, marks the limit (beginning or end) of repeatable module in the sequence. If set to 2, marks the limit of a TR segment. */
     int nav; /**< Navigator data flag */
     int rev; /**< Flag indicating that the readout direction is reversed */
     int sms; /**< Simultaneous multi-slice (SMS) acquisition */
