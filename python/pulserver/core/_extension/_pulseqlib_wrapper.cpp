@@ -131,8 +131,8 @@ static py::tuple _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, i
 
 static int _find_tr_in_sequence(
     std::vector<int>& unique_block_table,
-    const std::vector<int>& pure_delay_block,
-    const std::vector<int>& block_durations_us
+    std::vector<int>& pure_delay_block,
+    std::vector<int>& block_durations_us
 ) {
     const int n = (int)unique_block_table.size();
     if (n <= 0) return -1;
@@ -157,5 +157,7 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
 
     m.def("_find_tr_in_sequence",
       &_find_tr_in_sequence,
-      py::arg("unique_block_table"));
+      py::arg("unique_block_table"),
+      py::arg("pure_delay_block"),
+      py::arg("block_durations_us"));
 }

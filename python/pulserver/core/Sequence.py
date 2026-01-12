@@ -54,7 +54,7 @@ def get_unique_blocks(seq: PulserverSequence):
     return unique_blocs, unique_table
 
 def find_tr(seq: PulserverSequence):
-    _, unique_table, pure_delay_block, block_durations_us = get_unique_blocks(seq)
+    _, unique_table, pure_delay_block, block_durations_us = _get_unique_blocks(seq._cseq)
     tr_size = _find_tr_in_sequence(unique_table, pure_delay_block, block_durations_us)
 
     # Extract TR
