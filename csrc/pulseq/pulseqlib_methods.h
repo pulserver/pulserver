@@ -89,6 +89,7 @@ int pulseqlib_getUniqueBlocks(
   int index_max
 );
 int pulseqlib_findTRInSequence(
+  pulseqlib_TRdescriptor* trDesc,
   int numBlocks,
   int numPrep,
   int numCooldown,

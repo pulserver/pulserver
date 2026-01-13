@@ -461,6 +461,15 @@ typedef struct pulseqlib_SeqFile {
     pulseqlib_ShapeArbitrary* shapesLibrary; /**< @brief Array of arbitrary shape definitions. */
 } pulseqlib_SeqFile; /* Mirrors Pulseq SeqFile */
 
+typedef struct pulseqlib_TRdescriptor {
+    int trSize; /**< Size of the TR in number of blocks */
+    int numTRs; /**< Number of TRs in the sequence */
+    int numPrep; /**< Number of preparation blocks before the main TR */
+    int degeneratePrep; /**< Non-zero if the preparation blocks are degenerate (i.e. identical to main TR) */
+    int numCooldown; /**< Number of cooldown blocks after the main TR */
+    int degenerateCooldown; /**< Non-zero if the cooldown blocks are degenerate (i.e. identical to main TR) */
+} pulseqlib_TRdescriptor;
+
 
 #endif /* PULSEQLIB_H */
 

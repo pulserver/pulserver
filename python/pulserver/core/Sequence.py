@@ -3,6 +3,7 @@
 __all__ = []
 
 import copy
+from types import SimpleNamespace
 
 import pypulseq as pp
 
@@ -52,17 +53,54 @@ def get_unique_blocks(seq: PulserverSequence):
     return unique_blocks, unique_table
 
 
-def find_tr(seq: PulserverSequence):
+def find_tr(seq: PulserverSequence, num_reps: int = 1) -> SimpleNamespace:
     _, unique_table, pure_delay_block, block_durations_us, num_prep, num_cooldown = (
         _get_unique_blocks(seq._cseq)
     )
-    tr_size = _find_tr_in_sequence(unique_table, pure_delay_block, block_durations_us, num_prep, num_cooldown)
+    tr_size, num_trs, degenerate_prep, degenerate_cooldown = _find_tr_in_sequence(unique_table, pure_delay_block, block_durations_us, num_prep, num_cooldown)
 
-    # Extract TR
-    tr_seq = pp.Sequence(system=seq.system)
-
-    for n in range(tr_size):
+    # Prepare result
+    result = SimpleNamespace()
+        
+    # Special case: only one TR
+    if num_reps == 1 and num_trs == 1:
+        result.main_tr = seq._seq
+        result.first_rep_first_tr = None
+        result.last_rep_last_tr = None
+        return result
+        
+    # Prepare main TR
+    result.main_tr = pp.Sequence(system=seq.system)
+    
+    # Prepare first and last repetitions header and footer blocks
+    if degenerate_prep or num_prep == 0:
+        result.first_rep_first_tr = None
+    else:
+        result.first_rep_first_tr = pp.Sequence(system=seq.system)
+    if degenerate_cooldown or num_cooldown == 0:
+        result.last_rep_last_tr = None
+    else:
+        result.last_rep_last_tr = pp.Sequence(system=seq.system)
+        
+    # Add first repetition header blocks
+    if result.first_rep_first_tr is not None:
+        for n in range(num_prep):
+            block = seq._seq.get_block(n + 1)
+            result.first_rep_first_tr.add_block(block)
+    
+    # Add main TR blocks            
+    for n in range(num_prep, num_prep + tr_size):
         block = seq._seq.get_block(n + 1)
-        tr_seq.add_block(block)
-
-    return tr_seq
+        result.main_tr.add_block(block)
+        if result.first_rep_first_tr is not None:
+            result.first_rep_first_tr.add_block(block)
+        if result.last_rep_last_tr is not None:
+            result.last_rep_last_tr.add_block(block)
+    
+    # Add last repetition footer blocks
+    if result.last_rep_last_tr is not None:
+        for n in range(len(seq.block_events) - num_cooldown, len(seq.block_events)):
+            block = seq._seq.get_block(n + 1)
+            result.last_rep_last_tr.add_block(block)
+                 
+    return result

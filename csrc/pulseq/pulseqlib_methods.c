@@ -2747,6 +2747,7 @@ int array_equal(const int* a, const int* b, unsigned long len)
 /**
  * @brief Detect TR pattern.
  *
+ * @param[in, out] trDesc Pointer to TR descriptor to fill.
  * @param[in] numBlocks Total number of blocks in the sequence.
  * @param[in] numPrep Number of preparation blocks before imaging blocks.
  * @param[in] numCooldown Number of cooldown blocks after imaging blocks.
@@ -2756,6 +2757,7 @@ int array_equal(const int* a, const int* b, unsigned long len)
  * @return The TR pattern length, or -1 if no valid periodic TR is found.
  */
 int pulseqlib_findTRInSequence(
+    pulseqlib_TRdescriptor* trDesc,
     int numBlocks,
     int numPrep,
     int numCooldown,
@@ -2776,27 +2778,35 @@ int pulseqlib_findTRInSequence(
 
     /* Basic validation */
     if (numBlocks <= 0 || !uniqueBlockTable || !pureDelayBlock || !blockDurations_us) {
-        return -1;
+        return 0;
     }
     if (numPrep < 0 || numCooldown < 0) {
-        return -1;
+        return 0;
     }
     if (numPrep + numCooldown > numBlocks) {
-        return -1;
+        return 0;
     }
+
+    /* Fill trDesc with initial values */
+    trDesc->trSize = 0;
+    trDesc->numTRs = 0;
+    trDesc->numPrep = numPrep;
+    trDesc->degeneratePrep = 1;
+    trDesc->numCooldown = numCooldown;
+    trDesc->degenerateCooldown = 1;
 
     /* Imaging region is [prepBlocks, numBlocks - cooldownBlocks) */
     imagingStart = numPrep;
     imagingEnd = numBlocks - numCooldown; /* exclusive */
     imagingLen = imagingEnd - imagingStart;
     if (imagingLen <= 0) {
-        return -1;
+        return 0;
     }
 
     /* To identify TR, pure delay actual duration must be considered */
     sequence_pattern = ALLOC(numBlocks * sizeof(int));
     if (!sequence_pattern) {
-        return -1;
+        return 0;
     }
     for (n = 0; n < numBlocks; ++n) {
         if (pureDelayBlock[n]) {
@@ -2831,8 +2841,12 @@ int pulseqlib_findTRInSequence(
     /* Exit if pattern not found */
     if (!found) {
         FREE(sequence_pattern);
-        return -1;
+        return 0;
     }
+
+    /* Fill trDesc */
+    trDesc->trSize = L;
+    trDesc->numTRs = imagingLen / L;
 
     /* Safety check for preparation */
     if (numPrep) {
@@ -2842,8 +2856,9 @@ int pulseqlib_findTRInSequence(
                     prepDuration_us = pulseqlib_sum_durations_us(blockDurations_us, 0, numPrep);
                     if (prepDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) {
                         FREE(sequence_pattern);
-                        return -1;
+                        return 0;
                     } else { 
+                        trDesc->degeneratePrep = 0;
                         break;
                     }
                 }
@@ -2852,7 +2867,9 @@ int pulseqlib_findTRInSequence(
             prepDuration_us = pulseqlib_sum_durations_us(blockDurations_us, 0, numPrep);
             if (prepDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) {
                 FREE(sequence_pattern);
-                return -1;
+                return 0;
+            } else { 
+                trDesc->degeneratePrep = 0;
             }
         }
     }
@@ -2865,8 +2882,9 @@ int pulseqlib_findTRInSequence(
                     cooldownDuration_us = pulseqlib_sum_durations_us(blockDurations_us, imagingEnd, numCooldown);
                     if (cooldownDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) {
                         FREE(sequence_pattern);
-                        return -1;
+                        return 0;
                     } else { 
+                        trDesc->degenerateCooldown = 0;
                         break; 
                     }
                 }
@@ -2875,13 +2893,15 @@ int pulseqlib_findTRInSequence(
             cooldownDuration_us = pulseqlib_sum_durations_us(blockDurations_us, imagingEnd, numCooldown);
             if (cooldownDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) {
                 FREE(sequence_pattern);
-                return -1;
+                return 0;
+            } else { 
+                trDesc->degenerateCooldown = 0;
             }
         }
     }
    
     FREE(sequence_pattern);
-    return L;
+    return 1; /* SUCCESS */
 }
 
 int pulseqlib_findSegmentsInTR(const pulseqlib_SeqFile* seq, int TR_length, int* segmentIndices) {
