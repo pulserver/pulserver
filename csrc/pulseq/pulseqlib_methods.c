@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "pulseqlib_methods.h"
@@ -2672,6 +2673,65 @@ int pulseqlib_getUniqueBlocks(
     return numUniqueBlocks;
 }
 
+#define PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US 100000 /* 100 ms */
+
+static long long pulseqlib_sum_durations_us(const int* durations_us, int start, int count)
+{
+    long long total = 0;
+    int i;
+    for (i = 0; i < count; ++i) {
+        total += (long long)durations_us[start + i];
+    }
+    return total;
+}
+
+/*
+ * Find the first repeating segment of a sequence.
+ * Equivalent to Python _principal_period behavior (not minimal).
+ *
+ * seq: pointer to integer array
+ * len: number of elements
+ *
+ * Returns:
+ *   Length of first repeating segment if found
+ *   len if no repetition is found
+ */
+int first_repeating_segment(const int *seq, int len)
+{
+    int start;
+    int sublen;
+    int L;
+    int i;
+    int match;
+    const int *s;
+
+    if (len <= 1) {
+        return len;
+    }
+
+    for (start = 0; start < len; start++) {
+        s = seq + start;
+        sublen = len - start;
+
+        for (L = 1; L <= sublen / 2; L++) {
+            match = 1;
+
+            for (i = 0; i < L; i++) {
+                if (s[i] != s[i + L]) {
+                    match = 0;
+                    break;
+                }
+            }
+
+            if (match) {
+                return L;
+            }
+        }
+    }
+
+    return len;
+}
+
 /* Compare two arrays element-wise. Returns 1 if equal, 0 otherwise. */
 int array_equal(const int* a, const int* b, unsigned long len)
 {
@@ -2688,26 +2748,57 @@ int array_equal(const int* a, const int* b, unsigned long len)
  * @brief Detect TR pattern.
  *
  * @param[in] numBlocks Total number of blocks in the sequence.
+ * @param[in] numPrep Number of preparation blocks before imaging blocks.
+ * @param[in] numCooldown Number of cooldown blocks after imaging blocks.
  * @param[in] uniqueBlockTable Array of numBlocks elements mapping each block to its unique definition index.
  * @param[in] pureDelayBlock Mask indicating which blocks are pure delays.
  * @param[in] blockDurations_us Array of block durations in microseconds.
- * @return The TR pattern length.
+ * @return The TR pattern length, or -1 if no valid periodic TR is found.
  */
 int pulseqlib_findTRInSequence(
     int numBlocks,
-    int* uniqueBlockTable, 
+    int numPrep,
+    int numCooldown,
+    int* uniqueBlockTable,
     int* pureDelayBlock, 
     int* blockDurations_us
 ) {
-    unsigned long L = 0;
+    int i, n;
+    int imagingStart, imagingEnd, imagingLen;
     int * sequence_pattern;
+    long long prepDuration_us, cooldownDuration_us;
+    int found;
+    int L;
+
+    /* Initialize */
+    found = 0;
+    L = 0;
+
+    /* Basic validation */
+    if (numBlocks <= 0 || !uniqueBlockTable || !pureDelayBlock || !blockDurations_us) {
+        return -1;
+    }
+    if (numPrep < 0 || numCooldown < 0) {
+        return -1;
+    }
+    if (numPrep + numCooldown > numBlocks) {
+        return -1;
+    }
+
+    /* Imaging region is [prepBlocks, numBlocks - cooldownBlocks) */
+    imagingStart = numPrep;
+    imagingEnd = numBlocks - numCooldown; /* exclusive */
+    imagingLen = imagingEnd - imagingStart;
+    if (imagingLen <= 0) {
+        return -1;
+    }
 
     /* To identify TR, pure delay actual duration must be considered */
     sequence_pattern = ALLOC(numBlocks * sizeof(int));
     if (!sequence_pattern) {
-        return 0;
+        return -1;
     }
-    for (int n = 0; n < numBlocks; ++n) {
+    for (n = 0; n < numBlocks; ++n) {
         if (pureDelayBlock[n]) {
             sequence_pattern[n] = blockDurations_us[n];
         } else {
@@ -2716,14 +2807,81 @@ int pulseqlib_findTRInSequence(
     }
 
     /* Try candidate lengths from 1 up to n/2 */
-    for (L = 1; L <= numBlocks / 2; L++) {
-        if (array_equal(&sequence_pattern[0], &sequence_pattern[L], L)) {
-            FREE(sequence_pattern);
-            return (int)L; /* pattern length found */
+    L = first_repeating_segment(&sequence_pattern[imagingStart], imagingLen);
+
+    /* Check if pattern found */
+    if (L <= 0 || L > imagingLen) {
+        found = 0;
+    } else {
+        found = 1;
+    }
+
+    /* Verify consistency over imaging blocks */
+    if (found) {
+        for (i = 0; i < imagingLen; i++){
+            n = imagingStart + i;
+            if (sequence_pattern[n] != sequence_pattern[imagingStart + (i % L)]) 
+            {
+                found = 0;
+                break;
+            }
         }
     }
+
+    /* Exit if pattern not found */
+    if (!found) {
+        FREE(sequence_pattern);
+        return -1;
+    }
+
+    /* Safety check for preparation */
+    if (numPrep) {
+        if (numPrep % L == 0) {
+            for (n = 0; n < (int)(numPrep / L); ++n) {
+                if (!array_equal(&sequence_pattern[imagingStart], &sequence_pattern[n * L], L)) {
+                    prepDuration_us = pulseqlib_sum_durations_us(blockDurations_us, 0, numPrep);
+                    if (prepDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) {
+                        FREE(sequence_pattern);
+                        return -1;
+                    } else { 
+                        break;
+                    }
+                }
+            }
+        } else {
+            prepDuration_us = pulseqlib_sum_durations_us(blockDurations_us, 0, numPrep);
+            if (prepDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) {
+                FREE(sequence_pattern);
+                return -1;
+            }
+        }
+    }
+
+    /* Safety check for cooldown */
+    if (numCooldown) {
+        if (numCooldown % L == 0) {
+            for (n = 0; n < (int)(numCooldown / L); ++n) {
+                if (!array_equal(&sequence_pattern[imagingStart], &sequence_pattern[imagingEnd + n * L], L)) {
+                    cooldownDuration_us = pulseqlib_sum_durations_us(blockDurations_us, imagingEnd, numCooldown);
+                    if (cooldownDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) {
+                        FREE(sequence_pattern);
+                        return -1;
+                    } else { 
+                        break; 
+                    }
+                }
+            }
+        } else {
+            cooldownDuration_us = pulseqlib_sum_durations_us(blockDurations_us, imagingEnd, numCooldown);
+            if (cooldownDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) {
+                FREE(sequence_pattern);
+                return -1;
+            }
+        }
+    }
+   
     FREE(sequence_pattern);
-    return (int)L; /* no periodic pattern found */
+    return L;
 }
 
 int pulseqlib_findSegmentsInTR(const pulseqlib_SeqFile* seq, int TR_length, int* segmentIndices) {
