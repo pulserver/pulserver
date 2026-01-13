@@ -2411,6 +2411,8 @@ int pulseqlib_getUniqueBlocks(
     int numUniqueBlocks;
     int (*blockDefinitions)[23];
     int n, r, idx;
+    int gradType;
+    int waveId;
     int noRF, noGx, noGy, noGz, noADC, noExt;
     int hasPrep, hasCooldown;
     int ctrl;
@@ -2478,10 +2480,22 @@ int pulseqlib_getUniqueBlocks(
         idx = (int)(seq->blockLibrary[n][2]) - 1; /* 1-based in file, 0 means none */
         if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
             noGx = 0;
-            blockDefinitions[r][5] = (int)(seq->gradLibrary[idx][0]);  /* type */
+            gradType = (int)(seq->gradLibrary[idx][0]);
+            blockDefinitions[r][5] = gradType;  /* type */
             blockDefinitions[r][6] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
             blockDefinitions[r][7] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
-            blockDefinitions[r][8] = (int)(seq->gradLibrary[idx][4]);  /* fallTime / wave_id */
+            if (gradType == 0) {
+                /* trapezoid: index 4 is fallTime */
+                blockDefinitions[r][8] = (int)(seq->gradLibrary[idx][4]);  /* fallTime */
+            } else {
+                /* arbitrary: index 4 is wave_id, replace with numUncompressedSamples */
+                waveId = (int)(seq->gradLibrary[idx][4]);
+                if (waveId > 0 && seq->isShapesLibraryParsed && waveId <= seq->shapesLibrarySize) {
+                    blockDefinitions[r][8] = seq->shapesLibrary[waveId - 1].numUncompressedSamples;
+                } else {
+                    blockDefinitions[r][8] = 0;
+                }
+            }
             blockDefinitions[r][9] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
             blockDefinitions[r][10] = (int)(seq->gradLibrary[idx][6]); /* delay */
         } else {
@@ -2497,10 +2511,22 @@ int pulseqlib_getUniqueBlocks(
         idx = (int)(seq->blockLibrary[n][3]) - 1; /* 1-based in file, 0 means none */
         if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
             noGy = 0;
-            blockDefinitions[r][11] = (int)(seq->gradLibrary[idx][0]);  /* type */
+            gradType = (int)(seq->gradLibrary[idx][0]);
+            blockDefinitions[r][11] = gradType;  /* type */
             blockDefinitions[r][12] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
             blockDefinitions[r][13] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
-            blockDefinitions[r][14] = (int)(seq->gradLibrary[idx][4]);  /* fallTime / wave_id */
+            if (gradType == 0) {
+                /* trapezoid: index 4 is fallTime */
+                blockDefinitions[r][14] = (int)(seq->gradLibrary[idx][4]);  /* fallTime */
+            } else {
+                /* arbitrary: index 4 is wave_id, replace with numUncompressedSamples */
+                waveId = (int)(seq->gradLibrary[idx][4]);
+                if (waveId > 0 && seq->isShapesLibraryParsed && waveId <= seq->shapesLibrarySize) {
+                    blockDefinitions[r][14] = seq->shapesLibrary[waveId - 1].numUncompressedSamples;
+                } else {
+                    blockDefinitions[r][14] = 0;
+                }
+            }
             blockDefinitions[r][15] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
             blockDefinitions[r][16] = (int)(seq->gradLibrary[idx][6]); /* delay */
         } else {
@@ -2516,10 +2542,22 @@ int pulseqlib_getUniqueBlocks(
         idx = (int)(seq->blockLibrary[n][4]) - 1; /* 1-based in file, 0 means none */
         if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
             noGz = 0;
-            blockDefinitions[r][17] = (int)(seq->gradLibrary[idx][0]); /* type */
+            gradType = (int)(seq->gradLibrary[idx][0]);
+            blockDefinitions[r][17] = gradType; /* type */
             blockDefinitions[r][18] = (int)(seq->gradLibrary[idx][2]); /* riseTime / first */
             blockDefinitions[r][19] = (int)(seq->gradLibrary[idx][3]); /* flatTime / last */
-            blockDefinitions[r][20] = (int)(seq->gradLibrary[idx][4]); /* fallTime / wave_id */
+            if (gradType == 0) {
+                /* trapezoid: index 4 is fallTime */
+                blockDefinitions[r][20] = (int)(seq->gradLibrary[idx][4]); /* fallTime */
+            } else {
+                /* arbitrary: index 4 is wave_id, replace with numUncompressedSamples */
+                waveId = (int)(seq->gradLibrary[idx][4]);
+                if (waveId > 0 && seq->isShapesLibraryParsed && waveId <= seq->shapesLibrarySize) {
+                    blockDefinitions[r][20] = seq->shapesLibrary[waveId - 1].numUncompressedSamples;
+                } else {
+                    blockDefinitions[r][20] = 0;
+                }
+            }
             blockDefinitions[r][21] = (int)(seq->gradLibrary[idx][5]); /* time_id */
             blockDefinitions[r][22] = (int)(seq->gradLibrary[idx][6]); /* delay */
         } else {
