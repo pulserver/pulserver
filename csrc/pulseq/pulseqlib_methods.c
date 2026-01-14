@@ -2344,8 +2344,6 @@ float pulseqlib_getGradLibraryMaxAmplitude(const pulseqlib_SeqFile* seq) {
     return maxAmplitude;
 }
 
-#define M 23   /* number of columns */
-
 typedef struct {
     unsigned long long hash;
     int row_index;
@@ -2353,22 +2351,23 @@ typedef struct {
     char used;
 } HashEntry;
 
-static unsigned long long hash_row(const int *row)
+static unsigned long long hash_row(const int *row, const int numCols)
 {
     unsigned long long h = 1469598103934665603ULL;
     int i;
 
-    for (i = 0; i < M; ++i) {
+    for (i = 0; i < numCols; ++i) {
         h ^= (unsigned long long)row[i];
         h *= 1099511628211ULL;
     }
     return h;
 }
 
-static int rows_equal(const int *a, const int *b)
+/* Compare two arrays element-wise. Returns 1 if equal, 0 otherwise. */
+static int array_equal(const int *a, const int *b, const int len)
 {
     int i;
-    for (i = 0; i < M; ++i)
+    for (i = 0; i < len; ++i)
         if (a[i] != b[i])
             return 0;
     return 1;
@@ -2396,7 +2395,7 @@ static size_t next_pow2(size_t x)
  * @return The number of unique blocks K.
  */
 int pulseqlib_getUniqueBlocks(
-    const pulseqlib_SeqFile* seq, 
+    const pulseqlib_SeqFile* seq,
     int* blockDurations_us,
     int* uniqueBlockDefs, 
     int* uniqueBlockTable,
@@ -2622,7 +2621,7 @@ int pulseqlib_getUniqueBlocks(
     numUniqueBlocks = 0;
 
     for (r = 0; r < rangeCount; ++r) {
-        h = hash_row(blockDefinitions[r]);
+        h = hash_row(blockDefinitions[r], 23);
         pos = (size_t)h & mask;
         n = startIndex + r;
 
@@ -2640,7 +2639,7 @@ int pulseqlib_getUniqueBlocks(
                 break;
             }
 
-            if (table[pos].hash == h && rows_equal(blockDefinitions[r], blockDefinitions[table[pos].row_index])) {
+            if (table[pos].hash == h && array_equal(blockDefinitions[r], blockDefinitions[table[pos].row_index], 23)) {
                 uniqueBlockTable[n] = table[pos].label;
                 break;
             }
@@ -2768,18 +2767,6 @@ int first_repeating_segment(const int *seq, int len)
     }
 
     return len;
-}
-
-/* Compare two arrays element-wise. Returns 1 if equal, 0 otherwise. */
-int array_equal(const int* a, const int* b, unsigned long len)
-{
-    unsigned long i;
-    for (i = 0; i < len; i++) {
-        if (a[i] != b[i]) {
-            return 0;
-        }
-    }
-    return 1;
 }
 
 /**

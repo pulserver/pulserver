@@ -103,10 +103,10 @@ static py::tuple _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, i
 
     const int rangeCount = end - start;
 
+    std::vector<int> block_durations_us(numBlocks > 0 ? (size_t)numBlocks : 0, -1);
     std::vector<int> unique_defs(rangeCount > 0 ? (size_t)rangeCount : 0);
     std::vector<int> unique_table(numBlocks > 0 ? (size_t)numBlocks : 0, -1);
     std::vector<int> pure_delay_block(numBlocks > 0 ? (size_t)numBlocks : 0, -1);
-    std::vector<int> block_durations_us(numBlocks > 0 ? (size_t)numBlocks : 0, -1);
 
     int numPrep = 0;
     int numCooldown = 0;
