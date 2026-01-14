@@ -115,9 +115,9 @@ static py::tuple _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, i
     if (numBlocks > 0 && rangeCount > 0) {
         k = pulseqlib_getUniqueBlocks(
             seqfile.seq,
-            block_durations_us.data(),
             unique_defs.data(),
             unique_table.data(),
+            block_durations_us.data(),
             pure_delay_block.data(),
             &numPrep,
             &numCooldown,
@@ -131,13 +131,13 @@ static py::tuple _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, i
         unique_defs.clear();
     }
 
-    return py::make_tuple(unique_defs, unique_table, pure_delay_block, block_durations_us, numPrep, numCooldown);
+    return py::make_tuple(unique_defs, unique_table, block_durations_us, pure_delay_block, numPrep, numCooldown);
 }
 
 static py::tuple _find_tr_in_sequence(
     std::vector<int>& unique_block_table,
-    std::vector<int>& pure_delay_block,
     std::vector<int>& block_durations_us,
+    std::vector<int>& pure_delay_block,
     const int numPrep,
     const int numCooldown
 ) {
@@ -147,11 +147,11 @@ static py::tuple _find_tr_in_sequence(
     int code = pulseqlib_findTRInSequence(
         &trDesc,
         n,
-        numPrep,
-        numCooldown,
         unique_block_table.data(), 
+        block_durations_us.data(),
         pure_delay_block.data(),
-        block_durations_us.data()
+        numPrep,
+        numCooldown
     );
     if (code == 0) {
         return py::make_tuple(0, 0, 0, 0);
@@ -173,8 +173,8 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     m.def("_find_tr_in_sequence",
       &_find_tr_in_sequence,
       py::arg("unique_block_table"),
-      py::arg("pure_delay_block"),
       py::arg("block_durations_us"),
+      py::arg("pure_delay_block"),
       py::arg("numPrep"),
       py::arg("numCooldown"));
 }

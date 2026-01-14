@@ -79,9 +79,9 @@ float pulseqlib_getGradLibraryMaxAmplitude(const pulseqlib_SeqFile* seq);
 /* Segment-specific functions*/
 int pulseqlib_getUniqueBlocks(
   const pulseqlib_SeqFile* seq, 
-  int* blockDurations_us,
   int* uniqueBlockDefs, 
   int* uniqueBlockTable,
+  int* blockDurations_us,
   int* pureDelayBlock,
   int* numPrep,
   int* numCooldown, 
@@ -91,13 +91,17 @@ int pulseqlib_getUniqueBlocks(
 int pulseqlib_findTRInSequence(
   pulseqlib_TRdescriptor* trDesc,
   int numBlocks,
-  int numPrep,
-  int numCooldown,
   int* uniqueBlockTable,
-  int* pureDelayBlock, 
-  int* blockDurations_us
+  int* blockDurations_us,
+  int* pureDelayBlock,
+  int numPrep,
+  int numCooldown
 );
-int pulseqlib_findSegmentsInTR(const pulseqlib_SeqFile* seq, int TR_length, int* segmentIndices);
+int pulseqlib_findSegmentsInTR(
+  const pulseqlib_SeqFile* seq, 
+  int* segmentIndices,
+  const pulseqlib_TRdescriptor* trDesc
+);
 
 #ifdef __cplusplus
 }

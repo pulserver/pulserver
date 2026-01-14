@@ -2396,9 +2396,9 @@ static size_t next_pow2(size_t x)
  */
 int pulseqlib_getUniqueBlocks(
     const pulseqlib_SeqFile* seq,
-    int* blockDurations_us,
     int* uniqueBlockDefs, 
     int* uniqueBlockTable,
+    int* blockDurations_us,
     int* pureDelayBlock,
     int* numPrep,
     int* numCooldown,
@@ -2774,21 +2774,21 @@ int first_repeating_segment(const int *seq, int len)
  *
  * @param[in, out] trDesc Pointer to TR descriptor to fill.
  * @param[in] numBlocks Total number of blocks in the sequence.
+ * @param[in] uniqueBlockTable Array of numBlocks elements mapping each block to its unique definition index.
+ * @param[in] blockDurations_us Array of block durations in microseconds.
+ * @param[in] pureDelayBlock Mask indicating which blocks are pure delays.
  * @param[in] numPrep Number of preparation blocks before imaging blocks.
  * @param[in] numCooldown Number of cooldown blocks after imaging blocks.
- * @param[in] uniqueBlockTable Array of numBlocks elements mapping each block to its unique definition index.
- * @param[in] pureDelayBlock Mask indicating which blocks are pure delays.
- * @param[in] blockDurations_us Array of block durations in microseconds.
  * @return The TR pattern length, or -1 if no valid periodic TR is found.
  */
 int pulseqlib_findTRInSequence(
     pulseqlib_TRdescriptor* trDesc,
     int numBlocks,
-    int numPrep,
-    int numCooldown,
     int* uniqueBlockTable,
-    int* pureDelayBlock, 
-    int* blockDurations_us
+    int* blockDurations_us,
+    int* pureDelayBlock,
+    int numPrep,
+    int numCooldown
 ) {
     int i, n;
     int imagingStart, imagingEnd, imagingLen;
@@ -2929,97 +2929,3 @@ int pulseqlib_findTRInSequence(
     return 1; /* SUCCESS */
 }
 
-int pulseqlib_findSegmentsInTR(const pulseqlib_SeqFile* seq, int TR_length, int* segmentIndices) {
-    int n;
-    int idx;
-    int* hasRF;
-    int* gxStartZero;
-    int* gyStartZero;
-    int* gzStartZero;
-    int* gxEndZero;
-    int* gyEndZero;
-    int* gzEndZero;
-
-    /* Allocate hasRF array */
-    hasRF = (int*)ALLOC(TR_length * sizeof(int));
-    if (!hasRF) {
-        return 0;
-    }
-    gxStartZero = (int*)ALLOC(TR_length * sizeof(int));
-    gyStartZero = (int*)ALLOC(TR_length * sizeof(int));
-    gzStartZero = (int*)ALLOC(TR_length * sizeof(int));
-    gxEndZero = (int*)ALLOC(TR_length * sizeof(int));
-    gyEndZero = (int*)ALLOC(TR_length * sizeof(int));
-    gzEndZero = (int*)ALLOC(TR_length * sizeof(int));
-    if (!gxStartZero || !gyStartZero || !gzStartZero || !gxEndZero || !gyEndZero || !gzEndZero) {
-        FREE(hasRF);
-        if (gxStartZero) FREE(gxStartZero);
-        if (gyStartZero) FREE(gyStartZero);
-        if (gzStartZero) FREE(gzStartZero);
-        if (gxEndZero) FREE(gxEndZero);
-        if (gyEndZero) FREE(gyEndZero);
-        if (gzEndZero) FREE(gzEndZero);
-        return 0;
-    }
-
-    /* Set to zero */
-    for (n = 0; n < TR_length; ++n) {
-        hasRF[n] = 0;
-        gxStartZero[n] = 0;
-        gyStartZero[n] = 0;
-        gzStartZero[n] = 0;
-        gxEndZero[n] = 0;
-        gyEndZero[n] = 0;
-        gzEndZero[n] = 0;
-    }
-
-    /* Analyze blocks in TR */
-    for (n = 0; n < TR_length; ++n) {
-        idx = (int)(seq->blockLibrary[n][1]) - 1; /* 1-based in file, 0 means none */
-        if (idx >= 0 && seq->rfLibrary && idx < seq->rfLibrarySize) {
-            hasRF[n] = 1;
-        }
-        idx = (int)(seq->blockLibrary[n][2]) - 1; /* Gx */
-        if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
-            if ((int)(seq->gradLibrary[idx][0]) == 0) { /* trapezoid */
-                gxStartZero[n] = 1;
-                gxEndZero[n] = 1;
-            } else {
-                if ((int)(seq->gradLibrary[idx][2]) == 0) { /* first == 0 */
-                    gxStartZero[n] = 1;
-                }
-                if ((int)(seq->gradLibrary[idx][3]) == 0) { /* last == 0 */
-                    gxEndZero[n] = 1;
-                }
-            }
-        }
-        idx = (int)(seq->blockLibrary[n][3]) - 1; /* Gy */
-        if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
-            if ((int)(seq->gradLibrary[idx][0]) == 0) { /* trapezoid */
-                gyStartZero[n] = 1;
-                gyEndZero[n] = 1;
-            } else {
-                if ((int)(seq->gradLibrary[idx][2]) == 0) { /* first == 0 */
-                    gyStartZero[n] = 1;
-                }
-                if ((int)(seq->gradLibrary[idx][3]) == 0) { /* last == 0 */
-                    gyEndZero[n] = 1;
-                }
-            }
-        }
-        idx = (int)(seq->blockLibrary[n][4]) - 1; /* Gz */
-        if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
-            if ((int)(seq->gradLibrary[idx][0]) == 0) { /* trapezoid */
-                gzStartZero[n] = 1;
-                gzEndZero[n] = 1;
-            } else {
-                if ((int)(seq->gradLibrary[idx][2]) == 0) { /* first == 0 */
-                    gzStartZero[n] = 1;
-                }
-                if ((int)(seq->gradLibrary[idx][3]) == 0) { /* last == 0 */
-                    gzEndZero[n] = 1;
-                }
-            }
-        }
-    }
-}

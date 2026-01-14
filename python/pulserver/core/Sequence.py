@@ -54,10 +54,10 @@ def get_unique_blocks(seq: PulserverSequence):
 
 
 def find_tr(seq: PulserverSequence, num_reps: int = 1) -> SimpleNamespace:
-    _, unique_table, pure_delay_block, block_durations_us, num_prep, num_cooldown = (
+    _, unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown = (
         _get_unique_blocks(seq._cseq)
     )
-    tr_size, num_trs, degenerate_prep, degenerate_cooldown = _find_tr_in_sequence(unique_table, pure_delay_block, block_durations_us, num_prep, num_cooldown)
+    tr_size, num_trs, degenerate_prep, degenerate_cooldown = _find_tr_in_sequence(unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown)
 
     # Prepare result
     result = SimpleNamespace()
