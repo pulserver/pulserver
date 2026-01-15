@@ -2711,63 +2711,7 @@ int pulseqlib_getUniqueBlocks(
 }
 
 #define PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US 100000 /* 100 ms */
-
-static long long pulseqlib_sum_durations_us(const int* durations_us, int start, int count)
-{
-    long long total = 0;
-    int i;
-    for (i = 0; i < count; ++i) {
-        total += (long long)durations_us[start + i];
-    }
-    return total;
-}
-
-/*
- * Find the first repeating segment of a sequence.
- * Equivalent to Python _principal_period behavior (not minimal).
- *
- * seq: pointer to integer array
- * len: number of elements
- *
- * Returns:
- *   Length of first repeating segment if found
- *   len if no repetition is found
- */
-int first_repeating_segment(const int *seq, int len)
-{
-    int start;
-    int sublen;
-    int L;
-    int i;
-    int match;
-    const int *s;
-
-    if (len <= 1) {
-        return len;
-    }
-
-    for (start = 0; start < len; start++) {
-        s = seq + start;
-        sublen = len - start;
-
-        for (L = 1; L <= sublen / 2; L++) {
-            match = 1;
-
-            for (i = 0; i < L; i++) {
-                if (s[i] != s[i + L]) {
-                    match = 0;
-                    break;
-                }
-            }
-
-            if (match) {
-                return L;
-            }
-        }
-    }
-
-    return len;
-}
+#define PULSEQLIB_SINGLE_TR_MAX_DURATION_US 15000000 /* 15 s */
 
 /**
  * @brief Detect TR pattern.
@@ -2794,6 +2738,7 @@ int pulseqlib_findTRInSequence(
     int imagingStart, imagingEnd, imagingLen;
     int * sequence_pattern;
     long long prepDuration_us, cooldownDuration_us;
+    long long activeDuration_us;
     int found;
     int L;
 
@@ -2865,8 +2810,31 @@ int pulseqlib_findTRInSequence(
         }
     }
 
-    /* Exit if pattern not found */
+    /* Fallback for single TR sequences: if no periodic pattern found,
+       treat entire sequence as single TR if active duration < 15s */
     if (!found) {
+        /* Calculate total duration of non-pure-delay blocks */
+        activeDuration_us = 0;
+        for (n = 0; n < numBlocks; ++n) {
+            if (!pureDelayBlock[n]) {
+                activeDuration_us += (long long)blockDurations_us[n];
+            }
+        }
+
+        if (activeDuration_us <= PULSEQLIB_SINGLE_TR_MAX_DURATION_US) {
+            /* Treat entire sequence as a single TR */
+            trDesc->trSize = numBlocks;
+            trDesc->numTRs = 1;
+            trDesc->degeneratePrep = 1;
+            trDesc->numPrepBlocks = 0;
+            trDesc->numPrepTRs = 0;
+            trDesc->degenerateCooldown = 1;
+            trDesc->numCooldownBlocks = 0;
+            trDesc->numCooldownTRs = 0;
+            FREE(sequence_pattern);
+            return 1; /* SUCCESS - single TR fallback */
+        }
+
         FREE(sequence_pattern);
         return 0;
     }
