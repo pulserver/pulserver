@@ -3146,9 +3146,12 @@ int findSegmentsInTR(
             /* If we found a boundary candidate - store its index and prepare to store it as soon as we find an RF pulse */
             if (foundCandidate) 
             {
-                segmentStartCandidateIndex = n;
+                segmentStartCandidateIndex = n + 1;
                 storeCandidate = 1;
             }
+
+            /* Update segmentSize (before checking RF, so current block is counted in current segment) */
+            segmentSize++;
 
             /* If RF is found, store last candidate segment start */
             if (raw.rf >= 0 && storeCandidate)
@@ -3159,9 +3162,6 @@ int findSegmentsInTR(
                 numSegmentStarts++;
                 storeCandidate = 0; /* Avoid storing multiple segment starts for the same segment */
             }
-
-            /* update segmentSize */
-            segmentSize++;
         }
     }
 
