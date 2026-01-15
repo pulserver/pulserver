@@ -2929,3 +2929,216 @@ int pulseqlib_findTRInSequence(
     return 1; /* SUCCESS */
 }
 
+/* Get the RF start time with respect to block start */
+int get_rf_start_time(pulseqlib_SeqFile const* seq, int rfIndex)
+{
+    if (!seq || rfIndex < 0 || !seq->rfLibrary || rfIndex >= seq->rfLibrarySize) {
+        return 0;
+    }
+    return (int)(seq->rfLibrary[rfIndex][5]); /* delay */
+}
+
+/* Get the RF shape duration with respect to RF start */
+int get_rf_duration(pulseqlib_SeqFile const* seq, int rfIndex)
+{
+    pulseqlib_ShapeArbitrary rf_times;
+    pulseqlib_ShapeArbitrary rf_magnitude;
+    int rf_raster_us;
+    int waveID;
+    int num_samples;
+    int timeID;
+    if (!seq || rfIndex < 0 || !seq->rfLibrary || rfIndex >= seq->rfLibrarySize) {
+        return 0;
+    }
+    timeID = (int)(seq->rfLibrary[rfIndex][3]);
+    if (timeID >= 0){
+        decompressShape(&seq->shapesLibrary[timeID], &rf_times);
+        return rf_times.samples[rf_times.numUncompressedSamples - 1] - rf_times.samples[0];
+    } else {
+        rf_raster_us = (int)((seq->opts).rf_raster_time);
+        waveID = (int)(seq->rfLibrary[rfIndex][1]);
+        decompressShape(&seq->shapesLibrary[waveID], &rf_magnitude);
+        num_samples = rf_magnitude.numUncompressedSamples;
+        return num_samples * rf_raster_us; /* duration in us */}
+}
+
+/* Get the ADC start time with respect to block start */
+int get_adc_start_time(pulseqlib_SeqFile const* seq, int adcIndex){
+    if (!seq || adcIndex < 0 || !seq->adcLibrary || adcIndex >= seq->adcLibrarySize) {
+        return 0;
+    }
+    return (int)(seq->adcLibrary[adcIndex][2]); /* delay */
+}
+
+/* Get the readout duration with respect to ADC start */
+int get_adc_duration(pulseqlib_SeqFile const* seq, int adcIndex){
+    if (!seq || adcIndex < 0 || !seq->adcLibrary || adcIndex >= seq->adcLibrarySize) {
+        return 0;
+    }
+    return (int)(seq->adcLibrary[adcIndex][0] * seq->adcLibrary[adcIndex][1]); /* num_samples * dwell */
+}
+
+
+/**
+ * @brief Get segment definitions in TR.
+ *
+ * @param[in] seq Pointer to the SeqFile structure.
+ * @param[in, out] segmentStarts Array to fill with segment start block indices.
+ * @param[in, out] segmentSizes Array to fill with segment sizes (in blocks).
+ * @param[in] trDesc Pointer to TR descriptor to fill.
+ * @return The number of segments found, or 0 if an error occurred.
+ */
+int pulseqlib_findSegmentsInTR(
+  const pulseqlib_SeqFile* seq, 
+  int* segmentStarts,
+  int* segmentSizes,
+  const pulseqlib_TRdescriptor* trDesc
+) {
+    pulseqlib_RawBlock raw;
+    pulseqlib_RawBlock raw_next;
+
+    /* System specs */
+    float max_slew;
+    float grad_raster_s;
+
+    /* Gradient amplitude bookkeeping*/
+    int g[3];
+    float gradAmplitude;
+    float gradFirstCurrent[3];
+    float gradLastNext[3];
+
+    /* Segment boundaries helpers*/
+    int foundCandidate;
+    int storeCandidate;
+    int segmentStartCandidateIndex;
+    int segmentSize;
+    int numSegmentStarts;
+    
+    /* Loop counters */
+    int numBlocksInTR;
+    int n;
+    int i;
+
+    /* Parse maximum slew rate */
+    max_slew = seq->opts.max_slew; /* Maximum slew rate in Hz/m/s */
+    grad_raster_s = seq->opts.grad_raster_time * 1e-6f; /* Gradient raster time in seconds */
+
+    /* Parse number of blocks in TR */
+    numBlocksInTR = trDesc->trSize;
+
+    /* Check that first/last blocks begin/end with "zero" gradients */
+    getRawBlockContentIDs(seq, 0, &raw, 0);
+    g[0] = raw.gx;
+    g[1] = raw.gy;
+    g[2] = raw.gz;
+    for (i = 0; i < 3; ++i) {
+        if (g[i] > 0) {
+            gradAmplitude = seq->gradLibrary[g[i]][2]; /* initial gradient amplitude along channel i */
+        } else {
+            gradAmplitude = 0.0f;
+        }
+        if (fabs(gradAmplitude) > max_slew * grad_raster_s) {
+            return 0; /* First block does not start with zero gradient */
+        }
+    }
+    /* Check final amplitude */
+    getRawBlockContentIDs(seq, numBlocksInTR-1, &raw, 0);
+    g[0] = raw.gx;
+    g[1] = raw.gy;
+    g[2] = raw.gz;
+    for (i = 0; i < 3; ++i) {
+        if (g[i] > 0) {
+            gradFirstCurrent[i] = seq->gradLibrary[g[i]][3]; /* final gradient amplitude along channel i */
+        } else {
+            gradFirstCurrent[i] = 0.0f;
+        }
+        if (fabs(gradAmplitude) > max_slew * grad_raster_s) {
+            return 0; /* Last block does not finish with zero gradient */
+        }
+    }
+
+    /* Initialization: first segment starts at sequence beginning by definition */
+    foundCandidate = 0;
+    storeCandidate = 0;
+    segmentSize = 1; /* Contains at least first block */
+    segmentStartCandidateIndex = 0;
+    segmentStarts[0] = segmentStartCandidateIndex; /* = 0 */
+    numSegmentStarts = 1;
+
+    /* Loop over TR definition */
+    if (numBlocksInTR > 2)
+    {
+        for (n = 1; n < numBlocksInTR-1; ++n) 
+        {
+            if (!getRawBlockContentIDs(seq, n, &raw, 0)) {
+                return 0;
+            }
+
+            if (!getRawBlockContentIDs(seq, n+1, &raw_next, 0)) {
+                return 0;
+            }
+
+            /* Check if current block is a candidate for segment boundary, i.e., if ends with zero gradient 
+            and is followed by a block beginning with zero gradient */
+            g[0] = raw.gx;
+            g[1] = raw.gy;
+            g[2] = raw.gz;
+            for (i = 0; i < 3; ++i) 
+            {
+                if (g[i] > 0) {
+                    gradFirstCurrent[i] = seq->gradLibrary[g[i]][2]; /* initial gradient amplitude along channel i */
+                } else {
+                    gradFirstCurrent[i] = 0.0f;
+                }
+            }
+            g[0] = raw_next.gx;
+            g[1] = raw_next.gy;
+            g[2] = raw_next.gz;
+            for (i = 0; i < 3; ++i) 
+            {
+                if (g[i] > 0) {
+                    gradLastNext[i] = seq->gradLibrary[g[i]][3]; /* final gradient amplitude along channel i */
+                } else {
+                    gradLastNext[i] = 0.0f;
+                }
+            }
+
+            /* If all gradFirstCurrent and gradLastNext are zero, we found a boundary candidate - store its index and prepare
+            to store it as soon as we find an RF pulse */
+            for (i = 0; i < 3; ++i) 
+            {
+                if (fabs(gradFirstCurrent[i]) <= max_slew * grad_raster_s && fabs(gradLastNext[i]) <= max_slew * grad_raster_s) {
+                    foundCandidate = 1;
+                } else {
+                    foundCandidate = 0;
+                    break;
+                }
+            }
+
+            /* If we found a boundary candidate - store its index and prepare to store it as soon as we find an RF pulse */
+            if (foundCandidate) 
+            {
+                segmentStartCandidateIndex = n;
+                storeCandidate = 1;
+            }
+
+            /* If RF is found, store last candidate segment start */
+            if (raw.rf >= 0 && storeCandidate)
+            {
+                segmentStarts[numSegmentStarts] = segmentStartCandidateIndex;
+                segmentSizes[numSegmentStarts - 1] = segmentSize;
+                segmentSize = 0; /* reset segment size */
+                numSegmentStarts++;
+                storeCandidate = 0; /* Avoid storing multiple segment starts for the same segment */
+            }
+
+            /* update segmentSize */
+            segmentSize++;
+        }
+    }
+
+    /* Store last segment size */
+    segmentSizes[numSegmentStarts - 1] = segmentSize;
+
+    return numSegmentStarts;
+}
