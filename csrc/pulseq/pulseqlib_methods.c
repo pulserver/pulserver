@@ -1134,7 +1134,7 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
         }
     }
     if (seq->extensionLUTSize > 0){
-        seq->extensionLUT = ALLOC(sizeof(int) * (seq->extensionLUTSize + 1));
+        seq->extensionLUT = (int*) ALLOC(sizeof(int) * (seq->extensionLUTSize + 1));
         for (n = 0; n < 8; n++){
             if (seq->extensionMap[n] > 0) seq->extensionLUT[seq->extensionMap[n]] = n;
         }
@@ -1166,7 +1166,7 @@ int decompressShape(pulseqlib_ShapeArbitrary* encoded, pulseqlib_ShapeArbitrary*
     if (encoded->numSamples == encoded->numUncompressedSamples) {
         result->numSamples = encoded->numSamples;
         result->numUncompressedSamples = encoded->numUncompressedSamples;
-        result->samples = (float*)ALLOC(sizeof(float) * encoded->numSamples);
+        result->samples = (float*) ALLOC(sizeof(float) * encoded->numSamples);
         if (!result->samples) {
             return 0; /* Allocation failed */
         }
@@ -1723,8 +1723,8 @@ static void pulseqlib_apply_block_dynamic(const pulseqlib_BlockDynamic* dynamic,
         const pulseqlib_RfShimEntry* entry = dynamic->rfShim.entry;
         int n = entry->nChannels;
         if (n > 0 && n <= MAX_RF_SHIM_CHANNELS) {
-            float* amplitudes = (float*)ALLOC(sizeof(float) * n);
-            float* phases = (float*)ALLOC(sizeof(float) * n);
+            float* amplitudes = (float*) ALLOC(sizeof(float) * n);
+            float* phases = (float*) ALLOC(sizeof(float) * n);
             if (amplitudes && phases) {
                 block->rfShimming.type = 1;
                 block->rfShimming.nChan = n;
@@ -1804,7 +1804,7 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
         }
 
         if (DETECT_REAL_RF && block->rf.magShape.numSamples > 0 && block->rf.phaseShape.numSamples > 0) {
-            isRealSample = (int*)ALLOC(block->rf.magShape.numSamples * sizeof(int));
+            isRealSample = (int*) ALLOC(block->rf.magShape.numSamples * sizeof(int));
             if (!isRealSample) {
                 if (isRealSample) {
                     FREE(isRealSample);
@@ -2603,7 +2603,7 @@ int pulseqlib_getUniqueBlocks(
     table_size = next_pow2((size_t)rangeCount * 2);
     mask = table_size - 1;
 
-    table = (HashEntry *)ALLOC(table_size * sizeof(HashEntry));
+    table = (HashEntry*)ALLOC(table_size * sizeof(HashEntry));
     if (!table) {
         FREE(blockDefinitions);
         FREE(pureDelayBlock);
@@ -2815,10 +2815,12 @@ int pulseqlib_findTRInSequence(
     /* Fill trDesc with initial values */
     trDesc->trSize = 0;
     trDesc->numTRs = 0;
-    trDesc->numPrep = numPrep;
     trDesc->degeneratePrep = 1;
-    trDesc->numCooldown = numCooldown;
+    trDesc->numPrepBlocks = numPrep;
+    trDesc->numPrepTRs = 1;
     trDesc->degenerateCooldown = 1;
+    trDesc->numCooldownBlocks = numCooldown;
+    trDesc->numCooldownTRs = 1;
 
     /* Imaging region is [prepBlocks, numBlocks - cooldownBlocks) */
     imagingStart = numPrep;
@@ -2829,7 +2831,7 @@ int pulseqlib_findTRInSequence(
     }
 
     /* To identify TR, pure delay actual duration must be considered */
-    sequence_pattern = ALLOC(numBlocks * sizeof(int));
+    sequence_pattern = (int*)ALLOC(numBlocks * sizeof(int));
     if (!sequence_pattern) {
         return 0;
     }
@@ -2877,9 +2879,11 @@ int pulseqlib_findTRInSequence(
     if (numPrep) {
         if (numPrep % L == 0) {
             for (n = 0; n < (int)(numPrep / L); ++n) {
-                if (!array_equal(&sequence_pattern[imagingStart], &sequence_pattern[n * L], L)) {
+                if (!array_equal(&sequence_pattern[imagingStart], &sequence_pattern[n * L], L)) 
+                {
                     prepDuration_us = pulseqlib_sum_durations_us(blockDurations_us, 0, numPrep);
-                    if (prepDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) {
+                    if (prepDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) 
+                    {
                         FREE(sequence_pattern);
                         return 0;
                     } else { 
@@ -2888,9 +2892,15 @@ int pulseqlib_findTRInSequence(
                     }
                 }
             }
+            if (trDesc->degeneratePrep == 1) 
+            {
+                trDesc->numPrepBlocks = 0;
+                trDesc->numPrepTRs = numPrep / L;
+            }
         } else {
             prepDuration_us = pulseqlib_sum_durations_us(blockDurations_us, 0, numPrep);
-            if (prepDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) {
+            if (prepDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US)
+            {
                 FREE(sequence_pattern);
                 return 0;
             } else { 
@@ -2903,9 +2913,11 @@ int pulseqlib_findTRInSequence(
     if (numCooldown) {
         if (numCooldown % L == 0) {
             for (n = 0; n < (int)(numCooldown / L); ++n) {
-                if (!array_equal(&sequence_pattern[imagingStart], &sequence_pattern[imagingEnd + n * L], L)) {
+                if (!array_equal(&sequence_pattern[imagingStart], &sequence_pattern[imagingEnd + n * L], L)) 
+                {
                     cooldownDuration_us = pulseqlib_sum_durations_us(blockDurations_us, imagingEnd, numCooldown);
-                    if (cooldownDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) {
+                    if (cooldownDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) 
+                    {
                         FREE(sequence_pattern);
                         return 0;
                     } else { 
@@ -2914,9 +2926,15 @@ int pulseqlib_findTRInSequence(
                     }
                 }
             }
+            if (trDesc->degenerateCooldown == 1) 
+            {
+                trDesc->numCooldownBlocks = 0;
+                trDesc->numCooldownTRs = numCooldown / L;
+            }
         } else {
             cooldownDuration_us = pulseqlib_sum_durations_us(blockDurations_us, imagingEnd, numCooldown);
-            if (cooldownDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) {
+            if (cooldownDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) 
+            {
                 FREE(sequence_pattern);
                 return 0;
             } else { 
@@ -2978,21 +2996,13 @@ int get_adc_duration(pulseqlib_SeqFile const* seq, int adcIndex){
     return (int)(seq->adcLibrary[adcIndex][0] * seq->adcLibrary[adcIndex][1]); /* num_samples * dwell */
 }
 
-
-/**
- * @brief Get segment definitions in TR.
- *
- * @param[in] seq Pointer to the SeqFile structure.
- * @param[in, out] segmentStarts Array to fill with segment start block indices.
- * @param[in, out] segmentSizes Array to fill with segment sizes (in blocks).
- * @param[in] trDesc Pointer to TR descriptor to fill.
- * @return The number of segments found, or 0 if an error occurred.
- */
-int pulseqlib_findSegmentsInTR(
+/* Find segments definitions in a single TR */
+int findSegmentsInTR(
   const pulseqlib_SeqFile* seq, 
-  int* segmentStarts,
-  int* segmentSizes,
-  const pulseqlib_TRdescriptor* trDesc
+  pulseqlib_TRsegment* trSegments,
+  const int offset,
+  const int trStart,
+  const int trSize
 ) {
     pulseqlib_RawBlock raw;
     pulseqlib_RawBlock raw_next;
@@ -3013,6 +3023,8 @@ int pulseqlib_findSegmentsInTR(
     int segmentStartCandidateIndex;
     int segmentSize;
     int numSegmentStarts;
+    int* segmentStarts;
+    int* segmentSizes;
     
     /* Loop counters */
     int numBlocksInTR;
@@ -3024,10 +3036,18 @@ int pulseqlib_findSegmentsInTR(
     grad_raster_s = seq->opts.grad_raster_time * 1e-6f; /* Gradient raster time in seconds */
 
     /* Parse number of blocks in TR */
-    numBlocksInTR = trDesc->trSize;
+    numBlocksInTR = trSize;
+
+    /* Allocate segment start and size arrays */
+    segmentStarts = (int*) ALLOC(numBlocksInTR * sizeof(int));
+    segmentSizes = (int*) ALLOC(numBlocksInTR * sizeof(int));
+    if (!segmentStarts || !segmentSizes) 
+    {
+        return 0;
+    }
 
     /* Check that first/last blocks begin/end with "zero" gradients */
-    getRawBlockContentIDs(seq, 0, &raw, 0);
+    getRawBlockContentIDs(seq, trStart, &raw, 0);
     g[0] = raw.gx;
     g[1] = raw.gy;
     g[2] = raw.gz;
@@ -3038,11 +3058,13 @@ int pulseqlib_findSegmentsInTR(
             gradAmplitude = 0.0f;
         }
         if (fabs(gradAmplitude) > max_slew * grad_raster_s) {
+            FREE(segmentStarts);
+            FREE(segmentSizes);
             return 0; /* First block does not start with zero gradient */
         }
     }
     /* Check final amplitude */
-    getRawBlockContentIDs(seq, numBlocksInTR-1, &raw, 0);
+    getRawBlockContentIDs(seq, trStart+numBlocksInTR-1, &raw, 0);
     g[0] = raw.gx;
     g[1] = raw.gy;
     g[2] = raw.gz;
@@ -3053,6 +3075,8 @@ int pulseqlib_findSegmentsInTR(
             gradFirstCurrent[i] = 0.0f;
         }
         if (fabs(gradAmplitude) > max_slew * grad_raster_s) {
+            FREE(segmentStarts);
+            FREE(segmentSizes);
             return 0; /* Last block does not finish with zero gradient */
         }
     }
@@ -3062,19 +3086,23 @@ int pulseqlib_findSegmentsInTR(
     storeCandidate = 0;
     segmentSize = 1; /* Contains at least first block */
     segmentStartCandidateIndex = 0;
-    segmentStarts[0] = segmentStartCandidateIndex; /* = 0 */
+    segmentStarts[0] = trStart; /* = 0 */
     numSegmentStarts = 1;
 
     /* Loop over TR definition */
     if (numBlocksInTR > 2)
     {
-        for (n = 1; n < numBlocksInTR-1; ++n) 
+        for (n = trStart+1; n < trStart+numBlocksInTR-1; ++n) 
         {
             if (!getRawBlockContentIDs(seq, n, &raw, 0)) {
+                FREE(segmentStarts);
+                FREE(segmentSizes);
                 return 0;
             }
 
             if (!getRawBlockContentIDs(seq, n+1, &raw_next, 0)) {
+                FREE(segmentStarts);
+                FREE(segmentSizes);
                 return 0;
             }
 
@@ -3140,5 +3168,124 @@ int pulseqlib_findSegmentsInTR(
     /* Store last segment size */
     segmentSizes[numSegmentStarts - 1] = segmentSize;
 
+    /* Copy inside */
+    for (i = 0; i < numSegmentStarts; ++i)
+    {
+        trSegments[offset + i].startBlock = segmentStarts[i];
+        trSegments[offset + i].numBlocks = segmentSizes[i];
+        trSegments[offset + i].uniqueBlockIndices = NULL; /* Initialize to NULL or allocate as needed */
+    }
+    FREE(segmentStarts);
+    FREE(segmentSizes);
+
     return numSegmentStarts;
+}
+
+/**
+ * @brief Get segment definitions in TR.
+ *
+ * @param[in] seq Pointer to the SeqFile structure.
+ * @param[out] trSegments Array to store the detected TR segments.
+ * @param[out] uniqueSegmentTable Array mapping each segment to its unique definition index.
+ * @param[in] trDesc Pointer to the TR descriptor.
+ * @param[in] uniqueBlockTable Array mapping each block to its unique definition index.
+ * @return The number of segments found, or 0 if an error occurred.
+ */
+int pulseqlib_findSegmentsInTR(
+  const pulseqlib_SeqFile* seq, 
+  pulseqlib_TRsegment* trSegments,
+  int* uniqueSegmentTable,
+  const pulseqlib_TRdescriptor* trDesc,
+  const int* uniqueBlockTable
+) {
+    pulseqlib_TRsegment* trSegmentsRaw;
+    int segmentExists;
+    int numBlocks;
+    int numSegments;
+    int numUniqueSegments;
+    int found;
+    int trStart;
+    int trSize;
+    int n;
+    int i;
+    if (!seq || !trSegments || !uniqueSegmentTable || !trDesc || !uniqueBlockTable) {
+        return 0;
+    }
+
+    /* Initialize numSegments */
+    numSegments = 0;
+    numBlocks = trDesc->trSize + trDesc->numPrepBlocks + trDesc->numCooldownBlocks;
+
+    /* Initialize trSegmentsRaw (at most, one segment per block) */
+    trSegmentsRaw = (pulseqlib_TRsegment*) ALLOC(numBlocks * sizeof(pulseqlib_TRsegment));
+
+    /* Find segments in prep section */
+    if (trDesc->degeneratePrep == 0 && trDesc->numPrepBlocks > 0) {
+        trStart = 0;
+        trSize = trDesc->numPrepBlocks + trDesc->trSize;
+        numSegments += findSegmentsInTR(seq, trSegmentsRaw, numSegments, trStart, trSize);
+    }
+
+    /* Find segments in imaging TR section */
+    trStart = trDesc->numPrepBlocks;
+    trSize = trDesc->trSize;
+    numSegments += findSegmentsInTR(seq, trSegmentsRaw, numSegments, trStart, trSize);
+
+    /* Find segments in cooldown section */
+    if (trDesc->degenerateCooldown == 0 && trDesc->numCooldownBlocks > 0) {
+        trStart = seq->numBlocks - trDesc->numCooldownBlocks - trDesc->trSize;
+        trSize = trDesc->numCooldownBlocks + trDesc->trSize;
+        numSegments += findSegmentsInTR(seq, trSegmentsRaw, numSegments, trStart, trSize);
+    }
+
+    /* Parse actual segment definition from uniqueBlockTable */
+    for (n = 0; n < numSegments; ++n){
+        trSegmentsRaw[n].uniqueBlockIndices = (int*) ALLOC(trSegmentsRaw[n].numBlocks * sizeof(int));
+        for (i = 0; i < trSegmentsRaw[n].numBlocks; ++i){
+            trSegmentsRaw[n].uniqueBlockIndices[i] = uniqueBlockTable[trSegmentsRaw[n].startBlock + i];
+        }
+    }
+
+    /* Find unique segments and fill uniqueSegmentTable */
+    numUniqueSegments = 0;
+    for (n = 0; n < numSegments; ++n)
+    {
+        found = -1;
+        for (i = 0; i < numUniqueSegments; ++i)
+        {
+            if (trSegmentsRaw[n].numBlocks == trSegments[i].numBlocks &&
+                array_equal(trSegmentsRaw[n].uniqueBlockIndices, trSegments[i].uniqueBlockIndices, trSegmentsRaw[n].numBlocks))
+            {
+                found = i;
+                break;
+            }
+        }
+
+        if (found == -1)
+        {
+            /* New unique segment */
+            trSegments[numUniqueSegments].numBlocks = trSegmentsRaw[n].numBlocks;
+            trSegments[numUniqueSegments].startBlock = trSegmentsRaw[n].startBlock;
+            trSegments[numUniqueSegments].uniqueBlockIndices = (int*) ALLOC(trSegmentsRaw[n].numBlocks * sizeof(int));
+            for (i = 0; i < trSegmentsRaw[n].numBlocks; ++i)
+            {
+                trSegments[numUniqueSegments].uniqueBlockIndices[i] = trSegmentsRaw[n].uniqueBlockIndices[i];
+            }
+            found = numUniqueSegments;
+            numUniqueSegments++;
+        }
+
+        /* Store mapping: raw segment n → unique segment found */
+        uniqueSegmentTable[n] = found;
+    }
+
+
+    /* Free temporary storage */
+    for (n = 0; n < numSegments; ++n)
+    {
+        FREE(trSegmentsRaw[n].uniqueBlockIndices);
+    }
+    FREE(trSegmentsRaw);
+
+    return numUniqueSegments;
 }

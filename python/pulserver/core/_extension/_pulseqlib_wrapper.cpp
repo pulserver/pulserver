@@ -159,6 +159,99 @@ static py::tuple _find_tr_in_sequence(
     return py::make_tuple(trDesc.trSize, trDesc.numTRs, trDesc.degeneratePrep, trDesc.degenerateCooldown);
 }
 
+static py::tuple _find_segments_in_tr(
+    _PulserverSeqFile& seqfile,
+    const int trSize,
+    const int numTRs,
+    const int numPrepBlocks,
+    const int numCooldownBlocks,
+    const int degeneratePrep,
+    const int degenerateCooldown,
+    std::vector<int>& unique_block_table
+) {
+    if (!seqfile.seq) {
+        throw std::runtime_error("SeqFile pointer is null");
+    }
+
+    // Build TR descriptor from input parameters
+    pulseqlib_TRdescriptor trDesc;
+    trDesc.trSize = trSize;
+    trDesc.numTRs = numTRs;
+    trDesc.numPrepBlocks = numPrepBlocks;
+    trDesc.numPrepTRs = (numPrepBlocks > 0 && trSize > 0) ? (numPrepBlocks / trSize) : 0;
+    trDesc.numCooldownBlocks = numCooldownBlocks;
+    trDesc.numCooldownTRs = (numCooldownBlocks > 0 && trSize > 0) ? (numCooldownBlocks / trSize) : 0;
+    trDesc.degeneratePrep = degeneratePrep;
+    trDesc.degenerateCooldown = degenerateCooldown;
+
+    // Maximum possible segments: one per block in TR + prep + cooldown
+    const int maxSegments = trSize + numPrepBlocks + numCooldownBlocks;
+    if (maxSegments <= 0) {
+        return py::make_tuple(std::vector<int>(), std::vector<int>(), std::vector<std::vector<int>>());
+    }
+
+    // Allocate output arrays
+    std::vector<pulseqlib_TRsegment> trSegments(maxSegments);
+    std::vector<int> uniqueSegmentTable(maxSegments, -1);
+
+    // Initialize segment pointers to NULL
+    for (int i = 0; i < maxSegments; ++i) {
+        trSegments[i].uniqueBlockIndices = nullptr;
+    }
+
+    // Call the C function
+    int numUniqueSegments = pulseqlib_findSegmentsInTR(
+        seqfile.seq,
+        trSegments.data(),
+        uniqueSegmentTable.data(),
+        &trDesc,
+        unique_block_table.data()
+    );
+
+    // Convert results to Python-friendly format
+    std::vector<int> startBlocks;
+    std::vector<int> numBlocks;
+    std::vector<std::vector<int>> uniqueBlockIndices;
+
+    startBlocks.reserve(numUniqueSegments);
+    numBlocks.reserve(numUniqueSegments);
+    uniqueBlockIndices.reserve(numUniqueSegments);
+
+    for (int i = 0; i < numUniqueSegments; ++i) {
+        startBlocks.push_back(trSegments[i].startBlock);
+        numBlocks.push_back(trSegments[i].numBlocks);
+        
+        std::vector<int> indices;
+        if (trSegments[i].uniqueBlockIndices && trSegments[i].numBlocks > 0) {
+            indices.assign(
+                trSegments[i].uniqueBlockIndices,
+                trSegments[i].uniqueBlockIndices + trSegments[i].numBlocks
+            );
+        }
+        uniqueBlockIndices.push_back(std::move(indices));
+    }
+
+    // Free allocated memory in segments
+    for (int i = 0; i < numUniqueSegments; ++i) {
+        if (trSegments[i].uniqueBlockIndices) {
+            FREE(trSegments[i].uniqueBlockIndices);
+        }
+    }
+
+    // Resize uniqueSegmentTable to actual number of segments found
+    // (the table maps raw segments to unique segments)
+    // We need to find the actual number of raw segments first
+    int numRawSegments = 0;
+    for (int i = 0; i < maxSegments; ++i) {
+        if (uniqueSegmentTable[i] >= 0) {
+            numRawSegments = i + 1;
+        }
+    }
+    uniqueSegmentTable.resize(numRawSegments);
+
+    return py::make_tuple(startBlocks, numBlocks, uniqueBlockIndices, uniqueSegmentTable);
+}
+
 PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     py::class_<_PulserverSeqFile>(m, "_PulserverSeqFile")
         .def(py::init<py::bytes, float, float, float, float, float, float, float>())
@@ -177,4 +270,46 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
       py::arg("pure_delay_block"),
       py::arg("numPrep"),
       py::arg("numCooldown"));
+
+    m.def("_find_segments_in_tr",
+      &_find_segments_in_tr,
+      py::arg("seqfile"),
+      py::arg("trSize"),
+      py::arg("numTRs"),
+      py::arg("numPrepBlocks"),
+      py::arg("numCooldownBlocks"),
+      py::arg("degeneratePrep"),
+      py::arg("degenerateCooldown"),
+      py::arg("unique_block_table"),
+      R"pbdoc(
+        Get segment definitions within a TR.
+
+        Parameters
+        ----------
+        seqfile : _PulserverSeqFile
+            The sequence file object.
+        trSize : int
+            Size of the TR in number of blocks.
+        numTRs : int
+            Number of TRs in the sequence.
+        numPrepBlocks : int
+            Number of preparation blocks before imaging.
+        numCooldownBlocks : int
+            Number of cooldown blocks after imaging.
+        degeneratePrep : int
+            Non-zero if preparation blocks are degenerate (identical to main TR).
+        degenerateCooldown : int
+            Non-zero if cooldown blocks are degenerate (identical to main TR).
+        unique_block_table : list[int]
+            Array mapping each block to its unique definition index.
+
+        Returns
+        -------
+        tuple
+            (start_blocks, num_blocks, unique_block_indices, unique_segment_table)
+            - start_blocks: Starting block index for each unique segment
+            - num_blocks: Number of blocks in each unique segment  
+            - unique_block_indices: List of unique block index arrays for each segment
+            - unique_segment_table: Mapping from raw segments to unique segment indices
+      )pbdoc");
 }

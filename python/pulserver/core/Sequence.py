@@ -7,7 +7,12 @@ from types import SimpleNamespace
 
 import pypulseq as pp
 
-from ._extension._pulseqlib_wrapper import _find_tr_in_sequence, _get_unique_blocks, _PulserverSeqFile
+from ._extension._pulseqlib_wrapper import (
+    _find_tr_in_sequence,
+    _find_segments_in_tr,
+    _get_unique_blocks,
+    _PulserverSeqFile,
+)
 from ._iostream import write_to_stream
 
 
@@ -103,4 +108,54 @@ def find_tr(seq: PulserverSequence, num_reps: int = 1) -> SimpleNamespace:
             block = seq._seq.get_block(n + 1)
             result.last_rep_last_tr.add_block(block)
                  
+    return result
+
+
+def find_segments_in_tr(seq: PulserverSequence) -> SimpleNamespace:
+    # First get unique blocks and TR info
+    _, unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown = (
+        _get_unique_blocks(seq._cseq)
+    )
+    
+    # Find TR pattern
+    tr_size, num_trs, degenerate_prep, degenerate_cooldown = _find_tr_in_sequence(
+        unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown
+    )
+    
+    # If no valid TR found, return empty result
+    if tr_size == 0:
+        result = SimpleNamespace()
+        result.segments = []
+        result.segment_table = []
+        return result
+    
+    # Get segments in TR
+    start_blocks, num_blocks, _, segment_table = _find_segments_in_tr(
+        seq._cseq,
+        tr_size,
+        num_trs,
+        num_prep,
+        num_cooldown,
+        degenerate_prep,
+        degenerate_cooldown,
+        unique_table,
+    )
+    
+    # Build a pp.Sequence for each unique segment
+    segments = []
+    for i in range(len(start_blocks)):
+        segment_seq = pp.Sequence(system=seq.system)
+        start = start_blocks[i]
+        count = num_blocks[i]
+        for n in range(start, start + count):
+            # pypulseq uses 1-based block indexing
+            block = seq._seq.get_block(n + 1)
+            segment_seq.add_block(block)
+        segments.append(segment_seq)
+    
+    # Build result namespace
+    result = SimpleNamespace()
+    result.segments = segments
+    result.segment_table = segment_table
+    
     return result
