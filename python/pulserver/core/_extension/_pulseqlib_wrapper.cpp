@@ -58,6 +58,9 @@ public:
                       float adc_raster_time,
                       float block_duration_raster) {
         seq = (pulseqlib_SeqFile*)ALLOC(sizeof(pulseqlib_SeqFile));
+        if (!seq) {
+            throw std::runtime_error("Failed to allocate SeqFile");
+        }
 
         // Initialize SeqFile with options
         pulseqlib_Opts opts;
@@ -71,17 +74,33 @@ public:
         std::string buffer = seq_bytes;
         FMEMOPEN_HANDLE handle = FMEMOPEN_HANDLE_INIT;
         open_buffer_as_file(&handle, (char*)buffer.data(), buffer.size());
-        if (!handle.f) throw std::runtime_error("Failed to open buffer as file");
-        pulseqlib_readSeqFromBuffer(seq, handle.f);
+        if (!handle.f) {
+            pulseqlib_seqFileFree(seq);
+            FREE(seq);
+            seq = nullptr;
+            throw std::runtime_error("Failed to open buffer as file");
+        }
+        
+        int result = pulseqlib_readSeqFromBuffer(seq, handle.f);
         fclose(handle.f);
 #ifdef _WIN32
         DeleteFileA(handle.tmp_file);
 #endif
+
+        if (PULSEQLIB_FAILED(result)) {
+            const char* errMsg = pulseqlib_getErrorMessage(result);
+            pulseqlib_seqFileFree(seq);
+            FREE(seq);
+            seq = nullptr;
+            throw std::runtime_error(std::string("Failed to parse sequence: ") + errMsg);
+        }
     }
 
     ~_PulserverSeqFile() {
         if (seq) {
-            if (seq) pulseqlib_seqFileFree(seq);
+            pulseqlib_seqFileFree(seq);
+            FREE(seq);
+            seq = nullptr;
         }
     }
 };

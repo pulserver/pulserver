@@ -65,8 +65,8 @@ void pulseqlib_seqBlockInit(pulseqlib_SeqBlock* block);
 void pulseqlib_seqBlockFree(pulseqlib_SeqBlock* block);
 
 /* Parsing Sequence */
-void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath);
-void pulseqlib_readSeqFromBuffer(pulseqlib_SeqFile* seq, FILE* f);
+int pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath);
+int pulseqlib_readSeqFromBuffer(pulseqlib_SeqFile* seq, FILE* f);
 
 /* Getters - to mimic OOP *outputs = obj.func(input), we do func(obj, *outputs, *inputs) */
 void pulseqlib_getBlockStatic(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex);

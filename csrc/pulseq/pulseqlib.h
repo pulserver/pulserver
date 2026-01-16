@@ -522,6 +522,12 @@ typedef struct pulseqlib_SegmentTableResult {
 #define PULSEQLIB_ERR_SEG_NONZERO_END_GRAD   -201 /**< Last block does not end with zero gradient */
 #define PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND  -202 /**< No segment boundaries could be identified */
 
+/* Parsing/file errors (-10 to -19) */
+#define PULSEQLIB_ERR_FILE_NOT_FOUND        -10  /**< File could not be opened */
+#define PULSEQLIB_ERR_FILE_READ_FAILED      -11  /**< Error reading from file */
+#define PULSEQLIB_ERR_UNSUPPORTED_VERSION   -12  /**< Sequence file version not supported */
+#define PULSEQLIB_ERR_PARSE_FAILED          -13  /**< Failed to parse sequence data */
+
 /**
  * @brief Check if error code indicates success.
  */

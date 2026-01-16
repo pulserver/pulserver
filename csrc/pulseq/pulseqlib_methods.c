@@ -107,6 +107,16 @@ const char* pulseqlib_getErrorMessage(int code) {
             return "Invalid argument value";
         case PULSEQLIB_ERR_ALLOC_FAILED:
             return "Memory allocation failed";
+    
+        /* Parsing/file errors */
+        case PULSEQLIB_ERR_FILE_NOT_FOUND:
+            return "Sequence file not found or could not be opened";
+        case PULSEQLIB_ERR_FILE_READ_FAILED:
+            return "Error reading from sequence file";
+        case PULSEQLIB_ERR_UNSUPPORTED_VERSION:
+            return "Unsupported sequence file version (requires >= 1.5.0)";
+        case PULSEQLIB_ERR_PARSE_FAILED:
+            return "Failed to parse sequence data";
         
         /* TR detection errors */
         case PULSEQLIB_ERR_TR_NO_BLOCKS:
@@ -633,7 +643,6 @@ void readDefinitionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     /* Preallocate definitions array */
     ret = initDefinitionsLibrary(f, (seq->offsets).definitions, &seq->definitionsLibrary, &seq->numDefinitions);
     if (ret != 0) {
-        fprintf(stderr, "Error: Failed to initialize definitionsLibrary\n");
         return;
     }
 
@@ -725,7 +734,6 @@ void readDefinitions(pulseqlib_SeqFile* seq) {
         seq->reservedDefinitionsLibrary.radiofrequencyRasterTime == 0.0f ||
         seq->reservedDefinitionsLibrary.adcRasterTime == 0.0f ||
         seq->reservedDefinitionsLibrary.blockDurationRaster == 0.0f) {
-        fprintf(stderr, "Error: Missing required reserved definitions.\n");
     }
 }
 
@@ -750,14 +758,12 @@ void readBlockLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     /* Preallocate library */
     ret = initStandardLibrary(f,  &((seq->offsets).blocks), 1, (void**)&seq->blockLibrary, &seq->numBlocks, blockScale.size);
     if (ret != 0) {
-        fprintf(stderr, "Error: Failed to initialize blockLibrary\n");
         return;
     }
 
     /* Parse Block library */
     ret = readStandardLibrary(f, seq->offsets.blocks, seq->blockLibrary, seq->numBlocks, blockScale.size, blockScale, -1);
     if (ret != 0) {
-        fprintf(stderr, "Error: Failed to read blockLibrary from file %s\n", seq->filePath);
         return;
     }
 
@@ -785,14 +791,12 @@ void readRfLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     /* Preallocate library */
     ret = initStandardLibrary(f,  &((seq->offsets).rf), 1, (void**)&seq->rfLibrary, &seq->rfLibrarySize, rfScale.size);
     if (ret != 0) {
-        fprintf(stderr, "Error: Failed to initialize rfLibrary\n");
         return;
     }
 
     /* Parse RF library */
     ret = readStandardLibrary(f, seq->offsets.rf, seq->rfLibrary, seq->rfLibrarySize, rfScale.size, rfScale, -1);
     if (ret != 0) {
-        fprintf(stderr, "Error: Failed to read rfLibrary from file %s\n", seq->filePath);
         return;
     }
 
@@ -829,7 +833,6 @@ void readGradLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     /* Preallocate library */
     ret = initStandardLibrary(f, offsets, 2, (void**)&seq->gradLibrary, &seq->gradLibrarySize, gradScale.size + 1);
     if (ret != 0) {
-        fprintf(stderr, "Error: Failed to initialize gradLibrary\n");
         return;
     }
 
@@ -837,7 +840,6 @@ void readGradLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if ((seq->offsets).grad >= 0){
         ret = readStandardLibrary(f, offsets[0], seq->gradLibrary, seq->gradLibrarySize, gradScale.size + 1, gradScale, 1);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to read gradLibrary ([GRADIENTS] section) from file %s\n", seq->filePath);
             return;
         }
     }
@@ -846,7 +848,6 @@ void readGradLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if ((seq->offsets).trap >= 0){
         ret = readStandardLibrary(f, offsets[1], seq->gradLibrary, seq->gradLibrarySize, gradScale.size + 1, trapScale, 0);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to read gradLibrary ([TRAP] section) from file %s\n", seq->filePath);
             return;
         }
     }
@@ -874,14 +875,12 @@ void readAdcLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     /* Preallocate library */
     ret = initStandardLibrary(f,  &((seq->offsets).adc), 1, (void**)&seq->adcLibrary, &seq->adcLibrarySize, adcScale.size);
     if (ret != 0) {
-        fprintf(stderr, "Error: Failed to initialize adcLibrary\n");
         return;
     }
 
     /* Parse ADC library */
     ret = readStandardLibrary(f, seq->offsets.adc, seq->adcLibrary, seq->adcLibrarySize, adcScale.size, adcScale, -1);
     if (ret != 0) {
-        fprintf(stderr, "Error: Failed to read adcLibrary from file %s\n", seq->filePath);
         return;
     }
 
@@ -911,7 +910,6 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     /* Preallocate shapes array */
     ret = initShapesLibrary(f, (seq->offsets).shapes, &seq->shapesLibrary, &seq->shapesLibrarySize);
     if (ret != 0) {
-        fprintf(stderr, "Error: Failed to initialize shapesLibrary\n");
         return;
     }
 
@@ -1095,14 +1093,12 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     /* Preallocate library */
     ret = initStandardLibrary(f, &((seq->offsets).extensions), 1, (void**)&seq->extensionsLibrary, &seq->extensionsLibrarySize, extScale.size);
     if (ret != 0) {
-        fprintf(stderr, "Error: Failed to initialize extensionsLibrary\n");
         return;
     }
 
     if (seq->offsets.triggers >= 0){
         ret = initStandardLibrary(f, &((seq->offsets).triggers), 1, (void**)&seq->triggerLibrary, &seq->triggerLibrarySize, trigScale.size);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to initialize trigger library\n");
             return;
         }
     }
@@ -1110,7 +1106,6 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (seq->offsets.rotations >= 0){
         ret = initStandardLibrary(f, &((seq->offsets).rotations), 1, (void**)&seq->rotationQuaternionLibrary, &seq->rotationLibrarySize, rotScale.size);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to initialize rotations library\n");
             return;
         }
     }
@@ -1118,7 +1113,6 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (seq->offsets.labelset >= 0){
         ret = initStandardLibrary(f, &((seq->offsets).labelset), 1, (void**)&seq->labelsetLibrary, &seq->labelsetLibrarySize, 2);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to initialize labelset library\n");
             return;
         }
     }
@@ -1126,7 +1120,6 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (seq->offsets.labelinc >= 0){
         ret = initStandardLibrary(f, &((seq->offsets).labelinc), 1, (void**)&seq->labelincLibrary, &seq->labelincLibrarySize, 2);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to initialize labelinc library\n");
             return;
         }
     }
@@ -1134,7 +1127,6 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (seq->offsets.delays >= 0){
         ret = initStandardLibrary(f, &((seq->offsets).delays), 1, (void**)&seq->softDelayLibrary, &seq->softDelayLibrarySize, 4);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to initialize delays library\n");
             return;
         }
     }
@@ -1142,7 +1134,6 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (seq->offsets.rfshim >= 0){
         ret = initRfShimLibrary(f, seq->offsets.rfshim, &seq->rfShimLibrary, &seq->rfShimLibrarySize);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to initialize rf shim library\n");
             return;
         }
     }
@@ -1150,14 +1141,12 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     /* Parse Extensions library */
     ret = readStandardLibrary(f, seq->offsets.extensions, seq->extensionsLibrary, seq->extensionsLibrarySize, extScale.size, extScale, -1);
     if (ret != 0) {
-        fprintf(stderr, "Error: Failed to read extensionsLibrary from file %s\n", seq->filePath);
         return;
     }
 
     if (seq->offsets.triggers >= 0){
         ret = readStandardLibrary(f, seq->offsets.triggers, seq->triggerLibrary, seq->triggerLibrarySize, trigScale.size, trigScale, -1);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to initialize trigger library\n");
             return;
         }
     }
@@ -1165,7 +1154,6 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (seq->offsets.rotations >= 0){
         ret = readStandardLibrary(f, seq->offsets.rotations, seq->rotationQuaternionLibrary, seq->rotationLibrarySize, rotScale.size, rotScale, -1);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to initialize rotations library\n");
             return;
         }
         {
@@ -1187,7 +1175,6 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (seq->offsets.labelset >= 0){
         ret = readLabelLibrary(f, seq->offsets.labelset, seq->labelsetLibrary, seq->labelsetLibrarySize, 2, seq->isLabelDefined);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to initialize labelset library\n");
             return;
         }
     }
@@ -1195,7 +1182,6 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (seq->offsets.labelinc >= 0){
         ret = readLabelLibrary(f, seq->offsets.labelinc, seq->labelincLibrary, seq->labelincLibrarySize, 2, seq->isLabelDefined);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to initialize labelinc library\n");
             return;
         }
     }
@@ -1203,7 +1189,6 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (seq->offsets.delays >= 0){
         ret = readDelayLibrary(f, seq->offsets.delays, seq->softDelayLibrary, seq->softDelayLibrarySize, 4, seq->isDelayDefined);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to initialize delays library\n");
             return;
         }
     }
@@ -1211,7 +1196,6 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     if (seq->offsets.rfshim >= 0){
         ret = readRfShimLibrary(f, seq->offsets.rfshim, seq->rfShimLibrary, seq->rfShimLibrarySize);
         if (ret != 0) {
-            fprintf(stderr, "Error: Failed to initialize rf shim library\n");
             return;
         }
     }
@@ -1629,8 +1613,8 @@ void pulseqlib_seqBlockFree(pulseqlib_SeqBlock* block) {
  * @param[in, out] seq The SeqFile structure.
  * @param[in] f The FILE buffer.
  */
-void pulseqlib_readSeqFromBuffer(pulseqlib_SeqFile* seq, FILE* f) {
-    if (!seq || !f) return;
+int pulseqlib_readSeqFromBuffer(pulseqlib_SeqFile* seq, FILE* f) {
+    if (!seq || !f) return PULSEQLIB_ERR_NULL_POINTER;
 
     seqFileReset(seq);
 
@@ -1642,8 +1626,7 @@ void pulseqlib_readSeqFromBuffer(pulseqlib_SeqFile* seq, FILE* f) {
     getSectionOffsets(seq, f);
     readVersion(seq, f);
     if (seq->versionCombined < 1005000) {
-        fprintf(stderr, "Error: Unsupported sequence file version %d.%d.%d\n", seq->versionMajor, seq->versionMinor, seq->versionRevision);
-        return;
+        return PULSEQLIB_ERR_UNSUPPORTED_VERSION;
     }
     readDefinitionsLibrary(seq, f); 
     readDefinitions(seq);
@@ -1653,7 +1636,7 @@ void pulseqlib_readSeqFromBuffer(pulseqlib_SeqFile* seq, FILE* f) {
     readAdcLibrary(seq, f);
     readShapesLibrary(seq, f);
     readExtensionsLibrary(seq, f);  
-    return;    
+    return PULSEQLIB_OK;    
 }
 
 /**
@@ -1662,14 +1645,15 @@ void pulseqlib_readSeqFromBuffer(pulseqlib_SeqFile* seq, FILE* f) {
  * @param[in, out] seq The SeqFile structure.
  * @param[in] filePath The path to the sequence file.
  */
-void pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath) {
+int pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath) {
     FILE* f;
-    if (!seq || !filePath) return;
+    int code;
+    if (!seq || !filePath) return PULSEQLIB_ERR_INVALID_ARGUMENT;
     f = fopen(filePath, "r");
-    if (!f) return;
-    pulseqlib_readSeqFromBuffer(seq, f);
+    if (!f) return PULSEQLIB_ERR_FILE_NOT_FOUND;
+    code = pulseqlib_readSeqFromBuffer(seq, f);
     fclose(f);
-    return;
+    return code;
 }
 
 
