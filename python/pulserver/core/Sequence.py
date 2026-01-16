@@ -16,6 +16,56 @@ from ._extension._pulseqlib_wrapper import (
 from ._iostream import write_to_stream
 
 
+def _make_diagnostic(diag_dict: dict) -> SimpleNamespace:
+    """Create a diagnostic SimpleNamespace from a dict."""
+    diag = SimpleNamespace(
+        code=diag_dict["code"],
+        message=diag_dict["message"],
+        hint=diag_dict["hint"],
+        block_index=diag_dict["block_index"],
+        channel=diag_dict["channel"],
+        num_unique_blocks=diag_dict["num_unique_blocks"],
+        imaging_region_length=diag_dict["imaging_region_length"],
+        candidate_pattern_length=diag_dict["candidate_pattern_length"],
+        mismatch_position=diag_dict["mismatch_position"],
+    )
+    # Add convenience property
+    diag.success = diag.code > 0
+    return diag
+
+
+def _format_diagnostic(diag: SimpleNamespace) -> str:
+    """Format diagnostic info as a human-readable string."""
+    if diag.success:
+        return "Success"
+    
+    lines = [f"Error: {diag.message}"]
+    
+    if diag.block_index >= 0:
+        lines.append(f"  Block index: {diag.block_index}")
+    if diag.mismatch_position >= 0:
+        lines.append(f"  Mismatch at position: {diag.mismatch_position}")
+    if diag.num_unique_blocks > 0:
+        lines.append(f"  Unique blocks found: {diag.num_unique_blocks}")
+    if diag.imaging_region_length > 0:
+        lines.append(f"  Imaging region length: {diag.imaging_region_length}")
+    if diag.candidate_pattern_length > 0:
+        lines.append(f"  Best candidate pattern length: {diag.candidate_pattern_length}")
+    
+    if diag.hint:
+        lines.append(f"\nHint: {diag.hint}")
+    
+    return "\n".join(lines)
+
+
+class SequenceAnalysisError(Exception):
+    """Exception raised when sequence analysis fails."""
+    
+    def __init__(self, diagnostic: SimpleNamespace):
+        self.diagnostic = diagnostic
+        super().__init__(_format_diagnostic(diagnostic))
+
+
 class PulserverSequence(pp.Sequence):
     """ """
 
@@ -35,15 +85,12 @@ class PulserverSequence(pp.Sequence):
         object.__setattr__(self, '_cseq', cseq)
 
     def __getattribute__(self, name):
-        # Always return PulserverSequence's own attributes/methods first
         try:
             return object.__getattribute__(self, name)
         except AttributeError:
-            # Delegate to the underlying _seq
             return getattr(self._seq, name)
 
     def __setattr__(self, name, value):
-        # Set PulserverSequence's own attributes, else delegate
         if name in ('_seq', '_cseq'):
             object.__setattr__(self, name, value)
         else:
@@ -53,17 +100,88 @@ class PulserverSequence(pp.Sequence):
         return str(self._seq)
 
 
-def get_unique_blocks(seq: PulserverSequence):
+def get_unique_blocks(seq: PulserverSequence) -> tuple[list[int], list[int]]:
+    """
+    Get unique blocks in sequence.
+
+    Parameters
+    ----------
+    seq : PulserverSequence
+        Input sequence.
+
+    Returns
+    -------
+    unique_blocks : list[int]
+        Set of block ID containing the first instance of each unique block.
+    unique_table : list[int]
+        Table containing the unique block index corresponding to each block in sequence.
+        
+    Notes
+    -----
+    A unique block is determined by the tuple of unique (rf, gx, gy, gz),
+    i.e., the tuple of blocks whose rf and gradient events has the same normalized
+    waveforms on all channels. For gradients, waveforms are uniquely determined by
+    class (trapezoids vs arbitrary grads) and timing.
+
+    """
     unique_blocks, unique_table, _, _, _, _ = _get_unique_blocks(seq._cseq)
     return unique_blocks, unique_table
 
 
-def find_tr(seq: PulserverSequence, num_reps: int = 1) -> SimpleNamespace:
+def find_tr(seq: PulserverSequence, num_reps: int = 1, raise_on_error: bool = True) -> SimpleNamespace:
+    """
+    Find TR structure in a sequence.
+    
+    Parameters
+    ----------
+    seq : PulserverSequence
+        The sequence to analyze.
+    num_reps : int
+        Number of repetitions (for output structure).
+    raise_on_error : bool
+        If True, raise SequenceAnalysisError on failure.
+        If False, return result with diagnostic info.
+    
+    Returns
+    -------
+    SimpleNamespace
+        Result containing:
+        - main_tr: The main TR as a pp.Sequence
+        - first_rep_first_tr: First TR with prep blocks (or None)
+        - last_rep_last_tr: Last TR with cooldown blocks (or None)
+    
+    Raises
+    ------
+    SequenceAnalysisError
+        If raise_on_error=True and TR detection fails.
+    """
     _, unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown = (
         _get_unique_blocks(seq._cseq)
     )
-    tr_size, num_trs, degenerate_prep, degenerate_cooldown = _find_tr_in_sequence(unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown)
-
+    
+    tr_result = _find_tr_in_sequence(
+        unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown
+    )
+    
+    diagnostic = _make_diagnostic(tr_result["diagnostic"])
+    
+    # Check for failure
+    if not tr_result["success"]:
+        if raise_on_error:
+            raise SequenceAnalysisError(diagnostic)
+        else:
+            result = SimpleNamespace()
+            result.main_tr = None
+            result.first_rep_first_tr = None
+            result.last_rep_last_tr = None
+            result.diagnostic = diagnostic
+            return result
+    
+    tr_size = tr_result["tr_size"]
+    num_trs = tr_result["num_trs"]
+    degenerate_prep = tr_result["degenerate_prep"]
+    degenerate_cooldown = tr_result["degenerate_cooldown"]
+    
     # Prepare result
     result = SimpleNamespace()
         
@@ -111,7 +229,7 @@ def find_tr(seq: PulserverSequence, num_reps: int = 1) -> SimpleNamespace:
     return result
 
 
-def find_segments_in_tr(seq: PulserverSequence) -> tuple[list[pp.Sequence], SimpleNamespace]:
+def find_segments_in_tr(seq: PulserverSequence, raise_on_error: bool = True) -> tuple[list[pp.Sequence], SimpleNamespace]:
     """
     Find segment definitions within the TR structure of a sequence.
     
@@ -119,14 +237,17 @@ def find_segments_in_tr(seq: PulserverSequence) -> tuple[list[pp.Sequence], Simp
     ----------
     seq : PulserverSequence
         The sequence to analyze.
+    raise_on_error : bool
+        If True, raise SequenceAnalysisError on failure.
+        If False, return result with diagnostic info.
         
     Returns
-    -----
+    -------
     list[pp.Sequence]: 
-        List of unique segments as pp.Sequence objects.
-
-    SimpleNamespace:
-        Structured result containing:
+        List of pp.Sequences representing the unique sequence Segments.
+    SimpleNamespace
+        Result containing:
+          unique_block_indices, and sequence (pp.Sequence)
         - prep_segment_table: Maps prep section segments to unique segment IDs
         - main_segment_table: Maps main TR segments to unique segment IDs
         - cooldown_segment_table: Maps cooldown section segments to unique segment IDs
@@ -137,19 +258,30 @@ def find_segments_in_tr(seq: PulserverSequence) -> tuple[list[pp.Sequence], Simp
     )
     
     # Find TR pattern
-    tr_size, num_trs, degenerate_prep, degenerate_cooldown = _find_tr_in_sequence(
+    tr_result = _find_tr_in_sequence(
         unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown
     )
     
-    # If no valid TR found, return empty result
-    if tr_size == 0:
-        return [], SimpleNamespace(
-            prep_segment_table=[],
-            main_segment_table=[],
-            cooldown_segment_table=[],
-        )
+    diagnostic = _make_diagnostic(tr_result["diagnostic"])
     
-    # Get segments in TR (now returns a dict)
+    # If no valid TR found, return empty result or raise
+    if not tr_result["success"]:
+        if raise_on_error:
+            raise SequenceAnalysisError(diagnostic)
+        result = SimpleNamespace()
+        result.unique_segments = []
+        result.prep_segment_table = []
+        result.main_segment_table = []
+        result.cooldown_segment_table = []
+        result.diagnostic = diagnostic
+        return result
+    
+    tr_size = tr_result["tr_size"]
+    num_trs = tr_result["num_trs"]
+    degenerate_prep = tr_result["degenerate_prep"]
+    degenerate_cooldown = tr_result["degenerate_cooldown"]
+    
+    # Get segments in TR
     raw_result = _find_segments_in_tr(
         seq._cseq,
         tr_size,
@@ -161,7 +293,7 @@ def find_segments_in_tr(seq: PulserverSequence) -> tuple[list[pp.Sequence], Simp
         unique_table,
     )
     
-    # Build SegmentInfo objects with pp.Sequence for each unique segment
+    # Build SimpleNamespace for each unique segment with pp.Sequence
     unique_segments = []
     for seg_dict in raw_result["unique_segments"]:
         start = seg_dict["start_block"]
@@ -170,13 +302,13 @@ def find_segments_in_tr(seq: PulserverSequence) -> tuple[list[pp.Sequence], Simp
         # Build a pp.Sequence for this segment
         segment_seq = pp.Sequence(system=seq.system)
         for n in range(start, start + count):
-            # pypulseq uses 1-based block indexing
             block = seq._seq.get_block(n + 1)
             segment_seq.add_block(block)
         unique_segments.append(segment_seq)
     
-    return unique_segments, SimpleNamespace(
-        prep_segment_table=raw_result["prep_segment_table"],
-        main_segment_table=raw_result["main_segment_table"],
-        cooldown_segment_table=raw_result["cooldown_segment_table"],
-    )
+    result = SimpleNamespace()
+    result.prep_segment_table = raw_result["prep_segment_table"]
+    result.main_segment_table = raw_result["main_segment_table"]
+    result.cooldown_segment_table = raw_result["cooldown_segment_table"]
+    
+    return unique_segments, result

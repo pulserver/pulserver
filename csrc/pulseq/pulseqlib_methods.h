@@ -76,7 +76,28 @@ void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, pulseqlib_BlockLabel
 void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex);
 float pulseqlib_getGradLibraryMaxAmplitude(const pulseqlib_SeqFile* seq);
 
-/* Segment-specific functions*/
+/**
+ * @brief Get human-readable error message for an error code.
+ * 
+ * @param code The error code.
+ * @return Static string describing the error. Never returns NULL.
+ */
+const char* pulseqlib_getErrorMessage(int code);
+
+/**
+ * @brief Get a hint message suggesting how to fix the error.
+ * 
+ * @param code The error code.
+ * @return Static string with suggestions. Never returns NULL.
+ */
+const char* pulseqlib_getErrorHint(int code);
+
+/**
+ * @brief Initialize diagnostic struct to default values.
+ */
+void pulseqlib_diagnosticInit(pulseqlib_Diagnostic* diag);
+
+/* Segment-specific functions */
 int pulseqlib_getUniqueBlocks(
   const pulseqlib_SeqFile* seq, 
   int* uniqueBlockDefs, 
@@ -88,8 +109,10 @@ int pulseqlib_getUniqueBlocks(
   int index_min, 
   int index_max
 );
+
 int pulseqlib_findTRInSequence(
   pulseqlib_TRdescriptor* trDesc,
+  pulseqlib_Diagnostic* diag,
   int numBlocks,
   int* uniqueBlockTable,
   int* blockDurations_us,
@@ -97,13 +120,16 @@ int pulseqlib_findTRInSequence(
   int numPrep,
   int numCooldown
 );
+
 int pulseqlib_findSegmentsInTR(
   const pulseqlib_SeqFile* seq, 
   pulseqlib_TRsegment* trSegments,
   pulseqlib_SegmentTableResult* segmentTable,
+  pulseqlib_Diagnostic* diag,
   const pulseqlib_TRdescriptor* trDesc,
   const int* uniqueBlockTable
 );
+
 void pulseqlib_segmentTableResultFree(pulseqlib_SegmentTableResult* result);
 
 #ifdef __cplusplus

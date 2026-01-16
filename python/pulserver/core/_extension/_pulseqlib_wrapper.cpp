@@ -134,7 +134,7 @@ static py::tuple _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, i
     return py::make_tuple(unique_defs, unique_table, block_durations_us, pure_delay_block, numPrep, numCooldown);
 }
 
-static py::tuple _find_tr_in_sequence(
+static py::dict _find_tr_in_sequence(
     std::vector<int>& unique_block_table,
     std::vector<int>& block_durations_us,
     std::vector<int>& pure_delay_block,
@@ -142,21 +142,53 @@ static py::tuple _find_tr_in_sequence(
     const int numCooldown
 ) {
     pulseqlib_TRdescriptor trDesc;
+    pulseqlib_Diagnostic diag;
+    pulseqlib_diagnosticInit(&diag);
+    
     const int n = (int)unique_block_table.size();
-    if (n <= 0) return py::make_tuple(0, 0, 0, 0);
-    int code = pulseqlib_findTRInSequence(
-        &trDesc,
-        n,
-        unique_block_table.data(), 
-        block_durations_us.data(),
-        pure_delay_block.data(),
-        numPrep,
-        numCooldown
-    );
-    if (code == 0) {
-        return py::make_tuple(0, 0, 0, 0);
+    
+    py::dict result;
+    
+    if (n <= 0) {
+        diag.code = PULSEQLIB_ERR_TR_NO_BLOCKS;
+        result["success"] = false;
+        result["tr_size"] = 0;
+        result["num_trs"] = 0;
+        result["degenerate_prep"] = 0;
+        result["degenerate_cooldown"] = 0;
+    } else {
+        int code = pulseqlib_findTRInSequence(
+            &trDesc,
+            &diag,
+            n,
+            unique_block_table.data(), 
+            block_durations_us.data(),
+            pure_delay_block.data(),
+            numPrep,
+            numCooldown
+        );
+        
+        result["success"] = PULSEQLIB_SUCCEEDED(code);
+        result["tr_size"] = trDesc.trSize;
+        result["num_trs"] = trDesc.numTRs;
+        result["degenerate_prep"] = trDesc.degeneratePrep;
+        result["degenerate_cooldown"] = trDesc.degenerateCooldown;
     }
-    return py::make_tuple(trDesc.trSize, trDesc.numTRs, trDesc.degeneratePrep, trDesc.degenerateCooldown);
+    
+    // Always include diagnostic info
+    py::dict diagDict;
+    diagDict["code"] = diag.code;
+    diagDict["message"] = pulseqlib_getErrorMessage(diag.code);
+    diagDict["hint"] = pulseqlib_getErrorHint(diag.code);
+    diagDict["block_index"] = diag.blockIndex;
+    diagDict["channel"] = diag.channel;
+    diagDict["num_unique_blocks"] = diag.numUniqueBlocks;
+    diagDict["imaging_region_length"] = diag.imagingRegionLength;
+    diagDict["candidate_pattern_length"] = diag.candidatePatternLength;
+    diagDict["mismatch_position"] = diag.mismatchPosition;
+    result["diagnostic"] = diagDict;
+    
+    return result;
 }
 
 static py::dict _find_segments_in_tr(
@@ -198,17 +230,20 @@ static py::dict _find_segments_in_tr(
     // Allocate output arrays
     std::vector<pulseqlib_TRsegment> trSegments(maxSegments);
     pulseqlib_SegmentTableResult segmentTable = {0};
+    pulseqlib_Diagnostic diag;
+    pulseqlib_diagnosticInit(&diag);
 
     // Initialize segment pointers to NULL
     for (int i = 0; i < maxSegments; ++i) {
         trSegments[i].uniqueBlockIndices = nullptr;
     }
 
-    // Call the C function
+    // Call the C function - NOTE: argument order must match the declaration
     int numUniqueSegments = pulseqlib_findSegmentsInTR(
         seqfile.seq,
         trSegments.data(),
         &segmentTable,
+        &diag,              // diagnostic comes BEFORE trDesc
         &trDesc,
         unique_block_table.data()
     );
