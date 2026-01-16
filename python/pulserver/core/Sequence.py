@@ -111,7 +111,26 @@ def find_tr(seq: PulserverSequence, num_reps: int = 1) -> SimpleNamespace:
     return result
 
 
-def find_segments_in_tr(seq: PulserverSequence) -> SimpleNamespace:
+def find_segments_in_tr(seq: PulserverSequence) -> tuple[list[pp.Sequence], SimpleNamespace]:
+    """
+    Find segment definitions within the TR structure of a sequence.
+    
+    Parameters
+    ----------
+    seq : PulserverSequence
+        The sequence to analyze.
+        
+    Returns
+    -----
+    list[pp.Sequence]: 
+        List of unique segments as pp.Sequence objects.
+
+    SimpleNamespace:
+        Structured result containing:
+        - prep_segment_table: Maps prep section segments to unique segment IDs
+        - main_segment_table: Maps main TR segments to unique segment IDs
+        - cooldown_segment_table: Maps cooldown section segments to unique segment IDs
+    """
     # First get unique blocks and TR info
     _, unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown = (
         _get_unique_blocks(seq._cseq)
@@ -124,13 +143,14 @@ def find_segments_in_tr(seq: PulserverSequence) -> SimpleNamespace:
     
     # If no valid TR found, return empty result
     if tr_size == 0:
-        result = SimpleNamespace()
-        result.segments = []
-        result.segment_table = []
-        return result
+        return [], SimpleNamespace(
+            prep_segment_table=[],
+            main_segment_table=[],
+            cooldown_segment_table=[],
+        )
     
-    # Get segments in TR
-    start_blocks, num_blocks, _, segment_table = _find_segments_in_tr(
+    # Get segments in TR (now returns a dict)
+    raw_result = _find_segments_in_tr(
         seq._cseq,
         tr_size,
         num_trs,
@@ -141,21 +161,22 @@ def find_segments_in_tr(seq: PulserverSequence) -> SimpleNamespace:
         unique_table,
     )
     
-    # Build a pp.Sequence for each unique segment
-    segments = []
-    for i in range(len(start_blocks)):
+    # Build SegmentInfo objects with pp.Sequence for each unique segment
+    unique_segments = []
+    for seg_dict in raw_result["unique_segments"]:
+        start = seg_dict["start_block"]
+        count = seg_dict["num_blocks"]
+        
+        # Build a pp.Sequence for this segment
         segment_seq = pp.Sequence(system=seq.system)
-        start = start_blocks[i]
-        count = num_blocks[i]
         for n in range(start, start + count):
             # pypulseq uses 1-based block indexing
             block = seq._seq.get_block(n + 1)
             segment_seq.add_block(block)
-        segments.append(segment_seq)
+        unique_segments.append(segment_seq)
     
-    # Build result namespace
-    result = SimpleNamespace()
-    result.segments = segments
-    result.segment_table = segment_table
-    
-    return result
+    return unique_segments, SimpleNamespace(
+        prep_segment_table=raw_result["prep_segment_table"],
+        main_segment_table=raw_result["main_segment_table"],
+        cooldown_segment_table=raw_result["cooldown_segment_table"],
+    )

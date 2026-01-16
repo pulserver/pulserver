@@ -100,10 +100,11 @@ int pulseqlib_findTRInSequence(
 int pulseqlib_findSegmentsInTR(
   const pulseqlib_SeqFile* seq, 
   pulseqlib_TRsegment* trSegments,
-  int* uniqueSegmentTable,
+  pulseqlib_SegmentTableResult* segmentTable,
   const pulseqlib_TRdescriptor* trDesc,
   const int* uniqueBlockTable
 );
+void pulseqlib_segmentTableResultFree(pulseqlib_SegmentTableResult* result);
 
 #ifdef __cplusplus
 }

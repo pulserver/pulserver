@@ -2713,6 +2713,63 @@ int pulseqlib_getUniqueBlocks(
 #define PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US 100000 /* 100 ms */
 #define PULSEQLIB_SINGLE_TR_MAX_DURATION_US 15000000 /* 15 s */
 
+static long long pulseqlib_sum_durations_us(const int* durations_us, int start, int count)
+{
+    long long total = 0;
+    int i;
+    for (i = 0; i < count; ++i) {
+        total += (long long)durations_us[start + i];
+    }
+    return total;
+}
+
+/*
+ * Find the first repeating segment of a sequence.
+ * Equivalent to Python _principal_period behavior (not minimal).
+ *
+ * seq: pointer to integer array
+ * len: number of elements
+ *
+ * Returns:
+ *   Length of first repeating segment if found
+ *   len if no repetition is found
+ */
+int first_repeating_segment(const int *seq, int len)
+{
+    int start;
+    int sublen;
+    int L;
+    int i;
+    int match;
+    const int *s;
+
+    if (len <= 1) {
+        return len;
+    }
+
+    for (start = 0; start < len; start++) {
+        s = seq + start;
+        sublen = len - start;
+
+        for (L = 1; L <= sublen / 2; L++) {
+            match = 1;
+
+            for (i = 0; i < L; i++) {
+                if (s[i] != s[i + L]) {
+                    match = 0;
+                    break;
+                }
+            }
+
+            if (match) {
+                return L;
+            }
+        }
+    }
+
+    return len;
+}
+
 /**
  * @brief Detect TR pattern.
  *
@@ -3162,98 +3219,149 @@ int findSegmentsInTR(
 int pulseqlib_findSegmentsInTR(
   const pulseqlib_SeqFile* seq, 
   pulseqlib_TRsegment* trSegments,
-  int* uniqueSegmentTable,
+  pulseqlib_SegmentTableResult* segmentTable, // structured mapping (output)
   const pulseqlib_TRdescriptor* trDesc,
   const int* uniqueBlockTable
 ) {
     pulseqlib_TRsegment* trSegmentsRaw;
-    int segmentExists;
     int numBlocks;
-    int numSegments;
+    int numSegmentsTotal;
+    int numPrepSegments;
+    int numMainSegments;
+    int numCooldownSegments;
     int numUniqueSegments;
     int found;
     int trStart;
     int trSize;
-    int n;
-    int i;
-    if (!seq || !trSegments || !uniqueSegmentTable || !trDesc || !uniqueBlockTable) {
+    int n, i;
+    int offset;
+    if (!seq || !trSegments || !segmentTable || !trDesc || !uniqueBlockTable) {
         return 0;
     }
 
-    /* Initialize numSegments */
-    numSegments = 0;
+    /* Initialize counts */
+    numPrepSegments = 0;
+    numMainSegments = 0;
+    numCooldownSegments = 0;
+    numSegmentsTotal = 0;
+
     numBlocks = trDesc->trSize + trDesc->numPrepBlocks + trDesc->numCooldownBlocks;
 
-    /* Initialize trSegmentsRaw (at most, one segment per block) */
+    /* Allocate temporary storage (at most one segment per block) */
     trSegmentsRaw = (pulseqlib_TRsegment*) ALLOC(numBlocks * sizeof(pulseqlib_TRsegment));
+    if (!trSegmentsRaw) return 0;
 
-    /* Find segments in prep section */
+    /* ========== Find segments in each section ========== */
+
+    /* Prep section */
     if (trDesc->degeneratePrep == 0 && trDesc->numPrepBlocks > 0) {
         trStart = 0;
         trSize = trDesc->numPrepBlocks + trDesc->trSize;
-        numSegments += findSegmentsInTR(seq, trSegmentsRaw, numSegments, trStart, trSize);
+        numPrepSegments = findSegmentsInTR(seq, trSegmentsRaw, numSegmentsTotal, trStart, trSize);
+        numSegmentsTotal += numPrepSegments;
     }
 
-    /* Find segments in imaging TR section */
+    /* Main TR section */
     trStart = trDesc->numPrepBlocks;
     trSize = trDesc->trSize;
-    numSegments += findSegmentsInTR(seq, trSegmentsRaw, numSegments, trStart, trSize);
+    numMainSegments = findSegmentsInTR(seq, trSegmentsRaw, numSegmentsTotal, trStart, trSize);
+    numSegmentsTotal += numMainSegments;
 
-    /* Find segments in cooldown section */
+    /* Cooldown section */
     if (trDesc->degenerateCooldown == 0 && trDesc->numCooldownBlocks > 0) {
         trStart = seq->numBlocks - trDesc->numCooldownBlocks - trDesc->trSize;
         trSize = trDesc->numCooldownBlocks + trDesc->trSize;
-        numSegments += findSegmentsInTR(seq, trSegmentsRaw, numSegments, trStart, trSize);
+        numCooldownSegments = findSegmentsInTR(seq, trSegmentsRaw, numSegmentsTotal, trStart, trSize);
+        numSegmentsTotal += numCooldownSegments;
     }
 
     /* Parse actual segment definition from uniqueBlockTable */
-    for (n = 0; n < numSegments; ++n){
+    for (n = 0; n < numSegmentsTotal; ++n) {
         trSegmentsRaw[n].uniqueBlockIndices = (int*) ALLOC(trSegmentsRaw[n].numBlocks * sizeof(int));
-        for (i = 0; i < trSegmentsRaw[n].numBlocks; ++i){
+        if (!trSegmentsRaw[n].uniqueBlockIndices) {
+            /* Cleanup on failure */
+            for (i = 0; i < n; ++i) FREE(trSegmentsRaw[i].uniqueBlockIndices);
+            FREE(trSegmentsRaw);
+            return 0;
+        }
+        for (i = 0; i < trSegmentsRaw[n].numBlocks; ++i) {
             trSegmentsRaw[n].uniqueBlockIndices[i] = uniqueBlockTable[trSegmentsRaw[n].startBlock + i];
         }
     }
 
-    /* Find unique segments and fill uniqueSegmentTable */
+    /* ========== Allocate output segment tables ========== */
+    segmentTable->numPrepSegments = numPrepSegments;
+    segmentTable->numMainSegments = numMainSegments;
+    segmentTable->numCooldownSegments = numCooldownSegments;
+
+    segmentTable->prepSegmentTable = (numPrepSegments > 0) 
+        ? (int*) ALLOC(numPrepSegments * sizeof(int)) : NULL;
+    segmentTable->mainSegmentTable = (numMainSegments > 0) 
+        ? (int*) ALLOC(numMainSegments * sizeof(int)) : NULL;
+    segmentTable->cooldownSegmentTable = (numCooldownSegments > 0) 
+        ? (int*) ALLOC(numCooldownSegments * sizeof(int)) : NULL;
+
+    /* ========== Find unique segments and fill tables ========== */
     numUniqueSegments = 0;
-    for (n = 0; n < numSegments; ++n)
-    {
+    
+    for (n = 0; n < numSegmentsTotal; ++n) {
         found = -1;
-        for (i = 0; i < numUniqueSegments; ++i)
-        {
+        for (i = 0; i < numUniqueSegments; ++i) {
             if (trSegmentsRaw[n].numBlocks == trSegments[i].numBlocks &&
-                array_equal(trSegmentsRaw[n].uniqueBlockIndices, trSegments[i].uniqueBlockIndices, trSegmentsRaw[n].numBlocks))
-            {
+                array_equal(trSegmentsRaw[n].uniqueBlockIndices, 
+                           trSegments[i].uniqueBlockIndices, 
+                           trSegmentsRaw[n].numBlocks)) {
                 found = i;
                 break;
             }
         }
 
-        if (found == -1)
-        {
+        if (found == -1) {
             /* New unique segment */
             trSegments[numUniqueSegments].numBlocks = trSegmentsRaw[n].numBlocks;
             trSegments[numUniqueSegments].startBlock = trSegmentsRaw[n].startBlock;
-            trSegments[numUniqueSegments].uniqueBlockIndices = (int*) ALLOC(trSegmentsRaw[n].numBlocks * sizeof(int));
-            for (i = 0; i < trSegmentsRaw[n].numBlocks; ++i)
-            {
-                trSegments[numUniqueSegments].uniqueBlockIndices[i] = trSegmentsRaw[n].uniqueBlockIndices[i];
+            trSegments[numUniqueSegments].uniqueBlockIndices = 
+                (int*) ALLOC(trSegmentsRaw[n].numBlocks * sizeof(int));
+            for (i = 0; i < trSegmentsRaw[n].numBlocks; ++i) {
+                trSegments[numUniqueSegments].uniqueBlockIndices[i] = 
+                    trSegmentsRaw[n].uniqueBlockIndices[i];
             }
             found = numUniqueSegments;
             numUniqueSegments++;
         }
 
-        /* Store mapping: raw segment n → unique segment found */
-        uniqueSegmentTable[n] = found;
+        /* Store mapping in the appropriate section table */
+        if (n < numPrepSegments) {
+            segmentTable->prepSegmentTable[n] = found;
+        } else if (n < numPrepSegments + numMainSegments) {
+            segmentTable->mainSegmentTable[n - numPrepSegments] = found;
+        } else {
+            segmentTable->cooldownSegmentTable[n - numPrepSegments - numMainSegments] = found;
+        }
     }
 
+    segmentTable->numUniqueSegments = numUniqueSegments;
 
     /* Free temporary storage */
-    for (n = 0; n < numSegments; ++n)
-    {
+    for (n = 0; n < numSegmentsTotal; ++n) {
         FREE(trSegmentsRaw[n].uniqueBlockIndices);
     }
     FREE(trSegmentsRaw);
 
     return numUniqueSegments;
+    
+}
+
+void pulseqlib_segmentTableResultFree(pulseqlib_SegmentTableResult* result) {
+    if (!result) return;
+    if (result->prepSegmentTable) FREE(result->prepSegmentTable);
+    if (result->mainSegmentTable) FREE(result->mainSegmentTable);
+    if (result->cooldownSegmentTable) FREE(result->cooldownSegmentTable);
+    result->prepSegmentTable = NULL;
+    result->mainSegmentTable = NULL;
+    result->cooldownSegmentTable = NULL;
+    result->numPrepSegments = 0;
+    result->numMainSegments = 0;
+    result->numCooldownSegments = 0;
+    result->numUniqueSegments = 0;
 }

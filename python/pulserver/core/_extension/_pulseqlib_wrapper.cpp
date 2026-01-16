@@ -159,7 +159,7 @@ static py::tuple _find_tr_in_sequence(
     return py::make_tuple(trDesc.trSize, trDesc.numTRs, trDesc.degeneratePrep, trDesc.degenerateCooldown);
 }
 
-static py::tuple _find_segments_in_tr(
+static py::dict _find_segments_in_tr(
     _PulserverSeqFile& seqfile,
     const int trSize,
     const int numTRs,
@@ -187,12 +187,17 @@ static py::tuple _find_segments_in_tr(
     // Maximum possible segments: one per block in TR + prep + cooldown
     const int maxSegments = trSize + numPrepBlocks + numCooldownBlocks;
     if (maxSegments <= 0) {
-        return py::make_tuple(std::vector<int>(), std::vector<int>(), std::vector<std::vector<int>>());
+        py::dict result;
+        result["unique_segments"] = py::list();
+        result["prep_segment_table"] = std::vector<int>();
+        result["main_segment_table"] = std::vector<int>();
+        result["cooldown_segment_table"] = std::vector<int>();
+        return result;
     }
 
     // Allocate output arrays
     std::vector<pulseqlib_TRsegment> trSegments(maxSegments);
-    std::vector<int> uniqueSegmentTable(maxSegments, -1);
+    pulseqlib_SegmentTableResult segmentTable = {0};
 
     // Initialize segment pointers to NULL
     for (int i = 0; i < maxSegments; ++i) {
@@ -203,23 +208,17 @@ static py::tuple _find_segments_in_tr(
     int numUniqueSegments = pulseqlib_findSegmentsInTR(
         seqfile.seq,
         trSegments.data(),
-        uniqueSegmentTable.data(),
+        &segmentTable,
         &trDesc,
         unique_block_table.data()
     );
 
-    // Convert results to Python-friendly format
-    std::vector<int> startBlocks;
-    std::vector<int> numBlocks;
-    std::vector<std::vector<int>> uniqueBlockIndices;
-
-    startBlocks.reserve(numUniqueSegments);
-    numBlocks.reserve(numUniqueSegments);
-    uniqueBlockIndices.reserve(numUniqueSegments);
-
+    // Convert unique segments to Python-friendly format
+    py::list uniqueSegmentsList;
     for (int i = 0; i < numUniqueSegments; ++i) {
-        startBlocks.push_back(trSegments[i].startBlock);
-        numBlocks.push_back(trSegments[i].numBlocks);
+        py::dict segmentDict;
+        segmentDict["start_block"] = trSegments[i].startBlock;
+        segmentDict["num_blocks"] = trSegments[i].numBlocks;
         
         std::vector<int> indices;
         if (trSegments[i].uniqueBlockIndices && trSegments[i].numBlocks > 0) {
@@ -228,28 +227,50 @@ static py::tuple _find_segments_in_tr(
                 trSegments[i].uniqueBlockIndices + trSegments[i].numBlocks
             );
         }
-        uniqueBlockIndices.push_back(std::move(indices));
+        segmentDict["unique_block_indices"] = indices;
+        uniqueSegmentsList.append(segmentDict);
     }
 
-    // Free allocated memory in segments
+    // Convert segment tables to vectors
+    std::vector<int> prepTable;
+    std::vector<int> mainTable;
+    std::vector<int> cooldownTable;
+
+    if (segmentTable.prepSegmentTable && segmentTable.numPrepSegments > 0) {
+        prepTable.assign(
+            segmentTable.prepSegmentTable,
+            segmentTable.prepSegmentTable + segmentTable.numPrepSegments
+        );
+    }
+    if (segmentTable.mainSegmentTable && segmentTable.numMainSegments > 0) {
+        mainTable.assign(
+            segmentTable.mainSegmentTable,
+            segmentTable.mainSegmentTable + segmentTable.numMainSegments
+        );
+    }
+    if (segmentTable.cooldownSegmentTable && segmentTable.numCooldownSegments > 0) {
+        cooldownTable.assign(
+            segmentTable.cooldownSegmentTable,
+            segmentTable.cooldownSegmentTable + segmentTable.numCooldownSegments
+        );
+    }
+
+    // Free allocated memory
     for (int i = 0; i < numUniqueSegments; ++i) {
         if (trSegments[i].uniqueBlockIndices) {
             FREE(trSegments[i].uniqueBlockIndices);
         }
     }
+    pulseqlib_segmentTableResultFree(&segmentTable);
 
-    // Resize uniqueSegmentTable to actual number of segments found
-    // (the table maps raw segments to unique segments)
-    // We need to find the actual number of raw segments first
-    int numRawSegments = 0;
-    for (int i = 0; i < maxSegments; ++i) {
-        if (uniqueSegmentTable[i] >= 0) {
-            numRawSegments = i + 1;
-        }
-    }
-    uniqueSegmentTable.resize(numRawSegments);
+    // Build result dictionary
+    py::dict result;
+    result["unique_segments"] = uniqueSegmentsList;
+    result["prep_segment_table"] = prepTable;
+    result["main_segment_table"] = mainTable;
+    result["cooldown_segment_table"] = cooldownTable;
 
-    return py::make_tuple(startBlocks, numBlocks, uniqueBlockIndices, uniqueSegmentTable);
+    return result;
 }
 
 PYBIND11_MODULE(_pulseqlib_wrapper, m) {
@@ -305,11 +326,11 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
 
         Returns
         -------
-        tuple
-            (start_blocks, num_blocks, unique_block_indices, unique_segment_table)
-            - start_blocks: Starting block index for each unique segment
-            - num_blocks: Number of blocks in each unique segment  
-            - unique_block_indices: List of unique block index arrays for each segment
-            - unique_segment_table: Mapping from raw segments to unique segment indices
+        dict
+            Dictionary with keys:
+            - 'unique_segments': List of dicts with 'start_block', 'num_blocks', 'unique_block_indices'
+            - 'prep_segment_table': List mapping prep segments to unique segment IDs
+            - 'main_segment_table': List mapping main TR segments to unique segment IDs  
+            - 'cooldown_segment_table': List mapping cooldown segments to unique segment IDs
       )pbdoc");
 }

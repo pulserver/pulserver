@@ -478,6 +478,21 @@ typedef struct pulseqlib_TRsegment {
     int* uniqueBlockIndices; /**< Pointer to array of unique block indices in the segment */
 } pulseqlib_TRsegment;
 
+typedef struct pulseqlib_SegmentTableResult {
+    int numUniqueSegments;       /**< Total number of unique segment definitions */
+    
+    /* Prep section */
+    int numPrepSegments;         /**< Number of segments in prep section */
+    int* prepSegmentTable;       /**< Maps prep segment index → unique segment ID */
+    
+    /* Main TR section */
+    int numMainSegments;         /**< Number of segments in main TR */
+    int* mainSegmentTable;       /**< Maps main segment index → unique segment ID */
+    
+    /* Cooldown section */
+    int numCooldownSegments;     /**< Number of segments in cooldown section */
+    int* cooldownSegmentTable;   /**< Maps cooldown segment index → unique segment ID */
+} pulseqlib_SegmentTableResult;
 
 #endif /* PULSEQLIB_H */
 
