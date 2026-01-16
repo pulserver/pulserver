@@ -74,6 +74,61 @@
 #define ONCE 21   /* | 3-state flag |      No      | A 3-state flag that instructs the interpreter to alter the sequence when executing multiple repeats as follows: blocks with ONCE==0 are executed on every repetition; ONCE==1: only on the first repetition; ONCE==2: only on the last repetition */
 #define TRID 22   /* | 3-state flag |      No      | If set to 1, marks the limit (beginning or end) of repeatable module in the sequence. If set to 2, marks the limit of a TR segment. */ 
 
+/*********************************************************************      Error Codes     ******************************************************************************************/
+/* Success */
+#define PULSEQLIB_OK                          1
+
+/* Generic errors (-1 to -99) */
+#define PULSEQLIB_ERR_NULL_POINTER           -1   /**< Required pointer argument is NULL */
+#define PULSEQLIB_ERR_INVALID_ARGUMENT       -2   /**< Invalid argument value */
+#define PULSEQLIB_ERR_ALLOC_FAILED           -3   /**< Memory allocation failed */
+
+/* TR detection errors (-100 to -199) */
+#define PULSEQLIB_ERR_TR_NO_BLOCKS          -100  /**< Sequence has no blocks */
+#define PULSEQLIB_ERR_TR_NO_IMAGING_REGION  -101  /**< No imaging region (prep+cooldown >= numBlocks) */
+#define PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN -102 /**< No periodic pattern found in imaging region */
+#define PULSEQLIB_ERR_TR_PATTERN_MISMATCH   -103  /**< Periodic pattern does not repeat consistently */
+#define PULSEQLIB_ERR_TR_PREP_TOO_LONG      -104  /**< Non-degenerate prep section exceeds threshold */
+#define PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG  -105  /**< Non-degenerate cooldown section exceeds threshold */
+
+/* Segmentation errors (-200 to -299) */
+#define PULSEQLIB_ERR_SEG_NONZERO_START_GRAD -200 /**< First block does not start with zero gradient */
+#define PULSEQLIB_ERR_SEG_NONZERO_END_GRAD   -201 /**< Last block does not end with zero gradient */
+#define PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND  -202 /**< No segment boundaries could be identified */
+
+/* Parsing/file errors (-10 to -19) */
+#define PULSEQLIB_ERR_FILE_NOT_FOUND        -10  /**< File could not be opened */
+#define PULSEQLIB_ERR_FILE_READ_FAILED      -11  /**< Error reading from file */
+#define PULSEQLIB_ERR_UNSUPPORTED_VERSION   -12  /**< Sequence file version not supported */
+#define PULSEQLIB_ERR_PARSE_FAILED          -13  /**< Failed to parse sequence data */
+
+/* Code checking */
+#define PULSEQLIB_SUCCEEDED(code) ((code) > 0)
+#define PULSEQLIB_FAILED(code)    ((code) < 0)
+
+typedef struct pulseqlib_Diagnostic {
+    int code;                      /**< Error code (PULSEQLIB_OK or PULSEQLIB_ERR_*) */
+    
+    /* Location info (where the error occurred) */
+    int blockIndex;                /**< Block index where error was detected (-1 if N/A) */
+    int channel;                   /**< Gradient channel (0=Gx, 1=Gy, 2=Gz, -1 if N/A) */
+    
+    /* Pattern detection info */
+    int numUniqueBlocks;           /**< Number of unique block definitions found */
+    int imagingRegionLength;       /**< Length of imaging region in blocks */
+    int candidatePatternLength;    /**< Best candidate pattern length found (0 if none) */
+    int mismatchPosition;          /**< Position where pattern mismatch occurred (-1 if N/A) */
+    
+    /* Gradient info (for segmentation errors) */
+    float gradientAmplitude;       /**< Gradient amplitude at error location (Hz/m) */
+    float maxAllowedAmplitude;     /**< Maximum allowed amplitude for "zero" (Hz/m) */
+    
+} pulseqlib_Diagnostic;
+
+#define PULSEQLIB_DIAGNOSTIC_INIT { \
+    PULSEQLIB_OK, -1, -1, 0, 0, 0, -1, 0.0f, 0.0f \
+}
+
 /********************************************************* Shapes  ******************************************************/
 typedef struct pulseqlib_ShapeArbitrary {
     int numUncompressedSamples; /**< @brief Number of uncompressed waveform samples */
@@ -493,74 +548,6 @@ typedef struct pulseqlib_SegmentTableResult {
     int numCooldownSegments;     /**< Number of segments in cooldown section */
     int* cooldownSegmentTable;   /**< Maps cooldown segment index → unique segment ID */
 } pulseqlib_SegmentTableResult;
-
-/**
- * @brief Error codes for sequence analysis functions.
- * 
- * SUCCESS = 1, FAILURE = negative values (vendor convention).
- * These codes can be passed to pulseqlib_getErrorMessage() for human-readable strings.
- */
-
-/* Success */
-#define PULSEQLIB_OK                          1
-
-/* Generic errors (-1 to -99) */
-#define PULSEQLIB_ERR_NULL_POINTER           -1   /**< Required pointer argument is NULL */
-#define PULSEQLIB_ERR_INVALID_ARGUMENT       -2   /**< Invalid argument value */
-#define PULSEQLIB_ERR_ALLOC_FAILED           -3   /**< Memory allocation failed */
-
-/* TR detection errors (-100 to -199) */
-#define PULSEQLIB_ERR_TR_NO_BLOCKS          -100  /**< Sequence has no blocks */
-#define PULSEQLIB_ERR_TR_NO_IMAGING_REGION  -101  /**< No imaging region (prep+cooldown >= numBlocks) */
-#define PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN -102 /**< No periodic pattern found in imaging region */
-#define PULSEQLIB_ERR_TR_PATTERN_MISMATCH   -103  /**< Periodic pattern does not repeat consistently */
-#define PULSEQLIB_ERR_TR_PREP_TOO_LONG      -104  /**< Non-degenerate prep section exceeds threshold */
-#define PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG  -105  /**< Non-degenerate cooldown section exceeds threshold */
-
-/* Segmentation errors (-200 to -299) */
-#define PULSEQLIB_ERR_SEG_NONZERO_START_GRAD -200 /**< First block does not start with zero gradient */
-#define PULSEQLIB_ERR_SEG_NONZERO_END_GRAD   -201 /**< Last block does not end with zero gradient */
-#define PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND  -202 /**< No segment boundaries could be identified */
-
-/* Parsing/file errors (-10 to -19) */
-#define PULSEQLIB_ERR_FILE_NOT_FOUND        -10  /**< File could not be opened */
-#define PULSEQLIB_ERR_FILE_READ_FAILED      -11  /**< Error reading from file */
-#define PULSEQLIB_ERR_UNSUPPORTED_VERSION   -12  /**< Sequence file version not supported */
-#define PULSEQLIB_ERR_PARSE_FAILED          -13  /**< Failed to parse sequence data */
-
-/**
- * @brief Check if error code indicates success.
- */
-#define PULSEQLIB_SUCCEEDED(code) ((code) > 0)
-#define PULSEQLIB_FAILED(code)    ((code) < 0)
-
-/**
- * @brief Diagnostic information for sequence analysis failures.
- * 
- * Contains error code plus additional context to help diagnose the issue.
- */
-typedef struct pulseqlib_Diagnostic {
-    int code;                      /**< Error code (PULSEQLIB_OK or PULSEQLIB_ERR_*) */
-    
-    /* Location info (where the error occurred) */
-    int blockIndex;                /**< Block index where error was detected (-1 if N/A) */
-    int channel;                   /**< Gradient channel (0=Gx, 1=Gy, 2=Gz, -1 if N/A) */
-    
-    /* Pattern detection info */
-    int numUniqueBlocks;           /**< Number of unique block definitions found */
-    int imagingRegionLength;       /**< Length of imaging region in blocks */
-    int candidatePatternLength;    /**< Best candidate pattern length found (0 if none) */
-    int mismatchPosition;          /**< Position where pattern mismatch occurred (-1 if N/A) */
-    
-    /* Gradient info (for segmentation errors) */
-    float gradientAmplitude;       /**< Gradient amplitude at error location (Hz/m) */
-    float maxAllowedAmplitude;     /**< Maximum allowed amplitude for "zero" (Hz/m) */
-    
-} pulseqlib_Diagnostic;
-
-#define PULSEQLIB_DIAGNOSTIC_INIT { \
-    PULSEQLIB_OK, -1, -1, 0, 0, 0, -1, 0.0f, 0.0f \
-}
 
 #endif /* PULSEQLIB_H */
 
