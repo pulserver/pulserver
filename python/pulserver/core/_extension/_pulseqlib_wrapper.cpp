@@ -50,6 +50,7 @@ public:
     pulseqlib_SeqFile* seq;
 
     _PulserverSeqFile(const py::bytes& seq_bytes,
+                      float gamma,
                       float B0,
                       float max_grad,
                       float max_slew,
@@ -64,7 +65,7 @@ public:
 
         // Initialize SeqFile with options
         pulseqlib_Opts opts;
-        pulseqlib_optsInit(&opts, B0, max_grad, max_slew,
+        pulseqlib_optsInit(&opts, gamma, B0, max_grad, max_slew,
                            rf_raster_time, grad_raster_time,
                            adc_raster_time, block_duration_raster);
         pulseqlib_seqFileInit(seq, &opts);
@@ -105,7 +106,7 @@ public:
     }
 };
 
-static py::tuple _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, int index_max) {
+static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, int index_max) {
     if (!seqfile.seq) {
         throw std::runtime_error("SeqFile pointer is null");
     }
@@ -122,35 +123,170 @@ static py::tuple _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, i
 
     const int rangeCount = end - start;
 
-    std::vector<int> block_durations_us(numBlocks > 0 ? (size_t)numBlocks : 0, -1);
-    std::vector<int> unique_defs(rangeCount > 0 ? (size_t)rangeCount : 0);
-    std::vector<int> unique_table(numBlocks > 0 ? (size_t)numBlocks : 0, -1);
-    std::vector<int> pure_delay_block(numBlocks > 0 ? (size_t)numBlocks : 0, -1);
-
-    int numPrep = 0;
-    int numCooldown = 0;
-
-    int k = 0;
-    if (numBlocks > 0 && rangeCount > 0) {
-        k = pulseqlib_getUniqueBlocks(
-            seqfile.seq,
-            unique_defs.data(),
-            unique_table.data(),
-            block_durations_us.data(),
-            pure_delay_block.data(),
-            &numPrep,
-            &numCooldown,
-            index_min,
-            index_max
-        );
-        if (k < 0) k = 0;
-        if (k > rangeCount) k = rangeCount;
-        unique_defs.resize((size_t)k);
-    } else {
-        unique_defs.clear();
+    // Allocate sequence descriptor arrays
+    pulseqlib_SequenceDescriptor seqDesc;
+    memset(&seqDesc, 0, sizeof(seqDesc));
+    seqDesc.numBlocks = numBlocks;
+    seqDesc.uniqueBlockTable = (int*)ALLOC(numBlocks * sizeof(int));
+    seqDesc.isPureDelayBlock = (int*)ALLOC(numBlocks * sizeof(int));
+    // Allocate for max possible unique blocks (rangeCount)
+    seqDesc.uniqueBlockDefinitions = (int(*)[6])ALLOC(rangeCount * 6 * sizeof(int));
+    
+    // Only allocate if library has entries
+    if (seqfile.seq->rfLibrarySize > 0) {
+        seqDesc.rfDefinitions = (pulseqlib_RfDefinition*)ALLOC(seqfile.seq->rfLibrarySize * sizeof(pulseqlib_RfDefinition));
+        seqDesc.rfTable = (pulseqlib_RfTableElement*)ALLOC(seqfile.seq->rfLibrarySize * sizeof(pulseqlib_RfTableElement));
+    }
+    if (seqfile.seq->gradLibrarySize > 0) {
+        seqDesc.gradDefinitions = (pulseqlib_GradDefinition*)ALLOC(seqfile.seq->gradLibrarySize * sizeof(pulseqlib_GradDefinition));
+        seqDesc.gradTable = (pulseqlib_GradTableElement*)ALLOC(seqfile.seq->gradLibrarySize * sizeof(pulseqlib_GradTableElement));
+    }
+    if (seqfile.seq->adcLibrarySize > 0) {
+        seqDesc.adcDefinitions = (pulseqlib_AdcDefinition*)ALLOC(seqfile.seq->adcLibrarySize * sizeof(pulseqlib_AdcDefinition));
+        seqDesc.adcTable = (pulseqlib_AdcTableElement*)ALLOC(seqfile.seq->adcLibrarySize * sizeof(pulseqlib_AdcTableElement));
     }
 
-    return py::make_tuple(unique_defs, unique_table, block_durations_us, pure_delay_block, numPrep, numCooldown);
+    if (!seqDesc.uniqueBlockTable || !seqDesc.isPureDelayBlock || !seqDesc.uniqueBlockDefinitions) {
+        FREE(seqDesc.uniqueBlockTable);
+        FREE(seqDesc.isPureDelayBlock);
+        FREE(seqDesc.uniqueBlockDefinitions);
+        FREE(seqDesc.rfDefinitions);
+        FREE(seqDesc.rfTable);
+        FREE(seqDesc.gradDefinitions);
+        FREE(seqDesc.gradTable);
+        FREE(seqDesc.adcDefinitions);
+        FREE(seqDesc.adcTable);
+        throw std::runtime_error("Failed to allocate sequence descriptor");
+    }
+
+    int result = pulseqlib_getUniqueBlocks(seqfile.seq, &seqDesc, index_min, index_max);
+
+    py::dict output;
+
+    if (PULSEQLIB_FAILED(result)) {
+        output["success"] = false;
+        output["error"] = pulseqlib_getErrorMessage(result);
+    } else {
+        output["success"] = true;
+        
+        // Unique block table
+        std::vector<int> uniqueBlockTable(seqDesc.uniqueBlockTable, seqDesc.uniqueBlockTable + numBlocks);
+        output["unique_block_table"] = uniqueBlockTable;
+        
+        // Pure delay block
+        std::vector<int> isPureDelayBlock(seqDesc.isPureDelayBlock, seqDesc.isPureDelayBlock + numBlocks);
+        output["is_pure_delay_block"] = isPureDelayBlock;
+        
+        // Unique block definitions
+        py::list uniqueBlockDefs;
+        for (int i = 0; i < seqDesc.numUniqueBlocks; ++i) {
+            py::dict blockDef;
+            blockDef["id"] = seqDesc.uniqueBlockDefinitions[i][0];
+            blockDef["duration_us"] = seqDesc.uniqueBlockDefinitions[i][1];
+            blockDef["rf_id"] = seqDesc.uniqueBlockDefinitions[i][2];
+            blockDef["gx_id"] = seqDesc.uniqueBlockDefinitions[i][3];
+            blockDef["gy_id"] = seqDesc.uniqueBlockDefinitions[i][4];
+            blockDef["gz_id"] = seqDesc.uniqueBlockDefinitions[i][5];
+            uniqueBlockDefs.append(blockDef);
+        }
+        output["unique_block_definitions"] = uniqueBlockDefs;
+        output["num_unique_blocks"] = seqDesc.numUniqueBlocks;
+        
+        // RF definitions and table
+        py::list rfDefs;
+        for (int i = 0; i < seqDesc.numUniqueRFs; ++i) {
+            py::dict rfDef;
+            rfDef["id"] = seqDesc.rfDefinitions[i].ID;
+            rfDef["mag_shape_id"] = seqDesc.rfDefinitions[i].magShapeID;
+            rfDef["phase_shape_id"] = seqDesc.rfDefinitions[i].phaseShapeID;
+            rfDef["time_shape_id"] = seqDesc.rfDefinitions[i].timeShapeID;
+            rfDef["delay"] = seqDesc.rfDefinitions[i].delay;
+            rfDefs.append(rfDef);
+        }
+        output["rf_definitions"] = rfDefs;
+        
+        py::list rfTable;
+        for (int i = 0; i < seqfile.seq->rfLibrarySize; ++i) {
+            py::dict rfEntry;
+            rfEntry["id"] = seqDesc.rfTable[i].ID;
+            rfEntry["amplitude"] = seqDesc.rfTable[i].amplitude;
+            rfEntry["freq_offset"] = seqDesc.rfTable[i].freqOffset;
+            rfEntry["phase_offset"] = seqDesc.rfTable[i].phaseOffset;
+            rfTable.append(rfEntry);
+        }
+        output["rf_table"] = rfTable;
+        
+        // Grad definitions and table
+        py::list gradDefs;
+        for (int i = 0; i < seqDesc.numUniqueGrads; ++i) {
+            py::dict gradDef;
+            gradDef["id"] = seqDesc.gradDefinitions[i].ID;
+            gradDef["type"] = seqDesc.gradDefinitions[i].type;
+            gradDef["rise_time_or_first"] = seqDesc.gradDefinitions[i].riseTimeOrFirst;
+            gradDef["flat_time_or_last"] = seqDesc.gradDefinitions[i].flatTimeOrLast;
+            gradDef["fall_time_or_num_samples"] = seqDesc.gradDefinitions[i].fallTimeOrNumUncompressedSamples;
+            gradDef["time_shape_id"] = seqDesc.gradDefinitions[i].unusedOrTimeShapeID;
+            gradDef["delay"] = seqDesc.gradDefinitions[i].delay;
+            gradDefs.append(gradDef);
+        }
+        output["grad_definitions"] = gradDefs;
+        
+        py::list gradTable;
+        for (int i = 0; i < seqfile.seq->gradLibrarySize; ++i) {
+            py::dict gradEntry;
+            gradEntry["id"] = seqDesc.gradTable[i].ID;
+            gradEntry["amplitude"] = seqDesc.gradTable[i].amplitude;
+            gradTable.append(gradEntry);
+        }
+        output["grad_table"] = gradTable;
+        
+        // ADC definitions and table
+        py::list adcDefs;
+        for (int i = 0; i < seqDesc.numUniqueADCs; ++i) {
+            py::dict adcDef;
+            adcDef["id"] = seqDesc.adcDefinitions[i].ID;
+            adcDef["num_samples"] = seqDesc.adcDefinitions[i].numSamples;
+            adcDef["dwell_time"] = seqDesc.adcDefinitions[i].dwellTime;
+            adcDef["delay"] = seqDesc.adcDefinitions[i].delay;
+            adcDefs.append(adcDef);
+        }
+        output["adc_definitions"] = adcDefs;
+        
+        py::list adcTable;
+        for (int i = 0; i < seqfile.seq->adcLibrarySize; ++i) {
+            py::dict adcEntry;
+            adcEntry["id"] = seqDesc.adcTable[i].ID;
+            adcEntry["freq_offset"] = seqDesc.adcTable[i].freqOffset;
+            adcEntry["phase_offset"] = seqDesc.adcTable[i].phaseOffset;
+            adcTable.append(adcEntry);
+        }
+        output["adc_table"] = adcTable;
+        
+        // TR descriptor
+        py::dict trDesc;
+        trDesc["num_prep_blocks"] = seqDesc.trDescriptor.numPrepBlocks;
+        trDesc["num_cooldown_blocks"] = seqDesc.trDescriptor.numCooldownBlocks;
+        trDesc["tr_size"] = seqDesc.trDescriptor.trSize;
+        trDesc["num_trs"] = seqDesc.trDescriptor.numTRs;
+        trDesc["num_prep_trs"] = seqDesc.trDescriptor.numPrepTRs;
+        trDesc["degenerate_prep"] = seqDesc.trDescriptor.degeneratePrep;
+        trDesc["num_cooldown_trs"] = seqDesc.trDescriptor.numCooldownTRs;
+        trDesc["degenerate_cooldown"] = seqDesc.trDescriptor.degenerateCooldown;
+        output["tr_descriptor"] = trDesc;
+    }
+
+    // Free allocated memory
+    FREE(seqDesc.uniqueBlockTable);
+    FREE(seqDesc.isPureDelayBlock);
+    FREE(seqDesc.uniqueBlockDefinitions);
+    FREE(seqDesc.rfDefinitions);
+    FREE(seqDesc.rfTable);
+    FREE(seqDesc.gradDefinitions);
+    FREE(seqDesc.gradTable);
+    FREE(seqDesc.adcDefinitions);
+    FREE(seqDesc.adcTable);
+
+    return output;
 }
 
 static py::dict _find_tr_in_sequence(
@@ -257,12 +393,12 @@ static py::dict _find_segments_in_tr(
         trSegments[i].uniqueBlockIndices = nullptr;
     }
 
-    // Call the C function - NOTE: argument order must match the declaration
+    // Call the C function
     int numUniqueSegments = pulseqlib_findSegmentsInTR(
         seqfile.seq,
         trSegments.data(),
         &segmentTable,
-        &diag,              // diagnostic comes BEFORE trDesc
+        &diag,
         &trDesc,
         unique_block_table.data()
     );
@@ -329,14 +465,26 @@ static py::dict _find_segments_in_tr(
 
 PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     py::class_<_PulserverSeqFile>(m, "_PulserverSeqFile")
-        .def(py::init<py::bytes, float, float, float, float, float, float, float>())
+        .def(py::init<py::bytes, float, float, float, float, float, float, float, float>())
         ;
     
     m.def("_get_unique_blocks",
           &_get_unique_blocks,
           py::arg("seqfile"),
           py::arg("index_min") = -1,
-          py::arg("index_max") = -1);
+          py::arg("index_max") = -1,
+          R"pbdoc(
+            Get unique blocks and event deduplication info from a sequence.
+            
+            Returns a dict with:
+            - unique_block_table: mapping block index -> unique block ID
+            - is_pure_delay_block: array indicating pure delay blocks
+            - unique_block_definitions: list of unique block definitions
+            - rf_definitions, rf_table: RF event deduplication
+            - grad_definitions, grad_table: Gradient event deduplication
+            - adc_definitions, adc_table: ADC event deduplication
+            - tr_descriptor: TR structure info (prep/cooldown blocks)
+          )pbdoc");
 
     m.def("_find_tr_in_sequence",
       &_find_tr_in_sequence,

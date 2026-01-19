@@ -8,6 +8,8 @@
 #include "pulseqlib.h"
 #include "pulseqlib_methods.h"
 
+#define GAMMA 42.577478518e6f  /* Gyromagnetic ratio for Hydrogen in Hz/T */
+
 /* Helper function to get a block with the new API */
 static pulseqlib_SeqBlock* getBlock(pulseqlib_SeqFile* seq, int blockIndex) {
     pulseqlib_SeqBlock* block;
@@ -69,7 +71,7 @@ static pulseqlib_SeqFile* load_seq(char* filePath) {
     snprintf(seq_path, sizeof(seq_path), "%s/%s", TEST_ROOT_DIR, filePath);
 
     /* Initialize runtime options and the sequence structure */
-    pulseqlib_optsInit(&opts, 3.0f, 40.0f, 150.0f, 1.0f, 10.0f, 0.1f, 10.0f);
+    pulseqlib_optsInit(&opts, GAMMA, 3.0f, 40.0f, 150.0f, 1.0f, 10.0f, 0.1f, 10.0f);
     pulseqlib_seqFileInit(seq, &opts);
     pulseqlib_optsFree(&opts);
 

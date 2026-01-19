@@ -83,6 +83,10 @@
 #define PULSEQLIB_ERR_INVALID_ARGUMENT       -2   /**< Invalid argument value */
 #define PULSEQLIB_ERR_ALLOC_FAILED           -3   /**< Memory allocation failed */
 
+/* Unique block errors (-50 to -59) */
+#define PULSEQLIB_ERR_INVALID_PREP_POSITION      -50  /**< Invalid preparation block position */
+#define PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION  -51  /**< Invalid cooldown block position */
+
 /* TR detection errors (-100 to -199) */
 #define PULSEQLIB_ERR_TR_NO_BLOCKS          -100  /**< Sequence has no blocks */
 #define PULSEQLIB_ERR_TR_NO_IMAGING_REGION  -101  /**< No imaging region (prep+cooldown >= numBlocks) */
@@ -136,6 +140,7 @@ typedef struct pulseqlib_ShapeArbitrary {
     float *samples; /**< @brief Waveform samples */
 } pulseqlib_ShapeArbitrary; /* mirrors Pulseq CompressedShape */
 
+#define PULSEQLIB_SHAPE_ARBITRARY_INIT {0, 0, NULL}
 
 typedef struct pulseqlib_ShapeTrap {
     long riseTime; /**< @brief Ramp up time of trapezoid (us)  */
@@ -143,6 +148,7 @@ typedef struct pulseqlib_ShapeTrap {
     long fallTime; /**< @brief Ramp down time of trapezoid (us) */
 } pulseqlib_ShapeTrap; /* no Pulseq equivalent */
 
+#define PULSEQLIB_SHAPE_TRAP_INIT {0, 0, 0}
 
 /********************************************************* Events  ******************************************************/
 typedef struct pulseqlib_RFEvent {
@@ -161,6 +167,8 @@ typedef struct pulseqlib_RFEvent {
 } pulseqlib_RFEvent; /* mirrors Pulseq RFEvent */
 
 
+#define PULSEQLIB_RF_EVENT_INIT {0, 0.0f, PULSEQLIB_SHAPE_ARBITRARY_INIT, PULSEQLIB_SHAPE_ARBITRARY_INIT, PULSEQLIB_SHAPE_ARBITRARY_INIT, 0.0f, 0.0f, 0.0f, 0.0f, 0, '\0'}
+
 typedef struct pulseqlib_GradEvent {
     short type; /**< @brief NULL, TRAP, or ARBITRARY */  
     float amplitude; /**< @brief Peak amplitude of the gradient (Hz/m) */
@@ -172,6 +180,7 @@ typedef struct pulseqlib_GradEvent {
     float last; /**< @brief Amplitude at the end of the shape for arbitrary gradient */
 } pulseqlib_GradEvent; /* mirrors Pulseq GradEvent */
 
+#define PULSEQLIB_GRAD_EVENT_INIT {0, 0.0f, 0, PULSEQLIB_SHAPE_TRAP_INIT, PULSEQLIB_SHAPE_ARBITRARY_INIT, PULSEQLIB_SHAPE_ARBITRARY_INIT, 0.0f, 0.0f}
 
 typedef struct pulseqlib_ADCEvent {
     short type; /**< @brief NULL or ADC */
@@ -185,6 +194,7 @@ typedef struct pulseqlib_ADCEvent {
     pulseqlib_ShapeArbitrary phaseModulationShape; /**< @brief Phase modulation shape of receiver (rad) */
 } pulseqlib_ADCEvent; /* mirrors Pulseq ADCEvent */
 
+#define PULSEQLIB_ADC_EVENT_INIT {0, 0, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, PULSEQLIB_SHAPE_ARBITRARY_INIT}
 
 typedef struct pulseqlib_TriggerEvent {
     short type; /**< @brief OFF or ON */
@@ -194,6 +204,7 @@ typedef struct pulseqlib_TriggerEvent {
     int triggerChannel; /**< @brief Channel of trigger (system dependent). 0: undefined / unused */
 } pulseqlib_TriggerEvent; /* mirrors Pulseq TriggerEvent */
 
+#define PULSEQLIB_TRIGGER_EVENT_INIT {0, 0L, 0L, 0, 0}
 
 typedef struct pulseqlib_RotationEvent {
     short type; /**< @brief NULL or DEFINED */
@@ -203,6 +214,7 @@ typedef struct pulseqlib_RotationEvent {
     } data;
 } pulseqlib_RotationEvent; /* extends Pulseq RotationEvent */
 
+#define PULSEQLIB_ROTATION_EVENT_INIT {0, {{0.0f, 0.0f, 0.0f, 0.0f}}}
 
 typedef struct pulseqlib_LabelOrFlagEvent {
     short type; /**< @brief NULL or DEFINED */
@@ -229,6 +241,7 @@ typedef struct pulseqlib_LabelOrFlagEvent {
     int once; /**< A 3-state flag indicating whether the label is to be used once (0), multiple times (1), or not at all (2) */
     int trid; /**< If set to 1, marks the limit (beginning or end) of repeatable module in the sequence. If set to 2, marks the limit of a TR segment. */
 } pulseqlib_LabelOrFlagEvent; /* no Pulseq equivalent */
+
 
 
 typedef struct pulseqlib_LabelEvent {
@@ -278,7 +291,7 @@ typedef struct pulseqlib_RfShimmingEvent {
 } pulseqlib_RfShimmingEvent; /* mirrors Pulseq RfShimmingEvent */
 
 
-/********************************************************* EveBlocknts  ******************************************************/
+/********************************************************* Event Blocks  ******************************************************/
 typedef struct pulseqlib_RawBlock {
     int block_duration; /**<@brief Block duration in us */
     int rf; /**<@brief RF event ID in RF Library */
@@ -307,7 +320,9 @@ typedef struct pulseqlib_SeqBlock {
     pulseqlib_RfShimmingEvent rfShimming; /**< @brief RF shimming event */
 } pulseqlib_SeqBlock; /* Mirrors Pulseq SeqBlock */
 
+
 typedef struct pulseqlib_Opts {
+    float gamma; /**< @brief Gyromagnetic ratio in Hz/T */
     float B0; /**< @brief Main magnetic field strength in Tesla for frequency offset calculations */
     float max_grad; /**< @brief Maximum gradient amplitude in Hz/m */
     float max_slew; /**< @brief Maximum slew rate in Hz/m/s */
@@ -316,6 +331,7 @@ typedef struct pulseqlib_Opts {
     float adc_raster_time; /**< @brief ADC raster time in us */
     float block_duration_raster; /**< @brief Block duration raster time in us */
 } pulseqlib_Opts;
+
 
 typedef struct pulseqlib_SectionOffsets {
     long scan_cursor;
@@ -516,16 +532,95 @@ typedef struct pulseqlib_SeqFile {
     pulseqlib_ShapeArbitrary* shapesLibrary; /**< @brief Array of arbitrary shape definitions. */
 } pulseqlib_SeqFile; /* Mirrors Pulseq SeqFile */
 
+typedef struct pulseqlib_RfDefinition {
+    int ID; /**< Unique RF ID */
+    int magShapeID; /**< Magnitude shape ID */
+    int phaseShapeID; /**< Phase shape ID */
+    int timeShapeID; /**< Time shape ID */
+    int delay; /**< Delay prior to the pulse (us) */
+} pulseqlib_RfDefinition;
+
+typedef struct pulseqlib_RfTableElement {
+    int ID; /**< Unique RF ID */
+    float amplitude; /**< RF amplitude (Hz) */
+    float freqOffset; /**< Frequency offset (Hz) */
+    float phaseOffset; /**< Phase offset (rad) */
+} pulseqlib_RfTableElement;
+
+#define PULSEQLIB_RF_TABLE_ELEMENT_INIT {0, 0.0f, 0.0f, 0.0f}
+
+typedef struct pulseqlib_GradDefinition {
+    int ID; /**< Unique Grad ID */
+    int type; /**< Gradient type encoded in the library (TRAP/GRAD) */
+    int riseTimeOrFirst; /**< Rise time (us) for trapezoid, or first amplitude for arbitrary */
+    int flatTimeOrLast; /**< Flat time (us) for trapezoid, or last amplitude for arbitrary */
+    int fallTimeOrNumUncompressedSamples; /**< Fall time (us) for trapezoid, or number of uncompressed samples for arbitrary */
+    int unusedOrTimeShapeID; /**< Unused Time shape ID */
+    int delay; /**< Delay prior to the pulse (us) */
+} pulseqlib_GradDefinition;
+
+typedef struct pulseqlib_GradTableElement {
+    int ID;
+    int shotIndex; /**< Index of the shot this gradient belongs to */
+    float amplitude; /**< Gradient amplitude (Hz/m) */
+} pulseqlib_GradTableElement;
+
+#define PULSEQLIB_GRAD_TABLE_ELEMENT_INIT {0, 0, 0.0f}
+
+typedef struct pulseqlib_AdcDefinition {
+    int ID; /**< Unique ADC ID */
+    int numSamples; /**< Number of ADC samples */
+    int dwellTime; /**< Dwell time of ADC readout (ns) */
+    int delay; /**< Delay before first sample (us) */
+} pulseqlib_AdcDefinition;
+
+#define PULSEQLIB_ADC_DEFINITION_INIT {0, 0, 0, 0}
+
+typedef struct pulseqlib_AdcTableElement {
+    int ID; /**< Unique ADC ID */
+    float freqOffset; /**< Frequency offset (Hz) */
+    float phaseOffset; /**< Phase offset (rad) */
+} pulseqlib_AdcTableElement;
+
+#define PULSEQLIB_ADC_TABLE_ELEMENT_INIT {0, 0.0f, 0.0f}
+
 typedef struct pulseqlib_TRdescriptor {
+    int numPrepBlocks; /**< Number of preparation blocks before the main TR */
+    int numCooldownBlocks; /**< Number of cooldown blocks after the main TR */
     int trSize; /**< Size of the TR in number of blocks */
     int numTRs; /**< Number of TRs in the sequence */
     int numPrepTRs; /**< Number of preparation TR before the main TR */
-    int numPrepBlocks; /**< Number of preparation blocks before the main TR */
     int degeneratePrep; /**< Non-zero if the preparation blocks are degenerate (i.e. identical to main TR) */
     int numCooldownTRs; /**< Number of cooldown TR after the main TR */
-    int numCooldownBlocks; /**< Number of cooldown blocks after the main TR */
     int degenerateCooldown; /**< Non-zero if the cooldown blocks are degenerate (i.e. identical to main TR) */
 } pulseqlib_TRdescriptor;
+
+#define PULSEQLIB_TR_DESCRIPTOR_INIT {0, 0, 0, 0, 0, 0, 0, 0}
+
+typedef struct pulseqlib_SequenceDescriptor {
+    int numBlocks; /**< Total number of blocks in the sequence */
+    int* uniqueBlockTable; /**< Pointer to array mapping block index → unique block ID */
+    int* isPureDelayBlock; /**< Pointer to array indicating if block index is a pure delay block (1) or not (0) */
+
+    int numUniqueBlocks; /**< Number of unique blocks in the sequence */
+    int (*uniqueBlockDefinitions)[6]; /**< (ID, duration_us, rf=unique_RF_id, gx=unique_grad_id, gy=unique_grad_id, gz=unique_grad_id) */
+    
+    int numUniqueRFs; /**< Number of unique RF events in the sequence */
+    pulseqlib_RfDefinition* rfDefinitions; /**< (ID, rf_mag_id, rf_phase_id, rf_time_id, delay) */
+    pulseqlib_RfTableElement* rfTable; /**< Pointer to array mapping unique RF ID → RF dynamic parameters */
+
+    int numUniqueGrads; /**< Number of unique gradient events in the sequence */
+    pulseqlib_GradDefinition* gradDefinitions; /**< (ID, type, rise/first ; flat/last ; fall/numUncompressedSamples, unused/time_id, delay) */
+    pulseqlib_GradTableElement* gradTable; /**< Pointer to array mapping unique Grad ID → Grad dynamic parameters */
+
+    int numUniqueADCs; /**< Number of unique ADC events in the sequence */
+    pulseqlib_AdcDefinition* adcDefinitions; /**< (ID, numSamples, dwellTime, delay) */
+    pulseqlib_AdcTableElement* adcTable; /**< Pointer to array mapping unique ADC ID → ADC dynamic parameters */
+    pulseqlib_TRdescriptor trDescriptor; /**< TR segmentation descriptor */
+
+} pulseqlib_SequenceDescriptor;
+
+#define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT {0, NULL, NULL, 0, NULL, 0, NULL, NULL, 0, NULL, NULL, PULSEQLIB_TR_DESCRIPTOR_INIT}
 
 typedef struct pulseqlib_TRsegment {
     int startBlock; /**< Starting block index of the TR segment */

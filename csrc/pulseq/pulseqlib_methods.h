@@ -55,7 +55,7 @@ extern "C" {
 #endif
 
 /* Constructor, destructor and reset */
-void pulseqlib_optsInit(pulseqlib_Opts* opts, float B0, float max_grad, float max_slew, float rf_raster_time, float grad_raster_time, float adc_raster_time, float block_duration_raster);
+void pulseqlib_optsInit(pulseqlib_Opts* opts, float gamma, float B0, float max_grad, float max_slew, float rf_raster_time, float grad_raster_time, float adc_raster_time, float block_duration_raster);
 void pulseqlib_optsFree(pulseqlib_Opts* opts);
 
 void pulseqlib_seqFileInit(pulseqlib_SeqFile* seq, const pulseqlib_Opts* opts);
@@ -100,12 +100,7 @@ void pulseqlib_diagnosticInit(pulseqlib_Diagnostic* diag);
 /* Segment-specific functions */
 int pulseqlib_getUniqueBlocks(
   const pulseqlib_SeqFile* seq, 
-  int* uniqueBlockDefs, 
-  int* uniqueBlockTable,
-  int* blockDurations_us,
-  int* pureDelayBlock,
-  int* numPrep,
-  int* numCooldown, 
+  pulseqlib_SequenceDescriptor* seqDesc,
   int index_min, 
   int index_max
 );

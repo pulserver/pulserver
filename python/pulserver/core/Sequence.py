@@ -74,6 +74,7 @@ class PulserverSequence(pp.Sequence):
         sys = seq.system
         cseq = _PulserverSeqFile(
             write_to_stream(seq),
+            float(sys.gamma),
             float(sys.B0),
             float(sys.max_grad),
             float(sys.max_slew),
@@ -100,9 +101,9 @@ class PulserverSequence(pp.Sequence):
         return str(self._seq)
 
 
-def get_unique_blocks(seq: PulserverSequence) -> tuple[list[int], list[int]]:
+def get_unique_blocks(seq: PulserverSequence) -> SimpleNamespace:
     """
-    Get unique blocks in sequence.
+    Get unique blocks and event deduplication info from a sequence.
 
     Parameters
     ----------
@@ -111,10 +112,18 @@ def get_unique_blocks(seq: PulserverSequence) -> tuple[list[int], list[int]]:
 
     Returns
     -------
-    unique_blocks : list[int]
-        Set of block ID containing the first instance of each unique block.
-    unique_table : list[int]
-        Table containing the unique block index corresponding to each block in sequence.
+    SimpleNamespace
+        Result containing:
+        - unique_block_table: list mapping block index -> unique block ID
+        - is_pure_delay_block: list indicating pure delay blocks
+        - unique_block_definitions: list of unique block definitions
+        - rf_definitions: list of unique RF definitions
+        - rf_table: list mapping RF index -> unique RF params
+        - grad_definitions: list of unique gradient definitions
+        - grad_table: list mapping gradient index -> unique gradient params
+        - adc_definitions: list of unique ADC definitions
+        - adc_table: list mapping ADC index -> unique ADC params
+        - tr_descriptor: TR structure info (prep/cooldown blocks)
         
     Notes
     -----
@@ -124,8 +133,26 @@ def get_unique_blocks(seq: PulserverSequence) -> tuple[list[int], list[int]]:
     class (trapezoids vs arbitrary grads) and timing.
 
     """
-    unique_blocks, unique_table, _, _, _, _ = _get_unique_blocks(seq._cseq)
-    return unique_blocks, unique_table
+    result_dict = _get_unique_blocks(seq._cseq)
+    
+    if not result_dict["success"]:
+        raise RuntimeError(f"Failed to get unique blocks: {result_dict.get('error', 'unknown error')}")
+    
+    result = SimpleNamespace(
+        unique_block_table=result_dict["unique_block_table"],
+        is_pure_delay_block=result_dict["is_pure_delay_block"],
+        num_unique_blocks=result_dict["num_unique_blocks"],
+        unique_block_definitions=result_dict["unique_block_definitions"],
+        rf_definitions=result_dict["rf_definitions"],
+        rf_table=result_dict["rf_table"],
+        grad_definitions=result_dict["grad_definitions"],
+        grad_table=result_dict["grad_table"],
+        adc_definitions=result_dict["adc_definitions"],
+        adc_table=result_dict["adc_table"],
+        tr_descriptor=SimpleNamespace(**result_dict["tr_descriptor"]),
+    )
+    
+    return result
 
 
 def find_tr(seq: PulserverSequence, num_reps: int = 1, raise_on_error: bool = True) -> SimpleNamespace:
@@ -155,9 +182,23 @@ def find_tr(seq: PulserverSequence, num_reps: int = 1, raise_on_error: bool = Tr
     SequenceAnalysisError
         If raise_on_error=True and TR detection fails.
     """
-    _, unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown = (
-        _get_unique_blocks(seq._cseq)
-    )
+    # Get unique blocks result (includes TR descriptor from prep/cooldown detection)
+    blocks_result = get_unique_blocks(seq)
+    
+    unique_table = blocks_result.unique_block_table
+    tr_info = blocks_result.tr_descriptor
+    num_prep = tr_info.num_prep_blocks
+    num_cooldown = tr_info.num_cooldown_blocks
+    
+    # Build block durations from unique block definitions
+    block_durations_us = []
+    for i, block_id in enumerate(unique_table):
+        if block_id >= 0 and block_id < len(blocks_result.unique_block_definitions):
+            block_durations_us.append(blocks_result.unique_block_definitions[block_id]["duration_us"])
+        else:
+            block_durations_us.append(0)
+    
+    pure_delay_block = blocks_result.is_pure_delay_block
     
     tr_result = _find_tr_in_sequence(
         unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown
@@ -247,15 +288,27 @@ def find_segments_in_tr(seq: PulserverSequence, raise_on_error: bool = True) -> 
         List of pp.Sequences representing the unique sequence Segments.
     SimpleNamespace
         Result containing:
-          unique_block_indices, and sequence (pp.Sequence)
         - prep_segment_table: Maps prep section segments to unique segment IDs
         - main_segment_table: Maps main TR segments to unique segment IDs
         - cooldown_segment_table: Maps cooldown section segments to unique segment IDs
     """
-    # First get unique blocks and TR info
-    _, unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown = (
-        _get_unique_blocks(seq._cseq)
-    )
+    # Get unique blocks result
+    blocks_result = get_unique_blocks(seq)
+    
+    unique_table = blocks_result.unique_block_table
+    tr_info = blocks_result.tr_descriptor
+    num_prep = tr_info.num_prep_blocks
+    num_cooldown = tr_info.num_cooldown_blocks
+    
+    # Build block durations from unique block definitions
+    block_durations_us = []
+    for i, block_id in enumerate(unique_table):
+        if block_id >= 0 and block_id < len(blocks_result.unique_block_definitions):
+            block_durations_us.append(blocks_result.unique_block_definitions[block_id]["duration_us"])
+        else:
+            block_durations_us.append(0)
+    
+    pure_delay_block = blocks_result.is_pure_delay_block
     
     # Find TR pattern
     tr_result = _find_tr_in_sequence(
@@ -269,12 +322,11 @@ def find_segments_in_tr(seq: PulserverSequence, raise_on_error: bool = True) -> 
         if raise_on_error:
             raise SequenceAnalysisError(diagnostic)
         result = SimpleNamespace()
-        result.unique_segments = []
         result.prep_segment_table = []
         result.main_segment_table = []
         result.cooldown_segment_table = []
         result.diagnostic = diagnostic
-        return result
+        return [], result
     
     tr_size = tr_result["tr_size"]
     num_trs = tr_result["num_trs"]
@@ -293,7 +345,7 @@ def find_segments_in_tr(seq: PulserverSequence, raise_on_error: bool = True) -> 
         unique_table,
     )
     
-    # Build SimpleNamespace for each unique segment with pp.Sequence
+    # Build pp.Sequence for each unique segment
     unique_segments = []
     for seg_dict in raw_result["unique_segments"]:
         start = seg_dict["start_block"]

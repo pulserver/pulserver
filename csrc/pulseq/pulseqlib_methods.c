@@ -117,6 +117,12 @@ const char* pulseqlib_getErrorMessage(int code) {
             return "Unsupported sequence file version (requires >= 1.5.0)";
         case PULSEQLIB_ERR_PARSE_FAILED:
             return "Failed to parse sequence data";
+
+        /* Unique block errors */
+        case PULSEQLIB_ERR_INVALID_PREP_POSITION:
+            return "Invalid preparation block position";
+        case PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION:
+            return "Invalid cooldown block position";
         
         /* TR detection errors */
         case PULSEQLIB_ERR_TR_NO_BLOCKS:
@@ -149,6 +155,14 @@ const char* pulseqlib_getErrorHint(int code) {
     switch (code) {
         case PULSEQLIB_OK:
             return "";
+
+        case PULSEQLIB_ERR_INVALID_PREP_POSITION:
+            return "Ensure that the preparation section is marked with ONCE labels "
+                   "and starts at the first block of the sequence.";
+
+        case PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION:
+            return "Ensure that the cooldown section is marked with ONCE labels "
+                   "and ends at the last block of the sequence.";
         
         case PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN:
             return "This often occurs when phase-encoding gradients are created inside "
@@ -1290,8 +1304,9 @@ int decompressShape(pulseqlib_ShapeArbitrary* encoded, pulseqlib_ShapeArbitrary*
 
 
 /******************************************* Public methods *************************************************/
-void pulseqlib_optsInit(pulseqlib_Opts* opts, float B0, float max_grad, float max_slew, float rf_raster_time, float grad_raster_time, float adc_raster_time, float block_duration_raster){
+void pulseqlib_optsInit(pulseqlib_Opts* opts, float gamma, float B0, float max_grad, float max_slew, float rf_raster_time, float grad_raster_time, float adc_raster_time, float block_duration_raster){
     if (!opts) return;
+    opts->gamma = gamma;
     opts->B0 = B0;
     opts->max_grad = max_grad;
     opts->max_slew = max_slew;
@@ -1657,7 +1672,7 @@ int pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath) {
 }
 
 
-static int getRawBlockContentIDs(const pulseqlib_SeqFile* seq, int blockIndex, pulseqlib_RawBlock* block, int parseExtensions) {
+static int getRawBlockContentIDs(const pulseqlib_SeqFile* seq, pulseqlib_RawBlock* block, int blockIndex, int parseExtensions) {
     int nextExtID;
     int extCount;
     float* eventFloat;
@@ -2139,7 +2154,9 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
 
 
 static void getBlockDynamic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, pulseqlib_BlockDynamic* dynamic) {
+    float gamma = seq->opts.gamma;
     float b0 = seq->opts.B0;
+    float ppm_to_hz = gamma * b0 * 1e-6;
     float* farray;
     if (!dynamic) return;
     pulseqlib_clear_block_dynamic(dynamic);
@@ -2153,8 +2170,8 @@ static void getBlockDynamic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlo
         dynamic->rf.freqPPM = farray[6];
         dynamic->rf.phaseOffset = farray[9];
         dynamic->rf.phasePPM = farray[7];
-        dynamic->rf.totalFrequency = dynamic->rf.freqOffset + dynamic->rf.freqPPM * b0;
-        dynamic->rf.totalPhase = dynamic->rf.phaseOffset + dynamic->rf.phasePPM * b0;
+        dynamic->rf.totalFrequency = dynamic->rf.freqOffset + (ppm_to_hz * dynamic->rf.freqPPM);
+        dynamic->rf.totalPhase = dynamic->rf.phaseOffset + (ppm_to_hz * dynamic->rf.phasePPM);
     }
 
     if (raw->gx >= 0 && seq->gradLibrary && raw->gx < seq->gradLibrarySize) {
@@ -2317,7 +2334,8 @@ void pulseqlib_getBlockStatic(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* 
     if (!seq || !block) {
         return;
     }
-    if (!getRawBlockContentIDs(seq, blockIndex, &raw, 1)) {
+    if (!getRawBlockContentIDs(seq, &raw, blockIndex, 1)) 
+    {
         return;
     }
     if (!getBlockStatic(seq, &raw, block)) {
@@ -2331,7 +2349,8 @@ void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, pulseqlib_BlockDyna
     if (!dynamic) {
         return;
     }
-    if (!seq || !getRawBlockContentIDs(seq, blockIndex, &raw, 1)) {
+    if (!seq || !getRawBlockContentIDs(seq, &raw, blockIndex, 1)) 
+    {
         pulseqlib_clear_block_dynamic(dynamic);
         return;
     }
@@ -2344,7 +2363,8 @@ void pulseqlib_getBlockDynamicWithoutExtensions(const pulseqlib_SeqFile* seq, pu
     if (!dynamic) {
         return;
     }
-    if (!seq || !getRawBlockContentIDs(seq, blockIndex, &raw, 0)) {
+    if (!seq || !getRawBlockContentIDs(seq, &raw, blockIndex, 0)) 
+    {
         pulseqlib_clear_block_dynamic(dynamic);
         return;
     }
@@ -2357,7 +2377,8 @@ void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, pulseqlib_BlockLabel
     if (!labels) {
         return;
     }
-    if (!seq || !getRawBlockContentIDs(seq, blockIndex, &raw, 1)) {
+    if (!seq || !getRawBlockContentIDs(seq, &raw, blockIndex, 1))
+     {
         pulseqlib_clear_block_labels(labels);
         return;
     }
@@ -2382,7 +2403,7 @@ void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block,
         return; /* Invalid inputs */
     }
 
-    if (!getRawBlockContentIDs(seq, blockIndex, &rawBlock, 1)) {
+    if (!getRawBlockContentIDs(seq, &rawBlock, blockIndex, 1)) {
         return;
     }
 
@@ -2418,20 +2439,20 @@ float pulseqlib_getGradLibraryMaxAmplitude(const pulseqlib_SeqFile* seq) {
 }
 
 typedef struct {
-    unsigned long long hash;
+    size_t hash;
     int row_index;
     int label;
     char used;
 } HashEntry;
 
-static unsigned long long hash_row(const int *row, const int numCols)
+static size_t hash_row(const int *row, const int numCols)
 {
-    unsigned long long h = 1469598103934665603ULL;
+    size_t h = 2166136261UL;
     int i;
 
     for (i = 0; i < numCols; ++i) {
-        h ^= (unsigned long long)row[i];
-        h *= 1099511628211ULL;
+        h ^= (size_t)row[i];
+        h *= 16777619UL;
     }
     return h;
 }
@@ -2453,56 +2474,402 @@ static size_t next_pow2(size_t x)
     return p;
 }
 
+/* Number of columns for each event type (static parameters only) */
+#define RF_DEF_COLS   4  /* mag_id, phase_id, time_id, delay */
+#define RF_PARAMS_COLS 3 /* amplitude, freqOffset, phaseOffset */
+#define GRAD_DEF_COLS 6  /* type, riseTime/first, flatTime/last, fallTime/waveLen, time_id, delay */
+#define ADC_DEF_COLS  2  /* numSamples, dwellTime */
+#define ADC_PARAMS_COLS 2 /* freqOffset, phaseOffset */
+#define BLOCK_DEF_COLS   5 /* duration, uniqueRF, uniqueGx, uniqueGy, uniqueGz */
+
+
 /**
- * @brief Obtain unique blocks in sequence.
+ * @brief Core deduplication function for integer row arrays.
  *
- * @param[in] seq Pointer to the SeqFile structure.
- * @param[in, out] uniqueBlockDefs Array of K unique block definitions, each element containing the index of first occurrence.
- * @param[in, out] uniqueBlockTable Array of N elements mapping each block to its unique definition index.
- * @param[in, out] blockDurations_us Array of N elements containing the duration of each block in microseconds.
- * @param[in, out] pureDelayBlock Mask of N elements indicating which unique blocks are pure delays (1) or not (0).
- * @param[in, out] numPrep Number of preparation blocks before imaging blocks.
- * @param[in, out] numCooldown Number of cooldown blocks after imaging blocks.
- * @param[in] index_min Minimum block index to consider (inclusive). If negative, starts from 0.
- * @param[in] index_max Maximum block index to consider (exclusive). If negative, goes to seq->numBlocks.
- * @return The number of unique blocks K.
+ * @param[in, out] uniqueDefs Array of indices of unique rows (size >= numRows).
+ * @param[in, out] eventTable Mapping from row index to unique ID (size >= numRows).
+ * @param[in]  numRows Number of rows.
+ * @param[in]  numCols Number of columns per row.
+ * @param[in]  intRows Flattened array of integer rows (numRows * numCols).
+ * @return Number of unique rows found.
+ */
+static int deduplicate_int_rows(int* uniqueDefs, int* eventTable, int numRows, int numCols, const int* intRows)
+{
+    HashEntry* table;
+    size_t table_size, mask, pos, t;
+    size_t h;
+    int numUnique, r;
+
+    if (numRows <= 0) return 0;
+
+    table_size = next_pow2((size_t)numRows * 2);
+    mask = table_size - 1;
+
+    table = (HashEntry*)ALLOC(table_size * sizeof(HashEntry));
+    if (!table) return 0;
+
+    for (t = 0; t < table_size; ++t) {
+        table[t].used = 0;
+    }
+
+    numUnique = 0;
+
+    for (r = 0; r < numRows; ++r) {
+        h = hash_row(&intRows[r * numCols], numCols);
+        pos = h & mask;
+
+        while (1) {
+            if (!table[pos].used) {
+                table[pos].used = 1;
+                table[pos].hash = h;
+                table[pos].row_index = r;
+                table[pos].label = numUnique;
+
+                uniqueDefs[numUnique] = r;
+                eventTable[r] = numUnique;
+                numUnique++;
+                break;
+            }
+
+            if (table[pos].hash == h &&
+                array_equal(&intRows[r * numCols],
+                            &intRows[table[pos].row_index * numCols],
+                            numCols)) {
+                eventTable[r] = table[pos].label;
+                break;
+            }
+
+            pos = (pos + 1) & mask;
+        }
+    }
+
+    FREE(table);
+    return numUnique;
+}
+
+
+/**
+ * @brief Build RF static parameter row for deduplication.
+ */
+static void build_rf_def_row(const pulseqlib_SeqFile* seq, int rfIdx, int* row, float* params)
+{
+    float gamma = seq->opts.gamma;
+    float B0 = seq->opts.B0;
+    float* rf = seq->rfLibrary[rfIdx];
+    float ppm_to_hz = 1e-6 * gamma * B0;
+    row[0] = (int)rf[1]; /* mag_id */
+    row[1] = (int)rf[2]; /* phase_id */
+    row[2] = (int)rf[3]; /* time_id */
+    row[3] = (int)rf[5]; /* delay */
+    params[0] = rf[0];   /* amplitude */
+    params[1] = rf[8] + ppm_to_hz * rf[6];   /* freqPPM */
+    params[2] = rf[9] + ppm_to_hz * rf[7];   /* phasePPM */
+}
+
+/**
+ * @brief Deduplicate RF library by static parameters only.
+ *
+ * @param[in]  seq         Pointer to the sequence file.
+ * @param[in, out] rfDefinitions  Array of RF definitions (size >= numRows).
+ * @param[in, out] rfTable  Mapping from RF index to unique RF ID (size >= numRows).
+ * @return Number of unique RF events found.
+ */
+static int deduplicate_rf_library(const pulseqlib_SeqFile* seq, pulseqlib_RfDefinition* rfDefinitions, pulseqlib_RfTableElement* rfTable)
+{
+    int (*intRows)[RF_DEF_COLS];
+    float (*params)[RF_PARAMS_COLS];
+    int* uniqueDefs;
+    int* eventTable;
+    int numUnique;
+    int numRows = seq->rfLibrarySize;
+    int i;
+
+    /* Prepare temporary variables */
+    if (numRows <= 0) return 0;
+    intRows = ALLOC(numRows * sizeof(*intRows));
+    if (!intRows) return 0;
+    params = ALLOC(numRows * sizeof(*params));
+    if (!params) {
+        FREE(intRows);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    uniqueDefs = (int*)ALLOC(numRows * sizeof(int));
+    if (!uniqueDefs) {
+        FREE(intRows);
+        FREE(params);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    eventTable = (int*)ALLOC(numRows * sizeof(int));
+    if (!eventTable) {
+        FREE(intRows);
+        FREE(uniqueDefs);
+        FREE(params);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    for (i = 0; i < numRows; ++i) {
+        build_rf_def_row(seq, i, intRows[i], params[i]);
+    }
+
+    /* Deduplicate */
+    numUnique = deduplicate_int_rows(uniqueDefs, eventTable, numRows, RF_DEF_COLS, (const int*)intRows);
+
+    /* Copy inside rfDefinitions */
+    for (i = 0; i < numUnique; ++i) {
+        rfDefinitions[i].ID = uniqueDefs[i];
+        rfDefinitions[i].magShapeID = (int)intRows[uniqueDefs[i]][0];
+        rfDefinitions[i].phaseShapeID = (int)intRows[uniqueDefs[i]][1];
+        rfDefinitions[i].timeShapeID = (int)intRows[uniqueDefs[i]][2];
+        rfDefinitions[i].delay = (int)intRows[uniqueDefs[i]][3];
+    }
+    FREE(uniqueDefs);
+
+    /* Copy inside rfTable */
+    for (i = 0; i < numRows; ++i) {
+        rfTable[i].ID = eventTable[i];
+        rfTable[i].amplitude = params[i][0];
+        rfTable[i].freqOffset = params[i][1];
+        rfTable[i].phaseOffset = params[i][2];
+    }
+    FREE(intRows);
+    FREE(eventTable);
+    FREE(params);
+
+    return numUnique;
+}
+
+
+/**
+ * @brief Build Grad static parameter row for deduplication.
+ */
+static void build_grad_def_row(const pulseqlib_SeqFile* seq, int gradIdx, int* row, float* params)
+{
+    float* grad = seq->gradLibrary[gradIdx];
+    int gradType = (int)grad[0];
+    int waveId;
+
+    row[0] = gradType;           /* type */
+    row[1] = (int)grad[2];       /* riseTime / first */
+    row[2] = (int)grad[3];       /* flatTime / last */
+
+    if (gradType == 0) {
+        /* trapezoid: index 4 is fallTime */
+        row[3] = (int)grad[4];   /* fallTime */
+    } else {
+        /* arbitrary: index 4 is wave_id, replace with numUncompressedSamples */
+        waveId = (int)grad[4];
+        if (waveId > 0 && seq->isShapesLibraryParsed && waveId <= seq->shapesLibrarySize) {
+            row[3] = seq->shapesLibrary[waveId - 1].numUncompressedSamples;
+        } else {
+            row[3] = 0;
+        }
+    }
+    row[4] = (int)grad[5];       /* time_id */
+    row[5] = (int)grad[6];       /* delay */
+    *params = grad[1];          /* amplitude */
+}
+
+
+/**
+ * @brief Deduplicate Grad library by static parameters only.
+ *
+ * @param[in]  seq         Pointer to the sequence file.
+ * @param[in, out] gradDefinitions  Array of Grad definitions (size >= numRows).
+ * @param[in, out] gradTable  Mapping from Grad index to unique Grad ID (size >= numRows).
+ * @return Number of unique Grad events found.
+ */
+static int deduplicate_grad_library(const pulseqlib_SeqFile* seq, pulseqlib_GradDefinition* gradDefinitions, pulseqlib_GradTableElement* gradTable)
+{
+    int (*intRows)[GRAD_DEF_COLS];
+    float* params;
+    int* uniqueDefs;
+    int* eventTable;
+    int numUnique;
+    int numRows = seq->gradLibrarySize;
+    int i;
+
+    /* Prepare temporary variables */
+    if (numRows <= 0) return 0;
+    intRows = ALLOC(numRows * sizeof(*intRows));
+    if (!intRows) return 0;
+    params = (float*)ALLOC(numRows * sizeof(float));
+    if (!params) {
+        FREE(intRows);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    uniqueDefs = (int*)ALLOC(numRows * sizeof(int));
+    if (!uniqueDefs) {
+        FREE(intRows);
+        FREE(params);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    eventTable = (int*)ALLOC(numRows * sizeof(int));
+    if (!eventTable) {
+        FREE(intRows);
+        FREE(uniqueDefs);
+        FREE(params);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    for (i = 0; i < numRows; ++i) {
+        build_grad_def_row(seq, i, intRows[i], &params[i]);
+    }
+
+    /* Deduplicate */
+    numUnique = deduplicate_int_rows(uniqueDefs, eventTable, numRows, GRAD_DEF_COLS, (const int*)intRows);
+
+    /* Copy inside gradDefinitions */
+    for (i = 0; i < numUnique; ++i) {
+        gradDefinitions[i].ID = uniqueDefs[i];
+        gradDefinitions[i].type = (int)intRows[uniqueDefs[i]][0];
+        gradDefinitions[i].riseTimeOrFirst = (int)intRows[uniqueDefs[i]][1];
+        gradDefinitions[i].flatTimeOrLast = (int)intRows[uniqueDefs[i]][2];
+        gradDefinitions[i].fallTimeOrNumUncompressedSamples = (int)intRows[uniqueDefs[i]][3];
+        gradDefinitions[i].unusedOrTimeShapeID = (int)intRows[uniqueDefs[i]][4];
+        gradDefinitions[i].delay = (int)intRows[uniqueDefs[i]][5];
+    }
+    FREE(uniqueDefs);
+
+    /* Copy inside gradTable */
+    for (i = 0; i < numRows; ++i) {
+        gradTable[i].ID = eventTable[i];
+        gradTable[i].amplitude = params[i];
+    }
+    FREE(intRows);
+    FREE(eventTable);
+    FREE(params);
+
+    return numUnique;
+}
+
+
+/**
+ * @brief Build ADC static parameter row for deduplication.
+ */
+static void build_adc_def_row(const pulseqlib_SeqFile* seq, int adcIdx, int* row, float* params)
+{
+    float gamma = seq->opts.gamma;
+    float B0 = seq->opts.B0;
+    float* adc = seq->adcLibrary[adcIdx];
+    float ppm_to_hz = 1e-6 * gamma * B0;
+    row[0] = (int)adc[0]; /* numSamples */
+    row[1] = (int)adc[1]; /* dwellTime */
+    row[2] = (int)adc[2]; /* delay */
+    params[0] = adc[5] + ppm_to_hz * adc[3];   /* freqPPM */
+    params[1] = adc[6] + ppm_to_hz * adc[4];   /* phasePPM */
+}
+
+
+/**
+ * @brief Deduplicate ADC library by static parameters only.
+ *
+ * @param[in]  seq         Pointer to the sequence file.
+ * @param[out] adcDefinitions  Array of indices of unique ADC events (size >= numRows).
+ * @param[out] adcTable  Mapping from ADC index to unique ADC ID (size >= numRows).
+ * @return Number of unique ADC events found.
+ */
+static int deduplicate_adc_library(const pulseqlib_SeqFile* seq, pulseqlib_AdcDefinition* adcDefinitions, pulseqlib_AdcTableElement* adcTable)
+{
+    int (*intRows)[ADC_DEF_COLS];
+    float (*params)[ADC_PARAMS_COLS];
+    int* uniqueDefs;
+    int* eventTable;
+    int numUnique;
+    int numRows = seq->adcLibrarySize;
+    int i;
+
+    /* Prepare temporary variables */
+    if (numRows <= 0) return 0;
+    intRows = ALLOC(numRows * sizeof(*intRows));
+    if (!intRows) return 0;
+    params = ALLOC(numRows * sizeof(*params));
+    if (!params) {
+        FREE(intRows);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    uniqueDefs = (int*)ALLOC(numRows * sizeof(int));
+    if (!uniqueDefs) {
+        FREE(intRows);
+        FREE(params);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    eventTable = (int*)ALLOC(numRows * sizeof(int));
+    if (!eventTable) {
+        FREE(intRows);
+        FREE(uniqueDefs);
+        FREE(params);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    for (i = 0; i < numRows; ++i) {
+        build_adc_def_row(seq, i, intRows[i], params[i]);
+    }
+
+    /* Deduplicate */
+    numUnique = deduplicate_int_rows(uniqueDefs, eventTable, numRows, ADC_DEF_COLS, (const int*)intRows);
+
+    /* Copy inside adcDefinitions */
+    for (i = 0; i < numUnique; ++i) {
+        adcDefinitions[i].ID = uniqueDefs[i];
+        adcDefinitions[i].numSamples = (int)intRows[uniqueDefs[i]][0];
+        adcDefinitions[i].dwellTime = (int)intRows[uniqueDefs[i]][1];
+        adcDefinitions[i].delay = (int)intRows[uniqueDefs[i]][2];
+    }
+    FREE(uniqueDefs);
+
+    /* Copy inside adcTable */
+    for (i = 0; i < numRows; ++i) {
+        adcTable[i].ID = eventTable[i];
+        adcTable[i].freqOffset = params[i][0];
+        adcTable[i].phaseOffset = params[i][1];
+    }
+    FREE(intRows);
+    FREE(eventTable);
+    FREE(params);
+
+    return numUnique;
+}
+
+
+/**
+ * @brief Get unique blocks from a sequence.
+ *
+ * Two-step deduplication:
+ * 1. Deduplicate event libraries (RF, Grad, ADC) by static parameters
+ * 2. Deduplicate blocks using unique event IDs
+ *
+ * @param[in, out] seq                  Pointer to the sequence file.
+ * @param[in, out] seqDesc              Pointer to the sequence descriptor to fill.
+ * @param[in]  index_min            Minimum block index to process (inclusive). If negative, starts from 0.
+ * @param[in]  index_max            Maximum block index to process (exclusive). If negative, processes up to numBlocks.
+ * @return 0 on success, error code otherwise.
  */
 int pulseqlib_getUniqueBlocks(
     const pulseqlib_SeqFile* seq,
-    int* uniqueBlockDefs, 
-    int* uniqueBlockTable,
-    int* blockDurations_us,
-    int* pureDelayBlock,
-    int* numPrep,
-    int* numCooldown,
+    pulseqlib_SequenceDescriptor* seqDesc,
     int index_min, 
     int index_max
 ) {
+    /* Ranges */
     int numBlocks;
     int startIndex, endIndex, rangeCount;
-    int numUniqueBlocks;
-    int (*blockDefinitions)[23];
-    int n, r, idx;
-    int gradType;
-    int waveId;
-    int noRF, noGx, noGy, noGz, noADC, noExt;
+
+    /* Loop counters */
+    int n, r, c;
+
+    /* Auxiliaries for unique block finder */
+    pulseqlib_RawBlock raw;
+    int (*intRows)[BLOCK_DEF_COLS];
+    int *uniqueDefs;
+
+    /* Auxiliaries for preparation and cooldown detection */
+    pulseqlib_BlockLabels labels;
     int hasPrep, hasCooldown;
     int ctrl;
 
-    HashEntry *table;
-    size_t table_size, mask;
-    size_t t;
-    size_t pos;
-    unsigned long long h;
-
-    pulseqlib_BlockLabels labels;
-
     /* Get number of blocks */
-    if (!seq || !uniqueBlockDefs || !uniqueBlockTable) {
-         return 0;
+    if (!seq || !seqDesc) {
+         return PULSEQLIB_ERR_INVALID_ARGUMENT;
      }
     numBlocks = seq->numBlocks;
-    if (numBlocks <= 0 || !seq->blockLibrary) return 0;
+    if (numBlocks <= 0 || !seq->blockLibrary) return PULSEQLIB_ERR_INVALID_ARGUMENT;
 
     /* Determine range of blocks to process */
     startIndex = (index_min < 0) ? 0 : index_min;
@@ -2512,221 +2879,71 @@ int pulseqlib_getUniqueBlocks(
     if (endIndex < startIndex) endIndex = startIndex;
     if (endIndex > numBlocks) endIndex = numBlocks;
     rangeCount = endIndex - startIndex;
+    if (rangeCount <= 0) return PULSEQLIB_ERR_INVALID_ARGUMENT;
 
+    /* Initialize outputs */
     for (n = 0; n < numBlocks; ++n) {
-        uniqueBlockTable[n] = -1;
+        seqDesc->uniqueBlockTable[n] = -1;
+        seqDesc->uniqueBlockDefinitions[n][1] = 0; /* Block duration us */
+        seqDesc->isPureDelayBlock[n] = 0;
     }
-    if (rangeCount <= 0) return 0;
+    seqDesc->trDescriptor.numPrepBlocks = 0;
+    seqDesc->trDescriptor.numCooldownBlocks = 0;
 
+    /* Step 1: Deduplicate event libraries */
+    /* Allocate event tables */
+    if (seq->rfLibrarySize > 0) {
+        deduplicate_rf_library(seq, seqDesc->rfDefinitions, seqDesc->rfTable);
+    }
+
+    if (seq->gradLibrarySize > 0) {
+        deduplicate_grad_library(seq, seqDesc->gradDefinitions, seqDesc->gradTable);
+    }
+
+    if (seq->adcLibrarySize > 0) {
+        deduplicate_adc_library(seq, seqDesc->adcDefinitions, seqDesc->adcTable);
+    }
+
+    /* Step 2: Build block definition matrix using unique event IDs */
     /* Allocate block definition matrix */
-    blockDefinitions = ALLOC(rangeCount * sizeof(*blockDefinitions));
-    if (!blockDefinitions) {
-        return 0;
+    uniqueDefs = (int*)ALLOC(rangeCount * sizeof(int));
+    if (!uniqueDefs) {
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    intRows = ALLOC(rangeCount * sizeof(*intRows));
+    if (!intRows) {
+        FREE(uniqueDefs);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
     }
 
-    /* Build the matrix of block definition */
     for (r = 0; r < rangeCount; ++r) {
         n = startIndex + r;
-        noRF = noGx = noGy = noGz = noADC = noExt = 1;
-
-        /* 1) Duration */
-        blockDurations_us[n] = (int)(seq->blockLibrary[n][0]);
-        blockDefinitions[r][0] = blockDurations_us[n];
-
-        /* 2) RF */
-        idx = (int)(seq->blockLibrary[n][1]) - 1; /* 1-based in file, 0 means none */
-        if (idx >= 0 && seq->rfLibrary && idx < seq->rfLibrarySize) {
-            noRF = 0;
-            blockDefinitions[r][1] = (int)(seq->rfLibrary[idx][1]); /* mag_id */
-            blockDefinitions[r][2] = (int)(seq->rfLibrary[idx][2]); /* phase_id */
-            blockDefinitions[r][3] = (int)(seq->rfLibrary[idx][3]); /* time_id */
-            blockDefinitions[r][4] = (int)(seq->rfLibrary[idx][5]); /* delay */
-        } else {
-            blockDefinitions[r][1] = -1;
-            blockDefinitions[r][2] = -1;
-            blockDefinitions[r][3] = -1;
-            blockDefinitions[r][4] = -1;
+        if (!getRawBlockContentIDs(seq, &raw, n, 0)) {
+            FREE(intRows);
+            FREE(uniqueDefs);
+            return PULSEQLIB_ERR_INVALID_ARGUMENT;
         }
 
-        /* 3) Gx */
-        idx = (int)(seq->blockLibrary[n][2]) - 1; /* 1-based in file, 0 means none */
-        if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
-            noGx = 0;
-            gradType = (int)(seq->gradLibrary[idx][0]);
-            blockDefinitions[r][5] = gradType;  /* type */
-            blockDefinitions[r][6] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
-            blockDefinitions[r][7] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
-            if (gradType == 0) {
-                /* trapezoid: index 4 is fallTime */
-                blockDefinitions[r][8] = (int)(seq->gradLibrary[idx][4]);  /* fallTime */
-            } else {
-                /* arbitrary: index 4 is wave_id, replace with numUncompressedSamples */
-                waveId = (int)(seq->gradLibrary[idx][4]);
-                if (waveId > 0 && seq->isShapesLibraryParsed && waveId <= seq->shapesLibrarySize) {
-                    blockDefinitions[r][8] = seq->shapesLibrary[waveId - 1].numUncompressedSamples;
-                } else {
-                    blockDefinitions[r][8] = 0;
-                }
-            }
-            blockDefinitions[r][9] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
-            blockDefinitions[r][10] = (int)(seq->gradLibrary[idx][6]); /* delay */
-        } else {
-            blockDefinitions[r][5] = -1;
-            blockDefinitions[r][6] = -1;
-            blockDefinitions[r][7] = -1;
-            blockDefinitions[r][8] = -1;
-            blockDefinitions[r][9] = -1;
-            blockDefinitions[r][10] = -1;
-        }
-
-        /* 4) Gy */
-        idx = (int)(seq->blockLibrary[n][3]) - 1; /* 1-based in file, 0 means none */
-        if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
-            noGy = 0;
-            gradType = (int)(seq->gradLibrary[idx][0]);
-            blockDefinitions[r][11] = gradType;  /* type */
-            blockDefinitions[r][12] = (int)(seq->gradLibrary[idx][2]);  /* riseTime / first */
-            blockDefinitions[r][13] = (int)(seq->gradLibrary[idx][3]);  /* flatTime / last */
-            if (gradType == 0) {
-                /* trapezoid: index 4 is fallTime */
-                blockDefinitions[r][14] = (int)(seq->gradLibrary[idx][4]);  /* fallTime */
-            } else {
-                /* arbitrary: index 4 is wave_id, replace with numUncompressedSamples */
-                waveId = (int)(seq->gradLibrary[idx][4]);
-                if (waveId > 0 && seq->isShapesLibraryParsed && waveId <= seq->shapesLibrarySize) {
-                    blockDefinitions[r][14] = seq->shapesLibrary[waveId - 1].numUncompressedSamples;
-                } else {
-                    blockDefinitions[r][14] = 0;
-                }
-            }
-            blockDefinitions[r][15] = (int)(seq->gradLibrary[idx][5]);  /* time_id */
-            blockDefinitions[r][16] = (int)(seq->gradLibrary[idx][6]); /* delay */
-        } else {
-            blockDefinitions[r][11] = -1;
-            blockDefinitions[r][12] = -1;
-            blockDefinitions[r][13] = -1;
-            blockDefinitions[r][14] = -1;
-            blockDefinitions[r][15] = -1;
-            blockDefinitions[r][16] = -1;
-        }
-
-        /* 5) Gz */
-        idx = (int)(seq->blockLibrary[n][4]) - 1; /* 1-based in file, 0 means none */
-        if (idx >= 0 && seq->gradLibrary && idx < seq->gradLibrarySize) {
-            noGz = 0;
-            gradType = (int)(seq->gradLibrary[idx][0]);
-            blockDefinitions[r][17] = gradType; /* type */
-            blockDefinitions[r][18] = (int)(seq->gradLibrary[idx][2]); /* riseTime / first */
-            blockDefinitions[r][19] = (int)(seq->gradLibrary[idx][3]); /* flatTime / last */
-            if (gradType == 0) {
-                /* trapezoid: index 4 is fallTime */
-                blockDefinitions[r][20] = (int)(seq->gradLibrary[idx][4]); /* fallTime */
-            } else {
-                /* arbitrary: index 4 is wave_id, replace with numUncompressedSamples */
-                waveId = (int)(seq->gradLibrary[idx][4]);
-                if (waveId > 0 && seq->isShapesLibraryParsed && waveId <= seq->shapesLibrarySize) {
-                    blockDefinitions[r][20] = seq->shapesLibrary[waveId - 1].numUncompressedSamples;
-                } else {
-                    blockDefinitions[r][20] = 0;
-                }
-            }
-            blockDefinitions[r][21] = (int)(seq->gradLibrary[idx][5]); /* time_id */
-            blockDefinitions[r][22] = (int)(seq->gradLibrary[idx][6]); /* delay */
-        } else {
-            blockDefinitions[r][17] = -1;
-            blockDefinitions[r][18] = -1;
-            blockDefinitions[r][19] = -1;
-            blockDefinitions[r][20] = -1;
-            blockDefinitions[r][21] = -1;
-            blockDefinitions[r][22] = -1;
-        }
-
-        /* 6) ADC */
-        idx = (int)(seq->blockLibrary[n][5]) - 1; /* 1-based in file, 0 means none */
-        if (idx >= 0 && seq->adcLibrary && idx < seq->adcLibrarySize) {
-            noADC = 0;
-        } else {
-            noADC = 1;
-        }
-
-        /* 7) Extensions */
-        idx = (int)(seq->blockLibrary[n][6]) - 1;
-        if (idx >= 0 && seq->extensionsLibrary && idx < seq->extensionsLibrarySize) {
-            noExt = 0;
-        } else {
-            noExt = 1;
-        }
-
-        /* Check for pure delay block */
-        if (noRF && noGx && noGy && noGz && noADC && noExt) {
-            pureDelayBlock[r] = 1;
-        } else {
-            pureDelayBlock[r] = 0;
-        }
+        /* Map event indices to unique event IDs */
+        intRows[r][0] = raw.block_duration >= 0 ? raw.block_duration : 0;
+        intRows[r][1] = (raw.rf >= 0 && seqDesc->rfTable) ? seqDesc->rfTable[raw.rf].ID : -1;
+        intRows[r][2] = (raw.gx >= 0 && seqDesc->gradTable) ? seqDesc->gradTable[raw.gx].ID : -1;
+        intRows[r][3] = (raw.gy >= 0 && seqDesc->gradTable) ? seqDesc->gradTable[raw.gy].ID : -1;
+        intRows[r][4] = (raw.gz >= 0 && seqDesc->gradTable) ? seqDesc->gradTable[raw.gz].ID : -1;
     }
 
-    /* Pure delay are all equals regarding block uniqueness */
-    for (r = 0; r < rangeCount; ++r) {
-        if (pureDelayBlock[r]) {
-            blockDefinitions[r][0] = 0; /* Set duration to zero for uniqueness check */
+    /* Step 3: Deduplicate blocks */
+    seqDesc->numUniqueBlocks = deduplicate_int_rows(uniqueDefs, seqDesc->uniqueBlockTable, rangeCount, BLOCK_DEF_COLS, (const int*)intRows);
+
+    /* Copy unique block definitions */
+    for (n = 0; n < seqDesc->numUniqueBlocks; ++n) {
+        seqDesc->uniqueBlockDefinitions[n][0] = uniqueDefs[n];
+        for (c = 0; c < BLOCK_DEF_COLS; ++c) {
+            seqDesc->uniqueBlockDefinitions[n][c+1] = intRows[uniqueDefs[n]][c];
         }
     }
-
-    /* -------- HASH DEDUPLICATION -------- */
-    table_size = next_pow2((size_t)rangeCount * 2);
-    mask = table_size - 1;
-
-    table = (HashEntry*)ALLOC(table_size * sizeof(HashEntry));
-    if (!table) {
-        FREE(blockDefinitions);
-        FREE(pureDelayBlock);
-        return 0;
-    }
-
-    /* Initialize hash to zero */
-    for (t = 0; t < table_size; ++t) {
-        table[t].used = 0;
-        table[t].hash = 0;
-        table[t].row_index = 0;
-        table[t].label = 0;
-    }
-
-    numUniqueBlocks = 0;
-
-    for (r = 0; r < rangeCount; ++r) {
-        h = hash_row(blockDefinitions[r], 23);
-        pos = (size_t)h & mask;
-        n = startIndex + r;
-
-        while (1) {
-            if (!table[pos].used) {
-                table[pos].used = 1;
-                table[pos].hash = h;
-                table[pos].row_index = r;
-                table[pos].label = numUniqueBlocks;
-
-                uniqueBlockDefs[numUniqueBlocks] = n;
-                uniqueBlockTable[n] = numUniqueBlocks;
-
-                numUniqueBlocks++;
-                break;
-            }
-
-            if (table[pos].hash == h && array_equal(blockDefinitions[r], blockDefinitions[table[pos].row_index], 23)) {
-                uniqueBlockTable[n] = table[pos].label;
-                break;
-            }
-
-            pos = (pos + 1) & mask;
-        }
-    }
-
-    FREE(table);
-    FREE(blockDefinitions);
-
-    /* Determine number of blocks for preparation and cooldown */
-    *numPrep = 0;
-    *numCooldown = 0;
+    FREE(intRows);
+    FREE(uniqueDefs);
 
     /* Determine If sequence has preparation and cooldown sections */
     hasPrep = 0;
@@ -2742,23 +2959,23 @@ int pulseqlib_getUniqueBlocks(
     }
 
     if (!hasPrep && !hasCooldown) {
-        return numUniqueBlocks;
+        return PULSEQLIB_OK;
     }
 
     /* Preparation must start at first block */
     if (hasPrep == 1) {
         pulseqlib_getBlockLabels(seq, &labels, 0);
         if (labels.flag.once != 1) {
-            return 0;
+            return PULSEQLIB_ERR_INVALID_PREP_POSITION;
         }
 
         /* Search until we find flags.once == 0 */
         ctrl = 0;
-        *numPrep = 1;
-        while (ctrl == 0 && *numPrep < numBlocks) {
-            pulseqlib_getBlockLabels(seq, &labels, *numPrep);
+        seqDesc->trDescriptor.numPrepBlocks = 1;
+        while (ctrl == 0 && seqDesc->trDescriptor.numPrepBlocks < numBlocks) {
+            pulseqlib_getBlockLabels(seq, &labels, seqDesc->trDescriptor.numPrepBlocks);
             if (labels.flag.once != 0) {
-                (*numPrep)++;
+                (seqDesc->trDescriptor.numPrepBlocks)++;
             } else {
                 ctrl = 1;
             }
@@ -2769,18 +2986,22 @@ int pulseqlib_getUniqueBlocks(
     if (hasCooldown == 1) {
         /* Search until we find flags.once == 2 */
         ctrl = 0;
-        *numCooldown = 1;
-        while (ctrl == 0 && *numCooldown < numBlocks) {
-            pulseqlib_getBlockLabels(seq, &labels, numBlocks - 1 - *numCooldown);
+        seqDesc->trDescriptor.numCooldownBlocks = 0;
+        while (ctrl == 0 && seqDesc->trDescriptor.numCooldownBlocks < numBlocks) {
+            pulseqlib_getBlockLabels(seq, &labels, numBlocks - 1 - seqDesc->trDescriptor.numCooldownBlocks);
             if (labels.flag.once != 2) {
-                (*numCooldown)++;
+                (seqDesc->trDescriptor.numCooldownBlocks)++;
             } else {
                 ctrl = 1;
             }
         }
+        if (ctrl == 0) /* Cooldown section must last until the end, if present */
+        { 
+            return PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION;
+        }
     }
 
-    return numUniqueBlocks;
+    return PULSEQLIB_OK;
 }
 
 #define PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US 100000 /* 100 ms */
@@ -3196,7 +3417,7 @@ static int findSegmentsInTRInternal(
     }
 
     /* Check that first block begins with "zero" gradients */
-    getRawBlockContentIDs(seq, trStart, &raw, 0);
+    getRawBlockContentIDs(seq, &raw, trStart, 0);
     g[0] = raw.gx;
     g[1] = raw.gy;
     g[2] = raw.gz;
@@ -3221,7 +3442,7 @@ static int findSegmentsInTRInternal(
     }
 
     /* Check that last block ends with "zero" gradients */
-    getRawBlockContentIDs(seq, trStart + numBlocksInTR - 1, &raw, 0);
+    getRawBlockContentIDs(seq, &raw, trStart + numBlocksInTR - 1, 0);
     g[0] = raw.gx;
     g[1] = raw.gy;
     g[2] = raw.gz;
@@ -3258,7 +3479,7 @@ static int findSegmentsInTRInternal(
     {
         for (n = trStart + 1; n < trStart + numBlocksInTR - 1; ++n) 
         {
-            if (!getRawBlockContentIDs(seq, n, &raw, 0)) {
+            if (!getRawBlockContentIDs(seq, &raw, n, 0)) {
                 if (diag) {
                     diag->code = PULSEQLIB_ERR_INVALID_ARGUMENT;
                     diag->blockIndex = n;
@@ -3268,7 +3489,7 @@ static int findSegmentsInTRInternal(
                 return 0;
             }
 
-            if (!getRawBlockContentIDs(seq, n + 1, &raw_next, 0)) {
+            if (!getRawBlockContentIDs(seq, &raw_next, n + 1, 0)) {
                 if (diag) {
                     diag->code = PULSEQLIB_ERR_INVALID_ARGUMENT;
                     diag->blockIndex = n + 1;
