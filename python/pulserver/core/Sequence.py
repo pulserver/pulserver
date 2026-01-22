@@ -114,9 +114,10 @@ def get_unique_blocks(seq: PulserverSequence) -> SimpleNamespace:
     -------
     SimpleNamespace
         Result containing:
-        - unique_block_table: list mapping block index -> unique block ID
-        - is_pure_delay_block: list indicating pure delay blocks
-        - unique_block_definitions: list of unique block definitions
+        - num_blocks: total number of blocks in the sequence
+        - num_unique_blocks: number of unique block definitions
+        - block_table: list of per-block info (maps block index -> block metadata)
+        - block_definitions: list of unique block definitions
         - rf_definitions: list of unique RF definitions
         - rf_table: list mapping RF index -> unique RF params
         - grad_definitions: list of unique gradient definitions
@@ -139,14 +140,17 @@ def get_unique_blocks(seq: PulserverSequence) -> SimpleNamespace:
         raise RuntimeError(f"Failed to get unique blocks: {result_dict.get('error', 'unknown error')}")
     
     result = SimpleNamespace(
-        unique_block_table=result_dict["unique_block_table"],
-        is_pure_delay_block=result_dict["is_pure_delay_block"],
+        num_blocks=result_dict["num_blocks"],
         num_unique_blocks=result_dict["num_unique_blocks"],
-        unique_block_definitions=result_dict["unique_block_definitions"],
+        block_table=result_dict["block_table"],
+        block_definitions=result_dict["block_definitions"],
+        num_unique_rfs=result_dict["num_unique_rfs"],
         rf_definitions=result_dict["rf_definitions"],
         rf_table=result_dict["rf_table"],
+        num_unique_grads=result_dict["num_unique_grads"],
         grad_definitions=result_dict["grad_definitions"],
         grad_table=result_dict["grad_table"],
+        num_unique_adcs=result_dict["num_unique_adcs"],
         adc_definitions=result_dict["adc_definitions"],
         adc_table=result_dict["adc_table"],
         tr_descriptor=SimpleNamespace(**result_dict["tr_descriptor"]),
@@ -185,20 +189,22 @@ def find_tr(seq: PulserverSequence, num_reps: int = 1, raise_on_error: bool = Tr
     # Get unique blocks result (includes TR descriptor from prep/cooldown detection)
     blocks_result = get_unique_blocks(seq)
     
-    unique_table = blocks_result.unique_block_table
+    # Extract unique block table from block_table (the ID field maps block -> unique block)
+    unique_table = [entry["id"] for entry in blocks_result.block_table]
     tr_info = blocks_result.tr_descriptor
     num_prep = tr_info.num_prep_blocks
     num_cooldown = tr_info.num_cooldown_blocks
     
-    # Build block durations from unique block definitions
+    # Build block durations from block definitions
     block_durations_us = []
-    for i, block_id in enumerate(unique_table):
-        if block_id >= 0 and block_id < len(blocks_result.unique_block_definitions):
-            block_durations_us.append(blocks_result.unique_block_definitions[block_id]["duration_us"])
+    for block_id in unique_table:
+        if block_id >= 0 and block_id < len(blocks_result.block_definitions):
+            block_durations_us.append(blocks_result.block_definitions[block_id]["duration_us"])
         else:
             block_durations_us.append(0)
     
-    pure_delay_block = blocks_result.is_pure_delay_block
+    # Extract pure delay flags from block_table
+    pure_delay_block = [entry["pure_delay_flag"] for entry in blocks_result.block_table]
     
     tr_result = _find_tr_in_sequence(
         unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown
@@ -295,20 +301,22 @@ def find_segments_in_tr(seq: PulserverSequence, raise_on_error: bool = True) -> 
     # Get unique blocks result
     blocks_result = get_unique_blocks(seq)
     
-    unique_table = blocks_result.unique_block_table
+    # Extract unique block table from block_table (the ID field maps block -> unique block)
+    unique_table = [entry["id"] for entry in blocks_result.block_table]
     tr_info = blocks_result.tr_descriptor
     num_prep = tr_info.num_prep_blocks
     num_cooldown = tr_info.num_cooldown_blocks
     
-    # Build block durations from unique block definitions
+    # Build block durations from block definitions
     block_durations_us = []
-    for i, block_id in enumerate(unique_table):
-        if block_id >= 0 and block_id < len(blocks_result.unique_block_definitions):
-            block_durations_us.append(blocks_result.unique_block_definitions[block_id]["duration_us"])
+    for block_id in unique_table:
+        if block_id >= 0 and block_id < len(blocks_result.block_definitions):
+            block_durations_us.append(blocks_result.block_definitions[block_id]["duration_us"])
         else:
             block_durations_us.append(0)
     
-    pure_delay_block = blocks_result.is_pure_delay_block
+    # Extract pure delay flags from block_table
+    pure_delay_block = [entry["pure_delay_flag"] for entry in blocks_result.block_table]
     
     # Find TR pattern
     tr_result = _find_tr_in_sequence(

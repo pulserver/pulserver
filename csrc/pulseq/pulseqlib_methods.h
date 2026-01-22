@@ -69,51 +69,22 @@ int pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath);
 int pulseqlib_readSeqFromBuffer(pulseqlib_SeqFile* seq, FILE* f);
 
 /* Getters - to mimic OOP *outputs = obj.func(input), we do func(obj, *outputs, *inputs) */
-void pulseqlib_getBlockStatic(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex);
-void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, pulseqlib_BlockDynamic* dynamic, const int blockIndex);
-void pulseqlib_getBlockDynamicWithoutExtensions(const pulseqlib_SeqFile* seq, pulseqlib_BlockDynamic* dynamic, const int blockIndex);
-void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, pulseqlib_BlockLabels* labels, const int blockIndex);
 void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex);
 float pulseqlib_getGradLibraryMaxAmplitude(const pulseqlib_SeqFile* seq);
 
-/**
- * @brief Get human-readable error message for an error code.
- * 
- * @param code The error code.
- * @return Static string describing the error. Never returns NULL.
- */
 const char* pulseqlib_getErrorMessage(int code);
 
-/**
- * @brief Get a hint message suggesting how to fix the error.
- * 
- * @param code The error code.
- * @return Static string with suggestions. Never returns NULL.
- */
 const char* pulseqlib_getErrorHint(int code);
 
-/**
- * @brief Initialize diagnostic struct to default values.
- */
 void pulseqlib_diagnosticInit(pulseqlib_Diagnostic* diag);
 
 /* Segment-specific functions */
-int pulseqlib_getUniqueBlocks(
-  const pulseqlib_SeqFile* seq, 
-  pulseqlib_SequenceDescriptor* seqDesc,
-  int index_min, 
-  int index_max
-);
+int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDescriptor* seqDesc);
 
 int pulseqlib_findTRInSequence(
   pulseqlib_TRdescriptor* trDesc,
   pulseqlib_Diagnostic* diag,
-  int numBlocks,
-  int* uniqueBlockTable,
-  int* blockDurations_us,
-  int* pureDelayBlock,
-  int numPrep,
-  int numCooldown
+  pulseqlib_SequenceDescriptor* seqDesc
 );
 
 int pulseqlib_findSegmentsInTR(

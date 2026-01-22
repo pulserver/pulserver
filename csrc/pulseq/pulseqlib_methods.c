@@ -123,6 +123,8 @@ const char* pulseqlib_getErrorMessage(int code) {
             return "Invalid preparation block position";
         case PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION:
             return "Invalid cooldown block position";
+        case PULSEQLIB_ERR_INVALID_ONCE_FLAGS:
+            return "ONCE flags were found outside preparation/cooldown sections";
         
         /* TR detection errors */
         case PULSEQLIB_ERR_TR_NO_BLOCKS:
@@ -163,6 +165,12 @@ const char* pulseqlib_getErrorHint(int code) {
         case PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION:
             return "Ensure that the cooldown section is marked with ONCE labels "
                    "and ends at the last block of the sequence.";
+
+        case PULSEQLIB_ERR_INVALID_ONCE_FLAGS:
+            return "Ensure that ONCE flags are only used in preparation and cooldown sections.";
+
+        case PULSEQLIB_ERR_TR_NO_IMAGING_REGION:
+            return "Make sure to use ONCE flags either at beginning (preparation) or end (cooldown) of the sequence.";
         
         case PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN:
             return "This often occurs when phase-encoding gradients are created inside "
@@ -170,13 +178,7 @@ const char* pulseqlib_getErrorHint(int code) {
                    "events ONCE outside the loop and use 'scale' parameter to vary amplitude. "
                    "Example: use seq.add_block(gx=make_trapezoid(..., scale=pe_scale[n])) "
                    "rather than seq.add_block(gx=make_trapezoid(..., amplitude=pe_amp[n]))";
-        
-        case PULSEQLIB_ERR_TR_PATTERN_MISMATCH:
-            return "The sequence has a repeating structure but some TRs differ. "
-                   "Check for conditional logic inside the TR loop that creates "
-                   "different block structures (e.g., navigator pulses, GRAPPA ACS lines). "
-                   "Consider marking such variations with ONCE labels for prep/cooldown.";
-        
+                
         case PULSEQLIB_ERR_SEG_NONZERO_START_GRAD:
         case PULSEQLIB_ERR_SEG_NONZERO_END_GRAD:
             return "Each segment must begin and end with gradient amplitudes that can "
@@ -185,9 +187,8 @@ const char* pulseqlib_getErrorHint(int code) {
         
         case PULSEQLIB_ERR_TR_PREP_TOO_LONG:
         case PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG:
-            return "The preparation or cooldown section is too long and differs from "
-                   "the main TR pattern. If this is intentional (e.g., inversion recovery), "
-                   "ensure it is marked with appropriate ONCE labels.";
+            return "The preparation or cooldown section differs from the main TR pattern and is too long to be safe."
+                   "If this is intentional (e.g., steady-state preparation), ensure it is marked with appropriate ONCE labels.";
         
         default:
             return "Check sequence design for structural consistency.";
@@ -441,8 +442,8 @@ int initRfShimLibrary(FILE* f, long offset, pulseqlib_RfShimEntry** target, int*
 }
 
 
-typedef struct {
-    int size;         /**< Number of values to scale */
+typedef struct Scale {
+    int size;  /**< Number of values to scale */
     const float* values; /**< Array of scaling factors */
 } Scale;
 
@@ -823,12 +824,16 @@ void readGradLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     long offsets[2] = { seq->offsets.grad, seq->offsets.trap };
     int numSections = 0;
     Scale gradScale;
-    gradScale.size = 6;
-    gradScale.values = (float[]){ 1, 1, 1, 1, 1, 1 };
+    static const float gradScaleValues[6] = { 1, 1, 1, 1, 1, 1 };
     Scale trapScale;
-    trapScale.size = 5;
-    trapScale.values = (float[]){ 1, 1, 1, 1, 1 };
+    static const float trapScaleValues[5] = { 1, 1, 1, 1, 1 };
     const char* sections[] = { "[GRADIENTS]", "[TRAP]" };
+
+    gradScale.size = 6;
+    gradScale.values = gradScaleValues;
+    trapScale.size = 5;
+    trapScale.values = trapScaleValues;
+
 
     if (seq->isGradLibraryParsed) return;
 
@@ -873,9 +878,11 @@ void readGradLibrary(pulseqlib_SeqFile* seq, FILE* f) {
 void readAdcLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     int ret;
     Scale adcScale;
-    adcScale.size = 8;
-    adcScale.values = (float[]){1, 1, 1, 1, 1, 1, 1, 1};
+    static const float adcScaleValues[8] = { 1, 1, 1, 1, 1, 1, 1, 1 };
     const char* adc_section[] = {"[ADC]"};
+
+    adcScale.size = 8;
+    adcScale.values = adcScaleValues;
 
     /* Check if library was already parsed */
     if (seq->isAdcLibraryParsed) return;
@@ -1086,14 +1093,18 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
     int ret;
     int n;
     Scale extScale;
-    extScale.size = 3;
-    extScale.values = (float[]){ 1, 1, 1 };
+    static const float extScaleValues[3] = { 1, 1, 1 };
     Scale trigScale;
-    trigScale.size = 4;
-    trigScale.values = (float[]){ 1, 1, 1, 1 };
+    static const float trigScaleValues[4] = { 1, 1, 1, 1 };
     Scale rotScale;
+    static const float rotScaleValues[4] = { 1, 1, 1, 1 };
+
+    extScale.size = 3;
+    extScale.values = extScaleValues;
+    trigScale.size = 4;
+    trigScale.values = trigScaleValues;
     rotScale.size = 4;
-    rotScale.values = (float[]){ 1, 1, 1, 1 };
+    rotScale.values = rotScaleValues;
 
     /* Check if library was already parsed */
     if (seq->isExtensionsLibraryParsed) return;
@@ -1727,119 +1738,389 @@ static int getRawBlockContentIDs(const pulseqlib_SeqFile* seq, pulseqlib_RawBloc
     return 1;
 }
 
-static void pulseqlib_clear_block_labels(pulseqlib_BlockLabels* labels) {
-    if (!labels) return;
-    memset(labels, 0, sizeof(*labels)); /* Sets all fields to zero * /
-
-    /* Flags to -1 (undefined) */
-    labels->flag.trid = -1;
-    labels->flag.nav = -1;
-    labels->flag.rev = -1;
-    labels->flag.sms = -1;
-    labels->flag.ref = -1;
-    labels->flag.ima = -1;
-    labels->flag.noise = -1;
-    labels->flag.pmc = -1;
-    labels->flag.norot = -1;
-    labels->flag.nopos = -1;
-    labels->flag.noscl = -1;
-    labels->flag.once = -1;
+/******************************************* Extension Parsing *************************************************/
+void rawExtensionInit(pulseqlib_RawExtension* rawExt) {
+    if (!rawExt) return;
+    
+    /* Initialize labels to 0 */
+    memset(&rawExt->labelset, 0, sizeof(rawExt->labelset));
+    memset(&rawExt->labelinc, 0, sizeof(rawExt->labelinc));
+    
+    /* Initialize flags to -1 (undefined) */
+    rawExt->flag.trid = -1;
+    rawExt->flag.nav = -1;
+    rawExt->flag.rev = -1;
+    rawExt->flag.sms = -1;
+    rawExt->flag.ref = -1;
+    rawExt->flag.ima = -1;
+    rawExt->flag.noise = -1;
+    rawExt->flag.pmc = -1;
+    rawExt->flag.norot = -1;
+    rawExt->flag.nopos = -1;
+    rawExt->flag.noscl = -1;
+    rawExt->flag.once = -1;
+    
+    /* Initialize indices to -1 (not present) */
+    rawExt->rotationIndex = -1;
+    rawExt->rfShimIndex = -1;
+    rawExt->triggerIndex = -1;
+    rawExt->softDelayIndex = -1;
 }
 
 
-static void pulseqlib_clear_block_dynamic(pulseqlib_BlockDynamic* dynamic) {
-    if (!dynamic) return;
-    memset(dynamic, 0, sizeof(*dynamic));
+void extensionBlockInit(pulseqlib_ExtensionBlock* extBlock) {
+    if (!extBlock) return;
+    
+    memset(&extBlock->labelset, 0, sizeof(extBlock->labelset));
+    memset(&extBlock->labelinc, 0, sizeof(extBlock->labelinc));
+    
+    /* Initialize flags to -1 (undefined) */
+    extBlock->flag.trid = -1;
+    extBlock->flag.nav = -1;
+    extBlock->flag.rev = -1;
+    extBlock->flag.sms = -1;
+    extBlock->flag.ref = -1;
+    extBlock->flag.ima = -1;
+    extBlock->flag.noise = -1;
+    extBlock->flag.pmc = -1;
+    extBlock->flag.norot = -1;
+    extBlock->flag.nopos = -1;
+    extBlock->flag.noscl = -1;
+    extBlock->flag.once = -1;
+    
+    /* Initialize rotation */
+    extBlock->rotation.type = 0;
+    memset(&extBlock->rotation.data, 0, sizeof(extBlock->rotation.data));
+    
+    /* Initialize RF shimming */
+    extBlock->rfShimming.type = 0;
+    extBlock->rfShimming.nChan = 0;
+    extBlock->rfShimming.amplitudes = NULL;
+    extBlock->rfShimming.phases = NULL;
+
+    /* Initialize trigger */
+    extBlock->trigger.type = 0;
+    extBlock->trigger.duration = 0;
+    extBlock->trigger.delay = 0;
+    extBlock->trigger.triggerType = 0;
+    extBlock->trigger.triggerChannel = 0;
+
+    /* Initialize soft delay */
+    extBlock->softDelay.type = 0;
+    extBlock->softDelay.numID = 0;
+    extBlock->softDelay.hintID = 0;
+    extBlock->softDelay.offset = 0;
+    extBlock->softDelay.factor = 0;
 }
 
 
-static void pulseqlib_apply_block_labels(const pulseqlib_BlockLabels* labels, pulseqlib_SeqBlock* block) {
-    if (!labels || !block) return;
-    block->labelset = labels->labelset;
-    block->labelinc = labels->labelinc;
-    block->flag = labels->flag;
+void extensionBlockFree(pulseqlib_ExtensionBlock* extBlock) {
+    if (!extBlock) return;
+    
+    if (extBlock->rfShimming.amplitudes) {
+        FREE(extBlock->rfShimming.amplitudes);
+        extBlock->rfShimming.amplitudes = NULL;
+    }
+    if (extBlock->rfShimming.phases) {
+        FREE(extBlock->rfShimming.phases);
+        extBlock->rfShimming.phases = NULL;
+    }
+    extBlock->rfShimming.type = 0;
+    extBlock->rfShimming.nChan = 0;
 }
 
 
-static void pulseqlib_apply_block_dynamic(const pulseqlib_BlockDynamic* dynamic, pulseqlib_SeqBlock* block) {
+void getRawExtension(const pulseqlib_SeqFile* seq, pulseqlib_RawExtension* rawExt, const pulseqlib_RawBlock* raw) {
     int i;
-    if (!dynamic || !block) return;
+    int typeIdx;
+    int refIdx;
+    int extType;
+    int labelValue;
+    int labelID;
+    
+    rawExtensionInit(rawExt);
+    
+    if (!seq || !rawExt || !raw) return;
+    if (!seq->isExtensionsLibraryParsed || !seq->extensionLUT) return;
+    
+    for (i = 0; i < raw->extCount; ++i) {
+        typeIdx = raw->ext[i][0];
+        refIdx = raw->ext[i][1];
+        
+        if (typeIdx < 0 || typeIdx >= seq->extensionLUTSize) continue;
+        extType = seq->extensionLUT[typeIdx];
+        if (refIdx <= 0) continue;
 
-    if (dynamic->rf.present) {
-        block->rf.type = 1;
-        block->rf.amplitude = dynamic->rf.amplitude;
-        block->rf.freqOffset = dynamic->rf.freqOffset;
-        block->rf.freqPPM = dynamic->rf.freqPPM;
-        block->rf.phaseOffset = dynamic->rf.phaseOffset;
-        block->rf.phasePPM = dynamic->rf.phasePPM;
-    }
-
-    if (dynamic->gx.present) {
-        block->gx.amplitude = dynamic->gx.amplitude;
-    }
-
-    if (dynamic->gy.present) {
-        block->gy.amplitude = dynamic->gy.amplitude;
-    }
-
-    if (dynamic->gz.present) {
-        block->gz.amplitude = dynamic->gz.amplitude;
-    }
-
-    if (dynamic->adc.present) {
-        block->adc.type = 1;
-        block->adc.freqOffset = dynamic->adc.freqOffset;
-        block->adc.freqPPM = dynamic->adc.freqPPM;
-        block->adc.phaseOffset = dynamic->adc.phaseOffset;
-        block->adc.phasePPM = dynamic->adc.phasePPM;
-    }
-
-    if (dynamic->rotation.present && dynamic->rotation.data && dynamic->rotation.length > 0) {
-        block->rotation.type = 1;
-        if (dynamic->rotation.length == 4) {
-            for (i = 0; i < 4; ++i) {
-                block->rotation.data.rotQuaternion[i] = dynamic->rotation.data[i];
-            }
-        } else if (dynamic->rotation.length == 9) {
-            for (i = 0; i < 9; ++i) {
-                block->rotation.data.rotMatrix[i] = dynamic->rotation.data[i];
-            }
-        }
-    }
-
-    if (dynamic->rfShim.present && dynamic->rfShim.entry) {
-        const pulseqlib_RfShimEntry* entry = dynamic->rfShim.entry;
-        int n = entry->nChannels;
-        if (n > 0 && n <= MAX_RF_SHIM_CHANNELS) {
-            float* amplitudes = (float*) ALLOC(sizeof(float) * n);
-            float* phases = (float*) ALLOC(sizeof(float) * n);
-            if (amplitudes && phases) {
-                block->rfShimming.type = 1;
-                block->rfShimming.nChan = n;
-                block->rfShimming.amplitudes = amplitudes;
-                block->rfShimming.phases = phases;
-                for (i = 0; i < n; ++i) {
-                    block->rfShimming.amplitudes[i] = entry->values[2 * i];
-                    block->rfShimming.phases[i] = entry->values[2 * i + 1];
+        /* Convert to 0-based index for array access */
+        refIdx = refIdx - 1;
+        
+        switch (extType) {
+            case EXT_LABELSET:
+                if (seq->labelsetLibrary && refIdx < seq->labelsetLibrarySize) {
+                    labelValue = (int)seq->labelsetLibrary[refIdx][0];
+                    labelID = (int)seq->labelsetLibrary[refIdx][1];
+                    switch (labelID) {
+                        case SLC: rawExt->labelset.slc = labelValue; break;
+                        case SEG: rawExt->labelset.seg = labelValue; break;
+                        case REP: rawExt->labelset.rep = labelValue; break;
+                        case AVG: rawExt->labelset.avg = labelValue; break;
+                        case SET: rawExt->labelset.set = labelValue; break;
+                        case ECO: rawExt->labelset.eco = labelValue; break;
+                        case PHS: rawExt->labelset.phs = labelValue; break;
+                        case LIN: rawExt->labelset.lin = labelValue; break;
+                        case PAR: rawExt->labelset.par = labelValue; break;
+                        case ACQ: rawExt->labelset.acq = labelValue; break;
+                        /* Flags from labelset */
+                        case NAV: rawExt->flag.nav = labelValue; break;
+                        case REV: rawExt->flag.rev = labelValue; break;
+                        case SMS: rawExt->flag.sms = labelValue; break;
+                        case REF: rawExt->flag.ref = labelValue; break;
+                        case IMA: rawExt->flag.ima = labelValue; break;
+                        case NOISE: rawExt->flag.noise = labelValue; break;
+                        case PMC: rawExt->flag.pmc = labelValue; break;
+                        case NOROT: rawExt->flag.norot = labelValue; break;
+                        case NOPOS: rawExt->flag.nopos = labelValue; break;
+                        case NOSCL: rawExt->flag.noscl = labelValue; break;
+                        case ONCE: rawExt->flag.once = labelValue; break;
+                        case TRID: rawExt->flag.trid = labelValue; break;
+                        default: break;
+                    }
                 }
-            } else {
-                if (amplitudes) FREE(amplitudes);
-                if (phases) FREE(phases);
-                block->rfShimming.type = 0;
-                block->rfShimming.nChan = 0;
-            }
+                break;
+            case EXT_LABELINC:
+                if (seq->labelincLibrary && refIdx < seq->labelincLibrarySize) {
+                    labelValue = (int)seq->labelincLibrary[refIdx][0];
+                    labelID = (int)seq->labelincLibrary[refIdx][1];
+                    switch (labelID) {
+                        case SLC: rawExt->labelinc.slc = labelValue; break;
+                        case SEG: rawExt->labelinc.seg = labelValue; break;
+                        case REP: rawExt->labelinc.rep = labelValue; break;
+                        case AVG: rawExt->labelinc.avg = labelValue; break;
+                        case SET: rawExt->labelinc.set = labelValue; break;
+                        case ECO: rawExt->labelinc.eco = labelValue; break;
+                        case PHS: rawExt->labelinc.phs = labelValue; break;
+                        case LIN: rawExt->labelinc.lin = labelValue; break;
+                        case PAR: rawExt->labelinc.par = labelValue; break;
+                        case ACQ: rawExt->labelinc.acq = labelValue; break;
+                        default: break;
+                    }
+                }
+                break;
+            case EXT_ROTATION:
+                rawExt->rotationIndex = refIdx;
+                break;
+            case EXT_RF_SHIM:
+                rawExt->rfShimIndex = refIdx;
+                break;
+            case EXT_TRIGGER:
+                rawExt->triggerIndex = refIdx;
+                break;
+            case EXT_DELAY:
+                rawExt->softDelayIndex = refIdx;
+                break;
+            default:
+                break;
         }
     }
 }
 
 
-static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, pulseqlib_SeqBlock* block) {
+static int parseRotationFromRawExtension(const pulseqlib_SeqFile* seq, pulseqlib_ExtensionBlock* extBlock, const pulseqlib_RawExtension* rawExt) {
+    int i;
+    int refIdx = rawExt->rotationIndex;
+    
+    if (refIdx < 0) return 1; /* No rotation extension, not an error */
+    
+#if ROTATION_FORMAT == ROTATION_FORMAT_QUATERNION
+    if (seq->rotationQuaternionLibrary && refIdx < seq->rotationLibrarySize) {
+        extBlock->rotation.type = 1;
+        for (i = 0; i < 4; ++i) {
+            extBlock->rotation.data.rotQuaternion[i] = seq->rotationQuaternionLibrary[refIdx][i];
+        }
+    }
+#elif ROTATION_FORMAT == ROTATION_FORMAT_MATRIX
+    if (seq->rotationMatrixLibrary && refIdx < seq->rotationLibrarySize) {
+        extBlock->rotation.type = 1;
+        for (i = 0; i < 9; ++i) {
+            extBlock->rotation.data.rotMatrix[i] = seq->rotationMatrixLibrary[refIdx][i];
+        }
+    }
+#endif
+    
+    return 1;
+}
+
+
+static int parseRfShimFromRawExtension(const pulseqlib_SeqFile* seq, pulseqlib_ExtensionBlock* extBlock, const pulseqlib_RawExtension* rawExt) {
+    int refIdx = rawExt->rfShimIndex;
+    int i, n;
+    const pulseqlib_RfShimEntry* entry;
+    float* amplitudes;
+    float* phases;
+    
+    if (refIdx < 0) return 1; /* No RF shim extension, not an error */
+    
+    if (!seq->rfShimLibrary || refIdx >= seq->rfShimLibrarySize) {
+        return 1; /* Invalid reference, skip */
+    }
+    
+    entry = &seq->rfShimLibrary[refIdx];
+    n = entry->nChannels;
+    
+    if (n <= 0 || n > MAX_RF_SHIM_CHANNELS) {
+        return 1; /* Invalid channel count */
+    }
+    
+    amplitudes = (float*) ALLOC(sizeof(float) * n);
+    phases = (float*) ALLOC(sizeof(float) * n);
+    
+    if (!amplitudes || !phases) {
+        if (amplitudes) FREE(amplitudes);
+        if (phases) FREE(phases);
+        return 0; /* Allocation failure */
+    }
+    
+    for (i = 0; i < n; ++i) {
+        amplitudes[i] = entry->values[2 * i];
+        phases[i] = entry->values[2 * i + 1];
+    }
+    
+    extBlock->rfShimming.type = 1;
+    extBlock->rfShimming.nChan = n;
+    extBlock->rfShimming.amplitudes = amplitudes;
+    extBlock->rfShimming.phases = phases;
+    
+    return 1;
+}
+
+
+static int parseTriggerFromRawExtension(const pulseqlib_SeqFile* seq, pulseqlib_ExtensionBlock* extBlock, const pulseqlib_RawExtension* rawExt) {
+    int refIdx = rawExt->triggerIndex;
+
+    if (refIdx < 0) return 1; /* No trigger extension, not an error */
+    
+    if (!seq->triggerLibrary || refIdx >= seq->triggerLibrarySize) {
+        return 1; /* Invalid reference, skip */
+    }
+        
+    extBlock->trigger.type = 1;
+    extBlock->trigger.duration = seq->triggerLibrary[refIdx][0];
+    extBlock->trigger.delay = seq->triggerLibrary[refIdx][1];
+    extBlock->trigger.triggerType = (int)seq->triggerLibrary[refIdx][2];
+    extBlock->trigger.triggerChannel = (int)seq->triggerLibrary[refIdx][3];
+    
+    return 1;
+}
+
+static int parseSoftDelayFromRawExtension(const pulseqlib_SeqFile* seq, pulseqlib_ExtensionBlock* extBlock, const pulseqlib_RawExtension* rawExt) {
+    int refIdx = rawExt->softDelayIndex;
+
+    if (refIdx < 0) return 1; /* No soft delay extension, not an error */
+    
+    if (!seq->softDelayLibrary || refIdx >= seq->softDelayLibrarySize) {
+        return 1; /* Invalid reference, skip */
+    }
+        
+    extBlock->softDelay.type = 1;
+    extBlock->softDelay.numID = (int)seq->softDelayLibrary[refIdx][0];
+    extBlock->softDelay.hintID = (int)seq->softDelayLibrary[refIdx][1];
+    extBlock->softDelay.offset = seq->softDelayLibrary[refIdx][2];
+    extBlock->softDelay.factor = seq->softDelayLibrary[refIdx][3];
+    
+    return 1;
+}
+
+int parseExtension(const pulseqlib_SeqFile* seq, pulseqlib_ExtensionBlock* extBlock, const pulseqlib_RawExtension* rawExt) {
+    if (!extBlock) return 0;
+    
+    extensionBlockInit(extBlock);
+    
+    if (!seq || !rawExt) return 1; /* No data to parse, but not an error */
+    
+    /* Copy labels and flags directly from rawExt (already parsed) */
+    extBlock->labelset = rawExt->labelset;
+    extBlock->labelinc = rawExt->labelinc;
+    extBlock->flag = rawExt->flag;
+    
+    /* Parse rotation */
+    if (!parseRotationFromRawExtension(seq, extBlock, rawExt)) {
+        extensionBlockFree(extBlock);
+        return 0;
+    }
+    
+    /* Parse RF shimming */
+    if (!parseRfShimFromRawExtension(seq, extBlock, rawExt)) {
+        extensionBlockFree(extBlock);
+        return 0;
+    }
+
+    /* Parse trigger */
+    if (!parseTriggerFromRawExtension(seq, extBlock, rawExt)) {
+        extensionBlockFree(extBlock);
+        return 0;
+    }
+
+    /* Parse soft delay */
+    if (!parseSoftDelayFromRawExtension(seq, extBlock, rawExt)) {
+        extensionBlockFree(extBlock);
+        return 0;
+    }
+    
+    return 1;
+}
+
+
+void applyExtension(const pulseqlib_ExtensionBlock* extBlock, pulseqlib_SeqBlock* block) {
+    int i, n;
+    float* amplitudes;
+    float* phases;
+    
+    if (!extBlock || !block) return;
+    
+    /* Apply labels */
+    block->labelset = extBlock->labelset;
+    block->labelinc = extBlock->labelinc;
+    block->flag = extBlock->flag;
+    
+    /* Apply rotation */
+    block->rotation = extBlock->rotation;
+    
+    /* Apply RF shimming (need to copy the allocated arrays) */
+    if (extBlock->rfShimming.type && extBlock->rfShimming.nChan > 0) {
+        n = extBlock->rfShimming.nChan;
+        amplitudes = (float*) ALLOC(sizeof(float) * n);
+        phases = (float*) ALLOC(sizeof(float) * n);
+        
+        if (amplitudes && phases) {
+            for (i = 0; i < n; ++i) {
+                amplitudes[i] = extBlock->rfShimming.amplitudes[i];
+                phases[i] = extBlock->rfShimming.phases[i];
+            }
+            block->rfShimming.type = 1;
+            block->rfShimming.nChan = n;
+            block->rfShimming.amplitudes = amplitudes;
+            block->rfShimming.phases = phases;
+        } else {
+            if (amplitudes) FREE(amplitudes);
+            if (phases) FREE(phases);
+        }
+    }
+
+    /* Apply trigger */
+    block->trigger = extBlock->trigger;
+
+    /* Apply soft delay */
+    block->delay = extBlock->softDelay;
+}
+
+
+int parseBlockWithoutExt(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const pulseqlib_RawBlock* raw, const pulseqlib_RawExtension* rawExt) {
     float* farray;
+    float* trig;
+    float* delay;
     int idx;
     int i;
     int* isRealSample = NULL;
-    float* trig;
-    float* delay;
     pulseqlib_ShapeArbitrary shape;
 
     if (!seq || !raw || !block) {
@@ -1848,6 +2129,7 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
 
     block->duration = raw->block_duration;
 
+    /* Parse RF event */
     if (raw->rf >= 0 && seq->rfLibrary && raw->rf < seq->rfLibrarySize) {
         int numRealSamples = 0;
         farray = seq->rfLibrary[raw->rf];
@@ -1857,9 +2139,6 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
         idx = (int)farray[1];
         if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
             if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                if (isRealSample) {
-                    FREE(isRealSample);
-                }
                 pulseqlib_seqBlockFree(block);
                 pulseqlib_seqBlockInit(block);
                 return 0;
@@ -1874,9 +2153,6 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
         idx = (int)farray[2];
         if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
             if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                if (isRealSample) {
-                    FREE(isRealSample);
-                }
                 pulseqlib_seqBlockFree(block);
                 pulseqlib_seqBlockInit(block);
                 return 0;
@@ -1894,9 +2170,6 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
         if (DETECT_REAL_RF && block->rf.magShape.numSamples > 0 && block->rf.phaseShape.numSamples > 0) {
             isRealSample = (int*) ALLOC(block->rf.magShape.numSamples * sizeof(int));
             if (!isRealSample) {
-                if (isRealSample) {
-                    FREE(isRealSample);
-                }
                 pulseqlib_seqBlockFree(block);
                 pulseqlib_seqBlockInit(block);
                 return 0;
@@ -1927,9 +2200,6 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
         idx = (int)farray[3];
         if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
             if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                if (isRealSample) {
-                    FREE(isRealSample);
-                }
                 pulseqlib_seqBlockFree(block);
                 pulseqlib_seqBlockInit(block);
                 return 0;
@@ -1949,6 +2219,7 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
         block->rf.phaseOffset = farray[9];
     }
 
+    /* Parse Gx gradient */
     if (raw->gx >= 0 && seq->gradLibrary && raw->gx < seq->gradLibrarySize) {
         farray = seq->gradLibrary[raw->gx];
         block->gx.amplitude = farray[1];
@@ -1967,9 +2238,6 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
             idx = (int)farray[4];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
                 if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    if (isRealSample) {
-                        FREE(isRealSample);
-                    }
                     pulseqlib_seqBlockFree(block);
                     pulseqlib_seqBlockInit(block);
                     return 0;
@@ -1979,9 +2247,6 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
             idx = (int)farray[5];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
                 if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    if (isRealSample) {
-                        FREE(isRealSample);
-                    }
                     pulseqlib_seqBlockFree(block);
                     pulseqlib_seqBlockInit(block);
                     return 0;
@@ -1996,6 +2261,7 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
         }
     }
 
+    /* Parse Gy gradient */
     if (raw->gy >= 0 && seq->gradLibrary && raw->gy < seq->gradLibrarySize) {
         farray = seq->gradLibrary[raw->gy];
         block->gy.amplitude = farray[1];
@@ -2014,9 +2280,6 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
             idx = (int)farray[4];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
                 if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    if (isRealSample) {
-                        FREE(isRealSample);
-                    }
                     pulseqlib_seqBlockFree(block);
                     pulseqlib_seqBlockInit(block);
                     return 0;
@@ -2026,9 +2289,6 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
             idx = (int)farray[5];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
                 if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    if (isRealSample) {
-                        FREE(isRealSample);
-                    }
                     pulseqlib_seqBlockFree(block);
                     pulseqlib_seqBlockInit(block);
                     return 0;
@@ -2043,6 +2303,7 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
         }
     }
 
+    /* Parse Gz gradient */
     if (raw->gz >= 0 && seq->gradLibrary && raw->gz < seq->gradLibrarySize) {
         farray = seq->gradLibrary[raw->gz];
         block->gz.amplitude = farray[1];
@@ -2061,9 +2322,6 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
             idx = (int)farray[4];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
                 if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    if (isRealSample) {
-                        FREE(isRealSample);
-                    }
                     pulseqlib_seqBlockFree(block);
                     pulseqlib_seqBlockInit(block);
                     return 0;
@@ -2073,9 +2331,6 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
             idx = (int)farray[5];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
                 if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                    if (isRealSample) {
-                        FREE(isRealSample);
-                    }
                     pulseqlib_seqBlockFree(block);
                     pulseqlib_seqBlockInit(block);
                     return 0;
@@ -2090,6 +2345,7 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
         }
     }
 
+    /* Parse ADC event */
     if (raw->adc >= 0 && seq->adcLibrary && raw->adc < seq->adcLibrarySize) {
         farray = seq->adcLibrary[raw->adc];
         block->adc.type = 1;
@@ -2103,9 +2359,6 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
         idx = (int)farray[7];
         if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
             if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
-                if (isRealSample) {
-                    FREE(isRealSample);
-                }
                 pulseqlib_seqBlockFree(block);
                 pulseqlib_seqBlockInit(block);
                 return 0;
@@ -2118,34 +2371,24 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
         }
     }
 
-    if (seq->isExtensionsLibraryParsed && seq->extensionLUT) {
-        for (i = 0; i < raw->extCount; ++i) {
-            int extType = seq->extensionLUT[raw->ext[i][0]];
-            int refIdx = raw->ext[i][1];
-            switch (extType) {
-                case EXT_TRIGGER:
-                    if (seq->triggerLibrary) {
-                        trig = seq->triggerLibrary[refIdx];
-                        block->trigger.type = 1;
-                        block->trigger.duration = (long)trig[3];
-                        block->trigger.delay = (long)trig[2];
-                        block->trigger.triggerType = (int)trig[0];
-                        block->trigger.triggerChannel = (int)trig[1];
-                    }
-                    break;
-                case EXT_DELAY:
-                    if (seq->softDelayLibrary) {
-                        delay = seq->softDelayLibrary[refIdx];
-                        block->delay.type = 1;
-                        block->delay.numID = (int)delay[0];
-                        block->delay.offset = (int)delay[1];
-                        block->delay.factor = (int)delay[2];
-                        block->delay.hintID = (int)delay[3];
-                    }
-                    break;
-                default:
-                    break;
-            }
+    /* Parse trigger and soft delay from rawExt if provided */
+    if (rawExt) {
+        if (rawExt->triggerIndex >= 0 && seq->triggerLibrary) {
+            trig = seq->triggerLibrary[rawExt->triggerIndex];
+            block->trigger.type = 1;
+            block->trigger.duration = (long)trig[3];
+            block->trigger.delay = (long)trig[2];
+            block->trigger.triggerType = (int)trig[0];
+            block->trigger.triggerChannel = (int)trig[1];
+        }
+        
+        if (rawExt->softDelayIndex >= 0 && seq->softDelayLibrary) {
+            delay = seq->softDelayLibrary[rawExt->softDelayIndex];
+            block->delay.type = 1;
+            block->delay.numID = (int)delay[0];
+            block->delay.offset = (int)delay[1];
+            block->delay.factor = (int)delay[2];
+            block->delay.hintID = (int)delay[3];
         }
     }
 
@@ -2153,241 +2396,8 @@ static int getBlockStatic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock
 }
 
 
-static void getBlockDynamic(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, pulseqlib_BlockDynamic* dynamic) {
-    float gamma = seq->opts.gamma;
-    float b0 = seq->opts.B0;
-    float ppm_to_hz = gamma * b0 * 1e-6;
-    float* farray;
-    if (!dynamic) return;
-    pulseqlib_clear_block_dynamic(dynamic);
-    if (!seq || !raw) return;
-
-    if (raw->rf >= 0 && seq->rfLibrary && raw->rf < seq->rfLibrarySize) {
-        farray = seq->rfLibrary[raw->rf];
-        dynamic->rf.present = 1;
-        dynamic->rf.amplitude = farray[0];
-        dynamic->rf.freqOffset = farray[8];
-        dynamic->rf.freqPPM = farray[6];
-        dynamic->rf.phaseOffset = farray[9];
-        dynamic->rf.phasePPM = farray[7];
-        dynamic->rf.totalFrequency = dynamic->rf.freqOffset + (ppm_to_hz * dynamic->rf.freqPPM);
-        dynamic->rf.totalPhase = dynamic->rf.phaseOffset + (ppm_to_hz * dynamic->rf.phasePPM);
-    }
-
-    if (raw->gx >= 0 && seq->gradLibrary && raw->gx < seq->gradLibrarySize) {
-        farray = seq->gradLibrary[raw->gx];
-        dynamic->gx.present = 1;
-        dynamic->gx.type = (int)farray[0];
-        dynamic->gx.amplitude = farray[1];
-        if (dynamic->gx.type == 1) {
-            dynamic->gx.waveShapeId = (int)farray[4];
-            dynamic->gx.timeShapeId = (int)farray[5];
-        } else {
-            dynamic->gx.waveShapeId = 0;
-            dynamic->gx.timeShapeId = 0;
-        }
-    }
-
-    if (raw->gy >= 0 && seq->gradLibrary && raw->gy < seq->gradLibrarySize) {
-        farray = seq->gradLibrary[raw->gy];
-        dynamic->gy.present = 1;
-        dynamic->gy.type = (int)farray[0];
-        dynamic->gy.amplitude = farray[1];
-        if (dynamic->gy.type == 1) {
-            dynamic->gy.waveShapeId = (int)farray[4];
-            dynamic->gy.timeShapeId = (int)farray[5];
-        } else {
-            dynamic->gy.waveShapeId = 0;
-            dynamic->gy.timeShapeId = 0;
-        }
-    }
-
-    if (raw->gz >= 0 && seq->gradLibrary && raw->gz < seq->gradLibrarySize) {
-        farray = seq->gradLibrary[raw->gz];
-        dynamic->gz.present = 1;
-        dynamic->gz.type = (int)farray[0];
-        dynamic->gz.amplitude = farray[1];
-        if (dynamic->gz.type == 1) {
-            dynamic->gz.waveShapeId = (int)farray[4];
-            dynamic->gz.timeShapeId = (int)farray[5];
-        } else {
-            dynamic->gz.waveShapeId = 0;
-            dynamic->gz.timeShapeId = 0;
-        }
-    }
-
-    if (raw->adc >= 0 && seq->adcLibrary && raw->adc < seq->adcLibrarySize) {
-        farray = seq->adcLibrary[raw->adc];
-        dynamic->adc.present = 1;
-        dynamic->adc.freqOffset = farray[5];
-        dynamic->adc.freqPPM = farray[3];
-        dynamic->adc.phaseOffset = farray[6];
-        dynamic->adc.phasePPM = farray[4];
-        dynamic->adc.totalFrequency = dynamic->adc.freqOffset + dynamic->adc.freqPPM * b0;
-        dynamic->adc.totalPhase = dynamic->adc.phaseOffset + dynamic->adc.phasePPM * b0;
-    }
-
-    if (seq->isExtensionsLibraryParsed && seq->extensionLUT) {
-        int i;
-        for (i = 0; i < raw->extCount; ++i) {
-            int typeIdx = raw->ext[i][0];
-            int refIdx = raw->ext[i][1];
-            int extType;
-            if (typeIdx < 0 || typeIdx >= seq->extensionLUTSize) continue;
-            extType = seq->extensionLUT[typeIdx];
-            if (refIdx < 0) continue;
-            switch (extType) {
-                case EXT_ROTATION:
-                    dynamic->rotation.present = 1;
-                    dynamic->rotation.index = refIdx;
-#if ROTATION_FORMAT == ROTATION_FORMAT_QUATERNION
-                    if (seq->rotationQuaternionLibrary && refIdx < seq->rotationLibrarySize) {
-                        dynamic->rotation.data = seq->rotationQuaternionLibrary[refIdx];
-                        dynamic->rotation.length = 4;
-                    }
-#elif ROTATION_FORMAT == ROTATION_FORMAT_MATRIX
-                    if (seq->rotationMatrixLibrary && refIdx < seq->rotationLibrarySize) {
-                        dynamic->rotation.data = seq->rotationMatrixLibrary[refIdx];
-                        dynamic->rotation.length = 9;
-                    }
-#endif
-                    break;
-                case EXT_RF_SHIM:
-                    if (seq->rfShimLibrary && refIdx < seq->rfShimLibrarySize) {
-                        dynamic->rfShim.present = 1;
-                        dynamic->rfShim.entry = &seq->rfShimLibrary[refIdx];
-                    }
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-}
-
-
-static void getBlockLabels(const pulseqlib_SeqFile* seq, const pulseqlib_RawBlock* raw, pulseqlib_BlockLabels* labels) {
-    int i;
-    pulseqlib_clear_block_labels(labels);
-    if (!seq || !raw || !labels) return;
-    if (!seq->isExtensionsLibraryParsed || !seq->extensionLUT) return;
-
-    for (i = 0; i < raw->extCount; ++i) {
-        int typeIdx = raw->ext[i][0];
-        int refIdx = raw->ext[i][1];
-        int extType;
-        if (typeIdx < 0 || typeIdx >= seq->extensionLUTSize) continue;
-        extType = seq->extensionLUT[typeIdx];
-        if (refIdx < 0) continue;
-
-        if (extType == EXT_LABELSET && seq->labelsetLibrary && refIdx < seq->labelsetLibrarySize) {
-            int labelValue = (int)seq->labelsetLibrary[refIdx][0];
-            int labelID = (int)seq->labelsetLibrary[refIdx][1];
-            switch (labelID) {
-                case SLC: labels->labelset.slc = labelValue; break;
-                case SEG: labels->labelset.seg = labelValue; break;
-                case REP: labels->labelset.rep = labelValue; break;
-                case AVG: labels->labelset.avg = labelValue; break;
-                case SET: labels->labelset.set = labelValue; break;
-                case ECO: labels->labelset.eco = labelValue; break;
-                case PHS: labels->labelset.phs = labelValue; break;
-                case LIN: labels->labelset.lin = labelValue; break;
-                case PAR: labels->labelset.par = labelValue; break;
-                case ACQ: labels->labelset.acq = labelValue; break;
-                case NAV: labels->flag.nav = labelValue; break;
-                case REV: labels->flag.rev = labelValue; break;
-                case SMS: labels->flag.sms = labelValue; break;
-                case REF: labels->flag.ref = labelValue; break;
-                case IMA: labels->flag.ima = labelValue; break;
-                case NOISE: labels->flag.noise = labelValue; break;
-                case PMC: labels->flag.pmc = labelValue; break;
-                case NOROT: labels->flag.norot = labelValue; break;
-                case NOPOS: labels->flag.nopos = labelValue; break;
-                case NOSCL: labels->flag.noscl = labelValue; break;
-                case ONCE: labels->flag.once = labelValue; break;
-                case TRID: labels->flag.trid = labelValue; break;
-                default: break;
-            }
-        } else if (extType == EXT_LABELINC && seq->labelincLibrary && refIdx < seq->labelincLibrarySize) {
-            int labelValue = (int)seq->labelincLibrary[refIdx][0];
-            int labelID = (int)seq->labelincLibrary[refIdx][1];
-            switch (labelID) {
-                case SLC: labels->labelinc.slc = labelValue; break;
-                case SEG: labels->labelinc.seg = labelValue; break;
-                case REP: labels->labelinc.rep = labelValue; break;
-                case AVG: labels->labelinc.avg = labelValue; break;
-                case SET: labels->labelinc.set = labelValue; break;
-                case ECO: labels->labelinc.eco = labelValue; break;
-                case PHS: labels->labelinc.phs = labelValue; break;
-                case LIN: labels->labelinc.lin = labelValue; break;
-                case PAR: labels->labelinc.par = labelValue; break;
-                case ACQ: labels->labelinc.acq = labelValue; break;
-                default: break;
-            }
-        }
-    }
-}
-
-
-void pulseqlib_getBlockStatic(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex) {
-    pulseqlib_RawBlock raw;
-    if (!seq || !block) {
-        return;
-    }
-    if (!getRawBlockContentIDs(seq, &raw, blockIndex, 1)) 
-    {
-        return;
-    }
-    if (!getBlockStatic(seq, &raw, block)) {
-        return;
-    }
-}
-
-
-void pulseqlib_getBlockDynamic(const pulseqlib_SeqFile* seq, pulseqlib_BlockDynamic* dynamic, const int blockIndex) {
-    pulseqlib_RawBlock raw;
-    if (!dynamic) {
-        return;
-    }
-    if (!seq || !getRawBlockContentIDs(seq, &raw, blockIndex, 1)) 
-    {
-        pulseqlib_clear_block_dynamic(dynamic);
-        return;
-    }
-    getBlockDynamic(seq, &raw, dynamic);
-}
-
-
-void pulseqlib_getBlockDynamicWithoutExtensions(const pulseqlib_SeqFile* seq, pulseqlib_BlockDynamic* dynamic, const int blockIndex) {
-    pulseqlib_RawBlock raw;
-    if (!dynamic) {
-        return;
-    }
-    if (!seq || !getRawBlockContentIDs(seq, &raw, blockIndex, 0)) 
-    {
-        pulseqlib_clear_block_dynamic(dynamic);
-        return;
-    }
-    getBlockDynamic(seq, &raw, dynamic);
-}
-
-
-void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, pulseqlib_BlockLabels* labels, const int blockIndex) {
-    pulseqlib_RawBlock raw;
-    if (!labels) {
-        return;
-    }
-    if (!seq || !getRawBlockContentIDs(seq, &raw, blockIndex, 1))
-     {
-        pulseqlib_clear_block_labels(labels);
-        return;
-    }
-    getBlockLabels(seq, &raw, labels);
-}
-
-
 /**
- * @brief Retrieves a block from the sequence file.
+ * @brief Retrieves a block from the sequence file (refactored version).
  *
  * @param[in] seq Pointer to the SeqFile structure.
  * @param[in, out] block Pointer to a pre-allocated SeqBlock to fill.
@@ -2395,27 +2405,42 @@ void pulseqlib_getBlockLabels(const pulseqlib_SeqFile* seq, pulseqlib_BlockLabel
  */
 void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex) {
     pulseqlib_RawBlock rawBlock;
-    pulseqlib_BlockDynamic dynamic;
-    pulseqlib_BlockLabels labels;
+    pulseqlib_RawExtension rawExt;
+    pulseqlib_ExtensionBlock extBlock;
+    int hasExtensions;
     
     /* Check inputs */
     if (!seq || !block || blockIndex < 0 || blockIndex >= seq->numBlocks) {
         return; /* Invalid inputs */
     }
 
+    /* Step 1: Get raw block content IDs (with extensions) */
     if (!getRawBlockContentIDs(seq, &rawBlock, blockIndex, 1)) {
         return;
     }
-
-    if (!getBlockStatic(seq, &rawBlock, block)) {
+    
+    /* Check if we have extensions to parse */
+    hasExtensions = (rawBlock.extCount > 0) && seq->isExtensionsLibraryParsed && seq->extensionLUT;
+    
+    /* Step 2: Extract raw extension data (if needed) */
+    if (hasExtensions) {
+        getRawExtension(seq, &rawExt, &rawBlock);
+    } else {
+        rawExtensionInit(&rawExt);
+    }
+    
+    /* Step 3: Parse main block content (RF, grads, ADC, trigger, delay) */
+    if (!parseBlockWithoutExt(seq, block, &rawBlock, hasExtensions ? &rawExt : NULL)) {
         return;
     }
-
-    getBlockDynamic(seq, &rawBlock, &dynamic);
-    pulseqlib_apply_block_dynamic(&dynamic, block);
-
-    getBlockLabels(seq, &rawBlock, &labels);
-    pulseqlib_apply_block_labels(&labels, block);
+    
+    /* Step 4: Parse and apply extensions (if needed) */
+    if (hasExtensions) {
+        if (parseExtension(seq, &extBlock, &rawExt)) {
+            applyExtension(&extBlock, block);
+            extensionBlockFree(&extBlock);
+        }
+    }
 }
 
 float pulseqlib_getGradLibraryMaxAmplitude(const pulseqlib_SeqFile* seq) {
@@ -2602,8 +2627,8 @@ static int deduplicate_rf_library(const pulseqlib_SeqFile* seq, pulseqlib_RfDefi
     eventTable = (int*)ALLOC(numRows * sizeof(int));
     if (!eventTable) {
         FREE(intRows);
-        FREE(uniqueDefs);
         FREE(params);
+        FREE(uniqueDefs);
         return PULSEQLIB_ERR_ALLOC_FAILED;
     }
     for (i = 0; i < numRows; ++i) {
@@ -2621,7 +2646,6 @@ static int deduplicate_rf_library(const pulseqlib_SeqFile* seq, pulseqlib_RfDefi
         rfDefinitions[i].timeShapeID = (int)intRows[uniqueDefs[i]][2];
         rfDefinitions[i].delay = (int)intRows[uniqueDefs[i]][3];
     }
-    FREE(uniqueDefs);
 
     /* Copy inside rfTable */
     for (i = 0; i < numRows; ++i) {
@@ -2631,8 +2655,9 @@ static int deduplicate_rf_library(const pulseqlib_SeqFile* seq, pulseqlib_RfDefi
         rfTable[i].phaseOffset = params[i][2];
     }
     FREE(intRows);
-    FREE(eventTable);
     FREE(params);
+    FREE(uniqueDefs);
+    FREE(eventTable);
 
     return numUnique;
 }
@@ -2705,8 +2730,8 @@ static int deduplicate_grad_library(const pulseqlib_SeqFile* seq, pulseqlib_Grad
     eventTable = (int*)ALLOC(numRows * sizeof(int));
     if (!eventTable) {
         FREE(intRows);
-        FREE(uniqueDefs);
         FREE(params);
+        FREE(uniqueDefs);
         return PULSEQLIB_ERR_ALLOC_FAILED;
     }
     for (i = 0; i < numRows; ++i) {
@@ -2726,7 +2751,6 @@ static int deduplicate_grad_library(const pulseqlib_SeqFile* seq, pulseqlib_Grad
         gradDefinitions[i].unusedOrTimeShapeID = (int)intRows[uniqueDefs[i]][4];
         gradDefinitions[i].delay = (int)intRows[uniqueDefs[i]][5];
     }
-    FREE(uniqueDefs);
 
     /* Copy inside gradTable */
     for (i = 0; i < numRows; ++i) {
@@ -2734,8 +2758,9 @@ static int deduplicate_grad_library(const pulseqlib_SeqFile* seq, pulseqlib_Grad
         gradTable[i].amplitude = params[i];
     }
     FREE(intRows);
-    FREE(eventTable);
     FREE(params);
+    FREE(uniqueDefs);
+    FREE(eventTable);
 
     return numUnique;
 }
@@ -2794,8 +2819,8 @@ static int deduplicate_adc_library(const pulseqlib_SeqFile* seq, pulseqlib_AdcDe
     eventTable = (int*)ALLOC(numRows * sizeof(int));
     if (!eventTable) {
         FREE(intRows);
-        FREE(uniqueDefs);
         FREE(params);
+        FREE(uniqueDefs);
         return PULSEQLIB_ERR_ALLOC_FAILED;
     }
     for (i = 0; i < numRows; ++i) {
@@ -2812,7 +2837,6 @@ static int deduplicate_adc_library(const pulseqlib_SeqFile* seq, pulseqlib_AdcDe
         adcDefinitions[i].dwellTime = (int)intRows[uniqueDefs[i]][1];
         adcDefinitions[i].delay = (int)intRows[uniqueDefs[i]][2];
     }
-    FREE(uniqueDefs);
 
     /* Copy inside adcTable */
     for (i = 0; i < numRows; ++i) {
@@ -2821,8 +2845,9 @@ static int deduplicate_adc_library(const pulseqlib_SeqFile* seq, pulseqlib_AdcDe
         adcTable[i].phaseOffset = params[i][1];
     }
     FREE(intRows);
-    FREE(eventTable);
     FREE(params);
+    FREE(uniqueDefs);
+    FREE(eventTable);
 
     return numUnique;
 }
@@ -2837,30 +2862,27 @@ static int deduplicate_adc_library(const pulseqlib_SeqFile* seq, pulseqlib_AdcDe
  *
  * @param[in, out] seq                  Pointer to the sequence file.
  * @param[in, out] seqDesc              Pointer to the sequence descriptor to fill.
- * @param[in]  index_min            Minimum block index to process (inclusive). If negative, starts from 0.
- * @param[in]  index_max            Maximum block index to process (exclusive). If negative, processes up to numBlocks.
  * @return 0 on success, error code otherwise.
  */
-int pulseqlib_getUniqueBlocks(
-    const pulseqlib_SeqFile* seq,
-    pulseqlib_SequenceDescriptor* seqDesc,
-    int index_min, 
-    int index_max
-) {
-    /* Ranges */
+int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDescriptor* seqDesc) {
     int numBlocks;
-    int startIndex, endIndex, rangeCount;
+    int numUniqueBlocks;
+    int numUniqueRFs;
+    int numUniqueGrads;
+    int numUniqueADCs;
 
     /* Loop counters */
-    int n, r, c;
+    int n;
 
     /* Auxiliaries for unique block finder */
     pulseqlib_RawBlock raw;
     int (*intRows)[BLOCK_DEF_COLS];
     int *uniqueDefs;
+    int *eventTable;
 
     /* Auxiliaries for preparation and cooldown detection */
-    pulseqlib_BlockLabels labels;
+    pulseqlib_RawExtension ext;
+    int norotFlag, noposFlag, onceFlag, onceCounter;
     int hasPrep, hasCooldown;
     int ctrl;
 
@@ -2870,80 +2892,112 @@ int pulseqlib_getUniqueBlocks(
      }
     numBlocks = seq->numBlocks;
     if (numBlocks <= 0 || !seq->blockLibrary) return PULSEQLIB_ERR_INVALID_ARGUMENT;
-
-    /* Determine range of blocks to process */
-    startIndex = (index_min < 0) ? 0 : index_min;
-    endIndex   = (index_max < 0) ? numBlocks : index_max;
-    if (startIndex < 0) startIndex = 0;
-    if (startIndex > numBlocks) startIndex = numBlocks;
-    if (endIndex < startIndex) endIndex = startIndex;
-    if (endIndex > numBlocks) endIndex = numBlocks;
-    rangeCount = endIndex - startIndex;
-    if (rangeCount <= 0) return PULSEQLIB_ERR_INVALID_ARGUMENT;
-
+    
     /* Initialize outputs */
-    for (n = 0; n < numBlocks; ++n) {
-        seqDesc->uniqueBlockTable[n] = -1;
-        seqDesc->uniqueBlockDefinitions[n][1] = 0; /* Block duration us */
-        seqDesc->isPureDelayBlock[n] = 0;
-    }
-    seqDesc->trDescriptor.numPrepBlocks = 0;
-    seqDesc->trDescriptor.numCooldownBlocks = 0;
+    seqDesc->numPrepBlocks = 0;
+    seqDesc->numCooldownBlocks = 0;
 
     /* Step 1: Deduplicate event libraries */
     /* Allocate event tables */
     if (seq->rfLibrarySize > 0) {
-        deduplicate_rf_library(seq, seqDesc->rfDefinitions, seqDesc->rfTable);
+        numUniqueRFs = deduplicate_rf_library(seq, seqDesc->rfDefinitions, seqDesc->rfTable);
+        seqDesc->numUniqueRFs = numUniqueRFs;
+        seqDesc->rfTableSize = seq->rfLibrarySize;
     }
 
     if (seq->gradLibrarySize > 0) {
-        deduplicate_grad_library(seq, seqDesc->gradDefinitions, seqDesc->gradTable);
+        numUniqueGrads = deduplicate_grad_library(seq, seqDesc->gradDefinitions, seqDesc->gradTable);
+        seqDesc->numUniqueGrads = numUniqueGrads;
+        seqDesc->gradTableSize = seq->gradLibrarySize;
     }
 
     if (seq->adcLibrarySize > 0) {
-        deduplicate_adc_library(seq, seqDesc->adcDefinitions, seqDesc->adcTable);
+        numUniqueADCs = deduplicate_adc_library(seq, seqDesc->adcDefinitions, seqDesc->adcTable);
+        seqDesc->numUniqueADCs = numUniqueADCs;
+        seqDesc->adcTableSize = seq->adcLibrarySize;
     }
 
     /* Step 2: Build block definition matrix using unique event IDs */
-    /* Allocate block definition matrix */
-    uniqueDefs = (int*)ALLOC(rangeCount * sizeof(int));
-    if (!uniqueDefs) {
+    intRows = ALLOC(numBlocks * sizeof(*intRows));
+    if (!intRows) {
         return PULSEQLIB_ERR_ALLOC_FAILED;
     }
-    intRows = ALLOC(rangeCount * sizeof(*intRows));
-    if (!intRows) {
+    uniqueDefs = (int*)ALLOC(numBlocks * sizeof(int));
+    if (!uniqueDefs) {
+        FREE(intRows);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    eventTable = (int*)ALLOC(numBlocks * sizeof(int));
+    if (!eventTable) {
+        FREE(intRows);
         FREE(uniqueDefs);
         return PULSEQLIB_ERR_ALLOC_FAILED;
     }
 
-    for (r = 0; r < rangeCount; ++r) {
-        n = startIndex + r;
-        if (!getRawBlockContentIDs(seq, &raw, n, 0)) {
+    /* Initialize */
+    norotFlag = 0;
+    noposFlag = 0;
+    onceFlag = 0;
+    onceCounter = 0;
+    for (n = 0; n < numBlocks; ++n) {
+        if (!getRawBlockContentIDs(seq, &raw, n, 1)) {
             FREE(intRows);
             FREE(uniqueDefs);
+            FREE(eventTable);
             return PULSEQLIB_ERR_INVALID_ARGUMENT;
         }
 
         /* Map event indices to unique event IDs */
-        intRows[r][0] = raw.block_duration >= 0 ? raw.block_duration : 0;
-        intRows[r][1] = (raw.rf >= 0 && seqDesc->rfTable) ? seqDesc->rfTable[raw.rf].ID : -1;
-        intRows[r][2] = (raw.gx >= 0 && seqDesc->gradTable) ? seqDesc->gradTable[raw.gx].ID : -1;
-        intRows[r][3] = (raw.gy >= 0 && seqDesc->gradTable) ? seqDesc->gradTable[raw.gy].ID : -1;
-        intRows[r][4] = (raw.gz >= 0 && seqDesc->gradTable) ? seqDesc->gradTable[raw.gz].ID : -1;
+        intRows[n][0] = raw.block_duration >= 0 ? raw.block_duration : 0;
+        intRows[n][1] = (raw.rf >= 0 && seqDesc->rfTable) ? seqDesc->rfTable[raw.rf].ID : -1;
+        intRows[n][2] = (raw.gx >= 0 && seqDesc->gradTable) ? seqDesc->gradTable[raw.gx].ID : -1;
+        intRows[n][3] = (raw.gy >= 0 && seqDesc->gradTable) ? seqDesc->gradTable[raw.gy].ID : -1;
+        intRows[n][4] = (raw.gz >= 0 && seqDesc->gradTable) ? seqDesc->gradTable[raw.gz].ID : -1;
+
+        /* Store unique ADC event ID in block table */
+        seqDesc->blockTable[n].adcID = (raw.adc >= 0 && seqDesc->adcTable) ? seqDesc->adcTable[raw.adc].ID : -1;
+
+        /* Store pure delay flag */
+        seqDesc->blockTable[n].pureDelayFlag = (raw.rf < 0 && raw.gx < 0 && raw.gy < 0 && raw.gz < 0 && raw.adc < 0) ? 1 : 0;
+
+        /* Inspect extensions */
+        if (raw.extCount > 0 && seq->isExtensionsLibraryParsed && seq->extensionLUT) {
+            getRawExtension(seq, &ext, &raw);
+            seqDesc->blockTable[n].rotationID = ext.rotationIndex;
+            seqDesc->blockTable[n].triggerID = ext.triggerIndex;
+            seqDesc->blockTable[n].rfshimID = ext.rfShimIndex;
+            norotFlag = (ext.flag.norot >= 0) ? ext.flag.norot : norotFlag;
+            seqDesc->blockTable[n].norotFlag = norotFlag;
+            noposFlag = (ext.flag.nopos >= 0) ? ext.flag.nopos : noposFlag;
+            seqDesc->blockTable[n].noposFlag = noposFlag;
+            onceFlag = (ext.flag.once >= 0) ? ext.flag.once : onceFlag;
+            if (onceFlag > 0) {
+                ++onceCounter;
+            }
+        }
     }
 
     /* Step 3: Deduplicate blocks */
-    seqDesc->numUniqueBlocks = deduplicate_int_rows(uniqueDefs, seqDesc->uniqueBlockTable, rangeCount, BLOCK_DEF_COLS, (const int*)intRows);
+    seqDesc->numUniqueBlocks = deduplicate_int_rows(uniqueDefs, eventTable, numBlocks, BLOCK_DEF_COLS, (const int*)intRows);
+    seqDesc->numBlocks = numBlocks;
 
-    /* Copy unique block definitions */
+    /* Copy inside blockDefinitions */
     for (n = 0; n < seqDesc->numUniqueBlocks; ++n) {
-        seqDesc->uniqueBlockDefinitions[n][0] = uniqueDefs[n];
-        for (c = 0; c < BLOCK_DEF_COLS; ++c) {
-            seqDesc->uniqueBlockDefinitions[n][c+1] = intRows[uniqueDefs[n]][c];
-        }
+        seqDesc->blockDefinitions[n].ID = uniqueDefs[n];
+        seqDesc->blockDefinitions[n].duration_us = (int)intRows[uniqueDefs[n]][0];
+        seqDesc->blockDefinitions[n].rfID = (int)intRows[uniqueDefs[n]][1];
+        seqDesc->blockDefinitions[n].gxID = (int)intRows[uniqueDefs[n]][2];
+        seqDesc->blockDefinitions[n].gyID = (int)intRows[uniqueDefs[n]][3];
+        seqDesc->blockDefinitions[n].gzID = (int)intRows[uniqueDefs[n]][4];
+    }
+
+    /* Copy inside adcTable */
+    for (n = 0; n < numBlocks; ++n) {
+        seqDesc->blockTable[n].ID = eventTable[n];
     }
     FREE(intRows);
     FREE(uniqueDefs);
+    FREE(eventTable);
 
     /* Determine If sequence has preparation and cooldown sections */
     hasPrep = 0;
@@ -2964,18 +3018,20 @@ int pulseqlib_getUniqueBlocks(
 
     /* Preparation must start at first block */
     if (hasPrep == 1) {
-        pulseqlib_getBlockLabels(seq, &labels, 0);
-        if (labels.flag.once != 1) {
+        getRawBlockContentIDs(seq, &raw, 0, 1);
+        getRawExtension(seq, &ext, &raw);
+        if (ext.flag.once != 1) {
             return PULSEQLIB_ERR_INVALID_PREP_POSITION;
         }
 
         /* Search until we find flags.once == 0 */
         ctrl = 0;
-        seqDesc->trDescriptor.numPrepBlocks = 1;
-        while (ctrl == 0 && seqDesc->trDescriptor.numPrepBlocks < numBlocks) {
-            pulseqlib_getBlockLabels(seq, &labels, seqDesc->trDescriptor.numPrepBlocks);
-            if (labels.flag.once != 0) {
-                (seqDesc->trDescriptor.numPrepBlocks)++;
+        seqDesc->numPrepBlocks = 1;
+        while (ctrl == 0 && seqDesc->numPrepBlocks < numBlocks) {
+            getRawBlockContentIDs(seq, &raw, seqDesc->numPrepBlocks, 1);
+            getRawExtension(seq, &ext, &raw);
+            if (ext.flag.once != 0) {
+                (seqDesc->numPrepBlocks)++;
             } else {
                 ctrl = 1;
             }
@@ -2986,19 +3042,24 @@ int pulseqlib_getUniqueBlocks(
     if (hasCooldown == 1) {
         /* Search until we find flags.once == 2 */
         ctrl = 0;
-        seqDesc->trDescriptor.numCooldownBlocks = 0;
-        while (ctrl == 0 && seqDesc->trDescriptor.numCooldownBlocks < numBlocks) {
-            pulseqlib_getBlockLabels(seq, &labels, numBlocks - 1 - seqDesc->trDescriptor.numCooldownBlocks);
-            if (labels.flag.once != 2) {
-                (seqDesc->trDescriptor.numCooldownBlocks)++;
+        seqDesc->numCooldownBlocks = 0;
+        while (ctrl == 0 && seqDesc->numCooldownBlocks < numBlocks) {
+            getRawBlockContentIDs(seq, &raw, numBlocks - 1 - seqDesc->numCooldownBlocks, 1);
+            getRawExtension(seq, &ext, &raw);
+            if (ext.flag.once != 2) {
+                (seqDesc->numCooldownBlocks)++;
             } else {
                 ctrl = 1;
             }
         }
-        if (ctrl == 0) /* Cooldown section must last until the end, if present */
-        { 
+        if (ctrl == 0) { /* Cooldown section must last until the end, if present */
             return PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION;
         }
+    }
+
+    /* Check that ONCE is only in prep and cooldown */
+    if (onceCounter != (seqDesc->numPrepBlocks > 0 ? 1 : 0) + (seqDesc->numCooldownBlocks > 0 ? 1 : 0)) {
+        return PULSEQLIB_ERR_INVALID_ONCE_FLAGS;
     }
 
     return PULSEQLIB_OK;
@@ -3064,36 +3125,25 @@ int first_repeating_segment(const int *seq, int len)
     return len;
 }
 
-// Replace the entire pulseqlib_findTRInSequence function
-
 /**
  * @brief Detect TR pattern.
  *
  * @param[in, out] trDesc Pointer to TR descriptor to fill.
  * @param[in, out] diag Pointer to diagnostic struct (optional, can be NULL).
- * @param[in] numBlocks Total number of blocks in the sequence.
- * @param[in] uniqueBlockTable Array of numBlocks elements mapping each block to its unique definition index.
- * @param[in] blockDurations_us Array of block durations in microseconds.
- * @param[in] pureDelayBlock Mask indicating which blocks are pure delays.
- * @param[in] numPrep Number of preparation blocks before imaging blocks.
- * @param[in] numCooldown Number of cooldown blocks after imaging blocks.
+ * @param[in] seqDesc Pointer to sequence descriptor.
  * @return PULSEQLIB_OK on success, or negative error code on failure.
  */
 int pulseqlib_findTRInSequence(
     pulseqlib_TRdescriptor* trDesc,
     pulseqlib_Diagnostic* diag,
-    int numBlocks,
-    int* uniqueBlockTable,
-    int* blockDurations_us,
-    int* pureDelayBlock,
-    int numPrep,
-    int numCooldown
+    pulseqlib_SequenceDescriptor* seqDesc
 ) {
     int i, n;
     int imagingStart, imagingEnd, imagingLen;
     int* sequence_pattern;
-    long long prepDuration_us, cooldownDuration_us;
-    long long activeDuration_us;
+    int prepDuration_us, cooldownDuration_us;
+    int activeDuration_us;
+    int* blockDurations_us;
     int found;
     int L;
     pulseqlib_Diagnostic localDiag;
@@ -3111,15 +3161,15 @@ int pulseqlib_findTRInSequence(
     L = 0;
 
     /* Basic validation */
-    if (numBlocks <= 0 || !uniqueBlockTable || !pureDelayBlock || !blockDurations_us) {
-        diag->code = (numBlocks <= 0) ? PULSEQLIB_ERR_TR_NO_BLOCKS : PULSEQLIB_ERR_NULL_POINTER;
+    if (seqDesc->numBlocks <= 0 || !seqDesc->blockTable || !seqDesc->blockDefinitions) {
+        diag->code = (seqDesc->numBlocks <= 0) ? PULSEQLIB_ERR_TR_NO_BLOCKS : PULSEQLIB_ERR_NULL_POINTER;
         return diag->code;
     }
-    if (numPrep < 0 || numCooldown < 0) {
+    if (seqDesc->numPrepBlocks < 0 ||seqDesc-> numCooldownBlocks < 0) {
         diag->code = PULSEQLIB_ERR_INVALID_ARGUMENT;
         return diag->code;
     }
-    if (numPrep + numCooldown > numBlocks) {
+    if (seqDesc->numPrepBlocks + seqDesc->numCooldownBlocks > seqDesc->numBlocks) {
         diag->code = PULSEQLIB_ERR_TR_NO_IMAGING_REGION;
         return diag->code;
     }
@@ -3128,15 +3178,15 @@ int pulseqlib_findTRInSequence(
     trDesc->trSize = 0;
     trDesc->numTRs = 0;
     trDesc->degeneratePrep = 1;
-    trDesc->numPrepBlocks = numPrep;
+    trDesc->numPrepBlocks = seqDesc->numPrepBlocks;
     trDesc->numPrepTRs = 1;
     trDesc->degenerateCooldown = 1;
-    trDesc->numCooldownBlocks = numCooldown;
+    trDesc->numCooldownBlocks = seqDesc->numCooldownBlocks;
     trDesc->numCooldownTRs = 1;
 
     /* Imaging region is [prepBlocks, numBlocks - cooldownBlocks) */
-    imagingStart = numPrep;
-    imagingEnd = numBlocks - numCooldown; /* exclusive */
+    imagingStart = seqDesc->numPrepBlocks;
+    imagingEnd = seqDesc->numBlocks - seqDesc->numCooldownBlocks; /* exclusive */
     imagingLen = imagingEnd - imagingStart;
     
     diag->imagingRegionLength = imagingLen;
@@ -3149,23 +3199,30 @@ int pulseqlib_findTRInSequence(
     /* Count unique blocks for diagnostics */
     {
         int maxUnique = 0;
-        for (n = 0; n < numBlocks; ++n) {
-            if (uniqueBlockTable[n] > maxUnique) maxUnique = uniqueBlockTable[n];
+        for (n = 0; n < seqDesc->numBlocks; ++n) {
+            if (seqDesc->blockTable[n].ID > maxUnique) maxUnique = seqDesc->blockTable[n].ID;
         }
         diag->numUniqueBlocks = maxUnique + 1;
     }
 
     /* To identify TR, pure delay actual duration must be considered */
-    sequence_pattern = (int*)ALLOC(numBlocks * sizeof(int));
+    sequence_pattern = (int*)ALLOC(seqDesc->numBlocks * sizeof(int));
     if (!sequence_pattern) {
         diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
         return diag->code;
     }
-    for (n = 0; n < numBlocks; ++n) {
-        if (pureDelayBlock[n]) {
+    blockDurations_us = (int*)ALLOC(seqDesc->numBlocks * sizeof(int));
+    if (!blockDurations_us) {
+        FREE(sequence_pattern);
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        return diag->code;
+    }
+    for (n = 0; n < seqDesc->numBlocks; ++n) {
+        blockDurations_us[n] = seqDesc->blockDefinitions[seqDesc->blockTable[n].ID].duration_us;
+        if (seqDesc->blockTable[n].pureDelayFlag) {
             sequence_pattern[n] = blockDurations_us[n];
         } else {
-            sequence_pattern[n] = -1 * uniqueBlockTable[n]; /* negate to avoid collision with durations */
+            sequence_pattern[n] = -1 * seqDesc->blockTable[seqDesc->blockTable[n].ID].ID; /* negate to avoid collision with durations */
         }
     }
 
@@ -3199,15 +3256,15 @@ int pulseqlib_findTRInSequence(
     if (!found) {
         /* Calculate total duration of non-pure-delay blocks */
         activeDuration_us = 0;
-        for (n = 0; n < numBlocks; ++n) {
-            if (!pureDelayBlock[n]) {
-                activeDuration_us += (long long)blockDurations_us[n];
+        for (n = 0; n < seqDesc->numBlocks; ++n) {
+            if (!seqDesc->blockTable[n].pureDelayFlag) {
+                activeDuration_us += seqDesc->blockDefinitions[n].duration_us;
             }
         }
 
         if (activeDuration_us <= PULSEQLIB_SINGLE_TR_MAX_DURATION_US) {
             /* Treat entire sequence as a single TR */
-            trDesc->trSize = numBlocks;
+            trDesc->trSize = seqDesc->numBlocks;
             trDesc->numTRs = 1;
             trDesc->degeneratePrep = 1;
             trDesc->numPrepBlocks = 0;
@@ -3235,12 +3292,12 @@ int pulseqlib_findTRInSequence(
     trDesc->numTRs = imagingLen / L;
 
     /* Safety check for preparation */
-    if (numPrep) {
-        if (numPrep % L == 0) {
-            for (n = 0; n < (int)(numPrep / L); ++n) {
+    if (seqDesc->numPrepBlocks) {
+        if (seqDesc->numPrepBlocks % L == 0) {
+            for (n = 0; n < (int)(seqDesc->numPrepBlocks / L); ++n) {
                 if (!array_equal(&sequence_pattern[imagingStart], &sequence_pattern[n * L], L)) 
                 {
-                    prepDuration_us = pulseqlib_sum_durations_us(blockDurations_us, 0, numPrep);
+                    prepDuration_us = pulseqlib_sum_durations_us(blockDurations_us, 0, seqDesc->numPrepBlocks);
                     if (prepDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) 
                     {
                         diag->code = PULSEQLIB_ERR_TR_PREP_TOO_LONG;
@@ -3255,10 +3312,10 @@ int pulseqlib_findTRInSequence(
             if (trDesc->degeneratePrep == 1) 
             {
                 trDesc->numPrepBlocks = 0;
-                trDesc->numPrepTRs = numPrep / L;
+                trDesc->numPrepTRs = seqDesc->numPrepBlocks / L;
             }
         } else {
-            prepDuration_us = pulseqlib_sum_durations_us(blockDurations_us, 0, numPrep);
+            prepDuration_us = pulseqlib_sum_durations_us(blockDurations_us, 0, seqDesc->numPrepBlocks);
             if (prepDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US)
             {
                 diag->code = PULSEQLIB_ERR_TR_PREP_TOO_LONG;
@@ -3271,12 +3328,12 @@ int pulseqlib_findTRInSequence(
     }
 
     /* Safety check for cooldown */
-    if (numCooldown) {
-        if (numCooldown % L == 0) {
-            for (n = 0; n < (int)(numCooldown / L); ++n) {
+    if (seqDesc->numCooldownBlocks) {
+        if (seqDesc->numCooldownBlocks % L == 0) {
+            for (n = 0; n < (int)(seqDesc->numCooldownBlocks / L); ++n) {
                 if (!array_equal(&sequence_pattern[imagingStart], &sequence_pattern[imagingEnd + n * L], L)) 
                 {
-                    cooldownDuration_us = pulseqlib_sum_durations_us(blockDurations_us, imagingEnd, numCooldown);
+                    cooldownDuration_us = pulseqlib_sum_durations_us(blockDurations_us, imagingEnd, seqDesc->numCooldownBlocks);
                     if (cooldownDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) 
                     {
                         diag->code = PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG;
@@ -3291,10 +3348,10 @@ int pulseqlib_findTRInSequence(
             if (trDesc->degenerateCooldown == 1) 
             {
                 trDesc->numCooldownBlocks = 0;
-                trDesc->numCooldownTRs = numCooldown / L;
+                trDesc->numCooldownTRs = seqDesc->numCooldownBlocks / L;
             }
         } else {
-            cooldownDuration_us = pulseqlib_sum_durations_us(blockDurations_us, imagingEnd, numCooldown);
+            cooldownDuration_us = pulseqlib_sum_durations_us(blockDurations_us, imagingEnd, seqDesc->numCooldownBlocks);
             if (cooldownDuration_us > PULSEQLIB_PREP_COOLDOWN_THRESHOLD_US) 
             {
                 diag->code = PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG;

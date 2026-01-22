@@ -106,32 +106,23 @@ public:
     }
 };
 
-static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, int index_max) {
+static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile) {
     if (!seqfile.seq) {
         throw std::runtime_error("SeqFile pointer is null");
     }
 
     const int numBlocks = seqfile.seq->numBlocks;
 
-    int start = (index_min < 0) ? 0 : index_min;
-    int end   = (index_max < 0) ? numBlocks : index_max;
-
-    if (start < 0) start = 0;
-    if (start > numBlocks) start = numBlocks;
-    if (end < start) end = start;
-    if (end > numBlocks) end = numBlocks;
-
-    const int rangeCount = end - start;
-
-    // Allocate sequence descriptor arrays
+    // Allocate sequence descriptor
     pulseqlib_SequenceDescriptor seqDesc;
     memset(&seqDesc, 0, sizeof(seqDesc));
-    seqDesc.numBlocks = numBlocks;
-    seqDesc.uniqueBlockTable = (int*)ALLOC(numBlocks * sizeof(int));
-    seqDesc.isPureDelayBlock = (int*)ALLOC(numBlocks * sizeof(int));
-    // Allocate for max possible unique blocks (rangeCount)
-    seqDesc.uniqueBlockDefinitions = (int(*)[6])ALLOC(rangeCount * 6 * sizeof(int));
+
+    // Allocate block definitions (max possible = numBlocks)
+    seqDesc.blockDefinitions = (pulseqlib_BlockDefinition*)ALLOC(numBlocks * sizeof(pulseqlib_BlockDefinition));
     
+    // Allocate block table (one entry per block)
+    seqDesc.blockTable = (pulseqlib_BlockTableElement*)ALLOC(numBlocks * sizeof(pulseqlib_BlockTableElement));
+
     // Only allocate if library has entries
     if (seqfile.seq->rfLibrarySize > 0) {
         seqDesc.rfDefinitions = (pulseqlib_RfDefinition*)ALLOC(seqfile.seq->rfLibrarySize * sizeof(pulseqlib_RfDefinition));
@@ -146,10 +137,9 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, in
         seqDesc.adcTable = (pulseqlib_AdcTableElement*)ALLOC(seqfile.seq->adcLibrarySize * sizeof(pulseqlib_AdcTableElement));
     }
 
-    if (!seqDesc.uniqueBlockTable || !seqDesc.isPureDelayBlock || !seqDesc.uniqueBlockDefinitions) {
-        FREE(seqDesc.uniqueBlockTable);
-        FREE(seqDesc.isPureDelayBlock);
-        FREE(seqDesc.uniqueBlockDefinitions);
+    if (!seqDesc.blockDefinitions || !seqDesc.blockTable) {
+        FREE(seqDesc.blockDefinitions);
+        FREE(seqDesc.blockTable);
         FREE(seqDesc.rfDefinitions);
         FREE(seqDesc.rfTable);
         FREE(seqDesc.gradDefinitions);
@@ -159,7 +149,7 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, in
         throw std::runtime_error("Failed to allocate sequence descriptor");
     }
 
-    int result = pulseqlib_getUniqueBlocks(seqfile.seq, &seqDesc, index_min, index_max);
+    int result = pulseqlib_getUniqueBlocks(seqfile.seq, &seqDesc);
 
     py::dict output;
 
@@ -168,30 +158,43 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, in
         output["error"] = pulseqlib_getErrorMessage(result);
     } else {
         output["success"] = true;
-        
-        // Unique block table
-        std::vector<int> uniqueBlockTable(seqDesc.uniqueBlockTable, seqDesc.uniqueBlockTable + numBlocks);
-        output["unique_block_table"] = uniqueBlockTable;
-        
-        // Pure delay block
-        std::vector<int> isPureDelayBlock(seqDesc.isPureDelayBlock, seqDesc.isPureDelayBlock + numBlocks);
-        output["is_pure_delay_block"] = isPureDelayBlock;
-        
-        // Unique block definitions
-        py::list uniqueBlockDefs;
+
+        // Number of preparation and cooldown blocks
+        output["num_prep_blocks"] = seqDesc.numPrepBlocks;
+        output["num_cooldown_blocks"] = seqDesc.numCooldownBlocks;
+        output["num_blocks"] = seqDesc.numBlocks;
+        output["num_unique_blocks"] = seqDesc.numUniqueBlocks;
+
+        // Block table (maps block index -> unique block ID and per-block info)
+        py::list blockTableList;
+        for (int i = 0; i < seqDesc.numBlocks; ++i) {
+            py::dict entry;
+            entry["id"] = seqDesc.blockTable[i].ID;
+            entry["pure_delay_flag"] = seqDesc.blockTable[i].pureDelayFlag;
+            entry["adc_id"] = seqDesc.blockTable[i].adcID;
+            entry["trigger_id"] = seqDesc.blockTable[i].triggerID;
+            entry["rotation_id"] = seqDesc.blockTable[i].rotationID;
+            entry["rfshim_id"] = seqDesc.blockTable[i].rfshimID;
+            entry["norot_flag"] = seqDesc.blockTable[i].norotFlag;
+            entry["nopos_flag"] = seqDesc.blockTable[i].noposFlag;
+            blockTableList.append(entry);
+        }
+        output["block_table"] = blockTableList;
+
+        // Block definitions (unique blocks)
+        py::list blockDefsList;
         for (int i = 0; i < seqDesc.numUniqueBlocks; ++i) {
             py::dict blockDef;
-            blockDef["id"] = seqDesc.uniqueBlockDefinitions[i][0];
-            blockDef["duration_us"] = seqDesc.uniqueBlockDefinitions[i][1];
-            blockDef["rf_id"] = seqDesc.uniqueBlockDefinitions[i][2];
-            blockDef["gx_id"] = seqDesc.uniqueBlockDefinitions[i][3];
-            blockDef["gy_id"] = seqDesc.uniqueBlockDefinitions[i][4];
-            blockDef["gz_id"] = seqDesc.uniqueBlockDefinitions[i][5];
-            uniqueBlockDefs.append(blockDef);
+            blockDef["id"] = seqDesc.blockDefinitions[i].ID;
+            blockDef["duration_us"] = seqDesc.blockDefinitions[i].duration_us;
+            blockDef["rf_id"] = seqDesc.blockDefinitions[i].rfID;
+            blockDef["gx_id"] = seqDesc.blockDefinitions[i].gxID;
+            blockDef["gy_id"] = seqDesc.blockDefinitions[i].gyID;
+            blockDef["gz_id"] = seqDesc.blockDefinitions[i].gzID;
+            blockDefsList.append(blockDef);
         }
-        output["unique_block_definitions"] = uniqueBlockDefs;
-        output["num_unique_blocks"] = seqDesc.numUniqueBlocks;
-        
+        output["block_definitions"] = blockDefsList;
+
         // RF definitions and table
         py::list rfDefs;
         for (int i = 0; i < seqDesc.numUniqueRFs; ++i) {
@@ -204,9 +207,10 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, in
             rfDefs.append(rfDef);
         }
         output["rf_definitions"] = rfDefs;
-        
+        output["num_unique_rfs"] = seqDesc.numUniqueRFs;
+
         py::list rfTable;
-        for (int i = 0; i < seqfile.seq->rfLibrarySize; ++i) {
+        for (int i = 0; i < seqDesc.rfTableSize; ++i) {
             py::dict rfEntry;
             rfEntry["id"] = seqDesc.rfTable[i].ID;
             rfEntry["amplitude"] = seqDesc.rfTable[i].amplitude;
@@ -215,7 +219,7 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, in
             rfTable.append(rfEntry);
         }
         output["rf_table"] = rfTable;
-        
+
         // Grad definitions and table
         py::list gradDefs;
         for (int i = 0; i < seqDesc.numUniqueGrads; ++i) {
@@ -230,16 +234,18 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, in
             gradDefs.append(gradDef);
         }
         output["grad_definitions"] = gradDefs;
-        
+        output["num_unique_grads"] = seqDesc.numUniqueGrads;
+
         py::list gradTable;
-        for (int i = 0; i < seqfile.seq->gradLibrarySize; ++i) {
+        for (int i = 0; i < seqDesc.gradTableSize; ++i) {
             py::dict gradEntry;
             gradEntry["id"] = seqDesc.gradTable[i].ID;
+            gradEntry["shot_index"] = seqDesc.gradTable[i].shotIndex;
             gradEntry["amplitude"] = seqDesc.gradTable[i].amplitude;
             gradTable.append(gradEntry);
         }
         output["grad_table"] = gradTable;
-        
+
         // ADC definitions and table
         py::list adcDefs;
         for (int i = 0; i < seqDesc.numUniqueADCs; ++i) {
@@ -251,9 +257,10 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, in
             adcDefs.append(adcDef);
         }
         output["adc_definitions"] = adcDefs;
-        
+        output["num_unique_adcs"] = seqDesc.numUniqueADCs;
+
         py::list adcTable;
-        for (int i = 0; i < seqfile.seq->adcLibrarySize; ++i) {
+        for (int i = 0; i < seqDesc.adcTableSize; ++i) {
             py::dict adcEntry;
             adcEntry["id"] = seqDesc.adcTable[i].ID;
             adcEntry["freq_offset"] = seqDesc.adcTable[i].freqOffset;
@@ -261,24 +268,17 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile, int index_min, in
             adcTable.append(adcEntry);
         }
         output["adc_table"] = adcTable;
-        
-        // TR descriptor
-        py::dict trDesc;
-        trDesc["num_prep_blocks"] = seqDesc.trDescriptor.numPrepBlocks;
-        trDesc["num_cooldown_blocks"] = seqDesc.trDescriptor.numCooldownBlocks;
-        trDesc["tr_size"] = seqDesc.trDescriptor.trSize;
-        trDesc["num_trs"] = seqDesc.trDescriptor.numTRs;
-        trDesc["num_prep_trs"] = seqDesc.trDescriptor.numPrepTRs;
-        trDesc["degenerate_prep"] = seqDesc.trDescriptor.degeneratePrep;
-        trDesc["num_cooldown_trs"] = seqDesc.trDescriptor.numCooldownTRs;
-        trDesc["degenerate_cooldown"] = seqDesc.trDescriptor.degenerateCooldown;
-        output["tr_descriptor"] = trDesc;
+
+        // TR descriptor info for backward compatibility
+        py::dict trDescriptor;
+        trDescriptor["num_prep_blocks"] = seqDesc.numPrepBlocks;
+        trDescriptor["num_cooldown_blocks"] = seqDesc.numCooldownBlocks;
+        output["tr_descriptor"] = trDescriptor;
     }
 
     // Free allocated memory
-    FREE(seqDesc.uniqueBlockTable);
-    FREE(seqDesc.isPureDelayBlock);
-    FREE(seqDesc.uniqueBlockDefinitions);
+    FREE(seqDesc.blockDefinitions);
+    FREE(seqDesc.blockTable);
     FREE(seqDesc.rfDefinitions);
     FREE(seqDesc.rfTable);
     FREE(seqDesc.gradDefinitions);
@@ -471,19 +471,20 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     m.def("_get_unique_blocks",
           &_get_unique_blocks,
           py::arg("seqfile"),
-          py::arg("index_min") = -1,
-          py::arg("index_max") = -1,
           R"pbdoc(
             Get unique blocks and event deduplication info from a sequence.
             
             Returns a dict with:
-            - unique_block_table: mapping block index -> unique block ID
-            - is_pure_delay_block: array indicating pure delay blocks
-            - unique_block_definitions: list of unique block definitions
+            - num_prep_blocks: number of preparation blocks
+            - num_cooldown_blocks: number of cooldown blocks
+            - num_blocks: total number of blocks
+            - num_unique_blocks: number of unique block definitions
+            - block_table: list of per-block info (id, pure_delay_flag, adc_id, trigger_id, rotation_id, rfshim_id, norot_flag, nopos_flag)
+            - block_definitions: list of unique block definitions (id, duration_us, rf_id, gx_id, gy_id, gz_id)
             - rf_definitions, rf_table: RF event deduplication
-            - grad_definitions, grad_table: Gradient event deduplication
+            - grad_definitions, grad_table: Gradient event deduplication  
             - adc_definitions, adc_table: ADC event deduplication
-            - tr_descriptor: TR structure info (prep/cooldown blocks)
+            - tr_descriptor: TR structure info
           )pbdoc");
 
     m.def("_find_tr_in_sequence",

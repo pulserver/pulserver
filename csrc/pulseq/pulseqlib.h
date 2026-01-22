@@ -86,6 +86,7 @@
 /* Unique block errors (-50 to -59) */
 #define PULSEQLIB_ERR_INVALID_PREP_POSITION      -50  /**< Invalid preparation block position */
 #define PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION  -51  /**< Invalid cooldown block position */
+#define PULSEQLIB_ERR_INVALID_ONCE_FLAGS         -52  /**< Invalid ONCE flag configuration in preparation/cooldown blocks */
 
 /* TR detection errors (-100 to -199) */
 #define PULSEQLIB_ERR_TR_NO_BLOCKS          -100  /**< Sequence has no blocks */
@@ -243,7 +244,6 @@ typedef struct pulseqlib_LabelOrFlagEvent {
 } pulseqlib_LabelOrFlagEvent; /* no Pulseq equivalent */
 
 
-
 typedef struct pulseqlib_LabelEvent {
     int slc; /**< Slice counter */
     int seg; /**< Segment counter e.g. for segmented FLASH or EPI */
@@ -303,6 +303,42 @@ typedef struct pulseqlib_RawBlock {
     int ext[MAX_EXTENSIONS_PER_BLOCK][2]; /* Tuples of extension library (labelset, labelinc, rotation etc) and ID [type, ref] */
 } pulseqlib_RawBlock;
 
+typedef struct pulseqlib_RawExtension {
+    pulseqlib_LabelEvent labelset;  /**< Label set values */
+    pulseqlib_LabelEvent labelinc;  /**< Label increment values */
+    pulseqlib_FlagEvent flag;       /**< Flag values */
+    int rotationIndex;  /**< Index into rotation library (-1 if none) */
+    int rfShimIndex;    /**< Index into RF shim library (-1 if none) */
+    int triggerIndex;   /**< Index into trigger library (-1 if none) */    
+    int softDelayIndex; /**< Index into soft delay library (-1 if none) */
+} pulseqlib_RawExtension;
+
+#define PULSEQLIB_RAW_EXTENSION_INIT { \
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, \
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, \
+    {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1} \
+    , -1, -1, -1, -1 \
+}
+
+typedef struct pulseqlib_ExtensionBlock {
+    pulseqlib_LabelEvent labelset;  /**< Label set values */
+    pulseqlib_LabelEvent labelinc;  /**< Label increment values */
+    pulseqlib_FlagEvent flag;       /**< Flag values */
+    pulseqlib_RotationEvent rotation; /**< Rotation quaternion or matrix */
+    pulseqlib_RfShimmingEvent rfShimming; /**< RF shimming amplitudes and phases */
+    pulseqlib_TriggerEvent trigger; /**< Trigger event */
+    pulseqlib_SoftDelayEvent softDelay; /**< Soft delay event */
+} pulseqlib_ExtensionBlock;
+
+#define PULSEQLIB_EXTENSION_BLOCK_INIT { \
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, \
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, \
+    {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, \
+    PULSEQLIB_ROTATION_EVENT_INIT, \
+    PULSEQLIB_RF_SHIMMING_EVENT_INIT, \
+    PULSEQLIB_TRIGGER_EVENT_INIT, \
+    PULSEQLIB_SOFT_DELAY_EVENT_INIT \
+}
 
 typedef struct pulseqlib_SeqBlock {
     int duration; /**< @brief Duration of the block (us) */
@@ -415,70 +451,6 @@ typedef struct pulseqlib_RfShimEntry {
 } pulseqlib_RfShimEntry;
 
 
-typedef struct pulseqlib_BlockLabels {
-    pulseqlib_LabelEvent labelset; /**< Label set values for the block */
-    pulseqlib_LabelEvent labelinc; /**< Label increment values for the block */
-    pulseqlib_FlagEvent flag; /**< Flag values carried by the block */
-} pulseqlib_BlockLabels;
-
-
-typedef struct pulseqlib_RFDynamic {
-    int present; /**< Non-zero if the block contains an RF event */
-    float amplitude; /**< RF amplitude (Hz) */
-    float freqOffset; /**< Static frequency offset component (Hz) */
-    float freqPPM; /**< Frequency offset coefficient (ppm/T) */
-    float phaseOffset; /**< Static phase offset component (rad) */
-    float phasePPM; /**< Phase offset coefficient (rad/T) */
-    float totalFrequency; /**< Combined frequency offset given a specific B0 (Hz) */
-    float totalPhase; /**< Combined phase offset given a specific B0 (rad) */
-} pulseqlib_RFDynamic;
-
-
-typedef struct pulseqlib_ADCDynamic {
-    int present; /**< Non-zero if the block contains an ADC event */
-    float freqOffset; /**< Static frequency offset component (Hz) */
-    float freqPPM; /**< Frequency offset coefficient (ppm/T) */
-    float phaseOffset; /**< Static phase offset component (rad) */
-    float phasePPM; /**< Phase offset coefficient (rad/T) */
-    float totalFrequency; /**< Combined frequency offset given a specific B0 (Hz) */
-    float totalPhase; /**< Combined phase offset given a specific B0 (rad) */
-} pulseqlib_ADCDynamic;
-
-
-typedef struct pulseqlib_GradDynamic {
-    int present; /**< Non-zero if the block contains a gradient event */
-    int type; /**< Gradient type encoded in the library (TRAP/GRAD) */
-    float amplitude; /**< Gradient amplitude (Hz/m) */
-    int waveShapeId; /**< Identifier of the associated waveform shape (0 if trapezoid) */
-    int timeShapeId; /**< Identifier of the associated time shape (0 if none) */
-} pulseqlib_GradDynamic;
-
-
-typedef struct pulseqlib_RotationDynamic {
-    int present; /**< Non-zero if the block carries a rotation extension */
-    const float* data; /**< Pointer to the rotation coefficients in the sequence library */
-    int length; /**< Number of coefficients pointed to by data (4 for quaternion, 9 for matrix) */
-    int index; /**< Index of the rotation entry in the library */
-} pulseqlib_RotationDynamic;
-
-
-typedef struct pulseqlib_RfShimDynamic {
-    int present; /**< Non-zero if the block carries an RF shimming extension */
-    const pulseqlib_RfShimEntry* entry; /**< Pointer to the RF shimming entry in the sequence library */
-} pulseqlib_RfShimDynamic;
-
-
-typedef struct pulseqlib_BlockDynamic {
-    pulseqlib_RFDynamic rf; /**< RF dynamic parameters */
-    pulseqlib_GradDynamic gx; /**< Gx dynamic parameters */
-    pulseqlib_GradDynamic gy; /**< Gy dynamic parameters */
-    pulseqlib_GradDynamic gz; /**< Gz dynamic parameters */
-    pulseqlib_ADCDynamic adc; /**< ADC dynamic parameters */
-    pulseqlib_RfShimDynamic rfShim; /**< RF shimming parameters */
-    pulseqlib_RotationDynamic rotation; /**< Rotation parameters */
-} pulseqlib_BlockDynamic;
-
-
 typedef struct pulseqlib_SeqFile {
     pulseqlib_Opts opts;
     char* filePath; /**< @brief Path to the sequence (.seq) file. */
@@ -584,6 +556,30 @@ typedef struct pulseqlib_AdcTableElement {
 
 #define PULSEQLIB_ADC_TABLE_ELEMENT_INIT {0, 0.0f, 0.0f}
 
+typedef struct pulseqlib_BlockDefinition {
+    int ID; /**< Unique Block ID */
+    int duration_us; /**< Block duration in microseconds */
+    int rfID; /**< RF event ID in the unique RF Library */
+    int gxID; /**< Gradient event ID in unique GRAD Library (X channel) */
+    int gyID; /**< Gradient event ID in unique GRAD Library (Y channel) */
+    int gzID; /**< Gradient event ID in unique GRAD Library (Z channel) */
+} pulseqlib_BlockDefinition;
+
+#define PULSEQLIB_BLOCK_DEFINITION_INIT {0, 0, 0, 0, 0, 0}
+
+typedef struct pulseqlib_BlockTableElement {
+    int ID; /**< Unique Block ID */
+    int pureDelayFlag; /**< Non-zero if the block is a pure delay block (no RF, Grad, ADC, or extensions) */
+    int adcID; /**< ADC event ID in unique ADC Library */
+    int triggerID; /**< Trigger extension ID */
+    int rotationID; /**< Rotation extension ID */
+    int rfshimID; /**< RF shimming extension ID */
+    int norotFlag; /**< Ignore FOV rotation flag */
+    int noposFlag; /**< Ignore FOV position flag */
+} pulseqlib_BlockTableElement;
+
+#define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, 0, 0}
+
 typedef struct pulseqlib_TRdescriptor {
     int numPrepBlocks; /**< Number of preparation blocks before the main TR */
     int numCooldownBlocks; /**< Number of cooldown blocks after the main TR */
@@ -598,29 +594,36 @@ typedef struct pulseqlib_TRdescriptor {
 #define PULSEQLIB_TR_DESCRIPTOR_INIT {0, 0, 0, 0, 0, 0, 0, 0}
 
 typedef struct pulseqlib_SequenceDescriptor {
-    int numBlocks; /**< Total number of blocks in the sequence */
-    int* uniqueBlockTable; /**< Pointer to array mapping block index → unique block ID */
-    int* isPureDelayBlock; /**< Pointer to array indicating if block index is a pure delay block (1) or not (0) */
+    int numPrepBlocks; /**< Number of preparation blocks before the main sequence */
+    int numCooldownBlocks; /**< Number of cooldown blocks after the main sequence */
 
     int numUniqueBlocks; /**< Number of unique blocks in the sequence */
-    int (*uniqueBlockDefinitions)[6]; /**< (ID, duration_us, rf=unique_RF_id, gx=unique_grad_id, gy=unique_grad_id, gz=unique_grad_id) */
+    pulseqlib_BlockDefinition* blockDefinitions; /**< (ID, duration_us, rf_id, gx_id, gy_id, gz_id) */
+
+    int numBlocks; /**< Total number of blocks in the sequence */
+    pulseqlib_BlockTableElement* blockTable; /**< Pointer to array mapping unique Block ID → Block dynamic parameters */
     
     int numUniqueRFs; /**< Number of unique RF events in the sequence */
     pulseqlib_RfDefinition* rfDefinitions; /**< (ID, rf_mag_id, rf_phase_id, rf_time_id, delay) */
+
+    int rfTableSize; /**< Size of the RF table */
     pulseqlib_RfTableElement* rfTable; /**< Pointer to array mapping unique RF ID → RF dynamic parameters */
 
     int numUniqueGrads; /**< Number of unique gradient events in the sequence */
     pulseqlib_GradDefinition* gradDefinitions; /**< (ID, type, rise/first ; flat/last ; fall/numUncompressedSamples, unused/time_id, delay) */
+    
+    int gradTableSize; /**< Size of the Grad table */
     pulseqlib_GradTableElement* gradTable; /**< Pointer to array mapping unique Grad ID → Grad dynamic parameters */
 
     int numUniqueADCs; /**< Number of unique ADC events in the sequence */
     pulseqlib_AdcDefinition* adcDefinitions; /**< (ID, numSamples, dwellTime, delay) */
-    pulseqlib_AdcTableElement* adcTable; /**< Pointer to array mapping unique ADC ID → ADC dynamic parameters */
-    pulseqlib_TRdescriptor trDescriptor; /**< TR segmentation descriptor */
 
+    int adcTableSize; /**< Size of the ADC table */
+    pulseqlib_AdcTableElement* adcTable; /**< Pointer to array mapping unique ADC ID → ADC dynamic parameters */
+    
 } pulseqlib_SequenceDescriptor;
 
-#define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT {0, NULL, NULL, 0, NULL, 0, NULL, NULL, 0, NULL, NULL, PULSEQLIB_TR_DESCRIPTOR_INIT}
+#define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT {0, 0, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL}
 
 typedef struct pulseqlib_TRsegment {
     int startBlock; /**< Starting block index of the TR segment */
