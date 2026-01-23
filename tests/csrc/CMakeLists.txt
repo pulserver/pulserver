@@ -1,4 +1,3 @@
-
 # Set the minimum required version of CMake
 cmake_minimum_required(VERSION 3.10)
 project(pulserverlibTests C)
@@ -26,8 +25,8 @@ target_link_libraries(run_tests PRIVATE pulseqlib)
 # target_link_libraries(run_tests PRIVATE pulseqlib pulserverlib)
 
 # Use the top-level csrc directory for public API headers
-target_include_directories(run_tests PRIVATE  ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/pulseq)
-# target_include_directories(run_tests PRIVATE  ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/pulserver)
+target_include_directories(run_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/pulseq)
+target_include_directories(run_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../external/kissfft)
 
 # Enable warnings and enforce ANSI C89 compliance
 target_compile_options(run_tests PRIVATE -Wall -Wextra -std=c89 -pedantic -Werror)

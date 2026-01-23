@@ -97,6 +97,7 @@ int pulseqlib_findSegmentsInTR(
 );
 
 void pulseqlib_segmentTableResultFree(pulseqlib_SegmentTableResult* result);
+void pulseqlib_sequenceDescriptorFree(pulseqlib_SequenceDescriptor* seqDesc);
 
 #ifdef __cplusplus
 }

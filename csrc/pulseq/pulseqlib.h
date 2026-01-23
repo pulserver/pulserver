@@ -100,6 +100,11 @@
 #define PULSEQLIB_ERR_SEG_NONZERO_START_GRAD -200 /**< First block does not start with zero gradient */
 #define PULSEQLIB_ERR_SEG_NONZERO_END_GRAD   -201 /**< Last block does not end with zero gradient */
 #define PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND  -202 /**< No segment boundaries could be identified */
+#define PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS    -203 /**< Number of gradient shots exceeds MAX_GRAD_SHOTS */
+
+/* Selective excitation errors (-300 to -399) */
+#define PULSEQLIB_ERR_SELEXC_GRAD_SCALING    -300 /**< Selective excitation block has varying gradient amplitude */
+#define PULSEQLIB_ERR_SELEXC_ROTATION        -301 /**< Selective excitation block has rotation extension */
 
 /* Parsing/file errors (-10 to -19) */
 #define PULSEQLIB_ERR_FILE_NOT_FOUND        -10  /**< File could not be opened */
@@ -510,7 +515,13 @@ typedef struct pulseqlib_RfDefinition {
     int phaseShapeID; /**< Phase shape ID */
     int timeShapeID; /**< Time shape ID */
     int delay; /**< Delay prior to the pulse (us) */
+
+    float area;        /**< Normalized area of RF pulse (s for real, s for complex magnitude) */
+    int isodelay_us;   /**< Time of peak magnitude from pulse start (us) */
+    float bandwidth;   /**< RF bandwidth in Hz (computed via FFT, 0 if not yet computed) */
 } pulseqlib_RfDefinition;
+
+#define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0, 0.0f, 0, 0.0f}
 
 typedef struct pulseqlib_RfTableElement {
     int ID; /**< Unique RF ID */
@@ -521,6 +532,8 @@ typedef struct pulseqlib_RfTableElement {
 
 #define PULSEQLIB_RF_TABLE_ELEMENT_INIT {0, 0.0f, 0.0f, 0.0f}
 
+#define MAX_GRAD_SHOTS 16  /**< Maximum number of shots/interleaves per gradient definition */
+
 typedef struct pulseqlib_GradDefinition {
     int ID; /**< Unique Grad ID */
     int type; /**< Gradient type encoded in the library (TRAP/GRAD) */
@@ -529,7 +542,16 @@ typedef struct pulseqlib_GradDefinition {
     int fallTimeOrNumUncompressedSamples; /**< Fall time (us) for trapezoid, or number of uncompressed samples for arbitrary */
     int unusedOrTimeShapeID; /**< Unused Time shape ID */
     int delay; /**< Delay prior to the pulse (us) */
+    int numShots; /**< Number of distinct waveform shapes (shots/interleaves) for this gradient definition. 1 for trapezoids. */
+    int shotShapeIDs[MAX_GRAD_SHOTS]; /**< Array of shape IDs, one per shot. Unused entries are 0. Length = numShots. */
+    
+    float slewRate[MAX_GRAD_SHOTS];    /**< Maximum slew rate of normalized waveform (1/us) for each shot */
+    float energy[MAX_GRAD_SHOTS];      /**< Energy integral of normalized waveform (us) for each shot: integral(|shape|^2 dt) */
+    float firstValue[MAX_GRAD_SHOTS];  /**< First sample value of normalized waveform for each shot */
+    float lastValue[MAX_GRAD_SHOTS];   /**< Last sample value of normalized waveform for each shot */
 } pulseqlib_GradDefinition;
+
+#define PULSEQLIB_GRAD_DEFINITION_INIT {0, 0, 0, 0, 0, 0, 0, 1, {0}, {0.0f}, {0.0f}, {0.0f}, {0.0f}}
 
 typedef struct pulseqlib_GradTableElement {
     int ID;
@@ -573,12 +595,13 @@ typedef struct pulseqlib_BlockTableElement {
     int adcID; /**< ADC event ID in unique ADC Library */
     int triggerID; /**< Trigger extension ID */
     int rotationID; /**< Rotation extension ID */
-    int rfshimID; /**< RF shimming extension ID */
     int norotFlag; /**< Ignore FOV rotation flag */
     int noposFlag; /**< Ignore FOV position flag */
+    int pmcFlag; /**< Prospective motion correction flag */
+    int navFlag; /**< Navigator flag */
 } pulseqlib_BlockTableElement;
 
-#define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, 0, 0}
+#define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, 0, 0, 0, 0, 0, 0}
 
 typedef struct pulseqlib_TRdescriptor {
     int numPrepBlocks; /**< Number of preparation blocks before the main TR */
@@ -620,10 +643,22 @@ typedef struct pulseqlib_SequenceDescriptor {
 
     int adcTableSize; /**< Size of the ADC table */
     pulseqlib_AdcTableElement* adcTable; /**< Pointer to array mapping unique ADC ID → ADC dynamic parameters */
+
+    /* Rotation matrices (converted from quaternions) */
+    int numRotations; /**< Number of rotation matrices */
+    float (*rotationMatrices)[9]; /**< Rotation matrices as flattened 3x3 in row-major order */
+
+    /* Trigger events */
+    int numTriggers; /**< Number of trigger events */
+    pulseqlib_TriggerEvent* triggerEvents; /**< Array of trigger events */
+
+    /* Shape library (decompressed waveforms) */
+    int numShapes; /**< Number of shapes */
+    pulseqlib_ShapeArbitrary* shapes; /**< Array of decompressed shape waveforms */
     
 } pulseqlib_SequenceDescriptor;
 
-#define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT {0, 0, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL}
+#define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT {0, 0, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL}
 
 typedef struct pulseqlib_TRsegment {
     int startBlock; /**< Starting block index of the TR segment */
@@ -647,148 +682,6 @@ typedef struct pulseqlib_SegmentTableResult {
     int* cooldownSegmentTable;   /**< Maps cooldown segment index → unique segment ID */
 } pulseqlib_SegmentTableResult;
 
-
-/*************************** Actual Pulserver Objects ******************************/
-typedef struct pulseqlib_RFObject {
-    int num_samples; /**< Number of RF samples */
-    int complex_flag; /**< True if RF phase is present */
-    int default_raster_flag; /**< True if RF uses default raster time from sequence options */
-    float* magnitude; /**< Pointer to RF samples array (max(abs(magnitude)) == 1.0) */
-    float* phase; /**< Pointer to RF phase samples array (present if complex_flag is non-zero) */
-    int* time_us; /**< Pointer to RF time samples array in microseconds (present if default_raster_flag is zero) */
-    int duration_us; /**< RF duration from start in microseconds */
-    int center_us; /**< RF isocenter time from start in microseconds */
-    float bandwidth; /**< RF bandwidth in Hz */
-    float max_amplitude; /**< Maximum RF amplitude in Hz across instances */
-    float max_flip_angle; /**< Maximum flip angle in radians across instances */
-} pulseqlib_RFObject;
-
-#define PULSEQLIB_RF_OBJECT_INIT {0, 0, 0, NULL, NULL, NULL, 0, 0, 0.0f, 0.0f}
-
-typedef struct pulseqlib_GradientObject {
-    int num_samples; /**< Number of gradient samples */
-    int default_raster_flag; /**< True if gradient uses default raster time from sequence options */
-    int num_waveforms; /**< Number of gradient waveforms (0 for trapezoids; 1 for single-shot; N for multi-shot) */
-    float** waveform; /**< Pointer to gradient samples array (max(abs(waveform)) == 1.0) */
-    int* time_us; /**< Pointer to gradient time samples array in microseconds (present if default_raster_flag is zero) */
-    int duration_us; /**< Gradient duration from start in microseconds */
-    float* normalized_energy; /**< Gradient normalized energy in (Hz/m) s for each waveform */
-    float* normalized_slew; /**< Gradient normalized slew rate in 1 / s  for each waveform */
-    float max_energy; /**< Maximum energy across all waveforms (Hz/m) s */
-    float max_slew; /**< Maximum slew rate across all waveforms 1 / s */
-    int max_energy_index; /**< Index of the waveform with maximum energy */
-    int max_slew_index; /**< Index of the waveform with maximum slew rate */
-} pulseqlib_GradientObject;
-
-#define PULSEQLIB_GRADIENT_OBJECT_INIT {0, 0, 0, NULL, NULL, 0, NULL, NULL, 0.0f, 0.0f, -1, -1}
-
-typedef struct pulseqlib_GradientTupleObject {
-    int gx_ID; /**< Gx gradient object ID */
-    int gx_delay_us; /**< Gx gradient delay in microseconds */
-    int gy_ID; /**< Gy gradient object ID */
-    int gy_delay_us; /**< Gy gradient delay in microseconds */
-    int gz_ID; /**< Gz gradient object ID */
-    int gz_delay_us; /**< Gz gradient delay in microseconds */
-} pulseqlib_GradientTupleObject;
-
-typedef struct pulseqlib_AdcObject {
-    int num_samples;
-    int dwell_time_us; /**< Dwell time in microseconds */
-} pulseqlib_AdcObject;
-
-#define PULSEQLIB_ADC_OBJECT_INIT {0, 0}
-
-typedef struct pulseqlib_FrequencyModulationObject {
-    int num_samples;
-    int default_raster_flag; /**< True if frequency modulation uses default raster time from sequence options */
-    float* frequency; /**< Pointer to frequency modulation samples array in Hz */
-    int* time_us; /**< Pointer to time samples array in microseconds */
-} pulseqlib_FrequencyModulationObject;
-
-#define PULSEQLIB_FREQUENCY_MODULATION_OBJECT_INIT {0, 0, NULL, NULL}
-
-typedef struct pulseqlib_SegmentedSequenceBlock {
-    int duration_us; /**< Block duration in microseconds */
-
-    /* RF */
-    int rf_ID; /**< RF object ID */
-    int rf_delay_us; /**< RF delay in microseconds wrt block start */
-
-    /* Gradients */
-    int grad_ID; /**< Gradient tuple object ID */
-    int grad_delay_us; /**< Gradient tuple delay in microseconds wrt block start */
-
-    /* ADC */
-    int adc_ID; /**< ADC object ID */
-    int adc_delay_us; /**< ADC delay in microseconds wrt block start */
-} pulseqlib_SegmentedSequenceBlock;
-
-#define PULSEQLIB_SEGMENTEDSEQUENCEBLOCK_INIT {0, -1, 0, -1, 0, -1}
-
-typedef struct pulseqlib_SegmentObject {
-    int duration_us; /**< Duration of the segment in microseconds */
-    int startBlock; /**< Starting block index of the segment */
-    int numBlocks; /**< Number of blocks in the segment */
-    pulseqlib_SegmentedSequenceBlock* blocks; /**< Array of blocks in the segment */
-    int* rotext; /**< Array of flags indicating presence of rotation extension for a given block */
-    int* norot;  /**< Array of flags indicating whether fov rotation has to be ignored for a given block */
-    int* nopos;  /**< Array of flags indicating whether fov shift has to be ignored for a given block */
-} pulseqlib_SegmentObject;
-
-#define PULSEQLIB_SEGMENTOBJECT_INIT {0, 0, 0, NULL, NULL, NULL, NULL}
-
-typedef struct pulseqlib_SegmentedSequenceTR {
-    int duration_us; /**< Duration of the TR in microseconds */
-    int startBlock; /**< Starting block index of the TR */
-    int numBlocks; /**< Number of blocks in the TR */
-    int numSegments; /**< Number of segments in the TR */
-    int* segment_IDs; /**< Array of segments in the TR */
-    float rf_scaling; /**< RF scaling factor for each pulse instance in the TR */
-} pulseqlib_SegmentedSequenceTR;
-
-#define PULSEQLIB_SEGMENTEDSEQUENCETR_INIT {0, 0, 0, 0, NULL, 1.0f}
-
-typedef struct pulseqlib_SegmentedSequenceLoop {
-    int numBlocks;   /**< Number of blocks in the loop */
-    int (*block)[7]; /**< Array of tuples (rf_event, gx_event, gy_event, gz_event, adc_event, rot_event, once) */
-    int numRFEvents; /**< Number of RF events in the loop */
-    int (*rfEvents)[2]; /**< Array of tuples (rf_freq, rf_phase) */
-    int (*numGxEvents)[2]; /**< Array of tuples (gx_wave_id, gx_amplitude) */
-    int (*numGyEvents)[2]; /**< Array of tuples (gy_wave_id, gy_amplitude) */
-    int (*numGzEvents)[2]; /**< Array of tuples (gz_wave_id, gz_amplitude) */
-    int (*numAdcEvents)[3]; /**< Array of tuples (adc_freq, adc_phase, adc_rtfeedback) */
-    int (*numRotMatrices)[9]; /**< Array of rotation matrices (3x3, row-major) */
-} pulseqlib_SegmentedSequenceLoop;
-
-typedef struct pulseqlib_SegmentedSubSequence {
-    pulseqlib_SegmentedSequenceTR prepTR; /**< Preparation TR */
-    pulseqlib_SegmentedSequenceLoop prepLoop; /**< Preparation loop */
-
-    pulseqlib_SegmentedSequenceTR mainTR; /**< Main TR */
-    pulseqlib_SegmentedSequenceLoop mainLoop; /**< Main loop */
-
-    pulseqlib_SegmentedSequenceTR cooldownTR; /**< Cooldown TR */
-    pulseqlib_SegmentedSequenceLoop cooldownLoop; /**< Cooldown loop */
-} pulseqlib_SegmentedSubSequence;
-
-typedef struct pulseqlib_SegmentedSequence {
-    pulseqlib_Opts opts; /**< Sequence options */
-
-    int num_rf_objects; /**< Number of RF objects in the sequence */
-    pulseqlib_RFObject* rf_objects; /**< Array of RF objects */
-
-    int num_gradient_objects; /**< Number of gradient objects in the sequence */
-    pulseqlib_GradientObject* gradient_objects; /**< Array of gradient objects */
-
-    int num_adc_objects; /**< Number of ADC objects in the sequence */
-    pulseqlib_AdcObject* adc_objects; /**< Array of ADC objects */
-
-    int num_segment_objects; /**< Number of segments in the sequence */
-    pulseqlib_SegmentObject* segment_object; /**< Array of segments */
-
-    int numSubSequences; /**< Number of sub-sequences in the sequence */
-
-} pulseqlib_SegmentedSequence;
 
 #endif /* PULSEQLIB_H */
 

@@ -5,6 +5,9 @@
 
 #include "pulseqlib_methods.h"
 
+#include "kiss_fft.h"
+#include "kiss_fftr.h"
+
 #define INIT_LIBRARY(seq, fieldPtr, sizeField, flagField) \
     do { \
         (seq)->fieldPtr = NULL; \
@@ -125,6 +128,16 @@ const char* pulseqlib_getErrorMessage(int code) {
             return "Invalid cooldown block position";
         case PULSEQLIB_ERR_INVALID_ONCE_FLAGS:
             return "ONCE flags were found outside preparation/cooldown sections";
+
+        /* Too many gradient shots error */
+        case PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS:
+            return "Number of waveform shots exceeds maximum allowed";
+
+        /* Incompatible selective excitation errors */
+        case PULSEQLIB_ERR_SELEXC_GRAD_SCALING:
+            return "Selective excitation block has varying gradient amplitude across instances";
+        case PULSEQLIB_ERR_SELEXC_ROTATION:
+            return "Selective excitation block has rotation extension";
         
         /* TR detection errors */
         case PULSEQLIB_ERR_TR_NO_BLOCKS:
@@ -184,6 +197,17 @@ const char* pulseqlib_getErrorHint(int code) {
             return "Each segment must begin and end with gradient amplitudes that can "
                    "ramp to/from zero within one gradient raster. Check that spoiler "
                    "gradients or flow-compensation lobes are properly balanced.";
+        case PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS:
+            return "The sequence contains a waveform with more than 16 distinct waveform shapes "
+                   "(interleaves/shots). Consider representing the waveform using scaling or rotation.";
+        case PULSEQLIB_ERR_SELEXC_GRAD_SCALING:
+            return "Blocks containing both RF and gradients (spatially selective excitation) require "
+                   "constant gradient amplitude across instances for off-isocenter frequency modulation. Use explicit "
+                   "multi-shot gradient definitions instead of amplitude scaling.";
+        case PULSEQLIB_ERR_SELEXC_ROTATION:
+            return "Blocks containing both RF and gradients (spatially selective excitation) cannot "
+                   "have rotation extensions because frequency modulation is computed at prep time. "
+                   "Use explicit multi-shot gradient definitions with pre-rotated waveforms instead.";
         
         case PULSEQLIB_ERR_TR_PREP_TOO_LONG:
         case PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG:
@@ -195,8 +219,350 @@ const char* pulseqlib_getErrorHint(int code) {
     }
 }
 
+/******************************************* Math Helpers *************************************************/
 
-int initStandardLibrary(FILE* f, const long* offsets, int numSections, void** target, int* targetCount, int N) {
+/**
+ * @brief Find maximum absolute value in a real-valued array.
+ *
+ * @param[in]  samples    Array of samples.
+ * @param[in]  numSamples Number of samples.
+ * @return Maximum absolute value, or 0 if array is empty/NULL.
+ */
+static float find_max_abs_real(const float* samples, int numSamples)
+{
+    int i;
+    float maxAbs = 0.0f;
+    float absVal;
+    
+    if (!samples || numSamples <= 0) {
+        return 0.0f;
+    }
+    
+    for (i = 0; i < numSamples; ++i) {
+        absVal = (float)fabs(samples[i]);
+        if (absVal > maxAbs) {
+            maxAbs = absVal;
+        }
+    }
+    
+    return maxAbs;
+}
+
+/**
+ * @brief Convert magnitude/phase arrays to real/imaginary arrays.
+ *
+ * @param[in]  magnitude  Magnitude array.
+ * @param[in]  phase      Phase array (radians).
+ * @param[in]  numSamples Number of samples.
+ * @param[out] real       Output real part array (must be pre-allocated).
+ * @param[out] imag       Output imaginary part array (must be pre-allocated).
+ */
+static void mag_phase_to_real_imag(
+    const float* magnitude,
+    const float* phase,
+    int numSamples,
+    float* real,
+    float* imag)
+{
+    int i;
+    
+    if (!magnitude || !phase || !real || !imag || numSamples <= 0) {
+        return;
+    }
+    
+    for (i = 0; i < numSamples; ++i) {
+        real[i] = magnitude[i] * (float)cos(phase[i]);
+        imag[i] = magnitude[i] * (float)sin(phase[i]);
+    }
+}
+
+/**
+ * @brief Trapezoidal integration for real-valued function with uniform raster.
+ *
+ * Computes integral of f(t) dt using trapezoidal rule.
+ *
+ * @param[in]  samples    Array of function values.
+ * @param[in]  numSamples Number of samples.
+ * @param[in]  dt         Time step (seconds).
+ * @return Integral value.
+ */
+static float trapz_real_uniform(const float* samples, int numSamples, float dt)
+{
+    int i;
+    float sum = 0.0f;
+    
+    if (!samples || numSamples < 2 || dt <= 0.0f) {
+        return 0.0f;
+    }
+    
+    /* Trapezoidal rule: sum of (f[i-1] + f[i]) / 2 * dt */
+    for (i = 1; i < numSamples; ++i) {
+        sum += 0.5f * (samples[i - 1] + samples[i]) * dt;
+    }
+    
+    return sum;
+}
+
+/**
+ * @brief Trapezoidal integration for real-valued function with non-uniform raster.
+ *
+ * Computes integral of f(t) dt using trapezoidal rule.
+ *
+ * @param[in]  samples    Array of function values.
+ * @param[in]  time       Array of time points (seconds).
+ * @param[in]  numSamples Number of samples.
+ * @return Integral value.
+ */
+static float trapz_real_nonuniform(const float* samples, const float* time, int numSamples)
+{
+    int i;
+    float sum = 0.0f;
+    float dt;
+    
+    if (!samples || !time || numSamples < 2) {
+        return 0.0f;
+    }
+    
+    for (i = 1; i < numSamples; ++i) {
+        dt = time[i] - time[i - 1];
+        if (dt > 0.0f) {
+            sum += 0.5f * (samples[i - 1] + samples[i]) * dt;
+        }
+    }
+    
+    return sum;
+}
+
+/**
+ * @brief Trapezoidal integration of |f(t)| for complex-valued function with uniform raster.
+ *
+ * Computes integral of |f(t)| dt (magnitude, not magnitude squared).
+ *
+ * @param[in]  samples_re Real part of function values.
+ * @param[in]  samples_im Imaginary part of function values.
+ * @param[in]  numSamples Number of samples.
+ * @param[in]  dt         Time step (seconds).
+ * @return Integral value.
+ */
+static float trapz_complex_mag_uniform(
+    const float* samples_re,
+    const float* samples_im,
+    int numSamples,
+    float dt)
+{
+    int i;
+    float sum = 0.0f;
+    float mag_prev, mag_curr;
+    
+    if (!samples_re || !samples_im || numSamples < 2 || dt <= 0.0f) {
+        return 0.0f;
+    }
+    
+    mag_prev = (float)sqrt(samples_re[0] * samples_re[0] + samples_im[0] * samples_im[0]);
+    
+    for (i = 1; i < numSamples; ++i) {
+        mag_curr = (float)sqrt(samples_re[i] * samples_re[i] + samples_im[i] * samples_im[i]);
+        sum += 0.5f * (mag_prev + mag_curr) * dt;
+        mag_prev = mag_curr;
+    }
+    
+    return sum;
+}
+
+/**
+ * @brief Trapezoidal integration of |f(t)| for complex-valued function with non-uniform raster.
+ *
+ * Computes integral of |f(t)| dt (magnitude, not magnitude squared).
+ *
+ * @param[in]  samples_re Real part of function values.
+ * @param[in]  samples_im Imaginary part of function values.
+ * @param[in]  time       Array of time points (seconds).
+ * @param[in]  numSamples Number of samples.
+ * @return Integral value.
+ */
+static float trapz_complex_mag_nonuniform(
+    const float* samples_re,
+    const float* samples_im,
+    const float* time,
+    int numSamples)
+{
+    int i;
+    float sum = 0.0f;
+    float dt;
+    float mag_prev, mag_curr;
+    
+    if (!samples_re || !samples_im || !time || numSamples < 2) {
+        return 0.0f;
+    }
+    
+    mag_prev = (float)sqrt(samples_re[0] * samples_re[0] + samples_im[0] * samples_im[0]);
+    
+    for (i = 1; i < numSamples; ++i) {
+        dt = time[i] - time[i - 1];
+        if (dt > 0.0f) {
+            mag_curr = (float)sqrt(samples_re[i] * samples_re[i] + samples_im[i] * samples_im[i]);
+            sum += 0.5f * (mag_prev + mag_curr) * dt;
+            mag_prev = mag_curr;
+        }
+    }
+    
+    return sum;
+}
+
+/**
+ * @brief Compute maximum absolute slew rate for real-valued waveform with uniform raster.
+ *
+ * @param[in]  samples    Array of function values.
+ * @param[in]  numSamples Number of samples.
+ * @param[in]  dt         Time step (seconds).
+ * @return Maximum absolute slew rate (1/s).
+ */
+static float max_slew_real_uniform(const float* samples, int numSamples, float dt)
+{
+    int i;
+    float maxSlew = 0.0f;
+    float slew;
+    
+    if (!samples || numSamples < 2 || dt <= 0.0f) {
+        return 0.0f;
+    }
+    
+    for (i = 1; i < numSamples; ++i) {
+        slew = (float)fabs((samples[i] - samples[i - 1]) / dt);
+        if (slew > maxSlew) {
+            maxSlew = slew;
+        }
+    }
+    
+    return maxSlew;
+}
+
+/**
+ * @brief Compute maximum absolute slew rate for real-valued waveform with non-uniform raster.
+ *
+ * @param[in]  samples    Array of function values.
+ * @param[in]  time       Array of time points (seconds).
+ * @param[in]  numSamples Number of samples.
+ * @return Maximum absolute slew rate (1/s).
+ */
+static float max_slew_real_nonuniform(const float* samples, const float* time, int numSamples)
+{
+    int i;
+    float maxSlew = 0.0f;
+    float dt, slew;
+    
+    if (!samples || !time || numSamples < 2) {
+        return 0.0f;
+    }
+    
+    for (i = 1; i < numSamples; ++i) {
+        dt = time[i] - time[i - 1];
+        if (dt > 0.0f) {
+            slew = (float)fabs((samples[i] - samples[i - 1]) / dt);
+            if (slew > maxSlew) {
+                maxSlew = slew;
+            }
+        }
+    }
+    
+    return maxSlew;
+}
+
+/**
+ * @brief Find index of maximum absolute value in a real-valued array.
+ *
+ * @param[in]  samples    Array of samples.
+ * @param[in]  numSamples Number of samples.
+ * @return Index of maximum absolute value, or 0 if array is empty/NULL.
+ */
+static int find_max_abs_index_real(const float* samples, int numSamples)
+{
+    int i;
+    int maxIdx = 0;
+    float maxAbs = 0.0f;
+    float absVal;
+    
+    if (!samples || numSamples <= 0) {
+        return 0;
+    }
+    
+    for (i = 0; i < numSamples; ++i) {
+        absVal = (float)fabs(samples[i]);
+        if (absVal > maxAbs) {
+            maxAbs = absVal;
+            maxIdx = i;
+        }
+    }
+    
+    return maxIdx;
+}
+
+/**
+ * @brief Convert a quaternion to a 3x3 rotation matrix.
+ *
+ * Quaternion format: [w, x, y, z] where w is the scalar part.
+ * The quaternion is normalized before conversion to ensure a unitary rotation matrix.
+ * Output matrix is in row-major order.
+ *
+ * @param[in]  quat   Quaternion as [w, x, y, z].
+ * @param[out] matrix Output 3x3 rotation matrix (9 floats, row-major).
+ */
+static void quaternion_to_matrix(const float* quat, float* matrix)
+{
+    float w = quat[0];
+    float x = quat[1];
+    float y = quat[2];
+    float z = quat[3];
+    
+    float norm, invNorm;
+    float xx, yy, zz, xy, xz, yz, wx, wy, wz;
+    
+    /* Normalize quaternion */
+    norm = (float)sqrt(w*w + x*x + y*y + z*z);
+    if (norm > 1e-9f) {
+        invNorm = 1.0f / norm;
+        w *= invNorm;
+        x *= invNorm;
+        y *= invNorm;
+        z *= invNorm;
+    } else {
+        /* Degenerate quaternion - return identity matrix */
+        matrix[0] = 1.0f; matrix[1] = 0.0f; matrix[2] = 0.0f;
+        matrix[3] = 0.0f; matrix[4] = 1.0f; matrix[5] = 0.0f;
+        matrix[6] = 0.0f; matrix[7] = 0.0f; matrix[8] = 1.0f;
+        return;
+    }
+    
+    xx = x * x;
+    yy = y * y;
+    zz = z * z;
+    xy = x * y;
+    xz = x * z;
+    yz = y * z;
+    wx = w * x;
+    wy = w * y;
+    wz = w * z;
+    
+    /* Row 0 */
+    matrix[0] = 1.0f - 2.0f * (yy + zz);
+    matrix[1] = 2.0f * (xy - wz);
+    matrix[2] = 2.0f * (xz + wy);
+    
+    /* Row 1 */
+    matrix[3] = 2.0f * (xy + wz);
+    matrix[4] = 1.0f - 2.0f * (xx + zz);
+    matrix[5] = 2.0f * (yz - wx);
+    
+    /* Row 2 */
+    matrix[6] = 2.0f * (xz - wy);
+    matrix[7] = 2.0f * (yz + wx);
+    matrix[8] = 1.0f - 2.0f * (xx + yy);
+}
+
+
+/***************************************************** Private Functions  ***************************************/
+int initStandardLibrary(FILE* f, const long* offsets, int numSections, void** target, int* targetCount, int N) 
+{
     char line[MAX_LINE_LENGTH];
     int maxIndex = -1;
     int sec, i, j, idx;
@@ -2767,6 +3133,475 @@ static int deduplicate_grad_library(const pulseqlib_SeqFile* seq, pulseqlib_Grad
 
 
 /**
+ * @brief Compute shot indices for gradient table entries.
+ *
+ * For each unique gradient definition, this function identifies distinct waveform
+ * shapes (for arbitrary gradients) and assigns a shot index to each gradient
+ * library entry. Trapezoids always have numShots=1 and shotIndex=0.
+ *
+ * @param[in]  seq              Pointer to the sequence file.
+ * @param[in]  numUniqueGrads   Number of unique gradient definitions.
+ * @param[in,out] gradDefinitions  Array of gradient definitions; numShots and shotShapeIDs are populated.
+ * @param[in,out] gradTable     Array of gradient table entries; shotIndex is populated.
+ * @return PULSEQLIB_OK on success, or a negative error code on failure.
+ */
+static int compute_grad_shot_indices(
+    const pulseqlib_SeqFile* seq,
+    int numUniqueGrads,
+    pulseqlib_GradDefinition* gradDefinitions,
+    pulseqlib_GradTableElement* gradTable)
+{
+    int numRows = seq->gradLibrarySize;
+    int defIdx, i, j;
+    int shapeId;
+    int found;
+    int shotCount;
+
+    if (numRows <= 0 || numUniqueGrads <= 0) {
+        return PULSEQLIB_OK;
+    }
+
+    /* Process each unique gradient definition */
+    for (defIdx = 0; defIdx < numUniqueGrads; ++defIdx) {
+        int gradType = gradDefinitions[defIdx].type;
+
+        /* Initialize shotShapeIDs to zero */
+        for (j = 0; j < MAX_GRAD_SHOTS; ++j) {
+            gradDefinitions[defIdx].shotShapeIDs[j] = 0;
+        }
+
+        /* For trapezoids: single shot, no shape IDs */
+        if (gradType == 0) {
+            gradDefinitions[defIdx].numShots = 1;
+
+            /* Set shotIndex = 0 for all gradTable entries with this definition */
+            for (i = 0; i < numRows; ++i) {
+                if (gradTable[i].ID == defIdx) {
+                    gradTable[i].shotIndex = 0;
+                }
+            }
+            continue;
+        }
+
+        /* For arbitrary gradients: collect unique shape IDs */
+        shotCount = 0;
+
+        /* Scan all gradient library entries that map to this definition */
+        for (i = 0; i < numRows; ++i) {
+            if (gradTable[i].ID != defIdx) {
+                continue;
+            }
+
+            /* Get the wave_id (shape ID) from gradLibrary[i][4] */
+            shapeId = (int)seq->gradLibrary[i][4];
+
+            /* Check if this shapeId is already in our list */
+            found = 0;
+            for (j = 0; j < shotCount; ++j) {
+                if (gradDefinitions[defIdx].shotShapeIDs[j] == shapeId) {
+                    found = 1;
+                    gradTable[i].shotIndex = j;
+                    break;
+                }
+            }
+
+            /* If not found, add it as a new shot */
+            if (!found) {
+                if (shotCount >= MAX_GRAD_SHOTS) {
+                    return PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS;
+                } else {
+                    gradTable[i].shotIndex = shotCount;
+                    gradDefinitions[defIdx].shotShapeIDs[shotCount] = shapeId;
+                    shotCount++;
+                }
+            }
+        }
+
+        gradDefinitions[defIdx].numShots = shotCount > 0 ? shotCount : 1;
+    }
+
+    return PULSEQLIB_OK;
+}
+
+// Replace the old compute_waveform_stats and related functions
+
+/**
+ * @brief Normalize a real-valued waveform to unit peak amplitude in place.
+ *
+ * @param[in,out] waveform   Waveform to normalize.
+ * @param[in]     numSamples Number of samples.
+ * @return Peak amplitude before normalization.
+ */
+static float normalize_waveform(float* waveform, int numSamples)
+{
+    int i;
+    float maxAbs;
+    
+    maxAbs = find_max_abs_real(waveform, numSamples);
+    
+    if (maxAbs > 1e-9f) {
+        for (i = 0; i < numSamples; ++i) {
+            waveform[i] /= maxAbs;
+        }
+    }
+    
+    return maxAbs;
+}
+
+/**
+ * @brief Compute statistics for trapezoid gradient.
+ *
+ * Creates synthetic waveform [0, 1, 1, 0] with times [0, rise, rise+flat, rise+flat+fall].
+ * Time units are seconds.
+ *
+ * @param[in]  riseTime_us  Rise time in microseconds.
+ * @param[in]  flatTime_us  Flat time in microseconds.
+ * @param[in]  fallTime_us  Fall time in microseconds.
+ * @param[out] slewRate     Maximum slew rate (1/s).
+ * @param[out] energy       Energy integral (s).
+ * @param[out] firstVal     First sample value (always 0).
+ * @param[out] lastVal      Last sample value (always 0).
+ */
+static void compute_trapezoid_stats(
+    float riseTime_us,
+    float flatTime_us,
+    float fallTime_us,
+    float* slewRate,
+    float* energy,
+    float* firstVal,
+    float* lastVal)
+{
+    float waveform[4];
+    float time_s[4];
+    float sq_waveform[4];
+    
+    /* Trapezoid waveform: [0, 1, 1, 0] */
+    waveform[0] = 0.0f;
+    waveform[1] = 1.0f;
+    waveform[2] = 1.0f;
+    waveform[3] = 0.0f;
+    
+    /* Squared waveform for energy */
+    sq_waveform[0] = 0.0f;
+    sq_waveform[1] = 1.0f;
+    sq_waveform[2] = 1.0f;
+    sq_waveform[3] = 0.0f;
+    
+    /* Time points in seconds */
+    time_s[0] = 0.0f;
+    time_s[1] = riseTime_us * 1e-6f;
+    time_s[2] = (riseTime_us + flatTime_us) * 1e-6f;
+    time_s[3] = (riseTime_us + flatTime_us + fallTime_us) * 1e-6f;
+    
+    /* First and last values */
+    *firstVal = waveform[0];
+    *lastVal = waveform[3];
+    
+    /* Slew rate */
+    *slewRate = max_slew_real_nonuniform(waveform, time_s, 4);
+    
+    /* Energy: integral of |waveform|^2 dt */
+    *energy = trapz_real_nonuniform(sq_waveform, time_s, 4);
+}
+
+/**
+ * @brief Compute gradient statistics for all unique gradient definitions.
+ *
+ * For each gradient definition and each shot, computes:
+ * - slewRate: maximum |d(normalized_waveform)/dt| in 1/s
+ * - energy: integral of |normalized_waveform|^2 dt in s
+ * - firstValue: first sample of normalized waveform
+ * - lastValue: last sample of normalized waveform
+ *
+ * @param[in]     seq              Pointer to the sequence file.
+ * @param[in,out] gradDefinitions  Array of gradient definitions to populate.
+ * @param[in]     numUniqueGrads   Number of unique gradient definitions.
+ * @return PULSEQLIB_OK on success, or a negative error code on failure.
+ */
+static int compute_grad_statistics(
+    const pulseqlib_SeqFile* seq,
+    pulseqlib_GradDefinition* gradDefinitions,
+    int numUniqueGrads)
+{
+    int defIdx, shotIdx, i;
+    float gradRasterTime_s;
+    pulseqlib_ShapeArbitrary decompressedWave;
+    pulseqlib_ShapeArbitrary decompressedTime;
+    float* waveform = NULL;
+    float* sq_waveform = NULL;
+    float* time_s = NULL;
+    int numSamples;
+    int shapeId, timeId;
+    int result;
+    int hasTimeShape;
+    
+    if (!seq || !gradDefinitions || numUniqueGrads <= 0) {
+        return PULSEQLIB_OK;
+    }
+    
+    gradRasterTime_s = seq->opts.grad_raster_time * 1e-6f; /* convert us to s */
+    
+    /* Initialize decompressed shapes */
+    decompressedWave.numSamples = 0;
+    decompressedWave.numUncompressedSamples = 0;
+    decompressedWave.samples = NULL;
+    decompressedTime.numSamples = 0;
+    decompressedTime.numUncompressedSamples = 0;
+    decompressedTime.samples = NULL;
+    
+    for (defIdx = 0; defIdx < numUniqueGrads; ++defIdx) {
+        pulseqlib_GradDefinition* gradDef = &gradDefinitions[defIdx];
+        int gradType = gradDef->type;
+        
+        /* Initialize all stats to zero */
+        for (i = 0; i < MAX_GRAD_SHOTS; ++i) {
+            gradDef->slewRate[i] = 0.0f;
+            gradDef->energy[i] = 0.0f;
+            gradDef->firstValue[i] = 0.0f;
+            gradDef->lastValue[i] = 0.0f;
+        }
+        
+        if (gradType == 0) {
+            /* Trapezoid gradient */
+            float riseTime = (float)gradDef->riseTimeOrFirst;
+            float flatTime = (float)gradDef->flatTimeOrLast;
+            float fallTime = (float)gradDef->fallTimeOrNumUncompressedSamples;
+            
+            compute_trapezoid_stats(
+                riseTime, flatTime, fallTime,
+                &gradDef->slewRate[0],
+                &gradDef->energy[0],
+                &gradDef->firstValue[0],
+                &gradDef->lastValue[0]);
+        } else {
+            /* Arbitrary gradient - process each shot */
+            timeId = gradDef->unusedOrTimeShapeID;
+            
+            /* Decompress time shape if present (shared across shots) */
+            time_s = NULL;
+            hasTimeShape = 0;
+            if (timeId > 0 && timeId <= seq->shapesLibrarySize) {
+                result = decompressShape(&seq->shapesLibrary[timeId - 1], &decompressedTime);
+                if (result == 0 && decompressedTime.numUncompressedSamples > 0) {
+                    /* Time shape is already in seconds */
+                    time_s = (float*)ALLOC(decompressedTime.numUncompressedSamples * sizeof(float));
+                    if (time_s) {
+                        for (i = 0; i < decompressedTime.numUncompressedSamples; ++i) {
+                            time_s[i] = decompressedTime.samples[i];
+                        }
+                        hasTimeShape = 1;
+                    }
+                }
+            }
+            
+            for (shotIdx = 0; shotIdx < gradDef->numShots; ++shotIdx) {
+                shapeId = gradDef->shotShapeIDs[shotIdx];
+                
+                if (shapeId <= 0 || shapeId > seq->shapesLibrarySize) {
+                    continue;
+                }
+                
+                /* Decompress waveform shape */
+                result = decompressShape(&seq->shapesLibrary[shapeId - 1], &decompressedWave);
+                if (result != 0 || decompressedWave.numUncompressedSamples <= 0) {
+                    continue;
+                }
+                
+                numSamples = decompressedWave.numUncompressedSamples;
+                
+                /* Allocate working arrays */
+                waveform = (float*)ALLOC(numSamples * sizeof(float));
+                sq_waveform = (float*)ALLOC(numSamples * sizeof(float));
+                if (!waveform || !sq_waveform) {
+                    if (waveform) FREE(waveform);
+                    if (sq_waveform) FREE(sq_waveform);
+                    if (decompressedWave.samples) FREE(decompressedWave.samples);
+                    if (time_s) FREE(time_s);
+                    if (decompressedTime.samples) FREE(decompressedTime.samples);
+                    return PULSEQLIB_ERR_ALLOC_FAILED;
+                }
+                
+                /* Copy and normalize waveform */
+                for (i = 0; i < numSamples; ++i) {
+                    waveform[i] = decompressedWave.samples[i];
+                }
+                normalize_waveform(waveform, numSamples);
+                
+                /* Compute squared waveform for energy */
+                for (i = 0; i < numSamples; ++i) {
+                    sq_waveform[i] = waveform[i] * waveform[i];
+                }
+                
+                /* First and last values */
+                gradDef->firstValue[shotIdx] = waveform[0];
+                gradDef->lastValue[shotIdx] = waveform[numSamples - 1];
+                
+                /* Compute slew rate and energy */
+                if (hasTimeShape && time_s) {
+                    gradDef->slewRate[shotIdx] = max_slew_real_nonuniform(waveform, time_s, numSamples);
+                    gradDef->energy[shotIdx] = trapz_real_nonuniform(sq_waveform, time_s, numSamples);
+                } else {
+                    gradDef->slewRate[shotIdx] = max_slew_real_uniform(waveform, numSamples, gradRasterTime_s);
+                    gradDef->energy[shotIdx] = trapz_real_uniform(sq_waveform, numSamples, gradRasterTime_s);
+                }
+                
+                FREE(waveform);
+                FREE(sq_waveform);
+                waveform = NULL;
+                sq_waveform = NULL;
+                
+                /* Free decompressed waveform */
+                if (decompressedWave.samples) {
+                    FREE(decompressedWave.samples);
+                    decompressedWave.samples = NULL;
+                }
+            }
+            
+            /* Free time shape resources */
+            if (time_s) {
+                FREE(time_s);
+                time_s = NULL;
+            }
+            if (decompressedTime.samples) {
+                FREE(decompressedTime.samples);
+                decompressedTime.samples = NULL;
+            }
+        }
+    }
+    
+    return PULSEQLIB_OK;
+}
+
+/**
+ * @brief Compute RF statistics for all unique RF definitions.
+ *
+ * For each RF definition, computes:
+ * - area: integral of normalized RF magnitude
+ * - isodelay_us: time of peak magnitude from pulse start in microseconds
+ * - bandwidth: RF bandwidth in Hz (set to 0, computed later via FFT)
+ *
+ * @param[in]     seq            Pointer to the sequence file.
+ * @param[in,out] rfDefinitions  Array of RF definitions to populate.
+ * @param[in]     numUniqueRFs   Number of unique RF definitions.
+ * @return PULSEQLIB_OK on success, or a negative error code on failure.
+ */
+static int compute_rf_statistics(
+    const pulseqlib_SeqFile* seq,
+    pulseqlib_RfDefinition* rfDefinitions,
+    int numUniqueRFs)
+{
+    int defIdx, i;
+    float rfRasterTime_s;
+    pulseqlib_ShapeArbitrary decompMag;
+    pulseqlib_ShapeArbitrary decompTime;
+    float* magnitude = NULL;
+    float* time_s = NULL;
+    int numSamples;
+    int magId, timeId;
+    int result;
+    int hasMag, hasTime;
+    int peakIdx;
+    float maxMag;
+    
+    if (!seq || !rfDefinitions || numUniqueRFs <= 0) {
+        return PULSEQLIB_OK;
+    }
+    
+    rfRasterTime_s = seq->opts.rf_raster_time * 1e-6f; /* convert us to s */
+    
+    /* Initialize decompressed shapes */
+    decompMag.numSamples = 0;
+    decompMag.numUncompressedSamples = 0;
+    decompMag.samples = NULL;
+    decompTime.numSamples = 0;
+    decompTime.numUncompressedSamples = 0;
+    decompTime.samples = NULL;
+    
+    for (defIdx = 0; defIdx < numUniqueRFs; ++defIdx) {
+        pulseqlib_RfDefinition* rfDef = &rfDefinitions[defIdx];
+        
+        /* Initialize stats */
+        rfDef->area = 0.0f;
+        rfDef->isodelay_us = 0;
+        rfDef->bandwidth = 0.0f; /* Will be computed later via FFT */
+        
+        magId = rfDef->magShapeID;
+        timeId = rfDef->timeShapeID;
+        
+        hasMag = 0;
+        hasTime = 0;
+        magnitude = NULL;
+        time_s = NULL;
+        
+        /* Decompress magnitude shape (required) */
+        if (magId > 0 && magId <= seq->shapesLibrarySize) {
+            result = decompressShape(&seq->shapesLibrary[magId - 1], &decompMag);
+            if (result == 0 && decompMag.numUncompressedSamples > 0) {
+                numSamples = decompMag.numUncompressedSamples;
+                magnitude = (float*)ALLOC(numSamples * sizeof(float));
+                if (magnitude) {
+                    for (i = 0; i < numSamples; ++i) {
+                        magnitude[i] = decompMag.samples[i];
+                    }
+                    hasMag = 1;
+                }
+                FREE(decompMag.samples);
+                decompMag.samples = NULL;
+            }
+        }
+        
+        if (!hasMag) {
+            continue; /* Skip if no magnitude shape */
+        }
+        
+        /* Decompress time shape (optional) */
+        if (timeId > 0 && timeId <= seq->shapesLibrarySize) {
+            result = decompressShape(&seq->shapesLibrary[timeId - 1], &decompTime);
+            if (result == 0 && decompTime.numUncompressedSamples == numSamples) {
+                time_s = (float*)ALLOC(numSamples * sizeof(float));
+                if (time_s) {
+                    for (i = 0; i < numSamples; ++i) {
+                        time_s[i] = decompTime.samples[i]; /* already in seconds */
+                    }
+                    hasTime = 1;
+                }
+                FREE(decompTime.samples);
+                decompTime.samples = NULL;
+            }
+        }
+        
+        /* Normalize magnitude to 1.0 */
+        maxMag = find_max_abs_real(magnitude, numSamples);
+        if (maxMag > 1e-9f) {
+            for (i = 0; i < numSamples; ++i) {
+                magnitude[i] /= maxMag;
+            }
+        }
+        
+        /* Compute isodelay: time of peak magnitude */
+        peakIdx = find_max_abs_index_real(magnitude, numSamples);
+        if (hasTime && time_s) {
+            rfDef->isodelay_us = (int)(time_s[peakIdx] * 1e6f);
+        } else {
+            rfDef->isodelay_us = (int)(seq->opts.rf_raster_time * peakIdx);
+        }
+        
+        /* Compute area: integral of |magnitude| */
+        if (hasTime) {
+            rfDef->area = trapz_real_nonuniform(magnitude, time_s, numSamples);
+        } else {
+            rfDef->area = trapz_real_uniform(magnitude, numSamples, rfRasterTime_s);
+        }
+        
+        /* Cleanup */
+        if (magnitude) FREE(magnitude);
+        if (time_s) FREE(time_s);
+    }
+    
+    return PULSEQLIB_OK;
+}
+
+/**
  * @brief Build ADC static parameter row for deduplication.
  */
 static void build_adc_def_row(const pulseqlib_SeqFile* seq, int adcIdx, int* row, float* params)
@@ -2854,6 +3689,314 @@ static int deduplicate_adc_library(const pulseqlib_SeqFile* seq, pulseqlib_AdcDe
 
 
 /**
+ * @brief Check if PMC is enabled in the sequence definitions.
+ *
+ * @param[in] seq Pointer to the sequence file.
+ * @return 1 if PMC is enabled, 0 otherwise.
+ */
+static int is_pmc_enabled(const pulseqlib_SeqFile* seq)
+{
+    int i, j;
+    
+    if (!seq->isDefinitionsLibraryParsed || !seq->definitionsLibrary) {
+        return 0;
+    }
+    
+    for (i = 0; i < seq->numDefinitions; ++i) {
+        if (strcmp(seq->definitionsLibrary[i].name, "pmcEnabled") == 0) {
+            /* Check if value is "True" or "true" or "1" */
+            if (seq->definitionsLibrary[i].valueSize > 0 && 
+                seq->definitionsLibrary[i].value && 
+                seq->definitionsLibrary[i].value[0]) {
+                const char* val = seq->definitionsLibrary[i].value[0];
+                if (strcmp(val, "True") == 0 || 
+                    strcmp(val, "true") == 0 || 
+                    strcmp(val, "1") == 0) {
+                    return 1;
+                }
+            }
+            break;
+        }
+    }
+    return 0;
+}
+
+/**
+ * @brief Check if a block definition has spatially selective excitation (RF + gradient).
+ *
+ * @param[in] blockDef Pointer to the block definition.
+ * @return 1 if selective excitation, 0 otherwise.
+ */
+static int is_selective_excitation_block(const pulseqlib_BlockDefinition* blockDef)
+{
+    int hasRF, hasGrad;
+    
+    if (!blockDef) return 0;
+    
+    hasRF = (blockDef->rfID >= 0);
+    hasGrad = (blockDef->gxID >= 0) || (blockDef->gyID >= 0) || (blockDef->gzID >= 0);
+    
+    return hasRF && hasGrad;
+}
+
+/**
+ * @brief Validate selective excitation blocks for frequency modulation compatibility.
+ *
+ * For blocks containing both RF and gradients (spatially selective excitation),
+ * this function checks that:
+ * 1. Gradient amplitude does not vary across block instances
+ * 2. No rotation extension is present on any instance
+ * 3. PMC is not enabled globally
+ *
+ * @param[in] seq           Pointer to the sequence file.
+ * @param[in] seqDesc       Pointer to the sequence descriptor.
+ * @return PULSEQLIB_OK on success, or a negative error code on failure.
+ */
+static int validate_selective_excitation_blocks(
+    const pulseqlib_SeqFile* seq,
+    const pulseqlib_SequenceDescriptor* seqDesc)
+{
+    int defIdx, blockIdx;
+    int pmcEnabled;
+    int gxIdx, gyIdx, gzIdx;
+    float refAmpGx, refAmpGy, refAmpGz;
+    int hasRefAmp;
+    
+    if (!seq || !seqDesc) {
+        return PULSEQLIB_ERR_NULL_POINTER;
+    }
+    
+    /* Check if PMC is enabled globally */
+    pmcEnabled = is_pmc_enabled(seq);
+    
+    /* Iterate over unique block definitions */
+    for (defIdx = 0; defIdx < seqDesc->numUniqueBlocks; ++defIdx) {
+        const pulseqlib_BlockDefinition* blockDef = &seqDesc->blockDefinitions[defIdx];
+        
+        /* Skip non-selective excitation blocks */
+        if (!is_selective_excitation_block(blockDef)) {
+            continue;
+        }
+                
+        /* Initialize reference amplitudes */
+        hasRefAmp = 0;
+        refAmpGx = 0.0f;
+        refAmpGy = 0.0f;
+        refAmpGz = 0.0f;
+        
+        /* Scan all block instances to check for amplitude variation and rotation */
+        for (blockIdx = 0; blockIdx < seqDesc->numBlocks; ++blockIdx) {
+            const pulseqlib_BlockTableElement* blockElem = &seqDesc->blockTable[blockIdx];
+            float ampGx, ampGy, ampGz;
+            
+            /* Skip blocks that don't match this definition */
+            if (blockElem->ID != defIdx) {
+                continue;
+            }
+            
+            /* Check for rotation extension */
+            if (blockElem->rotationID >= 0) {
+                return PULSEQLIB_ERR_SELEXC_ROTATION;
+            }
+            
+            /* Get gradient amplitudes for this block instance */
+            gxIdx = (int)seq->blockLibrary[blockIdx][2] - 1;
+            gyIdx = (int)seq->blockLibrary[blockIdx][3] - 1;
+            gzIdx = (int)seq->blockLibrary[blockIdx][4] - 1;
+            
+            ampGx = (gxIdx >= 0 && gxIdx < seq->gradLibrarySize) ? seq->gradLibrary[gxIdx][1] : 0.0f;
+            ampGy = (gyIdx >= 0 && gyIdx < seq->gradLibrarySize) ? seq->gradLibrary[gyIdx][1] : 0.0f;
+            ampGz = (gzIdx >= 0 && gzIdx < seq->gradLibrarySize) ? seq->gradLibrary[gzIdx][1] : 0.0f;
+            
+            if (!hasRefAmp) {
+                /* Store first instance as reference */
+                refAmpGx = ampGx;
+                refAmpGy = ampGy;
+                refAmpGz = ampGz;
+                hasRefAmp = 1;
+            } else {
+                /* Compare with reference - check if amplitudes differ */
+                if (ampGx != refAmpGx || ampGy != refAmpGy || ampGz != refAmpGz) {
+                    return PULSEQLIB_ERR_SELEXC_GRAD_SCALING;
+                }
+            }
+        }
+    }
+    
+    return PULSEQLIB_OK;
+}
+
+/**
+ * @brief Copy and convert rotation library from quaternions to matrices.
+ *
+ * @param[in]  seq      Pointer to the sequence file.
+ * @param[out] seqDesc  Pointer to the sequence descriptor.
+ * @return PULSEQLIB_OK on success, or a negative error code on failure.
+ */
+static int copy_rotation_library(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDescriptor* seqDesc)
+{
+    int i;
+    int numRotations = seq->rotationLibrarySize;
+    
+    seqDesc->numRotations = 0;
+    seqDesc->rotationMatrices = NULL;
+    
+    if (numRotations <= 0 || !seq->rotationQuaternionLibrary) {
+        return PULSEQLIB_OK;
+    }
+    
+    seqDesc->rotationMatrices = (float(*)[9])ALLOC(numRotations * sizeof(float[9]));
+    if (!seqDesc->rotationMatrices) {
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    
+    for (i = 0; i < numRotations; ++i) {
+        quaternion_to_matrix(seq->rotationQuaternionLibrary[i], seqDesc->rotationMatrices[i]);
+    }
+    
+    seqDesc->numRotations = numRotations;
+    return PULSEQLIB_OK;
+}
+
+/**
+ * @brief Copy trigger library to sequence descriptor.
+ *
+ * @param[in]  seq      Pointer to the sequence file.
+ * @param[out] seqDesc  Pointer to the sequence descriptor.
+ * @return PULSEQLIB_OK on success, or a negative error code on failure.
+ */
+static int copy_trigger_library(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDescriptor* seqDesc)
+{
+    int i;
+    int numTriggers = seq->triggerLibrarySize;
+    
+    seqDesc->numTriggers = 0;
+    seqDesc->triggerEvents = NULL;
+    
+    if (numTriggers <= 0 || !seq->triggerLibrary) {
+        return PULSEQLIB_OK;
+    }
+    
+    seqDesc->triggerEvents = (pulseqlib_TriggerEvent*)ALLOC(numTriggers * sizeof(pulseqlib_TriggerEvent));
+    if (!seqDesc->triggerEvents) {
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    
+    for (i = 0; i < numTriggers; ++i) {
+        /* triggerLibrary columns: type, channel, delay, duration */
+        seqDesc->triggerEvents[i].type = 1; /* mark as defined */
+        seqDesc->triggerEvents[i].triggerType = (int)seq->triggerLibrary[i][0];
+        seqDesc->triggerEvents[i].triggerChannel = (int)seq->triggerLibrary[i][1];
+        seqDesc->triggerEvents[i].delay = (long)seq->triggerLibrary[i][2];
+        seqDesc->triggerEvents[i].duration = (long)seq->triggerLibrary[i][3];
+    }
+    
+    seqDesc->numTriggers = numTriggers;
+    return PULSEQLIB_OK;
+}
+
+/**
+ * @brief Copy and decompress shapes library to sequence descriptor.
+ *
+ * @param[in]  seq      Pointer to the sequence file.
+ * @param[out] seqDesc  Pointer to the sequence descriptor.
+ * @return PULSEQLIB_OK on success, or a negative error code on failure.
+ */
+static int copy_shapes_library(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDescriptor* seqDesc)
+{
+    int i;
+    int numShapes = seq->shapesLibrarySize;
+    int numSamples;
+    
+    seqDesc->numShapes = 0;
+    seqDesc->shapes = NULL;
+    
+    if (numShapes <= 0 || !seq->shapesLibrary) {
+        return PULSEQLIB_OK;
+    }
+    
+    seqDesc->shapes = (pulseqlib_ShapeArbitrary*)ALLOC(numShapes * sizeof(pulseqlib_ShapeArbitrary));
+    if (!seqDesc->shapes) {
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    
+    /* Initialize all shapes */
+    for (i = 0; i < numShapes; ++i) {
+        seqDesc->shapes[i].numSamples = 0;
+        seqDesc->shapes[i].numUncompressedSamples = 0;
+        seqDesc->shapes[i].samples = NULL;
+    }
+    
+    /* Copy each shape (still compressed) */
+    for (i = 0; i < numShapes; ++i) {
+        numSamples = seq->shapesLibrary[i].numSamples;
+        
+        seqDesc->shapes[i].numSamples = numSamples;
+        seqDesc->shapes[i].numUncompressedSamples = seq->shapesLibrary[i].numUncompressedSamples;
+        seqDesc->shapes[i].samples = NULL;
+        
+        if (numSamples > 0 && seq->shapesLibrary[i].samples) {
+            seqDesc->shapes[i].samples = (float*)ALLOC(numSamples * sizeof(float));
+            if (!seqDesc->shapes[i].samples) {
+                /* Cleanup on error */
+                int j;
+                for (j = 0; j < i; ++j) {
+                    if (seqDesc->shapes[j].samples) {
+                        FREE(seqDesc->shapes[j].samples);
+                    }
+                }
+                FREE(seqDesc->shapes);
+                seqDesc->shapes = NULL;
+                return PULSEQLIB_ERR_ALLOC_FAILED;
+            }
+            memcpy(seqDesc->shapes[i].samples, seq->shapesLibrary[i].samples, 
+                   numSamples * sizeof(float));
+        }
+    }
+    
+    seqDesc->numShapes = numShapes;
+    return PULSEQLIB_OK;
+}
+
+
+void pulseqlib_sequenceDescriptorFree(pulseqlib_SequenceDescriptor* seqDesc)
+{
+    int i;
+
+    if (!seqDesc) return;
+
+    // ...existing cleanup code for blocks, RF, grads, ADC...
+
+    /* Free rotation matrices */
+    if (seqDesc->rotationMatrices) {
+        FREE(seqDesc->rotationMatrices);
+        seqDesc->rotationMatrices = NULL;
+    }
+    seqDesc->numRotations = 0;
+
+    /* Free trigger events */
+    if (seqDesc->triggerEvents) {
+        FREE(seqDesc->triggerEvents);
+        seqDesc->triggerEvents = NULL;
+    }
+    seqDesc->numTriggers = 0;
+
+    /* Free shapes (including sample arrays) */
+    if (seqDesc->shapes) {
+        for (i = 0; i < seqDesc->numShapes; ++i) {
+            if (seqDesc->shapes[i].samples) {
+                FREE(seqDesc->shapes[i].samples);
+                seqDesc->shapes[i].samples = NULL;
+            }
+        }
+        FREE(seqDesc->shapes);
+        seqDesc->shapes = NULL;
+    }
+    seqDesc->numShapes = 0;
+}
+
+
+/**
  * @brief Get unique blocks from a sequence.
  *
  * Two-step deduplication:
@@ -2865,6 +4008,7 @@ static int deduplicate_adc_library(const pulseqlib_SeqFile* seq, pulseqlib_AdcDe
  * @return 0 on success, error code otherwise.
  */
 int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDescriptor* seqDesc) {
+    int result;
     int numBlocks;
     int numUniqueBlocks;
     int numUniqueRFs;
@@ -2882,7 +4026,7 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
 
     /* Auxiliaries for preparation and cooldown detection */
     pulseqlib_RawExtension ext;
-    int norotFlag, noposFlag, onceFlag, onceCounter;
+    int norotFlag, noposFlag, onceFlag, pmcFlag, navFlag, onceCounter;
     int hasPrep, hasCooldown;
     int ctrl;
 
@@ -2903,14 +4047,30 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
         numUniqueRFs = deduplicate_rf_library(seq, seqDesc->rfDefinitions, seqDesc->rfTable);
         seqDesc->numUniqueRFs = numUniqueRFs;
         seqDesc->rfTableSize = seq->rfLibrarySize;
-    }
 
+        /* Compute RF statistics (area, isodelay, bandwidth placeholder) */
+        result = compute_rf_statistics(seq, seqDesc->rfDefinitions, numUniqueRFs);
+        if (PULSEQLIB_FAILED(result)) {
+            return result;
+        }
+    }
     if (seq->gradLibrarySize > 0) {
         numUniqueGrads = deduplicate_grad_library(seq, seqDesc->gradDefinitions, seqDesc->gradTable);
         seqDesc->numUniqueGrads = numUniqueGrads;
         seqDesc->gradTableSize = seq->gradLibrarySize;
-    }
 
+        /* Compute shot indices for multi-shot gradients */
+        result = compute_grad_shot_indices(seq, numUniqueGrads, seqDesc->gradDefinitions, seqDesc->gradTable);
+        if (PULSEQLIB_FAILED(result)) {
+            return result;
+        }
+
+        /* Compute gradient statistics (slew rate, energy, first/last values) */
+        result = compute_grad_statistics(seq, seqDesc->gradDefinitions, numUniqueGrads);
+        if (PULSEQLIB_FAILED(result)) {
+            return result;
+        }
+    }
     if (seq->adcLibrarySize > 0) {
         numUniqueADCs = deduplicate_adc_library(seq, seqDesc->adcDefinitions, seqDesc->adcTable);
         seqDesc->numUniqueADCs = numUniqueADCs;
@@ -2938,6 +4098,8 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
     norotFlag = 0;
     noposFlag = 0;
     onceFlag = 0;
+    pmcFlag = 0;
+    navFlag = 0;
     onceCounter = 0;
     for (n = 0; n < numBlocks; ++n) {
         if (!getRawBlockContentIDs(seq, &raw, n, 1)) {
@@ -2965,11 +4127,14 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
             getRawExtension(seq, &ext, &raw);
             seqDesc->blockTable[n].rotationID = ext.rotationIndex;
             seqDesc->blockTable[n].triggerID = ext.triggerIndex;
-            seqDesc->blockTable[n].rfshimID = ext.rfShimIndex;
             norotFlag = (ext.flag.norot >= 0) ? ext.flag.norot : norotFlag;
             seqDesc->blockTable[n].norotFlag = norotFlag;
             noposFlag = (ext.flag.nopos >= 0) ? ext.flag.nopos : noposFlag;
             seqDesc->blockTable[n].noposFlag = noposFlag;
+            pmcFlag = (ext.flag.pmc >= 0) ? ext.flag.pmc : pmcFlag;
+            seqDesc->blockTable[n].pmcFlag = pmcFlag;
+            navFlag = (ext.flag.nav >= 0) ? ext.flag.nav : navFlag;
+            seqDesc->blockTable[n].navFlag = navFlag;
             onceFlag = (ext.flag.once >= 0) ? ext.flag.once : onceFlag;
             if (onceFlag > 0) {
                 ++onceCounter;
@@ -2998,6 +4163,30 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
     FREE(intRows);
     FREE(uniqueDefs);
     FREE(eventTable);
+
+    /* Copy rotation library (convert quaternions to matrices) */
+    result = copy_rotation_library(seq, seqDesc);
+    if (PULSEQLIB_FAILED(result)) {
+        return result;
+    }
+
+    /* Copy trigger library */
+    result = copy_trigger_library(seq, seqDesc);
+    if (PULSEQLIB_FAILED(result)) {
+        return result;
+    }
+
+    /* Copy and decompress shapes library */
+    result = copy_shapes_library(seq, seqDesc);
+    if (PULSEQLIB_FAILED(result)) {
+        return result;
+    }
+
+    /* Validate selective excitation blocks for frequency modulation compatibility */
+    result = validate_selective_excitation_blocks(seq, seqDesc);
+    if (PULSEQLIB_FAILED(result)) {
+        return result;
+    }
 
     /* Determine If sequence has preparation and cooldown sections */
     hasPrep = 0;

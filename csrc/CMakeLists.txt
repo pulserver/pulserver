@@ -3,15 +3,13 @@ cmake_minimum_required(VERSION 3.10)
 
 project(pulserverlib C)
 
+# External libraries
+file(GLOB KISSFFT "../external/kissfft/*.c")
+
 # Minimal ANSI C89 Pulseq reader library
 file(GLOB PULSEQ "pulseq/*.c" "pulseq/*.h")
-# file(GLOB PULSERVER "pulserver/*.c" "pulserver/*.h")
 
-add_library(pulseqlib ${PULSEQ})
+add_library(pulseqlib ${PULSEQ} ${KISSFFT})
 target_include_directories(pulseqlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(pulseqlib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../external/kissfft)
 target_link_libraries(pulseqlib m)
-
-# dd_library(pulserverlib ${PULSERVER})
-# target_include_directories(pulserverlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-# target_include_directories(pulserverlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/pulseq)
-# target_link_libraries(pulserverlib PUBLIC pulseqlib)

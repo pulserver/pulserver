@@ -195,13 +195,11 @@ def find_tr(seq: PulserverSequence, num_reps: int = 1, raise_on_error: bool = Tr
     num_prep = tr_info.num_prep_blocks
     num_cooldown = tr_info.num_cooldown_blocks
     
-    # Build block durations from block definitions
-    block_durations_us = []
-    for block_id in unique_table:
-        if block_id >= 0 and block_id < len(blocks_result.block_definitions):
-            block_durations_us.append(blocks_result.block_definitions[block_id]["duration_us"])
-        else:
-            block_durations_us.append(0)
+    # Build block durations indexed by unique definition ID
+    block_durations_us = [
+        blocks_result.block_definitions[i]["duration_us"] 
+        for i in range(len(blocks_result.block_definitions))
+    ]
     
     # Extract pure delay flags from block_table
     pure_delay_block = [entry["pure_delay_flag"] for entry in blocks_result.block_table]
@@ -307,13 +305,11 @@ def find_segments_in_tr(seq: PulserverSequence, raise_on_error: bool = True) -> 
     num_prep = tr_info.num_prep_blocks
     num_cooldown = tr_info.num_cooldown_blocks
     
-    # Build block durations from block definitions
-    block_durations_us = []
-    for block_id in unique_table:
-        if block_id >= 0 and block_id < len(blocks_result.block_definitions):
-            block_durations_us.append(blocks_result.block_definitions[block_id]["duration_us"])
-        else:
-            block_durations_us.append(0)
+    # Build block durations indexed by unique definition ID
+    block_durations_us = [
+        blocks_result.block_definitions[i]["duration_us"] 
+        for i in range(len(blocks_result.block_definitions))
+    ]
     
     # Extract pure delay flags from block_table
     pure_delay_block = [entry["pure_delay_flag"] for entry in blocks_result.block_table]
