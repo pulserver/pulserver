@@ -559,6 +559,328 @@ static void quaternion_to_matrix(const float* quat, float* matrix)
     matrix[8] = 1.0f - 2.0f * (xx + yy);
 }
 
+// Add these helpers after the existing math helpers section (around line 450)
+
+/******************************************* Interpolation Helpers *************************************************/
+
+/**
+ * @brief 1D linear interpolation.
+ *
+ * Interpolates values from (xp, fp) onto new x-coordinates.
+ * Assumes xp is sorted in ascending order.
+ * Values outside the range are clamped to boundary values.
+ *
+ * @param[in]  x          Target x-coordinates (sorted ascending).
+ * @param[in]  nx         Number of target points.
+ * @param[in]  xp         Source x-coordinates (sorted ascending).
+ * @param[in]  fp         Source function values.
+ * @param[in]  nxp        Number of source points.
+ * @param[out] out        Output interpolated values (must be pre-allocated, size nx).
+ */
+static void interp1_linear(
+    const float* x,
+    int nx,
+    const float* xp,
+    const float* fp,
+    int nxp,
+    float* out)
+{
+    int i, j;
+    float t;
+    
+    if (!x || !xp || !fp || !out || nx <= 0 || nxp <= 0) {
+        return;
+    }
+    
+    /* Handle single-point source */
+    if (nxp == 1) {
+        for (i = 0; i < nx; ++i) {
+            out[i] = fp[0];
+        }
+        return;
+    }
+    
+    j = 0; /* Current interval index in xp */
+    
+    for (i = 0; i < nx; ++i) {
+        /* Clamp below range */
+        if (x[i] <= xp[0]) {
+            out[i] = fp[0];
+            continue;
+        }
+        
+        /* Clamp above range */
+        if (x[i] >= xp[nxp - 1]) {
+            out[i] = fp[nxp - 1];
+            continue;
+        }
+        
+        /* Find interval: xp[j] <= x[i] < xp[j+1] */
+        while (j < nxp - 2 && xp[j + 1] < x[i]) {
+            ++j;
+        }
+        
+        /* Linear interpolation */
+        t = (x[i] - xp[j]) / (xp[j + 1] - xp[j]);
+        out[i] = fp[j] + t * (fp[j + 1] - fp[j]);
+    }
+}
+
+/**
+ * @brief 1D linear interpolation for complex values.
+ *
+ * Interpolates complex values from (xp, fp_re, fp_im) onto new x-coordinates.
+ * Assumes xp is sorted in ascending order.
+ *
+ * @param[in]  x          Target x-coordinates (sorted ascending).
+ * @param[in]  nx         Number of target points.
+ * @param[in]  xp         Source x-coordinates (sorted ascending).
+ * @param[in]  fp_re      Source function values (real part).
+ * @param[in]  fp_im      Source function values (imaginary part).
+ * @param[in]  nxp        Number of source points.
+ * @param[out] out_re     Output interpolated real part (must be pre-allocated, size nx).
+ * @param[out] out_im     Output interpolated imaginary part (must be pre-allocated, size nx).
+ */
+static void interp1_linear_complex(
+    const float* x,
+    int nx,
+    const float* xp,
+    const float* fp_re,
+    const float* fp_im,
+    int nxp,
+    float* out_re,
+    float* out_im)
+{
+    interp1_linear(x, nx, xp, fp_re, nxp, out_re);
+    interp1_linear(x, nx, xp, fp_im, nxp, out_im);
+}
+
+
+/******************************************* FFT Helpers *************************************************/
+
+/**
+ * @brief In-place fftshift for complex array.
+ *
+ * Swaps left and right halves of the array (for centering zero-frequency).
+ *
+ * @param[in,out] re  Real part array.
+ * @param[in,out] im  Imaginary part array.
+ * @param[in]     n   Array length.
+ */
+static void fftshift_complex(float* re, float* im, int n)
+{
+    int i, half, shift;
+    float tmp_re, tmp_im;
+    
+    if (!re || !im || n <= 1) {
+        return;
+    }
+    
+    half = n / 2;
+    shift = (n + 1) / 2; /* For odd n, shift = (n+1)/2 */
+    
+    /* Use rotation algorithm for in-place shift */
+    /* This handles both even and odd n correctly */
+    for (i = 0; i < half; ++i) {
+        tmp_re = re[i];
+        tmp_im = im[i];
+        re[i] = re[i + shift];
+        im[i] = im[i + shift];
+        re[i + shift] = tmp_re;
+        im[i + shift] = tmp_im;
+    }
+}
+
+/**
+ * @brief Find bandwidth flank position.
+ *
+ * Finds the x-position where the normalized spectrum first exceeds the cutoff.
+ *
+ * @param[in] x          Frequency axis array.
+ * @param[in] spectrum_re Real part of spectrum.
+ * @param[in] spectrum_im Imaginary part of spectrum.
+ * @param[in] n          Array length.
+ * @param[in] cutoff     Cutoff level (0 to 1, typically 0.5).
+ * @param[in] reverse    If non-zero, search from end to beginning.
+ * @return Frequency at flank position.
+ */
+static float find_spectrum_flank(
+    const float* x,
+    const float* spectrum_re,
+    const float* spectrum_im,
+    int n,
+    float cutoff,
+    int reverse)
+{
+    int i, idx;
+    float maxMag, mag, threshold;
+    
+    if (!x || !spectrum_re || !spectrum_im || n <= 0) {
+        return 0.0f;
+    }
+    
+    /* Find max magnitude */
+    maxMag = 0.0f;
+    for (i = 0; i < n; ++i) {
+        mag = (float)sqrt(spectrum_re[i] * spectrum_re[i] + spectrum_im[i] * spectrum_im[i]);
+        if (mag > maxMag) {
+            maxMag = mag;
+        }
+    }
+    
+    if (maxMag < 1e-12f) {
+        return 0.0f;
+    }
+    
+    threshold = cutoff * maxMag;
+    
+    /* Search for first index exceeding threshold */
+    if (reverse) {
+        for (i = n - 1; i >= 0; --i) {
+            mag = (float)sqrt(spectrum_re[i] * spectrum_re[i] + spectrum_im[i] * spectrum_im[i]);
+            if (mag > threshold) {
+                return x[i];
+            }
+        }
+    } else {
+        for (i = 0; i < n; ++i) {
+            mag = (float)sqrt(spectrum_re[i] * spectrum_re[i] + spectrum_im[i] * spectrum_im[i]);
+            if (mag > threshold) {
+                return x[i];
+            }
+        }
+    }
+    
+    return 0.0f;
+}
+
+/**
+ * @brief Compute RF bandwidth using FFT.
+ *
+ * Port of pypulseq.calc_rf_bandwidth().
+ * Uses low-angle approximation (simple FFT of RF waveform).
+ *
+ * @param[in]  rf_re        RF signal real part (complex envelope).
+ * @param[in]  rf_im        RF signal imaginary part.
+ * @param[in]  rf_time      RF time points (seconds, centered at isocenter).
+ * @param[in]  numSamples   Number of RF samples.
+ * @param[in]  dt           Sampling time for FFT (seconds), typically rf_raster_time.
+ * @param[in]  dw           Spectral resolution (Hz), typically 10 Hz.
+ * @param[in]  cutoff       Bandwidth cutoff level (typically 0.5).
+ * @param[in]  duration     RF pulse duration (seconds), for fallback calculation.
+ * @return Bandwidth in Hz.
+ */
+static float compute_rf_bandwidth_fft(
+    const float* rf_re,
+    const float* rf_im,
+    const float* rf_time,
+    int numSamples,
+    float dt,
+    float dw,
+    float cutoff,
+    float duration)
+{
+    int nn, i;
+    int half_nn;
+    float* tt = NULL;
+    float* rfs_re = NULL;
+    float* rfs_im = NULL;
+    float* w = NULL;
+    kiss_fftr_cfg fft_cfg = NULL;
+    kiss_fft_scalar* fft_in = NULL;
+    kiss_fft_cpx* fft_out = NULL;
+    float w1, w2, bw;
+    float fallback_bw;
+    int success = 0;
+    
+    /* Fallback bandwidth for rect pulse */
+    fallback_bw = (duration > 0.0f) ? (1.0f / duration) : 0.0f;
+    
+    if (!rf_re || !rf_im || !rf_time || numSamples <= 0 || dt <= 0.0f || dw <= 0.0f) {
+        return fallback_bw;
+    }
+    
+    /* Compute FFT size: nn = round(1 / dw / dt) */
+    nn = (int)(1.0f / (dw * dt) + 0.5f);
+    if (nn < 2) {
+        nn = 2;
+    }
+    /* Ensure nn is even for kiss_fftr */
+    if (nn % 2 != 0) {
+        nn += 1;
+    }
+    
+    half_nn = nn / 2;
+    
+    /* Allocate arrays */
+    tt = (float*)ALLOC(nn * sizeof(float));
+    rfs_re = (float*)ALLOC(nn * sizeof(float));
+    rfs_im = (float*)ALLOC(nn * sizeof(float));
+    w = (float*)ALLOC(nn * sizeof(float));
+    fft_in = (kiss_fft_scalar*)ALLOC(nn * sizeof(kiss_fft_scalar));
+    fft_out = (kiss_fft_cpx*)ALLOC((half_nn + 1) * sizeof(kiss_fft_cpx));
+    fft_cfg = kiss_fftr_alloc(nn, 0, NULL, NULL);
+    
+    if (!tt || !rfs_re || !rfs_im || !w || !fft_in || !fft_out || !fft_cfg) {
+        /* Allocation failed - cleanup and return fallback */
+    } else {
+        /* Create time array: tt = arange(-floor(nn/2), ceil(nn/2)-1) * dt */
+        for (i = 0; i < nn; ++i) {
+            tt[i] = (float)(i - half_nn) * dt;
+        }
+        
+        /* Create frequency axis: w = arange(-floor(nn/2), ceil(nn/2)-1) * dw */
+        for (i = 0; i < nn; ++i) {
+            w[i] = (float)(i - half_nn) * dw;
+        }
+        
+        /* Interpolate RF signal onto new time grid */
+        interp1_linear_complex(tt, nn, rf_time, rf_re, rf_im, numSamples, rfs_re, rfs_im);
+        
+        /* Apply fftshift to input (center the signal) */
+        fftshift_complex(rfs_re, rfs_im, nn);
+        
+        /* For real FFT, compute magnitude envelope */
+        for (i = 0; i < nn; ++i) {
+            fft_in[i] = (float)sqrt(rfs_re[i] * rfs_re[i] + rfs_im[i] * rfs_im[i]);
+        }
+        
+        /* Perform FFT */
+        kiss_fftr(fft_cfg, fft_in, fft_out);
+        
+        /* Expand half-spectrum to full spectrum for fftshift */
+        /* For real input, output is conjugate symmetric: X[k] = conj(X[N-k]) */
+        for (i = 0; i <= half_nn; ++i) {
+            rfs_re[i] = fft_out[i].r;
+            rfs_im[i] = fft_out[i].i;
+        }
+        for (i = half_nn + 1; i < nn; ++i) {
+            rfs_re[i] = fft_out[nn - i].r;
+            rfs_im[i] = -fft_out[nn - i].i; /* conjugate */
+        }
+        
+        /* Apply fftshift to output */
+        fftshift_complex(rfs_re, rfs_im, nn);
+        
+        /* Find bandwidth flanks */
+        w1 = find_spectrum_flank(w, rfs_re, rfs_im, nn, cutoff, 0);  /* left flank */
+        w2 = find_spectrum_flank(w, rfs_re, rfs_im, nn, cutoff, 1);  /* right flank */
+        
+        bw = w2 - w1;
+        success = (bw > 0.0f);
+    }
+    
+    /* Cleanup */
+    if (tt) FREE(tt);
+    if (rfs_re) FREE(rfs_re);
+    if (rfs_im) FREE(rfs_im);
+    if (w) FREE(w);
+    if (fft_in) FREE(fft_in);
+    if (fft_out) FREE(fft_out);
+    if (fft_cfg) kiss_fft_free(fft_cfg);
+    
+    return success ? bw : fallback_bw;
+}
 
 /***************************************************** Private Functions  ***************************************/
 int initStandardLibrary(FILE* f, const long* offsets, int numSections, void** target, int* targetCount, int N) 
@@ -3493,15 +3815,22 @@ static int compute_rf_statistics(
     int defIdx, i;
     float rfRasterTime_s;
     pulseqlib_ShapeArbitrary decompMag;
+    pulseqlib_ShapeArbitrary decompPhase;
     pulseqlib_ShapeArbitrary decompTime;
     float* magnitude = NULL;
+    float* phase = NULL;
     float* time_s = NULL;
+    float* rf_re = NULL;
+    float* rf_im = NULL;
+    float* time_centered = NULL;
     int numSamples;
-    int magId, timeId;
+    int magId, phaseId, timeId;
     int result;
-    int hasMag, hasTime;
+    int hasMag, hasPhase, hasTime;
     int peakIdx;
     float maxMag;
+    float duration;
+    float time_center;
     
     if (!seq || !rfDefinitions || numUniqueRFs <= 0) {
         return PULSEQLIB_OK;
@@ -3513,6 +3842,9 @@ static int compute_rf_statistics(
     decompMag.numSamples = 0;
     decompMag.numUncompressedSamples = 0;
     decompMag.samples = NULL;
+    decompPhase.numSamples = 0;
+    decompPhase.numUncompressedSamples = 0;
+    decompPhase.samples = NULL;
     decompTime.numSamples = 0;
     decompTime.numUncompressedSamples = 0;
     decompTime.samples = NULL;
@@ -3526,12 +3858,19 @@ static int compute_rf_statistics(
         rfDef->bandwidth = 0.0f; /* Will be computed later via FFT */
         
         magId = rfDef->magShapeID;
+        phaseId = rfDef->phaseShapeID;
         timeId = rfDef->timeShapeID;
         
         hasMag = 0;
+        hasPhase = 0;
         hasTime = 0;
         magnitude = NULL;
+        phase = NULL;
         time_s = NULL;
+        rf_re = NULL;
+        rf_im = NULL;
+        time_centered = NULL;
+        numSamples = 0;
         
         /* Decompress magnitude shape (required) */
         if (magId > 0 && magId <= seq->shapesLibrarySize) {
@@ -3553,6 +3892,22 @@ static int compute_rf_statistics(
         if (!hasMag) {
             continue; /* Skip if no magnitude shape */
         }
+
+        /* Decompress phase shape (optional, needed for bandwidth) */
+        if (phaseId > 0 && phaseId <= seq->shapesLibrarySize) {
+            result = decompressShape(&seq->shapesLibrary[phaseId - 1], &decompPhase);
+            if (result == 0 && decompPhase.numUncompressedSamples == numSamples) {
+                phase = (float*)ALLOC(numSamples * sizeof(float));
+                if (phase) {
+                    for (i = 0; i < numSamples; ++i) {
+                        phase[i] = decompPhase.samples[i] * (float)(2.0 * M_PI); /* Convert to radians */
+                    }
+                    hasPhase = 1;
+                }
+                FREE(decompPhase.samples);
+                decompPhase.samples = NULL;
+            }
+        }
         
         /* Decompress time shape (optional) */
         if (timeId > 0 && timeId <= seq->shapesLibrarySize) {
@@ -3570,20 +3925,37 @@ static int compute_rf_statistics(
             }
         }
         
-        /* Normalize magnitude to 1.0 */
+        /* Build uniform time array if no time shape */
+        if (!hasTime) {
+            time_s = (float*)ALLOC(numSamples * sizeof(float));
+            if (time_s) {
+                for (i = 0; i < numSamples; ++i) {
+                    time_s[i] = (float)i * rfRasterTime_s;
+                }
+                hasTime = 1;
+            }
+        }
+        
+        /* Compute pulse duration */
+        duration = (hasTime && numSamples > 0) ? time_s[numSamples - 1] : (numSamples * rfRasterTime_s);
+        
+        /* Find peak and compute isodelay */
         maxMag = find_max_abs_real(magnitude, numSamples);
+        peakIdx = find_max_abs_index_real(magnitude, numSamples);
+        
+        if (hasTime && time_s) {
+            rfDef->isodelay_us = (int)(time_s[peakIdx] * 1e6f);
+            time_center = time_s[peakIdx];
+        } else {
+            rfDef->isodelay_us = (int)(seq->opts.rf_raster_time * peakIdx);
+            time_center = (float)peakIdx * rfRasterTime_s;
+        }
+        
+        /* Normalize magnitude to 1.0 for area calculation */
         if (maxMag > 1e-9f) {
             for (i = 0; i < numSamples; ++i) {
                 magnitude[i] /= maxMag;
             }
-        }
-        
-        /* Compute isodelay: time of peak magnitude */
-        peakIdx = find_max_abs_index_real(magnitude, numSamples);
-        if (hasTime && time_s) {
-            rfDef->isodelay_us = (int)(time_s[peakIdx] * 1e6f);
-        } else {
-            rfDef->isodelay_us = (int)(seq->opts.rf_raster_time * peakIdx);
         }
         
         /* Compute area: integral of |magnitude| */
@@ -3593,9 +3965,53 @@ static int compute_rf_statistics(
             rfDef->area = trapz_real_uniform(magnitude, numSamples, rfRasterTime_s);
         }
         
+        /* Compute bandwidth via FFT */
+        /* Create complex RF signal: rf = magnitude * exp(j * phase) */
+        rf_re = (float*)ALLOC(numSamples * sizeof(float));
+        rf_im = (float*)ALLOC(numSamples * sizeof(float));
+        time_centered = (float*)ALLOC(numSamples * sizeof(float));
+
+        if (rf_re && rf_im && time_centered && hasTime) {
+            /* If no phase, assume zero phase */
+            if (hasPhase && phase) {
+                for (i = 0; i < numSamples; ++i) {
+                    rf_re[i] = magnitude[i] * (float)cos(phase[i]);
+                    rf_im[i] = magnitude[i] * (float)sin(phase[i]);
+                }
+            } else {
+                for (i = 0; i < numSamples; ++i) {
+                    rf_re[i] = magnitude[i];
+                    rf_im[i] = 0.0f;
+                }
+            }
+            
+            /* Center time around peak (isodelay) */
+            for (i = 0; i < numSamples; ++i) {
+                time_centered[i] = time_s[i] - time_center;
+            }
+            
+            /* Compute bandwidth */
+            rfDef->bandwidth = compute_rf_bandwidth_fft(
+                rf_re, rf_im, time_centered, numSamples,
+                rfRasterTime_s,  /* dt */
+                10.0f,           /* dw = 10 Hz spectral resolution */
+                0.5f,            /* cutoff = 0.5 (FWHM) */
+                duration         /* duration for fallback */
+            );
+        } else {
+            /* Fallback if allocation failed */
+            if (duration > 0.0f) {
+                rfDef->bandwidth = 1.0f / duration;
+            }
+        }
+
         /* Cleanup */
         if (magnitude) FREE(magnitude);
+        if (phase) FREE(phase);
         if (time_s) FREE(time_s);
+        if (rf_re) FREE(rf_re);
+        if (rf_im) FREE(rf_im);
+        if (time_centered) FREE(time_centered);
     }
     
     return PULSEQLIB_OK;
