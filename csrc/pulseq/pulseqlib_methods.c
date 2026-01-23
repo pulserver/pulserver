@@ -1847,12 +1847,9 @@ void getRawExtension(const pulseqlib_SeqFile* seq, pulseqlib_RawExtension* rawEx
         typeIdx = raw->ext[i][0];
         refIdx = raw->ext[i][1];
         
-        if (typeIdx < 0 || typeIdx >= seq->extensionLUTSize) continue;
+        if (typeIdx < 0 || typeIdx > seq->extensionLUTSize) continue;
         extType = seq->extensionLUT[typeIdx];
-        if (refIdx <= 0) continue;
-
-        /* Convert to 0-based index for array access */
-        refIdx = refIdx - 1;
+        if (refIdx < 0) continue;
         
         switch (extType) {
             case EXT_LABELSET:
@@ -2002,12 +1999,14 @@ static int parseTriggerFromRawExtension(const pulseqlib_SeqFile* seq, pulseqlib_
     if (!seq->triggerLibrary || refIdx >= seq->triggerLibrarySize) {
         return 1; /* Invalid reference, skip */
     }
-        
+     
+    /* File format: id type channel delay duration */
+    /* Array indices: [0]=type, [1]=channel, [2]=delay, [3]=duration */
     extBlock->trigger.type = 1;
-    extBlock->trigger.duration = seq->triggerLibrary[refIdx][0];
-    extBlock->trigger.delay = seq->triggerLibrary[refIdx][1];
-    extBlock->trigger.triggerType = (int)seq->triggerLibrary[refIdx][2];
-    extBlock->trigger.triggerChannel = (int)seq->triggerLibrary[refIdx][3];
+    extBlock->trigger.triggerType = (int)seq->triggerLibrary[refIdx][0];
+    extBlock->trigger.triggerChannel = (int)seq->triggerLibrary[refIdx][1];
+    extBlock->trigger.delay = seq->triggerLibrary[refIdx][2];
+    extBlock->trigger.duration = seq->triggerLibrary[refIdx][3];
     
     return 1;
 }
@@ -2021,11 +2020,12 @@ static int parseSoftDelayFromRawExtension(const pulseqlib_SeqFile* seq, pulseqli
         return 1; /* Invalid reference, skip */
     }
         
+    /* readDelayLibrary stores: [0]=numID, [1]=offset, [2]=factor, [3]=hintCode */
     extBlock->softDelay.type = 1;
     extBlock->softDelay.numID = (int)seq->softDelayLibrary[refIdx][0];
-    extBlock->softDelay.hintID = (int)seq->softDelayLibrary[refIdx][1];
-    extBlock->softDelay.offset = seq->softDelayLibrary[refIdx][2];
-    extBlock->softDelay.factor = seq->softDelayLibrary[refIdx][3];
+    extBlock->softDelay.offset = seq->softDelayLibrary[refIdx][1];
+    extBlock->softDelay.factor = seq->softDelayLibrary[refIdx][2];
+    extBlock->softDelay.hintID = (int)seq->softDelayLibrary[refIdx][3];
     
     return 1;
 }
