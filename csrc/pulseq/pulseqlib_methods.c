@@ -764,10 +764,18 @@ static float find_spectrum_flank(
  * @param[in]  rf_im        RF signal imaginary part.
  * @param[in]  rf_time      RF time points (seconds, centered at isocenter).
  * @param[in]  numSamples   Number of RF samples.
- * @param[in]  dt           Sampling time for FFT (seconds), typically rf_raster_time.
- * @param[in]  dw           Spectral resolution (Hz), typically 10 Hz.
+ * @param[in]  fft_cfg      Pre-allocated kiss_fft config.
+ * @param[in]  nn           FFT size.
+ * @param[in]  dt           Sampling time for FFT (seconds).
+ * @param[in]  dw           Spectral resolution (Hz).
  * @param[in]  cutoff       Bandwidth cutoff level (typically 0.5).
  * @param[in]  duration     RF pulse duration (seconds), for fallback calculation.
+ * @param[in]  tt           Pre-allocated time array (size nn).
+ * @param[in]  w            Pre-allocated frequency array (size nn).
+ * @param[in]  rfs_re       Pre-allocated work array (size nn).
+ * @param[in]  rfs_im       Pre-allocated work array (size nn).
+ * @param[in]  fft_in       Pre-allocated FFT input array (size nn).
+ * @param[in]  fft_out      Pre-allocated FFT output array (size nn).
  * @return Bandwidth in Hz.
  */
 static float compute_rf_bandwidth_fft(
@@ -775,111 +783,61 @@ static float compute_rf_bandwidth_fft(
     const float* rf_im,
     const float* rf_time,
     int numSamples,
+    kiss_fft_cfg fft_cfg,
+    int nn,
     float dt,
     float dw,
     float cutoff,
-    float duration)
-{
-    int nn, i;
-    int half_nn;
-    float* tt = NULL;
-    float* rfs_re = NULL;
-    float* rfs_im = NULL;
-    float* w = NULL;
-    kiss_fftr_cfg fft_cfg = NULL;
-    kiss_fft_scalar* fft_in = NULL;
-    kiss_fft_cpx* fft_out = NULL;
+    float duration,
+    const float* tt,
+    const float* w,
+    float* rfs_re,
+    float* rfs_im,
+    kiss_fft_cpx* fft_in,
+    kiss_fft_cpx* fft_out
+) {
+    int i;
     float w1, w2, bw;
     float fallback_bw;
-    int success = 0;
     
-    /* Fallback bandwidth for rect pulse */
-    fallback_bw = (duration > 0.0f) ? (1.0f / duration) : 0.0f;
+     /* Fallback bandwidth for rect pulse */
+    fallback_bw = (duration > 0.0f) ? (2.0f / duration) : 0.0f;
     
-    if (!rf_re || !rf_im || !rf_time || numSamples <= 0 || dt <= 0.0f || dw <= 0.0f) {
+    if (!rf_re || !rf_im || !rf_time || numSamples <= 0 || !fft_cfg) {
         return fallback_bw;
     }
+        
+    /* Interpolate RF signal onto new time grid */
+    interp1_linear_complex(tt, nn, rf_time, rf_re, rf_im, numSamples, rfs_re, rfs_im);
     
-    /* Compute FFT size: nn = round(1 / dw / dt) */
-    nn = (int)(1.0f / (dw * dt) + 0.5f);
-    if (nn < 2) {
-        nn = 2;
-    }
-    /* Ensure nn is even for kiss_fftr */
-    if (nn % 2 != 0) {
-        nn += 1;
-    }
-    
-    half_nn = nn / 2;
-    
-    /* Allocate arrays */
-    tt = (float*)ALLOC(nn * sizeof(float));
-    rfs_re = (float*)ALLOC(nn * sizeof(float));
-    rfs_im = (float*)ALLOC(nn * sizeof(float));
-    w = (float*)ALLOC(nn * sizeof(float));
-    fft_in = (kiss_fft_scalar*)ALLOC(nn * sizeof(kiss_fft_scalar));
-    fft_out = (kiss_fft_cpx*)ALLOC((half_nn + 1) * sizeof(kiss_fft_cpx));
-    fft_cfg = kiss_fftr_alloc(nn, 0, NULL, NULL);
-    
-    if (!tt || !rfs_re || !rfs_im || !w || !fft_in || !fft_out || !fft_cfg) {
-        /* Allocation failed - cleanup and return fallback */
-    } else {
-        /* Create time array: tt = arange(-floor(nn/2), ceil(nn/2)-1) * dt */
-        for (i = 0; i < nn; ++i) {
-            tt[i] = (float)(i - half_nn) * dt;
-        }
+    /* Apply fftshift to input (center the signal) */
+    fftshift_complex(rfs_re, rfs_im, nn);
         
-        /* Create frequency axis: w = arange(-floor(nn/2), ceil(nn/2)-1) * dw */
-        for (i = 0; i < nn; ++i) {
-            w[i] = (float)(i - half_nn) * dw;
-        }
-        
-        /* Interpolate RF signal onto new time grid */
-        interp1_linear_complex(tt, nn, rf_time, rf_re, rf_im, numSamples, rfs_re, rfs_im);
-        
-        /* Apply fftshift to input (center the signal) */
-        fftshift_complex(rfs_re, rfs_im, nn);
-        
-        /* For real FFT, compute magnitude envelope */
-        for (i = 0; i < nn; ++i) {
-            fft_in[i] = (float)sqrt(rfs_re[i] * rfs_re[i] + rfs_im[i] * rfs_im[i]);
-        }
-        
-        /* Perform FFT */
-        kiss_fftr(fft_cfg, fft_in, fft_out);
-        
-        /* Expand half-spectrum to full spectrum for fftshift */
-        /* For real input, output is conjugate symmetric: X[k] = conj(X[N-k]) */
-        for (i = 0; i <= half_nn; ++i) {
-            rfs_re[i] = fft_out[i].r;
-            rfs_im[i] = fft_out[i].i;
-        }
-        for (i = half_nn + 1; i < nn; ++i) {
-            rfs_re[i] = fft_out[nn - i].r;
-            rfs_im[i] = -fft_out[nn - i].i; /* conjugate */
-        }
-        
-        /* Apply fftshift to output */
-        fftshift_complex(rfs_re, rfs_im, nn);
-        
-        /* Find bandwidth flanks */
-        w1 = find_spectrum_flank(w, rfs_re, rfs_im, nn, cutoff, 0);  /* left flank */
-        w2 = find_spectrum_flank(w, rfs_re, rfs_im, nn, cutoff, 1);  /* right flank */
-        
-        bw = w2 - w1;
-        success = (bw > 0.0f);
+    /* Copy to FFT input */
+    for (i = 0; i < nn; ++i) {
+        fft_in[i].r = rfs_re[i];
+        fft_in[i].i = rfs_im[i];
     }
     
-    /* Cleanup */
-    if (tt) FREE(tt);
-    if (rfs_re) FREE(rfs_re);
-    if (rfs_im) FREE(rfs_im);
-    if (w) FREE(w);
-    if (fft_in) FREE(fft_in);
-    if (fft_out) FREE(fft_out);
-    if (fft_cfg) kiss_fft_free(fft_cfg);
+    /* Perform complex FFT */
+    kiss_fft(fft_cfg, fft_in, fft_out);
     
-    return success ? bw : fallback_bw;
+    /* Copy FFT output back to work arrays */
+    for (i = 0; i < nn; ++i) {
+        rfs_re[i] = fft_out[i].r;
+        rfs_im[i] = fft_out[i].i;
+    }
+
+    /* Apply fftshift to output */
+    fftshift_complex(rfs_re, rfs_im, nn);
+
+    /* Find bandwidth flanks */
+    w1 = find_spectrum_flank(w, rfs_re, rfs_im, nn, cutoff, 0);
+    w2 = find_spectrum_flank(w, rfs_re, rfs_im, nn, cutoff, 1);
+    
+    bw = w2 - w1;
+    
+    return (bw > 0.0f) ? bw : fallback_bw;
 }
 
 /***************************************************** Private Functions  ***************************************/
@@ -3831,12 +3789,47 @@ static int compute_rf_statistics(
     float maxMag;
     float duration;
     float time_center;
+    pulseqlib_RfDefinition* rfDef;
+
+    /* FFT resources (allocated once) */
+    int nn;
+    float dw = 10.0f;  /* spectral resolution in Hz */
+    float cutoff = 0.5f;
+    kiss_fft_cfg fft_cfg = NULL;
+    float* tt = NULL;
+    float* w = NULL;
+    float* rfs_re = NULL;
+    float* rfs_im = NULL;
+    kiss_fft_cpx* fft_in = NULL;
+    kiss_fft_cpx* fft_out = NULL;
+    int fft_ready = 0;
     
     if (!seq || !rfDefinitions || numUniqueRFs <= 0) {
         return PULSEQLIB_OK;
     }
     
     rfRasterTime_s = seq->opts.rf_raster_time * 1e-6f; /* convert us to s */
+
+    /* Compute FFT size and allocate FFT resources once */
+    nn = (int)(1.0f / (dw * rfRasterTime_s) + 0.5f);
+    if (nn < 2) nn = 2;
+    
+    tt = (float*)ALLOC(nn * sizeof(float));
+    w = (float*)ALLOC(nn * sizeof(float));
+    rfs_re = (float*)ALLOC(nn * sizeof(float));
+    rfs_im = (float*)ALLOC(nn * sizeof(float));
+    fft_in = (kiss_fft_cpx*)ALLOC(nn * sizeof(kiss_fft_cpx));
+    fft_out = (kiss_fft_cpx*)ALLOC(nn * sizeof(kiss_fft_cpx));
+    fft_cfg = kiss_fft_alloc(nn, 0, NULL, NULL);  /* 0 = forward FFT */
+    
+    if (tt && w && rfs_re && rfs_im && fft_in && fft_out && fft_cfg) {
+        /* Initialize time and frequency arrays */
+        for (i = 0; i < nn; ++i) {
+            tt[i] = (float)(i - nn / 2) * rfRasterTime_s;
+            w[i] = (float)(i - nn / 2) * dw;
+        }
+        fft_ready = 1;
+    }
     
     /* Initialize decompressed shapes */
     decompMag.numSamples = 0;
@@ -3850,7 +3843,7 @@ static int compute_rf_statistics(
     decompTime.samples = NULL;
     
     for (defIdx = 0; defIdx < numUniqueRFs; ++defIdx) {
-        pulseqlib_RfDefinition* rfDef = &rfDefinitions[defIdx];
+        rfDef = &rfDefinitions[defIdx];
         
         /* Initialize stats */
         rfDef->area = 0.0f;
@@ -3993,15 +3986,13 @@ static int compute_rf_statistics(
             /* Compute bandwidth */
             rfDef->bandwidth = compute_rf_bandwidth_fft(
                 rf_re, rf_im, time_centered, numSamples,
-                rfRasterTime_s,  /* dt */
-                10.0f,           /* dw = 10 Hz spectral resolution */
-                0.5f,            /* cutoff = 0.5 (FWHM) */
-                duration         /* duration for fallback */
+                fft_cfg, nn, rfRasterTime_s, dw, cutoff, duration,
+                tt, w, rfs_re, rfs_im, fft_in, fft_out
             );
         } else {
             /* Fallback if allocation failed */
             if (duration > 0.0f) {
-                rfDef->bandwidth = 1.0f / duration;
+                rfDef->bandwidth = 2.0f / duration;
             }
         }
 
@@ -4013,6 +4004,15 @@ static int compute_rf_statistics(
         if (rf_im) FREE(rf_im);
         if (time_centered) FREE(time_centered);
     }
+
+    /* Cleanup FFT resources */
+    if (tt) FREE(tt);
+    if (w) FREE(w);
+    if (rfs_re) FREE(rfs_re);
+    if (rfs_im) FREE(rfs_im);
+    if (fft_in) FREE(fft_in);
+    if (fft_out) FREE(fft_out);
+    if (fft_cfg) kiss_fft_free(fft_cfg);
     
     return PULSEQLIB_OK;
 }
