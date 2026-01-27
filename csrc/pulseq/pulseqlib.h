@@ -1,6 +1,10 @@
 #ifndef PULSEQLIB_H
 #define PULSEQLIB_H
 
+#ifndef IS_GEHC
+    #define  IS_GEHC 1
+#endif 
+
 #define TWO_PI 6.283185307179586476925286766558
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -509,19 +513,38 @@ typedef struct pulseqlib_SeqFile {
     pulseqlib_ShapeArbitrary* shapesLibrary; /**< @brief Array of arbitrary shape definitions. */
 } pulseqlib_SeqFile; /* Mirrors Pulseq SeqFile */
 
-typedef struct pulseqlib_RfDefinition {
-    int ID; /**< Unique RF ID */
-    int magShapeID; /**< Magnitude shape ID */
-    int phaseShapeID; /**< Phase shape ID */
-    int timeShapeID; /**< Time shape ID */
-    int delay; /**< Delay prior to the pulse (us) */
 
-    float area;        /**< Normalized area of RF pulse (s for real, s for complex magnitude) */
-    int isodelay_us;   /**< Time of peak magnitude from pulse start (us) */
-    float bandwidth;   /**< RF bandwidth in Hz (computed via FFT, 0 if not yet computed) */
+/********************************************************* Interpreter-related structs  ******************************************************/
+typedef struct pulseqlib_RfDefinition {
+    /* Core definition fields (used for deduplication/uniqueness matching) */
+    int ID;           /**< Unique RF ID (0-based index into rfDefinitions array) */
+    int magShapeID;   /**< Magnitude shape ID (1-based index into shapes library, 0 if none) */
+    int phaseShapeID; /**< Phase shape ID (1-based index into shapes library, 0 if none) */
+    int timeShapeID;  /**< Time shape ID (1-based index into shapes library, 0 if none) */
+    int delay;        /**< Delay prior to the pulse (us) */
+
+#ifdef IS_GEHC
+    /* Statistics fields for peak-normalized waveform (max|magnitude| = 1). */
+    int numSamples;     /**< Number of RF samples (count) */
+    float maxAmplitude; /**< Max amplitude across instances (Hz) */
+    float flipAngle;    /**< Flip angle at Max amplitude across instances(radians) */
+    float area;         /**< Signed integral / duration (dimensionless) */
+    float abswidth;     /**< Integral of |rf| / duration (dimensionless) */
+    float effwidth;     /**< Integral of rf² / duration (dimensionless) */
+    float dtycyc;       /**< Fraction of duration with |rf| > 0.2236 (dimensionless) */
+    float maxpw;        /**< Widest contiguous lobe / duration (dimensionless) */
+    float duration_us;  /**< RF pulse duration (us) */
+    int isodelay_us;    /**< Time from peak magnitude to pulse end (us) */
+    float bandwidth;    /**< RF bandwidth at 50% cutoff (Hz) */
+#endif
+
 } pulseqlib_RfDefinition;
 
-#define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0, 0.0f, 0, 0.0f}
+#ifdef IS_GEHC
+#define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f}
+#else
+#define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0}
+#endif
 
 typedef struct pulseqlib_RfTableElement {
     int ID; /**< Unique RF ID */
@@ -535,20 +558,28 @@ typedef struct pulseqlib_RfTableElement {
 #define MAX_GRAD_SHOTS 16  /**< Maximum number of shots/interleaves per gradient definition */
 
 typedef struct pulseqlib_GradDefinition {
-    int ID; /**< Unique Grad ID */
-    int type; /**< Gradient type encoded in the library (TRAP/GRAD) */
-    int riseTimeOrFirst; /**< Rise time (us) for trapezoid, or first amplitude for arbitrary */
-    int flatTimeOrLast; /**< Flat time (us) for trapezoid, or last amplitude for arbitrary */
-    int fallTimeOrNumUncompressedSamples; /**< Fall time (us) for trapezoid, or number of uncompressed samples for arbitrary */
-    int unusedOrTimeShapeID; /**< Unused Time shape ID */
-    int delay; /**< Delay prior to the pulse (us) */
-    int numShots; /**< Number of distinct waveform shapes (shots/interleaves) for this gradient definition. 1 for trapezoids. */
-    int shotShapeIDs[MAX_GRAD_SHOTS]; /**< Array of shape IDs, one per shot. Unused entries are 0. Length = numShots. */
+    /* Core definition fields (used for deduplication/uniqueness matching) */
+    int ID;                                  /**< Unique Grad ID (0-based index into gradDefinitions array) */
+    int type;                                /**< Gradient type: 0=TRAP, non-zero=ARBITRARY/EXTENDED */
+    int riseTimeOrFirst;                     /**< TRAP: rise time (us); ARBITRARY: first sample (normalized, scaled by 1e6) */
+    int flatTimeOrLast;                      /**< TRAP: flat time (us); ARBITRARY: last sample (normalized, scaled by 1e6) */
+    int fallTimeOrNumUncompressedSamples;    /**< TRAP: fall time (us); ARBITRARY: number of uncompressed samples */
+    int unusedOrTimeShapeID;                 /**< TRAP: unused; ARBITRARY: time shape ID (1-based, 0 if none) */
+    int delay;                               /**< Delay prior to the gradient (us) */
+
+    /* Multi-shot fields (populated after deduplication by compute_grad_shot_indices) */
+    int numShots;                            /**< Number of distinct waveform shapes (1 for trapezoids) */
+    int shotShapeIDs[MAX_GRAD_SHOTS];        /**< Shape IDs per shot (1-based into shapes library, 0 if unused) */
     
-    float slewRate[MAX_GRAD_SHOTS];    /**< Maximum slew rate of normalized waveform (1/us) for each shot */
-    float energy[MAX_GRAD_SHOTS];      /**< Energy integral of normalized waveform (us) for each shot: integral(|shape|^2 dt) */
-    float firstValue[MAX_GRAD_SHOTS];  /**< First sample value of normalized waveform for each shot */
-    float lastValue[MAX_GRAD_SHOTS];   /**< Last sample value of normalized waveform for each shot */
+    /* Statistics fields for peak-normalized waveform (max|waveform| = 1) 
+     * To get physical values, multiply by amplitude from GradTableElement:
+     *   physical_slew = slewRate * amplitude  -> (Hz/m)/s
+     *   physical_energy = energy * amplitude² -> (Hz/m)² * s
+     */
+    float slewRate[MAX_GRAD_SHOTS];          /**< Max |d(waveform)/dt| (1/s) */
+    float energy[MAX_GRAD_SHOTS];            /**< Integral of waveform² dt (s) */
+    float firstValue[MAX_GRAD_SHOTS];        /**< First sample of normalized waveform (dimensionless, range -1 to 1) */
+    float lastValue[MAX_GRAD_SHOTS];         /**< Last sample of normalized waveform (dimensionless, range -1 to 1) */
 } pulseqlib_GradDefinition;
 
 #define PULSEQLIB_GRAD_DEFINITION_INIT {0, 0, 0, 0, 0, 0, 0, 1, {0}, {0.0f}, {0.0f}, {0.0f}, {0.0f}}
@@ -562,10 +593,10 @@ typedef struct pulseqlib_GradTableElement {
 #define PULSEQLIB_GRAD_TABLE_ELEMENT_INIT {0, 0, 0.0f}
 
 typedef struct pulseqlib_AdcDefinition {
-    int ID; /**< Unique ADC ID */
-    int numSamples; /**< Number of ADC samples */
-    int dwellTime; /**< Dwell time of ADC readout (ns) */
-    int delay; /**< Delay before first sample (us) */
+    int ID;         /**< Unique ADC ID (0-based index into adcDefinitions array) */
+    int numSamples; /**< Number of ADC samples (count) */
+    int dwellTime;  /**< Dwell time between samples (ns) */
+    int delay;      /**< Delay before first sample (us) */
 } pulseqlib_AdcDefinition;
 
 #define PULSEQLIB_ADC_DEFINITION_INIT {0, 0, 0, 0}
@@ -579,12 +610,12 @@ typedef struct pulseqlib_AdcTableElement {
 #define PULSEQLIB_ADC_TABLE_ELEMENT_INIT {0, 0.0f, 0.0f}
 
 typedef struct pulseqlib_BlockDefinition {
-    int ID; /**< Unique Block ID */
-    int duration_us; /**< Block duration in microseconds */
-    int rfID; /**< RF event ID in the unique RF Library */
-    int gxID; /**< Gradient event ID in unique GRAD Library (X channel) */
-    int gyID; /**< Gradient event ID in unique GRAD Library (Y channel) */
-    int gzID; /**< Gradient event ID in unique GRAD Library (Z channel) */
+    int ID;          /**< Unique Block ID (0-based index into blockDefinitions array) */
+    int duration_us; /**< Block duration (us) */
+    int rfID;        /**< RF definition ID (-1 if no RF in this block) */
+    int gxID;        /**< Gradient X definition ID (-1 if no Gx in this block) */
+    int gyID;        /**< Gradient Y definition ID (-1 if no Gy in this block) */
+    int gzID;        /**< Gradient Z definition ID (-1 if no Gz in this block) */
 } pulseqlib_BlockDefinition;
 
 #define PULSEQLIB_BLOCK_DEFINITION_INIT {0, 0, 0, 0, 0, 0}
@@ -595,6 +626,8 @@ typedef struct pulseqlib_BlockTableElement {
     int adcID; /**< ADC event ID in unique ADC Library */
     int triggerID; /**< Trigger extension ID */
     int rotationID; /**< Rotation extension ID */
+    
+    /* Flow control fields */
     int norotFlag; /**< Ignore FOV rotation flag */
     int noposFlag; /**< Ignore FOV position flag */
     int pmcFlag; /**< Prospective motion correction flag */

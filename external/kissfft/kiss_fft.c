@@ -342,15 +342,16 @@ kiss_fft_cfg kiss_fft_alloc(int nfft,int inverse_fft,void * mem,size_t * lenmem 
     KISS_FFT_ALIGN_CHECK(mem)
 
     /* check for overflow condition {memneeded > SIZE_MAX}. */
-    if (nfft >= (int)((SIZE_MAX_VAL - 2*sizeof(struct kiss_fft_state))/sizeof(kiss_fft_cpx)))
+    if ((size_t)nfft >= (SIZE_MAX_VAL - 2*sizeof(struct kiss_fft_state))/sizeof(kiss_fft_cpx)) {
         return NULL;
+    }
 
     memneeded = KISS_FFT_ALIGN_SIZE_UP(sizeof(struct kiss_fft_state)
         + sizeof(kiss_fft_cpx)*(nfft-1)); /* twiddle factors*/
 
     if ( lenmem==NULL ) {
         st = ( kiss_fft_cfg)KISS_FFT_MALLOC( memneeded );
-    }else{
+    } else {
         if (mem != NULL && *lenmem >= memneeded)
             st = (kiss_fft_cfg)mem;
         *lenmem = memneeded;

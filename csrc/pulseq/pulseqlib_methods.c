@@ -559,7 +559,49 @@ static void quaternion_to_matrix(const float* quat, float* matrix)
     matrix[8] = 1.0f - 2.0f * (xx + yy);
 }
 
-// Add these helpers after the existing math helpers section (around line 450)
+/**
+ * @brief Find widest contiguous lobe above threshold for complex signal on uniform grid.
+ *
+ * @param[in] rf_re       Real part of complex RF signal.
+ * @param[in] rf_im       Imaginary part of complex RF signal.
+ * @param[in] numSamples  Number of samples.
+ * @param[in] duration    Total pulse duration (s).
+ * @param[in] dt          Time step (s).
+ * @param[in] threshold   Magnitude threshold (normalized).
+ * @return Widest lobe duration normalized by total duration.
+ */
+static float find_widest_lobe(
+    const float* rf_re,
+    const float* rf_im,
+    int numSamples,
+    float duration,
+    float dt,
+    float threshold)
+{
+    int i;
+    int current_run = 0;
+    int max_run = 0;
+    float mag;
+    
+    if (!rf_re || !rf_im || numSamples <= 0 || duration <= 0.0f) {
+        return 0.0f;
+    }
+    
+    for (i = 0; i < numSamples; ++i) {
+        mag = (float)sqrt(rf_re[i] * rf_re[i] + rf_im[i] * rf_im[i]);
+        
+        if (mag > threshold) {
+            current_run++;
+            if (current_run > max_run) {
+                max_run = current_run;
+            }
+        } else {
+            current_run = 0;
+        }
+    }
+    
+    return (float)max_run * dt / duration;
+}
 
 /******************************************* Interpolation Helpers *************************************************/
 
@@ -710,8 +752,8 @@ static float find_spectrum_flank(
     const float* spectrum_im,
     int n,
     float cutoff,
-    int reverse)
-{
+    int reverse
+) {
     int i, idx;
     float maxMag, mag, threshold;
     
@@ -755,44 +797,36 @@ static float find_spectrum_flank(
 }
 
 /**
- * @brief Compute RF bandwidth using FFT.
+ * @brief Compute RF bandwidth from uniformly sampled complex signal via FFT.
  *
- * Port of pypulseq.calc_rf_bandwidth().
- * Uses low-angle approximation (simple FFT of RF waveform).
+ * Assumes rf_re and rf_im are already on the FFT grid (nn samples, dt spacing).
+ * Performs fftshift, FFT, fftshift, then finds bandwidth at cutoff level.
  *
- * @param[in]  rf_re        RF signal real part (complex envelope).
- * @param[in]  rf_im        RF signal imaginary part.
- * @param[in]  rf_time      RF time points (seconds, centered at isocenter).
- * @param[in]  numSamples   Number of RF samples.
- * @param[in]  fft_cfg      Pre-allocated kiss_fft config.
- * @param[in]  nn           FFT size.
- * @param[in]  dt           Sampling time for FFT (seconds).
- * @param[in]  dw           Spectral resolution (Hz).
- * @param[in]  cutoff       Bandwidth cutoff level (typically 0.5).
- * @param[in]  duration     RF pulse duration (seconds), for fallback calculation.
- * @param[in]  tt           Pre-allocated time array (size nn).
- * @param[in]  w            Pre-allocated frequency array (size nn).
- * @param[in]  rfs_re       Pre-allocated work array (size nn).
- * @param[in]  rfs_im       Pre-allocated work array (size nn).
- * @param[in]  fft_in       Pre-allocated FFT input array (size nn).
- * @param[in]  fft_out      Pre-allocated FFT output array (size nn).
+ * @param[in]     rf_re     Real part of RF signal on FFT grid.
+ * @param[in]     rf_im     Imaginary part of RF signal on FFT grid.
+ * @param[in]     fft_cfg   Pre-allocated kiss_fft configuration.
+ * @param[in]     nn        Number of FFT points.
+ * @param[in]     dw        Frequency resolution (Hz).
+ * @param[in]     cutoff    Bandwidth cutoff level (0 to 1, typically 0.5).
+ * @param[in]     duration  Pulse duration for fallback (s).
+ * @param[in]     w         Frequency grid array.
+ * @param[in,out] work_re   Work array for real part (size nn).
+ * @param[in,out] work_im   Work array for imag part (size nn).
+ * @param[in,out] fft_in    FFT input array.
+ * @param[in,out] fft_out   FFT output array.
  * @return Bandwidth in Hz.
  */
 static float compute_rf_bandwidth_fft(
     const float* rf_re,
     const float* rf_im,
-    const float* rf_time,
-    int numSamples,
     kiss_fft_cfg fft_cfg,
     int nn,
-    float dt,
     float dw,
     float cutoff,
     float duration,
-    const float* tt,
     const float* w,
-    float* rfs_re,
-    float* rfs_im,
+    float* work_re,
+    float* work_im,
     kiss_fft_cpx* fft_in,
     kiss_fft_cpx* fft_out
 ) {
@@ -800,23 +834,25 @@ static float compute_rf_bandwidth_fft(
     float w1, w2, bw;
     float fallback_bw;
     
-     /* Fallback bandwidth for rect pulse */
     fallback_bw = (duration > 0.0f) ? (2.0f / duration) : 0.0f;
     
-    if (!rf_re || !rf_im || !rf_time || numSamples <= 0 || !fft_cfg) {
+    if (!rf_re || !rf_im || !fft_cfg || nn <= 0) {
         return fallback_bw;
     }
-        
-    /* Interpolate RF signal onto new time grid */
-    interp1_linear_complex(tt, nn, rf_time, rf_re, rf_im, numSamples, rfs_re, rfs_im);
+    
+    /* Copy input to work arrays */
+    for (i = 0; i < nn; ++i) {
+        work_re[i] = rf_re[i];
+        work_im[i] = rf_im[i];
+    }
     
     /* Apply fftshift to input (center the signal) */
-    fftshift_complex(rfs_re, rfs_im, nn);
-        
+    fftshift_complex(work_re, work_im, nn);
+    
     /* Copy to FFT input */
     for (i = 0; i < nn; ++i) {
-        fft_in[i].r = rfs_re[i];
-        fft_in[i].i = rfs_im[i];
+        fft_in[i].r = work_re[i];
+        fft_in[i].i = work_im[i];
     }
     
     /* Perform complex FFT */
@@ -824,16 +860,16 @@ static float compute_rf_bandwidth_fft(
     
     /* Copy FFT output back to work arrays */
     for (i = 0; i < nn; ++i) {
-        rfs_re[i] = fft_out[i].r;
-        rfs_im[i] = fft_out[i].i;
+        work_re[i] = fft_out[i].r;
+        work_im[i] = fft_out[i].i;
     }
-
+    
     /* Apply fftshift to output */
-    fftshift_complex(rfs_re, rfs_im, nn);
-
+    fftshift_complex(work_re, work_im, nn);
+    
     /* Find bandwidth flanks */
-    w1 = find_spectrum_flank(w, rfs_re, rfs_im, nn, cutoff, 0);
-    w2 = find_spectrum_flank(w, rfs_re, rfs_im, nn, cutoff, 1);
+    w1 = find_spectrum_flank(w, work_re, work_im, nn, cutoff, 0);
+    w2 = find_spectrum_flank(w, work_re, work_im, nn, cutoff, 1);
     
     bw = w2 - w1;
     
@@ -3503,8 +3539,6 @@ static int compute_grad_shot_indices(
     return PULSEQLIB_OK;
 }
 
-// Replace the old compute_waveform_stats and related functions
-
 /**
  * @brief Normalize a real-valued waveform to unit peak amplitude in place.
  *
@@ -3549,39 +3583,29 @@ static void compute_trapezoid_stats(
     float* slewRate,
     float* energy,
     float* firstVal,
-    float* lastVal)
-{
-    float waveform[4];
-    float time_s[4];
-    float sq_waveform[4];
+    float* lastVal
+) {
+    float riseTime_s = riseTime_us * 1e-6f;
+    float flatTime_s = flatTime_us * 1e-6f;
+    float fallTime_s = fallTime_us * 1e-6f;
+    float slew_rise, slew_fall;
     
-    /* Trapezoid waveform: [0, 1, 1, 0] */
-    waveform[0] = 0.0f;
-    waveform[1] = 1.0f;
-    waveform[2] = 1.0f;
-    waveform[3] = 0.0f;
+    /* First and last values for trapezoid are always zero */
+    *firstVal = 0.0f;
+    *lastVal = 0.0f;
     
-    /* Squared waveform for energy */
-    sq_waveform[0] = 0.0f;
-    sq_waveform[1] = 1.0f;
-    sq_waveform[2] = 1.0f;
-    sq_waveform[3] = 0.0f;
+    /* Slew rate: max of rise and fall ramps */
+    slew_rise = (riseTime_s > 0.0f) ? (1.0f / riseTime_s) : 0.0f;
+    slew_fall = (fallTime_s > 0.0f) ? (1.0f / fallTime_s) : 0.0f;
+    *slewRate = (slew_rise > slew_fall) ? slew_rise : slew_fall;
     
-    /* Time points in seconds */
-    time_s[0] = 0.0f;
-    time_s[1] = riseTime_us * 1e-6f;
-    time_s[2] = (riseTime_us + flatTime_us) * 1e-6f;
-    time_s[3] = (riseTime_us + flatTime_us + fallTime_us) * 1e-6f;
-    
-    /* First and last values */
-    *firstVal = waveform[0];
-    *lastVal = waveform[3];
-    
-    /* Slew rate */
-    *slewRate = max_slew_real_nonuniform(waveform, time_s, 4);
-    
-    /* Energy: integral of |waveform|^2 dt */
-    *energy = trapz_real_nonuniform(sq_waveform, time_s, 4);
+    /* Energy: analytical integral of |normalized_waveform|² dt */
+    /* For normalized trapezoid with peak = 1:
+     *   rise ramp contributes riseTime/3
+     *   flat top contributes flatTime
+     *   fall ramp contributes fallTime/3
+     */
+    *energy = riseTime_s / 3.0f + flatTime_s + fallTime_s / 3.0f;
 }
 
 /**
@@ -3753,85 +3777,115 @@ static int compute_grad_statistics(
 }
 
 /**
- * @brief Compute RF statistics for all unique RF definitions.
+ * @brief Compute RF statistics for deduplicated RF definitions (GE-compatible).
  *
- * For each RF definition, computes:
- * - area: integral of normalized RF magnitude
- * - isodelay_us: time of peak magnitude from pulse start in microseconds
- * - bandwidth: RF bandwidth in Hz (set to 0, computed later via FFT)
- *
- * @param[in]     seq            Pointer to the sequence file.
- * @param[in,out] rfDefinitions  Array of RF definitions to populate.
- * @param[in]     numUniqueRFs   Number of unique RF definitions.
- * @return PULSEQLIB_OK on success, or a negative error code on failure.
+ * Workflow:
+ * 1. Decompress magnitude, phase, time shapes
+ * 2. Detect real-valued RF (phase = 0 or π) and convert to signed magnitude
+ * 3. Normalize to max|magnitude| = 1
+ * 4. Interpolate to uniform FFT grid (centered at peak)
+ * 5. Compute stats on uniform grid
+ * 6. Compute bandwidth via FFT
  */
 static int compute_rf_statistics(
     const pulseqlib_SeqFile* seq,
     pulseqlib_RfDefinition* rfDefinitions,
-    int numUniqueRFs)
+    int numUniqueRFs,
+    const pulseqlib_RfTableElement* rfTable,
+    int rfTableSize)
 {
     int defIdx, i;
-    float rfRasterTime_s;
     pulseqlib_ShapeArbitrary decompMag;
     pulseqlib_ShapeArbitrary decompPhase;
     pulseqlib_ShapeArbitrary decompTime;
     float* magnitude = NULL;
     float* phase = NULL;
-    float* time_s = NULL;
+    float* time_us = NULL;
     float* rf_re = NULL;
     float* rf_im = NULL;
     float* time_centered = NULL;
-    int numSamples;
+    int numSamples, numRealSamples;
     int magId, phaseId, timeId;
     int result;
-    int hasMag, hasPhase, hasTime;
-    int peakIdx;
+    int hasPhase, hasTime;
+    int first;
+    int last;
     float maxMag;
     float duration;
     float time_center;
+    float sum_abs_unnorm;  /* For flip angle calculation (before normalization by duration) */
     pulseqlib_RfDefinition* rfDef;
-
-    /* FFT resources (allocated once) */
+    
+    /* Thresholds */
+    const float DTY_THRESHOLD = 0.2236f;  /* sqrt(0.05) for 5% power */
+    const float MPW_THRESHOLD = 1e-5f;
+    
+    /* FFT grid parameters */
     int nn;
-    float dw = 10.0f;  /* spectral resolution in Hz */
-    float cutoff = 0.5f;
+    float dw = 10.0f;       /* Frequency resolution (Hz) */
+    float cutoff = 0.5f;    /* Bandwidth cutoff level */
+    
+    /* FFT resources (allocated once, reused for all RFs) */
     kiss_fft_cfg fft_cfg = NULL;
-    float* tt = NULL;
-    float* w = NULL;
-    float* rfs_re = NULL;
-    float* rfs_im = NULL;
+    float* tt = NULL;           /* Centered time grid for FFT */
+    float* w = NULL;            /* Frequency grid */
+    float* rfs_re = NULL;       /* Interpolated RF real part on FFT grid */
+    float* rfs_im = NULL;       /* Interpolated RF imag part on FFT grid */
+    float* work_re = NULL;      /* Work array for FFT */
+    float* work_im = NULL;      /* Work array for FFT */
     kiss_fft_cpx* fft_in = NULL;
     kiss_fft_cpx* fft_out = NULL;
     int fft_ready = 0;
     
+    /* Stats computation variables */
+    float rfn_i, rfn_prev;
+    float mag_i, mag_prev;
+    float sq_i, sq_prev;
+    float sum_signed, sum_abs, sum_sq, time_above_threshold;
+    int fft_start, fft_end, fft_count;
+    
     if (!seq || !rfDefinitions || numUniqueRFs <= 0) {
         return PULSEQLIB_OK;
     }
-    
-    rfRasterTime_s = seq->opts.rf_raster_time * 1e-6f; /* convert us to s */
-
-    /* Compute FFT size and allocate FFT resources once */
-    nn = (int)(1.0f / (dw * rfRasterTime_s) + 0.5f);
+        
+    /* Compute FFT size: nn = 1 / (dw * dt) */
+    nn = (int)(1.0f / (dw * seq->opts.rf_raster_time * 1e-6f));
+    nn = kiss_fft_next_fast_size(nn);
     if (nn < 2) nn = 2;
-    
+       
+    /* Allocate FFT resources once */
     tt = (float*)ALLOC(nn * sizeof(float));
     w = (float*)ALLOC(nn * sizeof(float));
     rfs_re = (float*)ALLOC(nn * sizeof(float));
     rfs_im = (float*)ALLOC(nn * sizeof(float));
-    fft_in = (kiss_fft_cpx*)ALLOC(nn * sizeof(kiss_fft_cpx));
-    fft_out = (kiss_fft_cpx*)ALLOC(nn * sizeof(kiss_fft_cpx));
-    fft_cfg = kiss_fft_alloc(nn, 0, NULL, NULL);  /* 0 = forward FFT */
-    
-    if (tt && w && rfs_re && rfs_im && fft_in && fft_out && fft_cfg) {
-        /* Initialize time and frequency arrays */
+    work_re = (float*)ALLOC(nn * sizeof(float));
+    work_im = (float*)ALLOC(nn * sizeof(float));
+    fft_in = (kiss_fft_cpx*)KISS_FFT_MALLOC(nn * sizeof(kiss_fft_cpx));
+    fft_out = (kiss_fft_cpx*)KISS_FFT_MALLOC(nn * sizeof(kiss_fft_cpx));
+    fft_cfg = kiss_fft_alloc(nn, 0, NULL, NULL);
+    if (tt && w && rfs_re && rfs_im && work_re && work_im && fft_in && fft_out && fft_cfg) {
         for (i = 0; i < nn; ++i) {
-            tt[i] = (float)(i - nn / 2) * rfRasterTime_s;
+            tt[i] = (float)(i - nn / 2) * seq->opts.rf_raster_time; /* in us */
             w[i] = (float)(i - nn / 2) * dw;
         }
         fft_ready = 1;
+    } else {
+        fft_ready = 0;
+    }
+    if (!fft_ready) {
+        if (tt) FREE(tt);
+        if (w) FREE(w);
+        if (rfs_re) FREE(rfs_re);
+        if (rfs_im) FREE(rfs_im);
+        if (work_re) FREE(work_re);
+        if (work_im) FREE(work_im);
+        if (fft_in) KISS_FFT_FREE(fft_in);
+        if (fft_out) KISS_FFT_FREE(fft_out);
+        if (fft_cfg) kiss_fft_free(fft_cfg);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
     }
     
-    /* Initialize decompressed shapes */
+    /* Initialize decompressed shape structs */
     decompMag.numSamples = 0;
     decompMag.numUncompressedSamples = 0;
     decompMag.samples = NULL;
@@ -3842,130 +3896,222 @@ static int compute_rf_statistics(
     decompTime.numUncompressedSamples = 0;
     decompTime.samples = NULL;
     
+    /* Process each unique RF definition */
     for (defIdx = 0; defIdx < numUniqueRFs; ++defIdx) {
         rfDef = &rfDefinitions[defIdx];
+
+        /* Reset per-RF variables */
+        first = -1;
+        last = -1;
         
-        /* Initialize stats */
+        /* Initialize stats to zero/default */
+        rfDef->numSamples = 0;
+        rfDef->flipAngle = 0.0f;
+        rfDef->maxAmplitude = 0.0f;
         rfDef->area = 0.0f;
+        rfDef->abswidth = 0.0f;
+        rfDef->effwidth = 0.0f;
+        rfDef->dtycyc = 0.0f;
+        rfDef->maxpw = 0.0f;
+        rfDef->duration_us = 0.0f;
         rfDef->isodelay_us = 0;
-        rfDef->bandwidth = 0.0f; /* Will be computed later via FFT */
+        rfDef->bandwidth = 0.0f;
+        
+        /* Find max amplitude across all instances of this RF definition */
+        if (rfTable && rfTableSize > 0) {
+            for (i = 0; i < rfTableSize; ++i) {
+                if (rfTable[i].ID == defIdx) {
+                    float amp = (float)fabs(rfTable[i].amplitude);
+                    if (amp > rfDef->maxAmplitude) {
+                        rfDef->maxAmplitude = amp;
+                    }
+                }
+            }
+        }
         
         magId = rfDef->magShapeID;
         phaseId = rfDef->phaseShapeID;
         timeId = rfDef->timeShapeID;
         
-        hasMag = 0;
         hasPhase = 0;
         hasTime = 0;
         magnitude = NULL;
         phase = NULL;
-        time_s = NULL;
+        time_us = NULL;
         rf_re = NULL;
         rf_im = NULL;
         time_centered = NULL;
         numSamples = 0;
+        duration = 0.0f;
         
-        /* Decompress magnitude shape (required) */
-        if (magId > 0 && magId <= seq->shapesLibrarySize) {
-            result = decompressShape(&seq->shapesLibrary[magId - 1], &decompMag);
-            if (result == 0 && decompMag.numUncompressedSamples > 0) {
-                numSamples = decompMag.numUncompressedSamples;
-                magnitude = (float*)ALLOC(numSamples * sizeof(float));
-                if (magnitude) {
-                    for (i = 0; i < numSamples; ++i) {
-                        magnitude[i] = decompMag.samples[i];
-                    }
-                    hasMag = 1;
-                }
-                FREE(decompMag.samples);
-                decompMag.samples = NULL;
+        /* ================================================================
+         * Step 1: Decompress shapes
+         * ================================================================ */
+        /* Magnitude shape (required) */
+        if (!decompressShape(&(seq->shapesLibrary[magId - 1]), &decompMag)) 
+        {
+            if (tt) FREE(tt);
+            if (w) FREE(w);
+            if (rfs_re) FREE(rfs_re);
+            if (rfs_im) FREE(rfs_im);
+            if (work_re) FREE(work_re);
+            if (work_im) FREE(work_im);
+            if (fft_in) KISS_FFT_FREE(fft_in);
+            if (fft_out) KISS_FFT_FREE(fft_out);
+            if (fft_cfg) kiss_fft_free(fft_cfg);
+            return PULSEQLIB_ERR_NULL_POINTER;
+        }
+        numSamples = decompMag.numUncompressedSamples;
+        magnitude = (float*)ALLOC(numSamples * sizeof(float));
+        if (magnitude) {
+            for (i = 0; i < numSamples; ++i) {
+                magnitude[i] = decompMag.samples[i];
             }
         }
+        FREE(decompMag.samples);
+        decompMag.samples = NULL;
+  
+        /* Store number of samples */
+        rfDef->numSamples = numSamples;
         
-        if (!hasMag) {
-            continue; /* Skip if no magnitude shape */
-        }
-
-        /* Decompress phase shape (optional, needed for bandwidth) */
+        /* Phase shape (optional) */
         if (phaseId > 0 && phaseId <= seq->shapesLibrarySize) {
-            result = decompressShape(&seq->shapesLibrary[phaseId - 1], &decompPhase);
-            if (result == 0 && decompPhase.numUncompressedSamples == numSamples) {
-                phase = (float*)ALLOC(numSamples * sizeof(float));
-                if (phase) {
-                    for (i = 0; i < numSamples; ++i) {
-                        phase[i] = decompPhase.samples[i] * (float)(2.0 * M_PI); /* Convert to radians */
-                    }
-                    hasPhase = 1;
+            if (!decompressShape(&(seq->shapesLibrary[phaseId - 1]), &decompPhase)) 
+            {
+                if (tt) FREE(tt);
+                if (w) FREE(w);
+                if (rfs_re) FREE(rfs_re);
+                if (rfs_im) FREE(rfs_im);
+                if (work_re) FREE(work_re);
+                if (work_im) FREE(work_im);
+                if (fft_in) KISS_FFT_FREE(fft_in);
+                if (fft_out) KISS_FFT_FREE(fft_out);
+                if (fft_cfg) kiss_fft_free(fft_cfg);
+                if (magnitude) FREE(magnitude);
+                return PULSEQLIB_ERR_NULL_POINTER;
+            }
+            phase = (float*)ALLOC(numSamples * sizeof(float));
+            if (phase) {
+                for (i = 0; i < numSamples; ++i) {
+                    phase[i] = decompPhase.samples[i];
                 }
-                FREE(decompPhase.samples);
-                decompPhase.samples = NULL;
+            }
+            FREE(decompPhase.samples);
+            decompPhase.samples = NULL;
+        }
+        
+        /* ================================================================
+         * Step 2: Detect real-valued RF and convert to signed magnitude
+         * ================================================================ */
+        if (hasPhase && phase) {
+            numRealSamples = 0;
+            
+            for (i = 0; i < numSamples; ++i) {
+                if ((float)fabs(phase[i]) < 1e-6f || 
+                    (float)fabs(phase[i] - (float)M_PI) < 1e-6f) {
+                    ++numRealSamples;
+                }
+            }
+            
+            if (numRealSamples == numSamples) {
+                for (i = 0; i < numSamples; ++i) {
+                    if ((float)fabs(phase[i] - (float)M_PI) < 1e-6f) {
+                        magnitude[i] *= -1.0f;
+                    }
+                }
+                FREE(phase);
+                phase = NULL;
+                hasPhase = 0;
             }
         }
         
-        /* Decompress time shape (optional) */
+        /* Time shape (optional) */
         if (timeId > 0 && timeId <= seq->shapesLibrarySize) {
-            result = decompressShape(&seq->shapesLibrary[timeId - 1], &decompTime);
-            if (result == 0 && decompTime.numUncompressedSamples == numSamples) {
-                time_s = (float*)ALLOC(numSamples * sizeof(float));
-                if (time_s) {
-                    for (i = 0; i < numSamples; ++i) {
-                        time_s[i] = decompTime.samples[i]; /* already in seconds */
-                    }
-                    hasTime = 1;
-                }
-                FREE(decompTime.samples);
-                decompTime.samples = NULL;
+            if(!decompressShape(&seq->shapesLibrary[timeId - 1], &decompTime))
+            {
+                if (tt) FREE(tt);
+                if (w) FREE(w);
+                if (rfs_re) FREE(rfs_re);
+                if (rfs_im) FREE(rfs_im);
+                if (work_re) FREE(work_re);
+                if (work_im) FREE(work_im);
+                if (fft_in) KISS_FFT_FREE(fft_in);
+                if (fft_out) KISS_FFT_FREE(fft_out);
+                if (fft_cfg) kiss_fft_free(fft_cfg);
+                if (magnitude) FREE(magnitude);
+                if (phase) FREE(phase);
+                return PULSEQLIB_ERR_NULL_POINTER;
             }
+            time_us = (float*)ALLOC(numSamples * sizeof(float));
+            if (time_us) {
+                for (i = 0; i < numSamples; ++i) {
+                    time_us[i] = decompTime.samples[i];
+                }
+                hasTime = 1;
+            }
+            FREE(decompTime.samples);
+            decompTime.samples = NULL;
         }
         
         /* Build uniform time array if no time shape */
         if (!hasTime) {
-            time_s = (float*)ALLOC(numSamples * sizeof(float));
-            if (time_s) {
+            time_us = (float*)ALLOC(numSamples * sizeof(float));
+            if (time_us) {
                 for (i = 0; i < numSamples; ++i) {
-                    time_s[i] = (float)i * rfRasterTime_s;
+                    time_us[i] = (float)i * seq->opts.rf_raster_time;
                 }
                 hasTime = 1;
             }
         }
         
         /* Compute pulse duration */
-        duration = (hasTime && numSamples > 0) ? time_s[numSamples - 1] : (numSamples * rfRasterTime_s);
+        duration = (hasTime && numSamples > 0) ? time_us[numSamples - 1] : (numSamples * seq->opts.rf_raster_time);
+        rfDef->duration_us = duration;
         
-        /* Find peak and compute isodelay */
+        /* ================================================================
+         * Step 3: Normalize to max|magnitude| = 1
+         * ================================================================ */
         maxMag = find_max_abs_real(magnitude, numSamples);
-        peakIdx = find_max_abs_index_real(magnitude, numSamples);
-        
-        if (hasTime && time_s) {
-            rfDef->isodelay_us = (int)(time_s[peakIdx] * 1e6f);
-            time_center = time_s[peakIdx];
-        } else {
-            rfDef->isodelay_us = (int)(seq->opts.rf_raster_time * peakIdx);
-            time_center = (float)peakIdx * rfRasterTime_s;
+        for (i = 0; i < numSamples; ++i) {
+            if (fabs(magnitude[i]) >= 0.99999f * maxMag) {
+                if (first < 0) {
+                    first = i;
+                }
+                last = i;
+            }
         }
-        
-        /* Normalize magnitude to 1.0 for area calculation */
+
+        /* Safety fallback (should not happen unless maxMag ~ 0) */
+        if (first < 0) {
+            first = last = 0; /* or 0 */
+        }
+
+        /* Compute time_center */
+        if (hasTime && time_us) {
+            time_center = 0.5f * (time_us[first] + time_us[last]);
+        } else {
+            time_center = 0.5f * ((float)(first + last)) * seq->opts.rf_raster_time;
+        }
+
+        /* Compute isodelay: time from peak to end */
+        rfDef->isodelay_us = (int)((duration - time_center));
+
+        /* Normalize waveform */
         if (maxMag > 1e-9f) {
             for (i = 0; i < numSamples; ++i) {
                 magnitude[i] /= maxMag;
             }
         }
         
-        /* Compute area: integral of |magnitude| */
-        if (hasTime) {
-            rfDef->area = trapz_real_nonuniform(magnitude, time_s, numSamples);
-        } else {
-            rfDef->area = trapz_real_uniform(magnitude, numSamples, rfRasterTime_s);
-        }
-        
-        /* Compute bandwidth via FFT */
-        /* Create complex RF signal: rf = magnitude * exp(j * phase) */
+        /* ================================================================
+         * Step 4-6: Interpolate, compute stats, compute bandwidth
+         * ================================================================ */
         rf_re = (float*)ALLOC(numSamples * sizeof(float));
         rf_im = (float*)ALLOC(numSamples * sizeof(float));
         time_centered = (float*)ALLOC(numSamples * sizeof(float));
-
-        if (rf_re && rf_im && time_centered && hasTime) {
-            /* If no phase, assume zero phase */
+        
+        if (rf_re && rf_im && time_centered) {
+            /* Build complex RF signal */
             if (hasPhase && phase) {
                 for (i = 0; i < numSamples; ++i) {
                     rf_re[i] = magnitude[i] * (float)cos(phase[i]);
@@ -3978,44 +4124,116 @@ static int compute_rf_statistics(
                 }
             }
             
-            /* Center time around peak (isodelay) */
+            /* Center time array at peak */
             for (i = 0; i < numSamples; ++i) {
-                time_centered[i] = time_s[i] - time_center;
+                time_centered[i] = time_us[i] - time_center;
             }
             
-            /* Compute bandwidth */
-            rfDef->bandwidth = compute_rf_bandwidth_fft(
-                rf_re, rf_im, time_centered, numSamples,
-                fft_cfg, nn, rfRasterTime_s, dw, cutoff, duration,
-                tt, w, rfs_re, rfs_im, fft_in, fft_out
-            );
-        } else {
-            /* Fallback if allocation failed */
-            if (duration > 0.0f) {
-                rfDef->bandwidth = 2.0f / duration;
+            /* Interpolate to uniform FFT grid */
+            interp1_linear_complex(tt, nn, time_centered, rf_re, rf_im, numSamples, rfs_re, rfs_im);
+            
+            /* Find active region in interpolated signal */
+            fft_start = 0;
+            fft_end = nn - 1;
+            
+            for (i = 0; i < nn; ++i) {
+                if ((float)fabs(rfs_re[i]) > 1e-12f || (float)fabs(rfs_im[i]) > 1e-12f) {
+                    fft_start = i;
+                    break;
+                }
             }
+            for (i = nn - 1; i >= 0; --i) {
+                if ((float)fabs(rfs_re[i]) > 1e-12f || (float)fabs(rfs_im[i]) > 1e-12f) {
+                    fft_end = i;
+                    break;
+                }
+            }
+            
+            fft_count = fft_end - fft_start + 1;
+            
+            /* Compute stats on uniform grid */
+            if (fft_count >= 2) {
+                mag_prev = (float)sqrt(rfs_re[fft_start] * rfs_re[fft_start] + rfs_im[fft_start] * rfs_im[fft_start]);
+                rfn_prev = rfs_re[fft_start];
+                sq_prev = mag_prev * mag_prev;
+                
+                sum_signed = 0.0f;
+                sum_abs = 0.0f;
+                sum_sq = 0.0f;
+                time_above_threshold = 0.0f;
+                
+                for (i = fft_start + 1; i <= fft_end; ++i) {
+                    mag_i = (float)sqrt(rfs_re[i] * rfs_re[i] + rfs_im[i] * rfs_im[i]);
+                    rfn_i = rfs_re[i];
+                    sq_i = mag_i * mag_i;
+                    
+                    sum_signed += 0.5f * (rfn_prev + rfn_i) * seq->opts.rf_raster_time;
+                    sum_abs += 0.5f * (mag_prev + mag_i) * seq->opts.rf_raster_time;
+                    sum_sq += 0.5f * (sq_prev + sq_i) * seq->opts.rf_raster_time;
+                    
+                    if (mag_prev > DTY_THRESHOLD || mag_i > DTY_THRESHOLD) {
+                        time_above_threshold += seq->opts.rf_raster_time;
+                    }
+                    
+                    rfn_prev = rfn_i;
+                    mag_prev = mag_i;
+                    sq_prev = sq_i;
+                }
+                
+                /* Store unnormalized integral for flip angle */
+                sum_abs_unnorm = sum_abs;
+                
+                /* Normalize by duration for width metrics */
+                rfDef->area = sum_signed / duration;
+                rfDef->abswidth = sum_abs / duration;
+                rfDef->effwidth = sum_sq / duration;
+                rfDef->dtycyc = time_above_threshold / duration;
+                
+                /* Flip angle at 1 Hz = 2π × integral of normalized waveform
+                * flipAngle has units of radians/Hz, so:
+                * rfDef->flipAngle = flipAngle * amplitude
+                */
+                rfDef->flipAngle = (float)(2.0 * M_PI) * rfDef->maxAmplitude * sum_abs_unnorm;
+                
+                rfDef->maxpw = find_widest_lobe(
+                    rfs_re + fft_start, rfs_im + fft_start, fft_count,
+                    duration, seq->opts.rf_raster_time, MPW_THRESHOLD);
+                
+                if (rfDef->dtycyc < rfDef->maxpw) {
+                    rfDef->dtycyc = rfDef->maxpw;
+                }
+            }
+            
+            /* Compute bandwidth via FFT */
+            rfDef->bandwidth = compute_rf_bandwidth_fft(
+                rfs_re, rfs_im, fft_cfg, nn, dw, cutoff, duration,
+                w, work_re, work_im, fft_in, fft_out);
         }
-
-        /* Cleanup */
-        if (magnitude) FREE(magnitude);
-        if (phase) FREE(phase);
-        if (time_s) FREE(time_s);
+        
         if (rf_re) FREE(rf_re);
         if (rf_im) FREE(rf_im);
         if (time_centered) FREE(time_centered);
+        
+        /* Cleanup per-RF arrays */
+        if (magnitude) FREE(magnitude);
+        if (phase) FREE(phase);
+        if (time_us) FREE(time_us);
     }
-
+    
     /* Cleanup FFT resources */
     if (tt) FREE(tt);
     if (w) FREE(w);
     if (rfs_re) FREE(rfs_re);
     if (rfs_im) FREE(rfs_im);
-    if (fft_in) FREE(fft_in);
-    if (fft_out) FREE(fft_out);
+    if (work_re) FREE(work_re);
+    if (work_im) FREE(work_im);
+    if (fft_in) KISS_FFT_FREE(fft_in);
+    if (fft_out) KISS_FFT_FREE(fft_out);
     if (fft_cfg) kiss_fft_free(fft_cfg);
     
     return PULSEQLIB_OK;
 }
+
 
 /**
  * @brief Build ADC static parameter row for deduplication.
@@ -4374,14 +4592,70 @@ static int copy_shapes_library(const pulseqlib_SeqFile* seq, pulseqlib_SequenceD
     return PULSEQLIB_OK;
 }
 
-
+/**
+ * @brief Free all memory allocated in a SequenceDescriptor.
+ * 
+ * Call this after you're done using the descriptor returned by getUniqueBlocks.
+ *
+ * @param[in,out] seqDesc  Pointer to the sequence descriptor to free.
+ */
 void pulseqlib_sequenceDescriptorFree(pulseqlib_SequenceDescriptor* seqDesc)
 {
     int i;
 
     if (!seqDesc) return;
 
-    // ...existing cleanup code for blocks, RF, grads, ADC...
+    /* Free block definitions and table */
+    if (seqDesc->blockDefinitions) {
+        FREE(seqDesc->blockDefinitions);
+        seqDesc->blockDefinitions = NULL;
+    }
+    seqDesc->numUniqueBlocks = 0;
+
+    if (seqDesc->blockTable) {
+        FREE(seqDesc->blockTable);
+        seqDesc->blockTable = NULL;
+    }
+    seqDesc->numBlocks = 0;
+
+    /* Free RF definitions and table */
+    if (seqDesc->rfDefinitions) {
+        FREE(seqDesc->rfDefinitions);
+        seqDesc->rfDefinitions = NULL;
+    }
+    seqDesc->numUniqueRFs = 0;
+
+    if (seqDesc->rfTable) {
+        FREE(seqDesc->rfTable);
+        seqDesc->rfTable = NULL;
+    }
+    seqDesc->rfTableSize = 0;
+
+    /* Free gradient definitions and table */
+    if (seqDesc->gradDefinitions) {
+        FREE(seqDesc->gradDefinitions);
+        seqDesc->gradDefinitions = NULL;
+    }
+    seqDesc->numUniqueGrads = 0;
+
+    if (seqDesc->gradTable) {
+        FREE(seqDesc->gradTable);
+        seqDesc->gradTable = NULL;
+    }
+    seqDesc->gradTableSize = 0;
+
+    /* Free ADC definitions and table */
+    if (seqDesc->adcDefinitions) {
+        FREE(seqDesc->adcDefinitions);
+        seqDesc->adcDefinitions = NULL;
+    }
+    seqDesc->numUniqueADCs = 0;
+
+    if (seqDesc->adcTable) {
+        FREE(seqDesc->adcTable);
+        seqDesc->adcTable = NULL;
+    }
+    seqDesc->adcTableSize = 0;
 
     /* Free rotation matrices */
     if (seqDesc->rotationMatrices) {
@@ -4409,8 +4683,34 @@ void pulseqlib_sequenceDescriptorFree(pulseqlib_SequenceDescriptor* seqDesc)
         seqDesc->shapes = NULL;
     }
     seqDesc->numShapes = 0;
+
+    /* Reset prep/cooldown counts */
+    seqDesc->numPrepBlocks = 0;
+    seqDesc->numCooldownBlocks = 0;
 }
 
+/**
+ * @brief Free temporary arrays used during getUniqueBlocks.
+ */
+static void free_temp_arrays(
+    pulseqlib_RfDefinition* tmpRfDefs,
+    pulseqlib_RfTableElement* tmpRfTable,
+    pulseqlib_GradDefinition* tmpGradDefs,
+    pulseqlib_GradTableElement* tmpGradTable,
+    pulseqlib_AdcDefinition* tmpAdcDefs,
+    pulseqlib_AdcTableElement* tmpAdcTable,
+    pulseqlib_BlockDefinition* tmpBlockDefs,
+    pulseqlib_BlockTableElement* tmpBlockTable)
+{
+    if (tmpRfDefs) FREE(tmpRfDefs);
+    if (tmpRfTable) FREE(tmpRfTable);
+    if (tmpGradDefs) FREE(tmpGradDefs);
+    if (tmpGradTable) FREE(tmpGradTable);
+    if (tmpAdcDefs) FREE(tmpAdcDefs);
+    if (tmpAdcTable) FREE(tmpAdcTable);
+    if (tmpBlockDefs) FREE(tmpBlockDefs);
+    if (tmpBlockTable) FREE(tmpBlockTable);
+}
 
 /**
  * @brief Get unique blocks from a sequence.
@@ -4419,14 +4719,17 @@ void pulseqlib_sequenceDescriptorFree(pulseqlib_SequenceDescriptor* seqDesc)
  * 1. Deduplicate event libraries (RF, Grad, ADC) by static parameters
  * 2. Deduplicate blocks using unique event IDs
  *
- * @param[in, out] seq                  Pointer to the sequence file.
- * @param[in, out] seqDesc              Pointer to the sequence descriptor to fill.
- * @return 0 on success, error code otherwise.
+ * All arrays in seqDesc are allocated internally with exact sizes.
+ * The caller must call pulseqlib_sequenceDescriptorFree() when done.
+ *
+ * @param[in]     seq       Pointer to the sequence file.
+ * @param[in,out] seqDesc   Pointer to the sequence descriptor to fill (should be
+ *                          initialized with PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT).
+ * @return 0 on success, error code otherwise. On error, seqDesc is cleaned up.
  */
 int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDescriptor* seqDesc) {
     int result;
     int numBlocks;
-    int numUniqueBlocks;
     int numUniqueRFs;
     int numUniqueGrads;
     int numUniqueADCs;
@@ -4434,11 +4737,21 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
     /* Loop counters */
     int n;
 
+    /* Temporary max-size arrays for deduplication */
+    pulseqlib_RfDefinition* tmpRfDefs = NULL;
+    pulseqlib_RfTableElement* tmpRfTable = NULL;
+    pulseqlib_GradDefinition* tmpGradDefs = NULL;
+    pulseqlib_GradTableElement* tmpGradTable = NULL;
+    pulseqlib_AdcDefinition* tmpAdcDefs = NULL;
+    pulseqlib_AdcTableElement* tmpAdcTable = NULL;
+    pulseqlib_BlockDefinition* tmpBlockDefs = NULL;
+    pulseqlib_BlockTableElement* tmpBlockTable = NULL;
+
     /* Auxiliaries for unique block finder */
     pulseqlib_RawBlock raw;
-    int (*intRows)[BLOCK_DEF_COLS];
-    int *uniqueDefs;
-    int *eventTable;
+    int (*intRows)[BLOCK_DEF_COLS] = NULL;
+    int *uniqueDefs = NULL;
+    int *eventTable = NULL;
 
     /* Auxiliaries for preparation and cooldown detection */
     pulseqlib_RawExtension ext;
@@ -4446,111 +4759,179 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
     int hasPrep, hasCooldown;
     int ctrl;
 
-    /* Get number of blocks */
+    /* Validate inputs */
     if (!seq || !seqDesc) {
-         return PULSEQLIB_ERR_INVALID_ARGUMENT;
-     }
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    }
     numBlocks = seq->numBlocks;
-    if (numBlocks <= 0 || !seq->blockLibrary) return PULSEQLIB_ERR_INVALID_ARGUMENT;
-    
-    /* Initialize outputs */
+    if (numBlocks <= 0 || !seq->blockLibrary) {
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    }
+
+    /* Initialize output counts */
     seqDesc->numPrepBlocks = 0;
     seqDesc->numCooldownBlocks = 0;
+    seqDesc->numUniqueRFs = 0;
+    seqDesc->numUniqueGrads = 0;
+    seqDesc->numUniqueADCs = 0;
+    seqDesc->numUniqueBlocks = 0;
+    seqDesc->numBlocks = 0;
+    seqDesc->rfTableSize = 0;
+    seqDesc->gradTableSize = 0;
+    seqDesc->adcTableSize = 0;
 
-    /* Step 1: Deduplicate event libraries */
-    /* Allocate event tables */
+    /* ========== ALLOCATE TEMPORARY MAX-SIZE ARRAYS ========== */
     if (seq->rfLibrarySize > 0) {
-        numUniqueRFs = deduplicate_rf_library(seq, seqDesc->rfDefinitions, seqDesc->rfTable);
+        tmpRfDefs = (pulseqlib_RfDefinition*)ALLOC(seq->rfLibrarySize * sizeof(pulseqlib_RfDefinition));
+        tmpRfTable = (pulseqlib_RfTableElement*)ALLOC(seq->rfLibrarySize * sizeof(pulseqlib_RfTableElement));
+        if (!tmpRfDefs || !tmpRfTable) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+    }
+
+    if (seq->gradLibrarySize > 0) {
+        tmpGradDefs = (pulseqlib_GradDefinition*)ALLOC(seq->gradLibrarySize * sizeof(pulseqlib_GradDefinition));
+        tmpGradTable = (pulseqlib_GradTableElement*)ALLOC(seq->gradLibrarySize * sizeof(pulseqlib_GradTableElement));
+        if (!tmpGradDefs || !tmpGradTable) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+    }
+
+    if (seq->adcLibrarySize > 0) {
+        tmpAdcDefs = (pulseqlib_AdcDefinition*)ALLOC(seq->adcLibrarySize * sizeof(pulseqlib_AdcDefinition));
+        tmpAdcTable = (pulseqlib_AdcTableElement*)ALLOC(seq->adcLibrarySize * sizeof(pulseqlib_AdcTableElement));
+        if (!tmpAdcDefs || !tmpAdcTable) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+    }
+
+    tmpBlockDefs = (pulseqlib_BlockDefinition*)ALLOC(numBlocks * sizeof(pulseqlib_BlockDefinition));
+    tmpBlockTable = (pulseqlib_BlockTableElement*)ALLOC(numBlocks * sizeof(pulseqlib_BlockTableElement));
+    if (!tmpBlockDefs || !tmpBlockTable) {
+        free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                         tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+
+    /* ========== STEP 1: Deduplicate event libraries into temp arrays ========== */
+    if (seq->rfLibrarySize > 0) {
+        numUniqueRFs = deduplicate_rf_library(seq, tmpRfDefs, tmpRfTable);
         seqDesc->numUniqueRFs = numUniqueRFs;
         seqDesc->rfTableSize = seq->rfLibrarySize;
 
-        /* Compute RF statistics (area, isodelay, bandwidth placeholder) */
-        result = compute_rf_statistics(seq, seqDesc->rfDefinitions, numUniqueRFs);
-        if (PULSEQLIB_FAILED(result)) {
-            return result;
+#ifdef IS_GEHC
+        if (IS_GEHC) {
+            result = compute_rf_statistics(seq, tmpRfDefs, numUniqueRFs, tmpRfTable, seq->rfLibrarySize);
+            if (PULSEQLIB_FAILED(result)) {
+                free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                                 tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+                return result;
+            }
         }
+#endif
     }
+
     if (seq->gradLibrarySize > 0) {
-        numUniqueGrads = deduplicate_grad_library(seq, seqDesc->gradDefinitions, seqDesc->gradTable);
+        numUniqueGrads = deduplicate_grad_library(seq, tmpGradDefs, tmpGradTable);
         seqDesc->numUniqueGrads = numUniqueGrads;
         seqDesc->gradTableSize = seq->gradLibrarySize;
 
-        /* Compute shot indices for multi-shot gradients */
-        result = compute_grad_shot_indices(seq, numUniqueGrads, seqDesc->gradDefinitions, seqDesc->gradTable);
+        result = compute_grad_shot_indices(seq, numUniqueGrads, tmpGradDefs, tmpGradTable);
         if (PULSEQLIB_FAILED(result)) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
             return result;
         }
 
-        /* Compute gradient statistics (slew rate, energy, first/last values) */
-        result = compute_grad_statistics(seq, seqDesc->gradDefinitions, numUniqueGrads);
+        result = compute_grad_statistics(seq, tmpGradDefs, numUniqueGrads);
         if (PULSEQLIB_FAILED(result)) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
             return result;
         }
     }
+
     if (seq->adcLibrarySize > 0) {
-        numUniqueADCs = deduplicate_adc_library(seq, seqDesc->adcDefinitions, seqDesc->adcTable);
+        numUniqueADCs = deduplicate_adc_library(seq, tmpAdcDefs, tmpAdcTable);
         seqDesc->numUniqueADCs = numUniqueADCs;
         seqDesc->adcTableSize = seq->adcLibrarySize;
     }
 
-    /* Step 2: Build block definition matrix using unique event IDs */
+    /* ========== STEP 2: Build block definition matrix ========== */
     intRows = ALLOC(numBlocks * sizeof(*intRows));
     if (!intRows) {
+        free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                         tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
         return PULSEQLIB_ERR_ALLOC_FAILED;
     }
+
     uniqueDefs = (int*)ALLOC(numBlocks * sizeof(int));
     if (!uniqueDefs) {
         FREE(intRows);
+        free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                         tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
         return PULSEQLIB_ERR_ALLOC_FAILED;
     }
+
     eventTable = (int*)ALLOC(numBlocks * sizeof(int));
     if (!eventTable) {
         FREE(intRows);
         FREE(uniqueDefs);
+        free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                         tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
         return PULSEQLIB_ERR_ALLOC_FAILED;
     }
 
-    /* Initialize */
+    /* Initialize flags */
     norotFlag = 0;
     noposFlag = 0;
     onceFlag = 0;
-    pmcFlag = 0;
+    pmcFlag = 1;
     navFlag = 0;
     onceCounter = 0;
+
     for (n = 0; n < numBlocks; ++n) {
         if (!getRawBlockContentIDs(seq, &raw, n, 1)) {
             FREE(intRows);
             FREE(uniqueDefs);
             FREE(eventTable);
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
             return PULSEQLIB_ERR_INVALID_ARGUMENT;
         }
 
         /* Map event indices to unique event IDs */
         intRows[n][0] = raw.block_duration >= 0 ? raw.block_duration : 0;
-        intRows[n][1] = (raw.rf >= 0 && seqDesc->rfTable) ? seqDesc->rfTable[raw.rf].ID : -1;
-        intRows[n][2] = (raw.gx >= 0 && seqDesc->gradTable) ? seqDesc->gradTable[raw.gx].ID : -1;
-        intRows[n][3] = (raw.gy >= 0 && seqDesc->gradTable) ? seqDesc->gradTable[raw.gy].ID : -1;
-        intRows[n][4] = (raw.gz >= 0 && seqDesc->gradTable) ? seqDesc->gradTable[raw.gz].ID : -1;
+        intRows[n][1] = (raw.rf >= 0 && tmpRfTable) ? tmpRfTable[raw.rf].ID : -1;
+        intRows[n][2] = (raw.gx >= 0 && tmpGradTable) ? tmpGradTable[raw.gx].ID : -1;
+        intRows[n][3] = (raw.gy >= 0 && tmpGradTable) ? tmpGradTable[raw.gy].ID : -1;
+        intRows[n][4] = (raw.gz >= 0 && tmpGradTable) ? tmpGradTable[raw.gz].ID : -1;
 
         /* Store unique ADC event ID in block table */
-        seqDesc->blockTable[n].adcID = (raw.adc >= 0 && seqDesc->adcTable) ? seqDesc->adcTable[raw.adc].ID : -1;
+        tmpBlockTable[n].adcID = (raw.adc >= 0 && tmpAdcTable) ? tmpAdcTable[raw.adc].ID : -1;
 
         /* Store pure delay flag */
-        seqDesc->blockTable[n].pureDelayFlag = (raw.rf < 0 && raw.gx < 0 && raw.gy < 0 && raw.gz < 0 && raw.adc < 0) ? 1 : 0;
+        tmpBlockTable[n].pureDelayFlag = (raw.rf < 0 && raw.gx < 0 && raw.gy < 0 && raw.gz < 0 && raw.adc < 0) ? 1 : 0;
 
         /* Inspect extensions */
         if (raw.extCount > 0 && seq->isExtensionsLibraryParsed && seq->extensionLUT) {
             getRawExtension(seq, &ext, &raw);
-            seqDesc->blockTable[n].rotationID = ext.rotationIndex;
-            seqDesc->blockTable[n].triggerID = ext.triggerIndex;
+            tmpBlockTable[n].rotationID = ext.rotationIndex;
+            tmpBlockTable[n].triggerID = ext.triggerIndex;
             norotFlag = (ext.flag.norot >= 0) ? ext.flag.norot : norotFlag;
-            seqDesc->blockTable[n].norotFlag = norotFlag;
+            tmpBlockTable[n].norotFlag = norotFlag;
             noposFlag = (ext.flag.nopos >= 0) ? ext.flag.nopos : noposFlag;
-            seqDesc->blockTable[n].noposFlag = noposFlag;
+            tmpBlockTable[n].noposFlag = noposFlag;
             pmcFlag = (ext.flag.pmc >= 0) ? ext.flag.pmc : pmcFlag;
-            seqDesc->blockTable[n].pmcFlag = pmcFlag;
+            tmpBlockTable[n].pmcFlag = pmcFlag;
             navFlag = (ext.flag.nav >= 0) ? ext.flag.nav : navFlag;
-            seqDesc->blockTable[n].navFlag = navFlag;
+            tmpBlockTable[n].navFlag = navFlag;
             onceFlag = (ext.flag.once >= 0) ? ext.flag.once : onceFlag;
             if (onceFlag > 0) {
                 ++onceCounter;
@@ -4562,49 +4943,151 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
     seqDesc->numUniqueBlocks = deduplicate_int_rows(uniqueDefs, eventTable, numBlocks, BLOCK_DEF_COLS, (const int*)intRows);
     seqDesc->numBlocks = numBlocks;
 
-    /* Copy inside blockDefinitions */
+    /* Copy into tmpBlockDefinitions */
     for (n = 0; n < seqDesc->numUniqueBlocks; ++n) {
-        seqDesc->blockDefinitions[n].ID = uniqueDefs[n];
-        seqDesc->blockDefinitions[n].duration_us = (int)intRows[uniqueDefs[n]][0];
-        seqDesc->blockDefinitions[n].rfID = (int)intRows[uniqueDefs[n]][1];
-        seqDesc->blockDefinitions[n].gxID = (int)intRows[uniqueDefs[n]][2];
-        seqDesc->blockDefinitions[n].gyID = (int)intRows[uniqueDefs[n]][3];
-        seqDesc->blockDefinitions[n].gzID = (int)intRows[uniqueDefs[n]][4];
+        tmpBlockDefs[n].ID = uniqueDefs[n];
+        tmpBlockDefs[n].duration_us = (int)intRows[uniqueDefs[n]][0];
+        tmpBlockDefs[n].rfID = (int)intRows[uniqueDefs[n]][1];
+        tmpBlockDefs[n].gxID = (int)intRows[uniqueDefs[n]][2];
+        tmpBlockDefs[n].gyID = (int)intRows[uniqueDefs[n]][3];
+        tmpBlockDefs[n].gzID = (int)intRows[uniqueDefs[n]][4];
     }
 
-    /* Copy inside adcTable */
+    /* Copy block IDs into tmpBlockTable */
     for (n = 0; n < numBlocks; ++n) {
-        seqDesc->blockTable[n].ID = eventTable[n];
+        tmpBlockTable[n].ID = eventTable[n];
     }
+
     FREE(intRows);
     FREE(uniqueDefs);
     FREE(eventTable);
 
-    /* Copy rotation library (convert quaternions to matrices) */
+    /* ========== STEP 4: Allocate output arrays with exact sizes and copy ========== */
+    /* RF definitions (exact size) */
+    if (seqDesc->numUniqueRFs > 0) {
+        seqDesc->rfDefinitions = (pulseqlib_RfDefinition*)ALLOC(seqDesc->numUniqueRFs * sizeof(pulseqlib_RfDefinition));
+        if (!seqDesc->rfDefinitions) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+        memcpy(seqDesc->rfDefinitions, tmpRfDefs, seqDesc->numUniqueRFs * sizeof(pulseqlib_RfDefinition));
+    }
+
+    /* RF table (full library size - indexed by raw library index) */
+    if (seqDesc->rfTableSize > 0) {
+        seqDesc->rfTable = (pulseqlib_RfTableElement*)ALLOC(seqDesc->rfTableSize * sizeof(pulseqlib_RfTableElement));
+        if (!seqDesc->rfTable) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+            pulseqlib_sequenceDescriptorFree(seqDesc);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+        memcpy(seqDesc->rfTable, tmpRfTable, seqDesc->rfTableSize * sizeof(pulseqlib_RfTableElement));
+    }
+
+    /* Gradient definitions (exact size) */
+    if (seqDesc->numUniqueGrads > 0) {
+        seqDesc->gradDefinitions = (pulseqlib_GradDefinition*)ALLOC(seqDesc->numUniqueGrads * sizeof(pulseqlib_GradDefinition));
+        if (!seqDesc->gradDefinitions) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+            pulseqlib_sequenceDescriptorFree(seqDesc);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+        memcpy(seqDesc->gradDefinitions, tmpGradDefs, seqDesc->numUniqueGrads * sizeof(pulseqlib_GradDefinition));
+    }
+
+    /* Gradient table (full library size) */
+    if (seqDesc->gradTableSize > 0) {
+        seqDesc->gradTable = (pulseqlib_GradTableElement*)ALLOC(seqDesc->gradTableSize * sizeof(pulseqlib_GradTableElement));
+        if (!seqDesc->gradTable) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+            pulseqlib_sequenceDescriptorFree(seqDesc);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+        memcpy(seqDesc->gradTable, tmpGradTable, seqDesc->gradTableSize * sizeof(pulseqlib_GradTableElement));
+    }
+
+    /* ADC definitions (exact size) */
+    if (seqDesc->numUniqueADCs > 0) {
+        seqDesc->adcDefinitions = (pulseqlib_AdcDefinition*)ALLOC(seqDesc->numUniqueADCs * sizeof(pulseqlib_AdcDefinition));
+        if (!seqDesc->adcDefinitions) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+            pulseqlib_sequenceDescriptorFree(seqDesc);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+        memcpy(seqDesc->adcDefinitions, tmpAdcDefs, seqDesc->numUniqueADCs * sizeof(pulseqlib_AdcDefinition));
+    }
+
+    /* ADC table (full library size) */
+    if (seqDesc->adcTableSize > 0) {
+        seqDesc->adcTable = (pulseqlib_AdcTableElement*)ALLOC(seqDesc->adcTableSize * sizeof(pulseqlib_AdcTableElement));
+        if (!seqDesc->adcTable) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+            pulseqlib_sequenceDescriptorFree(seqDesc);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+        memcpy(seqDesc->adcTable, tmpAdcTable, seqDesc->adcTableSize * sizeof(pulseqlib_AdcTableElement));
+    }
+
+    /* Block definitions (exact size) */
+    if (seqDesc->numUniqueBlocks > 0) {
+        seqDesc->blockDefinitions = (pulseqlib_BlockDefinition*)ALLOC(seqDesc->numUniqueBlocks * sizeof(pulseqlib_BlockDefinition));
+        if (!seqDesc->blockDefinitions) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+            pulseqlib_sequenceDescriptorFree(seqDesc);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+        memcpy(seqDesc->blockDefinitions, tmpBlockDefs, seqDesc->numUniqueBlocks * sizeof(pulseqlib_BlockDefinition));
+    }
+
+    /* Block table (full numBlocks size) */
+    if (numBlocks > 0) {
+        seqDesc->blockTable = (pulseqlib_BlockTableElement*)ALLOC(numBlocks * sizeof(pulseqlib_BlockTableElement));
+        if (!seqDesc->blockTable) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                             tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+            pulseqlib_sequenceDescriptorFree(seqDesc);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+        memcpy(seqDesc->blockTable, tmpBlockTable, numBlocks * sizeof(pulseqlib_BlockTableElement));
+    }
+
+    /* Free temporary arrays - done with them */
+    free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                     tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+
+    /* ========== STEP 5: Copy auxiliary libraries ========== */
     result = copy_rotation_library(seq, seqDesc);
     if (PULSEQLIB_FAILED(result)) {
+        pulseqlib_sequenceDescriptorFree(seqDesc);
         return result;
     }
 
-    /* Copy trigger library */
     result = copy_trigger_library(seq, seqDesc);
     if (PULSEQLIB_FAILED(result)) {
+        pulseqlib_sequenceDescriptorFree(seqDesc);
         return result;
     }
 
-    /* Copy and decompress shapes library */
     result = copy_shapes_library(seq, seqDesc);
     if (PULSEQLIB_FAILED(result)) {
+        pulseqlib_sequenceDescriptorFree(seqDesc);
         return result;
     }
 
-    /* Validate selective excitation blocks for frequency modulation compatibility */
     result = validate_selective_excitation_blocks(seq, seqDesc);
     if (PULSEQLIB_FAILED(result)) {
+        pulseqlib_sequenceDescriptorFree(seqDesc);
         return result;
     }
 
-    /* Determine If sequence has preparation and cooldown sections */
+    /* ========== STEP 6: Prep/cooldown detection ========== */
     hasPrep = 0;
     hasCooldown = 0;
     for (n = 0; n < seq->labelsetLibrarySize; ++n) {
@@ -4626,10 +5109,10 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
         getRawBlockContentIDs(seq, &raw, 0, 1);
         getRawExtension(seq, &ext, &raw);
         if (ext.flag.once != 1) {
+            pulseqlib_sequenceDescriptorFree(seqDesc);
             return PULSEQLIB_ERR_INVALID_PREP_POSITION;
         }
 
-        /* Search until we find flags.once == 0 */
         ctrl = 0;
         seqDesc->numPrepBlocks = 1;
         while (ctrl == 0 && seqDesc->numPrepBlocks < numBlocks) {
@@ -4643,9 +5126,7 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
         }
     }
 
-    /* Search for cooldown */
     if (hasCooldown == 1) {
-        /* Search until we find flags.once == 2 */
         ctrl = 0;
         seqDesc->numCooldownBlocks = 0;
         while (ctrl == 0 && seqDesc->numCooldownBlocks < numBlocks) {
@@ -4657,13 +5138,14 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
                 ctrl = 1;
             }
         }
-        if (ctrl == 0) { /* Cooldown section must last until the end, if present */
+        if (ctrl == 0) {
+            pulseqlib_sequenceDescriptorFree(seqDesc);
             return PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION;
         }
     }
 
-    /* Check that ONCE is only in prep and cooldown */
     if (onceCounter != (seqDesc->numPrepBlocks > 0 ? 1 : 0) + (seqDesc->numCooldownBlocks > 0 ? 1 : 0)) {
+        pulseqlib_sequenceDescriptorFree(seqDesc);
         return PULSEQLIB_ERR_INVALID_ONCE_FLAGS;
     }
 

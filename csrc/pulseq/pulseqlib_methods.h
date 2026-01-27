@@ -14,6 +14,10 @@ extern "C" {
     #define  DETECT_REAL_RF 1
 #endif 
 
+#ifndef IS_GEHC
+    #define  IS_GEHC 1
+#endif 
+
 /** 
  * Default ALLOC to malloc if it's not already defined
  *
