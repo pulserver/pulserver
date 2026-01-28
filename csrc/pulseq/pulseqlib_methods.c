@@ -3569,8 +3569,8 @@ static void compute_trapezoid_stats(
  * @brief Compute gradient statistics for all unique gradient definitions.
  *
  * For each gradient definition and each shot, computes:
- * - slewRate: maximum |d(normalized_waveform)/dt| in 1/s
- * - energy: integral of |normalized_waveform|^2 dt in s
+ * - slewRate: maximum |d(normalized_waveform)/dt| in 1/us
+ * - energy: integral of |normalized_waveform|^2 dt in us
  * - firstValue: first sample of normalized waveform
  * - lastValue: last sample of normalized waveform
  *
@@ -3585,22 +3585,24 @@ static int compute_grad_statistics(
     int numUniqueGrads)
 {
     int defIdx, shotIdx, i;
-    float gradRasterTime_s;
+    float gradRasterTime_us;
     pulseqlib_ShapeArbitrary decompressedWave;
     pulseqlib_ShapeArbitrary decompressedTime;
     float* waveform = NULL;
     float* sq_waveform = NULL;
-    float* time_s = NULL;
+    float* time_us = NULL;
+    float riseTime_us, flatTime_us, fallTime_us;
     int numSamples;
     int shapeId, timeId;
-    int result;
+    int gradType;
     int hasTimeShape;
+    pulseqlib_GradDefinition* gradDef;
     
     if (!seq || !gradDefinitions || numUniqueGrads <= 0) {
         return PULSEQLIB_OK;
     }
     
-    gradRasterTime_s = seq->opts.grad_raster_time * 1e-6f; /* convert us to s */
+    gradRasterTime_us = seq->opts.grad_raster_time; /* already in us */
     
     /* Initialize decompressed shapes */
     decompressedWave.numSamples = 0;
@@ -3611,8 +3613,8 @@ static int compute_grad_statistics(
     decompressedTime.samples = NULL;
     
     for (defIdx = 0; defIdx < numUniqueGrads; ++defIdx) {
-        pulseqlib_GradDefinition* gradDef = &gradDefinitions[defIdx];
-        int gradType = gradDef->type;
+        gradDef = &gradDefinitions[defIdx];
+        gradType = gradDef->type;
         
         /* Initialize all stats to zero */
         for (i = 0; i < MAX_GRAD_SHOTS; ++i) {
@@ -3623,13 +3625,13 @@ static int compute_grad_statistics(
         }
         
         if (gradType == 0) {
-            /* Trapezoid gradient */
-            float riseTime = (float)gradDef->riseTimeOrFirst;
-            float flatTime = (float)gradDef->flatTimeOrLast;
-            float fallTime = (float)gradDef->fallTimeOrNumUncompressedSamples;
+            /* Trapezoid gradient - times already in us */
+            riseTime_us = (float)gradDef->riseTimeOrFirst;
+            flatTime_us = (float)gradDef->flatTimeOrLast;
+            fallTime_us = (float)gradDef->fallTimeOrNumUncompressedSamples;
             
             compute_trapezoid_stats(
-                riseTime, flatTime, fallTime,
+                riseTime_us, flatTime_us, fallTime_us,
                 &gradDef->slewRate[0],
                 &gradDef->energy[0],
                 &gradDef->firstValue[0],
@@ -3639,20 +3641,23 @@ static int compute_grad_statistics(
             timeId = gradDef->unusedOrTimeShapeID;
             
             /* Decompress time shape if present (shared across shots) */
-            time_s = NULL;
+            time_us = NULL;
             hasTimeShape = 0;
             if (timeId > 0 && timeId <= seq->shapesLibrarySize) {
-                result = decompressShape(&seq->shapesLibrary[timeId - 1], &decompressedTime);
-                if (result == 0 && decompressedTime.numUncompressedSamples > 0) {
-                    /* Time shape is already in seconds */
-                    time_s = (float*)ALLOC(decompressedTime.numUncompressedSamples * sizeof(float));
-                    if (time_s) {
-                        for (i = 0; i < decompressedTime.numUncompressedSamples; ++i) {
-                            time_s[i] = decompressedTime.samples[i];
-                        }
-                        hasTimeShape = 1;
-                    }
+                if (!decompressShape(&seq->shapesLibrary[timeId - 1], &decompressedTime)) {
+                    goto cleanup_error;
                 }
+                time_us = (float*)ALLOC(decompressedTime.numUncompressedSamples * sizeof(float));
+                if (!time_us) {
+                    FREE(decompressedTime.samples);
+                    goto cleanup_error;
+                }
+                for (i = 0; i < decompressedTime.numUncompressedSamples; ++i) {
+                    time_us[i] = decompressedTime.samples[i]; /* already in us */
+                }
+                hasTimeShape = 1;
+                FREE(decompressedTime.samples);
+                decompressedTime.samples = NULL;
             }
             
             for (shotIdx = 0; shotIdx < gradDef->numShots; ++shotIdx) {
@@ -3663,9 +3668,9 @@ static int compute_grad_statistics(
                 }
                 
                 /* Decompress waveform shape */
-                result = decompressShape(&seq->shapesLibrary[shapeId - 1], &decompressedWave);
-                if (result != 0 || decompressedWave.numUncompressedSamples <= 0) {
-                    continue;
+                if (!decompressShape(&seq->shapesLibrary[shapeId - 1], &decompressedWave)) {
+                    if (time_us) FREE(time_us);
+                    goto cleanup_error;
                 }
                 
                 numSamples = decompressedWave.numUncompressedSamples;
@@ -3676,10 +3681,9 @@ static int compute_grad_statistics(
                 if (!waveform || !sq_waveform) {
                     if (waveform) FREE(waveform);
                     if (sq_waveform) FREE(sq_waveform);
-                    if (decompressedWave.samples) FREE(decompressedWave.samples);
-                    if (time_s) FREE(time_s);
-                    if (decompressedTime.samples) FREE(decompressedTime.samples);
-                    return PULSEQLIB_ERR_ALLOC_FAILED;
+                    FREE(decompressedWave.samples);
+                    if (time_us) FREE(time_us);
+                    goto cleanup_error;
                 }
                 
                 /* Copy and normalize waveform */
@@ -3697,13 +3701,13 @@ static int compute_grad_statistics(
                 gradDef->firstValue[shotIdx] = waveform[0];
                 gradDef->lastValue[shotIdx] = waveform[numSamples - 1];
                 
-                /* Compute slew rate and energy */
-                if (hasTimeShape && time_s) {
-                    gradDef->slewRate[shotIdx] = max_slew_real_nonuniform(waveform, time_s, numSamples);
-                    gradDef->energy[shotIdx] = trapz_real_nonuniform(sq_waveform, time_s, numSamples);
+                /* Compute slew rate and energy (all in us) */
+                if (hasTimeShape && time_us) {
+                    gradDef->slewRate[shotIdx] = max_slew_real_nonuniform(waveform, time_us, numSamples);
+                    gradDef->energy[shotIdx] = trapz_real_nonuniform(sq_waveform, time_us, numSamples);
                 } else {
-                    gradDef->slewRate[shotIdx] = max_slew_real_uniform(waveform, numSamples, gradRasterTime_s);
-                    gradDef->energy[shotIdx] = trapz_real_uniform(sq_waveform, numSamples, gradRasterTime_s);
+                    gradDef->slewRate[shotIdx] = max_slew_real_uniform(waveform, numSamples, gradRasterTime_us);
+                    gradDef->energy[shotIdx] = trapz_real_uniform(sq_waveform, numSamples, gradRasterTime_us);
                 }
                 
                 FREE(waveform);
@@ -3712,25 +3716,27 @@ static int compute_grad_statistics(
                 sq_waveform = NULL;
                 
                 /* Free decompressed waveform */
-                if (decompressedWave.samples) {
-                    FREE(decompressedWave.samples);
-                    decompressedWave.samples = NULL;
-                }
+                FREE(decompressedWave.samples);
+                decompressedWave.samples = NULL;
             }
             
             /* Free time shape resources */
-            if (time_s) {
-                FREE(time_s);
-                time_s = NULL;
-            }
-            if (decompressedTime.samples) {
-                FREE(decompressedTime.samples);
-                decompressedTime.samples = NULL;
+            if (time_us) {
+                FREE(time_us);
+                time_us = NULL;
             }
         }
     }
     
     return PULSEQLIB_OK;
+
+cleanup_error:
+    if (waveform) FREE(waveform);
+    if (sq_waveform) FREE(sq_waveform);
+    if (time_us) FREE(time_us);
+    if (decompressedWave.samples) FREE(decompressedWave.samples);
+    if (decompressedTime.samples) FREE(decompressedTime.samples);
+    return PULSEQLIB_ERR_ALLOC_FAILED;
 }
 
 /**
