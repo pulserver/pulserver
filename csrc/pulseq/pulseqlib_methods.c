@@ -559,50 +559,6 @@ static void quaternion_to_matrix(const float* quat, float* matrix)
     matrix[8] = 1.0f - 2.0f * (xx + yy);
 }
 
-/**
- * @brief Find widest contiguous lobe above threshold for complex signal on uniform grid.
- *
- * @param[in] rf_re       Real part of complex RF signal.
- * @param[in] rf_im       Imaginary part of complex RF signal.
- * @param[in] numSamples  Number of samples.
- * @param[in] duration    Total pulse duration (s).
- * @param[in] dt          Time step (s).
- * @param[in] threshold   Magnitude threshold (normalized).
- * @return Widest lobe duration normalized by total duration.
- */
-static float find_widest_lobe(
-    const float* rf_re,
-    const float* rf_im,
-    int numSamples,
-    float duration,
-    float dt,
-    float threshold)
-{
-    int i;
-    int current_run = 0;
-    int max_run = 0;
-    float mag;
-    
-    if (!rf_re || !rf_im || numSamples <= 0 || duration <= 0.0f) {
-        return 0.0f;
-    }
-    
-    for (i = 0; i < numSamples; ++i) {
-        mag = (float)sqrt(rf_re[i] * rf_re[i] + rf_im[i] * rf_im[i]);
-        
-        if (mag > threshold) {
-            current_run++;
-            if (current_run > max_run) {
-                max_run = current_run;
-            }
-        } else {
-            current_run = 0;
-        }
-    }
-    
-    return (float)max_run * dt / duration;
-}
-
 /******************************************* Interpolation Helpers *************************************************/
 
 /**
@@ -834,7 +790,8 @@ static float compute_rf_bandwidth_fft(
     float w1, w2, bw;
     float fallback_bw;
     
-    fallback_bw = (duration > 0.0f) ? (2.0f / duration) : 0.0f;
+    /* If calc fails, assume it is block pulse and take 99% power bandwidth */
+    fallback_bw = (duration > 0.0f) ? (3.12f / duration) : 0.0f;
     
     if (!rf_re || !rf_im || !fft_cfg || nn <= 0) {
         return fallback_bw;
@@ -3801,10 +3758,13 @@ static int compute_rf_statistics(
     float* magnitude = NULL;
     float* phase = NULL;
     float* time_us = NULL;
+    float* time_us_uniform = NULL;
     float* rf_re = NULL;
     float* rf_im = NULL;
+    float* rf_re_uniform = NULL;
+    float* rf_im_uniform = NULL;
     float* time_centered = NULL;
-    int numSamples, numRealSamples;
+    int numSamples, numUniformSamples, numRealSamples;
     int magId, phaseId, timeId;
     int result;
     int hasPhase, hasTime;
@@ -3813,7 +3773,6 @@ static int compute_rf_statistics(
     float maxMag;
     float duration;
     float time_center;
-    float sum_abs_unnorm;  /* For flip angle calculation (before normalization by duration) */
     pulseqlib_RfDefinition* rfDef;
     
     /* Thresholds */
@@ -3838,10 +3797,15 @@ static int compute_rf_statistics(
     int fft_ready = 0;
     
     /* Stats computation variables */
-    float rfn_i, rfn_prev;
-    float mag_i, mag_prev;
-    float sq_i, sq_prev;
-    float sum_signed, sum_abs, sum_sq, time_above_threshold;
+    float rf_abs;
+    float sum_signed; 
+    float sum_signed_re; 
+    float sum_signed_im; 
+    float sum_abs; 
+    float sum_sq; 
+    float time_above_threshold;
+    float temp_pw;
+    float maxpw;
     int fft_start, fft_end, fft_count;
     
     if (!seq || !rfDefinitions || numUniqueRFs <= 0) {
@@ -4104,13 +4068,12 @@ static int compute_rf_statistics(
         }
         
         /* ================================================================
-         * Step 4-6: Interpolate, compute stats, compute bandwidth
+         * Step 4: Compute stats on original RF samples (not interpolated)
          * ================================================================ */
         rf_re = (float*)ALLOC(numSamples * sizeof(float));
         rf_im = (float*)ALLOC(numSamples * sizeof(float));
-        time_centered = (float*)ALLOC(numSamples * sizeof(float));
         
-        if (rf_re && rf_im && time_centered) {
+        if (rf_re && rf_im) {
             /* Build complex RF signal */
             if (hasPhase && phase) {
                 for (i = 0; i < numSamples; ++i) {
@@ -4123,97 +4086,108 @@ static int compute_rf_statistics(
                     rf_im[i] = 0.0f;
                 }
             }
+
+            /* Compute uniform grid parameters (all in us) */
+            numUniformSamples = (int)(duration / seq->opts.rf_raster_time + 0.5f) + 1;
+            if (numUniformSamples < 2) numUniformSamples = 2;
             
-            /* Center time array at peak */
-            for (i = 0; i < numSamples; ++i) {
-                time_centered[i] = time_us[i] - time_center;
-            }
+            /* Allocate uniform grid arrays */
+            time_us_uniform = (float*)ALLOC(numUniformSamples * sizeof(float));
+            rf_re_uniform = (float*)ALLOC(numUniformSamples * sizeof(float));
+            rf_im_uniform = (float*)ALLOC(numUniformSamples * sizeof(float));
+
+            /* Build uniform time grid (NOT centered), in us */
+            if (time_us_uniform && rf_re_uniform && rf_im_uniform && time_us) {
+                for (i = 0; i < numUniformSamples; ++i) {
+                    time_us_uniform[i] = (float)i * seq->opts.rf_raster_time;
+                }
+            } 
+
+            /* Interpolate complex RF to uniform grid */
+            interp1_linear_complex(time_us_uniform, numUniformSamples, time_us, rf_re, rf_im, numSamples, rf_re_uniform, rf_im_uniform);
+                
+            /* Compute stats on original samples using RF raster time */
+            sum_signed_re = 0.0f;
+            sum_signed_im = 0.0f;
+            sum_abs = 0.0f;
+            sum_sq = 0.0f;
+            time_above_threshold = 0.0f;
+            maxpw = 0.0f;
+            temp_pw = 0.0f;
             
-            /* Interpolate to uniform FFT grid */
-            interp1_linear_complex(tt, nn, time_centered, rf_re, rf_im, numSamples, rfs_re, rfs_im);
-            
-            /* Find active region in interpolated signal */
-            fft_start = 0;
-            fft_end = nn - 1;
-            
-            for (i = 0; i < nn; ++i) {
-                if ((float)fabs(rfs_re[i]) > 1e-12f || (float)fabs(rfs_im[i]) > 1e-12f) {
-                    fft_start = i;
-                    break;
+            for (i = 0; i < numUniformSamples; ++i) {                
+                sum_signed_re += rf_re_uniform[i];
+                sum_signed_im += rf_im_uniform[i];
+                rf_abs = (float)sqrt(rf_re_uniform[i] * rf_re_uniform[i] + rf_im_uniform[i] * rf_im_uniform[i]);
+                sum_abs += rf_abs;
+                sum_sq += rf_abs * rf_abs;
+                
+                if (rf_abs > DTY_THRESHOLD) {
+                    time_above_threshold += 1.0f;
+                }   
+                if (rf_abs >= MPW_THRESHOLD) {
+                    temp_pw += 1.0f;
+                } else {
+                    if (temp_pw > maxpw) {
+                        maxpw = temp_pw;
+                    }
+                    temp_pw = 0.0f;
                 }
             }
-            for (i = nn - 1; i >= 0; --i) {
-                if ((float)fabs(rfs_re[i]) > 1e-12f || (float)fabs(rfs_im[i]) > 1e-12f) {
-                    fft_end = i;
-                    break;
-                }
+            if (temp_pw > maxpw) {
+                maxpw = temp_pw;
             }
+
+            /* Store unnormalized integral for flip angle */
+            sum_signed = (float)sqrt(sum_signed_re * sum_signed_re + sum_signed_im * sum_signed_im) * seq->opts.rf_raster_time * 1e-6f; /* convert to seconds */
             
-            fft_count = fft_end - fft_start + 1;
+            /* Normalize by duration for width metrics */
+            rfDef->area = sum_signed;
+            rfDef->abswidth = sum_abs / numUniformSamples;
+            rfDef->effwidth = sum_sq / numUniformSamples;
+            rfDef->dtycyc = time_above_threshold / numUniformSamples;
             
-            /* Compute stats on uniform grid */
-            if (fft_count >= 2) {
-                mag_prev = (float)sqrt(rfs_re[fft_start] * rfs_re[fft_start] + rfs_im[fft_start] * rfs_im[fft_start]);
-                rfn_prev = rfs_re[fft_start];
-                sq_prev = mag_prev * mag_prev;
-                
-                sum_signed = 0.0f;
-                sum_abs = 0.0f;
-                sum_sq = 0.0f;
-                time_above_threshold = 0.0f;
-                
-                for (i = fft_start + 1; i <= fft_end; ++i) {
-                    mag_i = (float)sqrt(rfs_re[i] * rfs_re[i] + rfs_im[i] * rfs_im[i]);
-                    rfn_i = rfs_re[i];
-                    sq_i = mag_i * mag_i;
-                    
-                    sum_signed += 0.5f * (rfn_prev + rfn_i) * seq->opts.rf_raster_time;
-                    sum_abs += 0.5f * (mag_prev + mag_i) * seq->opts.rf_raster_time;
-                    sum_sq += 0.5f * (sq_prev + sq_i) * seq->opts.rf_raster_time;
-                    
-                    if (mag_prev > DTY_THRESHOLD || mag_i > DTY_THRESHOLD) {
-                        time_above_threshold += seq->opts.rf_raster_time;
+            /* Flip angle */
+            rfDef->flipAngle = (float)(TWO_PI) * rfDef->maxAmplitude * sum_signed;
+            rfDef->maxpw = maxpw / numUniformSamples;
+            if (rfDef->dtycyc < rfDef->maxpw) {
+                rfDef->dtycyc = rfDef->maxpw;
+            }
+
+            if (time_us_uniform) FREE(time_us_uniform);
+            if (rf_re_uniform) FREE(rf_re_uniform);
+            if (rf_im_uniform) FREE(rf_im_uniform);
+            time_us_uniform = NULL;
+            rf_re_uniform = NULL;
+            rf_im_uniform = NULL;
+            
+            /* ================================================================
+             * Step 5: Interpolate to FFT grid and compute bandwidth (only)
+             * ================================================================ */
+            if (fft_ready && time_us) {
+                /* Center time array at peak */
+                time_centered = (float*)ALLOC(numSamples * sizeof(float));
+                if (time_centered) {
+                    for (i = 0; i < numSamples; ++i) {
+                        time_centered[i] = (time_us[i] - time_center);
                     }
                     
-                    rfn_prev = rfn_i;
-                    mag_prev = mag_i;
-                    sq_prev = sq_i;
-                }
-                
-                /* Store unnormalized integral for flip angle */
-                sum_abs_unnorm = sum_abs;
-                
-                /* Normalize by duration for width metrics */
-                rfDef->area = sum_signed / duration;
-                rfDef->abswidth = sum_abs / duration;
-                rfDef->effwidth = sum_sq / duration;
-                rfDef->dtycyc = time_above_threshold / duration;
-                
-                /* Flip angle at 1 Hz = 2π × integral of normalized waveform
-                * flipAngle has units of radians/Hz, so:
-                * rfDef->flipAngle = flipAngle * amplitude
-                */
-                rfDef->flipAngle = (float)(2.0 * M_PI) * rfDef->maxAmplitude * sum_abs_unnorm;
-                
-                rfDef->maxpw = find_widest_lobe(
-                    rfs_re + fft_start, rfs_im + fft_start, fft_count,
-                    duration, seq->opts.rf_raster_time, MPW_THRESHOLD);
-                
-                if (rfDef->dtycyc < rfDef->maxpw) {
-                    rfDef->dtycyc = rfDef->maxpw;
+                    /* Interpolate to uniform FFT grid */
+                    interp1_linear_complex(tt, nn, time_centered, rf_re, rf_im, numSamples, rfs_re, rfs_im);
+                    
+                    /* Compute bandwidth via FFT */
+                    rfDef->bandwidth = compute_rf_bandwidth_fft(
+                        rfs_re, rfs_im, fft_cfg, nn, dw, cutoff, duration * 1e-6f, /* convert to seconds */
+                        w, work_re, work_im, fft_in, fft_out);
+                    
+                    FREE(time_centered);
+                    time_centered = NULL;
                 }
             }
-            
-            /* Compute bandwidth via FFT */
-            rfDef->bandwidth = compute_rf_bandwidth_fft(
-                rfs_re, rfs_im, fft_cfg, nn, dw, cutoff, duration,
-                w, work_re, work_im, fft_in, fft_out);
-        }
-        
+        }        
         if (rf_re) FREE(rf_re);
         if (rf_im) FREE(rf_im);
-        if (time_centered) FREE(time_centered);
-        
+ 
         /* Cleanup per-RF arrays */
         if (magnitude) FREE(magnitude);
         if (phase) FREE(phase);
