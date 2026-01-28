@@ -4227,7 +4227,7 @@ static void build_adc_def_row(const pulseqlib_SeqFile* seq, int adcIdx, int* row
     float* adc = seq->adcLibrary[adcIdx];
     float ppm_to_hz = 1e-6 * gamma * B0;
     row[0] = (int)adc[0]; /* numSamples */
-    row[1] = (int)adc[1]; /* dwellTime */
+    row[1] = (int)adc[1]; /* dwellTime_ns */
     row[2] = (int)adc[2]; /* delay */
     params[0] = adc[5] + ppm_to_hz * adc[3];   /* freqPPM */
     params[1] = adc[6] + ppm_to_hz * adc[4];   /* phasePPM */
