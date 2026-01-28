@@ -3312,22 +3312,25 @@ static void build_grad_def_row(const pulseqlib_SeqFile* seq, int gradIdx, int* r
     int waveId;
 
     row[0] = gradType;           /* type */
-    row[1] = (int)grad[2];       /* riseTime / first */
-    row[2] = (int)grad[3];       /* flatTime / last */
 
     if (gradType == 0) {
         /* trapezoid: index 4 is fallTime */
+        row[1] = (int)grad[2];   /* riseTime */
+        row[2] = (int)grad[3];   /* flatTime */
         row[3] = (int)grad[4];   /* fallTime */
+        row[4] = 0;              /* unused */ 
     } else {
         /* arbitrary: index 4 is wave_id, replace with numUncompressedSamples */
+        row[1] = 0;              /* unused */
+        row[2] = 0;              /* unused */
         waveId = (int)grad[4];
         if (waveId > 0 && seq->isShapesLibraryParsed && waveId <= seq->shapesLibrarySize) {
             row[3] = seq->shapesLibrary[waveId - 1].numUncompressedSamples;
         } else {
             row[3] = 0;
         }
+        row[4] = (int)grad[5];       /* time_id */
     }
-    row[4] = (int)grad[5];       /* time_id */
     row[5] = (int)grad[6];       /* delay */
     *params = grad[1];          /* amplitude */
 }
@@ -3384,8 +3387,8 @@ static int deduplicate_grad_library(const pulseqlib_SeqFile* seq, pulseqlib_Grad
     for (i = 0; i < numUnique; ++i) {
         gradDefinitions[i].ID = uniqueDefs[i];
         gradDefinitions[i].type = (int)intRows[uniqueDefs[i]][0];
-        gradDefinitions[i].riseTimeOrFirst = (int)intRows[uniqueDefs[i]][1];
-        gradDefinitions[i].flatTimeOrLast = (int)intRows[uniqueDefs[i]][2];
+        gradDefinitions[i].riseTimeOrUnused = (int)intRows[uniqueDefs[i]][1];
+        gradDefinitions[i].flatTimeOrUnused = (int)intRows[uniqueDefs[i]][2];
         gradDefinitions[i].fallTimeOrNumUncompressedSamples = (int)intRows[uniqueDefs[i]][3];
         gradDefinitions[i].unusedOrTimeShapeID = (int)intRows[uniqueDefs[i]][4];
         gradDefinitions[i].delay = (int)intRows[uniqueDefs[i]][5];
@@ -3626,8 +3629,8 @@ static int compute_grad_statistics(
         
         if (gradType == 0) {
             /* Trapezoid gradient - times already in us */
-            riseTime_us = (float)gradDef->riseTimeOrFirst;
-            flatTime_us = (float)gradDef->flatTimeOrLast;
+            riseTime_us = (float)gradDef->riseTimeOrUnused;
+            flatTime_us = (float)gradDef->flatTimeOrUnused;
             fallTime_us = (float)gradDef->fallTimeOrNumUncompressedSamples;
             
             compute_trapezoid_stats(

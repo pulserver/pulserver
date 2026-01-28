@@ -561,8 +561,8 @@ typedef struct pulseqlib_GradDefinition {
     /* Core definition fields (used for deduplication/uniqueness matching) */
     int ID;                                  /**< Unique Grad ID (0-based index into gradDefinitions array) */
     int type;                                /**< Gradient type: 0=TRAP, non-zero=ARBITRARY/EXTENDED */
-    int riseTimeOrFirst;                     /**< TRAP: rise time (us); ARBITRARY: first sample (normalized, scaled by 1e6) */
-    int flatTimeOrLast;                      /**< TRAP: flat time (us); ARBITRARY: last sample (normalized, scaled by 1e6) */
+    int riseTimeOrUnused;                    /**< TRAP: rise time (us); ARBITRARY: unused) */
+    int flatTimeOrUnused;                    /**< TRAP: flat time (us); ARBITRARY: unused) */
     int fallTimeOrNumUncompressedSamples;    /**< TRAP: fall time (us); ARBITRARY: number of uncompressed samples */
     int unusedOrTimeShapeID;                 /**< TRAP: unused; ARBITRARY: time shape ID (1-based, 0 if none) */
     int delay;                               /**< Delay prior to the gradient (us) */

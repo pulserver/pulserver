@@ -210,12 +210,19 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile) {
         py::dict entry;
         entry["id"] = seqDesc.gradDefinitions[i].ID;
         entry["type"] = seqDesc.gradDefinitions[i].type;
-        entry["rise_time_or_first"] = seqDesc.gradDefinitions[i].riseTimeOrFirst;
-        entry["flat_time_or_last"] = seqDesc.gradDefinitions[i].flatTimeOrLast;
-        entry["fall_time_or_num_samples"] = seqDesc.gradDefinitions[i].fallTimeOrNumUncompressedSamples;
-        entry["time_shape_id"] = seqDesc.gradDefinitions[i].unusedOrTimeShapeID;
         entry["delay"] = seqDesc.gradDefinitions[i].delay;
-        entry["num_shots"] = seqDesc.gradDefinitions[i].numShots;
+
+        if (seqDesc.gradDefinitions[i].type == 0) {
+            // Trapezoid: timing defined by rise/flat/fall
+            entry["rise_time"] = seqDesc.gradDefinitions[i].riseTimeOrUnused;
+            entry["flat_time"] = seqDesc.gradDefinitions[i].flatTimeOrUnused;
+            entry["fall_time"] = seqDesc.gradDefinitions[i].fallTimeOrNumUncompressedSamples;
+        } else {
+            // Arbitrary/Extended: timing defined by num_samples and time_shape_id
+            entry["num_shots"] = seqDesc.gradDefinitions[i].numShots;
+            entry["num_samples"] = seqDesc.gradDefinitions[i].fallTimeOrNumUncompressedSamples;
+            entry["time_shape_id"] = seqDesc.gradDefinitions[i].unusedOrTimeShapeID;
+        }
 #ifdef IS_GEHC
         if (IS_GEHC) {
             // Export arrays for multi-shot gradients
@@ -229,11 +236,13 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile) {
                                             seqDesc.gradDefinitions[i].firstValue + seqDesc.gradDefinitions[i].numShots);
             std::vector<float> lastValues(seqDesc.gradDefinitions[i].lastValue,
                                            seqDesc.gradDefinitions[i].lastValue + seqDesc.gradDefinitions[i].numShots);
-            entry["shot_shape_ids"] = shotShapeIDs;
             entry["slew_rate"] = slewRates;
             entry["energy"] = energies;
-            entry["first_value"] = firstValues;
-            entry["last_value"] = lastValues;
+            if (seqDesc.gradDefinitions[i].type != 0) {
+                entry["shot_shape_ids"] = shotShapeIDs;
+                entry["first_value"] = firstValues;
+                entry["last_value"] = lastValues;
+            }
         }
 #endif
         gradDefsList.append(entry);
@@ -245,7 +254,9 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile) {
         py::dict entry;
         entry["id"] = seqDesc.gradTable[i].ID;
         entry["amplitude"] = seqDesc.gradTable[i].amplitude;
-        entry["shot_index"] = seqDesc.gradTable[i].shotIndex;
+        if (seqDesc.gradDefinitions[seqDesc.gradTable[i].ID].type != 0) {
+            entry["shot_index"] = seqDesc.gradTable[i].shotIndex;
+        }
         gradTableList.append(entry);
     }
     output["grad_table"] = gradTableList;
