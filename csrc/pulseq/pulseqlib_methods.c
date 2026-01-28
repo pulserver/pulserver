@@ -3712,6 +3712,10 @@ static int compute_grad_statistics(
                     gradDef->slewRate[shotIdx] = max_slew_real_uniform(waveform, numSamples, gradRasterTime_us);
                     gradDef->energy[shotIdx] = trapz_real_uniform(sq_waveform, numSamples, gradRasterTime_us);
                 }
+
+                /* Convert to SI units: slew from 1/us to 1/s, energy from us to s */
+                gradDef->slewRate[shotIdx] *= 1e6f;   /* 1/us -> 1/s */
+                gradDef->energy[shotIdx] *= 1e-6f;   /* us -> s */
                 
                 FREE(waveform);
                 FREE(sq_waveform);
