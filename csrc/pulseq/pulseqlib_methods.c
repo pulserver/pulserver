@@ -5745,6 +5745,119 @@ static int findSegmentsInTRInternal(
 }
 
 /**
+ * @brief Strip leading and trailing pure delay blocks from raw segments.
+ *
+ * For each input segment, this function:
+ * 1. Creates individual 1-block segments for EACH leading pure delay
+ * 2. Creates a segment for the core (non-pure-delay) blocks
+ * 3. Creates individual 1-block segments for EACH trailing pure delay
+ *
+ * @param[in]     rawSegments      Array of raw segments from findSegmentsInTRInternal.
+ * @param[in]     numRawSegments   Number of raw segments.
+ * @param[in]     blockTable       Block table containing pureDelayFlag per block.
+ * @param[out]    outSegments      Output array for expanded segments (must be pre-allocated).
+ * @param[in]     maxOutSegments   Maximum number of output segments (size of outSegments).
+ * @return Number of output segments, or -1 on error.
+ */
+static int stripPureDelaysFromSegments(
+    const pulseqlib_TRsegment* rawSegments,
+    int numRawSegments,
+    const pulseqlib_BlockTableElement* blockTable,
+    pulseqlib_TRsegment* outSegments,
+    int maxOutSegments)
+{
+    int numOut = 0;
+    int segIdx, i;
+    int numBlocks;
+    int leadingDelays, trailingDelays;
+    int coreStart, coreEnd, coreSize;
+    const int* indices;
+    
+    for (segIdx = 0; segIdx < numRawSegments; ++segIdx) {
+        numBlocks = rawSegments[segIdx].numBlocks;
+        indices = rawSegments[segIdx].uniqueBlockIndices;
+        
+        if (numBlocks == 0 || !indices) {
+            continue;
+        }
+        
+        /* Count leading pure delays */
+        leadingDelays = 0;
+        for (i = 0; i < numBlocks; ++i) {
+            if (blockTable[indices[i]].pureDelayFlag) {
+                leadingDelays++;
+            } else {
+                break;
+            }
+        }
+        
+        /* Count trailing pure delays (don't overlap with leading) */
+        trailingDelays = 0;
+        for (i = numBlocks - 1; i >= leadingDelays; --i) {
+            if (blockTable[indices[i]].pureDelayFlag) {
+                trailingDelays++;
+            } else {
+                break;
+            }
+        }
+        
+        /* Compute core range */
+        coreStart = leadingDelays;
+        coreEnd = numBlocks - trailingDelays;
+        
+        /* Create individual segments for EACH leading pure delay */
+        for (i = 0; i < leadingDelays; ++i) {
+            if (numOut >= maxOutSegments) {
+                return -1; /* Error: exceeded capacity */
+            }
+            outSegments[numOut].startBlock = rawSegments[segIdx].startBlock + i;
+            outSegments[numOut].numBlocks = 1;
+            outSegments[numOut].uniqueBlockIndices = (int*)ALLOC(sizeof(int));
+            if (!outSegments[numOut].uniqueBlockIndices) {
+                return -1; /* Allocation failed */
+            }
+            outSegments[numOut].uniqueBlockIndices[0] = indices[i];
+            numOut++;
+        }
+        
+        /* Create segment for core (non-pure-delay) blocks, if any */
+        if (coreEnd > coreStart) {
+            coreSize = coreEnd - coreStart;
+            if (numOut >= maxOutSegments) {
+                return -1; /* Error: exceeded capacity */
+            }
+            outSegments[numOut].startBlock = rawSegments[segIdx].startBlock + coreStart;
+            outSegments[numOut].numBlocks = coreSize;
+            outSegments[numOut].uniqueBlockIndices = (int*)ALLOC(coreSize * sizeof(int));
+            if (!outSegments[numOut].uniqueBlockIndices) {
+                return -1; /* Allocation failed */
+            }
+            for (i = 0; i < coreSize; ++i) {
+                outSegments[numOut].uniqueBlockIndices[i] = indices[coreStart + i];
+            }
+            numOut++;
+        }
+        
+        /* Create individual segments for EACH trailing pure delay */
+        for (i = 0; i < trailingDelays; ++i) {
+            if (numOut >= maxOutSegments) {
+                return -1; /* Error: exceeded capacity */
+            }
+            outSegments[numOut].startBlock = rawSegments[segIdx].startBlock + coreEnd + i;
+            outSegments[numOut].numBlocks = 1;
+            outSegments[numOut].uniqueBlockIndices = (int*)ALLOC(sizeof(int));
+            if (!outSegments[numOut].uniqueBlockIndices) {
+                return -1; /* Allocation failed */
+            }
+            outSegments[numOut].uniqueBlockIndices[0] = indices[coreEnd + i];
+            numOut++;
+        }
+    }
+    
+    return numOut;
+}
+
+/**
  * @brief Get segment definitions in TR.
  */
 int pulseqlib_findSegmentsInTR(
@@ -5754,20 +5867,22 @@ int pulseqlib_findSegmentsInTR(
 ) {
     const pulseqlib_TRdescriptor* trDesc = &seqDesc->trDescriptor;
     pulseqlib_TRsegment* trSegments = NULL;
-    int* uniqueBlockTable = NULL;
     pulseqlib_TRsegment* trSegmentsRaw = NULL;
+    pulseqlib_TRsegment* trSegmentsExpanded = NULL;
     pulseqlib_Diagnostic localDiag;
     int numBlocks;
+    int numSegmentsRaw;
+    int numPrepSegmentsRaw, numMainSegmentsRaw, numCooldownSegmentsRaw;
+    int numPrepSegments, numMainSegments, numCooldownSegments;
     int numSegmentsTotal;
-    int numPrepSegments;
-    int numMainSegments;
-    int numCooldownSegments;
     int numUniqueSegments;
     int found;
     int trStart;
     int trSize;
     int n, i;
     int segResult;
+    int offset;
+    int maxExpandedSegments;
 
     /* Use local diag if caller doesn't want diagnostics */
     if (!diag) {
@@ -5782,110 +5897,147 @@ int pulseqlib_findSegmentsInTR(
         return 0;
     }
 
-    /* Build uniqueBlockTable from seqDesc->blockTable */
-    uniqueBlockTable = (int*)ALLOC(seqDesc->numBlocks * sizeof(int));
-    if (!uniqueBlockTable) {
-        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
-        return 0;
-    }
-    for (i = 0; i < seqDesc->numBlocks; ++i) {
-        uniqueBlockTable[i] = seqDesc->blockTable[i].ID;
-    }
-
     /* Initialize counts */
-    numPrepSegments = 0;
-    numMainSegments = 0;
-    numCooldownSegments = 0;
-    numSegmentsTotal = 0;
+    numPrepSegmentsRaw = 0;
+    numMainSegmentsRaw = 0;
+    numCooldownSegmentsRaw = 0;
+    numSegmentsRaw = 0;
 
     numBlocks = trDesc->trSize + trDesc->numPrepBlocks + trDesc->numCooldownBlocks;
 
-    /* Allocate temporary storage (at most one segment per block) */
+    /* Allocate temporary storage for raw segments (at most one segment per block) */
     trSegmentsRaw = (pulseqlib_TRsegment*) ALLOC(numBlocks * sizeof(pulseqlib_TRsegment));
     if (!trSegmentsRaw) {
         diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
-        FREE(uniqueBlockTable);
         return 0;
     }
 
-    /* Allocate output segments array (at most numBlocks unique segments) */
-    trSegments = (pulseqlib_TRsegment*) ALLOC(numBlocks * sizeof(pulseqlib_TRsegment));
-    if (!trSegments) {
-        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
-        FREE(uniqueBlockTable);
-        FREE(trSegmentsRaw);
-        return 0;
-    }
-
-    /* ========== Find segments in each section ========== */
+    /* ========== Find raw segments in each section ========== */
 
     /* Prep section */
     if (trDesc->degeneratePrep == 0 && trDesc->numPrepBlocks > 0) {
         trStart = 0;
         trSize = trDesc->numPrepBlocks + trDesc->trSize;
-        segResult = findSegmentsInTRInternal(seq, trSegmentsRaw, numSegmentsTotal, trStart, trSize, diag);
+        segResult = findSegmentsInTRInternal(seq, trSegmentsRaw, numSegmentsRaw, trStart, trSize, diag);
         if (segResult == 0 && PULSEQLIB_FAILED(diag->code)) {
-            FREE(uniqueBlockTable);
             FREE(trSegmentsRaw);
-            FREE(trSegments);
             return 0;
         }
-        numPrepSegments = segResult;
-        numSegmentsTotal += numPrepSegments;
+        numPrepSegmentsRaw = segResult;
+        numSegmentsRaw += numPrepSegmentsRaw;
     }
 
     /* Main TR section */
     trStart = trDesc->numPrepBlocks;
     trSize = trDesc->trSize;
-    segResult = findSegmentsInTRInternal(seq, trSegmentsRaw, numSegmentsTotal, trStart, trSize, diag);
+    segResult = findSegmentsInTRInternal(seq, trSegmentsRaw, numSegmentsRaw, trStart, trSize, diag);
     if (segResult == 0 && PULSEQLIB_FAILED(diag->code)) {
-        FREE(uniqueBlockTable);
         FREE(trSegmentsRaw);
-        FREE(trSegments);
         return 0;
     }
-    numMainSegments = segResult;
-    numSegmentsTotal += numMainSegments;
+    numMainSegmentsRaw = segResult;
+    numSegmentsRaw += numMainSegmentsRaw;
 
     /* Cooldown section */
     if (trDesc->degenerateCooldown == 0 && trDesc->numCooldownBlocks > 0) {
         trStart = seq->numBlocks - trDesc->numCooldownBlocks - trDesc->trSize;
         trSize = trDesc->numCooldownBlocks + trDesc->trSize;
-        segResult = findSegmentsInTRInternal(seq, trSegmentsRaw, numSegmentsTotal, trStart, trSize, diag);
+        segResult = findSegmentsInTRInternal(seq, trSegmentsRaw, numSegmentsRaw, trStart, trSize, diag);
         if (segResult == 0 && PULSEQLIB_FAILED(diag->code)) {
-            FREE(uniqueBlockTable);
             FREE(trSegmentsRaw);
-            FREE(trSegments);
             return 0;
         }
-        numCooldownSegments = segResult;
-        numSegmentsTotal += numCooldownSegments;
+        numCooldownSegmentsRaw = segResult;
+        numSegmentsRaw += numCooldownSegmentsRaw;
     }
 
     /* Check if any segments were found */
-    if (numSegmentsTotal == 0) {
+    if (numSegmentsRaw == 0) {
         diag->code = PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND;
-        FREE(uniqueBlockTable);
         FREE(trSegmentsRaw);
-        FREE(trSegments);
         return 0;
     }
 
-    /* Parse actual segment definition from uniqueBlockTable */
-    for (n = 0; n < numSegmentsTotal; ++n) {
+    /* Parse actual segment definition from blockTable (fill uniqueBlockIndices) */
+    for (n = 0; n < numSegmentsRaw; ++n) {
         trSegmentsRaw[n].uniqueBlockIndices = (int*) ALLOC(trSegmentsRaw[n].numBlocks * sizeof(int));
         if (!trSegmentsRaw[n].uniqueBlockIndices) {
             diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
             for (i = 0; i < n; ++i) FREE(trSegmentsRaw[i].uniqueBlockIndices);
-            FREE(uniqueBlockTable);
             FREE(trSegmentsRaw);
-            FREE(trSegments);
             return 0;
         }
         for (i = 0; i < trSegmentsRaw[n].numBlocks; ++i) {
-            trSegmentsRaw[n].uniqueBlockIndices[i] = uniqueBlockTable[trSegmentsRaw[n].startBlock + i];
+            trSegmentsRaw[n].uniqueBlockIndices[i] = seqDesc->blockTable[trSegmentsRaw[n].startBlock + i].ID;
         }
     }
+
+    /* ========== Strip pure delays from segments ========== */
+    /* Maximum expanded segments: each block could become its own segment */
+    maxExpandedSegments = numBlocks;
+    trSegmentsExpanded = (pulseqlib_TRsegment*) ALLOC(maxExpandedSegments * sizeof(pulseqlib_TRsegment));
+    if (!trSegmentsExpanded) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        for (n = 0; n < numSegmentsRaw; ++n) FREE(trSegmentsRaw[n].uniqueBlockIndices);
+        FREE(trSegmentsRaw);
+        return 0;
+    }
+
+    /* Process prep section */
+    offset = 0;
+    numPrepSegments = 0;
+    if (numPrepSegmentsRaw > 0) {
+        numPrepSegments = stripPureDelaysFromSegments(
+            trSegmentsRaw, numPrepSegmentsRaw,
+            seqDesc->blockTable, trSegmentsExpanded + offset, maxExpandedSegments - offset);
+        if (numPrepSegments == 0 && numPrepSegmentsRaw > 0) {
+            diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+            for (n = 0; n < numSegmentsRaw; ++n) FREE(trSegmentsRaw[n].uniqueBlockIndices);
+            FREE(trSegmentsRaw);
+            FREE(trSegmentsExpanded);
+            return 0;
+        }
+        offset += numPrepSegments;
+    }
+
+    /* Process main section */
+    numMainSegments = stripPureDelaysFromSegments(
+        trSegmentsRaw + numPrepSegmentsRaw, numMainSegmentsRaw,
+        seqDesc->blockTable, trSegmentsExpanded + offset, maxExpandedSegments - offset);
+    if (numMainSegments == 0 && numMainSegmentsRaw > 0) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        for (n = 0; n < offset; ++n) FREE(trSegmentsExpanded[n].uniqueBlockIndices);
+        for (n = 0; n < numSegmentsRaw; ++n) FREE(trSegmentsRaw[n].uniqueBlockIndices);
+        FREE(trSegmentsRaw);
+        FREE(trSegmentsExpanded);
+        return 0;
+    }
+    offset += numMainSegments;
+
+    /* Process cooldown section */
+    numCooldownSegments = 0;
+    if (numCooldownSegmentsRaw > 0) {
+        numCooldownSegments = stripPureDelaysFromSegments(
+            trSegmentsRaw + numPrepSegmentsRaw + numMainSegmentsRaw, numCooldownSegmentsRaw,
+            seqDesc->blockTable, trSegmentsExpanded + offset, maxExpandedSegments - offset);
+        if (numCooldownSegments == 0 && numCooldownSegmentsRaw > 0) {
+            diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+            for (n = 0; n < offset; ++n) FREE(trSegmentsExpanded[n].uniqueBlockIndices);
+            for (n = 0; n < numSegmentsRaw; ++n) FREE(trSegmentsRaw[n].uniqueBlockIndices);
+            FREE(trSegmentsRaw);
+            FREE(trSegmentsExpanded);
+            return 0;
+        }
+        offset += numCooldownSegments;
+    }
+
+    numSegmentsTotal = numPrepSegments + numMainSegments + numCooldownSegments;
+
+    /* Free raw segments */
+    for (n = 0; n < numSegmentsRaw; ++n) {
+        FREE(trSegmentsRaw[n].uniqueBlockIndices);
+    }
+    FREE(trSegmentsRaw);
 
     /* ========== Allocate output segment tables ========== */
     seqDesc->segmentTable.numPrepSegments = numPrepSegments;
@@ -5899,42 +6051,98 @@ int pulseqlib_findSegmentsInTR(
     seqDesc->segmentTable.cooldownSegmentTable = (numCooldownSegments > 0) 
         ? (int*) ALLOC(numCooldownSegments * sizeof(int)) : NULL;
 
-    /* ========== Find unique segments and fill tables ========== */
+    /* Allocate output segments array */
+    trSegments = (pulseqlib_TRsegment*) ALLOC(numSegmentsTotal * sizeof(pulseqlib_TRsegment));
+    if (!trSegments) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        for (n = 0; n < numSegmentsTotal; ++n) FREE(trSegmentsExpanded[n].uniqueBlockIndices);
+        FREE(trSegmentsExpanded);
+        return 0;
+    }
+
+        /* ========== Find unique segments and fill tables ========== */
+    /* 
+     * Special handling for pure delay segments: ALL pure delay segments 
+     * are considered identical regardless of their block ID or duration.
+     */
     numUniqueSegments = 0;
     
-    for (n = 0; n < numSegmentsTotal; ++n) {
-        found = -1;
-        for (i = 0; i < numUniqueSegments; ++i) {
-            if (trSegmentsRaw[n].numBlocks == trSegments[i].numBlocks &&
-                array_equal(trSegmentsRaw[n].uniqueBlockIndices, 
-                           trSegments[i].uniqueBlockIndices, 
-                           trSegmentsRaw[n].numBlocks)) {
-                found = i;
-                break;
-            }
-        }
+    {
+        int pureDelayUniqueIdx = -1;
+        int isPureDelay;
+        
+        for (n = 0; n < numSegmentsTotal; ++n) {
+            /* Check if this is a pure delay segment (single block that is pure delay) */
+            isPureDelay = (trSegmentsExpanded[n].numBlocks == 1 && 
+                          seqDesc->blockTable[trSegmentsExpanded[n].uniqueBlockIndices[0]].pureDelayFlag);
+            
+            if (isPureDelay) {
+                if (pureDelayUniqueIdx == -1) {
+                    /* Create the unique pure delay segment (use first occurrence) */
+                    trSegments[numUniqueSegments].numBlocks = 1;
+                    trSegments[numUniqueSegments].startBlock = trSegmentsExpanded[n].startBlock;
+                    trSegments[numUniqueSegments].uniqueBlockIndices = (int*)ALLOC(sizeof(int));
+                    if (!trSegments[numUniqueSegments].uniqueBlockIndices) {
+                        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+                        for (i = 0; i < numUniqueSegments; ++i) FREE(trSegments[i].uniqueBlockIndices);
+                        for (i = 0; i < numSegmentsTotal; ++i) FREE(trSegmentsExpanded[i].uniqueBlockIndices);
+                        FREE(trSegments);
+                        FREE(trSegmentsExpanded);
+                        return 0;
+                    }
+                    trSegments[numUniqueSegments].uniqueBlockIndices[0] = trSegmentsExpanded[n].uniqueBlockIndices[0];
+                    pureDelayUniqueIdx = numUniqueSegments;
+                    numUniqueSegments++;
+                }
+                found = pureDelayUniqueIdx;
+            } else {
+                /* Non-pure-delay segment: use normal deduplication */
+                found = -1;
+                for (i = 0; i < numUniqueSegments; ++i) {
+                    /* Skip the pure delay segment in comparison */
+                    if (i == pureDelayUniqueIdx) {
+                        continue;
+                    }
+                    if (trSegmentsExpanded[n].numBlocks == trSegments[i].numBlocks &&
+                        array_equal(trSegmentsExpanded[n].uniqueBlockIndices, 
+                                   trSegments[i].uniqueBlockIndices, 
+                                   trSegmentsExpanded[n].numBlocks)) {
+                        found = i;
+                        break;
+                    }
+                }
 
-        if (found == -1) {
-            /* New unique segment */
-            trSegments[numUniqueSegments].numBlocks = trSegmentsRaw[n].numBlocks;
-            trSegments[numUniqueSegments].startBlock = trSegmentsRaw[n].startBlock;
-            trSegments[numUniqueSegments].uniqueBlockIndices = 
-                (int*) ALLOC(trSegmentsRaw[n].numBlocks * sizeof(int));
-            for (i = 0; i < trSegmentsRaw[n].numBlocks; ++i) {
-                trSegments[numUniqueSegments].uniqueBlockIndices[i] = 
-                    trSegmentsRaw[n].uniqueBlockIndices[i];
+                if (found == -1) {
+                    /* New unique segment */
+                    trSegments[numUniqueSegments].numBlocks = trSegmentsExpanded[n].numBlocks;
+                    trSegments[numUniqueSegments].startBlock = trSegmentsExpanded[n].startBlock;
+                    trSegments[numUniqueSegments].uniqueBlockIndices = 
+                        (int*) ALLOC(trSegmentsExpanded[n].numBlocks * sizeof(int));
+                    if (!trSegments[numUniqueSegments].uniqueBlockIndices) {
+                        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+                        for (i = 0; i < numUniqueSegments; ++i) FREE(trSegments[i].uniqueBlockIndices);
+                        for (i = 0; i < numSegmentsTotal; ++i) FREE(trSegmentsExpanded[i].uniqueBlockIndices);
+                        FREE(trSegments);
+                        FREE(trSegmentsExpanded);
+                        return 0;
+                    }
+                    for (i = 0; i < trSegmentsExpanded[n].numBlocks; ++i) {
+                        trSegments[numUniqueSegments].uniqueBlockIndices[i] = 
+                            trSegmentsExpanded[n].uniqueBlockIndices[i];
+                    }
+                    found = numUniqueSegments;
+                    numUniqueSegments++;
+                }
             }
-            found = numUniqueSegments;
-            numUniqueSegments++;
-        }
 
-        /* Store mapping in the appropriate section table */
-        if (n < numPrepSegments) {
-            seqDesc->segmentTable.prepSegmentTable[n] = found;
-        } else if (n < numPrepSegments + numMainSegments) {
-            seqDesc->segmentTable.mainSegmentTable[n - numPrepSegments] = found;
-        } else {
-            seqDesc->segmentTable.cooldownSegmentTable[n - numPrepSegments - numMainSegments] = found;
+            /* Store mapping in the appropriate section table */
+            if (n < numPrepSegments) {
+                seqDesc->segmentTable.prepSegmentTable[n] = found;
+            } else if (n < numPrepSegments + numMainSegments) {
+                seqDesc->segmentTable.mainSegmentTable[n - numPrepSegments] = found;
+            } else {
+                seqDesc->segmentTable.cooldownSegmentTable[n - numPrepSegments - numMainSegments] = found;
+            }
         }
     }
 
@@ -5952,12 +6160,11 @@ int pulseqlib_findSegmentsInTR(
     }
     FREE(trSegments);
 
-    /* Free temporary storage */
+    /* Free expanded segments */
     for (n = 0; n < numSegmentsTotal; ++n) {
-        FREE(trSegmentsRaw[n].uniqueBlockIndices);
+        FREE(trSegmentsExpanded[n].uniqueBlockIndices);
     }
-    FREE(trSegmentsRaw);
-    FREE(uniqueBlockTable);
+    FREE(trSegmentsExpanded);
 
     diag->code = PULSEQLIB_OK;
     return numUniqueSegments;
