@@ -120,7 +120,14 @@ def get_unique_blocks(seq: PulserverSequence) -> SimpleNamespace:
         - block_definitions: list of unique block definitions
         - rf_definitions: list of unique RF definitions
         - rf_table: list mapping RF index -> unique RF params
-        - grad_definitions: list of unique gradient definitions
+        - grad_definitions: list of unique gradient definitions, each containing:
+            - id, type, delay (all types)
+            - rise_time, flat_time, fall_time (trapezoids only)
+            - num_shots, num_samples, time_shape_id (arbitrary only)
+            - max_amplitude: max |amplitude| across instances per shot (Hz/m)
+            - slew_rate: max |d(waveform)/dt| per shot (1/s, normalized)
+            - energy: integral of waveform² dt per shot (s, normalized)
+            - shot_shape_ids, first_value, last_value (arbitrary only)
         - grad_table: list mapping gradient index -> unique gradient params
         - adc_definitions: list of unique ADC definitions
         - adc_table: list mapping ADC index -> unique ADC params
@@ -186,27 +193,8 @@ def find_tr(seq: PulserverSequence, num_reps: int = 1, raise_on_error: bool = Tr
     SequenceAnalysisError
         If raise_on_error=True and TR detection fails.
     """
-    # Get unique blocks result (includes TR descriptor from prep/cooldown detection)
-    blocks_result = get_unique_blocks(seq)
-    
-    # Extract unique block table from block_table (the ID field maps block -> unique block)
-    unique_table = [entry["id"] for entry in blocks_result.block_table]
-    tr_info = blocks_result.tr_descriptor
-    num_prep = tr_info.num_prep_blocks
-    num_cooldown = tr_info.num_cooldown_blocks
-    
-    # Build block durations indexed by unique definition ID
-    block_durations_us = [
-        blocks_result.block_definitions[i]["duration_us"] 
-        for i in range(len(blocks_result.block_definitions))
-    ]
-    
-    # Extract pure delay flags from block_table
-    pure_delay_block = [entry["pure_delay_flag"] for entry in blocks_result.block_table]
-    
-    tr_result = _find_tr_in_sequence(
-        unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown
-    )
+    # Call the C wrapper which internally does getUniqueBlocks + findTRInSequence
+    tr_result = _find_tr_in_sequence(seq._cseq)
     
     diagnostic = _make_diagnostic(tr_result["diagnostic"])
     
@@ -224,6 +212,8 @@ def find_tr(seq: PulserverSequence, num_reps: int = 1, raise_on_error: bool = Tr
     
     tr_size = tr_result["tr_size"]
     num_trs = tr_result["num_trs"]
+    num_prep = tr_result["num_prep_blocks"]
+    num_cooldown = tr_result["num_cooldown_blocks"]
     degenerate_prep = tr_result["degenerate_prep"]
     degenerate_cooldown = tr_result["degenerate_cooldown"]
     
@@ -296,58 +286,22 @@ def find_segments_in_tr(seq: PulserverSequence, raise_on_error: bool = True) -> 
         - main_segment_table: Maps main TR segments to unique segment IDs
         - cooldown_segment_table: Maps cooldown section segments to unique segment IDs
     """
-    # Get unique blocks result
-    blocks_result = get_unique_blocks(seq)
+    # Call the C wrapper which internally does getUniqueBlocks + findTR + findSegments
+    raw_result = _find_segments_in_tr(seq._cseq)
     
-    # Extract unique block table from block_table (the ID field maps block -> unique block)
-    unique_table = [entry["id"] for entry in blocks_result.block_table]
-    tr_info = blocks_result.tr_descriptor
-    num_prep = tr_info.num_prep_blocks
-    num_cooldown = tr_info.num_cooldown_blocks
-    
-    # Build block durations indexed by unique definition ID
-    block_durations_us = [
-        blocks_result.block_definitions[i]["duration_us"] 
-        for i in range(len(blocks_result.block_definitions))
-    ]
-    
-    # Extract pure delay flags from block_table
-    pure_delay_block = [entry["pure_delay_flag"] for entry in blocks_result.block_table]
-    
-    # Find TR pattern
-    tr_result = _find_tr_in_sequence(
-        unique_table, block_durations_us, pure_delay_block, num_prep, num_cooldown
-    )
-    
-    diagnostic = _make_diagnostic(tr_result["diagnostic"])
-    
-    # If no valid TR found, return empty result or raise
-    if not tr_result["success"]:
+    # Check for failure
+    if not raw_result.get("success", True):
         if raise_on_error:
-            raise SequenceAnalysisError(diagnostic)
+            if "diagnostic" in raw_result:
+                diagnostic = _make_diagnostic(raw_result["diagnostic"])
+                raise SequenceAnalysisError(diagnostic)
+            else:
+                raise RuntimeError(raw_result.get("error", "Unknown error in find_segments_in_tr"))
         result = SimpleNamespace()
         result.prep_segment_table = []
         result.main_segment_table = []
         result.cooldown_segment_table = []
-        result.diagnostic = diagnostic
         return [], result
-    
-    tr_size = tr_result["tr_size"]
-    num_trs = tr_result["num_trs"]
-    degenerate_prep = tr_result["degenerate_prep"]
-    degenerate_cooldown = tr_result["degenerate_cooldown"]
-    
-    # Get segments in TR
-    raw_result = _find_segments_in_tr(
-        seq._cseq,
-        tr_size,
-        num_trs,
-        num_prep,
-        num_cooldown,
-        degenerate_prep,
-        degenerate_cooldown,
-        unique_table,
-    )
     
     # Build pp.Sequence for each unique segment
     unique_segments = []

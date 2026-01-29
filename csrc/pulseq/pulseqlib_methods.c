@@ -3572,20 +3572,25 @@ static void compute_trapezoid_stats(
  * @brief Compute gradient statistics for all unique gradient definitions.
  *
  * For each gradient definition and each shot, computes:
- * - slewRate: maximum |d(normalized_waveform)/dt| in 1/us
- * - energy: integral of |normalized_waveform|^2 dt in us
+ * - maxAmplitude: maximum |amplitude| across all instances (Hz/m)
+ * - slewRate: maximum |d(normalized_waveform)/dt| in 1/s
+ * - energy: integral of |normalized_waveform|^2 dt in s
  * - firstValue: first sample of normalized waveform
  * - lastValue: last sample of normalized waveform
  *
  * @param[in]     seq              Pointer to the sequence file.
  * @param[in,out] gradDefinitions  Array of gradient definitions to populate.
  * @param[in]     numUniqueGrads   Number of unique gradient definitions.
+ * @param[in]     gradTable        Array of gradient table elements with amplitude per instance.
+ * @param[in]     gradTableSize    Number of entries in the gradient table.
  * @return PULSEQLIB_OK on success, or a negative error code on failure.
  */
 static int compute_grad_statistics(
     const pulseqlib_SeqFile* seq,
     pulseqlib_GradDefinition* gradDefinitions,
-    int numUniqueGrads)
+    int numUniqueGrads,
+    const pulseqlib_GradTableElement* gradTable,
+    int gradTableSize)
 {
     int defIdx, shotIdx, i;
     float gradRasterTime_us;
@@ -3600,6 +3605,7 @@ static int compute_grad_statistics(
     int gradType;
     int hasTimeShape;
     pulseqlib_GradDefinition* gradDef;
+    float absAmp;
     
     if (!seq || !gradDefinitions || numUniqueGrads <= 0) {
         return PULSEQLIB_OK;
@@ -3621,10 +3627,27 @@ static int compute_grad_statistics(
         
         /* Initialize all stats to zero */
         for (i = 0; i < MAX_GRAD_SHOTS; ++i) {
+            gradDef->maxAmplitude[i] = 0.0f;
             gradDef->slewRate[i] = 0.0f;
             gradDef->energy[i] = 0.0f;
             gradDef->firstValue[i] = 0.0f;
             gradDef->lastValue[i] = 0.0f;
+        }
+        
+        /* Compute max amplitude per shot from gradient table */
+        if (gradTable && gradTableSize > 0) {
+            for (i = 0; i < gradTableSize; ++i) {
+                if (gradTable[i].ID == defIdx) {
+                    shotIdx = gradTable[i].shotIndex;
+                    if (shotIdx >= 0 && shotIdx < MAX_GRAD_SHOTS) {
+                        absAmp = gradTable[i].amplitude;
+                        if (absAmp < 0.0f) absAmp = -absAmp;
+                        if (absAmp > gradDef->maxAmplitude[shotIdx]) {
+                            gradDef->maxAmplitude[shotIdx] = absAmp;
+                        }
+                    }
+                }
+            }
         }
         
         if (gradType == 0) {
@@ -4669,6 +4692,21 @@ void pulseqlib_sequenceDescriptorFree(pulseqlib_SequenceDescriptor* seqDesc)
     /* Reset prep/cooldown counts */
     seqDesc->numPrepBlocks = 0;
     seqDesc->numCooldownBlocks = 0;
+
+    /* Free segment definitions */
+    if (seqDesc->segmentDefinitions) {
+        for (i = 0; i < seqDesc->numUniqueSegments; ++i) {
+            if (seqDesc->segmentDefinitions[i].uniqueBlockIndices) {
+                FREE(seqDesc->segmentDefinitions[i].uniqueBlockIndices);
+            }
+        }
+        FREE(seqDesc->segmentDefinitions);
+        seqDesc->segmentDefinitions = NULL;
+    }
+    seqDesc->numUniqueSegments = 0;
+    
+    /* Free segment table */
+    pulseqlib_segmentTableResultFree(&seqDesc->segmentTable);
 }
 
 /**
@@ -4831,7 +4869,7 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
             return result;
         }
 
-        result = compute_grad_statistics(seq, tmpGradDefs, numUniqueGrads);
+        result = compute_grad_statistics(seq, tmpGradDefs, numUniqueGrads, tmpGradTable, seq->gradLibrarySize);
         if (PULSEQLIB_FAILED(result)) {
             free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
                              tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
@@ -5197,16 +5235,15 @@ int first_repeating_segment(const int *seq, int len)
 /**
  * @brief Detect TR pattern.
  *
- * @param[in, out] trDesc Pointer to TR descriptor to fill.
+ * @param[in, out] seqDesc Pointer to sequence descriptor.
  * @param[in, out] diag Pointer to diagnostic struct (optional, can be NULL).
- * @param[in] seqDesc Pointer to sequence descriptor.
  * @return PULSEQLIB_OK on success, or negative error code on failure.
  */
 int pulseqlib_findTRInSequence(
-    pulseqlib_TRdescriptor* trDesc,
-    pulseqlib_Diagnostic* diag,
-    pulseqlib_SequenceDescriptor* seqDesc
+    pulseqlib_SequenceDescriptor* seqDesc,
+    pulseqlib_Diagnostic* diag
 ) {
+    pulseqlib_TRdescriptor* trDesc = &seqDesc->trDescriptor;
     int i, n;
     int imagingStart, imagingEnd, imagingLen;
     int* sequence_pattern;
@@ -5695,19 +5732,18 @@ static int findSegmentsInTRInternal(
     return numSegmentStarts;
 }
 
-
 /**
  * @brief Get segment definitions in TR.
  */
 int pulseqlib_findSegmentsInTR(
   const pulseqlib_SeqFile* seq, 
-  pulseqlib_TRsegment* trSegments,
-  pulseqlib_SegmentTableResult* segmentTable,
-  pulseqlib_Diagnostic* diag,
-  const pulseqlib_TRdescriptor* trDesc,
-  const int* uniqueBlockTable
+  pulseqlib_SequenceDescriptor* seqDesc,
+  pulseqlib_Diagnostic* diag
 ) {
-    pulseqlib_TRsegment* trSegmentsRaw;
+    const pulseqlib_TRdescriptor* trDesc = &seqDesc->trDescriptor;
+    pulseqlib_TRsegment* trSegments = NULL;
+    int* uniqueBlockTable = NULL;
+    pulseqlib_TRsegment* trSegmentsRaw = NULL;
     pulseqlib_Diagnostic localDiag;
     int numBlocks;
     int numSegmentsTotal;
@@ -5729,9 +5765,19 @@ int pulseqlib_findSegmentsInTR(
         pulseqlib_diagnosticInit(diag);
     }
 
-    if (!seq || !trSegments || !segmentTable || !trDesc || !uniqueBlockTable) {
+    if (!seq || !seqDesc) {
         diag->code = PULSEQLIB_ERR_NULL_POINTER;
         return 0;
+    }
+
+    /* Build uniqueBlockTable from seqDesc->blockTable */
+    uniqueBlockTable = (int*)ALLOC(seqDesc->numBlocks * sizeof(int));
+    if (!uniqueBlockTable) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        return 0;
+    }
+    for (i = 0; i < seqDesc->numBlocks; ++i) {
+        uniqueBlockTable[i] = seqDesc->blockTable[i].ID;
     }
 
     /* Initialize counts */
@@ -5746,6 +5792,16 @@ int pulseqlib_findSegmentsInTR(
     trSegmentsRaw = (pulseqlib_TRsegment*) ALLOC(numBlocks * sizeof(pulseqlib_TRsegment));
     if (!trSegmentsRaw) {
         diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        FREE(uniqueBlockTable);
+        return 0;
+    }
+
+    /* Allocate output segments array (at most numBlocks unique segments) */
+    trSegments = (pulseqlib_TRsegment*) ALLOC(numBlocks * sizeof(pulseqlib_TRsegment));
+    if (!trSegments) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        FREE(uniqueBlockTable);
+        FREE(trSegmentsRaw);
         return 0;
     }
 
@@ -5757,7 +5813,9 @@ int pulseqlib_findSegmentsInTR(
         trSize = trDesc->numPrepBlocks + trDesc->trSize;
         segResult = findSegmentsInTRInternal(seq, trSegmentsRaw, numSegmentsTotal, trStart, trSize, diag);
         if (segResult == 0 && PULSEQLIB_FAILED(diag->code)) {
+            FREE(uniqueBlockTable);
             FREE(trSegmentsRaw);
+            FREE(trSegments);
             return 0;
         }
         numPrepSegments = segResult;
@@ -5769,7 +5827,9 @@ int pulseqlib_findSegmentsInTR(
     trSize = trDesc->trSize;
     segResult = findSegmentsInTRInternal(seq, trSegmentsRaw, numSegmentsTotal, trStart, trSize, diag);
     if (segResult == 0 && PULSEQLIB_FAILED(diag->code)) {
+        FREE(uniqueBlockTable);
         FREE(trSegmentsRaw);
+        FREE(trSegments);
         return 0;
     }
     numMainSegments = segResult;
@@ -5781,7 +5841,9 @@ int pulseqlib_findSegmentsInTR(
         trSize = trDesc->numCooldownBlocks + trDesc->trSize;
         segResult = findSegmentsInTRInternal(seq, trSegmentsRaw, numSegmentsTotal, trStart, trSize, diag);
         if (segResult == 0 && PULSEQLIB_FAILED(diag->code)) {
+            FREE(uniqueBlockTable);
             FREE(trSegmentsRaw);
+            FREE(trSegments);
             return 0;
         }
         numCooldownSegments = segResult;
@@ -5791,7 +5853,9 @@ int pulseqlib_findSegmentsInTR(
     /* Check if any segments were found */
     if (numSegmentsTotal == 0) {
         diag->code = PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND;
+        FREE(uniqueBlockTable);
         FREE(trSegmentsRaw);
+        FREE(trSegments);
         return 0;
     }
 
@@ -5801,7 +5865,9 @@ int pulseqlib_findSegmentsInTR(
         if (!trSegmentsRaw[n].uniqueBlockIndices) {
             diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
             for (i = 0; i < n; ++i) FREE(trSegmentsRaw[i].uniqueBlockIndices);
+            FREE(uniqueBlockTable);
             FREE(trSegmentsRaw);
+            FREE(trSegments);
             return 0;
         }
         for (i = 0; i < trSegmentsRaw[n].numBlocks; ++i) {
@@ -5810,15 +5876,15 @@ int pulseqlib_findSegmentsInTR(
     }
 
     /* ========== Allocate output segment tables ========== */
-    segmentTable->numPrepSegments = numPrepSegments;
-    segmentTable->numMainSegments = numMainSegments;
-    segmentTable->numCooldownSegments = numCooldownSegments;
+    seqDesc->segmentTable.numPrepSegments = numPrepSegments;
+    seqDesc->segmentTable.numMainSegments = numMainSegments;
+    seqDesc->segmentTable.numCooldownSegments = numCooldownSegments;
 
-    segmentTable->prepSegmentTable = (numPrepSegments > 0) 
+    seqDesc->segmentTable.prepSegmentTable = (numPrepSegments > 0) 
         ? (int*) ALLOC(numPrepSegments * sizeof(int)) : NULL;
-    segmentTable->mainSegmentTable = (numMainSegments > 0) 
+    seqDesc->segmentTable.mainSegmentTable = (numMainSegments > 0) 
         ? (int*) ALLOC(numMainSegments * sizeof(int)) : NULL;
-    segmentTable->cooldownSegmentTable = (numCooldownSegments > 0) 
+    seqDesc->segmentTable.cooldownSegmentTable = (numCooldownSegments > 0) 
         ? (int*) ALLOC(numCooldownSegments * sizeof(int)) : NULL;
 
     /* ========== Find unique segments and fill tables ========== */
@@ -5852,21 +5918,34 @@ int pulseqlib_findSegmentsInTR(
 
         /* Store mapping in the appropriate section table */
         if (n < numPrepSegments) {
-            segmentTable->prepSegmentTable[n] = found;
+            seqDesc->segmentTable.prepSegmentTable[n] = found;
         } else if (n < numPrepSegments + numMainSegments) {
-            segmentTable->mainSegmentTable[n - numPrepSegments] = found;
+            seqDesc->segmentTable.mainSegmentTable[n - numPrepSegments] = found;
         } else {
-            segmentTable->cooldownSegmentTable[n - numPrepSegments - numMainSegments] = found;
+            seqDesc->segmentTable.cooldownSegmentTable[n - numPrepSegments - numMainSegments] = found;
         }
     }
 
-    segmentTable->numUniqueSegments = numUniqueSegments;
+    seqDesc->segmentTable.numUniqueSegments = numUniqueSegments;
+
+    /* Store results in seqDesc */
+    seqDesc->numUniqueSegments = numUniqueSegments;
+    
+    /* Reallocate trSegments to exact size and store in seqDesc */
+    seqDesc->segmentDefinitions = (pulseqlib_TRsegment*) ALLOC(numUniqueSegments * sizeof(pulseqlib_TRsegment));
+    if (seqDesc->segmentDefinitions) {
+        for (i = 0; i < numUniqueSegments; ++i) {
+            seqDesc->segmentDefinitions[i] = trSegments[i];
+        }
+    }
+    FREE(trSegments);
 
     /* Free temporary storage */
     for (n = 0; n < numSegmentsTotal; ++n) {
         FREE(trSegmentsRaw[n].uniqueBlockIndices);
     }
     FREE(trSegmentsRaw);
+    FREE(uniqueBlockTable);
 
     diag->code = PULSEQLIB_OK;
     return numUniqueSegments;

@@ -576,6 +576,7 @@ typedef struct pulseqlib_GradDefinition {
      *   physical_slew = slewRate * amplitude  -> (Hz/m)/s
      *   physical_energy = energy * amplitude² -> (Hz/m)² * s
      */
+    float maxAmplitude[MAX_GRAD_SHOTS];      /**< Max amplitude across instances (Hz/m) */
     float slewRate[MAX_GRAD_SHOTS];          /**< Max |d(waveform)/dt| (1/s) */
     float energy[MAX_GRAD_SHOTS];            /**< Integral of waveform² dt (s) */
     float firstValue[MAX_GRAD_SHOTS];        /**< First sample of normalized waveform (dimensionless, range -1 to 1) */
@@ -649,6 +650,33 @@ typedef struct pulseqlib_TRdescriptor {
 
 #define PULSEQLIB_TR_DESCRIPTOR_INIT {0, 0, 0, 0, 0, 0, 0, 0}
 
+
+typedef struct pulseqlib_TRsegment {
+    int startBlock; /**< Starting block index of the TR segment */
+    int numBlocks; /**< Number of blocks in the TR segment */
+    int* uniqueBlockIndices; /**< Pointer to array of unique block indices in the segment */
+} pulseqlib_TRsegment;
+
+#define PULSEQLIB_TR_SEGMENT_INIT {0, 0, NULL}
+
+typedef struct pulseqlib_SegmentTableResult {
+    int numUniqueSegments;       /**< Total number of unique segment definitions */
+    
+    /* Prep section */
+    int numPrepSegments;         /**< Number of segments in prep section */
+    int* prepSegmentTable;       /**< Maps prep segment index → unique segment ID */
+    
+    /* Main TR section */
+    int numMainSegments;         /**< Number of segments in main TR */
+    int* mainSegmentTable;       /**< Maps main segment index → unique segment ID */
+    
+    /* Cooldown section */
+    int numCooldownSegments;     /**< Number of segments in cooldown section */
+    int* cooldownSegmentTable;   /**< Maps cooldown segment index → unique segment ID */
+} pulseqlib_SegmentTableResult;
+
+#define PULSEQLIB_SEGMENT_TABLE_RESULT_INIT {0, 0, NULL, 0, NULL, 0, NULL}
+
 typedef struct pulseqlib_SequenceDescriptor {
     int numPrepBlocks; /**< Number of preparation blocks before the main sequence */
     int numCooldownBlocks; /**< Number of cooldown blocks after the main sequence */
@@ -688,32 +716,18 @@ typedef struct pulseqlib_SequenceDescriptor {
     /* Shape library (decompressed waveforms) */
     int numShapes; /**< Number of shapes */
     pulseqlib_ShapeArbitrary* shapes; /**< Array of decompressed shape waveforms */
+
+    /* TR descriptor (populated by pulseqlib_findTRInSequence) */
+    pulseqlib_TRdescriptor trDescriptor; /**< TR structure info */
+
+    /* Segment descriptor (populated by pulseqlib_findSegmentsInTR) */
+    int numUniqueSegments; /**< Number of unique segments */
+    pulseqlib_TRsegment* segmentDefinitions; /**< Array of unique segment definitions */
+    pulseqlib_SegmentTableResult segmentTable; /**< Segment table mapping */
     
 } pulseqlib_SequenceDescriptor;
 
-#define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT {0, 0, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL}
-
-typedef struct pulseqlib_TRsegment {
-    int startBlock; /**< Starting block index of the TR segment */
-    int numBlocks; /**< Number of blocks in the TR segment */
-    int* uniqueBlockIndices; /**< Pointer to array of unique block indices in the segment */
-} pulseqlib_TRsegment;
-
-typedef struct pulseqlib_SegmentTableResult {
-    int numUniqueSegments;       /**< Total number of unique segment definitions */
-    
-    /* Prep section */
-    int numPrepSegments;         /**< Number of segments in prep section */
-    int* prepSegmentTable;       /**< Maps prep segment index → unique segment ID */
-    
-    /* Main TR section */
-    int numMainSegments;         /**< Number of segments in main TR */
-    int* mainSegmentTable;       /**< Maps main segment index → unique segment ID */
-    
-    /* Cooldown section */
-    int numCooldownSegments;     /**< Number of segments in cooldown section */
-    int* cooldownSegmentTable;   /**< Maps cooldown segment index → unique segment ID */
-} pulseqlib_SegmentTableResult;
+#define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT {0, 0, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, PULSEQLIB_TR_DESCRIPTOR_INIT, 0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT}
 
 
 #endif /* PULSEQLIB_H */

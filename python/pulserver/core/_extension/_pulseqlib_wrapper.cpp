@@ -111,8 +111,9 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile) {
         throw std::runtime_error("SeqFile pointer is null");
     }
 
-    // Initialize sequence descriptor (all pointers NULL, counts 0)
-    pulseqlib_SequenceDescriptor seqDesc = PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT;
+    // Initialize sequence descriptor with memset (C++ compatible)
+    pulseqlib_SequenceDescriptor seqDesc;
+    memset(&seqDesc, 0, sizeof(seqDesc));
 
     // Call getUniqueBlocks - it handles all internal allocation
     int result = pulseqlib_getUniqueBlocks(seqfile.seq, &seqDesc);
@@ -228,6 +229,8 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile) {
             // Export arrays for multi-shot gradients
             std::vector<int> shotShapeIDs(seqDesc.gradDefinitions[i].shotShapeIDs, 
                                            seqDesc.gradDefinitions[i].shotShapeIDs + seqDesc.gradDefinitions[i].numShots);
+            std::vector<float> maxAmplitudes(seqDesc.gradDefinitions[i].maxAmplitude,
+                                              seqDesc.gradDefinitions[i].maxAmplitude + seqDesc.gradDefinitions[i].numShots);
             std::vector<float> slewRates(seqDesc.gradDefinitions[i].slewRate,
                                           seqDesc.gradDefinitions[i].slewRate + seqDesc.gradDefinitions[i].numShots);
             std::vector<float> energies(seqDesc.gradDefinitions[i].energy,
@@ -236,6 +239,7 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile) {
                                             seqDesc.gradDefinitions[i].firstValue + seqDesc.gradDefinitions[i].numShots);
             std::vector<float> lastValues(seqDesc.gradDefinitions[i].lastValue,
                                            seqDesc.gradDefinitions[i].lastValue + seqDesc.gradDefinitions[i].numShots);
+            entry["max_amplitude"] = maxAmplitudes;
             entry["slew_rate"] = slewRates;
             entry["energy"] = energies;
             if (seqDesc.gradDefinitions[i].type != 0) {
@@ -296,85 +300,44 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile) {
     return output;
 }
 
-static py::dict _find_tr_in_sequence(
-    std::vector<int>& unique_block_table,
-    std::vector<int>& block_durations_us,  // Now indexed by unique definition ID
-    std::vector<int>& pure_delay_block,
-    const int numPrep,
-    const int numCooldown
-) {
-    pulseqlib_TRdescriptor trDesc;
+static py::dict _find_tr_in_sequence(_PulserverSeqFile& seqfile) {
+    if (!seqfile.seq) {
+        throw std::runtime_error("SeqFile pointer is null");
+    }
+
+    // Initialize sequence descriptor with memset (C++ compatible)
+    pulseqlib_SequenceDescriptor seqDesc;
+    memset(&seqDesc, 0, sizeof(seqDesc));
+
+    // Step 1: Call getUniqueBlocks
+    int result = pulseqlib_getUniqueBlocks(seqfile.seq, &seqDesc);
+    
+    py::dict output;
+    
+    if (PULSEQLIB_FAILED(result)) {
+        output["success"] = false;
+        output["error"] = pulseqlib_getErrorMessage(result);
+        output["error_code"] = result;
+        return output;
+    }
+
+    // Step 2: Call findTRInSequence
     pulseqlib_Diagnostic diag;
     pulseqlib_diagnosticInit(&diag);
     
-    const int numBlocks = (int)unique_block_table.size();
-    const int numUniqueDefs = (int)block_durations_us.size();
+    int code = pulseqlib_findTRInSequence(&seqDesc, &diag);
     
-    py::dict result;
+    output["success"] = PULSEQLIB_SUCCEEDED(code);
+    output["tr_size"] = seqDesc.trDescriptor.trSize;
+    output["num_trs"] = seqDesc.trDescriptor.numTRs;
+    output["degenerate_prep"] = seqDesc.trDescriptor.degeneratePrep;
+    output["degenerate_cooldown"] = seqDesc.trDescriptor.degenerateCooldown;
+    output["num_prep_blocks"] = seqDesc.trDescriptor.numPrepBlocks;
+    output["num_prep_trs"] = seqDesc.trDescriptor.numPrepTRs;
+    output["num_cooldown_blocks"] = seqDesc.trDescriptor.numCooldownBlocks;
+    output["num_cooldown_trs"] = seqDesc.trDescriptor.numCooldownTRs;
     
-    if (numBlocks <= 0) {
-        diag.code = PULSEQLIB_ERR_TR_NO_BLOCKS;
-        result["success"] = false;
-        result["tr_size"] = 0;
-        result["num_trs"] = 0;
-        result["degenerate_prep"] = 0;
-        result["degenerate_cooldown"] = 0;
-    } else {
-        // Build a minimal SequenceDescriptor from the input vectors
-        pulseqlib_SequenceDescriptor seqDesc;
-        memset(&seqDesc, 0, sizeof(seqDesc));
-        
-        seqDesc.numBlocks = numBlocks;
-        seqDesc.numPrepBlocks = numPrep;
-        seqDesc.numCooldownBlocks = numCooldown;
-        seqDesc.numUniqueBlocks = numUniqueDefs;
-        
-        // Allocate block table (one per block)
-        seqDesc.blockTable = (pulseqlib_BlockTableElement*)ALLOC(numBlocks * sizeof(pulseqlib_BlockTableElement));
-        
-        // Allocate block definitions (one per unique definition)
-        seqDesc.blockDefinitions = (pulseqlib_BlockDefinition*)ALLOC(numUniqueDefs * sizeof(pulseqlib_BlockDefinition));
-        
-        if (!seqDesc.blockTable || !seqDesc.blockDefinitions) {
-            FREE(seqDesc.blockTable);
-            FREE(seqDesc.blockDefinitions);
-            diag.code = PULSEQLIB_ERR_ALLOC_FAILED;
-            result["success"] = false;
-            result["tr_size"] = 0;
-            result["num_trs"] = 0;
-            result["degenerate_prep"] = 0;
-            result["degenerate_cooldown"] = 0;
-        } else {
-            // Fill block table from input vectors (per-block data)
-            for (int i = 0; i < numBlocks; ++i) {
-                seqDesc.blockTable[i].ID = unique_block_table[i];
-                seqDesc.blockTable[i].pureDelayFlag = pure_delay_block[i];
-            }
-            
-            // Fill block definitions from durations (per-unique-definition data)
-            for (int i = 0; i < numUniqueDefs; ++i) {
-                seqDesc.blockDefinitions[i].duration_us = block_durations_us[i];
-            }
-            
-            int code = pulseqlib_findTRInSequence(
-                &trDesc,
-                &diag,
-                &seqDesc
-            );
-            
-            result["success"] = PULSEQLIB_SUCCEEDED(code);
-            result["tr_size"] = trDesc.trSize;
-            result["num_trs"] = trDesc.numTRs;
-            result["degenerate_prep"] = trDesc.degeneratePrep;
-            result["degenerate_cooldown"] = trDesc.degenerateCooldown;
-            
-            // Free allocated memory
-            FREE(seqDesc.blockTable);
-            FREE(seqDesc.blockDefinitions);
-        }
-    }
-    
-    // Always include diagnostic info
+    // Include diagnostic info
     py::dict diagDict;
     diagDict["code"] = diag.code;
     diagDict["message"] = pulseqlib_getErrorMessage(diag.code);
@@ -385,80 +348,86 @@ static py::dict _find_tr_in_sequence(
     diagDict["imaging_region_length"] = diag.imagingRegionLength;
     diagDict["candidate_pattern_length"] = diag.candidatePatternLength;
     diagDict["mismatch_position"] = diag.mismatchPosition;
-    result["diagnostic"] = diagDict;
+    output["diagnostic"] = diagDict;
     
-    return result;
+    // Free allocated memory
+    pulseqlib_sequenceDescriptorFree(&seqDesc);
+    
+    return output;
 }
 
-static py::dict _find_segments_in_tr(
-    _PulserverSeqFile& seqfile,
-    const int trSize,
-    const int numTRs,
-    const int numPrepBlocks,
-    const int numCooldownBlocks,
-    const int degeneratePrep,
-    const int degenerateCooldown,
-    std::vector<int>& unique_block_table
-) {
+static py::dict _find_segments_in_tr(_PulserverSeqFile& seqfile) {
     if (!seqfile.seq) {
         throw std::runtime_error("SeqFile pointer is null");
     }
 
-    // Build TR descriptor from input parameters
-    pulseqlib_TRdescriptor trDesc;
-    trDesc.trSize = trSize;
-    trDesc.numTRs = numTRs;
-    trDesc.numPrepBlocks = numPrepBlocks;
-    trDesc.numPrepTRs = (numPrepBlocks > 0 && trSize > 0) ? (numPrepBlocks / trSize) : 0;
-    trDesc.numCooldownBlocks = numCooldownBlocks;
-    trDesc.numCooldownTRs = (numCooldownBlocks > 0 && trSize > 0) ? (numCooldownBlocks / trSize) : 0;
-    trDesc.degeneratePrep = degeneratePrep;
-    trDesc.degenerateCooldown = degenerateCooldown;
+    // Initialize sequence descriptor with memset (C++ compatible)
+    pulseqlib_SequenceDescriptor seqDesc;
+    memset(&seqDesc, 0, sizeof(seqDesc));
 
-    // Maximum possible segments: one per block in TR + prep + cooldown
-    const int maxSegments = trSize + numPrepBlocks + numCooldownBlocks;
-    if (maxSegments <= 0) {
-        py::dict result;
-        result["unique_segments"] = py::list();
-        result["prep_segment_table"] = std::vector<int>();
-        result["main_segment_table"] = std::vector<int>();
-        result["cooldown_segment_table"] = std::vector<int>();
-        return result;
+    // Step 1: Call getUniqueBlocks
+    int result = pulseqlib_getUniqueBlocks(seqfile.seq, &seqDesc);
+    
+    py::dict output;
+    
+    if (PULSEQLIB_FAILED(result)) {
+        output["success"] = false;
+        output["error"] = pulseqlib_getErrorMessage(result);
+        output["error_code"] = result;
+        return output;
     }
 
-    // Allocate output arrays
-    std::vector<pulseqlib_TRsegment> trSegments(maxSegments);
-    pulseqlib_SegmentTableResult segmentTable = {0};
+    // Step 2: Call findTRInSequence
     pulseqlib_Diagnostic diag;
     pulseqlib_diagnosticInit(&diag);
-
-    // Initialize segment pointers to NULL
-    for (int i = 0; i < maxSegments; ++i) {
-        trSegments[i].uniqueBlockIndices = nullptr;
+    
+    int code = pulseqlib_findTRInSequence(&seqDesc, &diag);
+    
+    if (PULSEQLIB_FAILED(code)) {
+        output["success"] = false;
+        output["error"] = pulseqlib_getErrorMessage(code);
+        output["error_code"] = code;
+        
+        py::dict diagDict;
+        diagDict["code"] = diag.code;
+        diagDict["message"] = pulseqlib_getErrorMessage(diag.code);
+        diagDict["hint"] = pulseqlib_getErrorHint(diag.code);
+        output["diagnostic"] = diagDict;
+        
+        pulseqlib_sequenceDescriptorFree(&seqDesc);
+        return output;
     }
 
-    // Call the C function
-    int numUniqueSegments = pulseqlib_findSegmentsInTR(
-        seqfile.seq,
-        trSegments.data(),
-        &segmentTable,
-        &diag,
-        &trDesc,
-        unique_block_table.data()
-    );
+    // Step 3: Call findSegmentsInTR
+    int numUniqueSegments = pulseqlib_findSegmentsInTR(seqfile.seq, &seqDesc, &diag);
+
+    if (numUniqueSegments == 0 && PULSEQLIB_FAILED(diag.code)) {
+        output["success"] = false;
+        output["unique_segments"] = py::list();
+        output["prep_segment_table"] = std::vector<int>();
+        output["main_segment_table"] = std::vector<int>();
+        output["cooldown_segment_table"] = std::vector<int>();
+        output["error_code"] = diag.code;
+        output["error"] = pulseqlib_getErrorMessage(diag.code);
+        pulseqlib_sequenceDescriptorFree(&seqDesc);
+        return output;
+    }
+
+    output["success"] = true;
 
     // Convert unique segments to Python-friendly format
     py::list uniqueSegmentsList;
     for (int i = 0; i < numUniqueSegments; ++i) {
         py::dict segmentDict;
-        segmentDict["start_block"] = trSegments[i].startBlock;
-        segmentDict["num_blocks"] = trSegments[i].numBlocks;
+        segmentDict["start_block"] = seqDesc.segmentDefinitions[i].startBlock;
+        segmentDict["num_blocks"] = seqDesc.segmentDefinitions[i].numBlocks;
         
         std::vector<int> indices;
-        if (trSegments[i].uniqueBlockIndices && trSegments[i].numBlocks > 0) {
+        if (seqDesc.segmentDefinitions[i].uniqueBlockIndices && 
+            seqDesc.segmentDefinitions[i].numBlocks > 0) {
             indices.assign(
-                trSegments[i].uniqueBlockIndices,
-                trSegments[i].uniqueBlockIndices + trSegments[i].numBlocks
+                seqDesc.segmentDefinitions[i].uniqueBlockIndices,
+                seqDesc.segmentDefinitions[i].uniqueBlockIndices + seqDesc.segmentDefinitions[i].numBlocks
             );
         }
         segmentDict["unique_block_indices"] = indices;
@@ -470,41 +439,35 @@ static py::dict _find_segments_in_tr(
     std::vector<int> mainTable;
     std::vector<int> cooldownTable;
 
-    if (segmentTable.prepSegmentTable && segmentTable.numPrepSegments > 0) {
+    if (seqDesc.segmentTable.prepSegmentTable && seqDesc.segmentTable.numPrepSegments > 0) {
         prepTable.assign(
-            segmentTable.prepSegmentTable,
-            segmentTable.prepSegmentTable + segmentTable.numPrepSegments
+            seqDesc.segmentTable.prepSegmentTable,
+            seqDesc.segmentTable.prepSegmentTable + seqDesc.segmentTable.numPrepSegments
         );
     }
-    if (segmentTable.mainSegmentTable && segmentTable.numMainSegments > 0) {
+    if (seqDesc.segmentTable.mainSegmentTable && seqDesc.segmentTable.numMainSegments > 0) {
         mainTable.assign(
-            segmentTable.mainSegmentTable,
-            segmentTable.mainSegmentTable + segmentTable.numMainSegments
+            seqDesc.segmentTable.mainSegmentTable,
+            seqDesc.segmentTable.mainSegmentTable + seqDesc.segmentTable.numMainSegments
         );
     }
-    if (segmentTable.cooldownSegmentTable && segmentTable.numCooldownSegments > 0) {
+    if (seqDesc.segmentTable.cooldownSegmentTable && seqDesc.segmentTable.numCooldownSegments > 0) {
         cooldownTable.assign(
-            segmentTable.cooldownSegmentTable,
-            segmentTable.cooldownSegmentTable + segmentTable.numCooldownSegments
+            seqDesc.segmentTable.cooldownSegmentTable,
+            seqDesc.segmentTable.cooldownSegmentTable + seqDesc.segmentTable.numCooldownSegments
         );
     }
-
-    // Free allocated memory
-    for (int i = 0; i < numUniqueSegments; ++i) {
-        if (trSegments[i].uniqueBlockIndices) {
-            FREE(trSegments[i].uniqueBlockIndices);
-        }
-    }
-    pulseqlib_segmentTableResultFree(&segmentTable);
 
     // Build result dictionary
-    py::dict result;
-    result["unique_segments"] = uniqueSegmentsList;
-    result["prep_segment_table"] = prepTable;
-    result["main_segment_table"] = mainTable;
-    result["cooldown_segment_table"] = cooldownTable;
+    output["unique_segments"] = uniqueSegmentsList;
+    output["prep_segment_table"] = prepTable;
+    output["main_segment_table"] = mainTable;
+    output["cooldown_segment_table"] = cooldownTable;
 
-    return result;
+    // Free all allocated memory
+    pulseqlib_sequenceDescriptorFree(&seqDesc);
+
+    return output;
 }
 
 PYBIND11_MODULE(_pulseqlib_wrapper, m) {
@@ -532,52 +495,44 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
           )pbdoc");
 
     m.def("_find_tr_in_sequence",
-      &_find_tr_in_sequence,
-      py::arg("unique_block_table"),
-      py::arg("block_durations_us"),
-      py::arg("pure_delay_block"),
-      py::arg("numPrep"),
-      py::arg("numCooldown"));
+          &_find_tr_in_sequence,
+          py::arg("seqfile"),
+          R"pbdoc(
+            Find TR pattern in a sequence.
+            
+            Internally calls getUniqueBlocks then findTRInSequence.
+            
+            Parameters
+            ----------
+            seqfile : _PulserverSeqFile
+                The sequence file object.
+                
+            Returns
+            -------
+            dict
+                Dictionary with TR descriptor fields and diagnostic info.
+          )pbdoc");
 
     m.def("_find_segments_in_tr",
-      &_find_segments_in_tr,
-      py::arg("seqfile"),
-      py::arg("trSize"),
-      py::arg("numTRs"),
-      py::arg("numPrepBlocks"),
-      py::arg("numCooldownBlocks"),
-      py::arg("degeneratePrep"),
-      py::arg("degenerateCooldown"),
-      py::arg("unique_block_table"),
-      R"pbdoc(
-        Get segment definitions within a TR.
+          &_find_segments_in_tr,
+          py::arg("seqfile"),
+          R"pbdoc(
+            Get segment definitions within a TR.
+            
+            Internally calls getUniqueBlocks, findTRInSequence, then findSegmentsInTR.
 
-        Parameters
-        ----------
-        seqfile : _PulserverSeqFile
-            The sequence file object.
-        trSize : int
-            Size of the TR in number of blocks.
-        numTRs : int
-            Number of TRs in the sequence.
-        numPrepBlocks : int
-            Number of preparation blocks before imaging.
-        numCooldownBlocks : int
-            Number of cooldown blocks after imaging.
-        degeneratePrep : int
-            Non-zero if preparation blocks are degenerate (identical to main TR).
-        degenerateCooldown : int
-            Non-zero if cooldown blocks are degenerate (identical to main TR).
-        unique_block_table : list[int]
-            Array mapping each block to its unique definition index.
+            Parameters
+            ----------
+            seqfile : _PulserverSeqFile
+                The sequence file object.
 
-        Returns
-        -------
-        dict
-            Dictionary with keys:
-            - 'unique_segments': List of dicts with 'start_block', 'num_blocks', 'unique_block_indices'
-            - 'prep_segment_table': List mapping prep segments to unique segment IDs
-            - 'main_segment_table': List mapping main TR segments to unique segment IDs  
-            - 'cooldown_segment_table': List mapping cooldown segments to unique segment IDs
-      )pbdoc");
+            Returns
+            -------
+            dict
+                Dictionary with keys:
+                - 'unique_segments': List of dicts with 'start_block', 'num_blocks', 'unique_block_indices'
+                - 'prep_segment_table': List mapping prep segments to unique segment IDs
+                - 'main_segment_table': List mapping main TR segments to unique segment IDs  
+                - 'cooldown_segment_table': List mapping cooldown segments to unique segment IDs
+          )pbdoc");
 }

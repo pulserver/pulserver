@@ -86,18 +86,14 @@ void pulseqlib_diagnosticInit(pulseqlib_Diagnostic* diag);
 int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDescriptor* seqDesc);
 
 int pulseqlib_findTRInSequence(
-  pulseqlib_TRdescriptor* trDesc,
-  pulseqlib_Diagnostic* diag,
-  pulseqlib_SequenceDescriptor* seqDesc
+  pulseqlib_SequenceDescriptor* seqDesc,
+  pulseqlib_Diagnostic* diag
 );
 
 int pulseqlib_findSegmentsInTR(
-  const pulseqlib_SeqFile* seq, 
-  pulseqlib_TRsegment* trSegments,
-  pulseqlib_SegmentTableResult* segmentTable,
-  pulseqlib_Diagnostic* diag,
-  const pulseqlib_TRdescriptor* trDesc,
-  const int* uniqueBlockTable
+  const pulseqlib_SeqFile* seq,
+  pulseqlib_SequenceDescriptor* seqDesc,
+  pulseqlib_Diagnostic* diag
 );
 
 void pulseqlib_segmentTableResultFree(pulseqlib_SegmentTableResult* result);
