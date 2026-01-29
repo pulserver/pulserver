@@ -5745,7 +5745,7 @@ static int findSegmentsInTRInternal(
 }
 
 /**
- * @brief Strip leading and trailing pure delay blocks from raw segments.
+ * @brief Strip leading and trailing pure delay blocks from ALL segments.
  *
  * For each input segment, this function:
  * 1. Creates individual 1-block segments for EACH leading pure delay
@@ -5773,6 +5773,10 @@ static int stripPureDelaysFromSegments(
     int coreStart, coreEnd, coreSize;
     const int* indices;
     
+    if (numRawSegments == 0) {
+        return 0;
+    }
+    
     for (segIdx = 0; segIdx < numRawSegments; ++segIdx) {
         numBlocks = rawSegments[segIdx].numBlocks;
         indices = rawSegments[segIdx].uniqueBlockIndices;
@@ -5782,9 +5786,10 @@ static int stripPureDelaysFromSegments(
         }
         
         /* Count leading pure delays */
+        /* Count leading pure delays */
         leadingDelays = 0;
         for (i = 0; i < numBlocks; ++i) {
-            if (blockTable[indices[i]].pureDelayFlag) {
+            if (blockTable[rawSegments[segIdx].startBlock + i].pureDelayFlag) {
                 leadingDelays++;
             } else {
                 break;
@@ -5794,7 +5799,7 @@ static int stripPureDelaysFromSegments(
         /* Count trailing pure delays (don't overlap with leading) */
         trailingDelays = 0;
         for (i = numBlocks - 1; i >= leadingDelays; --i) {
-            if (blockTable[indices[i]].pureDelayFlag) {
+            if (blockTable[rawSegments[segIdx].startBlock + i].pureDelayFlag) {
                 trailingDelays++;
             } else {
                 break;
@@ -5808,29 +5813,29 @@ static int stripPureDelaysFromSegments(
         /* Create individual segments for EACH leading pure delay */
         for (i = 0; i < leadingDelays; ++i) {
             if (numOut >= maxOutSegments) {
-                return -1; /* Error: exceeded capacity */
+                return -1;
             }
             outSegments[numOut].startBlock = rawSegments[segIdx].startBlock + i;
             outSegments[numOut].numBlocks = 1;
             outSegments[numOut].uniqueBlockIndices = (int*)ALLOC(sizeof(int));
             if (!outSegments[numOut].uniqueBlockIndices) {
-                return -1; /* Allocation failed */
+                return -1;
             }
             outSegments[numOut].uniqueBlockIndices[0] = indices[i];
             numOut++;
         }
         
-        /* Create segment for core (non-pure-delay) blocks, if any */
+        /* Create segment for core blocks, if any */
         if (coreEnd > coreStart) {
             coreSize = coreEnd - coreStart;
             if (numOut >= maxOutSegments) {
-                return -1; /* Error: exceeded capacity */
+                return -1;
             }
             outSegments[numOut].startBlock = rawSegments[segIdx].startBlock + coreStart;
             outSegments[numOut].numBlocks = coreSize;
             outSegments[numOut].uniqueBlockIndices = (int*)ALLOC(coreSize * sizeof(int));
             if (!outSegments[numOut].uniqueBlockIndices) {
-                return -1; /* Allocation failed */
+                return -1;
             }
             for (i = 0; i < coreSize; ++i) {
                 outSegments[numOut].uniqueBlockIndices[i] = indices[coreStart + i];
@@ -5841,13 +5846,13 @@ static int stripPureDelaysFromSegments(
         /* Create individual segments for EACH trailing pure delay */
         for (i = 0; i < trailingDelays; ++i) {
             if (numOut >= maxOutSegments) {
-                return -1; /* Error: exceeded capacity */
+                return -1;
             }
             outSegments[numOut].startBlock = rawSegments[segIdx].startBlock + coreEnd + i;
             outSegments[numOut].numBlocks = 1;
             outSegments[numOut].uniqueBlockIndices = (int*)ALLOC(sizeof(int));
             if (!outSegments[numOut].uniqueBlockIndices) {
-                return -1; /* Allocation failed */
+                return -1;
             }
             outSegments[numOut].uniqueBlockIndices[0] = indices[coreEnd + i];
             numOut++;
