@@ -4379,93 +4379,6 @@ static int is_selective_excitation_block(const pulseqlib_BlockDefinition* blockD
 }
 
 /**
- * @brief Validate selective excitation blocks for frequency modulation compatibility.
- *
- * For blocks containing both RF and gradients (spatially selective excitation),
- * this function checks that:
- * 1. Gradient amplitude does not vary across block instances
- * 2. No rotation extension is present on any instance
- * 3. PMC is not enabled globally
- *
- * @param[in] seq           Pointer to the sequence file.
- * @param[in] seqDesc       Pointer to the sequence descriptor.
- * @return PULSEQLIB_OK on success, or a negative error code on failure.
- */
-static int validate_selective_excitation_blocks(
-    const pulseqlib_SeqFile* seq,
-    const pulseqlib_SequenceDescriptor* seqDesc)
-{
-    int defIdx, blockIdx;
-    int pmcEnabled;
-    int gxIdx, gyIdx, gzIdx;
-    float refAmpGx, refAmpGy, refAmpGz;
-    int hasRefAmp;
-    
-    if (!seq || !seqDesc) {
-        return PULSEQLIB_ERR_NULL_POINTER;
-    }
-    
-    /* Check if PMC is enabled globally */
-    pmcEnabled = is_pmc_enabled(seq);
-    
-    /* Iterate over unique block definitions */
-    for (defIdx = 0; defIdx < seqDesc->numUniqueBlocks; ++defIdx) {
-        const pulseqlib_BlockDefinition* blockDef = &seqDesc->blockDefinitions[defIdx];
-        
-        /* Skip non-selective excitation blocks */
-        if (!is_selective_excitation_block(blockDef)) {
-            continue;
-        }
-                
-        /* Initialize reference amplitudes */
-        hasRefAmp = 0;
-        refAmpGx = 0.0f;
-        refAmpGy = 0.0f;
-        refAmpGz = 0.0f;
-        
-        /* Scan all block instances to check for amplitude variation and rotation */
-        for (blockIdx = 0; blockIdx < seqDesc->numBlocks; ++blockIdx) {
-            const pulseqlib_BlockTableElement* blockElem = &seqDesc->blockTable[blockIdx];
-            float ampGx, ampGy, ampGz;
-            
-            /* Skip blocks that don't match this definition */
-            if (blockElem->ID != defIdx) {
-                continue;
-            }
-            
-            /* Check for rotation extension */
-            if (blockElem->rotationID >= 0) {
-                return PULSEQLIB_ERR_SELEXC_ROTATION;
-            }
-            
-            /* Get gradient amplitudes for this block instance */
-            gxIdx = (int)seq->blockLibrary[blockIdx][2] - 1;
-            gyIdx = (int)seq->blockLibrary[blockIdx][3] - 1;
-            gzIdx = (int)seq->blockLibrary[blockIdx][4] - 1;
-            
-            ampGx = (gxIdx >= 0 && gxIdx < seq->gradLibrarySize) ? seq->gradLibrary[gxIdx][1] : 0.0f;
-            ampGy = (gyIdx >= 0 && gyIdx < seq->gradLibrarySize) ? seq->gradLibrary[gyIdx][1] : 0.0f;
-            ampGz = (gzIdx >= 0 && gzIdx < seq->gradLibrarySize) ? seq->gradLibrary[gzIdx][1] : 0.0f;
-            
-            if (!hasRefAmp) {
-                /* Store first instance as reference */
-                refAmpGx = ampGx;
-                refAmpGy = ampGy;
-                refAmpGz = ampGz;
-                hasRefAmp = 1;
-            } else {
-                /* Compare with reference - check if amplitudes differ */
-                if (ampGx != refAmpGx || ampGy != refAmpGy || ampGz != refAmpGz) {
-                    return PULSEQLIB_ERR_SELEXC_GRAD_SCALING;
-                }
-            }
-        }
-    }
-    
-    return PULSEQLIB_OK;
-}
-
-/**
  * @brief Copy and convert rotation library from quaternions to matrices.
  *
  * @param[in]  seq      Pointer to the sequence file.
@@ -5096,12 +5009,6 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
     }
 
     result = copy_shapes_library(seq, seqDesc);
-    if (PULSEQLIB_FAILED(result)) {
-        pulseqlib_sequenceDescriptorFree(seqDesc);
-        return result;
-    }
-
-    result = validate_selective_excitation_blocks(seq, seqDesc);
     if (PULSEQLIB_FAILED(result)) {
         pulseqlib_sequenceDescriptorFree(seqDesc);
         return result;
@@ -5888,6 +5795,8 @@ int pulseqlib_findSegmentsInTR(
     int segResult;
     int offset;
     int maxExpandedSegments;
+    int pureDelayUniqueIdx;
+    int isPureDelay;
 
     /* Use local diag if caller doesn't want diagnostics */
     if (!diag) {
@@ -6065,92 +5974,88 @@ int pulseqlib_findSegmentsInTR(
         return 0;
     }
 
-        /* ========== Find unique segments and fill tables ========== */
+    /* ========== Find unique segments and fill tables ========== */
     /* 
      * Special handling for pure delay segments: ALL pure delay segments 
      * are considered identical regardless of their block ID or duration.
      */
     numUniqueSegments = 0;
-    
-    {
-        int pureDelayUniqueIdx = -1;
-        int isPureDelay;
+    pureDelayUniqueIdx = -1;
         
-        for (n = 0; n < numSegmentsTotal; ++n) {
-            /* Check if this is a pure delay segment (single block that is pure delay) */
-            isPureDelay = (trSegmentsExpanded[n].numBlocks == 1 && 
-                          seqDesc->blockTable[trSegmentsExpanded[n].uniqueBlockIndices[0]].pureDelayFlag);
-            
-            if (isPureDelay) {
-                if (pureDelayUniqueIdx == -1) {
-                    /* Create the unique pure delay segment (use first occurrence) */
-                    trSegments[numUniqueSegments].numBlocks = 1;
-                    trSegments[numUniqueSegments].startBlock = trSegmentsExpanded[n].startBlock;
-                    trSegments[numUniqueSegments].uniqueBlockIndices = (int*)ALLOC(sizeof(int));
-                    if (!trSegments[numUniqueSegments].uniqueBlockIndices) {
-                        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
-                        for (i = 0; i < numUniqueSegments; ++i) FREE(trSegments[i].uniqueBlockIndices);
-                        for (i = 0; i < numSegmentsTotal; ++i) FREE(trSegmentsExpanded[i].uniqueBlockIndices);
-                        FREE(trSegments);
-                        FREE(trSegmentsExpanded);
-                        return 0;
-                    }
-                    trSegments[numUniqueSegments].uniqueBlockIndices[0] = trSegmentsExpanded[n].uniqueBlockIndices[0];
-                    pureDelayUniqueIdx = numUniqueSegments;
-                    numUniqueSegments++;
+    for (n = 0; n < numSegmentsTotal; ++n) {
+        /* Check if this is a pure delay segment (single block that is pure delay) */
+        isPureDelay = (trSegmentsExpanded[n].numBlocks == 1 && 
+                        seqDesc->blockTable[trSegmentsExpanded[n].startBlock].pureDelayFlag);
+        
+        if (isPureDelay) {
+            if (pureDelayUniqueIdx == -1) {
+                /* Create the unique pure delay segment (use first occurrence) */
+                trSegments[numUniqueSegments].numBlocks = 1;
+                trSegments[numUniqueSegments].startBlock = trSegmentsExpanded[n].startBlock;
+                trSegments[numUniqueSegments].uniqueBlockIndices = (int*)ALLOC(sizeof(int));
+                if (!trSegments[numUniqueSegments].uniqueBlockIndices) {
+                    diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+                    for (i = 0; i < numUniqueSegments; ++i) FREE(trSegments[i].uniqueBlockIndices);
+                    for (i = 0; i < numSegmentsTotal; ++i) FREE(trSegmentsExpanded[i].uniqueBlockIndices);
+                    FREE(trSegments);
+                    FREE(trSegmentsExpanded);
+                    return 0;
                 }
-                found = pureDelayUniqueIdx;
-            } else {
-                /* Non-pure-delay segment: use normal deduplication */
-                found = -1;
-                for (i = 0; i < numUniqueSegments; ++i) {
-                    /* Skip the pure delay segment in comparison */
-                    if (i == pureDelayUniqueIdx) {
-                        continue;
-                    }
-                    if (trSegmentsExpanded[n].numBlocks == trSegments[i].numBlocks &&
-                        array_equal(trSegmentsExpanded[n].uniqueBlockIndices, 
-                                   trSegments[i].uniqueBlockIndices, 
-                                   trSegmentsExpanded[n].numBlocks)) {
-                        found = i;
-                        break;
-                    }
+                trSegments[numUniqueSegments].uniqueBlockIndices[0] = trSegmentsExpanded[n].uniqueBlockIndices[0];
+                pureDelayUniqueIdx = numUniqueSegments;
+                numUniqueSegments++;
+            }
+            found = pureDelayUniqueIdx;
+        } else {
+            /* Non-pure-delay segment: use normal deduplication */
+            found = -1;
+            for (i = 0; i < numUniqueSegments; ++i) {
+                /* Skip the pure delay segment in comparison */
+                if (i == pureDelayUniqueIdx) {
+                    continue;
                 }
-
-                if (found == -1) {
-                    /* New unique segment */
-                    trSegments[numUniqueSegments].numBlocks = trSegmentsExpanded[n].numBlocks;
-                    trSegments[numUniqueSegments].startBlock = trSegmentsExpanded[n].startBlock;
-                    trSegments[numUniqueSegments].uniqueBlockIndices = 
-                        (int*) ALLOC(trSegmentsExpanded[n].numBlocks * sizeof(int));
-                    if (!trSegments[numUniqueSegments].uniqueBlockIndices) {
-                        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
-                        for (i = 0; i < numUniqueSegments; ++i) FREE(trSegments[i].uniqueBlockIndices);
-                        for (i = 0; i < numSegmentsTotal; ++i) FREE(trSegmentsExpanded[i].uniqueBlockIndices);
-                        FREE(trSegments);
-                        FREE(trSegmentsExpanded);
-                        return 0;
-                    }
-                    for (i = 0; i < trSegmentsExpanded[n].numBlocks; ++i) {
-                        trSegments[numUniqueSegments].uniqueBlockIndices[i] = 
-                            trSegmentsExpanded[n].uniqueBlockIndices[i];
-                    }
-                    found = numUniqueSegments;
-                    numUniqueSegments++;
+                if (trSegmentsExpanded[n].numBlocks == trSegments[i].numBlocks &&
+                    array_equal(trSegmentsExpanded[n].uniqueBlockIndices, 
+                                trSegments[i].uniqueBlockIndices, 
+                                trSegmentsExpanded[n].numBlocks)) {
+                    found = i;
+                    break;
                 }
             }
 
-            /* Store mapping in the appropriate section table */
-            if (n < numPrepSegments) {
-                seqDesc->segmentTable.prepSegmentTable[n] = found;
-            } else if (n < numPrepSegments + numMainSegments) {
-                seqDesc->segmentTable.mainSegmentTable[n - numPrepSegments] = found;
-            } else {
-                seqDesc->segmentTable.cooldownSegmentTable[n - numPrepSegments - numMainSegments] = found;
+            if (found == -1) {
+                /* New unique segment */
+                trSegments[numUniqueSegments].numBlocks = trSegmentsExpanded[n].numBlocks;
+                trSegments[numUniqueSegments].startBlock = trSegmentsExpanded[n].startBlock;
+                trSegments[numUniqueSegments].uniqueBlockIndices = 
+                    (int*) ALLOC(trSegmentsExpanded[n].numBlocks * sizeof(int));
+                if (!trSegments[numUniqueSegments].uniqueBlockIndices) {
+                    diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+                    for (i = 0; i < numUniqueSegments; ++i) FREE(trSegments[i].uniqueBlockIndices);
+                    for (i = 0; i < numSegmentsTotal; ++i) FREE(trSegmentsExpanded[i].uniqueBlockIndices);
+                    FREE(trSegments);
+                    FREE(trSegmentsExpanded);
+                    return 0;
+                }
+                for (i = 0; i < trSegmentsExpanded[n].numBlocks; ++i) {
+                    trSegments[numUniqueSegments].uniqueBlockIndices[i] = 
+                        trSegmentsExpanded[n].uniqueBlockIndices[i];
+                }
+                found = numUniqueSegments;
+                numUniqueSegments++;
             }
         }
-    }
 
+        /* Store mapping in the appropriate section table */
+        if (n < numPrepSegments) {
+            seqDesc->segmentTable.prepSegmentTable[n] = found;
+        } else if (n < numPrepSegments + numMainSegments) {
+            seqDesc->segmentTable.mainSegmentTable[n - numPrepSegments] = found;
+        } else {
+            seqDesc->segmentTable.cooldownSegmentTable[n - numPrepSegments - numMainSegments] = found;
+        }
+    }
+    
     seqDesc->segmentTable.numUniqueSegments = numUniqueSegments;
 
     /* Store results in seqDesc */
