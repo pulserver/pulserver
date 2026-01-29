@@ -5686,6 +5686,16 @@ static int findSegmentsInTRInternal(
                 }
             }
 
+            /* If RF is found, store last candidate segment start */
+            if (raw.rf >= 0 && storeCandidate)
+            {
+                segmentStarts[numSegmentStarts] = segmentStartCandidateIndex;
+                segmentSizes[numSegmentStarts - 1] = segmentStartCandidateIndex - segmentStarts[numSegmentStarts - 1];
+                segmentSize = n - segmentStartCandidateIndex + 1;
+                numSegmentStarts++;
+                storeCandidate = 0;
+            }
+
             /* If all gradFirstCurrent and gradLastNext are zero, we found a boundary candidate */
             foundCandidate = 1;
             for (i = 0; i < 3; ++i) 
@@ -5703,16 +5713,6 @@ static int findSegmentsInTRInternal(
             }
 
             segmentSize++;
-
-            /* If RF is found, store last candidate segment start */
-            if (raw.rf >= 0 && storeCandidate)
-            {
-                segmentStarts[numSegmentStarts] = segmentStartCandidateIndex;
-                segmentSizes[numSegmentStarts - 1] = segmentSize;
-                segmentSize = 0;
-                numSegmentStarts++;
-                storeCandidate = 0;
-            }
         }
     }
 
