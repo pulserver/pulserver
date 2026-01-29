@@ -5547,6 +5547,8 @@ static int findSegmentsInTRInternal(
     float gradLastNext[3];
 
     /* Segment boundaries helpers*/
+    int savedCandidateIndex;
+    int haveSavedCandidate;
     int foundCandidate;
     int storeCandidate;
     int segmentStartCandidateIndex;
@@ -5630,6 +5632,8 @@ static int findSegmentsInTRInternal(
     }
 
     /* Initialization: first segment starts at sequence beginning by definition */
+    savedCandidateIndex = 0;
+    haveSavedCandidate = 0;
     foundCandidate = 0;
     storeCandidate = 0;
     segmentSize = 1; /* Contains at least first block */
@@ -5686,15 +5690,23 @@ static int findSegmentsInTRInternal(
                 }
             }
 
-            /* If RF is found, store last candidate segment start */
+            /* If RF is found and we have a pending candidate, save it for later */
             if (raw.rf >= 0 && storeCandidate)
             {
-                segmentStarts[numSegmentStarts] = segmentStartCandidateIndex;
-                segmentSizes[numSegmentStarts - 1] = segmentStartCandidateIndex - segmentStarts[numSegmentStarts - 1];
-                segmentSize = n - segmentStartCandidateIndex + 1;
+                savedCandidateIndex = segmentStartCandidateIndex;
+                haveSavedCandidate = 1;
+            }
+
+            /* If ADC is found and we have a saved candidate, commit the segment */
+            if (raw.adc >= 0 && haveSavedCandidate)
+            {
+                segmentStarts[numSegmentStarts] = savedCandidateIndex;
+                segmentSizes[numSegmentStarts - 1] = savedCandidateIndex - segmentStarts[numSegmentStarts - 1];
+                segmentSize = n - savedCandidateIndex + 1;
                 numSegmentStarts++;
                 storeCandidate = 0;
-            }
+                haveSavedCandidate = 0;
+            }            
 
             /* If all gradFirstCurrent and gradLastNext are zero, we found a boundary candidate */
             foundCandidate = 1;
