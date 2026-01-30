@@ -729,6 +729,25 @@ typedef struct pulseqlib_SequenceDescriptor {
 
 #define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT {0, 0, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, PULSEQLIB_TR_DESCRIPTOR_INIT, 0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT}
 
+/**
+ * @brief Structure to hold concatenated gradient waveforms for a TR.
+ * 
+ * Each channel (gx, gy, gz) has a time array and amplitude array.
+ * Time is in microseconds (us), amplitude is in Hz/m.
+ */
+typedef struct pulseqlib_TRGradientWaveforms {
+    int numSamplesGx;    /**< Number of samples in Gx waveform */
+    int numSamplesGy;    /**< Number of samples in Gy waveform */
+    int numSamplesGz;    /**< Number of samples in Gz waveform */
+    float* timeGx;       /**< Time array for Gx (us) */
+    float* timeGy;       /**< Time array for Gy (us) */
+    float* timeGz;       /**< Time array for Gz (us) */
+    float* waveformGx;   /**< Amplitude array for Gx (Hz/m) */
+    float* waveformGy;   /**< Amplitude array for Gy (Hz/m) */
+    float* waveformGz;   /**< Amplitude array for Gz (Hz/m) */
+} pulseqlib_TRGradientWaveforms;
+
+#define PULSEQLIB_TR_GRADIENT_WAVEFORMS_INIT {0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL}
 
 #endif /* PULSEQLIB_H */
 

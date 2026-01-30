@@ -467,6 +467,84 @@ static py::dict _find_segments_in_tr(_PulserverSeqFile& seqfile) {
     return output;
 }
 
+static py::dict _get_tr_gradient_waveforms(_PulserverSeqFile& seqfile, int trIndex) {
+    if (!seqfile.seq) {
+        throw std::runtime_error("SeqFile pointer is null");
+    }
+
+    // Initialize sequence descriptor with memset (C++ compatible)
+    pulseqlib_SequenceDescriptor seqDesc;
+    memset(&seqDesc, 0, sizeof(seqDesc));
+
+    py::dict output;
+
+    // Step 1: Call getUniqueBlocks
+    int result = pulseqlib_getUniqueBlocks(seqfile.seq, &seqDesc);
+    
+    if (PULSEQLIB_FAILED(result)) {
+        output["success"] = false;
+        output["error"] = pulseqlib_getErrorMessage(result);
+        output["error_code"] = result;
+        return output;
+    }
+
+    // Step 2: Call findTRInSequence
+    pulseqlib_Diagnostic diag;
+    pulseqlib_diagnosticInit(&diag);
+    
+    int code = pulseqlib_findTRInSequence(&seqDesc, &diag);
+    
+    if (PULSEQLIB_FAILED(code)) {
+        output["success"] = false;
+        output["error"] = pulseqlib_getErrorMessage(code);
+        output["error_code"] = code;
+        pulseqlib_sequenceDescriptorFree(&seqDesc);
+        return output;
+    }
+
+    // Step 3: Call getTRGradientWaveforms
+    pulseqlib_TRGradientWaveforms waveforms;
+    memset(&waveforms, 0, sizeof(waveforms));
+    
+    code = pulseqlib_getTRGradientWaveforms(seqfile.seq, &seqDesc, trIndex, &waveforms, &diag);
+    
+    if (PULSEQLIB_FAILED(code)) {
+        output["success"] = false;
+        output["error"] = pulseqlib_getErrorMessage(code);
+        output["error_code"] = code;
+        pulseqlib_sequenceDescriptorFree(&seqDesc);
+        return output;
+    }
+
+    output["success"] = true;
+
+    // Convert Gx waveform to vectors
+    std::vector<float> timeGx(waveforms.timeGx, waveforms.timeGx + waveforms.numSamplesGx);
+    std::vector<float> waveformGx(waveforms.waveformGx, waveforms.waveformGx + waveforms.numSamplesGx);
+    output["time_gx"] = timeGx;
+    output["waveform_gx"] = waveformGx;
+
+    // Convert Gy waveform to vectors
+    std::vector<float> timeGy(waveforms.timeGy, waveforms.timeGy + waveforms.numSamplesGy);
+    std::vector<float> waveformGy(waveforms.waveformGy, waveforms.waveformGy + waveforms.numSamplesGy);
+    output["time_gy"] = timeGy;
+    output["waveform_gy"] = waveformGy;
+
+    // Convert Gz waveform to vectors
+    std::vector<float> timeGz(waveforms.timeGz, waveforms.timeGz + waveforms.numSamplesGz);
+    std::vector<float> waveformGz(waveforms.waveformGz, waveforms.waveformGz + waveforms.numSamplesGz);
+    output["time_gz"] = timeGz;
+    output["waveform_gz"] = waveformGz;
+
+    // Free waveforms memory
+    pulseqlib_trGradientWaveformsFree(&waveforms);
+
+    // Free sequence descriptor memory
+    pulseqlib_sequenceDescriptorFree(&seqDesc);
+
+    return output;
+}
+
 PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     py::class_<_PulserverSeqFile>(m, "_PulserverSeqFile")
         .def(py::init<py::bytes, float, float, float, float, float, float, float, float>())
@@ -531,5 +609,41 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
                 - 'prep_segment_table': List mapping prep segments to unique segment IDs
                 - 'main_segment_table': List mapping main TR segments to unique segment IDs  
                 - 'cooldown_segment_table': List mapping cooldown segments to unique segment IDs
+          )pbdoc");
+
+    m.def("_get_tr_gradient_waveforms",
+          &_get_tr_gradient_waveforms,
+          py::arg("seqfile"),
+          py::arg("tr_index"),
+          R"pbdoc(
+            Extract concatenated gradient waveforms for a single TR.
+            
+            Internally calls getUniqueBlocks, findTRInSequence, then getTRGradientWaveforms.
+
+            Parameters
+            ----------
+            seqfile : _PulserverSeqFile
+                The sequence file object.
+            tr_index : int
+                TR index (0 to num_trs-1).
+
+            Returns
+            -------
+            dict
+                Dictionary with keys:
+                - 'success': bool indicating success
+                - 'time_gx': Time points for Gx (microseconds)
+                - 'waveform_gx': Gx waveform amplitude (Hz/m)
+                - 'time_gy': Time points for Gy (microseconds)
+                - 'waveform_gy': Gy waveform amplitude (Hz/m)
+                - 'time_gz': Time points for Gz (microseconds)
+                - 'waveform_gz': Gz waveform amplitude (Hz/m)
+                
+            Notes
+            -----
+            Timing conventions:
+            - Trapezoids: corner points (0, rise, rise+flat, rise+flat+fall)
+            - Extended trapezoids: samples at raster edges (from time shape)
+            - Arbitrary gradients: samples at raster centers (0.5*raster, 1.5*raster, ...)
           )pbdoc");
 }

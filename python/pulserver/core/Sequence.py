@@ -1,6 +1,6 @@
 """ """
 
-__all__ = []
+__all__ = ["PulserverSequence", "get_unique_blocks", "find_tr", "find_segments_in_tr", "get_tr_gradient_waveforms"]
 
 import copy
 from types import SimpleNamespace
@@ -11,6 +11,7 @@ from ._extension._pulseqlib_wrapper import (
     _find_tr_in_sequence,
     _find_segments_in_tr,
     _get_unique_blocks,
+    _get_tr_gradient_waveforms,
     _PulserverSeqFile,
 )
 from ._iostream import write_to_stream
@@ -322,3 +323,54 @@ def find_segments_in_tr(seq: PulserverSequence, raise_on_error: bool = True) -> 
     result.cooldown_segment_table = raw_result["cooldown_segment_table"]
     
     return unique_segments, result
+
+
+def get_tr_gradient_waveforms(seq: PulserverSequence, tr_index: int = 0) -> SimpleNamespace:
+    """
+    Extract concatenated gradient waveforms for a single TR.
+    
+    Parameters
+    ----------
+    seq : PulserverSequence
+        The sequence to analyze.
+    tr_index : int
+        TR index (0 to num_trs-1). Default is 0.
+        
+    Returns
+    -------
+    SimpleNamespace
+        Result containing:
+        - time_gx: np.ndarray of time points for Gx (microseconds)
+        - waveform_gx: np.ndarray of Gx amplitude (Hz/m)
+        - time_gy: np.ndarray of time points for Gy (microseconds)
+        - waveform_gy: np.ndarray of Gy amplitude (Hz/m)
+        - time_gz: np.ndarray of time points for Gz (microseconds)
+        - waveform_gz: np.ndarray of Gz amplitude (Hz/m)
+        
+    Notes
+    -----
+    Timing conventions:
+    - Trapezoids: corner points (0, rise, rise+flat, rise+flat+fall)
+    - Extended trapezoids: samples at raster edges (from time shape)
+    - Arbitrary gradients: samples at raster centers (0.5*raster, 1.5*raster, ...)
+    
+    The waveforms are concatenated across all blocks in the TR, with time
+    offsets adjusted so each block's waveform starts where the previous ended.
+    """
+    import numpy as np
+    
+    result_dict = _get_tr_gradient_waveforms(seq._cseq, tr_index)
+    
+    if not result_dict["success"]:
+        raise RuntimeError(f"Failed to get TR gradient waveforms: {result_dict.get('error', 'unknown error')}")
+    
+    result = SimpleNamespace(
+        time_gx=np.array(result_dict["time_gx"], dtype=np.float32),
+        waveform_gx=np.array(result_dict["waveform_gx"], dtype=np.float32),
+        time_gy=np.array(result_dict["time_gy"], dtype=np.float32),
+        waveform_gy=np.array(result_dict["waveform_gy"], dtype=np.float32),
+        time_gz=np.array(result_dict["time_gz"], dtype=np.float32),
+        waveform_gz=np.array(result_dict["waveform_gz"], dtype=np.float32),
+    )
+    
+    return result
