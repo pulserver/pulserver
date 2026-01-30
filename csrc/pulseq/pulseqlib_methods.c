@@ -5430,225 +5430,258 @@ int get_adc_duration(pulseqlib_SeqFile const* seq, int adcIndex){
     return (int)(seq->adcLibrary[adcIndex][0] * seq->adcLibrary[adcIndex][1]); /* num_samples * dwell */
 }
 
-/* Find segments definitions in a single TR */
+/* State constants for segment finding state machine */
+#define SEGSTATE_SEEKING_FIRST_ADC 0
+#define SEGSTATE_SEEKING_BOUNDARY  1
+#define SEGSTATE_OPTIMIZED_MODE    2
+
+/* Find segments definitions in a single TR - Single-pass algorithm */
 static int findSegmentsInTRInternal(
-  const pulseqlib_SeqFile* seq, 
+  const pulseqlib_Opts* opts,
+  const pulseqlib_SequenceDescriptor* seqDesc,
   pulseqlib_TRsegment* trSegments,
   const int offset,
   const int trStart,
   const int trSize,
   pulseqlib_Diagnostic* diag
 ) {
-    pulseqlib_RawBlock raw;
-    pulseqlib_RawBlock raw_next;
-
     /* System specs */
     float max_slew;
     float grad_raster_s;
     float maxAllowed;
 
-    /* Gradient amplitude bookkeeping*/
-    int g[3];
-    float gradAmplitude;
-    float gradFirstCurrent[3];
-    float gradLastNext[3];
+    /* Gradient amplitude bookkeeping */
+    int gradIDs[3];
+    float physicalFirst, physicalLast;
+    float gradLastCurrent[3];
+    float gradFirstNext[3];
+    const pulseqlib_BlockDefinition* blockDef;
+    const pulseqlib_GradDefinition* gradDef;
+    int blockDefID;
+    int shotIdx;
 
-    /* Segment boundaries helpers*/
-    int savedCandidateIndex;
-    int haveSavedCandidate;
-    int foundCandidate;
-    int storeCandidate;
-    int segmentStartCandidateIndex;
-    int segmentSize;
-    int numSegmentStarts;
+    /* Segment building */
     int* segmentStarts;
     int* segmentSizes;
+    int numSegments;
+    int segmentStart;
+
+    /* State machine */
+    int state;
+    int candidateBeforeLastRF;
+    int savedCandidate;
+    int hasSavedCandidate;
+    int hasRF, hasADC;
+    int isCandidate;
     
     /* Loop counters */
     int numBlocksInTR;
-    int n;
-    int i;
+    int n, i;
 
-    /* Parse maximum slew rate */
-    max_slew = seq->opts.max_slew; /* Maximum slew rate in Hz/m/s */
-    grad_raster_s = seq->opts.grad_raster_time * 1e-6f; /* Gradient raster time in seconds */
+    /* Parse maximum slew rate from opts */
+    max_slew = opts->max_slew;
+    grad_raster_s = opts->grad_raster_time * 1e-6f;
     maxAllowed = max_slew * grad_raster_s;
 
-    /* Parse number of blocks in TR */
     numBlocksInTR = trSize;
 
-    /* Allocate segment start and size arrays */
+    /* Allocate arrays */
     segmentStarts = (int*) ALLOC(numBlocksInTR * sizeof(int));
     segmentSizes = (int*) ALLOC(numBlocksInTR * sizeof(int));
-    if (!segmentStarts || !segmentSizes) 
-    {
-        if (diag) diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+    if (!segmentStarts || !segmentSizes) {
         if (segmentStarts) FREE(segmentStarts);
         if (segmentSizes) FREE(segmentSizes);
+        if (diag) diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
         return 0;
     }
 
     /* Check that first block begins with "zero" gradients */
-    getRawBlockContentIDs(seq, &raw, trStart, 0);
-    g[0] = raw.gx;
-    g[1] = raw.gy;
-    g[2] = raw.gz;
+    blockDefID = seqDesc->blockTable[trStart].ID;
+    blockDef = &seqDesc->blockDefinitions[blockDefID];
+    gradIDs[0] = blockDef->gxID;
+    gradIDs[1] = blockDef->gyID;
+    gradIDs[2] = blockDef->gzID;
+    
     for (i = 0; i < 3; ++i) {
-        if (g[i] > 0) {
-            gradAmplitude = seq->gradLibrary[g[i]][2]; /* initial gradient amplitude along channel i */
-        } else {
-            gradAmplitude = 0.0f;
-        }
-        if (fabs(gradAmplitude) > maxAllowed) {
-            if (diag) {
-                diag->code = PULSEQLIB_ERR_SEG_NONZERO_START_GRAD;
-                diag->blockIndex = trStart;
-                diag->channel = i;
-                diag->gradientAmplitude = gradAmplitude;
-                diag->maxAllowedAmplitude = maxAllowed;
+        if (gradIDs[i] < 0) continue;
+        gradDef = &seqDesc->gradDefinitions[gradIDs[i]];
+        for (shotIdx = 0; shotIdx < gradDef->numShots; ++shotIdx) {
+            physicalFirst = gradDef->firstValue[shotIdx] * gradDef->maxAmplitude[shotIdx];
+            if (fabs(physicalFirst) > maxAllowed) {
+                if (diag) {
+                    diag->code = PULSEQLIB_ERR_SEG_NONZERO_START_GRAD;
+                    diag->blockIndex = trStart;
+                    diag->channel = i;
+                    diag->gradientAmplitude = physicalFirst;
+                    diag->maxAllowedAmplitude = maxAllowed;
+                }
+                FREE(segmentStarts);
+                FREE(segmentSizes);
+                return 0;
             }
-            FREE(segmentStarts);
-            FREE(segmentSizes);
-            return 0;
         }
     }
 
     /* Check that last block ends with "zero" gradients */
-    getRawBlockContentIDs(seq, &raw, trStart + numBlocksInTR - 1, 0);
-    g[0] = raw.gx;
-    g[1] = raw.gy;
-    g[2] = raw.gz;
+    blockDefID = seqDesc->blockTable[trStart + numBlocksInTR - 1].ID;
+    blockDef = &seqDesc->blockDefinitions[blockDefID];
+    gradIDs[0] = blockDef->gxID;
+    gradIDs[1] = blockDef->gyID;
+    gradIDs[2] = blockDef->gzID;
+    
     for (i = 0; i < 3; ++i) {
-        if (g[i] > 0) {
-            gradAmplitude = seq->gradLibrary[g[i]][3]; /* final gradient amplitude along channel i */
-        } else {
-            gradAmplitude = 0.0f;
-        }
-        if (fabs(gradAmplitude) > maxAllowed) {
-            if (diag) {
-                diag->code = PULSEQLIB_ERR_SEG_NONZERO_END_GRAD;
-                diag->blockIndex = trStart + numBlocksInTR - 1;
-                diag->channel = i;
-                diag->gradientAmplitude = gradAmplitude;
-                diag->maxAllowedAmplitude = maxAllowed;
+        if (gradIDs[i] < 0) continue;
+        gradDef = &seqDesc->gradDefinitions[gradIDs[i]];
+        for (shotIdx = 0; shotIdx < gradDef->numShots; ++shotIdx) {
+            physicalLast = gradDef->lastValue[shotIdx] * gradDef->maxAmplitude[shotIdx];
+            if (fabs(physicalLast) > maxAllowed) {
+                if (diag) {
+                    diag->code = PULSEQLIB_ERR_SEG_NONZERO_END_GRAD;
+                    diag->blockIndex = trStart + numBlocksInTR - 1;
+                    diag->channel = i;
+                    diag->gradientAmplitude = physicalLast;
+                    diag->maxAllowedAmplitude = maxAllowed;
+                }
+                FREE(segmentStarts);
+                FREE(segmentSizes);
+                return 0;
             }
-            FREE(segmentStarts);
-            FREE(segmentSizes);
-            return 0;
         }
     }
 
-    /* Initialization: first segment starts at sequence beginning by definition */
-    savedCandidateIndex = 0;
-    haveSavedCandidate = 0;
-    foundCandidate = 0;
-    storeCandidate = 0;
-    segmentSize = 1; /* Contains at least first block */
-    segmentStartCandidateIndex = 0;
-    segmentStarts[0] = trStart;
-    numSegmentStarts = 1;
+    /* Initialize state machine */
+    numSegments = 0;
+    segmentStart = trStart;
+    state = SEGSTATE_SEEKING_FIRST_ADC;
+    candidateBeforeLastRF = -1;
+    savedCandidate = -1;
+    hasSavedCandidate = 0;
 
-    /* Loop over TR definition */
-    if (numBlocksInTR > 2)
-    {
-        for (n = trStart + 1; n < trStart + numBlocksInTR - 1; ++n) 
-        {
-            if (!getRawBlockContentIDs(seq, &raw, n, 0)) {
-                if (diag) {
-                    diag->code = PULSEQLIB_ERR_INVALID_ARGUMENT;
-                    diag->blockIndex = n;
-                }
-                FREE(segmentStarts);
-                FREE(segmentSizes);
-                return 0;
-            }
-
-            if (!getRawBlockContentIDs(seq, &raw_next, n + 1, 0)) {
-                if (diag) {
-                    diag->code = PULSEQLIB_ERR_INVALID_ARGUMENT;
-                    diag->blockIndex = n + 1;
-                }
-                FREE(segmentStarts);
-                FREE(segmentSizes);
-                return 0;
-            }
-
-            /* Check if current block is a candidate for segment boundary */
-            g[0] = raw.gx;
-            g[1] = raw.gy;
-            g[2] = raw.gz;
-            for (i = 0; i < 3; ++i) 
-            {
-                if (g[i] > 0) {
-                    gradFirstCurrent[i] = seq->gradLibrary[g[i]][2];
-                } else {
-                    gradFirstCurrent[i] = 0.0f;
-                }
-            }
-            g[0] = raw_next.gx;
-            g[1] = raw_next.gy;
-            g[2] = raw_next.gz;
-            for (i = 0; i < 3; ++i) 
-            {
-                if (g[i] > 0) {
-                    gradLastNext[i] = seq->gradLibrary[g[i]][3];
-                } else {
-                    gradLastNext[i] = 0.0f;
+    /* Single pass: check boundaries and RF/ADC events together */
+    for (n = trStart; n < trStart + numBlocksInTR; ++n) {
+        
+        /* Check if there's a boundary candidate between n-1 and n */
+        isCandidate = 0;
+        if (n > trStart) {
+            isCandidate = 1;
+            
+            /* Get last values of previous block */
+            blockDefID = seqDesc->blockTable[n - 1].ID;
+            blockDef = &seqDesc->blockDefinitions[blockDefID];
+            gradIDs[0] = blockDef->gxID;
+            gradIDs[1] = blockDef->gyID;
+            gradIDs[2] = blockDef->gzID;
+            
+            for (i = 0; i < 3; ++i) {
+                gradLastCurrent[i] = 0.0f;
+                if (gradIDs[i] >= 0) {
+                    gradDef = &seqDesc->gradDefinitions[gradIDs[i]];
+                    for (shotIdx = 0; shotIdx < gradDef->numShots; ++shotIdx) {
+                        physicalLast = gradDef->lastValue[shotIdx] * gradDef->maxAmplitude[shotIdx];
+                        if (fabs(physicalLast) > fabs(gradLastCurrent[i])) {
+                            gradLastCurrent[i] = physicalLast;
+                        }
+                    }
                 }
             }
 
-            /* If RF is found and we have a pending candidate, save it for later */
-            if (raw.rf >= 0 && storeCandidate)
-            {
-                savedCandidateIndex = segmentStartCandidateIndex;
-                haveSavedCandidate = 1;
+            /* Get first values of current block */
+            blockDefID = seqDesc->blockTable[n].ID;
+            blockDef = &seqDesc->blockDefinitions[blockDefID];
+            gradIDs[0] = blockDef->gxID;
+            gradIDs[1] = blockDef->gyID;
+            gradIDs[2] = blockDef->gzID;
+            
+            for (i = 0; i < 3; ++i) {
+                gradFirstNext[i] = 0.0f;
+                if (gradIDs[i] >= 0) {
+                    gradDef = &seqDesc->gradDefinitions[gradIDs[i]];
+                    for (shotIdx = 0; shotIdx < gradDef->numShots; ++shotIdx) {
+                        physicalFirst = gradDef->firstValue[shotIdx] * gradDef->maxAmplitude[shotIdx];
+                        if (fabs(physicalFirst) > fabs(gradFirstNext[i])) {
+                            gradFirstNext[i] = physicalFirst;
+                        }
+                    }
+                }
             }
 
-            /* If ADC is found and we have a saved candidate, commit the segment */
-            if (raw.adc >= 0 && haveSavedCandidate)
-            {
-                segmentStarts[numSegmentStarts] = savedCandidateIndex;
-                segmentSizes[numSegmentStarts - 1] = savedCandidateIndex - segmentStarts[numSegmentStarts - 1];
-                segmentSize = n - savedCandidateIndex + 1;
-                numSegmentStarts++;
-                storeCandidate = 0;
-                haveSavedCandidate = 0;
-            }            
-
-            /* If all gradFirstCurrent and gradLastNext are zero, we found a boundary candidate */
-            foundCandidate = 1;
-            for (i = 0; i < 3; ++i) 
-            {
-                if (fabs(gradFirstCurrent[i]) > maxAllowed || fabs(gradLastNext[i]) > maxAllowed) {
-                    foundCandidate = 0;
+            /* Check if this is a valid boundary candidate */
+            for (i = 0; i < 3; ++i) {
+                if (fabs(gradLastCurrent[i]) > maxAllowed || fabs(gradFirstNext[i]) > maxAllowed) {
+                    isCandidate = 0;
                     break;
                 }
             }
+        }
 
-            if (foundCandidate) 
-            {
-                segmentStartCandidateIndex = n + 1;
-                storeCandidate = 1;
+        /* Get RF/ADC status for current block */
+        hasRF = (seqDesc->blockDefinitions[seqDesc->blockTable[n].ID].rfID >= 0);
+        hasADC = (seqDesc->blockTable[n].adcID >= 0);
+
+        if (state == SEGSTATE_SEEKING_FIRST_ADC) {
+            /* Track the last candidate seen before the most recent RF */
+            if (isCandidate) {
+                savedCandidate = n;
+            }
+            if (hasRF) {
+                /* When we see RF, the current savedCandidate becomes the prep/excitation boundary */
+                candidateBeforeLastRF = savedCandidate;
+                savedCandidate = -1;
+            }
+            if (hasADC) {
+                /* Found first ADC. Commit prep segment if we have a valid candidate */
+                if (candidateBeforeLastRF > segmentStart) {
+                    segmentStarts[numSegments] = segmentStart;
+                    segmentSizes[numSegments] = candidateBeforeLastRF - segmentStart;
+                    numSegments++;
+                    segmentStart = candidateBeforeLastRF;
+                }
+                state = SEGSTATE_SEEKING_BOUNDARY;
+                hasSavedCandidate = 0;
+                savedCandidate = -1;
+            }
+        }
+        else if (state == SEGSTATE_SEEKING_BOUNDARY) {
+            /* Track boundary candidates */
+            if (isCandidate) {
+                savedCandidate = n;
+                hasSavedCandidate = 1;
             }
 
-            segmentSize++;
+            if (hasRF) {
+                if (hasSavedCandidate) {
+                    /* Commit segment at last saved candidate */
+                    segmentStarts[numSegments] = segmentStart;
+                    segmentSizes[numSegments] = savedCandidate - segmentStart;
+                    numSegments++;
+                    segmentStart = savedCandidate;
+                    hasSavedCandidate = 0;
+                    savedCandidate = -1;
+                } else {
+                    /* No candidate found between last ADC and this RF → optimized mode */
+                    state = SEGSTATE_OPTIMIZED_MODE;
+                }
+            }
         }
+        /* SEGSTATE_OPTIMIZED_MODE: no action, everything goes in current segment */
     }
 
-    /* Store last segment size */
-    segmentSizes[numSegmentStarts - 1] = segmentSize;
+    /* Commit final segment */
+    segmentStarts[numSegments] = segmentStart;
+    segmentSizes[numSegments] = trStart + numBlocksInTR - segmentStart;
+    numSegments++;
 
     /* Copy to output */
-    for (i = 0; i < numSegmentStarts; ++i)
-    {
+    for (i = 0; i < numSegments; ++i) {
         trSegments[offset + i].startBlock = segmentStarts[i];
         trSegments[offset + i].numBlocks = segmentSizes[i];
         trSegments[offset + i].uniqueBlockIndices = NULL;
     }
+
     FREE(segmentStarts);
     FREE(segmentSizes);
 
-    return numSegmentStarts;
+    return numSegments;
 }
 
 /**
@@ -5832,7 +5865,7 @@ int pulseqlib_findSegmentsInTR(
     if (trDesc->degeneratePrep == 0 && trDesc->numPrepBlocks > 0) {
         trStart = 0;
         trSize = trDesc->numPrepBlocks + trDesc->trSize;
-        segResult = findSegmentsInTRInternal(seq, trSegmentsRaw, numSegmentsRaw, trStart, trSize, diag);
+        segResult = findSegmentsInTRInternal(&seq->opts, seqDesc, trSegmentsRaw, numSegmentsRaw, trStart, trSize, diag);
         if (segResult == 0 && PULSEQLIB_FAILED(diag->code)) {
             FREE(trSegmentsRaw);
             return 0;
@@ -5844,7 +5877,7 @@ int pulseqlib_findSegmentsInTR(
     /* Main TR section */
     trStart = trDesc->numPrepBlocks;
     trSize = trDesc->trSize;
-    segResult = findSegmentsInTRInternal(seq, trSegmentsRaw, numSegmentsRaw, trStart, trSize, diag);
+    segResult = findSegmentsInTRInternal(&seq->opts, seqDesc, trSegmentsRaw, numSegmentsRaw, trStart, trSize, diag);
     if (segResult == 0 && PULSEQLIB_FAILED(diag->code)) {
         FREE(trSegmentsRaw);
         return 0;
@@ -5856,7 +5889,7 @@ int pulseqlib_findSegmentsInTR(
     if (trDesc->degenerateCooldown == 0 && trDesc->numCooldownBlocks > 0) {
         trStart = seq->numBlocks - trDesc->numCooldownBlocks - trDesc->trSize;
         trSize = trDesc->numCooldownBlocks + trDesc->trSize;
-        segResult = findSegmentsInTRInternal(seq, trSegmentsRaw, numSegmentsRaw, trStart, trSize, diag);
+        segResult = findSegmentsInTRInternal(&seq->opts, seqDesc, trSegmentsRaw, numSegmentsRaw, trStart, trSize, diag);
         if (segResult == 0 && PULSEQLIB_FAILED(diag->code)) {
             FREE(trSegmentsRaw);
             return 0;
