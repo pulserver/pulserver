@@ -111,7 +111,6 @@ void pulseqlib_trGradientWaveformsFree(pulseqlib_TRGradientWaveforms* waveforms)
  * Parses all blocks in a TR and concatenates their gradient waveforms
  * into continuous time/amplitude arrays for each axis.
  * 
- * @param[in]  seq       Pointer to the sequence file.
  * @param[in]  seqDesc   Pointer to the sequence descriptor (must have shapes populated).
  * @param[in]  trIndex   Index of the TR to extract (0 = first main TR).
  * @param[out] waveforms Pointer to output structure (caller allocates, function fills).
@@ -119,7 +118,6 @@ void pulseqlib_trGradientWaveformsFree(pulseqlib_TRGradientWaveforms* waveforms)
  * @return PULSEQLIB_OK on success, error code on failure.
  */
 int pulseqlib_getTRGradientWaveforms(
-    const pulseqlib_SeqFile* seq,
     const pulseqlib_SequenceDescriptor* seqDesc,
     int trIndex,
     pulseqlib_TRGradientWaveforms* waveforms,

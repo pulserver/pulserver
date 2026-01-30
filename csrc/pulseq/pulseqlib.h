@@ -624,7 +624,11 @@ typedef struct pulseqlib_BlockDefinition {
 typedef struct pulseqlib_BlockTableElement {
     int ID; /**< Unique Block ID */
     int pureDelayFlag; /**< Non-zero if the block is a pure delay block (no RF, Grad, ADC, or extensions) */
-    int adcID; /**< ADC event ID in unique ADC Library */
+    int rfID; /**< RF event ID in RF table */
+    int gxID; /**< Gradient X event ID in Grad table */
+    int gyID; /**< Gradient Y event ID in Grad table */
+    int gzID; /**< Gradient Z event ID in Grad table */
+    int adcID; /**< ADC event ID in ADC table */
     int triggerID; /**< Trigger extension ID */
     int rotationID; /**< Rotation extension ID */
     
@@ -635,7 +639,7 @@ typedef struct pulseqlib_BlockTableElement {
     int navFlag; /**< Navigator flag */
 } pulseqlib_BlockTableElement;
 
-#define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, 0, 0, 0, 0, 0, 0}
+#define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0}
 
 typedef struct pulseqlib_TRdescriptor {
     int numPrepBlocks; /**< Number of preparation blocks before the main TR */
@@ -649,7 +653,6 @@ typedef struct pulseqlib_TRdescriptor {
 } pulseqlib_TRdescriptor;
 
 #define PULSEQLIB_TR_DESCRIPTOR_INIT {0, 0, 0, 0, 0, 0, 0, 0}
-
 
 typedef struct pulseqlib_TRsegment {
     int startBlock; /**< Starting block index of the TR segment */
@@ -680,6 +683,12 @@ typedef struct pulseqlib_SegmentTableResult {
 typedef struct pulseqlib_SequenceDescriptor {
     int numPrepBlocks; /**< Number of preparation blocks before the main sequence */
     int numCooldownBlocks; /**< Number of cooldown blocks after the main sequence */
+
+    /* Timing rasters (in microseconds) */
+    float rfRasterTime_us; /**< RF raster time in microseconds */
+    float gradRasterTime_us; /**< Gradient raster time in microseconds */
+    float adcRasterTime_us; /**< ADC raster time in microseconds */
+    float blockDurationRaster_us; /**< Block duration raster time in microseconds */
 
     int numUniqueBlocks; /**< Number of unique blocks in the sequence */
     pulseqlib_BlockDefinition* blockDefinitions; /**< (ID, duration_us, rf_id, gx_id, gy_id, gz_id) */
@@ -727,8 +736,7 @@ typedef struct pulseqlib_SequenceDescriptor {
     
 } pulseqlib_SequenceDescriptor;
 
-#define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT {0, 0, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, PULSEQLIB_TR_DESCRIPTOR_INIT, 0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT}
-
+#define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT {0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, PULSEQLIB_TR_DESCRIPTOR_INIT, 0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT}
 /**
  * @brief Structure to hold concatenated gradient waveforms for a TR.
  * 

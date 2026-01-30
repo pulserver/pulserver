@@ -502,11 +502,11 @@ static py::dict _get_tr_gradient_waveforms(_PulserverSeqFile& seqfile, int trInd
         return output;
     }
 
-    // Step 3: Call getTRGradientWaveforms
+    // Step 3: Call getTRGradientWaveforms (now only uses seqDesc)
     pulseqlib_TRGradientWaveforms waveforms;
     memset(&waveforms, 0, sizeof(waveforms));
     
-    code = pulseqlib_getTRGradientWaveforms(seqfile.seq, &seqDesc, trIndex, &waveforms, &diag);
+    code = pulseqlib_getTRGradientWaveforms(&seqDesc, trIndex, &waveforms, &diag);
     
     if (PULSEQLIB_FAILED(code)) {
         output["success"] = false;
