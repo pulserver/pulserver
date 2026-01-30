@@ -860,7 +860,7 @@ int initStandardLibrary(FILE* f, const long* offsets, int numSections, void** ta
             p = line;
             while (*p == ' ' || *p == '\t') p++;
             if (*p == '[' || *p == 'e') break;     /* Next section */
-            if (*p == '\0' || *p == '#') continue; /* Skip blank/comment */
+            if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#') continue; /* Skip blank/comment */
             if (sscanf(p, "%d", &idx) == 1) {
                 if (idx > maxIndex) maxIndex = idx;
             }
@@ -906,8 +906,7 @@ int initDefinitionsLibrary(FILE* f, long offset, pulseqlib_Definition** target, 
         p = line;
         while (isspace((unsigned char)*p)) p++;
         if (*p == '[' || *p == 'e') break;     /* Next section */
-        if (*p == '\0' || *p == '#') continue; /* Skip blank/comment */
-        nameToken = strtok(p, " \t\r\n");
+        if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#') continue; /* Skip blank/comment */        nameToken = strtok(p, " \t\r\n");
         if (nameToken) count++;
     }
 
@@ -951,7 +950,7 @@ int initShapesLibrary(FILE* f, long offset, pulseqlib_ShapeArbitrary** target, i
         p = line;
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '[' || *p == 'e') break;     /* Next section */
-        if (*p == '\0' || *p == '#') continue; /* Skip blank/comment */
+        if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#') continue; /* Skip blank/comment */
         if (strncmp(p, "shape_id", 8) == 0) {
             if (sscanf(p + 8, "%d", &idx) == 1) {
                 if (idx > maxIndex) maxIndex = idx;
@@ -988,7 +987,7 @@ int initShapesLibrary(FILE* f, long offset, pulseqlib_ShapeArbitrary** target, i
         p = line;
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '[' || *p == 'e') break;     /* Next section */
-        if (*p == '\0' || *p == '#') continue; /* Skip blank/comment */
+        if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#') continue; /* Skip blank/comment */
         if (strncmp(p, "shape_id", 8) == 0) {
             if (sscanf(p + 8, "%d", &idx) == 1) {
                 shapes[idx - 1].numSamples = 0;
@@ -1004,11 +1003,6 @@ int initShapesLibrary(FILE* f, long offset, pulseqlib_ShapeArbitrary** target, i
         else {
             shapes[idx - 1].numSamples++;
         }
-    }
-
-    /* Adjust numSamples to account for the last sample */
-    for (i = 0; i < maxIndex; i++) {
-        shapes[i].numSamples -= 1;  
     }
 
     /* Allocate sample arrays */
@@ -1055,7 +1049,7 @@ int initRfShimLibrary(FILE* f, long offset, pulseqlib_RfShimEntry** target, int*
         p = line;
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '[' || *p == 'e') break;     /* Next section */
-        if (*p == '\0' || *p == '#') continue; /* Skip blank/comment */
+        if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#') continue; /* Skip blank/comment */
         if (sscanf(p, "%d", &idx) == 1) {
             if (idx > maxIndex) maxIndex = idx;
         }
@@ -1111,7 +1105,7 @@ int readStandardLibrary(FILE* f, long offset, void* target, int targetCount, int
         p = line;
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '[' || *p == 'e') break;     /* Next section */
-        if (*p == '\0' || *p == '#') continue; /* Skip blank/comment */
+        if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#') continue; /* Skip blank/comment */
         if (sscanf(p, "%d", &idx) != 1) continue;
         if (idx <= 0 || idx > targetCount) continue;
 
@@ -1257,7 +1251,7 @@ void readVersion(pulseqlib_SeqFile* seq, FILE* f) {
     while (fgets(line, sizeof(line), f)) {
         p = line;
         while (*p == ' ' || *p == '\t') p++;
-        if (*p == '\0' || *p == '#') continue;
+        if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#') continue; /* Skip blank/comment */
         if (*p == '[') break;
         if (sscanf(p, "%31s %d", key, &value) == 2) {
             if (strcmp(key, "major") == 0) major = value;
@@ -1312,7 +1306,7 @@ void readDefinitionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
         p = line;
         while (isspace((unsigned char)*p)) p++;
 
-        if (*p == '\0' || *p == '#') continue;
+        if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#') continue;
         if (*p == '[') break;  /* Next section begins */
 
         def.valueSize = 0;
@@ -1587,7 +1581,7 @@ void readShapesLibrary(pulseqlib_SeqFile* seq, FILE* f) {
         p = line;
         while (*p == ' ' || *p == '\t') p++;
 
-        if (*p == '\0' || *p == '#') continue;
+        if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#') continue; /* Skip blank/comment */
         if (*p == '[') break;
 
         /* Beginning of waveform: parse shape ID */
@@ -1634,7 +1628,7 @@ int readLabelLibrary(FILE* f, long offset, void* target, int targetCount, int N,
         p = line;
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '[' || *p == 'e') break;     /* Next section */
-        if (*p == '\0' || *p == '#') continue; /* Skip blank/comment */
+        if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#') continue; /* Skip blank/comment */
         if (sscanf(p, "%d %f %31s", &idx, &val, label) != 3) continue;
         if (idx <= 0 || idx > targetCount) continue;
         labelCode = label2enum(label); 
@@ -1669,7 +1663,7 @@ int readDelayLibrary(FILE* f, long offset, void* target, int targetCount, int N,
         p = line;
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '[' || *p == 'e') break;     /* Next section */
-        if (*p == '\0' || *p == '#') continue; /* Skip blank/comment */
+        if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#') continue; /* Skip blank/comment */
         if (sscanf(p, "%d %f %f %f %31s", &idx, &numID, &offsetVal, &scaleVal, hint) != 5) continue;
         if (idx <= 0 || idx > targetCount) continue;
         hintCode = hint2enum(hint);
@@ -1704,8 +1698,7 @@ int readRfShimLibrary(FILE* f, long offset, pulseqlib_RfShimEntry* target, int t
         p = line;
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '[' || *p == 'e') break;     /* Next section */
-        if (*p == '\0' || *p == '#') continue; /* Skip blank/comment */
-        if (sscanf(p, "%d %d", &idx, &nCh) != 2) continue;
+        if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#') continue; /* Skip blank/comment */        if (sscanf(p, "%d %d", &idx, &nCh) != 2) continue;
         if (idx <= 0 || idx > targetCount || nCh <= 0) continue;
 
         /* Skip past the index and nCh */
@@ -3675,7 +3668,6 @@ static int compute_grad_statistics(
                 }
                 time_us = (float*)ALLOC(decompressedTime.numUncompressedSamples * sizeof(float));
                 if (!time_us) {
-                    FREE(decompressedTime.samples);
                     goto cleanup_error;
                 }
                 for (i = 0; i < decompressedTime.numUncompressedSamples; ++i) {
@@ -3695,7 +3687,6 @@ static int compute_grad_statistics(
                 
                 /* Decompress waveform shape */
                 if (!decompressShape(&seq->shapesLibrary[shapeId - 1], &decompressedWave)) {
-                    if (time_us) FREE(time_us);
                     goto cleanup_error;
                 }
                 
@@ -3705,10 +3696,6 @@ static int compute_grad_statistics(
                 waveform = (float*)ALLOC(numSamples * sizeof(float));
                 sq_waveform = (float*)ALLOC(numSamples * sizeof(float));
                 if (!waveform || !sq_waveform) {
-                    if (waveform) FREE(waveform);
-                    if (sq_waveform) FREE(sq_waveform);
-                    FREE(decompressedWave.samples);
-                    if (time_us) FREE(time_us);
                     goto cleanup_error;
                 }
                 
@@ -3741,8 +3728,8 @@ static int compute_grad_statistics(
                 gradDef->energy[shotIdx] *= 1e-6f;   /* us -> s */
                 
                 FREE(waveform);
-                FREE(sq_waveform);
                 waveform = NULL;
+                FREE(sq_waveform);
                 sq_waveform = NULL;
                 
                 /* Free decompressed waveform */
@@ -3762,10 +3749,15 @@ static int compute_grad_statistics(
 
 cleanup_error:
     if (waveform) FREE(waveform);
+    waveform = NULL;
     if (sq_waveform) FREE(sq_waveform);
+    sq_waveform = NULL;
     if (time_us) FREE(time_us);
+    time_us = NULL;
     if (decompressedWave.samples) FREE(decompressedWave.samples);
+    decompressedWave.samples = NULL;
     if (decompressedTime.samples) FREE(decompressedTime.samples);
+    decompressedTime.samples = NULL;
     return PULSEQLIB_ERR_ALLOC_FAILED;
 }
 

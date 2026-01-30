@@ -77,7 +77,6 @@ public:
         open_buffer_as_file(&handle, (char*)buffer.data(), buffer.size());
         if (!handle.f) {
             pulseqlib_seqFileFree(seq);
-            FREE(seq);
             seq = nullptr;
             throw std::runtime_error("Failed to open buffer as file");
         }
@@ -91,7 +90,6 @@ public:
         if (PULSEQLIB_FAILED(result)) {
             const char* errMsg = pulseqlib_getErrorMessage(result);
             pulseqlib_seqFileFree(seq);
-            FREE(seq);
             seq = nullptr;
             throw std::runtime_error(std::string("Failed to parse sequence: ") + errMsg);
         }
@@ -100,7 +98,6 @@ public:
     ~_PulserverSeqFile() {
         if (seq) {
             pulseqlib_seqFileFree(seq);
-            FREE(seq);
             seq = nullptr;
         }
     }
