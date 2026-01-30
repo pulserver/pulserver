@@ -4684,6 +4684,9 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
     int hasPrep, hasCooldown;
     int ctrl;
 
+    /* Auxiliary variable for block duration raster */
+    float blockDurationRaster_us;
+
     /* Validate inputs */
     if (!seq || !seqDesc) {
         return PULSEQLIB_ERR_INVALID_ARGUMENT;
@@ -4868,10 +4871,17 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
     seqDesc->numUniqueBlocks = deduplicate_int_rows(uniqueDefs, eventTable, numBlocks, BLOCK_DEF_COLS, (const int*)intRows);
     seqDesc->numBlocks = numBlocks;
 
+    /* Get block duration raster: prefer from definitions, fall back to opts */
+    if (seq->reservedDefinitionsLibrary.blockDurationRaster > 0.0f) {
+        blockDurationRaster_us = seq->reservedDefinitionsLibrary.blockDurationRaster;
+    } else {
+        blockDurationRaster_us = seq->opts.block_duration_raster;
+    }
+
     /* Copy into tmpBlockDefinitions */
     for (n = 0; n < seqDesc->numUniqueBlocks; ++n) {
         tmpBlockDefs[n].ID = uniqueDefs[n];
-        tmpBlockDefs[n].duration_us = (int)intRows[uniqueDefs[n]][0];
+        tmpBlockDefs[n].duration_us = (int)(intRows[uniqueDefs[n]][0] * blockDurationRaster_us);
         tmpBlockDefs[n].rfID = (int)intRows[uniqueDefs[n]][1];
         tmpBlockDefs[n].gxID = (int)intRows[uniqueDefs[n]][2];
         tmpBlockDefs[n].gyID = (int)intRows[uniqueDefs[n]][3];
@@ -6146,7 +6156,7 @@ void pulseqlib_trGradientWaveformsFree(pulseqlib_TRGradientWaveforms* waveforms)
  * @brief Count samples needed for a single gradient channel in a block.
  * 
  * @param[in] gradDef    Gradient definition (or NULL if no gradient).
- * @return Number of samples needed (2 for empty block, varies for gradients).
+ * @return Number of samples needed (0 if no gradient, varies for gradients).
  */
 static int count_grad_samples_for_block(
     const pulseqlib_GradDefinition* gradDef)
@@ -6154,7 +6164,7 @@ static int count_grad_samples_for_block(
     int numSamples;
     
     if (!gradDef) {
-        return 2; /* Empty: start and end points */
+        return 0; /* No gradient on this channel - no samples needed */
     }
     
     if (gradDef->type == 0) {
@@ -6190,7 +6200,6 @@ static int fill_grad_waveform_for_block(
     const pulseqlib_GradDefinition* gradDef,
     const pulseqlib_GradTableElement* gradTableEntry,
     const pulseqlib_SequenceDescriptor* seqDesc,
-    float blockDuration_us,
     float gradRaster_us,
     float t0,
     float* time,
@@ -6198,7 +6207,7 @@ static int fill_grad_waveform_for_block(
     int startIdx)
 {
     int i, idx;
-    float sign, maxAmp, t_sample;
+    float t_sample, sign, maxAmp;
     float delay_us;
     int shapeId, timeShapeId, shotIdx;
     int numSamples;
@@ -6208,15 +6217,9 @@ static int fill_grad_waveform_for_block(
     
     idx = startIdx;
     
-    /* Empty gradient: two points at zero */
+    /* No gradient on this channel - write nothing */
     if (!gradDef || !gradTableEntry) {
-        time[idx] = t0;
-        waveform[idx] = 0.0f;
-        idx++;
-        time[idx] = t0 + blockDuration_us;
-        waveform[idx] = 0.0f;
-        idx++;
-        return idx - startIdx;
+        return 0;
     }
     
     /* Get amplitude and sign from gradTable */
@@ -6265,14 +6268,8 @@ static int fill_grad_waveform_for_block(
         
         /* Get waveform shape (1-based ID) */
         if (shapeId <= 0 || shapeId > seqDesc->numShapes) {
-            /* Invalid shape: treat as empty */
-            time[idx] = t0;
-            waveform[idx] = 0.0f;
-            idx++;
-            time[idx] = t0 + blockDuration_us;
-            waveform[idx] = 0.0f;
-            idx++;
-            return idx - startIdx;
+            /* Invalid shape: write nothing */
+            return 0;
         }
         waveShape = &seqDesc->shapes[shapeId - 1];
         
@@ -6387,9 +6384,18 @@ int pulseqlib_getTRGradientWaveforms(
         blockDefID = seqDesc->blockTable[blockIdx].ID;
         blockDef = &seqDesc->blockDefinitions[blockDefID];
         
-        gxDef = (blockDef->gxID >= 0) ? &seqDesc->gradDefinitions[blockDef->gxID] : NULL;
-        gyDef = (blockDef->gyID >= 0) ? &seqDesc->gradDefinitions[blockDef->gyID] : NULL;
-        gzDef = (blockDef->gzID >= 0) ? &seqDesc->gradDefinitions[blockDef->gzID] : NULL;
+        /* Get raw block to check gradient library indices */
+        if (!getRawBlockContentIDs(seq, &rawBlock, blockIdx, 0)) {
+            continue;
+        }
+        
+        /* Only count if both definition AND table entry exist */
+        gxDef = (blockDef->gxID >= 0 && rawBlock.gx >= 0 && rawBlock.gx < seqDesc->gradTableSize) 
+                ? &seqDesc->gradDefinitions[blockDef->gxID] : NULL;
+        gyDef = (blockDef->gyID >= 0 && rawBlock.gy >= 0 && rawBlock.gy < seqDesc->gradTableSize) 
+                ? &seqDesc->gradDefinitions[blockDef->gyID] : NULL;
+        gzDef = (blockDef->gzID >= 0 && rawBlock.gz >= 0 && rawBlock.gz < seqDesc->gradTableSize) 
+                ? &seqDesc->gradDefinitions[blockDef->gzID] : NULL;
         
         totalSamplesGx += count_grad_samples_for_block(gxDef);
         totalSamplesGy += count_grad_samples_for_block(gyDef);
@@ -6432,11 +6438,6 @@ int pulseqlib_getTRGradientWaveforms(
         }
         
         /* Get gradient definitions and table entries */
-        gxDef = (blockDef->gxID >= 0) ? &seqDesc->gradDefinitions[blockDef->gxID] : NULL;
-        gyDef = (blockDef->gyID >= 0) ? &seqDesc->gradDefinitions[blockDef->gyID] : NULL;
-        gzDef = (blockDef->gzID >= 0) ? &seqDesc->gradDefinitions[blockDef->gzID] : NULL;
-        
-        /* Get gradient table entries using raw block indices */
         gxTable = (rawBlock.gx >= 0 && rawBlock.gx < seqDesc->gradTableSize) ? 
                   &seqDesc->gradTable[rawBlock.gx] : NULL;
         gyTable = (rawBlock.gy >= 0 && rawBlock.gy < seqDesc->gradTableSize) ? 
@@ -6444,22 +6445,27 @@ int pulseqlib_getTRGradientWaveforms(
         gzTable = (rawBlock.gz >= 0 && rawBlock.gz < seqDesc->gradTableSize) ? 
                   &seqDesc->gradTable[rawBlock.gz] : NULL;
         
+        /* Get gradient definitions - must match table validity */
+        gxDef = (blockDef->gxID >= 0 && gxTable) ? &seqDesc->gradDefinitions[blockDef->gxID] : NULL;
+        gyDef = (blockDef->gyID >= 0 && gyTable) ? &seqDesc->gradDefinitions[blockDef->gyID] : NULL;
+        gzDef = (blockDef->gzID >= 0 && gzTable) ? &seqDesc->gradDefinitions[blockDef->gzID] : NULL;
+        
         /* Fill Gx */
         idxGx += fill_grad_waveform_for_block(
             gxDef, gxTable, seqDesc,
-            blockDuration_us, gradRaster_us, t0,
+            gradRaster_us, t0,
             waveforms->timeGx, waveforms->waveformGx, idxGx);
         
         /* Fill Gy */
         idxGy += fill_grad_waveform_for_block(
             gyDef, gyTable, seqDesc,
-            blockDuration_us, gradRaster_us, t0,
+            gradRaster_us, t0,
             waveforms->timeGy, waveforms->waveformGy, idxGy);
         
         /* Fill Gz */
         idxGz += fill_grad_waveform_for_block(
             gzDef, gzTable, seqDesc,
-            blockDuration_us, gradRaster_us, t0,
+            gradRaster_us, t0,
             waveforms->timeGz, waveforms->waveformGz, idxGz);
         
         /* Update time offset for next block */
