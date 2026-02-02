@@ -385,7 +385,8 @@ def get_tr_acoustic_spectra(
     seq: PulserverSequence, 
     target_window_size: int = 5000,
     oversampling: int = 3,
-    max_frequency: float = -1.0,
+    max_frequency: float | None = None,
+    combined: bool = False,
 ) -> SimpleNamespace:
     """
     Compute acoustic spectra for gradient waveforms in a TR.
@@ -407,14 +408,14 @@ def get_tr_acoustic_spectra(
         Maximum frequency to include in output (Hz). Default is -1 (full spectrum).
         Use a positive value to reduce output size by including only frequencies
         up to the specified maximum.
+    combined : bool
+        If True, return pointwise maximum across all windows (1D arrays).
+        If False, stack all windows (2D arrays). Default is False.
         
     Returns
     -------
     SimpleNamespace
         Result containing:
-        - num_windows: int, number of windows analyzed
-        - num_freq_bins: int, number of frequency bins per spectrum
-        - freq_resolution: float, frequency resolution in Hz
         - frequencies: np.ndarray of shape (num_freq_bins,), frequency values in Hz
         - spectra_gx: np.ndarray of shape (num_windows, num_freq_bins), Gx spectra
         - spectra_gy: np.ndarray of shape (num_windows, num_freq_bins), Gy spectra
@@ -436,9 +437,16 @@ def get_tr_acoustic_spectra(
     --------
     >>> result = get_tr_acoustic_spectra(seq)
     >>> plt.plot(result.frequencies, result.spectra_gx.max(axis=0))  # Max spectrum across windows
-    """    
+    
+    >>> # Get combined spectrum (pointwise max) up to 2000 Hz
+    >>> result = get_tr_acoustic_spectra(seq, max_frequency=2000.0, combined=True)
+    >>> plt.plot(result.frequencies, result.spectra_gx)  # Already the max across windows
+    """
+    if max_frequency is None:
+        max_frequency = -1.0  # Use -1 to indicate full spectrum in C wrapper
+    combined = int(combined)
     result_dict = _get_tr_acoustic_spectra(
-        seq._cseq, target_window_size, oversampling, max_frequency
+        seq._cseq, target_window_size, oversampling, max_frequency, combined
     )
     
     if not result_dict["success"]:
@@ -446,15 +454,23 @@ def get_tr_acoustic_spectra(
     
     num_windows = result_dict["num_windows"]
     num_freq_bins = result_dict["num_freq_bins"]
+    is_combined = bool(result_dict["combined"])
+    
+    # Reshape based on combined flag
+    if is_combined:
+        spectra_gx = np.asarray(result_dict["spectra_gx"], dtype=np.float32)
+        spectra_gy = np.asarray(result_dict["spectra_gy"], dtype=np.float32)
+        spectra_gz = np.asarray(result_dict["spectra_gz"], dtype=np.float32)
+    else:
+        spectra_gx = np.asarray(result_dict["spectra_gx"], dtype=np.float32).reshape(num_windows, num_freq_bins)
+        spectra_gy = np.asarray(result_dict["spectra_gy"], dtype=np.float32).reshape(num_windows, num_freq_bins)
+        spectra_gz = np.asarray(result_dict["spectra_gz"], dtype=np.float32).reshape(num_windows, num_freq_bins)
     
     result = SimpleNamespace(
-        num_windows=num_windows,
-        num_freq_bins=num_freq_bins,
-        freq_resolution=result_dict["freq_resolution"],
         frequencies=np.asarray(result_dict["frequencies"], dtype=np.float32),
-        spectra_gx=np.asarray(result_dict["spectra_gx"], dtype=np.float32).reshape(num_windows, num_freq_bins),
-        spectra_gy=np.asarray(result_dict["spectra_gy"], dtype=np.float32).reshape(num_windows, num_freq_bins),
-        spectra_gz=np.asarray(result_dict["spectra_gz"], dtype=np.float32).reshape(num_windows, num_freq_bins),
+        spectra_gx=spectra_gx,
+        spectra_gy=spectra_gy,
+        spectra_gz=spectra_gz,
     )
     
     return result

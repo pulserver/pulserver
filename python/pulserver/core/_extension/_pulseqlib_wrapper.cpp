@@ -545,7 +545,7 @@ static py::dict _get_tr_gradient_waveforms(_PulserverSeqFile& seqfile) {
     return output;
 }
 
-static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetWindowSize, int oversampling, float maxFrequency) {
+static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetWindowSize, int oversampling, float maxFrequency, bool combined) {
     if (!seqfile.seq) {
         throw std::runtime_error("Sequence file not loaded");
     }
@@ -595,7 +595,7 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
     pulseqlib_TRAcousticSpectra spectra;
     memset(&spectra, 0, sizeof(spectra));
     
-    code = pulseqlib_getTRAcousticSpectra(&waveforms, seqDesc.gradRasterTime_us, targetWindowSize, oversampling, maxFrequency, &spectra, &diag);
+    code = pulseqlib_getTRAcousticSpectra(&waveforms, seqDesc.gradRasterTime_us, targetWindowSize, oversampling, maxFrequency, combined ? 1 : 0, &spectra, &diag);
     
     if (PULSEQLIB_FAILED(code)) {
         pulseqlib_trGradientWaveformsFree(&waveforms);
@@ -608,9 +608,10 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
     output["success"] = true;
     output["num_windows"] = spectra.numWindows;
     output["num_freq_bins"] = spectra.numFreqBins;
+    output["combined"] = spectra.combined != 0;
     output["freq_resolution"] = spectra.freqResolution;
 
-    // Convert spectra to vectors (will be reshaped in Python)
+    // Convert spectra and frequencies to vectors
     int totalSize = spectra.numWindows * spectra.numFreqBins;
     
     std::vector<float> frequencies(spectra.frequencies, spectra.frequencies + spectra.numFreqBins);
@@ -622,7 +623,6 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
     output["spectra_gx"] = spectraGx;
     output["spectra_gy"] = spectraGy;
     output["spectra_gz"] = spectraGz;
-
 
     // Cleanup
     pulseqlib_trAcousticSpectraFree(&spectra);
@@ -737,26 +737,31 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
           py::arg("target_window_size"),
           py::arg("oversampling"),
           py::arg("max_frequency"),
+          py::arg("combined") = false,
           R"pbdoc(
-            Extract concatenated gradient waveforms for a single TR.
+            Compute acoustic spectra for gradient waveforms in a TR.
             
-            Internally calls getUniqueBlocks, findTRInSequence, then getTRGradientWaveforms.
+            Internally calls getUniqueBlocks, findTRInSequence, getTRGradientWaveforms,
+            then getTRAcousticSpectra.
 
             Parameters
             ----------
             seqfile : _PulserverSeqFile
-                The sequence file object.
+                The loaded sequence file
             target_window_size : int
-                Target window size (number of samples).
+                Target window size in samples (e.g., 5000)
             oversampling : int
-                Oversampling factor.
+                FFT oversampling ratio (e.g., 3)
             max_frequency : float
                 Maximum frequency to include in output (Hz). Use -1 for full spectrum.
-            
+            combined : bool
+                If True, return pointwise maximum across all windows (1D arrays).
+                If False, stack all windows (2D arrays). Default is False.
+                
             Returns
             -------
             dict
                 Result dictionary with keys: success, num_windows, num_freq_bins,
-                freq_resolution, frequencies, spectra_gx, spectra_gy, spectra_gz
+                combined, freq_resolution, frequencies, spectra_gx, spectra_gy, spectra_gz
           )pbdoc");
 }
