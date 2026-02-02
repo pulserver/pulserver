@@ -650,9 +650,10 @@ typedef struct pulseqlib_TRdescriptor {
     int degeneratePrep; /**< Non-zero if the preparation blocks are degenerate (i.e. identical to main TR) */
     int numCooldownTRs; /**< Number of cooldown TR after the main TR */
     int degenerateCooldown; /**< Non-zero if the cooldown blocks are degenerate (i.e. identical to main TR) */
+    float trDuration_us; /**< Duration of the TR in microseconds */
 } pulseqlib_TRdescriptor;
 
-#define PULSEQLIB_TR_DESCRIPTOR_INIT {0, 0, 0, 0, 0, 0, 0, 0}
+#define PULSEQLIB_TR_DESCRIPTOR_INIT {0, 0, 0, 0, 0, 0, 0, 0, 0.0f}
 
 typedef struct pulseqlib_TRsegment {
     int startBlock; /**< Starting block index of the TR segment */
@@ -757,9 +758,6 @@ typedef struct pulseqlib_TRGradientWaveforms {
 
 #define PULSEQLIB_TR_GRADIENT_WAVEFORMS_INIT {0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL}
 
-/**
- * @brief Result structure for TR acoustic spectra.
- */
 typedef struct pulseqlib_TRAcousticSpectra {
     int numWindows;        /**< Number of windows (1 if combined=true) */
     int numFreqBins;       /**< Number of frequency bins per spectrum (sliding window) */
@@ -770,16 +768,26 @@ typedef struct pulseqlib_TRAcousticSpectra {
     float* spectraGy;      /**< Gy spectra: if combined, (numFreqBins,); else (numWindows, numFreqBins) row-major */
     float* spectraGz;      /**< Gz spectra: if combined, (numFreqBins,); else (numWindows, numFreqBins) row-major */
     
-    /* Full TR spectrum (single window covering entire TR) */
+    /* Full TR spectrum (single window covering entire TR - continuous envelope) */
     int numFreqBinsFull;   /**< Number of frequency bins for full TR spectrum */
     float freqResolutionFull; /**< Frequency resolution in Hz for full TR spectrum */
     float* frequenciesFull; /**< Frequency axis in Hz (size: numFreqBinsFull), for full TR spectra */
-    float* spectraGxFull;  /**< Gx full TR spectrum (numFreqBinsFull,) */
-    float* spectraGyFull;  /**< Gy full TR spectrum (numFreqBinsFull,) */
-    float* spectraGzFull;  /**< Gz full TR spectrum (numFreqBinsFull,) */
+    float* spectraGxFull;  /**< Gx full TR spectrum (numFreqBinsFull,) - continuous envelope */
+    float* spectraGyFull;  /**< Gy full TR spectrum (numFreqBinsFull,) - continuous envelope */
+    float* spectraGzFull;  /**< Gz full TR spectrum (numFreqBinsFull,) - continuous envelope */
+    
+    /* Full sequence spectrum (N TRs - spectral line picking at harmonics of 1/TR) */
+    int numTRs;            /**< Number of TR repetitions in sequence */
+    float trDuration_us;   /**< TR duration in microseconds */
+    float fundamentalFreq; /**< Fundamental frequency = 1/TR (Hz) */
+    int numFreqBinsSeq;    /**< Number of spectral lines (harmonics) in sequence spectrum */
+    float* frequenciesSeq; /**< Frequency axis in Hz (size: numFreqBinsSeq), harmonic frequencies */
+    float* spectraGxSeq;   /**< Gx sequence spectrum (numFreqBinsSeq,) - magnitudes at harmonics */
+    float* spectraGySeq;   /**< Gy sequence spectrum (numFreqBinsSeq,) - magnitudes at harmonics */
+    float* spectraGzSeq;   /**< Gz sequence spectrum (numFreqBinsSeq,) - magnitudes at harmonics */
 } pulseqlib_TRAcousticSpectra;
 
-#define PULSEQLIB_TR_ACOUSTIC_SPECTRA_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, 0, 0.0f, NULL, NULL, NULL, NULL}
+#define PULSEQLIB_TR_ACOUSTIC_SPECTRA_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, 0, 0.0f, NULL, NULL, NULL, NULL, 0, 0.0f, 0.0f, 0, NULL, NULL, NULL, NULL}
 
 #endif /* PULSEQLIB_H */
 

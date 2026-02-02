@@ -547,7 +547,7 @@ static py::dict _get_tr_gradient_waveforms(_PulserverSeqFile& seqfile) {
 
 static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetWindowSize, float targetSpectralResolution, float maxFrequency, bool combined) {
     if (!seqfile.seq) {
-        throw std::runtime_error("Sequence file not loaded");
+        throw std::runtime_error("SeqFile is not initialized");
     }
 
     // Initialize sequence descriptor
@@ -565,7 +565,7 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
         return output;
     }
 
-    // Step 2: Call findTRInSequence
+    // Step 2: Call findTRInSequence (now computes and stores TR duration)
     pulseqlib_Diagnostic diag;
     pulseqlib_diagnosticInit(&diag);
     
@@ -591,11 +591,25 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
         return output;
     }
 
-    // Step 4: Call getTRAcousticSpectra
+    // Extract numTRs and trDuration from TR descriptor (computed by findTRInSequence)
+    int numTRs = seqDesc.trDescriptor.numTRs;
+    float trDuration_us = seqDesc.trDescriptor.trDuration_us;
+
+    // Step 4: Call getTRAcousticSpectra with numTRs and trDuration_us
     pulseqlib_TRAcousticSpectra spectra;
     memset(&spectra, 0, sizeof(spectra));
     
-    code = pulseqlib_getTRAcousticSpectra(&waveforms, seqDesc.gradRasterTime_us, targetWindowSize, targetSpectralResolution, maxFrequency, combined ? 1 : 0, &spectra, &diag);
+    code = pulseqlib_getTRAcousticSpectra(
+        &waveforms, 
+        seqDesc.gradRasterTime_us, 
+        targetWindowSize, 
+        targetSpectralResolution, 
+        maxFrequency, 
+        combined ? 1 : 0,
+        numTRs,
+        trDuration_us,
+        &spectra, 
+        &diag);
     
     if (PULSEQLIB_FAILED(code)) {
         pulseqlib_trGradientWaveformsFree(&waveforms);
@@ -637,6 +651,24 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
     output["spectra_gx_full"] = spectraGxFull;
     output["spectra_gy_full"] = spectraGyFull;
     output["spectra_gz_full"] = spectraGzFull;
+    
+    // Add sequence spectra if computed
+    if (spectra.numFreqBinsSeq > 0 && spectra.frequenciesSeq) {
+        output["num_trs"] = spectra.numTRs;
+        output["tr_duration_us"] = spectra.trDuration_us;
+        output["fundamental_freq"] = spectra.fundamentalFreq;
+        output["num_freq_bins_seq"] = spectra.numFreqBinsSeq;
+        
+        std::vector<float> frequenciesSeq(spectra.frequenciesSeq, spectra.frequenciesSeq + spectra.numFreqBinsSeq);
+        std::vector<float> spectraGxSeq(spectra.spectraGxSeq, spectra.spectraGxSeq + spectra.numFreqBinsSeq);
+        std::vector<float> spectraGySeq(spectra.spectraGySeq, spectra.spectraGySeq + spectra.numFreqBinsSeq);
+        std::vector<float> spectraGzSeq(spectra.spectraGzSeq, spectra.spectraGzSeq + spectra.numFreqBinsSeq);
+        
+        output["frequencies_seq"] = frequenciesSeq;
+        output["spectra_gx_seq"] = spectraGxSeq;
+        output["spectra_gy_seq"] = spectraGySeq;
+        output["spectra_gz_seq"] = spectraGzSeq;
+    }
 
     // Cleanup
     pulseqlib_trAcousticSpectraFree(&spectra);

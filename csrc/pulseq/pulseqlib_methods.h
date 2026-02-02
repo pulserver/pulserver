@@ -113,6 +113,8 @@ int pulseqlib_getTRAcousticSpectra(
     float targetSpectralResolution_Hz,
     float maxFrequency_Hz,
     int combined,
+    int numTRs,
+    float trDuration_us,
     pulseqlib_TRAcousticSpectra* spectra,
     pulseqlib_Diagnostic* diag);
 

@@ -392,7 +392,7 @@ def get_tr_acoustic_spectra(
     Compute acoustic spectra for gradient waveforms in a TR.
     
     Performs sliding-window FFT analysis on each gradient axis to identify
-    potential acoustic resonance frequencies, plus a full TR spectrum.
+    potential acoustic resonance frequencies, plus full TR and N-TR sequence spectra.
     
     Parameters
     ----------
@@ -425,15 +425,24 @@ def get_tr_acoustic_spectra(
         - spectra_gy: np.ndarray, Gy spectra (same shape as spectra_gx)
         - spectra_gz: np.ndarray, Gz spectra (same shape as spectra_gx)
         
-        Full TR spectra:
+        Full TR spectra (continuous envelope):
         - frequencies_full: np.ndarray of shape (num_freq_bins_full,), frequency values in Hz
         - spectrum_gx_full: np.ndarray of shape (num_freq_bins_full,), Gx full TR spectrum
         - spectrum_gy_full: np.ndarray of shape (num_freq_bins_full,), Gy full TR spectrum
         - spectrum_gz_full: np.ndarray of shape (num_freq_bins_full,), Gz full TR spectrum
         
+        N-TR sequence spectra (discrete lines at harmonics, only if numTRs > 1):
+        - num_trs: Number of TR repetitions
+        - tr_duration_us: TR duration in microseconds
+        - fundamental_freq: Fundamental frequency (1/TR) in Hz
+        - frequencies_seq: np.ndarray of harmonic frequencies (k * f0)
+        - spectrum_gx_seq: np.ndarray, Gx sequence spectrum at harmonics
+        - spectrum_gy_seq: np.ndarray, Gy sequence spectrum at harmonics
+        - spectrum_gz_seq: np.ndarray, Gz sequence spectrum at harmonics
+    
     Notes
     -----
-    The analysis performs two types of spectral analysis:
+    The analysis performs three types of spectral analysis:
     
     1. **Sliding window spectra**: Shows temporal evolution of frequencies
        - Extract window samples (50% overlap between windows)
@@ -442,32 +451,31 @@ def get_tr_acoustic_spectra(
        - Apply cosine taper window
        - Compute magnitude spectrum via real FFT
     
-    2. **Full TR spectrum**: Single spectrum for entire TR (global view)
+    2. **Full TR spectrum**: Single spectrum for entire TR (continuous envelope)
        - Uses entire TR as one window
        - Same spectral resolution and max frequency as sliding window
        - Useful for identifying dominant frequencies across the full TR
+       
+    3. **N-TR sequence spectrum**: Spectral lines at harmonics of 1/TR (discrete)
+       - Only computed if numTRs > 1
+       - Samples complex FFT at harmonic frequencies k*f0 where f0 = 1/TR
+       - Uses linear interpolation of complex FFT before taking magnitude
+       - Represents the steady-state spectrum of the repeated TR pattern
     
     When combined=True, the sliding window output is the pointwise maximum magnitude
     across all windows, useful for identifying the worst-case acoustic excitation.
     
-    The spectra can be used to identify gradient switching frequencies that
-    may excite mechanical resonances. 
-    
     Examples
     --------
-    >>> # Get spectra with 5 Hz resolution up to 2000 Hz
+    >>> # Get all spectra with 5 Hz resolution up to 2000 Hz
     >>> result = get_tr_acoustic_spectra(seq, max_frequency=2000.0)
     >>> 
-    >>> # Plot sliding window max vs full TR spectrum
+    >>> # Plot sliding window max vs full TR vs sequence spectrum
     >>> plt.plot(result.frequencies, result.spectra_gx.max(axis=0), label='Sliding window max')
     >>> plt.plot(result.frequencies_full, result.spectrum_gx_full, label='Full TR')
+    >>> if hasattr(result, 'frequencies_seq'):
+    >>>     plt.stem(result.frequencies_seq, result.spectrum_gx_seq, label='Sequence (harmonics)')
     >>> plt.legend()
-    
-    >>> # Get combined spectrum (pointwise max) with 2 Hz resolution
-    >>> result = get_tr_acoustic_spectra(seq, target_spectral_resolution=2.0, 
-    ...                                   max_frequency=2000.0, combined=True)
-    >>> plt.plot(result.frequencies, result.spectra_gx, label='Windowed (combined)')
-    >>> plt.plot(result.frequencies_full, result.spectrum_gx_full, label='Full TR')
     """
     if max_frequency is None:
         max_frequency = -1.0  # Use -1 to indicate full spectrum in C wrapper
@@ -505,5 +513,15 @@ def get_tr_acoustic_spectra(
         spectrum_gy_full=np.asarray(result_dict["spectra_gy_full"], dtype=np.float32),
         spectrum_gz_full=np.asarray(result_dict["spectra_gz_full"], dtype=np.float32),
     )
+    
+    # Add sequence spectra if present (only when numTRs > 1)
+    if "frequencies_seq" in result_dict:
+        result.num_trs = result_dict["num_trs"]
+        result.tr_duration_us = result_dict["tr_duration_us"]
+        result.fundamental_freq = result_dict["fundamental_freq"]
+        result.frequencies_seq = np.asarray(result_dict["frequencies_seq"], dtype=np.float32)
+        result.spectrum_gx_seq = np.asarray(result_dict["spectra_gx_seq"], dtype=np.float32)
+        result.spectrum_gy_seq = np.asarray(result_dict["spectra_gy_seq"], dtype=np.float32)
+        result.spectrum_gz_seq = np.asarray(result_dict["spectra_gz_seq"], dtype=np.float32)
     
     return result

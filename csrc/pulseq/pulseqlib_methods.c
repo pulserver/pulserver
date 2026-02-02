@@ -5221,6 +5221,8 @@ int pulseqlib_findTRInSequence(
     int found;
     int L;
     pulseqlib_Diagnostic localDiag;
+    float trDuration;
+    int trStartBlock;
 
     /* Use local diag if caller doesn't want diagnostics */
     if (!diag) {
@@ -5251,6 +5253,7 @@ int pulseqlib_findTRInSequence(
     /* Fill trDesc with initial values */
     trDesc->trSize = 0;
     trDesc->numTRs = 0;
+    trDesc->trDuration_us = 0.0f;
     trDesc->degeneratePrep = 1;
     trDesc->numPrepBlocks = seqDesc->numPrepBlocks;
     trDesc->numPrepTRs = 1;
@@ -5346,6 +5349,14 @@ int pulseqlib_findTRInSequence(
             trDesc->degenerateCooldown = 1;
             trDesc->numCooldownBlocks = 0;
             trDesc->numCooldownTRs = 0;
+
+            /* Compute TR duration as sum of all block durations */
+            trDuration = 0.0f;
+            for (i = 0; i < seqDesc->numBlocks; ++i) {
+                trDuration += (float)blockDurations_us[i];
+            }
+            trDesc->trDuration_us = trDuration;
+
             diag->code = PULSEQLIB_OK;
             FREE(sequence_pattern);
             return PULSEQLIB_OK; /* SUCCESS - single TR fallback */
@@ -5364,6 +5375,14 @@ int pulseqlib_findTRInSequence(
     /* Fill trDesc */
     trDesc->trSize = L;
     trDesc->numTRs = imagingLen / L;
+
+    /* Compute TR duration by summing block durations in one TR period */
+    trDuration = 0.0f;
+    trStartBlock = imagingStart;
+    for (i = 0; i < L; ++i) {
+        trDuration += (float)blockDurations_us[trStartBlock + i];
+    }
+    trDesc->trDuration_us = trDuration;
 
     /* Safety check for preparation */
     if (seqDesc->numPrepBlocks) {
@@ -7170,9 +7189,27 @@ void pulseqlib_trAcousticSpectraFree(pulseqlib_TRAcousticSpectra* spectra)
         spectra->spectraGzFull = NULL;
     }
     
+    if (spectra->frequenciesSeq) {
+        FREE(spectra->frequenciesSeq);
+        spectra->frequenciesSeq = NULL;
+    }
+    if (spectra->spectraGxSeq) {
+        FREE(spectra->spectraGxSeq);
+        spectra->spectraGxSeq = NULL;
+    }
+    if (spectra->spectraGySeq) {
+        FREE(spectra->spectraGySeq);
+        spectra->spectraGySeq = NULL;
+    }
+    if (spectra->spectraGzSeq) {
+        FREE(spectra->spectraGzSeq);
+        spectra->spectraGzSeq = NULL;
+    }
+    
     spectra->numWindows = 0;
     spectra->numFreqBins = 0;
     spectra->numFreqBinsFull = 0;
+    spectra->numFreqBinsSeq = 0;
     spectra->freqResolution = 0.0f;
     spectra->freqResolutionFull = 0.0f;
 }
@@ -7259,93 +7296,99 @@ static int compute_axis_spectra(
 }
 
 /**
- * @brief Calculate FFT parameters for full TR spectrum without computing it.
+ * @brief Compute full TR spectrum and optionally N-TR sequence spectrum.
+ *
+ * Computes the magnitude spectrum of the entire TR waveform (continuous envelope).
+ * Optionally computes the N-TR sequence spectrum by sampling the complex FFT
+ * at harmonic frequencies k*f0 (where f0 = 1/TR) with linear interpolation
+ * of complex values before taking magnitude. The sequence spectrum is normalized
+ * by numTRs to keep magnitudes comparable and prevent overflow.
+ *
+ * @param fullSpectrum Output buffer for full TR spectrum (must be pre-allocated), or NULL to skip
+ * @param seqSpectrum Output pointer for sequence spectrum (will be allocated), or NULL to skip
+ * @param seqFrequencies Output pointer for sequence frequency axis (will be allocated), or NULL to skip
+ * @param waveform Input waveform samples
+ * @param numSamples Number of samples in waveform
+ * @param gradRasterTime_us Gradient raster time in microseconds
+ * @param targetSpectralResolution_Hz Target spectral resolution in Hz
+ * @param maxFrequency Maximum frequency to include in output (Hz)
+ * @param fundamentalFreq Fundamental frequency = 1/TR (Hz), 0 to skip sequence spectrum
+ * @param numTRs Number of TRs (used for normalization of sequence spectrum)
+ * @param outNumFreqBinsFull Output: number of bins in full spectrum
+ * @param outFreqResolutionFull Output: frequency resolution of full spectrum
+ * @param outNumPicked Output: number of harmonic lines (if computing sequence spectrum)
  */
-static void calculate_full_tr_fft_params(
+static int compute_tr_and_sequence_spectra(
+    float* fullSpectrum,
+    float** seqSpectrum,
+    float** seqFrequencies,
+    const float* waveform,
     int numSamples,
     float gradRasterTime_us,
     float targetSpectralResolution_Hz,
-    float maxFrequency_Hz,
-    int* outNfft,
-    int* outNumFreqBins,
-    float* outFreqResolution)
+    float maxFrequency,
+    float fundamentalFreq,
+    int numTRs,
+    int* outNumFreqBinsFull,
+    float* outFreqResolutionFull,
+    int* outNumPicked)
 {
-    int nfft, nfreq, outputFreqBins;
+    /* All declarations at the top for C89 compliance */
+    int nfft, nfreq, outputFreqBinsFull, numPicked;
     int minNfftForResolution;
-    int maxIdx;
     float freqResolution;
+    float maxFreq;
+    int maxIdx;
+    float* workBuffer = NULL;
+    float* cosWindow = NULL;
+    kiss_fft_cpx* fftOut = NULL;
+    kiss_fftr_cfg fftCfg = NULL;
+    float* pickedMagnitudes = NULL;
+    float* pickedFreqs = NULL;
+    float mean;
+    int i, k, freqIdx;
+    float freq, freqLow, freqHigh, t;
+    float re_low, im_low, re_high, im_high;
+    float re_interp, im_interp;
+    float cosArg;
+    float normFactor;
+    int result = PULSEQLIB_OK;
+    
+    if (!waveform || numSamples <= 0) {
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    }
     
     /* Calculate minimum nfft needed for target spectral resolution */
-    minNfftForResolution = (int)ceil((double)(1.0e6f / (gradRasterTime_us * targetSpectralResolution_Hz)));
+    minNfftForResolution = (int)ceil((double)(1.0e6 / (gradRasterTime_us * targetSpectralResolution_Hz)));
     
     /* Ensure nfft is at least numSamples, round to power of 2 */
     if (minNfftForResolution < numSamples) {
-        nfft = next_pow2(numSamples);
+        nfft = (int)next_pow2((size_t)numSamples);
     } else {
-        nfft = next_pow2(minNfftForResolution);
+        nfft = (int)next_pow2((size_t)minNfftForResolution);
     }
     
     /* Number of frequency bins for real FFT */
     nfreq = nfft / 2 + 1;
     
     /* Actual frequency resolution achieved */
-    freqResolution = 1.0e6f / (gradRasterTime_us * (float)nfft);
+    freqResolution = (float)(1.0e6 / (gradRasterTime_us * (double)nfft));
     
-    /* Determine output frequency bins based on maxFrequency_Hz */
-    if (maxFrequency_Hz < 0.0f) {
-        outputFreqBins = nfreq;
+    /* Determine output frequency bins based on maxFrequency */
+    maxFreq = (maxFrequency > 0.0f) ? maxFrequency : (float)(5.0e5 / gradRasterTime_us);
+    maxIdx = (int)(maxFreq / freqResolution + 0.5);
+    if (maxIdx >= nfreq) {
+        outputFreqBinsFull = nfreq;
+    } else if (maxIdx < 1) {
+        outputFreqBinsFull = 1;
     } else {
-        maxIdx = (int)(maxFrequency_Hz / freqResolution + 0.5f);
-        if (maxIdx >= nfreq) {
-            outputFreqBins = nfreq;
-        } else if (maxIdx < 1) {
-            outputFreqBins = 1;
-        } else {
-            outputFreqBins = maxIdx + 1;
-        }
+        outputFreqBinsFull = maxIdx + 1;
     }
-    
-    if (outNfft) *outNfft = nfft;
-    if (outNumFreqBins) *outNumFreqBins = outputFreqBins;
-    if (outFreqResolution) *outFreqResolution = freqResolution;
-}
-
-/**
- * @brief Compute full TR spectrum (single window covering entire waveform).
- * 
- * @param spectrumOut Output buffer for spectrum (must be pre-allocated with outputFreqBins elements)
- * @param waveform Input waveform samples
- * @param numSamples Number of samples in waveform
- * @param nfft FFT size (from calculate_full_tr_fft_params)
- * @param outputFreqBins Number of output frequency bins (from calculate_full_tr_fft_params)
- */
-static int compute_full_tr_spectrum(
-    float* spectrumOut,
-    const float* waveform,
-    int numSamples,
-    int nfft,
-    int outputFreqBins)
-{
-    int nfreq;
-    float* workBuffer = NULL;
-    float* cosWindow = NULL;
-    kiss_fft_cpx* fftOut = NULL;
-    kiss_fftr_cfg fftCfg = NULL;
-    float mean;
-    int i;
-    int result = PULSEQLIB_OK;
-    
-    if (!spectrumOut || !waveform || numSamples <= 0 || nfft <= 0 || outputFreqBins <= 0) {
-        return PULSEQLIB_ERR_NULL_POINTER;
-    }
-    
-    /* Number of frequency bins for real FFT */
-    nfreq = nfft / 2 + 1;
     
     /* Allocate buffers */
-    workBuffer = (float*)ALLOC(nfft * sizeof(float));
-    cosWindow = (float*)ALLOC(numSamples * sizeof(float));
-    fftOut = (kiss_fft_cpx*)ALLOC(nfreq * sizeof(kiss_fft_cpx));
+    workBuffer = (float*)ALLOC((size_t)nfft * sizeof(float));
+    cosWindow = (float*)ALLOC((size_t)numSamples * sizeof(float));
+    fftOut = (kiss_fft_cpx*)ALLOC((size_t)nfreq * sizeof(kiss_fft_cpx));
     
     if (!workBuffer || !cosWindow || !fftOut) {
         result = PULSEQLIB_ERR_ALLOC_FAILED;
@@ -7361,7 +7404,8 @@ static int compute_full_tr_spectrum(
     
     /* Compute cosine taper window for full TR */
     for (i = 0; i < numSamples; ++i) {
-        cosWindow[i] = 0.5f * (1.0f - cosf(2.0f * (float)M_PI * (float)(i + 1) / (float)numSamples));
+        cosArg = 2.0 * M_PI * (double)(i + 1) / (double)numSamples;
+        cosWindow[i] = (float)(0.5 * (1.0 - cos(cosArg)));
     }
     
     /* Copy waveform to work buffer */
@@ -7389,12 +7433,85 @@ static int compute_full_tr_spectrum(
         workBuffer[i] *= cosWindow[i];
     }
     
-    /* Compute FFT */
+    /* Compute complex FFT */
     kiss_fftr(fftCfg, workBuffer, fftOut);
     
-    /* Compute magnitude spectrum and copy only requested frequency range */
-    for (i = 0; i < outputFreqBins; ++i) {
-        spectrumOut[i] = (float)sqrt((double)(fftOut[i].r * fftOut[i].r + fftOut[i].i * fftOut[i].i));
+    /* Compute full TR magnitude spectrum if requested */
+    if (fullSpectrum) {
+        for (i = 0; i < outputFreqBinsFull; ++i) {
+            fullSpectrum[i] = (float)sqrt((double)(fftOut[i].r * fftOut[i].r + fftOut[i].i * fftOut[i].i));
+        }
+    }
+    
+    /* Compute N-TR sequence spectrum (harmonic sampling) if requested */
+    if (fundamentalFreq > 0.0f && seqSpectrum && seqFrequencies && numTRs > 0) {
+        /* Count how many harmonic lines fit in the frequency range */
+        numPicked = (int)(maxFreq / fundamentalFreq) + 1;
+        
+        /* Allocate output arrays */
+        pickedMagnitudes = (float*)ALLOC((size_t)numPicked * sizeof(float));
+        pickedFreqs = (float*)ALLOC((size_t)numPicked * sizeof(float));
+        
+        if (!pickedMagnitudes || !pickedFreqs) {
+            result = PULSEQLIB_ERR_ALLOC_FAILED;
+            goto cleanup;
+        }
+        
+        /* Normalization factor to prevent overflow and keep magnitudes comparable */
+        normFactor = (numTRs > 1) ? (1.0f / (float)numTRs) : 1.0f;
+        
+        /* Sample complex spectrum at harmonic frequencies */
+        for (k = 0; k < numPicked; ++k) {
+            freq = (float)k * fundamentalFreq;
+            pickedFreqs[k] = freq;
+            
+            /* Find the FFT bin index for this frequency */
+            freqIdx = (int)(freq / freqResolution);
+            
+            if (freqIdx >= nfreq - 1) {
+                /* Beyond Nyquist - set to zero */
+                pickedMagnitudes[k] = 0.0f;
+            } else if (freqIdx == 0) {
+                /* DC bin - no interpolation */
+                pickedMagnitudes[k] = (float)sqrt((double)(fftOut[0].r * fftOut[0].r + 
+                                                           fftOut[0].i * fftOut[0].i)) * normFactor;
+            } else {
+                /* Interpolate complex spectrum linearly between adjacent bins */
+                freqLow = (float)freqIdx * freqResolution;
+                freqHigh = (float)(freqIdx + 1) * freqResolution;
+                
+                re_low = fftOut[freqIdx].r;
+                im_low = fftOut[freqIdx].i;
+                re_high = fftOut[freqIdx + 1].r;
+                im_high = fftOut[freqIdx + 1].i;
+                
+                /* Interpolation parameter */
+                t = (freq - freqLow) / (freqHigh - freqLow);
+                
+                /* Linear interpolation of complex values */
+                re_interp = re_low * (1.0f - t) + re_high * t;
+                im_interp = im_low * (1.0f - t) + im_high * t;
+                
+                /* Take magnitude after interpolation and normalize */
+                pickedMagnitudes[k] = (float)sqrt((double)(re_interp * re_interp + im_interp * im_interp)) * normFactor;
+            }
+        }
+        
+        *seqSpectrum = pickedMagnitudes;
+        *seqFrequencies = pickedFreqs;
+        if (outNumPicked) {
+            *outNumPicked = numPicked;
+        }
+        /* Prevent cleanup from freeing these - ownership transferred to caller */
+        pickedMagnitudes = NULL;
+        pickedFreqs = NULL;
+    }
+    
+    if (outNumFreqBinsFull) {
+        *outNumFreqBinsFull = outputFreqBinsFull;
+    }
+    if (outFreqResolutionFull) {
+        *outFreqResolutionFull = freqResolution;
     }
     
 cleanup:
@@ -7402,6 +7519,8 @@ cleanup:
     if (cosWindow) FREE(cosWindow);
     if (fftOut) FREE(fftOut);
     if (fftCfg) kiss_fftr_free(fftCfg);
+    if (pickedMagnitudes) FREE(pickedMagnitudes);
+    if (pickedFreqs) FREE(pickedFreqs);
     
     return result;
 }
@@ -7413,21 +7532,29 @@ int pulseqlib_getTRAcousticSpectra(
     float targetSpectralResolution_Hz,
     float maxFrequency_Hz,
     int combined,
+    int numTRs,
+    float trDuration_us,
     pulseqlib_TRAcousticSpectra* spectra,
     pulseqlib_Diagnostic* diag)
 {
+    /* All declarations at top for C89 compliance */
     pulseqlib_Diagnostic localDiag;
     AcousticSpectrumSupport support;
     int maxSamples;
     int paddedLen;
     int result;
     int i;
-    int outputSpectraSize;  /* Size of each spectra array */
-
-    /* Full spectrum analysis */
-    int nfft_full;
+    int outputSpectraSize;
+    
+    /* Full TR and sequence spectrum variables */
     int numFreqBinsFull;
     float freqResolutionFull;
+    int numFreqBinsSeq;
+    float fundamentalFreq;
+    float* seqSpectrumGx = NULL;
+    float* seqSpectrumGy = NULL;
+    float* seqSpectrumGz = NULL;
+    float* seqFrequencies = NULL;
     
     /* Use local diag if caller doesn't provide one */
     if (!diag) {
@@ -7461,7 +7588,7 @@ int pulseqlib_getTRAcousticSpectra(
         return diag->code;
     }
     
-    /* Initialize acoustic support structure */
+    /* Initialize acoustic support structure for sliding window */
     result = acousticSpectrumSupportInit(
         &support, maxSamples, targetWindowSize, targetSpectralResolution_Hz, gradRasterTime_us, maxFrequency_Hz);
     if (PULSEQLIB_FAILED(result)) {
@@ -7469,7 +7596,7 @@ int pulseqlib_getTRAcousticSpectra(
         return result;
     }
     
-    /* Store output parameters */
+    /* Store sliding window output parameters */
     spectra->combined = combined;
     spectra->numWindows = combined ? 1 : support.numWindows;
     spectra->numFreqBins = support.outputFreqBins;
@@ -7482,11 +7609,11 @@ int pulseqlib_getTRAcousticSpectra(
         outputSpectraSize = support.numWindows * support.outputFreqBins;
     }
         
-    /* Allocate output arrays */
-    spectra->spectraGx = (float*)ALLOC(outputSpectraSize * sizeof(float));
-    spectra->spectraGy = (float*)ALLOC(outputSpectraSize * sizeof(float));
-    spectra->spectraGz = (float*)ALLOC(outputSpectraSize * sizeof(float));
-    spectra->frequencies = (float*)ALLOC(support.outputFreqBins * sizeof(float));
+    /* Allocate sliding window output arrays */
+    spectra->spectraGx = (float*)ALLOC((size_t)outputSpectraSize * sizeof(float));
+    spectra->spectraGy = (float*)ALLOC((size_t)outputSpectraSize * sizeof(float));
+    spectra->spectraGz = (float*)ALLOC((size_t)outputSpectraSize * sizeof(float));
+    spectra->frequencies = (float*)ALLOC((size_t)support.outputFreqBins * sizeof(float));
 
     if (!spectra->spectraGx || !spectra->spectraGy || !spectra->spectraGz || !spectra->frequencies) {
         pulseqlib_trAcousticSpectraFree(spectra);
@@ -7495,19 +7622,20 @@ int pulseqlib_getTRAcousticSpectra(
         return diag->code;
     }
 
-    /* Populate frequency axis (only up to outputFreqBins) */
+    /* Populate sliding window frequency axis */
     for (i = 0; i < support.outputFreqBins; i++) {
-        spectra->frequencies[i] = i * support.freqResolution;
+        spectra->frequencies[i] = (float)i * support.freqResolution;
     }
 
-    /* Compute padded length that support expects (based on maxSamples) */
+    /* Compute padded length that support expects */
     if (maxSamples <= support.nwin) {
         paddedLen = maxSamples;
     } else {
         paddedLen = ((maxSamples + support.nwin - 1) / support.nwin) * support.nwin;
     }
     
-    /* Compute spectra for each axis */
+    /* ========== Compute sliding window spectra for each axis ========== */
+    
     /* Gx */
     if (waveforms->numSamplesGx > 0) {
         result = compute_axis_spectra(spectra->spectraGx, &support, 
@@ -7519,7 +7647,7 @@ int pulseqlib_getTRAcousticSpectra(
             return result;
         }
     } else {
-        memset(spectra->spectraGx, 0, outputSpectraSize * sizeof(float));
+        memset(spectra->spectraGx, 0, (size_t)outputSpectraSize * sizeof(float));
     }
     
     /* Gy */
@@ -7533,7 +7661,7 @@ int pulseqlib_getTRAcousticSpectra(
             return result;
         }
     } else {
-        memset(spectra->spectraGy, 0, outputSpectraSize * sizeof(float));
+        memset(spectra->spectraGy, 0, (size_t)outputSpectraSize * sizeof(float));
     }
 
     /* Gz */
@@ -7547,36 +7675,86 @@ int pulseqlib_getTRAcousticSpectra(
             return result;
         }
     } else {
-        memset(spectra->spectraGz, 0, outputSpectraSize * sizeof(float));
+        memset(spectra->spectraGz, 0, (size_t)outputSpectraSize * sizeof(float));
     }
     
     /* Cleanup sliding window support */
     acousticSpectrumSupportFree(&support);
     
-    /* ========== Compute Full TR Spectra ========== */
-        
-    /* Calculate FFT parameters based on the longest waveform */
-    calculate_full_tr_fft_params(
-        maxSamples,
-        gradRasterTime_us,
-        targetSpectralResolution_Hz,
-        maxFrequency_Hz,
-        &nfft_full,
-        &numFreqBinsFull,
-        &freqResolutionFull);
+    /* ========== Compute Full TR and Sequence Spectra ========== */
     
-    /* Store parameters in output struct */
+    /* Compute fundamental frequency for sequence spectrum (0 to skip) */
+    if (numTRs > 1 && trDuration_us > 0.0f) {
+        fundamentalFreq = 1.0e6f / trDuration_us;  /* Convert to Hz */
+        spectra->numTRs = numTRs;
+        spectra->trDuration_us = trDuration_us;
+        spectra->fundamentalFreq = fundamentalFreq;
+    } else {
+        fundamentalFreq = 0.0f;
+        spectra->numTRs = 1;
+        spectra->trDuration_us = trDuration_us;
+        spectra->fundamentalFreq = 0.0f;
+    }
+    
+    /* Allocate full TR spectrum arrays (will be populated by compute_tr_and_sequence_spectra) */
+    /* We need to call once to get the sizes first, then allocate */
+    
+    /* Compute for Gx (first call also determines sizes) */
+    if (waveforms->numSamplesGx > 0) {
+        result = compute_tr_and_sequence_spectra(
+            NULL,  /* Don't output full spectrum yet - need to allocate first */
+            (fundamentalFreq > 0.0f) ? &seqSpectrumGx : NULL,
+            (fundamentalFreq > 0.0f) ? &seqFrequencies : NULL,
+            waveforms->waveformGx,
+            waveforms->numSamplesGx,
+            gradRasterTime_us,
+            targetSpectralResolution_Hz,
+            maxFrequency_Hz,
+            fundamentalFreq,
+            numTRs,
+            &numFreqBinsFull,
+            &freqResolutionFull,
+            &numFreqBinsSeq);
+        if (PULSEQLIB_FAILED(result)) {
+            pulseqlib_trAcousticSpectraFree(spectra);
+            diag->code = result;
+            return result;
+        }
+    } else {
+        /* Use maxSamples to determine sizes */
+        result = compute_tr_and_sequence_spectra(
+            NULL, NULL, NULL,
+            waveforms->waveformGy ? waveforms->waveformGy : waveforms->waveformGz,
+            maxSamples,
+            gradRasterTime_us,
+            targetSpectralResolution_Hz,
+            maxFrequency_Hz,
+            0.0f,  /* No sequence spectrum needed for size calculation */
+            numTRs,
+            &numFreqBinsFull,
+            &freqResolutionFull,
+            NULL);
+        if (PULSEQLIB_FAILED(result)) {
+            pulseqlib_trAcousticSpectraFree(spectra);
+            diag->code = result;
+            return result;
+        }
+    }
+    
+    /* Store full TR parameters */
     spectra->numFreqBinsFull = numFreqBinsFull;
     spectra->freqResolutionFull = freqResolutionFull;
     
     /* Allocate full TR spectrum arrays */
-    spectra->spectraGxFull = (float*)ALLOC(numFreqBinsFull * sizeof(float));
-    spectra->spectraGyFull = (float*)ALLOC(numFreqBinsFull * sizeof(float));
-    spectra->spectraGzFull = (float*)ALLOC(numFreqBinsFull * sizeof(float));
-    spectra->frequenciesFull = (float*)ALLOC(numFreqBinsFull * sizeof(float));
+    spectra->spectraGxFull = (float*)ALLOC((size_t)numFreqBinsFull * sizeof(float));
+    spectra->spectraGyFull = (float*)ALLOC((size_t)numFreqBinsFull * sizeof(float));
+    spectra->spectraGzFull = (float*)ALLOC((size_t)numFreqBinsFull * sizeof(float));
+    spectra->frequenciesFull = (float*)ALLOC((size_t)numFreqBinsFull * sizeof(float));
     
     if (!spectra->spectraGxFull || !spectra->spectraGyFull || 
         !spectra->spectraGzFull || !spectra->frequenciesFull) {
+        if (seqSpectrumGx) FREE(seqSpectrumGx);
+        if (seqFrequencies) FREE(seqFrequencies);
         pulseqlib_trAcousticSpectraFree(spectra);
         diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
         return diag->code;
@@ -7584,62 +7762,123 @@ int pulseqlib_getTRAcousticSpectra(
     
     /* Populate full TR frequency axis */
     for (i = 0; i < numFreqBinsFull; i++) {
-        spectra->frequenciesFull[i] = i * freqResolutionFull;
+        spectra->frequenciesFull[i] = (float)i * freqResolutionFull;
     }
     
-    /* Compute full TR spectrum for Gx */
+    /* Allocate sequence spectrum arrays if computing sequence spectrum */
+    if (fundamentalFreq > 0.0f && numFreqBinsSeq > 0) {
+        spectra->numFreqBinsSeq = numFreqBinsSeq;
+        spectra->spectraGxSeq = (float*)ALLOC((size_t)numFreqBinsSeq * sizeof(float));
+        spectra->spectraGySeq = (float*)ALLOC((size_t)numFreqBinsSeq * sizeof(float));
+        spectra->spectraGzSeq = (float*)ALLOC((size_t)numFreqBinsSeq * sizeof(float));
+        spectra->frequenciesSeq = seqFrequencies;  /* Take ownership from first call */
+        seqFrequencies = NULL;
+        
+        if (!spectra->spectraGxSeq || !spectra->spectraGySeq || !spectra->spectraGzSeq) {
+            if (seqSpectrumGx) FREE(seqSpectrumGx);
+            pulseqlib_trAcousticSpectraFree(spectra);
+            diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+            return diag->code;
+        }
+        
+        /* Copy Gx sequence spectrum from first call */
+        if (seqSpectrumGx && waveforms->numSamplesGx > 0) {
+            memcpy(spectra->spectraGxSeq, seqSpectrumGx, (size_t)numFreqBinsSeq * sizeof(float));
+            FREE(seqSpectrumGx);
+            seqSpectrumGx = NULL;
+        } else {
+            memset(spectra->spectraGxSeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
+        }
+    }
+    
+    /* Now compute full TR spectrum for Gx */
     if (waveforms->numSamplesGx > 0) {
-        result = compute_full_tr_spectrum(
+        result = compute_tr_and_sequence_spectra(
             spectra->spectraGxFull,
+            NULL, NULL,  /* Already have sequence spectrum */
             waveforms->waveformGx,
             waveforms->numSamplesGx,
-            nfft_full,
-            numFreqBinsFull);
+            gradRasterTime_us,
+            targetSpectralResolution_Hz,
+            maxFrequency_Hz,
+            0.0f,  /* Don't recompute sequence spectrum */
+            1,
+            NULL, NULL, NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
             return result;
         }
     } else {
-        memset(spectra->spectraGxFull, 0, numFreqBinsFull * sizeof(float));
+        memset(spectra->spectraGxFull, 0, (size_t)numFreqBinsFull * sizeof(float));
     }
     
-    /* Compute full TR spectrum for Gy */
+    /* Compute for Gy */
     if (waveforms->numSamplesGy > 0) {
-        result = compute_full_tr_spectrum(
+        result = compute_tr_and_sequence_spectra(
             spectra->spectraGyFull,
+            (fundamentalFreq > 0.0f) ? &seqSpectrumGy : NULL,
+            NULL,  /* Don't need frequencies again */
             waveforms->waveformGy,
             waveforms->numSamplesGy,
-            nfft_full,
-            numFreqBinsFull);
+            gradRasterTime_us,
+            targetSpectralResolution_Hz,
+            maxFrequency_Hz,
+            fundamentalFreq,
+            numTRs,
+            NULL, NULL, NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
             return result;
         }
+        
+        /* Copy Gy sequence spectrum */
+        if (seqSpectrumGy && spectra->spectraGySeq) {
+            memcpy(spectra->spectraGySeq, seqSpectrumGy, (size_t)numFreqBinsSeq * sizeof(float));
+            FREE(seqSpectrumGy);
+            seqSpectrumGy = NULL;
+        }
     } else {
-        memset(spectra->spectraGyFull, 0, numFreqBinsFull * sizeof(float));
+        memset(spectra->spectraGyFull, 0, (size_t)numFreqBinsFull * sizeof(float));
+        if (spectra->spectraGySeq) {
+            memset(spectra->spectraGySeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
+        }
     }
     
-    /* Compute full TR spectrum for Gz */
+    /* Compute for Gz */
     if (waveforms->numSamplesGz > 0) {
-        result = compute_full_tr_spectrum(
+        result = compute_tr_and_sequence_spectra(
             spectra->spectraGzFull,
+            (fundamentalFreq > 0.0f) ? &seqSpectrumGz : NULL,
+            NULL,  /* Don't need frequencies again */
             waveforms->waveformGz,
             waveforms->numSamplesGz,
-            nfft_full,
-            numFreqBinsFull);
+            gradRasterTime_us,
+            targetSpectralResolution_Hz,
+            maxFrequency_Hz,
+            fundamentalFreq,
+            numTRs,
+            NULL, NULL, NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
             return result;
         }
+        
+        /* Copy Gz sequence spectrum */
+        if (seqSpectrumGz && spectra->spectraGzSeq) {
+            memcpy(spectra->spectraGzSeq, seqSpectrumGz, (size_t)numFreqBinsSeq * sizeof(float));
+            FREE(seqSpectrumGz);
+            seqSpectrumGz = NULL;
+        }
     } else {
-        memset(spectra->spectraGzFull, 0, numFreqBinsFull * sizeof(float));
+        memset(spectra->spectraGzFull, 0, (size_t)numFreqBinsFull * sizeof(float));
+        if (spectra->spectraGzSeq) {
+            memset(spectra->spectraGzSeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
+        }
     }
     
     diag->code = PULSEQLIB_OK;
     return PULSEQLIB_OK;
 }
-    
-    
