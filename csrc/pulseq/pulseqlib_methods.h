@@ -110,7 +110,7 @@ int pulseqlib_getTRAcousticSpectra(
     const pulseqlib_TRGradientWaveforms* waveforms,
     float gradRasterTime_us,
     int targetWindowSize,
-    int oversampling,
+    float targetSpectralResolution_Hz,
     float maxFrequency_Hz,
     int combined,
     pulseqlib_TRAcousticSpectra* spectra,

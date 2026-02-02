@@ -383,8 +383,8 @@ def get_tr_gradient_waveforms(seq: PulserverSequence) -> SimpleNamespace:
 
 def get_tr_acoustic_spectra(
     seq: PulserverSequence, 
-    target_window_size: int = 5000,
-    oversampling: int = 3,
+    target_window_size: int = 4096,
+    target_spectral_resolution: float = 5.0,
     max_frequency: float | None = None,
     combined: bool = False,
 ) -> SimpleNamespace:
@@ -399,15 +399,15 @@ def get_tr_acoustic_spectra(
     seq : PulserverSequence
         The sequence to analyze.
     target_window_size : int
-        Target window size in samples. Default is 5000 (Pulseq convention,
-        corresponding to 50ms at 10us raster).
-    oversampling : int
-        FFT oversampling ratio. Default is 3 (Pulseq convention).
-        Final FFT size is rounded up to the nearest power of 2.
-    max_frequency : float
-        Maximum frequency to include in output (Hz). Default is -1 (full spectrum).
-        Use a positive value to reduce output size by including only frequencies
-        up to the specified maximum.
+        Target window size in samples. Default is 4096.
+    target_spectral_resolution : float
+        Target frequency resolution in Hz. Default is 5.0 Hz.
+        FFT size is automatically chosen via zero-padding to achieve approximately
+        this resolution.
+    max_frequency : float | None
+        Maximum frequency to include in output (Hz). Default is None (full spectrum
+        up to Nyquist). Use a positive value to reduce output size by including
+        only frequencies up to the specified maximum.
     combined : bool
         If True, return pointwise maximum across all windows (1D arrays).
         If False, stack all windows (2D arrays). Default is False.
@@ -417,36 +417,42 @@ def get_tr_acoustic_spectra(
     SimpleNamespace
         Result containing:
         - frequencies: np.ndarray of shape (num_freq_bins,), frequency values in Hz
-        - spectra_gx: np.ndarray of shape (num_windows, num_freq_bins), Gx spectra
-        - spectra_gy: np.ndarray of shape (num_windows, num_freq_bins), Gy spectra
-        - spectra_gz: np.ndarray of shape (num_windows, num_freq_bins), Gz spectra
+        - spectra_gx: np.ndarray, Gx spectra
+            - If combined=False: shape (num_windows, num_freq_bins)
+            - If combined=True: shape (num_freq_bins,)
+        - spectra_gy: np.ndarray, Gy spectra (same shape as spectra_gx)
+        - spectra_gz: np.ndarray, Gz spectra (same shape as spectra_gx)
         
     Notes
     -----
     The analysis performs the following steps for each window:
     1. Extract window samples (50% overlap between windows)
-    2. Zero-pad to FFT size (window_size * oversampling, rounded to power of 2)
+    2. Zero-pad to FFT size determined by target spectral resolution
     3. Subtract mean (DC removal)
     4. Apply cosine taper window
     5. Compute magnitude spectrum via real FFT
     
+    When combined=True, the output is the pointwise maximum magnitude across
+    all windows, useful for identifying the worst-case acoustic excitation.
+    
     The spectra can be used to identify gradient switching frequencies that
-    may excite mechanical resonances in the scanner.
+    may excite mechanical resonances. 
     
     Examples
     --------
-    >>> result = get_tr_acoustic_spectra(seq)
-    >>> plt.plot(result.frequencies, result.spectra_gx.max(axis=0))  # Max spectrum across windows
+    >>> # Get spectra with 5 Hz resolution up to 2000 Hz
+    >>> result = get_tr_acoustic_spectra(seq, max_frequency=2000.0)
+    >>> plt.plot(result.frequencies, result.spectra_gx.max(axis=0))
     
-    >>> # Get combined spectrum (pointwise max) up to 2000 Hz
-    >>> result = get_tr_acoustic_spectra(seq, max_frequency=2000.0, combined=True)
-    >>> plt.plot(result.frequencies, result.spectra_gx)  # Already the max across windows
+    >>> # Get combined spectrum (pointwise max) with 2 Hz resolution
+    >>> result = get_tr_acoustic_spectra(seq, target_spectral_resolution=2.0, max_frequency=2000.0, combined=True)
+    >>> plt.plot(result.frequencies, result.spectra_gx)
     """
     if max_frequency is None:
         max_frequency = -1.0  # Use -1 to indicate full spectrum in C wrapper
-    combined = int(combined)
+    
     result_dict = _get_tr_acoustic_spectra(
-        seq._cseq, target_window_size, oversampling, max_frequency, combined
+        seq._cseq, target_window_size, target_spectral_resolution, max_frequency, combined
     )
     
     if not result_dict["success"]:

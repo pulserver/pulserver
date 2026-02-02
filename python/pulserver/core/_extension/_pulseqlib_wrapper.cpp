@@ -545,7 +545,7 @@ static py::dict _get_tr_gradient_waveforms(_PulserverSeqFile& seqfile) {
     return output;
 }
 
-static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetWindowSize, int oversampling, float maxFrequency, bool combined) {
+static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetWindowSize, float targetSpectralResolution, float maxFrequency, bool combined) {
     if (!seqfile.seq) {
         throw std::runtime_error("Sequence file not loaded");
     }
@@ -595,7 +595,7 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
     pulseqlib_TRAcousticSpectra spectra;
     memset(&spectra, 0, sizeof(spectra));
     
-    code = pulseqlib_getTRAcousticSpectra(&waveforms, seqDesc.gradRasterTime_us, targetWindowSize, oversampling, maxFrequency, combined ? 1 : 0, &spectra, &diag);
+    code = pulseqlib_getTRAcousticSpectra(&waveforms, seqDesc.gradRasterTime_us, targetWindowSize, targetSpectralResolution, maxFrequency, combined ? 1 : 0, &spectra, &diag);
     
     if (PULSEQLIB_FAILED(code)) {
         pulseqlib_trGradientWaveformsFree(&waveforms);
@@ -735,7 +735,7 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
           &_get_tr_acoustic_spectra,
           py::arg("seqfile"),
           py::arg("target_window_size"),
-          py::arg("oversampling"),
+          py::arg("target_spectral_resolution"),
           py::arg("max_frequency"),
           py::arg("combined") = false,
           R"pbdoc(
@@ -750,8 +750,9 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
                 The loaded sequence file
             target_window_size : int
                 Target window size in samples (e.g., 5000)
-            oversampling : int
-                FFT oversampling ratio (e.g., 3)
+            target_spectral_resolution : float
+                Target spectral resolution in Hz (e.g., 5.0). FFT size is chosen
+                to achieve approximately this resolution via zero-padding.
             max_frequency : float
                 Maximum frequency to include in output (Hz). Use -1 for full spectrum.
             combined : bool

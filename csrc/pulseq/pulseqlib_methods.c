@@ -6829,7 +6829,7 @@ static int acousticSpectrumSupportInit(
     AcousticSpectrumSupport* support,
     int numSamples,
     int targetWindowSize,
-    int oversampling,
+    float targetSpectralResolution_Hz,
     float gradRaster_us,
     float maxFrequency_Hz)
 {
@@ -6837,14 +6837,16 @@ static int acousticSpectrumSupportInit(
     int hopSize, numWindows;
     int paddedLen;
     int maxIdx;
+    int minNfftForResolution;
     float* cosWindow = NULL;
     float* workBuffer = NULL;
     kiss_fft_cpx* fftOut = NULL;
     kiss_fftr_cfg fftCfg = NULL;
     float freqResolution;
+    float maxFreqBand;
     int i;
     
-    if (!support || numSamples <= 0 || targetWindowSize <= 0 || oversampling <= 0) {
+    if (!support || numSamples <= 0 || targetWindowSize <= 0 || targetSpectralResolution_Hz <= 0.0f) {
         return PULSEQLIB_ERR_INVALID_ARGUMENT;
     }
     
@@ -6858,13 +6860,32 @@ static int acousticSpectrumSupportInit(
         nwin = numSamples;
     }
     
-    /* FFT size: window * oversampling, rounded to next power of 2 */
-    nfft = next_pow2(nwin * oversampling);
+    /* Determine frequency band of interest */
+    if (maxFrequency_Hz < 0.0f) {
+        /* Full Nyquist bandwidth: 0 to fs/2 = 0 to (1e6 / (2 * gradRaster_us)) Hz */
+        maxFreqBand = 5.0e5f / gradRaster_us;  /* Hz */
+    } else {
+        maxFreqBand = maxFrequency_Hz;
+    }
+    
+    /* Calculate minimum nfft needed to achieve target spectral resolution in frequency band:
+     * freqResolution = samplingRate / nfft = (1e6 / gradRaster_us) / nfft
+     * Therefore: nfft = (1e6 / gradRaster_us) / targetSpectralResolution_Hz
+     */
+    minNfftForResolution = (int)ceil((double)(1.0e6f / (gradRaster_us * targetSpectralResolution_Hz)));
+    
+    /* Ensure nfft is at least nwin (can't zero-pad to smaller than window) */
+    if (minNfftForResolution < nwin) {
+        nfft = nwin;
+    } else {
+        /* Round up to next power of 2 for FFT efficiency */
+        nfft = next_pow2(minNfftForResolution);
+    }
     
     /* Number of frequency bins for real FFT */
     nfreq = nfft / 2 + 1;
     
-    /* Frequency resolution */
+    /* Actual frequency resolution achieved */
     freqResolution = 1.0e6f / (gradRaster_us * (float)nfft); /* Hz */
     
     /* Determine output frequency bins based on maxFrequency_Hz */
@@ -6949,7 +6970,6 @@ cleanup_error:
     if (fftCfg) kiss_fftr_free(fftCfg);
     return PULSEQLIB_ERR_ALLOC_FAILED;
 }
-
 
 void acousticSpectrumSupportFree(AcousticSpectrumSupport* support)
 {
@@ -7219,11 +7239,12 @@ static int compute_axis_spectra(
     return PULSEQLIB_OK;
 }
 
+
 int pulseqlib_getTRAcousticSpectra(
     const pulseqlib_TRGradientWaveforms* waveforms,
     float gradRasterTime_us,
     int targetWindowSize,
-    int oversampling,
+    float targetSpectralResolution_Hz,
     float maxFrequency_Hz,
     int combined,
     pulseqlib_TRAcousticSpectra* spectra,
@@ -7271,7 +7292,7 @@ int pulseqlib_getTRAcousticSpectra(
     
     /* Initialize acoustic support structure */
     result = acousticSpectrumSupportInit(
-        &support, maxSamples, targetWindowSize, oversampling, gradRasterTime_us, maxFrequency_Hz);
+        &support, maxSamples, targetWindowSize, targetSpectralResolution_Hz, gradRasterTime_us, maxFrequency_Hz);
     if (PULSEQLIB_FAILED(result)) {
         diag->code = result;
         return result;
@@ -7289,7 +7310,7 @@ int pulseqlib_getTRAcousticSpectra(
     } else {
         outputSpectraSize = support.numWindows * support.outputFreqBins;
     }
-    
+        
     /* Allocate output arrays */
     spectra->spectraGx = (float*)ALLOC(outputSpectraSize * sizeof(float));
     spectra->spectraGy = (float*)ALLOC(outputSpectraSize * sizeof(float));
