@@ -135,7 +135,7 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile) {
     for (int i = 0; i < seqDesc.numBlocks; ++i) {
         py::dict entry;
         entry["id"] = seqDesc.blockTable[i].ID;
-        entry["pure_delay_flag"] = seqDesc.blockTable[i].pureDelayFlag;
+        entry["pure_delay_flag"] = seqDesc.blockTable[i].duration_us > 0;
         entry["adc_id"] = seqDesc.blockTable[i].adcID;
         entry["trigger_id"] = seqDesc.blockTable[i].triggerID;
         entry["rotation_id"] = seqDesc.blockTable[i].rotationID;

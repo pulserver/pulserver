@@ -1900,7 +1900,9 @@ int decompressShape(pulseqlib_ShapeArbitrary* encoded, pulseqlib_ShapeArbitrary*
         if (!result->samples) {
             return 0; /* Allocation failed */
         }
-        memcpy(result->samples, encoded->samples, sizeof(float) * encoded->numSamples);
+        for (i = 0; i < encoded->numSamples; ++i) {
+            result->samples[i] = encoded->samples[i] * scale;
+        }
         return 1; /* Success */
     }
 
