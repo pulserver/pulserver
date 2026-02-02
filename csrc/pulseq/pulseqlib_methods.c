@@ -1817,8 +1817,8 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
             float quatNorm;
             int n;
             for(n = 1; n < seq->rotationLibrarySize; n++){
-                quatNorm = sqrtf(powf(seq->rotationQuaternionLibrary[n][0], 2) + powf(seq->rotationQuaternionLibrary[n][1], 2) + 
-                            powf(seq->rotationQuaternionLibrary[n][2], 2) + powf(seq->rotationQuaternionLibrary[n][3], 2));
+                quatNorm = (float)sqrt(pow((double)seq->rotationQuaternionLibrary[n][0], 2) + pow((double)seq->rotationQuaternionLibrary[n][1], 2) + 
+                            pow((double)seq->rotationQuaternionLibrary[n][2], 2) + pow((double)seq->rotationQuaternionLibrary[n][3], 2));
                 seq->rotationQuaternionLibrary[n][0] = seq->rotationQuaternionLibrary[n][0] / quatNorm; /* manually unroll - with so few entries, more readable than loop */
                 seq->rotationQuaternionLibrary[n][1] = seq->rotationQuaternionLibrary[n][1] / quatNorm;
                 seq->rotationQuaternionLibrary[n][2] = seq->rotationQuaternionLibrary[n][2] / quatNorm;
@@ -6249,6 +6249,99 @@ static int count_grad_samples_for_block(
 }
 
 /**
+ * @brief Compute position-specific max amplitudes for acoustic worst-case analysis.
+ * 
+ * For each position within the TR, each gradient axis, and each shot index,
+ * finds the maximum |amplitude| across all TR repetitions.
+ * 
+ * Arrays are sized trSize * MAX_GRAD_SHOTS, indexed as [posInTR * MAX_GRAD_SHOTS + shotIdx]
+ */
+static int compute_position_max_amplitudes(
+    const pulseqlib_SequenceDescriptor* seqDesc,
+    float* posMaxAmpGx,
+    float* posMaxAmpGy,
+    float* posMaxAmpGz)
+{
+    const pulseqlib_TRdescriptor* trDesc;
+    int trStart, trSize, numTRs;
+    int trIdx, posInTR, blockIdx;
+    const pulseqlib_BlockTableElement* blockTableEntry;
+    const pulseqlib_GradTableElement* gradTable;
+    float absAmp;
+    int gRawID;
+    int n, shotIdx, arrIdx;
+    
+    trDesc = &seqDesc->trDescriptor;
+    trSize = trDesc->trSize;
+    numTRs = trDesc->numTRs;
+    
+    /* Initialize to zero (trSize * MAX_GRAD_SHOTS elements per axis) */
+    for (n = 0; n < trSize * MAX_GRAD_SHOTS; ++n) {
+        posMaxAmpGx[n] = 0.0f;
+        posMaxAmpGy[n] = 0.0f;
+        posMaxAmpGz[n] = 0.0f;
+    }
+    
+    /* Iterate over all TR repetitions */
+    for (trIdx = 0; trIdx < numTRs; ++trIdx) {
+        trStart = trDesc->numPrepBlocks + trIdx * trSize;
+        
+        /* Iterate over each position within the TR */
+        for (posInTR = 0; posInTR < trSize; ++posInTR) {
+            blockIdx = trStart + posInTR;
+            blockTableEntry = &seqDesc->blockTable[blockIdx];
+            
+            /* Gx */
+            gRawID = blockTableEntry->gxID;
+            if (gRawID >= 0 && gRawID < seqDesc->gradTableSize) {
+                gradTable = &seqDesc->gradTable[gRawID];
+                shotIdx = gradTable->shotIndex;
+                if (shotIdx >= 0 && shotIdx < MAX_GRAD_SHOTS) {
+                    absAmp = gradTable->amplitude;
+                    if (absAmp < 0.0f) absAmp = -absAmp;
+                    arrIdx = posInTR * MAX_GRAD_SHOTS + shotIdx;
+                    if (absAmp > posMaxAmpGx[arrIdx]) {
+                        posMaxAmpGx[arrIdx] = absAmp;
+                    }
+                }
+            }
+            
+            /* Gy */
+            gRawID = blockTableEntry->gyID;
+            if (gRawID >= 0 && gRawID < seqDesc->gradTableSize) {
+                gradTable = &seqDesc->gradTable[gRawID];
+                shotIdx = gradTable->shotIndex;
+                if (shotIdx >= 0 && shotIdx < MAX_GRAD_SHOTS) {
+                    absAmp = gradTable->amplitude;
+                    if (absAmp < 0.0f) absAmp = -absAmp;
+                    arrIdx = posInTR * MAX_GRAD_SHOTS + shotIdx;
+                    if (absAmp > posMaxAmpGy[arrIdx]) {
+                        posMaxAmpGy[arrIdx] = absAmp;
+                    }
+                }
+            }
+            
+            /* Gz */
+            gRawID = blockTableEntry->gzID;
+            if (gRawID >= 0 && gRawID < seqDesc->gradTableSize) {
+                gradTable = &seqDesc->gradTable[gRawID];
+                shotIdx = gradTable->shotIndex;
+                if (shotIdx >= 0 && shotIdx < MAX_GRAD_SHOTS) {
+                    absAmp = gradTable->amplitude;
+                    if (absAmp < 0.0f) absAmp = -absAmp;
+                    arrIdx = posInTR * MAX_GRAD_SHOTS + shotIdx;
+                    if (absAmp > posMaxAmpGz[arrIdx]) {
+                        posMaxAmpGz[arrIdx] = absAmp;
+                    }
+                }
+            }
+        }
+    }
+    
+    return PULSEQLIB_OK;
+}
+
+/**
  * @brief Fill gradient waveform for a single block on one channel.
  * @param prevTime Last time value from previous block (-1 if none). If first sample matches, it's skipped.
  */
@@ -6258,6 +6351,7 @@ static int fill_grad_waveform_for_block(
     const pulseqlib_SequenceDescriptor* seqDesc,
     float t0,
     float prevTime,
+    const float* positionMaxAmp,
     float* time,
     float* waveform,
     int startIdx)
@@ -6287,7 +6381,7 @@ static int fill_grad_waveform_for_block(
     /* Get amplitude and sign from gradTable */
     sign = (gradTableEntry->amplitude >= 0.0f) ? 1.0f : -1.0f;
     shotIdx = gradTableEntry->shotIndex;
-    maxAmp = gradDef->maxAmplitude[shotIdx];
+    maxAmp = positionMaxAmp[shotIdx];
     delay_us = (float)gradDef->delay;
     
     if (gradDef->type == 0) {
@@ -6390,12 +6484,75 @@ static int fill_grad_waveform_for_block(
     return idx - startIdx;
 }
 
+static int interpolate_waveform_to_uniform(
+    float** time,
+    float** waveform,
+    int* numSamples,
+    float targetRaster_us)
+{
+    float* timeIn;
+    float* waveformIn;
+    float* timeOut = NULL;
+    float* waveformOut = NULL;
+    int numIn, numOut;
+    float tStart, tEnd, duration;
+    int i;
+    
+    if (!time || !waveform || !numSamples || *numSamples <= 0) {
+        return PULSEQLIB_OK; /* Nothing to do for empty waveform */
+    }
+    
+    timeIn = *time;
+    waveformIn = *waveform;
+    numIn = *numSamples;
+    
+    /* Get time range */
+    tStart = timeIn[0];
+    tEnd = timeIn[numIn - 1];
+    duration = tEnd - tStart;
+    
+    if (duration <= 0.0f) {
+        /* Single point or zero duration - nothing to interpolate */
+        return PULSEQLIB_OK;
+    }
+    
+    /* Compute number of uniform samples */
+    numOut = (int)(duration / targetRaster_us) + 1;
+    
+    /* Allocate output arrays */
+    timeOut = (float*)ALLOC(numOut * sizeof(float));
+    waveformOut = (float*)ALLOC(numOut * sizeof(float));
+    if (!timeOut || !waveformOut) {
+        FREE(timeOut);
+        FREE(waveformOut);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    
+    /* Generate uniform time grid */
+    for (i = 0; i < numOut; ++i) {
+        timeOut[i] = tStart + (float)i * targetRaster_us;
+    }
+    
+    /* Interpolate waveform to uniform grid */
+    /* interp1_linear(x_query, nx_query, xp_data, fp_data, nxp_data, out) */
+    interp1_linear(timeOut, numOut, timeIn, waveformIn, numIn, waveformOut);
+    
+    /* Free old arrays and replace with new */
+    FREE(timeIn);
+    FREE(waveformIn);
+    
+    *time = timeOut;
+    *waveform = waveformOut;
+    *numSamples = numOut;
+    
+    return PULSEQLIB_OK;
+}
+
 /**
  * @brief Extract concatenated gradient waveforms for a single TR.
  */
 int pulseqlib_getTRGradientWaveforms(
     const pulseqlib_SequenceDescriptor* seqDesc,
-    int trIndex,
     pulseqlib_TRGradientWaveforms* waveforms,
     pulseqlib_Diagnostic* diag)
 {
@@ -6405,11 +6562,13 @@ int pulseqlib_getTRGradientWaveforms(
     int blockIdx, n;
     int totalSamplesGx, totalSamplesGy, totalSamplesGz;
     int idxGx, idxGy, idxGz;
+    int result;
     float t0;
     int blockDefID;
     const pulseqlib_BlockDefinition* blockDef;
     const pulseqlib_BlockTableElement* blockTableEntry;
     float blockDuration_us;
+    float targetRaster_us;
     int gxRawID, gyRawID, gzRawID;
     const pulseqlib_GradDefinition* gxDef;
     const pulseqlib_GradDefinition* gyDef;
@@ -6417,6 +6576,11 @@ int pulseqlib_getTRGradientWaveforms(
     const pulseqlib_GradTableElement* gxTable;
     const pulseqlib_GradTableElement* gyTable;
     const pulseqlib_GradTableElement* gzTable;
+    
+    /* Position-specific max amplitudes */
+    float* posMaxAmpGx = NULL;
+    float* posMaxAmpGy = NULL;
+    float* posMaxAmpGz = NULL;
     
     /* Use local diag if caller doesn't provide one */
     if (!diag) {
@@ -6452,18 +6616,25 @@ int pulseqlib_getTRGradientWaveforms(
         return diag->code;
     }
     
-    /* Validate trIndex */
-    if (trIndex < 0 || trIndex >= trDesc->numTRs) {
-        diag->code = PULSEQLIB_ERR_INVALID_ARGUMENT;
-        return diag->code;
-    }
-    
     /* Calculate TR start block */
-    trStart = trDesc->numPrepBlocks + trIndex * trSize;
+    trStart = trDesc->numPrepBlocks;
     if (trStart + trSize > seqDesc->numBlocks) {
         diag->code = PULSEQLIB_ERR_INVALID_ARGUMENT;
         return diag->code;
     }
+
+    /* Allocate and compute position-specific max amplitudes */
+    posMaxAmpGx = (float*)ALLOC(trSize * MAX_GRAD_SHOTS * sizeof(float));
+    posMaxAmpGy = (float*)ALLOC(trSize * MAX_GRAD_SHOTS * sizeof(float));
+    posMaxAmpGz = (float*)ALLOC(trSize * MAX_GRAD_SHOTS * sizeof(float));
+    if (!posMaxAmpGx || !posMaxAmpGy || !posMaxAmpGz) {
+        FREE(posMaxAmpGx);
+        FREE(posMaxAmpGy);
+        FREE(posMaxAmpGz);
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        return diag->code;
+    }
+    compute_position_max_amplitudes(seqDesc, posMaxAmpGx, posMaxAmpGy, posMaxAmpGz);
         
     /* ========== PASS 1: Count total samples ========== */
     totalSamplesGx = 0;
@@ -6513,6 +6684,9 @@ int pulseqlib_getTRGradientWaveforms(
     if (!waveforms->timeGx || !waveforms->waveformGx ||
         !waveforms->timeGy || !waveforms->waveformGy ||
         !waveforms->timeGz || !waveforms->waveformGz) {
+        FREE(posMaxAmpGx);  /* Don't forget to free these! */
+        FREE(posMaxAmpGy);
+        FREE(posMaxAmpGz);
         pulseqlib_trGradientWaveformsFree(waveforms);
         diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
         return diag->code;
@@ -6559,6 +6733,7 @@ int pulseqlib_getTRGradientWaveforms(
             gxDef, gxTable, seqDesc,
             t0,
             (idxGx > 0) ? waveforms->timeGx[idxGx - 1] : -1.0f,
+            &posMaxAmpGx[n * MAX_GRAD_SHOTS],  /* position max */
             waveforms->timeGx, waveforms->waveformGx, idxGx);
         
         /* Fill Gy */
@@ -6566,6 +6741,7 @@ int pulseqlib_getTRGradientWaveforms(
             gyDef, gyTable, seqDesc,
             t0,
             (idxGy > 0) ? waveforms->timeGy[idxGy - 1] : -1.0f,
+            &posMaxAmpGy[n * MAX_GRAD_SHOTS],  /* position max */
             waveforms->timeGy, waveforms->waveformGy, idxGy);
         
         /* Fill Gz */
@@ -6573,15 +6749,536 @@ int pulseqlib_getTRGradientWaveforms(
             gzDef, gzTable, seqDesc,
             t0,
             (idxGz > 0) ? waveforms->timeGz[idxGz - 1] : -1.0f,
+            &posMaxAmpGz[n * MAX_GRAD_SHOTS],  /* position max */
             waveforms->timeGz, waveforms->waveformGz, idxGz);
 
         /* Update time offset for next block */
         t0 += blockDuration_us;
     }
+
+    /* Cleanup */
+    FREE(posMaxAmpGx);
+    FREE(posMaxAmpGy);
+    FREE(posMaxAmpGz);
     
+    /* Store preliminary counts */
     waveforms->numSamplesGx = idxGx;
     waveforms->numSamplesGy = idxGy;
     waveforms->numSamplesGz = idxGz;
+    
+    /* Interpolate to uniform raster (0.5 * gradient raster time) */
+    targetRaster_us = 0.5f * seqDesc->gradRasterTime_us;
+    
+    result = interpolate_waveform_to_uniform(
+        &waveforms->timeGx, &waveforms->waveformGx, &waveforms->numSamplesGx, targetRaster_us);
+    if (PULSEQLIB_FAILED(result)) {
+        pulseqlib_trGradientWaveformsFree(waveforms);
+        diag->code = result;
+        return result;
+    }
+    
+    result = interpolate_waveform_to_uniform(
+        &waveforms->timeGy, &waveforms->waveformGy, &waveforms->numSamplesGy, targetRaster_us);
+    if (PULSEQLIB_FAILED(result)) {
+        pulseqlib_trGradientWaveformsFree(waveforms);
+        diag->code = result;
+        return result;
+    }
+    
+    result = interpolate_waveform_to_uniform(
+        &waveforms->timeGz, &waveforms->waveformGz, &waveforms->numSamplesGz, targetRaster_us);
+    if (PULSEQLIB_FAILED(result)) {
+        pulseqlib_trGradientWaveformsFree(waveforms);
+        diag->code = result;
+        return result;
+    }
+    
+    diag->code = PULSEQLIB_OK;
+    return PULSEQLIB_OK;
+}
+
+typedef struct AcousticSpectrumSupport {
+    int nwin;              /**< Window size (number of samples) */
+    int nfft;              /**< FFT size (nwin * oversampling, rounded to power of 2) */
+    int nfreq;             /**< Number of frequency bins (nfft/2 + 1) */
+    int numWindows;        /**< Total number of windows for this waveform */
+    int hopSize;           /**< Hop size between windows (nwin / 2) */
+    float gradRaster_us;   /**< Gradient raster time in us */
+    float freqResolution;  /**< Frequency resolution in Hz */
+    float* cosWindow;      /**< Precomputed cosine taper window (size: nwin) */
+    float* workBuffer;     /**< Working buffer for windowed/padded data (size: nfft) */
+    kiss_fftr_cfg fftCfg;  /**< KissFFT real-FFT configuration */
+    kiss_fft_cpx* fftOut;  /**< FFT output buffer (size: nfreq) */
+} AcousticSpectrumSupport;
+
+#define ACOUSTIC_SPECTRUM_SUPPORT_INIT {0, 0, 0, 0, 0, 0.0f, 0.0f, NULL, NULL, NULL, NULL}
+
+typedef struct AcousticWaveform {
+    int numSamples;        /**< Number of samples (padded to integer multiple of nwin, or original if < nwin) */
+    int numSamplesOriginal;/**< Original number of samples before padding */
+    float* samples;        /**< Waveform samples (may be padded copy or alias) */
+    int ownsMemory;        /**< Non-zero if samples was allocated and needs freeing */
+} AcousticWaveform;
+
+#define ACOUSTIC_WAVEFORM_INIT {0, 0, NULL, 0}
+
+// ...existing code...
+
+/* ============== Acoustic Spectrum Analysis Implementation ============== */
+
+int acousticSpectrumSupportInit(
+    AcousticSpectrumSupport* support,
+    int numSamples,
+    int targetWindowSize,
+    int oversampling,
+    float gradRaster_us)
+{
+    int i;
+    int nwin, nfft, nfreq, numWindows, hopSize;
+    int paddedLen;
+    float* cosWindow = NULL;
+    float* workBuffer = NULL;
+    kiss_fftr_cfg fftCfg = NULL;
+    kiss_fft_cpx* fftOut = NULL;
+    
+    if (!support) {
+        return PULSEQLIB_ERR_NULL_POINTER;
+    }
+    
+    /* Initialize to safe state */
+    memset(support, 0, sizeof(*support));
+    
+    /* Determine window size: use target if TR is long enough, else use TR length */
+    if (numSamples >= targetWindowSize) {
+        nwin = targetWindowSize;
+    } else {
+        nwin = numSamples;
+    }
+    
+    /* FFT size: window * oversampling, rounded to next power of 2 */
+    nfft = next_pow2(nwin * oversampling);
+    
+    /* Number of frequency bins for real FFT */
+    nfreq = nfft / 2 + 1;
+    
+    /* Hop size (50% overlap) */
+    hopSize = nwin / 2;
+    if (hopSize < 1) hopSize = 1;
+    
+    /* Number of windows (with 50% overlap) */
+    if (numSamples <= nwin) {
+        numWindows = 1;
+    } else {
+        /* Pad to integer multiple of nwin, then count windows with hopSize */
+        paddedLen = ((numSamples + nwin - 1) / nwin) * nwin;
+        numWindows = (paddedLen - nwin) / hopSize + 1;
+    }
+    
+    /* Allocate cosine taper window */
+    cosWindow = (float*)ALLOC(nwin * sizeof(float));
+    if (!cosWindow) {
+        goto cleanup_error;
+    }
+    
+    /* Compute cosine taper: 0.5 * (1 - cos(2*pi*i/nwin)) for i=1..nwin */
+    for (i = 0; i < nwin; ++i) {
+        cosWindow[i] = 0.5f * (1.0f - cosf(2.0f * (float)M_PI * (float)(i + 1) / (float)nwin));
+    }
+    
+    /* Allocate work buffer (for windowed + zero-padded data) */
+    workBuffer = (float*)ALLOC(nfft * sizeof(float));
+    if (!workBuffer) {
+        goto cleanup_error;
+    }
+    
+    /* Allocate FFT output buffer */
+    fftOut = (kiss_fft_cpx*)ALLOC(nfreq * sizeof(kiss_fft_cpx));
+    if (!fftOut) {
+        goto cleanup_error;
+    }
+    
+    /* Initialize KissFFT for real-to-complex forward transform */
+    fftCfg = kiss_fftr_alloc(nfft, 0, NULL, NULL);
+    if (!fftCfg) {
+        goto cleanup_error;
+    }
+    
+    /* Fill support structure */
+    support->nwin = nwin;
+    support->nfft = nfft;
+    support->nfreq = nfreq;
+    support->numWindows = numWindows;
+    support->hopSize = hopSize;
+    support->gradRaster_us = gradRaster_us;
+    support->freqResolution = 1.0e6f / (gradRaster_us * (float)nfft); /* Hz */
+    support->cosWindow = cosWindow;
+    support->workBuffer = workBuffer;
+    support->fftCfg = fftCfg;
+    support->fftOut = fftOut;
+    
+    return PULSEQLIB_OK;
+
+cleanup_error:
+    if (cosWindow) FREE(cosWindow);
+    if (workBuffer) FREE(workBuffer);
+    if (fftOut) FREE(fftOut);
+    if (fftCfg) kiss_fftr_free(fftCfg);
+    return PULSEQLIB_ERR_ALLOC_FAILED;
+}
+
+void acousticSpectrumSupportFree(AcousticSpectrumSupport* support)
+{
+    if (!support) return;
+    
+    if (support->cosWindow) {
+        FREE(support->cosWindow);
+        support->cosWindow = NULL;
+    }
+    if (support->workBuffer) {
+        FREE(support->workBuffer);
+        support->workBuffer = NULL;
+    }
+    if (support->fftOut) {
+        FREE(support->fftOut);
+        support->fftOut = NULL;
+    }
+    if (support->fftCfg) {
+        kiss_fftr_free(support->fftCfg);
+        support->fftCfg = NULL;
+    }
+    
+    memset(support, 0, sizeof(*support));
+}
+
+int acousticWaveformInit(
+    AcousticWaveform* acoustic,
+    const AcousticSpectrumSupport* support,
+    const float* waveform,
+    int numSamples,
+    int targetPaddedLen)  /* NEW: target padded length to match support->numWindows */
+{
+    float* paddedSamples = NULL;
+    int i;
+    
+    if (!acoustic || !support || !waveform || numSamples <= 0) {
+        return PULSEQLIB_ERR_NULL_POINTER;
+    }
+    
+    /* Initialize to safe state */
+    memset(acoustic, 0, sizeof(*acoustic));
+    acoustic->numSamplesOriginal = numSamples;
+    
+    /* If waveform fits in single window, no padding needed */
+    if (numSamples <= support->nwin) {
+        acoustic->numSamples = numSamples;
+        acoustic->samples = (float*)waveform; /* Alias, no copy */
+        acoustic->ownsMemory = 0;
+        return PULSEQLIB_OK;
+    }
+    
+    /* Use provided target length (should match what support expects) */
+    paddedSamples = (float*)ALLOC(targetPaddedLen * sizeof(float));
+    if (!paddedSamples) {
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    
+    /* Copy original samples */
+    for (i = 0; i < numSamples; ++i) {
+        paddedSamples[i] = waveform[i];
+    }
+    
+    /* Zero-pad the rest */
+    for (i = numSamples; i < targetPaddedLen; ++i) {
+        paddedSamples[i] = 0.0f;
+    }
+    
+    acoustic->numSamples = targetPaddedLen;
+    acoustic->samples = paddedSamples;
+    acoustic->ownsMemory = 1;
+    
+    return PULSEQLIB_OK;
+}
+
+void acousticWaveformFree(AcousticWaveform* acoustic)
+{
+    if (!acoustic) return;
+    
+    if (acoustic->ownsMemory && acoustic->samples) {
+        FREE(acoustic->samples);
+    }
+    
+    memset(acoustic, 0, sizeof(*acoustic));
+}
+
+int computeWindowSpectrum(
+    float* spectrum,
+    AcousticSpectrumSupport* support,
+    const AcousticWaveform* acoustic,
+    int windowIndex)
+{
+    int i;
+    int startIdx;
+    int nwin, nfft, nfreq;
+    float* workBuffer;
+    float* cosWindow;
+    const float* samples;
+    float mean;
+    kiss_fft_cpx* fftOut;
+    
+    if (!spectrum || !support || !acoustic || !acoustic->samples) {
+        return PULSEQLIB_ERR_NULL_POINTER;
+    }
+    
+    if (windowIndex < 0 || windowIndex >= support->numWindows) {
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    }
+    
+    nwin = support->nwin;
+    nfft = support->nfft;
+    nfreq = support->nfreq;
+    workBuffer = support->workBuffer;
+    cosWindow = support->cosWindow;
+    fftOut = support->fftOut;
+    samples = acoustic->samples;
+    
+    /* Calculate start index for this window */
+    startIdx = windowIndex * support->hopSize;
+    
+    /* Ensure we don't read past the end */
+    if (startIdx + nwin > acoustic->numSamples) {
+        /* Shouldn't happen if numWindows is computed correctly, but handle it */
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    }
+    
+    /* Step 1: Copy window samples */
+    for (i = 0; i < nwin; ++i) {
+        workBuffer[i] = samples[startIdx + i];
+    }
+    
+    /* Step 2: Zero-fill from nwin to nfft */
+    for (i = nwin; i < nfft; ++i) {
+        workBuffer[i] = 0.0f;
+    }
+    
+    /* Step 3: Compute and subtract mean of window samples */
+    mean = 0.0f;
+    for (i = 0; i < nwin; ++i) {
+        mean += workBuffer[i];
+    }
+    mean /= (float)nwin;
+    for (i = 0; i < nwin; ++i) {
+        workBuffer[i] -= mean;
+    }
+    
+    /* Step 4: Apply cosine taper to window samples (not zero-filled region) */
+    for (i = 0; i < nwin; ++i) {
+        workBuffer[i] *= cosWindow[i];
+    }
+    
+    /* Step 5: Compute real FFT */
+    kiss_fftr(support->fftCfg, workBuffer, fftOut);
+    
+    /* Step 6: Compute magnitude spectrum */
+    for (i = 0; i < nfreq; ++i) {
+        spectrum[i] = (float)sqrt((double)(fftOut[i].r * fftOut[i].r + fftOut[i].i * fftOut[i].i));
+    }
+    
+    return PULSEQLIB_OK;
+}
+
+void pulseqlib_trAcousticSpectraFree(pulseqlib_TRAcousticSpectra* spectra)
+{
+    if (!spectra) return;
+    
+    if (spectra->frequencies) {
+        FREE(spectra->frequencies);
+        spectra->frequencies = NULL;
+    }
+    if (spectra->spectraGx) {
+        FREE(spectra->spectraGx);
+        spectra->spectraGx = NULL;
+    }
+    if (spectra->spectraGy) {
+        FREE(spectra->spectraGy);
+        spectra->spectraGy = NULL;
+    }
+    if (spectra->spectraGz) {
+        FREE(spectra->spectraGz);
+        spectra->spectraGz = NULL;
+    }
+    
+    spectra->numWindows = 0;
+    spectra->numFreqBins = 0;
+    spectra->freqResolution = 0.0f;
+}
+
+/**
+ * @brief Compute all window spectra for a single axis.
+ */
+static int compute_axis_spectra(
+    float* spectraOut,
+    AcousticSpectrumSupport* support,
+    const float* waveform,
+    int numSamples,
+    int paddedLen)
+{
+    AcousticWaveform acoustic;
+    int w, result;
+    
+    memset(&acoustic, 0, sizeof(acoustic));
+        
+    /* Preprocess waveform (pad if needed) */
+    result = acousticWaveformInit(&acoustic, support, waveform, numSamples, paddedLen);
+    if (PULSEQLIB_FAILED(result)) {
+        return result;
+    }
+
+    /* Compute spectrum for each window */
+    for (w = 0; w < support->numWindows; ++w) {
+        result = computeWindowSpectrum(
+            &spectraOut[w * support->nfreq],
+            support,
+            &acoustic,
+            w);
+        if (PULSEQLIB_FAILED(result)) {
+            acousticWaveformFree(&acoustic);
+            return result;
+        }
+    }
+    
+    acousticWaveformFree(&acoustic);
+    return PULSEQLIB_OK;
+}
+
+int pulseqlib_getTRAcousticSpectra(
+    const pulseqlib_TRGradientWaveforms* waveforms,
+    float gradRasterTime_us,
+    int targetWindowSize,
+    int oversampling,
+    pulseqlib_TRAcousticSpectra* spectra,
+    pulseqlib_Diagnostic* diag)
+{
+    pulseqlib_Diagnostic localDiag;
+    AcousticSpectrumSupport support;
+    int maxSamples;
+    int paddedLen;
+    int result;
+    int i;
+    
+    /* Use local diag if caller doesn't provide one */
+    if (!diag) {
+        pulseqlib_diagnosticInit(&localDiag);
+        diag = &localDiag;
+    } else {
+        pulseqlib_diagnosticInit(diag);
+    }
+    
+    /* Validate inputs */
+    if (!waveforms || !spectra) {
+        diag->code = PULSEQLIB_ERR_NULL_POINTER;
+        return diag->code;
+    }
+    
+    /* Initialize output */
+    memset(spectra, 0, sizeof(*spectra));
+    memset(&support, 0, sizeof(support));
+    
+    /* Find maximum number of samples across all axes */
+    maxSamples = waveforms->numSamplesGx;
+    if (waveforms->numSamplesGy > maxSamples) {
+        maxSamples = waveforms->numSamplesGy;
+    }
+    if (waveforms->numSamplesGz > maxSamples) {
+        maxSamples = waveforms->numSamplesGz;
+    }
+    
+    if (maxSamples <= 0) {
+        diag->code = PULSEQLIB_ERR_INVALID_ARGUMENT;
+        return diag->code;
+    }
+    
+    /* Initialize acoustic support structure */
+    result = acousticSpectrumSupportInit(
+        &support, maxSamples, targetWindowSize, oversampling, gradRasterTime_us);
+    if (PULSEQLIB_FAILED(result)) {
+        diag->code = result;
+        return result;
+    }
+    
+    /* Store output parameters */
+    spectra->numWindows = support.numWindows;
+    spectra->numFreqBins = support.nfreq;
+    spectra->freqResolution = support.freqResolution;
+    
+    /* Allocate output arrays */
+    spectra->spectraGx = (float*)ALLOC(support.numWindows * support.nfreq * sizeof(float));
+    spectra->spectraGy = (float*)ALLOC(support.numWindows * support.nfreq * sizeof(float));
+    spectra->spectraGz = (float*)ALLOC(support.numWindows * support.nfreq * sizeof(float));
+    spectra->frequencies = (float*)ALLOC(support.nfreq * sizeof(float));
+
+    if (!spectra->spectraGx || !spectra->spectraGy || !spectra->spectraGz) {
+        pulseqlib_trAcousticSpectraFree(spectra);
+        acousticSpectrumSupportFree(&support);
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        return diag->code;
+    }
+
+    for (i = 0; i < (int)support.nfreq; i++) {
+        spectra->frequencies[i] = i * support.freqResolution;
+    }
+
+    /* Compute padded length that support expects (based on maxSamples) */
+    if (maxSamples <= support.nwin) {
+        paddedLen = maxSamples;
+    } else {
+        paddedLen = ((maxSamples + support.nwin - 1) / support.nwin) * support.nwin;
+    }
+    
+    /* Compute spectra for each axis */
+    /* Gx */
+    if (waveforms->numSamplesGx > 0) {
+        result = compute_axis_spectra(spectra->spectraGx, &support, 
+                                      waveforms->waveformGx, waveforms->numSamplesGx, paddedLen);
+        if (PULSEQLIB_FAILED(result)) {
+            pulseqlib_trAcousticSpectraFree(spectra);
+            acousticSpectrumSupportFree(&support);
+            diag->code = result;
+            return result;
+        }
+    } else {
+        memset(spectra->spectraGx, 0, support.numWindows * support.nfreq * sizeof(float));
+    }
+    
+    /* Gy */
+    if (waveforms->numSamplesGy > 0) {
+        result = compute_axis_spectra(spectra->spectraGy, &support,
+                                      waveforms->waveformGy, waveforms->numSamplesGy, paddedLen);
+        if (PULSEQLIB_FAILED(result)) {
+            pulseqlib_trAcousticSpectraFree(spectra);
+            acousticSpectrumSupportFree(&support);
+            diag->code = result;
+            return result;
+        }
+    } else {
+        memset(spectra->spectraGy, 0, support.numWindows * support.nfreq * sizeof(float));
+    }
+    
+    /* Gz */
+    if (waveforms->numSamplesGz > 0) {
+        result = compute_axis_spectra(spectra->spectraGz, &support,
+                                      waveforms->waveformGz, waveforms->numSamplesGz, paddedLen);
+        if (PULSEQLIB_FAILED(result)) {
+            pulseqlib_trAcousticSpectraFree(spectra);
+            acousticSpectrumSupportFree(&support);
+            diag->code = result;
+            return result;
+        }
+    } else {
+        memset(spectra->spectraGz, 0, support.numWindows * support.nfreq * sizeof(float));
+    }
+    
+    /* Cleanup */
+    acousticSpectrumSupportFree(&support);
     
     diag->code = PULSEQLIB_OK;
     return PULSEQLIB_OK;

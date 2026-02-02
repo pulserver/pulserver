@@ -757,5 +757,20 @@ typedef struct pulseqlib_TRGradientWaveforms {
 
 #define PULSEQLIB_TR_GRADIENT_WAVEFORMS_INIT {0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL}
 
+/**
+ * @brief Result structure for TR acoustic spectra.
+ */
+typedef struct pulseqlib_TRAcousticSpectra {
+    int numWindows;        /**< Number of windows */
+    int numFreqBins;       /**< Number of frequency bins per spectrum */
+    float freqResolution;  /**< Frequency resolution in Hz */
+    float* frequencies;    /**< Frequency axis in Hz (size: numFreqBins) */
+    float* spectraGx;      /**< Gx spectra (numWindows x numFreqBins, row-major) */
+    float* spectraGy;      /**< Gy spectra (numWindows x numFreqBins, row-major) */
+    float* spectraGz;      /**< Gz spectra (numWindows x numFreqBins, row-major) */
+} pulseqlib_TRAcousticSpectra;
+
+#define PULSEQLIB_TR_ACOUSTIC_SPECTRA_INIT {0, 0, 0.0f, NULL, NULL, NULL, NULL}
+
 #endif /* PULSEQLIB_H */
 

@@ -1,10 +1,18 @@
 """ """
 
-__all__ = ["PulserverSequence", "get_unique_blocks", "find_tr", "find_segments_in_tr", "get_tr_gradient_waveforms"]
+__all__ = [
+    "PulserverSequence", 
+    "get_unique_blocks", 
+    "find_tr", 
+    "find_segments_in_tr", 
+    "get_tr_gradient_waveforms", 
+    "get_tr_acoustic_spectra",
+]
 
 import copy
 from types import SimpleNamespace
 
+import numpy as np
 import pypulseq as pp
 
 from ._extension._pulseqlib_wrapper import (
@@ -12,6 +20,7 @@ from ._extension._pulseqlib_wrapper import (
     _find_segments_in_tr,
     _get_unique_blocks,
     _get_tr_gradient_waveforms,
+    _get_tr_acoustic_spectra,
     _PulserverSeqFile,
 )
 from ._iostream import write_to_stream
@@ -325,7 +334,7 @@ def find_segments_in_tr(seq: PulserverSequence, raise_on_error: bool = True) -> 
     return unique_segments, result
 
 
-def get_tr_gradient_waveforms(seq: PulserverSequence, tr_index: int = 0) -> SimpleNamespace:
+def get_tr_gradient_waveforms(seq: PulserverSequence) -> SimpleNamespace:
     """
     Extract concatenated gradient waveforms for a single TR.
     
@@ -333,8 +342,6 @@ def get_tr_gradient_waveforms(seq: PulserverSequence, tr_index: int = 0) -> Simp
     ----------
     seq : PulserverSequence
         The sequence to analyze.
-    tr_index : int
-        TR index (0 to num_trs-1). Default is 0.
         
     Returns
     -------
@@ -356,21 +363,93 @@ def get_tr_gradient_waveforms(seq: PulserverSequence, tr_index: int = 0) -> Simp
     
     The waveforms are concatenated across all blocks in the TR, with time
     offsets adjusted so each block's waveform starts where the previous ended.
-    """
-    import numpy as np
-    
-    result_dict = _get_tr_gradient_waveforms(seq._cseq, tr_index)
+    """    
+    result_dict = _get_tr_gradient_waveforms(seq._cseq)
     
     if not result_dict["success"]:
         raise RuntimeError(f"Failed to get TR gradient waveforms: {result_dict.get('error', 'unknown error')}")
     
     result = SimpleNamespace(
-        time_gx=np.array(result_dict["time_gx"], dtype=np.float32),
-        waveform_gx=np.array(result_dict["waveform_gx"], dtype=np.float32),
-        time_gy=np.array(result_dict["time_gy"], dtype=np.float32),
-        waveform_gy=np.array(result_dict["waveform_gy"], dtype=np.float32),
-        time_gz=np.array(result_dict["time_gz"], dtype=np.float32),
-        waveform_gz=np.array(result_dict["waveform_gz"], dtype=np.float32),
+        time_gx=np.asarray(result_dict["time_gx"], dtype=np.float32),
+        waveform_gx=np.asarray(result_dict["waveform_gx"], dtype=np.float32),
+        time_gy=np.asarray(result_dict["time_gy"], dtype=np.float32),
+        waveform_gy=np.asarray(result_dict["waveform_gy"], dtype=np.float32),
+        time_gz=np.asarray(result_dict["time_gz"], dtype=np.float32),
+        waveform_gz=np.asarray(result_dict["waveform_gz"], dtype=np.float32),
+    )
+    
+    return result
+
+
+def get_tr_acoustic_spectra(
+    seq: PulserverSequence, 
+    target_window_size: int = 5000,
+    oversampling: int = 3
+) -> SimpleNamespace:
+    """
+    Compute acoustic spectra for gradient waveforms in a TR.
+    
+    Performs sliding-window FFT analysis on each gradient axis to identify
+    potential acoustic resonance frequencies.
+    
+    Parameters
+    ----------
+    seq : PulserverSequence
+        The sequence to analyze.
+    target_window_size : int
+        Target window size in samples. Default is 5000 (Pulseq convention,
+        corresponding to 50ms at 10us raster).
+    oversampling : int
+        FFT oversampling ratio. Default is 3 (Pulseq convention).
+        Final FFT size is rounded up to the nearest power of 2.
+        
+    Returns
+    -------
+    SimpleNamespace
+        Result containing:
+        - num_windows: int, number of windows analyzed
+        - num_freq_bins: int, number of frequency bins per spectrum
+        - freq_resolution: float, frequency resolution in Hz
+        - frequencies: np.ndarray of shape (num_freq_bins,), frequency values in Hz
+        - spectra_gx: np.ndarray of shape (num_windows, num_freq_bins), Gx spectra
+        - spectra_gy: np.ndarray of shape (num_windows, num_freq_bins), Gy spectra
+        - spectra_gz: np.ndarray of shape (num_windows, num_freq_bins), Gz spectra
+        
+    Notes
+    -----
+    The analysis performs the following steps for each window:
+    1. Extract window samples (50% overlap between windows)
+    2. Zero-pad to FFT size (window_size * oversampling, rounded to power of 2)
+    3. Subtract mean (DC removal)
+    4. Apply cosine taper window
+    5. Compute magnitude spectrum via real FFT
+    
+    The spectra can be used to identify gradient switching frequencies that
+    may excite mechanical resonances in the scanner.
+    
+    Examples
+    --------
+    >>> result = get_tr_acoustic_spectra(seq)
+    >>> plt.plot(result.frequencies, result.spectra_gx.max(axis=0))  # Max spectrum across windows
+    """    
+    result_dict = _get_tr_acoustic_spectra(
+        seq._cseq, target_window_size, oversampling
+    )
+    
+    if not result_dict["success"]:
+        raise RuntimeError(f"Acoustic spectra computation failed: {result_dict.get('error', 'Unknown error')}")
+    
+    num_windows = result_dict["num_windows"]
+    num_freq_bins = result_dict["num_freq_bins"]
+    
+    result = SimpleNamespace(
+        num_windows=num_windows,
+        num_freq_bins=num_freq_bins,
+        freq_resolution=result_dict["freq_resolution"],
+        frequencies=np.asarray(result_dict["frequencies"], dtype=np.float32),
+        spectra_gx=np.asarray(result_dict["spectra_gx"], dtype=np.float32).reshape(num_windows, num_freq_bins),
+        spectra_gy=np.asarray(result_dict["spectra_gy"], dtype=np.float32).reshape(num_windows, num_freq_bins),
+        spectra_gz=np.asarray(result_dict["spectra_gz"], dtype=np.float32).reshape(num_windows, num_freq_bins),
     )
     
     return result

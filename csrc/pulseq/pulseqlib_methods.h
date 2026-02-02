@@ -99,28 +99,19 @@ int pulseqlib_findSegmentsInTR(
 void pulseqlib_segmentTableResultFree(pulseqlib_SegmentTableResult* result);
 void pulseqlib_sequenceDescriptorFree(pulseqlib_SequenceDescriptor* seqDesc);
 
-/**
- * @brief Free memory allocated for TR gradient waveforms.
- * @param waveforms Pointer to the waveforms structure.
- */
 void pulseqlib_trGradientWaveformsFree(pulseqlib_TRGradientWaveforms* waveforms);
-
-/**
- * @brief Extract concatenated gradient waveforms for a single TR.
- * 
- * Parses all blocks in a TR and concatenates their gradient waveforms
- * into continuous time/amplitude arrays for each axis.
- * 
- * @param[in]  seqDesc   Pointer to the sequence descriptor (must have shapes populated).
- * @param[in]  trIndex   Index of the TR to extract (0 = first main TR).
- * @param[out] waveforms Pointer to output structure (caller allocates, function fills).
- * @param[out] diag      Optional diagnostic info on failure.
- * @return PULSEQLIB_OK on success, error code on failure.
- */
 int pulseqlib_getTRGradientWaveforms(
     const pulseqlib_SequenceDescriptor* seqDesc,
-    int trIndex,
     pulseqlib_TRGradientWaveforms* waveforms,
+    pulseqlib_Diagnostic* diag);
+
+void pulseqlib_trAcousticSpectraFree(pulseqlib_TRAcousticSpectra* spectra);
+int pulseqlib_getTRAcousticSpectra(
+    const pulseqlib_TRGradientWaveforms* waveforms,
+    float gradRasterTime_us,
+    int targetWindowSize,
+    int oversampling,
+    pulseqlib_TRAcousticSpectra* spectra,
     pulseqlib_Diagnostic* diag);
 
 #ifdef __cplusplus
