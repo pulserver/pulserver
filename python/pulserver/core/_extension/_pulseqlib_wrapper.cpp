@@ -545,7 +545,7 @@ static py::dict _get_tr_gradient_waveforms(_PulserverSeqFile& seqfile) {
     return output;
 }
 
-static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetWindowSize, int oversampling) {
+static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetWindowSize, int oversampling, float maxFrequency) {
     if (!seqfile.seq) {
         throw std::runtime_error("Sequence file not loaded");
     }
@@ -595,7 +595,7 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
     pulseqlib_TRAcousticSpectra spectra;
     memset(&spectra, 0, sizeof(spectra));
     
-    code = pulseqlib_getTRAcousticSpectra(&waveforms, seqDesc.gradRasterTime_us, targetWindowSize, oversampling, &spectra, &diag);
+    code = pulseqlib_getTRAcousticSpectra(&waveforms, seqDesc.gradRasterTime_us, targetWindowSize, oversampling, maxFrequency, &spectra, &diag);
     
     if (PULSEQLIB_FAILED(code)) {
         pulseqlib_trGradientWaveformsFree(&waveforms);
@@ -736,6 +736,7 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
           py::arg("seqfile"),
           py::arg("target_window_size"),
           py::arg("oversampling"),
+          py::arg("max_frequency"),
           R"pbdoc(
             Extract concatenated gradient waveforms for a single TR.
             
@@ -749,24 +750,13 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
                 Target window size (number of samples).
             oversampling : int
                 Oversampling factor.
-
+            max_frequency : float
+                Maximum frequency to include in output (Hz). Use -1 for full spectrum.
+            
             Returns
             -------
             dict
-                Dictionary with keys:
-                - 'success': bool indicating success
-                - 'time_gx': Time points for Gx (microseconds)
-                - 'waveform_gx': Gx waveform amplitude (Hz/m)
-                - 'time_gy': Time points for Gy (microseconds)
-                - 'waveform_gy': Gy waveform amplitude (Hz/m)
-                - 'time_gz': Time points for Gz (microseconds)
-                - 'waveform_gz': Gz waveform amplitude (Hz/m)
-                
-            Notes
-            -----
-            Timing conventions:
-            - Trapezoids: corner points (0, rise, rise+flat, rise+flat+fall)
-            - Extended trapezoids: samples at raster edges (from time shape)
-            - Arbitrary gradients: samples at raster centers (0.5*raster, 1.5*raster, ...)
+                Result dictionary with keys: success, num_windows, num_freq_bins,
+                freq_resolution, frequencies, spectra_gx, spectra_gy, spectra_gz
           )pbdoc");
 }

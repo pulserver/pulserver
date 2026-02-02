@@ -384,7 +384,8 @@ def get_tr_gradient_waveforms(seq: PulserverSequence) -> SimpleNamespace:
 def get_tr_acoustic_spectra(
     seq: PulserverSequence, 
     target_window_size: int = 5000,
-    oversampling: int = 3
+    oversampling: int = 3,
+    max_frequency: float = -1.0,
 ) -> SimpleNamespace:
     """
     Compute acoustic spectra for gradient waveforms in a TR.
@@ -402,6 +403,10 @@ def get_tr_acoustic_spectra(
     oversampling : int
         FFT oversampling ratio. Default is 3 (Pulseq convention).
         Final FFT size is rounded up to the nearest power of 2.
+    max_frequency : float
+        Maximum frequency to include in output (Hz). Default is -1 (full spectrum).
+        Use a positive value to reduce output size by including only frequencies
+        up to the specified maximum.
         
     Returns
     -------
@@ -433,7 +438,7 @@ def get_tr_acoustic_spectra(
     >>> plt.plot(result.frequencies, result.spectra_gx.max(axis=0))  # Max spectrum across windows
     """    
     result_dict = _get_tr_acoustic_spectra(
-        seq._cseq, target_window_size, oversampling
+        seq._cseq, target_window_size, oversampling, max_frequency
     )
     
     if not result_dict["success"]:

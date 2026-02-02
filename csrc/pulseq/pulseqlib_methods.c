@@ -6801,17 +6801,19 @@ typedef struct AcousticSpectrumSupport {
     int nwin;              /**< Window size (number of samples) */
     int nfft;              /**< FFT size (nwin * oversampling, rounded to power of 2) */
     int nfreq;             /**< Number of frequency bins (nfft/2 + 1) */
+    int outputFreqBins;    /**< Number of frequency bins in output (may be less than nfreq) */
     int numWindows;        /**< Total number of windows for this waveform */
     int hopSize;           /**< Hop size between windows (nwin / 2) */
     float gradRaster_us;   /**< Gradient raster time in us */
     float freqResolution;  /**< Frequency resolution in Hz */
+    float maxFrequency_Hz; /**< Maximum frequency to include in output (Hz, -1 for all) */
     float* cosWindow;      /**< Precomputed cosine taper window (size: nwin) */
     float* workBuffer;     /**< Working buffer for windowed/padded data (size: nfft) */
     kiss_fftr_cfg fftCfg;  /**< KissFFT real-FFT configuration */
     kiss_fft_cpx* fftOut;  /**< FFT output buffer (size: nfreq) */
 } AcousticSpectrumSupport;
 
-#define ACOUSTIC_SPECTRUM_SUPPORT_INIT {0, 0, 0, 0, 0, 0.0f, 0.0f, NULL, NULL, NULL, NULL}
+#define ACOUSTIC_SPECTRUM_SUPPORT_INIT {0, 0, 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, NULL, NULL, NULL, NULL}
 
 typedef struct AcousticWaveform {
     int numSamples;        /**< Number of samples (padded to integer multiple of nwin, or original if < nwin) */
@@ -6822,27 +6824,28 @@ typedef struct AcousticWaveform {
 
 #define ACOUSTIC_WAVEFORM_INIT {0, 0, NULL, 0}
 
-// ...existing code...
-
 /* ============== Acoustic Spectrum Analysis Implementation ============== */
-
-int acousticSpectrumSupportInit(
+static int acousticSpectrumSupportInit(
     AcousticSpectrumSupport* support,
     int numSamples,
     int targetWindowSize,
     int oversampling,
-    float gradRaster_us)
+    float gradRaster_us,
+    float maxFrequency_Hz)
 {
-    int i;
-    int nwin, nfft, nfreq, numWindows, hopSize;
+    int nwin, nfft, nfreq, outputFreqBins;
+    int hopSize, numWindows;
     int paddedLen;
+    int maxIdx;
     float* cosWindow = NULL;
     float* workBuffer = NULL;
-    kiss_fftr_cfg fftCfg = NULL;
     kiss_fft_cpx* fftOut = NULL;
+    kiss_fftr_cfg fftCfg = NULL;
+    float freqResolution;
+    int i;
     
-    if (!support) {
-        return PULSEQLIB_ERR_NULL_POINTER;
+    if (!support || numSamples <= 0 || targetWindowSize <= 0 || oversampling <= 0) {
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
     }
     
     /* Initialize to safe state */
@@ -6860,6 +6863,25 @@ int acousticSpectrumSupportInit(
     
     /* Number of frequency bins for real FFT */
     nfreq = nfft / 2 + 1;
+    
+    /* Frequency resolution */
+    freqResolution = 1.0e6f / (gradRaster_us * (float)nfft); /* Hz */
+    
+    /* Determine output frequency bins based on maxFrequency_Hz */
+    if (maxFrequency_Hz < 0.0f) {
+        /* User wants full spectrum */
+        outputFreqBins = nfreq;
+    } else {
+        /* Find index of frequency closest to maxFrequency_Hz */
+        maxIdx = (int)(maxFrequency_Hz / freqResolution + 0.5f);
+        if (maxIdx >= nfreq) {
+            outputFreqBins = nfreq;
+        } else if (maxIdx < 1) {
+            outputFreqBins = 1; /* At least DC bin */
+        } else {
+            outputFreqBins = maxIdx + 1; /* +1 because we include bin at maxIdx */
+        }
+    }
     
     /* Hop size (50% overlap) */
     hopSize = nwin / 2;
@@ -6891,7 +6913,7 @@ int acousticSpectrumSupportInit(
         goto cleanup_error;
     }
     
-    /* Allocate FFT output buffer */
+    /* Allocate FFT output buffer (full size, we'll subset when copying out) */
     fftOut = (kiss_fft_cpx*)ALLOC(nfreq * sizeof(kiss_fft_cpx));
     if (!fftOut) {
         goto cleanup_error;
@@ -6907,10 +6929,12 @@ int acousticSpectrumSupportInit(
     support->nwin = nwin;
     support->nfft = nfft;
     support->nfreq = nfreq;
+    support->outputFreqBins = outputFreqBins;
     support->numWindows = numWindows;
     support->hopSize = hopSize;
     support->gradRaster_us = gradRaster_us;
-    support->freqResolution = 1.0e6f / (gradRaster_us * (float)nfft); /* Hz */
+    support->freqResolution = freqResolution;
+    support->maxFrequency_Hz = maxFrequency_Hz;
     support->cosWindow = cosWindow;
     support->workBuffer = workBuffer;
     support->fftCfg = fftCfg;
@@ -6925,6 +6949,7 @@ cleanup_error:
     if (fftCfg) kiss_fftr_free(fftCfg);
     return PULSEQLIB_ERR_ALLOC_FAILED;
 }
+
 
 void acousticSpectrumSupportFree(AcousticSpectrumSupport* support)
 {
@@ -7018,7 +7043,7 @@ int computeWindowSpectrum(
 {
     int i;
     int startIdx;
-    int nwin, nfft, nfreq;
+    int nwin, nfft, nfreq, outputFreqBins;
     float* workBuffer;
     float* cosWindow;
     const float* samples;
@@ -7036,6 +7061,7 @@ int computeWindowSpectrum(
     nwin = support->nwin;
     nfft = support->nfft;
     nfreq = support->nfreq;
+    outputFreqBins = support->outputFreqBins;
     workBuffer = support->workBuffer;
     cosWindow = support->cosWindow;
     fftOut = support->fftOut;
@@ -7078,8 +7104,8 @@ int computeWindowSpectrum(
     /* Step 5: Compute real FFT */
     kiss_fftr(support->fftCfg, workBuffer, fftOut);
     
-    /* Step 6: Compute magnitude spectrum */
-    for (i = 0; i < nfreq; ++i) {
+    /* Step 6: Compute magnitude spectrum and copy only requested frequency range to output */
+    for (i = 0; i < outputFreqBins; ++i) {
         spectrum[i] = (float)sqrt((double)(fftOut[i].r * fftOut[i].r + fftOut[i].i * fftOut[i].i));
     }
     
@@ -7112,9 +7138,6 @@ void pulseqlib_trAcousticSpectraFree(pulseqlib_TRAcousticSpectra* spectra)
     spectra->freqResolution = 0.0f;
 }
 
-/**
- * @brief Compute all window spectra for a single axis.
- */
 static int compute_axis_spectra(
     float* spectraOut,
     AcousticSpectrumSupport* support,
@@ -7136,7 +7159,7 @@ static int compute_axis_spectra(
     /* Compute spectrum for each window */
     for (w = 0; w < support->numWindows; ++w) {
         result = computeWindowSpectrum(
-            &spectraOut[w * support->nfreq],
+            &spectraOut[w * support->outputFreqBins],  /* Changed from nfreq */
             support,
             &acoustic,
             w);
@@ -7155,6 +7178,7 @@ int pulseqlib_getTRAcousticSpectra(
     float gradRasterTime_us,
     int targetWindowSize,
     int oversampling,
+    float maxFrequency_Hz,
     pulseqlib_TRAcousticSpectra* spectra,
     pulseqlib_Diagnostic* diag)
 {
@@ -7172,17 +7196,17 @@ int pulseqlib_getTRAcousticSpectra(
     } else {
         pulseqlib_diagnosticInit(diag);
     }
-    
+
     /* Validate inputs */
     if (!waveforms || !spectra) {
         diag->code = PULSEQLIB_ERR_NULL_POINTER;
         return diag->code;
     }
-    
+
     /* Initialize output */
     memset(spectra, 0, sizeof(*spectra));
     memset(&support, 0, sizeof(support));
-    
+
     /* Find maximum number of samples across all axes */
     maxSamples = waveforms->numSamplesGx;
     if (waveforms->numSamplesGy > maxSamples) {
@@ -7191,39 +7215,40 @@ int pulseqlib_getTRAcousticSpectra(
     if (waveforms->numSamplesGz > maxSamples) {
         maxSamples = waveforms->numSamplesGz;
     }
-    
+
     if (maxSamples <= 0) {
         diag->code = PULSEQLIB_ERR_INVALID_ARGUMENT;
         return diag->code;
     }
-    
+
     /* Initialize acoustic support structure */
     result = acousticSpectrumSupportInit(
-        &support, maxSamples, targetWindowSize, oversampling, gradRasterTime_us);
+        &support, maxSamples, targetWindowSize, oversampling, gradRasterTime_us, maxFrequency_Hz);
     if (PULSEQLIB_FAILED(result)) {
         diag->code = result;
         return result;
     }
-    
-    /* Store output parameters */
-    spectra->numWindows = support.numWindows;
-    spectra->numFreqBins = support.nfreq;
-    spectra->freqResolution = support.freqResolution;
-    
-    /* Allocate output arrays */
-    spectra->spectraGx = (float*)ALLOC(support.numWindows * support.nfreq * sizeof(float));
-    spectra->spectraGy = (float*)ALLOC(support.numWindows * support.nfreq * sizeof(float));
-    spectra->spectraGz = (float*)ALLOC(support.numWindows * support.nfreq * sizeof(float));
-    spectra->frequencies = (float*)ALLOC(support.nfreq * sizeof(float));
 
-    if (!spectra->spectraGx || !spectra->spectraGy || !spectra->spectraGz) {
+    /* Store output parameters (use outputFreqBins instead of nfreq) */
+    spectra->numWindows = support.numWindows;
+    spectra->numFreqBins = support.outputFreqBins;
+    spectra->freqResolution = support.freqResolution;
+
+    /* Allocate output arrays (using outputFreqBins) */
+    spectra->spectraGx = (float*)ALLOC(support.numWindows * support.outputFreqBins * sizeof(float));
+    spectra->spectraGy = (float*)ALLOC(support.numWindows * support.outputFreqBins * sizeof(float));
+    spectra->spectraGz = (float*)ALLOC(support.numWindows * support.outputFreqBins * sizeof(float));
+    spectra->frequencies = (float*)ALLOC(support.outputFreqBins * sizeof(float));
+
+    if (!spectra->spectraGx || !spectra->spectraGy || !spectra->spectraGz || !spectra->frequencies) {
         pulseqlib_trAcousticSpectraFree(spectra);
         acousticSpectrumSupportFree(&support);
         diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
         return diag->code;
     }
 
-    for (i = 0; i < (int)support.nfreq; i++) {
+    /* Populate frequency axis (only up to outputFreqBins) */
+    for (i = 0; i < support.outputFreqBins; i++) {
         spectra->frequencies[i] = i * support.freqResolution;
     }
 
@@ -7233,12 +7258,12 @@ int pulseqlib_getTRAcousticSpectra(
     } else {
         paddedLen = ((maxSamples + support.nwin - 1) / support.nwin) * support.nwin;
     }
-    
+
     /* Compute spectra for each axis */
     /* Gx */
     if (waveforms->numSamplesGx > 0) {
         result = compute_axis_spectra(spectra->spectraGx, &support, 
-                                      waveforms->waveformGx, waveforms->numSamplesGx, paddedLen);
+                                    waveforms->waveformGx, waveforms->numSamplesGx, paddedLen);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
@@ -7246,13 +7271,13 @@ int pulseqlib_getTRAcousticSpectra(
             return result;
         }
     } else {
-        memset(spectra->spectraGx, 0, support.numWindows * support.nfreq * sizeof(float));
+        memset(spectra->spectraGx, 0, support.numWindows * support.outputFreqBins * sizeof(float));
     }
-    
+
     /* Gy */
     if (waveforms->numSamplesGy > 0) {
         result = compute_axis_spectra(spectra->spectraGy, &support,
-                                      waveforms->waveformGy, waveforms->numSamplesGy, paddedLen);
+                                    waveforms->waveformGy, waveforms->numSamplesGy, paddedLen);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
@@ -7260,13 +7285,13 @@ int pulseqlib_getTRAcousticSpectra(
             return result;
         }
     } else {
-        memset(spectra->spectraGy, 0, support.numWindows * support.nfreq * sizeof(float));
+        memset(spectra->spectraGy, 0, support.numWindows * support.outputFreqBins * sizeof(float));
     }
-    
+
     /* Gz */
     if (waveforms->numSamplesGz > 0) {
         result = compute_axis_spectra(spectra->spectraGz, &support,
-                                      waveforms->waveformGz, waveforms->numSamplesGz, paddedLen);
+                                    waveforms->waveformGz, waveforms->numSamplesGz, paddedLen);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
@@ -7274,12 +7299,12 @@ int pulseqlib_getTRAcousticSpectra(
             return result;
         }
     } else {
-        memset(spectra->spectraGz, 0, support.numWindows * support.nfreq * sizeof(float));
+        memset(spectra->spectraGz, 0, support.numWindows * support.outputFreqBins * sizeof(float));
     }
-    
+
     /* Cleanup */
     acousticSpectrumSupportFree(&support);
-    
+
     diag->code = PULSEQLIB_OK;
     return PULSEQLIB_OK;
 }

@@ -111,6 +111,7 @@ int pulseqlib_getTRAcousticSpectra(
     float gradRasterTime_us,
     int targetWindowSize,
     int oversampling,
+    float maxFrequency_Hz,
     pulseqlib_TRAcousticSpectra* spectra,
     pulseqlib_Diagnostic* diag);
 
