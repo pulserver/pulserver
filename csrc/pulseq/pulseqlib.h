@@ -623,7 +623,7 @@ typedef struct pulseqlib_BlockDefinition {
 
 typedef struct pulseqlib_BlockTableElement {
     int ID; /**< Unique Block ID */
-    int pureDelayFlag; /**< Non-zero if the block is a pure delay block (no RF, Grad, ADC, or extensions) */
+    int duration_us; /**< Positive if the block is a pure delay block (no RF, Grad, ADC, or extensions) - otherwise refers to base block duration */
     int rfID; /**< RF event ID in RF table */
     int gxID; /**< Gradient X event ID in Grad table */
     int gyID; /**< Gradient Y event ID in Grad table */

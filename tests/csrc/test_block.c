@@ -134,7 +134,7 @@ MU_TEST(test_rf) {
 
     /* Real RF */
     block = getBlock(seq, 0);
-    mu_assert(block->duration == 400, "Block 0 duration should be 400 block raster units");
+    mu_assert(block->duration == 400 * seq->opts.block_duration_raster, "Block 0 duration should be 400 block raster units");
     mu_assert(block->rf.phaseShape.numSamples == 0, "Block 0 RF should not have phase shape samples");
     mu_assert(fabs(block->rf.center - 2000.0) < 1e-6, "Block 0 RF should have center at 2000 us");
     mu_assert(block->rfShimming.type == 1, "Block 0 should have RF shimming event");
@@ -147,7 +147,7 @@ MU_TEST(test_rf) {
 
     /* Complex RF */
     block = getBlock(seq, 1);
-    mu_assert(block->duration == 1000, "Block 1 duration should be 1000 block raster units");
+    mu_assert(block->duration == 1000 * seq->opts.block_duration_raster, "Block 1 duration should be 1000 block raster units");
     mu_assert(block->rf.phaseShape.numSamples > 0, "Block 1 RF should have phase shape samples");
     mu_assert(fabs(block->rf.center - 5000.5) < 1e-6, "Block 1 RF should have center at 5000.5 us");
     mu_assert(block->rfShimming.type == 0, "Block 1 should not have RF shimming event");
@@ -164,8 +164,7 @@ MU_TEST(test_adc) {
     for (i = 2; i < 4; i++) {
         block = getBlock(seq, i);
         mu_assert(block != NULL, "getBlock should return a valid block");
-        mu_assert(block->duration == 128, "Block duration should be 128 block raster units");
-        mu_assert(block->duration == 128, "Block duration should be 128 block raster units");
+        mu_assert(block->duration == 128 * seq->opts.block_duration_raster, "Block duration should be 128 block raster units");
         mu_assert(block->rf.type == 0, "Block should not have RF event");
         mu_assert(block->gx.type == 0, "Block should not have Gx event");
         mu_assert(block->gy.type == 0, "Block should not have Gy event");
@@ -215,7 +214,7 @@ MU_TEST(test_grad) {
     /**** TRAPEZOIDS ****/
     /* Gx */
     block = getBlock(seq, 36);
-    mu_assert(block->duration == 100, "Block 36 duration should be 100 block raster units");
+    mu_assert(block->duration == 100 * seq->opts.block_duration_raster, "Block 36 duration should be 100 block raster units");
     mu_assert(block->gx.type == 1, "Block 36 should have trapezoidal Gx event");
     mu_assert(block->gy.type == 0, "Block 36 should not have Gy event");
     mu_assert(block->gz.type == 0, "Block 36 should not have Gz event");
@@ -231,7 +230,7 @@ MU_TEST(test_grad) {
 
     /* Gy */
     block = getBlock(seq, 37);
-    mu_assert(block->duration == 100, "Block 37 duration should be 100 block raster units");
+    mu_assert(block->duration == 100 * seq->opts.block_duration_raster, "Block 37 duration should be 100 block raster units");
     mu_assert(block->gx.type == 0, "Block 37 should not have Gx event");
     mu_assert(block->gy.type == 1, "Block 37 should have trapezoidal Gy event");
     mu_assert(block->gz.type == 0, "Block 37 should not have Gz event");
@@ -247,7 +246,7 @@ MU_TEST(test_grad) {
 
     /* Gz */
     block = getBlock(seq, 38);
-    mu_assert(block->duration == 100, "Block 38 duration should be 100 block raster units");
+    mu_assert(block->duration == 100 * seq->opts.block_duration_raster, "Block 38 duration should be 100 block raster units");
     mu_assert(block->gx.type == 0, "Block 38 should not have Gx event");
     mu_assert(block->gy.type == 0, "Block 38 should not have Gy event");
     mu_assert(block->gz.type == 1, "Block 38 should have trapezoidal Gz event");
@@ -265,7 +264,7 @@ MU_TEST(test_grad) {
     /**** ARBITRARY GRAD ****/
     /* Gx */
     block = getBlock(seq, 39);
-    mu_assert(block->duration == 5, "Block 39 duration should be 5 block raster units");
+    mu_assert(block->duration == 5 * seq->opts.block_duration_raster, "Block 39 duration should be 5 block raster units");
     mu_assert(block->gx.type == 2, "Block 39 should have arbitrary Gx event");
     mu_assert(block->gy.type == 0, "Block 39 should not have Gy event");
     mu_assert(block->gz.type == 0, "Block 39 should not have Gz event");
@@ -284,7 +283,7 @@ MU_TEST(test_grad) {
 
     /* Gy */
     block = getBlock(seq, 40);
-    mu_assert(block->duration == 5, "Block 40 duration should be 5 block raster units");
+    mu_assert(block->duration == 5 * seq->opts.block_duration_raster, "Block 40 duration should be 5 block raster units");
     mu_assert(block->gx.type == 0, "Block 40 should not have Gx event");
     mu_assert(block->gy.type == 2, "Block 40 should have arbitrary Gy event");
     mu_assert(block->gz.type == 0, "Block 40 should not have Gz event");
@@ -303,7 +302,7 @@ MU_TEST(test_grad) {
 
     /* Gz */
     block = getBlock(seq, 41);
-    mu_assert(block->duration == 5, "Block 41 duration should be 5 block raster units");
+    mu_assert(block->duration == 5 * seq->opts.block_duration_raster, "Block 41 duration should be 5 block raster units");
     mu_assert(block->gx.type == 0, "Block 41 should not have Gx event");
     mu_assert(block->gy.type == 0, "Block 41 should not have Gy event");
     mu_assert(block->gz.type == 2, "Block 41 should have arbitrary Gz event");
@@ -324,7 +323,7 @@ MU_TEST(test_grad) {
     /**** EXTENDED TRAPEZOIDS GRAD ****/
     /* Gx */
     block = getBlock(seq, 42);
-    mu_assert(block->duration == 203, "Block 42 duration should be 5 block raster units");
+    mu_assert(block->duration == 203 * seq->opts.block_duration_raster, "Block 42 duration should be 203 block raster units");
     mu_assert(block->gx.type == 2, "Block 42 should have arbitrary Gx event");
     mu_assert(block->gy.type == 0, "Block 42 should not have Gy event");
     mu_assert(block->gz.type == 0, "Block 42 should not have Gz event");
@@ -339,7 +338,7 @@ MU_TEST(test_grad) {
 
     /* Gy */
     block = getBlock(seq, 43);
-    mu_assert(block->duration == 203, "Block 43 duration should be 5 block raster units");
+    mu_assert(block->duration == 203 * seq->opts.block_duration_raster, "Block 43 duration should be 203 block raster units");
     mu_assert(block->gx.type == 0, "Block 43 should not have Gx event");
     mu_assert(block->gy.type == 2, "Block 43 should have arbitrary Gy event");
     mu_assert(block->gz.type == 0, "Block 43 should not have Gz event");
@@ -354,7 +353,7 @@ MU_TEST(test_grad) {
 
     /* Gz */
     block = getBlock(seq, 44);
-    mu_assert(block->duration == 203, "Block 44 duration should be 5 block raster units");
+    mu_assert(block->duration == 203 * seq->opts.block_duration_raster, "Block 44 duration should be 203 block raster units");
     mu_assert(block->gx.type == 0, "Block 44 should not have Gx event");
     mu_assert(block->gy.type == 0, "Block 44 should not have Gy event");
     mu_assert(block->gz.type == 2, "Block 44 should have arbitrary Gz event");
@@ -435,28 +434,28 @@ MU_TEST(test_trigger) {
     }
 
     block = getBlock(seq, 45);
-    mu_assert(block->duration == 1, "Block 45 duration should be 1 block raster units");
+    mu_assert(block->duration == 1 * seq->opts.block_duration_raster, "Block 45 duration should be 1 block raster units");
     mu_assert(block->trigger.duration == 10, "Block 45 trigger duration should be 10 us");
     mu_assert(block->trigger.delay == 0, "Block 45 trigger delay should be 0");
     mu_assert(block->trigger.triggerType == TRIGGER_TYPE_INPUT, "Block 45 trigger should be a cardiac trigger");
     mu_assert(block->trigger.triggerChannel == TRIGGER_CHANNEL_INPUT_PHYSIO_1, "Block 45 channel type should be physio1");
 
     block = getBlock(seq, 46);
-    mu_assert(block->duration == 1, "Block 46 duration should be 1 block raster units");
+    mu_assert(block->duration == 1 * seq->opts.block_duration_raster, "Block 46 duration should be 1 block raster units");
     mu_assert(block->trigger.duration == 10, "Block 46 trigger duration should be 10 us");
     mu_assert(block->trigger.delay == 0, "Block 46 trigger delay should be 0");
     mu_assert(block->trigger.triggerType == TRIGGER_TYPE_INPUT, "Block 46 trigger should be a cardiac trigger");
     mu_assert(block->trigger.triggerChannel == TRIGGER_CHANNEL_INPUT_PHYSIO_2, "Block 46 channel type should be physio2");
 
     block = getBlock(seq, 47);
-    mu_assert(block->duration == 400, "Block 47 duration should be 400 block raster units");
+    mu_assert(block->duration == 400 * seq->opts.block_duration_raster, "Block 47 duration should be 400 block raster units");
     mu_assert(block->trigger.duration == 4000, "Block 47 trigger duration should be 4000 us");
     mu_assert(block->trigger.delay == 0, "Block 47 trigger delay should be 0");
     mu_assert(block->trigger.triggerType == TRIGGER_TYPE_OUTPUT, "Block 47 trigger should be a digital output trigger");
     mu_assert(block->trigger.triggerChannel == TRIGGER_CHANNEL_OUTPUT_OSC_0, "Block 47 channel type should be osc0");
 
     block = getBlock(seq, 48);
-    mu_assert(block->duration == 400, "Block 48 duration should be 400 block raster units");
+    mu_assert(block->duration == 400 * seq->opts.block_duration_raster, "Block 48 duration should be 400 block raster units");
     mu_assert(block->trigger.duration == 4000, "Block 48 trigger duration should be 4000 us");
     mu_assert(block->trigger.delay == 0, "Block 48 trigger delay should be 0");
     mu_assert(block->trigger.triggerType == TRIGGER_TYPE_OUTPUT, "Block 48 trigger should be a digital output trigger");
@@ -464,7 +463,7 @@ MU_TEST(test_trigger) {
 
     block = getBlock(seq, 49);
     mu_assert(block != NULL, "getBlock should return a valid block");
-    mu_assert(block->duration == 400, "Block 49 duration should be 400 block raster units");
+    mu_assert(block->duration == 400 * seq->opts.block_duration_raster, "Block 49 duration should be 400 block raster units");
     mu_assert(block->trigger.duration == 4000, "Block 49 trigger duration should be 4000 us");
     mu_assert(block->trigger.delay == 0, "Block 49 trigger delay should be 0");
     mu_assert(block->trigger.triggerType == TRIGGER_TYPE_OUTPUT, "Block 49 trigger should be a digital output trigger");
@@ -482,7 +481,7 @@ MU_TEST(test_delay) {
     for (i = 50; i < 58; i++) {
         block = getBlock(seq, i);
         mu_assert(block != NULL, "getBlock should return a valid block");
-        mu_assert(block->duration == 1, "Block duration should be 1 block raster units");
+        mu_assert(block->duration == 1 * seq->opts.block_duration_raster, "Block duration should be 1 block raster units");
         mu_assert(block->rf.type == 0, "Block should not have RF event");
         mu_assert(block->gx.type == 0, "Block should not have Gx event");
         mu_assert(block->gy.type == 0, "Block should not have Gy event");
@@ -535,7 +534,7 @@ MU_TEST(test_pure_delay) {
 
     block = getBlock(seq, 58);
     mu_assert(block != NULL, "getBlock should return a valid block");
-    mu_assert(block->duration == 100000, "Block 58 duration should be 100000");
+    mu_assert(block->duration == 100000 * seq->opts.block_duration_raster, "Block 58 duration should be 100000");
     mu_assert(block->rf.type == 0, "Block 58 should not have RF event");
     mu_assert(block->gx.type == 0, "Block 58 should not have Gx event");
     mu_assert(block->gy.type == 0, "Block 58 should not have Gy event");

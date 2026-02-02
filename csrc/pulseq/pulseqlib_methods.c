@@ -1874,7 +1874,7 @@ void readExtensionsLibrary(pulseqlib_SeqFile* seq, FILE* f) {
 }
 
 
-int decompressShape(pulseqlib_ShapeArbitrary* encoded, pulseqlib_ShapeArbitrary* result)
+int decompressShape(pulseqlib_ShapeArbitrary* encoded, pulseqlib_ShapeArbitrary* result, float scale)
 {
     int i, rep;
     const float *packed;
@@ -1936,6 +1936,11 @@ int decompressShape(pulseqlib_ShapeArbitrary* encoded, pulseqlib_ShapeArbitrary*
     /* Cumulative sum */
     for (i = 1; i < numSamples; i++) {
         unpacked[i] += unpacked[i - 1];
+    }
+
+    /* Apply scale factor */
+    for (i = 0; i < numSamples; i++) {
+        unpacked[i] *= scale;
     }
 
     result->numSamples = numSamples;
@@ -2753,13 +2758,32 @@ int parseBlockWithoutExt(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block
     int idx;
     int i;
     int* isRealSample = NULL;
+    float blockDurationRaster_us, rfRasterTime_us, gradRasterTime_us;
     pulseqlib_ShapeArbitrary shape;
 
     if (!seq || !raw || !block) {
         return 0;
     }
 
-    block->duration = raw->block_duration;
+    if (seq->reservedDefinitionsLibrary.blockDurationRaster > 0.0f) {
+        blockDurationRaster_us = seq->reservedDefinitionsLibrary.blockDurationRaster;
+    } else {
+        blockDurationRaster_us = seq->opts.block_duration_raster;
+    }
+
+    if (seq->reservedDefinitionsLibrary.radiofrequencyRasterTime > 0.0f) {
+        rfRasterTime_us = seq->reservedDefinitionsLibrary.radiofrequencyRasterTime;
+    } else {
+        rfRasterTime_us = seq->opts.rf_raster_time;
+    }
+
+    if (seq->reservedDefinitionsLibrary.gradientRasterTime > 0.0f) {
+        gradRasterTime_us = seq->reservedDefinitionsLibrary.gradientRasterTime;
+    } else {
+        gradRasterTime_us = seq->opts.grad_raster_time;
+    }
+
+    block->duration = raw->block_duration * (int)blockDurationRaster_us;
 
     /* Parse RF event */
     if (raw->rf >= 0 && seq->rfLibrary && raw->rf < seq->rfLibrarySize) {
@@ -2768,9 +2792,10 @@ int parseBlockWithoutExt(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block
         block->rf.type = 1;
         block->rf.amplitude = farray[0];
 
+        /* Magnitude shape*/
         idx = (int)farray[1];
         if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape, 1.0f)) {
                 pulseqlib_seqBlockFree(block);
                 pulseqlib_seqBlockInit(block);
                 return 0;
@@ -2782,9 +2807,10 @@ int parseBlockWithoutExt(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block
             block->rf.magShape.samples = NULL;
         }
 
+        /* Phase shape */
         idx = (int)farray[2];
         if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape, 1.0f)) {
                 pulseqlib_seqBlockFree(block);
                 pulseqlib_seqBlockInit(block);
                 return 0;
@@ -2829,9 +2855,10 @@ int parseBlockWithoutExt(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block
             isRealSample = NULL;
         }
 
+        /* Time shape */
         idx = (int)farray[3];
         if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape, rfRasterTime_us)) {
                 pulseqlib_seqBlockFree(block);
                 pulseqlib_seqBlockInit(block);
                 return 0;
@@ -2869,7 +2896,7 @@ int parseBlockWithoutExt(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block
             block->gx.last = farray[3];
             idx = (int)farray[4];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape, 1.0f)) {
                     pulseqlib_seqBlockFree(block);
                     pulseqlib_seqBlockInit(block);
                     return 0;
@@ -2878,7 +2905,7 @@ int parseBlockWithoutExt(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block
             }
             idx = (int)farray[5];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape, gradRasterTime_us)) {
                     pulseqlib_seqBlockFree(block);
                     pulseqlib_seqBlockInit(block);
                     return 0;
@@ -2911,7 +2938,7 @@ int parseBlockWithoutExt(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block
             block->gy.last = farray[3];
             idx = (int)farray[4];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape, 1.0f)) {
                     pulseqlib_seqBlockFree(block);
                     pulseqlib_seqBlockInit(block);
                     return 0;
@@ -2920,7 +2947,7 @@ int parseBlockWithoutExt(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block
             }
             idx = (int)farray[5];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape, gradRasterTime_us)) {
                     pulseqlib_seqBlockFree(block);
                     pulseqlib_seqBlockInit(block);
                     return 0;
@@ -2953,7 +2980,7 @@ int parseBlockWithoutExt(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block
             block->gz.last = farray[3];
             idx = (int)farray[4];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape, 1.0f)) {
                     pulseqlib_seqBlockFree(block);
                     pulseqlib_seqBlockInit(block);
                     return 0;
@@ -2962,7 +2989,7 @@ int parseBlockWithoutExt(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block
             }
             idx = (int)farray[5];
             if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+                if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape, gradRasterTime_us)) {
                     pulseqlib_seqBlockFree(block);
                     pulseqlib_seqBlockInit(block);
                     return 0;
@@ -2990,7 +3017,7 @@ int parseBlockWithoutExt(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block
         block->adc.phaseOffset = farray[6];
         idx = (int)farray[7];
         if (idx > 0 && seq->isShapesLibraryParsed && idx <= seq->shapesLibrarySize) {
-            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape)) {
+            if (!decompressShape(&(seq->shapesLibrary[idx - 1]), &shape, farray[1] * 1e-3f)) {
                 pulseqlib_seqBlockFree(block);
                 pulseqlib_seqBlockInit(block);
                 return 0;
@@ -3604,7 +3631,11 @@ static int compute_grad_statistics(
         return PULSEQLIB_OK;
     }
     
-    gradRasterTime_us = seq->opts.grad_raster_time; /* already in us */
+    if (seq->reservedDefinitionsLibrary.gradientRasterTime > 0.0f) {
+        gradRasterTime_us = seq->reservedDefinitionsLibrary.gradientRasterTime;
+    } else {
+        gradRasterTime_us = seq->opts.grad_raster_time;
+    }
     
     /* Initialize decompressed shapes */
     decompressedWave.numSamples = 0;
@@ -3663,7 +3694,7 @@ static int compute_grad_statistics(
             time_us = NULL;
             hasTimeShape = 0;
             if (timeId > 0 && timeId <= seq->shapesLibrarySize) {
-                if (!decompressShape(&seq->shapesLibrary[timeId - 1], &decompressedTime)) {
+                if (!decompressShape(&seq->shapesLibrary[timeId - 1], &decompressedTime, gradRasterTime_us)) {
                     goto cleanup_error;
                 }
                 time_us = (float*)ALLOC(decompressedTime.numUncompressedSamples * sizeof(float));
@@ -3686,7 +3717,7 @@ static int compute_grad_statistics(
                 }
                 
                 /* Decompress waveform shape */
-                if (!decompressShape(&seq->shapesLibrary[shapeId - 1], &decompressedWave)) {
+                if (!decompressShape(&seq->shapesLibrary[shapeId - 1], &decompressedWave, 1.0f)) {
                     goto cleanup_error;
                 }
                 
@@ -3801,6 +3832,7 @@ static int compute_rf_statistics(
     float maxMag;
     float duration;
     float time_center;
+    float rfRasterTime_us;
     pulseqlib_RfDefinition* rfDef;
     
     /* Thresholds */
@@ -3839,9 +3871,15 @@ static int compute_rf_statistics(
     if (!seq || !rfDefinitions || numUniqueRFs <= 0) {
         return PULSEQLIB_OK;
     }
+
+    if (seq->reservedDefinitionsLibrary.radiofrequencyRasterTime > 0.0f) {
+        rfRasterTime_us = seq->reservedDefinitionsLibrary.radiofrequencyRasterTime;
+    } else {
+        rfRasterTime_us = seq->opts.rf_raster_time;
+    }
         
     /* Compute FFT size: nn = 1 / (dw * dt) */
-    nn = (int)(1.0f / (dw * seq->opts.rf_raster_time * 1e-6f));
+    nn = (int)(1.0f / (dw * rfRasterTime_us * 1e-6f));
     nn = kiss_fft_next_fast_size(nn);
     if (nn < 2) nn = 2;
        
@@ -3857,7 +3895,7 @@ static int compute_rf_statistics(
     fft_cfg = kiss_fft_alloc(nn, 0, NULL, NULL);
     if (tt && w && rfs_re && rfs_im && work_re && work_im && fft_in && fft_out && fft_cfg) {
         for (i = 0; i < nn; ++i) {
-            tt[i] = (float)(i - nn / 2) * seq->opts.rf_raster_time; /* in us */
+            tt[i] = (float)(i - nn / 2) * rfRasterTime_us; /* in us */
             w[i] = (float)(i - nn / 2) * dw;
         }
         fft_ready = 1;
@@ -3931,7 +3969,7 @@ static int compute_rf_statistics(
          * Step 1: Decompress shapes
          * ================================================================ */
         /* Magnitude shape (required) */
-        if (!decompressShape(&(seq->shapesLibrary[magId - 1]), &decompMag)) {
+        if (!decompressShape(&(seq->shapesLibrary[magId - 1]), &decompMag, 1.0f)) {
             goto cleanup_error;
         }
         numSamples = decompMag.numUncompressedSamples;
@@ -3951,7 +3989,7 @@ static int compute_rf_statistics(
         
         /* Phase shape (optional) */
         if (phaseId > 0 && phaseId <= seq->shapesLibrarySize) {
-            if (!decompressShape(&(seq->shapesLibrary[phaseId - 1]), &decompPhase)) 
+            if (!decompressShape(&(seq->shapesLibrary[phaseId - 1]), &decompPhase, 1.0f)) 
             {
                 goto cleanup_error;
             }
@@ -3995,7 +4033,7 @@ static int compute_rf_statistics(
         
         /* Time shape (optional) */
         if (timeId > 0 && timeId <= seq->shapesLibrarySize) {
-            if(!decompressShape(&seq->shapesLibrary[timeId - 1], &decompTime))
+            if(!decompressShape(&seq->shapesLibrary[timeId - 1], &decompTime, rfRasterTime_us))
             {
                 goto cleanup_error;
             }
@@ -4019,13 +4057,13 @@ static int compute_rf_statistics(
                 goto cleanup_error;
             }
             for (i = 0; i < numSamples; ++i) {
-                time_us[i] = (float)i * seq->opts.rf_raster_time;
+                time_us[i] = (float)i * rfRasterTime_us;
             }
             hasTime = 1;
         }
         
         /* Compute pulse duration */
-        duration = (hasTime && numSamples > 0) ? time_us[numSamples - 1] : (numSamples * seq->opts.rf_raster_time);
+        duration = (hasTime && numSamples > 0) ? time_us[numSamples - 1] : (numSamples * rfRasterTime_us);
         rfDef->duration_us = duration;
         
         /* ================================================================
@@ -4050,7 +4088,7 @@ static int compute_rf_statistics(
         if (hasTime && time_us) {
             time_center = 0.5f * (time_us[first] + time_us[last]);
         } else {
-            time_center = 0.5f * ((float)(first + last)) * seq->opts.rf_raster_time;
+            time_center = 0.5f * ((float)(first + last)) * rfRasterTime_us;
         }
 
         /* Compute isodelay: time from peak to end */
@@ -4086,7 +4124,7 @@ static int compute_rf_statistics(
         }
 
         /* Compute uniform grid parameters (all in us) */
-        numUniformSamples = (int)(duration / seq->opts.rf_raster_time + 0.5f) + 1;
+        numUniformSamples = (int)(duration / rfRasterTime_us + 0.5f) + 1;
         if (numUniformSamples < 2) numUniformSamples = 2;
         
         /* Allocate uniform grid arrays */
@@ -4100,7 +4138,7 @@ static int compute_rf_statistics(
         /* Build uniform time grid (NOT centered), in us */
         if (time_us_uniform && rf_re_uniform && rf_im_uniform && time_us) {
             for (i = 0; i < numUniformSamples; ++i) {
-                time_us_uniform[i] = (float)i * seq->opts.rf_raster_time;
+                time_us_uniform[i] = (float)i * rfRasterTime_us;
             }
         } 
 
@@ -4684,9 +4722,6 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
     int hasPrep, hasCooldown;
     int ctrl;
 
-    /* Auxiliary variable for block duration raster */
-    float blockDurationRaster_us;
-
     /* Validate inputs */
     if (!seq || !seqDesc) {
         return PULSEQLIB_ERR_INVALID_ARGUMENT;
@@ -4874,7 +4909,7 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
         tmpBlockTable[n].adcID = raw.adc;
         
         /* Store pure delay flag */
-        tmpBlockTable[n].pureDelayFlag = (raw.rf < 0 && raw.gx < 0 && raw.gy < 0 && raw.gz < 0 && raw.adc < 0) ? 1 : 0;
+        tmpBlockTable[n].duration_us = (raw.rf < 0 && raw.gx < 0 && raw.gy < 0 && raw.gz < 0 && raw.adc < 0) ? raw.block_duration : -1;
 
         /* Inspect extensions */
         if (raw.extCount > 0 && seq->isExtensionsLibraryParsed && seq->extensionLUT) {
@@ -4900,17 +4935,10 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
     seqDesc->numUniqueBlocks = deduplicate_int_rows(uniqueDefs, eventTable, numBlocks, BLOCK_DEF_COLS, (const int*)intRows);
     seqDesc->numBlocks = numBlocks;
 
-    /* Get block duration raster: prefer from definitions, fall back to opts */
-    if (seq->reservedDefinitionsLibrary.blockDurationRaster > 0.0f) {
-        blockDurationRaster_us = seq->reservedDefinitionsLibrary.blockDurationRaster;
-    } else {
-        blockDurationRaster_us = seq->opts.block_duration_raster;
-    }
-
     /* Copy into tmpBlockDefinitions */
     for (n = 0; n < seqDesc->numUniqueBlocks; ++n) {
         tmpBlockDefs[n].ID = uniqueDefs[n];
-        tmpBlockDefs[n].duration_us = (int)(intRows[uniqueDefs[n]][0] * blockDurationRaster_us);
+        tmpBlockDefs[n].duration_us = (int)(intRows[uniqueDefs[n]][0] * seqDesc->blockDurationRaster_us);
         tmpBlockDefs[n].rfID = (int)intRows[uniqueDefs[n]][1];
         tmpBlockDefs[n].gxID = (int)intRows[uniqueDefs[n]][2];
         tmpBlockDefs[n].gyID = (int)intRows[uniqueDefs[n]][3];
@@ -5263,7 +5291,7 @@ int pulseqlib_findTRInSequence(
     }
     for (n = 0; n < seqDesc->numBlocks; ++n) {
         blockDurations_us[n] = seqDesc->blockDefinitions[seqDesc->blockTable[n].ID].duration_us;
-        if (seqDesc->blockTable[n].pureDelayFlag) {
+        if (seqDesc->blockTable[n].duration_us >= 0) {
             sequence_pattern[n] = blockDurations_us[n];
         } else {
             sequence_pattern[n] = -1 * seqDesc->blockTable[seqDesc->blockTable[n].ID].ID; /* negate to avoid collision with durations */
@@ -5301,7 +5329,7 @@ int pulseqlib_findTRInSequence(
         /* Calculate total duration of non-pure-delay blocks */
         activeDuration_us = 0;
         for (n = 0; n < seqDesc->numBlocks; ++n) {
-            if (!seqDesc->blockTable[n].pureDelayFlag) {
+            if (seqDesc->blockTable[n].duration_us < 0) {
                 activeDuration_us += seqDesc->blockDefinitions[n].duration_us;
             }
         }
@@ -5430,19 +5458,26 @@ int get_rf_duration(pulseqlib_SeqFile const* seq, int rfIndex)
     int waveID;
     int num_samples;
     int timeID;
+    float rfRasterTime_us;
     if (!seq || rfIndex < 0 || !seq->rfLibrary || rfIndex >= seq->rfLibrarySize) {
         return 0;
     }
+
+    if (seq->reservedDefinitionsLibrary.radiofrequencyRasterTime > 0.0f) {
+        rfRasterTime_us = seq->reservedDefinitionsLibrary.radiofrequencyRasterTime;
+    } else {
+        rfRasterTime_us = seq->opts.rf_raster_time;
+    }
+
     timeID = (int)(seq->rfLibrary[rfIndex][3]);
     if (timeID >= 0){
-        decompressShape(&seq->shapesLibrary[timeID], &rf_times);
+        decompressShape(&seq->shapesLibrary[timeID], &rf_times, rfRasterTime_us);
         return rf_times.samples[rf_times.numUncompressedSamples - 1] - rf_times.samples[0];
     } else {
-        rf_raster_us = (int)((seq->opts).rf_raster_time);
         waveID = (int)(seq->rfLibrary[rfIndex][1]);
-        decompressShape(&seq->shapesLibrary[waveID], &rf_magnitude);
+        decompressShape(&seq->shapesLibrary[waveID], &rf_magnitude, 1.0f);
         num_samples = rf_magnitude.numUncompressedSamples;
-        return num_samples * rf_raster_us; /* duration in us */}
+        return num_samples * rfRasterTime_us; /* duration in us */}
 }
 
 /* Get the ADC start time with respect to block start */
@@ -5511,7 +5546,7 @@ static int findSegmentsInTRInternal(
 
     /* Parse maximum slew rate from opts */
     max_slew = opts->max_slew;
-    grad_raster_s = opts->grad_raster_time * 1e-6f;
+    grad_raster_s = seqDesc->gradRasterTime_us * 1e-6f;
     maxAllowed = max_slew * grad_raster_s;
 
     numBlocksInTR = trSize;
@@ -5760,7 +5795,7 @@ static int stripPureDelaysFromSegments(
         /* Count leading pure delays */
         leadingDelays = 0;
         for (i = 0; i < numBlocks; ++i) {
-            if (blockTable[rawSegments[segIdx].startBlock + i].pureDelayFlag) {
+            if (blockTable[rawSegments[segIdx].startBlock + i].duration_us >= 0) {
                 leadingDelays++;
             } else {
                 break;
@@ -5770,7 +5805,7 @@ static int stripPureDelaysFromSegments(
         /* Count trailing pure delays (don't overlap with leading) */
         trailingDelays = 0;
         for (i = numBlocks - 1; i >= leadingDelays; --i) {
-            if (blockTable[rawSegments[segIdx].startBlock + i].pureDelayFlag) {
+            if (blockTable[rawSegments[segIdx].startBlock + i].duration_us >= 0) {
                 trailingDelays++;
             } else {
                 break;
@@ -6049,7 +6084,7 @@ int pulseqlib_findSegmentsInTR(
     for (n = 0; n < numSegmentsTotal; ++n) {
         /* Check if this is a pure delay segment (single block that is pure delay) */
         isPureDelay = (trSegmentsExpanded[n].numBlocks == 1 && 
-                        seqDesc->blockTable[trSegmentsExpanded[n].startBlock].pureDelayFlag);
+                        seqDesc->blockTable[trSegmentsExpanded[n].startBlock].duration_us >= 0);
         
         if (isPureDelay) {
             if (pureDelayUniqueIdx == -1) {
@@ -6301,14 +6336,14 @@ static int fill_grad_waveform_for_block(
         if (shapeId <= 0 || shapeId > seqDesc->numShapes) {
             return 0;
         }
-        if (!decompressShape(&seqDesc->shapes[shapeId - 1], &decompWave)) {
+        if (!decompressShape(&seqDesc->shapes[shapeId - 1], &decompWave, 1.0f)) {
             return 0;
         }
         
         /* Decompress time shape if present */
         hasTimeShape = 0;
         if (timeShapeId > 0 && timeShapeId <= seqDesc->numShapes) {
-            if (decompressShape(&seqDesc->shapes[timeShapeId - 1], &decompTime)) {
+            if (decompressShape(&seqDesc->shapes[timeShapeId - 1], &decompTime, gradRaster_us)) {
                 hasTimeShape = 1;
             }
         }
@@ -6317,7 +6352,7 @@ static int fill_grad_waveform_for_block(
             /* Extended trapezoid: time shape stores values in raster units, convert to us */
             for (i = 0; i < numSamples && i < decompWave.numUncompressedSamples; ++i) {
                 t_sample = (i < decompTime.numUncompressedSamples) ? 
-                           decompTime.samples[i] * gradRaster_us : (float)i * gradRaster_us;
+                           decompTime.samples[i] : (float)i * gradRaster_us;
                 t_sample = t0 + delay_us + t_sample;
                 /* Skip first sample if duplicate time */
                 if (i == 0 && t_sample == prevTime) {
@@ -6492,7 +6527,9 @@ int pulseqlib_getTRGradientWaveforms(
         blockTableEntry = &seqDesc->blockTable[blockIdx];
         blockDefID = blockTableEntry->ID;
         blockDef = &seqDesc->blockDefinitions[blockDefID];
-        blockDuration_us = (float)blockDef->duration_us;
+        
+        /* Get block duration: from blockTable if pure delay (>= 0), else from blockDefinitions */
+        blockDuration_us = (blockTableEntry->duration_us >= 0) ? (float)blockTableEntry->duration_us : (float)blockDef->duration_us;
         
         /* Get raw gradient table indices from blockTable */
         gxRawID = blockTableEntry->gxID;
