@@ -611,7 +611,7 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
     output["combined"] = spectra.combined != 0;
     output["freq_resolution"] = spectra.freqResolution;
 
-    // Convert spectra and frequencies to vectors
+    // Convert sliding window spectra and frequencies to vectors
     int totalSize = spectra.numWindows * spectra.numFreqBins;
     
     std::vector<float> frequencies(spectra.frequencies, spectra.frequencies + spectra.numFreqBins);
@@ -623,6 +623,20 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
     output["spectra_gx"] = spectraGx;
     output["spectra_gy"] = spectraGy;
     output["spectra_gz"] = spectraGz;
+    
+    // Add full TR spectra
+    output["num_freq_bins_full"] = spectra.numFreqBinsFull;
+    output["freq_resolution_full"] = spectra.freqResolutionFull;
+    
+    std::vector<float> frequenciesFull(spectra.frequenciesFull, spectra.frequenciesFull + spectra.numFreqBinsFull);
+    std::vector<float> spectraGxFull(spectra.spectraGxFull, spectra.spectraGxFull + spectra.numFreqBinsFull);
+    std::vector<float> spectraGyFull(spectra.spectraGyFull, spectra.spectraGyFull + spectra.numFreqBinsFull);
+    std::vector<float> spectraGzFull(spectra.spectraGzFull, spectra.spectraGzFull + spectra.numFreqBinsFull);
+    
+    output["frequencies_full"] = frequenciesFull;
+    output["spectra_gx_full"] = spectraGxFull;
+    output["spectra_gy_full"] = spectraGyFull;
+    output["spectra_gz_full"] = spectraGzFull;
 
     // Cleanup
     pulseqlib_trAcousticSpectraFree(&spectra);

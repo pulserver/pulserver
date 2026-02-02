@@ -761,17 +761,25 @@ typedef struct pulseqlib_TRGradientWaveforms {
  * @brief Result structure for TR acoustic spectra.
  */
 typedef struct pulseqlib_TRAcousticSpectra {
-    int numWindows;        /**< Number of windows */
-    int numFreqBins;       /**< Number of frequency bins per spectrum */
-    int combined;
-    float freqResolution;  /**< Frequency resolution in Hz */
-    float* frequencies;    /**< Frequency axis in Hz (size: numFreqBins) */
-    float* spectraGx;      /**< Gx spectra (numWindows x numFreqBins, row-major) */
-    float* spectraGy;      /**< Gy spectra (numWindows x numFreqBins, row-major) */
-    float* spectraGz;      /**< Gz spectra (numWindows x numFreqBins, row-major) */
+    int numWindows;        /**< Number of windows (1 if combined=true) */
+    int numFreqBins;       /**< Number of frequency bins per spectrum (sliding window) */
+    int combined;          /**< If true, spectra are pointwise max across windows (1D arrays) */
+    float freqResolution;  /**< Frequency resolution in Hz (sliding window) */
+    float* frequencies;    /**< Frequency axis in Hz (size: numFreqBins), for sliding window spectra */
+    float* spectraGx;      /**< Gx spectra: if combined, (numFreqBins,); else (numWindows, numFreqBins) row-major */
+    float* spectraGy;      /**< Gy spectra: if combined, (numFreqBins,); else (numWindows, numFreqBins) row-major */
+    float* spectraGz;      /**< Gz spectra: if combined, (numFreqBins,); else (numWindows, numFreqBins) row-major */
+    
+    /* Full TR spectrum (single window covering entire TR) */
+    int numFreqBinsFull;   /**< Number of frequency bins for full TR spectrum */
+    float freqResolutionFull; /**< Frequency resolution in Hz for full TR spectrum */
+    float* frequenciesFull; /**< Frequency axis in Hz (size: numFreqBinsFull), for full TR spectra */
+    float* spectraGxFull;  /**< Gx full TR spectrum (numFreqBinsFull,) */
+    float* spectraGyFull;  /**< Gy full TR spectrum (numFreqBinsFull,) */
+    float* spectraGzFull;  /**< Gz full TR spectrum (numFreqBinsFull,) */
 } pulseqlib_TRAcousticSpectra;
 
-#define PULSEQLIB_TR_ACOUSTIC_SPECTRA_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL}
+#define PULSEQLIB_TR_ACOUSTIC_SPECTRA_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, 0, 0.0f, NULL, NULL, NULL, NULL}
 
 #endif /* PULSEQLIB_H */
 

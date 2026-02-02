@@ -7153,9 +7153,28 @@ void pulseqlib_trAcousticSpectraFree(pulseqlib_TRAcousticSpectra* spectra)
         spectra->spectraGz = NULL;
     }
     
+    if (spectra->frequenciesFull) {
+        FREE(spectra->frequenciesFull);
+        spectra->frequenciesFull = NULL;
+    }
+    if (spectra->spectraGxFull) {
+        FREE(spectra->spectraGxFull);
+        spectra->spectraGxFull = NULL;
+    }
+    if (spectra->spectraGyFull) {
+        FREE(spectra->spectraGyFull);
+        spectra->spectraGyFull = NULL;
+    }
+    if (spectra->spectraGzFull) {
+        FREE(spectra->spectraGzFull);
+        spectra->spectraGzFull = NULL;
+    }
+    
     spectra->numWindows = 0;
     spectra->numFreqBins = 0;
+    spectra->numFreqBinsFull = 0;
     spectra->freqResolution = 0.0f;
+    spectra->freqResolutionFull = 0.0f;
 }
 
 /**
@@ -7239,6 +7258,153 @@ static int compute_axis_spectra(
     return PULSEQLIB_OK;
 }
 
+/**
+ * @brief Calculate FFT parameters for full TR spectrum without computing it.
+ */
+static void calculate_full_tr_fft_params(
+    int numSamples,
+    float gradRasterTime_us,
+    float targetSpectralResolution_Hz,
+    float maxFrequency_Hz,
+    int* outNfft,
+    int* outNumFreqBins,
+    float* outFreqResolution)
+{
+    int nfft, nfreq, outputFreqBins;
+    int minNfftForResolution;
+    int maxIdx;
+    float freqResolution;
+    
+    /* Calculate minimum nfft needed for target spectral resolution */
+    minNfftForResolution = (int)ceil((double)(1.0e6f / (gradRasterTime_us * targetSpectralResolution_Hz)));
+    
+    /* Ensure nfft is at least numSamples, round to power of 2 */
+    if (minNfftForResolution < numSamples) {
+        nfft = next_pow2(numSamples);
+    } else {
+        nfft = next_pow2(minNfftForResolution);
+    }
+    
+    /* Number of frequency bins for real FFT */
+    nfreq = nfft / 2 + 1;
+    
+    /* Actual frequency resolution achieved */
+    freqResolution = 1.0e6f / (gradRasterTime_us * (float)nfft);
+    
+    /* Determine output frequency bins based on maxFrequency_Hz */
+    if (maxFrequency_Hz < 0.0f) {
+        outputFreqBins = nfreq;
+    } else {
+        maxIdx = (int)(maxFrequency_Hz / freqResolution + 0.5f);
+        if (maxIdx >= nfreq) {
+            outputFreqBins = nfreq;
+        } else if (maxIdx < 1) {
+            outputFreqBins = 1;
+        } else {
+            outputFreqBins = maxIdx + 1;
+        }
+    }
+    
+    if (outNfft) *outNfft = nfft;
+    if (outNumFreqBins) *outNumFreqBins = outputFreqBins;
+    if (outFreqResolution) *outFreqResolution = freqResolution;
+}
+
+/**
+ * @brief Compute full TR spectrum (single window covering entire waveform).
+ * 
+ * @param spectrumOut Output buffer for spectrum (must be pre-allocated with outputFreqBins elements)
+ * @param waveform Input waveform samples
+ * @param numSamples Number of samples in waveform
+ * @param nfft FFT size (from calculate_full_tr_fft_params)
+ * @param outputFreqBins Number of output frequency bins (from calculate_full_tr_fft_params)
+ */
+static int compute_full_tr_spectrum(
+    float* spectrumOut,
+    const float* waveform,
+    int numSamples,
+    int nfft,
+    int outputFreqBins)
+{
+    int nfreq;
+    float* workBuffer = NULL;
+    float* cosWindow = NULL;
+    kiss_fft_cpx* fftOut = NULL;
+    kiss_fftr_cfg fftCfg = NULL;
+    float mean;
+    int i;
+    int result = PULSEQLIB_OK;
+    
+    if (!spectrumOut || !waveform || numSamples <= 0 || nfft <= 0 || outputFreqBins <= 0) {
+        return PULSEQLIB_ERR_NULL_POINTER;
+    }
+    
+    /* Number of frequency bins for real FFT */
+    nfreq = nfft / 2 + 1;
+    
+    /* Allocate buffers */
+    workBuffer = (float*)ALLOC(nfft * sizeof(float));
+    cosWindow = (float*)ALLOC(numSamples * sizeof(float));
+    fftOut = (kiss_fft_cpx*)ALLOC(nfreq * sizeof(kiss_fft_cpx));
+    
+    if (!workBuffer || !cosWindow || !fftOut) {
+        result = PULSEQLIB_ERR_ALLOC_FAILED;
+        goto cleanup;
+    }
+    
+    /* Initialize FFT */
+    fftCfg = kiss_fftr_alloc(nfft, 0, NULL, NULL);
+    if (!fftCfg) {
+        result = PULSEQLIB_ERR_ALLOC_FAILED;
+        goto cleanup;
+    }
+    
+    /* Compute cosine taper window for full TR */
+    for (i = 0; i < numSamples; ++i) {
+        cosWindow[i] = 0.5f * (1.0f - cosf(2.0f * (float)M_PI * (float)(i + 1) / (float)numSamples));
+    }
+    
+    /* Copy waveform to work buffer */
+    for (i = 0; i < numSamples; ++i) {
+        workBuffer[i] = waveform[i];
+    }
+    
+    /* Zero-fill from numSamples to nfft */
+    for (i = numSamples; i < nfft; ++i) {
+        workBuffer[i] = 0.0f;
+    }
+    
+    /* Compute and subtract mean */
+    mean = 0.0f;
+    for (i = 0; i < numSamples; ++i) {
+        mean += workBuffer[i];
+    }
+    mean /= (float)numSamples;
+    for (i = 0; i < numSamples; ++i) {
+        workBuffer[i] -= mean;
+    }
+    
+    /* Apply cosine taper */
+    for (i = 0; i < numSamples; ++i) {
+        workBuffer[i] *= cosWindow[i];
+    }
+    
+    /* Compute FFT */
+    kiss_fftr(fftCfg, workBuffer, fftOut);
+    
+    /* Compute magnitude spectrum and copy only requested frequency range */
+    for (i = 0; i < outputFreqBins; ++i) {
+        spectrumOut[i] = (float)sqrt((double)(fftOut[i].r * fftOut[i].r + fftOut[i].i * fftOut[i].i));
+    }
+    
+cleanup:
+    if (workBuffer) FREE(workBuffer);
+    if (cosWindow) FREE(cosWindow);
+    if (fftOut) FREE(fftOut);
+    if (fftCfg) kiss_fftr_free(fftCfg);
+    
+    return result;
+}
 
 int pulseqlib_getTRAcousticSpectra(
     const pulseqlib_TRGradientWaveforms* waveforms,
@@ -7257,6 +7423,11 @@ int pulseqlib_getTRAcousticSpectra(
     int result;
     int i;
     int outputSpectraSize;  /* Size of each spectra array */
+
+    /* Full spectrum analysis */
+    int nfft_full;
+    int numFreqBinsFull;
+    float freqResolutionFull;
     
     /* Use local diag if caller doesn't provide one */
     if (!diag) {
@@ -7364,7 +7535,7 @@ int pulseqlib_getTRAcousticSpectra(
     } else {
         memset(spectra->spectraGy, 0, outputSpectraSize * sizeof(float));
     }
-    
+
     /* Gz */
     if (waveforms->numSamplesGz > 0) {
         result = compute_axis_spectra(spectra->spectraGz, &support,
@@ -7379,9 +7550,96 @@ int pulseqlib_getTRAcousticSpectra(
         memset(spectra->spectraGz, 0, outputSpectraSize * sizeof(float));
     }
     
-    /* Cleanup */
+    /* Cleanup sliding window support */
     acousticSpectrumSupportFree(&support);
+    
+    /* ========== Compute Full TR Spectra ========== */
+        
+    /* Calculate FFT parameters based on the longest waveform */
+    calculate_full_tr_fft_params(
+        maxSamples,
+        gradRasterTime_us,
+        targetSpectralResolution_Hz,
+        maxFrequency_Hz,
+        &nfft_full,
+        &numFreqBinsFull,
+        &freqResolutionFull);
+    
+    /* Store parameters in output struct */
+    spectra->numFreqBinsFull = numFreqBinsFull;
+    spectra->freqResolutionFull = freqResolutionFull;
+    
+    /* Allocate full TR spectrum arrays */
+    spectra->spectraGxFull = (float*)ALLOC(numFreqBinsFull * sizeof(float));
+    spectra->spectraGyFull = (float*)ALLOC(numFreqBinsFull * sizeof(float));
+    spectra->spectraGzFull = (float*)ALLOC(numFreqBinsFull * sizeof(float));
+    spectra->frequenciesFull = (float*)ALLOC(numFreqBinsFull * sizeof(float));
+    
+    if (!spectra->spectraGxFull || !spectra->spectraGyFull || 
+        !spectra->spectraGzFull || !spectra->frequenciesFull) {
+        pulseqlib_trAcousticSpectraFree(spectra);
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        return diag->code;
+    }
+    
+    /* Populate full TR frequency axis */
+    for (i = 0; i < numFreqBinsFull; i++) {
+        spectra->frequenciesFull[i] = i * freqResolutionFull;
+    }
+    
+    /* Compute full TR spectrum for Gx */
+    if (waveforms->numSamplesGx > 0) {
+        result = compute_full_tr_spectrum(
+            spectra->spectraGxFull,
+            waveforms->waveformGx,
+            waveforms->numSamplesGx,
+            nfft_full,
+            numFreqBinsFull);
+        if (PULSEQLIB_FAILED(result)) {
+            pulseqlib_trAcousticSpectraFree(spectra);
+            diag->code = result;
+            return result;
+        }
+    } else {
+        memset(spectra->spectraGxFull, 0, numFreqBinsFull * sizeof(float));
+    }
+    
+    /* Compute full TR spectrum for Gy */
+    if (waveforms->numSamplesGy > 0) {
+        result = compute_full_tr_spectrum(
+            spectra->spectraGyFull,
+            waveforms->waveformGy,
+            waveforms->numSamplesGy,
+            nfft_full,
+            numFreqBinsFull);
+        if (PULSEQLIB_FAILED(result)) {
+            pulseqlib_trAcousticSpectraFree(spectra);
+            diag->code = result;
+            return result;
+        }
+    } else {
+        memset(spectra->spectraGyFull, 0, numFreqBinsFull * sizeof(float));
+    }
+    
+    /* Compute full TR spectrum for Gz */
+    if (waveforms->numSamplesGz > 0) {
+        result = compute_full_tr_spectrum(
+            spectra->spectraGzFull,
+            waveforms->waveformGz,
+            waveforms->numSamplesGz,
+            nfft_full,
+            numFreqBinsFull);
+        if (PULSEQLIB_FAILED(result)) {
+            pulseqlib_trAcousticSpectraFree(spectra);
+            diag->code = result;
+            return result;
+        }
+    } else {
+        memset(spectra->spectraGzFull, 0, numFreqBinsFull * sizeof(float));
+    }
     
     diag->code = PULSEQLIB_OK;
     return PULSEQLIB_OK;
 }
+    
+    
