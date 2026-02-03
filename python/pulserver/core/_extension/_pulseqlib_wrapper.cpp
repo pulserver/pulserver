@@ -627,7 +627,7 @@ static py::dict _get_tr_acoustic_spectra(
     
     code = pulseqlib_getTRAcousticSpectra(
         &waveforms, 
-        seqDesc.gradRasterTime_us, 
+        0.5f * seqDesc.gradRasterTime_us, 
         targetWindowSize, 
         targetSpectralResolution, 
         maxFrequency, 

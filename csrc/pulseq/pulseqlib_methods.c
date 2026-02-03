@@ -7495,11 +7495,11 @@ static int compute_sliding_window_spectra(
     int windowLen;
     float* windowSpectrum = NULL;
     float maxEnvWindow;
-    float maxEnvOverall;
     float absVal;
     pulseqlib_AcousticViolation violation;
     int* windowPeaks;
-    
+    float maxEnvOverall = 0.0f;
+
     memset(&acoustic, 0, sizeof(acoustic));
     
     /* If combined mode, we need a temporary buffer for each window */
