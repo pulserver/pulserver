@@ -7257,17 +7257,127 @@ void pulseqlib_trAcousticSpectraFree(pulseqlib_TRAcousticSpectra* spectra)
 }
 
 /* ============== Acoustic Resonance Detection ============== */
-static void detect_resonances(int n, const float* spectrum, int* peaks)
-{
+#define BASELINE_WIN   7      /* median window (±7 bins) */
+#define Q_BINS         3      /* distance for Q check */
+#define DB_THRESH      6.0f   /* minimum contrast in dB */
+#define Q_RATIO        2.0f   /* peak / side ratio */
+#define DR_RATIO       5.0f   /* global dynamic range */
+#define DB_RATIO 1.995262f   /* 10^(6/20) */
+
+static float median_f(const float *x, int n) {
+    float tmp[32];
+    int i, j;
+    float v;
+
+    for (i = 0; i < n; ++i)
+        tmp[i] = x[i];
+
+    for (i = 1; i < n; ++i) {
+        v = tmp[i];
+        j = i - 1;
+        while (j >= 0 && tmp[j] > v) {
+            tmp[j + 1] = tmp[j];
+            j--;
+        }
+        tmp[j + 1] = v;
+    }
+
+    return (n & 1) ? tmp[n >> 1] : 0.5f * (tmp[(n >> 1) - 1] + tmp[n >> 1]);
+}
+
+static float local_median_f(const float *x, int n, int i, int w) {
+    float buf[32];
+    int k, cnt = 0;
+
+    for (k = i - w; k <= i + w; ++k) {
+        if (k >= 0 && k < n)
+            buf[cnt++] = x[k];
+    }
+
+    return median_f(buf, cnt);
+}
+
+static void detect_resonances(int n, const float *mag, int *peaks) {
     int i;
-    
-    /* Initialize peaks to zero */
-    for (i = 0; i < n; ++i) {
+    float min_v, max_v;
+    float baseline;
+    float curv;
+    float left, right, center;
+
+    if (n <= 0 || !mag || !peaks)
+        return;
+
+    for (i = 0; i < n; ++i)
         peaks[i] = 0;
+
+    /* global dynamic range sanity check */
+    min_v = max_v = mag[0];
+    for (i = 1; i < n; ++i) {
+        if (mag[i] < min_v) min_v = mag[i];
+        if (mag[i] > max_v) max_v = mag[i];
+    }
+
+    if (max_v < DR_RATIO * min_v)
+        return;
+
+    for (i = BASELINE_WIN; i < n - BASELINE_WIN; ++i) {
+        left = mag[i - 1];
+        right = mag[i + 1];
+        center = mag[i];
+
+        /* 1. local maximum */
+        if (center <= left || center <= right)
+            continue;
+
+        /* 2. curvature (second difference) */
+        curv = left - 2.0f * center + right;
+        if (curv >= 0.0f)
+            continue;
+
+        /* 3. local baseline (median) */
+        baseline = local_median_f(mag, n, i, BASELINE_WIN);
+
+        if (mag[i] < DB_RATIO * baseline)
+            continue;
+
+        /* 4. finite bandwidth / Q constraint */
+        if (mag[i] < Q_RATIO * mag[i - Q_BINS]) continue;
+        if (mag[i] < Q_RATIO * mag[i + Q_BINS]) continue;
+
+        peaks[i] = 1;
+    }
+}
+
+#define HARMONIC_THRESH_RATIO 0.1f  /* -20 dB from max */
+
+static void detect_harmonic_peaks(int n, const float *mag, int *peaks) {
+    int i;
+    float max_val;
+    float threshold;
+    
+    if (n <= 0 || !mag || !peaks)
+        return;
+    
+    for (i = 0; i < n; ++i)
+        peaks[i] = 0;
+    
+    /* Find max value */
+    max_val = mag[0];
+    for (i = 1; i < n; ++i) {
+        if (mag[i] > max_val) max_val = mag[i];
     }
     
-    /* Dummy implementation: stop here (pretend there is no peak) */
-    return;
+    /* Skip if spectrum is essentially zero */
+    if (max_val < 1e-12f)
+        return;
+    
+    /* Mark harmonics above threshold */
+    threshold = HARMONIC_THRESH_RATIO * max_val;
+    for (i = 0; i < n; ++i) {
+        if (mag[i] > threshold) {
+            peaks[i] = 1;
+        }
+    }
 }
 
 static int check_acoustic_violations(
@@ -7278,7 +7388,8 @@ static int check_acoustic_violations(
     const pulseqlib_ForbiddenBand* forbiddenBands,
     int numBands,
     pulseqlib_AcousticViolation* violation,
-    int** outPeaks)
+    int** outPeaks, 
+    int isHarmonic)
 {
     int* peaks = NULL;
     int i, b;
@@ -7310,7 +7421,11 @@ static int check_acoustic_violations(
     }
     
     /* Detect peaks in spectrum */
-    detect_resonances(numFreqBins, spectrum, peaks);
+    if (isHarmonic) {
+        detect_harmonic_peaks(numFreqBins, spectrum, peaks);
+    } else {
+        detect_resonances(numFreqBins, spectrum, peaks);
+    }
     
     /* Find the worst peak in any forbidden band */
     worstPeakFreq = 0.0f;
@@ -7470,7 +7585,7 @@ static int compute_sliding_window_spectra(
                     forbiddenBands,
                     numForbiddenBands,
                     &violation,
-                    outPeaks ? &windowPeaks : NULL);
+                    outPeaks ? &windowPeaks : NULL, 0);
                 if (PULSEQLIB_FAILED(result)) {
                     if (windowSpectrum) FREE(windowSpectrum);
                     acousticWaveformFree(&acoustic);
@@ -7743,7 +7858,7 @@ static int compute_sequence_spectrum(
             maxEnv,
             forbiddenBands,
             numForbiddenBands,
-            &violation, outSeqPeaks);
+            &violation, outSeqPeaks, 1);
         if (PULSEQLIB_FAILED(result)) {
             goto cleanup;
         }
@@ -7754,7 +7869,7 @@ static int compute_sequence_spectrum(
             result = PULSEQLIB_ERR_ALLOC_FAILED;
             goto cleanup;
         }
-        detect_resonances(numPicked, *seqSpectrum, seqPeaks);  /* FIX: was outputFreqBinsFull, should be numPicked */
+        detect_harmonic_peaks(numPicked, *seqSpectrum, seqPeaks);  /* FIX: was outputFreqBinsFull, should be numPicked */
         *outSeqPeaks = seqPeaks;
     }
 
