@@ -7193,6 +7193,20 @@ void pulseqlib_trAcousticSpectraFree(pulseqlib_TRAcousticSpectra* spectra)
         spectra->maxEnvelopeGz = NULL;
     }
     
+    /* Free peak arrays for sliding window */
+    if (spectra->peaksGx) {
+        FREE(spectra->peaksGx);
+        spectra->peaksGx = NULL;
+    }
+    if (spectra->peaksGy) {
+        FREE(spectra->peaksGy);
+        spectra->peaksGy = NULL;
+    }
+    if (spectra->peaksGz) {
+        FREE(spectra->peaksGz);
+        spectra->peaksGz = NULL;
+    }
+    
     if (spectra->frequenciesFull) {
         FREE(spectra->frequenciesFull);
         spectra->frequenciesFull = NULL;
@@ -7227,34 +7241,139 @@ void pulseqlib_trAcousticSpectraFree(pulseqlib_TRAcousticSpectra* spectra)
         spectra->spectraGzSeq = NULL;
     }
     
-    spectra->numWindows = 0;
-    spectra->numFreqBins = 0;
-    spectra->numFreqBinsFull = 0;
-    spectra->numFreqBinsSeq = 0;
-    spectra->freqResolution = 0.0f;
-    spectra->freqResolutionFull = 0.0f;
+    /* Free peak arrays for sequence spectra */
+    if (spectra->peaksGxSeq) {
+        FREE(spectra->peaksGxSeq);
+        spectra->peaksGxSeq = NULL;
+    }
+    if (spectra->peaksGySeq) {
+        FREE(spectra->peaksGySeq);
+        spectra->peaksGySeq = NULL;
+    }
+    if (spectra->peaksGzSeq) {
+        FREE(spectra->peaksGzSeq);
+        spectra->peaksGzSeq = NULL;
+    }
 }
 
-/**
- * @brief Compute all window spectra for a single axis.
- * @param spectraOut Output buffer. Size depends on combined flag:
- *                   - If combined=0: numWindows * outputFreqBins
- *                   - If combined=1: outputFreqBins (pointwise max)
- * @param support Acoustic spectrum support structure
- * @param waveform Input waveform samples
- * @param numSamples Number of samples in waveform
- * @param paddedLen Target padded length for acoustic waveform
- * @param combined If true, compute pointwise max across all windows; if false, stack windows
- */
-static int compute_axis_spectra(
+/* ============== Acoustic Resonance Detection ============== */
+static void detect_resonances(int n, const float* spectrum, int* peaks)
+{
+    int i;
+    
+    /* Initialize peaks to zero */
+    for (i = 0; i < n; ++i) {
+        peaks[i] = 0;
+    }
+    
+    /* Dummy implementation: stop here (pretend there is no peak) */
+    return;
+}
+
+static int check_acoustic_violations(
+    const float* spectrum,
+    const float* frequencies,
+    int numFreqBins,
+    float maxEnvelope,
+    const pulseqlib_ForbiddenBand* forbiddenBands,
+    int numBands,
+    pulseqlib_AcousticViolation* violation,
+    int** outPeaks)
+{
+    int* peaks = NULL;
+    int i, b;
+    float freq;
+    float peakMagnitude;
+    float worstPeakFreq;
+    int worstBandIndex;
+    float worstPeakMagnitude;
+    
+    /* Initialize violation result */
+    violation->detected = 0;
+    violation->bandIndex = -1;
+    violation->peakFrequency_Hz = 0.0f;
+    violation->maxAmplitude = maxEnvelope;
+    violation->allowedAmplitude = 0.0f;
+    
+    /* No bands to check - no violation possible */
+    if (numBands <= 0 || !forbiddenBands) {
+        if (outPeaks) {
+            *outPeaks = NULL;  /* ADD THIS LINE */
+        }
+        return PULSEQLIB_OK;
+    }
+    
+    /* Allocate peaks array */
+    peaks = (int*)ALLOC((size_t)numFreqBins * sizeof(int));
+    if (!peaks) {
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    
+    /* Detect peaks in spectrum */
+    detect_resonances(numFreqBins, spectrum, peaks);
+    
+    /* Find the worst peak in any forbidden band */
+    worstPeakFreq = 0.0f;
+    worstBandIndex = -1;
+    worstPeakMagnitude = 0.0f;
+    
+    for (i = 0; i < numFreqBins; ++i) {
+        if (!peaks[i]) {
+            continue;  /* Not a peak */
+        }
+        
+        freq = frequencies[i];
+        peakMagnitude = spectrum[i];
+        
+        /* Check if this peak falls in any forbidden band */
+        for (b = 0; b < numBands; ++b) {
+            if (freq >= forbiddenBands[b].freqMin_Hz && freq <= forbiddenBands[b].freqMax_Hz) {
+                /* Peak is in forbidden band - check if it's the worst one so far */
+                if (peakMagnitude > worstPeakMagnitude) {
+                    worstPeakMagnitude = peakMagnitude;
+                    worstPeakFreq = freq;
+                    worstBandIndex = b;
+                }
+                break;  /* Found a band, no need to check more bands for this peak */
+            }
+        }
+    }
+    
+    /* Return peaks to caller if requested, otherwise free them */
+    if (outPeaks) {
+        *outPeaks = peaks;
+    } else {
+        FREE(peaks);
+    }
+    
+    /* If we found a peak in a forbidden band, check amplitude violation */
+    if (worstBandIndex >= 0) {
+        violation->peakFrequency_Hz = worstPeakFreq;
+        violation->bandIndex = worstBandIndex;
+        violation->allowedAmplitude = forbiddenBands[worstBandIndex].maxAmplitude;
+        
+        /* Check if max amplitude exceeds allowed */
+        if (maxEnvelope > forbiddenBands[worstBandIndex].maxAmplitude) {
+            violation->detected = 1;
+        }
+    }
+    
+    return PULSEQLIB_OK;
+}
+
+static int compute_sliding_window_spectra(
     float* spectraOut,
     AcousticSpectrumSupport* support,
     const float* waveform,
+    const float* frequencies,
     int numSamples,
     int paddedLen,
     int combined,
-    float* outMaxEnvelope)
-{
+    float* outMaxEnvelope,
+    int numForbiddenBands,
+    const pulseqlib_ForbiddenBand* forbiddenBands,
+    int* outPeaks
+) {
     AcousticWaveform acoustic;
     int w, i, result;
     int startIdx;
@@ -7263,6 +7382,8 @@ static int compute_axis_spectra(
     float maxEnvWindow;
     float maxEnvOverall;
     float absVal;
+    pulseqlib_AcousticViolation violation;
+    int* windowPeaks;
     
     memset(&acoustic, 0, sizeof(acoustic));
     
@@ -7337,9 +7458,32 @@ static int compute_axis_spectra(
                 support,
                 &acoustic,
                 w);
-            if (PULSEQLIB_FAILED(result)) {
-                acousticWaveformFree(&acoustic);
-                return result;
+
+            /* Check violations in current spectrum */
+            if (numForbiddenBands > 0 && forbiddenBands) {
+                windowPeaks = NULL;
+                result = check_acoustic_violations(
+                    &spectraOut[w * support->outputFreqBins],
+                    frequencies,
+                    support->outputFreqBins,
+                    maxEnvWindow,
+                    forbiddenBands,
+                    numForbiddenBands,
+                    &violation,
+                    outPeaks ? &windowPeaks : NULL);
+                if (PULSEQLIB_FAILED(result)) {
+                    if (windowSpectrum) FREE(windowSpectrum);
+                    acousticWaveformFree(&acoustic);
+                    return result;
+                }            
+                
+                /* Copy peaks to output array if requested */
+                if (windowPeaks && outPeaks) {
+                    memcpy(&outPeaks[w * support->outputFreqBins], windowPeaks, support->outputFreqBins * sizeof(int));
+                    FREE(windowPeaks);
+                }
+            } else if (outPeaks) {
+                detect_resonances(support->outputFreqBins, &spectraOut[w * support->outputFreqBins], &outPeaks[w * support->outputFreqBins]);
             }
         }
     }
@@ -7354,30 +7498,7 @@ static int compute_axis_spectra(
     return PULSEQLIB_OK;
 }
 
-/**
- * @brief Compute full TR spectrum and optionally N-TR sequence spectrum.
- *
- * Computes the magnitude spectrum of the entire TR waveform (continuous envelope).
- * Optionally computes the N-TR sequence spectrum by sampling the complex FFT
- * at harmonic frequencies k*f0 (where f0 = 1/TR) with linear interpolation
- * of complex values before taking magnitude. The sequence spectrum is normalized
- * by numTRs to keep magnitudes comparable and prevent overflow.
- *
- * @param fullSpectrum Output buffer for full TR spectrum (must be pre-allocated), or NULL to skip
- * @param seqSpectrum Output pointer for sequence spectrum (will be allocated), or NULL to skip
- * @param seqFrequencies Output pointer for sequence frequency axis (will be allocated), or NULL to skip
- * @param waveform Input waveform samples
- * @param numSamples Number of samples in waveform
- * @param gradRasterTime_us Gradient raster time in microseconds
- * @param targetSpectralResolution_Hz Target spectral resolution in Hz
- * @param maxFrequency Maximum frequency to include in output (Hz)
- * @param fundamentalFreq Fundamental frequency = 1/TR (Hz), 0 to skip sequence spectrum
- * @param numTRs Number of TRs (used for normalization of sequence spectrum)
- * @param outNumFreqBinsFull Output: number of bins in full spectrum
- * @param outFreqResolutionFull Output: frequency resolution of full spectrum
- * @param outNumPicked Output: number of harmonic lines (if computing sequence spectrum)
- */
-static int compute_tr_and_sequence_spectra(
+static int compute_sequence_spectrum(
     float* fullSpectrum,
     float** seqSpectrum,
     float** seqFrequencies,
@@ -7391,8 +7512,11 @@ static int compute_tr_and_sequence_spectra(
     int* outNumFreqBinsFull,
     float* outFreqResolutionFull,
     int* outNumPicked,
-    float* outMaxEnvelope)
-{
+    float* outMaxEnvelope,
+    int numForbiddenBands,
+    const pulseqlib_ForbiddenBand* forbiddenBands,
+    int** outSeqPeaks
+) {
     /* All declarations at the top for C89 compliance */
     int nfft, nfreq, outputFreqBinsFull, numPicked;
     int minNfftForResolution;
@@ -7416,6 +7540,8 @@ static int compute_tr_and_sequence_spectra(
     float normFactor;
     float fftNorm;
     float absVal;
+    pulseqlib_AcousticViolation violation;
+    int* seqPeaks;
     int result = PULSEQLIB_OK;
     
     if (!waveform || numSamples <= 0) {
@@ -7526,7 +7652,7 @@ static int compute_tr_and_sequence_spectra(
         }
     }
     
-        /* Compute N-TR sequence spectrum (harmonic sampling) if requested */
+    /* Compute N-TR sequence spectrum (harmonic sampling) if requested */
     if (fundamentalFreq > 0.0f && seqSpectrum && numTRs > 0) {
         /* Count how many harmonic lines fit in the frequency range */
         numPicked = (int)(maxFreq / fundamentalFreq) + 1;
@@ -7607,7 +7733,31 @@ static int compute_tr_and_sequence_spectra(
     if (outFreqResolutionFull) {
         *outFreqResolutionFull = freqResolution;
     }
-    
+
+    /* Acoustic check */
+    if (numForbiddenBands > 0 && forbiddenBands) {
+        result = check_acoustic_violations(
+            *seqSpectrum,
+            *seqFrequencies,
+            numPicked,  /* FIX: was outputFreqBinsFull, should be numPicked */
+            maxEnv,
+            forbiddenBands,
+            numForbiddenBands,
+            &violation, outSeqPeaks);
+        if (PULSEQLIB_FAILED(result)) {
+            goto cleanup;
+        }
+    } else if (outSeqPeaks) {
+        /* No violation check, but peaks requested - detect directly */
+        seqPeaks = (int*)ALLOC((size_t)numPicked * sizeof(int));  /* FIX: removed double assignment */
+        if (!seqPeaks) {
+            result = PULSEQLIB_ERR_ALLOC_FAILED;
+            goto cleanup;
+        }
+        detect_resonances(numPicked, *seqSpectrum, seqPeaks);  /* FIX: was outputFreqBinsFull, should be numPicked */
+        *outSeqPeaks = seqPeaks;
+    }
+
 cleanup:
     if (workBuffer) FREE(workBuffer);
     if (cosWindow) FREE(cosWindow);
@@ -7628,6 +7778,8 @@ int pulseqlib_getTRAcousticSpectra(
     int combined,
     int numTRs,
     float trDuration_us,
+    int numForbiddenBands,
+    const pulseqlib_ForbiddenBand* forbiddenBands,
     pulseqlib_TRAcousticSpectra* spectra,
     pulseqlib_Diagnostic* diag)
 {
@@ -7714,8 +7866,27 @@ int pulseqlib_getTRAcousticSpectra(
     spectra->maxEnvelopeGy = (float*)ALLOC((size_t)spectra->numWindows * sizeof(float));
     spectra->maxEnvelopeGz = (float*)ALLOC((size_t)spectra->numWindows * sizeof(float));
 
+    /* Allocate peak arrays for sliding window (only for non-combined mode) */
+    if (!combined) {
+        spectra->peaksGx = (int*)ALLOC((size_t)outputSpectraSize * sizeof(int));
+        spectra->peaksGy = (int*)ALLOC((size_t)outputSpectraSize * sizeof(int));
+        spectra->peaksGz = (int*)ALLOC((size_t)outputSpectraSize * sizeof(int));
+        
+        if (!spectra->peaksGx || !spectra->peaksGy || !spectra->peaksGz) {
+            pulseqlib_trAcousticSpectraFree(spectra);
+            acousticSpectrumSupportFree(&support);
+            diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+            return diag->code;
+        }
+    } else {
+        spectra->peaksGx = NULL;
+        spectra->peaksGy = NULL;
+        spectra->peaksGz = NULL;
+    }
+
     if (!spectra->spectraGx || !spectra->spectraGy || !spectra->spectraGz || !spectra->frequencies ||
-        !spectra->maxEnvelopeGx || !spectra->maxEnvelopeGy || !spectra->maxEnvelopeGz) {
+        !spectra->maxEnvelopeGx || !spectra->maxEnvelopeGy || !spectra->maxEnvelopeGz || 
+        (!combined && (!spectra->peaksGx || !spectra->peaksGy || !spectra->peaksGz))) {
         pulseqlib_trAcousticSpectraFree(spectra);
         acousticSpectrumSupportFree(&support);
         diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
@@ -7738,8 +7909,9 @@ int pulseqlib_getTRAcousticSpectra(
     
     /* Gx */
     if (waveforms->numSamplesGx > 0) {
-        result = compute_axis_spectra(spectra->spectraGx, &support, 
-                                      waveforms->waveformGx, waveforms->numSamplesGx, paddedLen, combined, spectra->maxEnvelopeGx);
+        result = compute_sliding_window_spectra(spectra->spectraGx, &support, 
+            waveforms->waveformGx, spectra->frequencies, waveforms->numSamplesGx, 
+            paddedLen, combined, spectra->maxEnvelopeGx, numForbiddenBands, forbiddenBands, spectra->peaksGx);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
@@ -7752,8 +7924,9 @@ int pulseqlib_getTRAcousticSpectra(
     
     /* Gy */
     if (waveforms->numSamplesGy > 0) {
-        result = compute_axis_spectra(spectra->spectraGy, &support,
-                                      waveforms->waveformGy, waveforms->numSamplesGy, paddedLen, combined, spectra->maxEnvelopeGy);
+        result = compute_sliding_window_spectra(spectra->spectraGy, &support,
+                waveforms->waveformGy, spectra->frequencies, waveforms->numSamplesGy, 
+                paddedLen, combined, spectra->maxEnvelopeGy, numForbiddenBands, forbiddenBands, spectra->peaksGy);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
@@ -7766,8 +7939,9 @@ int pulseqlib_getTRAcousticSpectra(
 
     /* Gz */
     if (waveforms->numSamplesGz > 0) {
-        result = compute_axis_spectra(spectra->spectraGz, &support,
-                                      waveforms->waveformGz, waveforms->numSamplesGz, paddedLen, combined, spectra->maxEnvelopeGz);
+        result = compute_sliding_window_spectra(spectra->spectraGz, &support,
+                waveforms->waveformGz, spectra->frequencies, waveforms->numSamplesGz, 
+                paddedLen, combined, spectra->maxEnvelopeGz, numForbiddenBands, forbiddenBands, spectra->peaksGz);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
@@ -7781,8 +7955,7 @@ int pulseqlib_getTRAcousticSpectra(
     /* Cleanup sliding window support */
     acousticSpectrumSupportFree(&support);
     
-    /* ========== Compute Full TR and Sequence Spectra ========== */
-    
+    /* ========== Compute Sequence Spectra ========== */
     /* Compute fundamental frequency for sequence spectrum (0 to skip) */
     if (numTRs > 1 && trDuration_us > 0.0f) {
         fundamentalFreq = 1.0e6f / trDuration_us;  /* Convert to Hz */
@@ -7801,7 +7974,7 @@ int pulseqlib_getTRAcousticSpectra(
     
     /* Compute for Gx (first call also determines sizes) */
     if (waveforms->numSamplesGx > 0) {
-        result = compute_tr_and_sequence_spectra(
+        result = compute_sequence_spectrum(
             NULL,  /* Don't output full spectrum yet - need to allocate first */
             (fundamentalFreq > 0.0f) ? &seqSpectrumGx : NULL,
             (fundamentalFreq > 0.0f) ? &seqFrequencies : NULL,
@@ -7815,7 +7988,9 @@ int pulseqlib_getTRAcousticSpectra(
             &numFreqBinsFull,
             &freqResolutionFull,
             &numFreqBinsSeq,
-            spectra->maxEnvelopeGx);
+            spectra->maxEnvelopeGx,
+            numForbiddenBands, forbiddenBands,
+            (fundamentalFreq > 0.0f) ? &spectra->peaksGxSeq : NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
@@ -7823,7 +7998,7 @@ int pulseqlib_getTRAcousticSpectra(
         }\
     } else {
         /* Use maxSamples to determine sizes */
-        result = compute_tr_and_sequence_spectra(
+        result = compute_sequence_spectrum(
             NULL, NULL, NULL,
             waveforms->waveformGy ? waveforms->waveformGy : waveforms->waveformGz,
             maxSamples,
@@ -7835,7 +8010,9 @@ int pulseqlib_getTRAcousticSpectra(
             &numFreqBinsFull,
             &freqResolutionFull,
             NULL,
-            NULL);
+            NULL,
+            numForbiddenBands, forbiddenBands,
+            (fundamentalFreq > 0.0f) ? &spectra->peaksGxSeq : NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
@@ -7895,7 +8072,7 @@ int pulseqlib_getTRAcousticSpectra(
     
     /* Now compute full TR spectrum for Gx */
     if (waveforms->numSamplesGx > 0) {
-        result = compute_tr_and_sequence_spectra(
+        result = compute_sequence_spectrum(
             spectra->spectraGxFull,
             NULL, NULL,  /* Already have sequence spectrum */
             waveforms->waveformGx,
@@ -7905,7 +8082,9 @@ int pulseqlib_getTRAcousticSpectra(
             maxFrequency_Hz,
             0.0f,  /* Don't recompute sequence spectrum */
             numTRs,
-            NULL, NULL, NULL, &spectra->maxEnvelopeGxFull);
+            NULL, NULL, NULL, &spectra->maxEnvelopeGxFull,
+            numForbiddenBands, forbiddenBands,
+            NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
@@ -7917,7 +8096,7 @@ int pulseqlib_getTRAcousticSpectra(
     
     /* Compute for Gy */
     if (waveforms->numSamplesGy > 0) {
-        result = compute_tr_and_sequence_spectra(
+        result = compute_sequence_spectrum(
             spectra->spectraGyFull,
             (fundamentalFreq > 0.0f) ? &seqSpectrumGy : NULL,
             NULL,  /* Don't need frequencies again */
@@ -7928,7 +8107,9 @@ int pulseqlib_getTRAcousticSpectra(
             maxFrequency_Hz,
             fundamentalFreq,
             numTRs,
-            NULL, NULL, NULL, &spectra->maxEnvelopeGyFull);
+            NULL, NULL, NULL, &spectra->maxEnvelopeGyFull,
+            numForbiddenBands, forbiddenBands, 
+            (fundamentalFreq > 0.0f) ? &spectra->peaksGySeq : NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
@@ -7946,11 +8127,14 @@ int pulseqlib_getTRAcousticSpectra(
         if (spectra->spectraGySeq) {
             memset(spectra->spectraGySeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
         }
+        if (spectra->peaksGySeq) {
+            memset(spectra->peaksGySeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
+        }
     }
     
     /* Compute for Gz */
     if (waveforms->numSamplesGz > 0) {
-        result = compute_tr_and_sequence_spectra(
+        result = compute_sequence_spectrum(
             spectra->spectraGzFull,
             (fundamentalFreq > 0.0f) ? &seqSpectrumGz : NULL,
             NULL,  /* Don't need frequencies again */
@@ -7961,7 +8145,9 @@ int pulseqlib_getTRAcousticSpectra(
             maxFrequency_Hz,
             fundamentalFreq,
             numTRs,
-            NULL, NULL, NULL, &spectra->maxEnvelopeGzFull);
+            NULL, NULL, NULL, &spectra->maxEnvelopeGzFull,
+            numForbiddenBands, forbiddenBands,
+            (fundamentalFreq > 0.0f) ? &spectra->peaksGzSeq : NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
@@ -7978,6 +8164,9 @@ int pulseqlib_getTRAcousticSpectra(
         memset(spectra->spectraGzFull, 0, (size_t)numFreqBinsFull * sizeof(float));
         if (spectra->spectraGzSeq) {
             memset(spectra->spectraGzSeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
+        }
+        if (spectra->peaksGzSeq) {
+            memset(spectra->peaksGzSeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
         }
     }
     

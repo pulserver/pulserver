@@ -545,9 +545,16 @@ static py::dict _get_tr_gradient_waveforms(_PulserverSeqFile& seqfile) {
     return output;
 }
 
-static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetWindowSize, float targetSpectralResolution, float maxFrequency, bool combined) {
+static py::dict _get_tr_acoustic_spectra(
+    _PulserverSeqFile& seqfile, 
+    int targetWindowSize, 
+    float targetSpectralResolution, 
+    float maxFrequency, 
+    bool combined,
+    py::list forbiddenBands  // NEW parameter
+) {
     if (!seqfile.seq) {
-        throw std::runtime_error("SeqFile is not initialized");
+        throw std::runtime_error("SeqFile pointer is null");
     }
 
     // Initialize sequence descriptor
@@ -595,7 +602,25 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
     int numTRs = seqDesc.trDescriptor.numTRs;
     float trDuration_us = seqDesc.trDescriptor.trDuration_us;
 
-    // Step 4: Call getTRAcousticSpectra with numTRs and trDuration_us
+    // Convert Python list of forbidden bands to C array
+    int numForbiddenBands = forbiddenBands.size();
+    pulseqlib_ForbiddenBand* cForbiddenBands = nullptr;
+    
+    if (numForbiddenBands > 0) {
+        cForbiddenBands = (pulseqlib_ForbiddenBand*)malloc(numForbiddenBands * sizeof(pulseqlib_ForbiddenBand));
+        if (!cForbiddenBands) {
+            throw std::runtime_error("Failed to allocate memory for forbidden bands");
+        }
+        
+        for (int i = 0; i < numForbiddenBands; ++i) {
+            py::dict band = forbiddenBands[i].cast<py::dict>();
+            cForbiddenBands[i].freqMin_Hz = band["freq_min_hz"].cast<float>();
+            cForbiddenBands[i].freqMax_Hz = band["freq_max_hz"].cast<float>();
+            cForbiddenBands[i].maxAmplitude = band["max_amplitude"].cast<float>();
+        }
+    }
+
+    // Step 4: Call getTRAcousticSpectra with numTRs, trDuration_us, and forbidden bands
     pulseqlib_TRAcousticSpectra spectra;
     memset(&spectra, 0, sizeof(spectra));
     
@@ -608,14 +633,22 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
         combined ? 1 : 0,
         numTRs,
         trDuration_us,
+        numForbiddenBands,      // NEW
+        cForbiddenBands,        // NEW
         &spectra, 
         &diag);
     
+    // Free forbidden bands array
+    if (cForbiddenBands) {
+        free(cForbiddenBands);
+    }
+    
     if (PULSEQLIB_FAILED(code)) {
+        const char* errMsg = pulseqlib_getErrorMessage(code);
         pulseqlib_trGradientWaveformsFree(&waveforms);
         pulseqlib_sequenceDescriptorFree(&seqDesc);
         output["success"] = false;
-        output["error"] = pulseqlib_getErrorMessage(diag.code);
+        output["error"] = errMsg;
         return output;
     }
 
@@ -648,6 +681,17 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
     output["max_envelope_gy"] = maxEnvelopeGy;
     output["max_envelope_gz"] = maxEnvelopeGz;
     
+    // Add peak arrays for sliding window (only if not combined)
+    if (!spectra.combined && spectra.peaksGx) {
+        std::vector<int> peaksGx(spectra.peaksGx, spectra.peaksGx + totalSize);
+        std::vector<int> peaksGy(spectra.peaksGy, spectra.peaksGy + totalSize);
+        std::vector<int> peaksGz(spectra.peaksGz, spectra.peaksGz + totalSize);
+        
+        output["peaks_gx"] = peaksGx;
+        output["peaks_gy"] = peaksGy;
+        output["peaks_gz"] = peaksGz;
+    }
+    
     // Add full TR spectra
     output["num_freq_bins_full"] = spectra.numFreqBinsFull;
     output["freq_resolution_full"] = spectra.freqResolutionFull;
@@ -672,7 +716,6 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
         output["num_trs"] = spectra.numTRs;
         output["tr_duration_us"] = spectra.trDuration_us;
         output["fundamental_freq"] = spectra.fundamentalFreq;
-        output["num_freq_bins_seq"] = spectra.numFreqBinsSeq;
         
         std::vector<float> frequenciesSeq(spectra.frequenciesSeq, spectra.frequenciesSeq + spectra.numFreqBinsSeq);
         std::vector<float> spectraGxSeq(spectra.spectraGxSeq, spectra.spectraGxSeq + spectra.numFreqBinsSeq);
@@ -683,8 +726,19 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
         output["spectra_gx_seq"] = spectraGxSeq;
         output["spectra_gy_seq"] = spectraGySeq;
         output["spectra_gz_seq"] = spectraGzSeq;
+        
+        // Add peak arrays for sequence spectra
+        if (spectra.peaksGxSeq) {
+            std::vector<int> peaksGxSeq(spectra.peaksGxSeq, spectra.peaksGxSeq + spectra.numFreqBinsSeq);
+            std::vector<int> peaksGySeq(spectra.peaksGySeq, spectra.peaksGySeq + spectra.numFreqBinsSeq);
+            std::vector<int> peaksGzSeq(spectra.peaksGzSeq, spectra.peaksGzSeq + spectra.numFreqBinsSeq);
+            
+            output["peaks_gx_seq"] = peaksGxSeq;
+            output["peaks_gy_seq"] = peaksGySeq;
+            output["peaks_gz_seq"] = peaksGzSeq;
+        }
     }
-
+    
     // Cleanup
     pulseqlib_trAcousticSpectraFree(&spectra);
     pulseqlib_trGradientWaveformsFree(&waveforms);
@@ -799,6 +853,7 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
           py::arg("target_spectral_resolution"),
           py::arg("max_frequency"),
           py::arg("combined") = false,
+          py::arg("forbidden_bands") = py::list(),  // NEW with default empty list
           R"pbdoc(
             Compute acoustic spectra for gradient waveforms in a TR.
             

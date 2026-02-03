@@ -387,6 +387,7 @@ def get_tr_acoustic_spectra(
     target_spectral_resolution: float = 5.0,
     max_frequency: float | None = None,
     combined: bool = False,
+    forbidden_bands: list[dict] | None = None,  # NEW parameter
 ) -> SimpleNamespace:
     """
     Compute acoustic spectra for gradient waveforms in a TR.
@@ -411,6 +412,13 @@ def get_tr_acoustic_spectra(
     combined : bool
         If True, return pointwise maximum across all windows (1D arrays).
         If False, stack all windows (2D arrays). Default is False.
+    forbidden_bands : list[dict] | None
+        Optional list of forbidden frequency bands for acoustic resonance check.
+        Each dict should contain:
+        - 'freq_min_hz': float, minimum frequency of the band (Hz)
+        - 'freq_max_hz': float, maximum frequency of the band (Hz)
+        - 'max_amplitude': float, maximum allowed gradient amplitude (Hz/m)
+        If None or empty list, no acoustic check is performed.
         
     Returns
     -------
@@ -480,8 +488,16 @@ def get_tr_acoustic_spectra(
     if max_frequency is None:
         max_frequency = -1.0  # Use -1 to indicate full spectrum in C wrapper
     
+    if forbidden_bands is None:
+        forbidden_bands = []
+    
     result_dict = _get_tr_acoustic_spectra(
-        seq._cseq, target_window_size, target_spectral_resolution, max_frequency, combined
+        seq._cseq, 
+        target_window_size, 
+        target_spectral_resolution, 
+        max_frequency, 
+        combined,
+        forbidden_bands  # NEW
     )
     
     if not result_dict["success"]:
@@ -531,5 +547,26 @@ def get_tr_acoustic_spectra(
         result.spectrum_gx_seq = np.asarray(result_dict["spectra_gx_seq"], dtype=np.float32)
         result.spectrum_gy_seq = np.asarray(result_dict["spectra_gy_seq"], dtype=np.float32)
         result.spectrum_gz_seq = np.asarray(result_dict["spectra_gz_seq"], dtype=np.float32)
+    
+    # Add peak arrays for sliding window (only if not combined)
+    if not is_combined and "peaks_gx" in result_dict:
+        peaks_gx = np.asarray(result_dict["peaks_gx"], dtype=np.int32).reshape(num_windows, num_freq_bins)
+        peaks_gy = np.asarray(result_dict["peaks_gy"], dtype=np.int32).reshape(num_windows, num_freq_bins)
+        peaks_gz = np.asarray(result_dict["peaks_gz"], dtype=np.int32).reshape(num_windows, num_freq_bins)
+        
+        result.peaks_gx = peaks_gx
+        result.peaks_gy = peaks_gy
+        result.peaks_gz = peaks_gz
+    else:
+        # No peaks in combined mode
+        result.peaks_gx = None
+        result.peaks_gy = None
+        result.peaks_gz = None
+    
+    # Add peak arrays for sequence spectra
+    if "peaks_gx_seq" in result_dict:
+        result.peaks_gx_seq = np.asarray(result_dict["peaks_gx_seq"], dtype=np.int32)
+        result.peaks_gy_seq = np.asarray(result_dict["peaks_gy_seq"], dtype=np.int32)
+        result.peaks_gz_seq = np.asarray(result_dict["peaks_gz_seq"], dtype=np.int32)
     
     return result

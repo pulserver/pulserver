@@ -773,6 +773,11 @@ typedef struct pulseqlib_TRAcousticSpectra {
     float* maxEnvelopeGy;  /**< Max envelope per window for Gy: if combined, scalar (1,); else (numWindows,) */
     float* maxEnvelopeGz;  /**< Max envelope per window for Gz: if combined, scalar (1,); else (numWindows,) */
     
+    /* Peak detection arrays for sliding window analysis (for visualization) */
+    int* peaksGx;          /**< Peak indicators for Gx: 1 at peak, 0 elsewhere; if combined, (numFreqBins,); else (numWindows, numFreqBins) row-major */
+    int* peaksGy;          /**< Peak indicators for Gy: 1 at peak, 0 elsewhere; if combined, (numFreqBins,); else (numWindows, numFreqBins) row-major */
+    int* peaksGz;          /**< Peak indicators for Gz: 1 at peak, 0 elsewhere; if combined, (numFreqBins,); else (numWindows, numFreqBins) row-major */
+    
     /* Full TR spectrum (single window covering entire TR - continuous envelope) */
     int numFreqBinsFull;   /**< Number of frequency bins for full TR spectrum */
     float freqResolutionFull; /**< Frequency resolution in Hz for full TR spectrum */
@@ -795,9 +800,50 @@ typedef struct pulseqlib_TRAcousticSpectra {
     float* spectraGxSeq;   /**< Gx sequence spectrum (numFreqBinsSeq,) - magnitudes at harmonics */
     float* spectraGySeq;   /**< Gy sequence spectrum (numFreqBinsSeq,) - magnitudes at harmonics */
     float* spectraGzSeq;   /**< Gz sequence spectrum (numFreqBinsSeq,) - magnitudes at harmonics */
+    
+    /* Peak detection arrays for sequence spectra (for visualization) */
+    int* peaksGxSeq;       /**< Peak indicators for Gx sequence: 1 at peak, 0 elsewhere (numFreqBinsSeq,) */
+    int* peaksGySeq;       /**< Peak indicators for Gy sequence: 1 at peak, 0 elsewhere (numFreqBinsSeq,) */
+    int* peaksGzSeq;       /**< Peak indicators for Gz sequence: 1 at peak, 0 elsewhere (numFreqBinsSeq,) */
+    
 } pulseqlib_TRAcousticSpectra;
 
-#define PULSEQLIB_TR_ACOUSTIC_SPECTRA_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0.0f, NULL, NULL, NULL, NULL, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f, 0, NULL, NULL, NULL, NULL}
+#define PULSEQLIB_TR_ACOUSTIC_SPECTRA_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0.0f, NULL, NULL, NULL, NULL, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, PULSEQLIB_ACOUSTIC_CHECK_RESULT_INIT, PULSEQLIB_ACOUSTIC_CHECK_RESULT_INIT}
+
+/**
+ * @brief Definition of a forbidden frequency band for acoustic resonance check.
+ */
+typedef struct pulseqlib_ForbiddenBand {
+    float freqMin_Hz;      /**< Minimum frequency of the band (Hz) */
+    float freqMax_Hz;      /**< Maximum frequency of the band (Hz) */
+    float maxAmplitude;    /**< Maximum allowed gradient amplitude in this band (Hz/m) */
+} pulseqlib_ForbiddenBand;
+
+#define PULSEQLIB_FORBIDDEN_BAND_INIT {0.0f, 0.0f, 0.0f}
+
+/**
+ * @brief Result of acoustic resonance violation check for a single axis.
+ */
+typedef struct pulseqlib_AcousticViolation {
+    int detected;              /**< Non-zero if violation detected */
+    int bandIndex;             /**< Index of the violated band (-1 if none) */
+    float peakFrequency_Hz;    /**< Frequency of the detected peak (Hz) */
+    float maxAmplitude;        /**< Max amplitude in the waveform (Hz/m) */
+    float allowedAmplitude;    /**< Allowed amplitude for this band (Hz/m) */
+} pulseqlib_AcousticViolation;
+
+#define PULSEQLIB_ACOUSTIC_VIOLATION_INIT {0, -1, 0.0f, 0.0f, 0.0f}
+
+/**
+ * @brief Acoustic check results for all axes.
+ */
+typedef struct pulseqlib_AcousticCheckResult {
+    pulseqlib_AcousticViolation gx;  /**< Violation info for Gx */
+    pulseqlib_AcousticViolation gy;  /**< Violation info for Gy */
+    pulseqlib_AcousticViolation gz;  /**< Violation info for Gz */
+} pulseqlib_AcousticCheckResult;
+
+#define PULSEQLIB_ACOUSTIC_CHECK_RESULT_INIT {PULSEQLIB_ACOUSTIC_VIOLATION_INIT, PULSEQLIB_ACOUSTIC_VIOLATION_INIT, PULSEQLIB_ACOUSTIC_VIOLATION_INIT}
 
 #endif /* PULSEQLIB_H */
 

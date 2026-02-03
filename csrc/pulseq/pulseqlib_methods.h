@@ -115,6 +115,8 @@ int pulseqlib_getTRAcousticSpectra(
     int combined,
     int numTRs,
     float trDuration_us,
+    int numForbiddenBands,
+    const pulseqlib_ForbiddenBand* forbiddenBands,
     pulseqlib_TRAcousticSpectra* spectra,
     pulseqlib_Diagnostic* diag);
 
