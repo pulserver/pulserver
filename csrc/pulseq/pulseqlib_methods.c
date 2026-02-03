@@ -7346,6 +7346,7 @@ static int compute_tr_and_sequence_spectra(
     float* pickedMagnitudes = NULL;
     float* pickedFreqs = NULL;
     float mean;
+    float scale;
     int i, k, freqIdx;
     float freq, freqLow, freqHigh, t;
     float re_low, im_low, re_high, im_high;
@@ -7443,18 +7444,25 @@ static int compute_tr_and_sequence_spectra(
         }
     }
     
-    /* Compute N-TR sequence spectrum (harmonic sampling) if requested */
-    if (fundamentalFreq > 0.0f && seqSpectrum && seqFrequencies && numTRs > 0) {
+        /* Compute N-TR sequence spectrum (harmonic sampling) if requested */
+    if (fundamentalFreq > 0.0f && seqSpectrum && numTRs > 0) {
         /* Count how many harmonic lines fit in the frequency range */
         numPicked = (int)(maxFreq / fundamentalFreq) + 1;
         
         /* Allocate output arrays */
         pickedMagnitudes = (float*)ALLOC((size_t)numPicked * sizeof(float));
-        pickedFreqs = (float*)ALLOC((size_t)numPicked * sizeof(float));
-        
-        if (!pickedMagnitudes || !pickedFreqs) {
+        if (!pickedMagnitudes) {
             result = PULSEQLIB_ERR_ALLOC_FAILED;
             goto cleanup;
+        }
+        
+        /* Only allocate frequencies if caller wants them */
+        if (seqFrequencies) {
+            pickedFreqs = (float*)ALLOC((size_t)numPicked * sizeof(float));
+            if (!pickedFreqs) {
+                result = PULSEQLIB_ERR_ALLOC_FAILED;
+                goto cleanup;
+            }
         }
         
         /* Normalization factor to prevent overflow and keep magnitudes comparable */
@@ -7463,7 +7471,9 @@ static int compute_tr_and_sequence_spectra(
         /* Sample complex spectrum at harmonic frequencies */
         for (k = 0; k < numPicked; ++k) {
             freq = (float)k * fundamentalFreq;
-            pickedFreqs[k] = freq;
+            if (pickedFreqs) {
+                pickedFreqs[k] = freq;
+            }
             
             /* Find the FFT bin index for this frequency */
             freqIdx = (int)(freq / freqResolution);
@@ -7473,8 +7483,7 @@ static int compute_tr_and_sequence_spectra(
                 pickedMagnitudes[k] = 0.0f;
             } else if (freqIdx == 0) {
                 /* DC bin - no interpolation */
-                pickedMagnitudes[k] = (float)sqrt((double)(fftOut[0].r * fftOut[0].r + 
-                                                           fftOut[0].i * fftOut[0].i)) * normFactor;
+                pickedMagnitudes[k] = (float)sqrt((double)(fftOut[0].r * fftOut[0].r +  fftOut[0].i * fftOut[0].i)) * normFactor;
             } else {
                 /* Interpolate complex spectrum linearly between adjacent bins */
                 freqLow = (float)freqIdx * freqResolution;
@@ -7498,13 +7507,16 @@ static int compute_tr_and_sequence_spectra(
         }
         
         *seqSpectrum = pickedMagnitudes;
-        *seqFrequencies = pickedFreqs;
+        pickedMagnitudes = NULL;  /* Prevent cleanup from freeing - ownership transferred */
+        
+        if (seqFrequencies) {
+            *seqFrequencies = pickedFreqs;
+            pickedFreqs = NULL;  /* Prevent cleanup from freeing - ownership transferred */
+        }
+        
         if (outNumPicked) {
             *outNumPicked = numPicked;
         }
-        /* Prevent cleanup from freeing these - ownership transferred to caller */
-        pickedMagnitudes = NULL;
-        pickedFreqs = NULL;
     }
     
     if (outNumFreqBinsFull) {
@@ -7802,7 +7814,7 @@ int pulseqlib_getTRAcousticSpectra(
             targetSpectralResolution_Hz,
             maxFrequency_Hz,
             0.0f,  /* Don't recompute sequence spectrum */
-            1,
+            numTRs,
             NULL, NULL, NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
