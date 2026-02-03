@@ -507,11 +507,19 @@ def get_tr_acoustic_spectra(
         spectra_gx=spectra_gx,
         spectra_gy=spectra_gy,
         spectra_gz=spectra_gz,
+        # Max envelope per window (sliding window)
+        max_envelope_gx=np.asarray(result_dict["max_envelope_gx"], dtype=np.float32),
+        max_envelope_gy=np.asarray(result_dict["max_envelope_gy"], dtype=np.float32),
+        max_envelope_gz=np.asarray(result_dict["max_envelope_gz"], dtype=np.float32),
         # Full TR spectra
         frequencies_full=np.asarray(result_dict["frequencies_full"], dtype=np.float32),
         spectrum_gx_full=np.asarray(result_dict["spectra_gx_full"], dtype=np.float32),
         spectrum_gy_full=np.asarray(result_dict["spectra_gy_full"], dtype=np.float32),
         spectrum_gz_full=np.asarray(result_dict["spectra_gz_full"], dtype=np.float32),
+        # Max envelope for full TR
+        max_envelope_gx_full=result_dict["max_envelope_gx_full"],
+        max_envelope_gy_full=result_dict["max_envelope_gy_full"],
+        max_envelope_gz_full=result_dict["max_envelope_gz_full"],
     )
     
     # Add sequence spectra if present (only when numTRs > 1)

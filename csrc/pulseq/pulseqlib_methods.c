@@ -7087,6 +7087,7 @@ int computeWindowSpectrum(
     float* cosWindow;
     const float* samples;
     float mean;
+    float fftNorm;
     kiss_fft_cpx* fftOut;
     
     if (!spectrum || !support || !acoustic || !acoustic->samples) {
@@ -7142,6 +7143,13 @@ int computeWindowSpectrum(
     
     /* Step 5: Compute real FFT */
     kiss_fftr(support->fftCfg, workBuffer, fftOut);
+
+    /* Normalize FFT output by nfft for proper amplitude scaling */
+    fftNorm = 1.0f / (float)nfft;
+    for (i = 0; i < nfreq; ++i) {
+        fftOut[i].r *= fftNorm;
+        fftOut[i].i *= fftNorm;
+    }
     
     /* Step 6: Compute magnitude spectrum and copy only requested frequency range to output */
     for (i = 0; i < outputFreqBins; ++i) {
@@ -7170,6 +7178,19 @@ void pulseqlib_trAcousticSpectraFree(pulseqlib_TRAcousticSpectra* spectra)
     if (spectra->spectraGz) {
         FREE(spectra->spectraGz);
         spectra->spectraGz = NULL;
+    }
+
+    if (spectra->maxEnvelopeGx) {
+        FREE(spectra->maxEnvelopeGx);
+        spectra->maxEnvelopeGx = NULL;
+    }
+    if (spectra->maxEnvelopeGy) {
+        FREE(spectra->maxEnvelopeGy);
+        spectra->maxEnvelopeGy = NULL;
+    }
+    if (spectra->maxEnvelopeGz) {
+        FREE(spectra->maxEnvelopeGz);
+        spectra->maxEnvelopeGz = NULL;
     }
     
     if (spectra->frequenciesFull) {
@@ -7231,11 +7252,17 @@ static int compute_axis_spectra(
     const float* waveform,
     int numSamples,
     int paddedLen,
-    int combined)
+    int combined,
+    float* outMaxEnvelope)
 {
     AcousticWaveform acoustic;
     int w, i, result;
+    int startIdx;
+    int windowLen;
     float* windowSpectrum = NULL;
+    float maxEnvWindow;
+    float maxEnvOverall;
+    float absVal;
     
     memset(&acoustic, 0, sizeof(acoustic));
     
@@ -7261,7 +7288,29 @@ static int compute_axis_spectra(
 
     /* Compute spectrum for each window */
     for (w = 0; w < support->numWindows; ++w) {
+
+        /* Calculate start index and length for this window */
+        startIdx = w * support->hopSize;
+        windowLen = support->nwin;
+        if (startIdx + windowLen > acoustic.numSamples) {
+            windowLen = acoustic.numSamples - startIdx;
+        }
+        
+        /* Compute max envelope for this window */
+        maxEnvWindow = 0.0f;
+        for (i = startIdx; i < startIdx + windowLen; ++i) {
+            absVal = (acoustic.samples[i] >= 0.0f) ? acoustic.samples[i] : -acoustic.samples[i];
+            if (absVal > maxEnvWindow) {
+                maxEnvWindow = absVal;
+            }
+        }
+
         if (combined) {
+            /* Track overall maximum */
+            if (maxEnvWindow > maxEnvOverall) {
+                maxEnvOverall = maxEnvWindow;
+            }
+
             /* Compute to temporary buffer */
             result = computeWindowSpectrum(windowSpectrum, support, &acoustic, w);
             if (PULSEQLIB_FAILED(result)) {
@@ -7277,6 +7326,11 @@ static int compute_axis_spectra(
                 }
             }
         } else {
+            /* Store per-window max envelope */
+            if (outMaxEnvelope) {
+                outMaxEnvelope[w] = maxEnvWindow;
+            }
+
             /* Compute directly to output buffer at appropriate offset */
             result = computeWindowSpectrum(
                 &spectraOut[w * support->outputFreqBins],
@@ -7288,6 +7342,11 @@ static int compute_axis_spectra(
                 return result;
             }
         }
+    }
+
+    /* Store combined max envelope */
+    if (combined && outMaxEnvelope) {
+        outMaxEnvelope[0] = maxEnvOverall;
     }
     
     if (windowSpectrum) FREE(windowSpectrum);
@@ -7331,13 +7390,15 @@ static int compute_tr_and_sequence_spectra(
     int numTRs,
     int* outNumFreqBinsFull,
     float* outFreqResolutionFull,
-    int* outNumPicked)
+    int* outNumPicked,
+    float* outMaxEnvelope)
 {
     /* All declarations at the top for C89 compliance */
     int nfft, nfreq, outputFreqBinsFull, numPicked;
     int minNfftForResolution;
     float freqResolution;
     float maxFreq;
+    float maxEnv;
     int maxIdx;
     float* workBuffer = NULL;
     float* cosWindow = NULL;
@@ -7353,10 +7414,24 @@ static int compute_tr_and_sequence_spectra(
     float re_interp, im_interp;
     float cosArg;
     float normFactor;
+    float fftNorm;
+    float absVal;
     int result = PULSEQLIB_OK;
     
     if (!waveform || numSamples <= 0) {
         return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    }
+
+    /* Compute maximum envelope value */
+    maxEnv = 0.0f;
+    for (i = 0; i < numSamples; ++i) {
+        absVal = (waveform[i] >= 0.0f) ? waveform[i] : -waveform[i];
+        if (absVal > maxEnv) {
+            maxEnv = absVal;
+        }
+    }
+    if (outMaxEnvelope) {
+        *outMaxEnvelope = maxEnv;
     }
     
     /* Calculate minimum nfft needed for target spectral resolution */
@@ -7436,6 +7511,13 @@ static int compute_tr_and_sequence_spectra(
     
     /* Compute complex FFT */
     kiss_fftr(fftCfg, workBuffer, fftOut);
+
+    /* Normalize FFT output by nfft for proper amplitude scaling */
+    fftNorm = 1.0f / (float)nfft;
+    for (i = 0; i < nfreq; ++i) {
+        fftOut[i].r *= fftNorm;
+        fftOut[i].i *= fftNorm;
+    }
     
     /* Compute full TR magnitude spectrum if requested */
     if (fullSpectrum) {
@@ -7627,7 +7709,13 @@ int pulseqlib_getTRAcousticSpectra(
     spectra->spectraGz = (float*)ALLOC((size_t)outputSpectraSize * sizeof(float));
     spectra->frequencies = (float*)ALLOC((size_t)support.outputFreqBins * sizeof(float));
 
-    if (!spectra->spectraGx || !spectra->spectraGy || !spectra->spectraGz || !spectra->frequencies) {
+    /* Allocate max envelope arrays */
+    spectra->maxEnvelopeGx = (float*)ALLOC((size_t)spectra->numWindows * sizeof(float));
+    spectra->maxEnvelopeGy = (float*)ALLOC((size_t)spectra->numWindows * sizeof(float));
+    spectra->maxEnvelopeGz = (float*)ALLOC((size_t)spectra->numWindows * sizeof(float));
+
+    if (!spectra->spectraGx || !spectra->spectraGy || !spectra->spectraGz || !spectra->frequencies ||
+        !spectra->maxEnvelopeGx || !spectra->maxEnvelopeGy || !spectra->maxEnvelopeGz) {
         pulseqlib_trAcousticSpectraFree(spectra);
         acousticSpectrumSupportFree(&support);
         diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
@@ -7651,7 +7739,7 @@ int pulseqlib_getTRAcousticSpectra(
     /* Gx */
     if (waveforms->numSamplesGx > 0) {
         result = compute_axis_spectra(spectra->spectraGx, &support, 
-                                      waveforms->waveformGx, waveforms->numSamplesGx, paddedLen, combined);
+                                      waveforms->waveformGx, waveforms->numSamplesGx, paddedLen, combined, spectra->maxEnvelopeGx);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
@@ -7665,7 +7753,7 @@ int pulseqlib_getTRAcousticSpectra(
     /* Gy */
     if (waveforms->numSamplesGy > 0) {
         result = compute_axis_spectra(spectra->spectraGy, &support,
-                                      waveforms->waveformGy, waveforms->numSamplesGy, paddedLen, combined);
+                                      waveforms->waveformGy, waveforms->numSamplesGy, paddedLen, combined, spectra->maxEnvelopeGy);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
@@ -7679,7 +7767,7 @@ int pulseqlib_getTRAcousticSpectra(
     /* Gz */
     if (waveforms->numSamplesGz > 0) {
         result = compute_axis_spectra(spectra->spectraGz, &support,
-                                      waveforms->waveformGz, waveforms->numSamplesGz, paddedLen, combined);
+                                      waveforms->waveformGz, waveforms->numSamplesGz, paddedLen, combined, spectra->maxEnvelopeGz);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
@@ -7726,12 +7814,13 @@ int pulseqlib_getTRAcousticSpectra(
             numTRs,
             &numFreqBinsFull,
             &freqResolutionFull,
-            &numFreqBinsSeq);
+            &numFreqBinsSeq,
+            spectra->maxEnvelopeGx);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
             return result;
-        }
+        }\
     } else {
         /* Use maxSamples to determine sizes */
         result = compute_tr_and_sequence_spectra(
@@ -7745,6 +7834,7 @@ int pulseqlib_getTRAcousticSpectra(
             numTRs,
             &numFreqBinsFull,
             &freqResolutionFull,
+            NULL,
             NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
@@ -7815,7 +7905,7 @@ int pulseqlib_getTRAcousticSpectra(
             maxFrequency_Hz,
             0.0f,  /* Don't recompute sequence spectrum */
             numTRs,
-            NULL, NULL, NULL);
+            NULL, NULL, NULL, &spectra->maxEnvelopeGxFull);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
@@ -7838,7 +7928,7 @@ int pulseqlib_getTRAcousticSpectra(
             maxFrequency_Hz,
             fundamentalFreq,
             numTRs,
-            NULL, NULL, NULL);
+            NULL, NULL, NULL, &spectra->maxEnvelopeGyFull);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
@@ -7871,7 +7961,7 @@ int pulseqlib_getTRAcousticSpectra(
             maxFrequency_Hz,
             fundamentalFreq,
             numTRs,
-            NULL, NULL, NULL);
+            NULL, NULL, NULL, &spectra->maxEnvelopeGzFull);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;

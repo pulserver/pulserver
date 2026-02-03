@@ -767,6 +767,11 @@ typedef struct pulseqlib_TRAcousticSpectra {
     float* spectraGx;      /**< Gx spectra: if combined, (numFreqBins,); else (numWindows, numFreqBins) row-major */
     float* spectraGy;      /**< Gy spectra: if combined, (numFreqBins,); else (numWindows, numFreqBins) row-major */
     float* spectraGz;      /**< Gz spectra: if combined, (numFreqBins,); else (numWindows, numFreqBins) row-major */
+
+     /* Maximum envelope values for sliding window analysis */
+    float* maxEnvelopeGx;  /**< Max envelope per window for Gx: if combined, scalar (1,); else (numWindows,) */
+    float* maxEnvelopeGy;  /**< Max envelope per window for Gy: if combined, scalar (1,); else (numWindows,) */
+    float* maxEnvelopeGz;  /**< Max envelope per window for Gz: if combined, scalar (1,); else (numWindows,) */
     
     /* Full TR spectrum (single window covering entire TR - continuous envelope) */
     int numFreqBinsFull;   /**< Number of frequency bins for full TR spectrum */
@@ -775,6 +780,11 @@ typedef struct pulseqlib_TRAcousticSpectra {
     float* spectraGxFull;  /**< Gx full TR spectrum (numFreqBinsFull,) - continuous envelope */
     float* spectraGyFull;  /**< Gy full TR spectrum (numFreqBinsFull,) - continuous envelope */
     float* spectraGzFull;  /**< Gz full TR spectrum (numFreqBinsFull,) - continuous envelope */
+
+    /* Maximum envelope values for full TR analysis */
+    float maxEnvelopeGxFull;  /**< Maximum absolute value in Gx full TR waveform */
+    float maxEnvelopeGyFull;  /**< Maximum absolute value in Gy full TR waveform */
+    float maxEnvelopeGzFull;  /**< Maximum absolute value in Gz full TR waveform */
     
     /* Full sequence spectrum (N TRs - spectral line picking at harmonics of 1/TR) */
     int numTRs;            /**< Number of TR repetitions in sequence */
@@ -787,7 +797,7 @@ typedef struct pulseqlib_TRAcousticSpectra {
     float* spectraGzSeq;   /**< Gz sequence spectrum (numFreqBinsSeq,) - magnitudes at harmonics */
 } pulseqlib_TRAcousticSpectra;
 
-#define PULSEQLIB_TR_ACOUSTIC_SPECTRA_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, 0, 0.0f, NULL, NULL, NULL, NULL, 0, 0.0f, 0.0f, 0, NULL, NULL, NULL, NULL}
+#define PULSEQLIB_TR_ACOUSTIC_SPECTRA_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0.0f, NULL, NULL, NULL, NULL, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f, 0, NULL, NULL, NULL, NULL}
 
 #endif /* PULSEQLIB_H */
 

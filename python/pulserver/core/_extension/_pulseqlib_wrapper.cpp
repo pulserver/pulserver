@@ -638,6 +638,16 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
     output["spectra_gy"] = spectraGy;
     output["spectra_gz"] = spectraGz;
     
+    // Add max envelope values for sliding window
+    int numEnvelopeValues = spectra.numWindows;  // 1 if combined, else numWindows
+    std::vector<float> maxEnvelopeGx(spectra.maxEnvelopeGx, spectra.maxEnvelopeGx + numEnvelopeValues);
+    std::vector<float> maxEnvelopeGy(spectra.maxEnvelopeGy, spectra.maxEnvelopeGy + numEnvelopeValues);
+    std::vector<float> maxEnvelopeGz(spectra.maxEnvelopeGz, spectra.maxEnvelopeGz + numEnvelopeValues);
+    
+    output["max_envelope_gx"] = maxEnvelopeGx;
+    output["max_envelope_gy"] = maxEnvelopeGy;
+    output["max_envelope_gz"] = maxEnvelopeGz;
+    
     // Add full TR spectra
     output["num_freq_bins_full"] = spectra.numFreqBinsFull;
     output["freq_resolution_full"] = spectra.freqResolutionFull;
@@ -651,6 +661,11 @@ static py::dict _get_tr_acoustic_spectra(_PulserverSeqFile& seqfile, int targetW
     output["spectra_gx_full"] = spectraGxFull;
     output["spectra_gy_full"] = spectraGyFull;
     output["spectra_gz_full"] = spectraGzFull;
+    
+    // Add max envelope values for full TR
+    output["max_envelope_gx_full"] = spectra.maxEnvelopeGxFull;
+    output["max_envelope_gy_full"] = spectra.maxEnvelopeGyFull;
+    output["max_envelope_gz_full"] = spectra.maxEnvelopeGzFull;
     
     // Add sequence spectra if computed
     if (spectra.numFreqBinsSeq > 0 && spectra.frequenciesSeq) {
