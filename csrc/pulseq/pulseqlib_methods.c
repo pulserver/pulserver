@@ -7257,12 +7257,12 @@ void pulseqlib_trAcousticSpectraFree(pulseqlib_TRAcousticSpectra* spectra)
 }
 
 /* ============== Acoustic Resonance Detection ============== */
-#define BASELINE_WIN   7      /* median window (±7 bins) */
+#define BASELINE_WIN   5      /* median window (±5 bins) */
 #define Q_BINS         3      /* distance for Q check */
 #define DB_THRESH      6.0f   /* minimum contrast in dB */
-#define Q_RATIO        2.0f   /* peak / side ratio */
+#define Q_RATIO        1.5f   /* peak / side ratio */
 #define DR_RATIO       5.0f   /* global dynamic range */
-#define DB_RATIO 1.995262f   /* 10^(6/20) */
+#define DB_RATIO       1.414f /* 10^(3/20) */
 
 static float median_f(const float *x, int n) {
     float tmp[32];
@@ -7297,54 +7297,83 @@ static float local_median_f(const float *x, int n, int i, int w) {
     return median_f(buf, cnt);
 }
 
+// static void detect_resonances(int n, const float *mag, int *peaks) {
+//     int i;
+//     float min_v, max_v;
+//     float baseline;
+//     float curv;
+//     float left, right, center;
+
+//     if (n <= 0 || !mag || !peaks)
+//         return;
+
+//     for (i = 0; i < n; ++i)
+//         peaks[i] = 0;
+
+//     /* global dynamic range sanity check */
+//     min_v = max_v = mag[0];
+//     for (i = 1; i < n; ++i) {
+//         if (mag[i] < min_v) min_v = mag[i];
+//         if (mag[i] > max_v) max_v = mag[i];
+//     }
+
+//     if (max_v < DR_RATIO * min_v)
+//         return;
+
+//     for (i = BASELINE_WIN; i < n - BASELINE_WIN; ++i) {
+//         left = mag[i - 1];
+//         right = mag[i + 1];
+//         center = mag[i];
+
+//         /* 1. local maximum */
+//         if (center <= left || center <= right)
+//             continue;
+
+//         /* 2. curvature (second difference) */
+//         curv = left - 2.0f * center + right;
+//         if (curv >= 0.0f)
+//             continue;
+
+//         /* 3. local baseline (median) */
+//         baseline = local_median_f(mag, n, i, BASELINE_WIN);
+
+//         if (mag[i] < DB_RATIO * baseline)
+//             continue;
+
+//         /* 4. finite bandwidth / Q constraint */
+//         if (mag[i] < Q_RATIO * mag[i - Q_BINS]) continue;
+//         if (mag[i] < Q_RATIO * mag[i + Q_BINS]) continue;
+
+//         peaks[i] = 1;
+//     }
+// }
+// Temporary debug version - just find local maxima above threshold
 static void detect_resonances(int n, const float *mag, int *peaks) {
     int i;
-    float min_v, max_v;
-    float baseline;
-    float curv;
-    float left, right, center;
-
+    float max_val, threshold;
+    
     if (n <= 0 || !mag || !peaks)
         return;
-
+    
     for (i = 0; i < n; ++i)
         peaks[i] = 0;
-
-    /* global dynamic range sanity check */
-    min_v = max_v = mag[0];
+    
+    /* Find max */
+    max_val = mag[0];
     for (i = 1; i < n; ++i) {
-        if (mag[i] < min_v) min_v = mag[i];
-        if (mag[i] > max_v) max_v = mag[i];
+        if (mag[i] > max_val) max_val = mag[i];
     }
-
-    if (max_v < DR_RATIO * min_v)
+    
+    if (max_val < 1e-12f)
         return;
-
-    for (i = BASELINE_WIN; i < n - BASELINE_WIN; ++i) {
-        left = mag[i - 1];
-        right = mag[i + 1];
-        center = mag[i];
-
-        /* 1. local maximum */
-        if (center <= left || center <= right)
-            continue;
-
-        /* 2. curvature (second difference) */
-        curv = left - 2.0f * center + right;
-        if (curv >= 0.0f)
-            continue;
-
-        /* 3. local baseline (median) */
-        baseline = local_median_f(mag, n, i, BASELINE_WIN);
-
-        if (mag[i] < DB_RATIO * baseline)
-            continue;
-
-        /* 4. finite bandwidth / Q constraint */
-        if (mag[i] < Q_RATIO * mag[i - Q_BINS]) continue;
-        if (mag[i] < Q_RATIO * mag[i + Q_BINS]) continue;
-
-        peaks[i] = 1;
+    
+    threshold = 0.1f * max_val;  /* -20 dB */
+    
+    /* Find local maxima above threshold */
+    for (i = 1; i < n - 1; ++i) {
+        if (mag[i] > mag[i-1] && mag[i] > mag[i+1] && mag[i] > threshold) {
+            peaks[i] = 1;
+        }
     }
 }
 
