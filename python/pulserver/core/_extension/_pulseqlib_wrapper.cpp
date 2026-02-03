@@ -749,6 +749,131 @@ static py::dict _get_tr_acoustic_spectra(
     return output;
 }
 
+static py::dict _get_pns(
+    _PulserverSeqFile& seqfile,
+#ifdef IS_GEHC
+    float chronaxie_us,
+    float rheobase,
+#else
+    float tau_us,
+#endif
+    int numTRCopies,
+    bool storeWaveforms
+) {
+    if (!seqfile.seq) {
+        throw std::runtime_error("SeqFile pointer is null");
+    }
+
+    // Initialize sequence descriptor
+    pulseqlib_SequenceDescriptor seqDesc;
+    memset(&seqDesc, 0, sizeof(seqDesc));
+
+    py::dict output;
+
+    // Step 1: Call getUniqueBlocks
+    int result = pulseqlib_getUniqueBlocks(seqfile.seq, &seqDesc);
+    
+    if (PULSEQLIB_FAILED(result)) {
+        output["success"] = false;
+        output["error"] = pulseqlib_getErrorMessage(result);
+        return output;
+    }
+
+    // Step 2: Call findTRInSequence
+    pulseqlib_Diagnostic diag;
+    pulseqlib_diagnosticInit(&diag);
+    
+    int code = pulseqlib_findTRInSequence(&seqDesc, &diag);
+    
+    if (PULSEQLIB_FAILED(code)) {
+        output["success"] = false;
+        output["error"] = pulseqlib_getErrorMessage(code);
+        pulseqlib_sequenceDescriptorFree(&seqDesc);
+        return output;
+    }
+
+    // Step 3: Call getTRGradientWaveforms
+    pulseqlib_TRGradientWaveforms waveforms;
+    memset(&waveforms, 0, sizeof(waveforms));
+    
+    code = pulseqlib_getTRGradientWaveforms(&seqDesc, &waveforms, &diag);
+    
+    if (PULSEQLIB_FAILED(code)) {
+        output["success"] = false;
+        output["error"] = pulseqlib_getErrorMessage(code);
+        pulseqlib_sequenceDescriptorFree(&seqDesc);
+        return output;
+    }
+
+    // Extract TR duration from descriptor
+    float trDuration_us = seqDesc.trDescriptor.trDuration_us;
+
+    // Step 4: Set up PNS params
+    pulseqlib_PNSParams params;
+#ifdef IS_GEHC
+    params.chronaxie_us = chronaxie_us;
+    params.rheobase = rheobase;
+#else
+    params.tau_us = tau_us;
+#endif
+
+    // Step 5: Call computePNS
+    pulseqlib_PNSResult pnsResult;
+    memset(&pnsResult, 0, sizeof(pnsResult));
+    
+    code = pulseqlib_computePNS(
+        &waveforms,
+        0.5f * seqDesc.gradRasterTime_us,  // Interpolated raster time
+        &params,
+        numTRCopies,
+        trDuration_us,
+        storeWaveforms ? 1 : 0,
+        &pnsResult,
+        &diag
+    );
+    
+    if (PULSEQLIB_FAILED(code)) {
+        output["success"] = false;
+        output["error"] = pulseqlib_getErrorMessage(code);
+        output["error_code"] = code;
+        pulseqlib_trGradientWaveformsFree(&waveforms);
+        pulseqlib_sequenceDescriptorFree(&seqDesc);
+        return output;
+    }
+
+    output["success"] = true;
+    output["max_pns"] = pnsResult.maxPNS;
+    output["max_pns_index"] = pnsResult.maxPNS_index;
+    output["max_pns_time_us"] = pnsResult.maxPNS_time_us;
+    output["num_samples"] = pnsResult.numSamples;
+    
+    // Export waveforms if requested and available
+    if (storeWaveforms && pnsResult.pnsTotal) {
+        std::vector<float> pnsTotal(pnsResult.pnsTotal, pnsResult.pnsTotal + pnsResult.numSamples);
+        output["pns_total"] = pnsTotal;
+        
+        if (pnsResult.pnsX) {
+            std::vector<float> pnsX(pnsResult.pnsX, pnsResult.pnsX + pnsResult.numSamples);
+            output["pns_x"] = pnsX;
+        }
+        if (pnsResult.pnsY) {
+            std::vector<float> pnsY(pnsResult.pnsY, pnsResult.pnsY + pnsResult.numSamples);
+            output["pns_y"] = pnsY;
+        }
+        if (pnsResult.pnsZ) {
+            std::vector<float> pnsZ(pnsResult.pnsZ, pnsResult.pnsZ + pnsResult.numSamples);
+            output["pns_z"] = pnsZ;
+        }
+    }
+
+    // Cleanup
+    pulseqlib_pnsResultFree(&pnsResult);
+    pulseqlib_trGradientWaveformsFree(&waveforms);
+    pulseqlib_sequenceDescriptorFree(&seqDesc);
+
+    return output;
+}
+
 PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     py::class_<_PulserverSeqFile>(m, "_PulserverSeqFile")
         .def(py::init<py::bytes, float, float, float, float, float, float, float, float>())
@@ -887,5 +1012,59 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
             dict
                 Result dictionary with keys: success, num_windows, num_freq_bins,
                 combined, freq_resolution, frequencies, spectra_gx, spectra_gy, spectra_gz
+          )pbdoc");
+
+    m.def("_get_pns",
+          &_get_pns,
+          py::arg("seqfile"),
+#ifdef IS_GEHC
+          py::arg("chronaxie_us"),
+          py::arg("rheobase"),
+#else
+          py::arg("tau_us"),
+#endif
+          py::arg("num_tr_copies") = 1,
+          py::arg("store_waveforms") = false,
+          R"pbdoc(
+            Compute Peripheral Nerve Stimulation (PNS) for gradient waveforms.
+            
+            Internally calls getUniqueBlocks, findTRInSequence, getTRGradientWaveforms,
+            then computePNS.
+
+            Parameters
+            ----------
+            seqfile : _PulserverSeqFile
+                The loaded sequence file
+)pbdoc"
+#ifdef IS_GEHC
+          R"pbdoc(
+            chronaxie_us : float
+                Chronaxie time constant in microseconds (GE model)
+            rheobase : float
+                Rheobase - minimum slew rate for stimulation Smin in T/m/s (GE model)
+)pbdoc"
+#else
+          R"pbdoc(
+            tau_us : float
+                Time constant tau in microseconds (Siemens SAFE model)
+)pbdoc"
+#endif
+          R"pbdoc(
+            num_tr_copies : int
+                Number of TR copies to concatenate for analysis. Default is 1.
+            store_waveforms : bool
+                If True, return PNS waveforms for each axis. Default is False.
+                
+            Returns
+            -------
+            dict
+                Result dictionary with keys:
+                - 'success': bool indicating success
+                - 'max_pns': Maximum PNS value (%)
+                - 'max_pns_index': Index of maximum
+                - 'max_pns_time_us': Time of maximum (µs)
+                - 'num_samples': Number of samples in output
+                - 'pns_total': Combined PNS waveform (if store_waveforms=True)
+                - 'pns_x', 'pns_y', 'pns_z': Per-axis PNS (if store_waveforms=True)
           )pbdoc");
 }

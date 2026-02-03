@@ -2,7 +2,7 @@
 #define PULSEQLIB_H
 
 #ifndef IS_GEHC
-    #define  IS_GEHC 1
+#define  IS_GEHC 1
 #endif 
 
 #define TWO_PI 6.283185307179586476925286766558
@@ -115,6 +115,21 @@
 #define PULSEQLIB_ERR_FILE_READ_FAILED      -11  /**< Error reading from file */
 #define PULSEQLIB_ERR_UNSUPPORTED_VERSION   -12  /**< Sequence file version not supported */
 #define PULSEQLIB_ERR_PARSE_FAILED          -13  /**< Failed to parse sequence data */
+
+/* Acoustic resonance errors (-400 to -449) */
+#define PULSEQLIB_ERR_ACOUSTIC_INVALID_WINDOW    -400  /**< Invalid window size for acoustic analysis */
+#define PULSEQLIB_ERR_ACOUSTIC_INVALID_RESOLUTION -401 /**< Invalid spectral resolution */
+#define PULSEQLIB_ERR_ACOUSTIC_NO_WAVEFORM       -402  /**< No waveform data for acoustic analysis */
+#define PULSEQLIB_ERR_ACOUSTIC_FFT_FAILED        -403  /**< FFT computation failed */
+#define PULSEQLIB_ERR_ACOUSTIC_VIOLATION         -404  /**< Acoustic resonance violation detected */
+
+/* PNS errors (-450 to -499) */
+#define PULSEQLIB_ERR_PNS_INVALID_PARAMS         -450  /**< Invalid PNS parameters */
+#define PULSEQLIB_ERR_PNS_INVALID_CHRONAXIE      -451  /**< Invalid chronaxie value */
+#define PULSEQLIB_ERR_PNS_INVALID_RHEOBASE       -452  /**< Invalid rheobase value (GE model) */
+#define PULSEQLIB_ERR_PNS_NO_WAVEFORM            -453  /**< No waveform data for PNS analysis */
+#define PULSEQLIB_ERR_PNS_FFT_FAILED             -454  /**< FFT convolution failed */
+#define PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED     -455  /**< PNS threshold exceeded (>100%) */
 
 /* Code checking */
 #define PULSEQLIB_SUCCEEDED(code) ((code) > 0)
@@ -805,7 +820,7 @@ typedef struct pulseqlib_TRAcousticSpectra {
     int* peaksGxSeq;       /**< Peak indicators for Gx sequence: 1 at peak, 0 elsewhere (numFreqBinsSeq,) */
     int* peaksGySeq;       /**< Peak indicators for Gy sequence: 1 at peak, 0 elsewhere (numFreqBinsSeq,) */
     int* peaksGzSeq;       /**< Peak indicators for Gz sequence: 1 at peak, 0 elsewhere (numFreqBinsSeq,) */
-    
+
 } pulseqlib_TRAcousticSpectra;
 
 #define PULSEQLIB_TR_ACOUSTIC_SPECTRA_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0.0f, NULL, NULL, NULL, NULL, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, PULSEQLIB_ACOUSTIC_CHECK_RESULT_INIT, PULSEQLIB_ACOUSTIC_CHECK_RESULT_INIT}
@@ -844,6 +859,48 @@ typedef struct pulseqlib_AcousticCheckResult {
 } pulseqlib_AcousticCheckResult;
 
 #define PULSEQLIB_ACOUSTIC_CHECK_RESULT_INIT {PULSEQLIB_ACOUSTIC_VIOLATION_INIT, PULSEQLIB_ACOUSTIC_VIOLATION_INIT, PULSEQLIB_ACOUSTIC_VIOLATION_INIT}
+
+/**
+ * @brief PNS parameters (vendor-specific via compile-time macro)
+ * 
+ * GE model (IEC 60601-2-33:2022 Eq. AA.21):
+ *   f(tau) = dt/Smin * c / (c + tau)^2
+ *   Requires: chronaxie_us, rheobase
+ * 
+ * Siemens model (SAFE, RC lowpass):
+ *   f[k] = alpha * (1 - alpha)^k, alpha = dt / (tau + dt)
+ *   Requires: tau_us (equivalent to chronaxie)
+ */
+typedef struct pulseqlib_PNSParams {
+#ifdef IS_GEHC
+    float chronaxie_us;  /**< Chronaxie time constant (µs) */
+    float rheobase;      /**< Minimum slew rate for stimulation Smin (T/m/s) */
+#else
+    float tau_us;        /**< Time constant tau (µs) */
+#endif
+} pulseqlib_PNSParams;
+
+#ifdef IS_GEHC
+#define PULSEQLIB_PNS_PARAMS_INIT {0.0f, 0.0f}
+#else
+#define PULSEQLIB_PNS_PARAMS_INIT {0.0f}
+#endif
+
+/**
+ * @brief PNS computation result
+ */
+typedef struct pulseqlib_PNSResult {
+    int numSamples;          /**< Number of output samples */
+    float* pnsX;             /**< PNS waveform for X (% threshold), or NULL */
+    float* pnsY;             /**< PNS waveform for Y (% threshold), or NULL */
+    float* pnsZ;             /**< PNS waveform for Z (% threshold), or NULL */
+    float* pnsTotal;         /**< Combined PNS: sqrt(X² + Y² + Z²) */
+    float maxPNS;            /**< Maximum PNS value (%) */
+    int maxPNS_index;        /**< Index of maximum */
+    float maxPNS_time_us;    /**< Time of maximum (µs) */
+} pulseqlib_PNSResult;
+
+#define PULSEQLIB_PNS_RESULT_INIT {0, NULL, NULL, NULL, NULL, 0.0f, 0, 0.0f}
 
 #endif /* PULSEQLIB_H */
 

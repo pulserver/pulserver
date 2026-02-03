@@ -7,6 +7,7 @@ __all__ = [
     "find_segments_in_tr", 
     "get_tr_gradient_waveforms", 
     "get_tr_acoustic_spectra",
+    "get_pns",
 ]
 
 import copy
@@ -21,6 +22,7 @@ from ._extension._pulseqlib_wrapper import (
     _get_unique_blocks,
     _get_tr_gradient_waveforms,
     _get_tr_acoustic_spectra,
+    _get_pns,  # Add this import
     _PulserverSeqFile,
 )
 from ._iostream import write_to_stream
@@ -569,5 +571,152 @@ def get_tr_acoustic_spectra(
         result.peaks_gx_seq = np.asarray(result_dict["peaks_gx_seq"], dtype=np.int32)
         result.peaks_gy_seq = np.asarray(result_dict["peaks_gy_seq"], dtype=np.int32)
         result.peaks_gz_seq = np.asarray(result_dict["peaks_gz_seq"], dtype=np.int32)
+    
+    return result
+
+
+def get_pns(
+    seq: PulserverSequence,
+    chronaxie_us: float | None = None,
+    rheobase: float | None = None,
+    tau_us: float | None = None,
+    num_tr_copies: int = 1,
+    store_waveforms: bool = False,
+) -> SimpleNamespace:
+    """
+    Compute Peripheral Nerve Stimulation (PNS) levels for gradient waveforms.
+    
+    Uses convolution with a vendor-specific nerve response kernel to estimate
+    PNS as a percentage of the stimulation threshold.
+    
+    Parameters
+    ----------
+    seq : PulserverSequence
+        The sequence to analyze.
+    chronaxie_us : float | None
+        Chronaxie time constant in microseconds. Required for GE model.
+        Typical value: ~360 µs (IEC 60601-2-33:2022).
+    rheobase : float | None
+        Rheobase - minimum slew rate for stimulation Smin in T/m/s.
+        Required for GE model. Typical value: ~20 T/m/s.
+    tau_us : float | None
+        Time constant tau in microseconds. Required for Siemens model.
+        Typical value: ~360 µs (equivalent to chronaxie).
+    num_tr_copies : int
+        Number of TR copies to concatenate for analysis. Useful for analyzing
+        steady-state behavior. Default is 1.
+    store_waveforms : bool
+        If True, return full PNS waveforms for each axis. Default is False
+        (only return maximum values).
+        
+    Returns
+    -------
+    SimpleNamespace
+        Result containing:
+        - max_pns: Maximum PNS value (%) - values > 100% indicate stimulation
+        - max_pns_index: Sample index of maximum
+        - max_pns_time_us: Time of maximum in microseconds
+        - num_samples: Number of output samples
+        
+        If store_waveforms=True, also includes:
+        - pns_total: np.ndarray of combined PNS waveform sqrt(X² + Y² + Z²)
+        - pns_x, pns_y, pns_z: np.ndarray of per-axis PNS waveforms
+        
+    Raises
+    ------
+    RuntimeError
+        If PNS computation fails.
+    ValueError
+        If required parameters are not provided for the compiled vendor model.
+        
+    Notes
+    -----
+    The PNS model depends on compile-time vendor selection:
+    
+    **GE Model (IEC 60601-2-33:2022 Eq. AA.21)**:
+        Uses chronaxie and rheobase parameters. The nerve response kernel is:
+        
+        h[k] = (1/c) * exp(-k*dt/c)
+        
+        where c = chronaxie. PNS is computed as:
+        
+        PNS(t) = |conv(slew_rate, h)| / rheobase * 100%
+    
+    **Siemens Model (SAFE RC lowpass)**:
+        Uses tau parameter. The nerve response kernel is an exponential lowpass:
+        
+        h[k] = alpha * (1 - alpha)^k, where alpha = dt / (tau + dt)
+        
+        The threshold is computed from the slew rate directly.
+    
+    Examples
+    --------
+    >>> # GE model (if compiled with IS_GEHC)
+    >>> result = get_pns(seq, chronaxie_us=360.0, rheobase=20.0)
+    >>> print(f"Max PNS: {result.max_pns:.1f}%")
+    
+    >>> # Siemens model (if compiled without IS_GEHC)  
+    >>> result = get_pns(seq, tau_us=360.0)
+    >>> print(f"Max PNS: {result.max_pns:.1f}%")
+    
+    >>> # Get full waveforms for plotting
+    >>> result = get_pns(seq, tau_us=360.0, store_waveforms=True)
+    >>> plt.plot(result.pns_total)
+    """
+    import sys
+    
+    # Determine which parameters to use based on what's available in the wrapper
+    # We check the function signature to determine the compiled model
+    import inspect
+    sig = inspect.signature(_get_pns)
+    param_names = list(sig.parameters.keys())
+    
+    if 'chronaxie_us' in param_names:
+        # GE model
+        if chronaxie_us is None or rheobase is None:
+            raise ValueError(
+                "GE PNS model requires 'chronaxie_us' and 'rheobase' parameters. "
+                "Typical values: chronaxie_us=360.0, rheobase=20.0"
+            )
+        result_dict = _get_pns(
+            seq._cseq,
+            chronaxie_us,
+            rheobase,
+            num_tr_copies,
+            store_waveforms,
+        )
+    else:
+        # Siemens model
+        if tau_us is None:
+            raise ValueError(
+                "Siemens PNS model requires 'tau_us' parameter. "
+                "Typical value: tau_us=360.0"
+            )
+        result_dict = _get_pns(
+            seq._cseq,
+            tau_us,
+            num_tr_copies,
+            store_waveforms,
+        )
+    
+    if not result_dict["success"]:
+        raise RuntimeError(f"PNS computation failed: {result_dict.get('error', 'Unknown error')}")
+    
+    result = SimpleNamespace(
+        max_pns=result_dict["max_pns"],
+        max_pns_index=result_dict["max_pns_index"],
+        max_pns_time_us=result_dict["max_pns_time_us"],
+        num_samples=result_dict["num_samples"],
+    )
+    
+    # Add waveforms if stored
+    if store_waveforms and "pns_total" in result_dict:
+        result.pns_total = np.asarray(result_dict["pns_total"], dtype=np.float32)
+        if "pns_x" in result_dict:
+            result.pns_x = np.asarray(result_dict["pns_x"], dtype=np.float32)
+        if "pns_y" in result_dict:
+            result.pns_y = np.asarray(result_dict["pns_y"], dtype=np.float32)
+        if "pns_z" in result_dict:
+            result.pns_z = np.asarray(result_dict["pns_z"], dtype=np.float32)
     
     return result

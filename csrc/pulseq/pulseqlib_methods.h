@@ -121,6 +121,18 @@ int pulseqlib_getTRAcousticSpectra(
     pulseqlib_TRAcousticSpectra* spectra,
     pulseqlib_Diagnostic* diag);
 
+int pulseqlib_computePNS(
+    const pulseqlib_TRGradientWaveforms* waveforms,
+    float gradRasterTime_us,
+    const pulseqlib_PNSParams* params,
+    int numTRCopies,
+    float trDuration_us,
+    int storeWaveforms,
+    pulseqlib_PNSResult* result,
+    pulseqlib_Diagnostic* diag);
+
+void pulseqlib_pnsResultFree(pulseqlib_PNSResult* result);
+
 #ifdef __cplusplus
 }
 #endif
