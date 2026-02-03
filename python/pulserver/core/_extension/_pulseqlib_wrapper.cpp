@@ -551,7 +551,8 @@ static py::dict _get_tr_acoustic_spectra(
     float targetSpectralResolution, 
     float maxFrequency, 
     bool combined,
-    py::list forbiddenBands  // NEW parameter
+    py::list forbiddenBands,
+    bool storeResults
 ) {
     if (!seqfile.seq) {
         throw std::runtime_error("SeqFile pointer is null");
@@ -633,8 +634,9 @@ static py::dict _get_tr_acoustic_spectra(
         combined ? 1 : 0,
         numTRs,
         trDuration_us,
-        numForbiddenBands,      // NEW
-        cForbiddenBands,        // NEW
+        numForbiddenBands,
+        cForbiddenBands,
+        storeResults ? 1 : 0,
         &spectra, 
         &diag);
     
@@ -853,7 +855,8 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
           py::arg("target_spectral_resolution"),
           py::arg("max_frequency"),
           py::arg("combined") = false,
-          py::arg("forbidden_bands") = py::list(),  // NEW with default empty list
+          py::arg("forbidden_bands") = py::list(),
+          py::arg("store_results") = true,
           R"pbdoc(
             Compute acoustic spectra for gradient waveforms in a TR.
             
@@ -874,6 +877,10 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
             combined : bool
                 If True, return pointwise maximum across all windows (1D arrays).
                 If False, stack all windows (2D arrays). Default is False.
+            forbidden_bands : list
+                List of forbidden frequency band dicts.
+            store_results : bool
+                If True, store spectra arrays. If False, only check violations.
                 
             Returns
             -------

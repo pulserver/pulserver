@@ -7780,23 +7780,21 @@ int pulseqlib_getTRAcousticSpectra(
     float trDuration_us,
     int numForbiddenBands,
     const pulseqlib_ForbiddenBand* forbiddenBands,
+    int storeResults,  /* NEW parameter */
     pulseqlib_TRAcousticSpectra* spectra,
     pulseqlib_Diagnostic* diag)
 {
-    /* All declarations at top for C89 compliance */
-    pulseqlib_Diagnostic localDiag;
     AcousticSpectrumSupport support;
+    pulseqlib_Diagnostic localDiag;
     int maxSamples;
-    int paddedLen;
     int result;
-    int i;
     int outputSpectraSize;
-    
-    /* Full TR and sequence spectrum variables */
-    int numFreqBinsFull;
-    float freqResolutionFull;
-    int numFreqBinsSeq;
+    int paddedLen;
+    int i;
     float fundamentalFreq;
+    int numFreqBinsFull;
+    int numFreqBinsSeq;
+    float freqResolutionFull;
     float* seqSpectrumGx = NULL;
     float* seqSpectrumGy = NULL;
     float* seqSpectrumGz = NULL;
@@ -7854,48 +7852,62 @@ int pulseqlib_getTRAcousticSpectra(
     } else {
         outputSpectraSize = support.numWindows * support.outputFreqBins;
     }
-        
-    /* Allocate sliding window output arrays */
-    spectra->spectraGx = (float*)ALLOC((size_t)outputSpectraSize * sizeof(float));
-    spectra->spectraGy = (float*)ALLOC((size_t)outputSpectraSize * sizeof(float));
-    spectra->spectraGz = (float*)ALLOC((size_t)outputSpectraSize * sizeof(float));
-    spectra->frequencies = (float*)ALLOC((size_t)support.outputFreqBins * sizeof(float));
+    
+    /* Allocate arrays only if storing results */
+    if (storeResults) {
+        /* Allocate sliding window output arrays */
+        spectra->spectraGx = (float*)ALLOC((size_t)outputSpectraSize * sizeof(float));
+        spectra->spectraGy = (float*)ALLOC((size_t)outputSpectraSize * sizeof(float));
+        spectra->spectraGz = (float*)ALLOC((size_t)outputSpectraSize * sizeof(float));
+        spectra->frequencies = (float*)ALLOC((size_t)support.outputFreqBins * sizeof(float));
 
-    /* Allocate max envelope arrays */
-    spectra->maxEnvelopeGx = (float*)ALLOC((size_t)spectra->numWindows * sizeof(float));
-    spectra->maxEnvelopeGy = (float*)ALLOC((size_t)spectra->numWindows * sizeof(float));
-    spectra->maxEnvelopeGz = (float*)ALLOC((size_t)spectra->numWindows * sizeof(float));
+        /* Allocate max envelope arrays */
+        spectra->maxEnvelopeGx = (float*)ALLOC((size_t)spectra->numWindows * sizeof(float));
+        spectra->maxEnvelopeGy = (float*)ALLOC((size_t)spectra->numWindows * sizeof(float));
+        spectra->maxEnvelopeGz = (float*)ALLOC((size_t)spectra->numWindows * sizeof(float));
 
-    /* Allocate peak arrays for sliding window (only for non-combined mode) */
-    if (!combined) {
-        spectra->peaksGx = (int*)ALLOC((size_t)outputSpectraSize * sizeof(int));
-        spectra->peaksGy = (int*)ALLOC((size_t)outputSpectraSize * sizeof(int));
-        spectra->peaksGz = (int*)ALLOC((size_t)outputSpectraSize * sizeof(int));
-        
-        if (!spectra->peaksGx || !spectra->peaksGy || !spectra->peaksGz) {
+        /* Allocate peak arrays for sliding window (only for non-combined mode) */
+        if (!combined) {
+            spectra->peaksGx = (int*)ALLOC((size_t)outputSpectraSize * sizeof(int));
+            spectra->peaksGy = (int*)ALLOC((size_t)outputSpectraSize * sizeof(int));
+            spectra->peaksGz = (int*)ALLOC((size_t)outputSpectraSize * sizeof(int));
+            
+            if (!spectra->peaksGx || !spectra->peaksGy || !spectra->peaksGz) {
+                pulseqlib_trAcousticSpectraFree(spectra);
+                acousticSpectrumSupportFree(&support);
+                diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+                return diag->code;
+            }
+        } else {
+            spectra->peaksGx = NULL;
+            spectra->peaksGy = NULL;
+            spectra->peaksGz = NULL;
+        }
+
+        if (!spectra->spectraGx || !spectra->spectraGy || !spectra->spectraGz || !spectra->frequencies ||
+            !spectra->maxEnvelopeGx || !spectra->maxEnvelopeGy || !spectra->maxEnvelopeGz) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
             diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
             return diag->code;
         }
+
+        /* Populate sliding window frequency axis */
+        for (i = 0; i < support.outputFreqBins; i++) {
+            spectra->frequencies[i] = (float)i * support.freqResolution;
+        }
     } else {
+        /* Production mode: no storage */
+        spectra->spectraGx = NULL;
+        spectra->spectraGy = NULL;
+        spectra->spectraGz = NULL;
+        spectra->frequencies = NULL;
+        spectra->maxEnvelopeGx = NULL;
+        spectra->maxEnvelopeGy = NULL;
+        spectra->maxEnvelopeGz = NULL;
         spectra->peaksGx = NULL;
         spectra->peaksGy = NULL;
         spectra->peaksGz = NULL;
-    }
-
-    if (!spectra->spectraGx || !spectra->spectraGy || !spectra->spectraGz || !spectra->frequencies ||
-        !spectra->maxEnvelopeGx || !spectra->maxEnvelopeGy || !spectra->maxEnvelopeGz || 
-        (!combined && (!spectra->peaksGx || !spectra->peaksGy || !spectra->peaksGz))) {
-        pulseqlib_trAcousticSpectraFree(spectra);
-        acousticSpectrumSupportFree(&support);
-        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
-        return diag->code;
-    }
-
-    /* Populate sliding window frequency axis */
-    for (i = 0; i < support.outputFreqBins; i++) {
-        spectra->frequencies[i] = (float)i * support.freqResolution;
     }
 
     /* Compute padded length that support expects */
@@ -7909,46 +7921,67 @@ int pulseqlib_getTRAcousticSpectra(
     
     /* Gx */
     if (waveforms->numSamplesGx > 0) {
-        result = compute_sliding_window_spectra(spectra->spectraGx, &support, 
-            waveforms->waveformGx, spectra->frequencies, waveforms->numSamplesGx, 
-            paddedLen, combined, spectra->maxEnvelopeGx, numForbiddenBands, forbiddenBands, spectra->peaksGx);
+        result = compute_sliding_window_spectra(
+            storeResults ? spectra->spectraGx : NULL,
+            &support, 
+            waveforms->waveformGx, 
+            spectra->frequencies,  /* Can be NULL in production mode */
+            waveforms->numSamplesGx, 
+            paddedLen, combined, 
+            storeResults ? spectra->maxEnvelopeGx : NULL,
+            numForbiddenBands, forbiddenBands, 
+            storeResults ? spectra->peaksGx : NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
             diag->code = result;
             return result;
         }
-    } else {
+    } else if (storeResults) {
         memset(spectra->spectraGx, 0, (size_t)outputSpectraSize * sizeof(float));
     }
     
     /* Gy */
     if (waveforms->numSamplesGy > 0) {
-        result = compute_sliding_window_spectra(spectra->spectraGy, &support,
-                waveforms->waveformGy, spectra->frequencies, waveforms->numSamplesGy, 
-                paddedLen, combined, spectra->maxEnvelopeGy, numForbiddenBands, forbiddenBands, spectra->peaksGy);
+        result = compute_sliding_window_spectra(
+            storeResults ? spectra->spectraGy : NULL,
+            &support,
+            waveforms->waveformGy, 
+            spectra->frequencies,
+            waveforms->numSamplesGy, 
+            paddedLen, combined, 
+            storeResults ? spectra->maxEnvelopeGy : NULL,
+            numForbiddenBands, forbiddenBands, 
+            storeResults ? spectra->peaksGy : NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
             diag->code = result;
             return result;
         }
-    } else {
+    } else if (storeResults) {
         memset(spectra->spectraGy, 0, (size_t)outputSpectraSize * sizeof(float));
     }
 
     /* Gz */
     if (waveforms->numSamplesGz > 0) {
-        result = compute_sliding_window_spectra(spectra->spectraGz, &support,
-                waveforms->waveformGz, spectra->frequencies, waveforms->numSamplesGz, 
-                paddedLen, combined, spectra->maxEnvelopeGz, numForbiddenBands, forbiddenBands, spectra->peaksGz);
+        result = compute_sliding_window_spectra(
+            storeResults ? spectra->spectraGz : NULL,
+            &support,
+            waveforms->waveformGz, 
+            spectra->frequencies,
+            waveforms->numSamplesGz, 
+            paddedLen, combined, 
+            storeResults ? spectra->maxEnvelopeGz : NULL,
+            numForbiddenBands, forbiddenBands, 
+            storeResults ? spectra->peaksGz : NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             acousticSpectrumSupportFree(&support);
             diag->code = result;
             return result;
         }
-    } else {
+    } else if (storeResults) {
         memset(spectra->spectraGz, 0, (size_t)outputSpectraSize * sizeof(float));
     }
     
@@ -7969,15 +8002,12 @@ int pulseqlib_getTRAcousticSpectra(
         spectra->fundamentalFreq = 0.0f;
     }
     
-    /* Allocate full TR spectrum arrays (will be populated by compute_tr_and_sequence_spectra) */
-    /* We need to call once to get the sizes first, then allocate */
-    
     /* Compute for Gx (first call also determines sizes) */
     if (waveforms->numSamplesGx > 0) {
         result = compute_sequence_spectrum(
             NULL,  /* Don't output full spectrum yet - need to allocate first */
-            (fundamentalFreq > 0.0f) ? &seqSpectrumGx : NULL,
-            (fundamentalFreq > 0.0f) ? &seqFrequencies : NULL,
+            (storeResults && fundamentalFreq > 0.0f) ? &seqSpectrumGx : NULL,
+            (storeResults && fundamentalFreq > 0.0f) ? &seqFrequencies : NULL,
             waveforms->waveformGx,
             waveforms->numSamplesGx,
             gradRasterTime_us,
@@ -7988,14 +8018,14 @@ int pulseqlib_getTRAcousticSpectra(
             &numFreqBinsFull,
             &freqResolutionFull,
             &numFreqBinsSeq,
-            spectra->maxEnvelopeGx,
+            NULL,  /* maxEnvelope computed later */
             numForbiddenBands, forbiddenBands,
-            (fundamentalFreq > 0.0f) ? &spectra->peaksGxSeq : NULL);
+            (storeResults && fundamentalFreq > 0.0f) ? &spectra->peaksGxSeq : NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
             return result;
-        }\
+        }
     } else {
         /* Use maxSamples to determine sizes */
         result = compute_sequence_spectrum(
@@ -8012,7 +8042,7 @@ int pulseqlib_getTRAcousticSpectra(
             NULL,
             NULL,
             numForbiddenBands, forbiddenBands,
-            (fundamentalFreq > 0.0f) ? &spectra->peaksGxSeq : NULL);
+            NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
@@ -8024,56 +8054,75 @@ int pulseqlib_getTRAcousticSpectra(
     spectra->numFreqBinsFull = numFreqBinsFull;
     spectra->freqResolutionFull = freqResolutionFull;
     
-    /* Allocate full TR spectrum arrays */
-    spectra->spectraGxFull = (float*)ALLOC((size_t)numFreqBinsFull * sizeof(float));
-    spectra->spectraGyFull = (float*)ALLOC((size_t)numFreqBinsFull * sizeof(float));
-    spectra->spectraGzFull = (float*)ALLOC((size_t)numFreqBinsFull * sizeof(float));
-    spectra->frequenciesFull = (float*)ALLOC((size_t)numFreqBinsFull * sizeof(float));
-    
-    if (!spectra->spectraGxFull || !spectra->spectraGyFull || 
-        !spectra->spectraGzFull || !spectra->frequenciesFull) {
-        if (seqSpectrumGx) FREE(seqSpectrumGx);
-        if (seqFrequencies) FREE(seqFrequencies);
-        pulseqlib_trAcousticSpectraFree(spectra);
-        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
-        return diag->code;
-    }
-    
-    /* Populate full TR frequency axis */
-    for (i = 0; i < numFreqBinsFull; i++) {
-        spectra->frequenciesFull[i] = (float)i * freqResolutionFull;
-    }
-    
-    /* Allocate sequence spectrum arrays if computing sequence spectrum */
-    if (fundamentalFreq > 0.0f && numFreqBinsSeq > 0) {
-        spectra->numFreqBinsSeq = numFreqBinsSeq;
-        spectra->spectraGxSeq = (float*)ALLOC((size_t)numFreqBinsSeq * sizeof(float));
-        spectra->spectraGySeq = (float*)ALLOC((size_t)numFreqBinsSeq * sizeof(float));
-        spectra->spectraGzSeq = (float*)ALLOC((size_t)numFreqBinsSeq * sizeof(float));
-        spectra->frequenciesSeq = seqFrequencies;  /* Take ownership from first call */
-        seqFrequencies = NULL;
+    /* Allocate full TR spectrum arrays only if storing */
+    if (storeResults) {
+        spectra->spectraGxFull = (float*)ALLOC((size_t)numFreqBinsFull * sizeof(float));
+        spectra->spectraGyFull = (float*)ALLOC((size_t)numFreqBinsFull * sizeof(float));
+        spectra->spectraGzFull = (float*)ALLOC((size_t)numFreqBinsFull * sizeof(float));
+        spectra->frequenciesFull = (float*)ALLOC((size_t)numFreqBinsFull * sizeof(float));
         
-        if (!spectra->spectraGxSeq || !spectra->spectraGySeq || !spectra->spectraGzSeq) {
+        if (!spectra->spectraGxFull || !spectra->spectraGyFull || 
+            !spectra->spectraGzFull || !spectra->frequenciesFull) {
             if (seqSpectrumGx) FREE(seqSpectrumGx);
+            if (seqFrequencies) FREE(seqFrequencies);
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
             return diag->code;
         }
         
-        /* Copy Gx sequence spectrum from first call */
-        if (seqSpectrumGx && waveforms->numSamplesGx > 0) {
-            memcpy(spectra->spectraGxSeq, seqSpectrumGx, (size_t)numFreqBinsSeq * sizeof(float));
-            FREE(seqSpectrumGx);
-            seqSpectrumGx = NULL;
-        } else {
-            memset(spectra->spectraGxSeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
+        /* Populate full TR frequency axis */
+        for (i = 0; i < numFreqBinsFull; i++) {
+            spectra->frequenciesFull[i] = (float)i * freqResolutionFull;
         }
+        
+        /* Allocate sequence spectrum arrays if computing sequence spectrum */
+        if (fundamentalFreq > 0.0f && numFreqBinsSeq > 0) {
+            spectra->numFreqBinsSeq = numFreqBinsSeq;
+            spectra->spectraGxSeq = (float*)ALLOC((size_t)numFreqBinsSeq * sizeof(float));
+            spectra->spectraGySeq = (float*)ALLOC((size_t)numFreqBinsSeq * sizeof(float));
+            spectra->spectraGzSeq = (float*)ALLOC((size_t)numFreqBinsSeq * sizeof(float));
+            spectra->frequenciesSeq = seqFrequencies;  /* Take ownership from first call */
+            seqFrequencies = NULL;
+            
+            if (!spectra->spectraGxSeq || !spectra->spectraGySeq || !spectra->spectraGzSeq) {
+                if (seqSpectrumGx) FREE(seqSpectrumGx);
+                pulseqlib_trAcousticSpectraFree(spectra);
+                diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+                return diag->code;
+            }
+            
+            /* Copy Gx sequence spectrum from first call */
+            if (seqSpectrumGx && waveforms->numSamplesGx > 0) {
+                memcpy(spectra->spectraGxSeq, seqSpectrumGx, (size_t)numFreqBinsSeq * sizeof(float));
+                FREE(seqSpectrumGx);
+                seqSpectrumGx = NULL;
+            } else {
+                memset(spectra->spectraGxSeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
+            }
+        }
+    } else {
+        /* Production mode: no full spectrum storage */
+        spectra->spectraGxFull = NULL;
+        spectra->spectraGyFull = NULL;
+        spectra->spectraGzFull = NULL;
+        spectra->frequenciesFull = NULL;
+        spectra->spectraGxSeq = NULL;
+        spectra->spectraGySeq = NULL;
+        spectra->spectraGzSeq = NULL;
+        spectra->frequenciesSeq = NULL;
+        spectra->peaksGxSeq = NULL;
+        spectra->peaksGySeq = NULL;
+        spectra->peaksGzSeq = NULL;
+        
+        /* Free temporary allocations from first call */
+        if (seqSpectrumGx) { FREE(seqSpectrumGx); seqSpectrumGx = NULL; }
+        if (seqFrequencies) { FREE(seqFrequencies); seqFrequencies = NULL; }
     }
     
     /* Now compute full TR spectrum for Gx */
     if (waveforms->numSamplesGx > 0) {
         result = compute_sequence_spectrum(
-            spectra->spectraGxFull,
+            storeResults ? spectra->spectraGxFull : NULL,
             NULL, NULL,  /* Already have sequence spectrum */
             waveforms->waveformGx,
             waveforms->numSamplesGx,
@@ -8090,15 +8139,15 @@ int pulseqlib_getTRAcousticSpectra(
             diag->code = result;
             return result;
         }
-    } else {
+    } else if (storeResults) {
         memset(spectra->spectraGxFull, 0, (size_t)numFreqBinsFull * sizeof(float));
     }
     
     /* Compute for Gy */
     if (waveforms->numSamplesGy > 0) {
         result = compute_sequence_spectrum(
-            spectra->spectraGyFull,
-            (fundamentalFreq > 0.0f) ? &seqSpectrumGy : NULL,
+            storeResults ? spectra->spectraGyFull : NULL,
+            (storeResults && fundamentalFreq > 0.0f) ? &seqSpectrumGy : NULL,
             NULL,  /* Don't need frequencies again */
             waveforms->waveformGy,
             waveforms->numSamplesGy,
@@ -8109,7 +8158,7 @@ int pulseqlib_getTRAcousticSpectra(
             numTRs,
             NULL, NULL, NULL, &spectra->maxEnvelopeGyFull,
             numForbiddenBands, forbiddenBands, 
-            (fundamentalFreq > 0.0f) ? &spectra->peaksGySeq : NULL);
+            (storeResults && fundamentalFreq > 0.0f) ? &spectra->peaksGySeq : NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
@@ -8117,26 +8166,29 @@ int pulseqlib_getTRAcousticSpectra(
         }
         
         /* Copy Gy sequence spectrum */
-        if (seqSpectrumGy && spectra->spectraGySeq) {
+        if (storeResults && seqSpectrumGy && spectra->spectraGySeq) {
             memcpy(spectra->spectraGySeq, seqSpectrumGy, (size_t)numFreqBinsSeq * sizeof(float));
             FREE(seqSpectrumGy);
             seqSpectrumGy = NULL;
+        } else if (seqSpectrumGy) {
+            FREE(seqSpectrumGy);
+            seqSpectrumGy = NULL;
         }
-    } else {
+    } else if (storeResults) {
         memset(spectra->spectraGyFull, 0, (size_t)numFreqBinsFull * sizeof(float));
         if (spectra->spectraGySeq) {
             memset(spectra->spectraGySeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
         }
         if (spectra->peaksGySeq) {
-            memset(spectra->peaksGySeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
+            memset(spectra->peaksGySeq, 0, (size_t)numFreqBinsSeq * sizeof(int));
         }
     }
     
     /* Compute for Gz */
     if (waveforms->numSamplesGz > 0) {
         result = compute_sequence_spectrum(
-            spectra->spectraGzFull,
-            (fundamentalFreq > 0.0f) ? &seqSpectrumGz : NULL,
+            storeResults ? spectra->spectraGzFull : NULL,
+            (storeResults && fundamentalFreq > 0.0f) ? &seqSpectrumGz : NULL,
             NULL,  /* Don't need frequencies again */
             waveforms->waveformGz,
             waveforms->numSamplesGz,
@@ -8147,7 +8199,7 @@ int pulseqlib_getTRAcousticSpectra(
             numTRs,
             NULL, NULL, NULL, &spectra->maxEnvelopeGzFull,
             numForbiddenBands, forbiddenBands,
-            (fundamentalFreq > 0.0f) ? &spectra->peaksGzSeq : NULL);
+            (storeResults && fundamentalFreq > 0.0f) ? &spectra->peaksGzSeq : NULL);
         if (PULSEQLIB_FAILED(result)) {
             pulseqlib_trAcousticSpectraFree(spectra);
             diag->code = result;
@@ -8155,18 +8207,21 @@ int pulseqlib_getTRAcousticSpectra(
         }
         
         /* Copy Gz sequence spectrum */
-        if (seqSpectrumGz && spectra->spectraGzSeq) {
+        if (storeResults && seqSpectrumGz && spectra->spectraGzSeq) {
             memcpy(spectra->spectraGzSeq, seqSpectrumGz, (size_t)numFreqBinsSeq * sizeof(float));
             FREE(seqSpectrumGz);
             seqSpectrumGz = NULL;
+        } else if (seqSpectrumGz) {
+            FREE(seqSpectrumGz);
+            seqSpectrumGz = NULL;
         }
-    } else {
+    } else if (storeResults) {
         memset(spectra->spectraGzFull, 0, (size_t)numFreqBinsFull * sizeof(float));
         if (spectra->spectraGzSeq) {
             memset(spectra->spectraGzSeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
         }
         if (spectra->peaksGzSeq) {
-            memset(spectra->peaksGzSeq, 0, (size_t)numFreqBinsSeq * sizeof(float));
+            memset(spectra->peaksGzSeq, 0, (size_t)numFreqBinsSeq * sizeof(int));
         }
     }
     

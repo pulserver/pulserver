@@ -387,7 +387,7 @@ def get_tr_acoustic_spectra(
     target_spectral_resolution: float = 5.0,
     max_frequency: float | None = None,
     combined: bool = False,
-    forbidden_bands: list[dict] | None = None,  # NEW parameter
+    forbidden_bands: list[dict] | None = None,
 ) -> SimpleNamespace:
     """
     Compute acoustic spectra for gradient waveforms in a TR.
@@ -497,7 +497,8 @@ def get_tr_acoustic_spectra(
         target_spectral_resolution, 
         max_frequency, 
         combined,
-        forbidden_bands  # NEW
+        forbidden_bands,
+        True,
     )
     
     if not result_dict["success"]:
