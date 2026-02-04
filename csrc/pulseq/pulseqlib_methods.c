@@ -7048,7 +7048,7 @@ int acousticWaveformInit(
     const AcousticSpectrumSupport* support,
     const float* waveform,
     int numSamples,
-    int targetPaddedLen)  /* NEW: target padded length to match support->numWindows */
+    int targetPaddedLen)
 {
     float* paddedSamples = NULL;
     int i;
@@ -7061,15 +7061,7 @@ int acousticWaveformInit(
     memset(acoustic, 0, sizeof(*acoustic));
     acoustic->numSamplesOriginal = numSamples;
     
-    /* If waveform fits in single window, no padding needed */
-    if (numSamples <= support->nwin) {
-        acoustic->numSamples = numSamples;
-        acoustic->samples = (float*)waveform; /* Alias, no copy */
-        acoustic->ownsMemory = 0;
-        return PULSEQLIB_OK;
-    }
-    
-    /* Use provided target length (should match what support expects) */
+    /* Always allocate and pad to targetPaddedLen to ensure all windows can be computed */
     paddedSamples = (float*)ALLOC(targetPaddedLen * sizeof(float));
     if (!paddedSamples) {
         return PULSEQLIB_ERR_ALLOC_FAILED;
@@ -8063,6 +8055,20 @@ int pulseqlib_getTRAcousticSpectra(
             acousticSpectrumSupportFree(&support);
             diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
             return diag->code;
+        }
+
+        /* Zero-initialize output arrays */
+        memset(spectra->spectraGx, 0, (size_t)outputSpectraSize * sizeof(float));
+        memset(spectra->spectraGy, 0, (size_t)outputSpectraSize * sizeof(float));
+        memset(spectra->spectraGz, 0, (size_t)outputSpectraSize * sizeof(float));
+        memset(spectra->maxEnvelopeGx, 0, (size_t)spectra->numWindows * sizeof(float));
+        memset(spectra->maxEnvelopeGy, 0, (size_t)spectra->numWindows * sizeof(float));
+        memset(spectra->maxEnvelopeGz, 0, (size_t)spectra->numWindows * sizeof(float));
+        
+        if (!combined) {
+            memset(spectra->peaksGx, 0, (size_t)outputSpectraSize * sizeof(int));
+            memset(spectra->peaksGy, 0, (size_t)outputSpectraSize * sizeof(int));
+            memset(spectra->peaksGz, 0, (size_t)outputSpectraSize * sizeof(int));
         }
 
         /* Populate sliding window frequency axis */
