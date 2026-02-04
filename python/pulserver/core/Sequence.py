@@ -579,15 +579,14 @@ def get_pns(
     seq: PulserverSequence,
     chronaxie_us: float | None = None,
     rheobase: float | None = None,
-    tau_us: float | None = None,
-    num_tr_copies: int = 1,
-    store_waveforms: bool = False,
+    alpha: float | None = None,
 ) -> SimpleNamespace:
     """
     Compute Peripheral Nerve Stimulation (PNS) levels for gradient waveforms.
     
     Uses convolution with a vendor-specific nerve response kernel to estimate
-    PNS as a percentage of the stimulation threshold.
+    PNS as a percentage of the stimulation threshold. Circular padding is 
+    automatically applied based on the kernel length.
     
     Parameters
     ----------
@@ -597,17 +596,12 @@ def get_pns(
         Chronaxie time constant in microseconds. Required for GE model.
         Typical value: ~360 µs (IEC 60601-2-33:2022).
     rheobase : float | None
-        Rheobase - minimum slew rate for stimulation Smin in T/m/s.
+        Rheobase - minimum slew rate for stimulation in T/m/s.
         Required for GE model. Typical value: ~20 T/m/s.
-    tau_us : float | None
-        Time constant tau in microseconds. Required for Siemens model.
-        Typical value: ~360 µs (equivalent to chronaxie).
-    num_tr_copies : int
-        Number of TR copies to concatenate for analysis. Useful for analyzing
-        steady-state behavior. Default is 1.
-    store_waveforms : bool
-        If True, return full PNS waveforms for each axis. Default is False
-        (only return maximum values).
+    alpha : float | None
+        Effective coil length in meters. Required for GE model.
+        The stimulation threshold Smin = rheobase / alpha.
+        Typical value: ~0.333 m (IEC 60601-2-33:2022).
         
     Returns
     -------
@@ -624,80 +618,72 @@ def get_pns(
         
     Raises
     ------
+    NotImplementedError
+        If called with non-GE vendor (currently only GE/GEHC is supported).
     RuntimeError
         If PNS computation fails.
     ValueError
-        If required parameters are not provided for the compiled vendor model.
+        If required GE parameters are not provided.
         
     Notes
     -----
-    The PNS model depends on compile-time vendor selection:
+    **Currently Supported: GE/GEHC Model**
     
-    **GE Model (IEC 60601-2-33:2022 Eq. AA.21)**:
-        Uses chronaxie and rheobase parameters. The nerve response kernel is:
-        
-        h[k] = (1/c) * exp(-k*dt/c)
-        
-        where c = chronaxie. PNS is computed as:
-        
-        PNS(t) = |conv(slew_rate, h)| / rheobase * 100%
+    Uses IEC 60601-2-33:2022 Eq. AA.21. The nerve response kernel is:
     
-    **Siemens Model (SAFE RC lowpass)**:
-        Uses tau parameter. The nerve response kernel is an exponential lowpass:
-        
-        h[k] = alpha * (1 - alpha)^k, where alpha = dt / (tau + dt)
-        
-        The threshold is computed from the slew rate directly.
+    h(tau) = (dt / Smin) * c / (c + tau)^2
+    
+    where:
+    - c = chronaxie (µs)
+    - Smin = rheobase / alpha (T/m/s)
+    
+    PNS is computed as the convolution of the gradient slew rate with this kernel,
+    with circular padding automatically applied based on kernel length.
+    
+    **Not Yet Implemented:**
+    - Siemens model (tau parameter)
+    - Philips vendor
+    - United Imaging vendor
+    - Bruker vendor
     
     Examples
     --------
-    >>> # GE model (if compiled with IS_GEHC)
-    >>> result = get_pns(seq, chronaxie_us=360.0, rheobase=20.0)
+    >>> # GE model
+    >>> result = get_pns(seq, pns_threshold=100.0, chronaxie_us=360.0, 
+    ...                   rheobase=20.0, alpha=0.333)
     >>> print(f"Max PNS: {result.max_pns:.1f}%")
-    
-    >>> # Siemens model (if compiled without IS_GEHC)  
-    >>> result = get_pns(seq, tau_us=360.0)
-    >>> print(f"Max PNS: {result.max_pns:.1f}%")
+    >>> if result.max_pns > 100.0:
+    ...     print("Warning: PNS threshold exceeded!")
     
     >>> # Get full waveforms for plotting
-    >>> result = get_pns(seq, tau_us=360.0, store_waveforms=True)
+    >>> result = get_pns(seq, chronaxie_us=360.0, rheobase=20.0, alpha=0.333,
+    ...                   store_waveforms=True)
+    >>> import matplotlib.pyplot as plt
     >>> plt.plot(result.pns_total)
-    """
-    import sys
+    >>> plt.axhline(100.0, color='r', linestyle='--', label='Threshold')
+    >>> plt.show()
+    """        
+    # GE model
+    if chronaxie_us is None or rheobase is None or alpha is None:
+        raise ValueError(
+            "GE PNS model requires 'chronaxie_us', 'rheobase', and 'alpha' parameters. "
+            "Typical values: chronaxie_us=360.0, rheobase=20.0, alpha=0.333"
+        )
     
-    # Determine which parameters to use based on what's available in the wrapper
-    # We check the function signature to determine the compiled model
-    import inspect
-    sig = inspect.signature(_get_pns)
-    param_names = list(sig.parameters.keys())
-    
-    if 'chronaxie_us' in param_names:
-        # GE model
-        if chronaxie_us is None or rheobase is None:
-            raise ValueError(
-                "GE PNS model requires 'chronaxie_us' and 'rheobase' parameters. "
-                "Typical values: chronaxie_us=360.0, rheobase=20.0"
-            )
+    try:
         result_dict = _get_pns(
             seq._cseq,
+            100.0, # pns_threshold (ignored when store_waveforms=True)
             chronaxie_us,
             rheobase,
-            num_tr_copies,
-            store_waveforms,
+            alpha,
+            True, # store_waveforms
         )
-    else:
-        # Siemens model
-        if tau_us is None:
-            raise ValueError(
-                "Siemens PNS model requires 'tau_us' parameter. "
-                "Typical value: tau_us=360.0"
-            )
-        result_dict = _get_pns(
-            seq._cseq,
-            tau_us,
-            num_tr_copies,
-            store_waveforms,
-        )
+    except RuntimeError as e:
+        # Check if it's a vendor not implemented error
+        if "PNS computation is currently only implemented for GE/GEHC" in str(e):
+            raise NotImplementedError(str(e))
+        raise
     
     if not result_dict["success"]:
         raise RuntimeError(f"PNS computation failed: {result_dict.get('error', 'Unknown error')}")
@@ -710,7 +696,7 @@ def get_pns(
     )
     
     # Add waveforms if stored
-    if store_waveforms and "pns_total" in result_dict:
+    if "pns_total" in result_dict:
         result.pns_total = np.asarray(result_dict["pns_total"], dtype=np.float32)
         if "pns_x" in result_dict:
             result.pns_x = np.asarray(result_dict["pns_x"], dtype=np.float32)

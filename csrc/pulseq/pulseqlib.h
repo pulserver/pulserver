@@ -1,10 +1,6 @@
 #ifndef PULSEQLIB_H
 #define PULSEQLIB_H
 
-#ifndef IS_GEHC
-#define  IS_GEHC 1
-#endif 
-
 #define TWO_PI 6.283185307179586476925286766558
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -130,6 +126,8 @@
 #define PULSEQLIB_ERR_PNS_NO_WAVEFORM            -453  /**< No waveform data for PNS analysis */
 #define PULSEQLIB_ERR_PNS_FFT_FAILED             -454  /**< FFT convolution failed */
 #define PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED     -455  /**< PNS threshold exceeded (>100%) */
+
+#define PULSEQLIB_ERR_NOT_IMPLEMENTED      -999  /**< Functionality not yet implemented */
 
 /* Code checking */
 #define PULSEQLIB_SUCCEEDED(code) ((code) > 0)
@@ -538,7 +536,7 @@ typedef struct pulseqlib_RfDefinition {
     int timeShapeID;  /**< Time shape ID (1-based index into shapes library, 0 if none) */
     int delay;        /**< Delay prior to the pulse (us) */
 
-#ifdef IS_GEHC
+#if VENDOR == GEHC
     /* Statistics fields for peak-normalized waveform (max|magnitude| = 1). */
     int numSamples;     /**< Number of RF samples (count) */
     float maxAmplitude; /**< Max amplitude across instances (Hz) */
@@ -555,7 +553,7 @@ typedef struct pulseqlib_RfDefinition {
 
 } pulseqlib_RfDefinition;
 
-#ifdef IS_GEHC
+#if VENDOR == GEHC
 #define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f}
 #else
 #define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0}
@@ -860,6 +858,24 @@ typedef struct pulseqlib_AcousticCheckResult {
 
 #define PULSEQLIB_ACOUSTIC_CHECK_RESULT_INIT {PULSEQLIB_ACOUSTIC_VIOLATION_INIT, PULSEQLIB_ACOUSTIC_VIOLATION_INIT, PULSEQLIB_ACOUSTIC_VIOLATION_INIT}
 
+#if VENDOR == SIEMENS
+
+typedef struct SafeParams {
+    float a1;
+    float tau1;
+    float a2;
+    float tau2;
+    float a3;
+    float tau3;
+    float g_scale;
+    float stim_thresh; /**< T/m/s */
+    float stim_limit;  /**< T/m/s */
+} SafeParams;
+
+#define PULSEQLIB_SAFE_PARAMS_INIT {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f}
+
+#endif
+
 /**
  * @brief PNS parameters (vendor-specific via compile-time macro)
  * 
@@ -872,18 +888,21 @@ typedef struct pulseqlib_AcousticCheckResult {
  *   Requires: tau_us (equivalent to chronaxie)
  */
 typedef struct pulseqlib_PNSParams {
-#ifdef IS_GEHC
+#if VENDOR == GEHC
     float chronaxie_us;  /**< Chronaxie time constant (µs) */
     float rheobase;      /**< Minimum slew rate for stimulation Smin (T/m/s) */
-#else
-    float tau_us;        /**< Time constant tau (µs) */
+    float alpha;         /**< Effective coil length (m). Smin = rheobase / alpha */
+#elif VENDOR == SIEMENS
+    SafeParams x;    /**< SAFE model parameters for X axis */
+    SafeParams y;    /**< SAFE model parameters for Y axis */
+    SafeParams z;    /**< SAFE model parameters for Z axis */
 #endif
 } pulseqlib_PNSParams;
 
-#ifdef IS_GEHC
-#define PULSEQLIB_PNS_PARAMS_INIT {0.0f, 0.0f}
-#else
-#define PULSEQLIB_PNS_PARAMS_INIT {0.0f}
+#if VENDOR == GEHC
+#define PULSEQLIB_PNS_PARAMS_INIT {0.0f, 0.0f, 1.0f}
+#elif VENDOR == SIEMENS
+#define PULSEQLIB_PNS_PARAMS_INIT {PULSEQLIB_SAFE_PARAMS_INIT, PULSEQLIB_SAFE_PARAMS_INIT, PULSEQLIB_SAFE_PARAMS_INIT}
 #endif
 
 /**

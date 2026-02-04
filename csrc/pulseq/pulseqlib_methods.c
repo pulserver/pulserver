@@ -186,6 +186,9 @@ const char* pulseqlib_getErrorMessage(int code) {
             return "FFT convolution failed during PNS analysis";
         case PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED:
             return "PNS threshold exceeded (>100%)";
+
+         case PULSEQLIB_ERR_NOT_IMPLEMENTED:
+            return "Functionality not yet implemented";       
         
         default:
             return "Unknown error";
@@ -239,6 +242,9 @@ const char* pulseqlib_getErrorHint(int code) {
         case PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG:
             return "The preparation or cooldown section differs from the main TR pattern and is too long to be safe."
                    "If this is intentional (e.g., steady-state preparation), ensure it is marked with appropriate ONCE labels.";
+
+        case PULSEQLIB_ERR_NOT_IMPLEMENTED:
+            return "This functionality is not yet implemented.";
         
         default:
             return "Check sequence design for structural consistency.";
@@ -4840,15 +4846,12 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
         numUniqueRFs = deduplicate_rf_library(seq, tmpRfDefs, tmpRfTable);
         seqDesc->numUniqueRFs = numUniqueRFs;
         seqDesc->rfTableSize = seq->rfLibrarySize;
-
-#ifdef IS_GEHC
-        if (IS_GEHC) {
-            result = compute_rf_statistics(seq, tmpRfDefs, numUniqueRFs, tmpRfTable, seq->rfLibrarySize);
-            if (PULSEQLIB_FAILED(result)) {
-                free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
-                                 tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
-                return result;
-            }
+#if VENDOR == GEHC
+        result = compute_rf_statistics(seq, tmpRfDefs, numUniqueRFs, tmpRfTable, seq->rfLibrarySize);
+        if (PULSEQLIB_FAILED(result)) {
+            free_temp_arrays(tmpRfDefs, tmpRfTable, tmpGradDefs, tmpGradTable,
+                                tmpAdcDefs, tmpAdcTable, tmpBlockDefs, tmpBlockTable);
+            return result;
         }
 #endif
     }
@@ -8404,15 +8407,15 @@ int pulseqlib_getTRAcousticSpectra(
 #define PNS_MIN_DURATION_FACTOR 3.0f      /* Minimum signal duration = factor * kernel duration */
 #define PNS_KERNEL_DURATION_FACTOR 20.0f  /* Kernel extends to 20 * chronaxie */
 
-#ifndef IS_GEHC
+#if VENDOR == SIEMENS
 #define PNS_SIEMENS_EPS 1e-6f             /* Accuracy for Siemens kernel truncation */
 #endif
 
-#ifdef IS_GEHC
-
+#if VENDOR == GEHC
 /**
  * @brief Build GE PNS kernel: f(tau) = dt/Smin * c / (c + tau)^2
  * IEC 60601-2-33:2022 Eq. AA.21
+ * where Smin = rheobase / alpha
  */
 static int build_pns_kernel(
     float** kernel,
@@ -8425,14 +8428,18 @@ static int build_pns_kernel(
     float c, dt;
     float* k;
     float denom;
-    float rheobase;
+    float Smin;
     
     c = params->chronaxie_us;
-    rheobase = params->rheobase;
-    dt = dt_us;
     
     if (c <= 0.0f) return PULSEQLIB_ERR_PNS_INVALID_CHRONAXIE;
-    if (rheobase <= 0.0f) return PULSEQLIB_ERR_PNS_INVALID_RHEOBASE;
+    if (params->rheobase <= 0.0f) return PULSEQLIB_ERR_PNS_INVALID_RHEOBASE;
+    if (params->alpha <= 0.0f) return PULSEQLIB_ERR_PNS_INVALID_PARAMS;  /* Need alpha > 0 */
+    
+    /* Smin = rheobase / alpha */
+    Smin = params->rheobase / params->alpha;
+    
+    dt = dt_us;
     
     /* Kernel length: 20 * chronaxie / dt */
     n = (int)(PNS_KERNEL_DURATION_FACTOR * c / dt) + 1;
@@ -8444,7 +8451,7 @@ static int build_pns_kernel(
     for (i = 0; i < n; ++i) {
         tau = (float)(i + 1) * dt;  /* tau starts at dt, not 0 */
         denom = (c + tau) * (c + tau);
-        k[i] = (dt / rheobase) * (c / denom);
+        k[i] = (dt / Smin) * (c / denom);
     }
     
     *kernel = k;
@@ -8456,60 +8463,6 @@ static float get_chronaxie(const pulseqlib_PNSParams* params)
 {
     return params->chronaxie_us;
 }
-
-#else
-
-/**
- * @brief Build Siemens PNS kernel: RC lowpass impulse response
- * f[k] = alpha * (1 - alpha)^k, where alpha = dt / (tau + dt)
- */
-static int build_pns_kernel(
-    float** kernel,
-    int* kernelLen,
-    float dt_us,
-    const pulseqlib_PNSParams* params)
-{
-    int n, i;
-    float alpha;
-    float tau, dt;
-    float* k;
-    float one_minus_alpha;
-    float coeff;
-    
-    tau = params->tau_us;
-    dt = dt_us;
-    
-    if (tau <= 0.0f) return PULSEQLIB_ERR_PNS_INVALID_CHRONAXIE;
-    
-    alpha = dt / (tau + dt);
-    one_minus_alpha = 1.0f - alpha;
-    
-    /* Calculate number of elements to reach desired accuracy (eps) */
-    /* n = log(eps) / log(1 - alpha) */
-    n = (int)(logf(PNS_SIEMENS_EPS) / logf(one_minus_alpha));
-    if (n < 1) n = 1;
-    
-    k = (float*)ALLOC((size_t)n * sizeof(float));
-    if (!k) return PULSEQLIB_ERR_ALLOC_FAILED;
-    
-    /* f[k] = alpha * (1 - alpha)^k */
-    coeff = alpha;
-    for (i = 0; i < n; ++i) {
-        k[i] = coeff;
-        coeff *= one_minus_alpha;
-    }
-    
-    *kernel = k;
-    *kernelLen = n;
-    return PULSEQLIB_OK;
-}
-
-static float get_chronaxie(const pulseqlib_PNSParams* params)
-{
-    return params->tau_us;
-}
-
-#endif
 
 /**
  * @brief Compute slew rate (derivative) of waveform
@@ -8620,75 +8573,70 @@ cleanup:
     return result;
 }
 
-void pulseqlib_pnsResultFree(pulseqlib_PNSResult* result)
-{
-    if (!result) return;
-    
-    if (result->pnsX) { FREE(result->pnsX); result->pnsX = NULL; }
-    if (result->pnsY) { FREE(result->pnsY); result->pnsY = NULL; }
-    if (result->pnsZ) { FREE(result->pnsZ); result->pnsZ = NULL; }
-    if (result->pnsTotal) { FREE(result->pnsTotal); result->pnsTotal = NULL; }
-    
-    result->numSamples = 0;
-    result->maxPNS = 0.0f;
-    result->maxPNS_index = 0;
-    result->maxPNS_time_us = 0.0f;
-}
-
 /**
- * @brief Process a single gradient axis for PNS
+ * @brief Process a single gradient axis for PNS with circular padding
+ * 
+ * @param waveform      Input gradient waveform (Hz/m)
+ * @param numSamples    Number of samples in waveform
+ * @param kernelLen     Length of PNS kernel (determines padding)
+ * @param gradRasterTime_us  Gradient raster time in µs
+ * @param kernel        PNS convolution kernel
+ * @param pnsAxis       Output: PNS values for this axis (length = numSamples)
+ * @param pnsTotal      In/Out: Accumulated sum of squares (length = numSamples)
+ * @param pnsStore      Output: Copy of pnsAxis if not NULL
  */
-static int process_pns_axis(
+static int process_pns_axis_circular(
     const float* waveform,
-    int numSamplesAxis,
-    int totalSamples,
-    int numCopies,
+    int numSamples,
+    int kernelLen,
     float gradRasterTime_us,
     const float* kernel,
-    int kernelLen,
-    float* extendedWaveform,
-    float* slewRate,
-    float* pnsAxis,
-    float* pnsTotal,
-    float* pnsStore)
+    float* paddedWaveform,   /* Working buffer: size = numSamples + kernelLen */
+    float* slewRate,         /* Working buffer: size = numSamples + kernelLen - 1 */
+    float* pnsConv,          /* Working buffer: size = numSamples + kernelLen - 1 */
+    float* pnsAxis,          /* Output: size = numSamples */
+    float* pnsTotal,         /* In/Out accumulator: size = numSamples */
+    float* pnsStore)         /* Optional output copy: size = numSamples or NULL */
 {
-    int i, c, idx;
+    int i, paddedLen, slewLen;
     int returnCode;
     
-    if (numSamplesAxis <= 0 || !waveform) {
+    if (numSamples <= 0 || !waveform) {
         return PULSEQLIB_OK;  /* Nothing to process */
     }
     
-    /* Extend waveform by repeating TR */
-    for (c = 0; c < numCopies; ++c) {
-        idx = c * numSamplesAxis;
-        for (i = 0; i < numSamplesAxis && (idx + i) < totalSamples; ++i) {
-            extendedWaveform[idx + i] = waveform[i];
-        }
-    }
-    /* Zero-pad remainder if needed */
-    for (i = numCopies * numSamplesAxis; i < totalSamples; ++i) {
-        extendedWaveform[i] = 0.0f;
+    paddedLen = numSamples + kernelLen;
+    slewLen = paddedLen - 1;
+    
+    /* Copy original waveform */
+    for (i = 0; i < numSamples; ++i) {
+        paddedWaveform[i] = waveform[i];
     }
     
-    /* Compute slew rate */
-    compute_slew_rate(extendedWaveform, totalSamples, gradRasterTime_us, slewRate);
+    /* Circular padding: wrap around to beginning */
+    for (i = 0; i < kernelLen; ++i) {
+        paddedWaveform[numSamples + i] = waveform[i % numSamples];
+    }
+    
+    /* Compute slew rate: s[i] = (g[i+1] - g[i]) / dt */
+    compute_slew_rate(paddedWaveform, paddedLen, gradRasterTime_us, slewRate);
     
     /* Convolve with kernel */
-    returnCode = convolve_fft(slewRate, totalSamples - 1, kernel, kernelLen, pnsAxis);
+    returnCode = convolve_fft(slewRate, slewLen, kernel, kernelLen, pnsConv);
     if (PULSEQLIB_FAILED(returnCode)) {
         return returnCode;
     }
     
-    /* Convert to percent, accumulate to total (sum of squares) */
-    for (i = 0; i < totalSamples - 1; ++i) {
-        pnsAxis[i] *= 100.0f;
+    /* Extract valid portion (skip initial transient, keep numSamples) */
+    /* The valid region starts at kernelLen-1 after convolution */
+    for (i = 0; i < numSamples; ++i) {
+        pnsAxis[i] = pnsConv[kernelLen - 1 + i] * 100.0f;  /* Convert to percent */
         pnsTotal[i] += pnsAxis[i] * pnsAxis[i];
     }
     
     /* Store if requested */
     if (pnsStore) {
-        for (i = 0; i < totalSamples - 1; ++i) {
+        for (i = 0; i < numSamples; ++i) {
             pnsStore[i] = pnsAxis[i];
         }
     }
@@ -8697,28 +8645,26 @@ static int process_pns_axis(
 }
 
 int pulseqlib_computePNS(
+    const float pns_threshold,
     const pulseqlib_TRGradientWaveforms* waveforms,
     float gradRasterTime_us,
     const pulseqlib_PNSParams* params,
-    int numTRCopies,
-    float trDuration_us,
     int storeWaveforms,
     pulseqlib_PNSResult* result,
     pulseqlib_Diagnostic* diag)
 {
     pulseqlib_Diagnostic localDiag;
-    int maxSamples, totalSamples, numCopies;
+    int maxSamples, paddedLen, slewLen;
     int kernelLen;
     float* kernel = NULL;
-    float* extendedWaveform = NULL;
+    float* paddedWaveform = NULL;
     float* slewRate = NULL;
+    float* pnsConv = NULL;
     float* pnsAxis = NULL;
     float* pnsX = NULL;
     float* pnsY = NULL;
     float* pnsZ = NULL;
     float* pnsTotal = NULL;
-    float minDuration_us, kernelDuration_us;
-    float chronaxie_us;
     int i;
     float maxPNS;
     int maxIdx;
@@ -8758,50 +8704,38 @@ int pulseqlib_computePNS(
         return returnCode;
     }
     
-    /* Get chronaxie for duration calculation */
-    chronaxie_us = get_chronaxie(params);
-    
-    /* Determine number of TR copies needed */
-    kernelDuration_us = PNS_KERNEL_DURATION_FACTOR * chronaxie_us;
-    minDuration_us = PNS_MIN_DURATION_FACTOR * kernelDuration_us;
-    
-    if (numTRCopies > 0) {
-        numCopies = numTRCopies;
-    } else if (trDuration_us > 0.0f && trDuration_us < minDuration_us) {
-        numCopies = (int)ceilf(minDuration_us / trDuration_us);
-    } else {
-        numCopies = 1;
-    }
-    
-    totalSamples = maxSamples * numCopies;
+    /* Compute buffer sizes with circular padding */
+    paddedLen = maxSamples + kernelLen;
+    slewLen = paddedLen - 1;
     
     /* Allocate working buffers */
-    extendedWaveform = (float*)ALLOC((size_t)totalSamples * sizeof(float));
-    slewRate = (float*)ALLOC((size_t)(totalSamples - 1) * sizeof(float));
-    pnsAxis = (float*)ALLOC((size_t)(totalSamples - 1) * sizeof(float));
-    pnsTotal = (float*)ALLOC((size_t)(totalSamples - 1) * sizeof(float));
+    paddedWaveform = (float*)ALLOC((size_t)paddedLen * sizeof(float));
+    slewRate = (float*)ALLOC((size_t)slewLen * sizeof(float));
+    pnsConv = (float*)ALLOC((size_t)slewLen * sizeof(float));
+    pnsAxis = (float*)ALLOC((size_t)maxSamples * sizeof(float));
+    pnsTotal = (float*)ALLOC((size_t)maxSamples * sizeof(float));
     
-    if (!extendedWaveform || !slewRate || !pnsAxis || !pnsTotal) {
+    if (!paddedWaveform || !slewRate || !pnsConv || !pnsAxis || !pnsTotal) {
         returnCode = PULSEQLIB_ERR_ALLOC_FAILED;
         goto cleanup;
     }
     
     /* Initialize pnsTotal to zero */
-    for (i = 0; i < totalSamples - 1; ++i) {
+    for (i = 0; i < maxSamples; ++i) {
         pnsTotal[i] = 0.0f;
     }
     
     /* Allocate per-axis storage if requested */
     if (storeWaveforms) {
-        pnsX = (float*)ALLOC((size_t)(totalSamples - 1) * sizeof(float));
-        pnsY = (float*)ALLOC((size_t)(totalSamples - 1) * sizeof(float));
-        pnsZ = (float*)ALLOC((size_t)(totalSamples - 1) * sizeof(float));
+        pnsX = (float*)ALLOC((size_t)maxSamples * sizeof(float));
+        pnsY = (float*)ALLOC((size_t)maxSamples * sizeof(float));
+        pnsZ = (float*)ALLOC((size_t)maxSamples * sizeof(float));
         if (!pnsX || !pnsY || !pnsZ) {
             returnCode = PULSEQLIB_ERR_ALLOC_FAILED;
             goto cleanup;
         }
         /* Initialize to zero */
-        for (i = 0; i < totalSamples - 1; ++i) {
+        for (i = 0; i < maxSamples; ++i) {
             pnsX[i] = 0.0f;
             pnsY[i] = 0.0f;
             pnsZ[i] = 0.0f;
@@ -8809,36 +8743,33 @@ int pulseqlib_computePNS(
     }
     
     /* Process X axis */
-    returnCode = process_pns_axis(
+    returnCode = process_pns_axis_circular(
         waveforms->waveformGx, waveforms->numSamplesGx,
-        totalSamples, numCopies, gradRasterTime_us,
-        kernel, kernelLen,
-        extendedWaveform, slewRate, pnsAxis, pnsTotal,
+        kernelLen, gradRasterTime_us, kernel,
+        paddedWaveform, slewRate, pnsConv, pnsAxis, pnsTotal,
         storeWaveforms ? pnsX : NULL);
     if (PULSEQLIB_FAILED(returnCode)) goto cleanup;
     
     /* Process Y axis */
-    returnCode = process_pns_axis(
+    returnCode = process_pns_axis_circular(
         waveforms->waveformGy, waveforms->numSamplesGy,
-        totalSamples, numCopies, gradRasterTime_us,
-        kernel, kernelLen,
-        extendedWaveform, slewRate, pnsAxis, pnsTotal,
+        kernelLen, gradRasterTime_us, kernel,
+        paddedWaveform, slewRate, pnsConv, pnsAxis, pnsTotal,
         storeWaveforms ? pnsY : NULL);
     if (PULSEQLIB_FAILED(returnCode)) goto cleanup;
     
     /* Process Z axis */
-    returnCode = process_pns_axis(
+    returnCode = process_pns_axis_circular(
         waveforms->waveformGz, waveforms->numSamplesGz,
-        totalSamples, numCopies, gradRasterTime_us,
-        kernel, kernelLen,
-        extendedWaveform, slewRate, pnsAxis, pnsTotal,
+        kernelLen, gradRasterTime_us, kernel,
+        paddedWaveform, slewRate, pnsConv, pnsAxis, pnsTotal,
         storeWaveforms ? pnsZ : NULL);
     if (PULSEQLIB_FAILED(returnCode)) goto cleanup;
     
     /* Compute sqrt for combined PNS and find maximum */
     maxPNS = 0.0f;
     maxIdx = 0;
-    for (i = 0; i < totalSamples - 1; ++i) {
+    for (i = 0; i < maxSamples; ++i) {
         pnsTotal[i] = sqrtf(pnsTotal[i]);
         if (pnsTotal[i] > maxPNS) {
             maxPNS = pnsTotal[i];
@@ -8847,7 +8778,7 @@ int pulseqlib_computePNS(
     }
     
     /* Fill result */
-    result->numSamples = totalSamples - 1;
+    result->numSamples = maxSamples;
     result->pnsTotal = pnsTotal;
     pnsTotal = NULL;  /* Transfer ownership */
     
@@ -8862,16 +8793,21 @@ int pulseqlib_computePNS(
     }
     
     /* Set warning if threshold exceeded */
-    if (maxPNS > 100.0f) {
-        diag->code = PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED;
+    if (storeWaveforms) {
+        returnCode = PULSEQLIB_OK;
+    } else if (maxPNS > pns_threshold) {
+        returnCode = PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED;
     } else {
-        diag->code = PULSEQLIB_OK;
+        returnCode = PULSEQLIB_OK;
     }
+    diag->code = returnCode;
+
     
 cleanup:
     if (kernel) FREE(kernel);
-    if (extendedWaveform) FREE(extendedWaveform);
+    if (paddedWaveform) FREE(paddedWaveform);
     if (slewRate) FREE(slewRate);
+    if (pnsConv) FREE(pnsConv);
     if (pnsAxis) FREE(pnsAxis);
     if (pnsTotal) FREE(pnsTotal);
     if (pnsX) FREE(pnsX);
@@ -8879,4 +8815,32 @@ cleanup:
     if (pnsZ) FREE(pnsZ);
     
     return returnCode;
+}
+#else
+int pulseqlib_computePNS(
+    const float pns_threshold,
+    const pulseqlib_TRGradientWaveforms* waveforms,
+    float gradRasterTime_us,
+    const pulseqlib_PNSParams* params,
+    int storeWaveforms,
+    pulseqlib_PNSResult* result,
+    pulseqlib_Diagnostic* diag)
+{
+    return PULSEQLIB_ERR_NOT_IMPLEMENTED;
+}
+#endif
+
+void pulseqlib_pnsResultFree(pulseqlib_PNSResult* result)
+{
+    if (!result) return;
+    
+    if (result->pnsX) { FREE(result->pnsX); result->pnsX = NULL; }
+    if (result->pnsY) { FREE(result->pnsY); result->pnsY = NULL; }
+    if (result->pnsZ) { FREE(result->pnsZ); result->pnsZ = NULL; }
+    if (result->pnsTotal) { FREE(result->pnsTotal); result->pnsTotal = NULL; }
+    
+    result->numSamples = 0;
+    result->maxPNS = 0.0f;
+    result->maxPNS_index = 0;
+    result->maxPNS_time_us = 0.0f;
 }

@@ -10,12 +10,24 @@
 extern "C" {
 #endif
 
-#ifndef DETECT_REAL_RF
-    #define  DETECT_REAL_RF 1
-#endif 
+#define SIEMENS 1
+#define GEHC 2
+#define PHILIPS 3
+#define UNITED_IMAGING 4
+#define BRUKER 5
+
+#ifndef VENDOR
+#define VENDOR GEHC
+#endif
+
+#if VENDOR == GEHC
+#define  DETECT_REAL_RF 1
+#else
+#define  DETECT_REAL_RF 0
+#endif
 
 #ifndef IS_GEHC
-    #define  IS_GEHC 1
+#define  IS_GEHC 1
 #endif 
 
 /** 
@@ -35,7 +47,7 @@ extern "C" {
  * // Other vendor-specific declarations can go here
 */
 #ifndef ALLOC
-    #define ALLOC(size) malloc(size)
+#define ALLOC(size) malloc(size)
 #endif
 
 /** 
@@ -55,7 +67,7 @@ extern "C" {
  * // Other vendor-specific declarations can go here
 */
 #ifndef FREE
-  #define FREE(ptr) free(ptr)
+#define FREE(ptr) free(ptr)
 #endif
 
 /* Constructor, destructor and reset */
@@ -122,11 +134,10 @@ int pulseqlib_getTRAcousticSpectra(
     pulseqlib_Diagnostic* diag);
 
 int pulseqlib_computePNS(
+    const float pns_threshold,
     const pulseqlib_TRGradientWaveforms* waveforms,
     float gradRasterTime_us,
     const pulseqlib_PNSParams* params,
-    int numTRCopies,
-    float trDuration_us,
     int storeWaveforms,
     pulseqlib_PNSResult* result,
     pulseqlib_Diagnostic* diag);

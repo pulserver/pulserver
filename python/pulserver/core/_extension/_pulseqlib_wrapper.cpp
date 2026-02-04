@@ -171,20 +171,18 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile) {
         entry["phase_shape_id"] = seqDesc.rfDefinitions[i].phaseShapeID;
         entry["time_shape_id"] = seqDesc.rfDefinitions[i].timeShapeID;
         entry["delay"] = seqDesc.rfDefinitions[i].delay;
-#ifdef IS_GEHC
-        if (IS_GEHC) {
-            entry["num_samples"] = seqDesc.rfDefinitions[i].numSamples;
-            entry["flip_angle"] = seqDesc.rfDefinitions[i].flipAngle;
-            entry["max_amplitude"] = seqDesc.rfDefinitions[i].maxAmplitude;
-            entry["duration_us"] = seqDesc.rfDefinitions[i].duration_us;
-            entry["area"] = seqDesc.rfDefinitions[i].area;
-            entry["abswidth"] = seqDesc.rfDefinitions[i].abswidth;
-            entry["effwidth"] = seqDesc.rfDefinitions[i].effwidth;
-            entry["dtycyc"] = seqDesc.rfDefinitions[i].dtycyc;
-            entry["maxpw"] = seqDesc.rfDefinitions[i].maxpw;
-            entry["isodelay_us"] = seqDesc.rfDefinitions[i].isodelay_us;
-            entry["bandwidth"] = seqDesc.rfDefinitions[i].bandwidth;
-        }
+#if VENDOR == GEHC
+        entry["num_samples"] = seqDesc.rfDefinitions[i].numSamples;
+        entry["flip_angle"] = seqDesc.rfDefinitions[i].flipAngle;
+        entry["max_amplitude"] = seqDesc.rfDefinitions[i].maxAmplitude;
+        entry["duration_us"] = seqDesc.rfDefinitions[i].duration_us;
+        entry["area"] = seqDesc.rfDefinitions[i].area;
+        entry["abswidth"] = seqDesc.rfDefinitions[i].abswidth;
+        entry["effwidth"] = seqDesc.rfDefinitions[i].effwidth;
+        entry["dtycyc"] = seqDesc.rfDefinitions[i].dtycyc;
+        entry["maxpw"] = seqDesc.rfDefinitions[i].maxpw;
+        entry["isodelay_us"] = seqDesc.rfDefinitions[i].isodelay_us;
+        entry["bandwidth"] = seqDesc.rfDefinitions[i].bandwidth;
 #endif
         rfDefsList.append(entry);
     }
@@ -221,29 +219,27 @@ static py::dict _get_unique_blocks(_PulserverSeqFile& seqfile) {
             entry["num_samples"] = seqDesc.gradDefinitions[i].fallTimeOrNumUncompressedSamples;
             entry["time_shape_id"] = seqDesc.gradDefinitions[i].unusedOrTimeShapeID;
         }
-#ifdef IS_GEHC
-        if (IS_GEHC) {
-            // Export arrays for multi-shot gradients
-            std::vector<int> shotShapeIDs(seqDesc.gradDefinitions[i].shotShapeIDs, 
-                                           seqDesc.gradDefinitions[i].shotShapeIDs + seqDesc.gradDefinitions[i].numShots);
-            std::vector<float> maxAmplitudes(seqDesc.gradDefinitions[i].maxAmplitude,
-                                              seqDesc.gradDefinitions[i].maxAmplitude + seqDesc.gradDefinitions[i].numShots);
-            std::vector<float> slewRates(seqDesc.gradDefinitions[i].slewRate,
-                                          seqDesc.gradDefinitions[i].slewRate + seqDesc.gradDefinitions[i].numShots);
-            std::vector<float> energies(seqDesc.gradDefinitions[i].energy,
-                                         seqDesc.gradDefinitions[i].energy + seqDesc.gradDefinitions[i].numShots);
-            std::vector<float> firstValues(seqDesc.gradDefinitions[i].firstValue,
-                                            seqDesc.gradDefinitions[i].firstValue + seqDesc.gradDefinitions[i].numShots);
-            std::vector<float> lastValues(seqDesc.gradDefinitions[i].lastValue,
-                                           seqDesc.gradDefinitions[i].lastValue + seqDesc.gradDefinitions[i].numShots);
-            entry["max_amplitude"] = maxAmplitudes;
-            entry["slew_rate"] = slewRates;
-            entry["energy"] = energies;
-            if (seqDesc.gradDefinitions[i].type != 0) {
-                entry["shot_shape_ids"] = shotShapeIDs;
-                entry["first_value"] = firstValues;
-                entry["last_value"] = lastValues;
-            }
+#if VENDOR == GEHC
+        // Export arrays for multi-shot gradients
+        std::vector<int> shotShapeIDs(seqDesc.gradDefinitions[i].shotShapeIDs, 
+                                        seqDesc.gradDefinitions[i].shotShapeIDs + seqDesc.gradDefinitions[i].numShots);
+        std::vector<float> maxAmplitudes(seqDesc.gradDefinitions[i].maxAmplitude,
+                                        seqDesc.gradDefinitions[i].maxAmplitude + seqDesc.gradDefinitions[i].numShots);
+        std::vector<float> slewRates(seqDesc.gradDefinitions[i].slewRate,
+                                        seqDesc.gradDefinitions[i].slewRate + seqDesc.gradDefinitions[i].numShots);
+        std::vector<float> energies(seqDesc.gradDefinitions[i].energy,
+                                        seqDesc.gradDefinitions[i].energy + seqDesc.gradDefinitions[i].numShots);
+        std::vector<float> firstValues(seqDesc.gradDefinitions[i].firstValue,
+                                        seqDesc.gradDefinitions[i].firstValue + seqDesc.gradDefinitions[i].numShots);
+        std::vector<float> lastValues(seqDesc.gradDefinitions[i].lastValue,
+                                        seqDesc.gradDefinitions[i].lastValue + seqDesc.gradDefinitions[i].numShots);
+        entry["max_amplitude"] = maxAmplitudes;
+        entry["slew_rate"] = slewRates;
+        entry["energy"] = energies;
+        if (seqDesc.gradDefinitions[i].type != 0) {
+            entry["shot_shape_ids"] = shotShapeIDs;
+            entry["first_value"] = firstValues;
+            entry["last_value"] = lastValues;
         }
 #endif
         gradDefsList.append(entry);
@@ -751,15 +747,19 @@ static py::dict _get_tr_acoustic_spectra(
 
 static py::dict _get_pns(
     _PulserverSeqFile& seqfile,
-#ifdef IS_GEHC
+    float pns_threshold,
     float chronaxie_us,
     float rheobase,
-#else
-    float tau_us,
-#endif
-    int numTRCopies,
+    float alpha,
     bool storeWaveforms
 ) {
+#if VENDOR != GEHC
+    throw std::runtime_error(
+        "PNS computation is currently only implemented for GE/GEHC vendor. "
+        "Compiled with VENDOR=" + std::to_string(VENDOR)
+    );
+#endif
+
     if (!seqfile.seq) {
         throw std::runtime_error("SeqFile pointer is null");
     }
@@ -805,28 +805,21 @@ static py::dict _get_pns(
         return output;
     }
 
-    // Extract TR duration from descriptor
-    float trDuration_us = seqDesc.trDescriptor.trDuration_us;
-
     // Step 4: Set up PNS params
     pulseqlib_PNSParams params;
-#ifdef IS_GEHC
     params.chronaxie_us = chronaxie_us;
     params.rheobase = rheobase;
-#else
-    params.tau_us = tau_us;
-#endif
+    params.alpha = alpha;
 
-    // Step 5: Call computePNS
+    // Step 5: Call computePNS (no numTRCopies - uses circular padding automatically)
     pulseqlib_PNSResult pnsResult;
     memset(&pnsResult, 0, sizeof(pnsResult));
     
     code = pulseqlib_computePNS(
+        pns_threshold,
         &waveforms,
         0.5f * seqDesc.gradRasterTime_us,  // Interpolated raster time
         &params,
-        numTRCopies,
-        trDuration_us,
         storeWaveforms ? 1 : 0,
         &pnsResult,
         &diag
@@ -1017,13 +1010,10 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     m.def("_get_pns",
           &_get_pns,
           py::arg("seqfile"),
-#ifdef IS_GEHC
+          py::arg("pns_threshold"),
           py::arg("chronaxie_us"),
           py::arg("rheobase"),
-#else
-          py::arg("tau_us"),
-#endif
-          py::arg("num_tr_copies") = 1,
+          py::arg("alpha"),
           py::arg("store_waveforms") = false,
           R"pbdoc(
             Compute Peripheral Nerve Stimulation (PNS) for gradient waveforms.
@@ -1035,23 +1025,14 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
             ----------
             seqfile : _PulserverSeqFile
                 The loaded sequence file
-)pbdoc"
-#ifdef IS_GEHC
-          R"pbdoc(
+            pns_threshold : float
+                PNS threshold in percent (e.g., 80.0 for 80% of threshold);
             chronaxie_us : float
                 Chronaxie time constant in microseconds (GE model)
             rheobase : float
                 Rheobase - minimum slew rate for stimulation Smin in T/m/s (GE model)
-)pbdoc"
-#else
-          R"pbdoc(
-            tau_us : float
-                Time constant tau in microseconds (Siemens SAFE model)
-)pbdoc"
-#endif
-          R"pbdoc(
-            num_tr_copies : int
-                Number of TR copies to concatenate for analysis. Default is 1.
+            alpha : float
+                Alpha parameter for PNS (GE model)
             store_waveforms : bool
                 If True, return PNS waveforms for each axis. Default is False.
                 
