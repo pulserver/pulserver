@@ -934,11 +934,14 @@ def _plot_acoustic_spectra(
                         fontsize=12, fontweight='bold')
             ax.set_ylim(-0.5, num_windows - 0.5)
             
-            # Set y-ticks to show each window
-            ax.set_yticks(np.arange(0, num_windows))
-            ax.set_yticklabels([str(i) for i in range(num_windows)], fontsize=9)
+            # Adaptive y-ticks: aim for ~10 ticks maximum for readability
+            max_ticks = 10
+            tick_stride = max(1, int(np.ceil(num_windows / max_ticks)))
+            yticks = np.arange(0, num_windows, tick_stride)
+            ax.set_yticks(yticks)
+            ax.set_yticklabels([str(int(i)) for i in yticks], fontsize=9)
             
-            # Add white separator lines between windows
+            # Add white separator lines between windows (always at every window edge)
             for win_idx in np.arange(0.5, num_windows, 1):
                 ax.axhline(win_idx, color='white', linestyle='-', linewidth=0.5, alpha=0.6)
             
