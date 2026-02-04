@@ -26,10 +26,6 @@ extern "C" {
 #define  DETECT_REAL_RF 0
 #endif
 
-#ifndef IS_GEHC
-#define  IS_GEHC 1
-#endif 
-
 /** 
  * Default ALLOC to malloc if it's not already defined
  *
@@ -134,6 +130,7 @@ int pulseqlib_getTRAcousticSpectra(
     pulseqlib_Diagnostic* diag);
 
 int pulseqlib_computePNS(
+    const float gamma_hz_per_tesla,
     const float pns_threshold,
     const pulseqlib_TRGradientWaveforms* waveforms,
     float gradRasterTime_us,

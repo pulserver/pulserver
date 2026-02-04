@@ -764,6 +764,9 @@ static py::dict _get_pns(
         throw std::runtime_error("SeqFile pointer is null");
     }
 
+    // Parse gamma from seqfile
+    float gamma = seqfile.seq->opts.gamma;  // in Hz/T
+
     // Initialize sequence descriptor
     pulseqlib_SequenceDescriptor seqDesc;
     memset(&seqDesc, 0, sizeof(seqDesc));
@@ -816,6 +819,7 @@ static py::dict _get_pns(
     memset(&pnsResult, 0, sizeof(pnsResult));
     
     code = pulseqlib_computePNS(
+        gamma,
         pns_threshold,
         &waveforms,
         0.5f * seqDesc.gradRasterTime_us,  // Interpolated raster time

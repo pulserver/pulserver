@@ -8425,7 +8425,7 @@ static int build_pns_kernel(
 {
     int n, i;
     float tau;
-    float c, dt;
+    float c, dt, c_s, dt_s;
     float* k;
     float denom;
     float Smin;
@@ -8434,24 +8434,26 @@ static int build_pns_kernel(
     
     if (c <= 0.0f) return PULSEQLIB_ERR_PNS_INVALID_CHRONAXIE;
     if (params->rheobase <= 0.0f) return PULSEQLIB_ERR_PNS_INVALID_RHEOBASE;
-    if (params->alpha <= 0.0f) return PULSEQLIB_ERR_PNS_INVALID_PARAMS;  /* Need alpha > 0 */
+    if (params->alpha <= 0.0f) return PULSEQLIB_ERR_PNS_INVALID_PARAMS;
     
-    /* Smin = rheobase / alpha */
+    /* Convert to seconds for proper dimensional analysis */
+    c_s = c * 1e-6f;      /* chronaxie from µs to s */
+    dt_s = dt_us * 1e-6f; /* raster from µs to s */
+    
+    /* Smin = rheobase / alpha (T/m/s) */
     Smin = params->rheobase / params->alpha;
     
-    dt = dt_us;
-    
     /* Kernel length: 20 * chronaxie / dt */
-    n = (int)(PNS_KERNEL_DURATION_FACTOR * c / dt) + 1;
+    n = (int)(PNS_KERNEL_DURATION_FACTOR * c_s / dt_s) + 1;
     
     k = (float*)ALLOC((size_t)n * sizeof(float));
     if (!k) return PULSEQLIB_ERR_ALLOC_FAILED;
     
     /* f(tau) = dt/Smin * c / (c + tau)^2, tau = dt, 2*dt, ..., n*dt */
     for (i = 0; i < n; ++i) {
-        tau = (float)(i + 1) * dt;  /* tau starts at dt, not 0 */
-        denom = (c + tau) * (c + tau);
-        k[i] = (dt / Smin) * (c / denom);
+        tau = (float)i * dt_s;  /* tau in seconds */
+        denom = (c_s + tau) * (c_s + tau);
+        k[i] = (dt_s / Smin) * (c_s / denom);
     }
     
     *kernel = k;
@@ -8473,13 +8475,18 @@ static void compute_slew_rate(
     const float* waveform,
     int numSamples,
     float dt_us,
+    float gamma_hz_per_tesla,
     float* slewRate)
 {
+    float grad_i;
+    float grad_ip1;
     int i;
     float dt_s = dt_us * 1e-6f;  /* Convert to seconds for T/m/s */
     
     for (i = 0; i < numSamples - 1; ++i) {
-        slewRate[i] = (waveform[i + 1] - waveform[i]) / dt_s;
+        grad_i = waveform[i] / gamma_hz_per_tesla;       /* Convert Hz/m to T/m */
+        grad_ip1 = waveform[i + 1] / gamma_hz_per_tesla; /* Convert Hz/m to T/m */
+        slewRate[i] = (grad_ip1 - grad_i) / dt_s;
     }
 }
 
@@ -8590,6 +8597,7 @@ static int process_pns_axis_circular(
     int numSamples,
     int kernelLen,
     float gradRasterTime_us,
+    float gamma_hz_per_tesla,
     const float* kernel,
     float* paddedWaveform,   /* Working buffer: size = numSamples + kernelLen */
     float* slewRate,         /* Working buffer: size = numSamples + kernelLen - 1 */
@@ -8619,7 +8627,7 @@ static int process_pns_axis_circular(
     }
     
     /* Compute slew rate: s[i] = (g[i+1] - g[i]) / dt */
-    compute_slew_rate(paddedWaveform, paddedLen, gradRasterTime_us, slewRate);
+    compute_slew_rate(paddedWaveform, paddedLen, gradRasterTime_us, gamma_hz_per_tesla, slewRate);
     
     /* Convolve with kernel */
     returnCode = convolve_fft(slewRate, slewLen, kernel, kernelLen, pnsConv);
@@ -8645,6 +8653,7 @@ static int process_pns_axis_circular(
 }
 
 int pulseqlib_computePNS(
+    const float gamma_hz_per_tesla,
     const float pns_threshold,
     const pulseqlib_TRGradientWaveforms* waveforms,
     float gradRasterTime_us,
@@ -8745,7 +8754,7 @@ int pulseqlib_computePNS(
     /* Process X axis */
     returnCode = process_pns_axis_circular(
         waveforms->waveformGx, waveforms->numSamplesGx,
-        kernelLen, gradRasterTime_us, kernel,
+        kernelLen, gradRasterTime_us, gamma_hz_per_tesla, kernel,
         paddedWaveform, slewRate, pnsConv, pnsAxis, pnsTotal,
         storeWaveforms ? pnsX : NULL);
     if (PULSEQLIB_FAILED(returnCode)) goto cleanup;
@@ -8753,7 +8762,7 @@ int pulseqlib_computePNS(
     /* Process Y axis */
     returnCode = process_pns_axis_circular(
         waveforms->waveformGy, waveforms->numSamplesGy,
-        kernelLen, gradRasterTime_us, kernel,
+        kernelLen, gradRasterTime_us, gamma_hz_per_tesla, kernel,
         paddedWaveform, slewRate, pnsConv, pnsAxis, pnsTotal,
         storeWaveforms ? pnsY : NULL);
     if (PULSEQLIB_FAILED(returnCode)) goto cleanup;
@@ -8761,7 +8770,7 @@ int pulseqlib_computePNS(
     /* Process Z axis */
     returnCode = process_pns_axis_circular(
         waveforms->waveformGz, waveforms->numSamplesGz,
-        kernelLen, gradRasterTime_us, kernel,
+        kernelLen, gradRasterTime_us, gamma_hz_per_tesla, kernel,
         paddedWaveform, slewRate, pnsConv, pnsAxis, pnsTotal,
         storeWaveforms ? pnsZ : NULL);
     if (PULSEQLIB_FAILED(returnCode)) goto cleanup;
