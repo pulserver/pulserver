@@ -7278,154 +7278,66 @@ void pulseqlib_trAcousticSpectraFree(pulseqlib_TRAcousticSpectra* spectra)
 }
 
 /* ============== Acoustic Resonance Detection ============== */
-#define BASELINE_WIN   5      /* median window (±5 bins) */
-#define Q_BINS         3      /* distance for Q check */
-#define DB_THRESH      6.0f   /* minimum contrast in dB */
-#define Q_RATIO        1.5f   /* peak / side ratio */
-#define DR_RATIO       5.0f   /* global dynamic range */
-#define DB_RATIO       1.414f /* 10^(3/20) */
+#define PEAK_LOG10_THRESHOLD    1.75f   /* Threshold in log10 domain */
+#define PEAK_NORM_SCALE         10.0f   /* Normalization scale factor */
+#define PEAK_EPS                1e-30f  /* Epsilon to avoid log(0) - placed INSIDE log */
 
-static float median_f(const float *x, int n) {
-    float tmp[32];
-    int i, j;
-    float v;
-
-    for (i = 0; i < n; ++i)
-        tmp[i] = x[i];
-
-    for (i = 1; i < n; ++i) {
-        v = tmp[i];
-        j = i - 1;
-        while (j >= 0 && tmp[j] > v) {
-            tmp[j + 1] = tmp[j];
-            j--;
-        }
-        tmp[j + 1] = v;
-    }
-
-    return (n & 1) ? tmp[n >> 1] : 0.5f * (tmp[(n >> 1) - 1] + tmp[n >> 1]);
-}
-
-static float local_median_f(const float *x, int n, int i, int w) {
-    float buf[32];
-    int k, cnt = 0;
-
-    for (k = i - w; k <= i + w; ++k) {
-        if (k >= 0 && k < n)
-            buf[cnt++] = x[k];
-    }
-
-    return median_f(buf, cnt);
-}
-
-// static void detect_resonances(int n, const float *mag, int *peaks) {
-//     int i;
-//     float min_v, max_v;
-//     float baseline;
-//     float curv;
-//     float left, right, center;
-
-//     if (n <= 0 || !mag || !peaks)
-//         return;
-
-//     for (i = 0; i < n; ++i)
-//         peaks[i] = 0;
-
-//     /* global dynamic range sanity check */
-//     min_v = max_v = mag[0];
-//     for (i = 1; i < n; ++i) {
-//         if (mag[i] < min_v) min_v = mag[i];
-//         if (mag[i] > max_v) max_v = mag[i];
-//     }
-
-//     if (max_v < DR_RATIO * min_v)
-//         return;
-
-//     for (i = BASELINE_WIN; i < n - BASELINE_WIN; ++i) {
-//         left = mag[i - 1];
-//         right = mag[i + 1];
-//         center = mag[i];
-
-//         /* 1. local maximum */
-//         if (center <= left || center <= right)
-//             continue;
-
-//         /* 2. curvature (second difference) */
-//         curv = left - 2.0f * center + right;
-//         if (curv >= 0.0f)
-//             continue;
-
-//         /* 3. local baseline (median) */
-//         baseline = local_median_f(mag, n, i, BASELINE_WIN);
-
-//         if (mag[i] < DB_RATIO * baseline)
-//             continue;
-
-//         /* 4. finite bandwidth / Q constraint */
-//         if (mag[i] < Q_RATIO * mag[i - Q_BINS]) continue;
-//         if (mag[i] < Q_RATIO * mag[i + Q_BINS]) continue;
-
-//         peaks[i] = 1;
-//     }
-// }
-// Temporary debug version - just find local maxima above threshold
+/**
+ * @brief Detect resonance peaks using normalized log-scale criterion
+ * 
+ * Original criterion (exactly as implemented):
+ *   norm[i] = (spectrum[i] / max(spectrum) + eps) * 10.0
+ *   criterion[i] = log10(norm[i]) - mean(log10(norm))
+ *   peak if criterion[i] > 1.75
+ * 
+ * Note: eps is placed inside the normalization (before log), not outside,
+ * to match the exact behavior of your empirical formula.
+ * 
+ * @param n      Number of frequency bins
+ * @param mag    Input spectrum (magnitude)
+ * @param peaks  Output: 1 where peak detected, 0 otherwise
+ */
 static void detect_resonances(int n, const float *mag, int *peaks) {
     int i;
-    float max_val, threshold;
+    float maxVal = 0.0f;
+    float sumLog = 0.0f;
+    float meanLog;
+    float norm;
+    float logVal;
     
-    if (n <= 0 || !mag || !peaks)
-        return;
+    /* Initialize output */
+    if (n <= 0 || !mag || !peaks) return;
     
-    for (i = 0; i < n; ++i)
+    for (i = 0; i < n; ++i) {
         peaks[i] = 0;
+    }
+    
+    if (n < 3) return;
     
     /* Find max */
-    max_val = mag[0];
-    for (i = 1; i < n; ++i) {
-        if (mag[i] > max_val) max_val = mag[i];
-    }
-    
-    if (max_val < 1e-12f)
-        return;
-    
-    threshold = 0.1f * max_val;  /* -20 dB */
-    
-    /* Find local maxima above threshold */
-    for (i = 1; i < n - 1; ++i) {
-        if (mag[i] > mag[i-1] && mag[i] > mag[i+1] && mag[i] > threshold) {
-            peaks[i] = 1;
-        }
-    }
-}
-
-#define HARMONIC_THRESH_RATIO 0.1f  /* -20 dB from max */
-
-static void detect_harmonic_peaks(int n, const float *mag, int *peaks) {
-    int i;
-    float max_val;
-    float threshold;
-    
-    if (n <= 0 || !mag || !peaks)
-        return;
-    
-    for (i = 0; i < n; ++i)
-        peaks[i] = 0;
-    
-    /* Find max value */
-    max_val = mag[0];
-    for (i = 1; i < n; ++i) {
-        if (mag[i] > max_val) max_val = mag[i];
-    }
-    
-    /* Skip if spectrum is essentially zero */
-    if (max_val < 1e-12f)
-        return;
-    
-    /* Mark harmonics above threshold */
-    threshold = HARMONIC_THRESH_RATIO * max_val;
     for (i = 0; i < n; ++i) {
-        if (mag[i] > threshold) {
-            peaks[i] = 1;
+        if (mag[i] > maxVal) maxVal = mag[i];
+    }
+    
+    if (maxVal <= 0.0f) return;
+    
+    /* First pass: compute normalized spectrum and sum of logs */
+    for (i = 0; i < n; ++i) {
+        norm = (mag[i] / maxVal + PEAK_EPS) * PEAK_NORM_SCALE;
+        sumLog += (float)log10((double)norm);
+    }
+    
+    meanLog = sumLog / (float)n;
+    
+    /* Second pass: find local maxima above threshold */
+    for (i = 1; i < n - 1; ++i) {
+        if (mag[i] > mag[i-1] && mag[i] > mag[i+1]) {
+            norm = (mag[i] / maxVal + PEAK_EPS) * PEAK_NORM_SCALE;
+            logVal = (float)log10((double)norm);
+            
+            if (logVal - meanLog > PEAK_LOG10_THRESHOLD) {
+                peaks[i] = 1;
+            }
         }
     }
 }
@@ -7438,8 +7350,7 @@ static int check_acoustic_violations(
     const pulseqlib_ForbiddenBand* forbiddenBands,
     int numBands,
     pulseqlib_AcousticViolation* violation,
-    int** outPeaks, 
-    int isHarmonic)
+    int** outPeaks)
 {
     int* peaks = NULL;
     int i, b;
@@ -7471,11 +7382,7 @@ static int check_acoustic_violations(
     }
     
     /* Detect peaks in spectrum */
-    if (isHarmonic) {
-        detect_harmonic_peaks(numFreqBins, spectrum, peaks);
-    } else {
-        detect_resonances(numFreqBins, spectrum, peaks);
-    }
+    detect_resonances(numFreqBins, spectrum, peaks);
     
     /* Find the worst peak in any forbidden band */
     worstPeakFreq = 0.0f;
@@ -7635,7 +7542,7 @@ static int compute_sliding_window_spectra(
                     forbiddenBands,
                     numForbiddenBands,
                     &violation,
-                    outPeaks ? &windowPeaks : NULL, 0);
+                    outPeaks ? &windowPeaks : NULL);
                 if (PULSEQLIB_FAILED(result)) {
                     if (windowSpectrum) FREE(windowSpectrum);
                     acousticWaveformFree(&acoustic);
@@ -7908,7 +7815,7 @@ static int compute_sequence_spectrum(
             maxEnv,
             forbiddenBands,
             numForbiddenBands,
-            &violation, outSeqPeaks, 1);
+            &violation, outSeqPeaks);
         if (PULSEQLIB_FAILED(result)) {
             goto cleanup;
         }
@@ -7919,7 +7826,7 @@ static int compute_sequence_spectrum(
             result = PULSEQLIB_ERR_ALLOC_FAILED;
             goto cleanup;
         }
-        detect_harmonic_peaks(numPicked, *seqSpectrum, seqPeaks);  /* FIX: was outputFreqBinsFull, should be numPicked */
+        detect_resonances(numPicked, *seqSpectrum, seqPeaks);  /* FIX: was outputFreqBinsFull, should be numPicked */
         *outSeqPeaks = seqPeaks;
     }
 

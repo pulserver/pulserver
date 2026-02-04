@@ -11,9 +11,15 @@ __all__ = [
 ]
 
 import copy
+import warnings
+
 from types import SimpleNamespace
 
 import numpy as np
+
+import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize
+    
 import pypulseq as pp
 
 from ._extension._pulseqlib_wrapper import (
@@ -385,11 +391,12 @@ def get_tr_gradient_waveforms(seq: PulserverSequence) -> SimpleNamespace:
 
 def get_tr_acoustic_spectra(
     seq: PulserverSequence, 
-    target_window_size: int = 4096,
-    target_spectral_resolution: float = 5.0,
-    max_frequency: float | None = None,
+    window_duration: float = 0.025,
+    spectral_resolution: float = 5.0,
+    max_frequency: float = 3000.0,
     combined: bool = False,
     forbidden_bands: list[dict] | None = None,
+    do_plot: bool = False,
 ) -> SimpleNamespace:
     """
     Compute acoustic spectra for gradient waveforms in a TR.
@@ -401,16 +408,15 @@ def get_tr_acoustic_spectra(
     ----------
     seq : PulserverSequence
         The sequence to analyze.
-    target_window_size : int
-        Target window size in samples for sliding window analysis. Default is 4096.
-    target_spectral_resolution : float
+    window_duration : float
+        Target window size in seconds for sliding window analysis. Default is 0.05 s.
+    spectral_resolution : float
         Target frequency resolution in Hz. Default is 5.0 Hz.
         FFT size is automatically chosen via zero-padding to achieve approximately
         this resolution.
-    max_frequency : float | None
-        Maximum frequency to include in output (Hz). Default is None (full spectrum
-        up to Nyquist). Use a positive value to reduce output size by including
-        only frequencies up to the specified maximum.
+    max_frequency : float
+        Maximum frequency to include in output (Hz). Default is 3000.0 Hz.
+        If None, the full spectrum up to Nyquist is returned.
     combined : bool
         If True, return pointwise maximum across all windows (1D arrays).
         If False, stack all windows (2D arrays). Default is False.
@@ -421,6 +427,8 @@ def get_tr_acoustic_spectra(
         - 'freq_max_hz': float, maximum frequency of the band (Hz)
         - 'max_amplitude': float, maximum allowed gradient amplitude (Hz/m)
         If None or empty list, no acoustic check is performed.
+    do_plot : bool
+        If True, plot the computed spectra. Default is False.
         
     Returns
     -------
@@ -434,13 +442,16 @@ def get_tr_acoustic_spectra(
             - If combined=True: shape (num_freq_bins,)
         - spectra_gy: np.ndarray, Gy spectra (same shape as spectra_gx)
         - spectra_gz: np.ndarray, Gz spectra (same shape as spectra_gx)
-        
-        Full TR spectra (continuous envelope):
-        - frequencies_full: np.ndarray of shape (num_freq_bins_full,), frequency values in Hz
-        - spectrum_gx_full: np.ndarray of shape (num_freq_bins_full,), Gx full TR spectrum
-        - spectrum_gy_full: np.ndarray of shape (num_freq_bins_full,), Gy full TR spectrum
-        - spectrum_gz_full: np.ndarray of shape (num_freq_bins_full,), Gz full TR spectrum
-        
+        - max_envelope_gx: np.ndarray of shape (num_freq_bins,), max gradient envelope (mT/m)
+        - max_envelope_gy: np.ndarray of shape (num_freq_bins,), max gradient envelope (mT/m)
+        - max_envelope_gz: np.ndarray of shape (num_freq_bins,), max gradient envelope (mT/m)
+        - peaks_gx: np.ndarray of shape (num_windows, num_freq_bins) or None
+            - Binary array indicating detected peaks along X (None if combined=True)
+        - peaks_gy: np.ndarray of shape (num_windows, num_freq_bins) or None
+            - Binary array indicating detected peaks along Y (None if combined=True)
+        - peaks_gz: np.ndarray of shape (num_windows, num_freq_bins) or None
+            - Binary array indicating detected peaks along Z (None if combined=True)
+                
         N-TR sequence spectra (discrete lines at harmonics, only if numTRs > 1):
         - num_trs: Number of TR repetitions
         - tr_duration_us: TR duration in microseconds
@@ -449,6 +460,15 @@ def get_tr_acoustic_spectra(
         - spectrum_gx_seq: np.ndarray, Gx sequence spectrum at harmonics
         - spectrum_gy_seq: np.ndarray, Gy sequence spectrum at harmonics
         - spectrum_gz_seq: np.ndarray, Gz sequence spectrum at harmonics
+        - max_envelope_gx_seq: np.ndarray of shape (num_harmonics,), max gradient envelope (mT/m)
+        - max_envelope_gy_seq: np.ndarray of shape (num_harmonics,), max gradient envelope (mT/m)
+        - max_envelope_gz_seq: np.ndarray of shape (num_harmonics,), max gradient envelope (mT/m)
+        - peaks_gx_seq: np.ndarray of shape (num_harmonics,) or None
+            - Binary array indicating detected peaks along X
+        - peaks_gy_seq: np.ndarray of shape (num_harmonics,) or None
+            - Binary array indicating detected peaks along Y
+        - peaks_gz_seq: np.ndarray of shape (num_harmonics,) or None
+            - Binary array indicating detected peaks along Z
     
     Notes
     -----
@@ -460,13 +480,8 @@ def get_tr_acoustic_spectra(
        - Subtract mean (DC removal)
        - Apply cosine taper window
        - Compute magnitude spectrum via real FFT
-    
-    2. **Full TR spectrum**: Single spectrum for entire TR (continuous envelope)
-       - Uses entire TR as one window
-       - Same spectral resolution and max frequency as sliding window
-       - Useful for identifying dominant frequencies across the full TR
-       
-    3. **N-TR sequence spectrum**: Spectral lines at harmonics of 1/TR (discrete)
+           
+    2. **N-TR sequence spectrum**: Spectral lines at harmonics of 1/TR (discrete)
        - Only computed if numTRs > 1
        - Samples complex FFT at harmonic frequencies k*f0 where f0 = 1/TR
        - Uses linear interpolation of complex FFT before taking magnitude
@@ -477,8 +492,8 @@ def get_tr_acoustic_spectra(
     
     Examples
     --------
-    >>> # Get all spectra with 5 Hz resolution up to 2000 Hz
-    >>> result = get_tr_acoustic_spectra(seq, max_frequency=2000.0)
+    >>> # Get all spectra with 5 Hz resolution up to 3000 Hz
+    >>> result = get_tr_acoustic_spectra(seq)
     >>> 
     >>> # Plot sliding window max vs full TR vs sequence spectrum
     >>> plt.plot(result.frequencies, result.spectra_gx.max(axis=0), label='Sliding window max')
@@ -492,11 +507,19 @@ def get_tr_acoustic_spectra(
     
     if forbidden_bands is None:
         forbidden_bands = []
+        
+    # Get gamma and gradient raster from sequence system
+    gamma = seq.system.gamma  # in Hz/T
+    grad_raster_time = seq.system.grad_raster_time  # in seconds
     
+    # Compute window size
+    target_window_size = int(2.0 * window_duration / grad_raster_time)
+    
+    # Run the C++ extension
     result_dict = _get_tr_acoustic_spectra(
         seq._cseq, 
         target_window_size, 
-        target_spectral_resolution, 
+        spectral_resolution, 
         max_frequency, 
         combined,
         forbidden_bands,
@@ -526,20 +549,23 @@ def get_tr_acoustic_spectra(
         spectra_gx=spectra_gx,
         spectra_gy=spectra_gy,
         spectra_gz=spectra_gz,
-        # Max envelope per window (sliding window)
-        max_envelope_gx=np.asarray(result_dict["max_envelope_gx"], dtype=np.float32),
-        max_envelope_gy=np.asarray(result_dict["max_envelope_gy"], dtype=np.float32),
-        max_envelope_gz=np.asarray(result_dict["max_envelope_gz"], dtype=np.float32),
-        # Full TR spectra
-        frequencies_full=np.asarray(result_dict["frequencies_full"], dtype=np.float32),
-        spectrum_gx_full=np.asarray(result_dict["spectra_gx_full"], dtype=np.float32),
-        spectrum_gy_full=np.asarray(result_dict["spectra_gy_full"], dtype=np.float32),
-        spectrum_gz_full=np.asarray(result_dict["spectra_gz_full"], dtype=np.float32),
-        # Max envelope for full TR
-        max_envelope_gx_full=result_dict["max_envelope_gx_full"],
-        max_envelope_gy_full=result_dict["max_envelope_gy_full"],
-        max_envelope_gz_full=result_dict["max_envelope_gz_full"],
+        max_envelope_gx=np.asarray(result_dict["max_envelope_gx"], dtype=np.float32) / gamma * 1000.0, # mT/m
+        max_envelope_gy=np.asarray(result_dict["max_envelope_gy"], dtype=np.float32) / gamma * 1000.0, # mT/m
+        max_envelope_gz=np.asarray(result_dict["max_envelope_gz"], dtype=np.float32) / gamma * 1000.0, # mT/m
     )
+    
+    # Add peak arrays for sliding window (only if not combined)
+    if not is_combined and "peaks_gx" in result_dict:
+        peaks_gx = np.asarray(result_dict["peaks_gx"], dtype=np.int32).reshape(num_windows, num_freq_bins)
+        peaks_gy = np.asarray(result_dict["peaks_gy"], dtype=np.int32).reshape(num_windows, num_freq_bins)
+        peaks_gz = np.asarray(result_dict["peaks_gz"], dtype=np.int32).reshape(num_windows, num_freq_bins)
+        result.peaks_gx = peaks_gx
+        result.peaks_gy = peaks_gy
+        result.peaks_gz = peaks_gz
+    else:
+        result.peaks_gx = None
+        result.peaks_gy = None
+        result.peaks_gz = None
     
     # Add sequence spectra if present (only when numTRs > 1)
     if "frequencies_seq" in result_dict:
@@ -550,27 +576,19 @@ def get_tr_acoustic_spectra(
         result.spectrum_gx_seq = np.asarray(result_dict["spectra_gx_seq"], dtype=np.float32)
         result.spectrum_gy_seq = np.asarray(result_dict["spectra_gy_seq"], dtype=np.float32)
         result.spectrum_gz_seq = np.asarray(result_dict["spectra_gz_seq"], dtype=np.float32)
-    
-    # Add peak arrays for sliding window (only if not combined)
-    if not is_combined and "peaks_gx" in result_dict:
-        peaks_gx = np.asarray(result_dict["peaks_gx"], dtype=np.int32).reshape(num_windows, num_freq_bins)
-        peaks_gy = np.asarray(result_dict["peaks_gy"], dtype=np.int32).reshape(num_windows, num_freq_bins)
-        peaks_gz = np.asarray(result_dict["peaks_gz"], dtype=np.int32).reshape(num_windows, num_freq_bins)
-        
-        result.peaks_gx = peaks_gx
-        result.peaks_gy = peaks_gy
-        result.peaks_gz = peaks_gz
-    else:
-        # No peaks in combined mode
-        result.peaks_gx = None
-        result.peaks_gy = None
-        result.peaks_gz = None
-    
-    # Add peak arrays for sequence spectra
-    if "peaks_gx_seq" in result_dict:
+        result.max_envelope_gx_seq=result_dict["max_envelope_gx_full"] / gamma * 1000.0, # mT/m
+        result.max_envelope_gy_seq=result_dict["max_envelope_gy_full"] / gamma * 1000.0, # mT/m
+        result.max_envelope_gz_seq=result_dict["max_envelope_gz_full"] / gamma * 1000.0, # mT/m
         result.peaks_gx_seq = np.asarray(result_dict["peaks_gx_seq"], dtype=np.int32)
         result.peaks_gy_seq = np.asarray(result_dict["peaks_gy_seq"], dtype=np.int32)
         result.peaks_gz_seq = np.asarray(result_dict["peaks_gz_seq"], dtype=np.int32)
+        
+    if do_plot:
+        _plot_acoustic_spectra(result, seq=seq, forbidden_bands=forbidden_bands)
+        
+    # Acoustic check
+    if forbidden_bands:
+        ...
     
     return result
 
@@ -649,15 +667,10 @@ def get_pns(
     Examples
     --------
     >>> # GE model
-    >>> result = get_pns(seq, pns_threshold=100.0, chronaxie_us=360.0, 
-    ...                   rheobase=20.0, alpha=0.333)
+    >>> result = get_pns(seq, chronaxie_us=360.0, rheobase=20.0, alpha=0.333)
     >>> print(f"Max PNS: {result.max_pns:.1f}%")
     >>> if result.max_pns > 100.0:
     ...     print("Warning: PNS threshold exceeded!")
-    
-    >>> # Get full waveforms for plotting
-    >>> result = get_pns(seq, chronaxie_us=360.0, rheobase=20.0, alpha=0.333,
-    ...                   store_waveforms=True)
     >>> import matplotlib.pyplot as plt
     >>> plt.plot(result.pns_total)
     >>> plt.axhline(100.0, color='r', linestyle='--', label='Threshold')
@@ -706,3 +719,268 @@ def get_pns(
             result.pns_z = np.asarray(result_dict["pns_z"], dtype=np.float32)
     
     return result
+
+
+def _plot_acoustic_spectra(
+    spectra: SimpleNamespace,
+    seq: PulserverSequence | None = None,
+    forbidden_bands: list[dict] | None = None,
+    figsize: tuple[float, float] = (16, 12),
+) -> tuple:
+    """
+    Plot acoustic spectra with waveforms and sliding windows.
+    
+    Creates a comprehensive visualization of acoustic spectra including:
+    - Full sequence spectrum with waveforms
+    - Sliding window spectra matrix (if combined=False)
+    - Detected peaks and forbidden frequency bands
+    
+    Parameters
+    ----------
+    spectra : SimpleNamespace
+        Output from get_tr_acoustic_spectra() with combined=False.
+    seq : PulserverSequence | None
+        The sequence object (needed to get waveforms and system parameters).
+        If None, waveform panel is skipped.
+    forbidden_bands : list[dict] | None
+        List of forbidden frequency bands with keys:
+        - 'freq_min_hz': float, minimum frequency (Hz)
+        - 'freq_max_hz': float, maximum frequency (Hz)
+        - 'max_amplitude': float (optional, for reference)
+    figsize : tuple[float, float]
+        Figure size (width, height) in inches. Default (16, 12).
+        
+    Returns
+    -------
+    tuple
+        (fig, axes) - Matplotlib figure and axes for further customization.
+        
+    Raises
+    ------
+    ValueError
+        If spectra is from combined=True mode (needs per-window data).
+    RuntimeError
+        If waveforms requested but seq not provided.
+        
+    Notes
+    -----
+    - Top panel: Full spectrum with overlaid waveforms
+    - Bottom panel: Sliding window spectrograms (3 subplots for X, Y, Z)
+    - Peaks marked with red stars in spectra
+    - Forbidden bands shown as black dashed lines (full spectrum) or white dashed lines (windows)
+    - Dual x-axis: frequency (Hz) and corresponding echo spacing (µs) = 1/(2*f)
+    """    
+    # Validate input
+    if not hasattr(spectra, 'spectra_gx') or not hasattr(spectra, 'peaks_gx'):
+        raise ValueError("spectra must be from get_tr_acoustic_spectra() with combined=False")
+    
+    if spectra.peaks_gx is None:
+        raise ValueError("Spectra must have peaks detected (combined=False)")
+    
+    if spectra.spectra_gx.ndim != 2:
+        num_windows = 1
+    else:
+        num_windows = spectra.spectra_gx.shape[0]
+    
+    # Get waveforms if seq provided
+    waveforms = None
+    if seq is not None:
+        try:
+            waveforms = get_tr_gradient_waveforms(seq)
+            gamma = seq.system.gamma
+        except Exception as e:
+            print(f"Warning: Could not get waveforms: {e}")
+    
+    # Create figure
+    fig = plt.figure()
+    
+    # Determine frequency range
+    freq_min = 0.0
+    freq_max = spectra.frequencies[-1]
+    
+    # ============ Panel 1: Full Sequence + Waveforms ============
+    ax_seq_spec = plt.subplot(2, 1, 1)
+    
+    # Plot spectra
+    colors = {'x': 'C0', 'y': 'C1', 'z': 'C2'}
+    labels = {'x': 'Gx', 'y': 'Gy', 'z': 'Gz'}
+    
+    for axis, (axis_name, color) in enumerate(colors.items()):
+        spec_attr = f'spectra_g{axis_name}'
+        peaks_attr = f'peaks_g{axis_name}'
+        
+        spectra_axis = getattr(spectra, spec_attr)
+        peaks_axis = getattr(spectra, peaks_attr, None)
+        
+        # Max across all windows for this axis
+        spec_max = spectra_axis.max(axis=0)
+        
+        # Plot full spectrum
+        ax_seq_spec.plot(spectra.frequencies, spec_max, color=color, linewidth=2, label=labels[axis_name])
+        
+        # Plot detected peaks
+        if peaks_axis is not None:
+            peaks_any = peaks_axis.max(axis=0) > 0  # Any window detected a peak
+            peak_freqs = spectra.frequencies[peaks_any]
+            peak_mags = spec_max[peaks_any]
+            ax_seq_spec.plot(peak_freqs, peak_mags, 
+                           marker='o', color=color, linestyle='none', 
+                           markersize=6.5, markerfacecolor=color, 
+                           markeredgecolor=color, markeredgewidth=0)
+    
+    # Add forbidden bands
+    if forbidden_bands:
+        for band in forbidden_bands:
+            freq_min_band = band['freq_min_hz']
+            freq_max_band = band['freq_max_hz']
+            ax_seq_spec.axvline(freq_min_band, color='black', linestyle='--', 
+                              linewidth=1.5, alpha=0.7)
+            ax_seq_spec.axvline(freq_max_band, color='black', linestyle='--', 
+                              linewidth=1.5, alpha=0.7)
+    
+    # Force x-axis limits
+    ax_seq_spec.set_xlim(freq_min, freq_max)
+    ax_seq_spec.set_xlabel('Frequency (Hz)', fontsize=12)
+    ax_seq_spec.set_ylabel('Magnitude [a.u.]', fontsize=12)
+    ax_seq_spec.set_title('Full Sequence Acoustic Spectrum', fontsize=14, fontweight='bold')
+    ax_seq_spec.legend(loc='upper right', fontsize=11)
+    ax_seq_spec.grid(True, alpha=0.3)
+    
+    # Add secondary x-axis (echo spacing in µs)
+    _add_echo_spacing_axis(ax_seq_spec, freq_min, freq_max)
+    
+    # ============ Panel 2: Waveforms (always in first figure) ============
+    if waveforms is not None:
+        ax_wf = plt.subplot(2, 1, 2)
+        
+        # Convert waveforms to mT/m
+        wf_gx_mtpm = waveforms.waveform_gx / gamma * 1000.0
+        wf_gy_mtpm = waveforms.waveform_gy / gamma * 1000.0
+        wf_gz_mtpm = waveforms.waveform_gz / gamma * 1000.0
+        
+        # Convert time to ms
+        time_gx_ms = waveforms.time_gx / 1000.0
+        time_gy_ms = waveforms.time_gy / 1000.0
+        time_gz_ms = waveforms.time_gz / 1000.0
+        
+        ax_wf.plot(time_gx_ms, wf_gx_mtpm, color=colors['x'], 
+                  linewidth=2, label='Gx')
+        ax_wf.plot(time_gy_ms, wf_gy_mtpm, color=colors['y'], 
+                  linewidth=2, label='Gy')
+        ax_wf.plot(time_gz_ms, wf_gz_mtpm, color=colors['z'], 
+                  linewidth=2, label='Gz')
+        
+        ax_wf.set_xlabel('Time (ms)', fontsize=12)
+        ax_wf.set_ylabel('Gradient Amplitude (mT/m)', fontsize=12)
+        ax_wf.set_title('TR Gradient Waveforms', fontsize=14, fontweight='bold')
+        ax_wf.legend(loc='upper right', fontsize=11)
+        ax_wf.grid(True, alpha=0.3)
+    
+    plt.figure(fig.number)  # Ensure we're still on fig
+    plt.tight_layout(rect=[0, 0, 1, 1])
+    
+    # ============ Panel 3: Sliding Window Spectrograms (separate figure if num_windows > 1) ============
+    fig2 = None
+    if num_windows > 1:
+        fig2 = plt.figure()
+
+        # Create three subplots for X, Y, Z
+        axes_windows = []
+        im = None
+        
+        for idx, (axis_name, color) in enumerate(colors.items()):
+            ax = plt.subplot(1, 3, 1 + idx)
+            axes_windows.append(ax)
+            
+            spec_attr = f'spectra_g{axis_name}'
+            peaks_attr = f'peaks_g{axis_name}'
+            
+            spectra_matrix = getattr(spectra, spec_attr)
+            peaks_matrix = getattr(spectra, peaks_attr, None)
+            
+            # Create spectrogram
+            im = ax.pcolormesh(spectra.frequencies, np.arange(num_windows), 
+                              spectra_matrix, cmap='viridis', shading='auto',
+                              norm=Normalize(vmin=spectra_matrix.min(), 
+                                           vmax=spectra_matrix.max()))
+            
+            # Overlay peaks with red asterisks
+            if peaks_matrix is not None:
+                peak_coords = np.where(peaks_matrix)
+                if len(peak_coords[0]) > 0:
+                    window_indices = peak_coords[0]
+                    freq_indices = peak_coords[1]
+                    peak_freqs = spectra.frequencies[freq_indices]
+                    ax.plot(peak_freqs, window_indices, 
+                           marker='*', color='red', linestyle='none',
+                           markersize=16, markerfacecolor='red', 
+                           markeredgecolor='red', markeredgewidth=0)
+            
+            # Add forbidden bands as white dashed lines
+            if forbidden_bands:
+                for band in forbidden_bands:
+                    freq_min_band = band['freq_min_hz']
+                    freq_max_band = band['freq_max_hz']
+                    ax.axvline(freq_min_band, color='white', linestyle='--', 
+                             linewidth=1.5, alpha=0.8)
+                    ax.axvline(freq_max_band, color='white', linestyle='--', 
+                             linewidth=1.5, alpha=0.8)
+            
+            # Force x-axis limits
+            ax.set_xlim(freq_min, freq_max)
+            ax.set_xlabel('Frequency (Hz)', fontsize=11)
+            ax.set_ylabel('Window Index', fontsize=11)
+            ax.set_title(f'Sliding Window - {labels[axis_name]}', 
+                        fontsize=12, fontweight='bold')
+            ax.set_ylim(-0.5, num_windows - 0.5)
+            
+            # Add secondary x-axis for echo spacing
+            _add_echo_spacing_axis(ax, freq_min, freq_max)
+        
+        # Add common colorbar below the three subplots
+        if im is not None:
+            cbar_ax = fig2.add_axes([0.15, 0.05, 0.7, 0.02])
+            cbar = fig2.colorbar(im, cax=cbar_ax, orientation='horizontal')
+            cbar.set_label('Magnitude [a.u.]', fontsize=11)
+        
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            fig2.tight_layout(rect=[0, 0.08, 1, 1])
+    
+    return fig, fig.axes
+
+
+def _add_echo_spacing_axis(ax, freq_min, freq_max):
+    """
+    Add a secondary x-axis showing echo spacing (µs) = 1/(2*frequency).
+    Uses proper inverse transformation so tick values are correct.
+    """
+    ax_top = ax.twiny()
+    
+    # Get the primary axis limits in data coordinates
+    ax_top.set_xlim(ax.get_xlim())
+        
+    def freq_to_es(freq_hz):
+        """Convert frequency (Hz) to echo spacing (µs)."""
+        if freq_hz <= 0:
+            return np.inf
+        return 1e6 / (2 * freq_hz)
+    
+    def es_to_freq(es_us):
+        """Convert echo spacing (µs) to frequency (Hz)."""
+        if es_us <= 0:
+            return np.inf
+        return 1e6 / (2 * es_us)
+    
+    # Get current ticks from primary axis
+    primary_ticks = ax.get_xticks()
+    # Filter out negative ticks
+    primary_ticks = primary_ticks[primary_ticks >= 0]
+        
+    # Set ticks and labels
+    ax_top.set_xticks(primary_ticks)
+    ax_top.set_xticklabels([f'{freq_to_es(f):.1f}' if f > 0 else '∞' for f in primary_ticks])
+    ax_top.set_xlim(ax.get_xlim())
+    ax_top.set_xlabel('Echo Spacing (µs)', fontsize=12)
+    
+    return ax_top
