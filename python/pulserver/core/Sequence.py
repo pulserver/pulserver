@@ -391,7 +391,7 @@ def get_tr_gradient_waveforms(seq: PulserverSequence) -> SimpleNamespace:
 
 def get_tr_acoustic_spectra(
     seq: PulserverSequence, 
-    window_duration: float = 0.025,
+    window_duration: float = 25.0e-3,
     spectral_resolution: float = 5.0,
     max_frequency: float = 3000.0,
     combined: bool = False,
@@ -933,6 +933,14 @@ def _plot_acoustic_spectra(
             ax.set_title(f'Sliding Window - {labels[axis_name]}', 
                         fontsize=12, fontweight='bold')
             ax.set_ylim(-0.5, num_windows - 0.5)
+            
+            # Set y-ticks to show each window
+            ax.set_yticks(np.arange(0, num_windows))
+            ax.set_yticklabels([str(i) for i in range(num_windows)], fontsize=9)
+            
+            # Add white separator lines between windows
+            for win_idx in np.arange(0.5, num_windows, 1):
+                ax.axhline(win_idx, color='white', linestyle='-', linewidth=0.5, alpha=0.6)
             
             # Add secondary x-axis for echo spacing
             _add_echo_spacing_axis(ax, freq_min, freq_max)

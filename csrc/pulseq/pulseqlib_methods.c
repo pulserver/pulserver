@@ -7278,7 +7278,7 @@ void pulseqlib_trAcousticSpectraFree(pulseqlib_TRAcousticSpectra* spectra)
 }
 
 /* ============== Acoustic Resonance Detection ============== */
-#define PEAK_LOG10_THRESHOLD    1.75f   /* Threshold in log10 domain */
+#define PEAK_LOG10_THRESHOLD    2.25f   /* Threshold in log10 domain */
 #define PEAK_NORM_SCALE         10.0f   /* Normalization scale factor */
 #define PEAK_EPS                1e-30f  /* Epsilon to avoid log(0) - placed INSIDE log */
 
