@@ -4940,7 +4940,7 @@ int pulseqlib_getUniqueBlocks(const pulseqlib_SeqFile* seq, pulseqlib_SequenceDe
         tmpBlockTable[n].adcID = raw.adc;
         
         /* Store pure delay flag */
-        tmpBlockTable[n].duration_us = (raw.rf < 0 && raw.gx < 0 && raw.gy < 0 && raw.gz < 0 && raw.adc < 0) ? raw.block_duration : -1;
+        tmpBlockTable[n].duration_us = (raw.rf < 0 && raw.gx < 0 && raw.gy < 0 && raw.gz < 0 && raw.adc < 0) ? (int)(raw.block_duration * seqDesc->blockDurationRaster_us) : -1;
 
         /* Inspect extensions */
         if (raw.extCount > 0 && seq->isExtensionsLibraryParsed && seq->extensionLUT) {
@@ -5364,7 +5364,7 @@ int pulseqlib_findTRInSequence(
         activeDuration_us = 0;
         for (n = 0; n < seqDesc->numBlocks; ++n) {
             if (seqDesc->blockTable[n].duration_us < 0) {
-                activeDuration_us += seqDesc->blockDefinitions[n].duration_us;
+                activeDuration_us += seqDesc->blockDefinitions[seqDesc->blockTable[n].ID].duration_us;
             }
         }
 
@@ -5388,6 +5388,7 @@ int pulseqlib_findTRInSequence(
 
             diag->code = PULSEQLIB_OK;
             FREE(sequence_pattern);
+            FREE(blockDurations_us);  /* Don't forget this! */
             return PULSEQLIB_OK; /* SUCCESS - single TR fallback */
         }
 
@@ -5398,6 +5399,7 @@ int pulseqlib_findTRInSequence(
             diag->code = PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN;
         }
         FREE(sequence_pattern);
+        FREE(blockDurations_us);
         return diag->code;
     }
 
@@ -6278,7 +6280,7 @@ static int count_grad_samples_for_block(
     int numSamples;
     
     if (!gradDef) {
-        return 0; /* No gradient on this channel - no samples needed */
+        return 1; /* No gradient on this channel - no samples needed */
     }
     
     if (gradDef->type == 0) {
@@ -6400,6 +6402,7 @@ static int fill_grad_waveform_for_block(
     float t0,
     float prevTime,
     const float* positionMaxAmp,
+    const float blockDuration_us,  /* NEW: need block duration for pure delays */
     float* time,
     float* waveform,
     int startIdx)
@@ -6423,7 +6426,13 @@ static int fill_grad_waveform_for_block(
     
     /* No gradient on this channel - write nothing */
     if (!gradDef || !gradTableEntry) {
-        return 0;
+        t_sample = t0 + blockDuration_us;
+        if (t_sample != prevTime) {
+            time[idx] = t_sample;
+            waveform[idx] = 0.0f;
+            idx++;
+        }
+        return idx - startIdx;
     }
     
     /* Get amplitude and sign from gradTable */
@@ -6781,7 +6790,7 @@ int pulseqlib_getTRGradientWaveforms(
             gxDef, gxTable, seqDesc,
             t0,
             (idxGx > 0) ? waveforms->timeGx[idxGx - 1] : -1.0f,
-            &posMaxAmpGx[n * MAX_GRAD_SHOTS],  /* position max */
+            &posMaxAmpGx[n * MAX_GRAD_SHOTS], blockDuration_us,
             waveforms->timeGx, waveforms->waveformGx, idxGx);
         
         /* Fill Gy */
@@ -6789,7 +6798,7 @@ int pulseqlib_getTRGradientWaveforms(
             gyDef, gyTable, seqDesc,
             t0,
             (idxGy > 0) ? waveforms->timeGy[idxGy - 1] : -1.0f,
-            &posMaxAmpGy[n * MAX_GRAD_SHOTS],  /* position max */
+            &posMaxAmpGy[n * MAX_GRAD_SHOTS], blockDuration_us,
             waveforms->timeGy, waveforms->waveformGy, idxGy);
         
         /* Fill Gz */
@@ -6797,7 +6806,7 @@ int pulseqlib_getTRGradientWaveforms(
             gzDef, gzTable, seqDesc,
             t0,
             (idxGz > 0) ? waveforms->timeGz[idxGz - 1] : -1.0f,
-            &posMaxAmpGz[n * MAX_GRAD_SHOTS],  /* position max */
+            &posMaxAmpGz[n * MAX_GRAD_SHOTS], blockDuration_us,
             waveforms->timeGz, waveforms->waveformGz, idxGz);
 
         /* Update time offset for next block */
