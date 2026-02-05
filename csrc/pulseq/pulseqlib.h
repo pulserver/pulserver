@@ -10,6 +10,7 @@
 #define EXT_NAME_LENGTH 32
 #define LABEL_NAME_LENGTH 32
 #define SEQUENCE_NAME_LENGTH 256
+#define SEQUENCE_FILENAME_LENGTH 256
 #define SOFT_DELAY_HINT_LENGTH 32
 #define MAX_EXTENSIONS_PER_BLOCK 64
 #define MAX_LINE_LENGTH 256
@@ -126,6 +127,10 @@
 #define PULSEQLIB_ERR_PNS_NO_WAVEFORM            -453  /**< No waveform data for PNS analysis */
 #define PULSEQLIB_ERR_PNS_FFT_FAILED             -454  /**< FFT convolution failed */
 #define PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED     -455  /**< PNS threshold exceeded (>100%) */
+
+#define PULSEQLIB_ERR_COLLECTION_EMPTY           -500  /**< No sequences in collection */
+#define PULSEQLIB_ERR_COLLECTION_CHAIN_BROKEN    -501  /**< NextSequence file not found */
+#define PULSEQLIB_ERR_COLLECTION_MAX_DEPTH       -503  /**< Too many chained sequences (circular?) */
 
 #define PULSEQLIB_ERR_NOT_IMPLEMENTED      -999  /**< Functionality not yet implemented */
 
@@ -418,7 +423,6 @@ typedef struct pulseqlib_Definition {
     char** value;
 } pulseqlib_Definition;
 
-
 typedef struct pulseqlib_ReservedDefinitions {
     float gradientRasterTime; /**< GradientRasterTime in us */
     float radiofrequencyRasterTime; /**< RadiofrequencyRasterTime in us */
@@ -427,8 +431,8 @@ typedef struct pulseqlib_ReservedDefinitions {
     char name[SEQUENCE_NAME_LENGTH]; /**< Sequence Name (optional) */
     float fov[3]; /**< FOV in cm (optional) */
     float totalDuration; /**< TotalDuration in seconds (optional) */
+    char nextSequence[SEQUENCE_FILENAME_LENGTH]; /**< Next sequence filename (empty if last) */
 } pulseqlib_ReservedDefinitions;
-
 
 typedef struct pulseqlib_LabelLimit {
     int min; /**< Minimum value for this label type */
@@ -526,6 +530,22 @@ typedef struct pulseqlib_SeqFile {
     pulseqlib_ShapeArbitrary* shapesLibrary; /**< @brief Array of arbitrary shape definitions. */
 } pulseqlib_SeqFile; /* Mirrors Pulseq SeqFile */
 
+typedef struct pulseqlib_SeqFileCollection {
+    int numSequences;              /**< Number of sequences in the collection */
+    pulseqlib_SeqFile* sequences;  /**< Array of parsed sequence files */
+    char* basePath;                /**< Base path for resolving relative filenames */
+} pulseqlib_SeqFileCollection;
+
+#define PULSEQLIB_SEQ_FILE_COLLECTION_INIT {0, NULL, NULL}
+
+typedef struct pulseqlib_SubsequenceInfo {
+    int sequenceIndex;         /**< Index in the SeqFileCollection */
+    int adcIDOffset;           /**< Offset to add to local ADC IDs for global uniqueness */
+    int segmentIDOffset;       /**< Offset to add to local segment IDs for global uniqueness */
+    int blockIndexOffset;      /**< Offset for block indices (cumulative block count) */
+} pulseqlib_SubsequenceInfo;
+
+#define PULSEQLIB_SUBSEQUENCE_INFO_INIT {0, 0, 0, 0}
 
 /********************************************************* Interpreter-related structs  ******************************************************/
 typedef struct pulseqlib_RfDefinition {
@@ -751,12 +771,23 @@ typedef struct pulseqlib_SequenceDescriptor {
 } pulseqlib_SequenceDescriptor;
 
 #define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT {0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, PULSEQLIB_TR_DESCRIPTOR_INIT, 0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT}
-/**
- * @brief Structure to hold concatenated gradient waveforms for a TR.
- * 
- * Each channel (gx, gy, gz) has a time array and amplitude array.
- * Time is in microseconds (us), amplitude is in Hz/m.
- */
+
+typedef struct pulseqlib_SequenceDescriptorCollection {
+    int numSubsequences;                         /**< Number of subsequences */
+    pulseqlib_SequenceDescriptor* descriptors;   /**< Array of sequence descriptors */
+    pulseqlib_SubsequenceInfo* subsequenceInfo;  /**< Offset info for each subsequence */
+    
+    /* Global counts (after applying offsets) */
+    int totalUniqueSegments;    /**< Total unique segments across all subsequences */
+    int totalUniqueADCs;        /**< Total unique ADC definitions across all subsequences */
+    int totalBlocks;            /**< Total blocks across all subsequences */
+    
+    /* Combined duration */
+    float totalDuration_us;     /**< Total duration of composite sequence (us) */
+} pulseqlib_SequenceDescriptorCollection;
+
+#define PULSEQLIB_SEQUENCE_DESCRIPTOR_COLLECTION_INIT {0, NULL, NULL, 0, 0, 0, 0.0f}
+
 typedef struct pulseqlib_TRGradientWaveforms {
     int numSamplesGx;    /**< Number of samples in Gx waveform */
     int numSamplesGy;    /**< Number of samples in Gy waveform */
@@ -823,9 +854,6 @@ typedef struct pulseqlib_TRAcousticSpectra {
 
 #define PULSEQLIB_TR_ACOUSTIC_SPECTRA_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0.0f, NULL, NULL, NULL, NULL, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, PULSEQLIB_ACOUSTIC_CHECK_RESULT_INIT, PULSEQLIB_ACOUSTIC_CHECK_RESULT_INIT}
 
-/**
- * @brief Definition of a forbidden frequency band for acoustic resonance check.
- */
 typedef struct pulseqlib_ForbiddenBand {
     float freqMin_Hz;      /**< Minimum frequency of the band (Hz) */
     float freqMax_Hz;      /**< Maximum frequency of the band (Hz) */
@@ -834,9 +862,6 @@ typedef struct pulseqlib_ForbiddenBand {
 
 #define PULSEQLIB_FORBIDDEN_BAND_INIT {0.0f, 0.0f, 0.0f}
 
-/**
- * @brief Result of acoustic resonance violation check for a single axis.
- */
 typedef struct pulseqlib_AcousticViolation {
     int detected;              /**< Non-zero if violation detected */
     int bandIndex;             /**< Index of the violated band (-1 if none) */
@@ -847,9 +872,6 @@ typedef struct pulseqlib_AcousticViolation {
 
 #define PULSEQLIB_ACOUSTIC_VIOLATION_INIT {0, -1, 0.0f, 0.0f, 0.0f}
 
-/**
- * @brief Acoustic check results for all axes.
- */
 typedef struct pulseqlib_AcousticCheckResult {
     pulseqlib_AcousticViolation gx;  /**< Violation info for Gx */
     pulseqlib_AcousticViolation gy;  /**< Violation info for Gy */
@@ -905,9 +927,6 @@ typedef struct pulseqlib_PNSParams {
 #define PULSEQLIB_PNS_PARAMS_INIT {PULSEQLIB_SAFE_PARAMS_INIT, PULSEQLIB_SAFE_PARAMS_INIT, PULSEQLIB_SAFE_PARAMS_INIT}
 #endif
 
-/**
- * @brief PNS computation result
- */
 typedef struct pulseqlib_PNSResult {
     int numSamples;          /**< Number of output samples */
     float* pnsX;             /**< PNS waveform for X (% threshold), or NULL */

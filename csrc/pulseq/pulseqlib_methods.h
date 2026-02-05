@@ -72,6 +72,7 @@ void pulseqlib_optsFree(pulseqlib_Opts* opts);
 
 void pulseqlib_seqFileInit(pulseqlib_SeqFile* seq, const pulseqlib_Opts* opts);
 void pulseqlib_seqFileFree(pulseqlib_SeqFile* seq);
+void pulseqlib_seqFileCollectionFree(pulseqlib_SeqFileCollection* collection);
 
 void pulseqlib_seqBlockInit(pulseqlib_SeqBlock* block);
 void pulseqlib_seqBlockFree(pulseqlib_SeqBlock* block);
@@ -79,6 +80,7 @@ void pulseqlib_seqBlockFree(pulseqlib_SeqBlock* block);
 /* Parsing Sequence */
 int pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath);
 int pulseqlib_readSeqFromBuffer(pulseqlib_SeqFile* seq, FILE* f);
+int pulseqlib_readSeqCollection(pulseqlib_SeqFileCollection* collection, const char* firstFilePath, const pulseqlib_Opts* opts);
 
 /* Getters - to mimic OOP *outputs = obj.func(input), we do func(obj, *outputs, *inputs) */
 void pulseqlib_getBlock(const pulseqlib_SeqFile* seq, pulseqlib_SeqBlock* block, const int blockIndex);
@@ -104,8 +106,14 @@ int pulseqlib_findSegmentsInTR(
   pulseqlib_Diagnostic* diag
 );
 
+int pulseqlib_getCollectionDescriptors(
+    const pulseqlib_SeqFileCollection* collection,
+    pulseqlib_SequenceDescriptorCollection* descCollection,
+    pulseqlib_Diagnostic* diag);
+
 void pulseqlib_segmentTableResultFree(pulseqlib_SegmentTableResult* result);
 void pulseqlib_sequenceDescriptorFree(pulseqlib_SequenceDescriptor* seqDesc);
+void pulseqlib_sequenceDescriptorCollectionFree(pulseqlib_SequenceDescriptorCollection* descCollection);
 
 void pulseqlib_trGradientWaveformsFree(pulseqlib_TRGradientWaveforms* waveforms);
 int pulseqlib_getTRGradientWaveforms(

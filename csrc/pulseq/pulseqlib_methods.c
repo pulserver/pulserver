@@ -251,6 +251,55 @@ const char* pulseqlib_getErrorHint(int code) {
     }
 }
 
+/**
+ * @brief Extract base directory path from a file path.
+ */
+static char* extractBasePath(const char* filePath) {
+    char* basePath;
+    const char* lastSlash;
+    size_t baseLen;
+    
+    /* Find last path separator */
+    lastSlash = strrchr(filePath, '/');
+    if (!lastSlash) {
+        lastSlash = strrchr(filePath, '\\');
+    }
+    
+    if (lastSlash) {
+        baseLen = (size_t)(lastSlash - filePath + 1);
+        basePath = (char*)ALLOC(baseLen + 1);
+        if (basePath) {
+            strncpy(basePath, filePath, baseLen);
+            basePath[baseLen] = '\0';
+        }
+    } else {
+        /* No path separator - use current directory */
+        basePath = (char*)ALLOC(3);
+        if (basePath) {
+            strcpy(basePath, "./");
+        }
+    }
+    
+    return basePath;
+}
+
+/**
+ * @brief Build full path from base path and filename.
+ */
+static char* buildFullPath(const char* basePath, const char* filename) {
+    size_t fullLen;
+    char* fullPath;
+    
+    fullLen = strlen(basePath) + strlen(filename) + 1;
+    fullPath = (char*)ALLOC(fullLen);
+    if (fullPath) {
+        strcpy(fullPath, basePath);
+        strcat(fullPath, filename);
+    }
+    
+    return fullPath;
+}
+
 /******************************************* Math Helpers *************************************************/
 
 /**
@@ -1406,6 +1455,9 @@ void readDefinitions(pulseqlib_SeqFile* seq) {
             }
         } else if (strcmp(key, "TotalDuration") == 0) {
             seq->reservedDefinitionsLibrary.totalDuration = atof(value); /* Already in seconds */
+        } else if (strcmp(key, "NextSequence") == 0) {
+            strncpy(seq->reservedDefinitionsLibrary.nextSequence, value, sizeof(seq->reservedDefinitionsLibrary.nextSequence) - 1);
+            seq->reservedDefinitionsLibrary.nextSequence[sizeof(seq->reservedDefinitionsLibrary.nextSequence) - 1] = '\0';
         }
     }
 
@@ -2134,6 +2186,26 @@ void pulseqlib_seqFileFree(pulseqlib_SeqFile *seq) {
     FREE(seq);
 }
 
+void pulseqlib_seqFileCollectionFree(pulseqlib_SeqFileCollection* collection) {
+    int i;
+    
+    if (!collection) return;
+    
+    if (collection->sequences) {
+        for (i = 0; i < collection->numSequences; ++i) {
+            pulseqlib_seqFileFree(&collection->sequences[i]);
+        }
+        FREE(collection->sequences);
+    }
+    
+    if (collection->basePath) {
+        FREE(collection->basePath);
+    }
+    
+    collection->numSequences = 0;
+    collection->sequences = NULL;
+    collection->basePath = NULL;
+}
 
 /**
  * @brief Initializes a sequence block with default values.
@@ -2351,6 +2423,158 @@ int pulseqlib_readSeq(pulseqlib_SeqFile* seq, const char* filePath) {
     code = pulseqlib_readSeqFromBuffer(seq, f);
     fclose(f);
     return code;
+}
+
+
+static int countSequencesInChain(const char* firstFilePath, const pulseqlib_Opts* opts) {
+    int count = 0;
+    int maxCount = 1000;  /* Prevent infinite loops from circular chains */
+    char* currentPath;
+    char* basePath;
+    char* nextPath;
+    pulseqlib_SeqFile tempSeq;
+    int result;
+    
+    basePath = extractBasePath(firstFilePath);
+    if (!basePath) return -1;
+    
+    currentPath = (char*)ALLOC(strlen(firstFilePath) + 1);
+    if (!currentPath) {
+        FREE(basePath);
+        return -1;
+    }
+    strcpy(currentPath, firstFilePath);
+    
+    /* Walk the chain, counting sequences */
+    while (currentPath && currentPath[0] != '\0' && count < maxCount) {
+        /* Initialize temp sequence to read only definitions */
+        pulseqlib_seqFileInit(&tempSeq, opts);
+        result = pulseqlib_readSeq(&tempSeq, currentPath);
+        if (PULSEQLIB_FAILED(result)) {
+            pulseqlib_seqFileFree(&tempSeq);
+            FREE(currentPath);
+            FREE(basePath);
+            return -1;
+        }
+        
+        count++;
+        
+        /* Prepare for next iteration */
+        FREE(currentPath);
+        currentPath = NULL;
+        
+        if (tempSeq.reservedDefinitionsLibrary.nextSequence[0] != '\0') {
+            currentPath = buildFullPath(basePath, tempSeq.reservedDefinitionsLibrary.nextSequence);
+            if (!currentPath) {
+                pulseqlib_seqFileFree(&tempSeq);
+                FREE(basePath);
+                return -1;
+            }
+        }
+        
+        pulseqlib_seqFileFree(&tempSeq);
+    }
+    
+    FREE(basePath);
+    
+    /* Check if we hit the limit (likely circular) */
+    if (count >= maxCount) {
+        return -1;
+    }
+    
+    return count;
+}
+
+
+int pulseqlib_readSeqCollection(
+    pulseqlib_SeqFileCollection* collection,
+    const char* firstFilePath,
+    const pulseqlib_Opts* opts)
+{
+    int numSeq;
+    int i;
+    char* currentPath;
+    char* basePath;
+    int result;
+    
+    if (!collection || !firstFilePath || !opts) {
+        return PULSEQLIB_ERR_NULL_POINTER;
+    }
+    
+    /* PASS 1: Count sequences in chain */
+    numSeq = countSequencesInChain(firstFilePath, opts);
+    if (numSeq <= 0) {
+        collection->numSequences = 0;
+        collection->sequences = NULL;
+        collection->basePath = NULL;
+        return (numSeq == 0) ? PULSEQLIB_ERR_COLLECTION_EMPTY : PULSEQLIB_ERR_COLLECTION_CHAIN_BROKEN;
+    }
+    
+    /* Initialize collection base path */
+    collection->basePath = extractBasePath(firstFilePath);
+    if (!collection->basePath) {
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    
+    /* PASS 2: Allocate and populate sequence array */
+    collection->sequences = (pulseqlib_SeqFile*)ALLOC(numSeq * sizeof(pulseqlib_SeqFile));
+    if (!collection->sequences) {
+        FREE(collection->basePath);
+        collection->basePath = NULL;
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    
+    currentPath = (char*)ALLOC(strlen(firstFilePath) + 1);
+    if (!currentPath) {
+        FREE(collection->sequences);
+        FREE(collection->basePath);
+        collection->sequences = NULL;
+        collection->basePath = NULL;
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    strcpy(currentPath, firstFilePath);
+    
+    /* Parse each sequence in the chain */
+    for (i = 0; i < numSeq; ++i) {
+        /* Initialize and parse current sequence */
+        pulseqlib_seqFileInit(&collection->sequences[i], opts);
+        result = pulseqlib_readSeq(&collection->sequences[i], currentPath);
+        if (PULSEQLIB_FAILED(result)) {
+            /* Clean up all previously parsed sequences */
+            for (int j = 0; j < i; ++j) {
+                pulseqlib_seqFileFree(&collection->sequences[j]);
+            }
+            FREE(collection->sequences);
+            FREE(currentPath);
+            FREE(collection->basePath);
+            collection->sequences = NULL;
+            collection->basePath = NULL;
+            return result;
+        }
+        
+        /* Prepare path for next sequence */
+        if (i < numSeq - 1) {
+            FREE(currentPath);
+            currentPath = buildFullPath(
+                collection->basePath,
+                collection->sequences[i].reservedDefinitionsLibrary.nextSequence);
+            if (!currentPath) {
+                for (int j = 0; j <= i; ++j) {
+                    pulseqlib_seqFileFree(&collection->sequences[j]);
+                }
+                FREE(collection->sequences);
+                FREE(collection->basePath);
+                collection->sequences = NULL;
+                collection->basePath = NULL;
+                return PULSEQLIB_ERR_ALLOC_FAILED;
+            }
+        }
+    }
+    
+    FREE(currentPath);
+    collection->numSequences = numSeq;
+    
+    return PULSEQLIB_OK;
 }
 
 
@@ -4686,6 +4910,33 @@ void pulseqlib_sequenceDescriptorFree(pulseqlib_SequenceDescriptor* seqDesc)
     pulseqlib_segmentTableResultFree(&seqDesc->segmentTable);
 }
 
+void pulseqlib_sequenceDescriptorCollectionFree(
+    pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    int i;
+    
+    if (!descCollection) return;
+    
+    if (descCollection->descriptors) {
+        for (i = 0; i < descCollection->numSubsequences; ++i) {
+            pulseqlib_sequenceDescriptorFree(&descCollection->descriptors[i]);
+        }
+        FREE(descCollection->descriptors);
+    }
+    
+    if (descCollection->subsequenceInfo) {
+        FREE(descCollection->subsequenceInfo);
+    }
+    
+    descCollection->numSubsequences = 0;
+    descCollection->descriptors = NULL;
+    descCollection->subsequenceInfo = NULL;
+    descCollection->totalUniqueSegments = 0;
+    descCollection->totalUniqueADCs = 0;
+    descCollection->totalBlocks = 0;
+    descCollection->totalDuration_us = 0.0f;
+}
+
 /**
  * @brief Free temporary arrays used during getUniqueBlocks.
  */
@@ -6245,6 +6496,148 @@ void pulseqlib_segmentTableResultFree(pulseqlib_SegmentTableResult* result) {
     result->numUniqueSegments = 0;
 }
 
+int pulseqlib_getCollectionDescriptors(
+    const pulseqlib_SeqFileCollection* collection,
+    pulseqlib_SequenceDescriptorCollection* descCollection,
+    pulseqlib_Diagnostic* diag)
+{
+    int i, j;
+    int result;
+    int adcOffset = 0;
+    int segmentOffset = 0;
+    int blockOffset = 0;
+    pulseqlib_Diagnostic localDiag;
+    
+    if (!diag) {
+        pulseqlib_diagnosticInit(&localDiag);
+        diag = &localDiag;
+    }
+    
+    if (!collection || !descCollection) {
+        diag->code = PULSEQLIB_ERR_NULL_POINTER;
+        return 0;
+    }
+    
+    if (collection->numSequences == 0) {
+        diag->code = PULSEQLIB_ERR_COLLECTION_EMPTY;
+        return 0;
+    }
+    
+    /* Allocate descriptor and info arrays */
+    descCollection->descriptors = (pulseqlib_SequenceDescriptor*)ALLOC(
+        collection->numSequences * sizeof(pulseqlib_SequenceDescriptor));
+    descCollection->subsequenceInfo = (pulseqlib_SubsequenceInfo*)ALLOC(
+        collection->numSequences * sizeof(pulseqlib_SubsequenceInfo));
+    
+    if (!descCollection->descriptors || !descCollection->subsequenceInfo) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        if (descCollection->descriptors) FREE(descCollection->descriptors);
+        if (descCollection->subsequenceInfo) FREE(descCollection->subsequenceInfo);
+        descCollection->descriptors = NULL;
+        descCollection->subsequenceInfo = NULL;
+        return 0;
+    }
+    
+    /* Initialize collection totals */
+    descCollection->numSubsequences = collection->numSequences;
+    descCollection->totalDuration_us = 0.0f;
+    descCollection->totalUniqueSegments = 0;
+    descCollection->totalUniqueADCs = 0;
+    descCollection->totalBlocks = 0;
+    
+    /* Process each subsequence */
+    for (i = 0; i < collection->numSequences; ++i) {
+        /* Store offsets BEFORE processing this subsequence */
+        descCollection->subsequenceInfo[i].sequenceIndex = i;
+        descCollection->subsequenceInfo[i].adcIDOffset = adcOffset;
+        descCollection->subsequenceInfo[i].segmentIDOffset = segmentOffset;
+        descCollection->subsequenceInfo[i].blockIndexOffset = blockOffset;
+        
+        /* Get unique blocks */
+        result = pulseqlib_getUniqueBlocks(
+            &collection->sequences[i],
+            &descCollection->descriptors[i]);
+        if (PULSEQLIB_FAILED(result)) {
+            diag->code = result;
+            goto cleanup_error;
+        }
+        
+        /* Find TR structure */
+        result = pulseqlib_findTRInSequence(
+            &descCollection->descriptors[i],
+            diag);
+        if (PULSEQLIB_FAILED(diag->code)) {
+            goto cleanup_error;
+        }
+        
+        /* Find segments */
+        result = pulseqlib_findSegmentsInTR(
+            &collection->sequences[i],
+            &descCollection->descriptors[i],
+            diag);
+        if (PULSEQLIB_FAILED(diag->code)) {
+            goto cleanup_error;
+        }
+        
+        /* Apply segment ID offsets */
+        if (segmentOffset > 0) {
+            for (j = 0; j < descCollection->descriptors[i].segmentTable.numPrepSegments; ++j) {
+                descCollection->descriptors[i].segmentTable.prepSegmentTable[j] += segmentOffset;
+            }
+            for (j = 0; j < descCollection->descriptors[i].segmentTable.numMainSegments; ++j) {
+                descCollection->descriptors[i].segmentTable.mainSegmentTable[j] += segmentOffset;
+            }
+            for (j = 0; j < descCollection->descriptors[i].segmentTable.numCooldownSegments; ++j) {
+                descCollection->descriptors[i].segmentTable.cooldownSegmentTable[j] += segmentOffset;
+            }
+        }
+        
+        /* Apply ADC ID offsets */
+        if (adcOffset > 0) {
+            for (j = 0; j < descCollection->descriptors[i].adcTableSize; ++j) {
+                descCollection->descriptors[i].adcTable[j].ID += adcOffset;
+            }
+            for (j = 0; j < descCollection->descriptors[i].numUniqueADCs; ++j) {
+                descCollection->descriptors[i].adcDefinitions[j].ID += adcOffset;
+            }
+        }
+        
+        /* Update offsets for next subsequence */
+        adcOffset += descCollection->descriptors[i].numUniqueADCs;
+        segmentOffset += descCollection->descriptors[i].numUniqueSegments;
+        blockOffset += descCollection->descriptors[i].numBlocks;
+        
+        /* Accumulate duration */
+        descCollection->totalDuration_us += 
+            descCollection->descriptors[i].trDescriptor.trDuration_us * 
+            descCollection->descriptors[i].trDescriptor.numTRs;
+    }
+    
+    /* Store global totals */
+    descCollection->totalUniqueSegments = segmentOffset;
+    descCollection->totalUniqueADCs = adcOffset;
+    descCollection->totalBlocks = blockOffset;
+    
+    diag->code = PULSEQLIB_OK;
+    return collection->numSequences;
+
+cleanup_error:
+    for (j = 0; j < i; ++j) {
+        pulseqlib_sequenceDescriptorFree(&descCollection->descriptors[j]);
+    }
+    FREE(descCollection->descriptors);
+    FREE(descCollection->subsequenceInfo);
+    descCollection->descriptors = NULL;
+    descCollection->subsequenceInfo = NULL;
+    descCollection->numSubsequences = 0;
+    descCollection->totalUniqueSegments = 0;
+    descCollection->totalUniqueADCs = 0;
+    descCollection->totalBlocks = 0;
+    descCollection->totalDuration_us = 0.0f;
+    return 0;
+}
+
+/***************************************** SeqDescriptor Methods  **********************************/
 /**
  * @brief Free memory allocated for TR gradient waveforms.
  */
@@ -8832,3 +9225,4 @@ void pulseqlib_pnsResultFree(pulseqlib_PNSResult* result)
     result->maxPNS_index = 0;
     result->maxPNS_time_us = 0.0f;
 }
+
