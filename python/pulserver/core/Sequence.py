@@ -588,8 +588,8 @@ def get_tr_acoustic_spectra(
         
     # Acoustic check
     if forbidden_bands:
-        ...
-    
+        _check_acoustic_forbidden_bands(result, seq, forbidden_bands)
+
     return result
 
 
@@ -598,6 +598,7 @@ def get_pns(
     chronaxie_us: float | None = None,
     rheobase: float | None = None,
     alpha: float | None = None,
+    do_plot: bool = False,
 ) -> SimpleNamespace:
     """
     Compute Peripheral Nerve Stimulation (PNS) levels for gradient waveforms.
@@ -620,6 +621,8 @@ def get_pns(
         Effective coil length in meters. Required for GE model.
         The stimulation threshold Smin = rheobase / alpha.
         Typical value: ~0.333 m (IEC 60601-2-33:2022).
+    do_plot : bool
+        If True, plot the computed spectra. Default is False.
         
     Returns
     -------
@@ -717,6 +720,12 @@ def get_pns(
             result.pns_y = np.asarray(result_dict["pns_y"], dtype=np.float32)
         if "pns_z" in result_dict:
             result.pns_z = np.asarray(result_dict["pns_z"], dtype=np.float32)
+            
+    if do_plot:
+        _plot_pns(result, seq)
+        
+    # Check PNS thresholds
+    _check_pns_thresholds(result)
     
     return result
 
@@ -725,7 +734,6 @@ def _plot_acoustic_spectra(
     spectra: SimpleNamespace,
     seq: PulserverSequence | None = None,
     forbidden_bands: list[dict] | None = None,
-    figsize: tuple[float, float] = (16, 12),
 ) -> tuple:
     """
     Plot acoustic spectra with waveforms and sliding windows.
@@ -747,8 +755,6 @@ def _plot_acoustic_spectra(
         - 'freq_min_hz': float, minimum frequency (Hz)
         - 'freq_max_hz': float, maximum frequency (Hz)
         - 'max_amplitude': float (optional, for reference)
-    figsize : tuple[float, float]
-        Figure size (width, height) in inches. Default (16, 12).
         
     Returns
     -------
@@ -995,3 +1001,283 @@ def _add_echo_spacing_axis(ax, freq_min, freq_max):
     ax_top.set_xlabel('Echo Spacing (µs)', fontsize=12)
     
     return ax_top
+
+
+def _plot_pns(
+    pns: SimpleNamespace,
+    seq: PulserverSequence | None = None,
+) -> tuple:
+    """
+    Plot PNS waveforms with TR gradient waveforms circularly padded to match.
+    
+    Creates a comprehensive visualization of PNS analysis including:
+    - Top panel: PNS % vs time (ms) with 80% (dotted) and 100% (dashed) limits
+    - Bottom panel: Gradient waveforms circularly padded to match PNS length
+    
+    Parameters
+    ----------
+    pns : SimpleNamespace
+        Output from get_pns() with store_waveforms=True.
+        Must contain pns_x, pns_y, pns_z, and num_samples.
+    seq : PulserverSequence | None
+        The sequence object (needed to get gradient waveforms).
+        If None, bottom waveform panel is skipped.
+        
+    Returns
+    -------
+    tuple
+        (fig, axes) - Matplotlib figure and axes for further customization.
+        
+    Raises
+    ------
+    ValueError
+        If pns is missing required attributes (pns_x, pns_y, pns_z).
+    RuntimeError
+        If waveforms requested but seq not provided.
+        
+    Notes
+    -----
+    - Top panel: PNS % vs time (ms) with 80% (dotted) and 100% (dashed) limits
+    - Bottom panel: Gradient waveforms circularly padded to match PNS length
+    - Waveforms are in mT/m
+    """
+    # Validate input
+    if not hasattr(pns, 'pns_x') or not hasattr(pns, 'pns_y') or not hasattr(pns, 'pns_z'):
+        raise ValueError("pns must have pns_x, pns_y, pns_z arrays from get_pns() with store_waveforms=True")
+    
+    if not hasattr(pns, 'num_samples'):
+        raise ValueError("pns must have num_samples attribute")
+    
+    num_pns_samples = pns.num_samples
+    
+    # Create figure
+    fig = plt.figure()
+    
+    # ============ Panel 1: PNS Waveforms ============
+    ax_pns = plt.subplot(2, 1, 1)
+    
+    # Convert time from microseconds to milliseconds
+    time_pns_ms = np.arange(num_pns_samples) * 1.0  # Placeholder: 1 sample = 1 ms
+    # Better: compute from grad_raster_time if available
+    if seq is not None:
+        grad_raster_time = seq.system.grad_raster_time  # in seconds
+        time_pns_ms = np.arange(num_pns_samples) * grad_raster_time * 1000.0  # to ms
+    else:
+        time_pns_ms = np.arange(num_pns_samples)
+    
+    # Plot PNS waveforms
+    colors = {'x': 'C0', 'y': 'C1', 'z': 'C2'}
+    labels = {'x': 'PNS_X', 'y': 'PNS_Y', 'z': 'PNS_Z'}
+    
+    ax_pns.plot(time_pns_ms, pns.pns_x, color=colors['x'], linewidth=2, label=labels['x'])
+    ax_pns.plot(time_pns_ms, pns.pns_y, color=colors['y'], linewidth=2, label=labels['y'])
+    ax_pns.plot(time_pns_ms, pns.pns_z, color=colors['z'], linewidth=2, label=labels['z'])
+    
+    # Add threshold lines
+    ax_pns.axhline(80.0, color='gray', linestyle=':', linewidth=2, label='80% limit')
+    ax_pns.axhline(100.0, color='red', linestyle='--', linewidth=2, label='100% threshold')
+    
+    ax_pns.set_xlabel('Time (ms)', fontsize=12)
+    ax_pns.set_ylabel('PNS (%)', fontsize=12)
+    ax_pns.set_title('Peripheral Nerve Stimulation (PNS)', fontsize=14, fontweight='bold')
+    ax_pns.legend(loc='upper right', fontsize=11)
+    ax_pns.grid(True, alpha=0.3)
+    ax_pns.set_ylim(bottom=0)
+    
+    # ============ Panel 2: Gradient Waveforms (Circularly Padded) ============
+    if seq is not None:
+        ax_wf = plt.subplot(2, 1, 2)
+        
+        # Get waveforms
+        try:
+            waveforms = get_tr_gradient_waveforms(seq)
+        except Exception as e:
+            print(f"Warning: Could not get waveforms: {e}")
+            plt.tight_layout()
+            return fig, fig.axes
+        
+        gamma = seq.system.gamma
+        grad_raster_time = seq.system.grad_raster_time
+        
+        # Convert waveforms to mT/m
+        wf_gx_mtpm = waveforms.waveform_gx / gamma * 1000.0
+        wf_gy_mtpm = waveforms.waveform_gy / gamma * 1000.0
+        wf_gz_mtpm = waveforms.waveform_gz / gamma * 1000.0
+        
+        # Get current waveform sizes
+        num_gx = len(wf_gx_mtpm)
+        num_gy = len(wf_gy_mtpm)
+        num_gz = len(wf_gz_mtpm)
+        
+        # Circularly pad waveforms to match PNS size
+        wf_gx_padded = _circular_pad(wf_gx_mtpm, num_pns_samples)
+        wf_gy_padded = _circular_pad(wf_gy_mtpm, num_pns_samples)
+        wf_gz_padded = _circular_pad(wf_gz_mtpm, num_pns_samples)
+        
+        # Create time array for padded waveforms
+        time_wf_ms = np.arange(num_pns_samples) * grad_raster_time * 1000.0  # to ms
+        
+        ax_wf.plot(time_wf_ms, wf_gx_padded, color=colors['x'], linewidth=2, label='Gx')
+        ax_wf.plot(time_wf_ms, wf_gy_padded, color=colors['y'], linewidth=2, label='Gy')
+        ax_wf.plot(time_wf_ms, wf_gz_padded, color=colors['z'], linewidth=2, label='Gz')
+        
+        ax_wf.set_xlabel('Time (ms)', fontsize=12)
+        ax_wf.set_ylabel('Gradient Amplitude (mT/m)', fontsize=12)
+        ax_wf.set_title('TR Gradient Waveforms (Circularly Padded to PNS Length)', fontsize=14, fontweight='bold')
+        ax_wf.legend(loc='upper right', fontsize=11)
+        ax_wf.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    return fig, fig.axes
+
+
+def _circular_pad(waveform: np.ndarray, target_length: int) -> np.ndarray:
+    """
+    Circularly pad a waveform to a target length.
+    
+    If target_length > len(waveform), repeats the waveform cyclically.
+    If target_length < len(waveform), truncates the waveform.
+    If target_length == len(waveform), returns a copy.
+    
+    Parameters
+    ----------
+    waveform : np.ndarray
+        Input waveform.
+    target_length : int
+        Desired output length.
+        
+    Returns
+    -------
+    np.ndarray
+        Padded waveform of length target_length.
+    """
+    current_length = len(waveform)
+    
+    if current_length == target_length:
+        return waveform.copy()
+    elif current_length > target_length:
+        # Truncate
+        return waveform[:target_length].copy()
+    else:
+        # Circular repeat: tile the waveform and then truncate
+        num_repeats = int(np.ceil(target_length / current_length))
+        padded = np.tile(waveform, num_repeats)
+        return padded[:target_length].copy()
+
+
+def _check_pns_thresholds(pns: SimpleNamespace) -> None:
+    """
+    Check PNS waveforms for threshold violations and print warnings.
+    
+    Parameters
+    ----------
+    pns : SimpleNamespace
+        Output from get_pns() with pns_x, pns_y, pns_z arrays.
+    """
+    if not hasattr(pns, 'pns_x') or not hasattr(pns, 'pns_y') or not hasattr(pns, 'pns_z'):
+        return  # No per-axis PNS data available
+    
+    thresholds = [80.0, 100.0]
+    axes = {'pns_x': 'X', 'pns_y': 'Y', 'pns_z': 'Z'}
+    
+    for axis_attr, axis_name in axes.items():
+        pns_data = getattr(pns, axis_attr, None)
+        if pns_data is None:
+            continue
+        
+        for threshold in thresholds:
+            max_val = np.max(pns_data)
+            if max_val > threshold:
+                warnings.warn(
+                    f"PNS {axis_name} exceeds {threshold}% threshold: "
+                    f"max = {max_val:.1f}%",
+                    UserWarning
+                )
+
+
+def _check_acoustic_forbidden_bands(
+    spectra: SimpleNamespace,
+    seq: PulserverSequence,
+    forbidden_bands: list[dict]
+) -> None:
+    """
+    Check acoustic spectra against forbidden frequency bands and print warnings.
+    
+    Parameters
+    ----------
+    spectra : SimpleNamespace
+        Output from get_tr_acoustic_spectra().
+    seq : PulserverSequence
+        The sequence (for gamma conversion).
+    forbidden_bands : list[dict]
+        List of forbidden bands, each with 'freq_min_hz', 'freq_max_hz', 'max_amplitude'.
+    """
+    if not forbidden_bands:
+        return
+    
+    gamma = seq.system.gamma
+    axes = {'gx': 'X', 'gy': 'Y', 'gz': 'Z'}
+    
+    for band in forbidden_bands:
+        freq_min = band['freq_min_hz']
+        freq_max = band['freq_max_hz']
+        max_allowed_hzm = band.get('max_amplitude', float('inf'))
+        max_allowed_mtpm = max_allowed_hzm / gamma * 1000.0  # Convert to mT/m
+        
+        for axis_short, axis_name in axes.items():
+            # Check sliding window peaks (if available)
+            peaks_attr = f'peaks_g{axis_short}'
+            spec_attr = f'spectra_g{axis_short}'
+            envelope_attr = f'max_envelope_g{axis_short}'
+            
+            if not hasattr(spectra, peaks_attr) or not hasattr(spectra, spec_attr):
+                continue
+            
+            peaks = getattr(spectra, peaks_attr)
+            specs = getattr(spectra, spec_attr)
+            envelope = getattr(spectra, envelope_attr)
+            
+            # Check if there are peaks in the forbidden band
+            freq_indices = (spectra.frequencies >= freq_min) & (spectra.frequencies <= freq_max)
+            
+            if peaks is None:
+                # For combined=True, check if spectrum has energy in band
+                if specs.ndim == 1:
+                    has_peaks_in_band = np.any(specs[freq_indices] > 0)
+                else:
+                    has_peaks_in_band = np.any(peaks[:, freq_indices] > 0)
+            else:
+                has_peaks_in_band = np.any(peaks[:, freq_indices] > 0) if peaks.ndim == 2 else np.any(peaks[freq_indices] > 0)
+            
+            if has_peaks_in_band:
+                # Find max envelope in the band
+                max_envelope_in_band = np.max(envelope[freq_indices])
+                if max_envelope_in_band > max_allowed_mtpm:
+                    warnings.warn(
+                        f"Acoustic forbidden band violation: {axis_name} "
+                        f"({freq_min:.1f}–{freq_max:.1f} Hz) "
+                        f"has peaks with envelope {max_envelope_in_band:.2f} mT/m "
+                        f"(allowed: {max_allowed_mtpm:.2f} mT/m)",
+                        UserWarning
+                    )
+            
+            # Also check full sequence spectrum if available (for sequence harmonic spectrum)
+            if hasattr(spectra, f'spectrum_g{axis_short}_seq') and hasattr(spectra, f'peaks_g{axis_short}_seq'):
+                spec_seq = getattr(spectra, f'spectrum_g{axis_short}_seq')
+                peaks_seq = getattr(spectra, f'peaks_g{axis_short}_seq')
+                envelope_seq = getattr(spectra, f'max_envelope_g{axis_short}_seq', None)
+                
+                if spec_seq is not None and peaks_seq is not None:
+                    freq_indices_seq = (spectra.frequencies_seq >= freq_min) & (spectra.frequencies_seq <= freq_max)
+                    has_peaks_in_band_seq = np.any(peaks_seq[freq_indices_seq] > 0)
+                    
+                    if has_peaks_in_band_seq and envelope_seq is not None:
+                        max_envelope_in_band_seq = np.max(envelope_seq[freq_indices_seq])
+                        if max_envelope_in_band_seq > max_allowed_mtpm:
+                            warnings.warn(
+                                f"Acoustic forbidden band violation (sequence spectrum): {axis_name} "
+                                f"({freq_min:.1f}–{freq_max:.1f} Hz) "
+                                f"has peaks with envelope {max_envelope_in_band_seq:.2f} mT/m "
+                                f"(allowed: {max_allowed_mtpm:.2f} mT/m)",
+                                UserWarning
+                            )
