@@ -9226,3 +9226,54 @@ void pulseqlib_pnsResultFree(pulseqlib_PNSResult* result)
     result->maxPNS_time_us = 0.0f;
 }
 
+/* ========== ADC Library Accessors ========== */
+
+int pulseqlib_getMaxADCSamples(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    int i, j;
+    int maxSamples = 0;
+    
+    if (!descCollection) return 0;
+    
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        for (j = 0; j < descCollection->descriptors[i].numUniqueADCs; ++j) {
+            if (descCollection->descriptors[i].adcDefinitions[j].numSamples > maxSamples) {
+                maxSamples = descCollection->descriptors[i].adcDefinitions[j].numSamples;
+            }
+        }
+    }
+    
+    return maxSamples;
+}
+
+int pulseqlib_getADCDwell(const pulseqlib_SequenceDescriptorCollection* descCollection, int adcIdx)
+{
+    int i, j;
+    
+    if (!descCollection || adcIdx < 0 || adcIdx >= descCollection->totalUniqueADCs) {
+        return 0;
+    }
+
+    /* Get nested indexes */
+    i = adcIdx / descCollection->descriptors[0].numUniqueADCs;  /* Subsequence index */
+    j = adcIdx % descCollection->descriptors[0].numUniqueADCs;
+    
+    return descCollection->descriptors[i].adcDefinitions[j].dwellTime;
+
+}
+
+int pulseqlib_getADCNumSamples(const pulseqlib_SequenceDescriptorCollection* descCollection, int adcIdx)
+{
+    int i, j;
+    
+    if (!descCollection || adcIdx < 0 || adcIdx >= descCollection->totalUniqueADCs) {
+        return 0;
+    }
+
+    /* Get nested indexes */
+    i = adcIdx / descCollection->descriptors[0].numUniqueADCs;  /* Subsequence index */
+    j = adcIdx % descCollection->descriptors[0].numUniqueADCs;
+
+    return descCollection->descriptors[i].adcDefinitions[j].numSamples;
+}
+

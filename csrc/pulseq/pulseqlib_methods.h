@@ -115,6 +115,32 @@ void pulseqlib_segmentTableResultFree(pulseqlib_SegmentTableResult* result);
 void pulseqlib_sequenceDescriptorFree(pulseqlib_SequenceDescriptor* seqDesc);
 void pulseqlib_sequenceDescriptorCollectionFree(pulseqlib_SequenceDescriptorCollection* descCollection);
 
+/**
+ * @brief Get maximum number of samples across all unique ADCs in collection.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @return Maximum number of samples, or 0 if no ADCs defined
+ */
+int pulseqlib_getMaxADCSamples(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get dwell time for a specific ADC by global ADC index.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param adcIdx Global ADC index (0-based, across all subsequences)
+ * @return Dwell time in nanoseconds, or 0 if invalid index
+ */
+int pulseqlib_getADCDwell(const pulseqlib_SequenceDescriptorCollection* descCollection, int adcIdx);
+
+/**
+ * @brief Get number of samples for a specific ADC by global ADC index.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param adcIdx Global ADC index (0-based, across all subsequences)
+ * @return Number of samples, or 0 if invalid index
+ */
+int pulseqlib_getADCNumSamples(const pulseqlib_SequenceDescriptorCollection* descCollection, int adcIdx);
+
 void pulseqlib_trGradientWaveformsFree(pulseqlib_TRGradientWaveforms* waveforms);
 int pulseqlib_getTRGradientWaveforms(
     const pulseqlib_SequenceDescriptor* seqDesc,
