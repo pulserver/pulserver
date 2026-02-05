@@ -355,11 +355,9 @@ def get_tr_gradient_waveforms(seq: PulserverSequence) -> SimpleNamespace:
     -------
     SimpleNamespace
         Result containing:
-        - time_gx: np.ndarray of time points for Gx (microseconds)
+        - time: np.ndarray of time points (microseconds)
         - waveform_gx: np.ndarray of Gx amplitude (Hz/m)
-        - time_gy: np.ndarray of time points for Gy (microseconds)
         - waveform_gy: np.ndarray of Gy amplitude (Hz/m)
-        - time_gz: np.ndarray of time points for Gz (microseconds)
         - waveform_gz: np.ndarray of Gz amplitude (Hz/m)
         
     Notes
@@ -378,11 +376,9 @@ def get_tr_gradient_waveforms(seq: PulserverSequence) -> SimpleNamespace:
         raise RuntimeError(f"Failed to get TR gradient waveforms: {result_dict.get('error', 'unknown error')}")
     
     result = SimpleNamespace(
-        time_gx=np.asarray(result_dict["time_gx"], dtype=np.float32),
+        time=np.asarray(result_dict["time_gx"], dtype=np.float32),
         waveform_gx=np.asarray(result_dict["waveform_gx"], dtype=np.float32),
-        time_gy=np.asarray(result_dict["time_gy"], dtype=np.float32),
         waveform_gy=np.asarray(result_dict["waveform_gy"], dtype=np.float32),
-        time_gz=np.asarray(result_dict["time_gz"], dtype=np.float32),
         waveform_gz=np.asarray(result_dict["waveform_gz"], dtype=np.float32),
     )
     
@@ -865,15 +861,13 @@ def _plot_acoustic_spectra(
         wf_gz_mtpm = waveforms.waveform_gz / gamma * 1000.0
         
         # Convert time to ms
-        time_gx_ms = waveforms.time_gx / 1000.0
-        time_gy_ms = waveforms.time_gy / 1000.0
-        time_gz_ms = waveforms.time_gz / 1000.0
+        time_ms = waveforms.time / 1000.0
         
-        ax_wf.plot(time_gx_ms, wf_gx_mtpm, color=colors['x'], 
+        ax_wf.plot(time_ms, wf_gx_mtpm, color=colors['x'], 
                   linewidth=2, label='Gx')
-        ax_wf.plot(time_gy_ms, wf_gy_mtpm, color=colors['y'], 
+        ax_wf.plot(time_ms, wf_gy_mtpm, color=colors['y'], 
                   linewidth=2, label='Gy')
-        ax_wf.plot(time_gz_ms, wf_gz_mtpm, color=colors['z'], 
+        ax_wf.plot(time_ms, wf_gz_mtpm, color=colors['z'], 
                   linewidth=2, label='Gz')
         
         ax_wf.set_xlabel('Time (ms)', fontsize=12)
@@ -982,13 +976,7 @@ def _add_echo_spacing_axis(ax, freq_min, freq_max):
         if freq_hz <= 0:
             return np.inf
         return 1e6 / (2 * freq_hz)
-    
-    def es_to_freq(es_us):
-        """Convert echo spacing (µs) to frequency (Hz)."""
-        if es_us <= 0:
-            return np.inf
-        return 1e6 / (2 * es_us)
-    
+        
     # Get current ticks from primary axis
     primary_ticks = ax.get_xticks()
     # Filter out negative ticks
@@ -1049,6 +1037,7 @@ def _plot_pns(
         raise ValueError("pns must have num_samples attribute")
     
     num_pns_samples = pns.num_samples
+    grad_raster_time = seq.system.grad_raster_time  # in seconds
     
     # Create figure
     fig = plt.figure()
@@ -1056,14 +1045,8 @@ def _plot_pns(
     # ============ Panel 1: PNS Waveforms ============
     ax_pns = plt.subplot(2, 1, 1)
     
-    # Convert time from microseconds to milliseconds
-    time_pns_ms = np.arange(num_pns_samples) * 1.0  # Placeholder: 1 sample = 1 ms
-    # Better: compute from grad_raster_time if available
-    if seq is not None:
-        grad_raster_time = seq.system.grad_raster_time  # in seconds
-        time_pns_ms = np.arange(num_pns_samples) * grad_raster_time * 1000.0  # to ms
-    else:
-        time_pns_ms = np.arange(num_pns_samples)
+    # Create time array in ms based on PNS samples and gradient raster
+    time_pns_ms = np.arange(num_pns_samples) * 0.5 * grad_raster_time * 1000.0  # Convert to ms
     
     # Plot PNS waveforms
     colors = {'x': 'C0', 'y': 'C1', 'z': 'C2'}
@@ -1088,34 +1071,23 @@ def _plot_pns(
     if seq is not None:
         ax_wf = plt.subplot(2, 1, 2)
         
-        # Get waveforms
-        try:
-            waveforms = get_tr_gradient_waveforms(seq)
-        except Exception as e:
-            print(f"Warning: Could not get waveforms: {e}")
-            plt.tight_layout()
-            return fig, fig.axes
-        
         gamma = seq.system.gamma
-        grad_raster_time = seq.system.grad_raster_time
+        
+        # Get original waveforms
+        waveforms = get_tr_gradient_waveforms(seq)
         
         # Convert waveforms to mT/m
         wf_gx_mtpm = waveforms.waveform_gx / gamma * 1000.0
         wf_gy_mtpm = waveforms.waveform_gy / gamma * 1000.0
         wf_gz_mtpm = waveforms.waveform_gz / gamma * 1000.0
         
-        # Get current waveform sizes
-        num_gx = len(wf_gx_mtpm)
-        num_gy = len(wf_gy_mtpm)
-        num_gz = len(wf_gz_mtpm)
-        
         # Circularly pad waveforms to match PNS size
         wf_gx_padded = _circular_pad(wf_gx_mtpm, num_pns_samples)
         wf_gy_padded = _circular_pad(wf_gy_mtpm, num_pns_samples)
         wf_gz_padded = _circular_pad(wf_gz_mtpm, num_pns_samples)
         
-        # Create time array for padded waveforms
-        time_wf_ms = np.arange(num_pns_samples) * grad_raster_time * 1000.0  # to ms
+        # Use the SAME time array as PNS plot (based on num_pns_samples)
+        time_wf_ms = time_pns_ms  # <-- FIX: Use consistent time axis
         
         ax_wf.plot(time_wf_ms, wf_gx_padded, color=colors['x'], linewidth=2, label='Gx')
         ax_wf.plot(time_wf_ms, wf_gy_padded, color=colors['y'], linewidth=2, label='Gy')

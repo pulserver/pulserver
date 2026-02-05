@@ -6268,34 +6268,73 @@ void pulseqlib_trGradientWaveformsFree(pulseqlib_TRGradientWaveforms* waveforms)
     waveforms->numSamplesGz = 0;
 }
 
-/**
- * @brief Count samples needed for a single gradient channel in a block.
- * 
- * @param[in] gradDef    Gradient definition (or NULL if no gradient).
- * @return Number of samples needed (0 if no gradient, varies for gradients).
- */
 static int count_grad_samples_for_block(
-    const pulseqlib_GradDefinition* gradDef)
+    const pulseqlib_SequenceDescriptor* seqDesc,
+    const pulseqlib_GradDefinition* gradDef,
+    const float blockDuration_us)
 {
+    int count;
     int numSamples;
-    
+    float delay_us, riseTime_us, flatTime_us, fallTime_us;
+    float duration_us;
+    float gradRaster_us;
+    float blockDurationRaster_us;
+    pulseqlib_ShapeArbitrary decompTime;
+
+    /* No gradient on this channel */
     if (!gradDef) {
-        return 1; /* No gradient on this channel - no samples needed */
+        return 2;
+    }
+    
+    /* Initialize */
+    count = 0;
+    decompTime.samples = NULL;
+
+    /* Parse rasters */
+    gradRaster_us = seqDesc->gradRasterTime_us;
+    blockDurationRaster_us = seqDesc->blockDurationRaster_us;
+    numSamples = gradDef->fallTimeOrNumUncompressedSamples;
+        /* Get delay */
+    delay_us = (float)gradDef->delay;
+
+    /* If delay > block_duration_raster, write zero at block start */
+    if (delay_us > 0.0f) {
+        count++;
     }
     
     if (gradDef->type == 0) {
         /* Trapezoid */
-        if (gradDef->flatTimeOrUnused > 0) {
-            numSamples = 4; /* 0, rise, rise+flat, rise+flat+fall */
+        riseTime_us = (float)gradDef->riseTimeOrUnused;
+        flatTime_us = (float)gradDef->flatTimeOrUnused;
+        fallTime_us = (float)gradDef->fallTimeOrNumUncompressedSamples;
+        duration_us = delay_us + riseTime_us + flatTime_us + fallTime_us;
+        
+        if (flatTime_us > 0) {
+            count += 4; /* 4 points: start, rise, flat, fall */
         } else {
-            numSamples = 3; /* 0, rise, rise+fall (triangular) */
+            count += 3; /* 3 points: start, rise, fall */
+        }            
+    } else {        
+        if (decompressShape(&seqDesc->shapes[gradDef->unusedOrTimeShapeID - 1], &decompTime, gradRaster_us)) {
+            duration_us = delay_us + decompTime.samples[decompTime.numUncompressedSamples - 1];
+        } else {
+            duration_us = delay_us + 0.5f * gradRaster_us + gradRaster_us * (float)(numSamples - 1);
+        }  
+
+        /* Free decompressed shapes */
+        if (decompTime.samples) {
+            FREE(decompTime.samples);
         }
-    } else {
-        /* Arbitrary/Extended: use numUncompressedSamples */
-        numSamples = gradDef->fallTimeOrNumUncompressedSamples;
+
+        count += numSamples;
+    }
+
+    /* Add block-end point if waveform ends before block ends */
+    if (duration_us > blockDuration_us) {
+        count++;
     }
     
-    return numSamples;
+    return count;
 }
 
 /**
@@ -6391,18 +6430,13 @@ static int compute_position_max_amplitudes(
     return PULSEQLIB_OK;
 }
 
-/**
- * @brief Fill gradient waveform for a single block on one channel.
- * @param prevTime Last time value from previous block (-1 if none). If first sample matches, it's skipped.
- */
 static int fill_grad_waveform_for_block(
     const pulseqlib_GradDefinition* gradDef,
     const pulseqlib_GradTableElement* gradTableEntry,
     const pulseqlib_SequenceDescriptor* seqDesc,
     float t0,
-    float prevTime,
     const float* positionMaxAmp,
-    const float blockDuration_us,  /* NEW: need block duration for pure delays */
+    const float blockDuration_us,
     float* time,
     float* waveform,
     int startIdx)
@@ -6415,70 +6449,107 @@ static int fill_grad_waveform_for_block(
     float riseTime_us, flatTime_us, fallTime_us;
     float t_sample;
     float gradRaster_us;
+    float blockDurationRaster_us;
+    float blockEnd_us;
+    float blockStart_us;
+    float lastWrittenTime;
     pulseqlib_ShapeArbitrary decompWave;
     pulseqlib_ShapeArbitrary decompTime;
     int hasTimeShape;
     
     idx = startIdx;
     gradRaster_us = seqDesc->gradRasterTime_us;
+    blockDurationRaster_us = seqDesc->blockDurationRaster_us;
+    blockStart_us = t0;
+    blockEnd_us = t0 + blockDuration_us;
     decompWave.samples = NULL;
     decompTime.samples = NULL;
     
-    /* No gradient on this channel - write nothing */
-    if (!gradDef || !gradTableEntry) {
-        t_sample = t0 + blockDuration_us;
-        if (t_sample != prevTime) {
-            time[idx] = t_sample;
-            waveform[idx] = 0.0f;
-            idx++;
-        }
+    /* No gradient on this channel */
+    if (!gradDef || !gradTableEntry) 
+    {
+        /* Write zero point at block start (if not duplicate of previous) */
+        time[idx] = blockStart_us;
+        waveform[idx] = 0.0f;
+        idx++;
+        
+        /* Always write zero point at block end (should never be same as blockStart) */
+        time[idx] = blockEnd_us;
+        waveform[idx] = 0.0f;
+        idx++;
+        
         return idx - startIdx;
     }
+
+    /* Initialize last written time to sample before block start */
+    lastWrittenTime = t0;
     
     /* Get amplitude and sign from gradTable */
     sign = (gradTableEntry->amplitude >= 0.0f) ? 1.0f : -1.0f;
     shotIdx = gradTableEntry->shotIndex;
     maxAmp = positionMaxAmp[shotIdx];
     delay_us = (float)gradDef->delay;
+
+    /* If delay > block_duration_raster, write zero at block start */
+    if (delay_us > 0.0f) {
+        t_sample = blockStart_us;
+        time[idx] = t_sample;
+        waveform[idx] = 0.0f;
+        lastWrittenTime = t_sample;
+        idx++;
+    }
     
     if (gradDef->type == 0) {
         /* Trapezoid */
         riseTime_us = (float)gradDef->riseTimeOrUnused;
         flatTime_us = (float)gradDef->flatTimeOrUnused;
         fallTime_us = (float)gradDef->fallTimeOrNumUncompressedSamples;
-        
+                
         if (flatTime_us > 0) {
             /* Full trapezoid: 4 points */
-            t_sample = t0 + delay_us;
-            if (t_sample != prevTime) {
-                time[idx] = t_sample;
-                waveform[idx] = 0.0f;
-                idx++;
-            }
-            time[idx] = t0 + delay_us + riseTime_us;
-            waveform[idx] = sign * maxAmp;
-            idx++;
-            time[idx] = t0 + delay_us + riseTime_us + flatTime_us;
-            waveform[idx] = sign * maxAmp;
-            idx++;
-            time[idx] = t0 + delay_us + riseTime_us + flatTime_us + fallTime_us;
+            t_sample = blockStart_us + delay_us;
+            time[idx] = t_sample;
             waveform[idx] = 0.0f;
+            lastWrittenTime = t_sample;
+            idx++;
+
+            t_sample = blockStart_us + delay_us + riseTime_us;
+            time[idx] = t_sample;
+            waveform[idx] = sign * maxAmp;
+            lastWrittenTime = t_sample;
+            idx++;
+            
+            t_sample = blockStart_us + delay_us + riseTime_us + flatTime_us;
+            time[idx] = t_sample;
+            waveform[idx] = sign * maxAmp;
+            lastWrittenTime = t_sample;
+            idx++;
+            
+            t_sample = blockStart_us + delay_us + riseTime_us + flatTime_us + fallTime_us;
+            time[idx] = t_sample;
+            waveform[idx] = 0.0f;
+            lastWrittenTime = t_sample;
             idx++;
         } else {
             /* Triangular: 3 points */
-            t_sample = t0 + delay_us;
-            if (t_sample != prevTime) {
-                time[idx] = t_sample;
-                waveform[idx] = 0.0f;
-                idx++;
-            }
-            time[idx] = t0 + delay_us + riseTime_us;
-            waveform[idx] = sign * maxAmp;
-            idx++;
-            time[idx] = t0 + delay_us + riseTime_us + fallTime_us;
+            t_sample = blockStart_us + delay_us;
+            time[idx] = t_sample;
             waveform[idx] = 0.0f;
+            lastWrittenTime = t_sample;
             idx++;
-        }
+
+            t_sample = blockStart_us + delay_us + riseTime_us;
+            time[idx] = t_sample;
+            waveform[idx] = sign * maxAmp;
+            lastWrittenTime = t_sample;
+            idx++;
+            
+            t_sample = blockStart_us + delay_us + riseTime_us + fallTime_us;
+            time[idx] = t_sample;
+            waveform[idx] = 0.0f;
+            lastWrittenTime = t_sample;
+            idx++;
+        }            
     } else {
         /* Arbitrary or Extended trapezoid */
         numSamples = gradDef->fallTimeOrNumUncompressedSamples;
@@ -6500,35 +6571,27 @@ static int fill_grad_waveform_for_block(
                 hasTimeShape = 1;
             }
         }
-        
+                
         if (hasTimeShape) {
-            /* Extended trapezoid: time shape stores values in raster units, convert to us */
-            for (i = 0; i < numSamples && i < decompWave.numUncompressedSamples; ++i) {
-                t_sample = (i < decompTime.numUncompressedSamples) ? 
-                           decompTime.samples[i] : (float)i * gradRaster_us;
-                t_sample = t0 + delay_us + t_sample;
-                /* Skip first sample if duplicate time */
-                if (i == 0 && t_sample == prevTime) {
-                    continue;
-                }
+            /* Extended trapezoid: time shape stores edge times */
+            for (i = 0; i < numSamples; ++i) {
+                t_sample = blockStart_us + delay_us + decompTime.samples[i];
                 time[idx] = t_sample;
                 waveform[idx] = sign * maxAmp * decompWave.samples[i];
+                lastWrittenTime = t_sample;
                 idx++;
             }
         } else {
             /* Arbitrary gradient: uniform timing, samples at raster center */
-            for (i = 0; i < numSamples && i < decompWave.numUncompressedSamples; ++i) {
-                t_sample = t0 + delay_us + 0.5f * gradRaster_us + (float)i * gradRaster_us;
-                /* Skip first sample if duplicate time */
-                if (i == 0 && t_sample == prevTime) {
-                    continue;
-                }
+            for (i = 0; i < numSamples; ++i) {
+                t_sample = blockStart_us + delay_us + 0.5f * gradRaster_us + (float)i * gradRaster_us;
                 time[idx] = t_sample;
                 waveform[idx] = sign * maxAmp * decompWave.samples[i];
+                lastWrittenTime = t_sample;
                 idx++;
             }
         }
-        
+                
         /* Free decompressed shapes */
         if (decompWave.samples) {
             FREE(decompWave.samples);
@@ -6536,6 +6599,13 @@ static int fill_grad_waveform_for_block(
         if (decompTime.samples) {
             FREE(decompTime.samples);
         }
+    }
+
+    /* Add block-end point if waveform ends before block ends */
+    if (blockEnd_us > lastWrittenTime) {
+        time[idx] = blockEnd_us;
+        waveform[idx] = 0.0f;
+        idx++;
     }
     
     return idx - startIdx;
@@ -6725,9 +6795,9 @@ int pulseqlib_getTRGradientWaveforms(
         gzDef = (gzTable && gzTable->ID >= 0 && gzTable->ID < seqDesc->numUniqueGrads) ? 
                 &seqDesc->gradDefinitions[gzTable->ID] : NULL;
         
-        totalSamplesGx += count_grad_samples_for_block(gxDef);
-        totalSamplesGy += count_grad_samples_for_block(gyDef);
-        totalSamplesGz += count_grad_samples_for_block(gzDef);
+        totalSamplesGx += count_grad_samples_for_block(seqDesc, gxDef, blockDuration_us);
+        totalSamplesGy += count_grad_samples_for_block(seqDesc, gyDef, blockDuration_us);
+        totalSamplesGz += count_grad_samples_for_block(seqDesc, gzDef, blockDuration_us);
     }
     
     /* ========== Allocate arrays ========== */
@@ -6754,7 +6824,7 @@ int pulseqlib_getTRGradientWaveforms(
     idxGx = 0;
     idxGy = 0;
     idxGz = 0;
-    
+
     for (n = 0; n < trSize; ++n) {
         blockIdx = trStart + n;
         blockTableEntry = &seqDesc->blockTable[blockIdx];
@@ -6789,7 +6859,6 @@ int pulseqlib_getTRGradientWaveforms(
         idxGx += fill_grad_waveform_for_block(
             gxDef, gxTable, seqDesc,
             t0,
-            (idxGx > 0) ? waveforms->timeGx[idxGx - 1] : -1.0f,
             &posMaxAmpGx[n * MAX_GRAD_SHOTS], blockDuration_us,
             waveforms->timeGx, waveforms->waveformGx, idxGx);
         
@@ -6797,7 +6866,6 @@ int pulseqlib_getTRGradientWaveforms(
         idxGy += fill_grad_waveform_for_block(
             gyDef, gyTable, seqDesc,
             t0,
-            (idxGy > 0) ? waveforms->timeGy[idxGy - 1] : -1.0f,
             &posMaxAmpGy[n * MAX_GRAD_SHOTS], blockDuration_us,
             waveforms->timeGy, waveforms->waveformGy, idxGy);
         
@@ -6805,10 +6873,9 @@ int pulseqlib_getTRGradientWaveforms(
         idxGz += fill_grad_waveform_for_block(
             gzDef, gzTable, seqDesc,
             t0,
-            (idxGz > 0) ? waveforms->timeGz[idxGz - 1] : -1.0f,
             &posMaxAmpGz[n * MAX_GRAD_SHOTS], blockDuration_us,
             waveforms->timeGz, waveforms->waveformGz, idxGz);
-
+        
         /* Update time offset for next block */
         t0 += blockDuration_us;
     }
@@ -6822,7 +6889,7 @@ int pulseqlib_getTRGradientWaveforms(
     waveforms->numSamplesGx = idxGx;
     waveforms->numSamplesGy = idxGy;
     waveforms->numSamplesGz = idxGz;
-    
+
     /* Interpolate to uniform raster (0.5 * gradient raster time) */
     targetRaster_us = 0.5f * seqDesc->gradRasterTime_us;
     
@@ -6849,7 +6916,7 @@ int pulseqlib_getTRGradientWaveforms(
         diag->code = result;
         return result;
     }
-    
+
     diag->code = PULSEQLIB_OK;
     return PULSEQLIB_OK;
 }
