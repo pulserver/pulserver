@@ -8569,18 +8569,6 @@ cleanup:
     return result;
 }
 
-/**
- * @brief Process a single gradient axis for PNS with circular padding
- * 
- * @param waveform      Input gradient waveform (Hz/m)
- * @param numSamples    Number of samples in waveform
- * @param kernelLen     Length of PNS kernel (determines padding)
- * @param gradRasterTime_us  Gradient raster time in µs
- * @param kernel        PNS convolution kernel
- * @param pnsAxis       Output: PNS values for this axis (length = numSamples)
- * @param pnsTotal      In/Out: Accumulated sum of squares (length = numSamples)
- * @param pnsStore      Output: Copy of pnsAxis if not NULL
- */
 static int process_pns_axis_circular(
     const float* waveform,
     int numSamples,
@@ -8591,9 +8579,10 @@ static int process_pns_axis_circular(
     float* paddedWaveform,   /* Working buffer: size = numSamples + kernelLen */
     float* slewRate,         /* Working buffer: size = numSamples + kernelLen - 1 */
     float* pnsConv,          /* Working buffer: size = numSamples + kernelLen - 1 */
-    float* pnsAxis,          /* Output: size = numSamples */
-    float* pnsTotal,         /* In/Out accumulator: size = numSamples */
-    float* pnsStore)         /* Optional output copy: size = numSamples or NULL */
+    float* pnsAxis,          /* Output: size = numSamples + kernelLen - 1 (FULL output) */
+    float* pnsTotal,         /* In/Out accumulator: size = numSamples + kernelLen - 1 */
+    float* pnsStore,         /* Optional output copy: size = numSamples + kernelLen - 1 or NULL */
+    int convOutputLen)       /* Length of pnsConv output (= numSamples + kernelLen - 1) */
 {
     int i, paddedLen, slewLen;
     int returnCode;
@@ -8624,16 +8613,16 @@ static int process_pns_axis_circular(
         return returnCode;
     }
     
-    /* Extract valid portion (skip initial transient, keep numSamples) */
-    /* The valid region starts at kernelLen-1 after convolution */
-    for (i = 0; i < numSamples; ++i) {
-        pnsAxis[i] = pnsConv[kernelLen - 1 + i] * 100.0f;  /* Convert to percent */
-        pnsTotal[i] += pnsAxis[i] * pnsAxis[i];
+    /* Return FULL convolution output (no extraction/truncation) */
+    /* This preserves the inter-TR boundary information */
+    for (i = 0; i < slewLen; ++i) {
+        pnsAxis[i] = pnsConv[i] * 100.0f;  /* Convert to percent */
+        pnsTotal[i] += pnsConv[i] * pnsConv[i];
     }
     
     /* Store if requested */
     if (pnsStore) {
-        for (i = 0; i < numSamples; ++i) {
+        for (i = 0; i < slewLen; ++i) {
             pnsStore[i] = pnsAxis[i];
         }
     }
@@ -8652,7 +8641,7 @@ int pulseqlib_computePNS(
     pulseqlib_Diagnostic* diag)
 {
     pulseqlib_Diagnostic localDiag;
-    int maxSamples, paddedLen, slewLen;
+    int maxSamples, paddedLen, slewLen, fullOutputLen;
     int kernelLen;
     float* kernel = NULL;
     float* paddedWaveform = NULL;
@@ -8705,13 +8694,14 @@ int pulseqlib_computePNS(
     /* Compute buffer sizes with circular padding */
     paddedLen = maxSamples + kernelLen;
     slewLen = paddedLen - 1;
+    fullOutputLen = slewLen;  /* Full output (no truncation) */
     
     /* Allocate working buffers */
     paddedWaveform = (float*)ALLOC((size_t)paddedLen * sizeof(float));
     slewRate = (float*)ALLOC((size_t)slewLen * sizeof(float));
     pnsConv = (float*)ALLOC((size_t)slewLen * sizeof(float));
-    pnsAxis = (float*)ALLOC((size_t)maxSamples * sizeof(float));
-    pnsTotal = (float*)ALLOC((size_t)maxSamples * sizeof(float));
+    pnsAxis = (float*)ALLOC((size_t)fullOutputLen * sizeof(float));
+    pnsTotal = (float*)ALLOC((size_t)fullOutputLen * sizeof(float));
     
     if (!paddedWaveform || !slewRate || !pnsConv || !pnsAxis || !pnsTotal) {
         returnCode = PULSEQLIB_ERR_ALLOC_FAILED;
@@ -8719,21 +8709,21 @@ int pulseqlib_computePNS(
     }
     
     /* Initialize pnsTotal to zero */
-    for (i = 0; i < maxSamples; ++i) {
+    for (i = 0; i < fullOutputLen; ++i) {
         pnsTotal[i] = 0.0f;
     }
     
     /* Allocate per-axis storage if requested */
     if (storeWaveforms) {
-        pnsX = (float*)ALLOC((size_t)maxSamples * sizeof(float));
-        pnsY = (float*)ALLOC((size_t)maxSamples * sizeof(float));
-        pnsZ = (float*)ALLOC((size_t)maxSamples * sizeof(float));
+        pnsX = (float*)ALLOC((size_t)fullOutputLen * sizeof(float));
+        pnsY = (float*)ALLOC((size_t)fullOutputLen * sizeof(float));
+        pnsZ = (float*)ALLOC((size_t)fullOutputLen * sizeof(float));
         if (!pnsX || !pnsY || !pnsZ) {
             returnCode = PULSEQLIB_ERR_ALLOC_FAILED;
             goto cleanup;
         }
         /* Initialize to zero */
-        for (i = 0; i < maxSamples; ++i) {
+        for (i = 0; i < fullOutputLen; ++i) {
             pnsX[i] = 0.0f;
             pnsY[i] = 0.0f;
             pnsZ[i] = 0.0f;
@@ -8745,7 +8735,7 @@ int pulseqlib_computePNS(
         waveforms->waveformGx, waveforms->numSamplesGx,
         kernelLen, gradRasterTime_us, gamma_hz_per_tesla, kernel,
         paddedWaveform, slewRate, pnsConv, pnsAxis, pnsTotal,
-        storeWaveforms ? pnsX : NULL);
+        storeWaveforms ? pnsX : NULL, fullOutputLen);
     if (PULSEQLIB_FAILED(returnCode)) goto cleanup;
     
     /* Process Y axis */
@@ -8753,7 +8743,7 @@ int pulseqlib_computePNS(
         waveforms->waveformGy, waveforms->numSamplesGy,
         kernelLen, gradRasterTime_us, gamma_hz_per_tesla, kernel,
         paddedWaveform, slewRate, pnsConv, pnsAxis, pnsTotal,
-        storeWaveforms ? pnsY : NULL);
+        storeWaveforms ? pnsY : NULL, fullOutputLen);
     if (PULSEQLIB_FAILED(returnCode)) goto cleanup;
     
     /* Process Z axis */
@@ -8761,14 +8751,14 @@ int pulseqlib_computePNS(
         waveforms->waveformGz, waveforms->numSamplesGz,
         kernelLen, gradRasterTime_us, gamma_hz_per_tesla, kernel,
         paddedWaveform, slewRate, pnsConv, pnsAxis, pnsTotal,
-        storeWaveforms ? pnsZ : NULL);
+        storeWaveforms ? pnsZ : NULL, fullOutputLen);
     if (PULSEQLIB_FAILED(returnCode)) goto cleanup;
     
     /* Compute sqrt for combined PNS and find maximum */
     maxPNS = 0.0f;
     maxIdx = 0;
-    for (i = 0; i < maxSamples; ++i) {
-        pnsTotal[i] = sqrtf(pnsTotal[i]);
+    for (i = 0; i < fullOutputLen; ++i) {
+        pnsTotal[i] = 100.0f * (float)sqrt((double)pnsTotal[i]);
         if (pnsTotal[i] > maxPNS) {
             maxPNS = pnsTotal[i];
             maxIdx = i;
@@ -8776,7 +8766,7 @@ int pulseqlib_computePNS(
     }
     
     /* Fill result */
-    result->numSamples = maxSamples;
+    result->numSamples = fullOutputLen;
     result->pnsTotal = pnsTotal;
     pnsTotal = NULL;  /* Transfer ownership */
     

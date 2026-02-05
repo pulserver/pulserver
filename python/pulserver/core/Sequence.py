@@ -705,6 +705,7 @@ def get_pns(
         max_pns_index=result_dict["max_pns_index"],
         max_pns_time_us=result_dict["max_pns_time_us"],
         num_samples=result_dict["num_samples"],
+        chronaxie_us=chronaxie_us,  # Store for visualization
     )
     
     # Add waveforms if stored
@@ -1000,13 +1001,16 @@ def _plot_pns(
     
     Creates a comprehensive visualization of PNS analysis including:
     - Top panel: PNS % vs time (ms) with 80% (dotted) and 100% (dashed) limits
-    - Bottom panel: Gradient waveforms circularly padded to match PNS length
+    - Bottom panel: Gradient waveforms circularly padded to match the padding used in PNS computation
+    
+    The waveforms are padded circularly by kernelLen = floor(20 * chronaxie / dt) + 1,
+    matching exactly how the C library computes PNS via circular convolution.
     
     Parameters
     ----------
     pns : SimpleNamespace
         Output from get_pns() with store_waveforms=True.
-        Must contain pns_x, pns_y, pns_z, and num_samples.
+        Must contain pns_x, pns_y, pns_z, num_samples, and chronaxie_us.
     seq : PulserverSequence | None
         The sequence object (needed to get gradient waveforms).
         If None, bottom waveform panel is skipped.
@@ -1019,15 +1023,9 @@ def _plot_pns(
     Raises
     ------
     ValueError
-        If pns is missing required attributes (pns_x, pns_y, pns_z).
+        If pns is missing required attributes.
     RuntimeError
         If waveforms requested but seq not provided.
-        
-    Notes
-    -----
-    - Top panel: PNS % vs time (ms) with 80% (dotted) and 100% (dashed) limits
-    - Bottom panel: Gradient waveforms circularly padded to match PNS length
-    - Waveforms are in mT/m
     """
     # Validate input
     if not hasattr(pns, 'pns_x') or not hasattr(pns, 'pns_y') or not hasattr(pns, 'pns_z'):
@@ -1036,8 +1034,19 @@ def _plot_pns(
     if not hasattr(pns, 'num_samples'):
         raise ValueError("pns must have num_samples attribute")
     
+    if not hasattr(pns, 'chronaxie_us'):
+        raise ValueError("pns must have chronaxie_us attribute")
+    
     num_pns_samples = pns.num_samples
     grad_raster_time = seq.system.grad_raster_time  # in seconds
+    chronaxie_us = pns.chronaxie_us
+    
+    # Compute kernel length: kernelLen = floor(20 * chronaxie / dt) + 1
+    # This matches PNS_KERNEL_DURATION_FACTOR = 20.0 from C code
+    kernel_len = int(20.0 * chronaxie_us / (grad_raster_time * 1e6)) + 1
+    
+    # Padded length used in PNS computation: paddedLen = numSamples + kernelLen
+    padded_len = num_pns_samples + kernel_len
     
     # Create figure
     fig = plt.figure()
@@ -1045,13 +1054,14 @@ def _plot_pns(
     # ============ Panel 1: PNS Waveforms ============
     ax_pns = plt.subplot(2, 1, 1)
     
-    # Create time array in ms based on PNS samples and gradient raster
-    time_pns_ms = np.arange(num_pns_samples) * 0.5 * grad_raster_time * 1000.0  # Convert to ms
+    # Time array for PNS (original, unpadded length)
+    time_pns_ms = np.arange(num_pns_samples) * 0.5 * grad_raster_time * 1000.0
     
     # Plot PNS waveforms
-    colors = {'x': 'C0', 'y': 'C1', 'z': 'C2'}
-    labels = {'x': 'PNS_X', 'y': 'PNS_Y', 'z': 'PNS_Z'}
-    
+    colors = {'x': 'C0', 'y': 'C1', 'z': 'C2', 'total': 'C3'}
+    labels = {'x': 'PNS_X', 'y': 'PNS_Y', 'z': 'PNS_Z', 'total': 'PNS_Total'}
+
+    ax_pns.plot(time_pns_ms, pns.pns_total, color=colors['total'], linewidth=2, label=labels['total'])    
     ax_pns.plot(time_pns_ms, pns.pns_x, color=colors['x'], linewidth=2, label=labels['x'])
     ax_pns.plot(time_pns_ms, pns.pns_y, color=colors['y'], linewidth=2, label=labels['y'])
     ax_pns.plot(time_pns_ms, pns.pns_z, color=colors['z'], linewidth=2, label=labels['z'])
@@ -1081,21 +1091,24 @@ def _plot_pns(
         wf_gy_mtpm = waveforms.waveform_gy / gamma * 1000.0
         wf_gz_mtpm = waveforms.waveform_gz / gamma * 1000.0
         
-        # Circularly pad waveforms to match PNS size
-        wf_gx_padded = _circular_pad(wf_gx_mtpm, num_pns_samples)
-        wf_gy_padded = _circular_pad(wf_gy_mtpm, num_pns_samples)
-        wf_gz_padded = _circular_pad(wf_gz_mtpm, num_pns_samples)
+        # Circularly pad waveforms to match PNS computation: paddedLen = numSamples + kernelLen
+        wf_gx_padded = _circular_pad(wf_gx_mtpm, padded_len)
+        wf_gy_padded = _circular_pad(wf_gy_mtpm, padded_len)
+        wf_gz_padded = _circular_pad(wf_gz_mtpm, padded_len)
         
-        # Use the SAME time array as PNS plot (based on num_pns_samples)
-        time_wf_ms = time_pns_ms  # <-- FIX: Use consistent time axis
+        # Time array for padded waveforms
+        time_wf_padded_ms = np.arange(padded_len) * 0.5 * grad_raster_time * 1000.0
         
-        ax_wf.plot(time_wf_ms, wf_gx_padded, color=colors['x'], linewidth=2, label='Gx')
-        ax_wf.plot(time_wf_ms, wf_gy_padded, color=colors['y'], linewidth=2, label='Gy')
-        ax_wf.plot(time_wf_ms, wf_gz_padded, color=colors['z'], linewidth=2, label='Gz')
+        ax_wf.plot(time_wf_padded_ms, wf_gx_padded, color=colors['x'], linewidth=2, label='Gx')
+        ax_wf.plot(time_wf_padded_ms, wf_gy_padded, color=colors['y'], linewidth=2, label='Gy')
+        ax_wf.plot(time_wf_padded_ms, wf_gz_padded, color=colors['z'], linewidth=2, label='Gz')
+        
+        # Add vertical line to show where padding starts
+        ax_wf.axvline(waveforms.time[-1] / 1000.0, color='gray', linestyle=':', linewidth=1.5, alpha=0.7, label='Padding start')
         
         ax_wf.set_xlabel('Time (ms)', fontsize=12)
         ax_wf.set_ylabel('Gradient Amplitude (mT/m)', fontsize=12)
-        ax_wf.set_title('TR Gradient Waveforms (Circularly Padded to PNS Length)', fontsize=14, fontweight='bold')
+        ax_wf.set_title(f'TR Gradient Waveforms (Circularly Padded by {kernel_len} samples)', fontsize=14, fontweight='bold')
         ax_wf.legend(loc='upper right', fontsize=11)
         ax_wf.grid(True, alpha=0.3)
     
@@ -1107,9 +1120,12 @@ def _circular_pad(waveform: np.ndarray, target_length: int) -> np.ndarray:
     """
     Circularly pad a waveform to a target length.
     
-    If target_length > len(waveform), repeats the waveform cyclically.
-    If target_length < len(waveform), truncates the waveform.
+    Uses circular (modulo) indexing so that when extended, the waveform
+    wraps around to the beginning (true circular padding).
+    
     If target_length == len(waveform), returns a copy.
+    If target_length > len(waveform), uses modulo indexing to repeat cyclically.
+    If target_length < len(waveform), truncates the waveform.
     
     Parameters
     ----------
@@ -1121,7 +1137,7 @@ def _circular_pad(waveform: np.ndarray, target_length: int) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        Padded waveform of length target_length.
+        Circularly padded waveform of length target_length.
     """
     current_length = len(waveform)
     
@@ -1131,10 +1147,9 @@ def _circular_pad(waveform: np.ndarray, target_length: int) -> np.ndarray:
         # Truncate
         return waveform[:target_length].copy()
     else:
-        # Circular repeat: tile the waveform and then truncate
-        num_repeats = int(np.ceil(target_length / current_length))
-        padded = np.tile(waveform, num_repeats)
-        return padded[:target_length].copy()
+        # Circular pad: use modulo indexing to wrap around
+        indices = np.arange(target_length) % current_length
+        return waveform[indices].copy()
 
 
 def _check_pns_thresholds(pns: SimpleNamespace) -> None:
@@ -1149,22 +1164,16 @@ def _check_pns_thresholds(pns: SimpleNamespace) -> None:
     if not hasattr(pns, 'pns_x') or not hasattr(pns, 'pns_y') or not hasattr(pns, 'pns_z'):
         return  # No per-axis PNS data available
     
-    thresholds = [80.0, 100.0]
-    axes = {'pns_x': 'X', 'pns_y': 'Y', 'pns_z': 'Z'}
-    
-    for axis_attr, axis_name in axes.items():
-        pns_data = getattr(pns, axis_attr, None)
-        if pns_data is None:
-            continue
-        
-        for threshold in thresholds:
-            max_val = np.max(pns_data)
-            if max_val > threshold:
-                warnings.warn(
-                    f"PNS {axis_name} exceeds {threshold}% threshold: "
-                    f"max = {max_val:.1f}%",
-                    UserWarning
-                )
+    thresholds = [80.0, 100.0]        
+    max_val = np.max(pns.pns_total)
+   
+    for threshold in thresholds:
+        if max_val > threshold:
+            warnings.warn(
+                f"PNS Total exceeds {threshold}% threshold: "
+                f"max = {max_val:.1f}%",
+                UserWarning
+            )
 
 
 def _check_acoustic_forbidden_bands(
