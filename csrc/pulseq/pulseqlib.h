@@ -701,9 +701,10 @@ typedef struct pulseqlib_TRsegment {
     int* hasRotation;   /**< Per-block flag: 1 if any instance has rotation, 0 otherwise */
     int* norotFlag;     /**< Per-block flag: 1 if any instance has norot, 0 otherwise */
     int* noposFlag;     /**< Per-block flag: 1 if any instance has nopos, 0 otherwise */
+    int maxEnergyStartBlock; /**< startBlock of the instance with maximum total gradient energy */
 } pulseqlib_TRsegment;
 
-#define PULSEQLIB_TR_SEGMENT_INIT {0, 0, NULL}
+#define PULSEQLIB_TR_SEGMENT_INIT {0, 0, NULL, NULL, NULL, NULL, NULL, 0}
 
 typedef struct pulseqlib_SegmentTableResult {
     int numUniqueSegments;       /**< Total number of unique segment definitions */

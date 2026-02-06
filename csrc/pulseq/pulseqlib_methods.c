@@ -6192,6 +6192,8 @@ int pulseqlib_findSegmentsInTR(
   pulseqlib_Diagnostic* diag
 ) {
     const pulseqlib_TRdescriptor* trDesc = &seqDesc->trDescriptor;
+    const pulseqlib_BlockTableElement* bte;
+    const pulseqlib_BlockDefinition* bdef;
     pulseqlib_TRsegment* trSegments = NULL;
     pulseqlib_TRsegment* trSegmentsRaw = NULL;
     pulseqlib_TRsegment* trSegmentsExpanded = NULL;
@@ -6205,12 +6207,20 @@ int pulseqlib_findSegmentsInTR(
     int found;
     int trStart;
     int trSize;
-    int n, i;
+    int n, b, i;
     int segResult;
     int offset;
     int maxExpandedSegments;
     int pureDelayUniqueIdx;
     int isPureDelay;
+    int nb;
+    int uniqueIdx;
+    int blockTableIdx;
+    int axGradIDs[3];
+    int axDefIDs[3];
+    int ax;
+    float* maxEnergy;
+    float instanceEnergy;
 
     /* Use local diag if caller doesn't want diagnostics */
     if (!diag) {
@@ -6491,7 +6501,7 @@ int pulseqlib_findSegmentsInTR(
      * OR in the flags from the blockTable entry.
      */
     for (i = 0; i < numUniqueSegments; ++i) {
-        int nb = seqDesc->segmentDefinitions[i].numBlocks;
+        nb = seqDesc->segmentDefinitions[i].numBlocks;
         seqDesc->segmentDefinitions[i].hasTrigger  = (int*) ALLOC(nb * sizeof(int));
         seqDesc->segmentDefinitions[i].hasRotation  = (int*) ALLOC(nb * sizeof(int));
         seqDesc->segmentDefinitions[i].norotFlag    = (int*) ALLOC(nb * sizeof(int));
@@ -6515,8 +6525,6 @@ int pulseqlib_findSegmentsInTR(
 
     /* Scan all expanded segment instances */
     for (n = 0; n < numSegmentsTotal; ++n) {
-        int uniqueIdx;
-        int b;
         
         /* Look up this instance's unique segment index from the section tables */
         if (n < numPrepSegments) {
@@ -6527,11 +6535,16 @@ int pulseqlib_findSegmentsInTR(
             uniqueIdx = seqDesc->segmentTable.cooldownSegmentTable[n - numPrepSegments - numMainSegments];
         }
         
-        /* For each block in this instance, OR in the flags */
+        instanceEnergy = 0.0f;
+        
+        /* For each block in this instance */
         for (b = 0; b < trSegmentsExpanded[n].numBlocks; ++b) {
-            int blockTableIdx = trSegmentsExpanded[n].startBlock + b;
-            const pulseqlib_BlockTableElement* bte = &seqDesc->blockTable[blockTableIdx];
+            blockTableIdx = trSegmentsExpanded[n].startBlock + b;
+            bte = &seqDesc->blockTable[blockTableIdx];
+            blockDefID = bte->ID;
+            bdef = &seqDesc->blockDefinitions[blockDefID];
             
+            /* OR in flags */
             if (bte->triggerID != -1) {
                 seqDesc->segmentDefinitions[uniqueIdx].hasTrigger[b] = 1;
             }
@@ -6544,8 +6557,34 @@ int pulseqlib_findSegmentsInTR(
             if (bte->noposFlag) {
                 seqDesc->segmentDefinitions[uniqueIdx].noposFlag[b] = 1;
             }
+            
+            /* Accumulate gradient energy for this instance */
+            axGradIDs[0] = bte->gxID;
+            axGradIDs[1] = bte->gyID;
+            axGradIDs[2] = bte->gzID;
+            axDefIDs[0] = bdef->gxID;
+            axDefIDs[1] = bdef->gyID;
+            axDefIDs[2] = bdef->gzID;
+
+            for (ax = 0; ax < 3; ++ax) {
+                if (axGradIDs[ax] >= 0 && axGradIDs[ax] < seqDesc->gradTableSize &&
+                    axDefIDs[ax] >= 0 && axDefIDs[ax] < seqDesc->numUniqueGrads) {
+                    float amp = seqDesc->gradTable[axGradIDs[ax]].amplitude;
+                    int shotIdx = seqDesc->gradTable[axGradIDs[ax]].shotIndex;
+                    float e = seqDesc->gradDefinitions[axDefIDs[ax]].energy[shotIdx];
+                    instanceEnergy += e * amp * amp;
+                }
+            }
+        }
+
+        /* Track the instance with maximum energy */
+        if (instanceEnergy > maxEnergy[uniqueIdx]) {
+            maxEnergy[uniqueIdx] = instanceEnergy;
+            seqDesc->segmentDefinitions[uniqueIdx].maxEnergyStartBlock = trSegmentsExpanded[n].startBlock;
         }
     }
+    
+    FREE(maxEnergy);
 
     /* Free expanded segments */
     for (n = 0; n < numSegmentsTotal; ++n) {
@@ -10420,6 +10459,114 @@ float** pulseqlib_getGradAmplitude(const pulseqlib_SequenceDescriptorCollection*
     *numShots = 0;
     *numSamplesPerShot = NULL;
     return NULL;
+}
+
+float pulseqlib_getGradInitialAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    int blockTableIdx;
+    const pulseqlib_BlockTableElement* bte;
+    int gradEventID;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return 1.0f;
+    }
+    
+    if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) {
+        return 1.0f;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return 1.0f;
+            }
+            
+            /* Use the max-energy instance's startBlock to index blockTable */
+            blockTableIdx = segment->maxEnergyStartBlock + blockIdx;
+            bte = &descCollection->descriptors[i].blockTable[blockTableIdx];
+            
+            /* Get the gradient event ID for the requested axis */
+            switch (axis) {
+                case PULSEQLIB_GRAD_AXIS_X: gradEventID = bte->gxID; break;
+                case PULSEQLIB_GRAD_AXIS_Y: gradEventID = bte->gyID; break;
+                case PULSEQLIB_GRAD_AXIS_Z: gradEventID = bte->gzID; break;
+                default: return 1.0f;
+            }
+            
+            /* No gradient on this axis */
+            if (gradEventID < 0 || gradEventID >= descCollection->descriptors[i].gradTableSize) {
+                return 1.0f;
+            }
+            
+            return descCollection->descriptors[i].gradTable[gradEventID].amplitude;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return 1.0f;
+}
+
+int pulseqlib_getGradInitialShotID(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    int blockTableIdx;
+    const pulseqlib_BlockTableElement* bte;
+    int gradEventID;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return 0;
+    }
+    
+    if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) {
+        return 0;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return 0;
+            }
+            
+            /* Use the max-energy instance's startBlock to index blockTable */
+            blockTableIdx = segment->maxEnergyStartBlock + blockIdx;
+            bte = &descCollection->descriptors[i].blockTable[blockTableIdx];
+            
+            /* Get the gradient event ID for the requested axis */
+            switch (axis) {
+                case PULSEQLIB_GRAD_AXIS_X: gradEventID = bte->gxID; break;
+                case PULSEQLIB_GRAD_AXIS_Y: gradEventID = bte->gyID; break;
+                case PULSEQLIB_GRAD_AXIS_Z: gradEventID = bte->gzID; break;
+                default: return 0;
+            }
+            
+            /* No gradient on this axis */
+            if (gradEventID < 0 || gradEventID >= descCollection->descriptors[i].gradTableSize) {
+                return 0;
+            }
+            
+            return descCollection->descriptors[i].gradTable[gradEventID].shotIndex;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return 0;
 }
 
 float* pulseqlib_getGradTime(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis, int* numSamples)

@@ -386,6 +386,36 @@ int pulseqlib_getGradDelay(const pulseqlib_SequenceDescriptorCollection* descCol
 float** pulseqlib_getGradAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis, int* numShots, int** numSamplesPerShot);
 
 /**
+ * @brief Get gradient amplitude for the max-energy instance of a segment.
+ * 
+ * Returns the gradient amplitude (Hz/m) from the block table entry of the
+ * segment instance that has the maximum total gradient energy. If no gradient
+ * is present on the specified axis, returns 1.0.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @param axis Gradient axis (PULSEQLIB_GRAD_AXIS_X, _Y, or _Z)
+ * @return Gradient amplitude (Hz/m), or 1.0 if no gradient on this axis
+ */
+float pulseqlib_getGradInitialAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis);
+
+/**
+ * @brief Get gradient shot index for the max-energy instance of a segment.
+ * 
+ * Returns the shot index from the block table entry of the segment instance
+ * that has the maximum total gradient energy. If no gradient is present on
+ * the specified axis, returns 0.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @param axis Gradient axis (PULSEQLIB_GRAD_AXIS_X, _Y, or _Z)
+ * @return Gradient shot index (0-based), or 0 if no gradient on this axis
+ */
+int pulseqlib_getGradInitialShotID(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis);
+
+/**
  * @brief Get gradient time waveform in microseconds.
  * 
  * For trapezoids, generates cumsum([0, riseTime, flatTime, fallTime]) or cumsum([0, riseTime, fallTime]) if flatTime == 0.
