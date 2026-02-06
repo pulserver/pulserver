@@ -516,6 +516,117 @@ int pulseqlib_blockHasNorot(const pulseqlib_SequenceDescriptorCollection* descCo
  */
 int pulseqlib_blockHasNopos(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
 
+/* ========== Cursor-based runtime accessors ========== */
+
+/**
+ * @brief Reinitialize cursor with a new repetition count.
+ *
+ * @param descCollection Sequence descriptor collection
+ * @param numRepetitions Number of full sequence repetitions
+ * @return 1 on success, 0 on failure
+ */
+int pulseqlib_cursorReinit(pulseqlib_SequenceDescriptorCollection* descCollection, int numRepetitions);
+
+/**
+ * @brief Reset cursor to the first block.
+ */
+void pulseqlib_cursorReset(pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Advance cursor to the next block.
+ *
+ * @return 1 if advanced, 0 if at end of sequence
+ */
+int pulseqlib_cursorAdvance(pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get total number of blocks for the current cursor run.
+ */
+int pulseqlib_cursorGetTotalBlocks(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get current unique segment index.
+ */
+int pulseqlib_cursorGetSegmentIdx(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get current block index within segment.
+ */
+int pulseqlib_cursorGetBlockInSeg(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get current block duration in microseconds.
+ *
+ * For pure delay blocks, returns the per-instance duration from blockTable.
+ * For non-delay blocks, returns the block definition duration.
+ */
+int pulseqlib_cursorGetBlockDuration(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get RF amplitude (Hz) for the current block, 0.0 if no RF.
+ */
+float pulseqlib_cursorGetRFAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get RF frequency offset (Hz) for the current block, 0.0 if no RF.
+ */
+float pulseqlib_cursorGetRFFrequency(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get RF phase offset (rad) for the current block, 0.0 if no RF.
+ */
+float pulseqlib_cursorGetRFPhaseOffset(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get Gx amplitude (Hz/m) for the current block, 0.0 if no Gx.
+ */
+float pulseqlib_cursorGetGxAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get Gx shot index for the current block, 0 if no Gx.
+ */
+int pulseqlib_cursorGetGxShotIndex(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get Gy amplitude (Hz/m) for the current block, 0.0 if no Gy.
+ */
+float pulseqlib_cursorGetGyAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get Gy shot index for the current block, 0 if no Gy.
+ */
+int pulseqlib_cursorGetGyShotIndex(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get Gz amplitude (Hz/m) for the current block, 0.0 if no Gz.
+ */
+float pulseqlib_cursorGetGzAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get Gz shot index for the current block, 0 if no Gz.
+ */
+int pulseqlib_cursorGetGzShotIndex(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get ADC flag for the current block (1 if active, 0 if not).
+ */
+int pulseqlib_cursorGetADCFlag(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get ADC frequency offset (Hz) for the current block, 0.0 if no ADC.
+ */
+float pulseqlib_cursorGetADCFrequency(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get ADC phase offset (rad) for the current block, 0.0 if no ADC.
+ */
+float pulseqlib_cursorGetADCPhaseOffset(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Get trigger flag for the current block (1 if active, 0 if not).
+ */
+int pulseqlib_cursorGetTriggerFlag(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
 #ifdef __cplusplus
 }
 #endif

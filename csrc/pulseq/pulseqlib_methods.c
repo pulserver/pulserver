@@ -4929,6 +4929,8 @@ void pulseqlib_sequenceDescriptorCollectionFree(
     
     if (!descCollection) return;
     
+    cursorFree(&descCollection->cursor);
+
     if (descCollection->descriptors) {
         for (i = 0; i < descCollection->numSubsequences; ++i) {
             pulseqlib_sequenceDescriptorFree(&descCollection->descriptors[i]);
@@ -6612,6 +6614,81 @@ void pulseqlib_segmentTableResultFree(pulseqlib_SegmentTableResult* result) {
     result->numUniqueSegments = 0;
 }
 
+/* ========== Cursor (internal) ========== */
+
+static void cursorUpdateCached(pulseqlib_Cursor* cur)
+{
+    cur->withinTRIdx = cur->globalBlockIdx % cur->trSize;
+    cur->trIdx = cur->globalBlockIdx / cur->trSize;
+    cur->segmentIdx = cur->trBlockMap[cur->withinTRIdx].segmentIdx;
+    cur->blockInSeg = cur->trBlockMap[cur->withinTRIdx].blockInSeg;
+    cur->blockTableIdx = cur->numPrepBlocks + cur->withinTRIdx;
+}
+
+static int cursorInit(pulseqlib_SequenceDescriptorCollection* descCollection, int numRepetitions)
+{
+    pulseqlib_Cursor* cur;
+    pulseqlib_SequenceDescriptor* desc;
+    const pulseqlib_TRdescriptor* trDesc;
+    const pulseqlib_SegmentTableResult* segTable;
+    int totalTRs;
+    int s, b, blockInTR;
+    int segIdx;
+    pulseqlib_TRsegment* segDef;
+    
+    if (!descCollection || descCollection->numSubsequences < 1 || numRepetitions < 1) {
+        return 0;
+    }
+    
+    desc = &descCollection->descriptors[0];
+    trDesc = &desc->trDescriptor;
+    segTable = &desc->segmentTable;
+    cur = &descCollection->cursor;
+    
+    totalTRs = (trDesc->numPrepTRs + trDesc->numTRs + trDesc->numCooldownTRs) * numRepetitions;
+    
+    cur->trSize = trDesc->trSize;
+    cur->numTRs = totalTRs;
+    cur->numPrepBlocks = trDesc->numPrepBlocks;
+    cur->totalBlocks = totalTRs * trDesc->trSize;
+    
+    /* Build TR block map from mainSegmentTable */
+    cur->trBlockMap = (pulseqlib_TRBlockMapEntry*) ALLOC(cur->trSize * sizeof(pulseqlib_TRBlockMapEntry));
+    if (!cur->trBlockMap) {
+        return 0;
+    }
+    
+    blockInTR = 0;
+    for (s = 0; s < segTable->numMainSegments; ++s) {
+        segIdx = segTable->mainSegmentTable[s];
+        segDef = &desc->segmentDefinitions[segIdx];
+        for (b = 0; b < segDef->numBlocks; ++b) {
+            if (blockInTR >= cur->trSize) {
+                break;
+            }
+            cur->trBlockMap[blockInTR].segmentIdx = segIdx;
+            cur->trBlockMap[blockInTR].blockInSeg = b;
+            blockInTR++;
+        }
+    }
+    
+    /* Reset to start */
+    cur->globalBlockIdx = 0;
+    cursorUpdateCached(cur);
+    
+    return 1;
+}
+
+static void cursorFree(pulseqlib_Cursor* cur)
+{
+    if (!cur) return;
+    if (cur->trBlockMap) {
+        FREE(cur->trBlockMap);
+        cur->trBlockMap = NULL;
+    }
+    cur->totalBlocks = 0;
+}
+
 int pulseqlib_getCollectionDescriptors(
     const pulseqlib_SeqFileCollection* collection,
     pulseqlib_SequenceDescriptorCollection* descCollection,
@@ -6633,6 +6710,7 @@ int pulseqlib_getCollectionDescriptors(
         diag->code = PULSEQLIB_ERR_NULL_POINTER;
         return 0;
     }
+    
     
     if (collection->numSequences == 0) {
         diag->code = PULSEQLIB_ERR_COLLECTION_EMPTY;
@@ -6733,6 +6811,12 @@ int pulseqlib_getCollectionDescriptors(
     descCollection->totalUniqueSegments = segmentOffset;
     descCollection->totalUniqueADCs = adcOffset;
     descCollection->totalBlocks = blockOffset;
+
+    /* Initialize cursor (single repetition by default) */
+    if (!cursorInit(descCollection, 1)) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        goto cleanup_error;
+    }
     
     diag->code = PULSEQLIB_OK;
     return collection->numSequences;
@@ -6750,6 +6834,7 @@ cleanup_error:
     descCollection->totalUniqueADCs = 0;
     descCollection->totalBlocks = 0;
     descCollection->totalDuration_us = 0.0f;
+    cursorFree(&descCollection->cursor);
     return 0;
 }
 
@@ -11006,6 +11091,215 @@ int pulseqlib_blockHasNopos(const pulseqlib_SequenceDescriptorCollection* descCo
     }
     
     return -1;
+}
+
+/* ========== Cursor-based runtime accessors ========== */
+
+int pulseqlib_cursorReinit(pulseqlib_SequenceDescriptorCollection* descCollection, int numRepetitions)
+{
+    if (!descCollection) return 0;
+    cursorFree(&descCollection->cursor);
+    return cursorInit(descCollection, numRepetitions);
+}
+
+void pulseqlib_cursorReset(pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    if (!descCollection) return;
+    descCollection->cursor.globalBlockIdx = 0;
+    cursorUpdateCached(&descCollection->cursor);
+}
+
+int pulseqlib_cursorAdvance(pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    pulseqlib_Cursor* cur;
+    if (!descCollection) return 0;
+    cur = &descCollection->cursor;
+    cur->globalBlockIdx++;
+    if (cur->globalBlockIdx >= cur->totalBlocks) {
+        return 0;
+    }
+    cursorUpdateCached(cur);
+    return 1;
+}
+
+int pulseqlib_cursorGetTotalBlocks(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    return descCollection->cursor.totalBlocks;
+}
+
+int pulseqlib_cursorGetSegmentIdx(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    return descCollection->cursor.segmentIdx;
+}
+
+int pulseqlib_cursorGetBlockInSeg(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    return descCollection->cursor.blockInSeg;
+}
+
+int pulseqlib_cursorGetBlockDuration(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    /* Pure delay block: duration_us is the actual duration */
+    if (bte->duration_us >= 0) {
+        return bte->duration_us;
+    }
+    
+    /* Non-delay block: get duration from block definition */
+    return desc->blockDefinitions[bte->ID].duration_us;
+}
+
+float pulseqlib_cursorGetRFAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    if (bte->rfID < 0 || bte->rfID >= desc->rfTableSize) {
+        return 0.0f;
+    }
+    return desc->rfTable[bte->rfID].amplitude;
+}
+
+float pulseqlib_cursorGetRFFrequency(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    if (bte->rfID < 0 || bte->rfID >= desc->rfTableSize) {
+        return 0.0f;
+    }
+    return desc->rfTable[bte->rfID].freqOffset;
+}
+
+float pulseqlib_cursorGetRFPhaseOffset(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    if (bte->rfID < 0 || bte->rfID >= desc->rfTableSize) {
+        return 0.0f;
+    }
+    return desc->rfTable[bte->rfID].phaseOffset;
+}
+
+float pulseqlib_cursorGetGxAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    if (bte->gxID < 0 || bte->gxID >= desc->gradTableSize) {
+        return 0.0f;
+    }
+    return desc->gradTable[bte->gxID].amplitude;
+}
+
+int pulseqlib_cursorGetGxShotIndex(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    if (bte->gxID < 0 || bte->gxID >= desc->gradTableSize) {
+        return 0;
+    }
+    return desc->gradTable[bte->gxID].shotIndex;
+}
+
+float pulseqlib_cursorGetGyAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    if (bte->gyID < 0 || bte->gyID >= desc->gradTableSize) {
+        return 0.0f;
+    }
+    return desc->gradTable[bte->gyID].amplitude;
+}
+
+int pulseqlib_cursorGetGyShotIndex(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    if (bte->gyID < 0 || bte->gyID >= desc->gradTableSize) {
+        return 0;
+    }
+    return desc->gradTable[bte->gyID].shotIndex;
+}
+
+float pulseqlib_cursorGetGzAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    if (bte->gzID < 0 || bte->gzID >= desc->gradTableSize) {
+        return 0.0f;
+    }
+    return desc->gradTable[bte->gzID].amplitude;
+}
+
+int pulseqlib_cursorGetGzShotIndex(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    if (bte->gzID < 0 || bte->gzID >= desc->gradTableSize) {
+        return 0;
+    }
+    return desc->gradTable[bte->gzID].shotIndex;
+}
+
+int pulseqlib_cursorGetADCFlag(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    return (bte->adcID != -1) ? 1 : 0;
+}
+
+float pulseqlib_cursorGetADCFrequency(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    if (bte->adcID < 0 || bte->adcID >= desc->adcTableSize) {
+        return 0.0f;
+    }
+    return desc->adcTable[bte->adcID].freqOffset;
+}
+
+float pulseqlib_cursorGetADCPhaseOffset(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    if (bte->adcID < 0 || bte->adcID >= desc->adcTableSize) {
+        return 0.0f;
+    }
+    return desc->adcTable[bte->adcID].phaseOffset;
+}
+
+int pulseqlib_cursorGetTriggerFlag(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    const pulseqlib_Cursor* cur = &descCollection->cursor;
+    const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    
+    return (bte->triggerID != -1) ? 1 : 0;
 }
 
 
