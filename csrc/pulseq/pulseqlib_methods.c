@@ -18,7 +18,9 @@
 static void seqFileSetDefaults(pulseqlib_SeqFile* seq);
 static void seqFileInit(pulseqlib_SeqFile* seq, const pulseqlib_Opts* opts);
 static void seqFileReset(pulseqlib_SeqFile* seq);
-
+static void cursorUpdateCached(pulseqlib_Cursor* cur);
+static int cursorInit(pulseqlib_SequenceDescriptorCollection* descCollection, int numRepetitions);
+static void cursorFree(pulseqlib_Cursor* cur);
 
 typedef struct {
     const char *name;
@@ -6218,6 +6220,7 @@ int pulseqlib_findSegmentsInTR(
     int nb;
     int uniqueIdx;
     int blockTableIdx;
+    int blockDefID;
     int shotIdx;
     int axGradIDs[3];
     int axDefIDs[3];
