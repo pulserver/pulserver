@@ -17,6 +17,11 @@
 #define MAX_SCALE_SIZE 16
 #define MAX_RF_SHIM_CHANNELS 64
 
+/********************************************************************      Gradient axes     *******************************************************************************************/
+#define PULSEQLIB_GRAD_AXIS_X 0
+#define PULSEQLIB_GRAD_AXIS_Y 1
+#define PULSEQLIB_GRAD_AXIS_Z 2
+
 /********************************************************************      Gradient types     *******************************************************************************************/
 #define TRAP 1
 #define GRAD 2
@@ -692,6 +697,10 @@ typedef struct pulseqlib_TRsegment {
     int startBlock; /**< Starting block index of the TR segment */
     int numBlocks; /**< Number of blocks in the TR segment */
     int* uniqueBlockIndices; /**< Pointer to array of unique block indices in the segment */
+    int* hasTrigger;    /**< Per-block flag: 1 if any instance has trigger, 0 otherwise */
+    int* hasRotation;   /**< Per-block flag: 1 if any instance has rotation, 0 otherwise */
+    int* norotFlag;     /**< Per-block flag: 1 if any instance has norot, 0 otherwise */
+    int* noposFlag;     /**< Per-block flag: 1 if any instance has nopos, 0 otherwise */
 } pulseqlib_TRsegment;
 
 #define PULSEQLIB_TR_SEGMENT_INIT {0, 0, NULL}

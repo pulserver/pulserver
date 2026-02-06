@@ -223,6 +223,269 @@ int pulseqlib_getBlockStartTime(const pulseqlib_SequenceDescriptorCollection* de
  */
 int pulseqlib_getBlockDuration(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
 
+/**
+ * @brief Check if a block has RF pulse.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return 1 if block has RF, 0 if no RF, -1 if invalid index
+ */
+int pulseqlib_blockHasRF(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Check if a block's RF pulse has uniform raster (time shape defined).
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return 1 if RF has uniform raster, 0 if not, -1 if invalid index or no RF
+ */
+int pulseqlib_blockRFHasUniformRaster(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Check if a block's RF pulse is complex valued (phase shape defined).
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return 1 if RF is complex valued, 0 if not, -1 if invalid index or no RF
+ */
+int pulseqlib_blockRFIsComplex(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Get number of RF samples in a block's RF pulse.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return Number of RF samples, or -1 if invalid index, no RF, or unable to determine
+ */
+int pulseqlib_getRFNumSamples(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Get RF pulse delay in microseconds.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return RF delay in microseconds, or -1 if invalid index or no RF
+ */
+int pulseqlib_getRFDelay(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Get RF magnitude waveform samples rescaled by max amplitude.
+ * 
+ * Returns pointer to magnitude shape samples scaled by the max amplitude value
+ * stored in the RF definition (Hz).
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @param numSamples Output parameter for number of samples (set by function)
+ * @return Pointer to magnitude waveform array, or NULL if invalid index, no RF, or no magnitude shape
+ */
+float* pulseqlib_getRFMagnitude(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int* numSamples);
+
+/**
+ * @brief Get RF phase waveform samples in radians.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @param numSamples Output parameter for number of samples (set by function)
+ * @return Pointer to phase waveform array (rad), or NULL if invalid index, no RF, or no phase shape
+ */
+float* pulseqlib_getRFPhase(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int* numSamples);
+
+/**
+ * @brief Get RF time waveform samples in microseconds.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @param numSamples Output parameter for number of samples (set by function)
+ * @return Pointer to time waveform array (us), or NULL if invalid index, no RF, or no time shape
+ */
+float* pulseqlib_getRFTime(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int* numSamples);
+
+/**
+ * @brief Check if a block has gradient on specified axis.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @param axis Gradient axis (PULSEQLIB_GRAD_AXIS_X, _Y, or _Z)
+ * @return 1 if block has gradient on axis, 0 if no gradient, -1 if invalid index/axis
+ */
+int pulseqlib_blockHasGrad(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis);
+
+/**
+ * @brief Check if a block's gradient is a trapezoid or has time shape defined.
+ * 
+ * Returns 1 if gradient is a standard trapezoid (type == 0) or if it has a time shape ID defined.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @param axis Gradient axis (PULSEQLIB_GRAD_AXIS_X, _Y, or _Z)
+ * @return 1 if trapezoid or has time shape, 0 if not, -1 if invalid index or no gradient
+ */
+int pulseqlib_blockGradIsTrapezoid(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis);
+
+/**
+ * @brief Get number of gradient waveform samples on a specified axis.
+ * 
+ * For trapezoids: returns 4 if flatTime > 0, or 3 if flatTime == 0.
+ * For arbitrary gradients: returns number of samples in the waveform shape.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @param axis Gradient axis (PULSEQLIB_GRAD_AXIS_X, _Y, or _Z)
+ * @return Number of samples, or -1 if invalid index or no gradient
+ */
+int pulseqlib_getGradNumSamples(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis);
+
+/**
+ * @brief Get number of gradient shots on a specified axis.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @param axis Gradient axis (PULSEQLIB_GRAD_AXIS_X, _Y, or _Z)
+ * @return Number of shots, or -1 if invalid index or no gradient
+ */
+int pulseqlib_getGradNumShots(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis);
+
+/**
+ * @brief Get gradient delay in microseconds.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @param axis Gradient axis (PULSEQLIB_GRAD_AXIS_X, _Y, or _Z)
+ * @return Gradient delay in microseconds, or -1 if invalid index or no gradient
+ */
+int pulseqlib_getGradDelay(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis);
+
+/**
+ * @brief Get gradient amplitude waveform scaled by max amplitude.
+ * 
+ * Returns array of waveforms for each shot. For trapezoids, generates [0, maxAmp, maxAmp, 0] or [0, maxAmp, 0]
+ * depending on flatTime. For arbitrary gradients, decompresses waveform shape and scales by maxAmplitude.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @param axis Gradient axis (PULSEQLIB_GRAD_AXIS_X, _Y, or _Z)
+ * @param numShots Output parameter for number of shots (set by function)
+ * @param numSamplesPerShot Output parameter for number of samples per shot (array of size numShots)
+ * @return Pointer to array of waveform pointers (float**), one per shot, or NULL if invalid
+ */
+float** pulseqlib_getGradAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis, int* numShots, int** numSamplesPerShot);
+
+/**
+ * @brief Get gradient time waveform in microseconds.
+ * 
+ * For trapezoids, generates cumsum([0, riseTime, flatTime, fallTime]) or cumsum([0, riseTime, fallTime]) if flatTime == 0.
+ * For arbitrary gradients, decompresses time shape.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @param axis Gradient axis (PULSEQLIB_GRAD_AXIS_X, _Y, or _Z)
+ * @param numSamples Output parameter for number of samples (set by function)
+ * @return Pointer to time waveform array (us), or NULL if invalid index or no gradient
+ */
+float* pulseqlib_getGradTime(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis, int* numSamples);
+
+/**
+ * @brief Check if a block has ADC.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return 1 if block has ADC, 0 if no ADC, -1 if invalid index
+ */
+int pulseqlib_blockHasADC(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Get ADC delay in microseconds.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return ADC delay in microseconds, or -1 if invalid index or no ADC
+ */
+int pulseqlib_getADCDelay(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Get ADC definition index in the SequenceDescriptorCollection's shared ADC library.
+ * 
+ * This index can be used to access ADC properties (numSamples, dwellTime) from the
+ * collection's global ADC definitions array, or to look up the ADC in echo_filters.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return ADC definition index in global ADC library, or -1 if invalid index or no ADC
+ */
+int pulseqlib_getADCLibraryIndex(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Check if a block has a trigger event (across all segment instances).
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return 1 if block has trigger, 0 if no trigger, -1 if invalid index
+ */
+int pulseqlib_blockHasTrigger(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Get trigger delay in microseconds.
+ * 
+ * Returns the delay from the first encountered trigger event for this block
+ * position across all segment instances.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return Trigger delay in microseconds, or -1 if invalid index or no trigger
+ */
+int pulseqlib_getTriggerDelay(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Check if a block has a rotation event (across all segment instances).
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return 1 if block has rotation, 0 if not, -1 if invalid index
+ */
+int pulseqlib_blockHasRotation(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Check if a block has norot flag set (across all segment instances).
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return 1 if norot, 0 if not, -1 if invalid index
+ */
+int pulseqlib_blockHasNorot(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Check if a block has nopos flag set (across all segment instances).
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return 1 if nopos, 0 if not, -1 if invalid index
+ */
+int pulseqlib_blockHasNopos(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
 #ifdef __cplusplus
 }
 #endif

@@ -4900,6 +4900,18 @@ void pulseqlib_sequenceDescriptorFree(pulseqlib_SequenceDescriptor* seqDesc)
             if (seqDesc->segmentDefinitions[i].uniqueBlockIndices) {
                 FREE(seqDesc->segmentDefinitions[i].uniqueBlockIndices);
             }
+            if (seqDesc->segmentDefinitions[i].hasTrigger) {
+                FREE(seqDesc->segmentDefinitions[i].hasTrigger);
+            }
+            if (seqDesc->segmentDefinitions[i].hasRotation) {
+                FREE(seqDesc->segmentDefinitions[i].hasRotation);
+            }
+            if (seqDesc->segmentDefinitions[i].norotFlag) {
+                FREE(seqDesc->segmentDefinitions[i].norotFlag);
+            }
+            if (seqDesc->segmentDefinitions[i].noposFlag) {
+                FREE(seqDesc->segmentDefinitions[i].noposFlag);
+            }
         }
         FREE(seqDesc->segmentDefinitions);
         seqDesc->segmentDefinitions = NULL;
@@ -6470,7 +6482,70 @@ int pulseqlib_findSegmentsInTR(
             seqDesc->segmentDefinitions[i] = trSegments[i];
         }
     }
-    FREE(trSegments);
+        FREE(trSegments);
+
+    /* ========== Populate per-block flags (trigger, rotation, norot, nopos) ========== */
+    /* 
+     * For each unique segment, allocate and zero-init per-block flag arrays.
+     * Then scan all expanded segment instances, and for each block in the instance,
+     * OR in the flags from the blockTable entry.
+     */
+    for (i = 0; i < numUniqueSegments; ++i) {
+        int nb = seqDesc->segmentDefinitions[i].numBlocks;
+        seqDesc->segmentDefinitions[i].hasTrigger  = (int*) ALLOC(nb * sizeof(int));
+        seqDesc->segmentDefinitions[i].hasRotation  = (int*) ALLOC(nb * sizeof(int));
+        seqDesc->segmentDefinitions[i].norotFlag    = (int*) ALLOC(nb * sizeof(int));
+        seqDesc->segmentDefinitions[i].noposFlag    = (int*) ALLOC(nb * sizeof(int));
+        if (!seqDesc->segmentDefinitions[i].hasTrigger ||
+            !seqDesc->segmentDefinitions[i].hasRotation ||
+            !seqDesc->segmentDefinitions[i].norotFlag ||
+            !seqDesc->segmentDefinitions[i].noposFlag) {
+            diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+            for (n = 0; n < numSegmentsTotal; ++n) FREE(trSegmentsExpanded[n].uniqueBlockIndices);
+            FREE(trSegmentsExpanded);
+            return 0;
+        }
+        for (n = 0; n < nb; ++n) {
+            seqDesc->segmentDefinitions[i].hasTrigger[n]  = 0;
+            seqDesc->segmentDefinitions[i].hasRotation[n] = 0;
+            seqDesc->segmentDefinitions[i].norotFlag[n]   = 0;
+            seqDesc->segmentDefinitions[i].noposFlag[n]   = 0;
+        }
+    }
+
+    /* Scan all expanded segment instances */
+    for (n = 0; n < numSegmentsTotal; ++n) {
+        int uniqueIdx;
+        int b;
+        
+        /* Look up this instance's unique segment index from the section tables */
+        if (n < numPrepSegments) {
+            uniqueIdx = seqDesc->segmentTable.prepSegmentTable[n];
+        } else if (n < numPrepSegments + numMainSegments) {
+            uniqueIdx = seqDesc->segmentTable.mainSegmentTable[n - numPrepSegments];
+        } else {
+            uniqueIdx = seqDesc->segmentTable.cooldownSegmentTable[n - numPrepSegments - numMainSegments];
+        }
+        
+        /* For each block in this instance, OR in the flags */
+        for (b = 0; b < trSegmentsExpanded[n].numBlocks; ++b) {
+            int blockTableIdx = trSegmentsExpanded[n].startBlock + b;
+            const pulseqlib_BlockTableElement* bte = &seqDesc->blockTable[blockTableIdx];
+            
+            if (bte->triggerID != -1) {
+                seqDesc->segmentDefinitions[uniqueIdx].hasTrigger[b] = 1;
+            }
+            if (bte->rotationID != -1) {
+                seqDesc->segmentDefinitions[uniqueIdx].hasRotation[b] = 1;
+            }
+            if (bte->norotFlag) {
+                seqDesc->segmentDefinitions[uniqueIdx].norotFlag[b] = 1;
+            }
+            if (bte->noposFlag) {
+                seqDesc->segmentDefinitions[uniqueIdx].noposFlag[b] = 1;
+            }
+        }
+    }
 
     /* Free expanded segments */
     for (n = 0; n < numSegmentsTotal; ++n) {
@@ -9429,4 +9504,1359 @@ int pulseqlib_getBlockDuration(const pulseqlib_SequenceDescriptorCollection* des
     
     return -1;
 }
+
+int pulseqlib_blockHasRF(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            return (blockDef->rfID != -1) ? 1 : 0;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_blockRFHasUniformRaster(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_RfDefinition* rfDef;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            
+            /* Check if block has RF */
+            if (blockDef->rfID == -1) {
+                return -1;
+            }
+            
+            /* Get RF definition and check timeShapeID */
+            rfDef = &descCollection->descriptors[i].rfDefinitions[blockDef->rfID];
+            return (rfDef->timeShapeID != 0) ? 1 : 0;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_blockRFIsComplex(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_RfDefinition* rfDef;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            
+            /* Check if block has RF */
+            if (blockDef->rfID == -1) {
+                return -1;
+            }
+            
+            /* Get RF definition and check phaseShapeID */
+            rfDef = &descCollection->descriptors[i].rfDefinitions[blockDef->rfID];
+            return (rfDef->phaseShapeID != 0) ? 1 : 0;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_getRFNumSamples(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    int shapeIdx;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_RfDefinition* rfDef;
+    pulseqlib_ShapeArbitrary* magShape;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            
+            /* Check if block has RF */
+            if (blockDef->rfID == -1) {
+                return -1;
+            }
+            
+            /* Get RF definition */
+            rfDef = &descCollection->descriptors[i].rfDefinitions[blockDef->rfID];
+            
+            /* Try to get number of samples from magnitude shape (preferred) */
+            if (rfDef->magShapeID > 0) {
+                shapeIdx = rfDef->magShapeID - 1;
+                if (shapeIdx >= 0 && shapeIdx < descCollection->descriptors[i].numShapes) {
+                    magShape = &descCollection->descriptors[i].shapes[shapeIdx];
+                    if (magShape->numUncompressedSamples > 0) {
+                        return magShape->numUncompressedSamples;
+                    }
+                }
+            }
+            
+            /* Try to get number of samples from phase shape */
+            if (rfDef->phaseShapeID > 0) {
+                shapeIdx = rfDef->phaseShapeID - 1;
+                if (shapeIdx >= 0 && shapeIdx < descCollection->descriptors[i].numShapes) {
+                    magShape = &descCollection->descriptors[i].shapes[shapeIdx];
+                    if (magShape->numUncompressedSamples > 0) {
+                        return magShape->numUncompressedSamples;
+                    }
+                }
+            }
+            
+            /* Try to get number of samples from time shape */
+            if (rfDef->timeShapeID > 0) {
+                shapeIdx = rfDef->timeShapeID - 1;
+                if (shapeIdx >= 0 && shapeIdx < descCollection->descriptors[i].numShapes) {
+                    magShape = &descCollection->descriptors[i].shapes[shapeIdx];
+                    if (magShape->numUncompressedSamples > 0) {
+                        return magShape->numUncompressedSamples;
+                    }
+                }
+            }
+            
+            return -1;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_getRFDelay(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_RfDefinition* rfDef;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            
+            /* Check if block has RF */
+            if (blockDef->rfID == -1) {
+                return -1;
+            }
+            
+            /* Get RF definition and return delay */
+            rfDef = &descCollection->descriptors[i].rfDefinitions[blockDef->rfID];
+            return rfDef->delay;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+float* pulseqlib_getRFMagnitude(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int* numSamples)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    int shapeIdx;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_RfDefinition* rfDef;
+    pulseqlib_ShapeArbitrary compressedShape;
+    pulseqlib_ShapeArbitrary decompressed;
+    
+    if (!descCollection || !numSamples || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        if (numSamples) *numSamples = 0;
+        return NULL;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            
+            /* Check if block has RF */
+            if (blockDef->rfID == -1) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            /* Get RF definition */
+            rfDef = &descCollection->descriptors[i].rfDefinitions[blockDef->rfID];
+            
+            /* Check if magShapeID is valid (1-based index) */
+            if (rfDef->magShapeID <= 0) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            /* magShapeID is 1-based, convert to 0-based index */
+            shapeIdx = rfDef->magShapeID - 1;
+            
+            if (shapeIdx < 0 || shapeIdx >= descCollection->descriptors[i].numShapes) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            /* Get compressed shape and decompress with maxAmplitude scale */
+            compressedShape = descCollection->descriptors[i].shapes[shapeIdx];
+            
+            /* Initialize decompressed shape */
+            decompressed.numSamples = 0;
+            decompressed.numUncompressedSamples = 0;
+            decompressed.samples = NULL;
+            
+            /* Decompress using maxAmplitude as scale */
+            if (!decompressShape(&compressedShape, &decompressed, rfDef->maxAmplitude)) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            *numSamples = decompressed.numSamples;
+            return decompressed.samples;
+        }
+        globalIdx += numSegs;
+    }
+    
+    *numSamples = 0;
+    return NULL;
+}
+
+float* pulseqlib_getRFPhase(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int* numSamples)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    int shapeIdx;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_RfDefinition* rfDef;
+    pulseqlib_ShapeArbitrary compressedShape;
+    pulseqlib_ShapeArbitrary decompressed;
+    
+    if (!descCollection || !numSamples || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        if (numSamples) *numSamples = 0;
+        return NULL;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            
+            /* Check if block has RF */
+            if (blockDef->rfID == -1) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            /* Get RF definition */
+            rfDef = &descCollection->descriptors[i].rfDefinitions[blockDef->rfID];
+            
+            /* Check if phaseShapeID is valid (1-based index) */
+            if (rfDef->phaseShapeID <= 0) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            /* phaseShapeID is 1-based, convert to 0-based index */
+            shapeIdx = rfDef->phaseShapeID - 1;
+            
+            if (shapeIdx < 0 || shapeIdx >= descCollection->descriptors[i].numShapes) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            /* Get compressed shape and decompress with scale 1.0 (phase in rad) */
+            compressedShape = descCollection->descriptors[i].shapes[shapeIdx];
+            
+            /* Initialize decompressed shape */
+            decompressed.numSamples = 0;
+            decompressed.numUncompressedSamples = 0;
+            decompressed.samples = NULL;
+            
+            /* Decompress with scale 1.0 (already in rad) */
+            if (!decompressShape(&compressedShape, &decompressed, 1.0f)) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            *numSamples = decompressed.numSamples;
+            return decompressed.samples;
+        }
+        globalIdx += numSegs;
+    }
+    
+    *numSamples = 0;
+    return NULL;
+}
+
+float* pulseqlib_getRFTime(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int* numSamples)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    int shapeIdx;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_RfDefinition* rfDef;
+    pulseqlib_ShapeArbitrary compressedShape;
+    pulseqlib_ShapeArbitrary decompressed;
+    
+    if (!descCollection || !numSamples || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        if (numSamples) *numSamples = 0;
+        return NULL;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            
+            /* Check if block has RF */
+            if (blockDef->rfID == -1) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            /* Get RF definition */
+            rfDef = &descCollection->descriptors[i].rfDefinitions[blockDef->rfID];
+            
+            /* Check if timeShapeID is valid (1-based index) */
+            if (rfDef->timeShapeID <= 0) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            /* timeShapeID is 1-based, convert to 0-based index */
+            shapeIdx = rfDef->timeShapeID - 1;
+            
+            if (shapeIdx < 0 || shapeIdx >= descCollection->descriptors[i].numShapes) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            /* Get compressed shape and decompress with RF raster time scale */
+            compressedShape = descCollection->descriptors[i].shapes[shapeIdx];
+            
+            /* Initialize decompressed shape */
+            decompressed.numSamples = 0;
+            decompressed.numUncompressedSamples = 0;
+            decompressed.samples = NULL;
+            
+            /* Decompress with RF raster time as scale (already in us) */
+            if (!decompressShape(&compressedShape, &decompressed, descCollection->descriptors[i].rfRasterTime_us)) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            *numSamples = decompressed.numSamples;
+            return decompressed.samples;
+        }
+        globalIdx += numSegs;
+    }
+    
+    *numSamples = 0;
+    return NULL;
+}
+
+static int getGradIDByAxis(const pulseqlib_BlockDefinition* blockDef, int axis)
+{
+    /* Helper function to get gradient ID by axis */
+    switch (axis) {
+        case PULSEQLIB_GRAD_AXIS_X:
+            return blockDef->gxID;
+        case PULSEQLIB_GRAD_AXIS_Y:
+            return blockDef->gyID;
+        case PULSEQLIB_GRAD_AXIS_Z:
+            return blockDef->gzID;
+        default:
+            return -1;
+    }
+}
+
+int pulseqlib_blockHasGrad(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    int gradID;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            gradID = getGradIDByAxis(blockDef, axis);
+            
+            return (gradID != -1) ? 1 : 0;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_blockGradIsTrapezoid(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_GradDefinition* gradDef;
+    int gradID;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            gradID = getGradIDByAxis(blockDef, axis);
+            
+            /* Check if block has gradient */
+            if (gradID == -1) {
+                return -1;
+            }
+            
+            /* Get gradient definition */
+            gradDef = &descCollection->descriptors[i].gradDefinitions[gradID];
+            
+            /* Trapezoid if type == 0 (TRAP) */
+            if (gradDef->type == 0) {
+                return 1;
+            }
+            
+            /* Also return 1 if timeShapeID is defined (unusedOrTimeShapeID for ARBITRARY) */
+            if (gradDef->unusedOrTimeShapeID > 0) {
+                return 1;
+            }
+            
+            return 0;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_getGradNumSamples(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    int shapeIdx;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_GradDefinition* gradDef;
+    int gradID;
+    pulseqlib_ShapeArbitrary* shape;
+    int riseTime, flatTime;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            gradID = getGradIDByAxis(blockDef, axis);
+            
+            /* Check if block has gradient */
+            if (gradID == -1) {
+                return -1;
+            }
+            
+            /* Get gradient definition */
+            gradDef = &descCollection->descriptors[i].gradDefinitions[gradID];
+            
+            /* Handle trapezoid case */
+            if (gradDef->type == 0) {
+                flatTime = gradDef->flatTimeOrUnused;
+                if (flatTime > 0) {
+                    return 4;  /* [0, riseTime, flatTime, fallTime] */
+                } else {
+                    return 3;  /* [0, riseTime, fallTime] */
+                }
+            } else {
+                /* Handle arbitrary gradient - get number of samples from first shot's shape */
+                if (gradDef->numShots > 0 && gradDef->shotShapeIDs[0] > 0) {
+                    shapeIdx = gradDef->shotShapeIDs[0] - 1;
+                    if (shapeIdx >= 0 && shapeIdx < descCollection->descriptors[i].numShapes) {
+                        shape = &descCollection->descriptors[i].shapes[shapeIdx];
+                        if (shape->numUncompressedSamples > 0) {
+                            return shape->numUncompressedSamples;
+                        }
+                    }
+                }
+                return -1;
+            }
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_getGradNumShots(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_GradDefinition* gradDef;
+    int gradID;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            gradID = getGradIDByAxis(blockDef, axis);
+            
+            /* Check if block has gradient */
+            if (gradID == -1) {
+                return -1;
+            }
+            
+            /* Get gradient definition and return number of shots */
+            gradDef = &descCollection->descriptors[i].gradDefinitions[gradID];
+            return gradDef->numShots;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_getGradDelay(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_GradDefinition* gradDef;
+    int gradID;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            gradID = getGradIDByAxis(blockDef, axis);
+            
+            /* Check if block has gradient */
+            if (gradID == -1) {
+                return -1;
+            }
+            
+            /* Get gradient definition and return delay */
+            gradDef = &descCollection->descriptors[i].gradDefinitions[gradID];
+            return gradDef->delay;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+float** pulseqlib_getGradAmplitude(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis, int* numShots, int** numSamplesPerShot)
+{
+    int i, j, k, shot;
+    int globalIdx = 0;
+    int numSegs;
+    int shapeIdx;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_GradDefinition* gradDef;
+    int gradID;
+    float** waveforms;
+    float* trapWaveform;
+    pulseqlib_ShapeArbitrary compressedShape;
+    pulseqlib_ShapeArbitrary decompressed;
+    int samplesPerShot;
+    int riseTime, flatTime, fallTime;
+    
+    if (!descCollection || !numShots || !numSamplesPerShot || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        if (numShots) *numShots = 0;
+        if (numSamplesPerShot) *numSamplesPerShot = NULL;
+        return NULL;
+    }
+    
+    if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) {
+        *numShots = 0;
+        *numSamplesPerShot = NULL;
+        return NULL;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                *numShots = 0;
+                *numSamplesPerShot = NULL;
+                return NULL;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            gradID = getGradIDByAxis(blockDef, axis);
+            
+            /* Check if block has gradient */
+            if (gradID == -1) {
+                *numShots = 0;
+                *numSamplesPerShot = NULL;
+                return NULL;
+            }
+            
+            /* Get gradient definition */
+            gradDef = &descCollection->descriptors[i].gradDefinitions[gradID];
+            
+            /* Allocate arrays to store number of samples per shot and waveforms */
+            *numSamplesPerShot = (int*) ALLOC(gradDef->numShots * sizeof(int));
+            if (!*numSamplesPerShot) {
+                *numShots = 0;
+                return NULL;
+            }
+            
+            waveforms = (float**) ALLOC(gradDef->numShots * sizeof(float*));
+            if (!waveforms) {
+                FREE(*numSamplesPerShot);
+                *numSamplesPerShot = NULL;
+                *numShots = 0;
+                return NULL;
+            }
+            
+            *numShots = gradDef->numShots;
+            
+            /* Handle trapezoid case */
+            if (gradDef->type == 0) {
+                riseTime = gradDef->riseTimeOrUnused;
+                flatTime = gradDef->flatTimeOrUnused;
+                fallTime = gradDef->fallTimeOrNumUncompressedSamples;
+                
+                /* Determine number of points */
+                if (flatTime > 0) {
+                    samplesPerShot = 4;  /* [0, riseTime, flatTime, fallTime] */
+                } else {
+                    samplesPerShot = 3;  /* [0, riseTime, fallTime] */
+                }
+                
+                /* Create waveform for each shot */
+                for (shot = 0; shot < gradDef->numShots; ++shot) {
+                    trapWaveform = (float*) ALLOC(samplesPerShot * sizeof(float));
+                    if (!trapWaveform) {
+                        /* Cleanup on allocation failure */
+                        for (k = 0; k < shot; ++k) {
+                            FREE(waveforms[k]);
+                        }
+                        FREE(waveforms);
+                        FREE(*numSamplesPerShot);
+                        *numSamplesPerShot = NULL;
+                        *numShots = 0;
+                        return NULL;
+                    }
+                    
+                    trapWaveform[0] = 0.0f;
+                    trapWaveform[1] = gradDef->maxAmplitude[shot];
+                    
+                    if (flatTime > 0) {
+                        trapWaveform[2] = gradDef->maxAmplitude[shot];
+                        trapWaveform[3] = 0.0f;
+                    } else {
+                        trapWaveform[2] = 0.0f;
+                    }
+                    
+                    waveforms[shot] = trapWaveform;
+                    (*numSamplesPerShot)[shot] = samplesPerShot;
+                }
+            } else {
+                /* Handle arbitrary gradient - decompress shapes for each shot */
+                for (shot = 0; shot < gradDef->numShots; ++shot) {
+                    /* Check if this shot has a shape */
+                    if (gradDef->shotShapeIDs[shot] <= 0) {
+                        waveforms[shot] = NULL;
+                        (*numSamplesPerShot)[shot] = 0;
+                        continue;
+                    }
+                    
+                    shapeIdx = gradDef->shotShapeIDs[shot] - 1;
+                    
+                    if (shapeIdx < 0 || shapeIdx >= descCollection->descriptors[i].numShapes) {
+                        waveforms[shot] = NULL;
+                        (*numSamplesPerShot)[shot] = 0;
+                        continue;
+                    }
+                    
+                    compressedShape = descCollection->descriptors[i].shapes[shapeIdx];
+                    
+                    /* Initialize decompressed shape */
+                    decompressed.numSamples = 0;
+                    decompressed.numUncompressedSamples = 0;
+                    decompressed.samples = NULL;
+                    
+                    /* Decompress with the appropriate scale for this shot */
+                    if (!decompressShape(&compressedShape, &decompressed, gradDef->maxAmplitude[shot])) {
+                        waveforms[shot] = NULL;
+                        (*numSamplesPerShot)[shot] = 0;
+                        continue;
+                    }
+                    
+                    waveforms[shot] = decompressed.samples;
+                    (*numSamplesPerShot)[shot] = decompressed.numSamples;
+                }
+            }
+            
+            return waveforms;
+        }
+        globalIdx += numSegs;
+    }
+    
+    *numShots = 0;
+    *numSamplesPerShot = NULL;
+    return NULL;
+}
+
+float* pulseqlib_getGradTime(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx, int axis, int* numSamples)
+{
+    int i, j, k;
+    int globalIdx = 0;
+    int numSegs;
+    int shapeIdx;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_GradDefinition* gradDef;
+    int gradID;
+    float* timeWaveform;
+    pulseqlib_ShapeArbitrary compressedShape;
+    pulseqlib_ShapeArbitrary decompressed;
+    int riseTime, flatTime, fallTime;
+    float accum;
+    
+    if (!descCollection || !numSamples || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        if (numSamples) *numSamples = 0;
+        return NULL;
+    }
+    
+    if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) {
+        *numSamples = 0;
+        return NULL;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            gradID = getGradIDByAxis(blockDef, axis);
+            
+            /* Check if block has gradient */
+            if (gradID == -1) {
+                *numSamples = 0;
+                return NULL;
+            }
+            
+            /* Get gradient definition */
+            gradDef = &descCollection->descriptors[i].gradDefinitions[gradID];
+            
+            /* Handle trapezoid case */
+            if (gradDef->type == 0) {
+                riseTime = gradDef->riseTimeOrUnused;
+                flatTime = gradDef->flatTimeOrUnused;
+                fallTime = gradDef->fallTimeOrNumUncompressedSamples;
+                
+                /* Determine number of time points */
+                if (flatTime > 0) {
+                    *numSamples = 4;  /* [0, riseTime, riseTime+flatTime, riseTime+flatTime+fallTime] */
+                } else {
+                    *numSamples = 3;  /* [0, riseTime, riseTime+fallTime] */
+                }
+                
+                timeWaveform = (float*) ALLOC((*numSamples) * sizeof(float));
+                if (!timeWaveform) {
+                    *numSamples = 0;
+                    return NULL;
+                }
+                
+                /* Build cumulative time array */
+                accum = 0.0f;
+                timeWaveform[0] = accum;
+                accum += (float)riseTime;
+                timeWaveform[1] = accum;
+                
+                if (flatTime > 0) {
+                    accum += (float)flatTime;
+                    timeWaveform[2] = accum;
+                    accum += (float)fallTime;
+                    timeWaveform[3] = accum;
+                } else {
+                    accum += (float)fallTime;
+                    timeWaveform[2] = accum;
+                }
+                
+                return timeWaveform;
+            } else {
+                /* Handle arbitrary gradient - decompress time shape */
+                if (gradDef->unusedOrTimeShapeID <= 0) {
+                    *numSamples = 0;
+                    return NULL;
+                }
+                
+                shapeIdx = gradDef->unusedOrTimeShapeID - 1;
+                
+                if (shapeIdx < 0 || shapeIdx >= descCollection->descriptors[i].numShapes) {
+                    *numSamples = 0;
+                    return NULL;
+                }
+                
+                compressedShape = descCollection->descriptors[i].shapes[shapeIdx];
+                
+                /* Initialize decompressed shape */
+                decompressed.numSamples = 0;
+                decompressed.numUncompressedSamples = 0;
+                decompressed.samples = NULL;
+                
+                /* Decompress with gradient raster time as scale */
+                if (!decompressShape(&compressedShape, &decompressed, descCollection->descriptors[i].gradRasterTime_us)) {
+                    *numSamples = 0;
+                    return NULL;
+                }
+                
+                *numSamples = decompressed.numSamples;
+                return decompressed.samples;
+            }
+        }
+        globalIdx += numSegs;
+    }
+    
+    *numSamples = 0;
+    return NULL;
+}
+
+int pulseqlib_blockHasADC(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_BlockTableElement* blockTableElem;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            blockTableElem = &descCollection->descriptors[i].blockTable[blockDef->ID];
+            
+            return (blockTableElem->adcID != -1) ? 1 : 0;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_getADCDelay(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_BlockTableElement* blockTableElem;
+    pulseqlib_AdcDefinition* adcDef;
+    int adcID;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            blockTableElem = &descCollection->descriptors[i].blockTable[blockDef->ID];
+            
+            /* Check if block has ADC */
+            if (blockTableElem->adcID == -1) {
+                return -1;
+            }
+            
+            /* Get ADC definition and return delay */
+            adcID = blockTableElem->adcID;
+            if (adcID < 0 || adcID >= descCollection->descriptors[i].numUniqueADCs) {
+                return -1;
+            }
+            
+            adcDef = &descCollection->descriptors[i].adcDefinitions[adcID];
+            return adcDef->delay;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_getADCLibraryIndex(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    int globalADCIdx = 0;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_BlockTableElement* blockTableElem;
+    int adcID;
+    int k;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]];
+            blockTableElem = &descCollection->descriptors[i].blockTable[blockDef->ID];
+            
+            /* Check if block has ADC */
+            if (blockTableElem->adcID == -1) {
+                return -1;
+            }
+            
+            /* Get local ADC ID */
+            adcID = blockTableElem->adcID;
+            if (adcID < 0 || adcID >= descCollection->descriptors[i].numUniqueADCs) {
+                return -1;
+            }
+            
+            /* Calculate global ADC index by summing up ADC counts from previous subsequences */
+            for (k = 0; k < i; ++k) {
+                globalADCIdx += descCollection->descriptors[k].numUniqueADCs;
+            }
+            
+            return globalADCIdx + adcID;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_blockHasTrigger(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            return segment->hasTrigger[blockIdx];
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_getTriggerDelay(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    pulseqlib_BlockTableElement* blockTableElem;
+    pulseqlib_TriggerEvent* triggerEvent;
+    int triggerID;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            /* Check the stored hasTrigger flag first */
+            if (!segment->hasTrigger[blockIdx]) {
+                return -1;
+            }
+            
+            /* 
+             * Get trigger delay from the first occurrence.
+             * Use the segment's startBlock to index into the blockTable.
+             */
+            blockTableElem = &descCollection->descriptors[i].blockTable[segment->startBlock + blockIdx];
+            
+            triggerID = blockTableElem->triggerID;
+            if (triggerID == -1 || triggerID >= descCollection->descriptors[i].numTriggers) {
+                return -1;
+            }
+            
+            triggerEvent = &descCollection->descriptors[i].triggerEvents[triggerID];
+            return (int)triggerEvent->delay;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_blockHasRotation(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            return segment->hasRotation[blockIdx];
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_blockHasNorot(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            return segment->norotFlag[blockIdx];
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_blockHasNopos(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            return segment->noposFlag[blockIdx];
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
 
