@@ -175,6 +175,54 @@ int pulseqlib_computePNS(
 
 void pulseqlib_pnsResultFree(pulseqlib_PNSResult* result);
 
+/**
+ * @brief Get total number of unique segments in collection.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @return Total number of unique segments, or 0 if none
+ */
+int pulseqlib_getNumSegments(const pulseqlib_SequenceDescriptorCollection* descCollection);
+
+/**
+ * @brief Check if a segment is pure delay.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @return 1 if pure delay, 0 if not, -1 if invalid index
+ */
+int pulseqlib_isSegmentPureDelay(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx);
+
+/**
+ * @brief Get number of blocks in a segment.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @return Number of blocks in segment, or -1 if invalid index
+ */
+int pulseqlib_getSegmentNumBlocks(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx);
+
+/**
+ * @brief Get start time of a block within a segment.
+ * 
+ * First block in segment starts at time 0.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return Block start time in microseconds, or -1 if invalid index
+ */
+int pulseqlib_getBlockStartTime(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
+/**
+ * @brief Get duration of a block.
+ * 
+ * @param descCollection Sequence descriptor collection
+ * @param segmentIdx Global segment index (0-based)
+ * @param blockIdx Block index within segment (0-based)
+ * @return Block duration in microseconds, or -1 if invalid index
+ */
+int pulseqlib_getBlockDuration(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx);
+
 #ifdef __cplusplus
 }
 #endif

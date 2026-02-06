@@ -9249,31 +9249,184 @@ int pulseqlib_getMaxADCSamples(const pulseqlib_SequenceDescriptorCollection* des
 int pulseqlib_getADCDwell(const pulseqlib_SequenceDescriptorCollection* descCollection, int adcIdx)
 {
     int i, j;
+    int globalIdx = 0;
+    int numADCs;
     
     if (!descCollection || adcIdx < 0 || adcIdx >= descCollection->totalUniqueADCs) {
         return 0;
     }
 
-    /* Get nested indexes */
-    i = adcIdx / descCollection->descriptors[0].numUniqueADCs;  /* Subsequence index */
-    j = adcIdx % descCollection->descriptors[0].numUniqueADCs;
+    /* Find which subsequence and local ADC index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numADCs = descCollection->descriptors[i].numUniqueADCs;
+        if (adcIdx < globalIdx + numADCs) {
+            /* Found the subsequence */
+            j = adcIdx - globalIdx;
+            return descCollection->descriptors[i].adcDefinitions[j].dwellTime;
+        }
+        globalIdx += numADCs;
+    }
     
-    return descCollection->descriptors[i].adcDefinitions[j].dwellTime;
-
+    return 0;
 }
 
 int pulseqlib_getADCNumSamples(const pulseqlib_SequenceDescriptorCollection* descCollection, int adcIdx)
 {
     int i, j;
+    int globalIdx = 0;
+    int numADCs;
     
     if (!descCollection || adcIdx < 0 || adcIdx >= descCollection->totalUniqueADCs) {
         return 0;
     }
 
-    /* Get nested indexes */
-    i = adcIdx / descCollection->descriptors[0].numUniqueADCs;  /* Subsequence index */
-    j = adcIdx % descCollection->descriptors[0].numUniqueADCs;
+    /* Find which subsequence and local ADC index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numADCs = descCollection->descriptors[i].numUniqueADCs;
+        if (adcIdx < globalIdx + numADCs) {
+            /* Found the subsequence */
+            j = adcIdx - globalIdx;
+            return descCollection->descriptors[i].adcDefinitions[j].numSamples;
+        }
+        globalIdx += numADCs;
+    }
+    
+    return 0;
+}
 
-    return descCollection->descriptors[i].adcDefinitions[j].numSamples;
+/* ========== Instruction Creation Support ========== */
+
+int pulseqlib_getNumSegments(const pulseqlib_SequenceDescriptorCollection* descCollection)
+{
+    if (!descCollection) return 0;
+    return descCollection->totalUniqueSegments;
+}
+
+int pulseqlib_isSegmentPureDelay(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    pulseqlib_BlockDefinition* blockDef;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            /* Pure delay: single block with no RF and no gradients */
+            if (segment->numBlocks == 1) {
+                blockDef = &descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[0]];
+                if (blockDef->rfID == -1 && blockDef->gxID == -1 && 
+                    blockDef->gyID == -1 && blockDef->gzID == -1) {
+                    return 1;
+                }
+            }
+            return 0;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_getSegmentNumBlocks(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            return descCollection->descriptors[i].segmentDefinitions[j].numBlocks;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_getBlockStartTime(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j, k;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    int startTime = 0;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            /* Sum durations of all blocks before blockIdx */
+            for (k = 0; k < blockIdx; ++k) {
+                startTime += descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[k]].duration_us;
+            }
+            
+            return startTime;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
+}
+
+int pulseqlib_getBlockDuration(const pulseqlib_SequenceDescriptorCollection* descCollection, int segmentIdx, int blockIdx)
+{
+    int i, j;
+    int globalIdx = 0;
+    int numSegs;
+    pulseqlib_TRsegment* segment;
+    
+    if (!descCollection || segmentIdx < 0 || segmentIdx >= descCollection->totalUniqueSegments) {
+        return -1;
+    }
+    
+    /* Find which subsequence and local segment index */
+    for (i = 0; i < descCollection->numSubsequences; ++i) {
+        numSegs = descCollection->descriptors[i].numUniqueSegments;
+        if (segmentIdx < globalIdx + numSegs) {
+            /* Found the subsequence */
+            j = segmentIdx - globalIdx;
+            segment = &descCollection->descriptors[i].segmentDefinitions[j];
+            
+            if (blockIdx < 0 || blockIdx >= segment->numBlocks) {
+                return -1;
+            }
+            
+            return descCollection->descriptors[i].blockDefinitions[segment->uniqueBlockIndices[blockIdx]].duration_us;
+        }
+        globalIdx += numSegs;
+    }
+    
+    return -1;
 }
 
