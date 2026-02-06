@@ -6216,11 +6216,13 @@ int pulseqlib_findSegmentsInTR(
     int nb;
     int uniqueIdx;
     int blockTableIdx;
+    int shotIdx;
     int axGradIDs[3];
     int axDefIDs[3];
     int ax;
     float* maxEnergy;
-    float instanceEnergy;
+    float instanceEnergy, e;
+    float amp;
 
     /* Use local diag if caller doesn't want diagnostics */
     if (!diag) {
@@ -6569,9 +6571,9 @@ int pulseqlib_findSegmentsInTR(
             for (ax = 0; ax < 3; ++ax) {
                 if (axGradIDs[ax] >= 0 && axGradIDs[ax] < seqDesc->gradTableSize &&
                     axDefIDs[ax] >= 0 && axDefIDs[ax] < seqDesc->numUniqueGrads) {
-                    float amp = seqDesc->gradTable[axGradIDs[ax]].amplitude;
-                    int shotIdx = seqDesc->gradTable[axGradIDs[ax]].shotIndex;
-                    float e = seqDesc->gradDefinitions[axDefIDs[ax]].energy[shotIdx];
+                    amp = seqDesc->gradTable[axGradIDs[ax]].amplitude;
+                    shotIdx = seqDesc->gradTable[axGradIDs[ax]].shotIndex;
+                    e = seqDesc->gradDefinitions[axDefIDs[ax]].energy[shotIdx];
                     instanceEnergy += e * amp * amp;
                 }
             }
