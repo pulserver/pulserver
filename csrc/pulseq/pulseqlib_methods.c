@@ -6622,7 +6622,12 @@ static void cursorUpdateCached(pulseqlib_Cursor* cur)
     cur->trIdx = cur->globalBlockIdx / cur->trSize;
     cur->segmentIdx = cur->trBlockMap[cur->withinTRIdx].segmentIdx;
     cur->blockInSeg = cur->trBlockMap[cur->withinTRIdx].blockInSeg;
-    cur->blockTableIdx = cur->numPrepBlocks + cur->withinTRIdx;
+    
+    /* Canonical within-TR index: always points to first main TR (safety-checked) */
+    cur->withinTRBlockTableIdx = cur->numPrepBlocks + cur->withinTRIdx;
+    
+    /* Actual block table index: wraps around the full sequence length */
+    cur->blockTableIdx = cur->numPrepBlocks + (cur->globalBlockIdx % cur->numBlocks);
 }
 
 static int cursorInit(pulseqlib_SequenceDescriptorCollection* descCollection, int numRepetitions)
@@ -6650,6 +6655,7 @@ static int cursorInit(pulseqlib_SequenceDescriptorCollection* descCollection, in
     cur->trSize = trDesc->trSize;
     cur->numTRs = totalTRs;
     cur->numPrepBlocks = trDesc->numPrepBlocks;
+    cur->numBlocks = desc->numBlocks;
     cur->totalBlocks = totalTRs * trDesc->trSize;
     
     /* Build TR block map from mainSegmentTable */
@@ -11156,7 +11162,7 @@ float pulseqlib_cursorGetRFAmplitude(const pulseqlib_SequenceDescriptorCollectio
 {
     const pulseqlib_Cursor* cur = &descCollection->cursor;
     const pulseqlib_SequenceDescriptor* desc = &descCollection->descriptors[0];
-    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->blockTableIdx];
+    const pulseqlib_BlockTableElement* bte = &desc->blockTable[cur->withinTRBlockTableIdx];
     
     if (bte->rfID < 0 || bte->rfID >= desc->rfTableSize) {
         return 0.0f;

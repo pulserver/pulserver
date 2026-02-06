@@ -792,24 +792,23 @@ typedef struct pulseqlib_TRBlockMapEntry {
 
 #define PULSEQLIB_TR_BLOCK_MAP_ENTRY_INIT {0, 0}
 
-/**
- * @brief Cursor for efficient sequential iteration over blocks.
- */
 typedef struct pulseqlib_Cursor {
     int totalBlocks;          /**< Total blocks in the full run (all reps) */
     int trSize;               /**< Blocks per TR */
     int numTRs;               /**< Total TRs (prep + main + cooldown) * reps */
     int numPrepBlocks;        /**< Prep blocks offset into blockTable */
+    int numBlocks;            /**< Total blocks in one pass of the sequence */
     pulseqlib_TRBlockMapEntry* trBlockMap; /**< Maps within-TR block idx -> (segmentIdx, blockInSeg) */
     int globalBlockIdx;       /**< Current global block index */
     int trIdx;                /**< Current TR index (0-based) */
     int withinTRIdx;          /**< Current block index within TR */
     int segmentIdx;           /**< Current unique segment ID */
     int blockInSeg;           /**< Current block index within segment */
-    int blockTableIdx;        /**< Current index into blockTable */
+    int blockTableIdx;        /**< Actual index into blockTable (for dynamic per-instance values) */
+    int withinTRBlockTableIdx; /**< Canonical within-TR index into blockTable (for safety-checked RF) */
 } pulseqlib_Cursor;
 
-#define PULSEQLIB_CURSOR_INIT {0, 0, 0, 0, NULL, 0, 0, 0, 0, 0, 0}
+#define PULSEQLIB_CURSOR_INIT {0, 0, 0, 0, 0, NULL, 0, 0, 0, 0, 0, 0, 0}
 
 typedef struct pulseqlib_SequenceDescriptorCollection {
     int numSubsequences;                         /**< Number of subsequences */
