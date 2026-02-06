@@ -671,13 +671,14 @@ typedef struct pulseqlib_BlockTableElement {
     int rotationID; /**< Rotation extension ID */
     
     /* Flow control fields */
+    int onceFlag; /**< 3-state flag indicating whether the block is to be used once (0), multiple times (1), or not at all (2) */
     int norotFlag; /**< Ignore FOV rotation flag */
     int noposFlag; /**< Ignore FOV position flag */
     int pmcFlag; /**< Prospective motion correction flag */
     int navFlag; /**< Navigator flag */
 } pulseqlib_BlockTableElement;
 
-#define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0}
+#define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0}
 
 typedef struct pulseqlib_TRdescriptor {
     int numPrepBlocks; /**< Number of preparation blocks before the main TR */
@@ -782,34 +783,6 @@ typedef struct pulseqlib_SequenceDescriptor {
 
 #define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT {0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, PULSEQLIB_TR_DESCRIPTOR_INIT, 0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT}
 
-/**
- * @brief Flat mapping of within-TR block index to segment/block-within-segment.
- */
-typedef struct pulseqlib_TRBlockMapEntry {
-    int segmentIdx;   /**< Unique segment ID for this block */
-    int blockInSeg;   /**< Block index within the segment */
-} pulseqlib_TRBlockMapEntry;
-
-#define PULSEQLIB_TR_BLOCK_MAP_ENTRY_INIT {0, 0}
-
-typedef struct pulseqlib_Cursor {
-    int totalBlocks;          /**< Total blocks in the full run (all reps) */
-    int trSize;               /**< Blocks per TR */
-    int numTRs;               /**< Total TRs (prep + main + cooldown) * reps */
-    int numPrepBlocks;        /**< Prep blocks offset into blockTable */
-    int numBlocks;            /**< Total blocks in one pass of the sequence */
-    pulseqlib_TRBlockMapEntry* trBlockMap; /**< Maps within-TR block idx -> (segmentIdx, blockInSeg) */
-    int globalBlockIdx;       /**< Current global block index */
-    int trIdx;                /**< Current TR index (0-based) */
-    int withinTRIdx;          /**< Current block index within TR */
-    int segmentIdx;           /**< Current unique segment ID */
-    int blockInSeg;           /**< Current block index within segment */
-    int blockTableIdx;        /**< Actual index into blockTable (for dynamic per-instance values) */
-    int withinTRBlockTableIdx; /**< Canonical within-TR index into blockTable (for safety-checked RF) */
-} pulseqlib_Cursor;
-
-#define PULSEQLIB_CURSOR_INIT {0, 0, 0, 0, 0, NULL, 0, 0, 0, 0, 0, 0, 0}
-
 typedef struct pulseqlib_SequenceDescriptorCollection {
     int numSubsequences;                         /**< Number of subsequences */
     pulseqlib_SequenceDescriptor* descriptors;   /**< Array of sequence descriptors */
@@ -823,11 +796,9 @@ typedef struct pulseqlib_SequenceDescriptorCollection {
     /* Combined duration */
     float totalDuration_us;     /**< Total duration of composite sequence (us) */
 
-    /* Runtime cursor */
-    pulseqlib_Cursor cursor;    /**< Cursor for sequential block iteration */
 } pulseqlib_SequenceDescriptorCollection;
 
-#define PULSEQLIB_SEQUENCE_DESCRIPTOR_COLLECTION_INIT {0, NULL, NULL, 0, 0, 0, 0.0f, PULSEQLIB_CURSOR_INIT}
+#define PULSEQLIB_SEQUENCE_DESCRIPTOR_COLLECTION_INIT {0, NULL, NULL, 0, 0, 0, 0.0f}
 
 typedef struct pulseqlib_TRGradientWaveforms {
     int numSamplesGx;    /**< Number of samples in Gx waveform */
