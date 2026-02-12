@@ -6,12 +6,12 @@
  *  See COPYING file for more information.
  */
 
-#ifndef KISS_FFT_H
-#define KISS_FFT_H
+#ifndef EXTERNAL_KISS_FFT_H
+#define EXTERNAL_KISS_FFT_H
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // Define KISS_FFT_SHARED macro to properly export symbols
@@ -157,4 +157,4 @@ int KISS_FFT_API kiss_fft_next_fast_size(int n);
 } 
 #endif
 
-#endif
+#endif /* EXTERNAL_KISS_FFT_H */

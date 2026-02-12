@@ -6,8 +6,8 @@
  *  See COPYING file for more information.
  */
 
-#ifndef kiss_fft_log_h
-#define kiss_fft_log_h
+#ifndef external_kiss_fft_log_h
+#define external_kiss_fft_log_h
 
 #define ERROR 1
 #define WARNING 2
@@ -33,4 +33,4 @@
 
 
 
-#endif /* kiss_fft_log_h */
+#endif /* external_kiss_fft_log_h */

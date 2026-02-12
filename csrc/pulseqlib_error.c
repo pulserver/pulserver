@@ -1,0 +1,173 @@
+/* pulseqlib_error.c -- error messages, hints, and lookup tables */
+
+#include <string.h>
+
+#include "pulseqlib_internal.h"
+
+/* ------------------------------------------------------------------ */
+/*  Label / hint lookup tables                                         */
+/* ------------------------------------------------------------------ */
+
+static const pulseqlib__table_entry label_table[] = {
+    { "SLC",   PULSEQLIB__SLC },
+    { "SEG",   PULSEQLIB__SEG },
+    { "REP",   PULSEQLIB__REP },
+    { "AVG",   PULSEQLIB__AVG },
+    { "SET",   PULSEQLIB__SET },
+    { "ECO",   PULSEQLIB__ECO },
+    { "PHS",   PULSEQLIB__PHS },
+    { "LIN",   PULSEQLIB__LIN },
+    { "PAR",   PULSEQLIB__PAR },
+    { "ACQ",   PULSEQLIB__ACQ },
+    { "NAV",   PULSEQLIB__NAV },
+    { "REV",   PULSEQLIB__REV },
+    { "SMS",   PULSEQLIB__SMS },
+    { "REF",   PULSEQLIB__REF },
+    { "IMA",   PULSEQLIB__IMA },
+    { "NOISE", PULSEQLIB__NOISE },
+    { "PMC",   PULSEQLIB__PMC },
+    { "NOROT", PULSEQLIB__NOROT },
+    { "NOPOS", PULSEQLIB__NOPOS },
+    { "NOSCL", PULSEQLIB__NOSCL },
+    { "ONCE",  PULSEQLIB__ONCE },
+    { "TRID",  PULSEQLIB__TRID },
+    { NULL, -1 }
+};
+
+int pulseqlib__label2enum(const char *label)
+{
+    int i;
+    if (!label) return -1;
+    for (i = 0; label_table[i].name != NULL; i++) {
+        if (strcmp(label, label_table[i].name) == 0)
+            return label_table[i].value;
+    }
+    return -1;
+}
+
+static const pulseqlib__table_entry hint_table[] = {
+    { "TE",      PULSEQLIB__HINT_TE },
+    { "TR",      PULSEQLIB__HINT_TR },
+    { "TI",      PULSEQLIB__HINT_TI },
+    { "ESP",     PULSEQLIB__HINT_ESP },
+    { "RECTIME", PULSEQLIB__HINT_RECTIME },
+    { "T2PREP",  PULSEQLIB__HINT_T2PREP },
+    { "TE2",     PULSEQLIB__HINT_TE2 },
+    { NULL, -1 }
+};
+
+int pulseqlib__hint2enum(const char *hint)
+{
+    int i;
+    if (!hint) return -1;
+    for (i = 0; hint_table[i].name != NULL; i++) {
+        if (strcmp(hint, hint_table[i].name) == 0)
+            return hint_table[i].value;
+    }
+    return -1;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Diagnostic init                                                    */
+/* ------------------------------------------------------------------ */
+void pulseqlib_diagnostic_init(pulseqlib_diagnostic* diag)
+{
+    if (!diag) return;
+    diag->code = PULSEQLIB_OK;
+    diag->block_index = -1;
+    diag->channel = -1;
+    diag->num_unique_blocks = 0;
+    diag->imaging_region_length = 0;
+    diag->candidate_pattern_length = 0;
+    diag->mismatch_position = -1;
+    diag->gradient_amplitude = 0.0f;
+    diag->max_allowed_amplitude = 0.0f;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Error messages                                                     */
+/* ------------------------------------------------------------------ */
+const char* pulseqlib_get_error_message(int code)
+{
+    switch (code) {
+        case PULSEQLIB_OK:                            return "Success";
+        case PULSEQLIB_ERR_NULL_POINTER:              return "Required pointer argument is NULL";
+        case PULSEQLIB_ERR_INVALID_ARGUMENT:          return "Invalid argument value";
+        case PULSEQLIB_ERR_ALLOC_FAILED:              return "Memory allocation failed";
+        case PULSEQLIB_ERR_FILE_NOT_FOUND:            return "Sequence file not found or could not be opened";
+        case PULSEQLIB_ERR_FILE_READ_FAILED:          return "Error reading from sequence file";
+        case PULSEQLIB_ERR_UNSUPPORTED_VERSION:       return "Unsupported sequence file version (requires >= 1.5.0)";
+        case PULSEQLIB_ERR_PARSE_FAILED:              return "Failed to parse sequence data";
+        case PULSEQLIB_ERR_INVALID_PREP_POSITION:     return "Invalid preparation block position";
+        case PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION: return "Invalid cooldown block position";
+        case PULSEQLIB_ERR_INVALID_ONCE_FLAGS:        return "ONCE flags were found outside preparation/cooldown sections";
+        case PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS:       return "Number of waveform shots exceeds maximum allowed";
+        case PULSEQLIB_ERR_SELEXC_GRAD_SCALING:       return "Selective excitation block has varying gradient amplitude across instances";
+        case PULSEQLIB_ERR_SELEXC_ROTATION:           return "Selective excitation block has rotation extension";
+        case PULSEQLIB_ERR_TR_NO_BLOCKS:              return "Sequence contains no blocks";
+        case PULSEQLIB_ERR_TR_NO_IMAGING_REGION:      return "No imaging region found (preparation + cooldown >= total blocks)";
+        case PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN:    return "No periodic TR pattern found in imaging region";
+        case PULSEQLIB_ERR_TR_PATTERN_MISMATCH:       return "TR pattern does not repeat consistently across imaging region";
+        case PULSEQLIB_ERR_TR_PREP_TOO_LONG:          return "Non-standard preparation section exceeds duration threshold";
+        case PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG:      return "Non-standard cooldown section exceeds duration threshold";
+        case PULSEQLIB_ERR_SEG_NONZERO_START_GRAD:    return "TR does not start with zero gradient amplitude";
+        case PULSEQLIB_ERR_SEG_NONZERO_END_GRAD:      return "TR does not end with zero gradient amplitude";
+        case PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND:     return "No segment boundaries could be identified in TR";
+        case PULSEQLIB_ERR_ACOUSTIC_INVALID_WINDOW:   return "Invalid window size for acoustic analysis";
+        case PULSEQLIB_ERR_ACOUSTIC_INVALID_RESOLUTION: return "Invalid spectral resolution for acoustic analysis";
+        case PULSEQLIB_ERR_ACOUSTIC_NO_WAVEFORM:      return "No waveform data for acoustic analysis";
+        case PULSEQLIB_ERR_ACOUSTIC_FFT_FAILED:       return "FFT computation failed during acoustic analysis";
+        case PULSEQLIB_ERR_ACOUSTIC_VIOLATION:        return "Acoustic resonance violation detected";
+        case PULSEQLIB_ERR_PNS_INVALID_PARAMS:        return "Invalid PNS parameters";
+        case PULSEQLIB_ERR_PNS_INVALID_CHRONAXIE:     return "Invalid chronaxie value for PNS";
+        case PULSEQLIB_ERR_PNS_INVALID_RHEOBASE:      return "Invalid rheobase value for PNS (GE model)";
+        case PULSEQLIB_ERR_PNS_NO_WAVEFORM:           return "No waveform data for PNS analysis";
+        case PULSEQLIB_ERR_PNS_FFT_FAILED:            return "FFT convolution failed during PNS analysis";
+        case PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED:    return "PNS threshold exceeded (>100%)";
+        case PULSEQLIB_ERR_NOT_IMPLEMENTED:           return "Functionality not yet implemented";
+        default:                                       return "Unknown error";
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Error hints                                                        */
+/* ------------------------------------------------------------------ */
+const char* pulseqlib_get_error_hint(int code)
+{
+    switch (code) {
+        case PULSEQLIB_OK:
+            return "";
+        case PULSEQLIB_ERR_INVALID_PREP_POSITION:
+            return "Ensure that the preparation section is marked with ONCE labels "
+                   "and starts at the first block of the sequence.";
+        case PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION:
+            return "Ensure that the cooldown section is marked with ONCE labels "
+                   "and ends at the last block of the sequence.";
+        case PULSEQLIB_ERR_INVALID_ONCE_FLAGS:
+            return "Ensure that ONCE flags are only used in preparation and cooldown sections.";
+        case PULSEQLIB_ERR_TR_NO_IMAGING_REGION:
+            return "Make sure to use ONCE flags either at beginning (preparation) or end (cooldown) of the sequence.";
+        case PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN:
+            return "This often occurs when phase-encoding gradients are created inside "
+                   "the sequence loop with varying amplitudes. Instead, create gradient "
+                   "events ONCE outside the loop and use 'scale' parameter to vary amplitude.";
+        case PULSEQLIB_ERR_SEG_NONZERO_START_GRAD:
+        case PULSEQLIB_ERR_SEG_NONZERO_END_GRAD:
+            return "Each segment must begin and end with gradient amplitudes that can "
+                   "ramp to/from zero within one gradient raster.";
+        case PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS:
+            return "The sequence contains a waveform with more than 16 distinct waveform shapes.";
+        case PULSEQLIB_ERR_SELEXC_GRAD_SCALING:
+            return "Blocks containing both RF and gradients require constant gradient "
+                   "amplitude across instances for off-isocenter frequency modulation.";
+        case PULSEQLIB_ERR_SELEXC_ROTATION:
+            return "Blocks containing both RF and gradients cannot have rotation extensions.";
+        case PULSEQLIB_ERR_TR_PREP_TOO_LONG:
+        case PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG:
+            return "The preparation or cooldown section differs from the main TR pattern and is too long.";
+        case PULSEQLIB_ERR_NOT_IMPLEMENTED:
+            return "This functionality is not yet implemented.";
+        default:
+            return "Check sequence design for structural consistency.";
+    }
+}

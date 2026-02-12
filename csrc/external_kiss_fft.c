@@ -6,7 +6,7 @@
  *  See COPYING file for more information.
  */
 
-#include "_kiss_fft_guts.h"
+#include "external_kiss_fft_guts.h"
 /* The guts header contains all the multiplication and addition macros that are defined for
  fixed or floating point complex numbers.  It also delares the kf_ internal functions.
  */

@@ -11,12 +11,13 @@
    and defines
    typedef struct { kiss_fft_scalar r; kiss_fft_scalar i; }kiss_fft_cpx; */
 
-#ifndef _kiss_fft_guts_h
-#define _kiss_fft_guts_h
+#ifndef external_kiss_fft_guts_h
+#define external_kiss_fft_guts_h
 
-#include "kiss_fft.h"
-#include "kiss_fft_log.h"
 #include <limits.h>
+
+#include "external_kiss_fft.h"
+#include "external_kiss_fft_log.h"
 
 #define MAXFACTORS 32
 /* e.g. an fft of length 128 has 4 factors
@@ -163,4 +164,4 @@ struct kiss_fft_state{
 #define  KISS_FFT_TMP_FREE(ptr) KISS_FFT_FREE(ptr)
 #endif
 
-#endif /* _kiss_fft_guts_h */
+#endif /* external_kiss_fft_guts_h */

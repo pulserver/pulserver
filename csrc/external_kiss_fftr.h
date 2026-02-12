@@ -6,10 +6,11 @@
  *  See COPYING file for more information.
  */
 
-#ifndef KISS_FTR_H
-#define KISS_FTR_H
+#ifndef EXTERNAL_KISS_FTR_H
+#define EXTERNAL_KISS_FTR_H
 
-#include "kiss_fft.h"
+#include "external_kiss_fft.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -51,4 +52,4 @@ void KISS_FFT_API kiss_fftri(kiss_fftr_cfg cfg,const kiss_fft_cpx *freqdata,kiss
 #ifdef __cplusplus
 }
 #endif
-#endif
+#endif /* EXTERNAL_KISS_FTR_H */

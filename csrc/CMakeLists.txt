@@ -1,15 +1,36 @@
-# Set the minimum required version of CMake
-cmake_minimum_required(VERSION 3.10)
+# csrc/CMakeLists.txt -- pulseqlib library build
 
-project(pulserverlib C)
+# Collect all library sources
+set(PULSEQLIB_SOURCES
+    pulseqlib_error.c
+    pulseqlib_math.c
+    pulseqlib_parse.c
+    pulseqlib_core.c
+    pulseqlib_segment.c
+    pulseqlib_safety.c
+    pulseqlib_accessor.c
+)
 
-# External libraries
-file(GLOB KISSFFT "../external/kissfft/*.c")
+# kissfft sources (co-located for self-containment)
+set(KISSFFT_SOURCES
+    external_kiss_fft.c
+    external_kiss_fftr.c
+)
 
-# Minimal ANSI C89 Pulseq reader library
-file(GLOB PULSEQ "pulseq/*.c" "pulseq/*.h")
+# Public headers (for IDE / install)
+set(PULSEQLIB_HEADERS
+    pulseqlib.h
+    pulseqlib_config.h
+    pulseqlib_types.h
+)
 
-add_library(pulseqlib ${PULSEQ} ${KISSFFT})
-target_include_directories(pulseqlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(pulseqlib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../external/kissfft)
-target_link_libraries(pulseqlib m)
+# Build the library
+add_library(pulseqlib STATIC
+    ${PULSEQLIB_SOURCES}
+    ${KISSFFT_SOURCES}
+)
+
+# Include the current directory so #include "pulseqlib.h" works
+target_include_directories(pulseqlib
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}
+)
