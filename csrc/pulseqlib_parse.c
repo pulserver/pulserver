@@ -1227,12 +1227,10 @@ int pulseqlib__read_seq_collection(pulseqlib__seq_file_collection* coll,
 }
 
 /* ================================================================== */
-/*  Raw block / extension parsing (static)                             */
+/*  Raw block / extension parsing (public)                             */
 /* ================================================================== */
 
-static int get_raw_block_content_ids(const pulseqlib__seq_file* seq,
-                                     pulseqlib__raw_block* block,
-                                     int block_index, int parse_extensions)
+int pulseqlib__get_raw_block_content_ids(const pulseqlib__seq_file* seq, pulseqlib__raw_block* block, int block_index, int parse_extensions)
 {
     int next_ext_id, ext_count;
     float* ev;
@@ -1327,9 +1325,7 @@ static void extension_block_free(pulseqlib__extension_block* eb)
     eb->rf_shimming.n_chan = 0;
 }
 
-static void get_raw_extension(const pulseqlib__seq_file* seq,
-                              pulseqlib__raw_extension* re,
-                              const pulseqlib__raw_block* raw)
+void pulseqlib__get_raw_extension(const pulseqlib__seq_file* seq, pulseqlib__raw_extension* re, const pulseqlib__raw_block* raw)
 {
     int i, type_idx, ref_idx, ext_type, label_value, label_id;
 
@@ -1754,10 +1750,10 @@ void pulseqlib__get_block(const pulseqlib__seq_file* seq,
 
     if (!seq || !block || block_index < 0 || block_index >= seq->num_blocks) return;
 
-    if (!get_raw_block_content_ids(seq, &raw, block_index, 1)) return;
+    if (!pulseqlib__get_raw_block_content_ids(seq, &raw, block_index, 1)) return;
     has_ext = (raw.ext_count > 0) && seq->is_extensions_library_parsed && seq->extension_lut;
 
-    if (has_ext) get_raw_extension(seq, &re, &raw);
+    if (has_ext) pulseqlib__get_raw_extension(seq, &re, &raw);
     else         raw_extension_init(&re);
 
     if (!parse_block_without_ext(seq, block, &raw, has_ext ? &re : NULL)) return;

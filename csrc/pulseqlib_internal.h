@@ -400,6 +400,8 @@ void  pulseqlib__seq_block_free(pulseqlib__seq_block* block);
 int   pulseqlib__read_seq(pulseqlib__seq_file* seq, const char* file_path);
 int   pulseqlib__read_seq_from_buffer(pulseqlib__seq_file* seq, FILE* f);
 int   pulseqlib__read_seq_collection(pulseqlib__seq_file_collection* coll, const char* first_file_path, const pulseqlib_opts* opts);
+int   pulseqlib__get_raw_block_content_ids(const pulseqlib__seq_file* seq, pulseqlib__raw_block* block, int block_index, int parse_extensions);
+void  pulseqlib__get_raw_extension(const pulseqlib__seq_file* seq, pulseqlib__raw_extension* re, const pulseqlib__raw_block* raw);
 void  pulseqlib__get_block(const pulseqlib__seq_file* seq, pulseqlib__seq_block* block, int block_index);
 float pulseqlib__get_grad_library_max_amplitude(const pulseqlib__seq_file* seq);
 int   pulseqlib__decompress_shape(pulseqlib_shape_arbitrary* result, const pulseqlib_shape_arbitrary* encoded, float scale);
@@ -411,19 +413,6 @@ int   pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseq
 int   pulseqlib__get_collection_descriptors(pulseqlib_sequence_descriptor_collection* desc_coll, pulseqlib_diagnostic* diag, const pulseqlib__seq_file_collection* coll);
 
 /* --- Helper to locate segment/block in collection --- */
-int pulseqlib__resolve_segment(
-    const pulseqlib_sequence_descriptor_collection* coll,
-    int seg_idx,
-    const pulseqlib_sequence_descriptor** out_desc,
-    int* out_local_seg);
-
-int pulseqlib__resolve_block(
-    const pulseqlib_sequence_descriptor_collection* coll,
-    int seg_idx, int blk_idx,
-    const pulseqlib_sequence_descriptor** out_desc,
-    const pulseqlib_tr_segment** out_seg,
-    int* out_local_blk);
-
 int pulseqlib__resolve_segment(
     const pulseqlib_sequence_descriptor** out_desc,
     int* out_local_seg,
