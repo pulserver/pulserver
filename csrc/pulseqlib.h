@@ -66,10 +66,12 @@ void pulseqlib_segment_table_result_free(pulseqlib_segment_table_result* result)
 /* ------------------------------------------------------------------ */
 /*  Gradient waveforms                                                 */
 /* ------------------------------------------------------------------ */
+
 int pulseqlib_get_tr_gradient_waveforms(
+    const pulseqlib_sequence_descriptor* desc,
     pulseqlib_tr_gradient_waveforms* waveforms,
-    pulseqlib_diagnostic* diag,
-    const pulseqlib_sequence_descriptor* desc);
+    pulseqlib_diagnostic* diag
+);
 void pulseqlib_tr_gradient_waveforms_free(pulseqlib_tr_gradient_waveforms* w);
 
 /* ------------------------------------------------------------------ */

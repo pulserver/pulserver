@@ -338,3 +338,94 @@ float pulseqlib__find_spectrum_flank(
     }
     return 0.0f;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Next power of two                                                  */
+/* ------------------------------------------------------------------ */
+
+size_t pulseqlib__next_pow2(size_t x)
+{
+    size_t v = 1;
+    while (v < x) v <<= 1;
+    return v;
+}
+
+/* ------------------------------------------------------------------ */
+/*  FFT convolution (real signals)                                     */
+/* ------------------------------------------------------------------ */
+#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
+#include "external_kiss_fft.h"
+#include "external_kiss_fftr.h"
+
+int pulseqlib__convolve_fft(
+    float* output,
+    const float* signal, int signal_len,
+    const float* kernel, int kernel_len)
+{
+    int nfft, nfreq, i;
+    kiss_fftr_cfg fwd;
+    kiss_fftr_cfg inv;
+    float* pad_sig;
+    float* pad_kern;
+    kiss_fft_cpx* sig_fft;
+    kiss_fft_cpx* kern_fft;
+    float* conv;
+    float re, im, scale;
+    int result;
+
+    result = PULSEQLIB_OK;
+    fwd = NULL;
+    inv = NULL;
+    pad_sig  = NULL;
+    pad_kern = NULL;
+    sig_fft  = NULL;
+    kern_fft = NULL;
+    conv     = NULL;
+
+    nfft  = (int)pulseqlib__next_pow2((size_t)(signal_len + kernel_len - 1));
+    nfreq = nfft / 2 + 1;
+
+    pad_sig  = (float*)ALLOC((size_t)nfft * sizeof(float));
+    pad_kern = (float*)ALLOC((size_t)nfft * sizeof(float));
+    sig_fft  = (kiss_fft_cpx*)ALLOC((size_t)nfreq * sizeof(kiss_fft_cpx));
+    kern_fft = (kiss_fft_cpx*)ALLOC((size_t)nfreq * sizeof(kiss_fft_cpx));
+    conv     = (float*)ALLOC((size_t)nfft * sizeof(float));
+    if (!pad_sig || !pad_kern || !sig_fft || !kern_fft || !conv) {
+        result = PULSEQLIB_ERR_ALLOC_FAILED; goto fail;
+    }
+
+    for (i = 0; i < signal_len; ++i) pad_sig[i] = signal[i];
+    for (i = signal_len; i < nfft; ++i) pad_sig[i] = 0.0f;
+
+    for (i = 0; i < kernel_len; ++i) pad_kern[i] = kernel[i];
+    for (i = kernel_len; i < nfft; ++i) pad_kern[i] = 0.0f;
+
+    fwd = kiss_fftr_alloc(nfft, 0, NULL, NULL);
+    inv = kiss_fftr_alloc(nfft, 1, NULL, NULL);
+    if (!fwd || !inv) { result = PULSEQLIB_ERR_PNS_FFT_FAILED; goto fail; }
+
+    kiss_fftr(fwd, pad_sig, sig_fft);
+    kiss_fftr(fwd, pad_kern, kern_fft);
+
+    for (i = 0; i < nfreq; ++i) {
+        re = sig_fft[i].r * kern_fft[i].r - sig_fft[i].i * kern_fft[i].i;
+        im = sig_fft[i].r * kern_fft[i].i + sig_fft[i].i * kern_fft[i].r;
+        sig_fft[i].r = re;
+        sig_fft[i].i = im;
+    }
+
+    kiss_fftri(inv, sig_fft, conv);
+    scale = 1.0f / (float)nfft;
+    for (i = 0; i < signal_len; ++i) output[i] = conv[i] * scale;
+
+fail:
+    if (pad_sig)  FREE(pad_sig);
+    if (pad_kern) FREE(pad_kern);
+    if (sig_fft)  FREE(sig_fft);
+    if (kern_fft) FREE(kern_fft);
+    if (conv)     FREE(conv);
+    if (fwd)      kiss_fftr_free(fwd);
+    if (inv)      kiss_fftr_free(inv);
+    return result;
+}
+#endif /* PULSEQLIB_VENDOR_GEHC */

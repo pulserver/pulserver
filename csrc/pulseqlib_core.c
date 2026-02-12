@@ -51,13 +51,6 @@ static int array_equal(const int* a, const int* b, int len)
     return 1;
 }
 
-static size_t next_pow2(size_t x)
-{
-    size_t v = 1;
-    while (v < x) v <<= 1;
-    return v;
-}
-
 /* ================================================================== */
 /*  Hash-based integer-row deduplication                               */
 /* ================================================================== */

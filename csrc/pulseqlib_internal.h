@@ -390,6 +390,10 @@ void  pulseqlib__interp1_linear(float* out, const float* x, int nx, const float*
 void  pulseqlib__interp1_linear_complex(float* out_re, float* out_im, const float* x, int nx, const float* xp, const float* fp_re, const float* fp_im, int nxp);
 void  pulseqlib__fftshift_complex(float* re, float* im, int n);
 float pulseqlib__find_spectrum_flank(const float* x, const float* re, const float* im, int n, float cutoff, int reverse);
+size_t pulseqlib__next_pow2(size_t x);
+#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
+int   pulseqlib__convolve_fft(float* output, const float* signal, int signal_len, const float* kernel, int kernel_len);
+#endif
 
 /* --- pulseqlib_parse.c --- */
 void  pulseqlib__seq_file_init(pulseqlib__seq_file* seq, const pulseqlib_opts* opts);
