@@ -123,7 +123,8 @@ const char* pulseqlib_get_error_message(int code)
         case PULSEQLIB_ERR_PNS_INVALID_RHEOBASE:      return "Invalid rheobase value for PNS (GE model)";
         case PULSEQLIB_ERR_PNS_NO_WAVEFORM:           return "No waveform data for PNS analysis";
         case PULSEQLIB_ERR_PNS_FFT_FAILED:            return "FFT convolution failed during PNS analysis";
-        case PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED:    return "PNS threshold exceeded (>100%)";
+        case PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED:    return "PNS threshold exceeded";
+        case PULSEQLIB_ERR_MAX_GRAD_EXCEEDED:         return "Maximum gradient amplitude exceeded";
         case PULSEQLIB_ERR_NOT_IMPLEMENTED:           return "Functionality not yet implemented";
         default:                                       return "Unknown error";
     }
@@ -165,6 +166,9 @@ const char* pulseqlib_get_error_hint(int code)
         case PULSEQLIB_ERR_TR_PREP_TOO_LONG:
         case PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG:
             return "The preparation or cooldown section differs from the main TR pattern and is too long.";
+        case PULSEQLIB_ERR_MAX_GRAD_EXCEEDED:
+            return "The gradient sum-of-squares amplitude exceeds the system limit. "
+                   "Check diagnostic fields gradient_amplitude and max_allowed_amplitude (mT/m).";
         case PULSEQLIB_ERR_NOT_IMPLEMENTED:
             return "This functionality is not yet implemented.";
         default:

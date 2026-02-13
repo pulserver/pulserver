@@ -1777,3 +1777,74 @@ void pulseqlib_pns_result_free(pulseqlib_pns_result* r)
     r->max_pns_index  = 0;
     r->max_pns_time_us = 0.0f;
 }
+
+/* ================================================================== */
+/*  Collection-level safety check                                     */
+/* ================================================================== */
+
+int check_max_grad(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    pulseqlib_diagnostic* diag,
+    const pulseqlib_opts* opts
+) {
+    int s, b, raw_id;
+    int worst_subseq, worst_block;
+    float gx_amp, gy_amp, gz_amp, gsos, gsos_max, limit_sq, hz_per_mt;
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_block_table_element* bte;
+
+    if (!coll || !opts) {
+        if (diag) { pulseqlib_diagnostic_init(diag); diag->code = PULSEQLIB_ERR_NULL_POINTER; }
+        return PULSEQLIB_ERR_NULL_POINTER;
+    }
+    if (diag) pulseqlib_diagnostic_init(diag);
+
+    /* ---- max gradient amplitude (GSOS) check ---- */
+    gsos_max     = 0.0f;
+    limit_sq     = opts->max_grad * opts->max_grad;
+    worst_subseq = 0;
+    worst_block  = 0;
+
+    for (s = 0; s < coll->num_subsequences; ++s) {
+        desc = &coll->descriptors[s];
+        for (b = 0; b < desc->num_blocks; ++b) {
+            bte = &desc->block_table[b];
+
+            gx_amp = 0.0f;
+            raw_id = bte->gx_id;
+            if (raw_id >= 0 && raw_id < desc->grad_table_size)
+                gx_amp = desc->grad_table[raw_id].amplitude;
+
+            gy_amp = 0.0f;
+            raw_id = bte->gy_id;
+            if (raw_id >= 0 && raw_id < desc->grad_table_size)
+                gy_amp = desc->grad_table[raw_id].amplitude;
+
+            gz_amp = 0.0f;
+            raw_id = bte->gz_id;
+            if (raw_id >= 0 && raw_id < desc->grad_table_size)
+                gz_amp = desc->grad_table[raw_id].amplitude;
+
+            gsos = gx_amp * gx_amp + gy_amp * gy_amp + gz_amp * gz_amp;
+            if (gsos > gsos_max) {
+                gsos_max     = gsos;
+                worst_subseq = s;
+                worst_block  = b;
+            }
+        }
+    }
+
+    if (limit_sq > 0.0f && gsos_max > limit_sq) {
+        hz_per_mt = opts->gamma * 0.001f;
+        if (diag) {
+            diag->code                = PULSEQLIB_ERR_MAX_GRAD_EXCEEDED;
+            diag->channel             = worst_subseq;
+            diag->block_index         = worst_block;
+            diag->gradient_amplitude  = (float)sqrt((double)gsos_max) / hz_per_mt;
+            diag->max_allowed_amplitude = opts->max_grad / hz_per_mt;
+        }
+        return PULSEQLIB_ERR_MAX_GRAD_EXCEEDED;
+    }
+
+    return PULSEQLIB_OK;
+}
