@@ -998,3 +998,153 @@ int pulseqlib_block_has_nopos(
 
     return seg->nopos_flag[local_blk];
 }
+
+int pulseqlib_cursor_next(pulseqlib_sequence_descriptor_collection* coll)
+{
+    pulseqlib_block_cursor* cursor;
+    const pulseqlib_sequence_descriptor* desc;
+    int imaging_start;
+    int cooldown_start;
+    int next_idx;
+
+    cursor = &coll->block_cursor;
+
+    if (cursor->sequence_index >= coll->num_subsequences)
+        return PULSEQLIB_CURSOR_DONE;
+
+    desc = &coll->descriptors[cursor->sequence_index];
+    imaging_start  = desc->num_prep_blocks;
+    cooldown_start = desc->num_blocks - desc->num_cooldown_blocks;
+
+    next_idx = cursor->within_sequence_block_index + 1;
+
+    /* Hit cooldown boundary on non-last rep: wrap to imaging start */
+    if (next_idx == cooldown_start &&
+        cursor->current_repetition < coll->num_repetitions - 1) {
+        cursor->current_repetition += 1;
+        cursor->within_sequence_block_index = imaging_start;
+        cursor->from_last_reset = 0;
+        return PULSEQLIB_CURSOR_BLOCK;
+    }
+
+    /* Past end of sequence: advance to next subsequence */
+    if (next_idx >= desc->num_blocks) {
+        cursor->sequence_index += 1;
+        cursor->current_repetition = 0;
+        cursor->within_sequence_block_index = 0;
+        cursor->from_last_reset = 0;
+        if (cursor->sequence_index >= coll->num_subsequences)
+            return PULSEQLIB_CURSOR_DONE;
+        return PULSEQLIB_CURSOR_BLOCK;
+    }
+
+    /* Normal advance */
+    cursor->within_sequence_block_index = next_idx;
+    cursor->from_last_reset += 1;
+    return PULSEQLIB_CURSOR_BLOCK;
+}
+
+void pulseqlib_cursor_reset(pulseqlib_sequence_descriptor_collection* coll)
+{
+    pulseqlib_block_cursor* cursor;
+
+    cursor = &coll->block_cursor;
+
+    /* Go back by the number of blocks advanced since the last reset */
+    cursor->within_sequence_block_index -= cursor->from_last_reset;
+    cursor->from_last_reset = 0;
+}
+
+int pulseqlib_get_block_instance(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    pulseqlib_block_instance* inst)
+{
+    const pulseqlib_block_cursor* cursor;
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_block_table_element* bte;
+    const pulseqlib_block_definition* bdef;
+    int idx, i;
+
+    if (!coll || !inst) return PULSEQLIB_ERR_NULL_POINTER;
+
+    cursor = &coll->block_cursor;
+    if (cursor->sequence_index >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    desc = &coll->descriptors[cursor->sequence_index];
+    idx  = cursor->within_sequence_block_index;
+    if (idx < 0 || idx >= desc->num_blocks)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    bte  = &desc->block_table[idx];
+    bdef = &desc->block_definitions[bte->id];
+
+    /* Duration: pure delay uses instance value, normal block uses definition */
+    inst->duration_us = (bte->duration_us >= 0)
+                        ? bte->duration_us
+                        : bdef->duration_us;
+
+    /* RF */
+    if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size) {
+        inst->rf_amp   = desc->rf_table[bte->rf_id].amplitude;
+        inst->rf_freq  = desc->rf_table[bte->rf_id].freq_offset;
+        inst->rf_phase = desc->rf_table[bte->rf_id].phase_offset;
+    } else {
+        inst->rf_amp   = 0.0f;
+        inst->rf_freq  = 0.0f;
+        inst->rf_phase = 0.0f;
+    }
+
+    /* Gradients */
+    if (bte->gx_id >= 0 && bte->gx_id < desc->grad_table_size) {
+        inst->gx_amp      = desc->grad_table[bte->gx_id].amplitude;
+        inst->gx_shot_idx = desc->grad_table[bte->gx_id].shot_index;
+    } else {
+        inst->gx_amp = 0.0f;
+        inst->gx_shot_idx = 0;
+    }
+    if (bte->gy_id >= 0 && bte->gy_id < desc->grad_table_size) {
+        inst->gy_amp      = desc->grad_table[bte->gy_id].amplitude;
+        inst->gy_shot_idx = desc->grad_table[bte->gy_id].shot_index;
+    } else {
+        inst->gy_amp = 0.0f;
+        inst->gy_shot_idx = 0;
+    }
+    if (bte->gz_id >= 0 && bte->gz_id < desc->grad_table_size) {
+        inst->gz_amp      = desc->grad_table[bte->gz_id].amplitude;
+        inst->gz_shot_idx = desc->grad_table[bte->gz_id].shot_index;
+    } else {
+        inst->gz_amp = 0.0f;
+        inst->gz_shot_idx = 0;
+    }
+
+    /* Rotation */
+    if (bte->rotation_id >= 0 && bte->rotation_id < desc->num_rotations) {
+        for (i = 0; i < 9; ++i)
+            inst->rotmat[i] = desc->rotation_matrices[bte->rotation_id][i];
+    } else {
+        inst->rotmat[0] = 1.0f; inst->rotmat[1] = 0.0f; inst->rotmat[2] = 0.0f;
+        inst->rotmat[3] = 0.0f; inst->rotmat[4] = 1.0f; inst->rotmat[5] = 0.0f;
+        inst->rotmat[6] = 0.0f; inst->rotmat[7] = 0.0f; inst->rotmat[8] = 1.0f;
+    }
+
+    /* Flags */
+    inst->norot_flag = bte->norot_flag;
+    inst->nopos_flag = bte->nopos_flag;
+
+    /* Trigger */
+    inst->trigon_flag = (bte->trigger_id >= 0) ? 1 : 0;
+
+    /* ADC */
+    if (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size) {
+        inst->adc_flag  = 1;
+        inst->adc_freq  = desc->adc_table[bte->adc_id].freq_offset;
+        inst->adc_phase = desc->adc_table[bte->adc_id].phase_offset;
+    } else {
+        inst->adc_flag  = 0;
+        inst->adc_freq  = 0.0f;
+        inst->adc_phase = 0.0f;
+    }
+
+    return PULSEQLIB_OK;
+}

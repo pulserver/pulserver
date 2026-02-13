@@ -36,7 +36,8 @@ int pulseqlib_load(
     pulseqlib_sequence_descriptor_collection* collection,
     pulseqlib_diagnostic* diag,
     const char* file_path,
-    const pulseqlib_opts* opts);
+    const pulseqlib_opts* opts,
+    int cache_binary);  /* 1 = write/read .bin alongside .seq */
 
 /* ------------------------------------------------------------------ */
 /*  Opts                                                              */
@@ -75,6 +76,20 @@ int pulseqlib_get_tr_gradient_waveforms(
 void pulseqlib_tr_gradient_waveforms_free(pulseqlib_tr_gradient_waveforms* w);
 
 /* ------------------------------------------------------------------ */
+/*  Safety checks                                                     */
+/* ------------------------------------------------------------------ */
+int pulseqlib_check_safety(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    pulseqlib_diagnostic* diag,
+    const pulseqlib_opts* opts,
+    int num_forbidden_bands,
+    const int* band_freq_min_hz,
+    const int* band_freq_max_hz,
+    const float* band_amp_max_tesla_m,
+    int pns_decay_time_us,
+    float pns_stim_threshold_tesla_m_s);
+
+/* ------------------------------------------------------------------ */
 /*  Acoustic analysis                                                 */
 /* ------------------------------------------------------------------ */
 int pulseqlib_get_tr_acoustic_spectra(
@@ -110,18 +125,19 @@ void pulseqlib_pns_result_free(pulseqlib_pns_result* r);
 /* ------------------------------------------------------------------ */
 /*  Collection-level accessors                                        */
 /* ------------------------------------------------------------------ */
-
-/* ADC queries */
-int pulseqlib_get_max_adc_samples(
+/* Subsequence queries */
+int pulseqlib_get_num_subsequences(
     const pulseqlib_sequence_descriptor_collection* coll);
-int pulseqlib_get_adc_dwell(
-    const pulseqlib_sequence_descriptor_collection* coll, int adc_idx);
-int pulseqlib_get_adc_num_samples(
-    const pulseqlib_sequence_descriptor_collection* coll, int adc_idx);
+float pulseqlib_get_tr_duration(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int subseq_idx);
 
 /* Segment queries */
 int pulseqlib_get_num_segments(
     const pulseqlib_sequence_descriptor_collection* coll);
+int pulseqlib_get_segment_duration(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int seg_idx);
 int pulseqlib_is_segment_pure_delay(
     const pulseqlib_sequence_descriptor_collection* coll, int seg_idx);
 int pulseqlib_get_segment_num_blocks(
@@ -136,6 +152,15 @@ int pulseqlib_get_block_duration(
     int seg_idx, int blk_idx);
 
 /* RF queries */
+int pulseqlib_get_num_unique_rf(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int subseq_idx);
+#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
+int pulseqlib_get_rf_stats(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    pulseqlib_rf_stats* stats,
+    int subseq_idx, int rf_idx);
+#endif
 int pulseqlib_block_has_rf(
     const pulseqlib_sequence_descriptor_collection* coll,
     int seg_idx, int blk_idx);
@@ -190,8 +215,14 @@ int pulseqlib_get_grad_initial_shot_id(
 float* pulseqlib_get_grad_time(
     const pulseqlib_sequence_descriptor_collection* coll,
     int seg_idx, int blk_idx, int axis, int* num_samples);
-
-/* ADC block queries */
+    
+/* ADC queries */
+int pulseqlib_get_max_adc_samples(
+    const pulseqlib_sequence_descriptor_collection* coll);
+int pulseqlib_get_adc_dwell(
+    const pulseqlib_sequence_descriptor_collection* coll, int adc_idx);
+int pulseqlib_get_adc_num_samples(
+    const pulseqlib_sequence_descriptor_collection* coll, int adc_idx);
 int pulseqlib_block_has_adc(
     const pulseqlib_sequence_descriptor_collection* coll,
     int seg_idx, int blk_idx);
@@ -218,6 +249,17 @@ int pulseqlib_block_has_norot(
 int pulseqlib_block_has_nopos(
     const pulseqlib_sequence_descriptor_collection* coll,
     int seg_idx, int blk_idx);
+
+/* ------------------------------------------------------------------ */
+/*  Block cursor / iterator                                           */
+/* ------------------------------------------------------------------ */
+int pulseqlib_cursor_next(
+    pulseqlib_sequence_descriptor_collection* coll);
+void pulseqlib_cursor_reset(
+    pulseqlib_sequence_descriptor_collection* coll);
+int pulseqlib_get_block_instance(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    pulseqlib_block_instance* inst);
 
 #ifdef __cplusplus
 }

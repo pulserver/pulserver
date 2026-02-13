@@ -5,7 +5,7 @@
 #include "pulseqlib_internal.h"
 
 /* ------------------------------------------------------------------ */
-/*  Label / hint lookup tables                                         */
+/*  Label / hint lookup tables                                        */
 /* ------------------------------------------------------------------ */
 
 static const pulseqlib__table_entry label_table[] = {
@@ -68,7 +68,7 @@ int pulseqlib__hint2enum(const char *hint)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Diagnostic init                                                    */
+/*  Diagnostic init                                                   */
 /* ------------------------------------------------------------------ */
 void pulseqlib_diagnostic_init(pulseqlib_diagnostic* diag)
 {
@@ -130,7 +130,7 @@ const char* pulseqlib_get_error_message(int code)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Error hints                                                        */
+/*  Error hints                                                       */
 /* ------------------------------------------------------------------ */
 const char* pulseqlib_get_error_hint(int code)
 {

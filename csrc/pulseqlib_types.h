@@ -10,14 +10,14 @@
 #include "pulseqlib_config.h"
 
 /* ================================================================== */
-/*  Gradient axes                                                      */
+/*  Gradient axes                                                     */
 /* ================================================================== */
 #define PULSEQLIB_GRAD_AXIS_X 0
 #define PULSEQLIB_GRAD_AXIS_Y 1
 #define PULSEQLIB_GRAD_AXIS_Z 2
 
 /* ================================================================== */
-/*  Error codes                                                        */
+/*  Error codes                                                       */
 /* ================================================================== */
 
 /* Success */
@@ -84,7 +84,13 @@
 #define PULSEQLIB_FAILED(code)    ((code) < 0)
 
 /* ================================================================== */
-/*  Max-size constants (public)                                        */
+/*  Cursor info                                                       */
+/* ================================================================== */
+#define PULSEQLIB_CURSOR_BLOCK  0
+#define PULSEQLIB_CURSOR_DONE   1
+
+/* ================================================================== */
+/*  Max-size constants (public)                                       */
 /* ================================================================== */
 #define PULSEQLIB_MAX_GRAD_SHOTS 16
 /* Legacy alias */
@@ -93,7 +99,7 @@
 #endif
 
 /* ================================================================== */
-/*  Diagnostic                                                         */
+/*  Diagnostic                                                        */
 /* ================================================================== */
 typedef struct pulseqlib_diagnostic {
     int code;
@@ -112,7 +118,7 @@ typedef struct pulseqlib_diagnostic {
 }
 
 /* ================================================================== */
-/*  System options                                                     */
+/*  System options                                                    */
 /* ================================================================== */
 typedef struct pulseqlib_opts {
     float gamma;
@@ -128,7 +134,7 @@ typedef struct pulseqlib_opts {
 #define PULSEQLIB_OPTS_INIT {0}
 
 /* ================================================================== */
-/*  RF definitions and table                                           */
+/*  RF definitions and table                                          */
 /* ================================================================== */
 typedef struct pulseqlib_rf_definition {
     int id;
@@ -167,7 +173,7 @@ typedef struct pulseqlib_rf_table_element {
 #define PULSEQLIB_RF_TABLE_ELEMENT_INIT {0, 0.0f, 0.0f, 0.0f}
 
 /* ================================================================== */
-/*  Gradient definitions and table                                     */
+/*  Gradient definitions and table                                    */
 /* ================================================================== */
 typedef struct pulseqlib_grad_definition {
     int id;
@@ -197,7 +203,7 @@ typedef struct pulseqlib_grad_table_element {
 #define PULSEQLIB_GRAD_TABLE_ELEMENT_INIT {0, 0, 0.0f}
 
 /* ================================================================== */
-/*  ADC definitions and table                                          */
+/*  ADC definitions and table                                         */
 /* ================================================================== */
 typedef struct pulseqlib_adc_definition {
     int id;
@@ -217,7 +223,7 @@ typedef struct pulseqlib_adc_table_element {
 #define PULSEQLIB_ADC_TABLE_ELEMENT_INIT {0, 0.0f, 0.0f}
 
 /* ================================================================== */
-/*  Block definitions and table                                        */
+/*  Block definitions and table                                       */
 /* ================================================================== */
 typedef struct pulseqlib_block_definition {
     int id;
@@ -250,7 +256,7 @@ typedef struct pulseqlib_block_table_element {
 #define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0}
 
 /* ================================================================== */
-/*  Trigger event (public - used in descriptor)                        */
+/*  Trigger event (public - used in descriptor)                       */
 /* ================================================================== */
 typedef struct pulseqlib_trigger_event {
     short type;
@@ -263,7 +269,7 @@ typedef struct pulseqlib_trigger_event {
 #define PULSEQLIB_TRIGGER_EVENT_INIT {0, 0L, 0L, 0, 0}
 
 /* ================================================================== */
-/*  Shape (public - used in descriptor for decompressed waveforms)     */
+/*  Shape (public - used in descriptor for decompressed waveforms)    */
 /* ================================================================== */
 typedef struct pulseqlib_shape_arbitrary {
     int num_uncompressed_samples;
@@ -274,7 +280,7 @@ typedef struct pulseqlib_shape_arbitrary {
 #define PULSEQLIB_SHAPE_ARBITRARY_INIT {0, 0, NULL}
 
 /* ================================================================== */
-/*  TR descriptor                                                      */
+/*  TR descriptor                                                     */
 /* ================================================================== */
 typedef struct pulseqlib_tr_descriptor {
     int num_prep_blocks;
@@ -291,7 +297,7 @@ typedef struct pulseqlib_tr_descriptor {
 #define PULSEQLIB_TR_DESCRIPTOR_INIT {0, 0, 0, 0, 0, 0, 0, 0, 0.0f}
 
 /* ================================================================== */
-/*  TR segment                                                         */
+/*  TR segment                                                        */
 /* ================================================================== */
 typedef struct pulseqlib_tr_segment {
     int start_block;
@@ -307,7 +313,7 @@ typedef struct pulseqlib_tr_segment {
 #define PULSEQLIB_TR_SEGMENT_INIT {0, 0, NULL, NULL, NULL, NULL, NULL, 0}
 
 /* ================================================================== */
-/*  Segment table result                                               */
+/*  Segment table result                                              */
 /* ================================================================== */
 typedef struct pulseqlib_segment_table_result {
     int num_unique_segments;
@@ -322,7 +328,7 @@ typedef struct pulseqlib_segment_table_result {
 #define PULSEQLIB_SEGMENT_TABLE_RESULT_INIT {0, 0, NULL, 0, NULL, 0, NULL}
 
 /* ================================================================== */
-/*  Sequence descriptor                                                */
+/*  Sequence descriptor                                               */
 /* ================================================================== */
 typedef struct pulseqlib_sequence_descriptor {
     int num_prep_blocks;
@@ -380,7 +386,7 @@ typedef struct pulseqlib_sequence_descriptor {
 }
 
 /* ================================================================== */
-/*  Subsequence info                                                   */
+/*  Subsequence info                                                  */
 /* ================================================================== */
 typedef struct pulseqlib_subsequence_info {
     int sequence_index;
@@ -392,10 +398,25 @@ typedef struct pulseqlib_subsequence_info {
 #define PULSEQLIB_SUBSEQUENCE_INFO_INIT {0, 0, 0, 0}
 
 /* ================================================================== */
-/*  Sequence descriptor collection                                     */
+/*  Block cursor                                                      */
+/* ================================================================== */
+
+typedef struct pulseqlib_block_cursor {
+    int current_repetition;
+    int sequence_index;
+    int within_sequence_block_index;
+    int from_last_reset;
+} pulseqlib_block_cursor;
+
+#define PULSEQLIB_BLOCK_CURSOR_INIT {0, 0, 0, 0}
+
+/* ================================================================== */
+/*  Sequence descriptor collection                                    */
 /* ================================================================== */
 typedef struct pulseqlib_sequence_descriptor_collection {
     int num_subsequences;
+    int num_repetitions;
+    pulseqlib_block_cursor block_cursor;
     pulseqlib_sequence_descriptor* descriptors;
     pulseqlib_subsequence_info* subsequence_info;
     int total_unique_segments;
@@ -404,10 +425,10 @@ typedef struct pulseqlib_sequence_descriptor_collection {
     float total_duration_us;
 } pulseqlib_sequence_descriptor_collection;
 
-#define PULSEQLIB_SEQUENCE_DESCRIPTOR_COLLECTION_INIT {0, NULL, NULL, 0, 0, 0, 0.0f}
+#define PULSEQLIB_SEQUENCE_DESCRIPTOR_COLLECTION_INIT {0, 1, PULSEQLIB_BLOCK_CURSOR_INIT, NULL, NULL, 0, 0, 0, 0.0f}
 
 /* ================================================================== */
-/*  TR gradient waveforms                                              */
+/*  TR gradient waveforms                                             */
 /* ================================================================== */
 typedef struct pulseqlib_tr_gradient_waveforms {
     int num_samples_gx;
@@ -424,7 +445,7 @@ typedef struct pulseqlib_tr_gradient_waveforms {
 #define PULSEQLIB_TR_GRADIENT_WAVEFORMS_INIT {0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL}
 
 /* ================================================================== */
-/*  Acoustic violations                                                */
+/*  Acoustic violations                                               */
 /* ================================================================== */
 typedef struct pulseqlib_acoustic_violation {
     int detected;
@@ -449,7 +470,7 @@ typedef struct pulseqlib_acoustic_check_result {
 }
 
 /* ================================================================== */
-/*  TR acoustic spectra                                                */
+/*  TR acoustic spectra                                               */
 /* ================================================================== */
 typedef struct pulseqlib_tr_acoustic_spectra {
     int num_windows;
@@ -501,7 +522,7 @@ typedef struct pulseqlib_tr_acoustic_spectra {
 }
 
 /* ================================================================== */
-/*  Forbidden band                                                     */
+/*  Forbidden band                                                    */
 /* ================================================================== */
 typedef struct pulseqlib_forbidden_band {
     float freq_min_hz;
@@ -512,7 +533,7 @@ typedef struct pulseqlib_forbidden_band {
 #define PULSEQLIB_FORBIDDEN_BAND_INIT {0.0f, 0.0f, 0.0f}
 
 /* ================================================================== */
-/*  PNS parameters and result (vendor-specific)                        */
+/*  PNS parameters and result (vendor-specific)                       */
 /* ================================================================== */
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_SIEMENS
 typedef struct pulseqlib_safe_params {
@@ -562,7 +583,7 @@ typedef struct pulseqlib_pns_result {
 #define PULSEQLIB_PNS_RESULT_INIT {0, NULL, NULL, NULL, NULL, 0.0f, 0, 0.0f}
 
 /* ================================================================== */
-/*  Label limits                                                       */
+/*  Label limits                                                      */
 /* ================================================================== */
 typedef struct pulseqlib_label_limit {
     int min;
@@ -581,5 +602,48 @@ typedef struct pulseqlib_label_limits {
     pulseqlib_label_limit lin;
     pulseqlib_label_limit acq;
 } pulseqlib_label_limits;
+
+typedef struct pulseqlib_block_instance {
+    /* Block duration (resolved: pure delay uses instance, normal uses definition) */
+    int duration_us;
+
+    /* RF */
+    float rf_amp;
+    float rf_freq;
+    float rf_phase;
+
+    /* Gradients — amplitudes for this TR instance */
+    float gx_amp;
+    float gy_amp;
+    float gz_amp;
+
+    /* Gradient shot indices for this TR instance */
+    int gx_shot_idx;
+    int gy_shot_idx;
+    int gz_shot_idx;
+
+    /* Rotation */
+    float rotmat[9];
+    int norot_flag;
+    int nopos_flag;
+
+    /* Trigger */
+    int trigon_flag;
+
+    /* ADC */
+    int adc_flag;        /* 0 = no ADC, 1 = has ADC */
+    float adc_freq;
+    float adc_phase;
+} pulseqlib_block_instance;
+
+#define PULSEQLIB_BLOCK_INSTANCE_INIT { \
+    0, \
+    0.0f, 0.0f, 0.0f, \
+    0.0f, 0.0f, 0.0f, \
+    0, 0, 0, \
+    {1,0,0, 0,1,0, 0,0,1}, 0, 0, \
+    0, \
+    0, 0.0f, 0.0f \
+}
 
 #endif /* PULSEQLIB_TYPES_H */

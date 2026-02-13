@@ -17,7 +17,7 @@
 #include <stdlib.h>
 
 /* ------------------------------------------------------------------ */
-/*  Vendor identifiers                                                 */
+/*  Vendor identifiers                                                */
 /* ------------------------------------------------------------------ */
 #define PULSEQLIB_VENDOR_SIEMENS        1
 #define PULSEQLIB_VENDOR_GEHC           2
@@ -30,7 +30,7 @@
 #endif
 
 /* ------------------------------------------------------------------ */
-/*  RF detection mode                                                  */
+/*  RF detection mode                                                 */
 /* ------------------------------------------------------------------ */
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
 #define PULSEQLIB_DETECT_REAL_RF 1
@@ -39,7 +39,19 @@
 #endif
 
 /* ------------------------------------------------------------------ */
-/*  Allocator overrides                                                */
+/*  ADC Dwell time unit                                               */
+/* ------------------------------------------------------------------ */
+#define PULSEQLIB_TIME_UNIT_US  0
+#define PULSEQLIB_TIME_UNIT_NS  1
+
+#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
+#define PULSEQLIB_TIME_UNIT PULSEQLIB_TIME_UNIT_US
+#else
+#define PULSEQLIB_TIME_UNIT PULSEQLIB_TIME_UNIT_NS
+#endif
+
+/* ------------------------------------------------------------------ */
+/*  Allocator overrides                                               */
 /* ------------------------------------------------------------------ */
 
 /*
