@@ -5,7 +5,7 @@
 #include "pulseqlib_internal.h"
 
 /* ------------------------------------------------------------------ */
-/*  Array statistics                                                   */
+/*  Array statistics                                                  */
 /* ------------------------------------------------------------------ */
 
 float pulseqlib__find_max_abs_real(const float* samples, int n)
@@ -46,7 +46,7 @@ int pulseqlib__find_max_abs_index_real(const float* samples, int n)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Complex conversion                                                 */
+/*  Complex conversion                                                */
 /* ------------------------------------------------------------------ */
 
 void pulseqlib__mag_phase_to_real_imag(
@@ -65,7 +65,7 @@ void pulseqlib__mag_phase_to_real_imag(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Trapezoidal integration                                            */
+/*  Trapezoidal integration                                           */
 /* ------------------------------------------------------------------ */
 
 float pulseqlib__trapz_real_uniform(const float* s, int n, float dt)
@@ -144,7 +144,7 @@ float pulseqlib__trapz_complex_mag_nonuniform(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Slew rate                                                          */
+/*  Slew rate                                                         */
 /* ------------------------------------------------------------------ */
 
 float pulseqlib__max_slew_real_uniform(const float* s, int n, float dt)
@@ -185,7 +185,7 @@ float pulseqlib__max_slew_real_nonuniform(const float* s, const float* t, int n)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Quaternion to rotation matrix                                      */
+/*  Quaternion to rotation matrix                                     */
 /* ------------------------------------------------------------------ */
 
 void pulseqlib__quaternion_to_matrix(float* matrix, const float* quat)
@@ -228,7 +228,7 @@ void pulseqlib__quaternion_to_matrix(float* matrix, const float* quat)
 }
 
 /* ------------------------------------------------------------------ */
-/*  1-D linear interpolation                                           */
+/*  1-D linear interpolation                                          */
 /* ------------------------------------------------------------------ */
 
 void pulseqlib__interp1_linear(
@@ -277,7 +277,7 @@ void pulseqlib__interp1_linear_complex(
 }
 
 /* ------------------------------------------------------------------ */
-/*  FFT helpers                                                        */
+/*  FFT helpers                                                       */
 /* ------------------------------------------------------------------ */
 
 void pulseqlib__fftshift_complex(float* re, float* im, int n)
@@ -340,7 +340,7 @@ float pulseqlib__find_spectrum_flank(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Next power of two                                                  */
+/*  Next power of two                                                 */
 /* ------------------------------------------------------------------ */
 
 size_t pulseqlib__next_pow2(size_t x)
@@ -351,7 +351,7 @@ size_t pulseqlib__next_pow2(size_t x)
 }
 
 /* ------------------------------------------------------------------ */
-/*  FFT convolution (real signals)                                     */
+/*  FFT convolution (real signals)                                    */
 /* ------------------------------------------------------------------ */
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
 #include "external_kiss_fft.h"
@@ -385,11 +385,11 @@ int pulseqlib__convolve_fft(
     nfft  = (int)pulseqlib__next_pow2((size_t)(signal_len + kernel_len - 1));
     nfreq = nfft / 2 + 1;
 
-    pad_sig  = (float*)ALLOC((size_t)nfft * sizeof(float));
-    pad_kern = (float*)ALLOC((size_t)nfft * sizeof(float));
-    sig_fft  = (kiss_fft_cpx*)ALLOC((size_t)nfreq * sizeof(kiss_fft_cpx));
-    kern_fft = (kiss_fft_cpx*)ALLOC((size_t)nfreq * sizeof(kiss_fft_cpx));
-    conv     = (float*)ALLOC((size_t)nfft * sizeof(float));
+    pad_sig  = (float*)PULSEQLIB_ALLOC((size_t)nfft * sizeof(float));
+    pad_kern = (float*)PULSEQLIB_ALLOC((size_t)nfft * sizeof(float));
+    sig_fft  = (kiss_fft_cpx*)PULSEQLIB_ALLOC((size_t)nfreq * sizeof(kiss_fft_cpx));
+    kern_fft = (kiss_fft_cpx*)PULSEQLIB_ALLOC((size_t)nfreq * sizeof(kiss_fft_cpx));
+    conv     = (float*)PULSEQLIB_ALLOC((size_t)nfft * sizeof(float));
     if (!pad_sig || !pad_kern || !sig_fft || !kern_fft || !conv) {
         result = PULSEQLIB_ERR_ALLOC_FAILED; goto fail;
     }
@@ -419,11 +419,11 @@ int pulseqlib__convolve_fft(
     for (i = 0; i < signal_len; ++i) output[i] = conv[i] * scale;
 
 fail:
-    if (pad_sig)  FREE(pad_sig);
-    if (pad_kern) FREE(pad_kern);
-    if (sig_fft)  FREE(sig_fft);
-    if (kern_fft) FREE(kern_fft);
-    if (conv)     FREE(conv);
+    if (pad_sig)  PULSEQLIB_FREE(pad_sig);
+    if (pad_kern) PULSEQLIB_FREE(pad_kern);
+    if (sig_fft)  PULSEQLIB_FREE(sig_fft);
+    if (kern_fft) PULSEQLIB_FREE(kern_fft);
+    if (conv)     PULSEQLIB_FREE(conv);
     if (fwd)      kiss_fftr_free(fwd);
     if (inv)      kiss_fftr_free(inv);
     return result;

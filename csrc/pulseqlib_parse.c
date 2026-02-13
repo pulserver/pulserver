@@ -9,7 +9,7 @@
 #include "pulseqlib_internal.h"
 
 /* ================================================================== */
-/*  Internal macro                                                     */
+/*  Internal macro                                                    */
 /* ================================================================== */
 #define INIT_LIBRARY(seq, field_ptr, size_field, flag_field) \
     do { \
@@ -20,7 +20,7 @@
 
 
 /* ================================================================== */
-/*  Path helpers (static)                                              */
+/*  Path helpers (static)                                             */
 /* ================================================================== */
 
 static char* extract_base_path(const char* file_path)
@@ -34,10 +34,10 @@ static char* extract_base_path(const char* file_path)
 
     if (last_slash) {
         len = (size_t)(last_slash - file_path + 1);
-        base = (char*)ALLOC(len + 1);
+        base = (char*)PULSEQLIB_ALLOC(len + 1);
         if (base) { strncpy(base, file_path, len); base[len] = '\0'; }
     } else {
-        base = (char*)ALLOC(3);
+        base = (char*)PULSEQLIB_ALLOC(3);
         if (base) strcpy(base, "./");
     }
     return base;
@@ -49,13 +49,13 @@ static char* build_full_path(const char* base_path, const char* filename)
     char* full;
 
     len = strlen(base_path) + strlen(filename) + 1;
-    full = (char*)ALLOC(len);
+    full = (char*)PULSEQLIB_ALLOC(len);
     if (full) { strcpy(full, base_path); strcat(full, filename); }
     return full;
 }
 
 /* ================================================================== */
-/*  seq_file defaults / init / reset / free                            */
+/*  seq_file defaults / init / reset / free                           */
 /* ================================================================== */
 
 static void seq_file_set_defaults(pulseqlib__seq_file* seq)
@@ -130,39 +130,39 @@ static void seq_file_reset(pulseqlib__seq_file* seq)
     if (seq->is_definitions_library_parsed && seq->definitions_library) {
         for (i = 0; i < seq->num_definitions; i++) {
             for (j = 0; j < seq->definitions_library[i].value_size; j++)
-                FREE(seq->definitions_library[i].value[j]);
-            FREE(seq->definitions_library[i].value);
+                PULSEQLIB_FREE(seq->definitions_library[i].value[j]);
+            PULSEQLIB_FREE(seq->definitions_library[i].value);
         }
-        FREE(seq->definitions_library);
+        PULSEQLIB_FREE(seq->definitions_library);
     }
     if (seq->is_block_library_parsed) {
-        FREE(seq->block_library);
-        FREE(seq->block_ids);
+        PULSEQLIB_FREE(seq->block_library);
+        PULSEQLIB_FREE(seq->block_ids);
         seq->block_ids = NULL;
     }
-    if (seq->is_rf_library_parsed)   FREE(seq->rf_library);
-    if (seq->is_grad_library_parsed) FREE(seq->grad_library);
-    if (seq->is_adc_library_parsed)  FREE(seq->adc_library);
+    if (seq->is_rf_library_parsed)   PULSEQLIB_FREE(seq->rf_library);
+    if (seq->is_grad_library_parsed) PULSEQLIB_FREE(seq->grad_library);
+    if (seq->is_adc_library_parsed)  PULSEQLIB_FREE(seq->adc_library);
     if (seq->is_extensions_library_parsed) {
-        FREE(seq->extensions_library);
-        FREE(seq->trigger_library);
-        FREE(seq->rotation_quaternion_library);
-        FREE(seq->rotation_matrix_library);
-        FREE(seq->labelset_library);
-        FREE(seq->labelinc_library);
-        FREE(seq->soft_delay_library);
-        FREE(seq->rf_shim_library);
+        PULSEQLIB_FREE(seq->extensions_library);
+        PULSEQLIB_FREE(seq->trigger_library);
+        PULSEQLIB_FREE(seq->rotation_quaternion_library);
+        PULSEQLIB_FREE(seq->rotation_matrix_library);
+        PULSEQLIB_FREE(seq->labelset_library);
+        PULSEQLIB_FREE(seq->labelinc_library);
+        PULSEQLIB_FREE(seq->soft_delay_library);
+        PULSEQLIB_FREE(seq->rf_shim_library);
     }
     if (seq->is_shapes_library_parsed && seq->shapes_library) {
         for (i = 0; i < seq->shapes_library_size; i++) {
-            FREE(seq->shapes_library[i].samples);
+            PULSEQLIB_FREE(seq->shapes_library[i].samples);
             seq->shapes_library[i].samples = NULL;
             seq->shapes_library[i].num_uncompressed_samples = 0;
             seq->shapes_library[i].num_samples = 0;
         }
-        FREE(seq->shapes_library);
+        PULSEQLIB_FREE(seq->shapes_library);
     }
-    FREE(seq->extension_lut);
+    PULSEQLIB_FREE(seq->extension_lut);
     seq->extension_lut = NULL;
 
     seq_file_set_defaults(seq);
@@ -172,9 +172,9 @@ void pulseqlib__seq_file_free(pulseqlib__seq_file* seq)
 {
     if (!seq) return;
     seq_file_reset(seq);
-    if (seq->file_path) { FREE(seq->file_path); seq->file_path = NULL; }
+    if (seq->file_path) { PULSEQLIB_FREE(seq->file_path); seq->file_path = NULL; }
     memset(&seq->opts, 0, sizeof(seq->opts));
-    FREE(seq);
+    PULSEQLIB_FREE(seq);
 }
 
 void pulseqlib__seq_file_collection_free(pulseqlib__seq_file_collection* coll)
@@ -185,20 +185,20 @@ void pulseqlib__seq_file_collection_free(pulseqlib__seq_file_collection* coll)
         for (i = 0; i < coll->num_sequences; ++i) {
             seq_file_reset(&coll->sequences[i]);
             if (coll->sequences[i].file_path) {
-                FREE(coll->sequences[i].file_path);
+                PULSEQLIB_FREE(coll->sequences[i].file_path);
                 coll->sequences[i].file_path = NULL;
             }
         }
-        FREE(coll->sequences);
+        PULSEQLIB_FREE(coll->sequences);
     }
-    if (coll->base_path) FREE(coll->base_path);
+    if (coll->base_path) PULSEQLIB_FREE(coll->base_path);
     coll->num_sequences = 0;
     coll->sequences = NULL;
     coll->base_path = NULL;
 }
 
 /* ================================================================== */
-/*  Library init helpers (static)                                      */
+/*  Library init helpers (static)                                     */
 /* ================================================================== */
 
 static int init_standard_library(FILE* f, const long* offsets, int num_sections,
@@ -224,7 +224,7 @@ static int init_standard_library(FILE* f, const long* offsets, int num_sections,
         }
     }
     if (max_idx <= 0) { *target = NULL; *target_count = 0; return 0; }
-    arr = (float*)ALLOC(sizeof(float) * n * max_idx);
+    arr = (float*)PULSEQLIB_ALLOC(sizeof(float) * n * max_idx);
     if (!arr) return 1;
     for (i = 0; i < max_idx * n; i++) arr[i] = 0.0f;
     *target = (void*)arr;
@@ -253,7 +253,7 @@ static int init_definitions_library(FILE* f, long offset,
         if (name_tok) count++;
     }
     if (count == 0) { *target = NULL; *target_count = 0; return 1; }
-    defs = (pulseqlib__definition*)ALLOC(sizeof(pulseqlib__definition) * count);
+    defs = (pulseqlib__definition*)PULSEQLIB_ALLOC(sizeof(pulseqlib__definition) * count);
     if (!defs) return 1;
     *target = defs;
     *target_count = count;
@@ -285,7 +285,7 @@ static int init_shapes_library(FILE* f, long offset,
     }
     if (max_idx <= 0) { *target = NULL; *target_count = 0; return 0; }
 
-    shapes = (pulseqlib_shape_arbitrary*)ALLOC(sizeof(pulseqlib_shape_arbitrary) * max_idx);
+    shapes = (pulseqlib_shape_arbitrary*)PULSEQLIB_ALLOC(sizeof(pulseqlib_shape_arbitrary) * max_idx);
     if (!shapes) return 1;
     for (i = 0; i < max_idx; i++) {
         shapes[i].num_samples = 0;
@@ -294,7 +294,7 @@ static int init_shapes_library(FILE* f, long offset,
     }
 
     /* Pass 2: count samples per shape */
-    if (fseek(f, offset, SEEK_SET) != 0) { FREE(shapes); return 1; }
+    if (fseek(f, offset, SEEK_SET) != 0) { PULSEQLIB_FREE(shapes); return 1; }
     if (!fgets(line, sizeof(line), f)) return 1;
     idx = 0;
     while (fgets(line, sizeof(line), f)) {
@@ -320,10 +320,10 @@ static int init_shapes_library(FILE* f, long offset,
     for (i = 0; i < max_idx; i++) {
         n = shapes[i].num_samples;
         if (n > 0) {
-            shapes[i].samples = (float*)ALLOC(sizeof(float) * n);
+            shapes[i].samples = (float*)PULSEQLIB_ALLOC(sizeof(float) * n);
             if (!shapes[i].samples) {
-                for (j = 0; j < i; j++) { if (shapes[j].samples) FREE(shapes[j].samples); }
-                FREE(shapes);
+                for (j = 0; j < i; j++) { if (shapes[j].samples) PULSEQLIB_FREE(shapes[j].samples); }
+                PULSEQLIB_FREE(shapes);
                 return 1;
             }
         }
@@ -354,7 +354,7 @@ static int init_rf_shim_library(FILE* f, long offset,
         if (sscanf(p, "%d", &idx) == 1 && idx > max_idx) max_idx = idx;
     }
     if (max_idx <= 0) { *target = NULL; *target_count = 0; return 1; }
-    arr = (pulseqlib__rf_shim_entry*)ALLOC(sizeof(pulseqlib__rf_shim_entry) * max_idx);
+    arr = (pulseqlib__rf_shim_entry*)PULSEQLIB_ALLOC(sizeof(pulseqlib__rf_shim_entry) * max_idx);
     if (!arr) return 1;
     for (i = 0; i < max_idx; i++) arr[i].n_channels = 0;
     *target = arr;
@@ -363,7 +363,7 @@ static int init_rf_shim_library(FILE* f, long offset,
 }
 
 /* ================================================================== */
-/*  Library read helpers (static)                                      */
+/*  Library read helpers (static)                                     */
 /* ================================================================== */
 
 static int read_standard_library(FILE* f, long offset, void* target, int target_count,
@@ -537,11 +537,11 @@ static void read_definitions_library(pulseqlib__seq_file* seq, FILE* f)
         def.name[PULSEQLIB__DEFINITION_NAME_LENGTH - 1] = '\0';
 
         while ((token = strtok(NULL, " \t\r\n")) != NULL) {
-            new_array = (char**)ALLOC(sizeof(char*) * (def.value_size + 1));
+            new_array = (char**)PULSEQLIB_ALLOC(sizeof(char*) * (def.value_size + 1));
             for (i = 0; i < def.value_size; i++) new_array[i] = def.value[i];
-            new_array[def.value_size] = (char*)ALLOC(strlen(token) + 1);
+            new_array[def.value_size] = (char*)PULSEQLIB_ALLOC(strlen(token) + 1);
             strcpy(new_array[def.value_size], token);
-            if (def.value) FREE(def.value);
+            if (def.value) PULSEQLIB_FREE(def.value);
             def.value = new_array;
             def.value_size++;
         }
@@ -590,7 +590,7 @@ static void read_definitions(pulseqlib__seq_file* seq)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Section readers                                                    */
+/*  Section readers                                                   */
 /* ------------------------------------------------------------------ */
 
 static void read_block_library(pulseqlib__seq_file* seq, FILE* f)
@@ -925,7 +925,7 @@ static void read_extensions_library(pulseqlib__seq_file* seq, FILE* f)
             seq->extension_lut_size = seq->extension_map[n];
     }
     if (seq->extension_lut_size > 0) {
-        seq->extension_lut = (int*)ALLOC(sizeof(int) * (seq->extension_lut_size + 1));
+        seq->extension_lut = (int*)PULSEQLIB_ALLOC(sizeof(int) * (seq->extension_lut_size + 1));
         for (n = 0; n < 8; n++) {
             if (seq->extension_map[n] > 0)
                 seq->extension_lut[seq->extension_map[n]] = n;
@@ -936,7 +936,7 @@ static void read_extensions_library(pulseqlib__seq_file* seq, FILE* f)
 }
 
 /* ================================================================== */
-/*  Shape decompression (cross-file)                                   */
+/*  Shape decompression (cross-file)                                  */
 /* ================================================================== */
 
 int pulseqlib__decompress_shape(pulseqlib_shape_arbitrary* result,
@@ -959,14 +959,14 @@ int pulseqlib__decompress_shape(pulseqlib_shape_arbitrary* result,
     if (encoded->num_samples == encoded->num_uncompressed_samples) {
         result->num_samples = encoded->num_samples;
         result->num_uncompressed_samples = encoded->num_uncompressed_samples;
-        result->samples = (float*)ALLOC(sizeof(float) * encoded->num_samples);
+        result->samples = (float*)PULSEQLIB_ALLOC(sizeof(float) * encoded->num_samples);
         if (!result->samples) return 0;
         for (i = 0; i < encoded->num_samples; ++i)
             result->samples[i] = encoded->samples[i] * scale;
         return 1;
     }
 
-    unpacked = (float*)ALLOC(sizeof(float) * num_samples);
+    unpacked = (float*)PULSEQLIB_ALLOC(sizeof(float) * num_samples);
     if (!unpacked) return 0;
 
     while (count_pack < num_packed) {
@@ -977,7 +977,7 @@ int pulseqlib__decompress_shape(pulseqlib_shape_arbitrary* result,
         } else {
             rep = (int)(packed[count_pack + 1]) + 2;
             if (fabsf(packed[count_pack + 1] + 2 - (float)rep) > 1e-6f) {
-                FREE(unpacked);
+                PULSEQLIB_FREE(unpacked);
                 return 0;
             }
             for (i = count_unpack - 1; i <= count_unpack + rep - 2; i++)
@@ -1004,7 +1004,7 @@ int pulseqlib__decompress_shape(pulseqlib_shape_arbitrary* result,
 }
 
 /* ================================================================== */
-/*  Opts init (public)                                                 */
+/*  Opts init (public)                                                */
 /* ================================================================== */
 
 void pulseqlib_opts_init(pulseqlib_opts* opts,
@@ -1025,7 +1025,7 @@ void pulseqlib_opts_init(pulseqlib_opts* opts,
 }
 
 /* ================================================================== */
-/*  seq_block init / free (cross-file)                                 */
+/*  seq_block init / free (cross-file)                                */
 /* ================================================================== */
 
 void pulseqlib__seq_block_init(pulseqlib__seq_block* block)
@@ -1065,40 +1065,40 @@ void pulseqlib__seq_block_free(pulseqlib__seq_block* block)
 {
     if (!block) return;
     if (block->rf.type > 0) {
-        if (block->rf.mag_shape.samples)   { FREE(block->rf.mag_shape.samples);   block->rf.mag_shape.samples   = NULL; }
-        if (block->rf.phase_shape.samples) { FREE(block->rf.phase_shape.samples); block->rf.phase_shape.samples = NULL; }
-        if (block->rf.time_shape.samples)  { FREE(block->rf.time_shape.samples);  block->rf.time_shape.samples  = NULL; }
+        if (block->rf.mag_shape.samples)   { PULSEQLIB_FREE(block->rf.mag_shape.samples);   block->rf.mag_shape.samples   = NULL; }
+        if (block->rf.phase_shape.samples) { PULSEQLIB_FREE(block->rf.phase_shape.samples); block->rf.phase_shape.samples = NULL; }
+        if (block->rf.time_shape.samples)  { PULSEQLIB_FREE(block->rf.time_shape.samples);  block->rf.time_shape.samples  = NULL; }
     }
     if (block->gx.type > 1) {
-        if (block->gx.wave_shape.samples) { FREE(block->gx.wave_shape.samples); block->gx.wave_shape.samples = NULL; }
-        if (block->gx.time_shape.samples) { FREE(block->gx.time_shape.samples); block->gx.time_shape.samples = NULL; }
+        if (block->gx.wave_shape.samples) { PULSEQLIB_FREE(block->gx.wave_shape.samples); block->gx.wave_shape.samples = NULL; }
+        if (block->gx.time_shape.samples) { PULSEQLIB_FREE(block->gx.time_shape.samples); block->gx.time_shape.samples = NULL; }
     }
     if (block->gy.type > 1) {
-        if (block->gy.wave_shape.samples) { FREE(block->gy.wave_shape.samples); block->gy.wave_shape.samples = NULL; }
-        if (block->gy.time_shape.samples) { FREE(block->gy.time_shape.samples); block->gy.time_shape.samples = NULL; }
+        if (block->gy.wave_shape.samples) { PULSEQLIB_FREE(block->gy.wave_shape.samples); block->gy.wave_shape.samples = NULL; }
+        if (block->gy.time_shape.samples) { PULSEQLIB_FREE(block->gy.time_shape.samples); block->gy.time_shape.samples = NULL; }
     }
     if (block->gz.type > 1) {
-        if (block->gz.wave_shape.samples) { FREE(block->gz.wave_shape.samples); block->gz.wave_shape.samples = NULL; }
-        if (block->gz.time_shape.samples) { FREE(block->gz.time_shape.samples); block->gz.time_shape.samples = NULL; }
+        if (block->gz.wave_shape.samples) { PULSEQLIB_FREE(block->gz.wave_shape.samples); block->gz.wave_shape.samples = NULL; }
+        if (block->gz.time_shape.samples) { PULSEQLIB_FREE(block->gz.time_shape.samples); block->gz.time_shape.samples = NULL; }
     }
     if (block->adc.type > 0) {
-        if (block->adc.phase_modulation_shape.samples) { FREE(block->adc.phase_modulation_shape.samples); block->adc.phase_modulation_shape.samples = NULL; }
+        if (block->adc.phase_modulation_shape.samples) { PULSEQLIB_FREE(block->adc.phase_modulation_shape.samples); block->adc.phase_modulation_shape.samples = NULL; }
     }
     if (block->rf_shimming.type > 0) {
-        if (block->rf_shimming.amplitudes) { FREE(block->rf_shimming.amplitudes); block->rf_shimming.amplitudes = NULL; }
-        if (block->rf_shimming.phases)     { FREE(block->rf_shimming.phases);     block->rf_shimming.phases     = NULL; }
+        if (block->rf_shimming.amplitudes) { PULSEQLIB_FREE(block->rf_shimming.amplitudes); block->rf_shimming.amplitudes = NULL; }
+        if (block->rf_shimming.phases)     { PULSEQLIB_FREE(block->rf_shimming.phases);     block->rf_shimming.phases     = NULL; }
     }
 }
 
 /* ================================================================== */
-/*  Read seq from buffer / file (cross-file)                           */
+/*  Read seq from buffer / file (cross-file)                          */
 /* ================================================================== */
 
 int pulseqlib__read_seq_from_buffer(pulseqlib__seq_file* seq, FILE* f)
 {
     if (!seq || !f) return PULSEQLIB_ERR_NULL_POINTER;
     seq_file_reset(seq);
-    if (seq->file_path) { FREE(seq->file_path); seq->file_path = NULL; }
+    if (seq->file_path) { PULSEQLIB_FREE(seq->file_path); seq->file_path = NULL; }
 
     get_section_offsets(seq, f);
     read_version(seq, f);
@@ -1127,7 +1127,7 @@ int pulseqlib__read_seq(pulseqlib__seq_file* seq, const char* file_path)
 }
 
 /* ================================================================== */
-/*  Sequence collection (cross-file)                                   */
+/*  Sequence collection (cross-file)                                  */
 /* ================================================================== */
 
 static int count_sequences_in_chain(const char* first_path, const pulseqlib_opts* opts)
@@ -1141,8 +1141,8 @@ static int count_sequences_in_chain(const char* first_path, const pulseqlib_opts
 
     base_path = extract_base_path(first_path);
     if (!base_path) return -1;
-    current_path = (char*)ALLOC(strlen(first_path) + 1);
-    if (!current_path) { FREE(base_path); return -1; }
+    current_path = (char*)PULSEQLIB_ALLOC(strlen(first_path) + 1);
+    if (!current_path) { PULSEQLIB_FREE(base_path); return -1; }
     strcpy(current_path, first_path);
 
     while (current_path && current_path[0] != '\0' && count < max_count) {
@@ -1150,21 +1150,21 @@ static int count_sequences_in_chain(const char* first_path, const pulseqlib_opts
         result = pulseqlib__read_seq(&temp, current_path);
         if (PULSEQLIB_FAILED(result)) {
             seq_file_reset(&temp);
-            FREE(current_path);
-            FREE(base_path);
+            PULSEQLIB_FREE(current_path);
+            PULSEQLIB_FREE(base_path);
             return -1;
         }
         count++;
-        FREE(current_path);
+        PULSEQLIB_FREE(current_path);
         current_path = NULL;
         if (temp.reserved_definitions_library.next_sequence[0] != '\0') {
             current_path = build_full_path(base_path,
                                            temp.reserved_definitions_library.next_sequence);
-            if (!current_path) { seq_file_reset(&temp); FREE(base_path); return -1; }
+            if (!current_path) { seq_file_reset(&temp); PULSEQLIB_FREE(base_path); return -1; }
         }
         seq_file_reset(&temp);
     }
-    FREE(base_path);
+    PULSEQLIB_FREE(base_path);
     if (count >= max_count) return -1;
     return count;
 }
@@ -1189,12 +1189,12 @@ int pulseqlib__read_seq_collection(pulseqlib__seq_file_collection* coll,
     coll->base_path = extract_base_path(first_file_path);
     if (!coll->base_path) return PULSEQLIB_ERR_ALLOC_FAILED;
 
-    coll->sequences = (pulseqlib__seq_file*)ALLOC(num_seq * sizeof(pulseqlib__seq_file));
-    if (!coll->sequences) { FREE(coll->base_path); coll->base_path = NULL; return PULSEQLIB_ERR_ALLOC_FAILED; }
+    coll->sequences = (pulseqlib__seq_file*)PULSEQLIB_ALLOC(num_seq * sizeof(pulseqlib__seq_file));
+    if (!coll->sequences) { PULSEQLIB_FREE(coll->base_path); coll->base_path = NULL; return PULSEQLIB_ERR_ALLOC_FAILED; }
 
-    current_path = (char*)ALLOC(strlen(first_file_path) + 1);
+    current_path = (char*)PULSEQLIB_ALLOC(strlen(first_file_path) + 1);
     if (!current_path) {
-        FREE(coll->sequences); FREE(coll->base_path);
+        PULSEQLIB_FREE(coll->sequences); PULSEQLIB_FREE(coll->base_path);
         coll->sequences = NULL; coll->base_path = NULL;
         return PULSEQLIB_ERR_ALLOC_FAILED;
     }
@@ -1205,29 +1205,29 @@ int pulseqlib__read_seq_collection(pulseqlib__seq_file_collection* coll,
         result = pulseqlib__read_seq(&coll->sequences[i], current_path);
         if (PULSEQLIB_FAILED(result)) {
             for (j = 0; j < i; ++j) seq_file_reset(&coll->sequences[j]);
-            FREE(coll->sequences); FREE(current_path); FREE(coll->base_path);
+            PULSEQLIB_FREE(coll->sequences); PULSEQLIB_FREE(current_path); PULSEQLIB_FREE(coll->base_path);
             coll->sequences = NULL; coll->base_path = NULL;
             return result;
         }
         if (i < num_seq - 1) {
-            FREE(current_path);
+            PULSEQLIB_FREE(current_path);
             current_path = build_full_path(coll->base_path,
                                            coll->sequences[i].reserved_definitions_library.next_sequence);
             if (!current_path) {
                 for (j = 0; j <= i; ++j) seq_file_reset(&coll->sequences[j]);
-                FREE(coll->sequences); FREE(coll->base_path);
+                PULSEQLIB_FREE(coll->sequences); PULSEQLIB_FREE(coll->base_path);
                 coll->sequences = NULL; coll->base_path = NULL;
                 return PULSEQLIB_ERR_ALLOC_FAILED;
             }
         }
     }
-    FREE(current_path);
+    PULSEQLIB_FREE(current_path);
     coll->num_sequences = num_seq;
     return PULSEQLIB_OK;
 }
 
 /* ================================================================== */
-/*  Raw block / extension parsing (public)                             */
+/*  Raw block / extension parsing (public)                            */
 /* ================================================================== */
 
 int pulseqlib__get_raw_block_content_ids(const pulseqlib__seq_file* seq, pulseqlib__raw_block* block, int block_index, int parse_extensions)
@@ -1319,8 +1319,8 @@ static void extension_block_init(pulseqlib__extension_block* eb)
 static void extension_block_free(pulseqlib__extension_block* eb)
 {
     if (!eb) return;
-    if (eb->rf_shimming.amplitudes) { FREE(eb->rf_shimming.amplitudes); eb->rf_shimming.amplitudes = NULL; }
-    if (eb->rf_shimming.phases)     { FREE(eb->rf_shimming.phases);     eb->rf_shimming.phases     = NULL; }
+    if (eb->rf_shimming.amplitudes) { PULSEQLIB_FREE(eb->rf_shimming.amplitudes); eb->rf_shimming.amplitudes = NULL; }
+    if (eb->rf_shimming.phases)     { PULSEQLIB_FREE(eb->rf_shimming.phases);     eb->rf_shimming.phases     = NULL; }
     eb->rf_shimming.type  = 0;
     eb->rf_shimming.n_chan = 0;
 }
@@ -1401,7 +1401,7 @@ void pulseqlib__get_raw_extension(const pulseqlib__seq_file* seq, pulseqlib__raw
 }
 
 /* ------------------------------------------------------------------ */
-/*  Extension sub-parsers (static)                                     */
+/*  Extension sub-parsers (static)                                    */
 /* ------------------------------------------------------------------ */
 
 static int parse_rotation_from_raw(const pulseqlib__seq_file* seq,
@@ -1435,9 +1435,9 @@ static int parse_rf_shim_from_raw(const pulseqlib__seq_file* seq,
     n = entry->n_channels;
     if (n <= 0 || n > PULSEQLIB__MAX_RF_SHIM_CHANNELS) return 1;
 
-    amps = (float*)ALLOC(sizeof(float) * n);
-    phs  = (float*)ALLOC(sizeof(float) * n);
-    if (!amps || !phs) { if (amps) FREE(amps); if (phs) FREE(phs); return 0; }
+    amps = (float*)PULSEQLIB_ALLOC(sizeof(float) * n);
+    phs  = (float*)PULSEQLIB_ALLOC(sizeof(float) * n);
+    if (!amps || !phs) { if (amps) PULSEQLIB_FREE(amps); if (phs) PULSEQLIB_FREE(phs); return 0; }
     for (i = 0; i < n; ++i) { amps[i] = entry->values[2*i]; phs[i] = entry->values[2*i+1]; }
     eb->rf_shimming.type = 1;
     eb->rf_shimming.n_chan = n;
@@ -1508,8 +1508,8 @@ static void apply_extension(const pulseqlib__extension_block* eb,
 
     if (eb->rf_shimming.type && eb->rf_shimming.n_chan > 0) {
         n = eb->rf_shimming.n_chan;
-        amps = (float*)ALLOC(sizeof(float) * n);
-        phs  = (float*)ALLOC(sizeof(float) * n);
+        amps = (float*)PULSEQLIB_ALLOC(sizeof(float) * n);
+        phs  = (float*)PULSEQLIB_ALLOC(sizeof(float) * n);
         if (amps && phs) {
             for (i = 0; i < n; ++i) { amps[i] = eb->rf_shimming.amplitudes[i]; phs[i] = eb->rf_shimming.phases[i]; }
             block->rf_shimming.type = 1;
@@ -1517,8 +1517,8 @@ static void apply_extension(const pulseqlib__extension_block* eb,
             block->rf_shimming.amplitudes = amps;
             block->rf_shimming.phases = phs;
         } else {
-            if (amps) FREE(amps);
-            if (phs)  FREE(phs);
+            if (amps) PULSEQLIB_FREE(amps);
+            if (phs)  PULSEQLIB_FREE(phs);
         }
     }
     block->trigger = eb->trigger;
@@ -1526,7 +1526,7 @@ static void apply_extension(const pulseqlib__extension_block* eb,
 }
 
 /* ================================================================== */
-/*  Parse gradient helper (static, avoids repeating 3x)                */
+/*  Parse gradient helper (static, avoids repeating 3x)               */
 /* ================================================================== */
 
 static int parse_grad_event(const pulseqlib__seq_file* seq,
@@ -1576,7 +1576,7 @@ static int parse_grad_event(const pulseqlib__seq_file* seq,
 }
 
 /* ================================================================== */
-/*  Parse block without extensions (static)                            */
+/*  Parse block without extensions (static)                           */
 /* ================================================================== */
 
 static int parse_block_without_ext(const pulseqlib__seq_file* seq,
@@ -1641,7 +1641,7 @@ static int parse_block_without_ext(const pulseqlib__seq_file* seq,
 
 #if PULSEQLIB_DETECT_REAL_RF
         if (block->rf.mag_shape.num_samples > 0 && block->rf.phase_shape.num_samples > 0) {
-            is_real = (int*)ALLOC(block->rf.mag_shape.num_samples * sizeof(int));
+            is_real = (int*)PULSEQLIB_ALLOC(block->rf.mag_shape.num_samples * sizeof(int));
             if (!is_real) goto fail;
             for (i = 0; i < block->rf.mag_shape.num_samples; i++)
                 is_real[i] = (float)fabs(block->rf.phase_shape.samples[i]) < 1e-6f ||
@@ -1652,12 +1652,12 @@ static int parse_block_without_ext(const pulseqlib__seq_file* seq,
                 for (i = 0; i < block->rf.mag_shape.num_samples; i++)
                     if ((float)fabs(block->rf.phase_shape.samples[i] - M_PI) < 1e-6f)
                         block->rf.mag_shape.samples[i] *= -1;
-                FREE(block->rf.phase_shape.samples);
+                PULSEQLIB_FREE(block->rf.phase_shape.samples);
                 block->rf.phase_shape.num_samples = 0;
                 block->rf.phase_shape.num_uncompressed_samples = 0;
                 block->rf.phase_shape.samples = NULL;
             }
-            FREE(is_real);
+            PULSEQLIB_FREE(is_real);
         }
 #endif
 
@@ -1737,7 +1737,7 @@ fail:
 }
 
 /* ================================================================== */
-/*  get_block (cross-file)                                             */
+/*  get_block (cross-file)                                            */
 /* ================================================================== */
 
 void pulseqlib__get_block(const pulseqlib__seq_file* seq,
@@ -1767,7 +1767,7 @@ void pulseqlib__get_block(const pulseqlib__seq_file* seq,
 }
 
 /* ================================================================== */
-/*  Grad library max amplitude (cross-file)                            */
+/*  Grad library max amplitude (cross-file)                           */
 /* ================================================================== */
 
 float pulseqlib__get_grad_library_max_amplitude(const pulseqlib__seq_file* seq)

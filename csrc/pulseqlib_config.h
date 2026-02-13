@@ -29,26 +29,6 @@
 #define PULSEQLIB_VENDOR PULSEQLIB_VENDOR_GEHC
 #endif
 
-/* Backward-compatible aliases (legacy code may use e.g. VENDOR == GEHC) */
-#ifndef VENDOR
-#define VENDOR   PULSEQLIB_VENDOR
-#endif
-#ifndef SIEMENS
-#define SIEMENS  PULSEQLIB_VENDOR_SIEMENS
-#endif
-#ifndef GEHC
-#define GEHC     PULSEQLIB_VENDOR_GEHC
-#endif
-#ifndef PHILIPS
-#define PHILIPS  PULSEQLIB_VENDOR_PHILIPS
-#endif
-#ifndef UNITED_IMAGING
-#define UNITED_IMAGING PULSEQLIB_VENDOR_UNITED_IMAGING
-#endif
-#ifndef BRUKER
-#define BRUKER   PULSEQLIB_VENDOR_BRUKER
-#endif
-
 /* ------------------------------------------------------------------ */
 /*  RF detection mode                                                  */
 /* ------------------------------------------------------------------ */
@@ -76,14 +56,6 @@
 
 #ifndef PULSEQLIB_FREE
 #define PULSEQLIB_FREE(ptr) free(ptr)
-#endif
-
-/* Legacy aliases (existing code uses ALLOC / FREE) */
-#ifndef ALLOC
-#define ALLOC(sz) PULSEQLIB_ALLOC(sz)
-#endif
-#ifndef FREE
-#define FREE(ptr) PULSEQLIB_FREE(ptr)
 #endif
 
 #endif /* PULSEQLIB_CONFIG_H */

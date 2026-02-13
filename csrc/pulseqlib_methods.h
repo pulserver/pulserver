@@ -19,7 +19,7 @@ extern "C" {
 #endif
 
 /* ------------------------------------------------------------------ */
-/*  High-level loading                                                 */
+/*  High-level loading                                                */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -39,7 +39,7 @@ int pulseqlib_load(
     const pulseqlib_opts* opts);
 
 /* ------------------------------------------------------------------ */
-/*  Opts                                                               */
+/*  Opts                                                              */
 /* ------------------------------------------------------------------ */
 void pulseqlib_opts_init(
     pulseqlib_opts* opts,
@@ -49,14 +49,14 @@ void pulseqlib_opts_init(
     float adc_raster_time, float block_duration_raster);
 
 /* ------------------------------------------------------------------ */
-/*  Diagnostic helpers                                                 */
+/*  Diagnostic helpers                                                */
 /* ------------------------------------------------------------------ */
 void pulseqlib_diagnostic_init(pulseqlib_diagnostic* diag);
 const char* pulseqlib_get_error_message(int code);
 const char* pulseqlib_get_error_hint(int code);
 
 /* ------------------------------------------------------------------ */
-/*  Descriptor lifecycle                                               */
+/*  Descriptor lifecycle                                              */
 /* ------------------------------------------------------------------ */
 void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* desc);
 void pulseqlib_sequence_descriptor_collection_free(
@@ -64,7 +64,7 @@ void pulseqlib_sequence_descriptor_collection_free(
 void pulseqlib_segment_table_result_free(pulseqlib_segment_table_result* result);
 
 /* ------------------------------------------------------------------ */
-/*  Gradient waveforms                                                 */
+/*  Gradient waveforms                                                */
 /* ------------------------------------------------------------------ */
 
 int pulseqlib_get_tr_gradient_waveforms(
@@ -75,7 +75,7 @@ int pulseqlib_get_tr_gradient_waveforms(
 void pulseqlib_tr_gradient_waveforms_free(pulseqlib_tr_gradient_waveforms* w);
 
 /* ------------------------------------------------------------------ */
-/*  Acoustic analysis                                                  */
+/*  Acoustic analysis                                                 */
 /* ------------------------------------------------------------------ */
 int pulseqlib_get_tr_acoustic_spectra(
     pulseqlib_tr_acoustic_spectra* spectra,
@@ -94,7 +94,7 @@ int pulseqlib_get_tr_acoustic_spectra(
 void pulseqlib_tr_acoustic_spectra_free(pulseqlib_tr_acoustic_spectra* s);
 
 /* ------------------------------------------------------------------ */
-/*  PNS analysis                                                       */
+/*  PNS analysis                                                      */
 /* ------------------------------------------------------------------ */
 int pulseqlib_compute_pns(
     pulseqlib_pns_result* result,
@@ -108,7 +108,7 @@ int pulseqlib_compute_pns(
 void pulseqlib_pns_result_free(pulseqlib_pns_result* r);
 
 /* ------------------------------------------------------------------ */
-/*  Collection-level accessors                                         */
+/*  Collection-level accessors                                        */
 /* ------------------------------------------------------------------ */
 
 /* ADC queries */

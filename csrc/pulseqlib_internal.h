@@ -7,14 +7,14 @@
 #ifndef PULSEQLIB_INTERNAL_H
 #define PULSEQLIB_INTERNAL_H
 
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
 
 #include "pulseqlib_config.h"
 #include "pulseqlib_types.h"
 
 /* ================================================================== */
-/*  Internal constants                                                 */
+/*  Internal constants                                                */
 /* ================================================================== */
 #define PULSEQLIB__TWO_PI 6.283185307179586476925286766558
 #ifndef M_PI
@@ -90,7 +90,7 @@
 #define PULSEQLIB__TRID 22
 
 /* ================================================================== */
-/*  Internal shape types                                               */
+/*  Internal shape types                                              */
 /* ================================================================== */
 typedef struct pulseqlib__shape_trap {
     long rise_time;
@@ -99,7 +99,7 @@ typedef struct pulseqlib__shape_trap {
 } pulseqlib__shape_trap;
 
 /* ================================================================== */
-/*  Internal event types                                               */
+/*  Internal event types                                              */
 /* ================================================================== */
 typedef struct pulseqlib__rf_event {
     short type;
@@ -191,7 +191,7 @@ typedef struct pulseqlib__rf_shimming_event {
 } pulseqlib__rf_shimming_event;
 
 /* ================================================================== */
-/*  Internal block types                                               */
+/*  Internal block types                                              */
 /* ================================================================== */
 typedef struct pulseqlib__raw_block {
     int block_duration;
@@ -241,7 +241,7 @@ typedef struct pulseqlib__seq_block {
 } pulseqlib__seq_block;
 
 /* ================================================================== */
-/*  SeqFile structs (opaque from public API)                           */
+/*  SeqFile structs (opaque from public API)                          */
 /* ================================================================== */
 typedef struct pulseqlib__section_offsets {
     long scan_cursor;
@@ -358,7 +358,7 @@ typedef struct pulseqlib__seq_file_collection {
 } pulseqlib__seq_file_collection;
 
 /* ================================================================== */
-/*  Internal table entry for label/hint lookup                         */
+/*  Internal table entry for label/hint lookup                        */
 /* ================================================================== */
 typedef struct pulseqlib__table_entry {
     const char *name;
@@ -366,7 +366,7 @@ typedef struct pulseqlib__table_entry {
 } pulseqlib__table_entry;
 
 /* ================================================================== */
-/*  Internal scale helper for library reading                          */
+/*  Internal scale helper for library reading                         */
 /* ================================================================== */
 typedef struct pulseqlib__scale {
     int size;
@@ -374,7 +374,7 @@ typedef struct pulseqlib__scale {
 } pulseqlib__scale;
 
 /* ================================================================== */
-/*  Cross-file internal helper declarations (pulseqlib__ prefix)       */
+/*  Cross-file internal helper declarations (pulseqlib__ prefix)      */
 /* ================================================================== */
 
 /* --- pulseqlib_error.c --- */

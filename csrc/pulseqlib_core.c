@@ -16,14 +16,14 @@
 #include <math.h>
 
 #include "pulseqlib_internal.h"
-#include "pulseqlib.h"
+#include "pulseqlib_methods.h"
 
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
 #include "external_kiss_fft.h"
 #endif
 
 /* ================================================================== */
-/*  File-scope constants                                               */
+/*  File-scope constants                                              */
 /* ================================================================== */
 #define RF_DEF_COLS    4
 #define RF_PARAMS_COLS 3
@@ -40,7 +40,7 @@
 #define SEGSTATE_OPTIMIZED_MODE    2
 
 /* ================================================================== */
-/*  Tiny helpers                                                       */
+/*  Tiny helpers                                                      */
 /* ================================================================== */
 
 static int array_equal(const int* a, const int* b, int len)
@@ -52,7 +52,7 @@ static int array_equal(const int* a, const int* b, int len)
 }
 
 /* ================================================================== */
-/*  Hash-based integer-row deduplication                               */
+/*  Hash-based integer-row deduplication                              */
 /* ================================================================== */
 
 typedef struct {
@@ -85,8 +85,8 @@ static int deduplicate_int_rows(
 
     if (num_rows <= 0) return 0;
 
-    table_size = next_pow2((size_t)(num_rows * 2));
-    table = (hash_entry*)ALLOC(table_size * sizeof(hash_entry));
+    table_size = pulseqlib__next_pow2((size_t)(num_rows * 2));
+    table = (hash_entry*)PULSEQLIB_ALLOC(table_size * sizeof(hash_entry));
     if (!table) return 0;
     memset(table, 0, table_size * sizeof(hash_entry));
 
@@ -116,12 +116,12 @@ static int deduplicate_int_rows(
         }
     }
 
-    FREE(table);
+    PULSEQLIB_FREE(table);
     return num_unique;
 }
 
 /* ================================================================== */
-/*  RF dedup helpers                                                   */
+/*  RF dedup helpers                                                  */
 /* ================================================================== */
 
 static void build_rf_def_row(const pulseqlib__seq_file* seq, int* row, float* params, int rf_idx)
@@ -152,15 +152,15 @@ static int deduplicate_rf_library(const pulseqlib__seq_file* seq, pulseqlib_rf_d
     num_rows = seq->rf_library_size;
     if (num_rows <= 0) return 0;
 
-    int_rows    = ALLOC(num_rows * sizeof(*int_rows));
-    params      = ALLOC(num_rows * sizeof(*params));
-    unique_defs = (int*)ALLOC(num_rows * sizeof(int));
-    event_table = (int*)ALLOC(num_rows * sizeof(int));
+    int_rows    = PULSEQLIB_ALLOC(num_rows * sizeof(*int_rows));
+    params      = PULSEQLIB_ALLOC(num_rows * sizeof(*params));
+    unique_defs = (int*)PULSEQLIB_ALLOC(num_rows * sizeof(int));
+    event_table = (int*)PULSEQLIB_ALLOC(num_rows * sizeof(int));
     if (!int_rows || !params || !unique_defs || !event_table) {
-        if (int_rows)    FREE(int_rows);
-        if (params)      FREE(params);
-        if (unique_defs) FREE(unique_defs);
-        if (event_table) FREE(event_table);
+        if (int_rows)    PULSEQLIB_FREE(int_rows);
+        if (params)      PULSEQLIB_FREE(params);
+        if (unique_defs) PULSEQLIB_FREE(unique_defs);
+        if (event_table) PULSEQLIB_FREE(event_table);
         return 0;
     }
 
@@ -183,12 +183,12 @@ static int deduplicate_rf_library(const pulseqlib__seq_file* seq, pulseqlib_rf_d
         rf_table[i].phase_offset = params[i][2];
     }
 
-    FREE(int_rows); FREE(params); FREE(unique_defs); FREE(event_table);
+    PULSEQLIB_FREE(int_rows); PULSEQLIB_FREE(params); PULSEQLIB_FREE(unique_defs); PULSEQLIB_FREE(event_table);
     return num_unique;
 }
 
 /* ================================================================== */
-/*  Grad dedup helpers                                                 */
+/*  Grad dedup helpers                                                */
 /* ================================================================== */
 
 static void build_grad_def_row(const pulseqlib__seq_file* seq, int* row, float* param, int grad_idx)
@@ -230,15 +230,15 @@ static int deduplicate_grad_library(const pulseqlib__seq_file* seq, pulseqlib_gr
     num_rows = seq->grad_library_size;
     if (num_rows <= 0) return 0;
 
-    int_rows    = ALLOC(num_rows * sizeof(*int_rows));
-    params      = (float*)ALLOC(num_rows * sizeof(float));
-    unique_defs = (int*)ALLOC(num_rows * sizeof(int));
-    event_table = (int*)ALLOC(num_rows * sizeof(int));
+    int_rows    = PULSEQLIB_ALLOC(num_rows * sizeof(*int_rows));
+    params      = (float*)PULSEQLIB_ALLOC(num_rows * sizeof(float));
+    unique_defs = (int*)PULSEQLIB_ALLOC(num_rows * sizeof(int));
+    event_table = (int*)PULSEQLIB_ALLOC(num_rows * sizeof(int));
     if (!int_rows || !params || !unique_defs || !event_table) {
-        if (int_rows)    FREE(int_rows);
-        if (params)      FREE(params);
-        if (unique_defs) FREE(unique_defs);
-        if (event_table) FREE(event_table);
+        if (int_rows)    PULSEQLIB_FREE(int_rows);
+        if (params)      PULSEQLIB_FREE(params);
+        if (unique_defs) PULSEQLIB_FREE(unique_defs);
+        if (event_table) PULSEQLIB_FREE(event_table);
         return 0;
     }
 
@@ -261,12 +261,12 @@ static int deduplicate_grad_library(const pulseqlib__seq_file* seq, pulseqlib_gr
         grad_table[i].amplitude = params[i];
     }
 
-    FREE(int_rows); FREE(params); FREE(unique_defs); FREE(event_table);
+    PULSEQLIB_FREE(int_rows); PULSEQLIB_FREE(params); PULSEQLIB_FREE(unique_defs); PULSEQLIB_FREE(event_table);
     return num_unique;
 }
 
 /* ================================================================== */
-/*  ADC dedup helpers                                                  */
+/*  ADC dedup helpers                                                 */
 /* ================================================================== */
 
 static void build_adc_def_row(const pulseqlib__seq_file* seq, int* row, float* params, int adc_idx)
@@ -294,15 +294,15 @@ static int deduplicate_adc_library(const pulseqlib__seq_file* seq, pulseqlib_adc
     num_rows = seq->adc_library_size;
     if (num_rows <= 0) return 0;
 
-    int_rows    = ALLOC(num_rows * sizeof(*int_rows));
-    params      = ALLOC(num_rows * sizeof(*params));
-    unique_defs = (int*)ALLOC(num_rows * sizeof(int));
-    event_table = (int*)ALLOC(num_rows * sizeof(int));
+    int_rows    = PULSEQLIB_ALLOC(num_rows * sizeof(*int_rows));
+    params      = PULSEQLIB_ALLOC(num_rows * sizeof(*params));
+    unique_defs = (int*)PULSEQLIB_ALLOC(num_rows * sizeof(int));
+    event_table = (int*)PULSEQLIB_ALLOC(num_rows * sizeof(int));
     if (!int_rows || !params || !unique_defs || !event_table) {
-        if (int_rows)    FREE(int_rows);
-        if (params)      FREE(params);
-        if (unique_defs) FREE(unique_defs);
-        if (event_table) FREE(event_table);
+        if (int_rows)    PULSEQLIB_FREE(int_rows);
+        if (params)      PULSEQLIB_FREE(params);
+        if (unique_defs) PULSEQLIB_FREE(unique_defs);
+        if (event_table) PULSEQLIB_FREE(event_table);
         return 0;
     }
 
@@ -323,12 +323,12 @@ static int deduplicate_adc_library(const pulseqlib__seq_file* seq, pulseqlib_adc
         adc_table[i].phase_offset = params[i][1];
     }
 
-    FREE(int_rows); FREE(params); FREE(unique_defs); FREE(event_table);
+    PULSEQLIB_FREE(int_rows); PULSEQLIB_FREE(params); PULSEQLIB_FREE(unique_defs); PULSEQLIB_FREE(event_table);
     return num_unique;
 }
 
 /* ================================================================== */
-/*  Gradient shot indices                                              */
+/*  Gradient shot indices                                             */
 /* ================================================================== */
 
 static int compute_grad_shot_indices(
@@ -383,7 +383,7 @@ static int compute_grad_shot_indices(
 }
 
 /* ================================================================== */
-/*  Waveform normalisation                                             */
+/*  Waveform normalisation                                            */
 /* ================================================================== */
 
 static float normalize_waveform(float* waveform, int n)
@@ -399,7 +399,7 @@ static float normalize_waveform(float* waveform, int n)
 }
 
 /* ================================================================== */
-/*  Trapezoid statistics                                                */
+/*  Trapezoid statistics                                               */
 /* ================================================================== */
 
 static void compute_trapezoid_stats(
@@ -422,7 +422,7 @@ static void compute_trapezoid_stats(
 }
 
 /* ================================================================== */
-/*  Gradient statistics                                                */
+/*  Gradient statistics                                               */
 /* ================================================================== */
 
 static int compute_grad_stats(
@@ -494,12 +494,12 @@ static int compute_grad_stats(
                 if (!pulseqlib__decompress_shape(&decomp_time,
                         &seq->shapes_library[time_id - 1], grad_raster_us))
                     goto fail;
-                time_us = (float*)ALLOC(decomp_time.num_uncompressed_samples * sizeof(float));
+                time_us = (float*)PULSEQLIB_ALLOC(decomp_time.num_uncompressed_samples * sizeof(float));
                 if (!time_us) goto fail;
                 for (i = 0; i < decomp_time.num_uncompressed_samples; ++i)
                     time_us[i] = decomp_time.samples[i];
                 has_time = 1;
-                FREE(decomp_time.samples);
+                PULSEQLIB_FREE(decomp_time.samples);
                 decomp_time.samples = NULL;
             }
 
@@ -512,8 +512,8 @@ static int compute_grad_stats(
                     goto fail;
                 num_samples = decomp_wave.num_uncompressed_samples;
 
-                waveform = (float*)ALLOC(num_samples * sizeof(float));
-                sq_wave  = (float*)ALLOC(num_samples * sizeof(float));
+                waveform = (float*)PULSEQLIB_ALLOC(num_samples * sizeof(float));
+                sq_wave  = (float*)PULSEQLIB_ALLOC(num_samples * sizeof(float));
                 if (!waveform || !sq_wave) goto fail;
 
                 for (i = 0; i < num_samples; ++i) waveform[i] = decomp_wave.samples[i];
@@ -534,27 +534,27 @@ static int compute_grad_stats(
                 gd->slew_rate[shot_idx] *= 1e6f;
                 gd->energy[shot_idx]    *= 1e-6f;
 
-                FREE(waveform);  waveform = NULL;
-                FREE(sq_wave);   sq_wave  = NULL;
-                FREE(decomp_wave.samples); decomp_wave.samples = NULL;
+                PULSEQLIB_FREE(waveform);  waveform = NULL;
+                PULSEQLIB_FREE(sq_wave);   sq_wave  = NULL;
+                PULSEQLIB_FREE(decomp_wave.samples); decomp_wave.samples = NULL;
             }
 
-            if (time_us) { FREE(time_us); time_us = NULL; }
+            if (time_us) { PULSEQLIB_FREE(time_us); time_us = NULL; }
         }
     }
     return PULSEQLIB_OK;
 
 fail:
-    if (waveform)          FREE(waveform);
-    if (sq_wave)           FREE(sq_wave);
-    if (time_us)           FREE(time_us);
-    if (decomp_wave.samples) FREE(decomp_wave.samples);
-    if (decomp_time.samples) FREE(decomp_time.samples);
+    if (waveform)          PULSEQLIB_FREE(waveform);
+    if (sq_wave)           PULSEQLIB_FREE(sq_wave);
+    if (time_us)           PULSEQLIB_FREE(time_us);
+    if (decomp_wave.samples) PULSEQLIB_FREE(decomp_wave.samples);
+    if (decomp_time.samples) PULSEQLIB_FREE(decomp_time.samples);
     return PULSEQLIB_ERR_ALLOC_FAILED;
 }
 
 /* ================================================================== */
-/*  RF statistics (GEHC only)                                          */
+/*  RF statistics (GEHC only)                                         */
 /* ================================================================== */
 
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
@@ -643,12 +643,12 @@ static int compute_rf_stats(
     nn = kiss_fft_next_fast_size(nn);
     if (nn < 2) nn = 2;
 
-    tt      = (float*)ALLOC(nn * sizeof(float));
-    w       = (float*)ALLOC(nn * sizeof(float));
-    rfs_re  = (float*)ALLOC(nn * sizeof(float));
-    rfs_im  = (float*)ALLOC(nn * sizeof(float));
-    work_re = (float*)ALLOC(nn * sizeof(float));
-    work_im = (float*)ALLOC(nn * sizeof(float));
+    tt      = (float*)PULSEQLIB_ALLOC(nn * sizeof(float));
+    w       = (float*)PULSEQLIB_ALLOC(nn * sizeof(float));
+    rfs_re  = (float*)PULSEQLIB_ALLOC(nn * sizeof(float));
+    rfs_im  = (float*)PULSEQLIB_ALLOC(nn * sizeof(float));
+    work_re = (float*)PULSEQLIB_ALLOC(nn * sizeof(float));
+    work_im = (float*)PULSEQLIB_ALLOC(nn * sizeof(float));
     fft_in  = (kiss_fft_cpx*)KISS_FFT_MALLOC(nn * sizeof(kiss_fft_cpx));
     fft_out = (kiss_fft_cpx*)KISS_FFT_MALLOC(nn * sizeof(kiss_fft_cpx));
     fft_cfg = kiss_fft_alloc(nn, 0, NULL, NULL);
@@ -703,21 +703,21 @@ static int compute_rf_stats(
         if (!pulseqlib__decompress_shape(&decomp_mag, &seq->shapes_library[mag_id - 1], 1.0f))
             goto fail;
         num_samples = decomp_mag.num_uncompressed_samples;
-        magnitude = (float*)ALLOC(num_samples * sizeof(float));
-        if (!magnitude) { FREE(decomp_mag.samples); goto fail; }
+        magnitude = (float*)PULSEQLIB_ALLOC(num_samples * sizeof(float));
+        if (!magnitude) { PULSEQLIB_FREE(decomp_mag.samples); goto fail; }
         for (i = 0; i < num_samples; ++i) magnitude[i] = decomp_mag.samples[i];
-        FREE(decomp_mag.samples); decomp_mag.samples = NULL;
+        PULSEQLIB_FREE(decomp_mag.samples); decomp_mag.samples = NULL;
         rd->num_samples = num_samples;
 
         /* decompress phase (optional) */
         if (phase_id > 0 && phase_id <= seq->shapes_library_size) {
             if (!pulseqlib__decompress_shape(&decomp_phase, &seq->shapes_library[phase_id - 1], 1.0f))
                 goto fail;
-            phase = (float*)ALLOC(num_samples * sizeof(float));
-            if (!phase) { FREE(decomp_phase.samples); goto fail; }
+            phase = (float*)PULSEQLIB_ALLOC(num_samples * sizeof(float));
+            if (!phase) { PULSEQLIB_FREE(decomp_phase.samples); goto fail; }
             for (i = 0; i < num_samples; ++i) phase[i] = decomp_phase.samples[i];
             has_phase = 1;
-            FREE(decomp_phase.samples); decomp_phase.samples = NULL;
+            PULSEQLIB_FREE(decomp_phase.samples); decomp_phase.samples = NULL;
         }
 
         /* detect real-valued RF */
@@ -732,7 +732,7 @@ static int compute_rf_stats(
                 for (i = 0; i < num_samples; ++i)
                     if ((float)fabs(phase[i] - (float)M_PI) < 1e-6f)
                         magnitude[i] *= -1.0f;
-                FREE(phase); phase = NULL; has_phase = 0;
+                PULSEQLIB_FREE(phase); phase = NULL; has_phase = 0;
             }
         }
 
@@ -740,14 +740,14 @@ static int compute_rf_stats(
         if (time_id > 0 && time_id <= seq->shapes_library_size) {
             if (!pulseqlib__decompress_shape(&decomp_time, &seq->shapes_library[time_id - 1], rf_raster_us))
                 goto fail;
-            time_us = (float*)ALLOC(num_samples * sizeof(float));
-            if (!time_us) { FREE(decomp_time.samples); goto fail; }
+            time_us = (float*)PULSEQLIB_ALLOC(num_samples * sizeof(float));
+            if (!time_us) { PULSEQLIB_FREE(decomp_time.samples); goto fail; }
             for (i = 0; i < num_samples; ++i) time_us[i] = decomp_time.samples[i];
             has_time = 1;
-            FREE(decomp_time.samples); decomp_time.samples = NULL;
+            PULSEQLIB_FREE(decomp_time.samples); decomp_time.samples = NULL;
         }
         if (!has_time) {
-            time_us = (float*)ALLOC(num_samples * sizeof(float));
+            time_us = (float*)PULSEQLIB_ALLOC(num_samples * sizeof(float));
             if (!time_us) goto fail;
             for (i = 0; i < num_samples; ++i) time_us[i] = (float)i * rf_raster_us;
             has_time = 1;
@@ -776,8 +776,8 @@ static int compute_rf_stats(
             for (i = 0; i < num_samples; ++i) magnitude[i] /= max_mag;
 
         /* build complex RF */
-        rf_re = (float*)ALLOC(num_samples * sizeof(float));
-        rf_im = (float*)ALLOC(num_samples * sizeof(float));
+        rf_re = (float*)PULSEQLIB_ALLOC(num_samples * sizeof(float));
+        rf_im = (float*)PULSEQLIB_ALLOC(num_samples * sizeof(float));
         if (!rf_re || !rf_im) goto fail;
         if (has_phase && phase) {
             for (i = 0; i < num_samples; ++i) {
@@ -792,9 +792,9 @@ static int compute_rf_stats(
         num_uniform = (int)(duration / rf_raster_us + 0.5f) + 1;
         if (num_uniform < 2) num_uniform = 2;
 
-        time_us_uniform = (float*)ALLOC(num_uniform * sizeof(float));
-        rf_re_uniform   = (float*)ALLOC(num_uniform * sizeof(float));
-        rf_im_uniform   = (float*)ALLOC(num_uniform * sizeof(float));
+        time_us_uniform = (float*)PULSEQLIB_ALLOC(num_uniform * sizeof(float));
+        rf_re_uniform   = (float*)PULSEQLIB_ALLOC(num_uniform * sizeof(float));
+        rf_im_uniform   = (float*)PULSEQLIB_ALLOC(num_uniform * sizeof(float));
         if (!time_us_uniform || !rf_re_uniform || !rf_im_uniform) goto fail;
 
         for (i = 0; i < num_uniform; ++i)
@@ -834,13 +834,13 @@ static int compute_rf_stats(
         rd->maxpw     = maxpw / num_uniform;
         if (rd->dtycyc < rd->maxpw) rd->dtycyc = rd->maxpw;
 
-        FREE(time_us_uniform); time_us_uniform = NULL;
-        FREE(rf_re_uniform);   rf_re_uniform = NULL;
-        FREE(rf_im_uniform);   rf_im_uniform = NULL;
+        PULSEQLIB_FREE(time_us_uniform); time_us_uniform = NULL;
+        PULSEQLIB_FREE(rf_re_uniform);   rf_re_uniform = NULL;
+        PULSEQLIB_FREE(rf_im_uniform);   rf_im_uniform = NULL;
 
         /* bandwidth via FFT */
         if (fft_ready && time_us) {
-            time_centered = (float*)ALLOC(num_samples * sizeof(float));
+            time_centered = (float*)PULSEQLIB_ALLOC(num_samples * sizeof(float));
             if (time_centered) {
                 for (i = 0; i < num_samples; ++i)
                     time_centered[i] = time_us[i] - time_center;
@@ -850,53 +850,53 @@ static int compute_rf_stats(
                 rd->bandwidth = compute_rf_bandwidth_fft(
                     rfs_re, rfs_im, fft_cfg, nn, dw, cutoff,
                     duration * 1e-6f, w, work_re, work_im, fft_in, fft_out);
-                FREE(time_centered); time_centered = NULL;
+                PULSEQLIB_FREE(time_centered); time_centered = NULL;
             }
         }
-        if (rf_re)    { FREE(rf_re);    rf_re = NULL; }
-        if (rf_im)    { FREE(rf_im);    rf_im = NULL; }
-        if (magnitude){ FREE(magnitude); magnitude = NULL; }
-        if (phase)    { FREE(phase);     phase = NULL; }
-        if (time_us)  { FREE(time_us);   time_us = NULL; }
+        if (rf_re)    { PULSEQLIB_FREE(rf_re);    rf_re = NULL; }
+        if (rf_im)    { PULSEQLIB_FREE(rf_im);    rf_im = NULL; }
+        if (magnitude){ PULSEQLIB_FREE(magnitude); magnitude = NULL; }
+        if (phase)    { PULSEQLIB_FREE(phase);     phase = NULL; }
+        if (time_us)  { PULSEQLIB_FREE(time_us);   time_us = NULL; }
     }
 
-    if (tt)      FREE(tt);
-    if (w)       FREE(w);
-    if (rfs_re)  FREE(rfs_re);
-    if (rfs_im)  FREE(rfs_im);
-    if (work_re) FREE(work_re);
-    if (work_im) FREE(work_im);
+    if (tt)      PULSEQLIB_FREE(tt);
+    if (w)       PULSEQLIB_FREE(w);
+    if (rfs_re)  PULSEQLIB_FREE(rfs_re);
+    if (rfs_im)  PULSEQLIB_FREE(rfs_im);
+    if (work_re) PULSEQLIB_FREE(work_re);
+    if (work_im) PULSEQLIB_FREE(work_im);
     if (fft_in)  KISS_FFT_FREE(fft_in);
     if (fft_out) KISS_FFT_FREE(fft_out);
     if (fft_cfg) kiss_fft_free(fft_cfg);
     return PULSEQLIB_OK;
 
 fail:
-    if (tt)      FREE(tt);
-    if (w)       FREE(w);
-    if (rfs_re)  FREE(rfs_re);
-    if (rfs_im)  FREE(rfs_im);
-    if (work_re) FREE(work_re);
-    if (work_im) FREE(work_im);
+    if (tt)      PULSEQLIB_FREE(tt);
+    if (w)       PULSEQLIB_FREE(w);
+    if (rfs_re)  PULSEQLIB_FREE(rfs_re);
+    if (rfs_im)  PULSEQLIB_FREE(rfs_im);
+    if (work_re) PULSEQLIB_FREE(work_re);
+    if (work_im) PULSEQLIB_FREE(work_im);
     if (fft_in)  KISS_FFT_FREE(fft_in);
     if (fft_out) KISS_FFT_FREE(fft_out);
     if (fft_cfg) kiss_fft_free(fft_cfg);
-    if (magnitude)      FREE(magnitude);
-    if (phase)          FREE(phase);
-    if (time_us)        FREE(time_us);
-    if (rf_re)          FREE(rf_re);
-    if (rf_im)          FREE(rf_im);
-    if (time_us_uniform) FREE(time_us_uniform);
-    if (rf_re_uniform)  FREE(rf_re_uniform);
-    if (rf_im_uniform)  FREE(rf_im_uniform);
-    if (time_centered)  FREE(time_centered);
+    if (magnitude)      PULSEQLIB_FREE(magnitude);
+    if (phase)          PULSEQLIB_FREE(phase);
+    if (time_us)        PULSEQLIB_FREE(time_us);
+    if (rf_re)          PULSEQLIB_FREE(rf_re);
+    if (rf_im)          PULSEQLIB_FREE(rf_im);
+    if (time_us_uniform) PULSEQLIB_FREE(time_us_uniform);
+    if (rf_re_uniform)  PULSEQLIB_FREE(rf_re_uniform);
+    if (rf_im_uniform)  PULSEQLIB_FREE(rf_im_uniform);
+    if (time_centered)  PULSEQLIB_FREE(time_centered);
     return PULSEQLIB_ERR_ALLOC_FAILED;
 }
 
 #endif /* PULSEQLIB_VENDOR_GEHC */
 
 /* ================================================================== */
-/*  Copy auxiliary libraries                                           */
+/*  Copy auxiliary libraries                                          */
 /* ================================================================== */
 
 static int copy_rotation_library(const pulseqlib__seq_file* seq, pulseqlib_sequence_descriptor* desc)
@@ -907,7 +907,7 @@ static int copy_rotation_library(const pulseqlib__seq_file* seq, pulseqlib_seque
     desc->rotation_matrices = NULL;
     if (num <= 0 || !seq->rotation_quaternion_library) return PULSEQLIB_OK;
 
-    desc->rotation_matrices = (float(*)[9])ALLOC(num * sizeof(float[9]));
+    desc->rotation_matrices = (float(*)[9])PULSEQLIB_ALLOC(num * sizeof(float[9]));
     if (!desc->rotation_matrices) return PULSEQLIB_ERR_ALLOC_FAILED;
 
     for (i = 0; i < num; ++i)
@@ -924,7 +924,7 @@ static int copy_trigger_library(const pulseqlib__seq_file* seq, pulseqlib_sequen
     desc->trigger_events = NULL;
     if (num <= 0 || !seq->trigger_library) return PULSEQLIB_OK;
 
-    desc->trigger_events = (pulseqlib_trigger_event*)ALLOC(num * sizeof(pulseqlib_trigger_event));
+    desc->trigger_events = (pulseqlib_trigger_event*)PULSEQLIB_ALLOC(num * sizeof(pulseqlib_trigger_event));
     if (!desc->trigger_events) return PULSEQLIB_ERR_ALLOC_FAILED;
 
     for (i = 0; i < num; ++i) {
@@ -947,7 +947,7 @@ static int copy_shapes_library(const pulseqlib__seq_file* seq, pulseqlib_sequenc
     desc->shapes = NULL;
     if (num <= 0 || !seq->shapes_library) return PULSEQLIB_OK;
 
-    desc->shapes = (pulseqlib_shape_arbitrary*)ALLOC(num * sizeof(pulseqlib_shape_arbitrary));
+    desc->shapes = (pulseqlib_shape_arbitrary*)PULSEQLIB_ALLOC(num * sizeof(pulseqlib_shape_arbitrary));
     if (!desc->shapes) return PULSEQLIB_ERR_ALLOC_FAILED;
 
     for (i = 0; i < num; ++i) {
@@ -960,11 +960,11 @@ static int copy_shapes_library(const pulseqlib__seq_file* seq, pulseqlib_sequenc
         desc->shapes[i].num_samples = ns;
         desc->shapes[i].num_uncompressed_samples = seq->shapes_library[i].num_uncompressed_samples;
         if (ns > 0 && seq->shapes_library[i].samples) {
-            desc->shapes[i].samples = (float*)ALLOC(ns * sizeof(float));
+            desc->shapes[i].samples = (float*)PULSEQLIB_ALLOC(ns * sizeof(float));
             if (!desc->shapes[i].samples) {
                 for (j = 0; j < i; ++j)
-                    if (desc->shapes[j].samples) FREE(desc->shapes[j].samples);
-                FREE(desc->shapes);
+                    if (desc->shapes[j].samples) PULSEQLIB_FREE(desc->shapes[j].samples);
+                PULSEQLIB_FREE(desc->shapes);
                 desc->shapes = NULL;
                 return PULSEQLIB_ERR_ALLOC_FAILED;
             }
@@ -977,7 +977,7 @@ static int copy_shapes_library(const pulseqlib__seq_file* seq, pulseqlib_sequenc
 }
 
 /* ================================================================== */
-/*  get_unique_blocks                                                  */
+/*  get_unique_blocks                                                 */
 /* ================================================================== */
 
 int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const pulseqlib__seq_file* seq)
@@ -1035,22 +1035,22 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
 
     /* ---- allocate temp arrays ---- */
     if (seq->rf_library_size > 0) {
-        tmp_rf_defs = (pulseqlib_rf_definition*)ALLOC(seq->rf_library_size * sizeof(pulseqlib_rf_definition));
-        tmp_rf_tab  = (pulseqlib_rf_table_element*)ALLOC(seq->rf_library_size * sizeof(pulseqlib_rf_table_element));
+        tmp_rf_defs = (pulseqlib_rf_definition*)PULSEQLIB_ALLOC(seq->rf_library_size * sizeof(pulseqlib_rf_definition));
+        tmp_rf_tab  = (pulseqlib_rf_table_element*)PULSEQLIB_ALLOC(seq->rf_library_size * sizeof(pulseqlib_rf_table_element));
         if (!tmp_rf_defs || !tmp_rf_tab) goto fail;
     }
     if (seq->grad_library_size > 0) {
-        tmp_grad_defs = (pulseqlib_grad_definition*)ALLOC(seq->grad_library_size * sizeof(pulseqlib_grad_definition));
-        tmp_grad_tab  = (pulseqlib_grad_table_element*)ALLOC(seq->grad_library_size * sizeof(pulseqlib_grad_table_element));
+        tmp_grad_defs = (pulseqlib_grad_definition*)PULSEQLIB_ALLOC(seq->grad_library_size * sizeof(pulseqlib_grad_definition));
+        tmp_grad_tab  = (pulseqlib_grad_table_element*)PULSEQLIB_ALLOC(seq->grad_library_size * sizeof(pulseqlib_grad_table_element));
         if (!tmp_grad_defs || !tmp_grad_tab) goto fail;
     }
     if (seq->adc_library_size > 0) {
-        tmp_adc_defs = (pulseqlib_adc_definition*)ALLOC(seq->adc_library_size * sizeof(pulseqlib_adc_definition));
-        tmp_adc_tab  = (pulseqlib_adc_table_element*)ALLOC(seq->adc_library_size * sizeof(pulseqlib_adc_table_element));
+        tmp_adc_defs = (pulseqlib_adc_definition*)PULSEQLIB_ALLOC(seq->adc_library_size * sizeof(pulseqlib_adc_definition));
+        tmp_adc_tab  = (pulseqlib_adc_table_element*)PULSEQLIB_ALLOC(seq->adc_library_size * sizeof(pulseqlib_adc_table_element));
         if (!tmp_adc_defs || !tmp_adc_tab) goto fail;
     }
-    tmp_blk_defs = (pulseqlib_block_definition*)ALLOC(num_blocks * sizeof(pulseqlib_block_definition));
-    tmp_blk_tab  = (pulseqlib_block_table_element*)ALLOC(num_blocks * sizeof(pulseqlib_block_table_element));
+    tmp_blk_defs = (pulseqlib_block_definition*)PULSEQLIB_ALLOC(num_blocks * sizeof(pulseqlib_block_definition));
+    tmp_blk_tab  = (pulseqlib_block_table_element*)PULSEQLIB_ALLOC(num_blocks * sizeof(pulseqlib_block_table_element));
     if (!tmp_blk_defs || !tmp_blk_tab) goto fail;
 
     /* ---- step 1: dedup event libraries ---- */
@@ -1081,9 +1081,9 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
     }
 
     /* ---- step 2: block definition matrix ---- */
-    int_rows    = ALLOC(num_blocks * sizeof(*int_rows));
-    unique_defs = (int*)ALLOC(num_blocks * sizeof(int));
-    event_table = (int*)ALLOC(num_blocks * sizeof(int));
+    int_rows    = PULSEQLIB_ALLOC(num_blocks * sizeof(*int_rows));
+    unique_defs = (int*)PULSEQLIB_ALLOC(num_blocks * sizeof(int));
+    event_table = (int*)PULSEQLIB_ALLOC(num_blocks * sizeof(int));
     if (!int_rows || !unique_defs || !event_table) goto fail;
 
     norot_flag = 0; nopos_flag = 0; once_flag = 0; pmc_flag = 1; nav_flag = 0;
@@ -1147,15 +1147,15 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
     for (n = 0; n < num_blocks; ++n)
         tmp_blk_tab[n].id = event_table[n];
 
-    FREE(int_rows);    int_rows    = NULL;
-    FREE(unique_defs); unique_defs = NULL;
-    FREE(event_table); event_table = NULL;
+    PULSEQLIB_FREE(int_rows);    int_rows    = NULL;
+    PULSEQLIB_FREE(unique_defs); unique_defs = NULL;
+    PULSEQLIB_FREE(event_table); event_table = NULL;
 
     /* ---- step 4: copy to output (exact sizes) ---- */
 #define COPY_ARRAY(dst, src, cnt, type)                                      \
     do {                                                                     \
         if ((cnt) > 0) {                                                     \
-            (dst) = (type*)ALLOC((cnt) * sizeof(type));                      \
+            (dst) = (type*)PULSEQLIB_ALLOC((cnt) * sizeof(type));                      \
             if (!(dst)) {                                                    \
                 result = PULSEQLIB_ERR_ALLOC_FAILED;                         \
                 pulseqlib_sequence_descriptor_free(desc);                    \
@@ -1176,15 +1176,15 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
 
 #undef COPY_ARRAY
 
-    /* free temps - done with them */
-    if (tmp_rf_defs)   FREE(tmp_rf_defs);   tmp_rf_defs   = NULL;
-    if (tmp_rf_tab)    FREE(tmp_rf_tab);    tmp_rf_tab    = NULL;
-    if (tmp_grad_defs) FREE(tmp_grad_defs); tmp_grad_defs = NULL;
-    if (tmp_grad_tab)  FREE(tmp_grad_tab);  tmp_grad_tab  = NULL;
-    if (tmp_adc_defs)  FREE(tmp_adc_defs);  tmp_adc_defs  = NULL;
-    if (tmp_adc_tab)   FREE(tmp_adc_tab);   tmp_adc_tab   = NULL;
-    if (tmp_blk_defs)  FREE(tmp_blk_defs);  tmp_blk_defs  = NULL;
-    if (tmp_blk_tab)   FREE(tmp_blk_tab);   tmp_blk_tab   = NULL;
+    /* PULSEQLIB_FREE temps - done with them */
+    if (tmp_rf_defs)   PULSEQLIB_FREE(tmp_rf_defs);   tmp_rf_defs   = NULL;
+    if (tmp_rf_tab)    PULSEQLIB_FREE(tmp_rf_tab);    tmp_rf_tab    = NULL;
+    if (tmp_grad_defs) PULSEQLIB_FREE(tmp_grad_defs); tmp_grad_defs = NULL;
+    if (tmp_grad_tab)  PULSEQLIB_FREE(tmp_grad_tab);  tmp_grad_tab  = NULL;
+    if (tmp_adc_defs)  PULSEQLIB_FREE(tmp_adc_defs);  tmp_adc_defs  = NULL;
+    if (tmp_adc_tab)   PULSEQLIB_FREE(tmp_adc_tab);   tmp_adc_tab   = NULL;
+    if (tmp_blk_defs)  PULSEQLIB_FREE(tmp_blk_defs);  tmp_blk_defs  = NULL;
+    if (tmp_blk_tab)   PULSEQLIB_FREE(tmp_blk_tab);   tmp_blk_tab   = NULL;
 
     /* ---- step 5: auxiliary libraries ---- */
     result = copy_rotation_library(seq, desc);
@@ -1245,22 +1245,22 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
     return PULSEQLIB_OK;
 
 fail:
-    if (tmp_rf_defs)   FREE(tmp_rf_defs);
-    if (tmp_rf_tab)    FREE(tmp_rf_tab);
-    if (tmp_grad_defs) FREE(tmp_grad_defs);
-    if (tmp_grad_tab)  FREE(tmp_grad_tab);
-    if (tmp_adc_defs)  FREE(tmp_adc_defs);
-    if (tmp_adc_tab)   FREE(tmp_adc_tab);
-    if (tmp_blk_defs)  FREE(tmp_blk_defs);
-    if (tmp_blk_tab)   FREE(tmp_blk_tab);
-    if (int_rows)      FREE(int_rows);
-    if (unique_defs)   FREE(unique_defs);
-    if (event_table)   FREE(event_table);
+    if (tmp_rf_defs)   PULSEQLIB_FREE(tmp_rf_defs);
+    if (tmp_rf_tab)    PULSEQLIB_FREE(tmp_rf_tab);
+    if (tmp_grad_defs) PULSEQLIB_FREE(tmp_grad_defs);
+    if (tmp_grad_tab)  PULSEQLIB_FREE(tmp_grad_tab);
+    if (tmp_adc_defs)  PULSEQLIB_FREE(tmp_adc_defs);
+    if (tmp_adc_tab)   PULSEQLIB_FREE(tmp_adc_tab);
+    if (tmp_blk_defs)  PULSEQLIB_FREE(tmp_blk_defs);
+    if (tmp_blk_tab)   PULSEQLIB_FREE(tmp_blk_tab);
+    if (int_rows)      PULSEQLIB_FREE(int_rows);
+    if (unique_defs)   PULSEQLIB_FREE(unique_defs);
+    if (event_table)   PULSEQLIB_FREE(event_table);
     return PULSEQLIB_ERR_ALLOC_FAILED;
 }
 
 /* ================================================================== */
-/*  TR detection helpers                                               */
+/*  TR detection helpers                                              */
 /* ================================================================== */
 
 static long long sum_durations_us(const int* dur, int start, int count)
@@ -1293,7 +1293,7 @@ static int first_repeating_segment(const int* s, int len)
 }
 
 /* ================================================================== */
-/*  find_tr_in_sequence                                                */
+/*  find_tr_in_sequence                                               */
 /* ================================================================== */
 
 int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag)
@@ -1356,11 +1356,11 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
         diag->num_unique_blocks = max_u + 1;
     }
 
-    seq_pat   = (int*)ALLOC(desc->num_blocks * sizeof(int));
-    block_dur = (int*)ALLOC(desc->num_blocks * sizeof(int));
+    seq_pat   = (int*)PULSEQLIB_ALLOC(desc->num_blocks * sizeof(int));
+    block_dur = (int*)PULSEQLIB_ALLOC(desc->num_blocks * sizeof(int));
     if (!seq_pat || !block_dur) {
-        if (seq_pat)   FREE(seq_pat);
-        if (block_dur) FREE(block_dur);
+        if (seq_pat)   PULSEQLIB_FREE(seq_pat);
+        if (block_dur) PULSEQLIB_FREE(block_dur);
         diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
         return diag->code;
     }
@@ -1409,13 +1409,13 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
                 tr_dur += (float)block_dur[i];
             tr->tr_duration_us = tr_dur;
             diag->code = PULSEQLIB_OK;
-            FREE(seq_pat); FREE(block_dur);
+            PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
             return PULSEQLIB_OK;
         }
         diag->code = (diag->mismatch_position >= 0)
             ? PULSEQLIB_ERR_TR_PATTERN_MISMATCH
             : PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN;
-        FREE(seq_pat); FREE(block_dur);
+        PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
         return diag->code;
     }
 
@@ -1434,7 +1434,7 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
                     prep_dur_us = (int)sum_durations_us(block_dur, 0, desc->num_prep_blocks);
                     if (prep_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
                         diag->code = PULSEQLIB_ERR_TR_PREP_TOO_LONG;
-                        FREE(seq_pat); FREE(block_dur);
+                        PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
                         return diag->code;
                     }
                     tr->degenerate_prep = 0;
@@ -1449,7 +1449,7 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
             prep_dur_us = (int)sum_durations_us(block_dur, 0, desc->num_prep_blocks);
             if (prep_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
                 diag->code = PULSEQLIB_ERR_TR_PREP_TOO_LONG;
-                FREE(seq_pat); FREE(block_dur);
+                PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
                 return diag->code;
             }
             tr->degenerate_prep = 0;
@@ -1464,7 +1464,7 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
                     cooldown_dur_us = (int)sum_durations_us(block_dur, imaging_end, desc->num_cooldown_blocks);
                     if (cooldown_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
                         diag->code = PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG;
-                        FREE(seq_pat); FREE(block_dur);
+                        PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
                         return diag->code;
                     }
                     tr->degenerate_cooldown = 0;
@@ -1479,7 +1479,7 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
             cooldown_dur_us = (int)sum_durations_us(block_dur, imaging_end, desc->num_cooldown_blocks);
             if (cooldown_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
                 diag->code = PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG;
-                FREE(seq_pat); FREE(block_dur);
+                PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
                 return diag->code;
             }
             tr->degenerate_cooldown = 0;
@@ -1487,12 +1487,12 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
     }
 
     diag->code = PULSEQLIB_OK;
-    FREE(seq_pat); FREE(block_dur);
+    PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
     return PULSEQLIB_OK;
 }
 
 /* ================================================================== */
-/*  Segment state machine                                              */
+/*  Segment state machine                                             */
 /* ================================================================== */
 
 static int find_segments_internal(
@@ -1521,11 +1521,11 @@ static int find_segments_internal(
     max_allowed = max_slew * grad_raster_s;
     nb = tr_size;
 
-    seg_starts = (int*)ALLOC(nb * sizeof(int));
-    seg_sizes  = (int*)ALLOC(nb * sizeof(int));
+    seg_starts = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+    seg_sizes  = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
     if (!seg_starts || !seg_sizes) {
-        if (seg_starts) FREE(seg_starts);
-        if (seg_sizes)  FREE(seg_sizes);
+        if (seg_starts) PULSEQLIB_FREE(seg_starts);
+        if (seg_sizes)  PULSEQLIB_FREE(seg_sizes);
         if (diag) diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
         return 0;
     }
@@ -1547,7 +1547,7 @@ static int find_segments_internal(
                     diag->gradient_amplitude = phys_first;
                     diag->max_allowed_amplitude = max_allowed;
                 }
-                FREE(seg_starts); FREE(seg_sizes);
+                PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
                 return 0;
             }
         }
@@ -1570,7 +1570,7 @@ static int find_segments_internal(
                     diag->gradient_amplitude = phys_last;
                     diag->max_allowed_amplitude = max_allowed;
                 }
-                FREE(seg_starts); FREE(seg_sizes);
+                PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
                 return 0;
             }
         }
@@ -1672,12 +1672,12 @@ static int find_segments_internal(
         segs[offset + i].unique_block_indices = NULL;
     }
 
-    FREE(seg_starts); FREE(seg_sizes);
+    PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
     return num_seg;
 }
 
 /* ================================================================== */
-/*  Strip pure delays from segments                                    */
+/*  Strip pure delays from segments                                   */
 /* ================================================================== */
 
 static int strip_pure_delays(
@@ -1712,7 +1712,7 @@ static int strip_pure_delays(
             if (num_out >= max_out) return -1;
             out[num_out].start_block = raw_segs[s].start_block + i;
             out[num_out].num_blocks  = 1;
-            out[num_out].unique_block_indices = (int*)ALLOC(sizeof(int));
+            out[num_out].unique_block_indices = (int*)PULSEQLIB_ALLOC(sizeof(int));
             if (!out[num_out].unique_block_indices) return -1;
             out[num_out].unique_block_indices[0] = idx[i];
             num_out++;
@@ -1722,7 +1722,7 @@ static int strip_pure_delays(
             if (num_out >= max_out) return -1;
             out[num_out].start_block = raw_segs[s].start_block + core_start;
             out[num_out].num_blocks  = core_size;
-            out[num_out].unique_block_indices = (int*)ALLOC(core_size * sizeof(int));
+            out[num_out].unique_block_indices = (int*)PULSEQLIB_ALLOC(core_size * sizeof(int));
             if (!out[num_out].unique_block_indices) return -1;
             for (i = 0; i < core_size; ++i)
                 out[num_out].unique_block_indices[i] = idx[core_start + i];
@@ -1732,7 +1732,7 @@ static int strip_pure_delays(
             if (num_out >= max_out) return -1;
             out[num_out].start_block = raw_segs[s].start_block + core_end + i;
             out[num_out].num_blocks  = 1;
-            out[num_out].unique_block_indices = (int*)ALLOC(sizeof(int));
+            out[num_out].unique_block_indices = (int*)PULSEQLIB_ALLOC(sizeof(int));
             if (!out[num_out].unique_block_indices) return -1;
             out[num_out].unique_block_indices[0] = idx[core_end + i];
             num_out++;
@@ -1742,7 +1742,7 @@ static int strip_pure_delays(
 }
 
 /* ================================================================== */
-/*  find_segments_in_tr                                                */
+/*  find_segments_in_tr                                               */
 /* ================================================================== */
 
 int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib__seq_file* seq)
@@ -1779,7 +1779,7 @@ int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqli
     num_raw_alloc = 0; num_exp_alloc = 0;
     total_blocks = tr->tr_size + tr->num_prep_blocks + tr->num_cooldown_blocks;
 
-    raw_segs = (pulseqlib_tr_segment*)ALLOC(total_blocks * sizeof(pulseqlib_tr_segment));
+    raw_segs = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(total_blocks * sizeof(pulseqlib_tr_segment));
     if (!raw_segs) { diag->code = PULSEQLIB_ERR_ALLOC_FAILED; return 0; }
 
     /* ---- raw segments per section ---- */
@@ -1787,7 +1787,7 @@ int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqli
         tr_start = 0;
         tr_size  = tr->num_prep_blocks + tr->tr_size;
         seg_result = find_segments_internal(desc, raw_segs, num_raw, diag, &seq->opts, tr_start, tr_size);
-        if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) { FREE(raw_segs); return 0; }
+        if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) { PULSEQLIB_FREE(raw_segs); return 0; }
         n_prep_raw = seg_result;
         num_raw += n_prep_raw;
     }
@@ -1795,7 +1795,7 @@ int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqli
     tr_start = tr->num_prep_blocks;
     tr_size  = tr->tr_size;
     seg_result = find_segments_internal(desc, raw_segs, num_raw, diag, &seq->opts, tr_start, tr_size);
-    if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) { FREE(raw_segs); return 0; }
+    if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) { PULSEQLIB_FREE(raw_segs); return 0; }
     n_main_raw = seg_result;
     num_raw += n_main_raw;
 
@@ -1803,20 +1803,20 @@ int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqli
         tr_start = seq->num_blocks - tr->num_cooldown_blocks - tr->tr_size;
         tr_size  = tr->num_cooldown_blocks + tr->tr_size;
         seg_result = find_segments_internal(desc, raw_segs, num_raw, diag, &seq->opts, tr_start, tr_size);
-        if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) { FREE(raw_segs); return 0; }
+        if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) { PULSEQLIB_FREE(raw_segs); return 0; }
         n_cool_raw = seg_result;
         num_raw += n_cool_raw;
     }
 
     if (num_raw == 0) {
         diag->code = PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND;
-        FREE(raw_segs);
+        PULSEQLIB_FREE(raw_segs);
         return 0;
     }
 
     /* populate unique_block_indices */
     for (n = 0; n < num_raw; ++n) {
-        raw_segs[n].unique_block_indices = (int*)ALLOC(raw_segs[n].num_blocks * sizeof(int));
+        raw_segs[n].unique_block_indices = (int*)PULSEQLIB_ALLOC(raw_segs[n].num_blocks * sizeof(int));
         if (!raw_segs[n].unique_block_indices) {
             diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
             num_raw_alloc = n;
@@ -1829,7 +1829,7 @@ int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqli
 
     /* ---- strip pure delays ---- */
     max_expanded = total_blocks;
-    exp_segs = (pulseqlib_tr_segment*)ALLOC(max_expanded * sizeof(pulseqlib_tr_segment));
+    exp_segs = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(max_expanded * sizeof(pulseqlib_tr_segment));
     if (!exp_segs) { diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto fail; }
 
     offset = 0;
@@ -1853,19 +1853,19 @@ int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqli
     num_exp_alloc = num_total;
 
     /* raw_segs no longer needed */
-    for (n = 0; n < num_raw_alloc; ++n) FREE(raw_segs[n].unique_block_indices);
-    FREE(raw_segs); raw_segs = NULL;
+    for (n = 0; n < num_raw_alloc; ++n) PULSEQLIB_FREE(raw_segs[n].unique_block_indices);
+    PULSEQLIB_FREE(raw_segs); raw_segs = NULL;
     num_raw_alloc = 0;
 
     /* ---- segment tables ---- */
     desc->segment_table.num_prep_segments     = n_prep;
     desc->segment_table.num_main_segments     = n_main;
     desc->segment_table.num_cooldown_segments = n_cool;
-    desc->segment_table.prep_segment_table     = (n_prep > 0) ? (int*)ALLOC(n_prep * sizeof(int)) : NULL;
-    desc->segment_table.main_segment_table     = (n_main > 0) ? (int*)ALLOC(n_main * sizeof(int)) : NULL;
-    desc->segment_table.cooldown_segment_table = (n_cool > 0) ? (int*)ALLOC(n_cool * sizeof(int)) : NULL;
+    desc->segment_table.prep_segment_table     = (n_prep > 0) ? (int*)PULSEQLIB_ALLOC(n_prep * sizeof(int)) : NULL;
+    desc->segment_table.main_segment_table     = (n_main > 0) ? (int*)PULSEQLIB_ALLOC(n_main * sizeof(int)) : NULL;
+    desc->segment_table.cooldown_segment_table = (n_cool > 0) ? (int*)PULSEQLIB_ALLOC(n_cool * sizeof(int)) : NULL;
 
-    uniq_segs = (pulseqlib_tr_segment*)ALLOC(num_total * sizeof(pulseqlib_tr_segment));
+    uniq_segs = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(num_total * sizeof(pulseqlib_tr_segment));
     if (!uniq_segs) { diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto fail; }
 
     num_unique = 0;
@@ -1879,7 +1879,7 @@ int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqli
             if (pure_delay_idx == -1) {
                 uniq_segs[num_unique].num_blocks  = 1;
                 uniq_segs[num_unique].start_block = exp_segs[n].start_block;
-                uniq_segs[num_unique].unique_block_indices = (int*)ALLOC(sizeof(int));
+                uniq_segs[num_unique].unique_block_indices = (int*)PULSEQLIB_ALLOC(sizeof(int));
                 if (!uniq_segs[num_unique].unique_block_indices) {
                     diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
                     goto fail;
@@ -1902,7 +1902,7 @@ int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqli
                 uniq_segs[num_unique].num_blocks  = exp_segs[n].num_blocks;
                 uniq_segs[num_unique].start_block = exp_segs[n].start_block;
                 uniq_segs[num_unique].unique_block_indices =
-                    (int*)ALLOC(exp_segs[n].num_blocks * sizeof(int));
+                    (int*)PULSEQLIB_ALLOC(exp_segs[n].num_blocks * sizeof(int));
                 if (!uniq_segs[num_unique].unique_block_indices) {
                     diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
                     goto fail;
@@ -1926,20 +1926,20 @@ int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqli
     desc->num_unique_segments = num_unique;
 
     /* transfer ownership from uniq_segs to desc */
-    desc->segment_definitions = (pulseqlib_tr_segment*)ALLOC(num_unique * sizeof(pulseqlib_tr_segment));
+    desc->segment_definitions = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(num_unique * sizeof(pulseqlib_tr_segment));
     if (!desc->segment_definitions) { diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto fail; }
     for (i = 0; i < num_unique; ++i)
         desc->segment_definitions[i] = uniq_segs[i];
-    FREE(uniq_segs); uniq_segs = NULL;
+    PULSEQLIB_FREE(uniq_segs); uniq_segs = NULL;
     /* note: unique_block_indices pointers now owned by desc->segment_definitions */
 
     /* ---- per-block flags ---- */
     for (i = 0; i < num_unique; ++i) {
         nb = desc->segment_definitions[i].num_blocks;
-        desc->segment_definitions[i].has_trigger  = (int*)ALLOC(nb * sizeof(int));
-        desc->segment_definitions[i].has_rotation = (int*)ALLOC(nb * sizeof(int));
-        desc->segment_definitions[i].norot_flag   = (int*)ALLOC(nb * sizeof(int));
-        desc->segment_definitions[i].nopos_flag   = (int*)ALLOC(nb * sizeof(int));
+        desc->segment_definitions[i].has_trigger  = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+        desc->segment_definitions[i].has_rotation = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+        desc->segment_definitions[i].norot_flag   = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+        desc->segment_definitions[i].nopos_flag   = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
         if (!desc->segment_definitions[i].has_trigger ||
             !desc->segment_definitions[i].has_rotation ||
             !desc->segment_definitions[i].norot_flag ||
@@ -1955,7 +1955,7 @@ int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqli
         }
     }
 
-    max_energy = (float*)ALLOC(num_unique * sizeof(float));
+    max_energy = (float*)PULSEQLIB_ALLOC(num_unique * sizeof(float));
     if (!max_energy) { diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto fail; }
     for (i = 0; i < num_unique; ++i) {
         max_energy[i] = 0.0f;
@@ -2001,36 +2001,36 @@ int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqli
         }
     }
 
-    FREE(max_energy); max_energy = NULL;
-    for (n = 0; n < num_exp_alloc; ++n) FREE(exp_segs[n].unique_block_indices);
-    FREE(exp_segs); exp_segs = NULL;
+    PULSEQLIB_FREE(max_energy); max_energy = NULL;
+    for (n = 0; n < num_exp_alloc; ++n) PULSEQLIB_FREE(exp_segs[n].unique_block_indices);
+    PULSEQLIB_FREE(exp_segs); exp_segs = NULL;
     num_exp_alloc = 0;
 
     diag->code = PULSEQLIB_OK;
     return num_unique;
 
 fail:
-    if (max_energy) FREE(max_energy);
+    if (max_energy) PULSEQLIB_FREE(max_energy);
     if (uniq_segs) {
         for (i = 0; i < num_unique; ++i)
-            if (uniq_segs[i].unique_block_indices) FREE(uniq_segs[i].unique_block_indices);
-        FREE(uniq_segs);
+            if (uniq_segs[i].unique_block_indices) PULSEQLIB_FREE(uniq_segs[i].unique_block_indices);
+        PULSEQLIB_FREE(uniq_segs);
     }
     if (exp_segs) {
         for (n = 0; n < num_exp_alloc; ++n)
-            if (exp_segs[n].unique_block_indices) FREE(exp_segs[n].unique_block_indices);
-        FREE(exp_segs);
+            if (exp_segs[n].unique_block_indices) PULSEQLIB_FREE(exp_segs[n].unique_block_indices);
+        PULSEQLIB_FREE(exp_segs);
     }
     if (raw_segs) {
         for (n = 0; n < num_raw_alloc; ++n)
-            if (raw_segs[n].unique_block_indices) FREE(raw_segs[n].unique_block_indices);
-        FREE(raw_segs);
+            if (raw_segs[n].unique_block_indices) PULSEQLIB_FREE(raw_segs[n].unique_block_indices);
+        PULSEQLIB_FREE(raw_segs);
     }
     return 0;
 }
 
 /* ================================================================== */
-/*  Descriptor free functions (public)                                 */
+/*  Descriptor free functions (public)                                */
 /* ================================================================== */
 
 void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
@@ -2038,35 +2038,35 @@ void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
     int i;
     if (!d) return;
 
-    if (d->block_definitions) { FREE(d->block_definitions); d->block_definitions = NULL; }
+    if (d->block_definitions) { PULSEQLIB_FREE(d->block_definitions); d->block_definitions = NULL; }
     d->num_unique_blocks = 0;
-    if (d->block_table) { FREE(d->block_table); d->block_table = NULL; }
+    if (d->block_table) { PULSEQLIB_FREE(d->block_table); d->block_table = NULL; }
     d->num_blocks = 0;
 
-    if (d->rf_definitions) { FREE(d->rf_definitions); d->rf_definitions = NULL; }
+    if (d->rf_definitions) { PULSEQLIB_FREE(d->rf_definitions); d->rf_definitions = NULL; }
     d->num_unique_rfs = 0;
-    if (d->rf_table) { FREE(d->rf_table); d->rf_table = NULL; }
+    if (d->rf_table) { PULSEQLIB_FREE(d->rf_table); d->rf_table = NULL; }
     d->rf_table_size = 0;
 
-    if (d->grad_definitions) { FREE(d->grad_definitions); d->grad_definitions = NULL; }
+    if (d->grad_definitions) { PULSEQLIB_FREE(d->grad_definitions); d->grad_definitions = NULL; }
     d->num_unique_grads = 0;
-    if (d->grad_table) { FREE(d->grad_table); d->grad_table = NULL; }
+    if (d->grad_table) { PULSEQLIB_FREE(d->grad_table); d->grad_table = NULL; }
     d->grad_table_size = 0;
 
-    if (d->adc_definitions) { FREE(d->adc_definitions); d->adc_definitions = NULL; }
+    if (d->adc_definitions) { PULSEQLIB_FREE(d->adc_definitions); d->adc_definitions = NULL; }
     d->num_unique_adcs = 0;
-    if (d->adc_table) { FREE(d->adc_table); d->adc_table = NULL; }
+    if (d->adc_table) { PULSEQLIB_FREE(d->adc_table); d->adc_table = NULL; }
     d->adc_table_size = 0;
 
-    if (d->rotation_matrices) { FREE(d->rotation_matrices); d->rotation_matrices = NULL; }
+    if (d->rotation_matrices) { PULSEQLIB_FREE(d->rotation_matrices); d->rotation_matrices = NULL; }
     d->num_rotations = 0;
-    if (d->trigger_events) { FREE(d->trigger_events); d->trigger_events = NULL; }
+    if (d->trigger_events) { PULSEQLIB_FREE(d->trigger_events); d->trigger_events = NULL; }
     d->num_triggers = 0;
 
     if (d->shapes) {
         for (i = 0; i < d->num_shapes; ++i)
-            if (d->shapes[i].samples) FREE(d->shapes[i].samples);
-        FREE(d->shapes);
+            if (d->shapes[i].samples) PULSEQLIB_FREE(d->shapes[i].samples);
+        PULSEQLIB_FREE(d->shapes);
         d->shapes = NULL;
     }
     d->num_shapes = 0;
@@ -2076,13 +2076,13 @@ void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
 
     if (d->segment_definitions) {
         for (i = 0; i < d->num_unique_segments; ++i) {
-            if (d->segment_definitions[i].unique_block_indices) FREE(d->segment_definitions[i].unique_block_indices);
-            if (d->segment_definitions[i].has_trigger)          FREE(d->segment_definitions[i].has_trigger);
-            if (d->segment_definitions[i].has_rotation)         FREE(d->segment_definitions[i].has_rotation);
-            if (d->segment_definitions[i].norot_flag)           FREE(d->segment_definitions[i].norot_flag);
-            if (d->segment_definitions[i].nopos_flag)           FREE(d->segment_definitions[i].nopos_flag);
+            if (d->segment_definitions[i].unique_block_indices) PULSEQLIB_FREE(d->segment_definitions[i].unique_block_indices);
+            if (d->segment_definitions[i].has_trigger)          PULSEQLIB_FREE(d->segment_definitions[i].has_trigger);
+            if (d->segment_definitions[i].has_rotation)         PULSEQLIB_FREE(d->segment_definitions[i].has_rotation);
+            if (d->segment_definitions[i].norot_flag)           PULSEQLIB_FREE(d->segment_definitions[i].norot_flag);
+            if (d->segment_definitions[i].nopos_flag)           PULSEQLIB_FREE(d->segment_definitions[i].nopos_flag);
         }
-        FREE(d->segment_definitions);
+        PULSEQLIB_FREE(d->segment_definitions);
         d->segment_definitions = NULL;
     }
     d->num_unique_segments = 0;
@@ -2098,9 +2098,9 @@ void pulseqlib_sequence_descriptor_collection_free(
     if (c->descriptors) {
         for (i = 0; i < c->num_subsequences; ++i)
             pulseqlib_sequence_descriptor_free(&c->descriptors[i]);
-        FREE(c->descriptors);
+        PULSEQLIB_FREE(c->descriptors);
     }
-    if (c->subsequence_info) FREE(c->subsequence_info);
+    if (c->subsequence_info) PULSEQLIB_FREE(c->subsequence_info);
     c->num_subsequences      = 0;
     c->descriptors           = NULL;
     c->subsequence_info      = NULL;
@@ -2113,9 +2113,9 @@ void pulseqlib_sequence_descriptor_collection_free(
 void pulseqlib_segment_table_result_free(pulseqlib_segment_table_result* r)
 {
     if (!r) return;
-    if (r->prep_segment_table)     FREE(r->prep_segment_table);
-    if (r->main_segment_table)     FREE(r->main_segment_table);
-    if (r->cooldown_segment_table) FREE(r->cooldown_segment_table);
+    if (r->prep_segment_table)     PULSEQLIB_FREE(r->prep_segment_table);
+    if (r->main_segment_table)     PULSEQLIB_FREE(r->main_segment_table);
+    if (r->cooldown_segment_table) PULSEQLIB_FREE(r->cooldown_segment_table);
     r->prep_segment_table     = NULL;
     r->main_segment_table     = NULL;
     r->cooldown_segment_table = NULL;
@@ -2126,7 +2126,7 @@ void pulseqlib_segment_table_result_free(pulseqlib_segment_table_result* r)
 }
 
 /* ================================================================== */
-/*  get_collection_descriptors                                         */
+/*  get_collection_descriptors                                        */
 /* ================================================================== */
 
 int pulseqlib__get_collection_descriptors(
@@ -2143,13 +2143,13 @@ int pulseqlib__get_collection_descriptors(
     if (!raw || !coll) { diag->code = PULSEQLIB_ERR_NULL_POINTER; return 0; }
     if (raw->num_sequences == 0) { diag->code = PULSEQLIB_ERR_COLLECTION_EMPTY; return 0; }
 
-    coll->descriptors = (pulseqlib_sequence_descriptor*)ALLOC(
+    coll->descriptors = (pulseqlib_sequence_descriptor*)PULSEQLIB_ALLOC(
         raw->num_sequences * sizeof(pulseqlib_sequence_descriptor));
-    coll->subsequence_info = (pulseqlib_subsequence_info*)ALLOC(
+    coll->subsequence_info = (pulseqlib_subsequence_info*)PULSEQLIB_ALLOC(
         raw->num_sequences * sizeof(pulseqlib_subsequence_info));
     if (!coll->descriptors || !coll->subsequence_info) {
-        if (coll->descriptors)     FREE(coll->descriptors);
-        if (coll->subsequence_info) FREE(coll->subsequence_info);
+        if (coll->descriptors)     PULSEQLIB_FREE(coll->descriptors);
+        if (coll->subsequence_info) PULSEQLIB_FREE(coll->subsequence_info);
         coll->descriptors = NULL;
         coll->subsequence_info = NULL;
         diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
@@ -2214,8 +2214,8 @@ int pulseqlib__get_collection_descriptors(
 fail:
     for (j = 0; j < i; ++j)
         pulseqlib_sequence_descriptor_free(&coll->descriptors[j]);
-    FREE(coll->descriptors);
-    FREE(coll->subsequence_info);
+    PULSEQLIB_FREE(coll->descriptors);
+    PULSEQLIB_FREE(coll->subsequence_info);
     coll->descriptors      = NULL;
     coll->subsequence_info = NULL;
     coll->num_subsequences = 0;
@@ -2223,7 +2223,7 @@ fail:
 }
 
 /* ================================================================== */
-/*  pulseqlib_load (public entry point)                                */
+/*  pulseqlib_load (public entry point)                               */
 /* ================================================================== */
 
 int pulseqlib_load(
