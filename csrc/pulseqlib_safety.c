@@ -1848,3 +1848,176 @@ int check_max_grad(
 
     return PULSEQLIB_OK;
 }
+
+/* ================================================================== */
+/*  Gradient continuity check (cursor dry-run over n repetitions)     */
+/* ================================================================== */
+
+int check_grad_continuity(
+    pulseqlib_sequence_descriptor_collection* coll,
+    pulseqlib_diagnostic* diag,
+    const pulseqlib_opts* opts)
+{
+    pulseqlib_block_cursor saved_cursor;
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_block_table_element* bte;
+    const pulseqlib_block_definition* bdef;
+    const pulseqlib_grad_definition* gdef;
+    const pulseqlib_grad_table_element* gte;
+    int n, raw_id, rot_id, status, cur_seq;
+    int grad_def_ids[3];
+    int shot_idx[3];
+    float amp[3], first_val[3], last_val[3];
+    float first_phys[3], last_phys[3], prev_phys[3];
+    float max_allowed, grad_raster_s, step, hz_per_mt;
+
+    if (!coll || !opts) {
+        if (diag) { pulseqlib_diagnostic_init(diag); diag->code = PULSEQLIB_ERR_NULL_POINTER; }
+        return PULSEQLIB_ERR_NULL_POINTER;
+    }
+    if (diag) pulseqlib_diagnostic_init(diag);
+
+    /* save cursor state */
+    saved_cursor = coll->block_cursor;
+    coll->block_cursor.current_repetition = 0;
+    coll->block_cursor.sequence_index = 0;
+    coll->block_cursor.within_sequence_block_index = 0;
+    coll->block_cursor.from_last_reset = 0;
+
+    prev_phys[0] = 0.0f;
+    prev_phys[1] = 0.0f;
+    prev_phys[2] = 0.0f;
+    cur_seq = 0;
+    status  = PULSEQLIB_CURSOR_BLOCK;
+
+    desc = &coll->descriptors[0];
+    grad_raster_s = desc->grad_raster_time_us * 1e-6f;
+    max_allowed   = opts->max_slew * grad_raster_s;
+
+    while (status != PULSEQLIB_CURSOR_DONE) {
+        /* detect subsequence change */
+        if (coll->block_cursor.sequence_index != cur_seq) {
+            /* end-of-subsequence: prev must ramp to zero */
+            for (n = 0; n < 3; ++n) {
+                step = prev_phys[n];
+                if (step < 0.0f) step = -step;
+                if (step > max_allowed) {
+                    hz_per_mt = opts->gamma * 0.001f;
+                    if (diag) {
+                        diag->code                  = PULSEQLIB_ERR_GRAD_DISCONTINUITY;
+                        diag->channel               = n;
+                        diag->block_index           = -1;
+                        diag->gradient_amplitude    = step / hz_per_mt;
+                        diag->max_allowed_amplitude = max_allowed / hz_per_mt;
+                    }
+                    coll->block_cursor = saved_cursor;
+                    return PULSEQLIB_ERR_GRAD_DISCONTINUITY;
+                }
+            }
+
+            cur_seq = coll->block_cursor.sequence_index;
+            prev_phys[0] = 0.0f;
+            prev_phys[1] = 0.0f;
+            prev_phys[2] = 0.0f;
+
+            desc = &coll->descriptors[cur_seq];
+            grad_raster_s = desc->grad_raster_time_us * 1e-6f;
+            max_allowed   = opts->max_slew * grad_raster_s;
+        }
+
+        /* read current block */
+        bte  = &desc->block_table[coll->block_cursor.within_sequence_block_index];
+        bdef = &desc->block_definitions[bte->id];
+
+        /* grad table: amplitude + shot_index */
+        grad_def_ids[0] = bdef->gx_id;
+        grad_def_ids[1] = bdef->gy_id;
+        grad_def_ids[2] = bdef->gz_id;
+
+        raw_id = bte->gx_id;
+        if (raw_id >= 0 && raw_id < desc->grad_table_size) {
+            gte = &desc->grad_table[raw_id];
+            amp[0] = gte->amplitude; shot_idx[0] = gte->shot_index;
+        } else { amp[0] = 0.0f; shot_idx[0] = 0; }
+
+        raw_id = bte->gy_id;
+        if (raw_id >= 0 && raw_id < desc->grad_table_size) {
+            gte = &desc->grad_table[raw_id];
+            amp[1] = gte->amplitude; shot_idx[1] = gte->shot_index;
+        } else { amp[1] = 0.0f; shot_idx[1] = 0; }
+
+        raw_id = bte->gz_id;
+        if (raw_id >= 0 && raw_id < desc->grad_table_size) {
+            gte = &desc->grad_table[raw_id];
+            amp[2] = gte->amplitude; shot_idx[2] = gte->shot_index;
+        } else { amp[2] = 0.0f; shot_idx[2] = 0; }
+
+        /* first_value / last_value from grad definitions, scaled by amplitude */
+        for (n = 0; n < 3; ++n) {
+            if (grad_def_ids[n] >= 0 && grad_def_ids[n] < desc->num_unique_grads) {
+                gdef = &desc->grad_definitions[grad_def_ids[n]];
+                first_val[n] = gdef->first_value[shot_idx[n]] * amp[n];
+                last_val[n]  = gdef->last_value[shot_idx[n]]  * amp[n];
+            } else {
+                first_val[n] = 0.0f;
+                last_val[n]  = 0.0f;
+            }
+        }
+
+        /* transform logical -> physical */
+        rot_id = bte->rotation_id;
+        if (rot_id >= 0 && rot_id < desc->num_rotations) {
+            pulseqlib__apply_rotation(first_phys, desc->rotation_matrices[rot_id], first_val, 1);
+            pulseqlib__apply_rotation(last_phys,  desc->rotation_matrices[rot_id], last_val,  1);
+        } else {
+            first_phys[0] = first_val[0]; first_phys[1] = first_val[1]; first_phys[2] = first_val[2];
+            last_phys[0]  = last_val[0];  last_phys[1]  = last_val[1];  last_phys[2]  = last_val[2];
+        }
+
+        /* continuity check */
+        for (n = 0; n < 3; ++n) {
+            step = first_phys[n] - prev_phys[n];
+            if (step < 0.0f) step = -step;
+            if (step > max_allowed) {
+                hz_per_mt = opts->gamma * 0.001f;
+                if (diag) {
+                    diag->code                  = PULSEQLIB_ERR_GRAD_DISCONTINUITY;
+                    diag->channel               = n;
+                    diag->block_index           = coll->block_cursor.within_sequence_block_index;
+                    diag->gradient_amplitude    = step / hz_per_mt;
+                    diag->max_allowed_amplitude = max_allowed / hz_per_mt;
+                }
+                coll->block_cursor = saved_cursor;
+                return PULSEQLIB_ERR_GRAD_DISCONTINUITY;
+            }
+        }
+
+        prev_phys[0] = last_phys[0];
+        prev_phys[1] = last_phys[1];
+        prev_phys[2] = last_phys[2];
+
+        /* advance cursor */
+        status = pulseqlib_cursor_next(coll);
+    }
+
+    /* final subsequence trailing edge */
+    for (n = 0; n < 3; ++n) {
+        step = prev_phys[n];
+        if (step < 0.0f) step = -step;
+        if (step > max_allowed) {
+            hz_per_mt = opts->gamma * 0.001f;
+            if (diag) {
+                diag->code                  = PULSEQLIB_ERR_GRAD_DISCONTINUITY;
+                diag->channel               = n;
+                diag->block_index           = -1;
+                diag->gradient_amplitude    = step / hz_per_mt;
+                diag->max_allowed_amplitude = max_allowed / hz_per_mt;
+            }
+            coll->block_cursor = saved_cursor;
+            return PULSEQLIB_ERR_GRAD_DISCONTINUITY;
+        }
+    }
+
+    coll->block_cursor = saved_cursor;
+    return PULSEQLIB_OK;
+}

@@ -386,6 +386,7 @@ float pulseqlib__find_max_abs_real(const float* samples, int n);
 int   pulseqlib__find_max_abs_index_real(const float* samples, int n);
 void  pulseqlib__mag_phase_to_real_imag(float* re, float* im, const float* mag, const float* phase, int n);
 void  pulseqlib__quaternion_to_matrix(float* matrix, const float* quat);
+void  pulseqlib__apply_rotation(float* out, const float* R, const float* v, int transpose);
 void  pulseqlib__interp1_linear(float* out, const float* x, int nx, const float* xp, const float* fp, int nxp);
 void  pulseqlib__interp1_linear_complex(float* out_re, float* out_im, const float* x, int nx, const float* xp, const float* fp_re, const float* fp_im, int nxp);
 void  pulseqlib__fftshift_complex(float* re, float* im, int n);

@@ -228,6 +228,24 @@ void pulseqlib__quaternion_to_matrix(float* matrix, const float* quat)
 }
 
 /* ------------------------------------------------------------------ */
+/*  3x3 rotation: out = R * v  (transpose=0)  or  out = R^T * v (1)  */
+/* ------------------------------------------------------------------ */
+
+void pulseqlib__apply_rotation(float* out, const float* R, const float* v,
+                               int transpose)
+{
+    if (transpose) {
+        out[0] = R[0] * v[0] + R[3] * v[1] + R[6] * v[2];
+        out[1] = R[1] * v[0] + R[4] * v[1] + R[7] * v[2];
+        out[2] = R[2] * v[0] + R[5] * v[1] + R[8] * v[2];
+    } else {
+        out[0] = R[0] * v[0] + R[1] * v[1] + R[2] * v[2];
+        out[1] = R[3] * v[0] + R[4] * v[1] + R[5] * v[2];
+        out[2] = R[6] * v[0] + R[7] * v[1] + R[8] * v[2];
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /*  1-D linear interpolation                                          */
 /* ------------------------------------------------------------------ */
 

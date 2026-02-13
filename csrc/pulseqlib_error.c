@@ -126,6 +126,7 @@ const char* pulseqlib_get_error_message(int code)
         case PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED:    return "PNS threshold exceeded";
         case PULSEQLIB_ERR_MAX_GRAD_EXCEEDED:         return "Maximum gradient amplitude exceeded";
         case PULSEQLIB_ERR_NOT_IMPLEMENTED:           return "Functionality not yet implemented";
+        case PULSEQLIB_ERR_GRAD_DISCONTINUITY:        return "Gradient discontinuity between blocks";
         default:                                       return "Unknown error";
     }
 }
@@ -171,6 +172,10 @@ const char* pulseqlib_get_error_hint(int code)
                    "Check diagnostic fields gradient_amplitude and max_allowed_amplitude (mT/m).";
         case PULSEQLIB_ERR_NOT_IMPLEMENTED:
             return "This functionality is not yet implemented.";
+        case PULSEQLIB_ERR_GRAD_DISCONTINUITY:
+            return "The gradient amplitude step between consecutive blocks exceeds "
+                   "the maximum allowed by the slew rate and raster time. "
+                   "Check diagnostic fields gradient_amplitude and max_allowed_amplitude (mT/m).";
         default:
             return "Check sequence design for structural consistency.";
     }
