@@ -127,6 +127,7 @@ const char* pulseqlib_get_error_message(int code)
         case PULSEQLIB_ERR_MAX_GRAD_EXCEEDED:         return "Maximum gradient amplitude exceeded";
         case PULSEQLIB_ERR_NOT_IMPLEMENTED:           return "Functionality not yet implemented";
         case PULSEQLIB_ERR_GRAD_DISCONTINUITY:        return "Gradient discontinuity between blocks";
+        case PULSEQLIB_ERR_MAX_SLEW_EXCEEDED:         return "Maximum slew rate exceeded";
         default:                                       return "Unknown error";
     }
 }
@@ -176,6 +177,10 @@ const char* pulseqlib_get_error_hint(int code)
             return "The gradient amplitude step between consecutive blocks exceeds "
                    "the maximum allowed by the slew rate and raster time. "
                    "Check diagnostic fields gradient_amplitude and max_allowed_amplitude (mT/m).";
+        case PULSEQLIB_ERR_MAX_SLEW_EXCEEDED:
+            return "A gradient waveform exceeds the per-axis slew rate limit "
+                   "(derated by 1/sqrt(3) for rotation safety). "
+                   "Check diagnostic fields gradient_amplitude and max_allowed_amplitude (T/m/s).";
         default:
             return "Check sequence design for structural consistency.";
     }

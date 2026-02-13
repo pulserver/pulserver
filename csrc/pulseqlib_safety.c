@@ -2021,3 +2021,62 @@ int check_grad_continuity(
     coll->block_cursor = saved_cursor;
     return PULSEQLIB_OK;
 }
+
+/* ================================================================== */
+/*  Max slew rate check (per unique block definition)                 */
+/* ================================================================== */
+
+int check_max_slew(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    pulseqlib_diagnostic* diag,
+    const pulseqlib_opts* opts)
+{
+    int s, d, n, grad_id, shot;
+    float slew_limit, slew_phys;
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_block_definition* bdef;
+    const pulseqlib_grad_definition* gdef;
+    int grad_ids[3];
+
+    if (!coll || !opts) {
+        if (diag) { pulseqlib_diagnostic_init(diag); diag->code = PULSEQLIB_ERR_NULL_POINTER; }
+        return PULSEQLIB_ERR_NULL_POINTER;
+    }
+    if (diag) pulseqlib_diagnostic_init(diag);
+
+    slew_limit = opts->max_slew / (float)sqrt(3.0);
+
+    for (s = 0; s < coll->num_subsequences; ++s) {
+        desc = &coll->descriptors[s];
+
+        for (d = 0; d < desc->num_unique_blocks; ++d) {
+            bdef = &desc->block_definitions[d];
+            grad_ids[0] = bdef->gx_id;
+            grad_ids[1] = bdef->gy_id;
+            grad_ids[2] = bdef->gz_id;
+
+            for (n = 0; n < 3; ++n) {
+                grad_id = grad_ids[n];
+                if (grad_id < 0 || grad_id >= desc->num_unique_grads)
+                    continue;
+
+                gdef = &desc->grad_definitions[grad_id];
+                for (shot = 0; shot < gdef->num_shots; ++shot) {
+                    slew_phys = gdef->slew_rate[shot] * gdef->max_amplitude[shot];
+                    if (slew_phys > slew_limit) {
+                        if (diag) {
+                            diag->code                  = PULSEQLIB_ERR_MAX_SLEW_EXCEEDED;
+                            diag->channel               = n;
+                            diag->block_index           = d;
+                            diag->gradient_amplitude    = slew_phys;
+                            diag->max_allowed_amplitude = slew_limit;
+                        }
+                        return PULSEQLIB_ERR_MAX_SLEW_EXCEEDED;
+                    }
+                }
+            }
+        }
+    }
+
+    return PULSEQLIB_OK;
+}
