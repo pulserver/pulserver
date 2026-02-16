@@ -412,10 +412,15 @@ float pulseqlib__get_grad_library_max_amplitude(const pulseqlib__seq_file* seq);
 int   pulseqlib__decompress_shape(pulseqlib_shape_arbitrary* result, const pulseqlib_shape_arbitrary* encoded, float scale);
 
 /* --- pulseqlib_core.c --- */
+int   pulseqlib__deduplicate_int_rows(int* unique_defs, int* event_table, const int* int_rows, int num_rows, int num_cols);
 int   pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const pulseqlib__seq_file* seq);
 int   pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);
 int   pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib__seq_file* seq);
 int   pulseqlib__get_collection_descriptors(pulseqlib_sequence_descriptor_collection* desc_coll, pulseqlib_diagnostic* diag, const pulseqlib__seq_file_collection* coll);
+
+/* --- pulseqlib_cache.c --- */
+int   pulseqlib__try_read_cache(pulseqlib_sequence_descriptor_collection* coll, const char* seq_path);
+int   pulseqlib__write_cache(const pulseqlib_sequence_descriptor_collection* seq_coll, const char* seq_path);
 
 /* --- Helper to locate segment/block in collection --- */
 int pulseqlib__resolve_segment(

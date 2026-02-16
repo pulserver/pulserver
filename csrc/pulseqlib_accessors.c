@@ -98,6 +98,92 @@ static int get_grad_id_by_axis(const pulseqlib_block_definition* bdef, int axis)
 }
 
 /* ================================================================== */
+/*  RF accessors                                                      */
+/* ================================================================== */
+
+int pulseqlib_get_num_unique_rf(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int subseq_idx)
+{
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    return coll->descriptors[subseq_idx].num_unique_rfs;
+}
+
+#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
+int pulseqlib_get_rf_stats(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    pulseqlib_rf_stats* stats,
+    int subseq_idx, int rf_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+
+    if (!coll || !stats) return PULSEQLIB_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    desc = &coll->descriptors[subseq_idx];
+    if (rf_idx < 0 || rf_idx >= desc->num_unique_rfs)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    *stats = desc->rf_definitions[rf_idx].stats;
+    return PULSEQLIB_OK;
+}
+
+float pulseqlib_get_rf_base_amplitude(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int subseq_idx, int rf_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0.0f;
+    desc = &coll->descriptors[subseq_idx];
+    if (rf_idx < 0 || rf_idx >= desc->num_unique_rfs)
+        return 0.0f;
+
+    return desc->rf_definitions[rf_idx].stats.max_amplitude;
+}
+#endif
+
+/*
+ * pulseqlib_get_tr_rf_ids --
+ *   Return an array of RF definition IDs for each block position
+ *   within the first main TR.  Blocks without RF get -1.
+ *
+ *   out_rf_ids must point to a pre-allocated array of tr_size ints.
+ *   Returns tr_size on success, negative error code on failure.
+ */
+int pulseqlib_get_tr_rf_ids(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int* out_rf_ids,
+    int subseq_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_tr_descriptor* trd;
+    const pulseqlib_block_table_element* bte;
+    int i, block_idx, tr_size;
+
+    if (!coll || !out_rf_ids) return PULSEQLIB_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    desc = &coll->descriptors[subseq_idx];
+    trd  = &desc->tr_descriptor;
+    tr_size = trd->tr_size;
+
+    for (i = 0; i < tr_size; ++i) {
+        block_idx = trd->num_prep_blocks + i;
+        bte = &desc->block_table[block_idx];
+        if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size)
+            out_rf_ids[i] = desc->rf_table[bte->rf_id].id;
+        else
+            out_rf_ids[i] = -1;
+    }
+
+    return tr_size;
+}
+
+/* ================================================================== */
 /*  ADC collection accessors                                          */
 /* ================================================================== */
 
@@ -395,7 +481,7 @@ float* pulseqlib_get_rf_magnitude(
 
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
     if (!pulseqlib__decompress_shape(&decompressed, &desc->shapes[shape_idx],
-                                     rdef->max_amplitude))
+                                     rdef->stats.max_amplitude))
         return NULL;
 #else
     if (!pulseqlib__decompress_shape(&decompressed, &desc->shapes[shape_idx], 1.0f))

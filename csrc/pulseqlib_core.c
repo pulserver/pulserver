@@ -73,7 +73,7 @@ static size_t hash_row(const int* row, int num_cols)
     return h;
 }
 
-static int deduplicate_int_rows(
+int pulseqlib__deduplicate_int_rows(
     int* unique_defs, int* event_table, 
     const int* int_rows, int num_rows, int num_cols
 ) {
@@ -167,7 +167,7 @@ static int deduplicate_rf_library(const pulseqlib__seq_file* seq, pulseqlib_rf_d
     for (i = 0; i < num_rows; ++i)
         build_rf_def_row(seq, int_rows[i], params[i], i);
 
-    num_unique = deduplicate_int_rows(unique_defs, event_table, (const int*)int_rows, num_rows, RF_DEF_COLS);
+    num_unique = pulseqlib__deduplicate_int_rows(unique_defs, event_table, (const int*)int_rows, num_rows, RF_DEF_COLS);
 
     for (i = 0; i < num_unique; ++i) {
         rf_defs[i].id            = unique_defs[i];
@@ -245,7 +245,7 @@ static int deduplicate_grad_library(const pulseqlib__seq_file* seq, pulseqlib_gr
     for (i = 0; i < num_rows; ++i)
         build_grad_def_row(seq, int_rows[i], &params[i], i);
 
-    num_unique = deduplicate_int_rows(unique_defs, event_table, (const int*)int_rows, num_rows, GRAD_DEF_COLS);
+    num_unique = pulseqlib__deduplicate_int_rows(unique_defs, event_table, (const int*)int_rows, num_rows, GRAD_DEF_COLS);
 
     for (i = 0; i < num_unique; ++i) {
         grad_defs[i].id = unique_defs[i];
@@ -309,7 +309,7 @@ static int deduplicate_adc_library(const pulseqlib__seq_file* seq, pulseqlib_adc
     for (i = 0; i < num_rows; ++i)
         build_adc_def_row(seq, int_rows[i], params[i], i);
 
-    num_unique = deduplicate_int_rows(unique_defs, event_table, (const int*)int_rows, num_rows, ADC_DEF_COLS);
+    num_unique = pulseqlib__deduplicate_int_rows(unique_defs, event_table, (const int*)int_rows, num_rows, ADC_DEF_COLS);
 
     for (i = 0; i < num_unique; ++i) {
         adc_defs[i].id          = unique_defs[i];
@@ -669,24 +669,24 @@ static int compute_rf_stats(
         rd = &rf_defs[def_idx];
         first = -1; last = -1;
 
-        rd->num_samples   = 0;
-        rd->flip_angle    = 0.0f;
-        rd->max_amplitude = 0.0f;
-        rd->area          = 0.0f;
-        rd->abswidth      = 0.0f;
-        rd->effwidth      = 0.0f;
-        rd->dtycyc        = 0.0f;
-        rd->maxpw         = 0.0f;
-        rd->duration_us   = 0.0f;
-        rd->isodelay_us   = 0;
-        rd->bandwidth     = 0.0f;
+        rd->stats.num_samples   = 0;
+        rd->stats.flip_angle    = 0.0f;
+        rd->stats.max_amplitude = 0.0f;
+        rd->stats.area          = 0.0f;
+        rd->stats.abswidth      = 0.0f;
+        rd->stats.effwidth      = 0.0f;
+        rd->stats.dtycyc        = 0.0f;
+        rd->stats.maxpw         = 0.0f;
+        rd->stats.duration_us   = 0.0f;
+        rd->stats.isodelay_us   = 0;
+        rd->stats.bandwidth     = 0.0f;
 
         /* max amplitude from table */
         if (rf_table && rf_table_size > 0) {
             for (i = 0; i < rf_table_size; ++i) {
                 if (rf_table[i].id == def_idx) {
                     float amp = (float)fabs(rf_table[i].amplitude);
-                    if (amp > rd->max_amplitude) rd->max_amplitude = amp;
+                    if (amp > rd->stats.max_amplitude) rd->stats.max_amplitude = amp;
                 }
             }
         }
@@ -707,7 +707,7 @@ static int compute_rf_stats(
         if (!magnitude) { PULSEQLIB_FREE(decomp_mag.samples); goto fail; }
         for (i = 0; i < num_samples; ++i) magnitude[i] = decomp_mag.samples[i];
         PULSEQLIB_FREE(decomp_mag.samples); decomp_mag.samples = NULL;
-        rd->num_samples = num_samples;
+        rd->stats.num_samples = num_samples;
 
         /* decompress phase (optional) */
         if (phase_id > 0 && phase_id <= seq->shapes_library_size) {
@@ -754,7 +754,7 @@ static int compute_rf_stats(
         }
 
         duration = (has_time && num_samples > 0) ? time_us[num_samples - 1] : (num_samples * rf_raster_us);
-        rd->duration_us = duration;
+        rd->stats.duration_us = duration;
 
         /* find peak indices for isodelay */
         max_mag = pulseqlib__find_max_abs_real(magnitude, num_samples);
@@ -769,7 +769,7 @@ static int compute_rf_stats(
         time_center = (has_time && time_us)
             ? 0.5f * (time_us[first] + time_us[last])
             : 0.5f * ((float)(first + last)) * rf_raster_us;
-        rd->isodelay_us = (int)(duration - time_center);
+        rd->stats.isodelay_us = (int)(duration - time_center);
 
         /* normalise */
         if (max_mag > 1e-9f)
@@ -826,13 +826,13 @@ static int compute_rf_stats(
                                  sum_signed_im * sum_signed_im) *
                      seq->opts.rf_raster_time * 1e-6f;
 
-        rd->area      = sum_signed;
-        rd->abswidth  = sum_abs / num_uniform;
-        rd->effwidth  = sum_sq  / num_uniform;
-        rd->dtycyc    = time_above_threshold / num_uniform;
-        rd->flip_angle = (float)PULSEQLIB__TWO_PI * rd->max_amplitude * sum_signed;
-        rd->maxpw     = maxpw / num_uniform;
-        if (rd->dtycyc < rd->maxpw) rd->dtycyc = rd->maxpw;
+        rd->stats.area      = sum_signed;
+        rd->stats.abswidth  = sum_abs / num_uniform;
+        rd->stats.effwidth  = sum_sq  / num_uniform;
+        rd->stats.dtycyc    = time_above_threshold / num_uniform;
+        rd->stats.flip_angle = (float)PULSEQLIB__TWO_PI * rd->stats.max_amplitude * sum_signed;
+        rd->stats.maxpw     = maxpw / num_uniform;
+        if (rd->stats.dtycyc < rd->stats.maxpw) rd->stats.dtycyc = rd->stats.maxpw;
 
         PULSEQLIB_FREE(time_us_uniform); time_us_uniform = NULL;
         PULSEQLIB_FREE(rf_re_uniform);   rf_re_uniform = NULL;
@@ -847,7 +847,7 @@ static int compute_rf_stats(
                 pulseqlib__interp1_linear_complex(rfs_re, rfs_im,
                                                   tt, nn,
                                                   time_centered, rf_re, rf_im, num_samples);
-                rd->bandwidth = compute_rf_bandwidth_fft(
+                rd->stats.bandwidth = compute_rf_bandwidth_fft(
                     rfs_re, rfs_im, fft_cfg, nn, dw, cutoff,
                     duration * 1e-6f, w, work_re, work_im, fft_in, fft_out);
                 PULSEQLIB_FREE(time_centered); time_centered = NULL;
@@ -1133,7 +1133,7 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
     }
 
     /* step 3: dedup blocks */
-    desc->num_unique_blocks = deduplicate_int_rows(unique_defs, event_table, (const int*)int_rows, num_blocks, BLOCK_DEF_COLS);
+    desc->num_unique_blocks = pulseqlib__deduplicate_int_rows(unique_defs, event_table, (const int*)int_rows, num_blocks, BLOCK_DEF_COLS);
     desc->num_blocks = num_blocks;
 
     for (n = 0; n < desc->num_unique_blocks; ++n) {
@@ -2126,6 +2126,241 @@ void pulseqlib_segment_table_result_free(pulseqlib_segment_table_result* r)
 }
 
 /* ================================================================== */
+/*  Consistency check helpers                                         */
+/* ================================================================== */
+
+/*
+ * get_block_rf_amplitude --
+ *   Return the RF amplitude for block at absolute index 'block_idx',
+ *   or 0 if the block has no RF.
+ */
+static float get_block_rf_amplitude(
+    const pulseqlib_sequence_descriptor* desc,
+    int block_idx)
+{
+    const pulseqlib_block_table_element* bte;
+
+    bte = &desc->block_table[block_idx];
+    if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size)
+        return desc->rf_table[bte->rf_id].amplitude;
+    return 0.0f;
+}
+
+/*
+ * check_rf_amplitude_periodicity --
+ *   Verify that the RF amplitude pattern within a TR is identical
+ *   across the "pure main" TR instances (excluding those adjacent
+ *   to non-degenerate prep/cooldown).
+ *
+ *   ref_tr:   index of the reference TR (0-based within main TRs)
+ *   first_tr: first TR index to check (inclusive)
+ *   last_tr:  last TR index to check (inclusive)
+ *
+ *   Compares each TR in [first_tr, last_tr] against ref_tr.
+ */
+static int check_rf_amplitude_periodicity(
+    const pulseqlib_sequence_descriptor* desc,
+    int ref_tr,
+    int first_tr,
+    int last_tr,
+    pulseqlib_diagnostic* diag)
+{
+    const pulseqlib_tr_descriptor* trd;
+    int tr_size, prep_blocks;
+    int ref_start, tr_idx, chk_start;
+    int j;
+    float ref_amp, chk_amp;
+
+    trd = &desc->tr_descriptor;
+    tr_size    = trd->tr_size;
+    prep_blocks = trd->num_prep_blocks;
+
+    ref_start = prep_blocks + ref_tr * tr_size;
+
+    for (tr_idx = first_tr; tr_idx <= last_tr; ++tr_idx) {
+        if (tr_idx == ref_tr) continue;
+        chk_start = prep_blocks + tr_idx * tr_size;
+        for (j = 0; j < tr_size; ++j) {
+            ref_amp = get_block_rf_amplitude(desc, ref_start + j);
+            chk_amp = get_block_rf_amplitude(desc, chk_start + j);
+            if (ref_amp != chk_amp) {
+                if (diag) {
+                    pulseqlib__diag_printf(diag,
+                        "RF periodicity: TR %d block %d has amplitude %.6g, "
+                        "expected %.6g (from reference TR %d)\n",
+                        tr_idx, j, (double)chk_amp,
+                        (double)ref_amp, ref_tr);
+                }
+                return PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC;
+            }
+        }
+    }
+
+    return PULSEQLIB_OK;
+}
+
+/*
+ * check_segment_walk --
+ *   Walk blocks [block_start .. block_start + total_blocks) and verify
+ *   that block definition IDs match the segment table.
+ *
+ *   segment_table[s] gives the index into segment_definitions[].
+ *   For each segment s we expect:
+ *     block_table[pos].id == segment_definitions[seg].unique_block_indices[j]
+ *   for j = 0 .. segment_definitions[seg].num_blocks - 1.
+ */
+static int check_segment_walk(
+    const pulseqlib_sequence_descriptor* desc,
+    int block_start,
+    int num_segments,
+    const int* segment_table,
+    pulseqlib_diagnostic* diag)
+{
+    int s, j, pos, seg_def_idx;
+    const pulseqlib_tr_segment* seg;
+
+    pos = block_start;
+    for (s = 0; s < num_segments; ++s) {
+        seg_def_idx = segment_table[s];
+        if (seg_def_idx < 0 ||
+            seg_def_idx >= desc->segment_table.num_unique_segments) {
+            if (diag) {
+                pulseqlib__diag_printf(diag,
+                    "Consistency: segment table index %d out of range "
+                    "(num_unique_segments = %d) at segment %d\n",
+                    seg_def_idx,
+                    desc->segment_table.num_unique_segments, s);
+            }
+            return PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH;
+        }
+        seg = &desc->segment_definitions[seg_def_idx];
+        for (j = 0; j < seg->num_blocks; ++j, ++pos) {
+            if (pos >= desc->num_blocks) {
+                if (diag) {
+                    pulseqlib__diag_printf(diag,
+                        "Consistency: block index %d exceeds num_blocks %d "
+                        "at segment %d, block %d\n",
+                        pos, desc->num_blocks, s, j);
+                }
+                return PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH;
+            }
+            if (desc->block_table[pos].id != seg->unique_block_indices[j]) {
+                if (diag) {
+                    pulseqlib__diag_printf(diag,
+                        "Consistency: block %d has def ID %d, "
+                        "expected %d (segment %d, position %d)\n",
+                        pos, desc->block_table[pos].id,
+                        seg->unique_block_indices[j], s, j);
+                }
+                return PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH;
+            }
+        }
+    }
+    return PULSEQLIB_OK;
+}
+
+static int check_consistency(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    pulseqlib_diagnostic* diag)
+{
+    int subseq_idx, rc;
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_tr_descriptor* trd;
+    const pulseqlib_segment_table_result* stab;
+    int block_start;
+    int ref_tr, first_check, last_check;
+
+    if (!coll) return PULSEQLIB_ERR_NULL_POINTER;
+
+    for (subseq_idx = 0; subseq_idx < coll->num_subsequences; ++subseq_idx) {
+        desc = &coll->descriptors[subseq_idx];
+        trd  = &desc->tr_descriptor;
+        stab = &desc->segment_table;
+
+        /* (a) Prep: blocks [0, num_prep + tr_size) against prep segment table */
+        if (!trd->degenerate_prep && stab->num_prep_segments > 0) {
+            rc = check_segment_walk(desc, 0,
+                stab->num_prep_segments, stab->prep_segment_table, diag);
+            if (PULSEQLIB_FAILED(rc)) {
+                if (diag) {
+                    pulseqlib__diag_printf(diag,
+                        "Consistency check failed in prep region "
+                        "of subsequence %d\n", subseq_idx);
+                }
+                return rc;
+            }
+        }
+
+        /* (b) Cooldown: blocks [num_blocks - cooldown - tr_size, num_blocks)
+         *     against cooldown segment table */
+        if (!trd->degenerate_cooldown && stab->num_cooldown_segments > 0) {
+            block_start = desc->num_blocks
+                        - trd->num_cooldown_blocks - trd->tr_size;
+            rc = check_segment_walk(desc, block_start,
+                stab->num_cooldown_segments, stab->cooldown_segment_table,
+                diag);
+            if (PULSEQLIB_FAILED(rc)) {
+                if (diag) {
+                    pulseqlib__diag_printf(diag,
+                        "Consistency check failed in cooldown region "
+                        "of subsequence %d\n", subseq_idx);
+                }
+                return rc;
+            }
+        }
+
+        /* (c) Second main TR instance: blocks [prep + tr_size, prep + 2*tr_size)
+         *     against main segment table — only if num_trs > 1 */
+        if (trd->num_trs > 1 && stab->num_main_segments > 0) {
+            block_start = trd->num_prep_blocks + trd->tr_size;
+            rc = check_segment_walk(desc, block_start,
+                stab->num_main_segments, stab->main_segment_table, diag);
+            if (PULSEQLIB_FAILED(rc)) {
+                if (diag) {
+                    pulseqlib__diag_printf(diag,
+                        "Consistency check failed at second main TR "
+                        "of subsequence %d\n", subseq_idx);
+                }
+                return rc;
+            }
+        }
+
+        /* (d) RF amplitude periodicity across pure main TRs.
+         *
+         *   prep degen   cooldown degen   ref   check range
+         *   ----------   --------------   ---   -----------
+         *   yes          yes              0     1 .. num_trs-1
+         *   no           yes              1     2 .. num_trs-1
+         *   yes          no               0     1 .. num_trs-2
+         *   no           no               1     2 .. num_trs-2
+         */
+        if (trd->num_trs > 1) {
+            ref_tr      = trd->degenerate_prep ? 0 : 1;
+            first_check = ref_tr + 1;
+            last_check  = trd->degenerate_cooldown
+                        ? trd->num_trs - 1
+                        : trd->num_trs - 2;
+
+            if (first_check <= last_check) {
+                rc = check_rf_amplitude_periodicity(desc,
+                    ref_tr, first_check, last_check, diag);
+                if (PULSEQLIB_FAILED(rc)) {
+                    if (diag) {
+                        pulseqlib__diag_printf(diag,
+                            "Consistency check failed: RF amplitude "
+                            "not periodic in subsequence %d\n",
+                            subseq_idx);
+                    }
+                    return rc;
+                }
+            }
+        }
+    }
+
+    return PULSEQLIB_OK;
+}
+
+/* ================================================================== */
 /*  get_collection_descriptors                                        */
 /* ================================================================== */
 
@@ -2230,7 +2465,8 @@ int pulseqlib_load(
     pulseqlib_sequence_descriptor_collection* collection,
     pulseqlib_diagnostic* diag,
     const char* file_path,
-    const pulseqlib_opts* opts)
+    const pulseqlib_opts* opts,
+    int cache_binary)
 {
     pulseqlib__seq_file_collection raw_coll;
     int rc;
@@ -2244,13 +2480,25 @@ int pulseqlib_load(
 
     pulseqlib_diagnostic_init(diag);
 
+    /* Try cache */
+    if (cache_binary && pulseqlib__try_read_cache(collection, file_path))
+        return PULSEQLIB_OK;
+
+    /* Full parse */
     rc = pulseqlib__read_seq_collection(&raw_coll, file_path, opts);
     if (PULSEQLIB_FAILED(rc)) { diag->code = rc; goto fail; }
 
     rc = pulseqlib__get_collection_descriptors(collection, diag, &raw_coll);
     if (PULSEQLIB_FAILED(diag->code)) { rc = diag->code; goto fail; }
 
+    rc = check_consistency(collection, diag);
+    if (PULSEQLIB_FAILED(rc)) { diag->code = rc; goto fail; }
+
     pulseqlib__seq_file_collection_free(&raw_coll);
+
+    /* Write cache (best-effort) */
+    if (cache_binary) pulseqlib__write_cache(collection, file_path);
+
     return PULSEQLIB_OK;
 
 fail:

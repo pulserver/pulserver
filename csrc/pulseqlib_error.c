@@ -128,6 +128,8 @@ const char* pulseqlib_get_error_message(int code)
         case PULSEQLIB_ERR_NOT_IMPLEMENTED:           return "Functionality not yet implemented";
         case PULSEQLIB_ERR_GRAD_DISCONTINUITY:        return "Gradient discontinuity between blocks";
         case PULSEQLIB_ERR_MAX_SLEW_EXCEEDED:         return "Maximum slew rate exceeded";
+        case PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH:  return "Block definition IDs do not match segment table";
+        case PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC:   return "RF amplitude pattern is not periodic across main TRs";
         default:                                       return "Unknown error";
     }
 }
@@ -181,6 +183,14 @@ const char* pulseqlib_get_error_hint(int code)
             return "A gradient waveform exceeds the per-axis slew rate limit "
                    "(derated by 1/sqrt(3) for rotation safety). "
                    "Check diagnostic fields gradient_amplitude and max_allowed_amplitude (T/m/s).";
+        case PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH:
+            return "Segment definitions are inconsistent with block table. "
+                "Try scaling gradients to eps instead of zero to preserve "
+                "gradient continuity across segment boundaries";
+        case PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC:
+            return "RF amplitudes differ between main TR instances that should "
+                "be identical. If variable flip angles across TRs are intended, "
+                "split volumes into separate subsequences";
         default:
             return "Check sequence design for structural consistency.";
     }

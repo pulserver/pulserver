@@ -79,7 +79,7 @@ void pulseqlib_tr_gradient_waveforms_free(pulseqlib_tr_gradient_waveforms* w);
 /*  Safety checks                                                     */
 /* ------------------------------------------------------------------ */
 int pulseqlib_check_safety(
-    const pulseqlib_sequence_descriptor_collection* coll,
+    pulseqlib_sequence_descriptor_collection* coll,   /* non-const: cursor dry-run */
     pulseqlib_diagnostic* diag,
     const pulseqlib_opts* opts,
     int num_forbidden_bands,
@@ -160,7 +160,14 @@ int pulseqlib_get_rf_stats(
     const pulseqlib_sequence_descriptor_collection* coll,
     pulseqlib_rf_stats* stats,
     int subseq_idx, int rf_idx);
+float pulseqlib_get_rf_base_amplitude(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int subseq_idx, int rf_idx);
 #endif
+int pulseqlib_get_tr_rf_ids(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int* out_rf_ids,
+    int subseq_idx);
 int pulseqlib_block_has_rf(
     const pulseqlib_sequence_descriptor_collection* coll,
     int seg_idx, int blk_idx);

@@ -80,6 +80,10 @@
 #define PULSEQLIB_ERR_GRAD_DISCONTINUITY         -551
 #define PULSEQLIB_ERR_MAX_SLEW_EXCEEDED          -552
 
+/* Consistancy errors */
+#define PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH   -560
+#define PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC    -561
+
 #define PULSEQLIB_ERR_NOT_IMPLEMENTED      -999
 
 /* Code checking */
@@ -137,6 +141,25 @@ typedef struct pulseqlib_opts {
 #define PULSEQLIB_OPTS_INIT {0}
 
 /* ================================================================== */
+/*  RF stats (public, vendor-independent view of RF definition stats) */
+/* ================================================================== */
+typedef struct pulseqlib_rf_stats {
+    float flip_angle;
+    float area;
+    float abswidth;
+    float effwidth;
+    float dtycyc;
+    float maxpw;
+    float duration_us;
+    int   isodelay_us;
+    float bandwidth;
+    float max_amplitude;
+    int   num_samples;
+} pulseqlib_rf_stats;
+
+#define PULSEQLIB_RF_STATS_INIT {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f, 0}
+
+/* ================================================================== */
 /*  RF definitions and table                                          */
 /* ================================================================== */
 typedef struct pulseqlib_rf_definition {
@@ -146,22 +169,12 @@ typedef struct pulseqlib_rf_definition {
     int time_shape_id;
     int delay;
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
-    int num_samples;
-    float max_amplitude;
-    float flip_angle;
-    float area;
-    float abswidth;
-    float effwidth;
-    float dtycyc;
-    float maxpw;
-    float duration_us;
-    int isodelay_us;
-    float bandwidth;
+    pulseqlib_rf_stats stats;
 #endif
 } pulseqlib_rf_definition;
 
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
-#define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f}
+#define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0, PULSEQLIB_RF_STATS_INIT}
 #else
 #define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0}
 #endif
@@ -434,18 +447,14 @@ typedef struct pulseqlib_sequence_descriptor_collection {
 /*  TR gradient waveforms                                             */
 /* ================================================================== */
 typedef struct pulseqlib_tr_gradient_waveforms {
-    int num_samples_gx;
-    int num_samples_gy;
-    int num_samples_gz;
-    float* time_gx;
-    float* time_gy;
-    float* time_gz;
+    int num_samples;
+    float* time;
     float* waveform_gx;
     float* waveform_gy;
     float* waveform_gz;
 } pulseqlib_tr_gradient_waveforms;
 
-#define PULSEQLIB_TR_GRADIENT_WAVEFORMS_INIT {0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL}
+#define PULSEQLIB_TR_GRADIENT_WAVEFORMS_INIT {0, NULL, NULL, NULL, NULL}
 
 /* ================================================================== */
 /*  Acoustic violations                                               */
