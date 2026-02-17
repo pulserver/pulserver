@@ -244,7 +244,9 @@ Per-Axis Processing & Output
    │   └── Gz: compute_sliding_window_spectra → spectra + peaks
    │
    └── Sequence spectrum (Scale 2):
-       └── Combined(Gx,Gy,Gz): compute_sequence_spectrum → harmonics
+       ├── Gx: compute_sequence_spectrum → harmonics + peaks
+       ├── Gy: compute_sequence_spectrum → harmonics + peaks
+       └── Gz: compute_sequence_spectrum → harmonics + peaks
 
    Output per TR pattern:
    ├── frequency_bins[nfreq]           — shared frequency axis
