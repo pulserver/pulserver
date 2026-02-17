@@ -12,7 +12,7 @@
 /* ================================================================== */
 
 #define PULSEQLIB_CACHE_ENDIAN_MARKER  0x01020304
-#define PULSEQLIB_CACHE_VERSION        1
+#define PULSEQLIB_CACHE_VERSION        2
 
 /* ------ Byte-swap helpers ------ */
 
@@ -197,6 +197,7 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &gd->num_shots, 1)) return 0;
         if (!write4(f, gd->shot_shape_ids, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
         if (!write4(f, gd->max_amplitude, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
+        if (!write4(f, gd->min_amplitude, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
         if (!write4(f, gd->slew_rate, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
         if (!write4(f, gd->energy, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
         if (!write4(f, gd->first_value, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
@@ -402,11 +403,12 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         if (do_swap) swap4_array(&gd->id, 8);
         if (!read4(f, gd->shot_shape_ids, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
         if (!read4(f, gd->max_amplitude, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
+        if (!read4(f, gd->min_amplitude, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
         if (!read4(f, gd->slew_rate, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
         if (!read4(f, gd->energy, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
         if (!read4(f, gd->first_value, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
         if (!read4(f, gd->last_value, PULSEQLIB_MAX_GRAD_SHOTS)) return 0;
-        if (do_swap) swap4_array(gd->shot_shape_ids, 6 * PULSEQLIB_MAX_GRAD_SHOTS);
+        if (do_swap) swap4_array(gd->shot_shape_ids, 7 * PULSEQLIB_MAX_GRAD_SHOTS);
     }
 
     /* gradient table */

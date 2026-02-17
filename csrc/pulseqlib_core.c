@@ -460,6 +460,7 @@ static int compute_grad_stats(
 
         for (i = 0; i < PULSEQLIB_MAX_GRAD_SHOTS; ++i) {
             gd->max_amplitude[i] = 0.0f;
+            gd->min_amplitude[i] = 1e30f;
             gd->slew_rate[i]     = 0.0f;
             gd->energy[i]        = 0.0f;
             gd->first_value[i]   = 0.0f;
@@ -476,9 +477,17 @@ static int compute_grad_stats(
                         if (abs_amp < 0.0f) abs_amp = -abs_amp;
                         if (abs_amp > gd->max_amplitude[shot_idx])
                             gd->max_amplitude[shot_idx] = abs_amp;
+                        if (abs_amp < gd->min_amplitude[shot_idx])
+                            gd->min_amplitude[shot_idx] = abs_amp;
                     }
                 }
             }
+        }
+
+        /* clamp sentinel: if no table entry touched a shot, min stays 0 */
+        for (i = 0; i < PULSEQLIB_MAX_GRAD_SHOTS; ++i) {
+            if (gd->min_amplitude[i] > 1e29f)
+                gd->min_amplitude[i] = 0.0f;
         }
 
         if (grad_type == 0) {
@@ -2081,6 +2090,9 @@ void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
             if (d->segment_definitions[i].has_rotation)         PULSEQLIB_FREE(d->segment_definitions[i].has_rotation);
             if (d->segment_definitions[i].norot_flag)           PULSEQLIB_FREE(d->segment_definitions[i].norot_flag);
             if (d->segment_definitions[i].nopos_flag)           PULSEQLIB_FREE(d->segment_definitions[i].nopos_flag);
+            if (d->segment_definitions[i].timing.rf_anchors)    PULSEQLIB_FREE(d->segment_definitions[i].timing.rf_anchors);
+            if (d->segment_definitions[i].timing.adc_anchors)   PULSEQLIB_FREE(d->segment_definitions[i].timing.adc_anchors);
+            if (d->segment_definitions[i].timing.kzero_crossing_indices) PULSEQLIB_FREE(d->segment_definitions[i].timing.kzero_crossing_indices);
         }
         PULSEQLIB_FREE(d->segment_definitions);
         d->segment_definitions = NULL;
@@ -2414,6 +2426,9 @@ int pulseqlib__get_collection_descriptors(
         result = pulseqlib__find_segments_in_tr(&desc, diag, &raw->sequences[i]);
         if (PULSEQLIB_FAILED(diag->code)) goto fail;
 
+        result = pulseqlib__compute_segment_timing(&desc, diag);
+        if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
+
         /* apply offsets */
         if (seg_off > 0) {
             for (j = 0; j < desc.segment_table.num_prep_segments; ++j)
@@ -2469,7 +2484,7 @@ int pulseqlib_load(
     int cache_binary)
 {
     pulseqlib__seq_file_collection raw_coll;
-    int rc;
+    int rc, i;
 
     raw_coll.num_sequences = 0;
     raw_coll.sequences     = NULL;
@@ -2481,8 +2496,12 @@ int pulseqlib_load(
     pulseqlib_diagnostic_init(diag);
 
     /* Try cache */
-    if (cache_binary && pulseqlib__try_read_cache(collection, file_path))
+    if (cache_binary && pulseqlib__try_read_cache(collection, file_path)) {
+        /* Segment timing is derived, not cached -- compute now */
+        for (i = 0; i < collection->num_subsequences; ++i)
+            pulseqlib__compute_segment_timing(&collection->descriptors[i], NULL);
         return PULSEQLIB_OK;
+    }
 
     /* Full parse */
     rc = pulseqlib__read_seq_collection(&raw_coll, file_path, opts);

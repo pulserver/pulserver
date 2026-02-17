@@ -257,6 +257,22 @@ int pulseqlib_block_has_nopos(
     const pulseqlib_sequence_descriptor_collection* coll,
     int seg_idx, int blk_idx);
 
+/* Segment timing queries */
+int pulseqlib_get_segment_num_rf_anchors(
+    const pulseqlib_sequence_descriptor_collection* coll, int seg_idx);
+int pulseqlib_get_segment_rf_anchor(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int seg_idx, int rf_idx,
+    pulseqlib_segment_rf_anchor* out);
+int pulseqlib_get_segment_num_adc_anchors(
+    const pulseqlib_sequence_descriptor_collection* coll, int seg_idx);
+int pulseqlib_get_segment_adc_anchor(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int seg_idx, int adc_idx,
+    pulseqlib_segment_adc_anchor* out);
+int pulseqlib_get_segment_num_kzero_crossings(
+    const pulseqlib_sequence_descriptor_collection* coll, int seg_idx);
+
 /* ------------------------------------------------------------------ */
 /*  Block cursor / iterator                                           */
 /* ------------------------------------------------------------------ */

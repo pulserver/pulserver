@@ -202,13 +202,14 @@ typedef struct pulseqlib_grad_definition {
     int num_shots;
     int shot_shape_ids[PULSEQLIB_MAX_GRAD_SHOTS];
     float max_amplitude[PULSEQLIB_MAX_GRAD_SHOTS];
+    float min_amplitude[PULSEQLIB_MAX_GRAD_SHOTS];
     float slew_rate[PULSEQLIB_MAX_GRAD_SHOTS];
     float energy[PULSEQLIB_MAX_GRAD_SHOTS];
     float first_value[PULSEQLIB_MAX_GRAD_SHOTS];
     float last_value[PULSEQLIB_MAX_GRAD_SHOTS];
 } pulseqlib_grad_definition;
 
-#define PULSEQLIB_GRAD_DEFINITION_INIT {0, 0, 0, 0, 0, 0, 0, 1, {0}, {0.0f}, {0.0f}, {0.0f}, {0.0f}}
+#define PULSEQLIB_GRAD_DEFINITION_INIT {0, 0, 0, 0, 0, 0, 0, 1, {0}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}}
 
 typedef struct pulseqlib_grad_table_element {
     int id;
@@ -313,6 +314,44 @@ typedef struct pulseqlib_tr_descriptor {
 #define PULSEQLIB_TR_DESCRIPTOR_INIT {0, 0, 0, 0, 0, 0, 0, 0, 0.0f}
 
 /* ================================================================== */
+/*  Segment timing anchors                                            */
+/* ================================================================== */
+
+/* RF event anchor relative to segment start (us) */
+typedef struct pulseqlib_segment_rf_anchor {
+    int   block_offset;         /* block index within segment */
+    float start_us;             /* RF delay relative to segment start */
+    float end_us;               /* RF end relative to segment start */
+    float isocenter_us;         /* RF isodelay point relative to segment start */
+    float base_amplitude;       /* amplitude of first TR appearance */
+} pulseqlib_segment_rf_anchor;
+
+#define PULSEQLIB_SEGMENT_RF_ANCHOR_INIT {0, 0.0f, 0.0f, 0.0f, 0.0f}
+
+/* ADC event anchor relative to segment start (us) */
+typedef struct pulseqlib_segment_adc_anchor {
+    int   block_offset;         /* block index within segment */
+    float start_us;             /* ADC delay relative to segment start */
+    float end_us;               /* ADC end relative to segment start */
+    int   kzero_index;          /* sample index of k=0 in readout */
+    float kzero_us;             /* time of k=0 relative to segment start */
+} pulseqlib_segment_adc_anchor;
+
+#define PULSEQLIB_SEGMENT_ADC_ANCHOR_INIT {0, 0.0f, 0.0f, 0, 0.0f}
+
+/* Per-segment timing summary */
+typedef struct pulseqlib_segment_timing {
+    int num_rf_anchors;
+    pulseqlib_segment_rf_anchor* rf_anchors;
+    int num_adc_anchors;
+    pulseqlib_segment_adc_anchor* adc_anchors;
+    int num_kzero_crossings;            /* total across full TR */
+    int* kzero_crossing_indices;        /* sample indices into min-amp waveform */
+} pulseqlib_segment_timing;
+
+#define PULSEQLIB_SEGMENT_TIMING_INIT {0, NULL, 0, NULL, 0, NULL}
+
+/* ================================================================== */
 /*  TR segment                                                        */
 /* ================================================================== */
 typedef struct pulseqlib_tr_segment {
@@ -324,9 +363,10 @@ typedef struct pulseqlib_tr_segment {
     int* norot_flag;
     int* nopos_flag;
     int max_energy_start_block;
+    pulseqlib_segment_timing timing;
 } pulseqlib_tr_segment;
 
-#define PULSEQLIB_TR_SEGMENT_INIT {0, 0, NULL, NULL, NULL, NULL, NULL, 0}
+#define PULSEQLIB_TR_SEGMENT_INIT {0, 0, NULL, NULL, NULL, NULL, NULL, 0, PULSEQLIB_SEGMENT_TIMING_INIT}
 
 /* ================================================================== */
 /*  Segment table result                                              */

@@ -418,6 +418,9 @@ int   pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseq
 int   pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib__seq_file* seq);
 int   pulseqlib__get_collection_descriptors(pulseqlib_sequence_descriptor_collection* desc_coll, pulseqlib_diagnostic* diag, const pulseqlib__seq_file_collection* coll);
 
+/* --- pulseqlib_safety.c --- */
+int   pulseqlib__compute_segment_timing(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);
+
 /* --- pulseqlib_cache.c --- */
 int   pulseqlib__try_read_cache(pulseqlib_sequence_descriptor_collection* coll, const char* seq_path);
 int   pulseqlib__write_cache(const pulseqlib_sequence_descriptor_collection* seq_coll, const char* seq_path);

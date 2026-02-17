@@ -503,13 +503,18 @@ static int interpolate_to_uniform(
 /*  Gradient waveforms for an arbitrary block range                   */
 /* ================================================================== */
 
+/*  amplitude_mode:
+ *    0 = actual block amplitude (single-TR)
+ *    1 = position-max (worst-case safety)
+ *    2 = definition-min (best-case k-space)
+ */
 static int get_gradient_waveforms_range(
     const pulseqlib_sequence_descriptor* desc,
     pulseqlib_tr_gradient_waveforms* waveforms,
     pulseqlib_diagnostic* diag,
     int block_start,
     int block_count,
-    int use_position_max,
+    int amplitude_mode,
     const int* tr_group_labels,
     int target_group)
 {
@@ -566,7 +571,7 @@ static int get_gradient_waveforms_range(
     }
 
     /* position-max amplitudes (only for worst-case main-TR mode) */
-    if (use_position_max) {
+    if (amplitude_mode == 1) {
         pos_max_gx = (float*)PULSEQLIB_ALLOC(
             (size_t)block_count * PULSEQLIB_MAX_GRAD_SHOTS * sizeof(float));
         pos_max_gy = (float*)PULSEQLIB_ALLOC(
@@ -661,7 +666,7 @@ static int get_gradient_waveforms_range(
         gz_def = (gz_tab && gz_tab->id >= 0 && gz_tab->id < desc->num_unique_grads)
                  ? &desc->grad_definitions[gz_tab->id] : NULL;
 
-        if (use_position_max) {
+        if (amplitude_mode == 1) {
             idx_gx += fill_grad_waveform_for_block(desc,
                 time_gx, waveforms->waveform_gx, idx_gx,
                 gx_def, gx_tab, t0,
@@ -674,6 +679,34 @@ static int get_gradient_waveforms_range(
                 time_gz, waveforms->waveform_gz, idx_gz,
                 gz_def, gz_tab, t0,
                 &pos_max_gz[n * PULSEQLIB_MAX_GRAD_SHOTS], block_dur_us);
+        } else if (amplitude_mode == 2) {
+            /* definition-min mode: use gd->min_amplitude */
+            for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
+            if (gx_def) {
+                for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
+                    actual_amp[k] = gx_def->min_amplitude[k];
+            }
+            idx_gx += fill_grad_waveform_for_block(desc,
+                time_gx, waveforms->waveform_gx, idx_gx,
+                gx_def, gx_tab, t0, actual_amp, block_dur_us);
+
+            for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
+            if (gy_def) {
+                for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
+                    actual_amp[k] = gy_def->min_amplitude[k];
+            }
+            idx_gy += fill_grad_waveform_for_block(desc,
+                time_gy, waveforms->waveform_gy, idx_gy,
+                gy_def, gy_tab, t0, actual_amp, block_dur_us);
+
+            for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
+            if (gz_def) {
+                for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
+                    actual_amp[k] = gz_def->min_amplitude[k];
+            }
+            idx_gz += fill_grad_waveform_for_block(desc,
+                time_gz, waveforms->waveform_gz, idx_gz,
+                gz_def, gz_tab, t0, actual_amp, block_dur_us);
         } else {
             for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
             if (gx_tab) {
@@ -785,6 +818,410 @@ int pulseqlib_get_tr_gradient_waveforms(
         desc->tr_descriptor.num_prep_blocks,
         desc->tr_descriptor.tr_size,
         1, NULL, 0);
+}
+
+/* ================================================================== */
+/*  Min-amplitude TR gradient waveforms (for k-space trajectory)      */
+/* ================================================================== */
+
+int pulseqlib_get_tr_gradient_waveforms_min(
+    const pulseqlib_sequence_descriptor* desc,
+    pulseqlib_tr_gradient_waveforms* waveforms,
+    pulseqlib_diagnostic* diag)
+{
+    if (!desc) {
+        if (diag) { pulseqlib_diagnostic_init(diag); diag->code = PULSEQLIB_ERR_NULL_POINTER; }
+        return PULSEQLIB_ERR_NULL_POINTER;
+    }
+    return get_gradient_waveforms_range(desc, waveforms, diag,
+        desc->tr_descriptor.num_prep_blocks,
+        desc->tr_descriptor.tr_size,
+        2, NULL, 0);
+}
+
+/* ================================================================== */
+/*  K-space trajectory from uniform gradient waveforms                */
+/* ================================================================== */
+
+/*
+ * Computes k-space trajectory by cumulative trapezoidal integration of
+ * gradient waveforms (already on uniform raster).
+ *
+ * Output arrays (kx, ky, kz, krss) must be caller-allocated with at
+ * least waveforms->num_samples elements.  dt_us is returned for
+ * convenience.
+ */
+static int compute_kspace_trajectory(
+    const pulseqlib_tr_gradient_waveforms* waveforms,
+    float* kx, float* ky, float* kz, float* krss,
+    float* dt_us)
+{
+    int i, n;
+    float dt_s;
+    float cum_x, cum_y, cum_z;
+    float v;
+
+    if (!waveforms || !waveforms->time || waveforms->num_samples < 2)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    n = waveforms->num_samples;
+    *dt_us = waveforms->time[1] - waveforms->time[0];
+    dt_s   = (*dt_us) * 1e-6f;
+
+    /* cumulative trapezoidal integration */
+    cum_x = 0.0f; cum_y = 0.0f; cum_z = 0.0f;
+    kx[0] = 0.0f; ky[0] = 0.0f; kz[0] = 0.0f;
+
+    for (i = 1; i < n; ++i) {
+        cum_x += 0.5f * (waveforms->waveform_gx[i - 1] + waveforms->waveform_gx[i]) * dt_s;
+        cum_y += 0.5f * (waveforms->waveform_gy[i - 1] + waveforms->waveform_gy[i]) * dt_s;
+        cum_z += 0.5f * (waveforms->waveform_gz[i - 1] + waveforms->waveform_gz[i]) * dt_s;
+        kx[i] = cum_x;
+        ky[i] = cum_y;
+        kz[i] = cum_z;
+    }
+
+    /* RSS magnitude */
+    for (i = 0; i < n; ++i) {
+        v = kx[i] * kx[i] + ky[i] * ky[i] + kz[i] * kz[i];
+        krss[i] = (v > 0.0f) ? (float)sqrt((double)v) : 0.0f;
+    }
+
+    return PULSEQLIB_OK;
+}
+
+/* ================================================================== */
+/*  Find k-space zero crossings (k=0 passages)                       */
+/* ================================================================== */
+
+/*
+ * A zero crossing is a local minimum of krss that is <= threshold.
+ * Floor convention: for symmetric plateaus the leftmost sample is kept.
+ *
+ * Two-pass protocol:
+ *   find_kspace_zero_crossings(krss, n, thr, NULL, &cnt, 1);
+ *   indices = PULSEQLIB_ALLOC(cnt * sizeof(int));
+ *   find_kspace_zero_crossings(krss, n, thr, indices, &cnt, 0);
+ */
+static int find_kspace_zero_crossings(
+    const float* krss, int n, float threshold,
+    int* zero_indices, int* out_count, int count_only)
+{
+    int i, cnt;
+    float prev, curr, next;
+
+    if (!krss || n < 2 || !out_count)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    cnt = 0;
+
+    for (i = 0; i < n; ++i) {
+        curr = krss[i];
+        if (curr > threshold) continue;
+
+        prev = (i > 0)     ? krss[i - 1] : curr + 1.0f;
+        next = (i < n - 1) ? krss[i + 1] : curr + 1.0f;
+
+        /* curr <= both neighbors => local minimum */
+        if (curr <= prev && curr <= next) {
+            /* plateau dedup: skip if left neighbor equals curr and
+             * was itself a local min (already recorded) */
+            if (i > 0 && krss[i - 1] == curr) {
+                float pprev = (i > 1) ? krss[i - 2] : curr + 1.0f;
+                if (krss[i - 1] <= pprev)
+                    continue;
+            }
+            if (!count_only && zero_indices)
+                zero_indices[cnt] = i;
+            cnt++;
+        }
+    }
+
+    *out_count = cnt;
+    return PULSEQLIB_OK;
+}
+
+/* ================================================================== */
+/*  Compute segment timing anchors                                    */
+/* ================================================================== */
+
+int pulseqlib__compute_segment_timing(
+    pulseqlib_sequence_descriptor* desc,
+    pulseqlib_diagnostic* diag)
+{
+    pulseqlib_diagnostic local_diag;
+    int seg_idx, blk, block_idx, result;
+    const pulseqlib_tr_segment* seg;
+    const pulseqlib_block_table_element* bte;
+    const pulseqlib_block_definition* bdef;
+    int rf_count, adc_count;
+    float t_accum, block_dur_us;
+    int rf_raw, adc_raw;
+    const pulseqlib_rf_definition* rdef;
+    const pulseqlib_adc_definition* adef;
+    const pulseqlib_rf_table_element* rte;
+    pulseqlib_segment_rf_anchor* rf_arr;
+    pulseqlib_segment_adc_anchor* adc_arr;
+    int rf_def_id, adc_def_id;
+    float adc_dur_us;
+
+    /* k-space trajectory variables */
+    pulseqlib_tr_gradient_waveforms min_waveforms;
+    float *kx, *ky, *kz, *krss;
+    int *kzero_indices;
+    int num_kzero, n_samples;
+    float dt_us, k_threshold;
+
+    /* ADC-to-kzero mapping variables */
+    int a, s, closest_idx, zi, kz_sample;
+    float seg_time_offset, adc_mid_us, best_dist, dist;
+    float kzero_time_us, kzero_in_adc;
+    int pos_in_tr, num_prep;
+    int tr_size;
+
+    int has_kspace;
+
+    if (!diag) { pulseqlib_diagnostic_init(&local_diag); diag = &local_diag; }
+
+    memset(&min_waveforms, 0, sizeof(min_waveforms));
+    kx = NULL; ky = NULL; kz = NULL; krss = NULL;
+    kzero_indices = NULL;
+    num_kzero = 0;
+    n_samples = 0;
+    dt_us = 0.0f;
+    has_kspace = 0;
+
+    if (!desc || desc->num_unique_segments <= 0)
+        return PULSEQLIB_OK;
+
+    num_prep = desc->tr_descriptor.num_prep_blocks;
+    tr_size  = desc->tr_descriptor.tr_size;
+
+    /* ---- Step A: build min-amplitude k-space trajectory ---- */
+    if (tr_size > 0) {
+        result = get_gradient_waveforms_range(desc, &min_waveforms, diag,
+            num_prep, tr_size, 2, NULL, 0);
+
+        if (!PULSEQLIB_FAILED(result) && min_waveforms.num_samples >= 2) {
+            n_samples = min_waveforms.num_samples;
+            kx   = (float*)PULSEQLIB_ALLOC((size_t)n_samples * sizeof(float));
+            ky   = (float*)PULSEQLIB_ALLOC((size_t)n_samples * sizeof(float));
+            kz   = (float*)PULSEQLIB_ALLOC((size_t)n_samples * sizeof(float));
+            krss = (float*)PULSEQLIB_ALLOC((size_t)n_samples * sizeof(float));
+            if (kx && ky && kz && krss) {
+                result = compute_kspace_trajectory(&min_waveforms,
+                    kx, ky, kz, krss, &dt_us);
+                if (!PULSEQLIB_FAILED(result)) {
+                    /* threshold = 1% of max |k| */
+                    k_threshold = 0.0f;
+                    for (a = 0; a < n_samples; ++a)
+                        if (krss[a] > k_threshold) k_threshold = krss[a];
+                    k_threshold *= 0.01f;
+                    if (k_threshold < 1e-10f) k_threshold = 1e-10f;
+
+                    find_kspace_zero_crossings(krss, n_samples, k_threshold,
+                                               NULL, &num_kzero, 1);
+                    if (num_kzero > 0) {
+                        kzero_indices = (int*)PULSEQLIB_ALLOC(
+                            (size_t)num_kzero * sizeof(int));
+                        if (kzero_indices) {
+                            find_kspace_zero_crossings(krss, n_samples,
+                                k_threshold, kzero_indices, &num_kzero, 0);
+                            has_kspace = 1;
+                        }
+                    } else {
+                        has_kspace = 1;  /* valid trajectory, just no crossings */
+                    }
+                }
+            }
+        }
+    }
+
+    /* ---- Step B: for each segment, collect RF and ADC anchors ---- */
+    for (seg_idx = 0; seg_idx < desc->num_unique_segments; ++seg_idx) {
+        seg = &desc->segment_definitions[seg_idx];
+
+        /* count RF and ADC events */
+        rf_count  = 0;
+        adc_count = 0;
+        for (blk = 0; blk < seg->num_blocks; ++blk) {
+            block_idx = seg->start_block + blk;
+            if (block_idx < 0 || block_idx >= desc->num_blocks) continue;
+            bte = &desc->block_table[block_idx];
+            if (bte->rf_id >= 0)  rf_count++;
+            if (bte->adc_id >= 0) adc_count++;
+        }
+
+        /* allocate anchor arrays */
+        rf_arr  = NULL;
+        adc_arr = NULL;
+        if (rf_count > 0) {
+            rf_arr = (pulseqlib_segment_rf_anchor*)PULSEQLIB_ALLOC(
+                (size_t)rf_count * sizeof(pulseqlib_segment_rf_anchor));
+            if (!rf_arr) goto timing_fail;
+        }
+        if (adc_count > 0) {
+            adc_arr = (pulseqlib_segment_adc_anchor*)PULSEQLIB_ALLOC(
+                (size_t)adc_count * sizeof(pulseqlib_segment_adc_anchor));
+            if (!adc_arr) {
+                if (rf_arr) PULSEQLIB_FREE(rf_arr);
+                goto timing_fail;
+            }
+        }
+
+        /* compute segment start time within TR (for kzero mapping) */
+        seg_time_offset = 0.0f;
+        if (has_kspace && seg->start_block >= num_prep &&
+            seg->start_block < num_prep + tr_size) {
+            pos_in_tr = seg->start_block - num_prep;
+            for (s = 0; s < pos_in_tr; ++s) {
+                bte = &desc->block_table[num_prep + s];
+                bdef = &desc->block_definitions[bte->id];
+                seg_time_offset += (bte->duration_us >= 0)
+                    ? (float)bte->duration_us
+                    : (float)bdef->duration_us;
+            }
+        }
+
+        /* fill anchors */
+        rf_count  = 0;
+        adc_count = 0;
+        t_accum   = 0.0f;
+
+        for (blk = 0; blk < seg->num_blocks; ++blk) {
+            block_idx = seg->start_block + blk;
+            if (block_idx < 0 || block_idx >= desc->num_blocks) continue;
+            bte  = &desc->block_table[block_idx];
+            bdef = &desc->block_definitions[bte->id];
+            block_dur_us = (bte->duration_us >= 0)
+                ? (float)bte->duration_us
+                : (float)bdef->duration_us;
+
+            /* RF anchor */
+            rf_raw = bte->rf_id;
+            if (rf_raw >= 0 && rf_raw < desc->rf_table_size) {
+                rte = &desc->rf_table[rf_raw];
+                rf_def_id = rte->id;
+                if (rf_def_id >= 0 && rf_def_id < desc->num_unique_rfs) {
+                    rdef = &desc->rf_definitions[rf_def_id];
+                    rf_arr[rf_count].block_offset = blk;
+                    rf_arr[rf_count].start_us     = t_accum + (float)rdef->delay;
+#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
+                    rf_arr[rf_count].end_us        = t_accum + (float)rdef->delay +
+                                                     rdef->stats.duration_us;
+                    rf_arr[rf_count].isocenter_us   = t_accum + (float)rdef->delay +
+                                                      (float)rdef->stats.isodelay_us;
+#else
+                    rf_arr[rf_count].end_us         = t_accum + block_dur_us;
+                    rf_arr[rf_count].isocenter_us    = t_accum + (float)rdef->delay;
+#endif
+                    rf_arr[rf_count].base_amplitude = rte->amplitude;
+                    rf_count++;
+                }
+            }
+
+            /* ADC anchor */
+            adc_raw = bte->adc_id;
+            if (adc_raw >= 0 && adc_raw < desc->adc_table_size) {
+                adc_def_id = desc->adc_table[adc_raw].id;
+                if (adc_def_id >= 0 && adc_def_id < desc->num_unique_adcs) {
+                    adef = &desc->adc_definitions[adc_def_id];
+                    adc_dur_us = (float)adef->num_samples *
+                                 (float)adef->dwell_time * 1e-3f;
+
+                    adc_arr[adc_count].block_offset = blk;
+                    adc_arr[adc_count].start_us = t_accum + (float)adef->delay;
+                    adc_arr[adc_count].end_us   = t_accum + (float)adef->delay +
+                                                  adc_dur_us;
+
+                    /* default: N/2 */
+                    adc_arr[adc_count].kzero_index = adef->num_samples / 2;
+                    adc_arr[adc_count].kzero_us    =
+                        adc_arr[adc_count].start_us +
+                        (float)(adef->num_samples / 2) *
+                        (float)adef->dwell_time * 1e-3f;
+
+                    /* refine kzero via k-space trajectory */
+                    if (has_kspace && num_kzero > 0 &&
+                        seg->start_block >= num_prep &&
+                        seg->start_block < num_prep + tr_size) {
+
+                        adc_mid_us = seg_time_offset +
+                            adc_arr[adc_count].start_us +
+                            0.5f * adc_dur_us;
+
+                        /* find closest k=0 crossing */
+                        closest_idx = 0;
+                        best_dist   = 1e30f;
+                        for (a = 0; a < num_kzero; ++a) {
+                            zi = kzero_indices[a];
+                            dist = (float)zi * dt_us +
+                                   min_waveforms.time[0] - adc_mid_us;
+                            if (dist < 0.0f) dist = -dist;
+                            if (dist < best_dist) {
+                                best_dist   = dist;
+                                closest_idx = a;
+                            }
+                        }
+
+                        /* convert to ADC sample index */
+                        kzero_time_us = (float)kzero_indices[closest_idx] *
+                                        dt_us + min_waveforms.time[0];
+                        kzero_in_adc  = kzero_time_us -
+                            (seg_time_offset + adc_arr[adc_count].start_us);
+                        kz_sample = (int)(kzero_in_adc /
+                            ((float)adef->dwell_time * 1e-3f));
+                        if (kz_sample < 0) kz_sample = 0;
+                        if (kz_sample >= adef->num_samples)
+                            kz_sample = adef->num_samples - 1;
+                        adc_arr[adc_count].kzero_index = kz_sample;
+                        adc_arr[adc_count].kzero_us    =
+                            kzero_time_us - seg_time_offset;
+                    }
+
+                    adc_count++;
+                }
+            }
+
+            t_accum += block_dur_us;
+        }
+
+        /* store timing */
+        ((pulseqlib_tr_segment*)seg)->timing.num_rf_anchors  = rf_count;
+        ((pulseqlib_tr_segment*)seg)->timing.rf_anchors      = rf_arr;
+        ((pulseqlib_tr_segment*)seg)->timing.num_adc_anchors = adc_count;
+        ((pulseqlib_tr_segment*)seg)->timing.adc_anchors     = adc_arr;
+        ((pulseqlib_tr_segment*)seg)->timing.num_kzero_crossings = num_kzero;
+        ((pulseqlib_tr_segment*)seg)->timing.kzero_crossing_indices = NULL;
+
+        if (num_kzero > 0 && kzero_indices) {
+            int* copy = (int*)PULSEQLIB_ALLOC((size_t)num_kzero * sizeof(int));
+            if (copy) {
+                int ci;
+                for (ci = 0; ci < num_kzero; ++ci) copy[ci] = kzero_indices[ci];
+                ((pulseqlib_tr_segment*)seg)->timing.kzero_crossing_indices = copy;
+            }
+        }
+    }
+
+    /* cleanup */
+    if (kx)   PULSEQLIB_FREE(kx);
+    if (ky)   PULSEQLIB_FREE(ky);
+    if (kz)   PULSEQLIB_FREE(kz);
+    if (krss) PULSEQLIB_FREE(krss);
+    if (kzero_indices) PULSEQLIB_FREE(kzero_indices);
+    pulseqlib_tr_gradient_waveforms_free(&min_waveforms);
+
+    return PULSEQLIB_OK;
+
+timing_fail:
+    if (kx)   PULSEQLIB_FREE(kx);
+    if (ky)   PULSEQLIB_FREE(ky);
+    if (kz)   PULSEQLIB_FREE(kz);
+    if (krss) PULSEQLIB_FREE(krss);
+    if (kzero_indices) PULSEQLIB_FREE(kzero_indices);
+    pulseqlib_tr_gradient_waveforms_free(&min_waveforms);
+    return PULSEQLIB_ERR_ALLOC_FAILED;
 }
 
 /* ================================================================== */

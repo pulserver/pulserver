@@ -289,6 +289,88 @@ int pulseqlib_get_segment_num_blocks(
 }
 
 /* ================================================================== */
+/*  Segment timing queries                                            */
+/* ================================================================== */
+
+int pulseqlib_get_segment_num_rf_anchors(
+    const pulseqlib_sequence_descriptor_collection* coll, int seg_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg;
+
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return 0;
+
+    return desc->segment_definitions[local_seg].timing.num_rf_anchors;
+}
+
+int pulseqlib_get_segment_rf_anchor(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int seg_idx, int rf_idx,
+    pulseqlib_segment_rf_anchor* out)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg;
+    const pulseqlib_segment_timing* t;
+
+    if (!out) return PULSEQLIB_ERR_NULL_POINTER;
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    t = &desc->segment_definitions[local_seg].timing;
+    if (rf_idx < 0 || rf_idx >= t->num_rf_anchors)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    *out = t->rf_anchors[rf_idx];
+    return PULSEQLIB_OK;
+}
+
+int pulseqlib_get_segment_num_adc_anchors(
+    const pulseqlib_sequence_descriptor_collection* coll, int seg_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg;
+
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return 0;
+
+    return desc->segment_definitions[local_seg].timing.num_adc_anchors;
+}
+
+int pulseqlib_get_segment_adc_anchor(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int seg_idx, int adc_idx,
+    pulseqlib_segment_adc_anchor* out)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg;
+    const pulseqlib_segment_timing* t;
+
+    if (!out) return PULSEQLIB_ERR_NULL_POINTER;
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    t = &desc->segment_definitions[local_seg].timing;
+    if (adc_idx < 0 || adc_idx >= t->num_adc_anchors)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    *out = t->adc_anchors[adc_idx];
+    return PULSEQLIB_OK;
+}
+
+int pulseqlib_get_segment_num_kzero_crossings(
+    const pulseqlib_sequence_descriptor_collection* coll, int seg_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg;
+
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return 0;
+
+    return desc->segment_definitions[local_seg].timing.num_kzero_crossings;
+}
+
+/* ================================================================== */
 /*  Block-level queries                                               */
 /* ================================================================== */
 
