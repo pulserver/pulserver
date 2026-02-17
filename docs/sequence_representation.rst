@@ -53,12 +53,63 @@ Identical tuples share one ``block_definition``.
              ↓ deduplication
    Block definitions:  {B0, B1, B2}  —  3 unique out of 5
 
+Each definition ID references the **timing skeleton** (shape) of an
+event, separated from the per-instance amplitude/phase that lives
+in the table:
+
+.. code-block:: text
+
+   grad_definition (timing skeleton):
+     type (trap / arbitrary), delay,
+     rise / flat / fall  (trapezoid)  OR  shape_id + num_samples (arb),
+     per-shot stats:  max_amplitude, min_amplitude, slew_rate,
+                      energy, first_value, last_value
+
+   rf_definition:
+     mag_shape_id, phase_shape_id, time_shape_id, delay
+     stats:  flip_angle, bandwidth, abswidth, effwidth,
+             dtycyc, maxpw, duration, isodelay
+
+   adc_definition:
+     num_samples, dwell_time, delay
+
+   block_definition:
+     duration_us, gx_id, gy_id, gz_id, rf_id   (→ definition IDs)
+
+- All waveform-derived parameters (``first_value``, ``last_value``,
+  ``slew_rate``, ``bandwidth``, ``isodelay``, etc.) are **parsed
+  directly from the waveforms** at definition time — no external
+  metadata required.
+
 - Gradient stats (slew rate, max/min amplitude) computed **once
   per unique gradient definition**, not per block instance.
 
-**2. Segments** — Contiguous groups of blocks that share the same
-timing skeleton.  Identified by walking the TR and splitting at
-RF / ADC boundaries.
+**2. Segments** — Contiguous groups of blocks forming playable
+units.  Identified by walking the TR with a state machine:
+
+.. code-block:: text
+
+   Segment boundary rule:
+   ─────────────────────
+   A split candidate is a block boundary where all gradient axes
+   have zero amplitude on both sides (|last_value| ≈ 0 AND
+   |first_value| ≈ 0, within max_slew × grad_raster tolerance).
+
+   State machine:
+   1. SEEKING_FIRST_ADC:  record last zero-gradient candidate
+      before each RF.  When the first ADC is found, split at
+      that candidate (if any)  →  isolates pre-ADC segment.
+
+   2. SEEKING_BOUNDARY:  after the first ADC, record each new
+      zero-gradient candidate.  On the next RF, split at the
+      most recent candidate  →  isolates each RF–ADC pair.
+
+   3. OPTIMIZED_MODE:  if no zero-gradient candidate exists
+      between an ADC and the next RF, stop splitting
+      (remaining blocks form one segment).
+
+   In summary: boundaries are placed at the last zero-gradient
+   gap before an RF, after a preceding RF–ADC pair.
 
 **3. Unique TR Patterns** — For acoustic / PNS checks, TRs that
 differ only in the shot index of their gradients are grouped.
