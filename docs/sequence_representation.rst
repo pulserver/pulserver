@@ -28,9 +28,6 @@ Multiple ``.seq`` files are concatenated into a **linked-list collection**:
 - A **block cursor** walks the collection in order, transparently
   crossing subsequence boundaries.
 
-- Each subsequence has its own ``grad_raster_time`` — no global
-  constraint.
-
 
 ----
 
@@ -156,8 +153,7 @@ Each subsequence can have optional **prep** and **cooldown** blocks:
   ``degenerate = 1``.  No special handling needed — they are just
   additional TR instances.
 
-- **Non-degenerate prep/cooldown**: different structure (e.g., fat-sat
-  or driven-equilibrium).  Checked separately for acoustic / PNS
+- **Non-degenerate prep/cooldown**: different structure (e.g., driven-equilibrium or gradients ramp-down).  Checked separately for acoustic / PNS
   as single-occurrence waveforms (``num_trs = 1``).
 
 - **RF periodicity** is verified over the "pure main" TRs —
