@@ -32,10 +32,10 @@ gradient waveform for each unique TR pattern.
 ----
 
 
-Scale 1 — Sliding Window STFT
+Scale 1 — Sliding Window Setup
 -------------------------------
 
-**Setup** — ``acoustic_support_init``:
+**FFT configuration** — ``acoustic_support_init``:
 
 .. code-block:: text
 
@@ -51,14 +51,20 @@ Scale 1 — Sliding Window STFT
 
 .. code-block:: text
 
-   For each window position:
    1. Extract nwin samples from waveform
    2. Apply cosine window (Hann-like):  w[i] = 1 − cos(2π·i / nwin)
    3. Zero-pad to nfft
    4. Real FFT → complex spectrum
    5. Magnitude:  |X[k]| = √(re² + im²)
 
-**Sliding window loop** — ``compute_sliding_window_spectra``:
+
+----
+
+
+Scale 1 — Sliding Window Loop
+------------------------------
+
+``compute_sliding_window_spectra``:
 
 .. code-block:: text
 

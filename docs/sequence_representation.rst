@@ -35,12 +35,10 @@ Multiple ``.seq`` files are concatenated into a **linked-list collection**:
 ----
 
 
-Unique Block / Segment / TR Representation
-------------------------------------------
+Unique Blocks & Event Definitions
+-----------------------------------
 
-Three levels of deduplication compress the representation:
-
-**1. Unique Blocks** — Each block is a tuple
+Each block is a tuple
 ``(gx_def, gy_def, gz_def, rf_def, adc_def, ext_def, duration)``.
 Identical tuples share one ``block_definition``.
 
@@ -81,16 +79,23 @@ in the table:
   directly from the waveforms** at definition time — no external
   metadata required.
 
-- Gradient stats (slew rate, max/min amplitude) computed **once
-  per unique gradient definition**, not per block instance.
+- Gradient stats computed **once per unique gradient definition**,
+  not per block instance.
 
-**2. Segments** — Contiguous groups of blocks forming playable
-units.  Identified by walking the TR with a state machine:
+
+----
+
+
+Segments
+--------
+
+Contiguous groups of blocks forming playable units.
+Identified by walking the TR with a state machine:
 
 .. code-block:: text
 
-   Segment boundary rule:
-   ─────────────────────
+   Segment boundary criterion:
+   ───────────────────────────
    A split candidate is a block boundary where all gradient axes
    have zero amplitude on both sides (|last_value| ≈ 0 AND
    |first_value| ≈ 0, within max_slew × grad_raster tolerance).
@@ -111,10 +116,16 @@ units.  Identified by walking the TR with a state machine:
    In summary: boundaries are placed at the last zero-gradient
    gap before an RF, after a preceding RF–ADC pair.
 
-**3. Unique TR Patterns** — For acoustic / PNS checks, TRs that
-differ only in the shot index of their gradients are grouped.
-A **fingerprint matrix** ``[tr_size × 3 axes]`` of shot indices
-is built, then deduplicated.
+
+----
+
+
+Unique TR Patterns
+-------------------
+
+For acoustic / PNS checks, TRs that differ only in the shot
+index of their gradients are grouped.  A **fingerprint matrix**
+``[tr_size × 3 axes]`` of shot indices is built, then deduplicated.
 
 .. code-block:: text
 

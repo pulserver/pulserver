@@ -94,11 +94,24 @@ shot indices per TR, deduplicates.  For each unique group:
 - Run acoustic check (sliding window + full-TR harmonic analysis)
 - Run PNS check (convolution with exponential kernel)
 
-**Worst-case waveform construction**:  for each block position
-and shot index, the maximum ``|amplitude|`` across all TRs in
-the group is found.  The **sign** of each block is preserved
-from the first TR instance — this ensures the waveform has a
-physically consistent polarity while using worst-case magnitude.
+.. code-block:: text
+
+   Result:  cost nearly independent of num_trs.
+   A 1000-TR sequence with 2 unique patterns costs the same
+   as a 10-TR sequence with 2 unique patterns.
+
+
+----
+
+
+Worst-Case Waveform Construction
+---------------------------------
+
+For each block position and shot index, the maximum
+``|amplitude|`` across all TRs in the group is found.  The
+**sign** of each block is preserved from the first TR instance —
+this ensures the waveform has a physically consistent polarity
+while using worst-case magnitude.
 
 .. code-block:: text
 
@@ -107,11 +120,8 @@ physically consistent polarity while using worst-case magnitude.
      sign    = sign(amplitude)   from the first TR
      waveform = sign × max_amp × normalized_shape
 
-.. code-block:: text
-
-   Result:  cost nearly independent of num_trs.
-   A 1000-TR sequence with 2 unique patterns costs the same
-   as a 10-TR sequence with 2 unique patterns.
+This construction is conservative: any real TR instance will have
+amplitudes ≤ the worst-case waveform at every block position.
 
 
 ----
