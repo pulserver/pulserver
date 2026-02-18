@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Define KISS_FFT_SHARED macro to properly export symbols
+/* Define KISS_FFT_SHARED macro to properly export symbols */
 #ifdef KISS_FFT_SHARED
 # ifdef _WIN32
 #  ifdef KISS_FFT_BUILD

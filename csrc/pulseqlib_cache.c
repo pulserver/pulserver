@@ -12,7 +12,7 @@
 /* ================================================================== */
 
 #define PULSEQLIB_CACHE_ENDIAN_MARKER  0x01020304
-#define PULSEQLIB_CACHE_VERSION        2
+#define PULSEQLIB_CACHE_VERSION        3
 
 /* ------ Byte-swap helpers ------ */
 
@@ -86,13 +86,8 @@ static int get_seq_file_sizes(const char* first_file_path,
                               const pulseqlib_opts* opts,
                               int* out_sizes, int max_files)
 {
-    int count, i;
     long sz;
-    pulseqlib__seq_file_collection raw;
 
-    /* We already know the chain is valid because pulseqlib_load will
-     * only call this after a successful parse.  For the read path
-     * (checking before parse), we just check the leading file. */
     (void)opts;
     (void)max_files;
 
@@ -109,9 +104,8 @@ static int get_seq_file_sizes(const char* first_file_path,
 
 static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
 {
-    int i, j, n;
+    int i, n;
     int ival;
-    float fval;
 
     /* scalars */
     if (!write4(f, &d->num_prep_blocks, 1)) return 0;
@@ -149,6 +143,7 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &d->block_table[i].nopos_flag, 1)) return 0;
         if (!write4(f, &d->block_table[i].pmc_flag, 1)) return 0;
         if (!write4(f, &d->block_table[i].nav_flag, 1)) return 0;
+        if (!write4(f, &d->block_table[i].freq_mod_id, 1)) return 0;
     }
 
     /* RF definitions */
@@ -229,6 +224,23 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &d->adc_table[i].phase_offset, 1)) return 0;
     }
 
+    /* freq_mod definitions */
+    if (!write4(f, &d->num_freq_mod_defs, 1)) return 0;
+    for (i = 0; i < d->num_freq_mod_defs; ++i) {
+        const pulseqlib_freq_mod_definition* fm = &d->freq_mod_definitions[i];
+        if (!write4(f, &fm->id, 1)) return 0;
+        if (!write4(f, &fm->num_samples, 1)) return 0;
+        if (!write4(f, &fm->raster_us, 1)) return 0;
+        if (!write4(f, &fm->duration_us, 1)) return 0;
+        if (fm->num_samples > 0) {
+            if (!write4(f, fm->waveform_gx, fm->num_samples)) return 0;
+            if (!write4(f, fm->waveform_gy, fm->num_samples)) return 0;
+            if (!write4(f, fm->waveform_gz, fm->num_samples)) return 0;
+        }
+        if (!write4(f, fm->ref_integral, 3)) return 0;
+        if (!write4(f, &fm->ref_time_us, 1)) return 0;
+    }
+
     /* rotations */
     if (!write4(f, &d->num_rotations, 1)) return 0;
     for (i = 0; i < d->num_rotations; ++i)
@@ -306,7 +318,7 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
     int i, n;
     int ival;
 
-    *d = (pulseqlib_sequence_descriptor)PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT;
+    memset(d, 0, sizeof(*d));
 
     /* scalars */
     if (!read4(f, &d->num_prep_blocks, 1)) return 0;
@@ -340,8 +352,8 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         (size_t)d->num_blocks * sizeof(pulseqlib_block_table_element));
     if (!d->block_table) return 0;
     for (i = 0; i < d->num_blocks; ++i) {
-        if (!read4(f, &d->block_table[i].id, 14)) return 0;
-        if (do_swap) swap4_array(&d->block_table[i].id, 14);
+        if (!read4(f, &d->block_table[i].id, 15)) return 0;
+        if (do_swap) swap4_array(&d->block_table[i].id, 15);
     }
 
     /* RF definitions */
@@ -442,6 +454,50 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
     for (i = 0; i < d->adc_table_size; ++i) {
         if (!read4(f, &d->adc_table[i].id, 3)) return 0;
         if (do_swap) swap4_array(&d->adc_table[i].id, 3);
+    }
+
+    /* freq_mod definitions */
+    if (!read4(f, &d->num_freq_mod_defs, 1)) return 0;
+    if (do_swap) swap4(&d->num_freq_mod_defs);
+    if (d->num_freq_mod_defs > 0) {
+        d->freq_mod_definitions = (pulseqlib_freq_mod_definition*)PULSEQLIB_ALLOC(
+            (size_t)d->num_freq_mod_defs * sizeof(pulseqlib_freq_mod_definition));
+        if (!d->freq_mod_definitions) return 0;
+        for (i = 0; i < d->num_freq_mod_defs; ++i) {
+            pulseqlib_freq_mod_definition* fm = &d->freq_mod_definitions[i];
+            memset(fm, 0, sizeof(*fm));
+            if (!read4(f, &fm->id, 1)) return 0;
+            if (!read4(f, &fm->num_samples, 1)) return 0;
+            if (!read4(f, &fm->raster_us, 1)) return 0;
+            if (!read4(f, &fm->duration_us, 1)) return 0;
+            if (do_swap) {
+                swap4(&fm->id);
+                swap4(&fm->num_samples);
+                swap4(&fm->raster_us);
+                swap4(&fm->duration_us);
+            }
+            n = fm->num_samples;
+            if (n > 0) {
+                fm->waveform_gx = (float*)PULSEQLIB_ALLOC((size_t)n * sizeof(float));
+                fm->waveform_gy = (float*)PULSEQLIB_ALLOC((size_t)n * sizeof(float));
+                fm->waveform_gz = (float*)PULSEQLIB_ALLOC((size_t)n * sizeof(float));
+                if (!fm->waveform_gx || !fm->waveform_gy || !fm->waveform_gz) return 0;
+                if (!read4(f, fm->waveform_gx, n)) return 0;
+                if (!read4(f, fm->waveform_gy, n)) return 0;
+                if (!read4(f, fm->waveform_gz, n)) return 0;
+                if (do_swap) {
+                    swap4_array(fm->waveform_gx, n);
+                    swap4_array(fm->waveform_gy, n);
+                    swap4_array(fm->waveform_gz, n);
+                }
+            }
+            if (!read4(f, fm->ref_integral, 3)) return 0;
+            if (!read4(f, &fm->ref_time_us, 1)) return 0;
+            if (do_swap) {
+                swap4_array(fm->ref_integral, 3);
+                swap4(&fm->ref_time_us);
+            }
+        }
     }
 
     /* rotations */
@@ -727,8 +783,55 @@ static int read_cache(const char* cache_path,
     }
 
     /* init cursor */
-    coll->block_cursor = (pulseqlib_block_cursor)PULSEQLIB_BLOCK_CURSOR_INIT;
+    memset(&coll->block_cursor, 0, sizeof(coll->block_cursor));
 
     fclose(f);
     return 1;
+}
+
+/* ================================================================== */
+/*  Public wrappers (called from pulseqlib_core.c)                    */
+/* ================================================================== */
+
+int pulseqlib__write_cache(const pulseqlib_sequence_descriptor_collection* coll,
+                           const char* seq_path)
+{
+    char* cache_path;
+    long sz;
+    int ok;
+
+    if (!coll || !seq_path) return 0;
+
+    /* suppress unused-function warning for reserved helper */
+    (void)get_seq_file_sizes;
+
+    cache_path = make_cache_path(seq_path);
+    if (!cache_path) return 0;
+
+    sz = get_file_size(seq_path);
+    if (sz < 0) { PULSEQLIB_FREE(cache_path); return 0; }
+
+    ok = write_cache(cache_path, coll, (int)sz);
+    PULSEQLIB_FREE(cache_path);
+    return ok;
+}
+
+int pulseqlib__try_read_cache(pulseqlib_sequence_descriptor_collection* coll,
+                              const char* seq_path)
+{
+    char* cache_path;
+    long sz;
+    int ok;
+
+    if (!coll || !seq_path) return 0;
+
+    cache_path = make_cache_path(seq_path);
+    if (!cache_path) return 0;
+
+    sz = get_file_size(seq_path);
+    if (sz < 0) { PULSEQLIB_FREE(cache_path); return 0; }
+
+    ok = read_cache(cache_path, coll, (int)sz);
+    PULSEQLIB_FREE(cache_path);
+    return ok;
 }

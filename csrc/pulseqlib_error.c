@@ -1,5 +1,7 @@
 /* pulseqlib_error.c -- error messages, hints, and lookup tables */
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "pulseqlib_internal.h"
@@ -84,6 +86,15 @@ void pulseqlib_diagnostic_init(pulseqlib_diagnostic* diag)
     diag->max_allowed_amplitude = 0.0f;
 }
 
+void pulseqlib__diag_printf(pulseqlib_diagnostic* diag, const char* fmt, ...)
+{
+    va_list ap;
+    (void)diag;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Error messages                                                     */
 /* ------------------------------------------------------------------ */
@@ -102,8 +113,6 @@ const char* pulseqlib_get_error_message(int code)
         case PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION: return "Invalid cooldown block position";
         case PULSEQLIB_ERR_INVALID_ONCE_FLAGS:        return "ONCE flags were found outside preparation/cooldown sections";
         case PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS:       return "Number of waveform shots exceeds maximum allowed";
-        case PULSEQLIB_ERR_SELEXC_GRAD_SCALING:       return "Selective excitation block has varying gradient amplitude across instances";
-        case PULSEQLIB_ERR_SELEXC_ROTATION:           return "Selective excitation block has rotation extension";
         case PULSEQLIB_ERR_TR_NO_BLOCKS:              return "Sequence contains no blocks";
         case PULSEQLIB_ERR_TR_NO_IMAGING_REGION:      return "No imaging region found (preparation + cooldown >= total blocks)";
         case PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN:    return "No periodic TR pattern found in imaging region";
@@ -162,11 +171,6 @@ const char* pulseqlib_get_error_hint(int code)
                    "ramp to/from zero within one gradient raster.";
         case PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS:
             return "The sequence contains a waveform with more than 16 distinct waveform shapes.";
-        case PULSEQLIB_ERR_SELEXC_GRAD_SCALING:
-            return "Blocks containing both RF and gradients require constant gradient "
-                   "amplitude across instances for off-isocenter frequency modulation.";
-        case PULSEQLIB_ERR_SELEXC_ROTATION:
-            return "Blocks containing both RF and gradients cannot have rotation extensions.";
         case PULSEQLIB_ERR_TR_PREP_TOO_LONG:
         case PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG:
             return "The preparation or cooldown section differs from the main TR pattern and is too long.";

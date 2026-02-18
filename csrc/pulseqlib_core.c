@@ -569,7 +569,7 @@ fail:
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
 
 static float compute_rf_bandwidth_fft(const float* rf_re, const float* rf_im,
-                                      kiss_fft_cfg cfg, int nn, float dw,
+                                      kiss_fft_cfg cfg, int nn,
                                       float cutoff, float duration,
                                       const float* w,
                                       float* work_re, float* work_im,
@@ -857,7 +857,7 @@ static int compute_rf_stats(
                                                   tt, nn,
                                                   time_centered, rf_re, rf_im, num_samples);
                 rd->stats.bandwidth = compute_rf_bandwidth_fft(
-                    rfs_re, rfs_im, fft_cfg, nn, dw, cutoff,
+                    rfs_re, rfs_im, fft_cfg, nn, cutoff,
                     duration * 1e-6f, w, work_re, work_im, fft_in, fft_out);
                 PULSEQLIB_FREE(time_centered); time_centered = NULL;
             }
@@ -1272,11 +1272,11 @@ fail:
 /*  TR detection helpers                                              */
 /* ================================================================== */
 
-static long long sum_durations_us(const int* dur, int start, int count)
+static double sum_durations_us(const int* dur, int start, int count)
 {
-    long long total = 0;
+    double total = 0.0;
     int i;
-    for (i = 0; i < count; ++i) total += (long long)dur[start + i];
+    for (i = 0; i < count; ++i) total += (double)dur[start + i];
     return total;
 }
 
@@ -2039,6 +2039,401 @@ fail:
 }
 
 /* ================================================================== */
+/*  Frequency modulation library                                      */
+/* ================================================================== */
+
+#define FREQ_MOD_DEF_COLS 5    /* (rf_def_id, adc_def_id, gx_def_id, gy_def_id, gz_def_id) */
+
+/*
+ * Build a freq-mod waveform for a single unique (rf, adc, gx, gy, gz) tuple.
+ *
+ * The waveform covers the active event region [active_start_us, active_end_us]
+ * within the block, interpolated to a uniform raster at grad_raster_us.
+ * Each axis is peak-normalized (as stored in shapes / grad definitions).
+ * Zero-padding is applied where the gradient doesn't cover the active region.
+ *
+ * ref_time_us is relative to active_start_us (e.g. isodelay for RF, kzero for ADC).
+ */
+static int build_freq_mod_for_block(
+    const pulseqlib_sequence_descriptor* desc,
+    int bdef_idx,
+    float active_start_us, float active_end_us,
+    float ref_time_us,
+    pulseqlib_freq_mod_definition* fmod)
+{
+    float grad_raster_us = desc->grad_raster_time_us;
+    const pulseqlib_block_definition* bdef = &desc->block_definitions[bdef_idx];
+    int grad_ids[3], axis;
+    const pulseqlib_grad_definition* gdef;
+    int shape_id, time_shape_id, num_samples, has_time_shape;
+    pulseqlib_shape_arbitrary decomp_wave, decomp_time;
+    float* raw_time = NULL;
+    float* raw_wave = NULL;
+    int raw_n, idx, i, j;
+    float delay_us, rise_us, flat_us, fall_us;
+    float active_dur_us;
+    float* uniform_t = NULL;
+
+    active_dur_us = active_end_us - active_start_us;
+    if (active_dur_us <= 0.0f || grad_raster_us <= 0.0f)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    grad_ids[0] = bdef->gx_id;
+    grad_ids[1] = bdef->gy_id;
+    grad_ids[2] = bdef->gz_id;
+
+    fmod->raster_us   = grad_raster_us;
+    fmod->duration_us = active_dur_us;
+    fmod->num_samples = (int)(active_dur_us / grad_raster_us) + 1;
+    if (fmod->num_samples < 2) fmod->num_samples = 2;
+
+    fmod->waveform_gx = (float*)PULSEQLIB_ALLOC((size_t)fmod->num_samples * sizeof(float));
+    fmod->waveform_gy = (float*)PULSEQLIB_ALLOC((size_t)fmod->num_samples * sizeof(float));
+    fmod->waveform_gz = (float*)PULSEQLIB_ALLOC((size_t)fmod->num_samples * sizeof(float));
+    if (!fmod->waveform_gx || !fmod->waveform_gy || !fmod->waveform_gz)
+        goto fmod_fail;
+
+    /* Oversized temp arrays for building non-uniform waveform */
+    raw_time = (float*)PULSEQLIB_ALLOC((size_t)(fmod->num_samples + 512) * sizeof(float));
+    raw_wave = (float*)PULSEQLIB_ALLOC((size_t)(fmod->num_samples + 512) * sizeof(float));
+    uniform_t = (float*)PULSEQLIB_ALLOC((size_t)fmod->num_samples * sizeof(float));
+    if (!raw_time || !raw_wave || !uniform_t)
+        goto fmod_fail;
+
+    /* Build uniform time axis for the active region [0, active_dur_us] */
+    for (i = 0; i < fmod->num_samples; ++i)
+        uniform_t[i] = (float)i * grad_raster_us;
+
+    for (axis = 0; axis < 3; ++axis) {
+        float* out_wave = (axis == 0) ? fmod->waveform_gx :
+                          (axis == 1) ? fmod->waveform_gy : fmod->waveform_gz;
+
+        if (grad_ids[axis] < 0 || grad_ids[axis] >= desc->num_unique_grads) {
+            /* No gradient on this axis: zero waveform */
+            for (i = 0; i < fmod->num_samples; ++i) out_wave[i] = 0.0f;
+            fmod->ref_integral[axis] = 0.0f;
+            continue;
+        }
+
+        gdef = &desc->grad_definitions[grad_ids[axis]];
+        decomp_wave.samples = NULL;
+        decomp_time.samples = NULL;
+        idx = 0;
+        delay_us = (float)gdef->delay;
+
+        if (gdef->type == 0) {
+            /* Trapezoid: build piecewise-linear in block coordinates,
+             * then shift to active-region coordinates */
+            rise_us = (float)gdef->rise_time_or_unused;
+            flat_us = (float)gdef->flat_time_or_unused;
+            fall_us = (float)gdef->fall_time_or_num_uncompressed_samples;
+
+            if (flat_us > 0.0f) {
+                raw_time[idx] = delay_us - active_start_us;
+                raw_wave[idx] = 0.0f; idx++;
+                raw_time[idx] = delay_us + rise_us - active_start_us;
+                raw_wave[idx] = 1.0f; idx++;
+                raw_time[idx] = delay_us + rise_us + flat_us - active_start_us;
+                raw_wave[idx] = 1.0f; idx++;
+                raw_time[idx] = delay_us + rise_us + flat_us + fall_us - active_start_us;
+                raw_wave[idx] = 0.0f; idx++;
+            } else {
+                raw_time[idx] = delay_us - active_start_us;
+                raw_wave[idx] = 0.0f; idx++;
+                raw_time[idx] = delay_us + rise_us - active_start_us;
+                raw_wave[idx] = 1.0f; idx++;
+                raw_time[idx] = delay_us + rise_us + fall_us - active_start_us;
+                raw_wave[idx] = 0.0f; idx++;
+            }
+        } else {
+            /* Arbitrary waveform: decompress shape 0 (peak-normalized) */
+            num_samples   = gdef->fall_time_or_num_uncompressed_samples;
+            time_shape_id = gdef->unused_or_time_shape_id;
+            shape_id      = gdef->shot_shape_ids[0];
+
+            if (shape_id <= 0 || shape_id > desc->num_shapes) {
+                for (i = 0; i < fmod->num_samples; ++i) out_wave[i] = 0.0f;
+                fmod->ref_integral[axis] = 0.0f;
+                continue;
+            }
+
+            if (!pulseqlib__decompress_shape(&decomp_wave,
+                    &desc->shapes[shape_id - 1], 1.0f)) {
+                for (i = 0; i < fmod->num_samples; ++i) out_wave[i] = 0.0f;
+                fmod->ref_integral[axis] = 0.0f;
+                continue;
+            }
+
+            has_time_shape = 0;
+            if (time_shape_id > 0 && time_shape_id <= desc->num_shapes) {
+                if (pulseqlib__decompress_shape(&decomp_time,
+                        &desc->shapes[time_shape_id - 1], grad_raster_us))
+                    has_time_shape = 1;
+            }
+
+            if (has_time_shape) {
+                for (i = 0; i < num_samples && i < decomp_wave.num_uncompressed_samples; ++i) {
+                    raw_time[idx] = delay_us + decomp_time.samples[i] - active_start_us;
+                    raw_wave[idx] = decomp_wave.samples[i];
+                    idx++;
+                }
+            } else {
+                for (i = 0; i < num_samples && i < decomp_wave.num_uncompressed_samples; ++i) {
+                    raw_time[idx] = delay_us + 0.5f * grad_raster_us +
+                                    (float)i * grad_raster_us - active_start_us;
+                    raw_wave[idx] = decomp_wave.samples[i];
+                    idx++;
+                }
+            }
+
+            if (decomp_wave.samples) PULSEQLIB_FREE(decomp_wave.samples);
+            if (decomp_time.samples) PULSEQLIB_FREE(decomp_time.samples);
+        }
+
+        raw_n = idx;
+
+        /* Ensure coverage at t=0 and t=active_dur_us (zero-pad) */
+        if (raw_n > 0 && raw_time[0] > 0.0f) {
+            for (j = raw_n; j > 0; --j) {
+                raw_time[j] = raw_time[j - 1];
+                raw_wave[j] = raw_wave[j - 1];
+            }
+            raw_time[0] = 0.0f;
+            raw_wave[0] = 0.0f;
+            raw_n++;
+        } else if (raw_n == 0) {
+            raw_time[0] = 0.0f;
+            raw_wave[0] = 0.0f;
+            raw_n = 1;
+        }
+        if (raw_time[raw_n - 1] < active_dur_us) {
+            raw_time[raw_n] = active_dur_us;
+            raw_wave[raw_n] = 0.0f;
+            raw_n++;
+        }
+
+        /* Interpolate to uniform raster */
+        pulseqlib__interp1_linear(out_wave, uniform_t, fmod->num_samples,
+                                  raw_time, raw_wave, raw_n);
+
+        /* Compute partial integral from start to reference point */
+        {
+            int ref_sample = (int)(ref_time_us / grad_raster_us);
+            if (ref_sample < 0) ref_sample = 0;
+            if (ref_sample >= fmod->num_samples) ref_sample = fmod->num_samples - 1;
+            fmod->ref_integral[axis] = pulseqlib__trapz_real_uniform(
+                out_wave, ref_sample + 1, grad_raster_us);
+        }
+    }
+
+    fmod->ref_time_us = ref_time_us;
+
+    PULSEQLIB_FREE(raw_time);
+    PULSEQLIB_FREE(raw_wave);
+    PULSEQLIB_FREE(uniform_t);
+    return PULSEQLIB_OK;
+
+fmod_fail:
+    if (fmod->waveform_gx) { PULSEQLIB_FREE(fmod->waveform_gx); fmod->waveform_gx = NULL; }
+    if (fmod->waveform_gy) { PULSEQLIB_FREE(fmod->waveform_gy); fmod->waveform_gy = NULL; }
+    if (fmod->waveform_gz) { PULSEQLIB_FREE(fmod->waveform_gz); fmod->waveform_gz = NULL; }
+    if (raw_time)  PULSEQLIB_FREE(raw_time);
+    if (raw_wave)  PULSEQLIB_FREE(raw_wave);
+    if (uniform_t) PULSEQLIB_FREE(uniform_t);
+    return PULSEQLIB_ERR_ALLOC_FAILED;
+}
+
+/*
+ * Build the frequency modulation library for a single sequence descriptor.
+ *
+ * Three passes:
+ *   1) Count blocks with RF or ADC
+ *   2) Deduplicate (rf_def_id, adc_def_id, gx_def_id, gy_def_id, gz_def_id)
+ *      and build a freq_mod_definition for each unique tuple
+ *   3) Assign freq_mod_id in block_table for every block
+ *
+ * Must be called after segment timing is computed since reference points
+ * (isodelay, kzero) may be needed.
+ */
+int pulseqlib__build_freq_mod_library(pulseqlib_sequence_descriptor* desc)
+{
+    int n, count, num_unique, result;
+    int* block_indices = NULL;
+    int (*int_rows)[FREQ_MOD_DEF_COLS] = NULL;
+    int* unique_defs = NULL;
+    int* event_table = NULL;
+    pulseqlib_freq_mod_definition* fm_defs = NULL;
+
+    const pulseqlib_block_table_element* bte;
+    const pulseqlib_block_definition* bdef;
+    int has_rf, has_adc, adc_def_id;
+    int u, row_idx, blk_idx, bdef_id;
+
+    /* Active region & reference point */
+    float active_start_us, active_end_us, ref_time_us;
+    const pulseqlib_rf_definition* rdef;
+    const pulseqlib_adc_definition* adef;
+    float adc_dur_us;
+
+    if (!desc || desc->num_blocks <= 0) {
+        if (desc) {
+            desc->num_freq_mod_defs = 0;
+            desc->freq_mod_definitions = NULL;
+        }
+        return PULSEQLIB_OK;
+    }
+
+    /* ---- Pass 1: count blocks with RF or ADC ---- */
+    count = 0;
+    for (n = 0; n < desc->num_blocks; ++n) {
+        bte  = &desc->block_table[n];
+        bdef = &desc->block_definitions[bte->id];
+        if (bdef->rf_id >= 0 || bte->adc_id >= 0)
+            count++;
+    }
+
+    if (count == 0) {
+        desc->num_freq_mod_defs = 0;
+        desc->freq_mod_definitions = NULL;
+        for (n = 0; n < desc->num_blocks; ++n)
+            desc->block_table[n].freq_mod_id = -1;
+        return PULSEQLIB_OK;
+    }
+
+    /* Allocate working arrays */
+    block_indices = (int*)PULSEQLIB_ALLOC((size_t)count * sizeof(int));
+    int_rows      = PULSEQLIB_ALLOC((size_t)count * sizeof(*int_rows));
+    unique_defs   = (int*)PULSEQLIB_ALLOC((size_t)count * sizeof(int));
+    event_table   = (int*)PULSEQLIB_ALLOC((size_t)count * sizeof(int));
+    if (!block_indices || !int_rows || !unique_defs || !event_table)
+        goto fm_lib_fail;
+
+    /* ---- Pass 2: build dedup rows ---- */
+    count = 0;
+    for (n = 0; n < desc->num_blocks; ++n) {
+        bte  = &desc->block_table[n];
+        bdef = &desc->block_definitions[bte->id];
+        has_rf  = (bdef->rf_id >= 0);
+        has_adc = (bte->adc_id >= 0);
+        if (!has_rf && !has_adc) continue;
+
+        block_indices[count] = n;
+        int_rows[count][0] = bdef->rf_id;
+
+        /* Resolve adc definition id */
+        if (has_adc && bte->adc_id < desc->adc_table_size)
+            int_rows[count][1] = desc->adc_table[bte->adc_id].id;
+        else
+            int_rows[count][1] = -1;
+
+        int_rows[count][2] = bdef->gx_id;
+        int_rows[count][3] = bdef->gy_id;
+        int_rows[count][4] = bdef->gz_id;
+        count++;
+    }
+
+    /* Deduplicate */
+    num_unique = pulseqlib__deduplicate_int_rows(
+        unique_defs, event_table,
+        (const int*)int_rows, count, FREQ_MOD_DEF_COLS);
+
+    /* ---- Build freq_mod definitions for each unique tuple ---- */
+    fm_defs = (pulseqlib_freq_mod_definition*)PULSEQLIB_ALLOC(
+        (size_t)num_unique * sizeof(pulseqlib_freq_mod_definition));
+    if (!fm_defs) goto fm_lib_fail;
+
+    for (u = 0; u < num_unique; ++u) {
+        memset(&fm_defs[u], 0, sizeof(fm_defs[u]));
+        fm_defs[u].id = u;
+
+        row_idx = unique_defs[u];   /* first occurrence in the row array */
+        blk_idx = block_indices[row_idx];
+        bte     = &desc->block_table[blk_idx];
+        bdef_id = bte->id;
+        bdef    = &desc->block_definitions[bdef_id];
+
+        has_rf  = (bdef->rf_id >= 0);
+        has_adc = (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size);
+
+        /* ---- Determine active region and reference point ---- */
+        if (has_rf && bdef->rf_id < desc->num_unique_rfs) {
+            rdef = &desc->rf_definitions[bdef->rf_id];
+            active_start_us = (float)rdef->delay;
+#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
+            active_end_us = active_start_us + rdef->stats.duration_us;
+            ref_time_us   = (float)rdef->stats.isodelay_us;  /* relative to RF start */
+#else
+            /* Stub for non-GEHC: use full block as active region */
+            active_end_us = (float)bdef->duration_us;
+            ref_time_us   = 0.0f;
+#endif
+        } else if (has_adc) {
+            adc_def_id = desc->adc_table[bte->adc_id].id;
+            if (adc_def_id >= 0 && adc_def_id < desc->num_unique_adcs) {
+                adef = &desc->adc_definitions[adc_def_id];
+                adc_dur_us = (float)adef->num_samples *
+                             (float)adef->dwell_time * 1e-3f;
+                active_start_us = (float)adef->delay;
+                active_end_us   = active_start_us + adc_dur_us;
+                ref_time_us     = adc_dur_us * 0.5f;  /* default k0 = center */
+            } else {
+                /* invalid ADC def — skip */
+                continue;
+            }
+        } else {
+            continue;  /* shouldn't reach here */
+        }
+
+        /* Clamp active region */
+        if (active_start_us < 0.0f) active_start_us = 0.0f;
+        if (active_end_us > (float)bdef->duration_us)
+            active_end_us = (float)bdef->duration_us;
+        if (ref_time_us < 0.0f) ref_time_us = 0.0f;
+        if (ref_time_us > (active_end_us - active_start_us))
+            ref_time_us = active_end_us - active_start_us;
+
+        result = build_freq_mod_for_block(desc, bdef_id,
+            active_start_us, active_end_us, ref_time_us, &fm_defs[u]);
+        if (PULSEQLIB_FAILED(result)) {
+            /* Non-fatal: leave as zeroed init */
+        }
+    }
+
+    /* ---- Pass 3: assign freq_mod_id in block table ---- */
+    for (n = 0; n < desc->num_blocks; ++n)
+        desc->block_table[n].freq_mod_id = -1;
+
+    for (n = 0; n < count; ++n)
+        desc->block_table[block_indices[n]].freq_mod_id = event_table[n];
+
+    /* Store in descriptor */
+    desc->num_freq_mod_defs    = num_unique;
+    desc->freq_mod_definitions = fm_defs;
+
+    /* Cleanup working arrays */
+    PULSEQLIB_FREE(block_indices);
+    PULSEQLIB_FREE(int_rows);
+    PULSEQLIB_FREE(unique_defs);
+    PULSEQLIB_FREE(event_table);
+    return PULSEQLIB_OK;
+
+fm_lib_fail:
+    if (block_indices) PULSEQLIB_FREE(block_indices);
+    if (int_rows)      PULSEQLIB_FREE(int_rows);
+    if (unique_defs)   PULSEQLIB_FREE(unique_defs);
+    if (event_table)   PULSEQLIB_FREE(event_table);
+    if (fm_defs) {
+        for (n = 0; n < num_unique; ++n) {
+            if (fm_defs[n].waveform_gx) PULSEQLIB_FREE(fm_defs[n].waveform_gx);
+            if (fm_defs[n].waveform_gy) PULSEQLIB_FREE(fm_defs[n].waveform_gy);
+            if (fm_defs[n].waveform_gz) PULSEQLIB_FREE(fm_defs[n].waveform_gz);
+        }
+        PULSEQLIB_FREE(fm_defs);
+    }
+    return PULSEQLIB_ERR_ALLOC_FAILED;
+}
+
+/* ================================================================== */
 /*  Descriptor free functions (public)                                */
 /* ================================================================== */
 
@@ -2066,6 +2461,17 @@ void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
     d->num_unique_adcs = 0;
     if (d->adc_table) { PULSEQLIB_FREE(d->adc_table); d->adc_table = NULL; }
     d->adc_table_size = 0;
+
+    if (d->freq_mod_definitions) {
+        for (i = 0; i < d->num_freq_mod_defs; ++i) {
+            if (d->freq_mod_definitions[i].waveform_gx) PULSEQLIB_FREE(d->freq_mod_definitions[i].waveform_gx);
+            if (d->freq_mod_definitions[i].waveform_gy) PULSEQLIB_FREE(d->freq_mod_definitions[i].waveform_gy);
+            if (d->freq_mod_definitions[i].waveform_gz) PULSEQLIB_FREE(d->freq_mod_definitions[i].waveform_gz);
+        }
+        PULSEQLIB_FREE(d->freq_mod_definitions);
+        d->freq_mod_definitions = NULL;
+    }
+    d->num_freq_mod_defs = 0;
 
     if (d->rotation_matrices) { PULSEQLIB_FREE(d->rotation_matrices); d->rotation_matrices = NULL; }
     d->num_rotations = 0;
@@ -2427,6 +2833,9 @@ int pulseqlib__get_collection_descriptors(
         if (PULSEQLIB_FAILED(diag->code)) goto fail;
 
         result = pulseqlib__compute_segment_timing(&desc, diag);
+        if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
+
+        result = pulseqlib__build_freq_mod_library(&desc);
         if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
 
         /* apply offsets */

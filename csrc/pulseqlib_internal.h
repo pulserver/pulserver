@@ -380,8 +380,13 @@ typedef struct pulseqlib__scale {
 /* --- pulseqlib_error.c --- */
 int pulseqlib__label2enum(const char *label);
 int pulseqlib__hint2enum(const char *hint);
+void pulseqlib__diag_printf(pulseqlib_diagnostic* diag, const char* fmt, ...);
 
 /* --- pulseqlib_math.c --- */
+float pulseqlib__trapz_real_uniform(const float* s, int n, float dt);
+float pulseqlib__trapz_real_nonuniform(const float* s, const float* t, int n);
+float pulseqlib__max_slew_real_uniform(const float* s, int n, float dt);
+float pulseqlib__max_slew_real_nonuniform(const float* s, const float* t, int n);
 float pulseqlib__find_max_abs_real(const float* samples, int n);
 int   pulseqlib__find_max_abs_index_real(const float* samples, int n);
 void  pulseqlib__mag_phase_to_real_imag(float* re, float* im, const float* mag, const float* phase, int n);
@@ -417,6 +422,7 @@ int   pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const pu
 int   pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);
 int   pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib__seq_file* seq);
 int   pulseqlib__get_collection_descriptors(pulseqlib_sequence_descriptor_collection* desc_coll, pulseqlib_diagnostic* diag, const pulseqlib__seq_file_collection* coll);
+int   pulseqlib__build_freq_mod_library(pulseqlib_sequence_descriptor* desc);
 
 /* --- pulseqlib_safety.c --- */
 int   pulseqlib__compute_segment_timing(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);

@@ -801,8 +801,10 @@ static int read_rf_shim_library(FILE* f, long offset,
         if (sscanf(p, "%d %d", &idx, &n_ch) != 2) continue;
         if (idx <= 0 || idx > target_count || n_ch <= 0) continue;
 
-        while (*p && *p != ' ') p++; while (*p == ' ') p++;
-        while (*p && *p != ' ') p++; while (*p == ' ') p++;
+        while (*p && *p != ' ') p++;
+        while (*p == ' ') p++;
+        while (*p && *p != ' ') p++;
+        while (*p == ' ') p++;
 
         if (n_ch > PULSEQLIB__MAX_RF_SHIM_CHANNELS) return 1;
         target[idx - 1].n_channels = n_ch;
@@ -976,7 +978,7 @@ int pulseqlib__decompress_shape(pulseqlib_shape_arbitrary* result,
             count_unpack++;
         } else {
             rep = (int)(packed[count_pack + 1]) + 2;
-            if (fabsf(packed[count_pack + 1] + 2 - (float)rep) > 1e-6f) {
+            if (fabs(packed[count_pack + 1] + 2 - (float)rep) > 1e-6f) {
                 PULSEQLIB_FREE(unpacked);
                 return 0;
             }

@@ -57,7 +57,7 @@ static int count_grad_samples_for_block(
     int count;
     int num_samples;
     float delay_us, rise_us, flat_us, fall_us, duration_us;
-    float grad_raster_us, block_raster_us;
+    float grad_raster_us;
     pulseqlib_shape_arbitrary decomp_time;
 
     if (!gdef) return 2;
@@ -67,7 +67,6 @@ static int count_grad_samples_for_block(
     decomp_time.num_uncompressed_samples = 0;
 
     grad_raster_us  = desc->grad_raster_time_us;
-    block_raster_us = desc->block_duration_raster_us;
     num_samples     = gdef->fall_time_or_num_uncompressed_samples;
     delay_us        = (float)gdef->delay;
 
@@ -1294,7 +1293,7 @@ static int acoustic_support_init(
 {
     int nwin, nfft, nfreq, output_freq_bins;
     int hop_size, num_windows, padded_len, min_nfft, max_idx, i;
-    float freq_res, max_freq_band;
+    float freq_res;
     float* cos_win  = NULL;
     float* work     = NULL;
     kiss_fft_cpx* fft_out = NULL;
@@ -1307,9 +1306,6 @@ static int acoustic_support_init(
     memset(sup, 0, sizeof(*sup));
 
     nwin = (num_samples >= target_window_size) ? target_window_size : num_samples;
-
-    max_freq_band = (max_frequency_hz < 0.0f) ? (5.0e5f / grad_raster_us)
-                                               : max_frequency_hz;
 
     min_nfft = (int)ceil((double)(1.0e6f / (grad_raster_us * target_spectral_resolution_hz)));
     nfft = (min_nfft < nwin) ? nwin : (int)pulseqlib__next_pow2((size_t)min_nfft);
@@ -2232,6 +2228,8 @@ static int process_pns_axis_circular(
     int full_output_len)
 {
     int i, padded_len, slew_len, rc;
+
+    (void)full_output_len;
 
     if (num_samples <= 0 || !waveform) return PULSEQLIB_OK;
 

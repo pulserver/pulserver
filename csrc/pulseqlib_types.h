@@ -53,9 +53,10 @@
 #define PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND  -202
 #define PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS    -203
 
-/* Selective excitation errors (-300 to -399) */
-#define PULSEQLIB_ERR_SELEXC_GRAD_SCALING    -300
-#define PULSEQLIB_ERR_SELEXC_ROTATION        -301
+/* Selective excitation errors (-300 to -399) -- REMOVED:
+ * Explicit frequency modulation eliminates the need for these checks.
+ * Error codes reserved but no longer used.
+ */
 
 /* Acoustic errors (-400 to -449) */
 #define PULSEQLIB_ERR_ACOUSTIC_INVALID_WINDOW    -400
@@ -240,6 +241,26 @@ typedef struct pulseqlib_adc_table_element {
 #define PULSEQLIB_ADC_TABLE_ELEMENT_INIT {0, 0.0f, 0.0f}
 
 /* ================================================================== */
+/*  Frequency modulation definitions                                  */
+/* ================================================================== */
+typedef struct pulseqlib_freq_mod_definition {
+    int id;
+    int num_samples;          /* samples per axis (uniform raster) */
+    float raster_us;          /* sample spacing in us */
+    float duration_us;        /* active region duration */
+    float* waveform_gx;       /* [num_samples] peak-normalized gradient, x */
+    float* waveform_gy;       /* [num_samples] peak-normalized gradient, y */
+    float* waveform_gz;       /* [num_samples] peak-normalized gradient, z */
+    float ref_integral[3];    /* integral from start to reference point
+                               * (gx, gy, gz) in [norm_amp * us] */
+    float ref_time_us;        /* reference time relative to active region
+                               * start (isodelay for RF, kzero for ADC) */
+} pulseqlib_freq_mod_definition;
+
+#define PULSEQLIB_FREQ_MOD_DEFINITION_INIT \
+    {0, 0, 0.0f, 0.0f, NULL, NULL, NULL, {0.0f, 0.0f, 0.0f}, 0.0f}
+
+/* ================================================================== */
 /*  Block definitions and table                                       */
 /* ================================================================== */
 typedef struct pulseqlib_block_definition {
@@ -268,9 +289,10 @@ typedef struct pulseqlib_block_table_element {
     int nopos_flag;
     int pmc_flag;
     int nav_flag;
+    int freq_mod_id;    /* index into freq_mod_definitions, or -1 */
 } pulseqlib_block_table_element;
 
-#define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0}
+#define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, -1}
 
 /* ================================================================== */
 /*  Trigger event (public - used in descriptor)                       */
@@ -414,6 +436,9 @@ typedef struct pulseqlib_sequence_descriptor {
     int adc_table_size;
     pulseqlib_adc_table_element* adc_table;
 
+    int num_freq_mod_defs;
+    pulseqlib_freq_mod_definition* freq_mod_definitions;
+
     int num_rotations;
     float (*rotation_matrices)[9];
 
@@ -436,6 +461,7 @@ typedef struct pulseqlib_sequence_descriptor {
     0, NULL, 0, NULL, \
     0, NULL, 0, NULL, \
     0, NULL, 0, NULL, \
+    0, NULL, \
     0, NULL, 0, NULL, 0, NULL, \
     PULSEQLIB_TR_DESCRIPTOR_INIT, \
     0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT \

@@ -1062,7 +1062,7 @@ int pulseqlib_get_adc_library_index(
 {
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_segment* seg;
-    int local_blk, adc_id, k, global_adc_idx, i;
+    int local_blk, adc_id, global_adc_idx, i;
     const pulseqlib_block_definition* bdef;
     const pulseqlib_block_table_element* bte;
 
