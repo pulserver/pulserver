@@ -5,6 +5,8 @@ set(PULSEQLIB_SOURCES
     pulseqlib_error.c
     pulseqlib_math.c
     pulseqlib_parse.c
+    pulseqlib_dedup.c
+    pulseqlib_structure.c
     pulseqlib_core.c
     pulseqlib_cache.c
     pulseqlib_safety.c

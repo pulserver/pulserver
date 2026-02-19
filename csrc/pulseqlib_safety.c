@@ -805,14 +805,17 @@ static int get_gradient_waveforms_range(
 /* ================================================================== */
 
 int pulseqlib_get_tr_gradient_waveforms(
-    const pulseqlib_sequence_descriptor* desc,
+    const pulseqlib_collection* coll,
+    int subseq_idx,
     pulseqlib_tr_gradient_waveforms* waveforms,
     pulseqlib_diagnostic* diag)
 {
-    if (!desc) {
-        if (diag) { pulseqlib_diagnostic_init(diag); diag->code = PULSEQLIB_ERR_NULL_POINTER; }
-        return PULSEQLIB_ERR_NULL_POINTER;
+    const pulseqlib_sequence_descriptor* desc;
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences) {
+        if (diag) { pulseqlib_diagnostic_init(diag); diag->code = PULSEQLIB_ERR_INVALID_ARGUMENT; }
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
     }
+    desc = &coll->descriptors[subseq_idx];
     return get_gradient_waveforms_range(desc, waveforms, diag,
         desc->tr_descriptor.num_prep_blocks,
         desc->tr_descriptor.tr_size,
@@ -2440,7 +2443,7 @@ void pulseqlib_pns_result_free(pulseqlib_pns_result* r)
 /* ================================================================== */
 
 int check_max_grad(
-    const pulseqlib_sequence_descriptor_collection* coll,
+    const pulseqlib_collection* coll,
     pulseqlib_diagnostic* diag,
     const pulseqlib_opts* opts
 ) {
@@ -2511,7 +2514,7 @@ int check_max_grad(
 /* ================================================================== */
 
 int check_grad_continuity(
-    pulseqlib_sequence_descriptor_collection* coll,
+    pulseqlib_collection* coll,
     pulseqlib_diagnostic* diag,
     const pulseqlib_opts* opts)
 {
@@ -2684,7 +2687,7 @@ int check_grad_continuity(
 /* ================================================================== */
 
 int check_max_slew(
-    const pulseqlib_sequence_descriptor_collection* coll,
+    const pulseqlib_collection* coll,
     pulseqlib_diagnostic* diag,
     const pulseqlib_opts* opts)
 {
@@ -2742,7 +2745,7 @@ int check_max_slew(
 /*  Safety check                                                      */
 /* ================================================================== */
 int pulseqlib_check_safety(
-    pulseqlib_sequence_descriptor_collection* coll,
+    pulseqlib_collection* coll,
     pulseqlib_diagnostic* diag,
     const pulseqlib_opts* opts,
     int num_forbidden_bands,

@@ -695,7 +695,7 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
 /* ------ Write full collection to cache ------ */
 
 static int write_cache(const char* cache_path,
-                       const pulseqlib_sequence_descriptor_collection* coll,
+                       const pulseqlib_collection* coll,
                        int seq_file_size)
 {
     FILE* f;
@@ -741,7 +741,7 @@ static int write_cache(const char* cache_path,
 /* ------ Read full collection from cache ------ */
 
 static int read_cache(const char* cache_path,
-                      pulseqlib_sequence_descriptor_collection* coll,
+                      pulseqlib_collection* coll,
                       int expected_seq_file_size)
 {
     FILE* f;
@@ -836,7 +836,7 @@ static int read_cache(const char* cache_path,
 /*  Public wrappers (called from pulseqlib_core.c)                    */
 /* ================================================================== */
 
-int pulseqlib__write_cache(const pulseqlib_sequence_descriptor_collection* coll,
+int pulseqlib__write_cache(const pulseqlib_collection* coll,
                            const char* seq_path)
 {
     char* cache_path;
@@ -859,7 +859,7 @@ int pulseqlib__write_cache(const pulseqlib_sequence_descriptor_collection* coll,
     return ok;
 }
 
-int pulseqlib__try_read_cache(pulseqlib_sequence_descriptor_collection* coll,
+int pulseqlib__try_read_cache(pulseqlib_collection* coll,
                               const char* seq_path)
 {
     char* cache_path;
