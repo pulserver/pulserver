@@ -103,6 +103,10 @@ MU_TEST(test_cursor_instance_fields)
     mu_assert((float)fabs(inst.rotmat[8] - 1.0f) < 1e-5f,
               "rotmat[2,2] ~ 1");
 
+    /* rf_shim_id should be -1 (no shim) for typical sequences */
+    mu_assert(inst.rf_shim_id == -1,
+              "rf_shim_id should default to -1");
+
     pulseqlib_collection_free(coll);
 }
 

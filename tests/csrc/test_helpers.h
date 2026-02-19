@@ -10,6 +10,13 @@
 #ifndef TEST_HELPERS_H
 #define TEST_HELPERS_H
 
+/* Suppress warnings for static helpers / minunit statics that may
+ * be unused in stub-only translation units. */
+#ifdef __GNUC__
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#endif
+
 #include "minunit.h"
 
 #include <stdio.h>
@@ -70,6 +77,7 @@ static int load_seq(const char* rel_path,
 /* ------------------------------------------------------------------ */
 /*  Suite entry points (defined in each test_*.c)                     */
 /* ------------------------------------------------------------------ */
+int test_error_main(void);
 int test_load_main(void);
 int test_structure_main(void);
 int test_safety_grad_main(void);

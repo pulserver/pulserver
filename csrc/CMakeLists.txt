@@ -13,6 +13,11 @@ set(PULSEQLIB_SOURCES
     pulseqlib_getters.c
 )
 
+# MD5 source (needed by pulseqlib_parse for signature verification)
+set(MD5_SOURCES
+    external_md5.c
+)
+
 # kissfft sources (co-located for self-containment)
 set(KISSFFT_SOURCES
     external_kiss_fft.c
@@ -30,6 +35,7 @@ set(PULSEQLIB_HEADERS
 add_library(pulseqlib STATIC
     ${PULSEQLIB_SOURCES}
     ${KISSFFT_SOURCES}
+    ${MD5_SOURCES}
 )
 
 # Include the current directory so #include "pulseqlib.h" works
