@@ -43,6 +43,7 @@ extern "C" {
  * @param[in]  cache_binary     1 = read/write .bin cache alongside .seq.
  * @param[in]  verify_signature 1 = verify MD5 signature for every .seq
  *                              file in the chain.
+ * @param[in]  parse_labels     1 = build ADC label table via dry-run.
  * @return PULSEQLIB_OK on success, negative error code on failure.
  */
 int pulseqlib_read(
@@ -51,7 +52,8 @@ int pulseqlib_read(
     const char*            file_path,
     const pulseqlib_opts*  opts,
     int                    cache_binary,
-    int                    verify_signature);
+    int                    verify_signature,
+    int                    parse_labels);
 
 /**
  * @brief Read one or more Pulseq subsequences from in-memory buffers.
@@ -75,7 +77,8 @@ int pulseqlib_read_from_buffers(
     const char* const*     buffers,
     const int*             buffer_sizes,
     int                    num_buffers,
-    const pulseqlib_opts*  opts);
+    const pulseqlib_opts*  opts,
+    int                    parse_labels);
 
 /* ================================================================== */
 /*  Options initializer                                               */
@@ -570,6 +573,37 @@ int pulseqlib_get_segment_adc_anchor(const pulseqlib_collection* coll,
 /** @brief Return number of k-space zero-crossings in a segment. */
 int pulseqlib_get_segment_num_kzero_crossings(
     const pulseqlib_collection* coll, int seg_idx);
+
+/* ================================================================== */
+/*  Label getters                                                     */
+/* ================================================================== */
+
+/** @brief Return label limits (min/max per label type) for a subsequence. */
+int pulseqlib_get_label_limits(const pulseqlib_collection* coll,
+                               int subseq_idx,
+                               pulseqlib_label_limits* limits);
+
+/** @brief Return number of ADC occurrences in the label table. */
+int pulseqlib_get_num_adc_occurrences(const pulseqlib_collection* coll,
+                                      int subseq_idx);
+
+/** @brief Return number of label columns (vendor-dependent). */
+int pulseqlib_get_num_label_columns(const pulseqlib_collection* coll,
+                                    int subseq_idx);
+
+/**
+ * @brief Get label values for a specific ADC occurrence.
+ *
+ * @p out_values must point to a pre-allocated array of at least
+ * num_label_columns ints.  For GEHC, the 3 columns are
+ * [lin, slc, eco] in that order.
+ *
+ * @return PULSEQLIB_OK on success, negative error code on failure.
+ */
+int pulseqlib_get_adc_label(const pulseqlib_collection* coll,
+                            int subseq_idx,
+                            int occurrence_idx,
+                            int* out_values);
 
 /* ================================================================== */
 /*  Block cursor / iterator                                           */

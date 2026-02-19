@@ -321,6 +321,12 @@ typedef struct pulseqlib_sequence_descriptor {
     int num_unique_segments;
     pulseqlib_tr_segment* segment_definitions;
     pulseqlib_segment_table_result segment_table;
+
+    /* label table (populated by dry-run if parse_labels is set) */
+    int label_num_columns;
+    int label_num_entries;
+    int* label_table;
+    pulseqlib_label_limits label_limits;
 } pulseqlib_sequence_descriptor;
 
 #define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT { \
@@ -332,7 +338,8 @@ typedef struct pulseqlib_sequence_descriptor {
     0, NULL, 0, NULL, \
     0, NULL, 0, NULL, 0, NULL, \
     PULSEQLIB_TR_DESCRIPTOR_INIT, \
-    0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT \
+    0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT, \
+    0, 0, NULL, {{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}} \
 }
 
 /* ================================================================== */
@@ -811,9 +818,10 @@ int   pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const pu
 int   pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);
 int   pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib__seq_file* seq);
 int   pulseqlib__build_freq_mod_library(pulseqlib_sequence_descriptor* desc);
+int   pulseqlib__build_label_table(pulseqlib_sequence_descriptor* desc, const pulseqlib__seq_file* seq);
 
 /* --- pulseqlib_core.c (continued) --- */
-int   pulseqlib__get_collection_descriptors(pulseqlib_collection* desc_coll, pulseqlib_diagnostic* diag, const pulseqlib__seq_file_collection* coll);
+int   pulseqlib__get_collection_descriptors(pulseqlib_collection* desc_coll, pulseqlib_diagnostic* diag, const pulseqlib__seq_file_collection* coll, int parse_labels);
 void  pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* desc);
 void  pulseqlib_segment_table_result_free(pulseqlib_segment_table_result* result);
 

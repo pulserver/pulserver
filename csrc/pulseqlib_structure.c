@@ -1205,3 +1205,237 @@ fm_lib_fail:
     }
     return PULSEQLIB_ERR_ALLOC_FAILED;
 }
+
+/* ================================================================== */
+/*  Label table dry-run                                               */
+/* ================================================================== */
+
+/*
+ * apply_block_labels --
+ *   Scan a block's extension chain and apply LABELSET / LABELINC
+ *   operations to the running label state.
+ *
+ *   state[0..9] = { slc, phs, rep, avg, seg, set, eco, par, lin, acq }
+ */
+static void apply_block_labels(
+    int* state,
+    const pulseqlib__seq_file* seq,
+    const pulseqlib__raw_block* raw)
+{
+    int i, type_idx, ref_idx, ext_type, label_value, label_id;
+
+    if (!seq->is_extensions_library_parsed || !seq->extension_lut) return;
+
+    for (i = 0; i < raw->ext_count; ++i) {
+        type_idx = raw->ext[i][0];
+        ref_idx  = raw->ext[i][1];
+        if (type_idx < 0 || type_idx > seq->extension_lut_size) continue;
+        ext_type = seq->extension_lut[type_idx];
+        if (ref_idx < 0) continue;
+
+        if (ext_type == PULSEQLIB__EXT_LABELSET) {
+            if (!seq->labelset_library || ref_idx >= seq->labelset_library_size)
+                continue;
+            label_value = (int)seq->labelset_library[ref_idx][0];
+            label_id    = (int)seq->labelset_library[ref_idx][1];
+            switch (label_id) {
+                case PULSEQLIB__SLC: state[0] = label_value; break;
+                case PULSEQLIB__PHS: state[1] = label_value; break;
+                case PULSEQLIB__REP: state[2] = label_value; break;
+                case PULSEQLIB__AVG: state[3] = label_value; break;
+                case PULSEQLIB__SEG: state[4] = label_value; break;
+                case PULSEQLIB__SET: state[5] = label_value; break;
+                case PULSEQLIB__ECO: state[6] = label_value; break;
+                case PULSEQLIB__PAR: state[7] = label_value; break;
+                case PULSEQLIB__LIN: state[8] = label_value; break;
+                case PULSEQLIB__ACQ: state[9] = label_value; break;
+                default: break;
+            }
+        } else if (ext_type == PULSEQLIB__EXT_LABELINC) {
+            if (!seq->labelinc_library || ref_idx >= seq->labelinc_library_size)
+                continue;
+            label_value = (int)seq->labelinc_library[ref_idx][0];
+            label_id    = (int)seq->labelinc_library[ref_idx][1];
+            switch (label_id) {
+                case PULSEQLIB__SLC: state[0] += label_value; break;
+                case PULSEQLIB__PHS: state[1] += label_value; break;
+                case PULSEQLIB__REP: state[2] += label_value; break;
+                case PULSEQLIB__AVG: state[3] += label_value; break;
+                case PULSEQLIB__SEG: state[4] += label_value; break;
+                case PULSEQLIB__SET: state[5] += label_value; break;
+                case PULSEQLIB__ECO: state[6] += label_value; break;
+                case PULSEQLIB__PAR: state[7] += label_value; break;
+                case PULSEQLIB__LIN: state[8] += label_value; break;
+                case PULSEQLIB__ACQ: state[9] += label_value; break;
+                default: break;
+            }
+        }
+    }
+}
+
+/*
+ * record_adc_label --
+ *   Record the current label state into one row of the label table
+ *   and update label_limits min/max tracking.
+ *
+ *   For GEHC: 3 columns = [lin, slc, eco].
+ *   label state indices: lin=8, slc=0, eco=6.
+ */
+static void record_adc_label(
+    int* table_row,
+    int num_columns,
+    const int* state,
+    pulseqlib_label_limits* limits,
+    int is_first)
+{
+    /* GEHC column mapping: col0=lin, col1=slc, col2=eco */
+    int lin_val = state[8];
+    int slc_val = state[0];
+    int eco_val = state[6];
+
+    (void)num_columns; /* always 3 for GEHC */
+
+    table_row[0] = lin_val;
+    table_row[1] = slc_val;
+    table_row[2] = eco_val;
+
+    if (is_first) {
+        limits->lin.min = lin_val; limits->lin.max = lin_val;
+        limits->slc.min = slc_val; limits->slc.max = slc_val;
+        limits->eco.min = eco_val; limits->eco.max = eco_val;
+        /* Also init the other label limits from state */
+        limits->phs.min = state[1]; limits->phs.max = state[1];
+        limits->rep.min = state[2]; limits->rep.max = state[2];
+        limits->avg.min = state[3]; limits->avg.max = state[3];
+        limits->seg.min = state[4]; limits->seg.max = state[4];
+        limits->set.min = state[5]; limits->set.max = state[5];
+        limits->par.min = state[7]; limits->par.max = state[7];
+        limits->acq.min = state[9]; limits->acq.max = state[9];
+    } else {
+        if (lin_val < limits->lin.min) limits->lin.min = lin_val;
+        if (lin_val > limits->lin.max) limits->lin.max = lin_val;
+        if (slc_val < limits->slc.min) limits->slc.min = slc_val;
+        if (slc_val > limits->slc.max) limits->slc.max = slc_val;
+        if (eco_val < limits->eco.min) limits->eco.min = eco_val;
+        if (eco_val > limits->eco.max) limits->eco.max = eco_val;
+        if (state[1] < limits->phs.min) limits->phs.min = state[1];
+        if (state[1] > limits->phs.max) limits->phs.max = state[1];
+        if (state[2] < limits->rep.min) limits->rep.min = state[2];
+        if (state[2] > limits->rep.max) limits->rep.max = state[2];
+        if (state[3] < limits->avg.min) limits->avg.min = state[3];
+        if (state[3] > limits->avg.max) limits->avg.max = state[3];
+        if (state[4] < limits->seg.min) limits->seg.min = state[4];
+        if (state[4] > limits->seg.max) limits->seg.max = state[4];
+        if (state[5] < limits->set.min) limits->set.min = state[5];
+        if (state[5] > limits->set.max) limits->set.max = state[5];
+        if (state[7] < limits->par.min) limits->par.min = state[7];
+        if (state[7] > limits->par.max) limits->par.max = state[7];
+        if (state[9] < limits->acq.min) limits->acq.min = state[9];
+        if (state[9] > limits->acq.max) limits->acq.max = state[9];
+    }
+}
+
+int pulseqlib__build_label_table(
+    pulseqlib_sequence_descriptor* desc,
+    const pulseqlib__seq_file* seq)
+{
+    int num_columns, total_adcs, adcs_per_tr;
+    int imaging_start, cooldown_start, num_trs;
+    int b, rep, entry_idx;
+    int state[10];
+    int* table;
+    pulseqlib__raw_block raw;
+
+    if (!desc || !seq) return PULSEQLIB_ERR_NULL_POINTER;
+
+#if PULSEQLIB_VENDOR != 2
+    (void)num_columns; (void)total_adcs; (void)adcs_per_tr;
+    (void)imaging_start; (void)cooldown_start; (void)num_trs;
+    (void)b; (void)rep; (void)entry_idx;
+    (void)state; (void)table; (void)raw;
+    return PULSEQLIB_ERR_NOT_IMPLEMENTED;
+#else
+    num_columns = 3; /* GEHC: [lin, slc, eco] */
+
+    imaging_start  = desc->num_prep_blocks;
+    cooldown_start = desc->num_blocks - desc->num_cooldown_blocks;
+    num_trs        = desc->tr_descriptor.num_trs;
+
+    /* Count total ADC occurrences */
+    total_adcs  = 0;
+    adcs_per_tr = 0;
+
+    for (b = 0; b < imaging_start; ++b) {
+        if (desc->block_table[b].adc_id >= 0) ++total_adcs;
+    }
+    for (b = imaging_start; b < cooldown_start; ++b) {
+        if (desc->block_table[b].adc_id >= 0) ++adcs_per_tr;
+    }
+    total_adcs += adcs_per_tr * num_trs;
+    for (b = cooldown_start; b < desc->num_blocks; ++b) {
+        if (desc->block_table[b].adc_id >= 0) ++total_adcs;
+    }
+
+    if (total_adcs == 0) {
+        desc->label_num_columns = num_columns;
+        desc->label_num_entries = 0;
+        desc->label_table       = NULL;
+        memset(&desc->label_limits, 0, sizeof(desc->label_limits));
+        return PULSEQLIB_OK;
+    }
+
+    /* Allocate table */
+    table = (int*)PULSEQLIB_ALLOC((size_t)total_adcs * (size_t)num_columns * sizeof(int));
+    if (!table) return PULSEQLIB_ERR_ALLOC_FAILED;
+    memset(table, 0, (size_t)total_adcs * (size_t)num_columns * sizeof(int));
+
+    /* Initialize running label state to zero */
+    memset(state, 0, sizeof(state));
+    memset(&desc->label_limits, 0, sizeof(desc->label_limits));
+    entry_idx = 0;
+
+    /* 1. Prep blocks */
+    for (b = 0; b < imaging_start; ++b) {
+        pulseqlib__get_raw_block_content_ids(seq, &raw, b, 1);
+        apply_block_labels(state, seq, &raw);
+        if (desc->block_table[b].adc_id >= 0) {
+            record_adc_label(&table[entry_idx * num_columns],
+                             num_columns, state, &desc->label_limits,
+                             entry_idx == 0);
+            ++entry_idx;
+        }
+    }
+
+    /* 2. Main blocks x num_trs */
+    for (rep = 0; rep < num_trs; ++rep) {
+        for (b = imaging_start; b < cooldown_start; ++b) {
+            pulseqlib__get_raw_block_content_ids(seq, &raw, b, 1);
+            apply_block_labels(state, seq, &raw);
+            if (desc->block_table[b].adc_id >= 0) {
+                record_adc_label(&table[entry_idx * num_columns],
+                                 num_columns, state, &desc->label_limits,
+                                 entry_idx == 0);
+                ++entry_idx;
+            }
+        }
+    }
+
+    /* 3. Cooldown blocks */
+    for (b = cooldown_start; b < desc->num_blocks; ++b) {
+        pulseqlib__get_raw_block_content_ids(seq, &raw, b, 1);
+        apply_block_labels(state, seq, &raw);
+        if (desc->block_table[b].adc_id >= 0) {
+            record_adc_label(&table[entry_idx * num_columns],
+                             num_columns, state, &desc->label_limits,
+                             entry_idx == 0);
+            ++entry_idx;
+        }
+    }
+
+    desc->label_num_columns = num_columns;
+    desc->label_num_entries = entry_idx;
+    desc->label_table       = table;
+
+    return PULSEQLIB_OK;
+#endif
+}

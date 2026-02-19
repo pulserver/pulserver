@@ -96,6 +96,10 @@ void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
     d->num_unique_segments = 0;
 
     pulseqlib_segment_table_result_free(&d->segment_table);
+
+    if (d->label_table) { PULSEQLIB_FREE(d->label_table); d->label_table = NULL; }
+    d->label_num_columns = 0;
+    d->label_num_entries = 0;
 }
 
 void pulseqlib_collection_free(
@@ -419,7 +423,8 @@ int pulseqlib_format_error(
 int pulseqlib__get_collection_descriptors(
     pulseqlib_collection* coll,
     pulseqlib_diagnostic* diag,
-    const pulseqlib__seq_file_collection* raw)
+    const pulseqlib__seq_file_collection* raw,
+    int parse_labels)
 {
     int i, j, result;
     int adc_off = 0, seg_off = 0, blk_off = 0;
@@ -471,6 +476,11 @@ int pulseqlib__get_collection_descriptors(
 
         result = pulseqlib__build_freq_mod_library(&desc);
         if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
+
+        if (parse_labels) {
+            result = pulseqlib__build_label_table(&desc, &raw->sequences[i]);
+            if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
+        }
 
         /* apply offsets */
         if (seg_off > 0) {
@@ -525,7 +535,8 @@ int pulseqlib_read(
     const char* file_path,
     const pulseqlib_opts* opts,
     int cache_binary,
-    int verify_signature)
+    int verify_signature,
+    int parse_labels)
 {
     pulseqlib__seq_file_collection raw_coll;
     pulseqlib_collection* collection;
@@ -574,7 +585,7 @@ int pulseqlib_read(
         }
     }
 
-    rc = pulseqlib__get_collection_descriptors(collection, diag, &raw_coll);
+    rc = pulseqlib__get_collection_descriptors(collection, diag, &raw_coll, parse_labels);
     if (PULSEQLIB_FAILED(diag->code)) { rc = diag->code; goto fail; }
 
     rc = check_consistency(collection, diag);
@@ -604,7 +615,8 @@ int pulseqlib_read_from_buffers(
     const char* const* buffers,
     const int* buffer_sizes,
     int num_buffers,
-    const pulseqlib_opts* opts)
+    const pulseqlib_opts* opts,
+    int parse_labels)
 {
     pulseqlib__seq_file_collection raw_coll;
     pulseqlib_collection* collection;
@@ -663,7 +675,7 @@ int pulseqlib_read_from_buffers(
     memset(collection, 0, sizeof(*collection));
     collection->num_repetitions = 1;
 
-    rc = pulseqlib__get_collection_descriptors(collection, diag, &raw_coll);
+    rc = pulseqlib__get_collection_descriptors(collection, diag, &raw_coll, parse_labels);
     if (PULSEQLIB_FAILED(diag->code)) { rc = diag->code; goto fail_coll; }
 
     rc = check_consistency(collection, diag);

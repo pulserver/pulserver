@@ -1699,3 +1699,60 @@ int pulseqlib_get_freq_mod_waveform(
     *out_phase_rad   = plan->phase_offset[inst];
     return 1;
 }
+
+/* ================================================================== */
+/*  Label getters                                                     */
+/* ================================================================== */
+
+int pulseqlib_get_label_limits(const pulseqlib_collection* coll,
+                               int subseq_idx,
+                               pulseqlib_label_limits* limits)
+{
+    if (!coll || !limits) return PULSEQLIB_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    *limits = coll->descriptors[subseq_idx].label_limits;
+    return PULSEQLIB_OK;
+}
+
+int pulseqlib_get_num_adc_occurrences(const pulseqlib_collection* coll,
+                                      int subseq_idx)
+{
+    if (!coll) return 0;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences) return 0;
+    return coll->descriptors[subseq_idx].label_num_entries;
+}
+
+int pulseqlib_get_num_label_columns(const pulseqlib_collection* coll,
+                                    int subseq_idx)
+{
+    if (!coll) return 0;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences) return 0;
+    return coll->descriptors[subseq_idx].label_num_columns;
+}
+
+int pulseqlib_get_adc_label(const pulseqlib_collection* coll,
+                            int subseq_idx,
+                            int occurrence_idx,
+                            int* out_values)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int ncols, row_start, c;
+
+    if (!coll || !out_values) return PULSEQLIB_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    desc = &coll->descriptors[subseq_idx];
+    if (!desc->label_table || desc->label_num_entries == 0)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    if (occurrence_idx < 0 || occurrence_idx >= desc->label_num_entries)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    ncols     = desc->label_num_columns;
+    row_start = occurrence_idx * ncols;
+    for (c = 0; c < ncols; ++c)
+        out_values[c] = desc->label_table[row_start + c];
+
+    return PULSEQLIB_OK;
+}

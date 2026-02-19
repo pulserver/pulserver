@@ -886,55 +886,6 @@ int pulseqlib_get_tr_gradient_waveforms(
 }
 
 /* ================================================================== */
-/*  Min-amplitude TR gradient waveforms (for k-space trajectory)      */
-/* ================================================================== */
-
-int pulseqlib_get_tr_gradient_waveforms_min(
-    const pulseqlib_sequence_descriptor* desc,
-    pulseqlib_tr_gradient_waveforms* waveforms,
-    pulseqlib_diagnostic* diag)
-{
-    pulseqlib__uniform_grad_waveforms uw;
-    int rc, i;
-    float* time_arr;
-
-    memset(&uw, 0, sizeof(uw));
-    if (!desc) {
-        if (diag) { pulseqlib_diagnostic_init(diag); diag->code = PULSEQLIB_ERR_NULL_POINTER; }
-        return PULSEQLIB_ERR_NULL_POINTER;
-    }
-    rc = get_gradient_waveforms_range(desc, &uw, diag,
-        desc->tr_descriptor.num_prep_blocks,
-        desc->tr_descriptor.tr_size,
-        2, NULL, 0);
-    if (PULSEQLIB_FAILED(rc)) return rc;
-    if (!waveforms) { uniform_grad_waveforms_free(&uw); return PULSEQLIB_ERR_NULL_POINTER; }
-    memset(waveforms, 0, sizeof(*waveforms));
-    time_arr = (float*)PULSEQLIB_ALLOC((size_t)uw.num_samples * sizeof(float));
-    if (!time_arr) { uniform_grad_waveforms_free(&uw); return PULSEQLIB_ERR_ALLOC_FAILED; }
-    for (i = 0; i < uw.num_samples; ++i) time_arr[i] = (float)i * uw.raster_us;
-    waveforms->gx.num_samples = uw.num_samples;
-    waveforms->gx.amplitude_hz_per_m = uw.gx; uw.gx = NULL;
-    waveforms->gx.time_us = time_arr;
-    waveforms->gx.seg_label = NULL;
-    time_arr = (float*)PULSEQLIB_ALLOC((size_t)uw.num_samples * sizeof(float));
-    if (!time_arr) { uniform_grad_waveforms_free(&uw); pulseqlib_tr_gradient_waveforms_free(waveforms); return PULSEQLIB_ERR_ALLOC_FAILED; }
-    for (i = 0; i < uw.num_samples; ++i) time_arr[i] = (float)i * uw.raster_us;
-    waveforms->gy.num_samples = uw.num_samples;
-    waveforms->gy.amplitude_hz_per_m = uw.gy; uw.gy = NULL;
-    waveforms->gy.time_us = time_arr;
-    waveforms->gy.seg_label = NULL;
-    time_arr = (float*)PULSEQLIB_ALLOC((size_t)uw.num_samples * sizeof(float));
-    if (!time_arr) { uniform_grad_waveforms_free(&uw); pulseqlib_tr_gradient_waveforms_free(waveforms); return PULSEQLIB_ERR_ALLOC_FAILED; }
-    for (i = 0; i < uw.num_samples; ++i) time_arr[i] = (float)i * uw.raster_us;
-    waveforms->gz.num_samples = uw.num_samples;
-    waveforms->gz.amplitude_hz_per_m = uw.gz; uw.gz = NULL;
-    waveforms->gz.time_us = time_arr;
-    waveforms->gz.seg_label = NULL;
-    return PULSEQLIB_OK;
-}
-
-/* ================================================================== */
 /*  K-space trajectory from uniform gradient waveforms                */
 /* ================================================================== */
 

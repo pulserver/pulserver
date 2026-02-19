@@ -12,7 +12,7 @@
 /* ================================================================== */
 
 #define PULSEQLIB_CACHE_ENDIAN_MARKER  0x01020304
-#define PULSEQLIB_CACHE_VERSION        5
+#define PULSEQLIB_CACHE_VERSION        6
 
 /* ------ Byte-swap helpers ------ */
 
@@ -324,6 +324,15 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
     if (!write4(f, &d->segment_table.num_cooldown_segments, 1)) return 0;
     if (d->segment_table.num_cooldown_segments > 0)
         if (!write4(f, d->segment_table.cooldown_segment_table, d->segment_table.num_cooldown_segments)) return 0;
+
+    /* label table */
+    fwrite(&d->label_num_columns, sizeof(int), 1, f);
+    fwrite(&d->label_num_entries, sizeof(int), 1, f);
+    if (d->label_num_entries > 0 && d->label_table) {
+        fwrite(d->label_table, sizeof(int),
+               (size_t)d->label_num_entries * (size_t)d->label_num_columns, f);
+    }
+    fwrite(&d->label_limits, sizeof(pulseqlib_label_limits), 1, f);
 
     return 1;
 }
@@ -688,6 +697,22 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         if (!read4(f, d->segment_table.cooldown_segment_table, d->segment_table.num_cooldown_segments)) return 0;
         if (do_swap) swap4_array(d->segment_table.cooldown_segment_table, d->segment_table.num_cooldown_segments);
     }
+
+    /* label table */
+    if (fread(&d->label_num_columns, sizeof(int), 1, f) != 1) return 0;
+    if (fread(&d->label_num_entries, sizeof(int), 1, f) != 1) return 0;
+    if (d->label_num_entries > 0) {
+        d->label_table = (int*)PULSEQLIB_ALLOC(
+            (size_t)d->label_num_entries * (size_t)d->label_num_columns * sizeof(int));
+        if (!d->label_table) return 0;
+        if (fread(d->label_table, sizeof(int),
+                  (size_t)d->label_num_entries * (size_t)d->label_num_columns, f)
+            != (size_t)d->label_num_entries * (size_t)d->label_num_columns)
+            return 0;
+    } else {
+        d->label_table = NULL;
+    }
+    if (fread(&d->label_limits, sizeof(pulseqlib_label_limits), 1, f) != 1) return 0;
 
     return 1;
 }
