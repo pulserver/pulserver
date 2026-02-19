@@ -121,8 +121,8 @@ int pulseqlib__deduplicate_int_rows(
 
 static void build_rf_def_row(const pulseqlib__seq_file* seq, int* row, float* params, int rf_idx)
 {
-    float gamma = seq->opts.gamma;
-    float b0    = seq->opts.b0;
+    float gamma = seq->opts.gamma_hz_per_t;
+    float b0    = seq->opts.b0_t;
     float* rf   = seq->rf_library[rf_idx];
     float ppm_to_hz = 1e-6f * gamma * b0;
 
@@ -285,8 +285,8 @@ static int deduplicate_grad_library(const pulseqlib__seq_file* seq, pulseqlib_gr
 
 static void build_adc_def_row(const pulseqlib__seq_file* seq, int* row, float* params, int adc_idx)
 {
-    float gamma = seq->opts.gamma;
-    float b0    = seq->opts.b0;
+    float gamma = seq->opts.gamma_hz_per_t;
+    float b0    = seq->opts.b0_t;
     float* adc  = seq->adc_library[adc_idx];
     float ppm_to_hz = 1e-6f * gamma * b0;
 
@@ -405,7 +405,7 @@ static float normalize_waveform(float* waveform, int n)
     float max_abs;
     int i;
 
-    max_abs = pulseqlib__find_max_abs_real(waveform, n);
+    max_abs = pulseqlib__get_max_abs_real(waveform, n);
     if (max_abs > 1e-9f) {
         for (i = 0; i < n; ++i) waveform[i] /= max_abs;
     }
@@ -459,7 +459,7 @@ static int compute_grad_stats(
     if (seq->reserved_definitions_library.gradient_raster_time > 0.0f)
         grad_raster_us = seq->reserved_definitions_library.gradient_raster_time;
     else
-        grad_raster_us = seq->opts.grad_raster_time;
+        grad_raster_us = seq->opts.grad_raster_us;
 
     decomp_wave.num_samples = 0;
     decomp_wave.num_uncompressed_samples = 0;
@@ -605,8 +605,8 @@ static float compute_rf_bandwidth_fft(const float* rf_re, const float* rf_im,
     for (i = 0; i < nn; ++i) { work_re[i] = fft_out[i].r; work_im[i] = fft_out[i].i; }
     pulseqlib__fftshift_complex(work_re, work_im, nn);
 
-    w1 = pulseqlib__find_spectrum_flank(w, work_re, work_im, nn, cutoff, 0);
-    w2 = pulseqlib__find_spectrum_flank(w, work_re, work_im, nn, cutoff, 1);
+    w1 = pulseqlib__get_spectrum_flank(w, work_re, work_im, nn, cutoff, 0);
+    w2 = pulseqlib__get_spectrum_flank(w, work_re, work_im, nn, cutoff, 1);
     bw = w2 - w1;
     return (bw > 0.0f) ? bw : fallback_bw;
 }
@@ -660,7 +660,7 @@ static int compute_rf_stats(
     if (seq->reserved_definitions_library.radiofrequency_raster_time > 0.0f)
         rf_raster_us = seq->reserved_definitions_library.radiofrequency_raster_time;
     else
-        rf_raster_us = seq->opts.rf_raster_time;
+        rf_raster_us = seq->opts.rf_raster_us;
 
     nn = (int)(1.0f / (dw * rf_raster_us * 1e-6f));
     nn = kiss_fft_next_fast_size(nn);
@@ -693,23 +693,23 @@ static int compute_rf_stats(
         first = -1; last = -1;
 
         rd->stats.num_samples   = 0;
-        rd->stats.flip_angle    = 0.0f;
-        rd->stats.max_amplitude = 0.0f;
+        rd->stats.flip_angle_deg    = 0.0f;
+        rd->stats.max_amplitude_hz = 0.0f;
         rd->stats.area          = 0.0f;
-        rd->stats.abswidth      = 0.0f;
-        rd->stats.effwidth      = 0.0f;
-        rd->stats.dtycyc        = 0.0f;
-        rd->stats.maxpw         = 0.0f;
+        rd->stats.abs_width      = 0.0f;
+        rd->stats.eff_width      = 0.0f;
+        rd->stats.duty_cycle        = 0.0f;
+        rd->stats.max_pulse_width         = 0.0f;
         rd->stats.duration_us   = 0.0f;
         rd->stats.isodelay_us   = 0;
-        rd->stats.bandwidth     = 0.0f;
+        rd->stats.bandwidth_hz     = 0.0f;
 
         /* max amplitude from table */
         if (rf_table && rf_table_size > 0) {
             for (i = 0; i < rf_table_size; ++i) {
                 if (rf_table[i].id == def_idx) {
                     float amp = (float)fabs(rf_table[i].amplitude);
-                    if (amp > rd->stats.max_amplitude) rd->stats.max_amplitude = amp;
+                    if (amp > rd->stats.max_amplitude_hz) rd->stats.max_amplitude_hz = amp;
                 }
             }
         }
@@ -830,7 +830,7 @@ static int compute_rf_stats(
         rd->stats.duration_us = duration;
 
         /* find peak indices for isodelay */
-        max_mag = pulseqlib__find_max_abs_real(magnitude, num_samples);
+        max_mag = pulseqlib__get_max_abs_real(magnitude, num_samples);
         for (i = 0; i < num_samples; ++i) {
             if ((float)fabs(magnitude[i]) >= 0.99999f * max_mag) {
                 if (first < 0) first = i;
@@ -897,15 +897,15 @@ static int compute_rf_stats(
 
         sum_signed = (float)sqrt(sum_signed_re * sum_signed_re +
                                  sum_signed_im * sum_signed_im) *
-                     seq->opts.rf_raster_time * 1e-6f;
+                     seq->opts.rf_raster_us * 1e-6f;
 
         rd->stats.area      = sum_signed;
-        rd->stats.abswidth  = sum_abs / num_uniform;
-        rd->stats.effwidth  = sum_sq  / num_uniform;
-        rd->stats.dtycyc    = time_above_threshold / num_uniform;
-        rd->stats.flip_angle = (float)PULSEQLIB__TWO_PI * rd->stats.max_amplitude * sum_signed;
-        rd->stats.maxpw     = maxpw / num_uniform;
-        if (rd->stats.dtycyc < rd->stats.maxpw) rd->stats.dtycyc = rd->stats.maxpw;
+        rd->stats.abs_width  = sum_abs / num_uniform;
+        rd->stats.eff_width  = sum_sq  / num_uniform;
+        rd->stats.duty_cycle    = time_above_threshold / num_uniform;
+        rd->stats.flip_angle_deg = (float)PULSEQLIB__TWO_PI * rd->stats.max_amplitude_hz * sum_signed;
+        rd->stats.max_pulse_width     = maxpw / num_uniform;
+        if (rd->stats.duty_cycle < rd->stats.max_pulse_width) rd->stats.duty_cycle = rd->stats.max_pulse_width;
 
         PULSEQLIB_FREE(time_us_uniform); time_us_uniform = NULL;
         PULSEQLIB_FREE(rf_re_uniform);   rf_re_uniform = NULL;
@@ -920,7 +920,7 @@ static int compute_rf_stats(
                 pulseqlib__interp1_linear_complex(rfs_re, rfs_im,
                                                   tt, nn,
                                                   time_centered, rf_re, rf_im, num_samples);
-                rd->stats.bandwidth = compute_rf_bandwidth_fft(
+                rd->stats.bandwidth_hz = compute_rf_bandwidth_fft(
                     rfs_re, rfs_im, fft_cfg, nn, cutoff,
                     duration * 1e-6f, w, work_re, work_im, fft_in, fft_out);
                 PULSEQLIB_FREE(time_centered); time_centered = NULL;
@@ -1109,19 +1109,19 @@ static int check_raster_times(const pulseqlib__seq_file* seq)
     const pulseqlib_opts* opts = &seq->opts;
 
     if (rd->radiofrequency_raster_time > 0.0f &&
-        !rasters_compatible(rd->radiofrequency_raster_time, opts->rf_raster_time))
+        !rasters_compatible(rd->radiofrequency_raster_time, opts->rf_raster_us))
         return PULSEQLIB_ERR_RASTER_MISMATCH;
 
     if (rd->gradient_raster_time > 0.0f &&
-        !rasters_compatible(rd->gradient_raster_time, opts->grad_raster_time))
+        !rasters_compatible(rd->gradient_raster_time, opts->grad_raster_us))
         return PULSEQLIB_ERR_RASTER_MISMATCH;
 
     if (rd->adc_raster_time > 0.0f &&
-        !rasters_compatible(rd->adc_raster_time, opts->adc_raster_time))
+        !rasters_compatible(rd->adc_raster_time, opts->adc_raster_us))
         return PULSEQLIB_ERR_RASTER_MISMATCH;
 
     if (rd->block_duration_raster > 0.0f &&
-        !rasters_compatible(rd->block_duration_raster, opts->block_duration_raster))
+        !rasters_compatible(rd->block_duration_raster, opts->block_raster_us))
         return PULSEQLIB_ERR_RASTER_MISMATCH;
 
     return PULSEQLIB_OK;
@@ -1171,18 +1171,18 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
     desc->adc_table_size     = 0;
 
     /* rasters */
-    desc->rf_raster_time_us = (seq->reserved_definitions_library.radiofrequency_raster_time > 0.0f)
+    desc->rf_raster_us = (seq->reserved_definitions_library.radiofrequency_raster_time > 0.0f)
         ? seq->reserved_definitions_library.radiofrequency_raster_time
-        : seq->opts.rf_raster_time;
-    desc->grad_raster_time_us = (seq->reserved_definitions_library.gradient_raster_time > 0.0f)
+        : seq->opts.rf_raster_us;
+    desc->grad_raster_us = (seq->reserved_definitions_library.gradient_raster_time > 0.0f)
         ? seq->reserved_definitions_library.gradient_raster_time
-        : seq->opts.grad_raster_time;
-    desc->adc_raster_time_us = (seq->reserved_definitions_library.adc_raster_time > 0.0f)
+        : seq->opts.grad_raster_us;
+    desc->adc_raster_us = (seq->reserved_definitions_library.adc_raster_time > 0.0f)
         ? seq->reserved_definitions_library.adc_raster_time
-        : seq->opts.adc_raster_time;
-    desc->block_duration_raster_us = (seq->reserved_definitions_library.block_duration_raster > 0.0f)
+        : seq->opts.adc_raster_us;
+    desc->block_raster_us = (seq->reserved_definitions_library.block_duration_raster > 0.0f)
         ? seq->reserved_definitions_library.block_duration_raster
-        : seq->opts.block_duration_raster;
+        : seq->opts.block_raster_us;
 
     /* per-subsequence flags */
     desc->ignore_fov_shift = seq->reserved_definitions_library.ignore_fov_shift;
@@ -1270,7 +1270,7 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
 
         tmp_blk_tab[n].duration_us = (raw.rf < 0 && raw.gx < 0 && raw.gy < 0 &&
                                       raw.gz < 0 && raw.adc < 0)
-            ? (int)(raw.block_duration * desc->block_duration_raster_us)
+            ? (int)(raw.block_duration * desc->block_raster_us)
             : -1;
 
         if (raw.ext_count > 0 && seq->is_extensions_library_parsed && seq->extension_lut) {
@@ -1302,7 +1302,7 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
 
     for (n = 0; n < desc->num_unique_blocks; ++n) {
         tmp_blk_defs[n].id          = unique_defs[n];
-        tmp_blk_defs[n].duration_us = (int)(int_rows[unique_defs[n]][0] * desc->block_duration_raster_us);
+        tmp_blk_defs[n].duration_us = (int)(int_rows[unique_defs[n]][0] * desc->block_raster_us);
         tmp_blk_defs[n].rf_id       = int_rows[unique_defs[n]][1];
         tmp_blk_defs[n].gx_id       = int_rows[unique_defs[n]][2];
         tmp_blk_defs[n].gy_id       = int_rows[unique_defs[n]][3];

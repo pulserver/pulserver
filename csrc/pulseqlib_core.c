@@ -5,7 +5,7 @@
  *   - Descriptor/collection free functions
  *   - Consistency checks (RF amplitude periodicity, segment walk)
  *   - get_collection_descriptors  --  chain subsequences
- *   - pulseqlib_load              --  public entry point
+ *   - pulseqlib_read              --  public entry point
  *
  * Deduplication / unique-block extraction lives in pulseqlib_dedup.c.
  * TR detection / segmentation / freq_mod lives in pulseqlib_structure.c.
@@ -109,7 +109,7 @@ void pulseqlib_collection_free(
         PULSEQLIB_FREE(c->descriptors);
     }
     if (c->subsequence_info) PULSEQLIB_FREE(c->subsequence_info);
-    /* Free the struct itself (allocated by pulseqlib_load) */
+    /* Free the struct itself (allocated by pulseqlib_read) */
     PULSEQLIB_FREE(c);
 }
 
@@ -398,9 +398,9 @@ int pulseqlib_format_error(
     /* Build the string with sprintf; caller must provide >= 512 bytes.
      * We guard against overrun by checking buf_size, but the assembled
      * string is never longer than ~380 chars (msg + hint + diag). */
-    if (diag && diag->block_index >= 0) {
+    if (diag && diag->message[0] != '\0') {
         if (buf_size < 512) { buf[0] = '\0'; return 0; }
-        written = sprintf(buf, "%s (block %d)", msg, diag->block_index);
+        written = sprintf(buf, "%s (%s)", msg, diag->message);
     } else if (hint && hint[0] != '\0') {
         if (buf_size < 256) { buf[0] = '\0'; return 0; }
         written = sprintf(buf, "%s (%s)", msg, hint);
@@ -460,13 +460,13 @@ int pulseqlib__get_collection_descriptors(
         result = pulseqlib__get_unique_blocks(&desc, &raw->sequences[i]);
         if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
 
-        result = pulseqlib__find_tr_in_sequence(&desc, diag);
+        result = pulseqlib__get_tr_in_sequence(&desc, diag);
         if (PULSEQLIB_FAILED(diag->code)) goto fail;
 
-        result = pulseqlib__find_segments_in_tr(&desc, diag, &raw->sequences[i]);
+        result = pulseqlib__get_segments_in_tr(&desc, diag, &raw->sequences[i]);
         if (PULSEQLIB_FAILED(diag->code)) goto fail;
 
-        result = pulseqlib__compute_segment_timing(&desc, diag);
+        result = pulseqlib__calc_segment_timing(&desc, diag);
         if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
 
         result = pulseqlib__build_freq_mod_library(&desc);
@@ -516,10 +516,10 @@ fail:
 }
 
 /* ================================================================== */
-/*  pulseqlib_load (public entry point)                               */
+/*  pulseqlib_read (public entry point)                               */
 /* ================================================================== */
 
-int pulseqlib_load(
+int pulseqlib_read(
     pulseqlib_collection** out_coll,
     pulseqlib_diagnostic* diag,
     const char* file_path,
@@ -551,7 +551,7 @@ int pulseqlib_load(
     if (cache_binary && pulseqlib__try_read_cache(collection, file_path)) {
         /* Segment timing is derived, not cached -- compute now */
         for (i = 0; i < collection->num_subsequences; ++i)
-            pulseqlib__compute_segment_timing(&collection->descriptors[i], NULL);
+            pulseqlib__calc_segment_timing(&collection->descriptors[i], NULL);
         *out_coll = collection;
         return PULSEQLIB_OK;
     }
@@ -568,7 +568,7 @@ int pulseqlib_load(
             rc = pulseqlib__verify_signature(fpath);
             if (PULSEQLIB_FAILED(rc)) {
                 diag->code = rc;
-                diag->block_index = i;  /* subsequence index */
+                pulseqlib__diag_printf(diag, " subsequence=%d", i);
                 goto fail;
             }
         }
@@ -595,10 +595,10 @@ fail:
 }
 
 /* ================================================================== */
-/*  pulseqlib_load_from_buffers (public entry point)                  */
+/*  pulseqlib_read_from_buffers (public entry point)                  */
 /* ================================================================== */
 
-int pulseqlib_load_from_buffers(
+int pulseqlib_read_from_buffers(
     pulseqlib_collection** out_coll,
     pulseqlib_diagnostic* diag,
     const char* const* buffers,

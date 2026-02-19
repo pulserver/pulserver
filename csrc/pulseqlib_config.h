@@ -1,14 +1,12 @@
-/* pulseqlib_config.h -- vendor and platform configuration
+/* pulseqlib_config.h -- platform configuration
  *
- * This header MUST be included (directly or transitively) before any other
- * pulseqlib header or source file.  It provides:
+ * This header MUST be included (directly or transitively) before any
+ * other pulseqlib header or source file.  It provides:
  *
- *   PULSEQLIB_VENDOR   -- active vendor ID
- *   PULSEQLIB_ALLOC    -- heap allocator  (default: malloc)
- *   PULSEQLIB_FREE     -- heap deallocator (default: free)
- *
- * Users may pre-define these macros before including this header
- * to override the defaults.
+ *   PULSEQLIB_VENDOR_*  -- vendor ID constants (used at runtime)
+ *   PULSEQLIB_VENDOR    -- compile-time default vendor
+ *   PULSEQLIB_ALLOC     -- heap allocator  (default: malloc)
+ *   PULSEQLIB_FREE      -- heap deallocator (default: free)
  */
 
 #ifndef PULSEQLIB_CONFIG_H
@@ -17,7 +15,7 @@
 #include <stdlib.h>
 
 /* ------------------------------------------------------------------ */
-/*  Vendor identifiers                                                */
+/*  Vendor identifiers (runtime constants)                            */
 /* ------------------------------------------------------------------ */
 #define PULSEQLIB_VENDOR_SIEMENS        1
 #define PULSEQLIB_VENDOR_GEHC           2
@@ -25,29 +23,9 @@
 #define PULSEQLIB_VENDOR_UNITED_IMAGING 4
 #define PULSEQLIB_VENDOR_BRUKER         5
 
+/* Compile-time default (overrideable via -DPULSEQLIB_VENDOR=N) */
 #ifndef PULSEQLIB_VENDOR
 #define PULSEQLIB_VENDOR PULSEQLIB_VENDOR_GEHC
-#endif
-
-/* ------------------------------------------------------------------ */
-/*  RF detection mode                                                 */
-/* ------------------------------------------------------------------ */
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
-#define PULSEQLIB_DETECT_REAL_RF 1
-#else
-#define PULSEQLIB_DETECT_REAL_RF 0
-#endif
-
-/* ------------------------------------------------------------------ */
-/*  ADC Dwell time unit                                               */
-/* ------------------------------------------------------------------ */
-#define PULSEQLIB_TIME_UNIT_US  0
-#define PULSEQLIB_TIME_UNIT_NS  1
-
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
-#define PULSEQLIB_TIME_UNIT PULSEQLIB_TIME_UNIT_US
-#else
-#define PULSEQLIB_TIME_UNIT PULSEQLIB_TIME_UNIT_NS
 #endif
 
 /* ------------------------------------------------------------------ */

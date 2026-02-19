@@ -1022,14 +1022,14 @@ void pulseqlib_opts_init(pulseqlib_opts* opts,
                          float adc_raster_time, float block_duration_raster)
 {
     if (!opts) return;
-    opts->gamma = gamma;
-    opts->b0 = b0;
-    opts->max_grad = max_grad;
-    opts->max_slew = max_slew;
-    opts->rf_raster_time = rf_raster_time;
-    opts->grad_raster_time = grad_raster_time;
-    opts->adc_raster_time = adc_raster_time;
-    opts->block_duration_raster = block_duration_raster;
+    opts->gamma_hz_per_t = gamma;
+    opts->b0_t = b0;
+    opts->max_grad_hz_per_m = max_grad;
+    opts->max_slew_hz_per_m_per_s = max_slew;
+    opts->rf_raster_us = rf_raster_time;
+    opts->grad_raster_us = grad_raster_time;
+    opts->adc_raster_us = adc_raster_time;
+    opts->block_raster_us = block_duration_raster;
 }
 
 /* ================================================================== */
@@ -1608,13 +1608,13 @@ static int parse_block_without_ext(const pulseqlib__seq_file* seq,
 
     block_raster_us = (seq->reserved_definitions_library.block_duration_raster > 0.0f)
         ? seq->reserved_definitions_library.block_duration_raster
-        : seq->opts.block_duration_raster;
+        : seq->opts.block_raster_us;
     rf_raster_us = (seq->reserved_definitions_library.radiofrequency_raster_time > 0.0f)
         ? seq->reserved_definitions_library.radiofrequency_raster_time
-        : seq->opts.rf_raster_time;
+        : seq->opts.rf_raster_us;
     grad_raster_us = (seq->reserved_definitions_library.gradient_raster_time > 0.0f)
         ? seq->reserved_definitions_library.gradient_raster_time
-        : seq->opts.grad_raster_time;
+        : seq->opts.grad_raster_us;
 
     block->duration = raw->block_duration * (int)block_raster_us;
 
@@ -1651,7 +1651,7 @@ static int parse_block_without_ext(const pulseqlib__seq_file* seq,
             block->rf.phase_shape.samples = NULL;
         }
 
-#if PULSEQLIB_DETECT_REAL_RF
+        /* Detect and fold real-valued RF pulses */
         if (block->rf.mag_shape.num_samples > 0 && block->rf.phase_shape.num_samples > 0) {
             is_real = (int*)PULSEQLIB_ALLOC(block->rf.mag_shape.num_samples * sizeof(int));
             if (!is_real) goto fail;
@@ -1671,7 +1671,6 @@ static int parse_block_without_ext(const pulseqlib__seq_file* seq,
             }
             PULSEQLIB_FREE(is_real);
         }
-#endif
 
         /* Time shape */
         idx = (int)fa[3];
@@ -1914,25 +1913,21 @@ static int read_definitions_only(pulseqlib__seq_file* seq, const char* path)
     return PULSEQLIB_OK;
 }
 
-int pulseqlib_query_scan_time(
+int pulseqlib_get_scan_time(
     pulseqlib_scan_time_info* info,
     const char* file_path,
     const pulseqlib_opts* opts)
 {
-    int capacity = 16;
     int count = 0;
     int max_depth = 1000;
     char* current_path;
     char* base_path;
     pulseqlib__seq_file temp;
     int result;
-    float* new_dur;
-    int* new_ign;
 
     if (!info || !file_path || !opts) return PULSEQLIB_ERR_NULL_POINTER;
-    info->num_subsequences = 0;
-    info->durations_us     = NULL;
-    info->ignore_averages  = NULL;
+    info->total_duration_us = 0.0f;
+    info->total_segment_boundaries = 0;
 
     base_path = extract_base_path(file_path);
     if (!base_path) return PULSEQLIB_ERR_ALLOC_FAILED;
@@ -1941,42 +1936,19 @@ int pulseqlib_query_scan_time(
     if (!current_path) { PULSEQLIB_FREE(base_path); return PULSEQLIB_ERR_ALLOC_FAILED; }
     strcpy(current_path, file_path);
 
-    info->durations_us    = (float*)PULSEQLIB_ALLOC(capacity * sizeof(float));
-    info->ignore_averages = (int*)PULSEQLIB_ALLOC(capacity * sizeof(int));
-    if (!info->durations_us || !info->ignore_averages) goto fail_alloc;
-
     while (current_path && current_path[0] != '\0' && count < max_depth) {
         pulseqlib__seq_file_init(&temp, opts);
         result = read_definitions_only(&temp, current_path);
         if (PULSEQLIB_FAILED(result)) {
             seq_file_reset(&temp);
             PULSEQLIB_FREE(current_path); PULSEQLIB_FREE(base_path);
-            PULSEQLIB_FREE(info->durations_us); PULSEQLIB_FREE(info->ignore_averages);
-            info->durations_us = NULL; info->ignore_averages = NULL;
             return result;
         }
 
-        /* grow arrays if needed */
-        if (count >= capacity) {
-            capacity *= 2;
-            new_dur = (float*)PULSEQLIB_ALLOC(capacity * sizeof(float));
-            new_ign = (int*)PULSEQLIB_ALLOC(capacity * sizeof(int));
-            if (!new_dur || !new_ign) {
-                if (new_dur) PULSEQLIB_FREE(new_dur);
-                if (new_ign) PULSEQLIB_FREE(new_ign);
-                seq_file_reset(&temp);
-                goto fail_alloc;
-            }
-            memcpy(new_dur, info->durations_us, count * sizeof(float));
-            memcpy(new_ign, info->ignore_averages, count * sizeof(int));
-            PULSEQLIB_FREE(info->durations_us);
-            PULSEQLIB_FREE(info->ignore_averages);
-            info->durations_us    = new_dur;
-            info->ignore_averages = new_ign;
-        }
-
-        info->durations_us[count]    = temp.reserved_definitions_library.total_duration * 1e6f;
-        info->ignore_averages[count] = temp.reserved_definitions_library.ignore_averages;
+        info->total_duration_us += temp.reserved_definitions_library.total_duration * 1e6f;
+        /* segment boundaries = (estimated from block count / TR structure);
+         * for a quick query we just increment by 1 per subsequence */
+        info->total_segment_boundaries += 1;
         count++;
 
         PULSEQLIB_FREE(current_path);
@@ -1984,33 +1956,14 @@ int pulseqlib_query_scan_time(
         if (temp.reserved_definitions_library.next_sequence[0] != '\0') {
             current_path = build_full_path(base_path,
                                            temp.reserved_definitions_library.next_sequence);
-            if (!current_path) { seq_file_reset(&temp); goto fail_alloc; }
+            if (!current_path) { seq_file_reset(&temp); PULSEQLIB_FREE(base_path); return PULSEQLIB_ERR_ALLOC_FAILED; }
         }
         seq_file_reset(&temp);
     }
 
     PULSEQLIB_FREE(current_path);
     PULSEQLIB_FREE(base_path);
-    info->num_subsequences = count;
     return (count > 0) ? PULSEQLIB_OK : PULSEQLIB_ERR_COLLECTION_EMPTY;
-
-fail_alloc:
-    PULSEQLIB_FREE(current_path);
-    PULSEQLIB_FREE(base_path);
-    if (info->durations_us)    PULSEQLIB_FREE(info->durations_us);
-    if (info->ignore_averages) PULSEQLIB_FREE(info->ignore_averages);
-    info->durations_us = NULL;
-    info->ignore_averages = NULL;
-    info->num_subsequences = 0;
-    return PULSEQLIB_ERR_ALLOC_FAILED;
 }
 
-void pulseqlib_scan_time_info_free(pulseqlib_scan_time_info* info)
-{
-    if (!info) return;
-    if (info->durations_us)    PULSEQLIB_FREE(info->durations_us);
-    if (info->ignore_averages) PULSEQLIB_FREE(info->ignore_averages);
-    info->durations_us    = NULL;
-    info->ignore_averages = NULL;
-    info->num_subsequences = 0;
-}
+/* pulseqlib_scan_time_info_free is no longer needed (no dynamic allocs) */

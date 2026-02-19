@@ -19,7 +19,7 @@
 /* ================================================================== */
 
 /* ================================================================== */
-/*  Shape (used in descriptor for decompressed waveforms)             */
+/*  Shape (public - used in descriptor for decompressed waveforms)    */
 /* ================================================================== */
 typedef struct pulseqlib_shape_arbitrary {
     int num_uncompressed_samples;
@@ -30,7 +30,7 @@ typedef struct pulseqlib_shape_arbitrary {
 #define PULSEQLIB_SHAPE_ARBITRARY_INIT {0, 0, NULL}
 
 /* ================================================================== */
-/*  Trigger event (used in descriptor)                                */
+/*  Trigger event (public - used in descriptor)                       */
 /* ================================================================== */
 typedef struct pulseqlib_trigger_event {
     short type;
@@ -52,10 +52,16 @@ typedef struct pulseqlib_rf_definition {
     int time_shape_id;
     int delay;
     int num_channels;     /* 1 for standard, >1 for dynamic pTx */
-    pulseqlib_rf_stats stats; /* always present (runtime vendor check) */
+#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
+    pulseqlib_rf_stats stats;
+#endif
 } pulseqlib_rf_definition;
 
+#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
 #define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0, 1, PULSEQLIB_RF_STATS_INIT}
+#else
+#define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0, 1}
+#endif
 
 typedef struct pulseqlib_rf_table_element {
     int id;
@@ -151,27 +157,6 @@ typedef struct pulseqlib_freq_mod_definition {
     {0, 0, 0.0f, 0.0f, NULL, NULL, NULL, {0.0f, 0.0f, 0.0f}, 0.0f}
 
 /* ================================================================== */
-/*  Frequency modulation plan (full struct, opaque from public API)   */
-/* ================================================================== */
-
-/* The public header only has a forward declaration.  Callers allocate
- * and free through pulseqlib_build_freq_mod_plan / _free.             */
-struct pulseqlib_freq_mod_plan {
-    int num_instances;      /* number of freq-mod events in plan */
-    int max_samples;        /* longest waveform (zero-padded length) */
-    int num_blocks;         /* total blocks in descriptor (block_table size) */
-    float raster_us;        /* common raster (us) */
-    float** waveforms;      /* [num_instances] pointers, each -> max_samples Hz */
-    int* num_samples;       /* [num_instances] actual length per row */
-    float* phase_offset;    /* [num_instances] phase compensation in rad */
-    int* block_to_instance; /* [num_blocks] absolute block idx -> instance, -1 */
-    float* _waveform_data;  /* backing store (flat), freed by plan_free */
-    const void* _desc;      /* opaque pointer to descriptor (for update) */
-};
-
-#define PULSEQLIB_FREQ_MOD_PLAN_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, NULL, NULL}
-
-/* ================================================================== */
 /*  Block definitions and table                                       */
 /* ================================================================== */
 typedef struct pulseqlib_block_definition {
@@ -229,8 +214,8 @@ typedef struct pulseqlib_segment_timing {
     pulseqlib_segment_rf_anchor* rf_anchors;
     int num_adc_anchors;
     pulseqlib_segment_adc_anchor* adc_anchors;
-    int num_kzero_crossings;
-    int* kzero_crossing_indices;
+    int num_kzero_crossings;            /* total across full TR */
+    int* kzero_crossing_indices;        /* sample indices into min-amp waveform */
 } pulseqlib_segment_timing;
 
 #define PULSEQLIB_SEGMENT_TIMING_INIT {0, NULL, 0, NULL, 0, NULL}
@@ -273,10 +258,10 @@ typedef struct pulseqlib_segment_table_result {
 typedef struct pulseqlib_sequence_descriptor {
     int num_prep_blocks;
     int num_cooldown_blocks;
-    float rf_raster_us;
-    float grad_raster_us;
-    float adc_raster_us;
-    float block_raster_us;
+    float rf_raster_time_us;
+    float grad_raster_time_us;
+    float adc_raster_time_us;
+    float block_duration_raster_us;
     int ignore_fov_shift;
     int enable_pmc;
     int ignore_averages;
@@ -376,25 +361,6 @@ struct pulseqlib_collection {
 };
 
 #define PULSEQLIB_COLLECTION_INIT {0, 1, PULSEQLIB_BLOCK_CURSOR_INIT, NULL, NULL, 0, 0, 0, 0.0f}
-
-/* ================================================================== */
-/*  Uniform-raster gradient waveforms (internal, post-interpolation)  */
-/* ================================================================== */
-
-/*
- * After extracting per-axis raw gradient tuples, the safety / acoustic
- * / PNS code interpolates them onto a common uniform raster.  This
- * struct holds the result.
- */
-typedef struct pulseqlib__uniform_grad_waveforms {
-    int    num_samples;   /* same for all 3 axes */
-    float  raster_us;     /* uniform sample spacing */
-    float* gx;            /* [num_samples] amplitude (Hz / m) */
-    float* gy;            /* [num_samples] amplitude (Hz / m) */
-    float* gz;            /* [num_samples] amplitude (Hz / m) */
-} pulseqlib__uniform_grad_waveforms;
-
-#define PULSEQLIB__UNIFORM_GRAD_WAVEFORMS_INIT {0, 0.0f, NULL, NULL, NULL}
 
 /* ================================================================== */
 /*  Internal constants                                                */
@@ -771,21 +737,21 @@ void pulseqlib__diag_printf(pulseqlib_diagnostic* diag, const char* fmt, ...);
 /* --- pulseqlib_math.c --- */
 float pulseqlib__trapz_real_uniform(const float* s, int n, float dt);
 float pulseqlib__trapz_real_nonuniform(const float* s, const float* t, int n);
-float pulseqlib__trapz_complex_mag_uniform(const float* re, const float* im, int n, float dt);
-float pulseqlib__trapz_complex_mag_nonuniform(const float* re, const float* im, const float* t, int n);
 float pulseqlib__max_slew_real_uniform(const float* s, int n, float dt);
 float pulseqlib__max_slew_real_nonuniform(const float* s, const float* t, int n);
-float pulseqlib__get_max_abs_real(const float* samples, int n);
-int   pulseqlib__get_max_abs_index_real(const float* samples, int n);
+float pulseqlib__find_max_abs_real(const float* samples, int n);
+int   pulseqlib__find_max_abs_index_real(const float* samples, int n);
 void  pulseqlib__mag_phase_to_real_imag(float* re, float* im, const float* mag, const float* phase, int n);
 void  pulseqlib__quaternion_to_matrix(float* matrix, const float* quat);
 void  pulseqlib__apply_rotation(float* out, const float* R, const float* v, int transpose);
 void  pulseqlib__interp1_linear(float* out, const float* x, int nx, const float* xp, const float* fp, int nxp);
 void  pulseqlib__interp1_linear_complex(float* out_re, float* out_im, const float* x, int nx, const float* xp, const float* fp_re, const float* fp_im, int nxp);
 void  pulseqlib__fftshift_complex(float* re, float* im, int n);
-float pulseqlib__get_spectrum_flank(const float* x, const float* re, const float* im, int n, float cutoff, int reverse);
+float pulseqlib__find_spectrum_flank(const float* x, const float* re, const float* im, int n, float cutoff, int reverse);
 size_t pulseqlib__next_pow2(size_t x);
-int   pulseqlib__calc_convolution_fft(float* output, const float* signal, int signal_len, const float* kernel, int kernel_len);
+#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
+int   pulseqlib__convolve_fft(float* output, const float* signal, int signal_len, const float* kernel, int kernel_len);
+#endif
 
 /* --- pulseqlib_parse.c --- */
 void  pulseqlib__seq_file_init(pulseqlib__seq_file* seq, const pulseqlib_opts* opts);
@@ -808,8 +774,8 @@ int   pulseqlib__deduplicate_int_rows(int* unique_defs, int* event_table, const 
 int   pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const pulseqlib__seq_file* seq);
 
 /* --- pulseqlib_structure.c --- */
-int   pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);
-int   pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib__seq_file* seq);
+int   pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);
+int   pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib__seq_file* seq);
 int   pulseqlib__build_freq_mod_library(pulseqlib_sequence_descriptor* desc);
 
 /* --- pulseqlib_core.c (continued) --- */
@@ -818,30 +784,7 @@ void  pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* desc);
 void  pulseqlib_segment_table_result_free(pulseqlib_segment_table_result* result);
 
 /* --- pulseqlib_safety.c --- */
-int   pulseqlib__calc_segment_timing(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);
-
-/* Gradient waveform extraction (private -- public wrapper adds seg labels).
- *
- * include_seg_labels: 0 = skip label computation (faster, for safety checks);
- *                     1 = populate seg_label arrays (for public API / plotting). */
-int   pulseqlib__get_tr_grad_raw(
-          const pulseqlib_sequence_descriptor* desc,
-          pulseqlib_tr_gradient_waveforms* waveforms,
-          pulseqlib_diagnostic* diag,
-          int block_start, int block_count,
-          int amplitude_mode,
-          const int* tr_group_labels, int target_group,
-          int include_seg_labels);
-
-/* Interpolate raw per-axis waveforms to uniform raster. */
-int   pulseqlib__interpolate_axes_uniform(
-          pulseqlib__uniform_grad_waveforms* out,
-          const pulseqlib_tr_gradient_waveforms* raw,
-          float target_raster_us);
-
-/* Free uniform waveforms. */
-void  pulseqlib__uniform_grad_waveforms_free(
-          pulseqlib__uniform_grad_waveforms* w);
+int   pulseqlib__compute_segment_timing(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);
 
 /* --- pulseqlib_cache.c --- */
 int   pulseqlib__try_read_cache(pulseqlib_collection* coll, const char* seq_path);

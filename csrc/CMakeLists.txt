@@ -10,7 +10,7 @@ set(PULSEQLIB_SOURCES
     pulseqlib_core.c
     pulseqlib_cache.c
     pulseqlib_safety.c
-    pulseqlib_accessors.c
+    pulseqlib_getters.c
 )
 
 # kissfft sources (co-located for self-containment)

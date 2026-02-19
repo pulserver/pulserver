@@ -8,7 +8,7 @@
 /*  Array statistics                                                  */
 /* ------------------------------------------------------------------ */
 
-float pulseqlib__find_max_abs_real(const float* samples, int n)
+float pulseqlib__get_max_abs_real(const float* samples, int n)
 {
     int i;
     float max_abs = 0.0f;
@@ -25,7 +25,7 @@ float pulseqlib__find_max_abs_real(const float* samples, int n)
     return max_abs;
 }
 
-int pulseqlib__find_max_abs_index_real(const float* samples, int n)
+int pulseqlib__get_max_abs_index_real(const float* samples, int n)
 {
     int i;
     int max_idx = 0;
@@ -319,7 +319,7 @@ void pulseqlib__fftshift_complex(float* re, float* im, int n)
     }
 }
 
-float pulseqlib__find_spectrum_flank(
+float pulseqlib__get_spectrum_flank(
     const float* x, const float* re, const float* im,
     int n, float cutoff, int reverse)
 {
@@ -375,7 +375,7 @@ size_t pulseqlib__next_pow2(size_t x)
 #include "external_kiss_fft.h"
 #include "external_kiss_fftr.h"
 
-int pulseqlib__convolve_fft(
+int pulseqlib__calc_convolution_fft(
     float* output,
     const float* signal, int signal_len,
     const float* kernel, int kernel_len)

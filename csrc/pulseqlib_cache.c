@@ -110,10 +110,10 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
     /* scalars */
     if (!write4(f, &d->num_prep_blocks, 1)) return 0;
     if (!write4(f, &d->num_cooldown_blocks, 1)) return 0;
-    if (!write4(f, &d->rf_raster_time_us, 1)) return 0;
-    if (!write4(f, &d->grad_raster_time_us, 1)) return 0;
-    if (!write4(f, &d->adc_raster_time_us, 1)) return 0;
-    if (!write4(f, &d->block_duration_raster_us, 1)) return 0;
+    if (!write4(f, &d->rf_raster_us, 1)) return 0;
+    if (!write4(f, &d->grad_raster_us, 1)) return 0;
+    if (!write4(f, &d->adc_raster_us, 1)) return 0;
+    if (!write4(f, &d->block_raster_us, 1)) return 0;
     if (!write4(f, &d->ignore_fov_shift, 1)) return 0;
     if (!write4(f, &d->enable_pmc, 1)) return 0;
     if (!write4(f, &d->ignore_averages, 1)) return 0;
@@ -160,16 +160,16 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &d->rf_definitions[i].delay, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].num_channels, 1)) return 0;
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
-        if (!write4(f, &d->rf_definitions[i].stats.flip_angle, 1)) return 0;
+        if (!write4(f, &d->rf_definitions[i].stats.flip_angle_deg, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].stats.area, 1)) return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.abswidth, 1)) return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.effwidth, 1)) return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.dtycyc, 1)) return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.maxpw, 1)) return 0;
+        if (!write4(f, &d->rf_definitions[i].stats.abs_width, 1)) return 0;
+        if (!write4(f, &d->rf_definitions[i].stats.eff_width, 1)) return 0;
+        if (!write4(f, &d->rf_definitions[i].stats.duty_cycle, 1)) return 0;
+        if (!write4(f, &d->rf_definitions[i].stats.max_pulse_width, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].stats.duration_us, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].stats.isodelay_us, 1)) return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.bandwidth, 1)) return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.max_amplitude, 1)) return 0;
+        if (!write4(f, &d->rf_definitions[i].stats.bandwidth_hz, 1)) return 0;
+        if (!write4(f, &d->rf_definitions[i].stats.max_amplitude_hz, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].stats.num_samples, 1)) return 0;
 #endif
     }
@@ -340,10 +340,10 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
     /* scalars */
     if (!read4(f, &d->num_prep_blocks, 1)) return 0;
     if (!read4(f, &d->num_cooldown_blocks, 1)) return 0;
-    if (!read4(f, &d->rf_raster_time_us, 1)) return 0;
-    if (!read4(f, &d->grad_raster_time_us, 1)) return 0;
-    if (!read4(f, &d->adc_raster_time_us, 1)) return 0;
-    if (!read4(f, &d->block_duration_raster_us, 1)) return 0;
+    if (!read4(f, &d->rf_raster_us, 1)) return 0;
+    if (!read4(f, &d->grad_raster_us, 1)) return 0;
+    if (!read4(f, &d->adc_raster_us, 1)) return 0;
+    if (!read4(f, &d->block_raster_us, 1)) return 0;
     if (!read4(f, &d->ignore_fov_shift, 1)) return 0;
     if (!read4(f, &d->enable_pmc, 1)) return 0;
     if (!read4(f, &d->ignore_averages, 1)) return 0;
@@ -391,18 +391,18 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         if (!read4(f, &d->rf_definitions[i].num_channels, 1)) return 0;
         if (do_swap) swap4_array(&d->rf_definitions[i].id, 6);
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
-        if (!read4(f, &d->rf_definitions[i].stats.flip_angle, 1)) return 0;
+        if (!read4(f, &d->rf_definitions[i].stats.flip_angle_deg, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].stats.area, 1)) return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.abswidth, 1)) return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.effwidth, 1)) return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.dtycyc, 1)) return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.maxpw, 1)) return 0;
+        if (!read4(f, &d->rf_definitions[i].stats.abs_width, 1)) return 0;
+        if (!read4(f, &d->rf_definitions[i].stats.eff_width, 1)) return 0;
+        if (!read4(f, &d->rf_definitions[i].stats.duty_cycle, 1)) return 0;
+        if (!read4(f, &d->rf_definitions[i].stats.max_pulse_width, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].stats.duration_us, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].stats.isodelay_us, 1)) return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.bandwidth, 1)) return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.max_amplitude, 1)) return 0;
+        if (!read4(f, &d->rf_definitions[i].stats.bandwidth_hz, 1)) return 0;
+        if (!read4(f, &d->rf_definitions[i].stats.max_amplitude_hz, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].stats.num_samples, 1)) return 0;
-        if (do_swap) swap4_array(&d->rf_definitions[i].stats.flip_angle, 11);
+        if (do_swap) swap4_array(&d->rf_definitions[i].stats.flip_angle_deg, 11);
 #endif
     }
 

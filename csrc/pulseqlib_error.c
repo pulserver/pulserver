@@ -76,23 +76,21 @@ void pulseqlib_diagnostic_init(pulseqlib_diagnostic* diag)
 {
     if (!diag) return;
     diag->code = PULSEQLIB_OK;
-    diag->block_index = -1;
-    diag->channel = -1;
-    diag->num_unique_blocks = 0;
-    diag->imaging_region_length = 0;
-    diag->candidate_pattern_length = 0;
-    diag->mismatch_position = -1;
-    diag->gradient_amplitude = 0.0f;
-    diag->max_allowed_amplitude = 0.0f;
+    diag->message[0] = '\0';
 }
 
 void pulseqlib__diag_printf(pulseqlib_diagnostic* diag, const char* fmt, ...)
 {
     va_list ap;
-    (void)diag;
+    int used;
+    if (!diag) return;
+    /* Find current length so successive calls append */
+    used = (int)strlen(diag->message);
+    if (used >= PULSEQLIB_DIAG_MSG_LEN - 1) return;
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    vsprintf(diag->message + used, fmt, ap);
     va_end(ap);
+    diag->message[PULSEQLIB_DIAG_MSG_LEN - 1] = '\0';
 }
 
 /* ------------------------------------------------------------------ */
@@ -189,17 +187,17 @@ const char* pulseqlib_get_error_hint(int code)
             return "The preparation or cooldown section differs from the main TR pattern and is too long.";
         case PULSEQLIB_ERR_MAX_GRAD_EXCEEDED:
             return "The gradient sum-of-squares amplitude exceeds the system limit. "
-                   "Check diagnostic fields gradient_amplitude and max_allowed_amplitude (mT/m).";
+                   "See diagnostic message for details.";
         case PULSEQLIB_ERR_NOT_IMPLEMENTED:
             return "This functionality is not yet implemented.";
         case PULSEQLIB_ERR_GRAD_DISCONTINUITY:
             return "The gradient amplitude step between consecutive blocks exceeds "
                    "the maximum allowed by the slew rate and raster time. "
-                   "Check diagnostic fields gradient_amplitude and max_allowed_amplitude (mT/m).";
+                   "See diagnostic message for details.";
         case PULSEQLIB_ERR_MAX_SLEW_EXCEEDED:
             return "A gradient waveform exceeds the per-axis slew rate limit "
                    "(derated by 1/sqrt(3) for rotation safety). "
-                   "Check diagnostic fields gradient_amplitude and max_allowed_amplitude (T/m/s).";
+                   "See diagnostic message for details.";
         case PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH:
             return "Segment definitions are inconsistent with block table. "
                 "Try scaling gradients to eps instead of zero to preserve "

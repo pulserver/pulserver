@@ -1,7 +1,14 @@
-/* pulseqlib_types.h -- public type definitions, constants, and init macros
+/**
+ * @file pulseqlib_types.h
+ * @brief Public type definitions, error codes, and initializer macros.
  *
- * All types intended for consumption by the caller are defined here.
+ * All types intended for consumption by calling code are defined here.
  * Internal / opaque types live in pulseqlib_internal.h.
+ *
+ * Naming conventions:
+ *   - Physical quantities carry unit suffixes: _us, _hz, _hz_per_m, etc.
+ *   - All identifiers are snake_case.
+ *   - INIT macros are C89 and C++ compatible (positional, no designated init).
  */
 
 #ifndef PULSEQLIB_TYPES_H
@@ -20,7 +27,10 @@
 /*  Error codes                                                       */
 /* ================================================================== */
 
-/* Success */
+/** @defgroup errcodes Error codes
+ *  Positive = success, negative = error.
+ *  @{ */
+
 #define PULSEQLIB_OK                          1
 
 /* Generic errors (-1 to -9) */
@@ -56,11 +66,6 @@
 #define PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND  -202
 #define PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS    -203
 
-/* Selective excitation errors (-300 to -399) -- REMOVED:
- * Explicit frequency modulation eliminates the need for these checks.
- * Error codes reserved but no longer used.
- */
-
 /* Acoustic errors (-400 to -449) */
 #define PULSEQLIB_ERR_ACOUSTIC_INVALID_WINDOW    -400
 #define PULSEQLIB_ERR_ACOUSTIC_INVALID_RESOLUTION -401
@@ -76,7 +81,7 @@
 #define PULSEQLIB_ERR_PNS_FFT_FAILED             -454
 #define PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED     -455
 
-/* Collection errors (-500 to -509) */
+/* Collection errors (-500 to -559) */
 #define PULSEQLIB_ERR_COLLECTION_EMPTY           -500
 #define PULSEQLIB_ERR_COLLECTION_CHAIN_BROKEN    -501
 #define PULSEQLIB_ERR_COLLECTION_MAX_DEPTH       -503
@@ -84,136 +89,141 @@
 #define PULSEQLIB_ERR_GRAD_DISCONTINUITY         -551
 #define PULSEQLIB_ERR_MAX_SLEW_EXCEEDED          -552
 
-/* Consistancy errors */
+/* Consistency errors (-560 to -569) */
 #define PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH   -560
 #define PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC    -561
 
 #define PULSEQLIB_ERR_NOT_IMPLEMENTED      -999
 
-/* Code checking */
+/** @} */
+
+/* Code checking macros */
 #define PULSEQLIB_SUCCEEDED(code) ((code) > 0)
 #define PULSEQLIB_FAILED(code)    ((code) < 0)
 
 /* ================================================================== */
-/*  Cursor info                                                       */
+/*  Cursor states                                                     */
 /* ================================================================== */
 #define PULSEQLIB_CURSOR_BLOCK  0
 #define PULSEQLIB_CURSOR_DONE   1
 
 /* ================================================================== */
-/*  Max-size constants (public)                                       */
+/*  Max-size constants                                                */
 /* ================================================================== */
-#define PULSEQLIB_MAX_GRAD_SHOTS 16
-/* Legacy alias */
-#ifndef MAX_GRAD_SHOTS
-#define MAX_GRAD_SHOTS PULSEQLIB_MAX_GRAD_SHOTS
-#endif
-
+#define PULSEQLIB_MAX_GRAD_SHOTS       16
 #define PULSEQLIB_MAX_RF_SHIM_CHANNELS 64
+#define PULSEQLIB_DIAG_MSG_LEN        256
 
 /* ================================================================== */
 /*  Diagnostic                                                        */
 /* ================================================================== */
+
+/**
+ * @brief Diagnostic info returned by library functions on failure.
+ *
+ * On error, @c code is set to a negative PULSEQLIB_ERR_* value and
+ * @c message contains a human-readable description (may include
+ * offending block index, axis, amplitude, etc.).
+ */
 typedef struct pulseqlib_diagnostic {
-    int code;
-    int block_index;
-    int channel;
-    int num_unique_blocks;
-    int imaging_region_length;
-    int candidate_pattern_length;
-    int mismatch_position;
-    float gradient_amplitude;
-    float max_allowed_amplitude;
+    int  code;
+    char message[PULSEQLIB_DIAG_MSG_LEN];
 } pulseqlib_diagnostic;
 
-#define PULSEQLIB_DIAGNOSTIC_INIT { \
-    PULSEQLIB_OK, -1, -1, 0, 0, 0, -1, 0.0f, 0.0f \
-}
+#define PULSEQLIB_DIAGNOSTIC_INIT {PULSEQLIB_OK, {'\0'}}
 
 /* ================================================================== */
 /*  System options                                                    */
 /* ================================================================== */
+
+/**
+ * @brief Scanner hardware limits and raster times.
+ *
+ * All raster times are in microseconds.  Gradient / slew limits use
+ * internal Pulseq units (Hz/m and Hz/m/s respectively).
+ */
 typedef struct pulseqlib_opts {
-    float gamma;
-    float b0;
-    float max_grad;
-    float max_slew;
-    float rf_raster_time;
-    float grad_raster_time;
-    float adc_raster_time;
-    float block_duration_raster;
+    int   vendor;                    /**< PULSEQLIB_VENDOR_* constant       */
+    float gamma_hz_per_t;            /**< gyromagnetic ratio  (Hz / T)      */
+    float b0_t;                      /**< static field strength (T)         */
+    float max_grad_hz_per_m;         /**< gradient amplitude limit (Hz / m) */
+    float max_slew_hz_per_m_per_s;   /**< slew rate limit (Hz / m / s)      */
+    float rf_raster_us;              /**< RF sample raster (us)             */
+    float grad_raster_us;            /**< gradient sample raster (us)       */
+    float adc_raster_us;             /**< ADC dwell raster (us)             */
+    float block_raster_us;           /**< block duration raster (us)        */
 } pulseqlib_opts;
 
-#define PULSEQLIB_OPTS_INIT {0}
+#define PULSEQLIB_OPTS_INIT {0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f}
 
 /* ================================================================== */
-/*  RF stats (public, vendor-independent view of RF definition stats) */
+/*  RF statistics                                                     */
 /* ================================================================== */
+
+/**
+ * @brief Per-RF-definition statistics (always available).
+ */
 typedef struct pulseqlib_rf_stats {
-    float flip_angle;
-    float area;
-    float abswidth;
-    float effwidth;
-    float dtycyc;
-    float maxpw;
-    float duration_us;
-    int   isodelay_us;
-    float bandwidth;
-    float max_amplitude;
-    int   num_samples;
+    float flip_angle_deg;   /**< nominal flip angle (degrees)           */
+    float area;             /**< integral of |B1(t)| dt  (a.u.)        */
+    float abs_width;        /**< fraction of duration with |B1|>0      */
+    float eff_width;        /**< equivalent rectangular pulse fraction */
+    float duty_cycle;       /**< fraction of TR occupied by RF         */
+    float max_pulse_width;  /**< longest contiguous |B1|>0 segment (s) */
+    float duration_us;      /**< total RF event duration (us)          */
+    int   isodelay_us;      /**< isodelay from center to echo (us)     */
+    float bandwidth_hz;     /**< estimated bandwidth (Hz, via FFT)     */
+    float max_amplitude_hz; /**< peak |gamma*B1| (Hz)                  */
+    int   num_samples;      /**< waveform sample count                 */
 } pulseqlib_rf_stats;
 
-#define PULSEQLIB_RF_STATS_INIT {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f, 0}
+#define PULSEQLIB_RF_STATS_INIT { \
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f, 0 \
+}
 
 /* ================================================================== */
-/*  RF definitions and table                                          */
+/*  TR region selectors (for freq-mod plan)                           */
 /* ================================================================== */
-/* (Internal -- see pulseqlib_internal.h)                             */
-
-/* TR region selectors for freq_mod plan building */
 #define PULSEQLIB_TR_REGION_ALL      (-1)
 #define PULSEQLIB_TR_REGION_PREP       0
 #define PULSEQLIB_TR_REGION_MAIN       1
 #define PULSEQLIB_TR_REGION_COOLDOWN   2
 
-/* Computed frequency modulation plan for a set of RF/ADC instances */
-typedef struct pulseqlib_freq_mod_plan {
-    int num_instances;      /* number of freq-mod events in plan */
-    int max_samples;        /* longest waveform (zero-padded length) */
-    int num_blocks;         /* total blocks in descriptor (block_table size) */
-    float raster_us;        /* common raster (us) */
-    float** waveforms;      /* [num_instances] pointers, each -> max_samples Hz */
-    int* num_samples;       /* [num_instances] actual length per row */
-    float* phase_offset;    /* [num_instances] phase compensation in rad */
-    int* block_to_instance; /* [num_blocks] absolute block idx -> instance, -1 */
-    float* _waveform_data;  /* backing store (flat), freed by plan_free */
-    const void* _desc;      /* opaque pointer to descriptor (for update) */
-} pulseqlib_freq_mod_plan;
+/* ================================================================== */
+/*  Frequency modulation plan (opaque)                                */
+/* ================================================================== */
 
-#define PULSEQLIB_FREQ_MOD_PLAN_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, NULL, NULL}
+/**
+ * @brief Opaque handle to a precomputed frequency modulation plan.
+ *
+ * Created by pulseqlib_build_freq_mod_plan(), queried via
+ * pulseqlib_get_freq_mod_waveform(), freed by
+ * pulseqlib_freq_mod_plan_free().
+ */
+typedef struct pulseqlib_freq_mod_plan pulseqlib_freq_mod_plan;
 
 /* ================================================================== */
 /*  Segment timing anchors                                            */
 /* ================================================================== */
 
-/* RF event anchor relative to segment start (us) */
+/** @brief RF event anchor relative to segment start. */
 typedef struct pulseqlib_segment_rf_anchor {
-    int   block_offset;         /* block index within segment */
-    float start_us;             /* RF delay relative to segment start */
-    float end_us;               /* RF end relative to segment start */
-    float isocenter_us;         /* RF isodelay point relative to segment start */
-    float base_amplitude;       /* amplitude of first TR appearance */
+    int   block_offset;     /**< block index within segment           */
+    float start_us;         /**< RF start relative to segment (us)    */
+    float end_us;           /**< RF end relative to segment (us)      */
+    float isocenter_us;     /**< RF isodelay point rel. to seg. (us)  */
+    float base_amplitude_hz;/**< amplitude of first TR appearance (Hz)*/
 } pulseqlib_segment_rf_anchor;
 
 #define PULSEQLIB_SEGMENT_RF_ANCHOR_INIT {0, 0.0f, 0.0f, 0.0f, 0.0f}
 
-/* ADC event anchor relative to segment start (us) */
+/** @brief ADC event anchor relative to segment start. */
 typedef struct pulseqlib_segment_adc_anchor {
-    int   block_offset;         /* block index within segment */
-    float start_us;             /* ADC delay relative to segment start */
-    float end_us;               /* ADC end relative to segment start */
-    int   kzero_index;          /* sample index of k=0 in readout */
-    float kzero_us;             /* time of k=0 relative to segment start */
+    int   block_offset;     /**< block index within segment           */
+    float start_us;         /**< ADC start relative to segment (us)   */
+    float end_us;           /**< ADC end relative to segment (us)     */
+    int   kzero_index;      /**< sample index of k=0 in readout      */
+    float kzero_us;         /**< time of k=0 relative to segment (us) */
 } pulseqlib_segment_adc_anchor;
 
 #define PULSEQLIB_SEGMENT_ADC_ANCHOR_INIT {0, 0.0f, 0.0f, 0, 0.0f}
@@ -221,162 +231,167 @@ typedef struct pulseqlib_segment_adc_anchor {
 /* ================================================================== */
 /*  Opaque collection handle                                          */
 /* ================================================================== */
+
+/**
+ * @brief Opaque handle to a loaded Pulseq sequence collection.
+ *
+ * Created by pulseqlib_read() or pulseqlib_read_from_buffers().
+ * All getter functions take a const pointer to this type.
+ * Freed by pulseqlib_collection_free().
+ */
 typedef struct pulseqlib_collection pulseqlib_collection;
 
 /* ================================================================== */
-/*  TR gradient waveforms                                             */
+/*  Per-axis gradient waveform (for plotting)                         */
 /* ================================================================== */
+
+/**
+ * @brief Single-axis gradient waveform with per-sample segment label.
+ *
+ * Each element i represents a time-point with amplitude and the
+ * segment it belongs to.  The time array is NOT interpolated to a
+ * uniform raster -- it follows the native event timing.
+ */
+typedef struct pulseqlib_grad_axis_waveform {
+    int    num_samples;           /**< number of time-points          */
+    float* time_us;               /**< time of each sample (us)       */
+    float* amplitude_hz_per_m;    /**< gradient amplitude (Hz / m)    */
+    int*   seg_label;             /**< segment index for each sample  */
+} pulseqlib_grad_axis_waveform;
+
+#define PULSEQLIB_GRAD_AXIS_WAVEFORM_INIT {0, NULL, NULL, NULL}
+
+/**
+ * @brief Per-TR gradient waveforms for all three axes.
+ *
+ * Used for gradient-shape plotting in the wrapper.  Each axis carries
+ * its own time base (not interpolated to a common raster).
+ */
 typedef struct pulseqlib_tr_gradient_waveforms {
-    int num_samples;
-    float* time;
-    float* waveform_gx;
-    float* waveform_gy;
-    float* waveform_gz;
+    pulseqlib_grad_axis_waveform gx;
+    pulseqlib_grad_axis_waveform gy;
+    pulseqlib_grad_axis_waveform gz;
 } pulseqlib_tr_gradient_waveforms;
 
-#define PULSEQLIB_TR_GRADIENT_WAVEFORMS_INIT {0, NULL, NULL, NULL, NULL}
-
-/* ================================================================== */
-/*  Acoustic violations                                               */
-/* ================================================================== */
-typedef struct pulseqlib_acoustic_violation {
-    int detected;
-    int band_index;
-    float peak_frequency_hz;
-    float max_amplitude;
-    float allowed_amplitude;
-} pulseqlib_acoustic_violation;
-
-#define PULSEQLIB_ACOUSTIC_VIOLATION_INIT {0, -1, 0.0f, 0.0f, 0.0f}
-
-typedef struct pulseqlib_acoustic_check_result {
-    pulseqlib_acoustic_violation gx;
-    pulseqlib_acoustic_violation gy;
-    pulseqlib_acoustic_violation gz;
-} pulseqlib_acoustic_check_result;
-
-#define PULSEQLIB_ACOUSTIC_CHECK_RESULT_INIT { \
-    PULSEQLIB_ACOUSTIC_VIOLATION_INIT, \
-    PULSEQLIB_ACOUSTIC_VIOLATION_INIT, \
-    PULSEQLIB_ACOUSTIC_VIOLATION_INIT \
+#define PULSEQLIB_TR_GRADIENT_WAVEFORMS_INIT { \
+    PULSEQLIB_GRAD_AXIS_WAVEFORM_INIT, \
+    PULSEQLIB_GRAD_AXIS_WAVEFORM_INIT, \
+    PULSEQLIB_GRAD_AXIS_WAVEFORM_INIT  \
 }
 
 /* ================================================================== */
-/*  TR acoustic spectra                                               */
+/*  Acoustic spectra (for plotting)                                   */
 /* ================================================================== */
-typedef struct pulseqlib_tr_acoustic_spectra {
-    int num_windows;
-    int num_freq_bins;
-    int combined;
-    float freq_resolution;
-    float* frequencies;
-    float* spectra_gx;
-    float* spectra_gy;
-    float* spectra_gz;
-    float* max_envelope_gx;
-    float* max_envelope_gy;
-    float* max_envelope_gz;
-    int* peaks_gx;
-    int* peaks_gy;
-    int* peaks_gz;
 
-    int num_freq_bins_full;
-    float freq_resolution_full;
-    float* frequencies_full;
-    float* spectra_gx_full;
-    float* spectra_gy_full;
-    float* spectra_gz_full;
-    float max_envelope_gx_full;
-    float max_envelope_gy_full;
-    float max_envelope_gz_full;
+/**
+ * @brief Acoustic spectral data for wrapper-side plotting.
+ *
+ * Frequency axes are specified by (min, spacing, num_bins) so
+ * the caller can reconstruct: freq[k] = freq_min_hz + k * freq_spacing_hz.
+ *
+ * Spectrograms are flat row-major arrays [num_windows * num_freq_bins].
+ * Peak masks are binary (0 / 1) with the same layout.
+ */
+typedef struct pulseqlib_acoustic_spectra {
+    /* -- sliding window -------------------------------------------- */
+    float freq_min_hz;          /**< lowest frequency bin (Hz)         */
+    float freq_spacing_hz;      /**< bin width (Hz)                    */
+    int   num_freq_bins;        /**< frequency bins per window         */
+    int   num_windows;          /**< number of sliding windows         */
+    float* spectrogram_gx;      /**< [num_windows * num_freq_bins]     */
+    float* spectrogram_gy;
+    float* spectrogram_gz;
+    int*   peaks_gx;            /**< binary peak mask (same shape)     */
+    int*   peaks_gy;
+    int*   peaks_gz;
 
-    int num_trs;
-    float tr_duration_us;
-    float fundamental_freq;
-    int num_freq_bins_seq;
-    float* frequencies_seq;
-    float* spectra_gx_seq;
-    float* spectra_gy_seq;
-    float* spectra_gz_seq;
-    int* peaks_gx_seq;
-    int* peaks_gy_seq;
-    int* peaks_gz_seq;
+    /* -- full TR spectrum ------------------------------------------ */
+    float* spectrum_full_gx;    /**< [num_freq_bins]                   */
+    float* spectrum_full_gy;
+    float* spectrum_full_gz;
+    int*   peaks_full_gx;       /**< binary peak mask [num_freq_bins]  */
+    int*   peaks_full_gy;
+    int*   peaks_full_gz;
 
-    pulseqlib_acoustic_check_result sliding_window_check;
-    pulseqlib_acoustic_check_result sequence_check;
-} pulseqlib_tr_acoustic_spectra;
+    /* -- sequence-level harmonics ---------------------------------- */
+    float  freq_spacing_seq_hz; /**< harmonic spacing (Hz)             */
+    int    num_freq_bins_seq;   /**< number of harmonic bins           */
+    float* spectrum_seq_gx;     /**< [num_freq_bins_seq]               */
+    float* spectrum_seq_gy;
+    float* spectrum_seq_gz;
+    int*   peaks_seq_gx;        /**< binary peak mask                  */
+    int*   peaks_seq_gy;
+    int*   peaks_seq_gz;
+} pulseqlib_acoustic_spectra;
 
-#define PULSEQLIB_TR_ACOUSTIC_SPECTRA_INIT { \
-    0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, \
-    0, 0.0f, NULL, NULL, NULL, NULL, 0.0f, 0.0f, 0.0f, \
-    0, 0.0f, 0.0f, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, \
-    PULSEQLIB_ACOUSTIC_CHECK_RESULT_INIT, PULSEQLIB_ACOUSTIC_CHECK_RESULT_INIT \
+#define PULSEQLIB_ACOUSTIC_SPECTRA_INIT { \
+    0.0f, 0.0f, 0, 0,  NULL, NULL, NULL,  NULL, NULL, NULL, \
+    NULL, NULL, NULL,  NULL, NULL, NULL, \
+    0.0f, 0,  NULL, NULL, NULL,  NULL, NULL, NULL \
 }
 
 /* ================================================================== */
-/*  Forbidden band                                                    */
+/*  Forbidden frequency band (for acoustic check)                     */
 /* ================================================================== */
+
+/**
+ * @brief A forbidden acoustic frequency band.
+ *
+ * @c max_amplitude_hz_per_m is the maximum allowed gradient spectral
+ * amplitude (in Hz / m) within the band [freq_min_hz, freq_max_hz].
+ */
 typedef struct pulseqlib_forbidden_band {
-    float freq_min_hz;
-    float freq_max_hz;
-    float max_amplitude;
+    float freq_min_hz;              /**< lower band edge (Hz)          */
+    float freq_max_hz;              /**< upper band edge (Hz)          */
+    float max_amplitude_hz_per_m;   /**< max spectral amplitude (Hz/m) */
 } pulseqlib_forbidden_band;
 
 #define PULSEQLIB_FORBIDDEN_BAND_INIT {0.0f, 0.0f, 0.0f}
 
 /* ================================================================== */
-/*  PNS parameters and result (vendor-specific)                       */
+/*  PNS parameters (vendor-independent)                               */
 /* ================================================================== */
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_SIEMENS
-typedef struct pulseqlib_safe_params {
-    float a1;
-    float tau1;
-    float a2;
-    float tau2;
-    float a3;
-    float tau3;
-    float g_scale;
-    float stim_thresh;
-    float stim_limit;
-} pulseqlib_safe_params;
 
-#define PULSEQLIB_SAFE_PARAMS_INIT {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f}
-#endif
-
+/**
+ * @brief PNS model parameters.
+ *
+ * Set @c vendor to the appropriate PULSEQLIB_VENDOR_* constant.
+ * Currently only PULSEQLIB_VENDOR_GEHC is implemented (exponential
+ * model with chronaxie / rheobase / alpha).
+ */
 typedef struct pulseqlib_pns_params {
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
-    float chronaxie_us;
-    float rheobase;
-    float alpha;
-#elif PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_SIEMENS
-    pulseqlib_safe_params x;
-    pulseqlib_safe_params y;
-    pulseqlib_safe_params z;
-#endif
+    int   vendor;                   /**< PULSEQLIB_VENDOR_* constant   */
+    float chronaxie_us;             /**< nerve time constant (us)      */
+    float rheobase_hz_per_m_per_s;  /**< threshold slew rate (Hz/m/s)  */
+    float alpha;                    /**< model exponent (dimensionless) */
 } pulseqlib_pns_params;
 
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
-#define PULSEQLIB_PNS_PARAMS_INIT {0.0f, 0.0f, 1.0f}
-#elif PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_SIEMENS
-#define PULSEQLIB_PNS_PARAMS_INIT {PULSEQLIB_SAFE_PARAMS_INIT, PULSEQLIB_SAFE_PARAMS_INIT, PULSEQLIB_SAFE_PARAMS_INIT}
-#endif
+#define PULSEQLIB_PNS_PARAMS_INIT {0, 0.0f, 0.0f, 1.0f}
 
+/* ================================================================== */
+/*  PNS result (for plotting)                                         */
+/* ================================================================== */
+
+/**
+ * @brief Convolved slew-rate waveforms per axis.
+ *
+ * The wrapper can compute combined PNS = sqrt(x^2+y^2+z^2) and
+ * percentage = slew / rheobase.  This avoids duplicating model
+ * logic across languages.
+ */
 typedef struct pulseqlib_pns_result {
-    int num_samples;
-    float* pns_x;
-    float* pns_y;
-    float* pns_z;
-    float* pns_total;
-    float max_pns;
-    int max_pns_index;
-    float max_pns_time_us;
+    int    num_samples;
+    float* slew_x_hz_per_m_per_s;   /**< convolved dG/dt on X (Hz/m/s) */
+    float* slew_y_hz_per_m_per_s;   /**< convolved dG/dt on Y (Hz/m/s) */
+    float* slew_z_hz_per_m_per_s;   /**< convolved dG/dt on Z (Hz/m/s) */
 } pulseqlib_pns_result;
 
-#define PULSEQLIB_PNS_RESULT_INIT {0, NULL, NULL, NULL, NULL, 0.0f, 0, 0.0f}
+#define PULSEQLIB_PNS_RESULT_INIT {0, NULL, NULL, NULL}
 
 /* ================================================================== */
 /*  Label limits                                                      */
 /* ================================================================== */
+
 typedef struct pulseqlib_label_limit {
     int min;
     int max;
@@ -395,37 +410,44 @@ typedef struct pulseqlib_label_limits {
     pulseqlib_label_limit acq;
 } pulseqlib_label_limits;
 
+/* ================================================================== */
+/*  Block instance (cursor output)                                    */
+/* ================================================================== */
+
+/**
+ * @brief Resolved block data for the current cursor position.
+ *
+ * Returned by pulseqlib_get_block_instance().  Amplitudes are in
+ * Pulseq native units (Hz for RF, Hz/m for gradients).
+ */
 typedef struct pulseqlib_block_instance {
-    /* Block duration (resolved: pure delay uses instance, normal uses definition) */
-    int duration_us;
+    int   duration_us;          /**< block duration (us)                */
 
     /* RF */
-    float rf_amp;
-    float rf_freq;
-    float rf_phase;
+    float rf_amp_hz;            /**< RF amplitude (Hz, = gamma*B1)     */
+    float rf_freq_hz;           /**< RF frequency offset (Hz)          */
+    float rf_phase_rad;         /**< RF phase offset (rad)             */
 
-    /* Gradients — amplitudes for this TR instance */
-    float gx_amp;
-    float gy_amp;
-    float gz_amp;
-
-    /* Gradient shot indices for this TR instance */
-    int gx_shot_idx;
-    int gy_shot_idx;
-    int gz_shot_idx;
+    /* Gradients */
+    float gx_amp_hz_per_m;      /**< GX amplitude (Hz / m)             */
+    float gy_amp_hz_per_m;      /**< GY amplitude (Hz / m)             */
+    float gz_amp_hz_per_m;      /**< GZ amplitude (Hz / m)             */
+    int   gx_shot_idx;          /**< GX multi-shot index               */
+    int   gy_shot_idx;          /**< GY multi-shot index               */
+    int   gz_shot_idx;          /**< GZ multi-shot index               */
 
     /* Rotation */
-    float rotmat[9];
-    int norot_flag;
-    int nopos_flag;
+    float rotmat[9];            /**< 3x3 rotation matrix (row-major)   */
+    int   norot_flag;           /**< 1 = skip rotation for this block  */
+    int   nopos_flag;           /**< 1 = skip repositioning            */
 
     /* Trigger */
-    int trigon_flag;
+    int   trigon_flag;          /**< 1 = trigger-on event present      */
 
     /* ADC */
-    int adc_flag;        /* 0 = no ADC, 1 = has ADC */
-    float adc_freq;
-    float adc_phase;
+    int   adc_flag;             /**< 1 = ADC acquisition active        */
+    float adc_freq_hz;          /**< ADC frequency offset (Hz)         */
+    float adc_phase_rad;        /**< ADC phase offset (rad)            */
 } pulseqlib_block_instance;
 
 #define PULSEQLIB_BLOCK_INSTANCE_INIT { \
@@ -439,14 +461,21 @@ typedef struct pulseqlib_block_instance {
 }
 
 /* ================================================================== */
-/*  Lightweight scan-time query result                                */
+/*  Scan-time query result                                            */
 /* ================================================================== */
+
+/**
+ * @brief Quick scan-time summary (no full load required).
+ *
+ * Returned by pulseqlib_get_scan_time().  The total number of
+ * segment boundaries equals the sum across subsequences of
+ * (segments_per_TR * num_TRs).
+ */
 typedef struct pulseqlib_scan_time_info {
-    int num_subsequences;
-    float* durations_us;       /* per-subsequence duration in us  */
-    int*   ignore_averages;    /* per-subsequence flag (0 or 1)   */
+    float total_duration_us;        /**< total sequence duration (us)  */
+    int   total_segment_boundaries; /**< total segment boundary count  */
 } pulseqlib_scan_time_info;
 
-#define PULSEQLIB_SCAN_TIME_INFO_INIT {0, NULL, NULL}
+#define PULSEQLIB_SCAN_TIME_INFO_INIT {0.0f, 0}
 
 #endif /* PULSEQLIB_TYPES_H */

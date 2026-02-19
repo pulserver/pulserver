@@ -75,7 +75,7 @@ static int first_repeating_segment(const int* s, int len)
 /*  find_tr_in_sequence                                               */
 /* ================================================================== */
 
-int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag)
+int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag)
 {
     pulseqlib_tr_descriptor* tr = &desc->tr_descriptor;
     pulseqlib_diagnostic local_diag;
@@ -85,13 +85,14 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
     int* block_dur     = NULL;
     int prep_dur_us, cooldown_dur_us, active_dur_us;
     int found, l;
+    int mismatch_pos;
     float tr_dur;
     int tr_start;
 
     if (!diag) { pulseqlib_diagnostic_init(&local_diag); diag = &local_diag; }
     else       pulseqlib_diagnostic_init(diag);
 
-    found = 0; l = 0;
+    found = 0; l = 0; mismatch_pos = -1;
 
     if (desc->num_blocks <= 0 || !desc->block_table || !desc->block_definitions) {
         diag->code = (desc->num_blocks <= 0)
@@ -120,7 +121,7 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
     imaging_start = desc->num_prep_blocks;
     imaging_end   = desc->num_blocks - desc->num_cooldown_blocks;
     imaging_len   = imaging_end - imaging_start;
-    diag->imaging_region_length = imaging_len;
+    pulseqlib__diag_printf(diag, "imaging region length=%d", imaging_len);
 
     if (imaging_len <= 0) {
         diag->code = PULSEQLIB_ERR_TR_NO_IMAGING_REGION;
@@ -132,7 +133,7 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
         int max_u = 0;
         for (n = 0; n < desc->num_blocks; ++n)
             if (desc->block_table[n].id > max_u) max_u = desc->block_table[n].id;
-        diag->num_unique_blocks = max_u + 1;
+        pulseqlib__diag_printf(diag, " unique blocks=%d", max_u + 1);
     }
 
     seq_pat   = (int*)PULSEQLIB_ALLOC(desc->num_blocks * sizeof(int));
@@ -152,7 +153,7 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
     }
 
     l = first_repeating_segment(&seq_pat[imaging_start], imaging_len);
-    diag->candidate_pattern_length = l;
+    pulseqlib__diag_printf(diag, " candidate TR=%d", l);
 
     found = (l > 0 && l <= imaging_len) ? 1 : 0;
 
@@ -160,8 +161,9 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
         for (i = 0; i < imaging_len; ++i) {
             n = imaging_start + i;
             if (seq_pat[n] != seq_pat[imaging_start + (i % l)]) {
-                diag->mismatch_position = i;
-                diag->block_index = n;
+                mismatch_pos = i;
+                pulseqlib__diag_printf(diag, " mismatch at offset=%d", i);
+                pulseqlib__diag_printf(diag, " block=%d", n);
                 found = 0;
                 break;
             }
@@ -191,7 +193,7 @@ int pulseqlib__find_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqli
             PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
             return PULSEQLIB_OK;
         }
-        diag->code = (diag->mismatch_position >= 0)
+        diag->code = (mismatch_pos >= 0)
             ? PULSEQLIB_ERR_TR_PATTERN_MISMATCH
             : PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN;
         PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
@@ -295,8 +297,8 @@ static int find_segments_internal(
     int has_rf, has_adc, is_cand;
     int nb, n, i;
 
-    max_slew = opts->max_slew;
-    grad_raster_s = desc->grad_raster_time_us * 1e-6f;
+    max_slew = opts->max_slew_hz_per_m_per_s;
+    grad_raster_s = desc->grad_raster_us * 1e-6f;
     max_allowed = max_slew * grad_raster_s;
     nb = tr_size;
 
@@ -321,10 +323,10 @@ static int find_segments_internal(
             if ((float)fabs(phys_first) > max_allowed) {
                 if (diag) {
                     diag->code = PULSEQLIB_ERR_SEG_NONZERO_START_GRAD;
-                    diag->block_index = tr_start;
-                    diag->channel = i;
-                    diag->gradient_amplitude = phys_first;
-                    diag->max_allowed_amplitude = max_allowed;
+                    pulseqlib__diag_printf(diag, " block=%d", tr_start);
+                    pulseqlib__diag_printf(diag, " channel=%d", i);
+                    pulseqlib__diag_printf(diag, " gradient_amplitude=%g", (double)phys_first);
+                    pulseqlib__diag_printf(diag, " max_allowed_amplitude=%g", (double)max_allowed);
                 }
                 PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
                 return 0;
@@ -344,10 +346,10 @@ static int find_segments_internal(
             if ((float)fabs(phys_last) > max_allowed) {
                 if (diag) {
                     diag->code = PULSEQLIB_ERR_SEG_NONZERO_END_GRAD;
-                    diag->block_index = tr_start + nb - 1;
-                    diag->channel = i;
-                    diag->gradient_amplitude = phys_last;
-                    diag->max_allowed_amplitude = max_allowed;
+                    pulseqlib__diag_printf(diag, " block=%d", tr_start + nb - 1);
+                    pulseqlib__diag_printf(diag, " channel=%d", i);
+                    pulseqlib__diag_printf(diag, " gradient_amplitude=%g", (double)phys_last);
+                    pulseqlib__diag_printf(diag, " max_allowed_amplitude=%g", (double)max_allowed);
                 }
                 PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
                 return 0;
@@ -524,7 +526,7 @@ static int strip_pure_delays(
 /*  find_segments_in_tr                                               */
 /* ================================================================== */
 
-int pulseqlib__find_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib__seq_file* seq)
+int pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib__seq_file* seq)
 {
     const pulseqlib_tr_descriptor* tr = &desc->tr_descriptor;
     const pulseqlib_block_table_element* bte;
@@ -831,7 +833,7 @@ static int build_freq_mod_for_block(
     float ref_time_us,
     pulseqlib_freq_mod_definition* fmod)
 {
-    float grad_raster_us = desc->grad_raster_time_us;
+    float grad_raster_us = desc->grad_raster_us;
     const pulseqlib_block_definition* bdef = &desc->block_definitions[bdef_idx];
     int grad_ids[3], axis;
     const pulseqlib_grad_definition* gdef;
