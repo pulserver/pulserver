@@ -413,32 +413,49 @@ int pulseqlib_block_rf_has_uniform_raster(const pulseqlib_collection* coll,
 int pulseqlib_block_rf_is_complex(const pulseqlib_collection* coll,
                                   int seg_idx, int blk_idx);
 
-/** @brief Return RF waveform sample count. */
+/** @brief Return RF per-channel sample count. */
 int pulseqlib_get_rf_num_samples(const pulseqlib_collection* coll,
                                  int seg_idx, int blk_idx);
+
+/** @brief Return number of RF channels (1 for standard, >1 for pTx). */
+int pulseqlib_get_rf_num_channels(const pulseqlib_collection* coll,
+                                  int seg_idx, int blk_idx);
 
 /** @brief Return RF delay within block (us). */
 int pulseqlib_get_rf_delay_us(const pulseqlib_collection* coll,
                               int seg_idx, int blk_idx);
 
 /**
- * @brief Return decompressed RF magnitude waveform.
- * Caller must free the returned array with PULSEQLIB_FREE.
+ * @brief Return decompressed RF magnitude waveform (multi-channel).
+ *
+ * Returns an array of num_channels pointers, each pointing to
+ * num_samples floats.  For single-channel RF num_channels == 1.
+ * On GEHC targets magnitudes are pre-scaled by max_amplitude_hz.
+ * Caller must free each result[ch] with PULSEQLIB_FREE, then
+ * free the result pointer itself with PULSEQLIB_FREE.
  */
-float* pulseqlib_get_rf_magnitude(const pulseqlib_collection* coll,
-                                  int seg_idx, int blk_idx,
-                                  int* num_samples);
+float** pulseqlib_get_rf_magnitude(const pulseqlib_collection* coll,
+                                   int seg_idx, int blk_idx,
+                                   int* num_channels,
+                                   int* num_samples);
 
 /**
- * @brief Return decompressed RF phase waveform (rad).
- * Caller must free the returned array with PULSEQLIB_FREE.
+ * @brief Return decompressed RF phase waveform (rad, multi-channel).
+ *
+ * Returns an array of num_channels pointers, each pointing to
+ * num_samples floats.  Caller must free each result[ch] with
+ * PULSEQLIB_FREE, then the result pointer with PULSEQLIB_FREE.
  */
-float* pulseqlib_get_rf_phase(const pulseqlib_collection* coll,
-                              int seg_idx, int blk_idx,
-                              int* num_samples);
+float** pulseqlib_get_rf_phase(const pulseqlib_collection* coll,
+                               int seg_idx, int blk_idx,
+                               int* num_channels,
+                               int* num_samples);
 
 /**
- * @brief Return RF time-point array (us).
+ * @brief Return RF time-point array (us, per-channel).
+ *
+ * For multi-channel RF the tiled time shape is truncated to the
+ * first channel (all channels share the same time base).
  * Caller must free the returned array with PULSEQLIB_FREE.
  */
 float* pulseqlib_get_rf_time_us(const pulseqlib_collection* coll,

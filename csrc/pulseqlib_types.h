@@ -92,6 +92,7 @@
 /* Consistency errors (-560 to -569) */
 #define PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH   -560
 #define PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC    -561
+#define PULSEQLIB_ERR_CONSISTENCY_RF_SHIM_PERIODIC -562
 
 #define PULSEQLIB_ERR_NOT_IMPLEMENTED      -999
 
@@ -448,6 +449,9 @@ typedef struct pulseqlib_block_instance {
     int   adc_flag;             /**< 1 = ADC acquisition active        */
     float adc_freq_hz;          /**< ADC frequency offset (Hz)         */
     float adc_phase_rad;        /**< ADC phase offset (rad)            */
+
+    /* RF shimming */
+    int   rf_shim_id;           /**< RF shim definition index (-1=none)*/
 } pulseqlib_block_instance;
 
 #define PULSEQLIB_BLOCK_INSTANCE_INIT { \
@@ -457,7 +461,8 @@ typedef struct pulseqlib_block_instance {
     0, 0, 0, \
     {1,0,0, 0,1,0, 0,0,1}, 0, 0, \
     0, \
-    0, 0.0f, 0.0f \
+    0, 0.0f, 0.0f, \
+    -1 \
 }
 
 /* ================================================================== */

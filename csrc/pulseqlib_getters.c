@@ -7,8 +7,9 @@
  *   pulseqlib_get_block_start_time_us   pulseqlib_get_block_duration_us
  *   pulseqlib_block_has_rf           pulseqlib_block_rf_has_uniform_raster
  *   pulseqlib_block_rf_is_complex    pulseqlib_get_rf_num_samples
- *   pulseqlib_get_rf_delay_us           pulseqlib_get_rf_magnitude
- *   pulseqlib_get_rf_phase           pulseqlib_get_rf_time_us
+ *   pulseqlib_get_rf_num_channels    pulseqlib_get_rf_delay_us
+ *   pulseqlib_get_rf_magnitude       pulseqlib_get_rf_phase
+ *   pulseqlib_get_rf_time_us
  *   pulseqlib_block_has_grad         pulseqlib_block_grad_is_trapezoid
  *   pulseqlib_get_grad_num_samples   pulseqlib_get_grad_num_shots
  *   pulseqlib_get_grad_delay_us         pulseqlib_get_grad_amplitude
@@ -544,7 +545,7 @@ int pulseqlib_get_rf_num_samples(
 {
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_segment* seg;
-    int local_blk, shape_idx;
+    int local_blk, shape_idx, total, nch;
     const pulseqlib_block_definition* bdef;
     const pulseqlib_rf_definition* rdef;
     const pulseqlib_shape_arbitrary* shape;
@@ -556,6 +557,7 @@ int pulseqlib_get_rf_num_samples(
     if (bdef->rf_id == -1) return -1;
 
     rdef = &desc->rf_definitions[bdef->rf_id];
+    total = -1;
 
     /* try mag, then phase, then time shape */
     if (rdef->mag_shape_id > 0) {
@@ -563,26 +565,29 @@ int pulseqlib_get_rf_num_samples(
         if (shape_idx >= 0 && shape_idx < desc->num_shapes) {
             shape = &desc->shapes[shape_idx];
             if (shape->num_uncompressed_samples > 0)
-                return shape->num_uncompressed_samples;
+                total = shape->num_uncompressed_samples;
         }
     }
-    if (rdef->phase_shape_id > 0) {
+    if (total < 0 && rdef->phase_shape_id > 0) {
         shape_idx = rdef->phase_shape_id - 1;
         if (shape_idx >= 0 && shape_idx < desc->num_shapes) {
             shape = &desc->shapes[shape_idx];
             if (shape->num_uncompressed_samples > 0)
-                return shape->num_uncompressed_samples;
+                total = shape->num_uncompressed_samples;
         }
     }
-    if (rdef->time_shape_id > 0) {
+    if (total < 0 && rdef->time_shape_id > 0) {
         shape_idx = rdef->time_shape_id - 1;
         if (shape_idx >= 0 && shape_idx < desc->num_shapes) {
             shape = &desc->shapes[shape_idx];
             if (shape->num_uncompressed_samples > 0)
-                return shape->num_uncompressed_samples;
+                total = shape->num_uncompressed_samples;
         }
     }
-    return -1;
+    if (total < 0) return -1;
+
+    nch = (rdef->num_channels > 1) ? rdef->num_channels : 1;
+    return total / nch;
 }
 
 int pulseqlib_get_rf_delay_us(
@@ -603,18 +608,42 @@ int pulseqlib_get_rf_delay_us(
     return desc->rf_definitions[bdef->rf_id].delay;
 }
 
-float* pulseqlib_get_rf_magnitude(
+int pulseqlib_get_rf_num_channels(
     const pulseqlib_collection* coll,
-    int seg_idx, int blk_idx, int* num_samples)
+    int seg_idx, int blk_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_segment* seg;
-    int local_blk, shape_idx;
+    int local_blk;
+    const pulseqlib_block_definition* bdef;
+    const pulseqlib_rf_definition* rdef;
+
+    if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+        return -1;
+
+    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    if (bdef->rf_id == -1) return -1;
+
+    rdef = &desc->rf_definitions[bdef->rf_id];
+    return (rdef->num_channels > 1) ? rdef->num_channels : 1;
+}
+
+float** pulseqlib_get_rf_magnitude(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx,
+    int* num_channels, int* num_samples)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_tr_segment* seg;
+    int local_blk, shape_idx, nch, npts, ch;
     const pulseqlib_block_definition* bdef;
     const pulseqlib_rf_definition* rdef;
     pulseqlib_shape_arbitrary decompressed;
+    float* flat;
+    float** result;
 
-    if (!num_samples) return NULL;
+    if (!num_channels || !num_samples) return NULL;
+    *num_channels = 0;
     *num_samples = 0;
 
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
@@ -642,22 +671,49 @@ float* pulseqlib_get_rf_magnitude(
         return NULL;
 #endif
 
-    *num_samples = decompressed.num_samples;
-    return decompressed.samples;
+    flat = decompressed.samples;
+    nch  = (rdef->num_channels > 1) ? rdef->num_channels : 1;
+    npts = decompressed.num_samples / nch;
+
+    /* allocate channel-pointer array */
+    result = (float**)PULSEQLIB_ALLOC((size_t)nch * sizeof(float*));
+    if (!result) { PULSEQLIB_FREE(flat); return NULL; }
+
+    /* split tiled flat array into per-channel rows */
+    for (ch = 0; ch < nch; ++ch) {
+        result[ch] = (float*)PULSEQLIB_ALLOC((size_t)npts * sizeof(float));
+        if (!result[ch]) {
+            int k;
+            for (k = 0; k < ch; ++k) PULSEQLIB_FREE(result[k]);
+            PULSEQLIB_FREE(result);
+            PULSEQLIB_FREE(flat);
+            return NULL;
+        }
+        memcpy(result[ch], flat + ch * npts, (size_t)npts * sizeof(float));
+    }
+
+    PULSEQLIB_FREE(flat);
+    *num_channels = nch;
+    *num_samples  = npts;
+    return result;
 }
 
-float* pulseqlib_get_rf_phase(
+float** pulseqlib_get_rf_phase(
     const pulseqlib_collection* coll,
-    int seg_idx, int blk_idx, int* num_samples)
+    int seg_idx, int blk_idx,
+    int* num_channels, int* num_samples)
 {
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_segment* seg;
-    int local_blk, shape_idx;
+    int local_blk, shape_idx, nch, npts, ch;
     const pulseqlib_block_definition* bdef;
     const pulseqlib_rf_definition* rdef;
     pulseqlib_shape_arbitrary decompressed;
+    float* flat;
+    float** result;
 
-    if (!num_samples) return NULL;
+    if (!num_channels || !num_samples) return NULL;
+    *num_channels = 0;
     *num_samples = 0;
 
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
@@ -679,8 +735,31 @@ float* pulseqlib_get_rf_phase(
     if (!pulseqlib__decompress_shape(&decompressed, &desc->shapes[shape_idx], 1.0f))
         return NULL;
 
-    *num_samples = decompressed.num_samples;
-    return decompressed.samples;
+    flat = decompressed.samples;
+    nch  = (rdef->num_channels > 1) ? rdef->num_channels : 1;
+    npts = decompressed.num_samples / nch;
+
+    /* allocate channel-pointer array */
+    result = (float**)PULSEQLIB_ALLOC((size_t)nch * sizeof(float*));
+    if (!result) { PULSEQLIB_FREE(flat); return NULL; }
+
+    /* split tiled flat array into per-channel rows */
+    for (ch = 0; ch < nch; ++ch) {
+        result[ch] = (float*)PULSEQLIB_ALLOC((size_t)npts * sizeof(float));
+        if (!result[ch]) {
+            int k;
+            for (k = 0; k < ch; ++k) PULSEQLIB_FREE(result[k]);
+            PULSEQLIB_FREE(result);
+            PULSEQLIB_FREE(flat);
+            return NULL;
+        }
+        memcpy(result[ch], flat + ch * npts, (size_t)npts * sizeof(float));
+    }
+
+    PULSEQLIB_FREE(flat);
+    *num_channels = nch;
+    *num_samples  = npts;
+    return result;
 }
 
 float* pulseqlib_get_rf_time_us(
@@ -689,10 +768,11 @@ float* pulseqlib_get_rf_time_us(
 {
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_segment* seg;
-    int local_blk, shape_idx;
+    int local_blk, shape_idx, nch, npts;
     const pulseqlib_block_definition* bdef;
     const pulseqlib_rf_definition* rdef;
     pulseqlib_shape_arbitrary decompressed;
+    float* result;
 
     if (!num_samples) return NULL;
     *num_samples = 0;
@@ -717,8 +797,21 @@ float* pulseqlib_get_rf_time_us(
                                      desc->rf_raster_us))
         return NULL;
 
-    *num_samples = decompressed.num_samples;
-    return decompressed.samples;
+    nch  = (rdef->num_channels > 1) ? rdef->num_channels : 1;
+    npts = decompressed.num_samples / nch;
+
+    if (nch > 1) {
+        /* return only first channel's time (all channels share time base) */
+        result = (float*)PULSEQLIB_ALLOC((size_t)npts * sizeof(float));
+        if (!result) { PULSEQLIB_FREE(decompressed.samples); return NULL; }
+        memcpy(result, decompressed.samples, (size_t)npts * sizeof(float));
+        PULSEQLIB_FREE(decompressed.samples);
+    } else {
+        result = decompressed.samples;
+    }
+
+    *num_samples = npts;
+    return result;
 }
 
 /* ================================================================== */
@@ -1385,6 +1478,9 @@ int pulseqlib_get_block_instance(
         inst->adc_freq_hz  = 0.0f;
         inst->adc_phase_rad = 0.0f;
     }
+
+    /* RF shimming */
+    inst->rf_shim_id = bte->rf_shim_id;
 
     return PULSEQLIB_OK;
 }

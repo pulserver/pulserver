@@ -154,6 +154,18 @@ static float get_block_rf_amplitude(
 }
 
 /*
+ * get_block_rf_shim_id --
+ *   Return the RF shim definition index for block at absolute index
+ *   'block_idx', or -1 if the block has no RF shim.
+ */
+static int get_block_rf_shim_id(
+    const pulseqlib_sequence_descriptor* desc,
+    int block_idx)
+{
+    return desc->block_table[block_idx].rf_shim_id;
+}
+
+/*
  * check_rf_amplitude_periodicity --
  *   Verify that the RF amplitude pattern within a TR is identical
  *   across the "pure main" TR instances (excluding those adjacent
@@ -199,6 +211,51 @@ static int check_rf_amplitude_periodicity(
                         (double)ref_amp, ref_tr);
                 }
                 return PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC;
+            }
+        }
+    }
+
+    return PULSEQLIB_OK;
+}
+
+/*
+ * check_rf_shim_periodicity --
+ *   Same logic as check_rf_amplitude_periodicity but compares
+ *   rf_shim_id values instead of RF amplitudes.
+ */
+static int check_rf_shim_periodicity(
+    const pulseqlib_sequence_descriptor* desc,
+    int ref_tr,
+    int first_tr,
+    int last_tr,
+    pulseqlib_diagnostic* diag)
+{
+    const pulseqlib_tr_descriptor* trd;
+    int tr_size, prep_blocks;
+    int ref_start, tr_idx, chk_start;
+    int j;
+    int ref_shim, chk_shim;
+
+    trd = &desc->tr_descriptor;
+    tr_size    = trd->tr_size;
+    prep_blocks = trd->num_prep_blocks;
+
+    ref_start = prep_blocks + ref_tr * tr_size;
+
+    for (tr_idx = first_tr; tr_idx <= last_tr; ++tr_idx) {
+        if (tr_idx == ref_tr) continue;
+        chk_start = prep_blocks + tr_idx * tr_size;
+        for (j = 0; j < tr_size; ++j) {
+            ref_shim = get_block_rf_shim_id(desc, ref_start + j);
+            chk_shim = get_block_rf_shim_id(desc, chk_start + j);
+            if (ref_shim != chk_shim) {
+                if (diag) {
+                    pulseqlib__diag_printf(diag,
+                        "RF shim periodicity: TR %d block %d has shim_id %d, "
+                        "expected %d (from reference TR %d)\n",
+                        tr_idx, j, chk_shim, ref_shim, ref_tr);
+                }
+                return PULSEQLIB_ERR_CONSISTENCY_RF_SHIM_PERIODIC;
             }
         }
     }
@@ -355,6 +412,19 @@ static int check_consistency(
                     if (diag) {
                         pulseqlib__diag_printf(diag,
                             "Consistency check failed: RF amplitude "
+                            "not periodic in subsequence %d\n",
+                            subseq_idx);
+                    }
+                    return rc;
+                }
+
+                /* (e) RF shim ID periodicity (same TR range as amplitude) */
+                rc = check_rf_shim_periodicity(desc,
+                    ref_tr, first_check, last_check, diag);
+                if (PULSEQLIB_FAILED(rc)) {
+                    if (diag) {
+                        pulseqlib__diag_printf(diag,
+                            "Consistency check failed: RF shim ID "
                             "not periodic in subsequence %d\n",
                             subseq_idx);
                     }

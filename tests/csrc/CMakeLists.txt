@@ -21,12 +21,10 @@ set_target_properties(run_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Link the test executable with the libraries under test
-target_link_libraries(run_tests PRIVATE pulseqlib)
-# target_link_libraries(run_tests PRIVATE pulseqlib pulserverlib)
+target_link_libraries(run_tests PRIVATE pulseqlib m)
 
-# Use the top-level csrc directory for public API headers
-target_include_directories(run_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/pulseq)
-target_include_directories(run_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../external/kissfft)
+# Public API headers live in csrc/
+target_include_directories(run_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc)
 
 # Enable warnings and enforce ANSI C89 compliance
 target_compile_options(run_tests PRIVATE -Wall -Wextra -std=c89 -pedantic -Werror)
