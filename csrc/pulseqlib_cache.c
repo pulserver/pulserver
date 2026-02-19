@@ -12,7 +12,7 @@
 /* ================================================================== */
 
 #define PULSEQLIB_CACHE_ENDIAN_MARKER  0x01020304
-#define PULSEQLIB_CACHE_VERSION        3
+#define PULSEQLIB_CACHE_VERSION        5
 
 /* ------ Byte-swap helpers ------ */
 
@@ -114,6 +114,9 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
     if (!write4(f, &d->grad_raster_time_us, 1)) return 0;
     if (!write4(f, &d->adc_raster_time_us, 1)) return 0;
     if (!write4(f, &d->block_duration_raster_us, 1)) return 0;
+    if (!write4(f, &d->ignore_fov_shift, 1)) return 0;
+    if (!write4(f, &d->enable_pmc, 1)) return 0;
+    if (!write4(f, &d->ignore_averages, 1)) return 0;
 
     /* block definitions */
     if (!write4(f, &d->num_unique_blocks, 1)) return 0;
@@ -144,6 +147,7 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &d->block_table[i].pmc_flag, 1)) return 0;
         if (!write4(f, &d->block_table[i].nav_flag, 1)) return 0;
         if (!write4(f, &d->block_table[i].freq_mod_id, 1)) return 0;
+        if (!write4(f, &d->block_table[i].rf_shim_id, 1)) return 0;
     }
 
     /* RF definitions */
@@ -154,6 +158,7 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &d->rf_definitions[i].phase_shape_id, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].time_shape_id, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].delay, 1)) return 0;
+        if (!write4(f, &d->rf_definitions[i].num_channels, 1)) return 0;
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
         if (!write4(f, &d->rf_definitions[i].stats.flip_angle, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].stats.area, 1)) return 0;
@@ -239,6 +244,18 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         }
         if (!write4(f, fm->ref_integral, 3)) return 0;
         if (!write4(f, &fm->ref_time_us, 1)) return 0;
+    }
+
+    /* rf_shim definitions */
+    if (!write4(f, &d->num_rf_shims, 1)) return 0;
+    for (i = 0; i < d->num_rf_shims; ++i) {
+        const pulseqlib_rf_shim_definition* rs = &d->rf_shim_definitions[i];
+        if (!write4(f, &rs->id, 1)) return 0;
+        if (!write4(f, &rs->n_channels, 1)) return 0;
+        if (rs->n_channels > 0) {
+            if (!write4(f, rs->magnitudes, rs->n_channels)) return 0;
+            if (!write4(f, rs->phases, rs->n_channels)) return 0;
+        }
     }
 
     /* rotations */
@@ -327,7 +344,10 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
     if (!read4(f, &d->grad_raster_time_us, 1)) return 0;
     if (!read4(f, &d->adc_raster_time_us, 1)) return 0;
     if (!read4(f, &d->block_duration_raster_us, 1)) return 0;
-    if (do_swap) swap4_array(&d->num_prep_blocks, 6);
+    if (!read4(f, &d->ignore_fov_shift, 1)) return 0;
+    if (!read4(f, &d->enable_pmc, 1)) return 0;
+    if (!read4(f, &d->ignore_averages, 1)) return 0;
+    if (do_swap) swap4_array(&d->num_prep_blocks, 9);
 
     /* block definitions */
     if (!read4(f, &d->num_unique_blocks, 1)) return 0;
@@ -352,8 +372,8 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         (size_t)d->num_blocks * sizeof(pulseqlib_block_table_element));
     if (!d->block_table) return 0;
     for (i = 0; i < d->num_blocks; ++i) {
-        if (!read4(f, &d->block_table[i].id, 15)) return 0;
-        if (do_swap) swap4_array(&d->block_table[i].id, 15);
+        if (!read4(f, &d->block_table[i].id, 16)) return 0;
+        if (do_swap) swap4_array(&d->block_table[i].id, 16);
     }
 
     /* RF definitions */
@@ -368,7 +388,8 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         if (!read4(f, &d->rf_definitions[i].phase_shape_id, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].time_shape_id, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].delay, 1)) return 0;
-        if (do_swap) swap4_array(&d->rf_definitions[i].id, 5);
+        if (!read4(f, &d->rf_definitions[i].num_channels, 1)) return 0;
+        if (do_swap) swap4_array(&d->rf_definitions[i].id, 6);
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
         if (!read4(f, &d->rf_definitions[i].stats.flip_angle, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].stats.area, 1)) return 0;
@@ -496,6 +517,28 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
             if (do_swap) {
                 swap4_array(fm->ref_integral, 3);
                 swap4(&fm->ref_time_us);
+            }
+        }
+    }
+
+    /* rf_shim definitions */
+    if (!read4(f, &d->num_rf_shims, 1)) return 0;
+    if (do_swap) swap4(&d->num_rf_shims);
+    if (d->num_rf_shims > 0) {
+        d->rf_shim_definitions = (pulseqlib_rf_shim_definition*)PULSEQLIB_ALLOC(
+            (size_t)d->num_rf_shims * sizeof(pulseqlib_rf_shim_definition));
+        if (!d->rf_shim_definitions) return 0;
+        for (i = 0; i < d->num_rf_shims; ++i) {
+            pulseqlib_rf_shim_definition* rs = &d->rf_shim_definitions[i];
+            memset(rs, 0, sizeof(*rs));
+            if (!read4(f, &rs->id, 1)) return 0;
+            if (!read4(f, &rs->n_channels, 1)) return 0;
+            if (do_swap) { swap4(&rs->id); swap4(&rs->n_channels); }
+            n = rs->n_channels;
+            if (n > 0 && n <= PULSEQLIB_MAX_RF_SHIM_CHANNELS) {
+                if (!read4(f, rs->magnitudes, n)) return 0;
+                if (!read4(f, rs->phases, n)) return 0;
+                if (do_swap) { swap4_array(rs->magnitudes, n); swap4_array(rs->phases, n); }
             }
         }
     }

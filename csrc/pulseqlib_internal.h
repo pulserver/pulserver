@@ -278,6 +278,9 @@ typedef struct pulseqlib__reserved_definitions {
     float fov[3];
     float total_duration;
     char next_sequence[PULSEQLIB__SEQUENCE_FILENAME_LENGTH];
+    int ignore_fov_shift;
+    int enable_pmc;
+    int ignore_averages;
 } pulseqlib__reserved_definitions;
 
 typedef struct pulseqlib__global_label_table {
@@ -415,6 +418,7 @@ void  pulseqlib__get_raw_extension(const pulseqlib__seq_file* seq, pulseqlib__ra
 void  pulseqlib__get_block(const pulseqlib__seq_file* seq, pulseqlib__seq_block* block, int block_index);
 float pulseqlib__get_grad_library_max_amplitude(const pulseqlib__seq_file* seq);
 int   pulseqlib__decompress_shape(pulseqlib_shape_arbitrary* result, const pulseqlib_shape_arbitrary* encoded, float scale);
+int   pulseqlib__verify_signature(const char* file_path);
 
 /* --- pulseqlib_core.c --- */
 int   pulseqlib__deduplicate_int_rows(int* unique_defs, int* event_table, const int* int_rows, int num_rows, int num_cols);

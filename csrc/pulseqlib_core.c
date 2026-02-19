@@ -170,11 +170,30 @@ static int deduplicate_rf_library(const pulseqlib__seq_file* seq, pulseqlib_rf_d
     num_unique = pulseqlib__deduplicate_int_rows(unique_defs, event_table, (const int*)int_rows, num_rows, RF_DEF_COLS);
 
     for (i = 0; i < num_unique; ++i) {
-        rf_defs[i].id            = unique_defs[i];
-        rf_defs[i].mag_shape_id  = int_rows[unique_defs[i]][0];
+        int time_id, nz, j;
+        rf_defs[i].id             = unique_defs[i];
+        rf_defs[i].mag_shape_id   = int_rows[unique_defs[i]][0];
         rf_defs[i].phase_shape_id = int_rows[unique_defs[i]][1];
-        rf_defs[i].time_shape_id = int_rows[unique_defs[i]][2];
-        rf_defs[i].delay         = int_rows[unique_defs[i]][3];
+        rf_defs[i].time_shape_id  = int_rows[unique_defs[i]][2];
+        rf_defs[i].delay          = int_rows[unique_defs[i]][3];
+        rf_defs[i].num_channels   = 1;
+
+        /* detect multichannel RF from tiled time shape */
+        time_id = rf_defs[i].time_shape_id;
+        if (time_id > 0 && time_id <= seq->shapes_library_size) {
+            pulseqlib_shape_arbitrary decomp;
+            decomp.num_samples = 0;
+            decomp.num_uncompressed_samples = 0;
+            decomp.samples = NULL;
+            if (pulseqlib__decompress_shape(&decomp,
+                    &seq->shapes_library[time_id - 1], 1.0f)) {
+                nz = 0;
+                for (j = 0; j < decomp.num_uncompressed_samples; ++j)
+                    if (decomp.samples[j] == 0.0f) ++nz;
+                if (nz > 1) rf_defs[i].num_channels = nz;
+                PULSEQLIB_FREE(decomp.samples);
+            }
+        }
     }
     for (i = 0; i < num_rows; ++i) {
         rf_table[i].id           = event_table[i];
@@ -716,7 +735,6 @@ static int compute_rf_stats(
         if (!magnitude) { PULSEQLIB_FREE(decomp_mag.samples); goto fail; }
         for (i = 0; i < num_samples; ++i) magnitude[i] = decomp_mag.samples[i];
         PULSEQLIB_FREE(decomp_mag.samples); decomp_mag.samples = NULL;
-        rd->stats.num_samples = num_samples;
 
         /* decompress phase (optional) */
         if (phase_id > 0 && phase_id <= seq->shapes_library_size) {
@@ -728,6 +746,57 @@ static int compute_rf_stats(
             has_phase = 1;
             PULSEQLIB_FREE(decomp_phase.samples); decomp_phase.samples = NULL;
         }
+
+        /* combine multichannel RF into single effective waveform
+         * using nominal coil phases (0, 2*pi/nch, 4*pi/nch, ...) */
+        if (rd->num_channels > 1 && num_samples > 0) {
+            int nch = rd->num_channels;
+            int npts = num_samples / nch;
+            float *comb_re, *comb_im;
+            float *new_mag, *new_phs;
+            int ch, s;
+
+            comb_re = (float*)PULSEQLIB_ALLOC(npts * sizeof(float));
+            comb_im = (float*)PULSEQLIB_ALLOC(npts * sizeof(float));
+            if (!comb_re || !comb_im) {
+                if (comb_re) PULSEQLIB_FREE(comb_re);
+                if (comb_im) PULSEQLIB_FREE(comb_im);
+                goto fail;
+            }
+            for (s = 0; s < npts; ++s) { comb_re[s] = 0.0f; comb_im[s] = 0.0f; }
+
+            for (ch = 0; ch < nch; ++ch) {
+                float coil_phi = (float)(PULSEQLIB__TWO_PI * ch / nch);
+                for (s = 0; s < npts; ++s) {
+                    float m = magnitude[ch * npts + s];
+                    float p = has_phase ? phase[ch * npts + s] : 0.0f;
+                    p += coil_phi;
+                    comb_re[s] += m * (float)cos(p);
+                    comb_im[s] += m * (float)sin(p);
+                }
+            }
+
+            new_mag = (float*)PULSEQLIB_ALLOC(npts * sizeof(float));
+            new_phs = (float*)PULSEQLIB_ALLOC(npts * sizeof(float));
+            if (!new_mag || !new_phs) {
+                if (new_mag) PULSEQLIB_FREE(new_mag);
+                if (new_phs) PULSEQLIB_FREE(new_phs);
+                PULSEQLIB_FREE(comb_re); PULSEQLIB_FREE(comb_im);
+                goto fail;
+            }
+            for (s = 0; s < npts; ++s) {
+                new_mag[s] = (float)sqrt(comb_re[s]*comb_re[s] +
+                                         comb_im[s]*comb_im[s]);
+                new_phs[s] = (float)atan2(comb_im[s], comb_re[s]);
+            }
+            PULSEQLIB_FREE(comb_re); PULSEQLIB_FREE(comb_im);
+            PULSEQLIB_FREE(magnitude); magnitude = new_mag;
+            if (phase) PULSEQLIB_FREE(phase);
+            phase = new_phs;
+            has_phase = 1;
+            num_samples = npts;
+        }
+        rd->stats.num_samples = num_samples;
 
         /* detect real-valued RF */
         if (has_phase && phase) {
@@ -947,6 +1016,36 @@ static int copy_trigger_library(const pulseqlib__seq_file* seq, pulseqlib_sequen
     return PULSEQLIB_OK;
 }
 
+static int copy_rf_shim_library(const pulseqlib__seq_file* seq, pulseqlib_sequence_descriptor* desc)
+{
+    int i, j, num = seq->rf_shim_library_size;
+    const pulseqlib__rf_shim_entry* entry;
+
+    desc->num_rf_shims = 0;
+    desc->rf_shim_definitions = NULL;
+    if (num <= 0 || !seq->rf_shim_library) return PULSEQLIB_OK;
+
+    desc->rf_shim_definitions = (pulseqlib_rf_shim_definition*)PULSEQLIB_ALLOC(
+        num * sizeof(pulseqlib_rf_shim_definition));
+    if (!desc->rf_shim_definitions) return PULSEQLIB_ERR_ALLOC_FAILED;
+
+    for (i = 0; i < num; ++i) {
+        entry = &seq->rf_shim_library[i];
+        desc->rf_shim_definitions[i].id = i;
+        desc->rf_shim_definitions[i].n_channels = entry->n_channels;
+        for (j = 0; j < entry->n_channels && j < PULSEQLIB_MAX_RF_SHIM_CHANNELS; ++j) {
+            desc->rf_shim_definitions[i].magnitudes[j] = entry->values[2 * j];
+            desc->rf_shim_definitions[i].phases[j]     = entry->values[2 * j + 1];
+        }
+        for (j = entry->n_channels; j < PULSEQLIB_MAX_RF_SHIM_CHANNELS; ++j) {
+            desc->rf_shim_definitions[i].magnitudes[j] = 0.0f;
+            desc->rf_shim_definitions[i].phases[j]     = 0.0f;
+        }
+    }
+    desc->num_rf_shims = num;
+    return PULSEQLIB_OK;
+}
+
 static int copy_shapes_library(const pulseqlib__seq_file* seq, pulseqlib_sequence_descriptor* desc)
 {
     int i, j, num = seq->shapes_library_size;
@@ -982,6 +1081,54 @@ static int copy_shapes_library(const pulseqlib__seq_file* seq, pulseqlib_sequenc
         }
     }
     desc->num_shapes = num;
+    return PULSEQLIB_OK;
+}
+
+/* ================================================================== */
+/*  Raster-time divisibility check                                    */
+/* ================================================================== */
+
+/*
+ * Verify that two raster times are integer-multiples of each other.
+ * If *either* value is <= 0 the check is skipped (value not set).
+ * Returns 1 on success, 0 on failure.
+ */
+static int rasters_compatible(float a, float b)
+{
+    float big, small, ratio, rounded;
+    if (a <= 0.0f || b <= 0.0f) return 1;
+    big   = (a > b) ? a : b;
+    small = (a > b) ? b : a;
+    ratio = big / small;
+    rounded = (float)((int)(ratio + 0.5f));
+    return ((float)fabs(ratio - rounded) < 1e-4f * ratio);
+}
+
+/*
+ * Check all four raster pairs (sequence-defined vs system opts).
+ * Returns PULSEQLIB_OK or PULSEQLIB_ERR_RASTER_MISMATCH.
+ */
+static int check_raster_times(const pulseqlib__seq_file* seq)
+{
+    const pulseqlib__reserved_definitions* rd = &seq->reserved_definitions_library;
+    const pulseqlib_opts* opts = &seq->opts;
+
+    if (rd->radiofrequency_raster_time > 0.0f &&
+        !rasters_compatible(rd->radiofrequency_raster_time, opts->rf_raster_time))
+        return PULSEQLIB_ERR_RASTER_MISMATCH;
+
+    if (rd->gradient_raster_time > 0.0f &&
+        !rasters_compatible(rd->gradient_raster_time, opts->grad_raster_time))
+        return PULSEQLIB_ERR_RASTER_MISMATCH;
+
+    if (rd->adc_raster_time > 0.0f &&
+        !rasters_compatible(rd->adc_raster_time, opts->adc_raster_time))
+        return PULSEQLIB_ERR_RASTER_MISMATCH;
+
+    if (rd->block_duration_raster > 0.0f &&
+        !rasters_compatible(rd->block_duration_raster, opts->block_duration_raster))
+        return PULSEQLIB_ERR_RASTER_MISMATCH;
+
     return PULSEQLIB_OK;
 }
 
@@ -1041,6 +1188,17 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
     desc->block_duration_raster_us = (seq->reserved_definitions_library.block_duration_raster > 0.0f)
         ? seq->reserved_definitions_library.block_duration_raster
         : seq->opts.block_duration_raster;
+
+    /* per-subsequence flags */
+    desc->ignore_fov_shift = seq->reserved_definitions_library.ignore_fov_shift;
+    desc->enable_pmc       = seq->reserved_definitions_library.enable_pmc;
+    desc->ignore_averages  = seq->reserved_definitions_library.ignore_averages;
+
+    /* verify system and sequence raster times are integer multiples */
+    {
+        int rc = check_raster_times(seq);
+        if (PULSEQLIB_FAILED(rc)) return rc;
+    }
 
     /* ---- allocate temp arrays ---- */
     if (seq->rf_library_size > 0) {
@@ -1124,6 +1282,7 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
             pulseqlib__get_raw_extension(seq, &ext, &raw);
             tmp_blk_tab[n].rotation_id = ext.rotation_index;
             tmp_blk_tab[n].trigger_id  = ext.trigger_index;
+            tmp_blk_tab[n].rf_shim_id  = ext.rf_shim_index;
             norot_flag = (ext.flag.norot >= 0) ? ext.flag.norot : norot_flag;
             nopos_flag = (ext.flag.nopos >= 0) ? ext.flag.nopos : nopos_flag;
             pmc_flag   = (ext.flag.pmc   >= 0) ? ext.flag.pmc   : pmc_flag;
@@ -1133,6 +1292,7 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
         } else {
             tmp_blk_tab[n].rotation_id = -1;
             tmp_blk_tab[n].trigger_id  = -1;
+            tmp_blk_tab[n].rf_shim_id  = -1;
         }
         tmp_blk_tab[n].norot_flag = norot_flag;
         tmp_blk_tab[n].nopos_flag = nopos_flag;
@@ -1199,6 +1359,8 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
     result = copy_rotation_library(seq, desc);
     if (PULSEQLIB_FAILED(result)) { pulseqlib_sequence_descriptor_free(desc); return result; }
     result = copy_trigger_library(seq, desc);
+    if (PULSEQLIB_FAILED(result)) { pulseqlib_sequence_descriptor_free(desc); return result; }
+    result = copy_rf_shim_library(seq, desc);
     if (PULSEQLIB_FAILED(result)) { pulseqlib_sequence_descriptor_free(desc); return result; }
     result = copy_shapes_library(seq, desc);
     if (PULSEQLIB_FAILED(result)) { pulseqlib_sequence_descriptor_free(desc); return result; }
@@ -2221,7 +2383,8 @@ static int build_freq_mod_for_block(
             int ref_sample = (int)(ref_time_us / grad_raster_us);
             if (ref_sample < 0) ref_sample = 0;
             if (ref_sample >= fmod->num_samples) ref_sample = fmod->num_samples - 1;
-            fmod->ref_integral[axis] = pulseqlib__trapz_real_uniform(
+            fmod->ref_integral[axis] = (float)(PULSEQLIB__TWO_PI * 1e-6) *
+                pulseqlib__trapz_real_uniform(
                 out_wave, ref_sample + 1, grad_raster_us);
         }
     }
@@ -2472,6 +2635,9 @@ void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
         d->freq_mod_definitions = NULL;
     }
     d->num_freq_mod_defs = 0;
+
+    if (d->rf_shim_definitions) { PULSEQLIB_FREE(d->rf_shim_definitions); d->rf_shim_definitions = NULL; }
+    d->num_rf_shims = 0;
 
     if (d->rotation_matrices) { PULSEQLIB_FREE(d->rotation_matrices); d->rotation_matrices = NULL; }
     d->num_rotations = 0;
@@ -2890,7 +3056,8 @@ int pulseqlib_load(
     pulseqlib_diagnostic* diag,
     const char* file_path,
     const pulseqlib_opts* opts,
-    int cache_binary)
+    int cache_binary,
+    int verify_signature)
 {
     pulseqlib__seq_file_collection raw_coll;
     int rc, i;
@@ -2915,6 +3082,20 @@ int pulseqlib_load(
     /* Full parse */
     rc = pulseqlib__read_seq_collection(&raw_coll, file_path, opts);
     if (PULSEQLIB_FAILED(rc)) { diag->code = rc; goto fail; }
+
+    /* Optional MD5 signature verification (all files in chain) */
+    if (verify_signature) {
+        for (i = 0; i < raw_coll.num_sequences; ++i) {
+            const char* fpath = raw_coll.sequences[i].file_path;
+            if (!fpath) continue;
+            rc = pulseqlib__verify_signature(fpath);
+            if (PULSEQLIB_FAILED(rc)) {
+                diag->code = rc;
+                diag->block_index = i;  /* subsequence index */
+                goto fail;
+            }
+        }
+    }
 
     rc = pulseqlib__get_collection_descriptors(collection, diag, &raw_coll);
     if (PULSEQLIB_FAILED(diag->code)) { rc = diag->code; goto fail; }

@@ -38,6 +38,9 @@
 #define PULSEQLIB_ERR_INVALID_PREP_POSITION      -50
 #define PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION  -51
 #define PULSEQLIB_ERR_INVALID_ONCE_FLAGS         -52
+#define PULSEQLIB_ERR_RASTER_MISMATCH            -53
+#define PULSEQLIB_ERR_SIGNATURE_MISMATCH         -54
+#define PULSEQLIB_ERR_SIGNATURE_MISSING          -55
 
 /* TR detection errors (-100 to -199) */
 #define PULSEQLIB_ERR_TR_NO_BLOCKS          -100
@@ -106,6 +109,8 @@
 #define MAX_GRAD_SHOTS PULSEQLIB_MAX_GRAD_SHOTS
 #endif
 
+#define PULSEQLIB_MAX_RF_SHIM_CHANNELS 64
+
 /* ================================================================== */
 /*  Diagnostic                                                        */
 /* ================================================================== */
@@ -169,15 +174,16 @@ typedef struct pulseqlib_rf_definition {
     int phase_shape_id;
     int time_shape_id;
     int delay;
+    int num_channels;     /* 1 for standard, >1 for dynamic pTx */
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
     pulseqlib_rf_stats stats;
 #endif
 } pulseqlib_rf_definition;
 
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
-#define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0, PULSEQLIB_RF_STATS_INIT}
+#define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0, 1, PULSEQLIB_RF_STATS_INIT}
 #else
-#define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0}
+#define PULSEQLIB_RF_DEFINITION_INIT {0, 0, 0, 0, 0, 1}
 #endif
 
 typedef struct pulseqlib_rf_table_element {
@@ -188,6 +194,18 @@ typedef struct pulseqlib_rf_table_element {
 } pulseqlib_rf_table_element;
 
 #define PULSEQLIB_RF_TABLE_ELEMENT_INIT {0, 0.0f, 0.0f, 0.0f}
+
+/* ================================================================== */
+/*  RF shim definitions (parallel transmit channel weights)           */
+/* ================================================================== */
+typedef struct pulseqlib_rf_shim_definition {
+    int id;
+    int n_channels;
+    float magnitudes[PULSEQLIB_MAX_RF_SHIM_CHANNELS];
+    float phases[PULSEQLIB_MAX_RF_SHIM_CHANNELS];
+} pulseqlib_rf_shim_definition;
+
+#define PULSEQLIB_RF_SHIM_DEFINITION_INIT {0, 0, {0}, {0}}
 
 /* ================================================================== */
 /*  Gradient definitions and table                                    */
@@ -252,13 +270,36 @@ typedef struct pulseqlib_freq_mod_definition {
     float* waveform_gy;       /* [num_samples] peak-normalized gradient, y */
     float* waveform_gz;       /* [num_samples] peak-normalized gradient, z */
     float ref_integral[3];    /* integral from start to reference point
-                               * (gx, gy, gz) in [norm_amp * us] */
+                               * (gx, gy, gz) in [rad/Hz], pre-multiplied
+                               * by 2*pi so that phase = ref_integral * freq */
     float ref_time_us;        /* reference time relative to active region
                                * start (isodelay for RF, kzero for ADC) */
 } pulseqlib_freq_mod_definition;
 
 #define PULSEQLIB_FREQ_MOD_DEFINITION_INIT \
     {0, 0, 0.0f, 0.0f, NULL, NULL, NULL, {0.0f, 0.0f, 0.0f}, 0.0f}
+
+/* TR region selectors for freq_mod plan building */
+#define PULSEQLIB_TR_REGION_ALL      (-1)
+#define PULSEQLIB_TR_REGION_PREP       0
+#define PULSEQLIB_TR_REGION_MAIN       1
+#define PULSEQLIB_TR_REGION_COOLDOWN   2
+
+/* Computed frequency modulation plan for a set of RF/ADC instances */
+typedef struct pulseqlib_freq_mod_plan {
+    int num_instances;      /* number of freq-mod events in plan */
+    int max_samples;        /* longest waveform (zero-padded length) */
+    int num_blocks;         /* total blocks in descriptor (block_table size) */
+    float raster_us;        /* common raster (us) */
+    float** waveforms;      /* [num_instances] pointers, each -> max_samples Hz */
+    int* num_samples;       /* [num_instances] actual length per row */
+    float* phase_offset;    /* [num_instances] phase compensation in rad */
+    int* block_to_instance; /* [num_blocks] absolute block idx -> instance, -1 */
+    float* _waveform_data;  /* backing store (flat), freed by plan_free */
+    const void* _desc;      /* opaque pointer to descriptor (for update) */
+} pulseqlib_freq_mod_plan;
+
+#define PULSEQLIB_FREQ_MOD_PLAN_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, NULL, NULL}
 
 /* ================================================================== */
 /*  Block definitions and table                                       */
@@ -290,9 +331,10 @@ typedef struct pulseqlib_block_table_element {
     int pmc_flag;
     int nav_flag;
     int freq_mod_id;    /* index into freq_mod_definitions, or -1 */
+    int rf_shim_id;     /* index into rf_shim_definitions, or -1 */
 } pulseqlib_block_table_element;
 
-#define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, -1}
+#define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, -1, -1}
 
 /* ================================================================== */
 /*  Trigger event (public - used in descriptor)                       */
@@ -415,6 +457,9 @@ typedef struct pulseqlib_sequence_descriptor {
     float grad_raster_time_us;
     float adc_raster_time_us;
     float block_duration_raster_us;
+    int ignore_fov_shift;
+    int enable_pmc;
+    int ignore_averages;
 
     int num_unique_blocks;
     pulseqlib_block_definition* block_definitions;
@@ -439,6 +484,9 @@ typedef struct pulseqlib_sequence_descriptor {
     int num_freq_mod_defs;
     pulseqlib_freq_mod_definition* freq_mod_definitions;
 
+    int num_rf_shims;
+    pulseqlib_rf_shim_definition* rf_shim_definitions;
+
     int num_rotations;
     float (*rotation_matrices)[9];
 
@@ -456,12 +504,12 @@ typedef struct pulseqlib_sequence_descriptor {
 } pulseqlib_sequence_descriptor;
 
 #define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT { \
-    0, 0, 0.0f, 0.0f, 0.0f, 0.0f, \
+    0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, \
     0, NULL, 0, NULL, \
     0, NULL, 0, NULL, \
     0, NULL, 0, NULL, \
     0, NULL, 0, NULL, \
-    0, NULL, \
+    0, NULL, 0, NULL, \
     0, NULL, 0, NULL, 0, NULL, \
     PULSEQLIB_TR_DESCRIPTOR_INIT, \
     0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT \
@@ -723,5 +771,16 @@ typedef struct pulseqlib_block_instance {
     0, \
     0, 0.0f, 0.0f \
 }
+
+/* ================================================================== */
+/*  Lightweight scan-time query result                                */
+/* ================================================================== */
+typedef struct pulseqlib_scan_time_info {
+    int num_subsequences;
+    float* durations_us;       /* per-subsequence duration in us  */
+    int*   ignore_averages;    /* per-subsequence flag (0 or 1)   */
+} pulseqlib_scan_time_info;
+
+#define PULSEQLIB_SCAN_TIME_INFO_INIT {0, NULL, NULL}
 
 #endif /* PULSEQLIB_TYPES_H */

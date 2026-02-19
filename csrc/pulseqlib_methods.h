@@ -26,10 +26,14 @@ extern "C" {
  * Load a (possibly chained) Pulseq sequence from disk, returning a
  * fully populated descriptor collection ready for accessor queries.
  *
- * @param collection  Output: populated descriptor collection.
- * @param diag        Output: diagnostic (error details on failure).
- * @param file_path   Path to the first .seq file.
- * @param opts        System limits / rasters.
+ * @param collection       Output: populated descriptor collection.
+ * @param diag             Output: diagnostic (error details on failure).
+ * @param file_path        Path to the first .seq file.
+ * @param opts             System limits / rasters.
+ * @param cache_binary     1 = write/read .bin alongside .seq.
+ * @param verify_signature 1 = verify MD5 signature for every .seq file
+ *                         in the chain before loading.  Use on scanner;
+ *                         skip (0) during development or quick queries.
  * @return PULSEQLIB_OK on success, negative error code on failure.
  */
 int pulseqlib_load(
@@ -37,7 +41,8 @@ int pulseqlib_load(
     pulseqlib_diagnostic* diag,
     const char* file_path,
     const pulseqlib_opts* opts,
-    int cache_binary);  /* 1 = write/read .bin alongside .seq */
+    int cache_binary,
+    int verify_signature);
 
 /* ------------------------------------------------------------------ */
 /*  Opts                                                              */
@@ -55,6 +60,27 @@ void pulseqlib_opts_init(
 void pulseqlib_diagnostic_init(pulseqlib_diagnostic* diag);
 const char* pulseqlib_get_error_message(int code);
 const char* pulseqlib_get_error_hint(int code);
+
+/* ------------------------------------------------------------------ */
+/*  Lightweight scan-time query                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Read only the definitions sections from a (possibly chained) .seq file
+ * to extract per-subsequence duration and ignore_averages flag.
+ * Much faster than pulseqlib_load -- no block/event/shape parsing.
+ *
+ * @param info       Output: populated scan time info (caller must free).
+ * @param file_path  Path to the first .seq file.
+ * @param opts       System limits (only used for chain traversal).
+ * @return PULSEQLIB_OK on success, negative error code on failure.
+ */
+int pulseqlib_query_scan_time(
+    pulseqlib_scan_time_info* info,
+    const char* file_path,
+    const pulseqlib_opts* opts);
+
+void pulseqlib_scan_time_info_free(pulseqlib_scan_time_info* info);
 
 /* ------------------------------------------------------------------ */
 /*  Descriptor lifecycle                                              */
@@ -283,6 +309,42 @@ void pulseqlib_cursor_reset(
 int pulseqlib_get_block_instance(
     const pulseqlib_sequence_descriptor_collection* coll,
     pulseqlib_block_instance* inst);
+
+/* ------------------------------------------------------------------ */
+/*  Frequency modulation plan                                         */
+/* ------------------------------------------------------------------ */
+
+/* Total number of RF+ADC events across the entire sequence */
+int pulseqlib_count_freq_mod_events(
+    const pulseqlib_sequence_descriptor_collection* coll);
+
+/* Number of RF+ADC events in a specific TR region.
+ * tr_type: PULSEQLIB_TR_REGION_PREP / _MAIN / _COOLDOWN
+ * tr_index: 0-based TR instance index (ignored for PREP/COOLDOWN) */
+int pulseqlib_count_freq_mod_events_tr(
+    const pulseqlib_sequence_descriptor_collection* coll,
+    int tr_type, int tr_index);
+
+/* Build a frequency modulation plan for a given spatial shift.
+ * shift[3]: (dx, dy, dz) in metres.
+ * tr_type: PULSEQLIB_TR_REGION_ALL / _PREP / _MAIN / _COOLDOWN
+ * tr_index: 0-based TR instance (ignored when tr_type == ALL or PREP/COOLDOWN).
+ * Returns PULSEQLIB_OK on success. */
+int pulseqlib_build_freq_mod_plan(
+    pulseqlib_freq_mod_plan* plan,
+    const pulseqlib_sequence_descriptor_collection* coll,
+    const float* shift,
+    int tr_type, int tr_index);
+
+/* Recompute waveforms and phase offsets in-place with a new shift.
+ * The plan must have been previously built with pulseqlib_build_freq_mod_plan.
+ * Reuses all existing allocations -- no malloc/free.
+ * Use this for prospective motion correction (call once per TR). */
+int pulseqlib_update_freq_mod_plan(
+    pulseqlib_freq_mod_plan* plan,
+    const float* shift);
+
+void pulseqlib_freq_mod_plan_free(pulseqlib_freq_mod_plan* plan);
 
 #ifdef __cplusplus
 }

@@ -585,6 +585,12 @@ static void read_definitions(pulseqlib__seq_file* seq)
             strncpy(seq->reserved_definitions_library.next_sequence, value,
                     sizeof(seq->reserved_definitions_library.next_sequence) - 1);
             seq->reserved_definitions_library.next_sequence[sizeof(seq->reserved_definitions_library.next_sequence) - 1] = '\0';
+        } else if (strcmp(key, "IgnoreFovShift") == 0) {
+            seq->reserved_definitions_library.ignore_fov_shift = atoi(value);
+        } else if (strcmp(key, "EnablePmc") == 0) {
+            seq->reserved_definitions_library.enable_pmc = atoi(value);
+        } else if (strcmp(key, "IgnoreAverages") == 0) {
+            seq->reserved_definitions_library.ignore_averages = atoi(value);
         }
     }
 }
@@ -1211,6 +1217,10 @@ int pulseqlib__read_seq_collection(pulseqlib__seq_file_collection* coll,
             coll->sequences = NULL; coll->base_path = NULL;
             return result;
         }
+        /* store file path for later use (e.g. signature verification) */
+        coll->sequences[i].file_path = (char*)PULSEQLIB_ALLOC(strlen(current_path) + 1);
+        if (coll->sequences[i].file_path)
+            strcpy(coll->sequences[i].file_path, current_path);
         if (i < num_seq - 1) {
             PULSEQLIB_FREE(current_path);
             current_path = build_full_path(coll->base_path,
@@ -1786,4 +1796,221 @@ float pulseqlib__get_grad_library_max_amplitude(const pulseqlib__seq_file* seq)
         if (amp > max_amp) max_amp = amp;
     }
     return max_amp;
+}
+
+/* ================================================================== */
+/*  MD5 signature verification                                        */
+/* ================================================================== */
+
+#include "external_md5.h"
+
+int pulseqlib__verify_signature(const char* file_path)
+{
+    FILE* f;
+    long sig_offset, hash_start;
+    char line[PULSEQLIB__MAX_LINE_LENGTH];
+    char stored_hash[33];
+    unsigned char digest[16];
+    struct MD5Context ctx;
+    unsigned char buf[4096];
+    size_t to_read, n;
+    long remaining;
+    char computed[33];
+    int i;
+    char* p;
+
+    if (!file_path) return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    f = fopen(file_path, "rb");
+    if (!f) return PULSEQLIB_ERR_FILE_NOT_FOUND;
+
+    /* locate [SIGNATURE] by scanning from start */
+    sig_offset = -1;
+    while (fgets(line, sizeof(line), f)) {
+        p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (strncmp(p, "[SIGNATURE]", 11) == 0) {
+            sig_offset = ftell(f) - (long)strlen(line);
+            break;
+        }
+    }
+    if (sig_offset < 0) { fclose(f); return PULSEQLIB_ERR_SIGNATURE_MISSING; }
+
+    /* read stored hash from section body */
+    stored_hash[0] = '\0';
+    while (fgets(line, sizeof(line), f)) {
+        p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '#' || *p == '\n' || *p == '\r' || *p == '\0') continue;
+        if (strncmp(p, "Type", 4) == 0) continue;
+        if (strncmp(p, "Hash", 4) == 0) {
+            p += 4;
+            while (*p == ' ' || *p == '\t') p++;
+            strncpy(stored_hash, p, 32);
+            stored_hash[32] = '\0';
+            /* strip trailing whitespace */
+            for (i = 31; i >= 0 && (stored_hash[i] == ' ' || stored_hash[i] == '\n' ||
+                                     stored_hash[i] == '\r'); --i)
+                stored_hash[i] = '\0';
+            break;
+        }
+    }
+    if (stored_hash[0] == '\0') { fclose(f); return PULSEQLIB_ERR_SIGNATURE_MISSING; }
+
+    /*
+     * Hash bytes [0 .. sig_offset - 2] inclusive.
+     * The newline preceding [SIGNATURE] belongs to the signature
+     * and must be stripped, so we hash up to sig_offset - 1 bytes
+     * (i.e. the \n at position sig_offset-1 is excluded).
+     */
+    hash_start = sig_offset - 1;
+    if (hash_start <= 0) { fclose(f); return PULSEQLIB_ERR_SIGNATURE_MISSING; }
+
+    MD5Init(&ctx);
+    if (fseek(f, 0L, SEEK_SET) != 0) { fclose(f); return PULSEQLIB_ERR_FILE_READ_FAILED; }
+    remaining = hash_start;
+    while (remaining > 0) {
+        to_read = (remaining > (long)sizeof(buf)) ? sizeof(buf) : (size_t)remaining;
+        n = fread(buf, 1, to_read, f);
+        if (n == 0) { fclose(f); return PULSEQLIB_ERR_FILE_READ_FAILED; }
+        MD5Update(&ctx, buf, (unsigned)n);
+        remaining -= (long)n;
+    }
+    MD5Final(digest, &ctx);
+    fclose(f);
+
+    /* format computed hash as hex string */
+    for (i = 0; i < 16; ++i)
+        sprintf(computed + i * 2, "%02x", digest[i]);
+    computed[32] = '\0';
+
+    /* compare */
+    if (strcmp(computed, stored_hash) != 0)
+        return PULSEQLIB_ERR_SIGNATURE_MISMATCH;
+
+    return PULSEQLIB_OK;
+}
+
+/* ================================================================== */
+/*  Lightweight scan-time query                                       */
+/* ================================================================== */
+
+/*
+ * Open a single .seq file and parse ONLY version + definitions.
+ * Fills a temporary seq_file just enough to read reserved definitions.
+ */
+static int read_definitions_only(pulseqlib__seq_file* seq, const char* path)
+{
+    FILE* f;
+    if (!seq || !path) return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    f = fopen(path, "r");
+    if (!f) return PULSEQLIB_ERR_FILE_NOT_FOUND;
+
+    get_section_offsets(seq, f);
+    read_version(seq, f);
+    if (seq->version_combined < 1005000) { fclose(f); return PULSEQLIB_ERR_UNSUPPORTED_VERSION; }
+    read_definitions_library(seq, f);
+    read_definitions(seq);
+    fclose(f);
+    return PULSEQLIB_OK;
+}
+
+int pulseqlib_query_scan_time(
+    pulseqlib_scan_time_info* info,
+    const char* file_path,
+    const pulseqlib_opts* opts)
+{
+    int capacity = 16;
+    int count = 0;
+    int max_depth = 1000;
+    char* current_path;
+    char* base_path;
+    pulseqlib__seq_file temp;
+    int result;
+    float* new_dur;
+    int* new_ign;
+
+    if (!info || !file_path || !opts) return PULSEQLIB_ERR_NULL_POINTER;
+    info->num_subsequences = 0;
+    info->durations_us     = NULL;
+    info->ignore_averages  = NULL;
+
+    base_path = extract_base_path(file_path);
+    if (!base_path) return PULSEQLIB_ERR_ALLOC_FAILED;
+
+    current_path = (char*)PULSEQLIB_ALLOC(strlen(file_path) + 1);
+    if (!current_path) { PULSEQLIB_FREE(base_path); return PULSEQLIB_ERR_ALLOC_FAILED; }
+    strcpy(current_path, file_path);
+
+    info->durations_us    = (float*)PULSEQLIB_ALLOC(capacity * sizeof(float));
+    info->ignore_averages = (int*)PULSEQLIB_ALLOC(capacity * sizeof(int));
+    if (!info->durations_us || !info->ignore_averages) goto fail_alloc;
+
+    while (current_path && current_path[0] != '\0' && count < max_depth) {
+        pulseqlib__seq_file_init(&temp, opts);
+        result = read_definitions_only(&temp, current_path);
+        if (PULSEQLIB_FAILED(result)) {
+            seq_file_reset(&temp);
+            PULSEQLIB_FREE(current_path); PULSEQLIB_FREE(base_path);
+            PULSEQLIB_FREE(info->durations_us); PULSEQLIB_FREE(info->ignore_averages);
+            info->durations_us = NULL; info->ignore_averages = NULL;
+            return result;
+        }
+
+        /* grow arrays if needed */
+        if (count >= capacity) {
+            capacity *= 2;
+            new_dur = (float*)PULSEQLIB_ALLOC(capacity * sizeof(float));
+            new_ign = (int*)PULSEQLIB_ALLOC(capacity * sizeof(int));
+            if (!new_dur || !new_ign) {
+                if (new_dur) PULSEQLIB_FREE(new_dur);
+                if (new_ign) PULSEQLIB_FREE(new_ign);
+                seq_file_reset(&temp);
+                goto fail_alloc;
+            }
+            memcpy(new_dur, info->durations_us, count * sizeof(float));
+            memcpy(new_ign, info->ignore_averages, count * sizeof(int));
+            PULSEQLIB_FREE(info->durations_us);
+            PULSEQLIB_FREE(info->ignore_averages);
+            info->durations_us    = new_dur;
+            info->ignore_averages = new_ign;
+        }
+
+        info->durations_us[count]    = temp.reserved_definitions_library.total_duration * 1e6f;
+        info->ignore_averages[count] = temp.reserved_definitions_library.ignore_averages;
+        count++;
+
+        PULSEQLIB_FREE(current_path);
+        current_path = NULL;
+        if (temp.reserved_definitions_library.next_sequence[0] != '\0') {
+            current_path = build_full_path(base_path,
+                                           temp.reserved_definitions_library.next_sequence);
+            if (!current_path) { seq_file_reset(&temp); goto fail_alloc; }
+        }
+        seq_file_reset(&temp);
+    }
+
+    PULSEQLIB_FREE(current_path);
+    PULSEQLIB_FREE(base_path);
+    info->num_subsequences = count;
+    return (count > 0) ? PULSEQLIB_OK : PULSEQLIB_ERR_COLLECTION_EMPTY;
+
+fail_alloc:
+    PULSEQLIB_FREE(current_path);
+    PULSEQLIB_FREE(base_path);
+    if (info->durations_us)    PULSEQLIB_FREE(info->durations_us);
+    if (info->ignore_averages) PULSEQLIB_FREE(info->ignore_averages);
+    info->durations_us = NULL;
+    info->ignore_averages = NULL;
+    info->num_subsequences = 0;
+    return PULSEQLIB_ERR_ALLOC_FAILED;
+}
+
+void pulseqlib_scan_time_info_free(pulseqlib_scan_time_info* info)
+{
+    if (!info) return;
+    if (info->durations_us)    PULSEQLIB_FREE(info->durations_us);
+    if (info->ignore_averages) PULSEQLIB_FREE(info->ignore_averages);
+    info->durations_us    = NULL;
+    info->ignore_averages = NULL;
+    info->num_subsequences = 0;
 }
