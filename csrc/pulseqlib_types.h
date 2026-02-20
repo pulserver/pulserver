@@ -191,7 +191,7 @@ typedef struct pulseqlib_rf_stats {
 #define PULSEQLIB_TR_REGION_COOLDOWN   2
 
 /* ================================================================== */
-/*  Frequency modulation plan (opaque)                                */
+/*  Frequency modulation                               */
 /* ================================================================== */
 
 /**
@@ -203,31 +203,38 @@ typedef struct pulseqlib_rf_stats {
  */
 typedef struct pulseqlib_freq_mod_plan pulseqlib_freq_mod_plan;
 
-/* ================================================================== */
-/*  Segment timing anchors                                            */
-/* ================================================================== */
+/**
+ * @brief Frequency modulation for a given Block instance.
+ *
+ * Contains the instantaneous frequency (Hz) at each sample point for the
+ * specified Block.  The time base is uniform at the ADC/RF raster (us). 
+ * It also includes a phase compensation term (rad) to set the event
+ * reference time to zero phase.
+ */
+typedef struct pulseqlib_freq_mod_instance {
+    int num_samples;       /**< number of samples in waveform         */
+    float* freq_hz;       /**< instantaneous frequency at each sample (Hz) */
+    float phase_offset_rad; /**< phase compensation to set ref time to zero (rad) */
+} pulseqlib_freq_mod_instance;
 
-/** @brief RF event anchor relative to segment start. */
-typedef struct pulseqlib_segment_rf_anchor {
-    int   block_offset;     /**< block index within segment           */
-    float start_us;         /**< RF start relative to segment (us)    */
-    float end_us;           /**< RF end relative to segment (us)      */
-    float isocenter_us;     /**< RF isodelay point rel. to seg. (us)  */
-    float base_amplitude_hz;/**< amplitude of first TR appearance (Hz)*/
-} pulseqlib_segment_rf_anchor;
+#define PULSEQLIB_FREQ_MOD_INSTANCE_INIT {0, NULL, 0.0f}
 
-#define PULSEQLIB_SEGMENT_RF_ANCHOR_INIT {0, 0.0f, 0.0f, 0.0f, 0.0f}
+/**
+ * @brief Per-block frequency modulation event metadata.
+ *
+ * Lightweight descriptor of the freq-mod event associated with a
+ * block.  Provides the active-region geometry and reference time
+ * without requiring a full modulation plan.
+ */
+typedef struct pulseqlib_freq_mod_event {
+    int   def_idx;         /**< freq-mod definition index (-1 = none)      */
+    int   num_samples;     /**< number of waveform samples                 */
+    float raster_us;       /**< uniform sample spacing (us)                */
+    float duration_us;     /**< active event duration (us)                 */
+    float ref_time_us;     /**< reference time within active region (us)   */
+} pulseqlib_freq_mod_event;
 
-/** @brief ADC event anchor relative to segment start. */
-typedef struct pulseqlib_segment_adc_anchor {
-    int   block_offset;     /**< block index within segment           */
-    float start_us;         /**< ADC start relative to segment (us)   */
-    float end_us;           /**< ADC end relative to segment (us)     */
-    int   kzero_index;      /**< sample index of k=0 in readout      */
-    float kzero_us;         /**< time of k=0 relative to segment (us) */
-} pulseqlib_segment_adc_anchor;
-
-#define PULSEQLIB_SEGMENT_ADC_ANCHOR_INIT {0, 0.0f, 0.0f, 0, 0.0f}
+#define PULSEQLIB_FREQ_MOD_EVENT_INIT {-1, 0, 0.0f, 0.0f, 0.0f}
 
 /* ================================================================== */
 /*  Opaque collection handle                                          */
@@ -428,6 +435,7 @@ typedef struct pulseqlib_block_instance {
     float rf_amp_hz;            /**< RF amplitude (Hz, = gamma*B1)     */
     float rf_freq_hz;           /**< RF frequency offset (Hz)          */
     float rf_phase_rad;         /**< RF phase offset (rad)             */
+    int   rf_shim_id;           /**< RF shim definition index (-1=none)*/
 
     /* Gradients */
     float gx_amp_hz_per_m;      /**< GX amplitude (Hz / m)             */
@@ -449,20 +457,16 @@ typedef struct pulseqlib_block_instance {
     int   adc_flag;             /**< 1 = ADC acquisition active        */
     float adc_freq_hz;          /**< ADC frequency offset (Hz)         */
     float adc_phase_rad;        /**< ADC phase offset (rad)            */
-
-    /* RF shimming */
-    int   rf_shim_id;           /**< RF shim definition index (-1=none)*/
 } pulseqlib_block_instance;
 
 #define PULSEQLIB_BLOCK_INSTANCE_INIT { \
     0, \
-    0.0f, 0.0f, 0.0f, \
+    0.0f, 0.0f, 0.0f, -1, \
     0.0f, 0.0f, 0.0f, \
     0, 0, 0, \
     {1,0,0, 0,1,0, 0,0,1}, 0, 0, \
     0, \
     0, 0.0f, 0.0f, \
-    -1 \
 }
 
 /* ================================================================== */
@@ -470,11 +474,18 @@ typedef struct pulseqlib_block_instance {
 /* ================================================================== */
 
 /**
- * @brief Quick scan-time summary (no full load required).
+ * @brief Scan-time summary.
  *
- * Returned by pulseqlib_get_scan_time().  The total number of
- * segment boundaries equals the sum across subsequences of
- * (segments_per_TR * num_TRs).
+ * When returned by pulseqlib_peek_scan_time(), only
+ * @c total_duration_us is populated (approximated from the
+ * [DEFINITIONS] section, multiplied by @c num_reps with
+ * per-subsequence @c IgnoreAverages clamping) and
+ * @c total_segment_boundaries is left at 0.
+ *
+ * When computed from a fully-loaded collection via
+ * pulseqlib_get_scan_time(), both fields are accurate and
+ * account for prep/cooldown block durations, degenerate
+ * TR folding, and the consumer-supplied @c num_reps.
  */
 typedef struct pulseqlib_scan_time_info {
     float total_duration_us;        /**< total sequence duration (us)  */

@@ -251,10 +251,10 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
     for (i = 0; i < d->num_rf_shims; ++i) {
         const pulseqlib_rf_shim_definition* rs = &d->rf_shim_definitions[i];
         if (!write4(f, &rs->id, 1)) return 0;
-        if (!write4(f, &rs->n_channels, 1)) return 0;
-        if (rs->n_channels > 0) {
-            if (!write4(f, rs->magnitudes, rs->n_channels)) return 0;
-            if (!write4(f, rs->phases, rs->n_channels)) return 0;
+        if (!write4(f, &rs->num_channels, 1)) return 0;
+        if (rs->num_channels > 0) {
+            if (!write4(f, rs->magnitudes, rs->num_channels)) return 0;
+            if (!write4(f, rs->phases, rs->num_channels)) return 0;
         }
     }
 
@@ -541,9 +541,9 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
             pulseqlib_rf_shim_definition* rs = &d->rf_shim_definitions[i];
             memset(rs, 0, sizeof(*rs));
             if (!read4(f, &rs->id, 1)) return 0;
-            if (!read4(f, &rs->n_channels, 1)) return 0;
-            if (do_swap) { swap4(&rs->id); swap4(&rs->n_channels); }
-            n = rs->n_channels;
+            if (!read4(f, &rs->num_channels, 1)) return 0;
+            if (do_swap) { swap4(&rs->id); swap4(&rs->num_channels); }
+            n = rs->num_channels;
             if (n > 0 && n <= PULSEQLIB_MAX_RF_SHIM_CHANNELS) {
                 if (!read4(f, rs->magnitudes, n)) return 0;
                 if (!read4(f, rs->phases, n)) return 0;

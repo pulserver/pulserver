@@ -1,0 +1,1167 @@
+%% generate_segmentation_test_sequences
+%
+% Generates Pulseq .seq files to verify TR detection / Segment detection
+% multishot pattern detection / min and max base grad amplitudes / positional max
+% grad amplitudes
+%
+
+clear; clc;
+import mr.*
+
+
+%% subfunctions
+function write_bssfp(num_slices)
+    % we define here a really crude True-FISP a.k.a. bSSFP sequence
+    % there is no user control for TR/TE, you just specify the ADC time and the
+    % RF parameters and the rest is calculated to find the fastest posible
+    % timing. The sequence intensively uses the extended trapezoid
+    % functionality to achieve near-optimal timing. Due to the requirement for
+    % splitting the sequence into blocks the TR is increased by approximately
+    % 40-60 us (rfDeadTime+adcDeadTime) in comparison to the true minimum TR
+
+    % set system limits
+    % had to slow down ramps and increase adc_duration to avoid stimulation
+    sys = mr.opts(...
+        'MaxGrad', 28, 'GradUnit', 'mT/m', ...
+        'MaxSlew', 150, 'SlewUnit', 'T/m/s', ...
+        'rfRingdownTime', 20e-6, ...
+        'rfDeadTime', 100e-6, ...
+        'adcDeadTime', 10e-6 ...
+    );
+
+    seq=mr.Sequence(sys);              % Create a new sequence object
+    fov=220e-3; Nx=256; Ny=256;     % Define FOV and resolution
+
+
+    % ADC duration (controls TR/TE)
+    adc_dur=2560; %us
+
+    % RF parameters 
+    alpha=40; % deg
+    thick=4; %mm
+    rf_dur=600; % us
+    rf_apo=0.5;
+    rf_bwt=1.5;
+
+    % Create 'alpha' degree slice selection pulse and gradient
+    [rf, gz, gzReph] = mr.makeSincPulse(alpha*pi/180,'Duration',rf_dur*1e-6,...
+        'SliceThickness',thick*1e-3,'apodization',rf_apo,'timeBwProduct',rf_bwt,'system',sys,...
+        'use', 'excitation');
+
+    % Define other gradients and ADC events
+    deltak=1/fov;
+    gx = mr.makeTrapezoid('x','FlatArea',Nx*deltak,'FlatTime',adc_dur*1e-6,'system',sys);
+    adc = mr.makeAdc(Nx,'Duration',gx.flatTime,'Delay',gx.riseTime,'system',sys);
+    gxPre = mr.makeTrapezoid('x','Area',-gx.area/2,'system',sys);
+    phaseAreas = ((0:Ny-1)-Ny/2)*deltak;
+
+    % now we have to reshuffle gradients to achieve a half-way optimal timing
+    % new gz will consist of two parts: 
+    % 1: slice refocusing from the previous TR followed by slice selection 
+    %    including the plato an a small bit of the ramp-down
+    % 2: the remainder of the ramp-down and the slice refocusing for the next TR
+    gz_parts=mr.splitGradientAt(gz,mr.calcDuration(rf));
+    gz_parts(1).delay=mr.calcDuration(gzReph);
+    gz_1=mr.addGradients({gzReph,gz_parts(1)},'system',sys);
+    [rf,~]=mr.align('right',rf,gz_1);
+    gz_parts(2).delay=0;
+    gzReph.delay=mr.calcDuration(gz_parts(2));
+    gz_2=mr.addGradients({gz_parts(2),gzReph},'system',sys);
+
+    % new gr will consist of two parts: 
+    % 1: prephaser followed by a part of the read gradient including the 
+    %    beginning of the ramp-down
+    % 2: the remainer of the ramp-down and the second "prephaser"
+    gx_parts=mr.splitGradientAt(gx,ceil(mr.calcDuration(adc)/sys.gradRasterTime)*sys.gradRasterTime);
+    gx_parts(1).delay=mr.calcDuration(gxPre);
+    gx_1=mr.addGradients({gxPre,gx_parts(1)},'system',sys);
+    adc.delay=adc.delay+mr.calcDuration(gxPre); % we cannot use mr.align here because the adc duration maz be not aligneed to the grad raster
+    gx_parts(2).delay=0;
+    gxPre.delay=mr.calcDuration(gx_parts(2));
+    gx_2=mr.addGradients({gx_parts(2),gxPre},'system',sys);
+
+    % Calculate timing
+    %pe_dur=min(max(tp2(end),tpr1(end-2)),max(tp(end-3),tpr2(end))); 
+    gxPre.delay=0; % otherwise duration below is misreported
+    %pe_dur=max(mr.calcDuration(gz_2),mr.calcDuration(gxPre)+gx.riseTime);
+    pe_dur=mr.calcDuration(gx_2);
+
+    % adjust delays to align objects
+    %gz_1.delay=max(mr.calcDuration(gx_2)-rf.delay,0);
+    gz_1.delay=max(mr.calcDuration(gx_2)-rf.delay+rf.ringdownTime,0); % this rf.ringdownTime is needed to center the ADC and the gradient echo in the center of RF-RF period
+
+    rf.delay=rf.delay+gz_1.delay;
+
+    % finish timing calculation
+    TR=mr.calcDuration(gz_1)+mr.calcDuration(gx_1);
+    TE=TR/2;
+
+    % alpha / 2 preparation: shorter TR and half-angle, no PE, no RO
+    % create 0.5*alpha prep pulse
+    rf05=rf;
+    rf05.signal=0.5*rf.signal;
+    seq.addBlock(rf05,gz_1,mr.makeLabel('SET','ONCE', 1)); % we also label the few following blocks as preparing to exclude them if the sequence is repeated
+    % the following delay calculation fails for agressive sequence timing
+    prepDelay=mr.makeDelay(round((TR/2-mr.calcDuration(gz_1))/sys.gradRasterTime)*sys.gradRasterTime); % I know this round() is not 100% correct
+    gx_1_1=mr.makeExtendedTrapezoidArea('x',0,gx_2.first,-gx_2.area,sys);
+    gyPre_2 = mr.makeTrapezoid('y','Area',phaseAreas(end),'Duration',pe_dur,'system',sys); % last PE step (in case of repetitions)
+    seq.addBlock(mr.align('left',prepDelay,gz_2,gyPre_2,'right',gx_1_1));
+    seq.addBlock(mr.makeLabel('SET','ONCE', 0)); % remove preparing block label
+
+    % Loop over phase encodes and define sequence blocks
+    for i=1:Ny
+        rf.phaseOffset=pi*mod(i,2);
+        adc.phaseOffset=pi*mod(i,2);
+            
+        gyPre_1 = mr.scaleGrad(gyPre_2,-1); % undo previous PE step
+        gyPre_2 = mr.makeTrapezoid('y','Area',phaseAreas(i),'Duration',pe_dur,'system',sys); % current PE step
+
+        seq.addBlock(rf,gz_1, gyPre_1, gx_2);
+        seq.addBlock(gx_1,gyPre_2, gz_2,adc);
+    end
+    % finish the x-grad shape 
+    seq.addBlock(gx_2,mr.makeLabel('SET','ONCE', 2)); % we also label this block as the exit block, which excludes it from all but last repetitions if the sequence is repeated
+
+    % check that the calculated TR was reached
+    % alpha / 2 prep takes 4 blocks
+    assert(TR==(mr.calcDuration(seq.getBlock(5))+mr.calcDuration(seq.getBlock(6))));
+
+    fprintf('Sequence ready\n');
+    fprintf('TR=%03f ms  TE=%03f ms\n', TR*1e3, TE*1e3);
+
+    %% check whether the timing of the sequence is correct
+    [ok, error_report]=seq.checkTiming;
+
+    if (ok)
+        fprintf('Timing check passed successfully\n');
+    else
+        fprintf('Timing check failed! Error listing follows:\n');
+        fprintf([error_report{:}]);
+        fprintf('\n');
+    end
+
+    %% prepare export
+    seq.setDefinition('FOV', [fov fov thick*1e-3]);
+    seq.setDefinition('Name', 'trufi');
+
+    seq.write('trufi.seq')       % Write to pulseq file
+
+    %seq.install('siemens');
+
+    %% plot entire interpolated wave forms -- good for debugging of gaps, jumps,
+    % etc, but is relatively slow
+    %gw=seq.gradient_waveforms();
+    %figure; plot(gw'); % plot the entire gradient waveform
+    gw_data = seq.waveforms_and_times();
+    % figure; plot(gw_data{1}(1,:),gw_data{1}(2,:),gw_data{2}(1,:),gw_data{2}(2,:),gw_data{3}(1,:),gw_data{3}(2,:)); % plot the entire gradient waveform
+    % title('gradient waveforms');
+
+    %% trajectory calculation 
+    [ktraj_adc, t_adc, ktraj, t_ktraj, t_excitation, t_refocusing] = seq.calculateKspacePP();
+
+    %% very optional slow step, but useful for testing during development e.g. for the real TE, TR or for staying within slewrate limits  
+    rep = seq.testReport;
+
+end
+
+function write_spgr(num_slices)
+    % this is a demo GRE sequence, which uses LABEL extension to produce raw
+    % data reconstuctable by the integrated image reconstruction on the scanner
+
+    % set system limits
+    sys = mr.opts(...
+        'MaxGrad', 28, 'GradUnit', 'mT/m', ...
+        'MaxSlew', 150, 'SlewUnit', 'T/m/s', ...
+        'rfRingdownTime', 20e-6, ...
+        'rfDeadTime', 100e-6, ...
+        'adcDeadTime', 10e-6 ...
+    );
+
+    seq=mr.Sequence(sys);         % Create a new sequence object
+
+    fov=224e-3; Nx=256; Ny=Nx; % Define FOV and resolution
+    alpha=15;                  % flip angle
+    thickness=5e-3;            % slice
+    Nslices=1;
+    TR=10e-3; 
+    TE=4.3e-3;
+    %TE=[7.38 9.84 15]*1e-3;            % alternatively give a vector here to have multiple TEs (e.g. for field mapping)
+
+    % more in-depth parameters
+    % RF spoiling increment = 84° for smoother transient decay, https://doi.org/10.1002/mrm.1910350216, 169° for diffusion independent rf spoiling in steady-state https://doi.org/10.1371/journal.pone.0324455
+    rfSpoilingInc=84;              % RF spoiling increment
+    roDuration=3.2e-3;              % ADC duration
+
+    % Create fat-sat pulse 
+    % (in Siemens interpreter from January 2019 duration is limited to 8.192 ms, and although product EPI uses 10.24 ms, 8 ms seems to be sufficient)
+    % B0=2.89; % 1.5 2.89 3.0
+    % sat_ppm=-3.45;
+    % sat_freq=sat_ppm*1e-6*B0*lims.gamma;
+    % rf_fs = mr.makeGaussPulse(110*pi/180,'system',lims,'Duration',8e-3,...
+    %     'bandwidth',abs(sat_freq),'freqOffset',sat_freq);
+    % gz_fs = mr.makeTrapezoid('z',sys,'delay',mr.calcDuration(rf_fs),'Area',1/1e-4); % spoil up to 0.1mm
+
+    % Create alpha-degree slice selection pulse and gradient
+    [rf, gz] = mr.makeSincPulse(alpha*pi/180,'Duration',3e-3,...
+        'SliceThickness',thickness,'apodization',0.42,'timeBwProduct',4,'use','excitation','system',sys);
+
+    % Define other gradients and ADC events
+    deltak=1/fov;
+    gx = mr.makeTrapezoid('x','FlatArea',Nx*deltak,'FlatTime',roDuration,'system',sys);
+    adc = mr.makeAdc(Nx,'Duration',gx.flatTime,'Delay',gx.riseTime,'system',sys);
+    gxPre = mr.makeTrapezoid('x','Area',-gx.area/2,'Duration',1e-3,'system',sys);
+    gzReph = mr.makeTrapezoid('z','Area',-gz.area/2,'Duration',1e-3,'system',sys);
+    phaseAreas = -((0:Ny-1)-Ny/2)*deltak; % phase area should be Kmax for clin=0 and -Kmax for clin=Ny... strange
+
+    % gradient spoiling
+    gxSpoil=mr.makeTrapezoid('x','Area',2*Nx*deltak,'system',sys);
+    gzSpoil=mr.makeTrapezoid('z','Area',4/thickness,'system',sys);
+
+    % Calculate timing
+    delayTE=ceil((TE - mr.calcDuration(gxPre) - gz.fallTime - gz.flatTime/2 ...
+        - mr.calcDuration(gx)/2)/seq.gradRasterTime)*seq.gradRasterTime;
+    delayTR=ceil((TR - mr.calcDuration(gz) - mr.calcDuration(gxPre) ...
+        - mr.calcDuration(gx) - delayTE)/seq.gradRasterTime)*seq.gradRasterTime;
+    assert(all(delayTE>=0));
+    assert(all(delayTR>=mr.calcDuration(gxSpoil,gzSpoil)));
+
+    rf_phase=0;
+    rf_inc=0;
+
+    % all LABELS / counters an flags are automatically initialized to 0 in the beginning, no need to define initial 0's  
+    % so we will just increment LIN after the ADC event (e.g. during the spoiler)
+
+    seq.addBlock(mr.makeLabel('SET','REV', 1)); % left-right swap fix (needed for 1.4.0)
+
+    for r=1:2
+    seq.addBlock(mr.makeLabel('SET','LIN', 0), mr.makeLabel('SET','SLC', 0)); % needed to make it compatible to multiple REPs
+
+    % loop over slices
+    for s=1:Nslices
+        rf.freqOffset=gz.amplitude*thickness*(s-1-(Nslices-1)/2);
+        % loop over phase encodes and define sequence blocks
+        for i=1:Ny
+        for c=1:length(TE)
+            rf.phaseOffset=rf_phase/180*pi;
+            adc.phaseOffset=rf_phase/180*pi;
+            rf_inc=mod(rf_inc+rfSpoilingInc, 360.0);
+            rf_phase=mod(rf_phase+rf_inc, 360.0);
+            %
+            seq.addBlock(rf,gz);
+            gyPre = mr.makeTrapezoid('y','Area',phaseAreas(i),'Duration',mr.calcDuration(gxPre),'system',sys);
+            seq.addBlock(gxPre,gyPre,gzReph);
+            seq.addBlock(mr.makeDelay(delayTE(c)));
+            seq.addBlock(gx,adc);
+            gyPre.amplitude=-gyPre.amplitude;
+            spoilBlockContents={mr.makeDelay(delayTR(c)),gxSpoil,gyPre,gzSpoil}; % here we demonstrate the technique to combine variable counter-dependent content into the same block
+            if c~=length(TE)
+                spoilBlockContents=[spoilBlockContents {mr.makeLabel('INC','ECO', 1)}];
+            else
+                if length(TE)>1
+                    spoilBlockContents=[spoilBlockContents {mr.makeLabel('SET','ECO', 0)}];
+                end
+                if i~=Ny
+                    spoilBlockContents=[spoilBlockContents {mr.makeLabel('INC','LIN', 1)}];
+                else
+                    spoilBlockContents=[spoilBlockContents {mr.makeLabel('SET','LIN', 0), mr.makeLabel('INC','SLC', 1)}];
+                end
+            end
+            seq.addBlock(spoilBlockContents{:});
+        end
+        end
+    end
+    seq.addBlock(mr.makeDelay(5));
+    seq.addBlock(mr.makeLabel('INC','REP', 1)); % make the sequence compatible with multiple runs/repetitions
+    end
+
+    %% check whether the timing of the sequence is correct
+    [ok, error_report]=seq.checkTiming;
+
+    if (ok)
+        fprintf('Timing check passed successfully\n');
+    else
+        fprintf('Timing check failed! Error listing follows:\n');
+        fprintf([error_report{:}]);
+        fprintf('\n');
+    end
+
+    %% prepare sequence export
+    seq.setDefinition('FOV', [fov fov thickness*Nslices]);
+    seq.setDefinition('Name', 'gre_lbl');
+
+    seq.write('gre_lbl.seq')       % Write to pulseq file
+
+    %% get waveforms
+    gw_data = seq.waveforms_and_times();
+
+    % k-space trajectory calculation
+    [ktraj_adc, t_adc, ktraj, t_ktraj, t_excitation, t_refocusing] = seq.calculateKspacePP();
+
+    %% evaluate label settings more specifically
+    lbls=seq.evalLabels('evolution','adc');
+
+    %% very optional slow step, but useful for testing during development e.g. for the real TE, TR or for staying within slewrate limits  
+    rep = seq.testReport;
+
+end
+
+function write_fse(num_slices)
+    %% Create a TSE sequence and export for execution
+    % 
+    % The |Sequence| class provides functionality to create magnetic
+    % resonance sequences (MRI or NMR) from basic building blocks.
+    %
+    % This provides an implementation of the open file format for MR sequences
+    % described here: http://pulseq.github.io/specification.pdf
+    %
+    % This example performs the following steps:
+    % 
+    % # Create slice selective RF pulse for imaging.
+    % # Create readout gradient and phase encode strategy.
+    % # Loop through phase encoding and generate sequence blocks.
+    % # Write the sequence to an open file format suitable for execution on a
+    % scanner.
+    % 
+    %   Juergen Hennig <juergen.hennig@uniklinik-freiburg.de>
+    %   Maxim Zaitsev  <maxim.zaitsev@uniklinik-freiburg.de>
+    
+
+    %% Instantiation and gradient limits
+    % The system gradient limits can be specified in various units _mT/m_,
+    % _Hz/cm_, or _Hz/m_. However the limits will be stored internally in units
+    % of _Hz/m_ for amplitude and _Hz/m/s_ for slew. Unspecificied hardware
+    % parameters will be assigned default values.
+
+    sys = mr.opts(...
+        'MaxGrad', 28, 'GradUnit', 'mT/m', ...
+        'MaxSlew', 150, 'SlewUnit', 'T/m/s', ...
+        'rfRingdownTime', 20e-6, ...
+        'rfDeadTime', 100e-6, ...
+        'adcDeadTime', 10e-6 ...
+    );
+
+    %%
+    % A new sequence object is created by calling the class constructor.
+    seq=mr.Sequence(system);
+
+    %% Sequence events
+    % Some sequence parameters are defined using standard MATLAB variables
+    fov=256e-3;
+    Nx=256; Ny=256; necho=16; Nslices=1;
+    rflip=180;
+    if (numel(rflip)==1), rflip=rflip+zeros([1 necho]); end
+    sliceThickness=5e-3;
+    TE1=12e-3; % echo time of the first echo in the train
+    TR=2000e-3;
+    TEeff=100e-3; % the desired echo time (can only be achieved approximately)
+
+    samplingTime= 6.4e-3;
+    readoutTime = samplingTime + 2*system.adcDeadTime;
+    tEx=2.5e-3; 
+    tExwd=tEx+system.rfRingdownTime+system.rfDeadTime;
+    tRef=2e-3; 
+    tRefwd=tRef+system.rfRingdownTime+system.rfDeadTime;
+    tSp=0.5*(TE1-readoutTime-tRefwd);
+    tSpex=0.5*(TE1-tExwd-tRefwd);
+    fspR=1.0;
+    fspS=0.5;
+    dG=250e-6; % 'standard' ramp time - makes sequence structure much simpler
+
+    rfex_phase=pi/2; % MZ: we need to maintain these as variables because we will overwrtite phase offsets for multiple slice positions
+    rfref_phase=0;
+
+    %%
+    %%% Base gradients
+    %%% Slice selection
+    % Key concepts in the sequence description are *blocks* and *events*.
+    % Blocks describe a group of events that are executed simultaneously. This
+    % hierarchical structure means that one event can be used in multiple
+    % blocks, a common occurrence in MR sequences, particularly in imaging
+    % sequences. 
+    %
+    % First, the slice selective RF pulses (and corresponding slice gradient)
+    % are generated using the |makeSincPulse| function.
+    % Gradients are recalculated such that their flattime covers the pulse plus
+    % the rfdead- and rfringdown- times.
+    %
+    flipex=90*pi/180;
+    [rfex, gz] = mr.makeSincPulse(flipex,system,'Duration',tEx,...
+        'SliceThickness',sliceThickness,'apodization',0.5,'timeBwProduct',4,'PhaseOffset',rfex_phase,...
+        'use','excitation');
+    GSex = mr.makeTrapezoid('z',system,'amplitude',gz.amplitude,'FlatTime',tExwd,'riseTime',dG);
+    % plotPulse(rfex,GSex);
+
+    flipref=rflip(1)*pi/180;
+    [rfref, gz2] = mr.makeSincPulse(flipref,system,'Duration',tRef,... % it was a bug as 'gz' was owerwritten
+        'SliceThickness',sliceThickness,'apodization',0.5,'timeBwProduct',4,'PhaseOffset',rfref_phase,'use','refocusing');
+    GSref = mr.makeTrapezoid('z',system,'amplitude',GSex.amplitude,'FlatTime',tRefwd,'riseTime',dG);
+    % plotPulse(rfref,GSref);
+
+    AGSex=GSex.area/2;
+    GSspr = mr.makeTrapezoid('z',system,'area',AGSex*(1+fspS),'duration',tSp,'riseTime',dG);
+    GSspex = mr.makeTrapezoid('z',system,'area',AGSex*fspS,'duration',tSpex,'riseTime',dG);
+
+    %%
+    %%% Readout gradient
+    % To define the remaining encoding gradients we need to calculate the
+    % $k$-space sampling. The Fourier relationship
+    %
+    % $$\Delta k = \frac{1}{FOV}$$
+    % 
+    % Therefore the area of the readout gradient is $n\Delta k$.
+    deltak=1/fov;
+    kWidth = Nx*deltak;
+
+    GRacq = mr.makeTrapezoid('x',system,'FlatArea',kWidth,'FlatTime',readoutTime,'riseTime',dG);
+    adc = mr.makeAdc(Nx,'Duration',samplingTime, 'Delay', system.adcDeadTime);%,'Delay',GRacq.riseTime);
+    GRspr = mr.makeTrapezoid('x',system,'area',GRacq.area*fspR,'duration',tSp,'riseTime',dG);
+    GRspex = mr.makeTrapezoid('x',system,'area',GRacq.area*(1+fspR),'duration',tSpex,'riseTime',dG);
+
+
+    AGRspr=GRspr.area;%GRacq.area/2*fspR;
+    AGRpreph = GRacq.area/2+AGRspr;%GRacq.area*(1+fspR)/2;
+    GRpreph = mr.makeTrapezoid('x',system,'Area',AGRpreph,'duration',tSpex,'riseTime',dG);
+
+    %%
+    %%% Phase encoding
+    % To move the $k$-space trajectory away from 0 prior to the readout a
+    % prephasing gradient must be used. Furthermore rephasing of the slice
+    % select gradient is required.
+
+    nex=floor(Ny/necho);
+    pe_steps=(1:(necho*nex))-0.5*necho*nex-1;
+    if 0==mod(necho,2)
+        pe_steps=circshift(pe_steps,[0,-round(nex/2)]); % for odd number of echoes we have to apply a shift to avoid a contrast jump at k=0
+    end
+    % TSE echo time magic
+    [~,iPEmin]=min(abs(pe_steps));
+    k0curr=floor((iPEmin-1)/nex)+1; % calculate the 'native' central echo index 
+    k0prescr=max(round(TEeff/TE1),1); % echo to be aligned to the k-space center 
+    PEorder=circshift(reshape(pe_steps,[nex,necho])',k0prescr-k0curr);
+
+    phaseAreas = PEorder*deltak;
+
+    %% split gradients and recombine into blocks
+    % lets start with slice selection....
+    GS1times=[0 GSex.riseTime];
+    GS1amp=[0 GSex.amplitude];
+    GS1 = mr.makeExtendedTrapezoid('z','times',GS1times,'amplitudes',GS1amp);
+
+    GS2times=[0 GSex.flatTime];
+    GS2amp=[GSex.amplitude GSex.amplitude];
+    GS2 = mr.makeExtendedTrapezoid('z','times',GS2times,'amplitudes',GS2amp);
+
+    GS3times=[0 GSspex.riseTime GSspex.riseTime+GSspex.flatTime GSspex.riseTime+GSspex.flatTime+GSspex.fallTime];
+    GS3amp=[GSex.amplitude GSspex.amplitude GSspex.amplitude GSref.amplitude];
+    GS3 = mr.makeExtendedTrapezoid('z','times',GS3times,'amplitudes',GS3amp);
+
+    GS4times=[0 GSref.flatTime];
+    GS4amp=[GSref.amplitude GSref.amplitude];
+    GS4 = mr.makeExtendedTrapezoid('z','times',GS4times,'amplitudes',GS4amp);
+
+    GS5times=[0 GSspr.riseTime GSspr.riseTime+GSspr.flatTime GSspr.riseTime+GSspr.flatTime+GSspr.fallTime];
+    GS5amp=[GSref.amplitude GSspr.amplitude GSspr.amplitude 0];
+    GS5 = mr.makeExtendedTrapezoid('z','times',GS5times,'amplitudes',GS5amp);
+
+    GS7times=[0 GSspr.riseTime GSspr.riseTime+GSspr.flatTime GSspr.riseTime+GSspr.flatTime+GSspr.fallTime];
+    GS7amp=[0 GSspr.amplitude GSspr.amplitude GSref.amplitude];
+    GS7 = mr.makeExtendedTrapezoid('z','times',GS7times,'amplitudes',GS7amp);
+
+    % and now the readout gradient....
+
+    GR3=GRpreph;%GRspex;
+
+    GR5times=[0 GRspr.riseTime GRspr.riseTime+GRspr.flatTime GRspr.riseTime+GRspr.flatTime+GRspr.fallTime];
+    GR5amp=[0 GRspr.amplitude GRspr.amplitude GRacq.amplitude];
+    GR5 = mr.makeExtendedTrapezoid('x','times',GR5times,'amplitudes',GR5amp);
+
+    GR6times=[0 readoutTime];
+    GR6amp=[GRacq.amplitude GRacq.amplitude];
+    GR6 = mr.makeExtendedTrapezoid('x','times',GR6times,'amplitudes',GR6amp);
+
+    GR7times=[0 GRspr.riseTime GRspr.riseTime+GRspr.flatTime GRspr.riseTime+GRspr.flatTime+GRspr.fallTime];
+    GR7amp=[GRacq.amplitude GRspr.amplitude GRspr.amplitude 0];
+    GR7 = mr.makeExtendedTrapezoid('x','times',GR7times,'amplitudes',GR7amp);
+
+
+    % and filltimes
+    %tex=GS1.t(end)+GS2.t(end)+GS3.t(end);
+    %tref=GS4.t(end)+GS5.t(end)+GS7.t(end)+readoutTime;
+    %tend=GS4.t(end)+GS5.t(end);
+    tex=mr.calcDuration(GS1)+mr.calcDuration(GS2)+mr.calcDuration(GS3);
+    tref=mr.calcDuration(GS4)+mr.calcDuration(GS5)+mr.calcDuration(GS7)+readoutTime;
+    tend=mr.calcDuration(GS4)+mr.calcDuration(GS5);
+
+
+    tETrain=tex+necho*tref+tend;
+    TRfill=(TR-Nslices*tETrain)/Nslices;
+    % round to gradient raster
+    TRfill=system.gradRasterTime * round(TRfill / system.gradRasterTime);
+    if TRfill<0, TRfill=1e-3; 
+        disp(strcat('Warning!!! TR too short, adapted to include all slices to : ',num2str(1000*Nslices*(tETrain+TRfill)),' ms')); 
+    else
+        disp(strcat('TRfill : ',num2str(1000*TRfill),' ms')); 
+    end
+    delayTR = mr.makeDelay(TRfill);
+
+    %% Define sequence blocks
+    % Next, the blocks are put together to form the sequence
+    for kex=0:nex % MZ: we start at 0 to have one dummy
+        for s=1:Nslices
+            rfex.freqOffset=GSex.amplitude*sliceThickness*(s-1-(Nslices-1)/2);
+            rfref.freqOffset=GSref.amplitude*sliceThickness*(s-1-(Nslices-1)/2);
+            rfex.phaseOffset=rfex_phase-2*pi*rfex.freqOffset*mr.calcRfCenter(rfex); % align the phase for off-center slices
+            rfref.phaseOffset=rfref_phase-2*pi*rfref.freqOffset*mr.calcRfCenter(rfref); % dito
+        
+            seq.addBlock(GS1);
+            seq.addBlock(GS2,rfex);
+            seq.addBlock(GS3,GR3);
+            %GS4.first=GS4f;
+            %GS4.first=GS3.last;
+            for kech=1:necho,
+                if (kex>0)
+                    phaseArea=phaseAreas(kech,kex);
+                else
+                    phaseArea=0;
+                end
+                GPpre = mr.makeTrapezoid('y',system,'Area',phaseArea,'Duration',tSp,'riseTime',dG);
+                GPrew = mr.makeTrapezoid('y',system,'Area',-phaseArea,'Duration',tSp,'riseTime',dG);
+                seq.addBlock(GS4,rfref);
+                seq.addBlock(GS5,GR5,GPpre);
+                if (kex>0)
+                    seq.addBlock(GR6,adc);
+                else
+                    seq.addBlock(GR6);
+                end
+                seq.addBlock(GS7,GR7,GPrew);
+                %GS4.first=GS7.last;
+            end
+            seq.addBlock(GS4);
+            seq.addBlock(GS5);
+            seq.addBlock(delayTR);
+        end
+    end
+
+    %% check whether the timing of the sequence is correct
+    [ok, error_report]=seq.checkTiming;
+
+    if (ok)
+        fprintf('Timing check passed successfully\n');
+    else
+        fprintf('Timing check failed! Error listing follows:\n');
+        fprintf([error_report{:}]);
+        fprintf('\n');
+    end
+
+    gw_data = seq.waveforms_and_times();
+
+    %% k-space trajectory calculation
+    [ktraj_adc, t_adc, ktraj, t_ktraj, t_excitation, t_refocusing] = seq.calculateKspacePP();
+
+    %% very optional slow step, but useful for testing during development e.g. for the real TE, TR or for staying within slew rate limits  
+    rep = seq.testReport; 
+
+    %% Write to file
+
+    % The sequence is written to file in compressed form according to the file
+    % format specification using the |write| method.
+    seq.write('tse.seq')
+
+
+end
+
+function write_epi(num_slices)
+    % this is an experimental high-performance EPI sequence
+    % which uses split gradients to overlap blips with the readout
+    % gradients combined with ramp-samping
+    % strongly leaned towards the Siemens EPI_BOLD sequence 
+    % especially in terms of flags and labes to enable ICE reconstruction
+
+    % Set system limits
+    sys = mr.opts(...
+        'MaxGrad', 28, 'GradUnit', 'mT/m', ...
+        'MaxSlew', 150, 'SlewUnit', 'T/m/s', ...
+        'rfRingdownTime', 20e-6, ...
+        'rfDeadTime', 100e-6, ...
+        'adcDeadTime', 10e-6 ...
+    );
+
+    seq=mr.Sequence(sys);      % Create a new sequence object
+    fov=220e-3; Nx=96; Ny=Nx;  % Define FOV and resolution
+    thickness=3e-3;            % slice thickness in mm
+    sliceGap=1.5e-3;            % slice gap in mm
+    Nslices=4;
+    Nrep = 1 ;
+    TR = 3000e-3 ;
+
+    pe_enable=1;               % a flag to quickly disable phase encoding (1/0) as needed for the delay calibration
+    ro_os=2;                   % oversampling factor (in contrast to the product sequence we don't really need it)
+    readoutTime = 580e-6 ; % default value
+
+    readoutBW = 1/readoutTime ; % readout bandwidth
+    disp(['Readout bandwidth = ', num2str(readoutBW), ' Hz/Px']) ;
+    partFourierFactor=1;       % partial Fourier factor: 1: full sampling 0: start with ky=0
+    Nnav=3;		   % navigator echoes for ghost supprerssion
+
+    % Create fat-sat pulse 
+    sat_ppm=-3.35;
+    rf_fs = mr.makeGaussPulse(110*pi/180,'system',sys,'Duration',8e-3,...
+        'bandwidth',abs(sat_ppm*1e-6*sys.B0*sys.gamma),'freqPPM',sat_ppm,'use','saturation');
+    rf_fs.phasePPM=-2*pi*rf_fs.freqPPM*rf_fs.center; % compensate for the frequency-offset induced phase    
+
+    gz_fs = mr.makeTrapezoid('z',sys,'delay',mr.calcDuration(rf_fs),'Area',0.1/1e-4); % spoil up to 0.1mm
+    % Create 90 degree slice selection pulse and gradient
+    [rf, gz, gzReph] = mr.makeSincPulse(pi/2,'system',sys,'Duration',2e-3,...
+        'SliceThickness',thickness,'apodization',0.42,'timeBwProduct',4,'use','excitation');
+
+    % define the output trigger to play out with every slice excitation
+    trig=mr.makeDigitalOutputPulse('osc0','duration', 100e-6); % possible channels: 'osc0','osc1','ext1'
+
+    % Define other gradients and ADC events
+    deltak=1/fov;
+    kWidth = Nx*deltak;
+
+    % Phase blip in shortest possible time
+    blip_dur = ceil(2*sqrt(deltak/sys.maxSlew)/10e-6/2)*10e-6*2; % we round-up the duration to 2x the gradient raster time
+    % the split code below fails if this really makes a trpezoid instead of a triangle...
+    gy = mr.makeTrapezoid('y',sys,'Area',-deltak,'Duration',blip_dur); % we use negative blips to save one k-space line on our way towards the k-space center
+    %gy = mr.makeTrapezoid('y',lims,'amplitude',deltak/blip_dur*2,'riseTime',blip_dur/2, 'flatTime', 0);
+
+    % readout gradient is a truncated trapezoid with dead times at the beginnig
+    % and at the end each equal to a half of blip_dur
+    % the area between the blips should be defined by kWidth
+    % we do a two-step calculation: we first increase the area assuming maximum
+    % slewrate and then scale down the amlitude to fix the area 
+    extra_area=blip_dur/2*blip_dur/2*sys.maxSlew; % check unit!;
+    gx = mr.makeTrapezoid('x',sys,'Area',kWidth+extra_area,'duration',readoutTime+blip_dur);
+    % actual sampled area = whole area - rampup deadarea - rampdown deadarea
+    actual_area=gx.area-gx.amplitude/gx.riseTime*blip_dur/2*blip_dur/2/2-gx.amplitude/gx.fallTime*blip_dur/2*blip_dur/2/2;
+    gx.amplitude=gx.amplitude/actual_area*kWidth; % rescale amplitude to make sampled area = kWidth
+    gx.area = gx.amplitude*(gx.flatTime + gx.riseTime/2 + gx.fallTime/2); % udpate parameters relative to amplitude
+    gx.flatArea = gx.amplitude*gx.flatTime;
+    assert(gx.amplitude<=sys.maxGrad);
+    ESP = 1e3 * mr.calcDuration(gx) ; % echo spacing, ms
+    disp(['echo spacing = ', num2str(ESP), ' ms']) ;
+    % calculate ADC
+    % % we use ramp sampling, so we have to calculate the dwell time and the
+    % % number of samples, which are will be qite different from Nx and
+    % % readoutTime/Nx, respectively. 
+    % adcDwellNyquist=deltak/gx.amplitude/ro_os;
+    % % round-down dwell time to 100 ns
+    % adcDwell=floor(adcDwellNyquist*1e7)*1e-7;
+    % adcSamples=floor(readoutTime/adcDwell/4)*4; % on Siemens the number of ADC samples need to be divisible by 4
+    % simple Siemens-like calculations with the fixed oversampling
+    assert(ro_os>=2) ;
+    adcSamples=Nx*ro_os ;
+    adcDwell=floor(readoutTime/adcSamples*1e7)*1e-7;
+    disp(['ADC bandwidth = ', num2str(1/adcDwell/1000), ' kHz']) ;
+    fprintf('Actual RO oversampling factor is %g, Siemens recommends it to be above 1.3\n', deltak/gx.amplitude/adcDwell)
+    % MZ: no idea, whether ceil,round or floor is better for the adcSamples...
+    adc = mr.makeAdc(adcSamples,'Dwell',adcDwell,'Delay',blip_dur/2,'phaseModulation',0.1*rand(1,adcSamples));
+    % realign the ADC with respect to the gradient
+    time_to_center=adc.dwell*((adcSamples-1)/2+0.5); % I've been told that Siemens samples in the center of the dwell period
+    adc.delay=round((gx.riseTime+gx.flatTime/2-time_to_center)*1e6)*1e-6; % we adjust the delay to align the trajectory with the gradient. We have to aligh the delay to 1us 
+    % this rounding actually makes the sampling points on odd and even readouts
+    % to appear misalligned. However, on the real hardware this misalignment is
+    % much stronger anyways due to the grdient delays
+
+    % FOV positioning requires alignment to grad. raster... -> TODO
+
+    % split the blip into two halves and produce a combined synthetic gradient
+    gy_parts = mr.splitGradientAt(gy, blip_dur/2, sys);
+    [gy_blipup, gy_blipdown,~]=mr.align('right',gy_parts(1),'left',gy_parts(2),gx);
+    gy_blipdownup=mr.addGradients({gy_blipdown, gy_blipup}, sys);
+
+    % pe_enable support
+    gy_blipup.waveform=gy_blipup.waveform*pe_enable;
+    gy_blipdown.waveform=gy_blipdown.waveform*pe_enable;
+    gy_blipdownup.waveform=gy_blipdownup.waveform*pe_enable;
+
+    % phase encoding and partial Fourier
+    Ny_pre=round(partFourierFactor*Ny/2-1); % PE steps prior to ky=0, excluding the central line
+    Ny_post=round(Ny/2+1); % PE lines after the k-space center including the central line
+    Ny_meas=Ny_pre+Ny_post;
+
+    % Pre-phasing gradients
+    gxPre = mr.makeTrapezoid('x',sys,'Area',-gx.area/2);
+    gyPre = mr.makeTrapezoid('y',sys,'Area',Ny_pre*deltak);
+    [gxPre,gyPre,gzReph]=mr.align('right',gxPre,'left',gyPre,gzReph);
+    % relax the PE prepahser to reduce stimulation
+    gyPre = mr.makeTrapezoid('y',sys,'Area',gyPre.area,'Duration',mr.calcDuration(gxPre,gyPre,gzReph));
+    gyPre.amplitude=gyPre.amplitude*pe_enable;
+
+    % slice positions
+    slicePositions=(thickness+sliceGap)*((0:(Nslices-1)) - (Nslices-1)/2);
+    slicePositions=slicePositions([1:2:Nslices 2:2:Nslices]); % reorder slices for an interleaved acquisition (optional)
+    %slicePositions=slicePositions([1:3:Nslices 2:3:Nslices 3:3:Nslices]); % reorder slices for an interleaved acquisition (optional)
+    % estimate sequence timing
+    minTR_1slice = mr.calcDuration(gz_fs) + mr.calcDuration(gz) + mr.calcDuration(gzReph)+...
+        Nnav*mr.calcDuration(gx) + mr.calcDuration(gyPre) + ...
+        Ny_meas*mr.calcDuration(gx) ;
+
+    % calculate minimal TE (or besster to say actual TE if we don't add any TE filling delays)
+    min_TE = rf.shape_dur-rf.center + max(rf.ringdownTime, gz.fallTime) + mr.calcDuration(gzReph)+...
+        Nnav*mr.calcDuration(gx) + mr.calcDuration(gyPre) + ...
+        Ny_pre*mr.calcDuration(gx) + mr.calcDuration(gx)/2;
+
+    TRdelay = TR - minTR_1slice * Nslices ;
+    TRdelay_perSlice = round(TRdelay / Nslices / sys.blockDurationRaster) * sys.blockDurationRaster ;
+    assert(TRdelay_perSlice>0 ) ;
+
+    % change orientation to match the siemens product sequence
+    % reverse the polarity of all gradients in readout direction (Gx)
+    % gxPre = mr.scaleGrad(gxPre, -1) ;
+    % gx = mr.scaleGrad(gx, -1) ;
+    % reverse the polarity of all gradients in slice encoding direction (Gz)?
+    % gz_fs.amplitude = -gz_fs.amplitude ;
+    % gz.amplitude = -gz.amplitude ;
+    % initial readout gradient polarity
+    ROpolarity = sign(gx.amplitude) ;
+    % seq.addBlock(mr.makeLabel('SET','REP', 0)) ;
+    for r=1:Nrep
+        seq.addBlock(mr.makeLabel('SET', 'SLC', 0) ) ;
+        for s=1:Nslices
+            seq.addBlock(rf_fs, gz_fs) ;
+            rf.freqOffset=gz.amplitude*slicePositions(s);
+            rf.phaseOffset=-2*pi*rf.freqOffset*rf.center; % compensate for the slice-offset induced phase
+            seq.addBlock(rf,gz,trig);
+            if Nnav>0
+                gxPre = mr.scaleGrad(gxPre, -1) ; % reverse the readout gradient in advance for navigator
+                gx = mr.scaleGrad(gx, -1) ; % reverse the readout gradient in advance for navigator
+                seq.addBlock(gxPre,gzReph, ...
+                    mr.makeLabel('SET','NAV',1),...
+                    mr.makeLabel('SET','LIN', floor(Ny/2))) ; % k-space center line
+                gxPre = mr.scaleGrad(gxPre, -1) ; % reverse the gxPre back after addBlock
+                for n=1:Nnav
+                    seq.addBlock(mr.makeLabel('SET','REV', sign(gx.amplitude) ~= ROpolarity ), ...
+                        mr.makeLabel('SET','SEG', sign(gx.amplitude) ~= ROpolarity ), ...
+                        mr.makeLabel('SET','AVG', n==Nnav ) ) ;
+                    seq.addBlock(gx, adc);
+                    gx = mr.scaleGrad(gx, -1) ;   % Reverse polarity of read gradient
+                end
+                % softdelay TE
+                seq.addBlock(gyPre,  ...
+                    mr.makeLabel('SET','LIN', -1), ... % increment LIN by -1 for "llin" performs before adc below
+                    mr.makeLabel('SET','NAV', 0), ...
+                    mr.makeLabel('SET','AVG', 0) );% lin/nav/avg reset
+            else
+                seq.addBlock(gxPre,gyPre,gzReph,...
+                    mr.makeLabel('SET','LIN', -1), ...
+                    mr.makeLabel('SET','NAV', 0), ...
+                    mr.makeLabel('SET','AVG', 0) );% lin/nav/avg reset
+            end
+
+            for i = 1:Ny_meas
+                lrev = mr.makeLabel('SET', 'REV', sign(gx.amplitude) ~= ROpolarity ) ;
+                lseg = mr.makeLabel('SET', 'SEG', sign(gx.amplitude) ~= ROpolarity ) ;
+                llin = mr.makeLabel('INC', 'LIN', 1) ;
+                if i==1 % first phase encoding step
+                    seq.addBlock(gx, gy_blipup, adc, lrev, lseg, llin) ; % Read the first line of k-space with a single half-blip at the end
+                elseif i==Ny_meas % last phase encoding step
+                    seq.addBlock(gx, gy_blipdown, adc, lrev, lseg, llin) ; % Read the last line of k-space with a single half-blip at the beginning
+                else % phase encoding steps in between
+                    seq.addBlock(gx, gy_blipdownup, adc, lrev, lseg, llin) ; % Read an intermediate line of k-space with a half-blip at the beginning and a half-blip at the end
+                end
+                gx = mr.scaleGrad(gx, -1) ;   % Reverse polarity of read gradient
+            end
+            seq.addBlock(mr.makeLabel('INC','SLC', 1)) ;
+            if sign(gx.amplitude) ~= ROpolarity % if the polarity of gx is not the same as original one
+                gx = mr.scaleGrad(gx, -1) ;
+            end
+        if s==1 && r==1
+            durPerSlc=sum(seq.blockDurations);
+        end
+        seq.addBlock(TRdelay_perSlice);
+        end
+        seq.addBlock(mr.makeLabel('INC','REP', 1)) ;
+    end
+
+    %% check whether the timing of the sequence is correct
+    [ok, error_report]=seq.checkTiming ;
+
+    if (ok)
+        fprintf('Timing check passed successfully\n') ;
+    else
+        fprintf('Timing check failed! Error listing follows:\n') ;
+        fprintf([error_report{:}]);
+        fprintf('\n');
+    end
+    
+    %% get waveforms
+    gw_data = seq.waveforms_and_times();
+
+    %% trajectory calculation
+    [ktraj_adc, t_adc, ktraj, t_ktraj, t_excitation, t_refocusing, slicepos, t_slicepos] = seq.calculateKspacePP();
+
+    %% prepare the sequence output for the scanner
+    seq.setDefinition('Name', 'epi'); 
+    seq.setDefinition('FOV', [fov fov max(slicePositions)-min(slicePositions)+thickness]);
+    % the following definitions have effect in conjunction with LABELs 
+    seq.setDefinition('SlicePositions', slicePositions);
+    seq.setDefinition('SliceThickness', thickness);
+    seq.setDefinition('SliceGap', sliceGap);
+    % readout without oversampling
+    %seq.setDefinition('IntendedReadoutSamples',Nx); % number of samples without oversamping
+    % readout gridding parameters
+    seq.setDefinition('ReceiverGainHigh',1);
+    %seq.setDefinition('kSpaceCenterLine', Ny/2+1) ;
+    seq.setDefinition('ReadoutOversamplingFactor',ro_os);
+    seq.setDefinition('TargetGriddedSamples',Nx*ro_os); % number of samples after gridding (with oversamping)
+    seq.setDefinition('TrapezoidGriddingParameters', [gx.riseTime gx.flatTime gx.fallTime adc.delay-gx.delay adc.dwell*adc.numSamples]); % rise,flat,fall,adc_delay,adc_dur
+
+    seq.write('epi_rs_lbl.seq'); 
+
+    %% evaluate label settings
+    lbls = seq.evalLabels('evolution','adc');
+
+    %% very optional slow step, but useful for testing during development e.g. for the real TE, TR or for staying within slew rate limits  
+    rep = seq.testReport; 
+
+end
+
+function write_mprage(num_slices)
+    % set system limits (slew rate 130 and max_grad 30 work on Prisma; Trio requires 20us RF-ringdown)
+    sys = mr.opts(...
+        'MaxGrad', 28, 'GradUnit', 'mT/m', ...
+        'MaxSlew', 150, 'SlewUnit', 'T/m/s', ...
+        'rfRingdownTime', 20e-6, ...
+        'rfDeadTime', 100e-6, ...
+        'adcDeadTime', 10e-6 ...
+    );
+
+    seq=mr.Sequence(sys);           % Create a new sequence object
+    alpha=7;                        % flip angle
+    %ro_dur=5120e-6;                 % RO duration
+    ro_dur=5017.6e-6; % BW=200Hz/pix
+    ro_os=1;                        % readout oversampling
+    ro_spoil=3;                     % additional k-max excursion for RO spoiling
+    TI=1.1;
+    TRout=2.5;
+    % TE & TR in the inner loop are as short as possible derived from the above parameters and the system specs
+    % more in-depth parameters
+    % RF spoiling increment = 84° for smoother transient decay, https://doi.org/10.1002/mrm.1910350216, 169° for diffusion independent rf spoiling in steady-state https://doi.org/10.1371/journal.pone.0324455
+    rfSpoilingInc=84;              % RF spoiling increment
+    rfLen=100e-6;
+    ax=struct; % encoding axes
+    % sagittal fov options % remember to enable OrientationMapping SAG in setDefinition section below
+    fov=[192 240 256]*1e-3;         % Define FOV and resolution
+    N = [192 240 256];              % matrix sizes
+    ax.d1='z'; % the fastest dimension (readout)
+    ax.d2='x'; % the second-fast dimension (the inner pe loop)
+    %transversal fov options 
+    %fov=[256 192 240]*1e-3;         % Define FOV and resolution
+    %N = [256 192 240];               % matrix sizes
+    %ax.d1='x'; % the fastest dimension (readout)
+    %ax.d2='z'; % the second-fast dimension (the inner pe loop)
+
+    ax.d3=setdiff('xyz',[ax.d1 ax.d2]); % automatically set the slowest dimension
+    ax.n1=strfind('xyz',ax.d1);
+    ax.n2=strfind('xyz',ax.d2);
+    ax.n3=strfind('xyz',ax.d3);
+
+    %%
+
+    % Create alpha-degree hard pulse and gradient
+    rf = mr.makeBlockPulse(alpha*pi/180,sys,'Duration',rfLen, 'use', 'excitation');
+    rf180 = mr.makeAdiabaticPulse('hypsec',sys,'Duration',10.24e-3,'dwell',1e-5,...
+        'use', 'excitation'); % if use=inversion, calcKspacePP will not return the inversion pulse anchors, so we cannot check ic pulseqlib worked
+
+    % Define other gradients and ADC events
+    deltak=1./fov;
+    gro = mr.makeTrapezoid(ax.d1,'Amplitude',N(ax.n1)*deltak(ax.n1)/ro_dur,'FlatTime',ceil((ro_dur+sys.adcDeadTime)/sys.gradRasterTime)*sys.gradRasterTime,'system',sys);
+    adc = mr.makeAdc(N(ax.n1)*ro_os,'Duration',ro_dur,'Delay',gro.riseTime,'system',sys);
+    groPre = mr.makeTrapezoid(ax.d1,'Area',-gro.amplitude*(adc.dwell*(adc.numSamples/2+0.5)+0.5*gro.riseTime),'system',sys); % the first 0.5 is necessary to acount for the Siemens sampling in the center of the dwell periods
+    gpe1 = mr.makeTrapezoid(ax.d2,'Area',-deltak(ax.n2)*(N(ax.n2)/2),'system',sys); % maximum PE1 gradient
+    gpe2 = mr.makeTrapezoid(ax.d3,'Area',-deltak(ax.n3)*(N(ax.n3)/2),'system',sys); % maximum PE2 gradient
+    gslSp = mr.makeTrapezoid(ax.d3,'Area',max(deltak.*N)*4,'Duration',10e-3,'system',sys); % spoil with 4x cycles per voxel
+    % we cut the RO gradient into two parts for the optimal spoiler timing
+    [gro1,groSp]=mr.splitGradientAt(gro,gro.riseTime+gro.flatTime);
+    % gradient spoiling
+    if ro_spoil>0
+        groSp=mr.makeExtendedTrapezoidArea(gro.channel,gro.amplitude,0,deltak(ax.n1)/2*N(ax.n1)*ro_spoil,sys);
+    end
+    % calculate timing of the fast loop 
+    % we will have two blocks in the inner loop:
+    % 1: spoilers/rewinders + RF 
+    % 2: prewinder,phase neconding + readout 
+    rf.delay=mr.calcDuration(groSp,gpe1,gpe2);
+    [groPre,~,~]=mr.align('right',groPre,gpe1,gpe2); % suboptimal, TODO: fixme
+    gro1.delay=mr.calcDuration(groPre);
+    adc.delay=gro1.delay+gro.riseTime;
+    gro1=mr.addGradients({gro1,groPre},'system',sys);
+    TRinner=mr.calcDuration(rf)+mr.calcDuration(gro1); % we'll need it for the TI delay
+    % peSteps -- control reordering
+    pe1Steps=((0:N(ax.n2)-1)-N(ax.n2)/2)/N(ax.n2)*2;
+    pe2Steps=((0:N(ax.n3)-1)-N(ax.n3)/2)/N(ax.n3)*2;
+    % TI calc
+    TIdelay=round((TI-(find(pe1Steps==0)-1)*TRinner-(mr.calcDuration(rf180)-mr.calcRfCenter(rf180)-rf180.delay)-rf.delay-mr.calcRfCenter(rf))/sys.blockDurationRaster)*sys.blockDurationRaster;
+    TRoutDelay=TRout-TRinner*N(ax.n2)-TIdelay-mr.calcDuration(rf180);
+
+    % all LABELS / counters an flags are automatically initialized to 0 in the beginning, no need to define initial 0's  
+    % so we will just increment LIN after the ADC event (e.g. during the spoiler)
+    lblIncLin=mr.makeLabel('INC','LIN', 1);
+    lblIncPar=mr.makeLabel('INC','PAR', 1);
+    lblResetPar=mr.makeLabel('SET','PAR', 0);
+
+    % pre-register objects that do not change while looping
+    gslSp.id=seq.registerGradEvent(gslSp);
+    groSp.id=seq.registerGradEvent(groSp);
+    gro1.id=seq.registerGradEvent(gro1);
+    [~, rf.shapeIDs]=seq.registerRfEvent(rf); % the phase of the RF object will change, therefore we only pre-register the shapes 
+    [rf180.id, rf180.shapeIDs]=seq.registerRfEvent(rf180); % 
+    lblIncPar.id=seq.registerLabelEvent(lblIncPar);
+
+    % start the sequence
+    tic;
+    for j=1:N(ax.n3)
+        seq.addBlock(rf180);
+        seq.addBlock(TIdelay,gslSp);
+        rf_phase=0;
+        rf_inc=0;
+        % pre-register the PE gradients that repeat in the inner loop
+        gpe2je=mr.scaleGrad(gpe2,pe2Steps(j));
+        gpe2je.id=seq.registerGradEvent(gpe2je);
+        gpe2jr=mr.scaleGrad(gpe2,-pe2Steps(j));
+        gpe2jr.id=seq.registerGradEvent(gpe2jr);
+        for i=1:N(ax.n2)
+            rf.phaseOffset=rf_phase/180*pi;
+            adc.phaseOffset=rf_phase/180*pi;
+            rf_inc=mod(rf_inc+rfSpoilingInc, 360.0);
+            rf_phase=mod(rf_phase+rf_inc, 360.0);
+            %
+            if (i==1)
+                seq.addBlock(rf);
+            else
+                seq.addBlock(rf,groSp,mr.scaleGrad(gpe1,-pe1Steps(i-1)),gpe2jr,lblIncPar);
+            end
+            seq.addBlock(adc,gro1,mr.scaleGrad(gpe1,pe1Steps(i)),gpe2je);
+        end
+        seq.addBlock(groSp,mr.makeDelay(TRoutDelay),lblResetPar,lblIncLin);
+    end
+    fprintf('Sequence ready (blocks generation took %g seconds)\n', toc);
+
+    %% check whether the timing of the sequence is correct
+    [ok, error_report]=seq.checkTiming;
+
+    if (ok)
+        fprintf('Timing check passed successfully\n');
+    else
+        fprintf('Timing check failed! Error listing follows:\n');
+        fprintf([error_report{:}]);
+        fprintf('\n');
+    end
+
+    %% get waveforms
+    gw_data = seq.waveforms_and_times();
+
+    %% trajectory calculation
+    [ktraj_adc, t_adc, ktraj, t_ktraj, t_excitation, t_refocusing, slicepos, t_slicepos] = seq.calculateKspacePP();
+
+    %%
+    seq.setDefinition('FOV', fov);
+    seq.setDefinition('Name', 'mprage');
+    seq.setDefinition('OrientationMapping', 'SAG'); % only when programming in saggital orientation
+    seq.setDefinition('ReceiverGainHigh',1);
+
+    seq.write('mprage.seq')       % Write to pulseq file
+
+    %% very optional slow step, but useful for testing during development e.g. for the real TE, TR or for staying within slew rate limits  
+    rep = seq.testReport; 
+    fprintf([rep{:}]); 
+
+end
+
+function write_radial(num_slices)
+    % set system limits (slew rate 130 and max_grad 30 work on Prisma; Trio requires 20us RF-ringdown)
+    sys = mr.opts(...
+        'MaxGrad', 28, 'GradUnit', 'mT/m', ...
+        'MaxSlew', 150, 'SlewUnit', 'T/m/s', ...
+        'rfRingdownTime', 20e-6, ...
+        'rfDeadTime', 100e-6, ...
+        'adcDeadTime', 10e-6 ...
+    );
+
+    seq=mr.Sequence(sys);           % Create a new sequence object
+    fov=260e-3; Nx=320;             % Define FOV and resolution
+    alpha=10;                       % flip angle
+    sliceThickness=3e-3;            % slice
+    TE=8e-3;                        % TE; give a vector here to have multiple TEs (e.g. for field mapping)
+    TR=20e-3;                       % only a single value for now
+    Nr=256;                         % number of radial spokes
+    Ndummy=20;                      % number of dummy scans
+    delta= pi / Nr;                 % angular increment; try golden angle pi*(3-5^0.5) or 0.5 of it
+
+    % more in-depth parameters
+    % RF spoiling increment = 84° for smoother transient decay, https://doi.org/10.1002/mrm.1910350216, 169° for diffusion independent rf spoiling in steady-state https://doi.org/10.1371/journal.pone.0324455
+    rfSpoilingInc=84;              % RF spoiling increment
+
+    % Create alpha-degree slice selection pulse and gradient
+    [rf, gz] = mr.makeSincPulse(alpha*pi/180,'Duration',4e-3,...
+        'SliceThickness',sliceThickness,'apodization',0.5,'timeBwProduct',4,'system',sys,...
+        'use','excitation');
+
+    % Define other gradients and ADC events
+    deltak=1/fov;
+    gx = mr.makeTrapezoid('x','FlatArea',Nx*deltak,'FlatTime',6.4e-3/5,'system',sys);
+    adc = mr.makeAdc(Nx,'Duration',gx.flatTime,'Delay',gx.riseTime,'system',sys);
+    gxPre = mr.makeTrapezoid('x','Area',-gx.area/2-deltak/2,'Duration',2e-3,'system',sys);
+    gzReph = mr.makeTrapezoid('z','Area',-gz.area/2,'Duration',2e-3,'system',sys);
+
+    % gradient spoiling
+    gxSpoil=mr.makeTrapezoid('x','Area',0.5*Nx*deltak,'system',sys);
+    gzSpoil=mr.makeTrapezoid('z','Area',4/sliceThickness,'system',sys);
+
+    % Calculate timing
+    delayTE=ceil((TE - mr.calcDuration(gxPre) - gz.fallTime - gz.flatTime/2 ...
+        - mr.calcDuration(gx)/2)/seq.gradRasterTime)*seq.gradRasterTime;
+    delayTR=ceil((TR - mr.calcDuration(gxPre) - mr.calcDuration(gz) ...
+        - mr.calcDuration(gx) - delayTE)/seq.gradRasterTime)*seq.gradRasterTime;
+    assert(all(delayTR>=mr.calcDuration(gxSpoil,gzSpoil)));
+
+    rf_phase=0;
+    rf_inc=0;
+
+    for i=(-Ndummy):Nr
+        for c=1:length(TE)
+            rf.phaseOffset=rf_phase/180*pi;
+            adc.phaseOffset=rf_phase/180*pi;
+            rf_inc=mod(rf_inc+rfSpoilingInc, 360.0);
+            rf_phase=mod(rf_phase+rf_inc, 360.0);
+            %
+            seq.addBlock(rf,gz);
+            phi=delta*(i-1);
+            seq.addBlock(mr.rotate('z',phi,gxPre,gzReph));
+            seq.addBlock(mr.makeDelay(delayTE(c)));
+            if (i>0)
+                seq.addBlock(mr.rotate('z',phi,gx,adc));
+            else
+                seq.addBlock(mr.rotate('z',phi,gx));
+            end
+            seq.addBlock(mr.rotate('z',phi,gxSpoil,gzSpoil,mr.makeDelay(delayTR)));
+        end
+    end
+
+    seq.plot();
+
+    %% check whether the timing of the sequence is correct
+    [ok, error_report]=seq.checkTiming;
+
+    if (ok)
+        fprintf('Timing check passed successfully\n');
+    else
+        fprintf('Timing check failed! Error listing follows:\n');
+        fprintf([error_report{:}]);
+        fprintf('\n');
+    end
+
+    %%
+    seq.setDefinition('FOV', [fov fov sliceThickness]);
+    seq.setDefinition('Name', 'gre_rad');
+
+    seq.write('gre_rad.seq')       % Write to pulseq file
+
+    %% get waveforms
+    gw_data = seq.waveforms_and_times();
+
+    %% k-space trajectory calculation
+    [ktraj_adc, t_adc, ktraj, t_ktraj, t_excitation, t_refocusing] = seq.calculateKspacePP();
+
+end
+
+function write_radial_rotext(num_slices)
+    % set system limits (slew rate 130 and max_grad 30 work on Prisma; Trio requires 20us RF-ringdown)
+    sys = mr.opts(...
+        'MaxGrad', 28, 'GradUnit', 'mT/m', ...
+        'MaxSlew', 150, 'SlewUnit', 'T/m/s', ...
+        'rfRingdownTime', 20e-6, ...
+        'rfDeadTime', 100e-6, ...
+        'adcDeadTime', 10e-6 ...
+    );
+
+    seq=mr.Sequence(sys);           % Create a new sequence object
+    fov=260e-3; Nx=320;             % Define FOV and resolution
+    alpha=10;                       % flip angle
+    sliceThickness=3e-3;            % slice
+    TE=8e-3;                        % TE; give a vector here to have multiple TEs (e.g. for field mapping)
+    TR=20e-3;                       % only a single value for now
+    Nr=256;                         % number of radial spokes
+    Ndummy=20;                      % number of dummy scans
+    delta= pi / Nr;                 % angular increment; try golden angle pi*(3-5^0.5) or 0.5 of it
+
+    % more in-depth parameters
+    % RF spoiling increment = 84° for smoother transient decay, https://doi.org/10.1002/mrm.1910350216, 169° for diffusion independent rf spoiling in steady-state https://doi.org/10.1371/journal.pone.0324455
+    rfSpoilingInc=84;              % RF spoiling increment
+
+    % Create alpha-degree slice selection pulse and gradient
+    [rf, gz] = mr.makeSincPulse(alpha*pi/180,'Duration',4e-3,...
+        'SliceThickness',sliceThickness,'apodization',0.5,'timeBwProduct',4,'system',sys,...
+        'use','excitation');
+
+    % Define other gradients and ADC events
+    deltak=1/fov;
+    gx = mr.makeTrapezoid('x','FlatArea',Nx*deltak,'FlatTime',6.4e-3/5,'system',sys);
+    adc = mr.makeAdc(Nx,'Duration',gx.flatTime,'Delay',gx.riseTime,'system',sys);
+    gxPre = mr.makeTrapezoid('x','Area',-gx.area/2-deltak/2,'Duration',2e-3,'system',sys);
+    gzReph = mr.makeTrapezoid('z','Area',-gz.area/2,'Duration',2e-3,'system',sys);
+
+    % gradient spoiling
+    gxSpoil=mr.makeTrapezoid('x','Area',0.5*Nx*deltak,'system',sys);
+    gzSpoil=mr.makeTrapezoid('z','Area',4/sliceThickness,'system',sys);
+
+    % Calculate timing
+    delayTE=ceil((TE - mr.calcDuration(gxPre) - gz.fallTime - gz.flatTime/2 ...
+        - mr.calcDuration(gx)/2)/seq.gradRasterTime)*seq.gradRasterTime;
+    delayTR=ceil((TR - mr.calcDuration(gxPre) - mr.calcDuration(gz) ...
+        - mr.calcDuration(gx) - delayTE)/seq.gradRasterTime)*seq.gradRasterTime;
+    assert(all(delayTR>=mr.calcDuration(gxSpoil,gzSpoil)));
+
+    rf_phase=0;
+    rf_inc=0;
+
+    for i=(-Ndummy):Nr
+        for c=1:length(TE)
+            rf.phaseOffset=rf_phase/180*pi;
+            adc.phaseOffset=rf_phase/180*pi;
+            rf_inc=mod(rf_inc+rfSpoilingInc, 360.0);
+            rf_phase=mod(rf_phase+rf_inc, 360.0);
+            %
+            seq.addBlock(rf,gz);
+            phi=delta*(i-1);
+            rot = mr.makeRotation(phi);
+            seq.addBlock(gxPre,gzReph,rot);
+            seq.addBlock(mr.makeDelay(delayTE(c)));
+            if (i>0)
+                seq.addBlock(gx,adc,rot);
+            else
+                seq.addBlock(gx,rot);
+            end
+            seq.addBlock(gxSpoil,gzSpoil,mr.makeDelay(delayTR),rot);
+        end
+    end
+
+    %% check whether the timing of the sequence is correct
+    [ok, error_report]=seq.checkTiming;
+
+    if (ok)
+        fprintf('Timing check passed successfully\n');
+    else
+        fprintf('Timing check failed! Error listing follows:\n');
+        fprintf([error_report{:}]);
+        fprintf('\n');
+    end
+
+    %%
+    seq.setDefinition('FOV', [fov fov sliceThickness]);
+    seq.setDefinition('Name', 'gre_rad');
+
+    seq.write('gre_rad_rotext.seq')       % Write to pulseq file
+
+    %% get waveforms
+    gw_data = seq.waveforms_and_times();
+
+    %% k-space trajectory calculation
+    [ktraj_adc, t_adc, ktraj, t_ktraj, t_excitation, t_refocusing] = seq.calculateKspacePP();
+
+end
+
+

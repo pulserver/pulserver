@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "external_md5.h"
+
 #include "pulseqlib_internal.h"
 
 /* ================================================================== */
@@ -356,7 +358,7 @@ static int init_rf_shim_library(FILE* f, long offset,
     if (max_idx <= 0) { *target = NULL; *target_count = 0; return 1; }
     arr = (pulseqlib__rf_shim_entry*)PULSEQLIB_ALLOC(sizeof(pulseqlib__rf_shim_entry) * max_idx);
     if (!arr) return 1;
-    for (i = 0; i < max_idx; i++) arr[i].n_channels = 0;
+    for (i = 0; i < max_idx; i++) arr[i].num_channels = 0;
     *target = arr;
     *target_count = max_idx;
     return 0;
@@ -813,7 +815,7 @@ static int read_rf_shim_library(FILE* f, long offset,
         while (*p == ' ') p++;
 
         if (n_ch > PULSEQLIB__MAX_RF_SHIM_CHANNELS) return 1;
-        target[idx - 1].n_channels = n_ch;
+        target[idx - 1].num_channels = n_ch;
         for (i = 0; i < 2 * n_ch; i++) {
             consumed = 0;
             if (sscanf(p, "%f%n", &val, &consumed) != 1) break;
@@ -1313,7 +1315,7 @@ static void extension_block_init(pulseqlib__extension_block* eb)
     eb->rotation.type = 0;
     memset(&eb->rotation.data, 0, sizeof(eb->rotation.data));
     eb->rf_shimming.type = 0;
-    eb->rf_shimming.n_chan = 0;
+    eb->rf_shimming.num_channels = 0;
     eb->rf_shimming.amplitudes = NULL;
     eb->rf_shimming.phases = NULL;
     eb->trigger.type = 0;
@@ -1334,7 +1336,7 @@ static void extension_block_free(pulseqlib__extension_block* eb)
     if (eb->rf_shimming.amplitudes) { PULSEQLIB_FREE(eb->rf_shimming.amplitudes); eb->rf_shimming.amplitudes = NULL; }
     if (eb->rf_shimming.phases)     { PULSEQLIB_FREE(eb->rf_shimming.phases);     eb->rf_shimming.phases     = NULL; }
     eb->rf_shimming.type  = 0;
-    eb->rf_shimming.n_chan = 0;
+    eb->rf_shimming.num_channels = 0;
 }
 
 void pulseqlib__get_raw_extension(const pulseqlib__seq_file* seq, pulseqlib__raw_extension* re, const pulseqlib__raw_block* raw)
@@ -1444,7 +1446,7 @@ static int parse_rf_shim_from_raw(const pulseqlib__seq_file* seq,
     if (ref < 0) return 1;
     if (!seq->rf_shim_library || ref >= seq->rf_shim_library_size) return 1;
     entry = &seq->rf_shim_library[ref];
-    n = entry->n_channels;
+    n = entry->num_channels;
     if (n <= 0 || n > PULSEQLIB__MAX_RF_SHIM_CHANNELS) return 1;
 
     amps = (float*)PULSEQLIB_ALLOC(sizeof(float) * n);
@@ -1452,7 +1454,7 @@ static int parse_rf_shim_from_raw(const pulseqlib__seq_file* seq,
     if (!amps || !phs) { if (amps) PULSEQLIB_FREE(amps); if (phs) PULSEQLIB_FREE(phs); return 0; }
     for (i = 0; i < n; ++i) { amps[i] = entry->values[2*i]; phs[i] = entry->values[2*i+1]; }
     eb->rf_shimming.type = 1;
-    eb->rf_shimming.n_chan = n;
+    eb->rf_shimming.num_channels = n;
     eb->rf_shimming.amplitudes = amps;
     eb->rf_shimming.phases = phs;
     return 1;
@@ -1518,14 +1520,14 @@ static void apply_extension(const pulseqlib__extension_block* eb,
     block->flag     = eb->flag;
     block->rotation = eb->rotation;
 
-    if (eb->rf_shimming.type && eb->rf_shimming.n_chan > 0) {
-        n = eb->rf_shimming.n_chan;
+    if (eb->rf_shimming.type && eb->rf_shimming.num_channels > 0) {
+        n = eb->rf_shimming.num_channels;
         amps = (float*)PULSEQLIB_ALLOC(sizeof(float) * n);
         phs  = (float*)PULSEQLIB_ALLOC(sizeof(float) * n);
         if (amps && phs) {
             for (i = 0; i < n; ++i) { amps[i] = eb->rf_shimming.amplitudes[i]; phs[i] = eb->rf_shimming.phases[i]; }
             block->rf_shimming.type = 1;
-            block->rf_shimming.n_chan = n;
+            block->rf_shimming.num_channels = n;
             block->rf_shimming.amplitudes = amps;
             block->rf_shimming.phases = phs;
         } else {
@@ -1801,8 +1803,6 @@ float pulseqlib__get_grad_library_max_amplitude(const pulseqlib__seq_file* seq)
 /*  MD5 signature verification                                        */
 /* ================================================================== */
 
-#include "external_md5.h"
-
 int pulseqlib__verify_signature(const char* file_path)
 {
     FILE* f;
@@ -1913,10 +1913,11 @@ static int read_definitions_only(pulseqlib__seq_file* seq, const char* path)
     return PULSEQLIB_OK;
 }
 
-int pulseqlib_get_scan_time(
+int pulseqlib_peek_scan_time(
     pulseqlib_scan_time_info* info,
     const char* file_path,
-    const pulseqlib_opts* opts)
+    const pulseqlib_opts* opts,
+    int num_reps)
 {
     int count = 0;
     int max_depth = 1000;
@@ -1924,8 +1925,10 @@ int pulseqlib_get_scan_time(
     char* base_path;
     pulseqlib__seq_file temp;
     int result;
+    int navg;
 
     if (!info || !file_path || !opts) return PULSEQLIB_ERR_NULL_POINTER;
+    if (num_reps < 1) return PULSEQLIB_ERR_INVALID_ARGUMENT;
     info->total_duration_us = 0.0f;
     info->total_segment_boundaries = 0;
 
@@ -1945,10 +1948,9 @@ int pulseqlib_get_scan_time(
             return result;
         }
 
-        info->total_duration_us += temp.reserved_definitions_library.total_duration * 1e6f;
-        /* segment boundaries = (estimated from block count / TR structure);
-         * for a quick query we just increment by 1 per subsequence */
-        info->total_segment_boundaries += 1;
+        navg = temp.reserved_definitions_library.ignore_averages ? 1 : num_reps;
+        info->total_duration_us +=
+            temp.reserved_definitions_library.total_duration * 1e6f * (float)navg;
         count++;
 
         PULSEQLIB_FREE(current_path);
@@ -1965,5 +1967,3 @@ int pulseqlib_get_scan_time(
     PULSEQLIB_FREE(base_path);
     return (count > 0) ? PULSEQLIB_OK : PULSEQLIB_ERR_COLLECTION_EMPTY;
 }
-
-/* pulseqlib_scan_time_info_free is no longer needed (no dynamic allocs) */

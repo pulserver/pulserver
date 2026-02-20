@@ -149,24 +149,36 @@ int pulseqlib_check_consistency(
     pulseqlib_diagnostic*       diag);
 
 /* ================================================================== */
-/*  Scan-time query                                                   */
+/*  Scan-time peek (fast estimate from definitions only)              */
 /* ================================================================== */
 
 /**
- * @brief Fast scan-time estimate without full sequence loading.
+ * @brief Peek at scan time without full sequence loading.
  *
- * Reads only the definitions sections from a (possibly chained) .seq
- * file to compute total duration and segment count.
+ * Reads only the [DEFINITIONS] sections from a (possibly chained)
+ * .seq file to obtain @c TotalDuration.  The result is an
+ * approximation: dead time between segments is not accounted for
+ * and @c total_segment_boundaries is left at 0.
+ *
+ * @c num_reps controls the number of repetitions the consumer
+ * intends to play (>= 1).  For subsequences whose
+ * @c IgnoreAverages definition is set, the multiplier is clamped
+ * to 1.
+ *
+ * Typical use: UI preview of scan time before the sequence is
+ * fully loaded.
  *
  * @param[out] info       Receives scan time summary.
  * @param[in]  file_path  Path to the first .seq file.
  * @param[in]  opts       Scanner limits (used for chain traversal).
+ * @param[in]  num_reps   Number of repetitions (>= 1).
  * @return PULSEQLIB_OK on success, negative error code on failure.
  */
-int pulseqlib_get_scan_time(
+int pulseqlib_peek_scan_time(
     pulseqlib_scan_time_info* info,
     const char*               file_path,
-    const pulseqlib_opts*     opts);
+    const pulseqlib_opts*     opts,
+    int                       num_reps);
 
 /* ================================================================== */
 /*  Collection lifetime                                               */
@@ -339,6 +351,29 @@ int pulseqlib_get_num_unique_adcs(const pulseqlib_collection* coll,
 
 /** @brief Return total sequence duration (us). */
 float pulseqlib_get_total_duration_us(const pulseqlib_collection* coll);
+
+/**
+ * @brief Compute scan-time info from a fully loaded collection.
+ *
+ * Uses the accurate formula that accounts for prep/cooldown block
+ * durations, degenerate TR folding, and the number-of-averages
+ * multiplier (controlled by @c IgnoreAverages per subsequence).
+ *
+ * @c num_reps is the number of repetitions the consumer intends to
+ * play (>= 1).  For subsequences whose @c IgnoreAverages flag is
+ * set, the multiplier is clamped to 1.
+ *
+ * Both @c total_duration_us and @c total_segment_boundaries are
+ * populated.
+ *
+ * @param[in]  coll      Loaded collection.
+ * @param[in]  num_reps  Number of repetitions (>= 1).
+ * @param[out] info      Receives scan time summary.
+ * @return PULSEQLIB_OK on success, negative error code on failure.
+ */
+int pulseqlib_get_scan_time(const pulseqlib_collection* coll,
+                           int                        num_reps,
+                           pulseqlib_scan_time_info*  info);
 
 /* ================================================================== */
 /*  Segment getters                                                   */
@@ -568,24 +603,6 @@ int pulseqlib_block_has_nopos(const pulseqlib_collection* coll,
 /* ================================================================== */
 /*  Segment timing getters                                            */
 /* ================================================================== */
-
-/** @brief Return number of RF anchors in a segment. */
-int pulseqlib_get_segment_num_rf_anchors(const pulseqlib_collection* coll,
-                                         int seg_idx);
-
-/** @brief Get an RF anchor for a segment. */
-int pulseqlib_get_segment_rf_anchor(const pulseqlib_collection* coll,
-                                    int seg_idx, int rf_idx,
-                                    pulseqlib_segment_rf_anchor* out);
-
-/** @brief Return number of ADC anchors in a segment. */
-int pulseqlib_get_segment_num_adc_anchors(const pulseqlib_collection* coll,
-                                          int seg_idx);
-
-/** @brief Get an ADC anchor for a segment. */
-int pulseqlib_get_segment_adc_anchor(const pulseqlib_collection* coll,
-                                     int seg_idx, int adc_idx,
-                                     pulseqlib_segment_adc_anchor* out);
 
 /** @brief Return number of k-space zero-crossings in a segment. */
 int pulseqlib_get_segment_num_kzero_crossings(

@@ -19,6 +19,29 @@
 /* ================================================================== */
 
 /* ================================================================== */
+/*  Segment timing anchors (internal)                                 */
+/* ================================================================== */
+typedef struct pulseqlib_segment_rf_anchor {
+    int   block_offset;        /* block index within segment         */
+    float start_us;            /* RF start time within segment (us)  */
+    float end_us;              /* RF end time within segment (us)    */
+    float isocenter_us;        /* isodelay time within segment (us)  */
+    float base_amplitude_hz;   /* base RF amplitude (Hz)             */
+} pulseqlib_segment_rf_anchor;
+
+#define PULSEQLIB_SEGMENT_RF_ANCHOR_INIT {0, 0.0f, 0.0f, 0.0f, 0.0f}
+
+typedef struct pulseqlib_segment_adc_anchor {
+    int   block_offset;        /* block index within segment         */
+    float start_us;            /* ADC start time within segment (us) */
+    float end_us;              /* ADC end time within segment (us)   */
+    int   kzero_index;         /* k=0 sample index within readout    */
+    float kzero_us;            /* k=0 time within segment (us)       */
+} pulseqlib_segment_adc_anchor;
+
+#define PULSEQLIB_SEGMENT_ADC_ANCHOR_INIT {0, 0.0f, 0.0f, 0, 0.0f}
+
+/* ================================================================== */
 /*  Shape (used in descriptor for decompressed waveforms)             */
 /* ================================================================== */
 typedef struct pulseqlib_shape_arbitrary {
@@ -71,7 +94,7 @@ typedef struct pulseqlib_rf_table_element {
 /* ================================================================== */
 typedef struct pulseqlib_rf_shim_definition {
     int id;
-    int n_channels;
+    int num_channels;
     float magnitudes[PULSEQLIB_MAX_RF_SHIM_CHANNELS];
     float phases[PULSEQLIB_MAX_RF_SHIM_CHANNELS];
 } pulseqlib_rf_shim_definition;
@@ -575,7 +598,7 @@ typedef struct pulseqlib__soft_delay_event {
 
 typedef struct pulseqlib__rf_shimming_event {
     short type;
-    int n_chan;
+    int num_channels;
     float* amplitudes;
     float* phases;
 } pulseqlib__rf_shimming_event;
@@ -687,7 +710,7 @@ typedef struct pulseqlib__global_label_table {
 } pulseqlib__global_label_table;
 
 typedef struct pulseqlib__rf_shim_entry {
-    int n_channels;
+    int num_channels;
     float values[2 * PULSEQLIB__MAX_RF_SHIM_CHANNELS];
 } pulseqlib__rf_shim_entry;
 

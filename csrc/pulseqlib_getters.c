@@ -152,6 +152,83 @@ float pulseqlib_get_total_duration_us(
     return coll->total_duration_us;
 }
 
+int pulseqlib_get_scan_time(
+    const pulseqlib_collection* coll,
+    int                        num_reps,
+    pulseqlib_scan_time_info*  info)
+{
+    int i, j;
+
+    if (!coll || !info) return PULSEQLIB_ERR_NULL_POINTER;
+    if (num_reps < 1) return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    if (coll->num_subsequences <= 0) return PULSEQLIB_ERR_COLLECTION_EMPTY;
+
+    info->total_duration_us        = 0.0f;
+    info->total_segment_boundaries = 0;
+
+    for (i = 0; i < coll->num_subsequences; ++i) {
+        const pulseqlib_sequence_descriptor* desc = &coll->descriptors[i];
+        const pulseqlib_tr_descriptor*       trd  = &desc->tr_descriptor;
+        const pulseqlib_segment_table_result* stab = &desc->segment_table;
+
+        float prep_dur    = 0.0f;
+        float cooldown_dur = 0.0f;
+        int   cooldown_blk_start;
+        int   N;     /* total TR count including degenerate extras */
+        int   navg;
+        int   prep_segs, cool_segs, main_segs;
+
+        /* --- sum prep block durations (0 when degenerate) --- */
+        for (j = 0; j < trd->num_prep_blocks; ++j)
+            prep_dur += (float)desc->block_definitions[
+                desc->block_table[j].id].duration_us;
+
+        /* --- sum cooldown block durations (0 when degenerate) --- */
+        cooldown_blk_start = desc->num_blocks - trd->num_cooldown_blocks;
+        for (j = 0; j < trd->num_cooldown_blocks; ++j)
+            cooldown_dur += (float)desc->block_definitions[
+                desc->block_table[cooldown_blk_start + j].id].duration_us;
+
+        /* --- total TR count ----------------------------------- */
+        N = trd->num_trs;
+        if (desc->num_prep_blocks > 0 && trd->degenerate_prep)
+            N += trd->num_prep_trs;
+        if (desc->num_cooldown_blocks > 0 && trd->degenerate_cooldown)
+            N += trd->num_cooldown_trs;
+
+        /* --- averages ----------------------------------------- */
+        navg = desc->ignore_averages ? 1 : num_reps;
+
+        /* --- duration ----------------------------------------- */
+        if (N >= 2) {
+            info->total_duration_us +=
+                (prep_dur + trd->tr_duration_us)
+                + (float)navg * (float)(N - 2) * trd->tr_duration_us
+                + (cooldown_dur + trd->tr_duration_us);
+        } else if (N == 1) {
+            info->total_duration_us +=
+                trd->tr_duration_us + prep_dur + cooldown_dur;
+        }
+        /* N == 0: no contribution */
+
+        /* --- segment boundaries ------------------------------- */
+        main_segs = stab->num_main_segments;
+        prep_segs = (trd->degenerate_prep)
+                        ? main_segs : stab->num_prep_segments;
+        cool_segs = (trd->degenerate_cooldown)
+                        ? main_segs : stab->num_cooldown_segments;
+
+        if (N >= 2) {
+            info->total_segment_boundaries +=
+                prep_segs + navg * (N - 2) * main_segs + cool_segs;
+        } else if (N == 1) {
+            info->total_segment_boundaries += main_segs;
+        }
+    }
+
+    return PULSEQLIB_OK;
+}
+
 /* ================================================================== */
 /*  RF accessors                                                      */
 /* ================================================================== */
@@ -364,72 +441,6 @@ int pulseqlib_get_segment_num_blocks(
 /* ================================================================== */
 /*  Segment timing queries                                            */
 /* ================================================================== */
-
-int pulseqlib_get_segment_num_rf_anchors(
-    const pulseqlib_collection* coll, int seg_idx)
-{
-    const pulseqlib_sequence_descriptor* desc;
-    int local_seg;
-
-    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
-        return 0;
-
-    return desc->segment_definitions[local_seg].timing.num_rf_anchors;
-}
-
-int pulseqlib_get_segment_rf_anchor(
-    const pulseqlib_collection* coll,
-    int seg_idx, int rf_idx,
-    pulseqlib_segment_rf_anchor* out)
-{
-    const pulseqlib_sequence_descriptor* desc;
-    int local_seg;
-    const pulseqlib_segment_timing* t;
-
-    if (!out) return PULSEQLIB_ERR_NULL_POINTER;
-    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
-        return PULSEQLIB_ERR_INVALID_ARGUMENT;
-
-    t = &desc->segment_definitions[local_seg].timing;
-    if (rf_idx < 0 || rf_idx >= t->num_rf_anchors)
-        return PULSEQLIB_ERR_INVALID_ARGUMENT;
-
-    *out = t->rf_anchors[rf_idx];
-    return PULSEQLIB_OK;
-}
-
-int pulseqlib_get_segment_num_adc_anchors(
-    const pulseqlib_collection* coll, int seg_idx)
-{
-    const pulseqlib_sequence_descriptor* desc;
-    int local_seg;
-
-    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
-        return 0;
-
-    return desc->segment_definitions[local_seg].timing.num_adc_anchors;
-}
-
-int pulseqlib_get_segment_adc_anchor(
-    const pulseqlib_collection* coll,
-    int seg_idx, int adc_idx,
-    pulseqlib_segment_adc_anchor* out)
-{
-    const pulseqlib_sequence_descriptor* desc;
-    int local_seg;
-    const pulseqlib_segment_timing* t;
-
-    if (!out) return PULSEQLIB_ERR_NULL_POINTER;
-    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
-        return PULSEQLIB_ERR_INVALID_ARGUMENT;
-
-    t = &desc->segment_definitions[local_seg].timing;
-    if (adc_idx < 0 || adc_idx >= t->num_adc_anchors)
-        return PULSEQLIB_ERR_INVALID_ARGUMENT;
-
-    *out = t->adc_anchors[adc_idx];
-    return PULSEQLIB_OK;
-}
 
 int pulseqlib_get_segment_num_kzero_crossings(
     const pulseqlib_collection* coll, int seg_idx)

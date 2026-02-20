@@ -1027,12 +1027,12 @@ static int copy_rf_shim_library(const pulseqlib__seq_file* seq, pulseqlib_sequen
     for (i = 0; i < num; ++i) {
         entry = &seq->rf_shim_library[i];
         desc->rf_shim_definitions[i].id = i;
-        desc->rf_shim_definitions[i].n_channels = entry->n_channels;
-        for (j = 0; j < entry->n_channels && j < PULSEQLIB_MAX_RF_SHIM_CHANNELS; ++j) {
+        desc->rf_shim_definitions[i].num_channels = entry->num_channels;
+        for (j = 0; j < entry->num_channels && j < PULSEQLIB_MAX_RF_SHIM_CHANNELS; ++j) {
             desc->rf_shim_definitions[i].magnitudes[j] = entry->values[2 * j];
             desc->rf_shim_definitions[i].phases[j]     = entry->values[2 * j + 1];
         }
-        for (j = entry->n_channels; j < PULSEQLIB_MAX_RF_SHIM_CHANNELS; ++j) {
+        for (j = entry->num_channels; j < PULSEQLIB_MAX_RF_SHIM_CHANNELS; ++j) {
             desc->rf_shim_definitions[i].magnitudes[j] = 0.0f;
             desc->rf_shim_definitions[i].phases[j]     = 0.0f;
         }
@@ -1394,9 +1394,8 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
         while (ctrl == 0 && desc->num_cooldown_blocks < num_blocks) {
             pulseqlib__get_raw_block_content_ids(seq, &raw, num_blocks - 1 - desc->num_cooldown_blocks, 1);
             pulseqlib__get_raw_extension(seq, &ext, &raw);
-            if (ext.flag.once != 2)
-                desc->num_cooldown_blocks++;
-            else
+            desc->num_cooldown_blocks++;
+            if (ext.flag.once == 2)
                 ctrl = 1;
         }
         if (ctrl == 0) {
