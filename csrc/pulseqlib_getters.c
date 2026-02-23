@@ -157,72 +157,40 @@ int pulseqlib_get_scan_time(
     int                        num_reps,
     pulseqlib_scan_time_info*  info)
 {
-    int i, j;
+    int i, n, bt_idx;
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_block_table_element* bte;
+    const pulseqlib_block_definition* bdef;
+    int prev_seg, cur_seg;
 
     if (!coll || !info) return PULSEQLIB_ERR_NULL_POINTER;
     if (num_reps < 1) return PULSEQLIB_ERR_INVALID_ARGUMENT;
     if (coll->num_subsequences <= 0) return PULSEQLIB_ERR_COLLECTION_EMPTY;
 
+    (void)num_reps;  /* averages already baked into scan table */
+
     info->total_duration_us        = 0.0f;
     info->total_segment_boundaries = 0;
 
     for (i = 0; i < coll->num_subsequences; ++i) {
-        const pulseqlib_sequence_descriptor* desc = &coll->descriptors[i];
-        const pulseqlib_tr_descriptor*       trd  = &desc->tr_descriptor;
-        const pulseqlib_segment_table_result* stab = &desc->segment_table;
+        desc = &coll->descriptors[i];
+        prev_seg = -1;
 
-        float prep_dur    = 0.0f;
-        float cooldown_dur = 0.0f;
-        int   cooldown_blk_start;
-        int   N;     /* total TR count including degenerate extras */
-        int   navg;
-        int   prep_segs, cool_segs, main_segs;
+        for (n = 0; n < desc->scan_table_len; ++n) {
+            bt_idx = desc->scan_table_block_idx[n];
+            bte  = &desc->block_table[bt_idx];
+            bdef = &desc->block_definitions[bte->id];
 
-        /* --- sum prep block durations (0 when degenerate) --- */
-        for (j = 0; j < trd->num_prep_blocks; ++j)
-            prep_dur += (float)desc->block_definitions[
-                desc->block_table[j].id].duration_us;
+            /* Duration: pure delay uses instance value, normal uses definition */
+            info->total_duration_us += (bte->duration_us >= 0)
+                ? (float)bte->duration_us
+                : (float)bdef->duration_us;
 
-        /* --- sum cooldown block durations (0 when degenerate) --- */
-        cooldown_blk_start = desc->num_blocks - trd->num_cooldown_blocks;
-        for (j = 0; j < trd->num_cooldown_blocks; ++j)
-            cooldown_dur += (float)desc->block_definitions[
-                desc->block_table[cooldown_blk_start + j].id].duration_us;
-
-        /* --- total TR count ----------------------------------- */
-        N = trd->num_trs;
-        if (desc->num_prep_blocks > 0 && trd->degenerate_prep)
-            N += trd->num_prep_trs;
-        if (desc->num_cooldown_blocks > 0 && trd->degenerate_cooldown)
-            N += trd->num_cooldown_trs;
-
-        /* --- averages ----------------------------------------- */
-        navg = desc->ignore_averages ? 1 : num_reps;
-
-        /* --- duration ----------------------------------------- */
-        if (N >= 2) {
-            info->total_duration_us +=
-                (prep_dur + trd->tr_duration_us)
-                + (float)navg * (float)(N - 2) * trd->tr_duration_us
-                + (cooldown_dur + trd->tr_duration_us);
-        } else if (N == 1) {
-            info->total_duration_us +=
-                trd->tr_duration_us + prep_dur + cooldown_dur;
-        }
-        /* N == 0: no contribution */
-
-        /* --- segment boundaries ------------------------------- */
-        main_segs = stab->num_main_segments;
-        prep_segs = (trd->degenerate_prep)
-                        ? main_segs : stab->num_prep_segments;
-        cool_segs = (trd->degenerate_cooldown)
-                        ? main_segs : stab->num_cooldown_segments;
-
-        if (N >= 2) {
-            info->total_segment_boundaries +=
-                prep_segs + navg * (N - 2) * main_segs + cool_segs;
-        } else if (N == 1) {
-            info->total_segment_boundaries += main_segs;
+            /* Count segment boundaries (transitions) */
+            cur_seg = desc->scan_table_seg_id[n];
+            if (cur_seg >= 0 && cur_seg != prev_seg)
+                info->total_segment_boundaries += 1;
+            prev_seg = cur_seg;
         }
     }
 
@@ -1347,9 +1315,7 @@ int pulseqlib_cursor_next(pulseqlib_collection* coll)
 {
     pulseqlib_block_cursor* cursor;
     const pulseqlib_sequence_descriptor* desc;
-    int imaging_start;
-    int cooldown_start;
-    int next_idx;
+    int next_pos;
 
     cursor = &coll->block_cursor;
 
@@ -1357,25 +1323,12 @@ int pulseqlib_cursor_next(pulseqlib_collection* coll)
         return PULSEQLIB_CURSOR_DONE;
 
     desc = &coll->descriptors[cursor->sequence_index];
-    imaging_start  = desc->num_prep_blocks;
-    cooldown_start = desc->num_blocks - desc->num_cooldown_blocks;
+    next_pos = cursor->scan_table_position + 1;
 
-    next_idx = cursor->within_sequence_block_index + 1;
-
-    /* Hit cooldown boundary on non-last rep: wrap to imaging start */
-    if (next_idx == cooldown_start &&
-        cursor->current_repetition < coll->num_repetitions - 1) {
-        cursor->current_repetition += 1;
-        cursor->within_sequence_block_index = imaging_start;
-        cursor->from_last_reset = 0;
-        return PULSEQLIB_CURSOR_BLOCK;
-    }
-
-    /* Past end of sequence: advance to next subsequence */
-    if (next_idx >= desc->num_blocks) {
+    /* Past end of scan table: advance to next subsequence */
+    if (next_pos >= desc->scan_table_len) {
         cursor->sequence_index += 1;
-        cursor->current_repetition = 0;
-        cursor->within_sequence_block_index = 0;
+        cursor->scan_table_position = 0;
         cursor->from_last_reset = 0;
         if (cursor->sequence_index >= coll->num_subsequences)
             return PULSEQLIB_CURSOR_DONE;
@@ -1383,7 +1336,7 @@ int pulseqlib_cursor_next(pulseqlib_collection* coll)
     }
 
     /* Normal advance */
-    cursor->within_sequence_block_index = next_idx;
+    cursor->scan_table_position = next_pos;
     cursor->from_last_reset += 1;
     return PULSEQLIB_CURSOR_BLOCK;
 }
@@ -1395,7 +1348,7 @@ void pulseqlib_cursor_reset(pulseqlib_collection* coll)
     cursor = &coll->block_cursor;
 
     /* Go back by the number of blocks advanced since the last reset */
-    cursor->within_sequence_block_index -= cursor->from_last_reset;
+    cursor->scan_table_position -= cursor->from_last_reset;
     cursor->from_last_reset = 0;
 }
 
@@ -1416,7 +1369,11 @@ int pulseqlib_get_block_instance(
         return PULSEQLIB_ERR_INVALID_ARGUMENT;
 
     desc = &coll->descriptors[cursor->sequence_index];
-    idx  = cursor->within_sequence_block_index;
+    if (cursor->scan_table_position < 0 ||
+        cursor->scan_table_position >= desc->scan_table_len)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    idx  = desc->scan_table_block_idx[cursor->scan_table_position];
     if (idx < 0 || idx >= desc->num_blocks)
         return PULSEQLIB_ERR_INVALID_ARGUMENT;
 

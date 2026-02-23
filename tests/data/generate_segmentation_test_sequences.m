@@ -342,7 +342,6 @@ function write_spgr(num_slices)
     % Pre-create labels
     lblOnce1  = mr.makeLabel('SET', 'ONCE', 1);
     lblOnce0  = mr.makeLabel('SET', 'ONCE', 0);
-    lblOnce2  = mr.makeLabel('SET', 'ONCE', 2);
     lblIncLin = mr.makeLabel('INC', 'LIN', 1);
     lblSetLin = mr.makeLabel('SET', 'LIN', 0);
     lblIncSlc = mr.makeLabel('INC', 'SLC', 1);
@@ -352,23 +351,44 @@ function write_spgr(num_slices)
     rf_phase = 0;
     rf_inc   = 0;
 
-    % --- prep: dummy scans (ONCE=1) ---
-    seq.addBlock(lblOnce1);
-    for d = 1:Ndummy
-        for s = 1:Nslices
-            rf.freqOffset  = gz.amplitude * thick * (s - 1 - (Nslices-1)/2);
-            rf.phaseOffset = rf_phase / 180 * pi;
-            rf_inc   = mod(rf_inc + rfSpoilInc, 360.0);
-            rf_phase = mod(rf_phase + rf_inc, 360.0);
+    % --- unique blocks ---
+    uniqueBlocksID = [];
 
-            seq.addBlock(rf, gz);
-            seq.addBlock(gxPre, gzReph);     % no PE during dummies
-            seq.addBlock(evDelayTE);
-            seq.addBlock(gx);                % no ADC
-            seq.addBlock(gxSpoil, gzSpoil, evDelayTR);
-        end
+    % --- segments ----
+    tr = mr.Sequence(sys);
+    seg = {mr.Sequence(sys)};
+
+    % --- prep: dummy scans (ONCE=1) / representative TR / segment  ---
+    for d = 1:Ndummy
+        rf.phaseOffset = rf_phase / 180 * pi;
+        rf_inc   = mod(rf_inc + rfSpoilInc, 360.0);
+        rf_phase = mod(rf_phase + rf_inc, 360.0);
+
+        seq.addBlock(rf, gz, lblOnce1); 
+        tr.addBlock(rf, gz); 
+        seg{1}.addBlock(rf, gz); 
+        uniqueBlocksID(end+1) = 0; % Excitation + Slice Selection
+        
+        seq.addBlock(gxPre, mr.scaleGrad(gyPre, 0.0), gzReph);     % no PE during dummies
+        tr.addBlock(gxPre, mr.scaleGrad(gyPre, 0.0), gzReph); 
+        seg{1}.addBlock(gxPre, mr.scaleGrad(gyPre, 0.0), gzReph); 
+        uniqueBlocksID(end+1) = 1; % Slice Rephasing + Phase prewind + Readout prewind
+        
+        seq.addBlock(evDelayTE);
+        tr.addBlock(evDelayTE); 
+        seg{1}.addBlock(evDelayTE); 
+        uniqueBlocksID(end+1) = 2; % Pure TE delay (no events)
+        
+        seq.addBlock(gx);                % no ADC
+        tr.addBlock(gx); 
+        seg{1}.addBlock(gx); 
+        uniqueBlocksID(end+1) = 3; % Readout gradient + ADC
+
+        seq.addBlock(gxSpoil, mr.scaleGrad(gyPre, 0.0), gzSpoil, evDelayTR);
+        tr.addBlock(gxSpoil, mr.scaleGrad(gyPre, 0.0), gzSpoil, evDelayTR); 
+        seg{1}.addBlock(gxSpoil, mr.scaleGrad(gyPre, 0.0), gzSpoil, evDelayTR); 
+        uniqueBlocksID(end+1) = 4; % XZ Spoiler + rewind PE + TR delay
     end
-    seq.addBlock(lblOnce0);   % end prep
 
     % --- main imaging loop ---
     for i = 1:Ny
@@ -378,32 +398,28 @@ function write_spgr(num_slices)
             adc.phaseOffset = rf_phase / 180 * pi;
             rf_inc   = mod(rf_inc + rfSpoilInc, 360.0);
             rf_phase = mod(rf_phase + rf_inc, 360.0);
-
-            seq.addBlock(rf, gz);
-
             if maxPeArea > 0
-                gyPre = mr.scaleGrad(gyMax, phaseAreas(i) / maxPeArea);
-            else
-                gyPre = mr.scaleGrad(gyMax, 0);
+                pe_scale = phaseAreas(i) / maxPeArea;
+            else                
+                pe_scale = 0;
             end
-            seq.addBlock(gxPre, gyPre, gzReph);
+
+            seq.addBlock(rf, gz, lblOnce0);
+            seq.addBlock(gxPre, mr.scaleGrad(gyMax, pe_scale), gzReph);
             seq.addBlock(evDelayTE);
             seq.addBlock(gx, adc);
 
             % Spoiler + rewind PE
-            gyRew = mr.scaleGrad(gyPre, -1);
+            gyRew = mr.scaleGrad(gyMax, -pe_scale);
             if i == Ny && s == Nslices
-                seq.addBlock(gxSpoil, gzSpoil, gyRew, evDelayTR, lblSetLin, lblSetSlc);
+                seq.addBlock(gxSpoil, gyRew, gzSpoil, evDelayTR, lblSetLin, lblSetSlc);
             elseif s == Nslices
-                seq.addBlock(gxSpoil, gzSpoil, gyRew, evDelayTR, lblIncLin, lblSetSlc);
+                seq.addBlock(gxSpoil, gyRew, gzSpoil, evDelayTR, lblIncLin, lblSetSlc);
             else
-                seq.addBlock(gxSpoil, gzSpoil, gyRew, evDelayTR, lblIncSlc);
+                seq.addBlock(gxSpoil, gyRew, gzSpoil, evDelayTR, lblIncSlc);
             end
         end
     end
-
-    % --- cooldown (ONCE=2) ---
-    seq.addBlock(lblIncRep, lblOnce2);
 
     fprintf('  TR = %.3f ms   TE = %.3f ms   Ndummy = %d\n', ...
             TR * 1e3, TE * 1e3, Ndummy);
@@ -568,51 +584,64 @@ function write_fse(num_slices)
     end
     delayTR = mr.makeDelay(TRfill);
 
-    % Labels
-    lblOnce1 = mr.makeLabel('SET', 'ONCE', 1);
-    lblOnce0 = mr.makeLabel('SET', 'ONCE', 0);
-    lblOnce2 = mr.makeLabel('SET', 'ONCE', 2);
+    tr = mr.Sequence(sys);
+    seg = {mr.Sequence(sys), mr.Sequence(sys)};
+    uniqueBlocksID = [];
 
-    % --- prep: dummy excitations (ONCE=1) ---
-    seq.addBlock(lblOnce1);
-    for kex = 0:(Ndummy - 1)
-        for s = 1:Nslices
-            rfex.freqOffset  = GSex.amplitude * thick * (s - 1 - (Nslices-1)/2);
-            rfref.freqOffset = GSref.amplitude * thick * (s - 1 - (Nslices-1)/2);
-            rfex.phaseOffset  = rfex_phase - 2*pi * rfex.freqOffset * mr.calcRfCenter(rfex);
-            rfref.phaseOffset = rfref_phase - 2*pi * rfref.freqOffset * mr.calcRfCenter(rfref);
+    % --- representative TR / segments / unique blocks ---
+    for kex = 0:nex
+        tr.addBlock(GS1); seg{1}.addBlock(GS1); uniqueBlocksID(end+1) = 0; % Slice Selection Part 1
+        tr.addBlock(GS2, rfex); seg{1}.addBlock(GS2, rfex); uniqueBlocksID(end+1) = 1; % Slice Selection Part 2 + Excitation
+        tr.addBlock(GS3, GR3); seg{1}.addBlock(GS3, GR3); uniqueBlocksID(end+1) = 2; % Slice Selection Part 3 + Readout prephasing
 
-            seq.addBlock(GS1);
-            seq.addBlock(GS2, rfex);
-            seq.addBlock(GS3, GR3);
-            for kech = 1:necho
-                seq.addBlock(GS4, rfref);
-                seq.addBlock(GS5, GR5);     % no PE during dummies
-                seq.addBlock(GR6);           % no ADC during dummies
-                seq.addBlock(GS7, GR7);
+        for kech = 1:necho
+            phaseArea = phaseAreas(kech, kex);
+            if maxPeArea > 0 && kex > 0
+                pe_scale = phaseArea / maxPeArea;
+            else
+                pe_scale = 0;
             end
-            seq.addBlock(GS4);
-            seq.addBlock(GS5);
-            seq.addBlock(delayTR);
+            GPpre = mr.scaleGrad(gyMax, pe_scale);
+            GPrew = mr.scaleGrad(gyMax, -pe_scale);
+
+            tr.addBlock(GS4, rfref); seg{1}.addBlock(GS4, rfref); uniqueBlocksID(end+1) = 3; % Slice Selection Part 4 + Refocusing
+            tr.addBlock(GS5, GR5, GPpre); seg{1}.addBlock(GS5, GR5, GPpre); uniqueBlocksID(end+1) = 4; % Slice Selection Part 5 + Prephasing
+            if kex > 0
+                tr.addBlock(GR6, adc); seg{1}.addBlock(GR6, adc); uniqueBlocksID(end+1) = 5; % Slice Selection Part 6 + ADC
+            else
+                tr.addBlock(GR6); seg{1}.addBlock(GR6); uniqueBlocksID(end+1) = 6; % Slice Selection Part 6
+
+            end
+            tr.addBlock(GS7, GR7, GPrew); seg{1}.addBlock(GS7, GR7, GPrew); uniqueBlocksID(end+1) = 7; % Slice Selection Part 7 + Rewinding
         end
+
+        tr.addBlock(GS4); seg{1}.addBlock(GS4); uniqueBlocksID(end+1) = 8; % Slice Selection Part 4
+        tr.addBlock(GS5); seg{1}.addBlock(GS5); uniqueBlocksID(end+1) = 9; % Slice Selection Part 5
+        tr.addBlock(delayTR); seg{2}.addBlock(delayTR); uniqueBlocksID(end+1) = 10; % Delay TR
+
     end
-    seq.addBlock(lblOnce0);  % end prep
 
     % --- main imaging loop ---
-    for kex = 1:nex
+    for kex = 0:nex
         for s = 1:Nslices
             rfex.freqOffset  = GSex.amplitude * thick * (s - 1 - (Nslices-1)/2);
             rfref.freqOffset = GSref.amplitude * thick * (s - 1 - (Nslices-1)/2);
             rfex.phaseOffset  = rfex_phase - 2*pi * rfex.freqOffset * mr.calcRfCenter(rfex);
             rfref.phaseOffset = rfref_phase - 2*pi * rfref.freqOffset * mr.calcRfCenter(rfref);
 
-            seq.addBlock(GS1);
+            if kex == 0
+                seq.addBlock(GS1, lblOnce0);  % first block sets ONCE=0 for main loop
+            elseif kex == 1
+                seq.addBlock(GS1, lblOnce1);  % second block sets ONCE=1 for dummy prep
+            else
+                seq.addBlock(GS1);
+            end
             seq.addBlock(GS2, rfex);
             seq.addBlock(GS3, GR3);
 
             for kech = 1:necho
                 phaseArea = phaseAreas(kech, kex);
-                if maxPeArea > 0
+                if maxPeArea > 0 && kex > 0
                     pe_scale = phaseArea / maxPeArea;
                 else
                     pe_scale = 0;
@@ -622,7 +651,11 @@ function write_fse(num_slices)
 
                 seq.addBlock(GS4, rfref);
                 seq.addBlock(GS5, GR5, GPpre);
-                seq.addBlock(GR6, adc);
+                if kex > 0
+                    seq.addBlock(GR6, adc);
+                else
+                    seq.addBlock(GR6);
+                end
                 seq.addBlock(GS7, GR7, GPrew);
             end
 
@@ -631,9 +664,6 @@ function write_fse(num_slices)
             seq.addBlock(delayTR);
         end
     end
-
-    % --- cooldown (ONCE=2) ---
-    seq.addBlock(lblOnce2);
 
     fname = seq_filename('fse_2d', num_slices);
     check_and_write(seq, fname, fov, thick, num_slices, 1);

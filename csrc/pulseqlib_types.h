@@ -60,6 +60,9 @@
 #define PULSEQLIB_ERR_TR_PREP_TOO_LONG      -104
 #define PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG  -105
 
+/* Block definition errors (-56 to -59) */
+#define PULSEQLIB_ERR_ADC_DEFINITION_CONFLICT      -56
+
 /* Segmentation errors (-200 to -299) */
 #define PULSEQLIB_ERR_SEG_NONZERO_START_GRAD -200
 #define PULSEQLIB_ERR_SEG_NONZERO_END_GRAD   -201

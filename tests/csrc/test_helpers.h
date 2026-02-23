@@ -71,7 +71,7 @@ static int load_seq(const char* rel_path,
     pulseqlib_opts opts;
     test_opts_init(&opts);
     return pulseqlib_read(out, diag, make_path(rel_path),
-                          &opts, 0, 0, parse_labels);
+                          &opts, 0, 0, parse_labels, 1);
 }
 
 /* ------------------------------------------------------------------ */

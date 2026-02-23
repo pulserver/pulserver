@@ -2518,9 +2518,8 @@ int check_grad_continuity(
 
     /* save cursor state */
     saved_cursor = coll->block_cursor;
-    coll->block_cursor.current_repetition = 0;
     coll->block_cursor.sequence_index = 0;
-    coll->block_cursor.within_sequence_block_index = 0;
+    coll->block_cursor.scan_table_position = 0;
     coll->block_cursor.from_last_reset = 0;
 
     prev_phys[0] = 0.0f;
@@ -2564,7 +2563,10 @@ int check_grad_continuity(
         }
 
         /* read current block */
-        bte  = &desc->block_table[coll->block_cursor.within_sequence_block_index];
+        {
+            int bt_idx = desc->scan_table_block_idx[coll->block_cursor.scan_table_position];
+            bte  = &desc->block_table[bt_idx];
+        }
         bdef = &desc->block_definitions[bte->id];
 
         /* grad table: amplitude + shot_index */
@@ -2621,8 +2623,8 @@ int check_grad_continuity(
                 if (diag) {
                     diag->code = PULSEQLIB_ERR_GRAD_DISCONTINUITY;
                     pulseqlib__diag_printf(diag,
-                        "grad discontinuity: axis=%d block=%d step=%.4f limit=%.4f mT/m",
-                        n, coll->block_cursor.within_sequence_block_index,
+                        "grad discontinuity: axis=%d scan_pos=%d step=%.4f limit=%.4f mT/m",
+                        n, coll->block_cursor.scan_table_position,
                         (double)(step / hz_per_mt), (double)(max_allowed / hz_per_mt));
                 }
                 coll->block_cursor = saved_cursor;

@@ -31,7 +31,7 @@ static int check_grads(const char* seq_rel,
 
     test_opts_init(&opts);
     rc = pulseqlib_read(&coll, &diag, make_path(seq_rel),
-                        &opts, 0, 0, 0);
+                        &opts, 0, 0, 0, 1);
     if (PULSEQLIB_FAILED(rc)) return rc;
 
     /* Override limits for purposes of the check */

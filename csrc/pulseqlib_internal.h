@@ -204,9 +204,10 @@ typedef struct pulseqlib_block_definition {
     int gx_id;
     int gy_id;
     int gz_id;
+    int adc_id;    /* unique ADC definition index, -1 = no ADC */
 } pulseqlib_block_definition;
 
-#define PULSEQLIB_BLOCK_DEFINITION_INIT {0, 0, 0, 0, 0, 0}
+#define PULSEQLIB_BLOCK_DEFINITION_INIT {0, 0, 0, 0, 0, 0, -1}
 
 typedef struct pulseqlib_block_table_element {
     int id;
@@ -345,6 +346,14 @@ typedef struct pulseqlib_sequence_descriptor {
     pulseqlib_tr_segment* segment_definitions;
     pulseqlib_segment_table_result segment_table;
 
+    /* Scan table (expanded playback order).
+     * Each row has 3 columns: block_table_idx, tr_id, seg_id.
+     * Stored as 3 parallel arrays of length scan_table_len. */
+    int  scan_table_len;
+    int* scan_table_block_idx;  /* [scan_table_len] index into block_table */
+    int* scan_table_tr_id;      /* [scan_table_len] TR region id           */
+    int* scan_table_seg_id;     /* [scan_table_len] segment id             */
+
     /* label table (populated by dry-run if parse_labels is set) */
     int label_num_columns;
     int label_num_entries;
@@ -362,6 +371,7 @@ typedef struct pulseqlib_sequence_descriptor {
     0, NULL, 0, NULL, 0, NULL, \
     PULSEQLIB_TR_DESCRIPTOR_INIT, \
     0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT, \
+    0, NULL, NULL, NULL, \
     0, 0, NULL, {{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}} \
 }
 
@@ -382,13 +392,12 @@ typedef struct pulseqlib_subsequence_info {
 /* ================================================================== */
 
 typedef struct pulseqlib_block_cursor {
-    int current_repetition;
     int sequence_index;
-    int within_sequence_block_index;
+    int scan_table_position;
     int from_last_reset;
 } pulseqlib_block_cursor;
 
-#define PULSEQLIB_BLOCK_CURSOR_INIT {0, 0, 0, 0}
+#define PULSEQLIB_BLOCK_CURSOR_INIT {0, 0, 0}
 
 /* ================================================================== */
 /*  Sequence descriptor collection                                    */
@@ -839,12 +848,15 @@ int   pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const pu
 
 /* --- pulseqlib_structure.c --- */
 int   pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);
+int   pulseqlib__build_scan_table(pulseqlib_sequence_descriptor* desc, int num_averages, pulseqlib_diagnostic* diag);
 int   pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib__seq_file* seq);
+int   pulseqlib__fill_scan_seg_id_from_blocktable(pulseqlib_sequence_descriptor* desc);
+int   pulseqlib__get_scan_table_segments(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib_opts* opts);
 int   pulseqlib__build_freq_mod_library(pulseqlib_sequence_descriptor* desc);
 int   pulseqlib__build_label_table(pulseqlib_sequence_descriptor* desc, const pulseqlib__seq_file* seq);
 
 /* --- pulseqlib_core.c (continued) --- */
-int   pulseqlib__get_collection_descriptors(pulseqlib_collection* desc_coll, pulseqlib_diagnostic* diag, const pulseqlib__seq_file_collection* coll, int parse_labels);
+int   pulseqlib__get_collection_descriptors(pulseqlib_collection* desc_coll, pulseqlib_diagnostic* diag, const pulseqlib__seq_file_collection* coll, int parse_labels, int num_averages);
 void  pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* desc);
 void  pulseqlib_segment_table_result_free(pulseqlib_segment_table_result* result);
 

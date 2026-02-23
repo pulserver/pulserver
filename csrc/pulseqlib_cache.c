@@ -12,7 +12,7 @@
 /* ================================================================== */
 
 #define PULSEQLIB_CACHE_ENDIAN_MARKER  0x01020304
-#define PULSEQLIB_CACHE_VERSION        6
+#define PULSEQLIB_CACHE_VERSION        8
 
 /* ------ Byte-swap helpers ------ */
 
@@ -127,6 +127,7 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &d->block_definitions[i].gx_id, 1)) return 0;
         if (!write4(f, &d->block_definitions[i].gy_id, 1)) return 0;
         if (!write4(f, &d->block_definitions[i].gz_id, 1)) return 0;
+        if (!write4(f, &d->block_definitions[i].adc_id, 1)) return 0;
     }
 
     /* block table */
@@ -334,6 +335,14 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
     }
     fwrite(&d->label_limits, sizeof(pulseqlib_label_limits), 1, f);
 
+    /* scan table */
+    if (!write4(f, &d->scan_table_len, 1)) return 0;
+    if (d->scan_table_len > 0) {
+        if (!write4(f, d->scan_table_block_idx, d->scan_table_len)) return 0;
+        if (!write4(f, d->scan_table_tr_id,    d->scan_table_len)) return 0;
+        if (!write4(f, d->scan_table_seg_id,   d->scan_table_len)) return 0;
+    }
+
     return 1;
 }
 
@@ -371,7 +380,8 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         if (!read4(f, &d->block_definitions[i].gx_id, 1)) return 0;
         if (!read4(f, &d->block_definitions[i].gy_id, 1)) return 0;
         if (!read4(f, &d->block_definitions[i].gz_id, 1)) return 0;
-        if (do_swap) swap4_array(&d->block_definitions[i].id, 6);
+        if (!read4(f, &d->block_definitions[i].adc_id, 1)) return 0;
+        if (do_swap) swap4_array(&d->block_definitions[i].id, 7);
     }
 
     /* block table */
@@ -713,6 +723,28 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         d->label_table = NULL;
     }
     if (fread(&d->label_limits, sizeof(pulseqlib_label_limits), 1, f) != 1) return 0;
+
+    /* scan table */
+    if (fread(&d->scan_table_len, sizeof(int), 1, f) != 1) return 0;
+    if (do_swap) swap4(&d->scan_table_len);
+    if (d->scan_table_len > 0) {
+        d->scan_table_block_idx = (int*)PULSEQLIB_ALLOC((size_t)d->scan_table_len * sizeof(int));
+        d->scan_table_tr_id     = (int*)PULSEQLIB_ALLOC((size_t)d->scan_table_len * sizeof(int));
+        d->scan_table_seg_id    = (int*)PULSEQLIB_ALLOC((size_t)d->scan_table_len * sizeof(int));
+        if (!d->scan_table_block_idx || !d->scan_table_tr_id || !d->scan_table_seg_id) return 0;
+        if (fread(d->scan_table_block_idx, sizeof(int), (size_t)d->scan_table_len, f) != (size_t)d->scan_table_len) return 0;
+        if (fread(d->scan_table_tr_id,     sizeof(int), (size_t)d->scan_table_len, f) != (size_t)d->scan_table_len) return 0;
+        if (fread(d->scan_table_seg_id,    sizeof(int), (size_t)d->scan_table_len, f) != (size_t)d->scan_table_len) return 0;
+        if (do_swap) {
+            swap4_array(d->scan_table_block_idx, d->scan_table_len);
+            swap4_array(d->scan_table_tr_id,     d->scan_table_len);
+            swap4_array(d->scan_table_seg_id,    d->scan_table_len);
+        }
+    } else {
+        d->scan_table_block_idx = NULL;
+        d->scan_table_tr_id     = NULL;
+        d->scan_table_seg_id    = NULL;
+    }
 
     return 1;
 }

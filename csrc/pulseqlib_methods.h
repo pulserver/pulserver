@@ -44,6 +44,7 @@ extern "C" {
  * @param[in]  verify_signature 1 = verify MD5 signature for every .seq
  *                              file in the chain.
  * @param[in]  parse_labels     1 = build ADC label table via dry-run.
+ * @param[in]  num_averages     Number of scan averages (>= 1).
  * @return PULSEQLIB_OK on success, negative error code on failure.
  */
 int pulseqlib_read(
@@ -53,7 +54,8 @@ int pulseqlib_read(
     const pulseqlib_opts*  opts,
     int                    cache_binary,
     int                    verify_signature,
-    int                    parse_labels);
+    int                    parse_labels,
+    int                    num_averages);
 
 /**
  * @brief Read one or more Pulseq subsequences from in-memory buffers.
@@ -69,6 +71,7 @@ int pulseqlib_read(
  * @param[in]  buffer_sizes  Byte length of each buffer (excl. NUL).
  * @param[in]  num_buffers   Number of buffers (>= 1).
  * @param[in]  opts          Scanner limits / rasters.
+ * @param[in]  num_averages  Number of scan averages (>= 1).
  * @return PULSEQLIB_OK on success, negative error code on failure.
  */
 int pulseqlib_read_from_buffers(
@@ -78,7 +81,8 @@ int pulseqlib_read_from_buffers(
     const int*             buffer_sizes,
     int                    num_buffers,
     const pulseqlib_opts*  opts,
-    int                    parse_labels);
+    int                    parse_labels,
+    int                    num_averages);
 
 /* ================================================================== */
 /*  Options initializer                                               */

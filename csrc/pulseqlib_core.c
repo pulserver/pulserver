@@ -97,6 +97,12 @@ void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
 
     pulseqlib_segment_table_result_free(&d->segment_table);
 
+    /* Scan table arrays */
+    if (d->scan_table_block_idx) { PULSEQLIB_FREE(d->scan_table_block_idx); d->scan_table_block_idx = NULL; }
+    if (d->scan_table_tr_id)     { PULSEQLIB_FREE(d->scan_table_tr_id);     d->scan_table_tr_id     = NULL; }
+    if (d->scan_table_seg_id)    { PULSEQLIB_FREE(d->scan_table_seg_id);    d->scan_table_seg_id    = NULL; }
+    d->scan_table_len = 0;
+
     if (d->label_table) { PULSEQLIB_FREE(d->label_table); d->label_table = NULL; }
     d->label_num_columns = 0;
     d->label_num_entries = 0;
@@ -264,61 +270,72 @@ static int check_rf_shim_periodicity(
 }
 
 /*
- * check_segment_walk --
- *   Walk blocks [block_start .. block_start + total_blocks) and verify
- *   that block definition IDs match the segment table.
+ * check_scan_table_segments --
+ *   Walk the scan table and verify that each entry's block definition ID
+ *   matches the segment definition indicated by scan_table_seg_id.
  *
- *   segment_table[s] gives the index into segment_definitions[].
- *   For each segment s we expect:
- *     block_table[pos].id == segment_definitions[seg].unique_block_indices[j]
- *   for j = 0 .. segment_definitions[seg].num_blocks - 1.
+ *   For each contiguous group of entries sharing the same seg_id,
+ *   position within the group gives the position within the segment.
  */
-static int check_segment_walk(
+static int check_scan_table_segments(
     const pulseqlib_sequence_descriptor* desc,
-    int block_start,
-    int num_segments,
-    const int* segment_table,
     pulseqlib_diagnostic* diag)
 {
-    int s, j, pos, seg_def_idx;
+    int n, seg_id, prev_seg_id, pos_in_seg;
+    int bt_idx, bdef_id, expected_id;
     const pulseqlib_tr_segment* seg;
 
-    pos = block_start;
-    for (s = 0; s < num_segments; ++s) {
-        seg_def_idx = segment_table[s];
-        if (seg_def_idx < 0 ||
-            seg_def_idx >= desc->segment_table.num_unique_segments) {
+    prev_seg_id = -2;  /* impossible value to force reset */
+    pos_in_seg  = 0;
+
+    for (n = 0; n < desc->scan_table_len; ++n) {
+        seg_id = desc->scan_table_seg_id[n];
+        if (seg_id < 0) {
+            prev_seg_id = seg_id;
+            pos_in_seg  = 0;
+            continue;
+        }
+        if (seg_id != prev_seg_id) {
+            pos_in_seg  = 0;
+            prev_seg_id = seg_id;
+        }
+
+        if (seg_id >= desc->segment_table.num_unique_segments) {
             if (diag) {
                 pulseqlib__diag_printf(diag,
-                    "Consistency: segment table index %d out of range "
-                    "(num_unique_segments = %d) at segment %d\n",
-                    seg_def_idx,
-                    desc->segment_table.num_unique_segments, s);
+                    "Consistency: scan_table_seg_id[%d] = %d out of range "
+                    "(num_unique = %d)\n",
+                    n, seg_id, desc->segment_table.num_unique_segments);
             }
             return PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH;
         }
-        seg = &desc->segment_definitions[seg_def_idx];
-        for (j = 0; j < seg->num_blocks; ++j, ++pos) {
-            if (pos >= desc->num_blocks) {
-                if (diag) {
-                    pulseqlib__diag_printf(diag,
-                        "Consistency: block index %d exceeds num_blocks %d "
-                        "at segment %d, block %d\n",
-                        pos, desc->num_blocks, s, j);
-                }
-                return PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH;
+
+        seg = &desc->segment_definitions[seg_id];
+        if (pos_in_seg >= seg->num_blocks) {
+            if (diag) {
+                pulseqlib__diag_printf(diag,
+                    "Consistency: scan pos %d, segment %d position %d "
+                    "exceeds num_blocks %d\n",
+                    n, seg_id, pos_in_seg, seg->num_blocks);
             }
-            if (desc->block_table[pos].id != seg->unique_block_indices[j]) {
-                if (diag) {
-                    pulseqlib__diag_printf(diag,
-                        "Consistency: block %d has def ID %d, "
-                        "expected %d (segment %d, position %d)\n",
-                        pos, desc->block_table[pos].id,
-                        seg->unique_block_indices[j], s, j);
-                }
-                return PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH;
-            }
+            return PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH;
         }
+
+        bt_idx      = desc->scan_table_block_idx[n];
+        bdef_id     = desc->block_table[bt_idx].id;
+        expected_id = seg->unique_block_indices[pos_in_seg];
+
+        if (bdef_id != expected_id) {
+            if (diag) {
+                pulseqlib__diag_printf(diag,
+                    "Consistency: scan pos %d (block_table[%d]) has def ID %d, "
+                    "expected %d (segment %d, position %d)\n",
+                    n, bt_idx, bdef_id, expected_id, seg_id, pos_in_seg);
+            }
+            return PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH;
+        }
+
+        ++pos_in_seg;
     }
     return PULSEQLIB_OK;
 }
@@ -330,8 +347,6 @@ static int check_consistency(
     int subseq_idx, rc;
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_descriptor* trd;
-    const pulseqlib_segment_table_result* stab;
-    int block_start;
     int ref_tr, first_check, last_check;
 
     if (!coll) return PULSEQLIB_ERR_NULL_POINTER;
@@ -339,57 +354,23 @@ static int check_consistency(
     for (subseq_idx = 0; subseq_idx < coll->num_subsequences; ++subseq_idx) {
         desc = &coll->descriptors[subseq_idx];
         trd  = &desc->tr_descriptor;
-        stab = &desc->segment_table;
 
-        /* (a) Prep: blocks [0, num_prep + tr_size) against prep segment table */
-        if (!trd->degenerate_prep && stab->num_prep_segments > 0) {
-            rc = check_segment_walk(desc, 0,
-                stab->num_prep_segments, stab->prep_segment_table, diag);
+        /* (a) Scan-table segment consistency: walk the scan table and
+         *     verify that each entry's block definition ID matches what
+         *     its seg_id expects. */
+        if (desc->scan_table_len > 0 && desc->scan_table_seg_id) {
+            rc = check_scan_table_segments(desc, diag);
             if (PULSEQLIB_FAILED(rc)) {
                 if (diag) {
                     pulseqlib__diag_printf(diag,
-                        "Consistency check failed in prep region "
-                        "of subsequence %d\n", subseq_idx);
+                        "Segment consistency check failed "
+                        "in subsequence %d\n", subseq_idx);
                 }
                 return rc;
             }
         }
 
-        /* (b) Cooldown: blocks [num_blocks - cooldown - tr_size, num_blocks)
-         *     against cooldown segment table */
-        if (!trd->degenerate_cooldown && stab->num_cooldown_segments > 0) {
-            block_start = desc->num_blocks
-                        - trd->num_cooldown_blocks - trd->tr_size;
-            rc = check_segment_walk(desc, block_start,
-                stab->num_cooldown_segments, stab->cooldown_segment_table,
-                diag);
-            if (PULSEQLIB_FAILED(rc)) {
-                if (diag) {
-                    pulseqlib__diag_printf(diag,
-                        "Consistency check failed in cooldown region "
-                        "of subsequence %d\n", subseq_idx);
-                }
-                return rc;
-            }
-        }
-
-        /* (c) Second main TR instance: blocks [prep + tr_size, prep + 2*tr_size)
-         *     against main segment table — only if num_trs > 1 */
-        if (trd->num_trs > 1 && stab->num_main_segments > 0) {
-            block_start = trd->num_prep_blocks + trd->tr_size;
-            rc = check_segment_walk(desc, block_start,
-                stab->num_main_segments, stab->main_segment_table, diag);
-            if (PULSEQLIB_FAILED(rc)) {
-                if (diag) {
-                    pulseqlib__diag_printf(diag,
-                        "Consistency check failed at second main TR "
-                        "of subsequence %d\n", subseq_idx);
-                }
-                return rc;
-            }
-        }
-
-        /* (d) RF amplitude periodicity across pure main TRs.
+        /* (b) RF amplitude periodicity across pure main TRs.
          *
          *   prep degen   cooldown degen   ref   check range
          *   ----------   --------------   ---   -----------
@@ -418,7 +399,7 @@ static int check_consistency(
                     return rc;
                 }
 
-                /* (e) RF shim ID periodicity (same TR range as amplitude) */
+                /* (c) RF shim ID periodicity (same TR range as amplitude) */
                 rc = check_rf_shim_periodicity(desc,
                     ref_tr, first_check, last_check, diag);
                 if (PULSEQLIB_FAILED(rc)) {
@@ -494,7 +475,8 @@ int pulseqlib__get_collection_descriptors(
     pulseqlib_collection* coll,
     pulseqlib_diagnostic* diag,
     const pulseqlib__seq_file_collection* raw,
-    int parse_labels)
+    int parse_labels,
+    int num_averages)
 {
     int i, j, result;
     int adc_off = 0, seg_off = 0, blk_off = 0;
@@ -538,8 +520,26 @@ int pulseqlib__get_collection_descriptors(
         result = pulseqlib__get_tr_in_sequence(&desc, diag);
         if (PULSEQLIB_FAILED(diag->code)) goto fail;
 
-        result = pulseqlib__get_segments_in_tr(&desc, diag, &raw->sequences[i]);
+        result = pulseqlib__build_scan_table(&desc, num_averages, diag);
         if (PULSEQLIB_FAILED(diag->code)) goto fail;
+
+        /* Try blockTable-based segmentation first */
+        result = pulseqlib__get_segments_in_tr(&desc, diag, &raw->sequences[i]);
+        if (PULSEQLIB_FAILED(diag->code)) {
+            /* Gradient boundary error → fall back to scanTable segmentation */
+            if (diag->code == PULSEQLIB_ERR_SEG_NONZERO_START_GRAD ||
+                diag->code == PULSEQLIB_ERR_SEG_NONZERO_END_GRAD) {
+                pulseqlib_diagnostic_init(diag);
+                result = pulseqlib__get_scan_table_segments(&desc, diag, &raw->sequences[i].opts);
+                if (PULSEQLIB_FAILED(diag->code)) goto fail;
+            } else {
+                goto fail;
+            }
+        } else {
+            /* blockTable segmentation succeeded: backfill scan_table_seg_id */
+            result = pulseqlib__fill_scan_seg_id_from_blocktable(&desc);
+            if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
+        }
 
         result = pulseqlib__calc_segment_timing(&desc, diag);
         if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
@@ -606,7 +606,8 @@ int pulseqlib_read(
     const pulseqlib_opts* opts,
     int cache_binary,
     int verify_signature,
-    int parse_labels)
+    int parse_labels,
+    int num_averages)
 {
     pulseqlib__seq_file_collection raw_coll;
     pulseqlib_collection* collection;
@@ -655,7 +656,7 @@ int pulseqlib_read(
         }
     }
 
-    rc = pulseqlib__get_collection_descriptors(collection, diag, &raw_coll, parse_labels);
+    rc = pulseqlib__get_collection_descriptors(collection, diag, &raw_coll, parse_labels, num_averages);
     if (PULSEQLIB_FAILED(diag->code)) { rc = diag->code; goto fail; }
 
     rc = check_consistency(collection, diag);
@@ -686,7 +687,8 @@ int pulseqlib_read_from_buffers(
     const int* buffer_sizes,
     int num_buffers,
     const pulseqlib_opts* opts,
-    int parse_labels)
+    int parse_labels,
+    int num_averages)
 {
     pulseqlib__seq_file_collection raw_coll;
     pulseqlib_collection* collection;
@@ -745,7 +747,7 @@ int pulseqlib_read_from_buffers(
     memset(collection, 0, sizeof(*collection));
     collection->num_repetitions = 1;
 
-    rc = pulseqlib__get_collection_descriptors(collection, diag, &raw_coll, parse_labels);
+    rc = pulseqlib__get_collection_descriptors(collection, diag, &raw_coll, parse_labels, num_averages);
     if (PULSEQLIB_FAILED(diag->code)) { rc = diag->code; goto fail_coll; }
 
     rc = check_consistency(collection, diag);

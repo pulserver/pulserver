@@ -113,6 +113,7 @@ const char* pulseqlib_get_error_message(int code)
         case PULSEQLIB_ERR_RASTER_MISMATCH:            return "System and sequence raster times are not integer multiples";
         case PULSEQLIB_ERR_SIGNATURE_MISMATCH:         return "MD5 signature verification failed";
         case PULSEQLIB_ERR_SIGNATURE_MISSING:          return "Sequence file has no [SIGNATURE] section or stored hash";
+        case PULSEQLIB_ERR_ADC_DEFINITION_CONFLICT:    return "Block definition has conflicting ADC definitions across instances";
         case PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS:       return "Number of waveform shots exceeds maximum allowed";
         case PULSEQLIB_ERR_TR_NO_BLOCKS:              return "Sequence contains no blocks";
         case PULSEQLIB_ERR_TR_NO_IMAGING_REGION:      return "No imaging region found (preparation + cooldown >= total blocks)";
@@ -181,6 +182,10 @@ const char* pulseqlib_get_error_hint(int code)
         case PULSEQLIB_ERR_SEG_NONZERO_END_GRAD:
             return "Each segment must begin and end with gradient amplitudes that can "
                    "ramp to/from zero within one gradient raster.";
+        case PULSEQLIB_ERR_ADC_DEFINITION_CONFLICT:
+            return "Two instances of the same block definition use different ADC events "
+                   "(different num_samples, dwell time, or delay). Ensure all instances "
+                   "of a given block use the same ADC structure, or omit the ADC entirely.";
         case PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS:
             return "The sequence contains a waveform with more than 16 distinct waveform shapes.";
         case PULSEQLIB_ERR_TR_PREP_TOO_LONG:

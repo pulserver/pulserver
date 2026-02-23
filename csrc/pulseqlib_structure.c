@@ -72,6 +72,126 @@ static int first_repeating_segment(const int* s, int len)
 }
 
 /* ================================================================== */
+/*  build_scan_table                                                  */
+/* ================================================================== */
+
+/*
+ * Build the scan table: an expanded playback order that resolves
+ * ONCE semantics and multiple averages into a flat array.
+ *
+ * For avg == 0:             play ONCE=1 (prep) and ONCE=0 (main)
+ * For 0 < avg < navg-1:    play ONCE=0 (main) only
+ * For avg == navg-1:        play ONCE=0 (main) and ONCE=2 (cooldown)
+ *
+ * When navg == 1, all three flags are played (entire block table).
+ *
+ * Each entry stores the block_table index.
+ * tr_id column is filled based on non-degenerate prep/cooldown:
+ *   - No non-degenerate prep or cooldown:   main = 0
+ *   - Prep only:                            prep = 0, main = 1
+ *   - Cooldown only:                        main = 0, cooldown = 1
+ *   - Both:                                 prep = 0, main = 1, cooldown = 2
+ *
+ * seg_id column is initialised to -1 (filled later by segment detection).
+ */
+
+int pulseqlib__build_scan_table(
+    pulseqlib_sequence_descriptor* desc,
+    int num_averages,
+    pulseqlib_diagnostic* diag)
+{
+    pulseqlib_diagnostic local_diag;
+    int avg, blk, once, count, idx;
+    int has_nd_prep, has_nd_cool;
+    int prep_tr_id, main_tr_id, cool_tr_id;
+    int play_prep, play_main, play_cool;
+
+    if (!diag) { pulseqlib_diagnostic_init(&local_diag); diag = &local_diag; }
+    else       pulseqlib_diagnostic_init(diag);
+
+    if (!desc) { diag->code = PULSEQLIB_ERR_NULL_POINTER; return diag->code; }
+    if (num_averages < 1) num_averages = 1;
+
+    has_nd_prep = (desc->tr_descriptor.num_prep_blocks > 0 &&
+                   !desc->tr_descriptor.degenerate_prep);
+    has_nd_cool = (desc->tr_descriptor.num_cooldown_blocks > 0 &&
+                   !desc->tr_descriptor.degenerate_cooldown);
+
+    /* Assign tr_id values */
+    if (!has_nd_prep && !has_nd_cool) {
+        prep_tr_id = -1; main_tr_id = 0; cool_tr_id = -1;
+    } else if (has_nd_prep && !has_nd_cool) {
+        prep_tr_id = 0;  main_tr_id = 1; cool_tr_id = -1;
+    } else if (!has_nd_prep && has_nd_cool) {
+        prep_tr_id = -1; main_tr_id = 0; cool_tr_id = 1;
+    } else {
+        prep_tr_id = 0;  main_tr_id = 1; cool_tr_id = 2;
+    }
+
+    /* Pass 1: count entries */
+    count = 0;
+    for (avg = 0; avg < num_averages; ++avg) {
+        play_prep = (avg == 0) ? 1 : 0;
+        play_main = 1;
+        play_cool = (avg == num_averages - 1) ? 1 : 0;
+
+        for (blk = 0; blk < desc->num_blocks; ++blk) {
+            once = desc->block_table[blk].once_flag;
+            if (once == 1 && play_prep)      ++count;
+            else if (once == 0 && play_main) ++count;
+            else if (once == 2 && play_cool) ++count;
+        }
+    }
+
+    /* Allocate */
+    desc->scan_table_len       = count;
+    desc->scan_table_block_idx = (int*)PULSEQLIB_ALLOC((size_t)count * sizeof(int));
+    desc->scan_table_tr_id     = (int*)PULSEQLIB_ALLOC((size_t)count * sizeof(int));
+    desc->scan_table_seg_id    = (int*)PULSEQLIB_ALLOC((size_t)count * sizeof(int));
+    if (!desc->scan_table_block_idx ||
+        !desc->scan_table_tr_id ||
+        !desc->scan_table_seg_id) {
+        if (desc->scan_table_block_idx) { PULSEQLIB_FREE(desc->scan_table_block_idx); desc->scan_table_block_idx = NULL; }
+        if (desc->scan_table_tr_id)     { PULSEQLIB_FREE(desc->scan_table_tr_id);     desc->scan_table_tr_id = NULL; }
+        if (desc->scan_table_seg_id)    { PULSEQLIB_FREE(desc->scan_table_seg_id);    desc->scan_table_seg_id = NULL; }
+        desc->scan_table_len = 0;
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        return diag->code;
+    }
+
+    /* Pass 2: fill */
+    idx = 0;
+    for (avg = 0; avg < num_averages; ++avg) {
+        play_prep = (avg == 0) ? 1 : 0;
+        play_main = 1;
+        play_cool = (avg == num_averages - 1) ? 1 : 0;
+
+        for (blk = 0; blk < desc->num_blocks; ++blk) {
+            once = desc->block_table[blk].once_flag;
+            if (once == 1 && play_prep) {
+                desc->scan_table_block_idx[idx] = blk;
+                desc->scan_table_tr_id[idx]     = prep_tr_id;
+                desc->scan_table_seg_id[idx]    = -1;
+                ++idx;
+            } else if (once == 0 && play_main) {
+                desc->scan_table_block_idx[idx] = blk;
+                desc->scan_table_tr_id[idx]     = main_tr_id;
+                desc->scan_table_seg_id[idx]    = -1;
+                ++idx;
+            } else if (once == 2 && play_cool) {
+                desc->scan_table_block_idx[idx] = blk;
+                desc->scan_table_tr_id[idx]     = cool_tr_id;
+                desc->scan_table_seg_id[idx]    = -1;
+                ++idx;
+            }
+        }
+    }
+
+    diag->code = PULSEQLIB_OK;
+    return PULSEQLIB_OK;
+}
+
+/* ================================================================== */
 /*  find_tr_in_sequence                                               */
 /* ================================================================== */
 
@@ -811,6 +931,137 @@ fail:
 }
 
 /* ================================================================== */
+/*  Fill scan_table_seg_id from blockTable-based segmentation         */
+/* ================================================================== */
+
+/*
+ * After get_segments_in_tr succeeds, this function maps its segment
+ * tables onto the scan table's seg_id column.
+ *
+ * For each section (prep, main, cooldown) we build a per-block-position
+ * seg_id map from the corresponding segment table, then look up each
+ * scan table entry by its block_table index and tr_id.
+ *
+ * Main blocks always use the main segment map (period tr_size).
+ * Prep/cooldown blocks use maps derived from the prep/cooldown segment
+ * tables, which cover [0, prep+tr_size) and [cool_start, num_blocks)
+ * respectively.
+ */
+int pulseqlib__fill_scan_seg_id_from_blocktable(
+    pulseqlib_sequence_descriptor* desc)
+{
+    const pulseqlib_tr_descriptor*        tr = &desc->tr_descriptor;
+    const pulseqlib_segment_table_result* st = &desc->segment_table;
+    int has_nd_prep, has_nd_cool;
+    int prep_tr_id, main_tr_id, cool_tr_id;
+    int main_len, prep_len, cool_len, cool_start;
+    int* main_map = NULL;
+    int* prep_map = NULL;
+    int* cool_map = NULL;
+    int n, i, uid, blk_count, bt_pos, pos;
+
+    if (!desc || !desc->scan_table_seg_id) return PULSEQLIB_ERR_NULL_POINTER;
+
+    has_nd_prep = (tr->num_prep_blocks > 0 && !tr->degenerate_prep);
+    has_nd_cool = (tr->num_cooldown_blocks > 0 && !tr->degenerate_cooldown);
+
+    /* Determine tr_id values (same logic as build_scan_table) */
+    if (!has_nd_prep && !has_nd_cool) {
+        prep_tr_id = -1; main_tr_id = 0; cool_tr_id = -1;
+    } else if (has_nd_prep && !has_nd_cool) {
+        prep_tr_id = 0;  main_tr_id = 1; cool_tr_id = -1;
+    } else if (!has_nd_prep && has_nd_cool) {
+        prep_tr_id = -1; main_tr_id = 0; cool_tr_id = 1;
+    } else {
+        prep_tr_id = 0;  main_tr_id = 1; cool_tr_id = 2;
+    }
+
+    /* ---- Build main map [tr_size] ---- */
+    main_len = tr->tr_size;
+    main_map = (int*)PULSEQLIB_ALLOC((size_t)main_len * sizeof(int));
+    if (!main_map) return PULSEQLIB_ERR_ALLOC_FAILED;
+    for (i = 0; i < main_len; ++i) main_map[i] = -1;
+
+    blk_count = 0;
+    for (n = 0; n < st->num_main_segments; ++n) {
+        uid = st->main_segment_table[n];
+        for (i = 0; i < desc->segment_definitions[uid].num_blocks; ++i) {
+            if (blk_count < main_len) main_map[blk_count] = uid;
+            ++blk_count;
+        }
+    }
+
+    /* ---- Build prep map [num_prep_blocks + tr_size] ---- */
+    if (has_nd_prep && st->num_prep_segments > 0) {
+        prep_len = tr->num_prep_blocks + tr->tr_size;
+        prep_map = (int*)PULSEQLIB_ALLOC((size_t)prep_len * sizeof(int));
+        if (!prep_map) { PULSEQLIB_FREE(main_map); return PULSEQLIB_ERR_ALLOC_FAILED; }
+        for (i = 0; i < prep_len; ++i) prep_map[i] = -1;
+
+        blk_count = 0;
+        for (n = 0; n < st->num_prep_segments; ++n) {
+            uid = st->prep_segment_table[n];
+            for (i = 0; i < desc->segment_definitions[uid].num_blocks; ++i) {
+                if (blk_count < prep_len) prep_map[blk_count] = uid;
+                ++blk_count;
+            }
+        }
+    }
+
+    /* ---- Build cool map [tr_size + num_cooldown_blocks] ---- */
+    if (has_nd_cool && st->num_cooldown_segments > 0) {
+        cool_start = desc->num_blocks - tr->num_cooldown_blocks - tr->tr_size;
+        cool_len   = tr->tr_size + tr->num_cooldown_blocks;
+        cool_map   = (int*)PULSEQLIB_ALLOC((size_t)cool_len * sizeof(int));
+        if (!cool_map) {
+            PULSEQLIB_FREE(main_map);
+            if (prep_map) PULSEQLIB_FREE(prep_map);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+        for (i = 0; i < cool_len; ++i) cool_map[i] = -1;
+
+        blk_count = 0;
+        for (n = 0; n < st->num_cooldown_segments; ++n) {
+            uid = st->cooldown_segment_table[n];
+            for (i = 0; i < desc->segment_definitions[uid].num_blocks; ++i) {
+                if (blk_count < cool_len) cool_map[blk_count] = uid;
+                ++blk_count;
+            }
+        }
+    } else {
+        cool_start = 0;
+        cool_len   = 0;
+    }
+
+    /* ---- Walk scan table and assign seg_id ---- */
+    for (n = 0; n < desc->scan_table_len; ++n) {
+        bt_pos = desc->scan_table_block_idx[n];
+
+        if (desc->scan_table_tr_id[n] == prep_tr_id && prep_map) {
+            /* Prep block: bt_pos in [0, num_prep_blocks) */
+            desc->scan_table_seg_id[n] = (bt_pos >= 0 && bt_pos < prep_len)
+                ? prep_map[bt_pos] : -1;
+        } else if (desc->scan_table_tr_id[n] == cool_tr_id && cool_map) {
+            /* Cooldown block: bt_pos in [num_blocks-cool_blocks, num_blocks) */
+            pos = bt_pos - cool_start;
+            desc->scan_table_seg_id[n] = (pos >= 0 && pos < cool_len)
+                ? cool_map[pos] : -1;
+        } else {
+            /* Main block: bt_pos in [num_prep_blocks, ...), modular in tr_size */
+            pos = (bt_pos - tr->num_prep_blocks) % tr->tr_size;
+            if (pos < 0) pos += tr->tr_size;
+            desc->scan_table_seg_id[n] = (pos >= 0 && pos < main_len)
+                ? main_map[pos] : -1;
+        }
+    }
+
+    PULSEQLIB_FREE(main_map);
+    if (prep_map) PULSEQLIB_FREE(prep_map);
+    if (cool_map) PULSEQLIB_FREE(cool_map);
+    return PULSEQLIB_OK;
+}
+
+/* ================================================================== */
 /*  Frequency modulation library                                      */
 /* ================================================================== */
 
@@ -1438,4 +1689,622 @@ int pulseqlib__build_label_table(
 
     return PULSEQLIB_OK;
 #endif
+}
+
+/* ================================================================== */
+/*  Scan-table-aware segment state machine                            */
+/* ================================================================== */
+
+/*
+ * Like find_segments_internal but resolves blocks through scan table
+ * indirection.  scan_block_idx[pat_start + i] gives the block_table
+ * index for position i within the pattern.
+ *
+ * start_block in returned segs is a SCAN TABLE position.
+ */
+static int find_segments_on_scan_table(
+    const pulseqlib_sequence_descriptor* desc,
+    pulseqlib_tr_segment* segs, int offset,
+    pulseqlib_diagnostic* diag,
+    const pulseqlib_opts* opts,
+    const int* scan_block_idx,
+    int pat_start, int pat_size)
+{
+    float max_slew, grad_raster_s, max_allowed;
+    int grad_ids[3];
+    float phys_first, phys_last;
+    float grad_last_cur[3], grad_first_next[3];
+    const pulseqlib_block_definition* bdef;
+    const pulseqlib_grad_definition* gdef;
+    int bdef_id, shot_idx, bt_idx, prev_bt;
+    int* seg_starts = NULL;
+    int* seg_sizes  = NULL;
+    int num_seg, seg_start;
+    int state, cand_before_rf, saved_cand, has_saved_cand;
+    int has_rf, has_adc, is_cand;
+    int nb, n, i;
+
+    max_slew = opts->max_slew_hz_per_m_per_s;
+    grad_raster_s = desc->grad_raster_us * 1e-6f;
+    max_allowed = max_slew * grad_raster_s;
+    nb = pat_size;
+
+    seg_starts = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+    seg_sizes  = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+    if (!seg_starts || !seg_sizes) {
+        if (seg_starts) PULSEQLIB_FREE(seg_starts);
+        if (seg_sizes)  PULSEQLIB_FREE(seg_sizes);
+        if (diag) diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        return 0;
+    }
+
+    /* first block gradient check */
+    bt_idx = scan_block_idx[pat_start];
+    bdef_id = desc->block_table[bt_idx].id;
+    bdef = &desc->block_definitions[bdef_id];
+    grad_ids[0] = bdef->gx_id; grad_ids[1] = bdef->gy_id; grad_ids[2] = bdef->gz_id;
+    for (i = 0; i < 3; ++i) {
+        if (grad_ids[i] < 0) continue;
+        gdef = &desc->grad_definitions[grad_ids[i]];
+        for (shot_idx = 0; shot_idx < gdef->num_shots; ++shot_idx) {
+            phys_first = gdef->first_value[shot_idx] * gdef->max_amplitude[shot_idx];
+            if ((float)fabs(phys_first) > max_allowed) {
+                if (diag) {
+                    diag->code = PULSEQLIB_ERR_SEG_NONZERO_START_GRAD;
+                    pulseqlib__diag_printf(diag, " scan_pos=%d block=%d", pat_start, bt_idx);
+                    pulseqlib__diag_printf(diag, " channel=%d", i);
+                }
+                PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
+                return 0;
+            }
+        }
+    }
+
+    /* last block gradient check */
+    bt_idx = scan_block_idx[pat_start + nb - 1];
+    bdef_id = desc->block_table[bt_idx].id;
+    bdef = &desc->block_definitions[bdef_id];
+    grad_ids[0] = bdef->gx_id; grad_ids[1] = bdef->gy_id; grad_ids[2] = bdef->gz_id;
+    for (i = 0; i < 3; ++i) {
+        if (grad_ids[i] < 0) continue;
+        gdef = &desc->grad_definitions[grad_ids[i]];
+        for (shot_idx = 0; shot_idx < gdef->num_shots; ++shot_idx) {
+            phys_last = gdef->last_value[shot_idx] * gdef->max_amplitude[shot_idx];
+            if ((float)fabs(phys_last) > max_allowed) {
+                if (diag) {
+                    diag->code = PULSEQLIB_ERR_SEG_NONZERO_END_GRAD;
+                    pulseqlib__diag_printf(diag, " scan_pos=%d block=%d", pat_start + nb - 1, bt_idx);
+                    pulseqlib__diag_printf(diag, " channel=%d", i);
+                }
+                PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
+                return 0;
+            }
+        }
+    }
+
+    /* state machine */
+    num_seg = 0;
+    seg_start = pat_start;
+    state = SEGSTATE_SEEKING_FIRST_ADC;
+    cand_before_rf = -1;
+    saved_cand = -1;
+    has_saved_cand = 0;
+
+    for (n = pat_start; n < pat_start + nb; ++n) {
+        bt_idx = scan_block_idx[n];
+        is_cand = 0;
+        if (n > pat_start) {
+            prev_bt = scan_block_idx[n - 1];
+            is_cand = 1;
+
+            bdef_id = desc->block_table[prev_bt].id;
+            bdef = &desc->block_definitions[bdef_id];
+            grad_ids[0] = bdef->gx_id; grad_ids[1] = bdef->gy_id; grad_ids[2] = bdef->gz_id;
+            for (i = 0; i < 3; ++i) {
+                grad_last_cur[i] = 0.0f;
+                if (grad_ids[i] >= 0) {
+                    gdef = &desc->grad_definitions[grad_ids[i]];
+                    for (shot_idx = 0; shot_idx < gdef->num_shots; ++shot_idx) {
+                        phys_last = gdef->last_value[shot_idx] * gdef->max_amplitude[shot_idx];
+                        if ((float)fabs(phys_last) > (float)fabs(grad_last_cur[i]))
+                            grad_last_cur[i] = phys_last;
+                    }
+                }
+            }
+
+            bdef_id = desc->block_table[bt_idx].id;
+            bdef = &desc->block_definitions[bdef_id];
+            grad_ids[0] = bdef->gx_id; grad_ids[1] = bdef->gy_id; grad_ids[2] = bdef->gz_id;
+            for (i = 0; i < 3; ++i) {
+                grad_first_next[i] = 0.0f;
+                if (grad_ids[i] >= 0) {
+                    gdef = &desc->grad_definitions[grad_ids[i]];
+                    for (shot_idx = 0; shot_idx < gdef->num_shots; ++shot_idx) {
+                        phys_first = gdef->first_value[shot_idx] * gdef->max_amplitude[shot_idx];
+                        if ((float)fabs(phys_first) > (float)fabs(grad_first_next[i]))
+                            grad_first_next[i] = phys_first;
+                    }
+                }
+            }
+
+            for (i = 0; i < 3; ++i) {
+                if ((float)fabs(grad_last_cur[i]) > max_allowed ||
+                    (float)fabs(grad_first_next[i]) > max_allowed) {
+                    is_cand = 0; break;
+                }
+            }
+        }
+
+        has_rf  = (desc->block_definitions[desc->block_table[bt_idx].id].rf_id >= 0);
+        has_adc = (desc->block_table[bt_idx].adc_id >= 0);
+
+        if (state == SEGSTATE_SEEKING_FIRST_ADC) {
+            if (is_cand) saved_cand = n;
+            if (has_rf)  { cand_before_rf = saved_cand; saved_cand = -1; }
+            if (has_adc) {
+                if (cand_before_rf > seg_start) {
+                    seg_starts[num_seg] = seg_start;
+                    seg_sizes[num_seg]  = cand_before_rf - seg_start;
+                    num_seg++;
+                    seg_start = cand_before_rf;
+                }
+                state = SEGSTATE_SEEKING_BOUNDARY;
+                has_saved_cand = 0;
+                saved_cand = -1;
+            }
+        } else if (state == SEGSTATE_SEEKING_BOUNDARY) {
+            if (is_cand) { saved_cand = n; has_saved_cand = 1; }
+            if (has_rf) {
+                if (has_saved_cand) {
+                    seg_starts[num_seg] = seg_start;
+                    seg_sizes[num_seg]  = saved_cand - seg_start;
+                    num_seg++;
+                    seg_start = saved_cand;
+                    has_saved_cand = 0;
+                    saved_cand = -1;
+                } else {
+                    state = SEGSTATE_OPTIMIZED_MODE;
+                }
+            }
+        }
+        /* SEGSTATE_OPTIMIZED_MODE: no action */
+    }
+
+    seg_starts[num_seg] = seg_start;
+    seg_sizes[num_seg]  = pat_start + nb - seg_start;
+    num_seg++;
+
+    for (i = 0; i < num_seg; ++i) {
+        segs[offset + i].start_block = seg_starts[i];
+        segs[offset + i].num_blocks  = seg_sizes[i];
+        segs[offset + i].unique_block_indices = NULL;
+    }
+
+    PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
+    return num_seg;
+}
+
+/* ================================================================== */
+/*  Strip pure delays (scan table variant)                            */
+/* ================================================================== */
+
+static int strip_pure_delays_scan(
+    const pulseqlib_tr_segment* raw_segs, int num_raw,
+    pulseqlib_tr_segment* out, int max_out,
+    const pulseqlib_block_table_element* bt,
+    const int* scan_block_idx)
+{
+    int num_out = 0;
+    int s, i, n_blk, bt_idx;
+    int leading, trailing, core_start, core_end, core_size;
+    const int* idx;
+
+    for (s = 0; s < num_raw; ++s) {
+        n_blk = raw_segs[s].num_blocks;
+        idx   = raw_segs[s].unique_block_indices;
+        if (n_blk == 0 || !idx) continue;
+
+        leading = 0;
+        for (i = 0; i < n_blk; ++i) {
+            bt_idx = scan_block_idx[raw_segs[s].start_block + i];
+            if (bt[bt_idx].duration_us >= 0) leading++;
+            else break;
+        }
+        trailing = 0;
+        for (i = n_blk - 1; i >= leading; --i) {
+            bt_idx = scan_block_idx[raw_segs[s].start_block + i];
+            if (bt[bt_idx].duration_us >= 0) trailing++;
+            else break;
+        }
+        core_start = leading;
+        core_end   = n_blk - trailing;
+
+        for (i = 0; i < leading; ++i) {
+            if (num_out >= max_out) return -1;
+            out[num_out].start_block = raw_segs[s].start_block + i;
+            out[num_out].num_blocks  = 1;
+            out[num_out].unique_block_indices = (int*)PULSEQLIB_ALLOC(sizeof(int));
+            if (!out[num_out].unique_block_indices) return -1;
+            out[num_out].unique_block_indices[0] = idx[i];
+            num_out++;
+        }
+        if (core_end > core_start) {
+            core_size = core_end - core_start;
+            if (num_out >= max_out) return -1;
+            out[num_out].start_block = raw_segs[s].start_block + core_start;
+            out[num_out].num_blocks  = core_size;
+            out[num_out].unique_block_indices = (int*)PULSEQLIB_ALLOC(core_size * sizeof(int));
+            if (!out[num_out].unique_block_indices) return -1;
+            for (i = 0; i < core_size; ++i)
+                out[num_out].unique_block_indices[i] = idx[core_start + i];
+            num_out++;
+        }
+        for (i = 0; i < trailing; ++i) {
+            if (num_out >= max_out) return -1;
+            out[num_out].start_block = raw_segs[s].start_block + core_end + i;
+            out[num_out].num_blocks  = 1;
+            out[num_out].unique_block_indices = (int*)PULSEQLIB_ALLOC(sizeof(int));
+            if (!out[num_out].unique_block_indices) return -1;
+            out[num_out].unique_block_indices[0] = idx[core_end + i];
+            num_out++;
+        }
+    }
+    return num_out;
+}
+
+/* ================================================================== */
+/*  Scan-table-based segment detection                                */
+/* ================================================================== */
+
+int pulseqlib__get_scan_table_segments(
+    pulseqlib_sequence_descriptor* desc,
+    pulseqlib_diagnostic* diag,
+    const pulseqlib_opts* opts)
+{
+    pulseqlib_diagnostic local_diag;
+    int* scan_pat         = NULL;
+    int* pattern_seg_id   = NULL;
+    float* max_energy     = NULL;
+    pulseqlib_tr_segment* raw_segs  = NULL;
+    pulseqlib_tr_segment* exp_segs  = NULL;
+    pulseqlib_tr_segment* uniq_segs = NULL;
+    int scan_len, scan_tr_size;
+    int num_raw, num_total, num_unique;
+    int n, b, i, found;
+    int num_raw_alloc, num_exp_alloc;
+    int pure_delay_idx, is_pure;
+    int seg_result, max_expanded;
+    int nb, unique_idx, blk_tab_idx, blk_def_id, shot_idx;
+    int ax_grad_ids[3], ax_def_ids[3], ax;
+    float inst_energy, e, amp;
+    const pulseqlib_block_table_element* bte;
+    const pulseqlib_block_definition* bdef;
+
+    if (!diag) { pulseqlib_diagnostic_init(&local_diag); diag = &local_diag; }
+    else       pulseqlib_diagnostic_init(diag);
+
+    if (!desc || !opts) {
+        diag->code = PULSEQLIB_ERR_NULL_POINTER;
+        return 0;
+    }
+    if (desc->scan_table_len <= 0 || !desc->scan_table_block_idx) {
+        diag->code = PULSEQLIB_ERR_INVALID_ARGUMENT;
+        return 0;
+    }
+
+    scan_len = desc->scan_table_len;
+    num_raw = 0; num_total = 0; num_unique = 0;
+    num_raw_alloc = 0; num_exp_alloc = 0;
+
+    /* ---- 1. Map scan table to block-def-ID pattern ---- */
+    scan_pat = (int*)PULSEQLIB_ALLOC((size_t)scan_len * sizeof(int));
+    if (!scan_pat) { diag->code = PULSEQLIB_ERR_ALLOC_FAILED; return 0; }
+    for (n = 0; n < scan_len; ++n)
+        scan_pat[n] = desc->block_table[desc->scan_table_block_idx[n]].id;
+
+    /* ---- 2. Find repeating pattern ---- */
+    scan_tr_size = first_repeating_segment(scan_pat, scan_len);
+
+    /* Verify tiling */
+    for (n = 0; n < scan_len; ++n) {
+        if (scan_pat[n] != scan_pat[n % scan_tr_size]) {
+            /* Pattern does not tile: treat entire scan table as one period */
+            scan_tr_size = scan_len;
+            break;
+        }
+    }
+
+    /* ---- 3. Find segments on the scan TR pattern ---- */
+    raw_segs = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(
+        (size_t)scan_tr_size * sizeof(pulseqlib_tr_segment));
+    if (!raw_segs) {
+        PULSEQLIB_FREE(scan_pat);
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        return 0;
+    }
+
+    seg_result = find_segments_on_scan_table(
+        desc, raw_segs, 0, diag, opts,
+        desc->scan_table_block_idx, 0, scan_tr_size);
+    if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) {
+        PULSEQLIB_FREE(scan_pat);
+        PULSEQLIB_FREE(raw_segs);
+        return 0;
+    }
+    num_raw = seg_result;
+
+    /* ---- 4. Populate unique_block_indices ---- */
+    for (n = 0; n < num_raw; ++n) {
+        raw_segs[n].unique_block_indices =
+            (int*)PULSEQLIB_ALLOC(raw_segs[n].num_blocks * sizeof(int));
+        if (!raw_segs[n].unique_block_indices) {
+            diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+            num_raw_alloc = n;
+            goto scan_seg_fail;
+        }
+        for (i = 0; i < raw_segs[n].num_blocks; ++i)
+            raw_segs[n].unique_block_indices[i] =
+                scan_pat[raw_segs[n].start_block + i];
+    }
+    num_raw_alloc = num_raw;
+
+    /* ---- 5. Strip pure delays ---- */
+    max_expanded = scan_tr_size;
+    exp_segs = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(
+        (size_t)max_expanded * sizeof(pulseqlib_tr_segment));
+    if (!exp_segs) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        goto scan_seg_fail;
+    }
+
+    num_total = strip_pure_delays_scan(
+        raw_segs, num_raw, exp_segs, max_expanded,
+        desc->block_table, desc->scan_table_block_idx);
+    if (num_total < 0) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        goto scan_seg_fail;
+    }
+    num_exp_alloc = num_total;
+
+    /* Free raw segments */
+    for (n = 0; n < num_raw_alloc; ++n)
+        PULSEQLIB_FREE(raw_segs[n].unique_block_indices);
+    PULSEQLIB_FREE(raw_segs); raw_segs = NULL;
+    num_raw_alloc = 0;
+
+    if (num_total == 0) {
+        diag->code = PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND;
+        goto scan_seg_fail;
+    }
+
+    /* ---- 6. Deduplicate segments ---- */
+    uniq_segs = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(
+        (size_t)num_total * sizeof(pulseqlib_tr_segment));
+    if (!uniq_segs) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        goto scan_seg_fail;
+    }
+
+    /* Build main segment table (single flat table, no prep/cooldown split) */
+    desc->segment_table.num_prep_segments     = 0;
+    desc->segment_table.prep_segment_table    = NULL;
+    desc->segment_table.num_cooldown_segments = 0;
+    desc->segment_table.cooldown_segment_table = NULL;
+    desc->segment_table.num_main_segments     = num_total;
+    desc->segment_table.main_segment_table    =
+        (int*)PULSEQLIB_ALLOC((size_t)num_total * sizeof(int));
+    if (!desc->segment_table.main_segment_table) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        goto scan_seg_fail;
+    }
+
+    num_unique = 0;
+    pure_delay_idx = -1;
+
+    for (n = 0; n < num_total; ++n) {
+        is_pure = (exp_segs[n].num_blocks == 1 &&
+                   desc->block_table[
+                       desc->scan_table_block_idx[exp_segs[n].start_block]
+                   ].duration_us >= 0);
+
+        if (is_pure) {
+            if (pure_delay_idx == -1) {
+                uniq_segs[num_unique].num_blocks  = 1;
+                uniq_segs[num_unique].start_block = exp_segs[n].start_block;
+                uniq_segs[num_unique].unique_block_indices =
+                    (int*)PULSEQLIB_ALLOC(sizeof(int));
+                if (!uniq_segs[num_unique].unique_block_indices) {
+                    diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+                    goto scan_seg_fail;
+                }
+                uniq_segs[num_unique].unique_block_indices[0] =
+                    exp_segs[n].unique_block_indices[0];
+                pure_delay_idx = num_unique;
+                num_unique++;
+            }
+            found = pure_delay_idx;
+        } else {
+            found = -1;
+            for (i = 0; i < num_unique; ++i) {
+                if (i == pure_delay_idx) continue;
+                if (exp_segs[n].num_blocks == uniq_segs[i].num_blocks &&
+                    array_equal(exp_segs[n].unique_block_indices,
+                                uniq_segs[i].unique_block_indices,
+                                exp_segs[n].num_blocks)) {
+                    found = i; break;
+                }
+            }
+            if (found == -1) {
+                uniq_segs[num_unique].num_blocks  = exp_segs[n].num_blocks;
+                uniq_segs[num_unique].start_block = exp_segs[n].start_block;
+                uniq_segs[num_unique].unique_block_indices =
+                    (int*)PULSEQLIB_ALLOC(exp_segs[n].num_blocks * sizeof(int));
+                if (!uniq_segs[num_unique].unique_block_indices) {
+                    diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+                    goto scan_seg_fail;
+                }
+                for (i = 0; i < exp_segs[n].num_blocks; ++i)
+                    uniq_segs[num_unique].unique_block_indices[i] =
+                        exp_segs[n].unique_block_indices[i];
+                found = num_unique;
+                num_unique++;
+            }
+        }
+
+        desc->segment_table.main_segment_table[n] = found;
+    }
+
+    desc->segment_table.num_unique_segments = num_unique;
+    desc->num_unique_segments = num_unique;
+
+    /* ---- 7. Transfer segment definitions ---- */
+    desc->segment_definitions = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(
+        (size_t)num_unique * sizeof(pulseqlib_tr_segment));
+    if (!desc->segment_definitions) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        goto scan_seg_fail;
+    }
+    for (i = 0; i < num_unique; ++i) {
+        desc->segment_definitions[i] = uniq_segs[i];
+        /* Convert start_block from scan table pos to block_table index */
+        desc->segment_definitions[i].start_block =
+            desc->scan_table_block_idx[uniq_segs[i].start_block];
+    }
+    PULSEQLIB_FREE(uniq_segs); uniq_segs = NULL;
+
+    /* ---- 8. Per-block flags ---- */
+    for (i = 0; i < num_unique; ++i) {
+        nb = desc->segment_definitions[i].num_blocks;
+        desc->segment_definitions[i].has_trigger  = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+        desc->segment_definitions[i].has_rotation = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+        desc->segment_definitions[i].norot_flag   = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+        desc->segment_definitions[i].nopos_flag   = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+        if (!desc->segment_definitions[i].has_trigger ||
+            !desc->segment_definitions[i].has_rotation ||
+            !desc->segment_definitions[i].norot_flag ||
+            !desc->segment_definitions[i].nopos_flag) {
+            diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+            goto scan_seg_fail;
+        }
+        for (n = 0; n < nb; ++n) {
+            desc->segment_definitions[i].has_trigger[n]  = 0;
+            desc->segment_definitions[i].has_rotation[n] = 0;
+            desc->segment_definitions[i].norot_flag[n]   = 0;
+            desc->segment_definitions[i].nopos_flag[n]   = 0;
+        }
+    }
+
+    /* ---- 9. Walk expanded segments, populate flags + max energy ---- */
+    max_energy = (float*)PULSEQLIB_ALLOC((size_t)num_unique * sizeof(float));
+    if (!max_energy) { diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto scan_seg_fail; }
+    for (i = 0; i < num_unique; ++i) {
+        max_energy[i] = 0.0f;
+        desc->segment_definitions[i].max_energy_start_block = 0;
+    }
+
+    for (n = 0; n < num_total; ++n) {
+        unique_idx = desc->segment_table.main_segment_table[n];
+        inst_energy = 0.0f;
+
+        for (b = 0; b < exp_segs[n].num_blocks; ++b) {
+            blk_tab_idx = desc->scan_table_block_idx[exp_segs[n].start_block + b];
+            bte = &desc->block_table[blk_tab_idx];
+            blk_def_id = bte->id;
+            bdef = &desc->block_definitions[blk_def_id];
+
+            if (bte->trigger_id  != -1)
+                desc->segment_definitions[unique_idx].has_trigger[b]  = 1;
+            if (bte->rotation_id != -1)
+                desc->segment_definitions[unique_idx].has_rotation[b] = 1;
+            if (bte->norot_flag)
+                desc->segment_definitions[unique_idx].norot_flag[b]   = 1;
+            if (bte->nopos_flag)
+                desc->segment_definitions[unique_idx].nopos_flag[b]   = 1;
+
+            ax_grad_ids[0] = bte->gx_id;
+            ax_grad_ids[1] = bte->gy_id;
+            ax_grad_ids[2] = bte->gz_id;
+            ax_def_ids[0]  = bdef->gx_id;
+            ax_def_ids[1]  = bdef->gy_id;
+            ax_def_ids[2]  = bdef->gz_id;
+
+            for (ax = 0; ax < 3; ++ax) {
+                if (ax_grad_ids[ax] >= 0 &&
+                    ax_grad_ids[ax] < desc->grad_table_size &&
+                    ax_def_ids[ax]  >= 0 &&
+                    ax_def_ids[ax]  < desc->num_unique_grads) {
+                    amp = desc->grad_table[ax_grad_ids[ax]].amplitude;
+                    shot_idx = desc->grad_table[ax_grad_ids[ax]].shot_index;
+                    e = desc->grad_definitions[ax_def_ids[ax]].energy[shot_idx];
+                    inst_energy += e * amp * amp;
+                }
+            }
+        }
+
+        if (inst_energy > max_energy[unique_idx]) {
+            max_energy[unique_idx] = inst_energy;
+            desc->segment_definitions[unique_idx].max_energy_start_block =
+                desc->scan_table_block_idx[exp_segs[n].start_block];
+        }
+    }
+
+    PULSEQLIB_FREE(max_energy); max_energy = NULL;
+
+    /* ---- 10. Build pattern_seg_id and fill scan_table_seg_id ---- */
+    pattern_seg_id = (int*)PULSEQLIB_ALLOC((size_t)scan_tr_size * sizeof(int));
+    if (!pattern_seg_id) {
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        goto scan_seg_fail;
+    }
+    /* Init to -1 */
+    for (n = 0; n < scan_tr_size; ++n) pattern_seg_id[n] = -1;
+
+    /* Walk expanded segments and assign each position its unique seg id */
+    for (n = 0; n < num_total; ++n) {
+        unique_idx = desc->segment_table.main_segment_table[n];
+        for (b = 0; b < exp_segs[n].num_blocks; ++b) {
+            i = exp_segs[n].start_block + b;
+            if (i >= 0 && i < scan_tr_size)
+                pattern_seg_id[i] = unique_idx;
+        }
+    }
+
+    /* Tile pattern across full scan table */
+    for (n = 0; n < scan_len; ++n)
+        desc->scan_table_seg_id[n] = pattern_seg_id[n % scan_tr_size];
+
+    PULSEQLIB_FREE(pattern_seg_id); pattern_seg_id = NULL;
+
+    /* ---- Cleanup ---- */
+    for (n = 0; n < num_exp_alloc; ++n)
+        PULSEQLIB_FREE(exp_segs[n].unique_block_indices);
+    PULSEQLIB_FREE(exp_segs); exp_segs = NULL;
+    PULSEQLIB_FREE(scan_pat); scan_pat = NULL;
+
+    diag->code = PULSEQLIB_OK;
+    return num_unique;
+
+scan_seg_fail:
+    if (pattern_seg_id) PULSEQLIB_FREE(pattern_seg_id);
+    if (max_energy) PULSEQLIB_FREE(max_energy);
+    if (uniq_segs) {
+        for (i = 0; i < num_unique; ++i)
+            if (uniq_segs[i].unique_block_indices)
+                PULSEQLIB_FREE(uniq_segs[i].unique_block_indices);
+        PULSEQLIB_FREE(uniq_segs);
+    }
+    if (exp_segs) {
+        for (n = 0; n < num_exp_alloc; ++n)
+            if (exp_segs[n].unique_block_indices)
+                PULSEQLIB_FREE(exp_segs[n].unique_block_indices);
+        PULSEQLIB_FREE(exp_segs);
+    }
+    if (raw_segs) {
+        for (n = 0; n < num_raw_alloc; ++n)
+            if (raw_segs[n].unique_block_indices)
+                PULSEQLIB_FREE(raw_segs[n].unique_block_indices);
+        PULSEQLIB_FREE(raw_segs);
+    }
+    if (scan_pat) PULSEQLIB_FREE(scan_pat);
+    return 0;
 }

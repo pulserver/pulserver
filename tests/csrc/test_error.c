@@ -223,7 +223,7 @@ MU_TEST(test_read_null_out)
     pulseqlib_opts opts;
     int rc;
     test_opts_init(&opts);
-    rc = pulseqlib_read(NULL, NULL, "dummy.seq", &opts, 0, 0, 0);
+    rc = pulseqlib_read(NULL, NULL, "dummy.seq", &opts, 0, 0, 0, 1);
     mu_assert(PULSEQLIB_FAILED(rc),
               "NULL out_coll should return error");
 }

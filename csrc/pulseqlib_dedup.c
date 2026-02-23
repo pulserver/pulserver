@@ -1307,9 +1307,26 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
         tmp_blk_defs[n].gx_id       = int_rows[unique_defs[n]][2];
         tmp_blk_defs[n].gy_id       = int_rows[unique_defs[n]][3];
         tmp_blk_defs[n].gz_id       = int_rows[unique_defs[n]][4];
+        tmp_blk_defs[n].adc_id      = -1;  /* no ADC until proven otherwise */
     }
     for (n = 0; n < num_blocks; ++n)
         tmp_blk_tab[n].id = event_table[n];
+
+    /* step 3b: resolve ADC definition per block definition */
+    for (n = 0; n < num_blocks; ++n) {
+        int blk_def_id, raw_adc, adc_def_id;
+        blk_def_id = tmp_blk_tab[n].id;
+        raw_adc    = tmp_blk_tab[n].adc_id;
+        if (raw_adc < 0 || !tmp_adc_tab) continue;    /* no ADC in this instance */
+        adc_def_id = tmp_adc_tab[raw_adc].id;
+        if (tmp_blk_defs[blk_def_id].adc_id < 0) {
+            tmp_blk_defs[blk_def_id].adc_id = adc_def_id;  /* first encounter */
+        } else if (tmp_blk_defs[blk_def_id].adc_id != adc_def_id) {
+            result = PULSEQLIB_ERR_ADC_DEFINITION_CONFLICT;
+            pulseqlib_sequence_descriptor_free(desc);
+            goto fail;
+        }
+    }
 
     PULSEQLIB_FREE(int_rows);    int_rows    = NULL;
     PULSEQLIB_FREE(unique_defs); unique_defs = NULL;
