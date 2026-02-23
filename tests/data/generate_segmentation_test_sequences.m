@@ -59,8 +59,28 @@ function fname = seq_filename(prefix, num_slices, suffix)
     fname = sprintf('%s_%dsl%s.seq', prefix, num_slices, suffix);
 end
 
-function check_and_write(seq, fname, fov, thick, num_slices, num_averages)
+function check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt)
 % Timing check, definitions, write, ground truth.
+%
+% gt (optional struct) contains structural ground truth:
+%   .tr_min          - mr.Sequence: representative TR with zero PE
+%                      (matches C library amplitude mode 2 = definition-min)
+%   .tr_max          - mr.Sequence: representative TR with max |PE|
+%                      (matches C library amplitude mode 1 = position-max)
+%   .rf_center_s     - RF isocenter offset within the shape (seconds)
+%   .adc_num_samples - number of ADC samples per readout
+%   .adc_dwell_s     - ADC dwell time (seconds)
+%   .seg_unique_ids  - cell array of int arrays, each cell is
+%                      unique block def IDs for one segment
+%   .unique_blocks   - int array of unique block def IDs for the
+%                      full TR (all segments concatenated)
+%   .num_prep_blocks - number of preparation blocks (ONCE=1 region)
+%   .num_cool_blocks - number of cooldown blocks (ONCE=2 region)
+%   .degenerate_prep - 1 if prep pattern == main pattern, 0 otherwise
+%   .degenerate_cool - 1 if cooldown pattern == main pattern, 0 otherwise
+
+    if nargin < 7, gt = struct(); end
+
     [ok, err] = seq.checkTiming;
     if ok
         fprintf('  [%s] Timing OK\n', fname);
@@ -78,23 +98,21 @@ function check_and_write(seq, fname, fov, thick, num_slices, num_averages)
     seq.write(fname);
 
     % Export ground truth
-    export_ground_truth(seq, fname, num_averages);
+    export_ground_truth(seq, fname, num_averages, gt);
 end
 
-function export_ground_truth(seq, seq_fname, num_averages)
-% Write per-block ground truth CSV and metadata text file.
+function export_ground_truth(seq, seq_fname, num_averages, gt)
+% Write ground truth files for C library validation.
 %
-% CSV columns (0-indexed block):
-%   idx, duration_us, rf_amp_hz, rf_freq_hz, rf_phase_rad,
-%   gx_amp, gy_amp, gz_amp, adc_flag, adc_freq_hz, adc_phase_rad
-%
-% The data corresponds to a single pass (num_averages == 1) through
-% all blocks.  For num_averages > 1 the cursor replays main blocks,
-% which the C test can derive from this base listing plus the
-% prep / cooldown boundaries.
+% Outputs (all <base>_* files):
+%   _blocks.csv   - per-block event summary
+%   _meta.txt     - key/value metadata (C-parseable)
+%   _segments.txt - segment definitions as unique block IDs
+%   _tr_gx.csv, _tr_gy.csv, _tr_gz.csv - TR gradient waveforms
+
+    if nargin < 4, gt = struct(); end
 
     N = length(seq.blockDurations);
-
     [~, base, ~] = fileparts(seq_fname);
 
     % --- per-block data ---
@@ -106,15 +124,10 @@ function export_ground_truth(seq, seq_fname, num_averages)
         blk = seq.getBlock(n);
         dur_us = round(seq.blockDurations(n) * 1e6);
 
-        % RF
         [rf_amp, rf_freq, rf_phase] = extract_rf(blk);
-
-        % Gradients
         gx_amp = extract_grad_amp(blk, 'gx');
         gy_amp = extract_grad_amp(blk, 'gy');
         gz_amp = extract_grad_amp(blk, 'gz');
-
-        % ADC
         [adc_flag, adc_freq, adc_phase] = extract_adc(blk);
         num_adcs = num_adcs + adc_flag;
 
@@ -130,6 +143,127 @@ function export_ground_truth(seq, seq_fname, num_averages)
     fprintf(fid, 'num_averages %d\n', num_averages);
     fprintf(fid, 'total_duration_us %d\n', round(sum(seq.blockDurations) * 1e6));
     fprintf(fid, 'num_adcs %d\n', num_adcs);
+
+    if isfield(gt, 'num_prep_blocks')
+        fprintf(fid, 'num_prep_blocks %d\n', gt.num_prep_blocks);
+    end
+    if isfield(gt, 'num_cool_blocks')
+        fprintf(fid, 'num_cool_blocks %d\n', gt.num_cool_blocks);
+    end
+    if isfield(gt, 'degenerate_prep')
+        fprintf(fid, 'degenerate_prep %d\n', gt.degenerate_prep);
+    end
+    if isfield(gt, 'degenerate_cool')
+        fprintf(fid, 'degenerate_cool %d\n', gt.degenerate_cool);
+    end
+    if isfield(gt, 'unique_blocks')
+        tr_size = length(gt.unique_blocks);
+        fprintf(fid, 'tr_size %d\n', tr_size);
+    end
+    if isfield(gt, 'seg_unique_ids')
+        fprintf(fid, 'num_segments %d\n', length(gt.seg_unique_ids));
+    end
+    fclose(fid);
+
+    % --- segment definitions (unique block IDs per segment) ---
+    if isfield(gt, 'seg_unique_ids')
+        fid = fopen([base '_segments.txt'], 'w');
+        for s = 1:length(gt.seg_unique_ids)
+            ids = gt.seg_unique_ids{s};
+            fprintf(fid, '%d', ids(1));
+            for k = 2:length(ids)
+                fprintf(fid, ' %d', ids(k));
+            end
+            fprintf(fid, '\n');
+        end
+        fclose(fid);
+    end
+
+    % --- TR gradient waveforms (min amplitude = definition-min, mode 2) ---
+    if isfield(gt, 'tr_min') && ~isempty(gt.tr_min)
+        export_tr_waveforms(gt.tr_min, base, '_min', gt);
+    end
+
+    % --- TR gradient waveforms (max positional amplitude, mode 1) ---
+    if isfield(gt, 'tr_max') && ~isempty(gt.tr_max)
+        export_tr_waveforms(gt.tr_max, base, '_max', gt);
+    end
+end
+
+function export_tr_waveforms(tr_seq, base, mode_suffix, gt)
+% Export per-axis gradient waveforms from a representative TR sequence.
+% Uses waveforms_and_times to get native-timing waveform points.
+%
+% Args:
+%   tr_seq      - mr.Sequence with one TR worth of blocks
+%   base        - output filename base (no extension)
+%   mode_suffix - '_min' or '_max' appended to filenames
+%   gt          - ground truth struct with rf_center_s, adc_num_samples,
+%                 adc_dwell_s for proper anchor computation
+%
+% waveforms_and_times returns:
+%   wave_data      - cell array {gx, gy, gz}, each 2xN (time;amplitude)
+%   tfp_excitation - Nx3 [time, freq, phase] for excitation RF pulses
+%                    time = block_start + rf.delay (shape onset, NOT isocenter)
+%   tfp_refocusing - Nx3 [time, freq, phase] for refocusing RF pulses
+%   t_adc          - vector of ALL ADC sample times (s)
+%
+% Output files:
+%   _tr<mode>_gx.csv, _tr<mode>_gy.csv, _tr<mode>_gz.csv
+%   _tr<mode>_anchors.txt  (RF isocenter + ADC k=0 center times)
+
+    [wave, tfp_exc, tfp_ref, t_adc] = tr_seq.waveforms_and_times();
+
+    axis_labels = {'gx', 'gy', 'gz'};
+    for c = 1:3
+        fname = sprintf('%s_tr%s_%s.csv', base, mode_suffix, axis_labels{c});
+        fid = fopen(fname, 'w');
+        fprintf(fid, 'time_us,amplitude_hz_per_m\n');
+
+        if c <= length(wave) && ~isempty(wave{c})
+            t = wave{c}(1,:) * 1e6;   % seconds -> us
+            a = wave{c}(2,:);          % Hz/m (Pulseq native)
+            for k = 1:length(t)
+                fprintf(fid, '%.6f,%.8g\n', t(k), a(k));
+            end
+        end
+        fclose(fid);
+    end
+
+    % --- RF/ADC timing anchors ---
+    fid = fopen(sprintf('%s_tr%s_anchors.txt', base, mode_suffix), 'w');
+
+    % RF isocenter = tfp_excitation time + rf.center
+    rf_center = 0;
+    if isfield(gt, 'rf_center_s'), rf_center = gt.rf_center_s; end
+
+    if ~isempty(tfp_exc)
+        for k = 1:size(tfp_exc, 1)
+            isocenter_us = (tfp_exc(k, 1) + rf_center) * 1e6;
+            fprintf(fid, 'rf_isocenter_us %.6f\n', isocenter_us);
+        end
+    end
+
+    if ~isempty(tfp_ref)
+        for k = 1:size(tfp_ref, 1)
+            isocenter_us = (tfp_ref(k, 1) + rf_center) * 1e6;
+            fprintf(fid, 'rf_refocus_isocenter_us %.6f\n', isocenter_us);
+        end
+    end
+
+    % ADC k-space center = first_sample_time + ceil(N/2) * dwell
+    if ~isempty(t_adc) && isfield(gt, 'adc_num_samples') && isfield(gt, 'adc_dwell_s')
+        % t_adc contains ALL sample times; find center of each ADC event
+        N_adc = gt.adc_num_samples;
+        dwell = gt.adc_dwell_s;
+        num_events = length(t_adc) / N_adc;
+        for ev = 1:num_events
+            first_idx = (ev - 1) * N_adc + 1;
+            kzero_us = (t_adc(first_idx) + ceil(N_adc / 2) * dwell) * 1e6;
+            fprintf(fid, 'adc_kzero_us %.6f\n', kzero_us);
+        end
+    end
+
     fclose(fid);
 end
 
@@ -309,14 +443,10 @@ function write_spgr(num_slices)
         'use', 'excitation', 'system', sys);
 
     deltak  = 1 / fov;
-    gx      = mr.makeTrapezoid('x', 'FlatArea', Nx * deltak, ...
-                               'FlatTime', roDur, 'system', sys);
-    adc     = mr.makeAdc(Nx, 'Duration', gx.flatTime, ...
-                         'Delay', gx.riseTime, 'system', sys);
-    gxPre   = mr.makeTrapezoid('x', 'Area', -gx.area / 2, ...
-                               'Duration', 1e-3, 'system', sys);
-    gzReph  = mr.makeTrapezoid('z', 'Area', -gz.area / 2, ...
-                               'Duration', 1e-3, 'system', sys);
+    gx      = mr.makeTrapezoid('x', 'FlatArea', Nx * deltak, 'FlatTime', roDur, 'system', sys);
+    adc     = mr.makeAdc(Nx, 'Duration', gx.flatTime, 'Delay', gx.riseTime, 'system', sys);
+    gxPre   = mr.makeTrapezoid('x', 'Area', -gx.area / 2, 'Duration', 1e-3, 'system', sys);
+    gzReph  = mr.makeTrapezoid('z', 'Area', -gz.area / 2, 'Duration', 1e-3, 'system', sys);
     gxSpoil = mr.makeTrapezoid('x', 'Area', 2 * Nx * deltak, 'system', sys);
     gzSpoil = mr.makeTrapezoid('z', 'Area', 4 / thick, 'system', sys);
 
@@ -351,43 +481,43 @@ function write_spgr(num_slices)
     rf_phase = 0;
     rf_inc   = 0;
 
-    % --- unique blocks ---
-    uniqueBlocksID = [];
+    % --- ground truth: segment defs as unique block IDs ---
+    seg_unique_ids = {[0, 1, 2, 3, 4]};  % single segment = full TR
 
-    % --- segments ----
-    tr = mr.Sequence(sys);
-    seg = {mr.Sequence(sys)};
+    % --- representative TRs for waveform ground truth ---
+    tr_min = mr.Sequence(sys);   % zero PE  (C library mode 2: definition-min)
+    tr_max = mr.Sequence(sys);   % max  |PE| (C library mode 1: position-max)
 
-    % --- prep: dummy scans (ONCE=1) / representative TR / segment  ---
+    % --- build representative TR: min amplitude (zero PE, mode 2) ---
+    tr_min.addBlock(rf, gz);
+    tr_min.addBlock(gxPre, mr.scaleGrad(gyMax, 0.0), gzReph);
+    tr_min.addBlock(evDelayTE);
+    tr_min.addBlock(gx, adc);
+    tr_min.addBlock(gxSpoil, mr.scaleGrad(gyMax, 0.0), gzSpoil, evDelayTR);
+
+    % --- build representative TR: max positional amplitude (full PE, mode 1) ---
+    tr_max.addBlock(rf, gz);
+    tr_max.addBlock(gxPre, gyMax, gzReph);
+    tr_max.addBlock(evDelayTE);
+    tr_max.addBlock(gx, adc);
+    tr_max.addBlock(gxSpoil, mr.scaleGrad(gyMax, -1), gzSpoil, evDelayTR);
+
+    % --- prep: dummy scans (ONCE=1) ---
     for d = 1:Ndummy
         rf.phaseOffset = rf_phase / 180 * pi;
         rf_inc   = mod(rf_inc + rfSpoilInc, 360.0);
         rf_phase = mod(rf_phase + rf_inc, 360.0);
 
-        seq.addBlock(rf, gz, lblOnce1); 
-        tr.addBlock(rf, gz); 
-        seg{1}.addBlock(rf, gz); 
-        uniqueBlocksID(end+1) = 0; % Excitation + Slice Selection
-        
-        seq.addBlock(gxPre, mr.scaleGrad(gyPre, 0.0), gzReph);     % no PE during dummies
-        tr.addBlock(gxPre, mr.scaleGrad(gyPre, 0.0), gzReph); 
-        seg{1}.addBlock(gxPre, mr.scaleGrad(gyPre, 0.0), gzReph); 
-        uniqueBlocksID(end+1) = 1; % Slice Rephasing + Phase prewind + Readout prewind
-        
-        seq.addBlock(evDelayTE);
-        tr.addBlock(evDelayTE); 
-        seg{1}.addBlock(evDelayTE); 
-        uniqueBlocksID(end+1) = 2; % Pure TE delay (no events)
-        
-        seq.addBlock(gx);                % no ADC
-        tr.addBlock(gx); 
-        seg{1}.addBlock(gx); 
-        uniqueBlocksID(end+1) = 3; % Readout gradient + ADC
+        if d == 1
+            seq.addBlock(rf, gz, lblOnce1);
+        else
+            seq.addBlock(rf, gz);
+        end
 
-        seq.addBlock(gxSpoil, mr.scaleGrad(gyPre, 0.0), gzSpoil, evDelayTR);
-        tr.addBlock(gxSpoil, mr.scaleGrad(gyPre, 0.0), gzSpoil, evDelayTR); 
-        seg{1}.addBlock(gxSpoil, mr.scaleGrad(gyPre, 0.0), gzSpoil, evDelayTR); 
-        uniqueBlocksID(end+1) = 4; % XZ Spoiler + rewind PE + TR delay
+        seq.addBlock(gxPre, mr.scaleGrad(gyMax, 0.0), gzReph);     % no PE during dummies
+        seq.addBlock(evDelayTE);
+        seq.addBlock(gx);                % no ADC
+        seq.addBlock(gxSpoil, mr.scaleGrad(gyMax, 0.0), gzSpoil, evDelayTR);
     end
 
     % --- main imaging loop ---
@@ -404,7 +534,11 @@ function write_spgr(num_slices)
                 pe_scale = 0;
             end
 
-            seq.addBlock(rf, gz, lblOnce0);
+            if i == 1 && s == 1
+                seq.addBlock(rf, gz, lblOnce0);
+            else
+                seq.addBlock(rf, gz);
+            end
             seq.addBlock(gxPre, mr.scaleGrad(gyMax, pe_scale), gzReph);
             seq.addBlock(evDelayTE);
             seq.addBlock(gx, adc);
@@ -424,13 +558,26 @@ function write_spgr(num_slices)
     fprintf('  TR = %.3f ms   TE = %.3f ms   Ndummy = %d\n', ...
             TR * 1e3, TE * 1e3, Ndummy);
 
+    % --- structural ground truth ---
+    gt.tr_min          = tr_min;
+    gt.tr_max          = tr_max;
+    gt.rf_center_s     = rf.center;                         % RF isocenter offset (s)
+    gt.adc_num_samples = adc.numSamples;                    % samples per readout
+    gt.adc_dwell_s     = adc.dwell;                         % dwell time (s)
+    gt.seg_unique_ids  = seg_unique_ids;
+    gt.unique_blocks   = [0, 1, 2, 3, 4];
+    gt.num_prep_blocks = Ndummy * 5;  % 5 blocks per dummy TR (no slice loop in dummies)
+    gt.num_cool_blocks = 0;
+    gt.degenerate_prep = 1;    % dummy TR pattern == imaging TR pattern
+    gt.degenerate_cool = 0;
+
     fname = seq_filename('gre_2d', num_slices);
-    check_and_write(seq, fname, fov, thick, num_slices, 1);
+    check_and_write(seq, fname, fov, thick, num_slices, 1, gt);
 end
 
 
 %% ========================================================================
-%  FSE  (turbo spin echo)
+%  FSE  (fast spin echo)
 %  ========================================================================
 
 function write_fse(num_slices)
@@ -618,7 +765,6 @@ function write_fse(num_slices)
         tr.addBlock(GS4); seg{1}.addBlock(GS4); uniqueBlocksID(end+1) = 8; % Slice Selection Part 4
         tr.addBlock(GS5); seg{1}.addBlock(GS5); uniqueBlocksID(end+1) = 9; % Slice Selection Part 5
         tr.addBlock(delayTR); seg{2}.addBlock(delayTR); uniqueBlocksID(end+1) = 10; % Delay TR
-
     end
 
     % --- main imaging loop ---
@@ -700,8 +846,7 @@ function write_epi(num_slices)
         'bandwidth', abs(sat_ppm * 1e-6 * sys.B0 * sys.gamma), ...
         'freqPPM', sat_ppm, 'use', 'saturation');
     rf_fs.phasePPM = -2*pi * rf_fs.freqPPM * rf_fs.center;
-    gz_fs = mr.makeTrapezoid('z', sys, 'delay', mr.calcDuration(rf_fs), ...
-                             'Area', 0.1 / 1e-4);
+    gz_fs = mr.makeTrapezoid('z', sys, 'delay', mr.calcDuration(rf_fs), 'Area', 0.1 / 1e-4);
 
     % Excitation
     [rf, gz, gzReph] = mr.makeSincPulse(pi / 2, 'system', sys, ...
@@ -717,8 +862,7 @@ function write_epi(num_slices)
     gy = mr.makeTrapezoid('y', sys, 'Area', -deltak, 'Duration', blip_dur);
 
     extra_area = blip_dur/2 * blip_dur/2 * sys.maxSlew;
-    gx = mr.makeTrapezoid('x', sys, 'Area', deltak * Nx + extra_area, ...
-                          'duration', readoutTime + blip_dur);
+    gx = mr.makeTrapezoid('x', sys, 'Area', deltak * Nx + extra_area, 'Duration', readoutTime + blip_dur);
     actual_area = gx.area ...
         - gx.amplitude / gx.riseTime  * blip_dur/2 * blip_dur/2 / 2 ...
         - gx.amplitude / gx.fallTime  * blip_dur/2 * blip_dur/2 / 2;
@@ -737,8 +881,7 @@ function write_epi(num_slices)
 
     % Split blips
     gy_parts = mr.splitGradientAt(gy, blip_dur / 2, sys);
-    [gy_blipup, gy_blipdown, ~] = mr.align('right', gy_parts(1), ...
-                                            'left', gy_parts(2), gx);
+    [gy_blipup, gy_blipdown, ~] = mr.align('right', gy_parts(1), 'left', gy_parts(2), gx);
     gy_blipdownup = mr.addGradients({gy_blipdown, gy_blipup}, sys);
 
     gy_blipup.waveform     = gy_blipup.waveform * pe_enable;
@@ -1033,215 +1176,3 @@ function write_mprage()
     fname = 'mprage_3d.seq';
     check_and_write(seq, fname, fov(1), fov(3), 1, 1);
 end
-
-
-%% ========================================================================
-%  Radial GRE (using mr.rotate)
-%  ========================================================================
-
-function write_radial(num_slices)
-    fprintf('Generating Radial GRE (%d slice) ...\n', num_slices);
-
-    sys = make_system();
-    seq = mr.Sequence(sys);
-
-    fov     = 260e-3;
-    Nx      = 320;
-    alpha   = 10;
-    thick   = 3e-3;
-    TE      = 8e-3;
-    TR      = 20e-3;
-    Nr      = 256;     % number of spokes
-    Nslices = num_slices;
-    Ndummy  = 20;
-    delta   = pi / Nr;
-    rfSpoilInc = 84;
-
-    % --- events ---
-    [rf, gz] = mr.makeSincPulse(alpha * pi / 180, 'Duration', 4e-3, ...
-        'SliceThickness', thick, 'apodization', 0.5, 'timeBwProduct', 4, ...
-        'system', sys, 'use', 'excitation');
-
-    deltak  = 1 / fov;
-    gx      = mr.makeTrapezoid('x', 'FlatArea', Nx * deltak, ...
-                               'FlatTime', 6.4e-3/5, 'system', sys);
-    adc     = mr.makeAdc(Nx, 'Duration', gx.flatTime, ...
-                         'Delay', gx.riseTime, 'system', sys);
-    gxPre   = mr.makeTrapezoid('x', 'Area', -gx.area/2 - deltak/2, ...
-                               'Duration', 2e-3, 'system', sys);
-    gzReph  = mr.makeTrapezoid('z', 'Area', -gz.area/2, ...
-                               'Duration', 2e-3, 'system', sys);
-    gxSpoil = mr.makeTrapezoid('x', 'Area', 0.5 * Nx * deltak, 'system', sys);
-    gzSpoil = mr.makeTrapezoid('z', 'Area', 4 / thick, 'system', sys);
-
-    delayTE = ceil((TE - mr.calcDuration(gxPre) - gz.fallTime ...
-              - gz.flatTime/2 - mr.calcDuration(gx)/2) ...
-              / seq.gradRasterTime) * seq.gradRasterTime;
-    delayTR = ceil((TR - mr.calcDuration(gxPre) - mr.calcDuration(gz) ...
-              - mr.calcDuration(gx) - delayTE) ...
-              / seq.gradRasterTime) * seq.gradRasterTime;
-    assert(delayTR >= mr.calcDuration(gxSpoil, gzSpoil), 'TR too short');
-    evDelayTE = mr.makeDelay(delayTE);
-    evDelayTR = mr.makeDelay(delayTR);
-
-    lblOnce1 = mr.makeLabel('SET', 'ONCE', 1);
-    lblOnce0 = mr.makeLabel('SET', 'ONCE', 0);
-    lblOnce2 = mr.makeLabel('SET', 'ONCE', 2);
-
-    rf_phase = 0;
-    rf_inc   = 0;
-
-    % --- prep: dummy spokes (ONCE=1) ---
-    seq.addBlock(lblOnce1);
-    for i = 1:Ndummy
-        phi = delta * (i - 1);
-        rf.phaseOffset = rf_phase / 180 * pi;
-        rf_inc   = mod(rf_inc + rfSpoilInc, 360.0);
-        rf_phase = mod(rf_phase + rf_inc, 360.0);
-
-        for s = 1:Nslices
-            rf.freqOffset = gz.amplitude * thick * (s - 1 - (Nslices-1)/2);
-            seq.addBlock(rf, gz);
-            seq.addBlock(mr.rotate('z', phi, gxPre, gzReph));
-            seq.addBlock(evDelayTE);
-            seq.addBlock(mr.rotate('z', phi, gx));  % no ADC
-            seq.addBlock(mr.rotate('z', phi, gxSpoil, gzSpoil, evDelayTR));
-        end
-    end
-    seq.addBlock(lblOnce0);  % end prep
-
-    % --- main: imaging spokes ---
-    for i = 1:Nr
-        phi = delta * (i - 1);
-        rf.phaseOffset  = rf_phase / 180 * pi;
-        adc.phaseOffset = rf_phase / 180 * pi;
-        rf_inc   = mod(rf_inc + rfSpoilInc, 360.0);
-        rf_phase = mod(rf_phase + rf_inc, 360.0);
-
-        for s = 1:Nslices
-            rf.freqOffset = gz.amplitude * thick * (s - 1 - (Nslices-1)/2);
-            seq.addBlock(rf, gz);
-            seq.addBlock(mr.rotate('z', phi, gxPre, gzReph));
-            seq.addBlock(evDelayTE);
-            seq.addBlock(mr.rotate('z', phi, gx, adc));
-            seq.addBlock(mr.rotate('z', phi, gxSpoil, gzSpoil, evDelayTR));
-        end
-    end
-
-    % --- cooldown (ONCE=2) ---
-    seq.addBlock(lblOnce2);
-
-    seq.setDefinition('FOV', [fov, fov, thick * Nslices]);
-    seq.setDefinition('Name', 'gre_rad');
-
-    fname = seq_filename('gre_rad', num_slices);
-    check_and_write(seq, fname, fov, thick, num_slices, 1);
-end
-
-
-%% ========================================================================
-%  Radial GRE with rotation extension (uses mr.makeRotation)
-%  ========================================================================
-
-function write_radial_rotext(num_slices)
-    fprintf('Generating Radial GRE rotext (%d slice) ...\n', num_slices);
-
-    sys = make_system();
-    seq = mr.Sequence(sys);
-
-    fov     = 260e-3;
-    Nx      = 320;
-    alpha   = 10;
-    thick   = 3e-3;
-    TE      = 8e-3;
-    TR      = 20e-3;
-    Nr      = 256;
-    Nslices = num_slices;
-    Ndummy  = 20;
-    delta   = pi / Nr;
-    rfSpoilInc = 84;
-
-    % --- events ---
-    [rf, gz] = mr.makeSincPulse(alpha * pi / 180, 'Duration', 4e-3, ...
-        'SliceThickness', thick, 'apodization', 0.5, 'timeBwProduct', 4, ...
-        'system', sys, 'use', 'excitation');
-
-    deltak  = 1 / fov;
-    gx      = mr.makeTrapezoid('x', 'FlatArea', Nx * deltak, ...
-                               'FlatTime', 6.4e-3/5, 'system', sys);
-    adc     = mr.makeAdc(Nx, 'Duration', gx.flatTime, ...
-                         'Delay', gx.riseTime, 'system', sys);
-    gxPre   = mr.makeTrapezoid('x', 'Area', -gx.area/2 - deltak/2, ...
-                               'Duration', 2e-3, 'system', sys);
-    gzReph  = mr.makeTrapezoid('z', 'Area', -gz.area/2, ...
-                               'Duration', 2e-3, 'system', sys);
-    gxSpoil = mr.makeTrapezoid('x', 'Area', 0.5 * Nx * deltak, 'system', sys);
-    gzSpoil = mr.makeTrapezoid('z', 'Area', 4 / thick, 'system', sys);
-
-    delayTE = ceil((TE - mr.calcDuration(gxPre) - gz.fallTime ...
-              - gz.flatTime/2 - mr.calcDuration(gx)/2) ...
-              / seq.gradRasterTime) * seq.gradRasterTime;
-    delayTR = ceil((TR - mr.calcDuration(gxPre) - mr.calcDuration(gz) ...
-              - mr.calcDuration(gx) - delayTE) ...
-              / seq.gradRasterTime) * seq.gradRasterTime;
-    assert(delayTR >= mr.calcDuration(gxSpoil, gzSpoil), 'TR too short');
-    evDelayTE = mr.makeDelay(delayTE);
-    evDelayTR = mr.makeDelay(delayTR);
-
-    lblOnce1 = mr.makeLabel('SET', 'ONCE', 1);
-    lblOnce0 = mr.makeLabel('SET', 'ONCE', 0);
-    lblOnce2 = mr.makeLabel('SET', 'ONCE', 2);
-
-    rf_phase = 0;
-    rf_inc   = 0;
-
-    % --- prep: dummy spokes (ONCE=1) ---
-    seq.addBlock(lblOnce1);
-    for i = 1:Ndummy
-        phi = delta * (i - 1);
-        rot = mr.makeRotation(phi);
-        rf.phaseOffset = rf_phase / 180 * pi;
-        rf_inc   = mod(rf_inc + rfSpoilInc, 360.0);
-        rf_phase = mod(rf_phase + rf_inc, 360.0);
-
-        for s = 1:Nslices
-            rf.freqOffset = gz.amplitude * thick * (s - 1 - (Nslices-1)/2);
-            seq.addBlock(rf, gz);
-            seq.addBlock(gxPre, gzReph, rot);
-            seq.addBlock(evDelayTE);
-            seq.addBlock(gx, rot);           % no ADC
-            seq.addBlock(gxSpoil, gzSpoil, evDelayTR, rot);
-        end
-    end
-    seq.addBlock(lblOnce0);  % end prep
-
-    % --- main: imaging spokes ---
-    for i = 1:Nr
-        phi = delta * (i - 1);
-        rot = mr.makeRotation(phi);
-        rf.phaseOffset  = rf_phase / 180 * pi;
-        adc.phaseOffset = rf_phase / 180 * pi;
-        rf_inc   = mod(rf_inc + rfSpoilInc, 360.0);
-        rf_phase = mod(rf_phase + rf_inc, 360.0);
-
-        for s = 1:Nslices
-            rf.freqOffset = gz.amplitude * thick * (s - 1 - (Nslices-1)/2);
-            seq.addBlock(rf, gz);
-            seq.addBlock(gxPre, gzReph, rot);
-            seq.addBlock(evDelayTE);
-            seq.addBlock(gx, adc, rot);
-            seq.addBlock(gxSpoil, gzSpoil, evDelayTR, rot);
-        end
-    end
-
-    % --- cooldown (ONCE=2) ---
-    seq.addBlock(lblOnce2);
-
-    seq.setDefinition('FOV', [fov, fov, thick * Nslices]);
-    seq.setDefinition('Name', 'gre_rad_rotext');
-
-    fname = seq_filename('gre_rad_rotext', num_slices);
-    check_and_write(seq, fname, fov, thick, num_slices, 1);
-end
-
-
