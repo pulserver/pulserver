@@ -27,10 +27,11 @@ write_fse(1);
 write_fse(3);
 write_epi(1);
 write_epi(3);
-write_mprage();
-write_radial(1);
-write_radial(3);
-write_radial_rotext(1);
+write_mprage(204);
+write_mprage(2048); % MRF-style
+write_mprage_noncart(204, false);
+write_mprage_noncart(204, true);
+
 
 fprintf('\n=== All segmentation test sequences generated. ===\n');
 
@@ -193,6 +194,16 @@ function export_ground_truth(seq, seq_fname, num_averages, gt)
     % --- TR gradient waveforms (max positional amplitude, mode 1) ---
     if isfield(gt, 'tr_max') && ~isempty(gt.tr_max)
         export_tr_waveforms(gt.tr_max, base, '_max', gt);
+    end
+
+    % --- prep TR waveforms (actual amplitude, mode 0) ---
+    if isfield(gt, 'tr_prep') && ~isempty(gt.tr_prep)
+        export_tr_waveforms(gt.tr_prep, base, '_prep', gt);
+    end
+
+    % --- cooldown TR waveforms (actual amplitude, mode 0) ---
+    if isfield(gt, 'tr_cool') && ~isempty(gt.tr_cool)
+        export_tr_waveforms(gt.tr_cool, base, '_cool', gt);
     end
 end
 
@@ -443,20 +454,45 @@ function write_bssfp(num_slices)
                    + mr.calcDuration(seq.getBlock(5)))) < 1e-12);
 
     % --- representative TRs for waveform ground truth ---
-    tr_min = mr.Sequence(sys);  % zero PE (C library mode 2: definition-min)
-    tr_max = mr.Sequence(sys);  % max |PE| (C library mode 1: position-max)
+    tr_min  = mr.Sequence(sys);  % zero PE (C library mode 2: definition-min)
+    tr_max  = mr.Sequence(sys);  % max |PE| (C library mode 1: position-max)
+    tr_prep = mr.Sequence(sys);  % prep TR: prep blocks + first main TR (actual amplitudes)
+    tr_cool = mr.Sequence(sys);  % cool TR: last main TR + exit block (actual amplitudes)
 
+    % Main TR: min (zero PE)
     tr_min.addBlock(rf, gz_1, mr.scaleGrad(gyMax, 0), gx_2);
     tr_min.addBlock(gx_1, mr.scaleGrad(gyMax, 0), gz_2, adc);
 
+    % Main TR: max (full |PE|)
     tr_max.addBlock(rf, gz_1, gyMax, gx_2);
     tr_max.addBlock(gx_1, gyMax, gz_2, adc);
+
+    % Prep TR = prep blocks (alpha/2 + align + lblOnce0) + first main TR
+    % Use actual amplitudes: alpha/2 RF + last PE from previous TR
+    tr_prep.addBlock(rf05, gz_1);                                          % alpha/2
+    tr_prep.addBlock(mr.align('left', prepDelay, gz_2, gyPre_2, 'right', gx_1_1)); % align block
+    % lblOnce0 is label-only (no gradients) — still a block in the sequence
+    % First main block uses gyPre_1 = undo of last prep PE, gyPre_2 = first PE
+    gyPre_1_first = mr.scaleGrad(gyPre_2, -1);
+    gyPre_2_first = mr.scaleGrad(gyMax, phaseAreas(1) / maxPeArea);
+    tr_prep.addBlock(rf, gz_1, gyPre_1_first, gx_2);
+    tr_prep.addBlock(gx_1, gyPre_2_first, gz_2, adc);
+
+    % Cooldown TR = last main TR + exit block
+    % Last main TR uses gyPre_1 = undo of previous PE, gyPre_2 = last PE
+    gyPre_1_last = mr.scaleGrad(gyMax, -phaseAreas(end-1) / maxPeArea);
+    gyPre_2_last = mr.scaleGrad(gyMax, phaseAreas(end) / maxPeArea);
+    tr_cool.addBlock(rf, gz_1, gyPre_1_last, gx_2);
+    tr_cool.addBlock(gx_1, gyPre_2_last, gz_2, adc);
+    tr_cool.addBlock(gx_2);  % exit block
 
     fprintf('  TR = %.3f ms   TE = %.3f ms\n', TR * 1e3, TE * 1e3);
 
     % --- structural ground truth ---
     gt.tr_min          = tr_min;
     gt.tr_max          = tr_max;
+    gt.tr_prep         = tr_prep;
+    gt.tr_cool         = tr_cool;
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
@@ -830,10 +866,18 @@ function write_fse(num_slices)
     tr_max.addBlock(GS2, rfex);
     tr_max.addBlock(GS3, GR3);
     for kech = 1:necho
+        phaseArea = phaseAreas(kech, 1);
+        if maxPeArea > 0 && kex > 0
+            pe_scale = phaseArea / maxPeArea;
+        else
+            pe_scale = 0;
+        end
+        GPpre = mr.scaleGrad(gyMax, pe_scale);
+        GPrew = mr.scaleGrad(gyMax, -pe_scale);
         tr_max.addBlock(GS4, rfref);
-        tr_max.addBlock(GS5, GR5, gyMax);
+        tr_max.addBlock(GS5, GR5, GPpre);
         tr_max.addBlock(GR6, adc);
-        tr_max.addBlock(GS7, GR7, mr.scaleGrad(gyMax, -1));
+        tr_max.addBlock(GS7, GR7, GPrew);
     end
     tr_max.addBlock(GS4);
     tr_max.addBlock(GS5);
@@ -1007,7 +1051,6 @@ function write_epi(num_slices)
     % Labels
     lblOnce1  = mr.makeLabel('SET', 'ONCE', 1);
     lblOnce0  = mr.makeLabel('SET', 'ONCE', 0);
-    lblOnce2  = mr.makeLabel('SET', 'ONCE', 2);
     lblSetSlc = mr.makeLabel('SET', 'SLC', 0);
     lblIncSlc = mr.makeLabel('INC', 'SLC', 1);
     lblIncRep = mr.makeLabel('INC', 'REP', 1);
@@ -1111,9 +1154,6 @@ function write_epi(num_slices)
         seq.addBlock(TRdelay_perSlice);
     end
 
-    % --- cooldown (ONCE=2) ---
-    seq.addBlock(lblIncRep, lblOnce2);
-
     % Definitions
     seq.setDefinition('Name', 'epi');
     seq.setDefinition('SlicePositions', slicePositions);
@@ -1121,13 +1161,96 @@ function write_epi(num_slices)
     seq.setDefinition('SliceGap', sliceGap);
     seq.setDefinition('ReadoutOversamplingFactor', ro_os);
 
+    % --- representative TRs for waveform ground truth ---
+    % EPI: each "TR" is one slice excitation through readout train.
+    % Block structure per slice (main):
+    %   0: rf_fs + gz_fs         (fat-sat)
+    %   1: rf + gz + trig        (excitation)
+    %   2: gxPre_nav + gzReph    (prephasing, reversed for nav)
+    %   3..3+2*Nnav-1: label + gx_tmp+adc  (navigator pairs)
+    %   3+2*Nnav: gyPre + labels (PE prephasing)
+    %   then Ny_meas readout blocks: gx + blip + adc
+    %   Ny_meas+...: lblIncSlc, TRdelay
+
+    tr_min = mr.Sequence(sys);  % definition-min (mode 2)
+    tr_max = mr.Sequence(sys);  % position-max (mode 1)
+
+    % For EPI the readout gradient alternates polarity each line.
+    % min-amplitude: just the readout train structure (no PE blips contribute)
+    % max-amplitude: same structure (PE blips are same for all shots)
+    % Both are identical for EPI since there's only one shot pattern.
+
+    % Fat-sat + excitation
+    tr_min.addBlock(rf_fs, gz_fs);
+    tr_min.addBlock(rf, gz, trig);
+    tr_max.addBlock(rf_fs, gz_fs);
+    tr_max.addBlock(rf, gz, trig);
+
+    % Navigator prephasing + navigator echoes
+    gxPre_nav = mr.scaleGrad(gxPre, -1);
+    gx_tmp    = mr.scaleGrad(gx, -1);
+    tr_min.addBlock(gxPre_nav, gzReph);
+    tr_max.addBlock(gxPre_nav, gzReph);
+    for n = 1:Nnav
+        tr_min.addBlock(gx_tmp, adc);
+        tr_max.addBlock(gx_tmp, adc);
+        gx_tmp = mr.scaleGrad(gx_tmp, -1);
+    end
+
+    % PE prephasing
+    tr_min.addBlock(gyPre);
+    tr_max.addBlock(gyPre);
+
+    % Readout train
+    gx_ro = gx;  % ensure positive polarity at start
+    if sign(gx_ro.amplitude) ~= ROpolarity
+        gx_ro = mr.scaleGrad(gx_ro, -1);
+    end
+    for i = 1:Ny_meas
+        if i == 1
+            tr_min.addBlock(gx_ro, gy_blipup, adc);
+            tr_max.addBlock(gx_ro, gy_blipup, adc);
+        elseif i == Ny_meas
+            tr_min.addBlock(gx_ro, gy_blipdown, adc);
+            tr_max.addBlock(gx_ro, gy_blipdown, adc);
+        else
+            tr_min.addBlock(gx_ro, gy_blipdownup, adc);
+            tr_max.addBlock(gx_ro, gy_blipdownup, adc);
+        end
+        gx_ro = mr.scaleGrad(gx_ro, -1);
+    end
+
+    % TR delay
+    tr_min.addBlock(TRdelay_perSlice);
+    tr_max.addBlock(TRdelay_perSlice);
+
     % --- structural ground truth ---
+    % Block defs (dedup key = duration, rf_def, gx_def, gy_def, gz_def;
+    %             amplitude is scalar, NOT in key):
+    %   0: label-only               (min-duration: ONCE, SLC, NAV, SEG, etc.)
+    %   1: rf_fs + gz_fs            (fat-sat)
+    %   2: rf + gz + trig           (excitation + slice-select)
+    %   3: gxPre + gzReph           (nav/readout prephasing)
+    %   4: gx + adc                 (nav readout, shape-only)
+    %   5: gyPre                    (PE prephasing)
+    %   6: gx + gy_blipup + adc     (first readout line)
+    %   7: gx + gy_blipdownup + adc (middle readout lines)
+    %   8: gx + gy_blipdown + adc   (last readout line)
+    %   9: TRdelay                  (per-slice delay)
+
     % Prep: lblOnce1 + lblSetSlc + Nslices*(2+1+Nnav+1+Ny_meas+1+1) + lblOnce0
     blocks_per_slice_prep = 2 + 1 + Nnav + 1 + Ny_meas + 1 + 1;
+    gt.tr_min          = tr_min;
+    gt.tr_max          = tr_max;
+    gt.rf_center_s     = rf.center;
+    gt.adc_num_samples = adc.numSamples;
+    gt.adc_dwell_s     = adc.dwell;
+    gt.seg_unique_ids  = {0:9};       % single segment = full per-volume TR
+    gt.unique_blocks   = 0:9;
     gt.num_prep_blocks = 2 + blocks_per_slice_prep * Nslices + 1;
-    gt.num_cool_blocks = 1;           % lblIncRep + lblOnce2
+    gt.num_cool_blocks = 0;
     gt.degenerate_prep = 0;           % nav structure differs (no ADC, no labels)
-    gt.degenerate_cool = 0;           % single label block
+    gt.degenerate_cool = 0;
 
     fname = seq_filename('epi_2d', num_slices);
     check_and_write(seq, fname, fov, thick, num_slices, 1, gt);
@@ -1138,7 +1261,7 @@ end
 %  MPRAGE (3D inversion-recovery GRE)
 %  ========================================================================
 
-function write_mprage()
+function write_mprage(num_shots)
     fprintf('Generating MPRAGE ...\n');
 
     sys = make_system();
@@ -1154,7 +1277,7 @@ function write_mprage()
     rfLen   = 100e-6;
 
     fov = [192, 240, 256] * 1e-3;
-    N   = [192, 240, 256];
+    N   = [192, num_shots, 256];
     ax.d1 = 'z'; ax.d2 = 'x';
     ax.d3 = setdiff('xyz', [ax.d1, ax.d2]);
     ax.n1 = strfind('xyz', ax.d1);
@@ -1209,7 +1332,6 @@ function write_mprage()
     lblResetPar = mr.makeLabel('SET', 'PAR', 0);
     lblOnce1   = mr.makeLabel('SET', 'ONCE', 1);
     lblOnce0   = mr.makeLabel('SET', 'ONCE', 0);
-    lblOnce2   = mr.makeLabel('SET', 'ONCE', 2);
 
     % Pre-register unchanging events
     gslSp.id  = seq.registerGradEvent(gslSp);
@@ -1248,8 +1370,7 @@ function write_mprage()
             if i == 1
                 seq.addBlock(rf);
             else
-                seq.addBlock(rf, groSp, ...
-                    mr.scaleGrad(gpe1, -pe1Steps(i-1)), gpe2jr, lblIncPar);
+                seq.addBlock(rf, groSp, mr.scaleGrad(gpe1, -pe1Steps(i-1)), gpe2jr, lblIncPar);
             end
             seq.addBlock(adc, gro1, ...
                 mr.scaleGrad(gpe1, pe1Steps(i)), gpe2je);
@@ -1257,19 +1378,235 @@ function write_mprage()
         seq.addBlock(groSp, mr.makeDelay(TRoutDelay), lblResetPar, lblIncLin);
     end
 
-    % Cooldown (ONCE=2)
-    seq.addBlock(lblOnce2);
-
     seq.setDefinition('FOV', fov);
     seq.setDefinition('Name', 'mprage');
     seq.setDefinition('OrientationMapping', 'SAG');
 
+    % --- representative TRs for waveform ground truth ---
+    % MPRAGE inner TR = 2 blocks: rf + groSp/PE (combined), adc + gro1/PE
+    % For position-max (mode 1): use max |PE| on both axes
+    % For definition-min (mode 2): use zero PE
+
+    tr_min = mr.Sequence(sys);  % zero PE (mode 2: definition-min)
+    tr_max = mr.Sequence(sys);  % max |PE| (mode 1: position-max)
+
+    % Inner TR min: first block = rf only (no groSp/PE), second = adc + gro1 (no PE)
+    tr_min.addBlock(rf);
+    tr_min.addBlock(adc, gro1);
+
+    % Inner TR max: first block = rf + groSp + max PEs, second = adc + gro1 + max PEs
+    tr_max.addBlock(rf, groSp, gpe1, gpe2);
+    tr_max.addBlock(adc, gro1, mr.scaleGrad(gpe1, -1), mr.scaleGrad(gpe2, -1));
+
     % --- structural ground truth ---
+    % Block defs (dedup key = duration, rf_def, gx_def, gy_def, gz_def;
+    %             amplitude is scalar, NOT in key):
+    %   0: rf180                         (inversion pulse, no gradients)
+    %   1: TIdelay + gslSp               (TI delay + y-axis spoiler)
+    %   2: label-only                    (lblOnce0 in prep)
+    %   3: rf                            (inner TR first block, rf only)
+    %   4: rf + groSp + gpe1 + gpe2      (inner TR i>1, rf + z-spoiler + PE rewind)
+    %   5: adc + gro1 + gpe1 + gpe2      (readout + PE encode)
+    %   6: groSp + TRoutDelay            (end-of-partition, z-spoiler + delay)
+    gt.tr_min          = tr_min;
+    gt.tr_max          = tr_max;
+    gt.rf_center_s     = rf.center;
+    gt.adc_num_samples = adc.numSamples;
+    gt.adc_dwell_s     = adc.dwell;
+    gt.seg_unique_ids  = {[0, 1, 3, 4, 5, 6]};  % outer TR (j>1 pattern)
+    gt.unique_blocks   = 0:6;
     gt.num_prep_blocks = 3;   % rf180+lblOnce1, TIdelay+gslSp, lblOnce0
-    gt.num_cool_blocks = 1;   % lblOnce2
+    gt.num_cool_blocks = 0;
     gt.degenerate_prep = 0;   % inversion prep ~= inner TR pattern
-    gt.degenerate_cool = 0;   % single label block
+    gt.degenerate_cool = 0;
 
     fname = 'mprage_3d.seq';
+    check_and_write(seq, fname, fov(1), fov(3), 1, 1, gt);
+end
+
+%% ========================================================================
+%  Noncartesian MPRAGE (3D stack-of-stars inversion-recovery GRE)
+%  ========================================================================
+
+function write_mprage_noncart(num_shots, use_rotext)
+    fprintf('Generating Noncartesian MPRAGE (%d shots, rotext=%d) ...\n', ...
+            num_shots, use_rotext);
+
+    sys = make_system();
+    seq = mr.Sequence(sys);
+
+    alpha      = 7;             % flip angle [deg]
+    ro_dur     = 5040e-6;       % RO duration (multiple of 20us)
+    ro_os      = 1;
+    ro_spoil   = 3;
+    TI         = 1.1;
+    TRout      = 2.5;
+    rfSpoilInc = 84;
+    rfLen      = 100e-6;
+
+    fov = [192, 240, 256] * 1e-3;
+    N   = [192, num_shots, 256];
+    ax.d1 = 'z'; ax.d2 = 'x';
+    ax.d3 = setdiff('xyz', [ax.d1, ax.d2]);
+    ax.n1 = strfind('xyz', ax.d1);
+    ax.n2 = strfind('xyz', ax.d2);
+    ax.n3 = strfind('xyz', ax.d3);
+
+    % --- events ---
+    rf180 = mr.makeAdiabaticPulse('hypsec', sys, ...
+        'Duration', 10.24e-3, 'dwell', 1e-5, 'use', 'excitation');
+    rf = mr.makeBlockPulse(alpha * pi / 180, sys, ...
+        'Duration', rfLen, 'use', 'excitation');
+
+    deltak = 1 ./ fov;
+
+    % Readout trapezoid template → arbitrary waveform for rotation
+    groTrap = mr.makeTrapezoid(ax.d1, ...
+        'Amplitude', N(ax.n1) * deltak(ax.n1) / ro_dur, ...
+        'FlatTime', ceil((ro_dur + sys.adcDeadTime) / sys.gradRasterTime) ...
+                    * sys.gradRasterTime, 'system', sys);
+    times    = cumsum([0, groTrap.riseTime, groTrap.flatTime, groTrap.fallTime]);
+    amp      = [0, groTrap.amplitude, groTrap.amplitude, 0];
+    waveform = mr.pts2waveform(times, amp, 'system', sys);
+    groArbX  = mr.makeArbitraryGrad(ax.d1, waveform, 'system', sys);
+    groArbY  = mr.makeArbitraryGrad(ax.d2, 0 * waveform, 'system', sys);
+
+    % ADC
+    adc = mr.makeAdc(N(ax.n1) * ro_os, 'Duration', ro_dur, ...
+                     'Delay', groTrap.riseTime, 'system', sys);
+
+    % Readout spoiler (along d1 = 'z')
+    groSp = mr.makeTrapezoid(ax.d1, ...
+        'Area', deltak(ax.n1) / 2 * N(ax.n1) * ro_spoil, 'system', sys);
+
+    % Partition encoding (along d3 = 'y')
+    gpe2 = mr.makeTrapezoid(ax.d3, ...
+        'Area', -deltak(ax.n3) * N(ax.n3) / 2, 'system', sys);
+
+    % Slab spoiler (along d3 = 'y')
+    gslSp = mr.makeTrapezoid(ax.d3, ...
+        'Area', max(deltak .* N) * 4, 'Duration', 10e-3, 'system', sys);
+
+    % RF delay to accommodate spoiler + partition rewind
+    rf.delay = mr.calcDuration(groSp, gpe2);
+
+    TRinner = mr.calcDuration(rf) + mr.calcDuration(groArbX);
+
+    pe2Steps = ((0:N(ax.n3)-1) - N(ax.n3)/2) / N(ax.n3) * 2;
+
+    % TI delay — for radial, every spoke passes through k-center,
+    % so TI targets the first excitation of each partition
+    TIdelay = round((TI ...
+              - (mr.calcDuration(rf180) - mr.calcRfCenter(rf180) - rf180.delay) ...
+              - rf.delay - mr.calcRfCenter(rf)) / sys.blockDurationRaster) ...
+              * sys.blockDurationRaster;
+    TRoutDelay = TRout - TRinner * N(ax.n2) - TIdelay - mr.calcDuration(rf180);
+
+    % Pre-create labels
+    lblIncLin   = mr.makeLabel('INC', 'LIN', 1);
+    lblIncPar   = mr.makeLabel('INC', 'PAR', 1);
+    lblResetPar = mr.makeLabel('SET', 'PAR', 0);
+    lblOnce1    = mr.makeLabel('SET', 'ONCE', 1);
+    lblOnce0    = mr.makeLabel('SET', 'ONCE', 0);
+
+    % Pre-register unchanging events
+    gslSp.id  = seq.registerGradEvent(gslSp);
+    groSp.id  = seq.registerGradEvent(groSp);
+    [~, rf.shapeIDs]           = seq.registerRfEvent(rf);
+    [rf180.id, rf180.shapeIDs] = seq.registerRfEvent(rf180);
+    lblIncPar.id = seq.registerLabelEvent(lblIncPar);
+
+    % Build sequence
+    % First inversion block (prep, ONCE=1)
+    seq.addBlock(rf180, lblOnce1);
+    seq.addBlock(TIdelay, gslSp);
+    seq.addBlock(lblOnce0);  % end prep
+
+    rf_phase = 0;
+    rf_inc   = 0;
+    phi      = 0;
+    dphi     = 137.51 * pi / 180;  % golden angle [rad]
+
+    for j = 1:N(ax.n3)
+        if j > 1
+            seq.addBlock(rf180);
+            seq.addBlock(TIdelay, gslSp);
+        end
+
+        gpe2je    = mr.scaleGrad(gpe2, pe2Steps(j));
+        gpe2je.id = seq.registerGradEvent(gpe2je);
+        gpe2jr    = mr.scaleGrad(gpe2, -pe2Steps(j));
+        gpe2jr.id = seq.registerGradEvent(gpe2jr);
+
+        for i = 1:N(ax.n2)
+            rf.phaseOffset  = rf_phase / 180 * pi;
+            adc.phaseOffset = rf_phase / 180 * pi;
+            rf_inc   = mod(rf_inc + rfSpoilInc, 360.0);
+            rf_phase = mod(rf_phase + rf_inc, 360.0);
+
+            % RF block: first shot = rf only; subsequent = rf + spoiler + PE2 rewind
+            if i == 1
+                seq.addBlock(rf);
+            else
+                seq.addBlock(rf, groSp, gpe2jr, lblIncPar);
+            end
+
+            % Readout block: rotated arbitrary gradients + PE2 encode + ADC
+            if use_rotext
+                seq.addBlock(adc, groArbX, gpe2je, ...
+                    mr.makeRotation('axis', ax.d3, 'angle', phi));
+            else
+                seq.addBlock(adc, ...
+                    mr.rotate(ax.d3, phi, groArbX, groArbY), gpe2je);
+            end
+
+            phi = phi + dphi;
+        end
+        seq.addBlock(groSp, mr.makeDelay(TRoutDelay), lblResetPar, lblIncLin);
+    end
+
+    seq.setDefinition('FOV', fov);
+    seq.setDefinition('Name', 'mprage_noncart');
+    seq.setDefinition('OrientationMapping', 'SAG');
+
+    % --- representative TRs for waveform ground truth ---
+    % Noncart inner TR = 2 blocks: rf (+ spoiler + PE2 rewind), adc + rotated grads (+ PE2)
+    % For representative TRs, use unrotated (phi=0) readout as base shape.
+
+    tr_min = mr.Sequence(sys);  % zero PE2 (mode 2: definition-min)
+    tr_max = mr.Sequence(sys);  % max |PE2| (mode 1: position-max)
+
+    % tr_min: first shot, no spoiler, no PE2
+    tr_min.addBlock(rf);
+    tr_min.addBlock(adc, groArbX, groArbY);
+
+    % tr_max: subsequent shot, with spoiler + full PE2
+    tr_max.addBlock(rf, groSp, gpe2);
+    tr_max.addBlock(adc, groArbX, groArbY, mr.scaleGrad(gpe2, -1));
+
+    % --- structural ground truth ---
+    % Block defs (dedup key = duration, rf_def, gx_def, gy_def, gz_def;
+    %             amplitude is scalar, NOT in key):
+    %   0: rf180                         (inversion pulse)
+    %   1: TIdelay + gslSp               (TI delay + y-axis spoiler)
+    %   2: label-only                    (lblOnce0 in prep)
+    %   3: rf                            (inner TR first shot, rf only)
+    %   4: rf + groSp + gpe2             (inner TR i>1, spoiler + PE2 rewind)
+    %   5: adc + groArb + gpe2           (readout + PE2 encode; waveform shape
+    %                                     varies with rotation angle)
+    %   6: groSp + TRoutDelay            (end-of-partition, spoiler + delay)
+    gt.tr_min          = tr_min;
+    gt.tr_max          = tr_max;
+    gt.rf_center_s     = rf.center;
+    gt.adc_num_samples = adc.numSamples;
+    gt.adc_dwell_s     = adc.dwell;
+    gt.seg_unique_ids  = {[0, 1, 3, 4, 5, 6]};  % outer TR (j>1 pattern)
+    gt.unique_blocks   = 0:6;
+    gt.num_prep_blocks = 3;   % rf180+lblOnce1, TIdelay+gslSp, lblOnce0
+    gt.num_cool_blocks = 0;
+    gt.degenerate_prep = 0;   % inversion prep ~= inner TR pattern
+    gt.degenerate_cool = 0;
+
+    fname = sprintf('mprage_noncart_3d_%dshots.seq', num_shots);
     check_and_write(seq, fname, fov(1), fov(3), 1, 1, gt);
 end
