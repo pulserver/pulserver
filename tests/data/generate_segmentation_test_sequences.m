@@ -13,24 +13,23 @@
 %   3. Raster times chosen for GE + Siemens compatibility:
 %        rf = 2 us, grad = 20 us, adc = 2 us, block = 20 us
 %   4. Ground truth exported per-sequence as CSV + metadata text files.
-%   5. Each generator accepts num_slices (1 = single-slice, >1 = multi-slice).
+%   5. Each generator accepts num_slices and num_averages as input params.
 
 clear; clc;
 import mr.*
 
 %% --- run all generators -------------------------------------------------
 
-write_bssfp(1);
-write_spgr(1);
-write_spgr(3);
-write_fse(1);
-write_fse(3);
-write_epi(1);
-write_epi(3);
-write_mprage(204);
-write_mprage(2048); % MRF-style
-write_mprage_noncart(204, false);
-write_mprage_noncart(204, true);
+write_bssfp(1, 1);
+write_spgr(1, 1);
+write_spgr(3, 1);
+write_fse(1, 1);
+write_fse(3, 1);
+write_epi(1, 1);
+write_epi(3, 1);
+write_mprage(1, 1);
+write_mprage_noncart(1, 1, 204, false);
+write_mprage_noncart(1, 1, 204, true);
 
 
 fprintf('\n=== All segmentation test sequences generated. ===\n');
@@ -353,8 +352,8 @@ end
 %  bSSFP  (True FISP)
 %  ========================================================================
 
-function write_bssfp(num_slices)
-    fprintf('Generating bSSFP (%d slice) ...\n', num_slices);
+function write_bssfp(num_slices, num_averages)
+    fprintf('Generating bSSFP (%d slice, %d avg) ...\n', num_slices, num_averages);
     assert(num_slices == 1, 'bSSFP supports single-slice only (gradient continuity).');
 
     sys   = make_system();
@@ -504,7 +503,7 @@ function write_bssfp(num_slices)
     gt.degenerate_cool = 0;          % exit block ~= main pattern
 
     fname = seq_filename('bssfp_2d', num_slices);
-    check_and_write(seq, fname, fov, thick, num_slices, 1, gt);
+    check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt);
 end
 
 
@@ -512,8 +511,8 @@ end
 %  SPGR  (spoiled GRE with labels)
 %  ========================================================================
 
-function write_spgr(num_slices)
-    fprintf('Generating SPGR (%d slice) ...\n', num_slices);
+function write_spgr(num_slices, num_averages)
+    fprintf('Generating SPGR (%d slice, %d avg) ...\n', num_slices, num_averages);
 
     sys = make_system();
     seq = mr.Sequence(sys);
@@ -666,7 +665,7 @@ function write_spgr(num_slices)
     gt.degenerate_cool = 0;    % no cooldown blocks
 
     fname = seq_filename('gre_2d', num_slices);
-    check_and_write(seq, fname, fov, thick, num_slices, 1, gt);
+    check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt);
 end
 
 
@@ -674,8 +673,8 @@ end
 %  FSE  (fast spin echo)
 %  ========================================================================
 
-function write_fse(num_slices)
-    fprintf('Generating FSE (%d slice) ...\n', num_slices);
+function write_fse(num_slices, num_averages)
+    fprintf('Generating FSE (%d slice, %d avg) ...\n', num_slices, num_averages);
 
     sys = make_system();
     seq = mr.Sequence(sys);
@@ -944,7 +943,7 @@ function write_fse(num_slices)
     gt.degenerate_cool     = 0;
 
     fname = seq_filename('fse_2d', num_slices);
-    check_and_write(seq, fname, fov, thick, num_slices, 1, gt);
+    check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt);
 end
 
 
@@ -952,8 +951,8 @@ end
 %  EPI (echo-planar imaging)
 %  ========================================================================
 
-function write_epi(num_slices)
-    fprintf('Generating EPI (%d slice) ...\n', num_slices);
+function write_epi(num_slices, num_averages)
+    fprintf('Generating EPI (%d slice, %d avg) ...\n', num_slices, num_averages);
 
     sys = make_system();
     seq = mr.Sequence(sys);
@@ -1253,7 +1252,7 @@ function write_epi(num_slices)
     gt.degenerate_cool = 0;
 
     fname = seq_filename('epi_2d', num_slices);
-    check_and_write(seq, fname, fov, thick, num_slices, 1, gt);
+    check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt);
 end
 
 
@@ -1261,28 +1260,25 @@ end
 %  MPRAGE (3D inversion-recovery GRE)
 %  ========================================================================
 
-function write_mprage(num_shots)
-    fprintf('Generating MPRAGE ...\n');
+function write_mprage(num_slices, num_averages)
+    fprintf('Generating MPRAGE (%d slice, %d avg) ...\n', num_slices, num_averages);
 
     sys = make_system();
     seq = mr.Sequence(sys);
 
-    alpha   = 7;             % flip angle [deg]
-    ro_dur  = 5040e-6;       % RO duration (multiple of 20us)
-    ro_os   = 1;
-    ro_spoil = 3;
-    TI      = 1.1;
-    TRout   = 2.5;
+    alpha      = 7;             % flip angle [deg]
+    ro_dur     = 5040e-6;       % RO duration (multiple of 20us)
+    ro_os      = 1;
+    ro_spoil   = 3;
+    TI         = 1.1;
+    TRout      = 2.5;
     rfSpoilInc = 84;
-    rfLen   = 100e-6;
+    rfLen      = 100e-6;
 
-    fov = [192, 240, 256] * 1e-3;
-    N   = [192, num_shots, 256];
-    ax.d1 = 'z'; ax.d2 = 'x';
-    ax.d3 = setdiff('xyz', [ax.d1, ax.d2]);
-    ax.n1 = strfind('xyz', ax.d1);
-    ax.n2 = strfind('xyz', ax.d2);
-    ax.n3 = strfind('xyz', ax.d3);
+    fov = [256, 240, 192] * 1e-3;   % [x, y, z]
+    Nx  = 256;                       % readout (x)
+    Ny  = 240;                       % PE1 (y) — inner loop
+    Nz  = 192;                       % partition (z) — outer loop
 
     % --- events ---
     rf = mr.makeBlockPulse(alpha * pi / 180, sys, ...
@@ -1292,21 +1288,24 @@ function write_mprage(num_shots)
                                   'use', 'excitation');
 
     deltak = 1 ./ fov;
-    gro    = mr.makeTrapezoid(ax.d1, 'Amplitude', ...
-        N(ax.n1) * deltak(ax.n1) / ro_dur, ...
+    gro    = mr.makeTrapezoid('x', 'Amplitude', ...
+        Nx * deltak(1) / ro_dur, ...
         'FlatTime', ceil((ro_dur + sys.adcDeadTime) / sys.gradRasterTime) ...
                     * sys.gradRasterTime, 'system', sys);
-    adc    = mr.makeAdc(N(ax.n1) * ro_os, 'Duration', ro_dur, 'Delay', gro.riseTime, 'system', sys);
-    groPre = mr.makeTrapezoid(ax.d1, 'Area', ...
+    adc    = mr.makeAdc(Nx * ro_os, 'Duration', ro_dur, ...
+                        'Delay', gro.riseTime, 'system', sys);
+    groPre = mr.makeTrapezoid('x', 'Area', ...
         -gro.amplitude * (adc.dwell * (adc.numSamples/2 + 0.5) ...
          + 0.5 * gro.riseTime), 'system', sys);
-    gpe1   = mr.makeTrapezoid(ax.d2, 'Area', -deltak(ax.n2) * N(ax.n2) / 2, 'system', sys);
-    gpe2   = mr.makeTrapezoid(ax.d3, 'Area', -deltak(ax.n3) * N(ax.n3) / 2, 'system', sys);
-    gslSp  = mr.makeTrapezoid(ax.d3, 'Area', max(deltak .* N) * 4, 'Duration', 10e-3, 'system', sys);
+    gpe1   = mr.makeTrapezoid('y', 'Area', -deltak(2) * Ny / 2, 'system', sys);
+    gpe2   = mr.makeTrapezoid('z', 'Area', -deltak(3) * Nz / 2, 'system', sys);
+    gslSp  = mr.makeTrapezoid('z', 'Area', max(deltak .* [Nx Ny Nz]) * 4, ...
+                              'Duration', 10e-3, 'system', sys);
 
     [gro1, groSp] = mr.splitGradientAt(gro, gro.riseTime + gro.flatTime);
     if ro_spoil > 0
-        groSp = mr.makeExtendedTrapezoidArea(gro.channel, gro.amplitude, 0, deltak(ax.n1) / 2 * N(ax.n1) * ro_spoil, sys);
+        groSp = mr.makeExtendedTrapezoidArea('x', gro.amplitude, 0, ...
+                    deltak(1) / 2 * Nx * ro_spoil, sys);
     end
 
     rf.delay = mr.calcDuration(groSp, gpe1, gpe2);
@@ -1317,27 +1316,27 @@ function write_mprage(num_shots)
 
     TRinner = mr.calcDuration(rf) + mr.calcDuration(gro1);
 
-    pe1Steps = ((0:N(ax.n2)-1) - N(ax.n2)/2) / N(ax.n2) * 2;
-    pe2Steps = ((0:N(ax.n3)-1) - N(ax.n3)/2) / N(ax.n3) * 2;
+    pe1Steps = ((0:Ny-1) - Ny/2) / Ny * 2;
+    pe2Steps = ((0:Nz-1) - Nz/2) / Nz * 2;
 
     TIdelay = round((TI - (find(pe1Steps==0) - 1) * TRinner ...
               - (mr.calcDuration(rf180) - mr.calcRfCenter(rf180) - rf180.delay) ...
               - rf.delay - mr.calcRfCenter(rf)) / sys.blockDurationRaster) ...
               * sys.blockDurationRaster;
-    TRoutDelay = TRout - TRinner * N(ax.n2) - TIdelay - mr.calcDuration(rf180);
+    TRoutDelay = TRout - TRinner * Ny - TIdelay - mr.calcDuration(rf180);
 
     % Pre-create labels
-    lblIncLin  = mr.makeLabel('INC', 'LIN', 1);
-    lblIncPar  = mr.makeLabel('INC', 'PAR', 1);
+    lblIncLin   = mr.makeLabel('INC', 'LIN', 1);
+    lblIncPar   = mr.makeLabel('INC', 'PAR', 1);
     lblResetPar = mr.makeLabel('SET', 'PAR', 0);
-    lblOnce1   = mr.makeLabel('SET', 'ONCE', 1);
-    lblOnce0   = mr.makeLabel('SET', 'ONCE', 0);
+    lblOnce1    = mr.makeLabel('SET', 'ONCE', 1);
+    lblOnce0    = mr.makeLabel('SET', 'ONCE', 0);
 
     % Pre-register unchanging events
     gslSp.id  = seq.registerGradEvent(gslSp);
     groSp.id  = seq.registerGradEvent(groSp);
     gro1.id   = seq.registerGradEvent(gro1);
-    [~, rf.shapeIDs]      = seq.registerRfEvent(rf);
+    [~, rf.shapeIDs]           = seq.registerRfEvent(rf);
     [rf180.id, rf180.shapeIDs] = seq.registerRfEvent(rf180);
     lblIncPar.id = seq.registerLabelEvent(lblIncPar);
 
@@ -1350,18 +1349,18 @@ function write_mprage(num_shots)
     rf_phase = 0;
     rf_inc   = 0;
 
-    for j = 1:N(ax.n3)
+    for j = 1:Nz
         if j > 1
             seq.addBlock(rf180);
             seq.addBlock(TIdelay, gslSp);
         end
 
-        gpe2je = mr.scaleGrad(gpe2, pe2Steps(j));
+        gpe2je    = mr.scaleGrad(gpe2, pe2Steps(j));
         gpe2je.id = seq.registerGradEvent(gpe2je);
-        gpe2jr = mr.scaleGrad(gpe2, -pe2Steps(j));
+        gpe2jr    = mr.scaleGrad(gpe2, -pe2Steps(j));
         gpe2jr.id = seq.registerGradEvent(gpe2jr);
 
-        for i = 1:N(ax.n2)
+        for i = 1:Ny
             rf.phaseOffset  = rf_phase / 180 * pi;
             adc.phaseOffset = rf_phase / 180 * pi;
             rf_inc   = mod(rf_inc + rfSpoilInc, 360.0);
@@ -1383,31 +1382,25 @@ function write_mprage(num_shots)
     seq.setDefinition('OrientationMapping', 'SAG');
 
     % --- representative TRs for waveform ground truth ---
-    % MPRAGE inner TR = 2 blocks: rf + groSp/PE (combined), adc + gro1/PE
-    % For position-max (mode 1): use max |PE| on both axes
-    % For definition-min (mode 2): use zero PE
-
     tr_min = mr.Sequence(sys);  % zero PE (mode 2: definition-min)
     tr_max = mr.Sequence(sys);  % max |PE| (mode 1: position-max)
 
-    % Inner TR min: first block = rf only (no groSp/PE), second = adc + gro1 (no PE)
     tr_min.addBlock(rf);
     tr_min.addBlock(adc, gro1);
 
-    % Inner TR max: first block = rf + groSp + max PEs, second = adc + gro1 + max PEs
     tr_max.addBlock(rf, groSp, gpe1, gpe2);
     tr_max.addBlock(adc, gro1, mr.scaleGrad(gpe1, -1), mr.scaleGrad(gpe2, -1));
 
     % --- structural ground truth ---
     % Block defs (dedup key = duration, rf_def, gx_def, gy_def, gz_def;
     %             amplitude is scalar, NOT in key):
-    %   0: rf180                         (inversion pulse, no gradients)
-    %   1: TIdelay + gslSp               (TI delay + y-axis spoiler)
+    %   0: rf180                         (inversion pulse)
+    %   1: TIdelay + gslSp               (TI delay + z-axis slab spoiler)
     %   2: label-only                    (lblOnce0 in prep)
     %   3: rf                            (inner TR first block, rf only)
-    %   4: rf + groSp + gpe1 + gpe2      (inner TR i>1, rf + z-spoiler + PE rewind)
-    %   5: adc + gro1 + gpe1 + gpe2      (readout + PE encode)
-    %   6: groSp + TRoutDelay            (end-of-partition, z-spoiler + delay)
+    %   4: rf + groSp + gpe1 + gpe2      (inner TR i>1, x-spoiler + y/z PE rewind)
+    %   5: adc + gro1 + gpe1 + gpe2      (x-readout + y/z PE encode)
+    %   6: groSp + TRoutDelay            (end-of-partition, x-spoiler + delay)
     gt.tr_min          = tr_min;
     gt.tr_max          = tr_max;
     gt.rf_center_s     = rf.center;
@@ -1417,18 +1410,18 @@ function write_mprage(num_shots)
     gt.unique_blocks   = 0:6;
     gt.num_prep_blocks = 3;   % rf180+lblOnce1, TIdelay+gslSp, lblOnce0
     gt.num_cool_blocks = 0;
-    gt.degenerate_prep = 0;   % inversion prep ~= inner TR pattern
+    gt.degenerate_prep = 0;
     gt.degenerate_cool = 0;
 
     fname = 'mprage_3d.seq';
-    check_and_write(seq, fname, fov(1), fov(3), 1, 1, gt);
+    check_and_write(seq, fname, fov(1), fov(3), num_slices, num_averages, gt);
 end
 
 %% ========================================================================
 %  Noncartesian MPRAGE (3D stack-of-stars inversion-recovery GRE)
 %  ========================================================================
 
-function write_mprage_noncart(num_shots, use_rotext)
+function write_mprage_noncart(num_slices, num_averages, num_shots, use_rotext)
     fprintf('Generating Noncartesian MPRAGE (%d shots, rotext=%d) ...\n', ...
             num_shots, use_rotext);
 
@@ -1444,13 +1437,9 @@ function write_mprage_noncart(num_shots, use_rotext)
     rfSpoilInc = 84;
     rfLen      = 100e-6;
 
-    fov = [192, 240, 256] * 1e-3;
-    N   = [192, num_shots, 256];
-    ax.d1 = 'z'; ax.d2 = 'x';
-    ax.d3 = setdiff('xyz', [ax.d1, ax.d2]);
-    ax.n1 = strfind('xyz', ax.d1);
-    ax.n2 = strfind('xyz', ax.d2);
-    ax.n3 = strfind('xyz', ax.d3);
+    fov = [256, 240, 192] * 1e-3;   % [x, y, z]
+    Nx  = 256;                       % readout samples (x)
+    Nz  = 192;                       % partition (z) — outer loop
 
     % --- events ---
     rf180 = mr.makeAdiabaticPulse('hypsec', sys, ...
@@ -1461,38 +1450,38 @@ function write_mprage_noncart(num_shots, use_rotext)
     deltak = 1 ./ fov;
 
     % Readout trapezoid template → arbitrary waveform for rotation
-    groTrap = mr.makeTrapezoid(ax.d1, ...
-        'Amplitude', N(ax.n1) * deltak(ax.n1) / ro_dur, ...
+    groTrap = mr.makeTrapezoid('x', ...
+        'Amplitude', Nx * deltak(1) / ro_dur, ...
         'FlatTime', ceil((ro_dur + sys.adcDeadTime) / sys.gradRasterTime) ...
                     * sys.gradRasterTime, 'system', sys);
     times    = cumsum([0, groTrap.riseTime, groTrap.flatTime, groTrap.fallTime]);
     amp      = [0, groTrap.amplitude, groTrap.amplitude, 0];
     waveform = mr.pts2waveform(times, amp, 'system', sys);
-    groArbX  = mr.makeArbitraryGrad(ax.d1, waveform, 'system', sys);
-    groArbY  = mr.makeArbitraryGrad(ax.d2, 0 * waveform, 'system', sys);
+    groArbX  = mr.makeArbitraryGrad('x', waveform, 'system', sys);
+    groArbY  = mr.makeArbitraryGrad('y', 0 * waveform, 'system', sys);
 
     % ADC
-    adc = mr.makeAdc(N(ax.n1) * ro_os, 'Duration', ro_dur, ...
+    adc = mr.makeAdc(Nx * ro_os, 'Duration', ro_dur, ...
                      'Delay', groTrap.riseTime, 'system', sys);
 
-    % Readout spoiler (along d1 = 'z')
-    groSp = mr.makeTrapezoid(ax.d1, ...
-        'Area', deltak(ax.n1) / 2 * N(ax.n1) * ro_spoil, 'system', sys);
+    % Readout spoiler (along x)
+    groSp = mr.makeTrapezoid('x', ...
+        'Area', deltak(1) / 2 * Nx * ro_spoil, 'system', sys);
 
-    % Partition encoding (along d3 = 'y')
-    gpe2 = mr.makeTrapezoid(ax.d3, ...
-        'Area', -deltak(ax.n3) * N(ax.n3) / 2, 'system', sys);
+    % Partition encoding (along z)
+    gpe2 = mr.makeTrapezoid('z', ...
+        'Area', -deltak(3) * Nz / 2, 'system', sys);
 
-    % Slab spoiler (along d3 = 'y')
-    gslSp = mr.makeTrapezoid(ax.d3, ...
-        'Area', max(deltak .* N) * 4, 'Duration', 10e-3, 'system', sys);
+    % Slab spoiler (along z)
+    gslSp = mr.makeTrapezoid('z', ...
+        'Area', max(deltak .* [Nx 1 Nz]) * 4, 'Duration', 10e-3, 'system', sys);
 
     % RF delay to accommodate spoiler + partition rewind
     rf.delay = mr.calcDuration(groSp, gpe2);
 
     TRinner = mr.calcDuration(rf) + mr.calcDuration(groArbX);
 
-    pe2Steps = ((0:N(ax.n3)-1) - N(ax.n3)/2) / N(ax.n3) * 2;
+    pe2Steps = ((0:Nz-1) - Nz/2) / Nz * 2;
 
     % TI delay — for radial, every spoke passes through k-center,
     % so TI targets the first excitation of each partition
@@ -1500,7 +1489,7 @@ function write_mprage_noncart(num_shots, use_rotext)
               - (mr.calcDuration(rf180) - mr.calcRfCenter(rf180) - rf180.delay) ...
               - rf.delay - mr.calcRfCenter(rf)) / sys.blockDurationRaster) ...
               * sys.blockDurationRaster;
-    TRoutDelay = TRout - TRinner * N(ax.n2) - TIdelay - mr.calcDuration(rf180);
+    TRoutDelay = TRout - TRinner * num_shots - TIdelay - mr.calcDuration(rf180);
 
     % Pre-create labels
     lblIncLin   = mr.makeLabel('INC', 'LIN', 1);
@@ -1527,7 +1516,7 @@ function write_mprage_noncart(num_shots, use_rotext)
     phi      = 0;
     dphi     = 137.51 * pi / 180;  % golden angle [rad]
 
-    for j = 1:N(ax.n3)
+    for j = 1:Nz
         if j > 1
             seq.addBlock(rf180);
             seq.addBlock(TIdelay, gslSp);
@@ -1538,7 +1527,7 @@ function write_mprage_noncart(num_shots, use_rotext)
         gpe2jr    = mr.scaleGrad(gpe2, -pe2Steps(j));
         gpe2jr.id = seq.registerGradEvent(gpe2jr);
 
-        for i = 1:N(ax.n2)
+        for i = 1:num_shots
             rf.phaseOffset  = rf_phase / 180 * pi;
             adc.phaseOffset = rf_phase / 180 * pi;
             rf_inc   = mod(rf_inc + rfSpoilInc, 360.0);
@@ -1554,10 +1543,10 @@ function write_mprage_noncart(num_shots, use_rotext)
             % Readout block: rotated arbitrary gradients + PE2 encode + ADC
             if use_rotext
                 seq.addBlock(adc, groArbX, gpe2je, ...
-                    mr.makeRotation('axis', ax.d3, 'angle', phi));
+                    mr.makeRotation('axis', 'z', 'angle', phi));
             else
                 seq.addBlock(adc, ...
-                    mr.rotate(ax.d3, phi, groArbX, groArbY), gpe2je);
+                    mr.rotate('z', phi, groArbX, groArbY), gpe2je);
             end
 
             phi = phi + dphi;
@@ -1570,9 +1559,6 @@ function write_mprage_noncart(num_shots, use_rotext)
     seq.setDefinition('OrientationMapping', 'SAG');
 
     % --- representative TRs for waveform ground truth ---
-    % Noncart inner TR = 2 blocks: rf (+ spoiler + PE2 rewind), adc + rotated grads (+ PE2)
-    % For representative TRs, use unrotated (phi=0) readout as base shape.
-
     tr_min = mr.Sequence(sys);  % zero PE2 (mode 2: definition-min)
     tr_max = mr.Sequence(sys);  % max |PE2| (mode 1: position-max)
 
@@ -1588,13 +1574,13 @@ function write_mprage_noncart(num_shots, use_rotext)
     % Block defs (dedup key = duration, rf_def, gx_def, gy_def, gz_def;
     %             amplitude is scalar, NOT in key):
     %   0: rf180                         (inversion pulse)
-    %   1: TIdelay + gslSp               (TI delay + y-axis spoiler)
+    %   1: TIdelay + gslSp               (TI delay + z-axis slab spoiler)
     %   2: label-only                    (lblOnce0 in prep)
     %   3: rf                            (inner TR first shot, rf only)
-    %   4: rf + groSp + gpe2             (inner TR i>1, spoiler + PE2 rewind)
-    %   5: adc + groArb + gpe2           (readout + PE2 encode; waveform shape
-    %                                     varies with rotation angle)
-    %   6: groSp + TRoutDelay            (end-of-partition, spoiler + delay)
+    %   4: rf + groSp + gpe2             (inner TR i>1, x-spoiler + z PE2 rewind)
+    %   5: adc + groArb + gpe2           (x/y rotated readout + z PE2 encode;
+    %                                     waveform shape varies with angle)
+    %   6: groSp + TRoutDelay            (end-of-partition, x-spoiler + delay)
     gt.tr_min          = tr_min;
     gt.tr_max          = tr_max;
     gt.rf_center_s     = rf.center;
@@ -1604,9 +1590,9 @@ function write_mprage_noncart(num_shots, use_rotext)
     gt.unique_blocks   = 0:6;
     gt.num_prep_blocks = 3;   % rf180+lblOnce1, TIdelay+gslSp, lblOnce0
     gt.num_cool_blocks = 0;
-    gt.degenerate_prep = 0;   % inversion prep ~= inner TR pattern
+    gt.degenerate_prep = 0;
     gt.degenerate_cool = 0;
 
     fname = sprintf('mprage_noncart_3d_%dshots.seq', num_shots);
-    check_and_write(seq, fname, fov(1), fov(3), 1, 1, gt);
+    check_and_write(seq, fname, fov(1), fov(3), num_slices, num_averages, gt);
 end
