@@ -195,6 +195,9 @@ static int deduplicate_rf_library(const pulseqlib__seq_file* seq, pulseqlib_rf_d
         rf_table[i].amplitude    = params[i][0];
         rf_table[i].freq_offset  = params[i][1];
         rf_table[i].phase_offset = params[i][2];
+        rf_table[i].rf_use       = (seq->rf_use_tags)
+                                     ? seq->rf_use_tags[i]
+                                     : PULSEQLIB_RF_USE_UNKNOWN;
     }
 
     PULSEQLIB_FREE(int_rows); PULSEQLIB_FREE(params); PULSEQLIB_FREE(unique_defs); PULSEQLIB_FREE(event_table);

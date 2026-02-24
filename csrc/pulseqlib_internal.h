@@ -27,9 +27,10 @@ typedef struct pulseqlib_segment_rf_anchor {
     float end_us;              /* RF end time within segment (us)    */
     float isocenter_us;        /* isodelay time within segment (us)  */
     float base_amplitude_hz;   /* base RF amplitude (Hz)             */
+    int   rf_use;              /* PULSEQLIB_RF_USE_*                 */
 } pulseqlib_segment_rf_anchor;
 
-#define PULSEQLIB_SEGMENT_RF_ANCHOR_INIT {0, 0.0f, 0.0f, 0.0f, 0.0f}
+#define PULSEQLIB_SEGMENT_RF_ANCHOR_INIT {0, 0.0f, 0.0f, 0.0f, 0.0f, 0}
 
 typedef struct pulseqlib_segment_adc_anchor {
     int   block_offset;        /* block index within segment         */
@@ -85,9 +86,10 @@ typedef struct pulseqlib_rf_table_element {
     float amplitude;
     float freq_offset;
     float phase_offset;
+    int rf_use;              /* PULSEQLIB_RF_USE_* (0 = unknown) */
 } pulseqlib_rf_table_element;
 
-#define PULSEQLIB_RF_TABLE_ELEMENT_INIT {0, 0.0f, 0.0f, 0.0f}
+#define PULSEQLIB_RF_TABLE_ELEMENT_INIT {0, 0.0f, 0.0f, 0.0f, 0}
 
 /* ================================================================== */
 /*  RF shim definitions (parallel transmit channel weights)           */
@@ -743,6 +745,7 @@ typedef struct pulseqlib__seq_file {
     int is_rf_library_parsed;
     int rf_library_size;
     float (*rf_library)[10];
+    int* rf_use_tags;            /* per-RF-event use tag (parsed from .seq) */
     int is_grad_library_parsed;
     int grad_library_size;
     float (*grad_library)[7];

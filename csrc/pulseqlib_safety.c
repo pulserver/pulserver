@@ -900,9 +900,10 @@ int pulseqlib_get_tr_gradient_waveforms(
 static int compute_kspace_trajectory(
     const pulseqlib__uniform_grad_waveforms* waveforms,
     float* kx, float* ky, float* kz, float* krss,
-    float* dt_us)
+    float* dt_us,
+    const int* refocus_samples, int num_refocus)
 {
-    int i, n;
+    int i, n, r;
     float dt_s;
     float cum_x, cum_y, cum_z;
     float v;
@@ -918,10 +919,22 @@ static int compute_kspace_trajectory(
     cum_x = 0.0f; cum_y = 0.0f; cum_z = 0.0f;
     kx[0] = 0.0f; ky[0] = 0.0f; kz[0] = 0.0f;
 
+    r = 0;  /* index into refocus_samples */
+
     for (i = 1; i < n; ++i) {
         cum_x += 0.5f * (waveforms->gx[i - 1] + waveforms->gx[i]) * dt_s;
         cum_y += 0.5f * (waveforms->gy[i - 1] + waveforms->gy[i]) * dt_s;
         cum_z += 0.5f * (waveforms->gz[i - 1] + waveforms->gz[i]) * dt_s;
+
+        /* negate k at refocusing RF isocenter (180 deg pulse) */
+        if (refocus_samples && r < num_refocus &&
+            i == refocus_samples[r]) {
+            cum_x = -cum_x;
+            cum_y = -cum_y;
+            cum_z = -cum_z;
+            r++;
+        }
+
         kx[i] = cum_x;
         ky[i] = cum_y;
         kz[i] = cum_z;
@@ -1018,6 +1031,10 @@ int pulseqlib__calc_segment_timing(
     int num_kzero, n_samples;
     float dt_us, k_threshold;
 
+    /* refocusing RF detection variables */
+    int *refocus_samples;
+    int  num_refocus;
+
     /* ADC-to-kzero mapping variables */
     int a, s, closest_idx, zi, kz_sample;
     float seg_time_offset, adc_mid_us, best_dist, dist;
@@ -1032,6 +1049,8 @@ int pulseqlib__calc_segment_timing(
     memset(&min_waveforms, 0, sizeof(min_waveforms));
     kx = NULL; ky = NULL; kz = NULL; krss = NULL;
     kzero_indices = NULL;
+    refocus_samples = NULL;
+    num_refocus = 0;
     num_kzero = 0;
     n_samples = 0;
     dt_us = 0.0f;
@@ -1050,13 +1069,107 @@ int pulseqlib__calc_segment_timing(
 
         if (!PULSEQLIB_FAILED(result) && min_waveforms.num_samples >= 2) {
             n_samples = min_waveforms.num_samples;
+
+            /* ---- Step A.1: find refocusing RF isocenters in TR ---- */
+            /*
+             * Walk all blocks in the main TR range and identify
+             * refocusing pulses.  If rf_use is tagged in the file,
+             * use it directly; otherwise auto-detect from flip
+             * angle (|flip| within 10% of 180 deg).
+             */
+            {
+                float rf_t_accum = 0.0f;
+                int   rf_cap = 0, rb;
+
+                /* first pass: count */
+                for (rb = 0; rb < tr_size; ++rb) {
+                    int bi = num_prep + rb;
+                    if (bi < 0 || bi >= desc->num_blocks) continue;
+                    bte = &desc->block_table[bi];
+                    rf_raw = bte->rf_id;
+                    if (rf_raw >= 0 && rf_raw < desc->rf_table_size) {
+                        rte = &desc->rf_table[rf_raw];
+                        rf_def_id = rte->id;
+                        if (rf_def_id >= 0 && rf_def_id < desc->num_unique_rfs) {
+                            int use = rte->rf_use;
+                            if (use == PULSEQLIB_RF_USE_UNKNOWN) {
+                                /* auto-detect: actual_flip = base_flip *
+                                 * |amplitude| / base_amplitude */
+                                rdef = &desc->rf_definitions[rf_def_id];
+                                if (rdef->stats.base_amplitude_hz > 0.0f) {
+                                    float ratio = (float)fabs((double)rte->amplitude) /
+                                                  rdef->stats.base_amplitude_hz;
+                                    float actual_flip = rdef->stats.flip_angle_deg * ratio;
+                                    if (actual_flip > 162.0f && actual_flip < 198.0f)
+                                        use = PULSEQLIB_RF_USE_REFOCUSING;
+                                }
+                            }
+                            if (use == PULSEQLIB_RF_USE_REFOCUSING)
+                                rf_cap++;
+                        }
+                    }
+                }
+
+                /* second pass: collect isocenter sample indices */
+                if (rf_cap > 0) {
+                    refocus_samples = (int*)PULSEQLIB_ALLOC(
+                        (size_t)rf_cap * sizeof(int));
+                }
+                if (refocus_samples) {
+                    rf_t_accum = 0.0f;
+                    num_refocus = 0;
+                    for (rb = 0; rb < tr_size; ++rb) {
+                        int bi = num_prep + rb;
+                        if (bi < 0 || bi >= desc->num_blocks) continue;
+                        bte  = &desc->block_table[bi];
+                        bdef = &desc->block_definitions[bte->id];
+                        block_dur_us = (bte->duration_us >= 0)
+                            ? (float)bte->duration_us
+                            : (float)bdef->duration_us;
+
+                        rf_raw = bte->rf_id;
+                        if (rf_raw >= 0 && rf_raw < desc->rf_table_size) {
+                            rte = &desc->rf_table[rf_raw];
+                            rf_def_id = rte->id;
+                            if (rf_def_id >= 0 && rf_def_id < desc->num_unique_rfs) {
+                                int use = rte->rf_use;
+                                if (use == PULSEQLIB_RF_USE_UNKNOWN) {
+                                    rdef = &desc->rf_definitions[rf_def_id];
+                                    if (rdef->stats.base_amplitude_hz > 0.0f) {
+                                        float ratio = (float)fabs((double)rte->amplitude) /
+                                                      rdef->stats.base_amplitude_hz;
+                                        float actual_flip = rdef->stats.flip_angle_deg * ratio;
+                                        if (actual_flip > 162.0f && actual_flip < 198.0f)
+                                            use = PULSEQLIB_RF_USE_REFOCUSING;
+                                    }
+                                }
+                                if (use == PULSEQLIB_RF_USE_REFOCUSING) {
+                                    float iso_us;
+                                    int   iso_sample;
+                                    rdef = &desc->rf_definitions[rf_def_id];
+                                    iso_us = rf_t_accum + (float)rdef->delay +
+                                             (float)rdef->stats.isodelay_us;
+                                    iso_sample = (int)(iso_us / min_waveforms.raster_us + 0.5f);
+                                    if (iso_sample < 0) iso_sample = 0;
+                                    if (iso_sample >= n_samples) iso_sample = n_samples - 1;
+                                    refocus_samples[num_refocus++] = iso_sample;
+                                }
+                            }
+                        }
+                        rf_t_accum += block_dur_us;
+                    }
+                }
+            }
+
+            /* ---- Step A.2: compute k-space trajectory ---- */
             kx   = (float*)PULSEQLIB_ALLOC((size_t)n_samples * sizeof(float));
             ky   = (float*)PULSEQLIB_ALLOC((size_t)n_samples * sizeof(float));
             kz   = (float*)PULSEQLIB_ALLOC((size_t)n_samples * sizeof(float));
             krss = (float*)PULSEQLIB_ALLOC((size_t)n_samples * sizeof(float));
             if (kx && ky && kz && krss) {
                 result = compute_kspace_trajectory(&min_waveforms,
-                    kx, ky, kz, krss, &dt_us);
+                    kx, ky, kz, krss, &dt_us,
+                    refocus_samples, num_refocus);
                 if (!PULSEQLIB_FAILED(result)) {
                     /* threshold = 1% of max |k| */
                     k_threshold = 0.0f;
@@ -1149,6 +1262,7 @@ int pulseqlib__calc_segment_timing(
                 rte = &desc->rf_table[rf_raw];
                 rf_def_id = rte->id;
                 if (rf_def_id >= 0 && rf_def_id < desc->num_unique_rfs) {
+                    int use;
                     rdef = &desc->rf_definitions[rf_def_id];
                     rf_arr[rf_count].block_offset = blk;
                     rf_arr[rf_count].start_us     = t_accum + (float)rdef->delay;
@@ -1157,6 +1271,20 @@ int pulseqlib__calc_segment_timing(
                     rf_arr[rf_count].isocenter_us   = t_accum + (float)rdef->delay +
                                                       (float)rdef->stats.isodelay_us;
                     rf_arr[rf_count].base_amplitude_hz = rte->amplitude;
+
+                    /* rf_use: from file tag, or auto-detect from flip angle */
+                    use = rte->rf_use;
+                    if (use == PULSEQLIB_RF_USE_UNKNOWN &&
+                        rdef->stats.base_amplitude_hz > 0.0f) {
+                        float ratio = (float)fabs((double)rte->amplitude) /
+                                      rdef->stats.base_amplitude_hz;
+                        float actual_flip = rdef->stats.flip_angle_deg * ratio;
+                        if (actual_flip > 162.0f && actual_flip < 198.0f)
+                            use = PULSEQLIB_RF_USE_REFOCUSING;
+                        else
+                            use = PULSEQLIB_RF_USE_EXCITATION;
+                    }
+                    rf_arr[rf_count].rf_use = use;
                     rf_count++;
                 }
             }
@@ -1250,6 +1378,7 @@ int pulseqlib__calc_segment_timing(
     if (kz)   PULSEQLIB_FREE(kz);
     if (krss) PULSEQLIB_FREE(krss);
     if (kzero_indices) PULSEQLIB_FREE(kzero_indices);
+    if (refocus_samples) PULSEQLIB_FREE(refocus_samples);
     uniform_grad_waveforms_free(&min_waveforms);
 
     return PULSEQLIB_OK;
@@ -1260,6 +1389,7 @@ timing_fail:
     if (kz)   PULSEQLIB_FREE(kz);
     if (krss) PULSEQLIB_FREE(krss);
     if (kzero_indices) PULSEQLIB_FREE(kzero_indices);
+    if (refocus_samples) PULSEQLIB_FREE(refocus_samples);
     uniform_grad_waveforms_free(&min_waveforms);
     return PULSEQLIB_ERR_ALLOC_FAILED;
 }

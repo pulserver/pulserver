@@ -12,7 +12,7 @@
 /* ================================================================== */
 
 #define PULSEQLIB_CACHE_ENDIAN_MARKER  0x01020304
-#define PULSEQLIB_CACHE_VERSION        8
+#define PULSEQLIB_CACHE_VERSION        9
 
 /* ------ Byte-swap helpers ------ */
 
@@ -182,6 +182,7 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &d->rf_table[i].amplitude, 1)) return 0;
         if (!write4(f, &d->rf_table[i].freq_offset, 1)) return 0;
         if (!write4(f, &d->rf_table[i].phase_offset, 1)) return 0;
+        if (!write4(f, &d->rf_table[i].rf_use, 1)) return 0;
     }
 
     /* gradient definitions */
@@ -434,6 +435,8 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
     for (i = 0; i < d->rf_table_size; ++i) {
         if (!read4(f, &d->rf_table[i].id, 4)) return 0;
         if (do_swap) swap4_array(&d->rf_table[i].id, 4);
+        if (!read4(f, &d->rf_table[i].rf_use, 1)) return 0;
+        if (do_swap) swap4(&d->rf_table[i].rf_use);
     }
 
     /* gradient definitions */

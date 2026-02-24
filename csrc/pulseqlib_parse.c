@@ -95,6 +95,7 @@ static void seq_file_set_defaults(pulseqlib__seq_file* seq)
     INIT_LIBRARY(seq, block_library, num_blocks, is_block_library_parsed);
     seq->block_ids = NULL;
     INIT_LIBRARY(seq, rf_library, rf_library_size, is_rf_library_parsed);
+    seq->rf_use_tags = NULL;
     INIT_LIBRARY(seq, grad_library, grad_library_size, is_grad_library_parsed);
     INIT_LIBRARY(seq, adc_library, adc_library_size, is_adc_library_parsed);
     INIT_LIBRARY(seq, extensions_library, extensions_library_size, is_extensions_library_parsed);
@@ -142,7 +143,11 @@ static void seq_file_reset(pulseqlib__seq_file* seq)
         PULSEQLIB_FREE(seq->block_ids);
         seq->block_ids = NULL;
     }
-    if (seq->is_rf_library_parsed)   PULSEQLIB_FREE(seq->rf_library);
+    if (seq->is_rf_library_parsed) {
+        PULSEQLIB_FREE(seq->rf_library);
+        if (seq->rf_use_tags) PULSEQLIB_FREE(seq->rf_use_tags);
+        seq->rf_use_tags = NULL;
+    }
     if (seq->is_grad_library_parsed) PULSEQLIB_FREE(seq->grad_library);
     if (seq->is_adc_library_parsed)  PULSEQLIB_FREE(seq->adc_library);
     if (seq->is_extensions_library_parsed) {
@@ -635,6 +640,57 @@ static void read_rf_library(pulseqlib__seq_file* seq, FILE* f)
                                 seq->rf_library_size, s.size, s, -1);
     if (ret != 0) return;
     seq->is_rf_library_parsed = 1;
+
+    /* parse trailing RF use tags (e/r/s/i) from the [RF] section */
+    if (seq->rf_library_size > 0 && seq->offsets.rf >= 0) {
+        char use_line[PULSEQLIB__MAX_LINE_LENGTH];
+        seq->rf_use_tags = (int*)PULSEQLIB_ALLOC(
+            (size_t)seq->rf_library_size * sizeof(int));
+        if (seq->rf_use_tags) {
+            int ui;
+            for (ui = 0; ui < seq->rf_library_size; ++ui)
+                seq->rf_use_tags[ui] = PULSEQLIB_RF_USE_UNKNOWN;
+
+            if (fseek(f, seq->offsets.rf, SEEK_SET) == 0 &&
+                fgets(use_line, sizeof(use_line), f)) {
+                while (fgets(use_line, sizeof(use_line), f)) {
+                    char* up = use_line;
+                    int use_idx;
+                    float dummy;
+                    int col, consumed;
+                    char* scan_p;
+                    while (*up == ' ' || *up == '\t') up++;
+                    if (*up == '[' || *up == '\0' || *up == '\n' ||
+                        *up == '\r' || *up == '#')
+                        break;
+                    if (sscanf(up, "%d", &use_idx) != 1) continue;
+                    if (use_idx < 1 || use_idx > seq->rf_library_size) continue;
+                    /* skip index */
+                    while (*up && *up != ' ' && *up != '\t') up++;
+                    while (*up == ' ' || *up == '\t') up++;
+                    /* skip 10 float columns */
+                    scan_p = up;
+                    for (col = 0; col < 10; ++col) {
+                        consumed = 0;
+                        if (sscanf(scan_p, "%f%n", &dummy, &consumed) != 1)
+                            break;
+                        scan_p += consumed;
+                        while (*scan_p == ' ' || *scan_p == '\t') scan_p++;
+                    }
+                    /* trailing character is the rf_use tag */
+                    if (col == 10) {
+                        char tag = *scan_p;
+                        int use_val = PULSEQLIB_RF_USE_UNKNOWN;
+                        if (tag == 'e') use_val = PULSEQLIB_RF_USE_EXCITATION;
+                        else if (tag == 'r') use_val = PULSEQLIB_RF_USE_REFOCUSING;
+                        else if (tag == 'i') use_val = PULSEQLIB_RF_USE_INVERSION;
+                        else if (tag == 's') use_val = PULSEQLIB_RF_USE_SATURATION;
+                        seq->rf_use_tags[use_idx - 1] = use_val;
+                    }
+                }
+            }
+        }
+    }
 }
 
 static void read_grad_library(pulseqlib__seq_file* seq, FILE* f)

@@ -161,6 +161,15 @@ typedef struct pulseqlib_opts {
 #define PULSEQLIB_OPTS_INIT {0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f}
 
 /* ================================================================== */
+/*  RF use types                                                      */
+/* ================================================================== */
+#define PULSEQLIB_RF_USE_UNKNOWN     0
+#define PULSEQLIB_RF_USE_EXCITATION  1
+#define PULSEQLIB_RF_USE_REFOCUSING  2
+#define PULSEQLIB_RF_USE_INVERSION   3
+#define PULSEQLIB_RF_USE_SATURATION  4
+
+/* ================================================================== */
 /*  RF statistics                                                     */
 /* ================================================================== */
 

@@ -315,7 +315,7 @@ skip_rf:
             int dur = pulseqlib_get_block_duration_us(coll, seg_idx, blk_idx);
             int raster_us = 2;  /* vendor-specific raster (e.g. 2 us on GE) */
             int num_samples = dur / raster_us;
-            vendorCreateFreqModInstruction(num_samples, t_us);
+            vendorCreateFreqModInstruction(num_samples);
         }
     }
 }
