@@ -313,7 +313,7 @@ int main(int argc, char** argv)
                     printf("  RF %d: flip=%.1f deg, bw=%.0f Hz, "
                            "dur=%.0f us, max_amp=%.0f Hz\n",
                            r, stats.flip_angle_deg, stats.bandwidth_hz,
-                           stats.duration_us, stats.max_amplitude_hz);
+                           stats.duration_us, stats.base_amplitude_hz);
                 }
             }
         }

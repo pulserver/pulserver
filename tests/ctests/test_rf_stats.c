@@ -47,7 +47,7 @@
  *     mu_assert(fabs(stats.flip_angle_deg - 15.0f) < 1.0f,
  *               "flip angle should be ~15 deg");
  *     mu_assert(stats.duration_us > 0.0f, "duration > 0");
- *     mu_assert(stats.max_amplitude_hz > 0.0f, "max amp > 0");
+ *     mu_assert(stats.base_amplitude_hz > 0.0f, "max amp > 0");
  *     mu_assert(stats.bandwidth_hz > 0.0f, "bandwidth > 0");
  *     mu_assert(stats.num_samples > 0, "num_samples > 0");
  *

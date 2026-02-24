@@ -27,6 +27,7 @@
  */
 
 #include <string.h>
+#include <stdlib.h>
 
 #include "pulseqlib_internal.h"
 #include "pulseqlib_methods.h"
@@ -295,7 +296,7 @@ float pulseqlib_get_rf_base_amplitude_hz(
     if (rf_idx < 0 || rf_idx >= desc->num_unique_rfs)
         return 0.0f;
 
-    return desc->rf_definitions[rf_idx].stats.max_amplitude_hz;
+    return desc->rf_definitions[rf_idx].stats.base_amplitude_hz;
 }
 #endif
 
@@ -338,8 +339,173 @@ int pulseqlib_get_tr_rf_ids(
 }
 
 /* ================================================================== */
+/*  pulseqlib_get_rf_array --                                         */
+/*    Build an ordered array of RF stats for a TR region.             */
+/*    Each entry gets the base rf_stats patched with the actual       */
+/*    amplitude from the rf_table and the repetition count for        */
+/*    that region.  The library allocates; caller must free().        */
+/* ================================================================== */
+int pulseqlib_get_rf_array(
+    const pulseqlib_collection*  coll,
+    pulseqlib_rf_stats**         out_pulses,
+    int                          subseq_idx,
+    int                          region)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_tr_descriptor* trd;
+    const pulseqlib_block_table_element* bte;
+    const pulseqlib_rf_definition* rfdef;
+    int start, count, num_instances;
+    int i, n, num_rf;
+
+    if (!coll || !out_pulses)
+        return PULSEQLIB_ERR_NULL_POINTER;
+    *out_pulses = NULL;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    desc = &coll->descriptors[subseq_idx];
+    trd  = &desc->tr_descriptor;
+
+    /* Determine block range and instance count for the region */
+    switch (region) {
+    case PULSEQLIB_TR_REGION_PREP:
+        start = 0;
+        count = trd->num_prep_blocks + trd->tr_size;
+        num_instances = 1;
+        break;
+
+    case PULSEQLIB_TR_REGION_MAIN:
+        start = trd->num_prep_blocks;
+        count = trd->tr_size;
+        num_instances = trd->num_trs;
+        if (!trd->degenerate_prep)    num_instances--;
+        if (!trd->degenerate_cooldown) num_instances--;
+        if (num_instances < 0) num_instances = 0;
+        break;
+
+    case PULSEQLIB_TR_REGION_COOLDOWN:
+        start = trd->num_prep_blocks +
+                (trd->num_trs > 0 ? (trd->num_trs - 1) * trd->tr_size : 0);
+        count = trd->tr_size + trd->num_cooldown_blocks;
+        num_instances = 1;
+        break;
+
+    default:
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    }
+
+    /* Clamp to available block range */
+    if (start + count > desc->num_blocks)
+        count = desc->num_blocks - start;
+    if (count < 0) count = 0;
+
+    /* Pass 1: count RF-bearing blocks */
+    num_rf = 0;
+    for (i = 0; i < count; ++i) {
+        bte = &desc->block_table[start + i];
+        if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size) {
+            int id = desc->rf_table[bte->rf_id].id;
+            if (id >= 0 && id < desc->num_unique_rfs)
+                num_rf++;
+        }
+    }
+
+    if (num_rf == 0)
+        return 0;
+
+    /* Allocate output array */
+    *out_pulses = (pulseqlib_rf_stats*)malloc(
+        (size_t)num_rf * sizeof(pulseqlib_rf_stats));
+    if (!*out_pulses)
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+
+    /* Pass 2: fill entries */
+    n = 0;
+    for (i = 0; i < count; ++i) {
+        int blk_idx = start + i;
+        int rf_def_id;
+        float act_amp;
+
+        bte = &desc->block_table[blk_idx];
+        if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
+            continue;
+
+        rf_def_id = desc->rf_table[bte->rf_id].id;
+        if (rf_def_id < 0 || rf_def_id >= desc->num_unique_rfs)
+            continue;
+
+        rfdef = &desc->rf_definitions[rf_def_id];
+
+        /* Hard-copy base stats */
+        (*out_pulses)[n] = rfdef->stats;
+
+        /* Patch actual amplitude from rf_table */
+        act_amp = desc->rf_table[bte->rf_id].amplitude;
+        (*out_pulses)[n].act_amplitude_hz = (act_amp >= 0.0f)
+            ? act_amp : -act_amp;
+
+        /* Set repetition count */
+        (*out_pulses)[n].num_instances = num_instances;
+
+        n++;
+    }
+
+    return n;
+}
+
+/* ================================================================== */
 /*  ADC collection accessors                                          */
 /* ================================================================== */
+
+int pulseqlib_get_total_readouts(
+    const pulseqlib_collection* coll)
+{
+    int i, b, total;
+
+    if (!coll) return 0;
+
+    total = 0;
+    for (i = 0; i < coll->num_subsequences; ++i) {
+        const pulseqlib_sequence_descriptor* desc = &coll->descriptors[i];
+        const pulseqlib_tr_descriptor* trd = &desc->tr_descriptor;
+        int adc_per_tr = 0;
+        int adc_prep   = 0;
+        int adc_cool   = 0;
+        int main_trs;
+
+        /* Count ADC blocks in one main TR */
+        for (b = 0; b < trd->tr_size; ++b) {
+            int blk_idx = trd->num_prep_blocks + b;
+            if (blk_idx < desc->num_blocks &&
+                desc->block_table[blk_idx].adc_id >= 0)
+                adc_per_tr++;
+        }
+
+        /* Count ADC blocks in prep region */
+        for (b = 0; b < trd->num_prep_blocks; ++b) {
+            if (b < desc->num_blocks &&
+                desc->block_table[b].adc_id >= 0)
+                adc_prep++;
+        }
+
+        /* Count ADC blocks in cooldown region */
+        {
+            int cool_start = trd->num_prep_blocks +
+                             trd->num_trs * trd->tr_size;
+            for (b = 0; b < trd->num_cooldown_blocks; ++b) {
+                int idx = cool_start + b;
+                if (idx < desc->num_blocks &&
+                    desc->block_table[idx].adc_id >= 0)
+                    adc_cool++;
+            }
+        }
+
+        main_trs = trd->num_trs;
+        total += adc_per_tr * main_trs + adc_prep + adc_cool;
+    }
+    return total;
+}
 
 int pulseqlib_get_max_adc_samples(
     const pulseqlib_collection* coll)
@@ -782,7 +948,7 @@ float** pulseqlib_get_rf_magnitude(
 
 #if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
     if (!pulseqlib__decompress_shape(&decompressed, &desc->shapes[shape_idx],
-                                     rdef->stats.max_amplitude_hz))
+                                     rdef->stats.base_amplitude_hz))
         return NULL;
 #else
     if (!pulseqlib__decompress_shape(&decompressed, &desc->shapes[shape_idx], 1.0f))

@@ -694,7 +694,7 @@ static int compute_rf_stats(
 
         rd->stats.num_samples   = 0;
         rd->stats.flip_angle_deg    = 0.0f;
-        rd->stats.max_amplitude_hz = 0.0f;
+        rd->stats.base_amplitude_hz = 0.0f;
         rd->stats.area          = 0.0f;
         rd->stats.abs_width      = 0.0f;
         rd->stats.eff_width      = 0.0f;
@@ -709,7 +709,7 @@ static int compute_rf_stats(
             for (i = 0; i < rf_table_size; ++i) {
                 if (rf_table[i].id == def_idx) {
                     float amp = (float)fabs(rf_table[i].amplitude);
-                    if (amp > rd->stats.max_amplitude_hz) rd->stats.max_amplitude_hz = amp;
+                    if (amp > rd->stats.base_amplitude_hz) rd->stats.base_amplitude_hz = amp;
                 }
             }
         }
@@ -903,7 +903,7 @@ static int compute_rf_stats(
         rd->stats.abs_width  = sum_abs / num_uniform;
         rd->stats.eff_width  = sum_sq  / num_uniform;
         rd->stats.duty_cycle    = time_above_threshold / num_uniform;
-        rd->stats.flip_angle_deg = (float)PULSEQLIB__TWO_PI * rd->stats.max_amplitude_hz * sum_signed;
+        rd->stats.flip_angle_deg = (float)PULSEQLIB__TWO_PI * rd->stats.base_amplitude_hz * sum_signed;
         rd->stats.max_pulse_width     = maxpw / num_uniform;
         if (rd->stats.duty_cycle < rd->stats.max_pulse_width) rd->stats.duty_cycle = rd->stats.max_pulse_width;
 

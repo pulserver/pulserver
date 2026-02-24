@@ -168,21 +168,23 @@ typedef struct pulseqlib_opts {
  * @brief Per-RF-definition statistics (always available).
  */
 typedef struct pulseqlib_rf_stats {
-    float flip_angle_deg;   /**< nominal flip angle (degrees)           */
-    float area;             /**< integral of |B1(t)| dt  (a.u.)        */
-    float abs_width;        /**< fraction of duration with |B1|>0      */
-    float eff_width;        /**< equivalent rectangular pulse fraction */
-    float duty_cycle;       /**< fraction of TR occupied by RF         */
-    float max_pulse_width;  /**< longest contiguous |B1|>0 segment (s) */
-    float duration_us;      /**< total RF event duration (us)          */
-    int   isodelay_us;      /**< isodelay from center to echo (us)     */
-    float bandwidth_hz;     /**< estimated bandwidth (Hz, via FFT)     */
-    float max_amplitude_hz; /**< peak |gamma*B1| (Hz)                  */
-    int   num_samples;      /**< waveform sample count                 */
+    float flip_angle_deg;       /**< nominal flip angle (degrees)           */
+    float act_amplitude_hz;     /**< actual |gamma*B1| amplitude (Hz)       */
+    float area;                 /**< integral of |B1(t)| dt  (a.u.)        */
+    float abs_width;            /**< fraction of duration with |B1|>0      */
+    float eff_width;            /**< equivalent rectangular pulse fraction */
+    float duty_cycle;           /**< fraction of TR occupied by RF         */
+    float max_pulse_width;      /**< longest contiguous |B1|>0 segment (s) */
+    float duration_us;          /**< total RF event duration (us)          */
+    int   isodelay_us;          /**< isodelay from center to echo (us)     */
+    float bandwidth_hz;         /**< estimated bandwidth (Hz, via FFT)     */
+    float base_amplitude_hz;    /**< base (nominal) peak |gamma*B1| (Hz)   */
+    int   num_samples;          /**< waveform sample count                 */
+    int   num_instances;        /**< repetition count for this RF pulse    */
 } pulseqlib_rf_stats;
 
 #define PULSEQLIB_RF_STATS_INIT { \
-    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f, 0 \
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f, 0, 0 \
 }
 
 /* ================================================================== */

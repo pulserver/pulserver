@@ -170,7 +170,7 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &d->rf_definitions[i].stats.duration_us, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].stats.isodelay_us, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].stats.bandwidth_hz, 1)) return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.max_amplitude_hz, 1)) return 0;
+        if (!write4(f, &d->rf_definitions[i].stats.base_amplitude_hz, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].stats.num_samples, 1)) return 0;
 #endif
     }
@@ -419,7 +419,7 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         if (!read4(f, &d->rf_definitions[i].stats.duration_us, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].stats.isodelay_us, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].stats.bandwidth_hz, 1)) return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.max_amplitude_hz, 1)) return 0;
+        if (!read4(f, &d->rf_definitions[i].stats.base_amplitude_hz, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].stats.num_samples, 1)) return 0;
         if (do_swap) swap4_array(&d->rf_definitions[i].stats.flip_angle_deg, 11);
 #endif

@@ -39,7 +39,7 @@
  *   -DPULSEQLIB_VENDOR=2
  */
 #ifndef PULSEQLIB_VENDOR
-#define PULSEQLIB_VENDOR 2   /* GEHC */
+#define PULSEQLIB_VENDOR 1   /* SIEMENS */
 #endif
 
 /* ================================================================== */
@@ -77,23 +77,12 @@
  * constants here for illustration.
  */
 
-/** Gyromagnetic ratio (Hz / T). */
-#define VENDOR_GAMMA_HZ_PER_T      42577478.0f
-
-/** Static field strength (T). */
-#define VENDOR_B0_T                 3.0f
-
-/** Maximum gradient amplitude (Hz / m). */
-#define VENDOR_MAX_GRAD_HZ_PER_M   (50.0e-3f * VENDOR_GAMMA_HZ_PER_T)
-
-/** Maximum slew rate (Hz / m / s). */
-#define VENDOR_MAX_SLEW_HZ_PER_M_S (200.0f * VENDOR_GAMMA_HZ_PER_T)
 
 /** RF raster time (us). */
 #define VENDOR_RF_RASTER_US         1.0f
 
 /** Gradient raster time (us). */
-#define VENDOR_GRAD_RASTER_US       4.0f
+#define VENDOR_GRAD_RASTER_US       10.0f
 
 /** ADC dwell raster time (us). */
 #define VENDOR_ADC_RASTER_US        0.1f
@@ -102,33 +91,7 @@
 #define VENDOR_BLOCK_RASTER_US      10.0f
 
 /* ================================================================== */
-/*  4. PNS model parameters                                          */
-/* ================================================================== */
-
-/** Chronaxie (us) – IEC 60601-2-33:2022. */
-#define VENDOR_PNS_CHRONAXIE_US     360.0f
-
-/** Rheobase (T/m/s) – scanner-specific calibration. */
-#define VENDOR_PNS_RHEOBASE_T_M_S   20.0f
-
-/** Effective coil length (m). */
-#define VENDOR_PNS_ALPHA            0.333f
-
-/** PNS threshold (%). */
-#define VENDOR_PNS_THRESHOLD_PCT    100.0f
-
-/* ================================================================== */
-/*  5. Acoustic forbidden bands                                       */
-/* ================================================================== */
-
-/**
- * Number of forbidden acoustic bands (scanner-specific).
- * Set to 0 in this example — fill in from the system config at runtime.
- */
-#define VENDOR_NUM_FORBIDDEN_BANDS  0
-
-/* ================================================================== */
-/*  6. Vendor error reporting facade                                  */
+/*  4. Vendor error reporting facade                                  */
 /* ================================================================== */
 
 #include <stdio.h>
@@ -151,9 +114,10 @@
  * @param code  pulseqlib error code (negative PULSEQLIB_ERR_*).
  * @param diag  Diagnostic struct (may be NULL).
  */
-static void vendor_report_error(int code,
-                                const pulseqlib_diagnostic* diag)
-{
+static void vendor_report_error(
+    int code,
+    const pulseqlib_diagnostic* diag
+) {
     char buf[512];
     pulseqlib_format_error(buf, sizeof(buf), code, diag);
 
@@ -167,7 +131,7 @@ static void vendor_report_error(int code,
 }
 
 /* ================================================================== */
-/*  7. Convenience: fill an opts struct from the #defines above       */
+/*  5. Convenience: fill an opts struct from the #defines above       */
 /* ================================================================== */
 
 #include "pulseqlib_methods.h"
@@ -178,13 +142,18 @@ static void vendor_report_error(int code,
  * Call this once at startup; pass the result to every pulseqlib_read()
  * and pulseqlib_check_safety() call.
  */
-static inline void vendor_opts_init(pulseqlib_opts* opts)
-{
+static void vendor_opts_init(
+    pulseqlib_opts* opts, 
+    float gamma_hz_per_t, 
+    float b0_t, 
+    float max_grad_millitesla_per_m, 
+    float max_slew_tesla_per_m_per_s
+) {
     pulseqlib_opts_init(opts,
-        VENDOR_GAMMA_HZ_PER_T,
-        VENDOR_B0_T,
-        VENDOR_MAX_GRAD_HZ_PER_M,
-        VENDOR_MAX_SLEW_HZ_PER_M_S,
+        gamma_hz_per_t,
+        b0_t,
+        gamma_hz_per_t * 1e-3f * max_grad_millitesla_per_m,
+        gamma_hz_per_t * max_slew_tesla_per_m_per_s,
         VENDOR_RF_RASTER_US,
         VENDOR_GRAD_RASTER_US,
         VENDOR_ADC_RASTER_US,
@@ -194,13 +163,17 @@ static inline void vendor_opts_init(pulseqlib_opts* opts)
 /**
  * @brief Initialise PNS parameters from the vendor constants.
  */
-static inline void vendor_pns_params_init(pulseqlib_pns_params* p)
-{
+static void vendor_pns_params_init(
+    pulseqlib_pns_params* p,
+    pulseqlib_opts* opts,
+    float chronaxie_us, 
+    float rheobase_t_m_s, 
+    float alpha
+) {
     p->vendor                  = PULSEQLIB_VENDOR;
-    p->chronaxie_us            = VENDOR_PNS_CHRONAXIE_US;
-    p->rheobase_hz_per_m_per_s = VENDOR_PNS_RHEOBASE_T_M_S
-                                 * VENDOR_GAMMA_HZ_PER_T;
-    p->alpha                   = VENDOR_PNS_ALPHA;
+    p->chronaxie_us            = chronaxie_us;
+    p->rheobase_hz_per_m_per_s = rheobase_t_m_s * opts->gamma_hz_per_t;
+    p->alpha                   = alpha;
 }
 
 #endif /* EXAMPLE_VENDORLIB_H */

@@ -95,7 +95,7 @@ struct RfStats {
     float duration_us      = 0.0f;
     int   isodelay_us      = 0;
     float bandwidth_hz     = 0.0f;
-    float max_amplitude_hz = 0.0f;
+    float base_amplitude_hz = 0.0f;
     int   num_samples      = 0;
 
     static RfStats from_c(const pulseqlib_rf_stats& c) {
@@ -109,7 +109,7 @@ struct RfStats {
         s.duration_us      = c.duration_us;
         s.isodelay_us      = c.isodelay_us;
         s.bandwidth_hz     = c.bandwidth_hz;
-        s.max_amplitude_hz = c.max_amplitude_hz;
+        s.base_amplitude_hz = c.base_amplitude_hz;
         s.num_samples      = c.num_samples;
         return s;
     }

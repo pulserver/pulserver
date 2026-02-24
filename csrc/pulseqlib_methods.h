@@ -377,6 +377,12 @@ int pulseqlib_get_num_cooldown_trs(const pulseqlib_collection* coll,
 int pulseqlib_get_num_unique_adcs(const pulseqlib_collection* coll,
                                   int subseq_idx);
 
+/**
+ * @brief Return total number of ADC readout events across all
+ *        subsequences (accounting for TR repetitions, prep, cooldown).
+ */
+int pulseqlib_get_total_readouts(const pulseqlib_collection* coll);
+
 /** @brief Return total sequence duration (us). */
 float pulseqlib_get_total_duration_us(const pulseqlib_collection* coll);
 
@@ -508,6 +514,35 @@ float pulseqlib_get_rf_base_amplitude_hz(const pulseqlib_collection* coll,
 int pulseqlib_get_tr_rf_ids(const pulseqlib_collection* coll,
                             int* out_rf_ids, int subseq_idx);
 
+/**
+ * @brief Build an ordered array of RF stats for a TR region.
+ *
+ * Walks the block table for the specified region and, for each block
+ * that carries an RF event, hard-copies the base rf_stats, then patches
+ * act_amplitude_hz from the actual amplitude at that block position,
+ * and sets num_instances to the repetition count for that region.
+ *
+ * The library allocates @p *out_pulses via malloc(); the caller must
+ * free() it when done.  On return @p *out_pulses is NULL if the region
+ * contains no RF events.
+ *
+ * Region semantics:
+ *   PULSEQLIB_TR_REGION_PREP     — prep blocks + first main TR (1 instance)
+ *   PULSEQLIB_TR_REGION_MAIN     — one main TR (num_trs adjusted for
+ *                                   non-degenerate prep/cooldown)
+ *   PULSEQLIB_TR_REGION_COOLDOWN — last main TR + cooldown blocks (1 instance)
+ *
+ * @param[in]  coll          Loaded collection.
+ * @param[out] out_pulses    Set to a malloc'd array; caller must free().
+ * @param[in]  subseq_idx    Subsequence index.
+ * @param[in]  region        PULSEQLIB_TR_REGION_PREP/_MAIN/_COOLDOWN.
+ * @return Number of RF entries (≥ 0), or negative error code.
+ */
+int pulseqlib_get_rf_array(const pulseqlib_collection* coll,
+                           pulseqlib_rf_stats** out_pulses,
+                           int subseq_idx,
+                           int region);
+
 /** @brief Return 1 if block has an RF event. */
 int pulseqlib_block_has_rf(const pulseqlib_collection* coll,
                            int seg_idx, int blk_idx);
@@ -537,7 +572,7 @@ int pulseqlib_get_rf_delay_us(const pulseqlib_collection* coll,
  *
  * Returns an array of num_channels pointers, each pointing to
  * num_samples floats.  For single-channel RF num_channels == 1.
- * On GEHC targets magnitudes are pre-scaled by max_amplitude_hz.
+ * On GEHC targets magnitudes are pre-scaled by base_amplitude_hz.
  * Caller must free each result[ch] with PULSEQLIB_FREE, then
  * free the result pointer itself with PULSEQLIB_FREE.
  */

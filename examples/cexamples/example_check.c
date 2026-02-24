@@ -1,27 +1,28 @@
 /**
  * @file example_check.c
- * @brief Load a sequence, cache it, and run all safety checks.
+ * @brief Load a sequence, run safety checks, set up echo filters.
+ *
+ * Assumes globals from example_startup.c are initialised.
  *
  * Workflow:
- *   1. Initialise vendor opts / PNS params / forbidden bands.
- *   2. Load the .seq file (with binary cache enabled so subsequent
- *      loads skip the text parser).
- *   3. Peek scan time (quick estimate from [DEFINITIONS] only).
- *   4. Run full safety check (gradient limits + acoustic + PNS).
- *   5. Print a summary or report errors.
+ *   1. Load with signature check + caching (no label parsing).
+ *   2. Consistency check.
+ *   3. Hardware safety check (gmax, slewmax, continuity, acoustic, PNS).
+ *   4. Build per-TR RF stat arrays; run vendor RF safety + find max B1.
+ *   5. Gradient safety per segment.
+ *   6. Set up echo filters and data storage dimensions.
  *
  * Compile:
  *   cc -I../../csrc example_check.c ../../csrc/pulseqlib_*.c -lm -o check
- *
- * Run:
- *   ./check path/to/sequence.seq
  */
 
-#include "example_vendorlib.h"   /* must come first */
+#include "example_vendorlib.h"
 #include "pulseqlib_methods.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #define CHECK(rc, diag)                                 \
     do {                                                \
@@ -31,148 +32,279 @@
         }                                               \
     } while (0)
 
+#define MAX_SEGMENTS  256
+
+/* ================================================================== */
+/*  Globals — initialised by startup() in production                  */
+/* ================================================================== */
+
+#define MAX_FORBIDDEN_BANDS 16
+
+pulseqlib_opts           g_opts;
+pulseqlib_diagnostic     g_diag;
+pulseqlib_pns_params     g_pns;
+pulseqlib_forbidden_band g_bands[MAX_FORBIDDEN_BANDS];
+int                      g_num_bands;
+
+/* ================================================================== */
+/*  Vendor RF / gradient safety stubs                                 */
+/* ================================================================== */
+
+/**
+ * @brief Vendor RF safety check.
+ *
+ * In a real driver this calls the vendor SAR model with the ordered
+ * array of RF pulses (each carrying act_amplitude_hz, duration,
+ * duty_cycle, num_instances, …).  Returns minimum TR in us.
+ */
+static float vendorCheckRFSafety(const pulseqlib_rf_stats* pulses,
+                                 int num_pulses)
+{
+    /* Placeholder: return 0 = no constraint */
+    (void)pulses; (void)num_pulses;
+    return 0.0f;
+}
+
+/**
+ * @brief Vendor max-B1 finder — returns peak |gamma*B1| (Hz).
+ */
+static float vendorFindRFMax(const pulseqlib_rf_stats* pulses,
+                             int num_pulses)
+{
+    float mx = 0.0f;
+    int i;
+    for (i = 0; i < num_pulses; ++i) {
+        if (pulses[i].base_amplitude_hz > mx)
+            mx = pulses[i].base_amplitude_hz;
+    }
+    return mx;
+}
+
+/**
+ * @brief Vendor gradient safety per segment — returns min duration (us).
+ */
+static float vendorCheckGradSafety(const pulseqlib_collection* coll,
+                                   int seg_idx)
+{
+    /* Placeholder: return 0 = no constraint */
+    (void)coll; (void)seg_idx;
+    return 0.0f;
+}
+
+/* ================================================================== */
+/*  Main                                                              */
+/* ================================================================== */
+
 int main(int argc, char** argv)
 {
-    const char*            seq_path;
-    pulseqlib_opts         opts       = PULSEQLIB_OPTS_INIT;
-    pulseqlib_diagnostic   diag       = PULSEQLIB_DIAGNOSTIC_INIT;
-    pulseqlib_collection*  coll       = NULL;
-    pulseqlib_scan_time_info peek_info = PULSEQLIB_SCAN_TIME_INFO_INIT;
-    pulseqlib_scan_time_info scan_info = PULSEQLIB_SCAN_TIME_INFO_INIT;
-    pulseqlib_pns_params   pns        = PULSEQLIB_PNS_PARAMS_INIT;
-    int                    rc;
-    int                    num_averages = 1;
+    const char*           seq_path;
+    pulseqlib_collection* coll = NULL;
+    int rc, s, nsub, nseg;
+    int max_b1_subseq = 0;
 
-    /* -- Command line --------------------------------------------- */
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <sequence.seq> [num_averages]\n", argv[0]);
+        fprintf(stderr, "Usage: %s <sequence.seq>\n", argv[0]);
         return 1;
     }
     seq_path = argv[1];
-    if (argc > 2) num_averages = atoi(argv[2]);
 
-    /* -- Step 1: initialise vendor parameters --------------------- */
-    vendor_opts_init(&opts);
-    vendor_pns_params_init(&pns);
+    /* -- Startup (in production this is in a separate function) --- */
+    vendor_opts_init(&g_opts, 42577478.0f, 3.0f, 50.0f, 200.0f);
+    vendor_pns_params_init(&g_pns, &g_opts, 360.0f, 20.0f, 0.333f);
+    pulseqlib_diagnostic_init(&g_diag);
+    g_num_bands = 0;
 
-    /*
-     * Acoustic forbidden bands.
-     *
-     * In a real integration these come from the system configuration
-     * database.  Here we hardcode one example band.
-     */
-    pulseqlib_forbidden_band bands[1];
-    int num_bands = 0;  /* set to 1 to enable the check below */
+    /* ============================================================= */
+    /*  1. Load — signature + cache, no label parsing                */
+    /* ============================================================= */
 
-    /* Example: forbid 500–600 Hz above 10 mT/m spectral amplitude */
-    bands[0].freq_min_hz            = 500.0f;
-    bands[0].freq_max_hz            = 600.0f;
-    bands[0].max_amplitude_hz_per_m = 10.0e-3f * VENDOR_GAMMA_HZ_PER_T;
-    /* num_bands = 1;  -- uncomment to enable */
+    rc = pulseqlib_read(&coll, &g_diag, seq_path, &g_opts,
+                        1,   /* cache_binary     */
+                        1,   /* verify_signature */
+                        0,   /* parse_labels     */
+                        1);  /* num_averages     */
+    CHECK(rc, &g_diag);
 
-    /* -- Step 2: quick scan-time peek (before full load) ---------- */
-    rc = pulseqlib_peek_scan_time(&peek_info, seq_path, &opts,
-                                  num_averages);
-    if (PULSEQLIB_SUCCEEDED(rc)) {
-        printf("Quick scan-time estimate: %.3f s\n",
-               peek_info.total_duration_us / 1e6f);
-    } else {
-        fprintf(stderr, "Warning: could not peek scan time (rc=%d)\n", rc);
-        /* Non-fatal: continue with full load */
-    }
+    /* ============================================================= */
+    /*  2. Consistency check                                         */
+    /* ============================================================= */
 
-    /* -- Step 3: full load (with binary cache) -------------------- */
-    rc = pulseqlib_read(
-        &coll, &diag, seq_path, &opts,
-        /*cache_binary=*/1,          /* write/read .bin cache */
-        /*verify_signature=*/1,      /* check MD5 signature   */
-        /*parse_labels=*/1,          /* build ADC label table  */
-        num_averages);
-    CHECK(rc, &diag);
+    rc = pulseqlib_check_consistency(coll, &g_diag);
+    CHECK(rc, &g_diag);
 
-    /* -- Step 4: print structural summary ------------------------- */
+    /* ============================================================= */
+    /*  3. Hardware safety (gmax, slewmax, continuity, acoustic, PNS)*/
+    /* ============================================================= */
+
+    rc = pulseqlib_check_safety(coll, &g_diag, &g_opts,
+                                g_num_bands, g_bands,
+                                &g_pns, 100.0f);
+    CHECK(rc, &g_diag);
+    printf("Hardware safety check PASSED.\n");
+
+    /* ============================================================= */
+    /*  4. RF safety — per-region RF arrays via pulseqlib_get_rf_array*/
+    /* ============================================================= */
     {
-        int nsub = pulseqlib_get_num_subsequences(coll);
-        int s;
-        printf("\nLoaded collection: %d subsequence(s)\n", nsub);
+        float max_b1_hz = 0.0f;
+
+        nsub = pulseqlib_get_num_subsequences(coll);
 
         for (s = 0; s < nsub; ++s) {
-            int tr_size     = pulseqlib_get_tr_size(coll, s);
-            int num_trs     = pulseqlib_get_num_trs(coll, s);
-            int num_prep    = pulseqlib_get_num_prep_blocks(coll, s);
-            int num_cool    = pulseqlib_get_num_cooldown_blocks(coll, s);
+            int deg_prep = pulseqlib_get_degenerate_prep(coll, s);
+            int deg_cool = pulseqlib_get_degenerate_cooldown(coll, s);
             float tr_dur_us = pulseqlib_get_tr_duration_us(coll, s);
 
-            printf("  Subseq %d: TR size=%d, #TRs=%d, "
-                   "prep=%d, cooldown=%d, TR duration=%.1f us\n",
-                   s, tr_size, num_trs, num_prep, num_cool, tr_dur_us);
+            pulseqlib_rf_stats* pulses = NULL;
+            int   npulses;
+            float min_tr_us, b1;
+
+            /* -- Prep (if non-degenerate) ------------------------- */
+            if (!deg_prep) {
+                npulses = pulseqlib_get_rf_array(
+                    coll, &pulses, s, PULSEQLIB_TR_REGION_PREP);
+                if (npulses > 0) {
+                    min_tr_us = vendorCheckRFSafety(pulses, npulses);
+                    if (min_tr_us > tr_dur_us) {
+                        free(pulses);
+                        fprintf(stderr,
+                            "RF safety: subseq %d prep TR too short\n", s);
+                        goto fail;
+                    }
+                    b1 = vendorFindRFMax(pulses, npulses);
+                    if (b1 > max_b1_hz) {
+                        max_b1_hz = b1;
+                        max_b1_subseq = s;
+                    }
+                }
+                free(pulses);
+                pulses = NULL;
+            }
+
+            /* -- Cooldown (if non-degenerate) --------------------- */
+            if (!deg_cool) {
+                npulses = pulseqlib_get_rf_array(
+                    coll, &pulses, s, PULSEQLIB_TR_REGION_COOLDOWN);
+                if (npulses > 0) {
+                    min_tr_us = vendorCheckRFSafety(pulses, npulses);
+                    if (min_tr_us > tr_dur_us) {
+                        free(pulses);
+                        fprintf(stderr,
+                            "RF safety: subseq %d cooldown TR too short\n", s);
+                        goto fail;
+                    }
+                    b1 = vendorFindRFMax(pulses, npulses);
+                    if (b1 > max_b1_hz) {
+                        max_b1_hz = b1;
+                        max_b1_subseq = s;
+                    }
+                }
+                free(pulses);
+                pulses = NULL;
+            }
+
+            /* -- Main TR ------------------------------------------ */
+            npulses = pulseqlib_get_rf_array(
+                coll, &pulses, s, PULSEQLIB_TR_REGION_MAIN);
+            if (npulses > 0) {
+                min_tr_us = vendorCheckRFSafety(pulses, npulses);
+                if (min_tr_us > tr_dur_us) {
+                    free(pulses);
+                    fprintf(stderr,
+                        "RF safety: subseq %d main TR too short\n", s);
+                    goto fail;
+                }
+                b1 = vendorFindRFMax(pulses, npulses);
+                if (b1 > max_b1_hz) {
+                    max_b1_hz = b1;
+                    max_b1_subseq = s;
+                }
+            }
+            free(pulses);
+        }
+
+        printf("Max B1 = %.1f Hz (subseq %d)\n",
+               max_b1_hz, max_b1_subseq);
+    }
+
+    /* ============================================================= */
+    /*  5. Gradient safety per segment                               */
+    /* ============================================================= */
+    nseg = pulseqlib_get_num_segments(coll);
+
+    for (s = 0; s < nseg; ++s) {
+        int  seg_dur_us = pulseqlib_get_segment_duration_us(coll, s);
+        float min_dur   = vendorCheckGradSafety(coll, s);
+
+        if (min_dur > (float)seg_dur_us) {
+            fprintf(stderr,
+                "Gradient safety: segment %d too short "
+                "(%.0f us < %.0f us min)\n",
+                s, (float)seg_dur_us, min_dur);
+            goto fail;
+        }
+    }
+    printf("Gradient safety check PASSED (%d segments).\n", nseg);
+
+    /* ============================================================= */
+    /*  6. Echo filters and data storage dimensions                  */
+    /* ============================================================= */
+    {
+        int max_samples       = pulseqlib_get_max_adc_samples(coll);
+        int total_readouts    = pulseqlib_get_total_readouts(coll);
+        int num_unique_adcs   = pulseqlib_get_num_unique_adcs(coll, 0);
+        int calibration_samples = 0;
+        int a;
+
+        /*
+         * calibration_samples = first ADC sample count from the
+         * subsequence that contains max B1 (used for prescan).
+         * Walking unique ADCs in that subsequence:
+         */
+        {
+            int n_adcs = pulseqlib_get_num_unique_adcs(coll,
+                                                       max_b1_subseq);
+            for (a = 0; a < n_adcs; ++a) {
+                int ns = pulseqlib_get_adc_num_samples(coll, a);
+                if (ns > 0) {
+                    calibration_samples = ns;
+                    break;
+                }
+            }
+        }
+
+        printf("\nEcho filter / data storage setup:\n");
+        printf("  max_samples         = %d\n", max_samples);
+        printf("  calibration_samples = %d\n", calibration_samples);
+        printf("  total_readouts      = %d\n", total_readouts);
+        printf("  unique ADC events   = %d\n", num_unique_adcs);
+
+        /*
+         * In a real vendor driver you would now:
+         *
+         * 1. Set up echo filters per unique ADC event:
+         *      dwell     = pulseqlib_get_adc_dwell_us(coll, a);
+         *      nsamples  = pulseqlib_get_adc_num_samples(coll, a);
+         *      bw        = <vendor formula from dwell>;
+         *      calcfilter(&echo_filt[a], bw, nsamples, ...);
+         *      setfilter(&echo_filt[a], SCAN | PRESCAN);
+         *
+         * 2. Set data storage dimensions from total_readouts,
+         *    max_samples, and vendor-specific limits.
+         */
+
+        for (a = 0; a < num_unique_adcs; ++a) {
+            int dwell = pulseqlib_get_adc_dwell_us(coll, a);
+            int nsamp = pulseqlib_get_adc_num_samples(coll, a);
+            printf("  ADC %d: dwell=%d us, nsamples=%d\n", a, dwell, nsamp);
         }
     }
 
-    /* -- Step 5: accurate scan time ------------------------------- */
-    rc = pulseqlib_get_scan_time(coll, num_averages, &scan_info);
-    CHECK(rc, &diag);
-
-    printf("\nAccurate scan time: %.3f s  (%d segment boundaries)\n",
-           scan_info.total_duration_us / 1e6f,
-           scan_info.total_segment_boundaries);
-
-    /* -- Step 6: full safety check -------------------------------- */
-    rc = pulseqlib_check_safety(
-        coll, &diag, &opts,
-        num_bands, bands,
-        &pns,
-        VENDOR_PNS_THRESHOLD_PCT);
-
-    if (PULSEQLIB_SUCCEEDED(rc)) {
-        printf("\nSafety check PASSED.\n");
-    } else {
-        /* Safety violation — report the specific failure */
-        char buf[512];
-        pulseqlib_format_error(buf, sizeof(buf), rc, &diag);
-
-        printf("\nSafety check FAILED:\n  %s\n", buf);
-
-        /*
-         * The error code tells you which check failed:
-         *
-         *   PULSEQLIB_ERR_MAX_GRAD_EXCEEDED (-550)
-         *   PULSEQLIB_ERR_MAX_SLEW_EXCEEDED (-552)
-         *   PULSEQLIB_ERR_GRAD_DISCONTINUITY (-551)
-         *   PULSEQLIB_ERR_ACOUSTIC_VIOLATION (-404)
-         *   PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED (-455)
-         *
-         * The diagnostic message includes axis and block index.
-         */
-        switch (rc) {
-        case PULSEQLIB_ERR_MAX_GRAD_EXCEEDED:
-            printf("  -> Reduce gradient amplitude.\n");
-            break;
-        case PULSEQLIB_ERR_MAX_SLEW_EXCEEDED:
-            printf("  -> Reduce slew rate.\n");
-            break;
-        case PULSEQLIB_ERR_ACOUSTIC_VIOLATION:
-            printf("  -> Adjust echo spacing or gradient waveform shape.\n");
-            break;
-        case PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED:
-            printf("  -> Reduce slew rate or TR.\n");
-            break;
-        default:
-            break;
-        }
-
-        /*
-         * In a real vendor integration, this would call the vendor
-         * error API to stop the scan prescription:
-         *
-         *   vendor_report_error(USE_ERMES, buf,
-         *                       VENDOR_ERR_PSD_SAFETY_VIOLATION, 0);
-         */
-    }
-
-    /* -- Cleanup -------------------------------------------------- */
+    /* ============================================================= */
+    /*  Cleanup                                                      */
+    /* ============================================================= */
     pulseqlib_collection_free(coll);
-    return (PULSEQLIB_SUCCEEDED(rc)) ? 0 : 1;
+    return 0;
 
 fail:
     if (coll) pulseqlib_collection_free(coll);
