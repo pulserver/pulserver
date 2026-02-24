@@ -20,17 +20,40 @@ import mr.*
 
 %% --- run all generators -------------------------------------------------
 
-write_bssfp(1, 1);
-write_spgr(1, 1);
-write_spgr(3, 1);
-write_fse(1, 1);
-write_fse(3, 1);
-write_epi(1, 1);
-write_epi(3, 1);
-write_mprage(1, 1);
-write_mprage_noncart(1, 1, 204, false);
-write_mprage_noncart(1, 1, 204, true);
+write_bssfp(1);
+write_bssfp(3);
 
+write_spgr(1, 1);
+write_spgr(1, 3);
+write_spgr(3, 1);
+write_spgr(3, 3);
+
+write_fse(1, 1);
+write_fse(1, 3);
+write_fse(3, 1);
+write_fse(3, 3);
+
+write_epi(1, 1);
+write_epi(1, 3);
+write_epi(3, 1);
+write_epi(3, 3);
+
+write_mprage(1, 1);
+write_mprage(1, 3);
+write_mprage(3, 1);
+write_mprage(3, 3);
+
+write_mprage_noncart(1, 1, 240, false);
+write_mprage_noncart(1, 3, 240, false);
+write_mprage_noncart(3, 1, 240, false);
+write_mprage_noncart(3, 3, 240, false);
+
+write_mprage_noncart(1, 1, 240, true);
+write_mprage_noncart(1, 3, 240, true);
+write_mprage_noncart(3, 1, 240, true);
+write_mprage_noncart(3, 3, 240, true);
+
+write_mprage_noncart(1, 1, 2048, true);
 
 fprintf('\n=== All segmentation test sequences generated. ===\n');
 
@@ -53,10 +76,10 @@ function sys = make_system()
         'blockDurationRaster', 20e-6);
 end
 
-function fname = seq_filename(prefix, num_slices, suffix)
-% Build output filename: <prefix>_<Nsl>sl<suffix>.seq
-    if nargin < 3, suffix = ''; end
-    fname = sprintf('%s_%dsl%s.seq', prefix, num_slices, suffix);
+function fname = seq_filename(prefix, num_slices, num_averages, suffix)
+% Build output filename: <prefix>_<Nsl>sl_<Navg>avg<suffix>.seq
+    if nargin < 4, suffix = ''; end
+    fname = sprintf('%s_%dsl_%davg%s.seq', prefix, num_slices, num_averages, suffix);
 end
 
 function check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt)
@@ -352,9 +375,8 @@ end
 %  bSSFP  (True FISP)
 %  ========================================================================
 
-function write_bssfp(num_slices, num_averages)
-    fprintf('Generating bSSFP (%d slice, %d avg) ...\n', num_slices, num_averages);
-    assert(num_slices == 1, 'bSSFP supports single-slice only (gradient continuity).');
+function write_bssfp(num_averages)
+    fprintf('Generating bSSFP (1 slice, %d avg) ...\n', num_averages);
 
     sys   = make_system();
     seq   = mr.Sequence(sys);
@@ -452,46 +474,15 @@ function write_bssfp(num_slices, num_averages)
     assert(abs(TR - (mr.calcDuration(seq.getBlock(4)) ...
                    + mr.calcDuration(seq.getBlock(5)))) < 1e-12);
 
-    % --- representative TRs for waveform ground truth ---
-    tr_min  = mr.Sequence(sys);  % zero PE (C library mode 2: definition-min)
-    tr_max  = mr.Sequence(sys);  % max |PE| (C library mode 1: position-max)
-    tr_prep = mr.Sequence(sys);  % prep TR: prep blocks + first main TR (actual amplitudes)
-    tr_cool = mr.Sequence(sys);  % cool TR: last main TR + exit block (actual amplitudes)
-
-    % Main TR: min (zero PE)
-    tr_min.addBlock(rf, gz_1, mr.scaleGrad(gyMax, 0), gx_2);
-    tr_min.addBlock(gx_1, mr.scaleGrad(gyMax, 0), gz_2, adc);
-
-    % Main TR: max (full |PE|)
-    tr_max.addBlock(rf, gz_1, gyMax, gx_2);
-    tr_max.addBlock(gx_1, gyMax, gz_2, adc);
-
-    % Prep TR = prep blocks (alpha/2 + align + lblOnce0) + first main TR
-    % Use actual amplitudes: alpha/2 RF + last PE from previous TR
-    tr_prep.addBlock(rf05, gz_1);                                          % alpha/2
-    tr_prep.addBlock(mr.align('left', prepDelay, gz_2, gyPre_2, 'right', gx_1_1)); % align block
-    % lblOnce0 is label-only (no gradients) — still a block in the sequence
-    % First main block uses gyPre_1 = undo of last prep PE, gyPre_2 = first PE
-    gyPre_1_first = mr.scaleGrad(gyPre_2, -1);
-    gyPre_2_first = mr.scaleGrad(gyMax, phaseAreas(1) / maxPeArea);
-    tr_prep.addBlock(rf, gz_1, gyPre_1_first, gx_2);
-    tr_prep.addBlock(gx_1, gyPre_2_first, gz_2, adc);
-
-    % Cooldown TR = last main TR + exit block
-    % Last main TR uses gyPre_1 = undo of previous PE, gyPre_2 = last PE
-    gyPre_1_last = mr.scaleGrad(gyMax, -phaseAreas(end-1) / maxPeArea);
-    gyPre_2_last = mr.scaleGrad(gyMax, phaseAreas(end) / maxPeArea);
-    tr_cool.addBlock(rf, gz_1, gyPre_1_last, gx_2);
-    tr_cool.addBlock(gx_1, gyPre_2_last, gz_2, adc);
-    tr_cool.addBlock(gx_2);  % exit block
-
     fprintf('  TR = %.3f ms   TE = %.3f ms\n', TR * 1e3, TE * 1e3);
 
     % --- structural ground truth ---
-    gt.tr_min          = tr_min;
-    gt.tr_max          = tr_max;
-    gt.tr_prep         = tr_prep;
-    gt.tr_cool         = tr_cool;
+    % bSSFP uses split/merged gradients that don't start at 0, so
+    % representative TR sequences cannot be built as standalone sequences.
+    gt.tr_min          = [];
+    gt.tr_max          = [];
+    gt.tr_prep         = [];
+    gt.tr_cool         = [];
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
@@ -502,8 +493,8 @@ function write_bssfp(num_slices, num_averages)
     gt.degenerate_prep = 0;          % alpha/2 prep ~= main pattern
     gt.degenerate_cool = 0;          % exit block ~= main pattern
 
-    fname = seq_filename('bssfp_2d', num_slices);
-    check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt);
+    fname = sprintf('bssfp_2d_%davg.seq', num_averages);
+    check_and_write(seq, fname, fov, thick, 1, num_averages, gt);
 end
 
 
@@ -527,7 +518,7 @@ function write_spgr(num_slices, num_averages)
     TE        = 4.3e-3;
     Ndummy    = 5;                  % dummy TRs for steady state
     rfSpoilInc = 84;               % RF spoiling increment [deg]
-    roDur     = 3.2e-3;            % readout duration
+    roDur     = 2.560e-3;          % readout flat time: dwell=10us (mult of adcRaster=2us), trap=2680us (mult of blockRaster=20us)
 
     % --- events ---
     [rf, gz] = mr.makeSincPulse(alpha * pi / 180, ...
@@ -664,7 +655,7 @@ function write_spgr(num_slices, num_averages)
     gt.degenerate_prep = 1;    % dummy TR pattern == imaging TR pattern
     gt.degenerate_cool = 0;    % no cooldown blocks
 
-    fname = seq_filename('gre_2d', num_slices);
+    fname = seq_filename('gre_2d', num_slices, num_averages);
     check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt);
 end
 
@@ -692,14 +683,16 @@ function write_fse(num_slices, num_averages)
     TEeff  = 100e-3;
     Ndummy = 1;        % one dummy excitation
 
-    samplingTime = 6.4e-3;
+    samplingTime = 5.120e-3;       % dwell = 20 us (mult of adcRaster); samplingTime+2*adcDeadTime on gradRaster
     readoutTime  = samplingTime + 2 * sys.adcDeadTime;
     tEx   = 2.5e-3;
     tExwd = tEx + sys.rfRingdownTime + sys.rfDeadTime;
-    tRef  = 2e-3;
+    tRef  = 3e-3;
     tRefwd = tRef + sys.rfRingdownTime + sys.rfDeadTime;
     tSp    = 0.5 * (TE1 - readoutTime - tRefwd);
+    tSp    = sys.blockDurationRaster * round(tSp / sys.blockDurationRaster);
     tSpex  = 0.5 * (TE1 - tExwd - tRefwd);
+    tSpex  = sys.blockDurationRaster * round(tSpex / sys.blockDurationRaster);
     fspR   = 1.0;
     fspS   = 0.5;
     dG     = 260e-6;    % ramp time (multiple of 20 us grad raster)
@@ -824,6 +817,10 @@ function write_fse(num_slices, num_averages)
     end
     delayTR = mr.makeDelay(TRfill);
 
+    % --- labels ---
+    lblOnce1 = mr.makeLabel('SET', 'ONCE', 1);
+    lblOnce0 = mr.makeLabel('SET', 'ONCE', 0);
+
     % --- ground truth: segment defs as unique block IDs ---
     % Block defs (based on gradient/RF structure, ADC not in key):
     %   0: GS1                          (slice-select ramp-up)
@@ -866,7 +863,7 @@ function write_fse(num_slices, num_averages)
     tr_max.addBlock(GS3, GR3);
     for kech = 1:necho
         phaseArea = phaseAreas(kech, 1);
-        if maxPeArea > 0 && kex > 0
+        if maxPeArea > 0
             pe_scale = phaseArea / maxPeArea;
         else
             pe_scale = 0;
@@ -901,7 +898,11 @@ function write_fse(num_slices, num_averages)
             seq.addBlock(GS3, GR3);
 
             for kech = 1:necho
-                phaseArea = phaseAreas(kech, kex);
+                if kex > 0
+                    phaseArea = phaseAreas(kech, kex);
+                else
+                    phaseArea = 0;
+                end
                 if maxPeArea > 0 && kex > 0
                     pe_scale = phaseArea / maxPeArea;
                 else
@@ -942,7 +943,7 @@ function write_fse(num_slices, num_averages)
     gt.degenerate_prep     = 1;  % dummy uses same block defs (ADC not in dedup key)
     gt.degenerate_cool     = 0;
 
-    fname = seq_filename('fse_2d', num_slices);
+    fname = seq_filename('fse_2d', num_slices, num_averages);
     check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt);
 end
 
@@ -1005,7 +1006,7 @@ function write_epi(num_slices, num_averages)
     % ADC
     assert(ro_os >= 2);
     adcSamples = Nx * ro_os;
-    adcDwell   = floor(readoutTime / adcSamples * 1e7) * 1e-7;
+    adcDwell   = sys.adcRasterTime * floor(readoutTime / adcSamples / sys.adcRasterTime);
     adc = mr.makeAdc(adcSamples, 'Dwell', adcDwell, 'Delay', blip_dur / 2);
     time_to_center = adc.dwell * ((adcSamples - 1)/2 + 0.5);
     adc.delay = round((gx.riseTime + gx.flatTime/2 - time_to_center) * 1e6) * 1e-6;
@@ -1029,7 +1030,7 @@ function write_epi(num_slices, num_averages)
     gyPre = mr.makeTrapezoid('y', sys, 'Area', Ny_pre * deltak);
     [gxPre, gyPre, gzReph] = mr.align('right', gxPre, 'left', gyPre, gzReph);
     gyPre = mr.makeTrapezoid('y', sys, 'Area', gyPre.area, ...
-                             'Duration', mr.calcDuration(gxPre, gyPre, gzReph));
+        'Duration', mr.calcDuration(gxPre, gyPre, gzReph));
     gyPre.amplitude = gyPre.amplitude * pe_enable;
 
     % Slice positions (interleaved)
@@ -1251,7 +1252,7 @@ function write_epi(num_slices, num_averages)
     gt.degenerate_prep = 0;           % nav structure differs (no ADC, no labels)
     gt.degenerate_cool = 0;
 
-    fname = seq_filename('epi_2d', num_slices);
+    fname = seq_filename('epi_2d', num_slices, num_averages);
     check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt);
 end
 
@@ -1281,12 +1282,11 @@ function write_mprage(num_slices, num_averages)
     Nz  = 192;                       % partition (z) — outer loop
 
     % --- events ---
+    rf180 = mr.makeBlockPulse(pi, sys, ...
+        'Duration', 10e-3, 'use', 'excitation');
     rf = mr.makeBlockPulse(alpha * pi / 180, sys, ...
-                           'Duration', rfLen, 'use', 'excitation');
-    rf180 = mr.makeAdiabaticPulse('hypsec', sys, ...
-                                  'Duration', 10.24e-3, 'dwell', 1e-5, ...
-                                  'use', 'excitation');
-
+        'Duration', rfLen, 'use', 'excitation');
+    
     deltak = 1 ./ fov;
     gro    = mr.makeTrapezoid('x', 'Amplitude', ...
         Nx * deltak(1) / ro_dur, ...
@@ -1379,7 +1379,7 @@ function write_mprage(num_slices, num_averages)
 
     seq.setDefinition('FOV', fov);
     seq.setDefinition('Name', 'mprage');
-    seq.setDefinition('OrientationMapping', 'SAG');
+    seq.setDefinition('OrientationMapping', 'AX');
 
     % --- representative TRs for waveform ground truth ---
     tr_min = mr.Sequence(sys);  % zero PE (mode 2: definition-min)
@@ -1413,7 +1413,7 @@ function write_mprage(num_slices, num_averages)
     gt.degenerate_prep = 0;
     gt.degenerate_cool = 0;
 
-    fname = 'mprage_3d.seq';
+    fname = seq_filename('mprage_3d', num_slices, num_averages);
     check_and_write(seq, fname, fov(1), fov(3), num_slices, num_averages, gt);
 end
 
@@ -1442,8 +1442,8 @@ function write_mprage_noncart(num_slices, num_averages, num_shots, use_rotext)
     Nz  = 192;                       % partition (z) — outer loop
 
     % --- events ---
-    rf180 = mr.makeAdiabaticPulse('hypsec', sys, ...
-        'Duration', 10.24e-3, 'dwell', 1e-5, 'use', 'excitation');
+    rf180 = mr.makeBlockPulse(pi, sys, ...
+        'Duration', 10e-3, 'use', 'excitation');
     rf = mr.makeBlockPulse(alpha * pi / 180, sys, ...
         'Duration', rfLen, 'use', 'excitation');
 
@@ -1556,7 +1556,7 @@ function write_mprage_noncart(num_slices, num_averages, num_shots, use_rotext)
 
     seq.setDefinition('FOV', fov);
     seq.setDefinition('Name', 'mprage_noncart');
-    seq.setDefinition('OrientationMapping', 'SAG');
+    seq.setDefinition('OrientationMapping', 'AX');
 
     % --- representative TRs for waveform ground truth ---
     tr_min = mr.Sequence(sys);  % zero PE2 (mode 2: definition-min)
@@ -1593,6 +1593,11 @@ function write_mprage_noncart(num_slices, num_averages, num_shots, use_rotext)
     gt.degenerate_prep = 0;
     gt.degenerate_cool = 0;
 
-    fname = sprintf('mprage_noncart_3d_%dshots.seq', num_shots);
+    if use_rotext
+        rotext_tag = '_rotext';
+    else
+        rotext_tag = '';
+    end
+    fname = seq_filename(sprintf('mprage_noncart_3d_%dshots%s', num_shots, rotext_tag), num_slices, num_averages);
     check_and_write(seq, fname, fov(1), fov(3), num_slices, num_averages, gt);
 end
