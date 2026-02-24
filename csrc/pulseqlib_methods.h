@@ -598,11 +598,12 @@ float** pulseqlib_get_rf_phase(const pulseqlib_collection* coll,
  *
  * For multi-channel RF the tiled time shape is truncated to the
  * first channel (all channels share the same time base).
+ * The number of time points equals num_samples from
+ * pulseqlib_get_rf_magnitude.
  * Caller must free the returned array with PULSEQLIB_FREE.
  */
 float* pulseqlib_get_rf_time_us(const pulseqlib_collection* coll,
-                                int seg_idx, int blk_idx,
-                                int* num_samples);
+                                int seg_idx, int blk_idx);
 
 /* ================================================================== */
 /*  Gradient getters                                                  */
@@ -650,11 +651,13 @@ int pulseqlib_get_grad_initial_shot_id(const pulseqlib_collection* coll,
 
 /**
  * @brief Return gradient time-point array (us).
+ *
+ * The number of time points matches the amplitude waveform returned
+ * by pulseqlib_get_grad_amplitude (or 3/4 for trapezoids).
  * Caller must free the returned array with PULSEQLIB_FREE.
  */
 float* pulseqlib_get_grad_time_us(const pulseqlib_collection* coll,
-                                  int seg_idx, int blk_idx, int axis,
-                                  int* num_samples);
+                                  int seg_idx, int blk_idx, int axis);
 
 /* ================================================================== */
 /*  ADC getters                                                       */
@@ -695,6 +698,14 @@ int pulseqlib_block_has_trigger(const pulseqlib_collection* coll,
 int pulseqlib_get_trigger_delay_us(const pulseqlib_collection* coll,
                                    int seg_idx, int blk_idx);
 
+/** @brief Return trigger duration within block (us). */
+int pulseqlib_get_trigger_duration_us(const pulseqlib_collection* coll,
+                                      int seg_idx, int blk_idx);
+
+/** @brief Return 1 if block has a frequency modulation event. */
+int pulseqlib_block_has_freq_mod(const pulseqlib_collection* coll,
+                                 int seg_idx, int blk_idx);
+
 /** @brief Return 1 if block has a rotation event. */
 int pulseqlib_block_has_rotation(const pulseqlib_collection* coll,
                                  int seg_idx, int blk_idx);
@@ -713,6 +724,26 @@ int pulseqlib_block_has_nopos(const pulseqlib_collection* coll,
 
 /** @brief Return number of k-space zero-crossings in a segment. */
 int pulseqlib_get_segment_num_kzero_crossings(
+    const pulseqlib_collection* coll, int seg_idx);
+
+/**
+ * @brief Return RF-to-ADC gap within a segment (us).
+ *
+ * Finds the last RF anchor and the first following ADC anchor in the
+ * segment and returns (adc_start - rf_end) in us.  Returns -1 if the
+ * segment has no RF+ADC pair in that order.
+ */
+int pulseqlib_get_segment_rf_adc_gap_us(
+    const pulseqlib_collection* coll, int seg_idx);
+
+/**
+ * @brief Return minimum ADC-to-ADC gap within a segment (us).
+ *
+ * For consecutive ADC anchors in the segment, returns the smallest
+ * (next_adc_start - prev_adc_end).  Returns -1 if the segment has
+ * fewer than 2 ADC events.
+ */
+int pulseqlib_get_segment_adc_adc_gap_us(
     const pulseqlib_collection* coll, int seg_idx);
 
 /* ================================================================== */

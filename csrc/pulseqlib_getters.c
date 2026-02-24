@@ -727,6 +727,64 @@ int pulseqlib_get_segment_num_kzero_crossings(
     return desc->segment_definitions[local_seg].timing.num_kzero_crossings;
 }
 
+int pulseqlib_get_segment_rf_adc_gap_us(
+    const pulseqlib_collection* coll, int seg_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg;
+    const pulseqlib_segment_timing* tm;
+    int r, a;
+
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return -1;
+
+    tm = &desc->segment_definitions[local_seg].timing;
+
+    /* For each RF anchor (in order), find the first ADC anchor whose
+     * start is after the RF end.  Return the smallest such gap. */
+    {
+        int best = -1;
+        for (r = 0; r < tm->num_rf_anchors; ++r) {
+            int rf_end = tm->rf_anchors[r].end_us;
+            for (a = 0; a < tm->num_adc_anchors; ++a) {
+                int adc_start = tm->adc_anchors[a].start_us;
+                if (adc_start >= rf_end) {
+                    int gap = adc_start - rf_end;
+                    if (best < 0 || gap < best)
+                        best = gap;
+                    break; /* first matching ADC for this RF */
+                }
+            }
+        }
+        return best;
+    }
+}
+
+int pulseqlib_get_segment_adc_adc_gap_us(
+    const pulseqlib_collection* coll, int seg_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg;
+    const pulseqlib_segment_timing* tm;
+    int a, best;
+
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return -1;
+
+    tm = &desc->segment_definitions[local_seg].timing;
+    if (tm->num_adc_anchors < 2)
+        return -1;
+
+    best = -1;
+    for (a = 1; a < tm->num_adc_anchors; ++a) {
+        int gap = (int)(tm->adc_anchors[a].start_us -
+                        tm->adc_anchors[a - 1].end_us);
+        if (best < 0 || gap < best)
+            best = gap;
+    }
+    return best;
+}
+
 /* ================================================================== */
 /*  Block-level queries                                               */
 /* ================================================================== */
@@ -1048,7 +1106,7 @@ float** pulseqlib_get_rf_phase(
 
 float* pulseqlib_get_rf_time_us(
     const pulseqlib_collection* coll,
-    int seg_idx, int blk_idx, int* num_samples)
+    int seg_idx, int blk_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_segment* seg;
@@ -1057,9 +1115,6 @@ float* pulseqlib_get_rf_time_us(
     const pulseqlib_rf_definition* rdef;
     pulseqlib_shape_arbitrary decompressed;
     float* result;
-
-    if (!num_samples) return NULL;
-    *num_samples = 0;
 
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
         return NULL;
@@ -1094,7 +1149,6 @@ float* pulseqlib_get_rf_time_us(
         result = decompressed.samples;
     }
 
-    *num_samples = npts;
     return result;
 }
 
@@ -1388,7 +1442,7 @@ int pulseqlib_get_grad_initial_shot_id(
 
 float* pulseqlib_get_grad_time_us(
     const pulseqlib_collection* coll,
-    int seg_idx, int blk_idx, int axis, int* num_samples)
+    int seg_idx, int blk_idx, int axis)
 {
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_segment* seg;
@@ -1397,11 +1451,8 @@ float* pulseqlib_get_grad_time_us(
     const pulseqlib_grad_definition* gdef;
     float* time_waveform;
     float accum;
-    int rise_time, flat_time, fall_time;
+    int rise_time, flat_time, fall_time, ns;
     pulseqlib_shape_arbitrary decompressed;
-
-    if (!num_samples) return NULL;
-    *num_samples = 0;
 
     if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) return NULL;
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
@@ -1418,10 +1469,10 @@ float* pulseqlib_get_grad_time_us(
         flat_time = gdef->flat_time_or_unused;
         fall_time = gdef->fall_time_or_num_uncompressed_samples;
 
-        *num_samples = (flat_time > 0) ? 4 : 3;
+        ns = (flat_time > 0) ? 4 : 3;
 
-        time_waveform = (float*)PULSEQLIB_ALLOC((*num_samples) * sizeof(float));
-        if (!time_waveform) { *num_samples = 0; return NULL; }
+        time_waveform = (float*)PULSEQLIB_ALLOC((size_t)ns * sizeof(float));
+        if (!time_waveform) return NULL;
 
         accum = 0.0f;
         time_waveform[0] = accum;
@@ -1454,7 +1505,6 @@ float* pulseqlib_get_grad_time_us(
                                      desc->grad_raster_us))
         return NULL;
 
-    *num_samples = decompressed.num_samples;
     return decompressed.samples;
 }
 
@@ -1572,6 +1622,43 @@ int pulseqlib_get_trigger_delay_us(
     if (trigger_id == -1 || trigger_id >= desc->num_triggers) return -1;
 
     return (int)desc->trigger_events[trigger_id].delay;
+}
+
+int pulseqlib_get_trigger_duration_us(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_tr_segment* seg;
+    int local_blk, trigger_id;
+    const pulseqlib_block_table_element* bte;
+
+    if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+        return -1;
+
+    if (!seg->has_trigger[local_blk]) return -1;
+
+    bte = &desc->block_table[seg->start_block + local_blk];
+    trigger_id = bte->trigger_id;
+    if (trigger_id == -1 || trigger_id >= desc->num_triggers) return -1;
+
+    return (int)desc->trigger_events[trigger_id].duration;
+}
+
+int pulseqlib_block_has_freq_mod(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_tr_segment* seg;
+    int local_blk;
+    const pulseqlib_block_table_element* bte;
+
+    if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+        return 0;
+
+    bte = &desc->block_table[seg->start_block + local_blk];
+    return (bte->freq_mod_id >= 0) ? 1 : 0;
 }
 
 int pulseqlib_block_has_rotation(

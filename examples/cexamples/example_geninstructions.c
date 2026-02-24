@@ -1,31 +1,40 @@
 /**
  * @file example_geninstructions.c
- * @brief Generate per-segment base instructions from a cached collection.
+ * @brief Generate hardware instructions from a cached collection.
  *
- * Workflow:
- *   1. Load the cached sequence collection (fast .bin reload).
- *   2. Query the segment table (prep / main / cooldown).
- *   3. For each unique segment, build a "base instruction" by reading
- *      block definitions (RF, gradients, ADC, trigger, rotation).
- *   4. Print the instruction table — in a real driver this would be
- *      written into hardware instruction memory.
+ * Workflow (per segment, per block):
+ *   FOREACH segment:
+ *     query RF-ADC gap for vendor timing optimization
+ *     t = 0
+ *     FOREACH block in segment:
+ *       get gradient waveforms  (X, Y, Z)
+ *       get RF waveforms        (magnitude + optional phase + optional time)
+ *       get ADC definition ID   (maps to echo filter from check phase)
+ *       get trigger info        (delay + duration)
+ *       get rotation flags      (has_rotation + norot)
+ *       check freq-mod presence (spans whole block, uniform raster)
+ *       vendorCreateInstruction(...)
+ *       t += block_duration_us
  *
- * The idea is that segment definitions are *static* — they describe
- * the waveform shapes.  The dynamic part (amplitudes, frequencies,
- * phases, shot indices) is handled at scan time by the cursor loop
- * (see example_scanloop.c).
+ * Board waveform layout:
+ *   Gradient:  [num_shots x num_samples] amplitude + optional time array
+ *   RF:        [num_channels x num_samples] magnitude + optional phase
+ *              + optional time array
+ *   ADC:       delay + unique definition ID (links to echo filter)
+ *   Trigger:   delay + duration
+ *   Rotation:  presence flag + norot flag
+ *   Freq-mod:  presence flag only (uniform raster, no delay, no time array)
  *
  * Compile:
- *   cc -I../../csrc example_geninstructions.c ../../csrc/pulseqlib_*.c -lm -o geninstructions
- *
- * Run:
- *   ./geninstructions path/to/sequence.seq
+ *   cc -I../../csrc example_geninstructions.c \
+ *      ../../csrc/pulseqlib_*.c -lm -o geninstructions
  */
 
 #include "example_vendorlib.h"   /* must come first */
 #include "pulseqlib_methods.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define CHECK(rc, diag)                                 \
@@ -37,181 +46,278 @@
     } while (0)
 
 /* ================================================================== */
-/*  Per-block instruction (vendor-specific)                           */
+/*  Vendor-side stubs (placeholders)                                  */
 /* ================================================================== */
 
 /**
- * @brief Minimal example of a vendor instruction for one block.
+ * @brief Create a gradient instruction for one axis.
  *
- * In a real driver these fields map to hardware registers or DMA
- * descriptors — the exact layout is vendor-specific.  This struct
- * captures the *base* (initial) values; the cursor loop in
- * example_scanloop.c patches amplitudes / phases / shots at runtime.
+ * @param[in] t_us         absolute time in segment
+ * @param[in] delay_us     delay from block start
+ * @param[in] num_shots    leftmost dimension
+ * @param[in] ns_per_shot  per-shot sample counts
+ * @param[in] amps         [num_shots][ns_per_shot[s]] amplitude values
+ * @param[in] time_us      optional time array (NULL for uniform raster)
  */
-typedef struct vendor_block_instruction {
-    /* timing */
-    int   duration_us;
-
-    /* RF — base definition */
-    int   has_rf;
-    int   rf_num_samples;
-    int   rf_num_channels;
-    int   rf_delay_us;
-    int   rf_is_complex;        /* has nonzero phase shape? */
-    float rf_max_amplitude_hz;  /* peak |gamma*B1| */
-    /* rf waveform pointer(s) would go here */
-
-    /* Gradient — per axis */
-    struct {
-        int   has_grad;
-        int   is_trapezoid;
-        int   num_shots;
-        int   num_samples;
-        int   delay_us;
-        float initial_amplitude;
-        /* gradient waveform pointer would go here */
-    } grad[3]; /* [X, Y, Z] */
-
-    /* ADC */
-    int   has_adc;
-    int   adc_num_samples;
-    int   adc_dwell_us;
-    int   adc_delay_us;
-
-    /* Flow control */
-    int   has_trigger;
-    int   trigger_delay_us;
-    int   has_rotation;
-    int   has_norot;
-    int   has_nopos;
-} vendor_block_instruction;
-
-/* ================================================================== */
-/*  Build base instruction for one block in a segment                 */
-/* ================================================================== */
-
-static void build_block_instruction(
-    vendor_block_instruction* instr,
-    const pulseqlib_collection* coll,
-    int seg_idx,
-    int blk_idx)
+static void vendorCreateGradInstruction(
+    int axis,
+    int t_us, int delay_us,
+    float** amps, int* ns_per_shot,
+    float* time_us, int num_time)
 {
-    int axis;
+    (void)axis; (void)amps; (void)ns_per_shot;
+    (void)time_us; (void)num_time; (void)delay_us; (void)t_us;
+}
 
-    memset(instr, 0, sizeof(*instr));
+/**
+ * @brief Create an RF instruction.
+ *
+ * @param[in] t_us         absolute time in segment
+ * @param[in] delay_us     delay from block start
+ * @param[in] num_channels Tx channel count
+ * @param[in] num_samples  samples per channel
+ * @param[in] mag          [num_channels][num_samples] magnitude
+ * @param[in] phase        [num_channels][num_samples] phase (NULL if real)
+ * @param[in] time_us      optional time array (NULL for uniform raster)
+ */
+static void vendorCreateRFInstruction(
+    int t_us, int delay_us,
+    float** mag, float** phase, int num_channels, int num_samples,
+    float* time_us)
+{
+    (void)mag; (void)phase; (void)num_channels; (void)num_samples;
+    (void)time_us; (void)delay_us; (void)t_us;
+}
 
-    /* Timing */
-    instr->duration_us = pulseqlib_get_block_duration_us(coll, seg_idx, blk_idx);
+/**
+ * @brief Create an ADC instruction.
+ *
+ * @param[in] t_us         absolute time in segment
+ * @param[in] delay_us     delay from block start
+ * @param[in] adc_def_id   unique ADC definition index (maps to echo filter)
+ */
+static void vendorCreateADCInstruction(int t_us, int delay_us, int adc_def_id)
+{
+    (void)adc_def_id; (void)delay_us; (void)t_us;
+}
 
-    /* RF */
-    instr->has_rf = pulseqlib_block_has_rf(coll, seg_idx, blk_idx);
-    if (instr->has_rf) {
-        instr->rf_num_samples  = pulseqlib_get_rf_num_samples(coll, seg_idx, blk_idx);
-        instr->rf_num_channels = pulseqlib_get_rf_num_channels(coll, seg_idx, blk_idx);
-        instr->rf_delay_us     = pulseqlib_get_rf_delay_us(coll, seg_idx, blk_idx);
-        instr->rf_is_complex   = pulseqlib_block_rf_is_complex(coll, seg_idx, blk_idx);
+/**
+ * @brief Create a frequency modulation instruction.
+ *
+ * Freq-mod is an independent channel (separate from RF and ADC).
+ * It is created when the block has a freq_mod_id AND a simultaneous
+ * gradient active during the RF/ADC window.  The waveform spans the
+ * entire block at uniform raster (rf_raster or adc_raster, which are
+ * equal on some vendors, e.g. 2 us on GE).
+ *
+ * @param[in] num_samples  block_duration_us / raster_us
+ */
+static void vendorCreateFreqModInstruction(int num_samples)
+{
+    (void)num_samples;
+}
 
-        /*
-         * In a real driver you would also call:
-         *
-         *   float** mag = pulseqlib_get_rf_magnitude(coll, seg_idx, blk_idx,
-         *                                            &nch, &ns);
-         *   float** phs = pulseqlib_get_rf_phase(coll, seg_idx, blk_idx,
-         *                                        &nch, &ns);
-         *   float*  t   = pulseqlib_get_rf_time_us(coll, seg_idx, blk_idx, &ns);
-         *
-         * and copy / DMA-map the waveform data into hardware memory.
-         * Remember to PULSEQLIB_FREE each channel array and the array
-         * of pointers afterwards.
-         */
-    }
+/**
+ * @brief Create a trigger instruction.
+ *
+ * @param[in] t_us        absolute time in segment
+ * @param[in] delay_us    delay from block start
+ * @param[in] duration_us trigger duration
+ */
+static void vendorCreateTriggerInstruction(
+    int t_us, int delay_us, int duration_us)
+{
+    (void)delay_us; (void)duration_us; (void)t_us;
+}
 
-    /* Gradients (X=0, Y=1, Z=2) */
-    for (axis = 0; axis < 3; ++axis) {
-        instr->grad[axis].has_grad = pulseqlib_block_has_grad(
-            coll, seg_idx, blk_idx, axis);
+/**
+ * @brief Set rotation flag for this block.
+ *
+ * @param[in] has_rotation 1 if block carries ANY rotation ID
+ * @param[in] norot_flag   1 if block has the no-rotation override
+ */
+static void vendorSetRotation(int has_rotation, int norot_flag)
+{
+    (void)has_rotation; (void)norot_flag;
+}
 
-        if (!instr->grad[axis].has_grad) continue;
+/**
+ * @brief Notify vendor driver of intra-segment RF-to-ADC gap.
+ *
+ * When RF and the following ADC within the same segment are closer
+ * than a certain threshold, vendor-specific timing adjustments are
+ * required.
+ *
+ * @param[in] gap_us  RF end -> next ADC start (us), or -1 if none.
+ */
+static void vendorSetSegmentRFADCGap(int gap_us)
+{
+    (void)gap_us;
+}
 
-        instr->grad[axis].is_trapezoid = pulseqlib_block_grad_is_trapezoid(
-            coll, seg_idx, blk_idx, axis);
-        instr->grad[axis].num_shots = pulseqlib_get_grad_num_shots(
-            coll, seg_idx, blk_idx, axis);
-        instr->grad[axis].num_samples = pulseqlib_get_grad_num_samples(
-            coll, seg_idx, blk_idx, axis);
-        instr->grad[axis].delay_us = pulseqlib_get_grad_delay_us(
-            coll, seg_idx, blk_idx, axis);
-        instr->grad[axis].initial_amplitude =
-            pulseqlib_get_grad_initial_amplitude_hz_per_m(
-                coll, seg_idx, blk_idx, axis);
-
-        /*
-         * In a real driver you would also call:
-         *
-         *   int* ns_per_shot;
-         *   float** amps = pulseqlib_get_grad_amplitude(
-         *       coll, seg_idx, blk_idx, axis, &num_shots, &ns_per_shot);
-         *   float* t = pulseqlib_get_grad_time_us(
-         *       coll, seg_idx, blk_idx, axis, &ns);
-         *
-         * and upload each shot waveform into hardware memory.
-         * For multi-shot gradients the cursor loop selects the
-         * active shot index at runtime.
-         */
-    }
-
-    /* ADC */
-    instr->has_adc = pulseqlib_block_has_adc(coll, seg_idx, blk_idx);
-    if (instr->has_adc) {
-        int adc_lib_idx = pulseqlib_get_adc_library_index(coll, seg_idx, blk_idx);
-        instr->adc_delay_us    = pulseqlib_get_adc_delay_us(coll, seg_idx, blk_idx);
-        instr->adc_num_samples = pulseqlib_get_adc_num_samples(coll, adc_lib_idx);
-        instr->adc_dwell_us    = pulseqlib_get_adc_dwell_us(coll, adc_lib_idx);
-    }
-
-    /* Flow control */
-    instr->has_trigger   = pulseqlib_block_has_trigger(coll, seg_idx, blk_idx);
-    if (instr->has_trigger)
-        instr->trigger_delay_us = pulseqlib_get_trigger_delay_us(coll, seg_idx, blk_idx);
-    instr->has_rotation  = pulseqlib_block_has_rotation(coll, seg_idx, blk_idx);
-    instr->has_norot     = pulseqlib_block_has_norot(coll, seg_idx, blk_idx);
-    instr->has_nopos     = pulseqlib_block_has_nopos(coll, seg_idx, blk_idx);
+/**
+ * @brief Notify vendor driver of intra-segment ADC-to-ADC gap.
+ *
+ * When consecutive ADC events within a segment are closer than a
+ * threshold, vendor-specific data acquisition placement must be
+ * adjusted.
+ *
+ * @param[in] gap_us  prev ADC end -> next ADC start (us), or -1 if < 2 ADCs.
+ */
+static void vendorSetSegmentADCADCGap(int gap_us)
+{
+    (void)gap_us;
 }
 
 /* ================================================================== */
-/*  Print helpers                                                     */
+/*  Free helpers (waveform arrays returned by pulseqlib)              */
 /* ================================================================== */
 
-static void print_block_instruction(const vendor_block_instruction* instr,
-                                    int seg_idx, int blk_idx)
+static void free_2d(float** arr, int n)
 {
-    const char* axis_name[] = {"GX", "GY", "GZ"};
-    int a;
+    int i;
+    if (!arr) return;
+    for (i = 0; i < n; ++i)
+        free(arr[i]);
+    free(arr);
+}
 
-    printf("  Block [seg=%d, blk=%d]  dur=%d us", seg_idx, blk_idx,
-           instr->duration_us);
+/* ================================================================== */
+/*  Generate instructions for one block                               */
+/* ================================================================== */
 
-    if (instr->has_rf)
-        printf("  RF(%d samp, %d ch, delay=%d us)",
-               instr->rf_num_samples, instr->rf_num_channels,
-               instr->rf_delay_us);
+static void generate_block_instructions(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx, int t_us)
+{
+    int axis;
+    int has_rf, has_adc;
 
-    for (a = 0; a < 3; ++a) {
-        if (instr->grad[a].has_grad)
-            printf("  %s(%s, %d shots, %d samp)",
-                   axis_name[a],
-                   instr->grad[a].is_trapezoid ? "trap" : "arb",
-                   instr->grad[a].num_shots,
-                   instr->grad[a].num_samples);
+    /* -- Gradients (X=0, Y=1, Z=2) ------------------------------- */
+    for (axis = 0; axis < 3; ++axis) {
+        int   delay_us;
+        int   num_shots;
+        int*  ns_per_shot;
+        float** amps;
+        float* time_arr;
+
+        if (!pulseqlib_block_has_grad(coll, seg_idx, blk_idx, axis))
+            continue;
+
+        num_shots   = 0;
+        ns_per_shot = NULL;
+        delay_us    = pulseqlib_get_grad_delay_us(
+                          coll, seg_idx, blk_idx, axis);
+        amps        = pulseqlib_get_grad_amplitude(
+                          coll, seg_idx, blk_idx, axis,
+                          &num_shots, &ns_per_shot);
+        if (!amps)
+            continue;
+
+        /* Optional time array (for traps / extended traps) */
+        time_arr = pulseqlib_get_grad_time_us(
+                       coll, seg_idx, blk_idx, axis);
+
+        vendorCreateGradInstruction(
+            axis, t_us, delay_us,
+            amps, ns_per_shot,
+            time_arr, num_shots);
+
+        free(time_arr);
+        free(ns_per_shot);
+        free_2d(amps, num_shots);
     }
 
-    if (instr->has_adc)
-        printf("  ADC(%d samp, dwell=%d us)",
-               instr->adc_num_samples, instr->adc_dwell_us);
-    if (instr->has_trigger)
-        printf("  TRIG(delay=%d us)", instr->trigger_delay_us);
+    /* -- RF -------------------------------------------------------- */
+    has_rf = pulseqlib_block_has_rf(coll, seg_idx, blk_idx);
+    if (has_rf) {
+        int   delay_us;
+        int   num_channels;
+        int   num_samples;
+        float** mag;
+        float** phase;
+        float* time_arr;
 
-    printf("\n");
+        num_channels = 0;
+        num_samples  = 0;
+        delay_us = pulseqlib_get_rf_delay_us(coll, seg_idx, blk_idx);
+        mag      = pulseqlib_get_rf_magnitude(
+                       coll, seg_idx, blk_idx, &num_channels, &num_samples);
+        if (!mag)
+            goto skip_rf;
+
+        /* Phase: NULL if RF is real-valued */
+        phase = NULL;
+        if (pulseqlib_block_rf_is_complex(coll, seg_idx, blk_idx)) {
+            int pch = 0, pns = 0;
+            phase = pulseqlib_get_rf_phase(
+                        coll, seg_idx, blk_idx, &pch, &pns);
+            /* phase can still be NULL on alloc failure */
+        }
+
+        /* Optional time array (same length as mag samples) */
+        time_arr = NULL;
+        if (!pulseqlib_block_rf_has_uniform_raster(coll, seg_idx, blk_idx)) {
+            time_arr = pulseqlib_get_rf_time_us(
+                           coll, seg_idx, blk_idx);
+        }
+
+        vendorCreateRFInstruction(
+            t_us, delay_us,
+            mag, phase, num_channels, num_samples,
+            time_arr);
+
+        free(time_arr);
+        if (phase) free_2d(phase, num_channels);
+        free_2d(mag, num_channels);
+    }
+skip_rf:
+
+    /* -- ADC ------------------------------------------------------- */
+    has_adc = pulseqlib_block_has_adc(coll, seg_idx, blk_idx);
+    if (has_adc) {
+        int adc_def_id = pulseqlib_get_adc_library_index(
+                             coll, seg_idx, blk_idx);
+        int delay_us   = pulseqlib_get_adc_delay_us(
+                             coll, seg_idx, blk_idx);
+
+        vendorCreateADCInstruction(t_us, delay_us, adc_def_id);
+    }
+
+    /* -- Trigger --------------------------------------------------- */
+    if (pulseqlib_block_has_trigger(coll, seg_idx, blk_idx)) {
+        int delay_us    = pulseqlib_get_trigger_delay_us(
+                              coll, seg_idx, blk_idx);
+        int duration_us = pulseqlib_get_trigger_duration_us(
+                              coll, seg_idx, blk_idx);
+
+        vendorCreateTriggerInstruction(t_us, delay_us, duration_us);
+    }
+
+    /* -- Rotation flags -------------------------------------------- */
+    {
+        int has_rot = pulseqlib_block_has_rotation(coll, seg_idx, blk_idx);
+        int norot   = pulseqlib_block_has_norot(coll, seg_idx, blk_idx);
+        vendorSetRotation(has_rot, norot);
+    }
+
+    /* -- Freq-mod (independent channel) ---------------------------- */
+    if (pulseqlib_block_has_freq_mod(coll, seg_idx, blk_idx)
+        && (has_rf || has_adc)) {
+        int grad_active = 0;
+        for (axis = 0; axis < 3; ++axis) {
+            if (pulseqlib_block_has_grad(coll, seg_idx, blk_idx, axis)) {
+                grad_active = 1;
+                break;
+            }
+        }
+        if (grad_active) {
+            int dur = pulseqlib_get_block_duration_us(coll, seg_idx, blk_idx);
+            int raster_us = 2;  /* vendor-specific raster (e.g. 2 us on GE) */
+            int num_samples = dur / raster_us;
+            vendorCreateFreqModInstruction(num_samples, t_us);
+        }
+    }
 }
 
 /* ================================================================== */
@@ -221,10 +327,10 @@ static void print_block_instruction(const vendor_block_instruction* instr,
 int main(int argc, char** argv)
 {
     const char*           seq_path;
-    pulseqlib_opts        opts = PULSEQLIB_OPTS_INIT;
-    pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
-    pulseqlib_collection* coll = NULL;
-    int rc, s, nseg, nblk, seg_idx, blk_idx;
+    pulseqlib_opts        opts  = PULSEQLIB_OPTS_INIT;
+    pulseqlib_diagnostic  diag  = PULSEQLIB_DIAGNOSTIC_INIT;
+    pulseqlib_collection* coll  = NULL;
+    int rc, nseg, seg_idx;
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <sequence.seq>\n", argv[0]);
@@ -232,107 +338,35 @@ int main(int argc, char** argv)
     }
     seq_path = argv[1];
 
-    vendor_opts_init(&opts);
+    vendor_opts_init(&opts, 42577478.0f, 3.0f, 50.0f, 200.0f);
 
-    /* -- Load (with cache) ---------------------------------------- */
-    rc = pulseqlib_read(&coll, &diag, seq_path, &opts, 1, 1, 1, 1);
+    /* -- Load (with cache, no labels needed) ---------------------- */
+    rc = pulseqlib_read(&coll, &diag, seq_path, &opts,
+                        1,   /* cache_binary     */
+                        1,   /* verify_signature */
+                        0,   /* parse_labels     */
+                        1);  /* num_averages     */
     CHECK(rc, &diag);
 
-    /* -- Walk segments -------------------------------------------- */
+    /* -- Walk segments and generate instructions ------------------ */
     nseg = pulseqlib_get_num_segments(coll);
-    printf("Total unique segments: %d\n\n", nseg);
 
     for (seg_idx = 0; seg_idx < nseg; ++seg_idx) {
-        int  seg_dur_us  = pulseqlib_get_segment_duration_us(coll, seg_idx);
-        int  pure_delay  = pulseqlib_is_segment_pure_delay(coll, seg_idx);
-        int  start_block = pulseqlib_get_segment_start_block(coll, seg_idx);
+        int nblk = pulseqlib_get_segment_num_blocks(coll, seg_idx);
+        int blk_idx;
+        int t_us = 0;
 
-        nblk = pulseqlib_get_segment_num_blocks(coll, seg_idx);
-
-        printf("Segment %d: %d blocks, duration=%d us, start_block=%d%s\n",
-               seg_idx, nblk, seg_dur_us, start_block,
-               pure_delay ? " (pure delay)" : "");
+        /* Segment-level gaps for vendor timing tweaks */
+        {
+            int rf_adc_gap  = pulseqlib_get_segment_rf_adc_gap_us(coll, seg_idx);
+            int adc_adc_gap = pulseqlib_get_segment_adc_adc_gap_us(coll, seg_idx);
+            vendorSetSegmentRFADCGap(rf_adc_gap);
+            vendorSetSegmentADCADCGap(adc_adc_gap);
+        }
 
         for (blk_idx = 0; blk_idx < nblk; ++blk_idx) {
-            vendor_block_instruction instr;
-            build_block_instruction(&instr, coll, seg_idx, blk_idx);
-            print_block_instruction(&instr, seg_idx, blk_idx);
-        }
-        printf("\n");
-    }
-
-    /* -- Print segment tables for each subsequence ---------------- */
-    {
-        int nsub = pulseqlib_get_num_subsequences(coll);
-        for (s = 0; s < nsub; ++s) {
-            int n_prep = pulseqlib_get_num_prep_segments(coll, s);
-            int n_main = pulseqlib_get_num_main_segments(coll, s);
-            int n_cool = pulseqlib_get_num_cooldown_segments(coll, s);
-            int i;
-
-            /* Stack-allocate small tables (real code would use ALLOC) */
-            int prep_ids[64], main_ids[256], cool_ids[64];
-
-            printf("Subseq %d segment tables:\n", s);
-
-            if (n_prep > 0 && n_prep <= 64) {
-                pulseqlib_get_prep_segment_table(coll, s, prep_ids);
-                printf("  Prep:     ");
-                for (i = 0; i < n_prep; ++i) printf("%d ", prep_ids[i]);
-                printf("\n");
-            }
-
-            if (n_main > 0 && n_main <= 256) {
-                pulseqlib_get_main_segment_table(coll, s, main_ids);
-                printf("  Main:     ");
-                for (i = 0; i < n_main; ++i) printf("%d ", main_ids[i]);
-                printf("\n");
-            }
-
-            if (n_cool > 0 && n_cool <= 64) {
-                pulseqlib_get_cooldown_segment_table(coll, s, cool_ids);
-                printf("  Cooldown: ");
-                for (i = 0; i < n_cool; ++i) printf("%d ", cool_ids[i]);
-                printf("\n");
-            }
-            printf("\n");
-        }
-    }
-
-    /* -- RF statistics -------------------------------------------- */
-    {
-        int nsub = pulseqlib_get_num_subsequences(coll);
-        for (s = 0; s < nsub; ++s) {
-            int nrf = pulseqlib_get_num_unique_rf(coll, s);
-            int r;
-            printf("Subseq %d: %d unique RF event(s)\n", s, nrf);
-            for (r = 0; r < nrf; ++r) {
-                pulseqlib_rf_stats stats = PULSEQLIB_RF_STATS_INIT;
-                rc = pulseqlib_get_rf_stats(coll, &stats, s, r);
-                if (PULSEQLIB_SUCCEEDED(rc)) {
-                    printf("  RF %d: flip=%.1f deg, bw=%.0f Hz, "
-                           "dur=%.0f us, max_amp=%.0f Hz\n",
-                           r, stats.flip_angle_deg, stats.bandwidth_hz,
-                           stats.duration_us, stats.base_amplitude_hz);
-                }
-            }
-        }
-    }
-
-    /* -- Label limits (if labels were parsed) --------------------- */
-    {
-        pulseqlib_label_limits limits;
-        rc = pulseqlib_get_label_limits(coll, 0, &limits);
-        if (PULSEQLIB_SUCCEEDED(rc)) {
-            printf("\nLabel limits (subseq 0):\n");
-            printf("  LIN: [%d, %d]\n", limits.lin.min, limits.lin.max);
-            printf("  SLC: [%d, %d]\n", limits.slc.min, limits.slc.max);
-            printf("  ECO: [%d, %d]\n", limits.eco.min, limits.eco.max);
-            printf("  REP: [%d, %d]\n", limits.rep.min, limits.rep.max);
-            printf("  AVG: [%d, %d]\n", limits.avg.min, limits.avg.max);
-            printf("  SEG: [%d, %d]\n", limits.seg.min, limits.seg.max);
-            printf("  SET: [%d, %d]\n", limits.set.min, limits.set.max);
-            printf("  PAR: [%d, %d]\n", limits.par.min, limits.par.max);
+            generate_block_instructions(coll, seg_idx, blk_idx, t_us);
+            t_us += pulseqlib_get_block_duration_us(coll, seg_idx, blk_idx);
         }
     }
 
