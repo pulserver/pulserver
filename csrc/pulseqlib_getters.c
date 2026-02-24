@@ -136,6 +136,60 @@ int pulseqlib_get_tr_size(
     return coll->descriptors[subseq_idx].tr_descriptor.tr_size;
 }
 
+int pulseqlib_get_num_prep_blocks(
+    const pulseqlib_collection* coll,
+    int subseq_idx)
+{
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    return coll->descriptors[subseq_idx].tr_descriptor.num_prep_blocks;
+}
+
+int pulseqlib_get_num_cooldown_blocks(
+    const pulseqlib_collection* coll,
+    int subseq_idx)
+{
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    return coll->descriptors[subseq_idx].tr_descriptor.num_cooldown_blocks;
+}
+
+int pulseqlib_get_degenerate_prep(
+    const pulseqlib_collection* coll,
+    int subseq_idx)
+{
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    return coll->descriptors[subseq_idx].tr_descriptor.degenerate_prep;
+}
+
+int pulseqlib_get_degenerate_cooldown(
+    const pulseqlib_collection* coll,
+    int subseq_idx)
+{
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    return coll->descriptors[subseq_idx].tr_descriptor.degenerate_cooldown;
+}
+
+int pulseqlib_get_num_prep_trs(
+    const pulseqlib_collection* coll,
+    int subseq_idx)
+{
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    return coll->descriptors[subseq_idx].tr_descriptor.num_prep_trs;
+}
+
+int pulseqlib_get_num_cooldown_trs(
+    const pulseqlib_collection* coll,
+    int subseq_idx)
+{
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    return coll->descriptors[subseq_idx].tr_descriptor.num_cooldown_trs;
+}
+
 int pulseqlib_get_num_unique_adcs(
     const pulseqlib_collection* coll,
     int subseq_idx)
@@ -404,6 +458,91 @@ int pulseqlib_get_segment_num_blocks(
         return -1;
 
     return desc->segment_definitions[local_seg].num_blocks;
+}
+
+int pulseqlib_get_segment_start_block(
+    const pulseqlib_collection* coll, int seg_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg;
+
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return -1;
+
+    return desc->segment_definitions[local_seg].start_block;
+}
+
+/* ================================================================== */
+/*  Segment table queries                                             */
+/* ================================================================== */
+
+int pulseqlib_get_num_prep_segments(
+    const pulseqlib_collection* coll, int subseq_idx)
+{
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    return coll->descriptors[subseq_idx].segment_table.num_prep_segments;
+}
+
+int pulseqlib_get_num_main_segments(
+    const pulseqlib_collection* coll, int subseq_idx)
+{
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    return coll->descriptors[subseq_idx].segment_table.num_main_segments;
+}
+
+int pulseqlib_get_num_cooldown_segments(
+    const pulseqlib_collection* coll, int subseq_idx)
+{
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    return coll->descriptors[subseq_idx].segment_table.num_cooldown_segments;
+}
+
+int pulseqlib_get_prep_segment_table(
+    const pulseqlib_collection* coll, int subseq_idx, int* out_ids)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int n;
+    if (!coll || !out_ids) return PULSEQLIB_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    desc = &coll->descriptors[subseq_idx];
+    n = desc->segment_table.num_prep_segments;
+    if (n > 0 && desc->segment_table.prep_segment_table)
+        memcpy(out_ids, desc->segment_table.prep_segment_table, n * sizeof(int));
+    return n;
+}
+
+int pulseqlib_get_main_segment_table(
+    const pulseqlib_collection* coll, int subseq_idx, int* out_ids)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int n;
+    if (!coll || !out_ids) return PULSEQLIB_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    desc = &coll->descriptors[subseq_idx];
+    n = desc->segment_table.num_main_segments;
+    if (n > 0 && desc->segment_table.main_segment_table)
+        memcpy(out_ids, desc->segment_table.main_segment_table, n * sizeof(int));
+    return n;
+}
+
+int pulseqlib_get_cooldown_segment_table(
+    const pulseqlib_collection* coll, int subseq_idx, int* out_ids)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int n;
+    if (!coll || !out_ids) return PULSEQLIB_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    desc = &coll->descriptors[subseq_idx];
+    n = desc->segment_table.num_cooldown_segments;
+    if (n > 0 && desc->segment_table.cooldown_segment_table)
+        memcpy(out_ids, desc->segment_table.cooldown_segment_table, n * sizeof(int));
+    return n;
 }
 
 /* ================================================================== */

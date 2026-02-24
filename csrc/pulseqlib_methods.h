@@ -349,6 +349,30 @@ int pulseqlib_get_num_trs(const pulseqlib_collection* coll,
 int pulseqlib_get_tr_size(const pulseqlib_collection* coll,
                           int subseq_idx);
 
+/** @brief Return number of preparation blocks before the first TR. */
+int pulseqlib_get_num_prep_blocks(const pulseqlib_collection* coll,
+                                  int subseq_idx);
+
+/** @brief Return number of cooldown blocks after the last TR. */
+int pulseqlib_get_num_cooldown_blocks(const pulseqlib_collection* coll,
+                                      int subseq_idx);
+
+/** @brief Return 1 if preparation blocks are degenerate (same as first TR). */
+int pulseqlib_get_degenerate_prep(const pulseqlib_collection* coll,
+                                  int subseq_idx);
+
+/** @brief Return 1 if cooldown blocks are degenerate (same as last TR). */
+int pulseqlib_get_degenerate_cooldown(const pulseqlib_collection* coll,
+                                      int subseq_idx);
+
+/** @brief Return number of preparation TRs. */
+int pulseqlib_get_num_prep_trs(const pulseqlib_collection* coll,
+                               int subseq_idx);
+
+/** @brief Return number of cooldown TRs. */
+int pulseqlib_get_num_cooldown_trs(const pulseqlib_collection* coll,
+                                   int subseq_idx);
+
 /** @brief Return number of unique ADC events in a subsequence. */
 int pulseqlib_get_num_unique_adcs(const pulseqlib_collection* coll,
                                   int subseq_idx);
@@ -397,6 +421,50 @@ int pulseqlib_is_segment_pure_delay(const pulseqlib_collection* coll,
 /** @brief Return number of unique blocks in a segment. */
 int pulseqlib_get_segment_num_blocks(const pulseqlib_collection* coll,
                                      int seg_idx);
+
+/** @brief Return start block index (in the original sequence) for a segment. */
+int pulseqlib_get_segment_start_block(const pulseqlib_collection* coll,
+                                      int seg_idx);
+
+/* ================================================================== */
+/*  Segment table getters                                             */
+/* ================================================================== */
+
+/** @brief Return number of segments in the prep region. */
+int pulseqlib_get_num_prep_segments(const pulseqlib_collection* coll,
+                                    int subseq_idx);
+
+/** @brief Return number of segments in the main TR region. */
+int pulseqlib_get_num_main_segments(const pulseqlib_collection* coll,
+                                    int subseq_idx);
+
+/** @brief Return number of segments in the cooldown region. */
+int pulseqlib_get_num_cooldown_segments(const pulseqlib_collection* coll,
+                                        int subseq_idx);
+
+/**
+ * @brief Copy prep segment IDs into caller-supplied buffer.
+ * @param[out] out_ids   Buffer of at least num_prep_segments ints.
+ * @return Number of IDs written, or negative error code.
+ */
+int pulseqlib_get_prep_segment_table(const pulseqlib_collection* coll,
+                                     int subseq_idx, int* out_ids);
+
+/**
+ * @brief Copy main segment IDs into caller-supplied buffer.
+ * @param[out] out_ids   Buffer of at least num_main_segments ints.
+ * @return Number of IDs written, or negative error code.
+ */
+int pulseqlib_get_main_segment_table(const pulseqlib_collection* coll,
+                                     int subseq_idx, int* out_ids);
+
+/**
+ * @brief Copy cooldown segment IDs into caller-supplied buffer.
+ * @param[out] out_ids   Buffer of at least num_cooldown_segments ints.
+ * @return Number of IDs written, or negative error code.
+ */
+int pulseqlib_get_cooldown_segment_table(const pulseqlib_collection* coll,
+                                         int subseq_idx, int* out_ids);
 
 /* ================================================================== */
 /*  Block getters (within segments)                                   */

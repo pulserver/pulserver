@@ -89,16 +89,15 @@ install(
 # -------------------------
 # _pulseqlib module
 # -------------------------
-file(GLOB KISSFFT_SOURCES "${CMAKE_SOURCE_DIR}/external/kissfft/*.c")
+file(GLOB PULSEQLIB_C_SOURCES "${CMAKE_SOURCE_DIR}/csrc/*.c")
 
 add_pybind_module(_pulseqlib_wrapper ""
     SOURCES
         "${CMAKE_SOURCE_DIR}/python/pulserver/core/_extension/_pulseqlib_wrapper.cpp"
-        "${CMAKE_SOURCE_DIR}/csrc/pulseq/pulseqlib_methods.c"
-        ${KISSFFT_SOURCES}
+        ${PULSEQLIB_C_SOURCES}
     INCLUDES
-        ${CMAKE_SOURCE_DIR}/csrc/pulseq
-        ${CMAKE_SOURCE_DIR}/external/kissfft
+        ${CMAKE_SOURCE_DIR}/csrc
+        ${CMAKE_SOURCE_DIR}/extensions/pulseqlib
 )
 
 # Install built extensions to the source tree for editable mode
