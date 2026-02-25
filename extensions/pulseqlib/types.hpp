@@ -213,7 +213,7 @@ struct BlockInstance {
     float rotmat[9]      = {1,0,0, 0,1,0, 0,0,1};
     int   norot_flag     = 0;
     int   nopos_flag     = 0;
-    int   trigon_flag    = 0;
+    int   digitalout_flag = 0;
     int   adc_flag       = 0;
     float adc_freq_hz    = 0.0f;
     float adc_phase_rad  = 0.0f;
@@ -234,7 +234,7 @@ struct BlockInstance {
         for (int i = 0; i < 9; ++i) b.rotmat[i] = c.rotmat[i];
         b.norot_flag   = c.norot_flag;
         b.nopos_flag   = c.nopos_flag;
-        b.trigon_flag  = c.trigon_flag;
+        b.digitalout_flag = c.digitalout_flag;
         b.adc_flag     = c.adc_flag;
         b.adc_freq_hz  = c.adc_freq_hz;
         b.adc_phase_rad= c.adc_phase_rad;

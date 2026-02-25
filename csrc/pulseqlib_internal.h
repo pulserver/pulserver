@@ -219,7 +219,7 @@ typedef struct pulseqlib_block_table_element {
     int gy_id;
     int gz_id;
     int adc_id;
-    int trigger_id;
+    int digitalout_id;
     int rotation_id;
     int once_flag;
     int norot_flag;
@@ -231,6 +231,7 @@ typedef struct pulseqlib_block_table_element {
 } pulseqlib_block_table_element;
 
 #define PULSEQLIB_BLOCK_TABLE_ELEMENT_INIT {0, 0, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, -1, -1}
+/* NOTE: digitalout_id occupies the former trigger_id position */
 
 /* ================================================================== */
 /*  TR descriptor                                                     */
@@ -268,15 +269,18 @@ typedef struct pulseqlib_tr_segment {
     int start_block;
     int num_blocks;
     int* unique_block_indices;
-    int* has_trigger;
+    int* has_digitalout;
     int* has_rotation;
     int* norot_flag;
     int* nopos_flag;
     int max_energy_start_block;
+    int trigger_id;             /* segment-level physio trigger (INPUT type),
+                                   index into trigger_events[], or -1          */
+    int is_nav;                 /* 1 if all blocks in segment are NAV          */
     pulseqlib_segment_timing timing;
 } pulseqlib_tr_segment;
 
-#define PULSEQLIB_TR_SEGMENT_INIT {0, 0, NULL, NULL, NULL, NULL, NULL, 0, PULSEQLIB_SEGMENT_TIMING_INIT}
+#define PULSEQLIB_TR_SEGMENT_INIT {0, 0, NULL, NULL, NULL, NULL, NULL, 0, -1, 0, PULSEQLIB_SEGMENT_TIMING_INIT}
 
 /* ================================================================== */
 /*  Segment table result                                              */

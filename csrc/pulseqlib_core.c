@@ -82,7 +82,7 @@ void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
     if (d->segment_definitions) {
         for (i = 0; i < d->num_unique_segments; ++i) {
             if (d->segment_definitions[i].unique_block_indices) PULSEQLIB_FREE(d->segment_definitions[i].unique_block_indices);
-            if (d->segment_definitions[i].has_trigger)          PULSEQLIB_FREE(d->segment_definitions[i].has_trigger);
+            if (d->segment_definitions[i].has_digitalout)       PULSEQLIB_FREE(d->segment_definitions[i].has_digitalout);
             if (d->segment_definitions[i].has_rotation)         PULSEQLIB_FREE(d->segment_definitions[i].has_rotation);
             if (d->segment_definitions[i].norot_flag)           PULSEQLIB_FREE(d->segment_definitions[i].norot_flag);
             if (d->segment_definitions[i].nopos_flag)           PULSEQLIB_FREE(d->segment_definitions[i].nopos_flag);

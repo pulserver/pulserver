@@ -377,6 +377,14 @@ int pulseqlib_get_num_cooldown_trs(const pulseqlib_collection* coll,
 int pulseqlib_get_num_unique_adcs(const pulseqlib_collection* coll,
                                   int subseq_idx);
 
+/** @brief Return 1 if PMC (prospective motion correction) is enabled. */
+int pulseqlib_is_pmc_enabled(const pulseqlib_collection* coll,
+                             int subseq_idx);
+
+/** @brief Return global segment offset for subsequence @p subseq_idx. */
+int pulseqlib_get_subseq_segment_offset(const pulseqlib_collection* coll,
+                                        int subseq_idx);
+
 /**
  * @brief Return total number of ADC readout events across all
  *        subsequences (accounting for TR repetitions, prep, cooldown).
@@ -687,20 +695,40 @@ int pulseqlib_get_adc_library_index(const pulseqlib_collection* coll,
                                     int seg_idx, int blk_idx);
 
 /* ================================================================== */
-/*  Flow control getters                                              */
+/*  Digital output getters (block-level, OUTPUT-type triggers)        */
 /* ================================================================== */
 
-/** @brief Return 1 if block has a trigger event. */
-int pulseqlib_block_has_trigger(const pulseqlib_collection* coll,
-                                int seg_idx, int blk_idx);
-
-/** @brief Return trigger delay within block (us). */
-int pulseqlib_get_trigger_delay_us(const pulseqlib_collection* coll,
+/** @brief Return 1 if block has a digital output event. */
+int pulseqlib_block_has_digitalout(const pulseqlib_collection* coll,
                                    int seg_idx, int blk_idx);
 
-/** @brief Return trigger duration within block (us). */
-int pulseqlib_get_trigger_duration_us(const pulseqlib_collection* coll,
+/** @brief Return digital output delay within block (us). */
+int pulseqlib_get_digitalout_delay_us(const pulseqlib_collection* coll,
                                       int seg_idx, int blk_idx);
+
+/** @brief Return digital output duration within block (us). */
+int pulseqlib_get_digitalout_duration_us(const pulseqlib_collection* coll,
+                                         int seg_idx, int blk_idx);
+
+/* ================================================================== */
+/*  Physio trigger getters (segment-level, INPUT-type triggers)       */
+/* ================================================================== */
+
+/** @brief Return 1 if segment has a physio trigger. */
+int pulseqlib_segment_has_trigger(const pulseqlib_collection* coll,
+                                  int seg_idx);
+
+/** @brief Return physio trigger delay (us) for a segment. */
+int pulseqlib_get_segment_trigger_delay_us(const pulseqlib_collection* coll,
+                                           int seg_idx);
+
+/** @brief Return physio trigger duration (us) for a segment. */
+int pulseqlib_get_segment_trigger_duration_us(const pulseqlib_collection* coll,
+                                              int seg_idx);
+
+/** @brief Return 1 if segment is a navigator (NAV) segment. */
+int pulseqlib_segment_is_nav(const pulseqlib_collection* coll,
+                             int seg_idx);
 
 /** @brief Return 1 if block has a frequency modulation event. */
 int pulseqlib_block_has_freq_mod(const pulseqlib_collection* coll,

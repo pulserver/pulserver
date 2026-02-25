@@ -102,6 +102,8 @@ public:
     int   num_trs(int ss = 0)              const { return pulseqlib_get_num_trs(coll_, ss); }
     int   tr_size(int ss = 0)              const { return pulseqlib_get_tr_size(coll_, ss); }
     int   num_unique_adcs(int ss = 0)      const { return pulseqlib_get_num_unique_adcs(coll_, ss); }
+    bool  is_pmc_enabled(int ss = 0)        const { return pulseqlib_is_pmc_enabled(coll_, ss) != 0; }
+    int   subseq_segment_offset(int ss = 0) const { return pulseqlib_get_subseq_segment_offset(coll_, ss); }
     float total_duration_us()              const { return pulseqlib_get_total_duration_us(coll_); }
 
     // ── TR structure ─────────────────────────────────────────────
@@ -225,9 +227,14 @@ public:
 
     // ── Flow control queries ─────────────────────────────────────
 
-    bool block_has_trigger(int seg, int blk)    const { return pulseqlib_block_has_trigger(coll_, seg, blk) == 1; }
-    int  trigger_delay_us(int seg, int blk)     const { return pulseqlib_get_trigger_delay_us(coll_, seg, blk); }
-    bool block_has_rotation(int seg, int blk)   const { return pulseqlib_block_has_rotation(coll_, seg, blk) == 1; }
+    bool block_has_digitalout(int seg, int blk)  const { return pulseqlib_block_has_digitalout(coll_, seg, blk) == 1; }
+    int  digitalout_delay_us(int seg, int blk)   const { return pulseqlib_get_digitalout_delay_us(coll_, seg, blk); }
+    int  digitalout_duration_us(int seg, int blk)const { return pulseqlib_get_digitalout_duration_us(coll_, seg, blk); }
+    bool segment_has_trigger(int seg)            const { return pulseqlib_segment_has_trigger(coll_, seg) == 1; }
+    int  segment_trigger_delay_us(int seg)       const { return pulseqlib_get_segment_trigger_delay_us(coll_, seg); }
+    int  segment_trigger_duration_us(int seg)    const { return pulseqlib_get_segment_trigger_duration_us(coll_, seg); }
+    bool segment_is_nav(int seg)                 const { return pulseqlib_segment_is_nav(coll_, seg) == 1; }
+    bool block_has_rotation(int seg, int blk)    const { return pulseqlib_block_has_rotation(coll_, seg, blk) == 1; }
     bool block_has_norot(int seg, int blk)      const { return pulseqlib_block_has_norot(coll_, seg, blk) == 1; }
     bool block_has_nopos(int seg, int blk)      const { return pulseqlib_block_has_nopos(coll_, seg, blk) == 1; }
 

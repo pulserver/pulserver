@@ -1278,9 +1278,9 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
 
         if (raw.ext_count > 0 && seq->is_extensions_library_parsed && seq->extension_lut) {
             pulseqlib__get_raw_extension(seq, &ext, &raw);
-            tmp_blk_tab[n].rotation_id = ext.rotation_index;
-            tmp_blk_tab[n].trigger_id  = ext.trigger_index;
-            tmp_blk_tab[n].rf_shim_id  = ext.rf_shim_index;
+            tmp_blk_tab[n].rotation_id    = ext.rotation_index;
+            tmp_blk_tab[n].digitalout_id  = ext.trigger_index;
+            tmp_blk_tab[n].rf_shim_id     = ext.rf_shim_index;
             norot_flag = (ext.flag.norot >= 0) ? ext.flag.norot : norot_flag;
             nopos_flag = (ext.flag.nopos >= 0) ? ext.flag.nopos : nopos_flag;
             pmc_flag   = (ext.flag.pmc   >= 0) ? ext.flag.pmc   : pmc_flag;
@@ -1288,9 +1288,9 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
             once_flag  = (ext.flag.once  >= 0) ? ext.flag.once  : once_flag;
             if (once_flag > 0) ++once_counter;
         } else {
-            tmp_blk_tab[n].rotation_id = -1;
-            tmp_blk_tab[n].trigger_id  = -1;
-            tmp_blk_tab[n].rf_shim_id  = -1;
+            tmp_blk_tab[n].rotation_id    = -1;
+            tmp_blk_tab[n].digitalout_id  = -1;
+            tmp_blk_tab[n].rf_shim_id     = -1;
         }
         tmp_blk_tab[n].norot_flag = norot_flag;
         tmp_blk_tab[n].nopos_flag = nopos_flag;

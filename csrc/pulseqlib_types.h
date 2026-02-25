@@ -68,6 +68,8 @@
 #define PULSEQLIB_ERR_SEG_NONZERO_END_GRAD   -201
 #define PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND  -202
 #define PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS    -203
+#define PULSEQLIB_ERR_SEG_MULTIPLE_PHYSIO_TRIGGERS -204
+#define PULSEQLIB_ERR_SEG_MULTIPLE_NAV_SEGMENTS    -205
 
 /* Acoustic errors (-400 to -449) */
 #define PULSEQLIB_ERR_ACOUSTIC_INVALID_WINDOW    -400
@@ -464,8 +466,8 @@ typedef struct pulseqlib_block_instance {
     int   norot_flag;           /**< 1 = skip rotation for this block  */
     int   nopos_flag;           /**< 1 = skip repositioning            */
 
-    /* Trigger */
-    int   trigon_flag;          /**< 1 = trigger-on event present      */
+    /* Digital output */
+    int   digitalout_flag;      /**< 1 = digital output event present  */
 
     /* ADC */
     int   adc_flag;             /**< 1 = ADC acquisition active        */

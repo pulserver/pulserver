@@ -12,7 +12,7 @@
 /* ================================================================== */
 
 #define PULSEQLIB_CACHE_ENDIAN_MARKER  0x01020304
-#define PULSEQLIB_CACHE_VERSION        9
+#define PULSEQLIB_CACHE_VERSION        11
 
 /* ------ Byte-swap helpers ------ */
 
@@ -140,7 +140,7 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &d->block_table[i].gy_id, 1)) return 0;
         if (!write4(f, &d->block_table[i].gz_id, 1)) return 0;
         if (!write4(f, &d->block_table[i].adc_id, 1)) return 0;
-        if (!write4(f, &d->block_table[i].trigger_id, 1)) return 0;
+        if (!write4(f, &d->block_table[i].digitalout_id, 1)) return 0;
         if (!write4(f, &d->block_table[i].rotation_id, 1)) return 0;
         if (!write4(f, &d->block_table[i].once_flag, 1)) return 0;
         if (!write4(f, &d->block_table[i].norot_flag, 1)) return 0;
@@ -308,11 +308,13 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &seg->max_energy_start_block, 1)) return 0;
         if (seg->num_blocks > 0) {
             if (!write4(f, seg->unique_block_indices, seg->num_blocks)) return 0;
-            if (!write4(f, seg->has_trigger, seg->num_blocks)) return 0;
+            if (!write4(f, seg->has_digitalout, seg->num_blocks)) return 0;
             if (!write4(f, seg->has_rotation, seg->num_blocks)) return 0;
             if (!write4(f, seg->norot_flag, seg->num_blocks)) return 0;
             if (!write4(f, seg->nopos_flag, seg->num_blocks)) return 0;
         }
+        if (!write4(f, &seg->trigger_id, 1)) return 0;
+        if (!write4(f, &seg->is_nav, 1)) return 0;
     }
 
     /* segment table */
@@ -645,10 +647,12 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         for (i = 0; i < d->num_unique_segments; ++i) {
             pulseqlib_tr_segment* seg = &d->segment_definitions[i];
             seg->unique_block_indices = NULL;
-            seg->has_trigger = NULL;
+            seg->has_digitalout = NULL;
             seg->has_rotation = NULL;
             seg->norot_flag = NULL;
             seg->nopos_flag = NULL;
+            seg->trigger_id = -1;
+            seg->is_nav = 0;
 
             if (!read4(f, &seg->start_block, 1)) return 0;
             if (!read4(f, &seg->num_blocks, 1)) return 0;
@@ -658,26 +662,30 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
             n = seg->num_blocks;
             if (n > 0) {
                 seg->unique_block_indices = (int*)PULSEQLIB_ALLOC((size_t)n * sizeof(int));
-                seg->has_trigger  = (int*)PULSEQLIB_ALLOC((size_t)n * sizeof(int));
+                seg->has_digitalout  = (int*)PULSEQLIB_ALLOC((size_t)n * sizeof(int));
                 seg->has_rotation = (int*)PULSEQLIB_ALLOC((size_t)n * sizeof(int));
                 seg->norot_flag   = (int*)PULSEQLIB_ALLOC((size_t)n * sizeof(int));
                 seg->nopos_flag   = (int*)PULSEQLIB_ALLOC((size_t)n * sizeof(int));
-                if (!seg->unique_block_indices || !seg->has_trigger ||
+                if (!seg->unique_block_indices || !seg->has_digitalout ||
                     !seg->has_rotation || !seg->norot_flag || !seg->nopos_flag)
                     return 0;
                 if (!read4(f, seg->unique_block_indices, n)) return 0;
-                if (!read4(f, seg->has_trigger, n)) return 0;
+                if (!read4(f, seg->has_digitalout, n)) return 0;
                 if (!read4(f, seg->has_rotation, n)) return 0;
                 if (!read4(f, seg->norot_flag, n)) return 0;
                 if (!read4(f, seg->nopos_flag, n)) return 0;
                 if (do_swap) {
                     swap4_array(seg->unique_block_indices, n);
-                    swap4_array(seg->has_trigger, n);
+                    swap4_array(seg->has_digitalout, n);
                     swap4_array(seg->has_rotation, n);
                     swap4_array(seg->norot_flag, n);
                     swap4_array(seg->nopos_flag, n);
                 }
             }
+            if (!read4(f, &seg->trigger_id, 1)) return 0;
+            if (do_swap) swap4(&seg->trigger_id);
+            if (!read4(f, &seg->is_nav, 1)) return 0;
+            if (do_swap) swap4(&seg->is_nav);
         }
     }
 

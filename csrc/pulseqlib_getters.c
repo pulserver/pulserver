@@ -18,7 +18,9 @@
  *   pulseqlib_get_grad_time_us
  *   pulseqlib_block_has_adc          pulseqlib_get_adc_delay_us
  *   pulseqlib_get_adc_library_index
- *   pulseqlib_block_has_trigger      pulseqlib_get_trigger_delay_us
+ *   pulseqlib_block_has_digitalout   pulseqlib_get_digitalout_delay_us
+ *   pulseqlib_segment_has_trigger    pulseqlib_get_segment_trigger_delay_us
+ *   pulseqlib_segment_is_nav
  *   pulseqlib_block_has_rotation
  *   pulseqlib_block_has_norot        pulseqlib_block_has_nopos
  *
@@ -198,6 +200,27 @@ int pulseqlib_get_num_unique_adcs(
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].num_unique_adcs;
+}
+
+int pulseqlib_is_pmc_enabled(
+    const pulseqlib_collection* coll,
+    int subseq_idx)
+{
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    return coll->descriptors[subseq_idx].enable_pmc;
+}
+
+int pulseqlib_get_subseq_segment_offset(
+    const pulseqlib_collection* coll,
+    int subseq_idx)
+{
+    int i, offset = 0;
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    for (i = 0; i < subseq_idx; ++i)
+        offset += coll->descriptors[i].num_unique_segments;
+    return offset;
 }
 
 float pulseqlib_get_total_duration_us(
@@ -1586,10 +1609,10 @@ int pulseqlib_get_adc_library_index(
 }
 
 /* ================================================================== */
-/*  Trigger / rotation / flag queries                                 */
+/*  Digital output / trigger / rotation / flag queries                */
 /* ================================================================== */
 
-int pulseqlib_block_has_trigger(
+int pulseqlib_block_has_digitalout(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -1600,49 +1623,111 @@ int pulseqlib_block_has_trigger(
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
         return -1;
 
-    return seg->has_trigger[local_blk];
+    return seg->has_digitalout[local_blk];
 }
 
-int pulseqlib_get_trigger_delay_us(
+int pulseqlib_get_digitalout_delay_us(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_segment* seg;
-    int local_blk, trigger_id;
+    int local_blk, digitalout_id;
     const pulseqlib_block_table_element* bte;
 
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
         return -1;
 
-    if (!seg->has_trigger[local_blk]) return -1;
+    if (!seg->has_digitalout[local_blk]) return -1;
 
     bte = &desc->block_table[seg->start_block + local_blk];
-    trigger_id = bte->trigger_id;
-    if (trigger_id == -1 || trigger_id >= desc->num_triggers) return -1;
+    digitalout_id = bte->digitalout_id;
+    if (digitalout_id == -1 || digitalout_id >= desc->num_triggers) return -1;
 
-    return (int)desc->trigger_events[trigger_id].delay;
+    return (int)desc->trigger_events[digitalout_id].delay;
 }
 
-int pulseqlib_get_trigger_duration_us(
+int pulseqlib_get_digitalout_duration_us(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_segment* seg;
-    int local_blk, trigger_id;
+    int local_blk, digitalout_id;
     const pulseqlib_block_table_element* bte;
 
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
         return -1;
 
-    if (!seg->has_trigger[local_blk]) return -1;
+    if (!seg->has_digitalout[local_blk]) return -1;
 
     bte = &desc->block_table[seg->start_block + local_blk];
-    trigger_id = bte->trigger_id;
-    if (trigger_id == -1 || trigger_id >= desc->num_triggers) return -1;
+    digitalout_id = bte->digitalout_id;
+    if (digitalout_id == -1 || digitalout_id >= desc->num_triggers) return -1;
 
-    return (int)desc->trigger_events[trigger_id].duration;
+    return (int)desc->trigger_events[digitalout_id].duration;
+}
+
+/* ---- Segment-level physio trigger queries ------------------------ */
+
+int pulseqlib_segment_has_trigger(
+    const pulseqlib_collection* coll,
+    int seg_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg;
+
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return 0;
+
+    return (desc->segment_definitions[local_seg].trigger_id >= 0) ? 1 : 0;
+}
+
+int pulseqlib_get_segment_trigger_delay_us(
+    const pulseqlib_collection* coll,
+    int seg_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg, tid;
+
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return -1;
+
+    tid = desc->segment_definitions[local_seg].trigger_id;
+    if (tid < 0 || tid >= desc->num_triggers) return -1;
+
+    return (int)desc->trigger_events[tid].delay;
+}
+
+int pulseqlib_get_segment_trigger_duration_us(
+    const pulseqlib_collection* coll,
+    int seg_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg, tid;
+
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return -1;
+
+    tid = desc->segment_definitions[local_seg].trigger_id;
+    if (tid < 0 || tid >= desc->num_triggers) return -1;
+
+    return (int)desc->trigger_events[tid].duration;
+}
+
+/* ---- Navigator flag query ---------------------------------------- */
+
+int pulseqlib_segment_is_nav(
+    const pulseqlib_collection* coll,
+    int seg_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg;
+
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return 0;
+
+    return desc->segment_definitions[local_seg].is_nav;
 }
 
 int pulseqlib_block_has_freq_mod(
@@ -1825,8 +1910,8 @@ int pulseqlib_get_block_instance(
     inst->norot_flag = bte->norot_flag;
     inst->nopos_flag = bte->nopos_flag;
 
-    /* Trigger */
-    inst->trigon_flag = (bte->trigger_id >= 0) ? 1 : 0;
+    /* Digital output */
+    inst->digitalout_flag = (bte->digitalout_id >= 0) ? 1 : 0;
 
     /* ADC */
     if (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size) {

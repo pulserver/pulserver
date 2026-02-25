@@ -643,6 +643,159 @@ static int strip_pure_delays(
 }
 
 /* ================================================================== */
+/*  NAV-aware split / merge                                           */
+/* ================================================================== */
+
+/**
+ * @brief Split segments at NAV / non-NAV boundaries, merge adjacent NAV.
+ *
+ * After strip_pure_delays, every expanded segment covers a contiguous
+ * run of blocks.  This function:
+ *   1. Splits any segment whose blocks have mixed nav_flag values into
+ *      contiguous runs of identical NAV state.
+ *   2. Merges adjacent segments that are both NAV and contiguous in
+ *      block order.
+ *
+ * Ownership of in[].unique_block_indices is transferred: they are freed
+ * inside this function (set to NULL on the input side).
+ *
+ * @param[in]  in       Input expanded segments for one section
+ * @param[in]  num_in   Count of input segments
+ * @param[out] out      Pre-allocated output array
+ * @param[in]  max_out  Capacity of output array
+ * @param[in]  bt       Block table (for nav_flag lookup)
+ * @param[in]  scan_bi  If non-NULL, resolve through scan_table_block_idx
+ * @return Number of output segments, or -1 on allocation failure.
+ */
+static int nav_split_merge(
+    pulseqlib_tr_segment* in,  int num_in,
+    pulseqlib_tr_segment* out, int max_out,
+    const pulseqlib_block_table_element* bt,
+    const int* scan_bi)
+{
+    pulseqlib_tr_segment* split_buf = NULL;
+    int* new_ubi;
+    int  split_max, num_split, num_out;
+    int  n, b, k;
+    int  sb, nb, run_start, run_len, cur_nav, blk_nav;
+    int  bt_idx, this_nav, prev_nav;
+
+    if (num_in == 0) return 0;
+
+    /* worst case: every block becomes its own segment */
+    split_max = 0;
+    for (n = 0; n < num_in; ++n) split_max += in[n].num_blocks;
+    if (split_max == 0) return 0;
+
+    split_buf = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(
+        (size_t)split_max * sizeof(pulseqlib_tr_segment));
+    if (!split_buf) return -1;
+
+    /* ---- Pass 1: split at NAV transitions ---- */
+    num_split = 0;
+    for (n = 0; n < num_in; ++n) {
+        sb = in[n].start_block;
+        nb = in[n].num_blocks;
+        if (nb <= 0) {
+            PULSEQLIB_FREE(in[n].unique_block_indices);
+            in[n].unique_block_indices = NULL;
+            continue;
+        }
+
+        bt_idx  = scan_bi ? scan_bi[sb] : sb;
+        cur_nav = bt[bt_idx].nav_flag ? 1 : 0;
+        run_start = 0;
+
+        for (b = 1; b <= nb; ++b) {
+            if (b < nb) {
+                bt_idx  = scan_bi ? scan_bi[sb + b] : (sb + b);
+                blk_nav = bt[bt_idx].nav_flag ? 1 : 0;
+            } else {
+                blk_nav = -1;   /* sentinel — force flush of last run */
+            }
+
+            if (blk_nav != cur_nav) {
+                run_len = b - run_start;
+                split_buf[num_split].start_block = sb + run_start;
+                split_buf[num_split].num_blocks  = run_len;
+                split_buf[num_split].unique_block_indices =
+                    (int*)PULSEQLIB_ALLOC((size_t)run_len * sizeof(int));
+                if (!split_buf[num_split].unique_block_indices) {
+                    for (k = 0; k < num_split; ++k)
+                        PULSEQLIB_FREE(split_buf[k].unique_block_indices);
+                    PULSEQLIB_FREE(split_buf);
+                    return -1;
+                }
+                for (k = 0; k < run_len; ++k)
+                    split_buf[num_split].unique_block_indices[k] =
+                        in[n].unique_block_indices[run_start + k];
+                num_split++;
+                run_start = b;
+                cur_nav   = blk_nav;
+            }
+        }
+
+        PULSEQLIB_FREE(in[n].unique_block_indices);
+        in[n].unique_block_indices = NULL;
+    }
+
+    /* ---- Pass 2: merge adjacent NAV segments ---- */
+    num_out = 0;
+    for (n = 0; n < num_split; ++n) {
+        bt_idx   = scan_bi ? scan_bi[split_buf[n].start_block]
+                           : split_buf[n].start_block;
+        this_nav = bt[bt_idx].nav_flag ? 1 : 0;
+
+        if (this_nav && num_out > 0) {
+            pulseqlib_tr_segment* prev = &out[num_out - 1];
+            bt_idx   = scan_bi ? scan_bi[prev->start_block]
+                               : prev->start_block;
+            prev_nav = bt[bt_idx].nav_flag ? 1 : 0;
+
+            if (prev_nav &&
+                prev->start_block + prev->num_blocks ==
+                    split_buf[n].start_block) {
+                /* merge into previous segment */
+                int old_nb = prev->num_blocks;
+                int add_nb = split_buf[n].num_blocks;
+                int new_nb = old_nb + add_nb;
+                new_ubi = (int*)PULSEQLIB_ALLOC((size_t)new_nb * sizeof(int));
+                if (!new_ubi) {
+                    for (k = n; k < num_split; ++k)
+                        PULSEQLIB_FREE(split_buf[k].unique_block_indices);
+                    PULSEQLIB_FREE(split_buf);
+                    return -1;
+                }
+                for (k = 0; k < old_nb; ++k)
+                    new_ubi[k] = prev->unique_block_indices[k];
+                for (k = 0; k < add_nb; ++k)
+                    new_ubi[old_nb + k] =
+                        split_buf[n].unique_block_indices[k];
+                PULSEQLIB_FREE(prev->unique_block_indices);
+                PULSEQLIB_FREE(split_buf[n].unique_block_indices);
+                split_buf[n].unique_block_indices = NULL;
+                prev->unique_block_indices = new_ubi;
+                prev->num_blocks = new_nb;
+                continue;
+            }
+        }
+
+        if (num_out >= max_out) {
+            for (k = n; k < num_split; ++k)
+                PULSEQLIB_FREE(split_buf[k].unique_block_indices);
+            PULSEQLIB_FREE(split_buf);
+            return -1;
+        }
+        out[num_out] = split_buf[n];
+        split_buf[n].unique_block_indices = NULL;   /* ownership transferred */
+        num_out++;
+    }
+
+    PULSEQLIB_FREE(split_buf);
+    return num_out;
+}
+
+/* ================================================================== */
 /*  find_segments_in_tr                                               */
 /* ================================================================== */
 
@@ -758,6 +911,62 @@ int pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib
     PULSEQLIB_FREE(raw_segs); raw_segs = NULL;
     num_raw_alloc = 0;
 
+    /* ---- NAV-aware split and merge (per section, only when PMC enabled) ---- */
+    if (desc->enable_pmc) {
+        pulseqlib_tr_segment* nav_segs;
+        int nav_total = 0, r;
+
+        nav_segs = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(
+            (size_t)max_expanded * sizeof(pulseqlib_tr_segment));
+        if (!nav_segs) { diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto fail; }
+
+        if (n_prep > 0) {
+            r = nav_split_merge(exp_segs, n_prep,
+                    nav_segs + nav_total, max_expanded - nav_total,
+                    desc->block_table, NULL);
+            if (r < 0) {
+                for (n = 0; n < nav_total; ++n)
+                    if (nav_segs[n].unique_block_indices)
+                        PULSEQLIB_FREE(nav_segs[n].unique_block_indices);
+                PULSEQLIB_FREE(nav_segs);
+                diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto fail;
+            }
+            n_prep = r; nav_total += r;
+        }
+
+        r = nav_split_merge(exp_segs + (num_total - n_cool - n_main), n_main,
+                nav_segs + nav_total, max_expanded - nav_total,
+                desc->block_table, NULL);
+        if (r < 0) {
+            for (n = 0; n < nav_total; ++n)
+                if (nav_segs[n].unique_block_indices)
+                    PULSEQLIB_FREE(nav_segs[n].unique_block_indices);
+            PULSEQLIB_FREE(nav_segs);
+            diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto fail;
+        }
+        n_main = r; nav_total += r;
+
+        if (n_cool > 0) {
+            r = nav_split_merge(exp_segs + (num_total - n_cool), n_cool,
+                    nav_segs + nav_total, max_expanded - nav_total,
+                    desc->block_table, NULL);
+            if (r < 0) {
+                for (n = 0; n < nav_total; ++n)
+                    if (nav_segs[n].unique_block_indices)
+                        PULSEQLIB_FREE(nav_segs[n].unique_block_indices);
+                PULSEQLIB_FREE(nav_segs);
+                diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto fail;
+            }
+            n_cool = r; nav_total += r;
+        }
+
+        /* replace exp_segs with nav_segs */
+        PULSEQLIB_FREE(exp_segs);
+        exp_segs = nav_segs;
+        num_total = nav_total;
+        num_exp_alloc = nav_total;
+    }
+
     /* ---- segment tables ---- */
     desc->segment_table.num_prep_segments     = n_prep;
     desc->segment_table.num_main_segments     = n_main;
@@ -837,11 +1046,11 @@ int pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib
     /* ---- per-block flags ---- */
     for (i = 0; i < num_unique; ++i) {
         nb = desc->segment_definitions[i].num_blocks;
-        desc->segment_definitions[i].has_trigger  = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+        desc->segment_definitions[i].has_digitalout = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].has_rotation = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].norot_flag   = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].nopos_flag   = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
-        if (!desc->segment_definitions[i].has_trigger ||
+        if (!desc->segment_definitions[i].has_digitalout ||
             !desc->segment_definitions[i].has_rotation ||
             !desc->segment_definitions[i].norot_flag ||
             !desc->segment_definitions[i].nopos_flag) {
@@ -849,11 +1058,12 @@ int pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib
             goto fail;
         }
         for (n = 0; n < nb; ++n) {
-            desc->segment_definitions[i].has_trigger[n]  = 0;
+            desc->segment_definitions[i].has_digitalout[n] = 0;
             desc->segment_definitions[i].has_rotation[n] = 0;
             desc->segment_definitions[i].norot_flag[n]   = 0;
             desc->segment_definitions[i].nopos_flag[n]   = 0;
         }
+        desc->segment_definitions[i].trigger_id = -1;
     }
 
     max_energy = (float*)PULSEQLIB_ALLOC(num_unique * sizeof(float));
@@ -878,7 +1088,21 @@ int pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib
             blk_def_id = bte->id;
             bdef = &desc->block_definitions[blk_def_id];
 
-            if (bte->trigger_id  != -1) desc->segment_definitions[unique_idx].has_trigger[b]  = 1;
+            /* Classify trigger: OUTPUT → block-level digitalout,
+             *                    INPUT  → segment-level trigger */
+            if (bte->digitalout_id != -1 && bte->digitalout_id < desc->num_triggers) {
+                const pulseqlib_trigger_event* te = &desc->trigger_events[bte->digitalout_id];
+                if (te->trigger_type == PULSEQLIB__TRIGGER_TYPE_OUTPUT) {
+                    desc->segment_definitions[unique_idx].has_digitalout[b] = 1;
+                } else if (te->trigger_type == PULSEQLIB__TRIGGER_TYPE_INPUT) {
+                    int prev = desc->segment_definitions[unique_idx].trigger_id;
+                    if (prev >= 0 && prev != bte->digitalout_id) {
+                        diag->code = PULSEQLIB_ERR_SEG_MULTIPLE_PHYSIO_TRIGGERS;
+                        goto fail;
+                    }
+                    desc->segment_definitions[unique_idx].trigger_id = bte->digitalout_id;
+                }
+            }
             if (bte->rotation_id != -1) desc->segment_definitions[unique_idx].has_rotation[b] = 1;
             if (bte->norot_flag)        desc->segment_definitions[unique_idx].norot_flag[b]   = 1;
             if (bte->nopos_flag)        desc->segment_definitions[unique_idx].nopos_flag[b]   = 1;
@@ -903,6 +1127,22 @@ int pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib
     }
 
     PULSEQLIB_FREE(max_energy); max_energy = NULL;
+
+    /* ---- tag segments as NAV; verify at most 1 unique NAV ---- */
+    if (desc->enable_pmc) {
+        int nav_count = 0;
+        for (i = 0; i < num_unique; ++i) {
+            int bt0 = desc->segment_definitions[i].start_block;
+            desc->segment_definitions[i].is_nav =
+                (desc->block_table[bt0].nav_flag) ? 1 : 0;
+            if (desc->segment_definitions[i].is_nav) nav_count++;
+        }
+        if (nav_count > 1) {
+            diag->code = PULSEQLIB_ERR_SEG_MULTIPLE_NAV_SEGMENTS;
+            goto fail;
+        }
+    }
+
     for (n = 0; n < num_exp_alloc; ++n) PULSEQLIB_FREE(exp_segs[n].unique_block_indices);
     PULSEQLIB_FREE(exp_segs); exp_segs = NULL;
     num_exp_alloc = 0;
@@ -2077,6 +2317,29 @@ int pulseqlib__get_scan_table_segments(
         goto scan_seg_fail;
     }
 
+    /* ---- 5b. NAV-aware split and merge (only when PMC enabled) ---- */
+    if (desc->enable_pmc) {
+        pulseqlib_tr_segment* nav_segs;
+        int nav_total;
+
+        nav_segs = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(
+            (size_t)max_expanded * sizeof(pulseqlib_tr_segment));
+        if (!nav_segs) { diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto scan_seg_fail; }
+
+        nav_total = nav_split_merge(exp_segs, num_total,
+                nav_segs, max_expanded,
+                desc->block_table, desc->scan_table_block_idx);
+        if (nav_total < 0) {
+            PULSEQLIB_FREE(nav_segs);
+            diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto scan_seg_fail;
+        }
+
+        PULSEQLIB_FREE(exp_segs);
+        exp_segs = nav_segs;
+        num_total = nav_total;
+        num_exp_alloc = nav_total;
+    }
+
     /* ---- 6. Deduplicate segments ---- */
     uniq_segs = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(
         (size_t)num_total * sizeof(pulseqlib_tr_segment));
@@ -2175,11 +2438,11 @@ int pulseqlib__get_scan_table_segments(
     /* ---- 8. Per-block flags ---- */
     for (i = 0; i < num_unique; ++i) {
         nb = desc->segment_definitions[i].num_blocks;
-        desc->segment_definitions[i].has_trigger  = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+        desc->segment_definitions[i].has_digitalout = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].has_rotation = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].norot_flag   = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].nopos_flag   = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
-        if (!desc->segment_definitions[i].has_trigger ||
+        if (!desc->segment_definitions[i].has_digitalout ||
             !desc->segment_definitions[i].has_rotation ||
             !desc->segment_definitions[i].norot_flag ||
             !desc->segment_definitions[i].nopos_flag) {
@@ -2187,11 +2450,12 @@ int pulseqlib__get_scan_table_segments(
             goto scan_seg_fail;
         }
         for (n = 0; n < nb; ++n) {
-            desc->segment_definitions[i].has_trigger[n]  = 0;
+            desc->segment_definitions[i].has_digitalout[n] = 0;
             desc->segment_definitions[i].has_rotation[n] = 0;
             desc->segment_definitions[i].norot_flag[n]   = 0;
             desc->segment_definitions[i].nopos_flag[n]   = 0;
         }
+        desc->segment_definitions[i].trigger_id = -1;
     }
 
     /* ---- 9. Walk expanded segments, populate flags + max energy ---- */
@@ -2212,8 +2476,21 @@ int pulseqlib__get_scan_table_segments(
             blk_def_id = bte->id;
             bdef = &desc->block_definitions[blk_def_id];
 
-            if (bte->trigger_id  != -1)
-                desc->segment_definitions[unique_idx].has_trigger[b]  = 1;
+            /* Classify trigger: OUTPUT → block-level digitalout,
+             *                    INPUT  → segment-level trigger */
+            if (bte->digitalout_id != -1 && bte->digitalout_id < desc->num_triggers) {
+                const pulseqlib_trigger_event* te = &desc->trigger_events[bte->digitalout_id];
+                if (te->trigger_type == PULSEQLIB__TRIGGER_TYPE_OUTPUT) {
+                    desc->segment_definitions[unique_idx].has_digitalout[b] = 1;
+                } else if (te->trigger_type == PULSEQLIB__TRIGGER_TYPE_INPUT) {
+                    int prev = desc->segment_definitions[unique_idx].trigger_id;
+                    if (prev >= 0 && prev != bte->digitalout_id) {
+                        diag->code = PULSEQLIB_ERR_SEG_MULTIPLE_PHYSIO_TRIGGERS;
+                        goto scan_seg_fail;
+                    }
+                    desc->segment_definitions[unique_idx].trigger_id = bte->digitalout_id;
+                }
+            }
             if (bte->rotation_id != -1)
                 desc->segment_definitions[unique_idx].has_rotation[b] = 1;
             if (bte->norot_flag)
@@ -2249,6 +2526,22 @@ int pulseqlib__get_scan_table_segments(
     }
 
     PULSEQLIB_FREE(max_energy); max_energy = NULL;
+
+    /* ---- tag segments as NAV; verify at most 1 unique NAV ---- */
+    if (desc->enable_pmc) {
+        int nav_count = 0;
+        for (i = 0; i < num_unique; ++i) {
+            /* start_block already resolved to block_table index in step 7 */
+            int bt0 = desc->segment_definitions[i].start_block;
+            desc->segment_definitions[i].is_nav =
+                (desc->block_table[bt0].nav_flag) ? 1 : 0;
+            if (desc->segment_definitions[i].is_nav) nav_count++;
+        }
+        if (nav_count > 1) {
+            diag->code = PULSEQLIB_ERR_SEG_MULTIPLE_NAV_SEGMENTS;
+            goto scan_seg_fail;
+        }
+    }
 
     /* ---- 10. Build pattern_seg_id and fill scan_table_seg_id ---- */
     pattern_seg_id = (int*)PULSEQLIB_ALLOC((size_t)scan_tr_size * sizeof(int));
