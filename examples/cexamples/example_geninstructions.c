@@ -217,45 +217,44 @@ static void walk_segment_events(
     const pulseqlib_collection* coll,
     int seg_idx)
 {
-    int nblk = pulseqlib_get_segment_num_blocks(coll, seg_idx);
+    pulseqlib_segment_info segi = PULSEQLIB_SEGMENT_INFO_INIT;
     seg_event events[MAX_SEG_EVENTS];
     int num_events = 0;
     int t_us = 0;
     int i, j;
 
-    /* --- Pass 1: collect RF and ADC events with absolute timing --- */
-    for (i = 0; i < nblk; ++i) {
-        int dur = pulseqlib_get_block_duration_us(coll, seg_idx, i);
+    pulseqlib_get_segment_info(coll, seg_idx, &segi);
 
-        if (pulseqlib_block_has_rf(coll, seg_idx, i)
-            && num_events < MAX_SEG_EVENTS) {
-            int delay  = pulseqlib_get_rf_delay_us(coll, seg_idx, i);
-            int ns     = pulseqlib_get_rf_num_samples(coll, seg_idx, i);
-            int rf_dur = (int)(ns * VENDOR_RF_RASTER_US);
+    /* --- Pass 1: collect RF and ADC events with absolute timing --- */
+    for (i = 0; i < segi.num_blocks; ++i) {
+        pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
+        pulseqlib_get_block_info(coll, seg_idx, i, &bi);
+
+        if (bi.has_rf && num_events < MAX_SEG_EVENTS) {
+            int rf_dur = (int)(bi.rf_num_samples * VENDOR_RF_RASTER_US);
 
             events[num_events].kind     = EVT_RF;
             events[num_events].blk_idx  = i;
-            events[num_events].start_us = t_us + delay;
-            events[num_events].end_us   = t_us + delay + rf_dur;
+            events[num_events].start_us = t_us + bi.rf_delay_us;
+            events[num_events].end_us   = t_us + bi.rf_delay_us + rf_dur;
             num_events++;
         }
 
-        if (pulseqlib_block_has_adc(coll, seg_idx, i)
-            && num_events < MAX_SEG_EVENTS) {
-            int adc_id  = pulseqlib_get_adc_library_index(coll, seg_idx, i);
-            int delay   = pulseqlib_get_adc_delay_us(coll, seg_idx, i);
-            int ns      = pulseqlib_get_adc_num_samples(coll, adc_id);
-            int dwell   = pulseqlib_get_adc_dwell_us(coll, adc_id);
-            int adc_dur = (int)(ns * dwell * 1e-3f);  /* dwell is ns */
+        if (bi.has_adc && num_events < MAX_SEG_EVENTS) {
+            pulseqlib_adc_def ad = PULSEQLIB_ADC_DEF_INIT;
+            int adc_dur;
+
+            pulseqlib_get_adc_def(coll, bi.adc_def_id, &ad);
+            adc_dur = (int)(ad.num_samples * ad.dwell_us * 1e-3f);
 
             events[num_events].kind     = EVT_ADC;
             events[num_events].blk_idx  = i;
-            events[num_events].start_us = t_us + delay;
-            events[num_events].end_us   = t_us + delay + adc_dur;
+            events[num_events].start_us = t_us + bi.adc_delay_us;
+            events[num_events].end_us   = t_us + bi.adc_delay_us + adc_dur;
             num_events++;
         }
 
-        t_us += dur;
+        t_us += bi.duration_us;
     }
 
     /* --- Sort by start time (insertion sort, stable) -------------- */
@@ -320,22 +319,22 @@ static void generate_block_instructions(
     int seg_idx, int blk_idx, int t_us)
 {
     int axis;
-    int has_rf, has_adc;
+    pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
+
+    pulseqlib_get_block_info(coll, seg_idx, blk_idx, &bi);
 
     /* -- Gradients (X=0, Y=1, Z=2) ------------------------------- */
     for (axis = 0; axis < 3; ++axis) {
-        int   delay_us;
         int   num_shots;
         int   num_samples;
         float** amps;
         float* time_arr;
 
-        if (!pulseqlib_block_has_grad(coll, seg_idx, blk_idx, axis))
+        if (!bi.has_grad[axis])
             continue;
 
         num_shots = 0;
         num_samples = 0;
-        delay_us = pulseqlib_get_grad_delay_us(coll, seg_idx, blk_idx, axis);
         amps = pulseqlib_get_grad_amplitude(coll, seg_idx, blk_idx, axis, &num_shots, &num_samples);
         if (!amps)
             continue;
@@ -344,7 +343,7 @@ static void generate_block_instructions(
         time_arr = pulseqlib_get_grad_time_us(coll, seg_idx, blk_idx, axis);
 
         vendor_create_grad_instruction(
-            axis, t_us, delay_us,
+            axis, t_us, bi.grad_delay_us[axis],
             num_shots, num_samples,
             amps, time_arr);
 
@@ -353,9 +352,7 @@ static void generate_block_instructions(
     }
 
     /* -- RF -------------------------------------------------------- */
-    has_rf = pulseqlib_block_has_rf(coll, seg_idx, blk_idx);
-    if (has_rf) {
-        int   delay_us;
+    if (bi.has_rf) {
         int   num_channels;
         int   num_samples;
         float** mag;
@@ -364,27 +361,25 @@ static void generate_block_instructions(
 
         num_channels = 0;
         num_samples = 0;
-        delay_us = pulseqlib_get_rf_delay_us(coll, seg_idx, blk_idx);
         mag = pulseqlib_get_rf_magnitude(coll, seg_idx, blk_idx, &num_channels, &num_samples);
         if (!mag)
             goto skip_rf;
 
         /* Phase: NULL if RF is real-valued */
         phase = NULL;
-        if (pulseqlib_block_rf_is_complex(coll, seg_idx, blk_idx)) {
+        if (bi.rf_is_complex) {
             int pch = 0, pns = 0;
             phase = pulseqlib_get_rf_phase(coll, seg_idx, blk_idx, &pch, &pns);
-            /* phase can still be NULL on alloc failure */
         }
 
         /* Optional time array (same length as mag samples) */
         time_arr = NULL;
-        if (!pulseqlib_block_rf_has_uniform_raster(coll, seg_idx, blk_idx)) {
+        if (!bi.rf_uniform_raster) {
             time_arr = pulseqlib_get_rf_time_us(coll, seg_idx, blk_idx);
         }
 
         vendor_create_rf_instruction(
-            t_us, delay_us,
+            t_us, bi.rf_delay_us,
             num_channels, num_samples,
             mag, phase, time_arr);
 
@@ -395,42 +390,31 @@ static void generate_block_instructions(
 skip_rf:
 
     /* -- ADC ------------------------------------------------------- */
-    has_adc = pulseqlib_block_has_adc(coll, seg_idx, blk_idx);
-    if (has_adc) {
-        int adc_def_id = pulseqlib_get_adc_library_index(coll, seg_idx, blk_idx);
-        int delay_us = pulseqlib_get_adc_delay_us(coll, seg_idx, blk_idx);
-
-        vendor_create_adc_instruction(t_us, delay_us, adc_def_id);
+    if (bi.has_adc) {
+        vendor_create_adc_instruction(t_us, bi.adc_delay_us, bi.adc_def_id);
     }
 
     /* -- Digitalout ------------------------------------------------ */
-    if (pulseqlib_block_has_digitalout(coll, seg_idx, blk_idx)) {
-        int delay_us = pulseqlib_get_digitalout_delay_us(coll, seg_idx, blk_idx);
-        int duration_us = pulseqlib_get_digitalout_duration_us(coll, seg_idx, blk_idx);
-
-        vendor_create_digitalout_instruction(t_us, delay_us, duration_us);
+    if (bi.has_digitalout) {
+        vendor_create_digitalout_instruction(
+            t_us, bi.digitalout_delay_us, bi.digitalout_duration_us);
     }
 
     /* -- Rotation flags -------------------------------------------- */
-    {
-        int has_rot = pulseqlib_block_has_rotation(coll, seg_idx, blk_idx);
-        int norot   = pulseqlib_block_has_norot(coll, seg_idx, blk_idx);
-        vendor_set_rotation(has_rot, norot);
-    }
+    vendor_set_rotation(bi.has_rotation, bi.norot_flag);
 
     /* -- Freq-mod (independent channel) ---------------------------- */
-    if (pulseqlib_block_has_freq_mod(coll, seg_idx, blk_idx) && (has_rf || has_adc)) {
+    if (bi.has_freq_mod && (bi.has_rf || bi.has_adc)) {
         int grad_active = 0;
         for (axis = 0; axis < 3; ++axis) {
-            if (pulseqlib_block_has_grad(coll, seg_idx, blk_idx, axis)) {
+            if (bi.has_grad[axis]) {
                 grad_active = 1;
                 break;
             }
         }
         if (grad_active) {
-            int dur = pulseqlib_get_block_duration_us(coll, seg_idx, blk_idx);
             int raster_us = 2;  /* vendor-specific raster (e.g. 2 us on GE) */
-            int num_samples = dur / raster_us;
+            int num_samples = bi.duration_us / raster_us;
             vendor_create_freq_mod_instruction(num_samples);
         }
     }
@@ -446,7 +430,8 @@ int main(int argc, char** argv)
     pulseqlib_opts        opts  = PULSEQLIB_OPTS_INIT;
     pulseqlib_diagnostic  diag  = PULSEQLIB_DIAGNOSTIC_INIT;
     pulseqlib_collection* coll  = NULL;
-    int rc, nseg, seg_idx;
+    pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
+    int rc, seg_idx;
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <sequence.seq>\n", argv[0]);
@@ -464,20 +449,26 @@ int main(int argc, char** argv)
                         1);  /* num_averages     */
     CHECK(rc, &diag);
 
-    /* -- Walk segments and generate instructions ------------------ */
-    nseg = pulseqlib_get_num_segments(coll);
+    rc = pulseqlib_get_collection_info(coll, &ci);
+    CHECK(rc, &diag);
 
-    for (seg_idx = 0; seg_idx < nseg; ++seg_idx) {
-        int nblk = pulseqlib_get_segment_num_blocks(coll, seg_idx);
+    /* -- Walk segments and generate instructions ------------------ */
+    for (seg_idx = 0; seg_idx < ci.num_segments; ++seg_idx) {
+        pulseqlib_segment_info segi = PULSEQLIB_SEGMENT_INFO_INIT;
         int blk_idx;
         int t_us = 0;
+
+        rc = pulseqlib_get_segment_info(coll, seg_idx, &segi);
+        CHECK(rc, &diag);
 
         /* Per-event gap walk for vendor timing tweaks */
         walk_segment_events(coll, seg_idx);
 
-        for (blk_idx = 0; blk_idx < nblk; ++blk_idx) {
+        for (blk_idx = 0; blk_idx < segi.num_blocks; ++blk_idx) {
+            pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
             generate_block_instructions(coll, seg_idx, blk_idx, t_us);
-            t_us += pulseqlib_get_block_duration_us(coll, seg_idx, blk_idx);
+            pulseqlib_get_block_info(coll, seg_idx, blk_idx, &bi);
+            t_us += bi.duration_us;
         }
     }
 

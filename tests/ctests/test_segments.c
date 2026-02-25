@@ -29,35 +29,41 @@ MU_TEST(test_segments_seq1_smoke)
 {
     pulseqlib_collection* coll = NULL;
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
-    int rc, nseg, s;
+    pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
+    int rc, s;
 
     rc = load_seq("expected_output/seq1.seq", &coll, &diag, 0);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
 
-    nseg = pulseqlib_get_num_segments(coll);
-    mu_assert(nseg > 0, "should have at least 1 segment");
+    rc = pulseqlib_get_collection_info(coll, &ci);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "collection_info");
+    mu_assert(ci.num_segments > 0, "should have at least 1 segment");
 
-    for (s = 0; s < nseg; s++) {
-        int nblocks = pulseqlib_get_segment_num_blocks(coll, s);
-        int dur     = pulseqlib_get_segment_duration_us(coll, s);
+    for (s = 0; s < ci.num_segments; s++) {
+        pulseqlib_segment_info segi = PULSEQLIB_SEGMENT_INFO_INIT;
+        rc = pulseqlib_get_segment_info(coll, s, &segi);
+        mu_assert(PULSEQLIB_SUCCEEDED(rc), "segment_info");
 
-        mu_assert(nblocks > 0,
+        mu_assert(segi.num_blocks > 0,
                   "each segment should have at least 1 block");
-        mu_assert(dur > 0,
+        mu_assert(segi.duration_us > 0,
                   "segment duration should be positive");
 
         /* Block times non-decreasing, durations positive */
-        if (nblocks > 0) {
+        if (segi.num_blocks > 0) {
             int b, prev_start;
-            prev_start = pulseqlib_get_block_start_time_us(coll, s, 0);
-            for (b = 0; b < nblocks; b++) {
-                int bstart = pulseqlib_get_block_start_time_us(coll, s, b);
-                int bdur   = pulseqlib_get_block_duration_us(coll, s, b);
-                mu_assert(bstart >= prev_start,
+            pulseqlib_block_info bi0 = PULSEQLIB_BLOCK_INFO_INIT;
+            pulseqlib_get_block_info(coll, s, 0, &bi0);
+            prev_start = bi0.start_time_us;
+
+            for (b = 0; b < segi.num_blocks; b++) {
+                pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
+                pulseqlib_get_block_info(coll, s, b, &bi);
+                mu_assert(bi.start_time_us >= prev_start,
                           "block start times should be non-decreasing");
-                mu_assert(bdur > 0,
+                mu_assert(bi.duration_us > 0,
                           "block duration should be positive");
-                prev_start = bstart;
+                prev_start = bi.start_time_us;
             }
         }
     }

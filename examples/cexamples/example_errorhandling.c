@@ -53,9 +53,14 @@ int main(int argc, char** argv)
     rc = pulseqlib_check_consistency(coll, &diag);
     CHECK(rc, &diag);
 
-    printf("OK: %d subsequences, %.1f ms\n",
-           pulseqlib_get_num_subsequences(coll),
-           pulseqlib_get_total_duration_us(coll) / 1000.0f);
+    {
+        pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
+        rc = pulseqlib_get_collection_info(coll, &ci);
+        CHECK(rc, &diag);
+        printf("OK: %d subsequences, %.1f ms\n",
+               ci.num_subsequences,
+               ci.total_duration_us / 1000.0f);
+    }
 
     pulseqlib_collection_free(coll);
     return 0;

@@ -29,10 +29,16 @@ MU_TEST(test_load_seq1)
               "collection pointer should be non-NULL");
 
     /* Basic structural queries */
-    mu_assert(pulseqlib_get_num_subsequences(coll) >= 1,
-              "should have at least 1 subsequence");
-    mu_assert(pulseqlib_get_total_duration_us(coll) > 0.0f,
-              "total duration should be positive");
+    {
+        pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
+        rc = pulseqlib_get_collection_info(coll, &ci);
+        mu_assert(PULSEQLIB_SUCCEEDED(rc),
+                  "collection_info should succeed");
+        mu_assert(ci.num_subsequences >= 1,
+                  "should have at least 1 subsequence");
+        mu_assert(ci.total_duration_us > 0.0f,
+                  "total duration should be positive");
+    }
 
     pulseqlib_collection_free(coll);
 }

@@ -106,9 +106,14 @@ int main(int argc, char** argv)
     rc = pulseqlib_read(&coll, &diag, seq_path, &opts, 1, 1, 0, 1);
     CHECK(rc, &diag);
 
-    nsub = pulseqlib_get_num_subsequences(coll);
-    printf("Loaded: %d subsequences, %.2f s\n",
-           nsub, pulseqlib_get_total_duration_us(coll) / 1e6);
+    {
+        pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
+        rc = pulseqlib_get_collection_info(coll, &ci);
+        CHECK(rc, &diag);
+        nsub = ci.num_subsequences;
+        printf("Loaded: %d subsequences, %.2f s\n",
+               nsub, ci.total_duration_us / 1e6);
+    }
 
     /* ============================================================== */
     /*  2. Build per-subsequence freq-mod libraries                   */

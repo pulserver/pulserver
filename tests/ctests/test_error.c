@@ -243,21 +243,23 @@ MU_TEST(test_check_consistency_null)
 
 MU_TEST(test_getters_null_coll)
 {
-    /* Getters with NULL coll should return error / -1 / 0 */
-    mu_assert(pulseqlib_get_num_subsequences(NULL) <= 0,
-              "NULL coll num_subseq");
-    mu_assert(pulseqlib_get_num_segments(NULL) <= 0,
-              "NULL coll num_segments");
-    mu_assert(pulseqlib_get_max_adc_samples(NULL) <= 0,
-              "NULL coll max_adc");
-    mu_assert(pulseqlib_block_has_rf(NULL, 0, 0) <= 0,
-              "NULL coll has_rf");
-    mu_assert(pulseqlib_block_has_grad(NULL, 0, 0, 0) <= 0,
-              "NULL coll has_grad");
-    mu_assert(pulseqlib_get_rf_num_samples(NULL, 0, 0) < 0,
-              "NULL coll rf_num_samples");
-    mu_assert(pulseqlib_get_rf_num_channels(NULL, 0, 0) < 0,
-              "NULL coll rf_num_channels");
+    /* Batch getters with NULL coll should return error */
+    pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
+    pulseqlib_subseq_info     si = PULSEQLIB_SUBSEQ_INFO_INIT;
+    pulseqlib_segment_info    segi = PULSEQLIB_SEGMENT_INFO_INIT;
+    pulseqlib_block_info      bi = PULSEQLIB_BLOCK_INFO_INIT;
+    pulseqlib_adc_def         ad = PULSEQLIB_ADC_DEF_INIT;
+
+    mu_assert(PULSEQLIB_FAILED(pulseqlib_get_collection_info(NULL, &ci)),
+              "NULL coll collection_info");
+    mu_assert(PULSEQLIB_FAILED(pulseqlib_get_subseq_info(NULL, 0, &si)),
+              "NULL coll subseq_info");
+    mu_assert(PULSEQLIB_FAILED(pulseqlib_get_segment_info(NULL, 0, &segi)),
+              "NULL coll segment_info");
+    mu_assert(PULSEQLIB_FAILED(pulseqlib_get_block_info(NULL, 0, 0, &bi)),
+              "NULL coll block_info");
+    mu_assert(PULSEQLIB_FAILED(pulseqlib_get_adc_def(NULL, 0, &ad)),
+              "NULL coll adc_def");
 }
 
 MU_TEST(test_cursor_null_coll)

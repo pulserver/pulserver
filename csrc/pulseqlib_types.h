@@ -506,4 +506,156 @@ typedef struct pulseqlib_scan_time_info {
 
 #define PULSEQLIB_SCAN_TIME_INFO_INIT {0.0f, 0}
 
+/* ================================================================== */
+/*  Collection info (replaces individual collection-level getters)    */
+/* ================================================================== */
+
+/**
+ * @brief Summary information about a loaded collection.
+ *
+ * Returned by pulseqlib_get_collection_info().
+ */
+typedef struct pulseqlib_collection_info {
+    int   num_subsequences;     /**< number of subsequences              */
+    int   num_segments;         /**< total unique segments               */
+    int   max_adc_samples;      /**< max sample count across all ADCs    */
+    int   total_readouts;       /**< total ADC readout events            */
+    float total_duration_us;    /**< total sequence duration (us)        */
+} pulseqlib_collection_info;
+
+#define PULSEQLIB_COLLECTION_INFO_INIT {0, 0, 0, 0, 0.0f}
+
+/* ================================================================== */
+/*  Subsequence info (replaces per-subsequence getters)               */
+/* ================================================================== */
+
+/**
+ * @brief Metadata for a single subsequence.
+ *
+ * Returned by pulseqlib_get_subseq_info().
+ */
+typedef struct pulseqlib_subseq_info {
+    float tr_duration_us;       /**< TR duration (us)                    */
+    int   num_trs;              /**< number of TRs                       */
+    int   tr_size;              /**< blocks per TR                       */
+    int   num_prep_blocks;      /**< preparation blocks before first TR  */
+    int   num_cooldown_blocks;  /**< cooldown blocks after last TR       */
+    int   num_prep_trs;         /**< preparation TRs                     */
+    int   num_cooldown_trs;     /**< cooldown TRs                        */
+    int   degenerate_prep;      /**< 1 if prep == first TR               */
+    int   degenerate_cooldown;  /**< 1 if cooldown == last TR            */
+    int   num_unique_adcs;      /**< unique ADC definitions              */
+    int   num_unique_rf;        /**< unique RF definitions               */
+    int   pmc_enabled;          /**< 1 if PMC (prospective motion corr)  */
+    int   segment_offset;       /**< global segment index offset         */
+    int   num_prep_segments;    /**< segments in prep region             */
+    int   num_main_segments;    /**< segments in main TR region          */
+    int   num_cooldown_segments;/**< segments in cooldown region         */
+    int   num_adc_occurrences;  /**< ADC entries in label table          */
+    int   num_label_columns;    /**< label columns (vendor-dependent)    */
+} pulseqlib_subseq_info;
+
+#define PULSEQLIB_SUBSEQ_INFO_INIT { \
+    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 \
+}
+
+/* ================================================================== */
+/*  Segment info (replaces per-segment getters)                       */
+/* ================================================================== */
+
+/**
+ * @brief Metadata for a single segment.
+ *
+ * Returned by pulseqlib_get_segment_info().
+ */
+typedef struct pulseqlib_segment_info {
+    int   duration_us;          /**< total segment duration (us)         */
+    int   num_blocks;           /**< unique blocks in the segment        */
+    int   start_block;          /**< start block index in the sequence   */
+    int   pure_delay;           /**< 1 if segment is a bare delay        */
+    int   has_trigger;          /**< 1 if physio trigger attached        */
+    int   trigger_delay_us;     /**< trigger delay (us), -1 if none      */
+    int   trigger_duration_us;  /**< trigger duration (us), -1 if none   */
+    int   is_nav;               /**< 1 if navigator segment              */
+    int   num_kzero_crossings;  /**< k-space zero-crossings              */
+    int   rf_adc_gap_us;        /**< RF->ADC gap (us), -1 if no pair     */
+    int   adc_adc_gap_us;       /**< min ADC->ADC gap (us), -1 if < 2    */
+} pulseqlib_segment_info;
+
+#define PULSEQLIB_SEGMENT_INFO_INIT { \
+    0, 0, 0, 0, 0, -1, -1, 0, 0, -1, -1 \
+}
+
+/* ================================================================== */
+/*  Block info (replaces per-block has/get accessor pairs)            */
+/* ================================================================== */
+
+/**
+ * @brief Metadata for a single block within a segment.
+ *
+ * Returned by pulseqlib_get_block_info().
+ * Waveform data is NOT included — use the dedicated waveform getters
+ * (e.g.\ pulseqlib_get_grad_amplitude) keyed by the metadata here.
+ */
+typedef struct pulseqlib_block_info {
+    int   duration_us;            /**< block duration (us)               */
+    int   start_time_us;          /**< start time within segment (us)    */
+
+    /* Gradient (per axis: [0]=X, [1]=Y, [2]=Z) */
+    int   has_grad[3];            /**< 1 if gradient present             */
+    int   grad_is_trapezoid[3];   /**< 1 if trapezoid (not arbitrary)    */
+    int   grad_delay_us[3];       /**< gradient delay (us), -1 if absent */
+    int   grad_num_shots[3];      /**< shot count, -1 if absent          */
+    int   grad_num_samples[3];    /**< sample count, -1 if absent        */
+
+    /* RF */
+    int   has_rf;                 /**< 1 if RF event present             */
+    int   rf_delay_us;            /**< RF delay (us), -1 if absent       */
+    int   rf_num_channels;        /**< Tx channel count, -1 if absent    */
+    int   rf_num_samples;         /**< samples per channel, -1 if absent */
+    int   rf_is_complex;          /**< 1 if phase shape exists           */
+    int   rf_uniform_raster;      /**< 1 if time shape present           */
+
+    /* ADC */
+    int   has_adc;                /**< 1 if ADC acquisition active       */
+    int   adc_delay_us;           /**< ADC delay (us), -1 if absent      */
+    int   adc_def_id;             /**< global ADC library index, -1      */
+
+    /* Digital output */
+    int   has_digitalout;         /**< 1 if digital output present       */
+    int   digitalout_delay_us;    /**< delay (us), -1 if absent          */
+    int   digitalout_duration_us; /**< duration (us), -1 if absent       */
+
+    /* Flags */
+    int   has_rotation;           /**< 1 if rotation event present       */
+    int   norot_flag;             /**< 1 if no-rotation override         */
+    int   nopos_flag;             /**< 1 if no-position override         */
+    int   has_freq_mod;           /**< 1 if frequency modulation present */
+} pulseqlib_block_info;
+
+#define PULSEQLIB_BLOCK_INFO_INIT { \
+    0, 0, \
+    {0,0,0}, {0,0,0}, {-1,-1,-1}, {-1,-1,-1}, {-1,-1,-1}, \
+    0, -1, -1, -1, 0, 0, \
+    0, -1, -1, \
+    0, -1, -1, \
+    0, 0, 0, 0 \
+}
+
+/* ================================================================== */
+/*  ADC definition (replaces per-ADC getters)                         */
+/* ================================================================== */
+
+/**
+ * @brief Information about a unique ADC definition.
+ *
+ * Returned by pulseqlib_get_adc_def().
+ */
+typedef struct pulseqlib_adc_def {
+    int   dwell_us;             /**< dwell time (us)                     */
+    int   num_samples;          /**< sample count                        */
+} pulseqlib_adc_def;
+
+#define PULSEQLIB_ADC_DEF_INIT {0, 0}
+
 #endif /* PULSEQLIB_TYPES_H */

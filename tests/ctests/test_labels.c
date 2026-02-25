@@ -49,16 +49,16 @@ MU_TEST(test_labels_enabled_smoke)
 {
     pulseqlib_collection* coll = NULL;
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
-    int rc, ncols, nadc;
+    pulseqlib_subseq_info si   = PULSEQLIB_SUBSEQ_INFO_INIT;
+    int rc;
 
     rc = load_seq("expected_output/seq1.seq", &coll, &diag, 1);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1 with labels");
 
-    ncols = pulseqlib_get_num_label_columns(coll, 0);
-    mu_assert(ncols >= 0, "num_label_columns >= 0");
-
-    nadc = pulseqlib_get_num_adc_occurrences(coll, 0);
-    mu_assert(nadc >= 0, "num_adc_occurrences >= 0");
+    rc = pulseqlib_get_subseq_info(coll, 0, &si);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "subseq_info");
+    mu_assert(si.num_label_columns >= 0, "num_label_columns >= 0");
+    mu_assert(si.num_adc_occurrences >= 0, "num_adc_occurrences >= 0");
 
     pulseqlib_collection_free(coll);
 }

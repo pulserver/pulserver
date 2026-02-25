@@ -95,25 +95,37 @@ public:
     const pulseqlib_collection* handle() const { return coll_; }
     const pulseqlib_opts&       opts()   const { return opts_;  }
 
-    // ── Subsequence info ─────────────────────────────────────────
+    // ── Batch info queries ──────────────────────────────────────
 
-    int   num_subsequences()               const { return pulseqlib_get_num_subsequences(coll_); }
-    float tr_duration_us(int ss = 0)       const { return pulseqlib_get_tr_duration_us(coll_, ss); }
-    int   num_trs(int ss = 0)              const { return pulseqlib_get_num_trs(coll_, ss); }
-    int   tr_size(int ss = 0)              const { return pulseqlib_get_tr_size(coll_, ss); }
-    int   num_unique_adcs(int ss = 0)      const { return pulseqlib_get_num_unique_adcs(coll_, ss); }
-    bool  is_pmc_enabled(int ss = 0)        const { return pulseqlib_is_pmc_enabled(coll_, ss) != 0; }
-    int   subseq_segment_offset(int ss = 0) const { return pulseqlib_get_subseq_segment_offset(coll_, ss); }
-    float total_duration_us()              const { return pulseqlib_get_total_duration_us(coll_); }
+    pulseqlib_collection_info collection_info() const {
+        pulseqlib_collection_info info = PULSEQLIB_COLLECTION_INFO_INIT;
+        check(pulseqlib_get_collection_info(coll_, &info));
+        return info;
+    }
 
-    // ── TR structure ─────────────────────────────────────────────
+    pulseqlib_subseq_info subseq_info(int ss = 0) const {
+        pulseqlib_subseq_info info = PULSEQLIB_SUBSEQ_INFO_INIT;
+        check(pulseqlib_get_subseq_info(coll_, ss, &info));
+        return info;
+    }
 
-    int  num_prep_blocks(int ss = 0)       const { return pulseqlib_get_num_prep_blocks(coll_, ss); }
-    int  num_cooldown_blocks(int ss = 0)   const { return pulseqlib_get_num_cooldown_blocks(coll_, ss); }
-    bool degenerate_prep(int ss = 0)       const { return pulseqlib_get_degenerate_prep(coll_, ss) != 0; }
-    bool degenerate_cooldown(int ss = 0)   const { return pulseqlib_get_degenerate_cooldown(coll_, ss) != 0; }
-    int  num_prep_trs(int ss = 0)          const { return pulseqlib_get_num_prep_trs(coll_, ss); }
-    int  num_cooldown_trs(int ss = 0)      const { return pulseqlib_get_num_cooldown_trs(coll_, ss); }
+    pulseqlib_segment_info segment_info(int seg) const {
+        pulseqlib_segment_info info = PULSEQLIB_SEGMENT_INFO_INIT;
+        check(pulseqlib_get_segment_info(coll_, seg, &info));
+        return info;
+    }
+
+    pulseqlib_block_info block_info(int seg, int blk) const {
+        pulseqlib_block_info info = PULSEQLIB_BLOCK_INFO_INIT;
+        check(pulseqlib_get_block_info(coll_, seg, blk, &info));
+        return info;
+    }
+
+    pulseqlib_adc_def adc_def(int adc_idx) const {
+        pulseqlib_adc_def def = PULSEQLIB_ADC_DEF_INIT;
+        check(pulseqlib_get_adc_def(coll_, adc_idx, &def));
+        return def;
+    }
 
     // ── Scan time ────────────────────────────────────────────────
 
@@ -131,58 +143,31 @@ public:
         check(pulseqlib_check_consistency(coll_, &diag), diag);
     }
 
-    // ── Segment info ─────────────────────────────────────────────
-
-    int  num_segments()                         const { return pulseqlib_get_num_segments(coll_); }
-    int  segment_duration_us(int seg)           const { return pulseqlib_get_segment_duration_us(coll_, seg); }
-    bool is_segment_pure_delay(int seg)         const { return pulseqlib_is_segment_pure_delay(coll_, seg) == 1; }
-    int  segment_num_blocks(int seg)            const { return pulseqlib_get_segment_num_blocks(coll_, seg); }
-    int  segment_start_block(int seg)           const { return pulseqlib_get_segment_start_block(coll_, seg); }
-    int  segment_num_kzero_crossings(int seg)   const { return pulseqlib_get_segment_num_kzero_crossings(coll_, seg); }
-
     // ── Segment tables ───────────────────────────────────────────
 
-    int num_prep_segments(int ss = 0) const {
-        return pulseqlib_get_num_prep_segments(coll_, ss);
-    }
-    int num_main_segments(int ss = 0) const {
-        return pulseqlib_get_num_main_segments(coll_, ss);
-    }
-    int num_cooldown_segments(int ss = 0) const {
-        return pulseqlib_get_num_cooldown_segments(coll_, ss);
-    }
-
     std::vector<int> prep_segment_table(int ss = 0) const {
-        int n = num_prep_segments(ss);
-        std::vector<int> ids(n);
-        if (n > 0) pulseqlib_get_prep_segment_table(coll_, ss, ids.data());
+        pulseqlib_subseq_info si = subseq_info(ss);
+        std::vector<int> ids(si.num_prep_segments);
+        if (si.num_prep_segments > 0)
+            pulseqlib_get_prep_segment_table(coll_, ss, ids.data());
         return ids;
     }
     std::vector<int> main_segment_table(int ss = 0) const {
-        int n = num_main_segments(ss);
-        std::vector<int> ids(n);
-        if (n > 0) pulseqlib_get_main_segment_table(coll_, ss, ids.data());
+        pulseqlib_subseq_info si = subseq_info(ss);
+        std::vector<int> ids(si.num_main_segments);
+        if (si.num_main_segments > 0)
+            pulseqlib_get_main_segment_table(coll_, ss, ids.data());
         return ids;
     }
     std::vector<int> cooldown_segment_table(int ss = 0) const {
-        int n = num_cooldown_segments(ss);
-        std::vector<int> ids(n);
-        if (n > 0) pulseqlib_get_cooldown_segment_table(coll_, ss, ids.data());
+        pulseqlib_subseq_info si = subseq_info(ss);
+        std::vector<int> ids(si.num_cooldown_segments);
+        if (si.num_cooldown_segments > 0)
+            pulseqlib_get_cooldown_segment_table(coll_, ss, ids.data());
         return ids;
     }
 
-    // ── Block-level queries ──────────────────────────────────────
-
-    int block_start_time_us(int seg, int blk)    const { return pulseqlib_get_block_start_time_us(coll_, seg, blk); }
-    int block_duration_us(int seg, int blk)      const { return pulseqlib_get_block_duration_us(coll_, seg, blk); }
-
-    // ── RF queries ───────────────────────────────────────────────
-
-    int  num_unique_rf(int ss = 0)               const { return pulseqlib_get_num_unique_rf(coll_, ss); }
-    bool block_has_rf(int seg, int blk)          const { return pulseqlib_block_has_rf(coll_, seg, blk) == 1; }
-    int  rf_num_samples(int seg, int blk)        const { return pulseqlib_get_rf_num_samples(coll_, seg, blk); }
-    int  rf_num_channels(int seg, int blk)       const { return pulseqlib_get_rf_num_channels(coll_, seg, blk); }
-    int  rf_delay_us(int seg, int blk)           const { return pulseqlib_get_rf_delay_us(coll_, seg, blk); }
+    // ── RF queries (waveform access – still individual) ─────────
 
     RfStats get_rf_stats(int ss, int rf_idx) const {
         pulseqlib_rf_stats cstats = PULSEQLIB_RF_STATS_INIT;
@@ -190,24 +175,14 @@ public:
         return RfStats::from_c(cstats);
     }
 
-    float rf_base_amplitude_hz(int ss, int rf_idx) const {
-        return pulseqlib_get_rf_base_amplitude_hz(coll_, ss, rf_idx);
-    }
-
     std::vector<int> tr_rf_ids(int ss = 0) const {
-        int sz = tr_size(ss);
-        std::vector<int> ids(sz, -1);
+        pulseqlib_subseq_info si = subseq_info(ss);
+        std::vector<int> ids(si.tr_size, -1);
         pulseqlib_get_tr_rf_ids(coll_, ids.data(), ss);
         return ids;
     }
 
-    // ── Gradient queries ─────────────────────────────────────────
-
-    bool block_has_grad(int seg, int blk, int axis)         const { return pulseqlib_block_has_grad(coll_, seg, blk, axis) == 1; }
-    bool block_grad_is_trapezoid(int seg, int blk, int axis) const { return pulseqlib_block_grad_is_trapezoid(coll_, seg, blk, axis) == 1; }
-    int  grad_num_samples(int seg, int blk, int axis)        const { return pulseqlib_get_grad_num_samples(coll_, seg, blk, axis); }
-    int  grad_num_shots(int seg, int blk, int axis)          const { return pulseqlib_get_grad_num_shots(coll_, seg, blk, axis); }
-    int  grad_delay_us(int seg, int blk, int axis)           const { return pulseqlib_get_grad_delay_us(coll_, seg, blk, axis); }
+    // ── Gradient waveform queries (still individual) ─────────────
 
     float grad_initial_amplitude(int seg, int blk, int axis) const {
         return pulseqlib_get_grad_initial_amplitude_hz_per_m(coll_, seg, blk, axis);
@@ -215,28 +190,6 @@ public:
     int grad_initial_shot_id(int seg, int blk, int axis) const {
         return pulseqlib_get_grad_initial_shot_id(coll_, seg, blk, axis);
     }
-
-    // ── ADC queries ──────────────────────────────────────────────
-
-    int  max_adc_samples()                      const { return pulseqlib_get_max_adc_samples(coll_); }
-    int  adc_dwell_us(int adc_idx)              const { return pulseqlib_get_adc_dwell_us(coll_, adc_idx); }
-    int  adc_num_samples(int adc_idx)           const { return pulseqlib_get_adc_num_samples(coll_, adc_idx); }
-    bool block_has_adc(int seg, int blk)        const { return pulseqlib_block_has_adc(coll_, seg, blk) == 1; }
-    int  adc_delay_us(int seg, int blk)         const { return pulseqlib_get_adc_delay_us(coll_, seg, blk); }
-    int  adc_library_index(int seg, int blk)    const { return pulseqlib_get_adc_library_index(coll_, seg, blk); }
-
-    // ── Flow control queries ─────────────────────────────────────
-
-    bool block_has_digitalout(int seg, int blk)  const { return pulseqlib_block_has_digitalout(coll_, seg, blk) == 1; }
-    int  digitalout_delay_us(int seg, int blk)   const { return pulseqlib_get_digitalout_delay_us(coll_, seg, blk); }
-    int  digitalout_duration_us(int seg, int blk)const { return pulseqlib_get_digitalout_duration_us(coll_, seg, blk); }
-    bool segment_has_trigger(int seg)            const { return pulseqlib_segment_has_trigger(coll_, seg) == 1; }
-    int  segment_trigger_delay_us(int seg)       const { return pulseqlib_get_segment_trigger_delay_us(coll_, seg); }
-    int  segment_trigger_duration_us(int seg)    const { return pulseqlib_get_segment_trigger_duration_us(coll_, seg); }
-    bool segment_is_nav(int seg)                 const { return pulseqlib_segment_is_nav(coll_, seg) == 1; }
-    bool block_has_rotation(int seg, int blk)    const { return pulseqlib_block_has_rotation(coll_, seg, blk) == 1; }
-    bool block_has_norot(int seg, int blk)      const { return pulseqlib_block_has_norot(coll_, seg, blk) == 1; }
-    bool block_has_nopos(int seg, int blk)      const { return pulseqlib_block_has_nopos(coll_, seg, blk) == 1; }
 
     // ── Label queries ────────────────────────────────────────────
 
@@ -246,16 +199,9 @@ public:
         return LabelLimits::from_c(cl);
     }
 
-    int num_adc_occurrences(int ss = 0) const {
-        return pulseqlib_get_num_adc_occurrences(coll_, ss);
-    }
-    int num_label_columns(int ss = 0) const {
-        return pulseqlib_get_num_label_columns(coll_, ss);
-    }
-
     std::vector<int> get_adc_label(int ss, int occurrence) const {
-        int ncols = num_label_columns(ss);
-        std::vector<int> vals(ncols);
+        pulseqlib_subseq_info si = subseq_info(ss);
+        std::vector<int> vals(si.num_label_columns);
         check(pulseqlib_get_adc_label(coll_, ss, occurrence, vals.data()));
         return vals;
     }

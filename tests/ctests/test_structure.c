@@ -27,20 +27,26 @@ MU_TEST(test_structure_seq1_basic)
 {
     pulseqlib_collection* coll = NULL;
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
-    int rc, nsub;
+    pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
+    pulseqlib_subseq_info     si = PULSEQLIB_SUBSEQ_INFO_INIT;
+    int rc;
 
     rc = load_seq("expected_output/seq1.seq", &coll, &diag, 0);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "load should succeed");
 
-    nsub = pulseqlib_get_num_subsequences(coll);
-    mu_assert(nsub >= 1, "at least 1 subsequence");
+    rc = pulseqlib_get_collection_info(coll, &ci);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "collection_info should succeed");
+    mu_assert(ci.num_subsequences >= 1, "at least 1 subsequence");
+
+    rc = pulseqlib_get_subseq_info(coll, 0, &si);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "subseq_info should succeed");
 
     /* TR count and size for first subsequence */
-    mu_assert(pulseqlib_get_num_trs(coll, 0) >= 1,
+    mu_assert(si.num_trs >= 1,
               "should have at least 1 TR");
-    mu_assert(pulseqlib_get_tr_size(coll, 0) >= 1,
+    mu_assert(si.tr_size >= 1,
               "TR should contain at least 1 block");
-    mu_assert(pulseqlib_get_tr_duration_us(coll, 0) > 0.0f,
+    mu_assert(si.tr_duration_us > 0.0f,
               "TR duration should be positive");
 
     pulseqlib_collection_free(coll);

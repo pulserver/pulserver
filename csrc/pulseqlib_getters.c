@@ -102,17 +102,17 @@ static int get_grad_id_by_axis(const pulseqlib_block_definition* bdef, int axis)
 }
 
 /* ================================================================== */
-/*  Subsequence accessors                                             */
+/*  Subsequence accessors (internal helpers for batch getters)         */
 /* ================================================================== */
 
-int pulseqlib_get_num_subsequences(
+static int pulseqlib__get_num_subsequences(
     const pulseqlib_collection* coll)
 {
     if (!coll) return 0;
     return coll->num_subsequences;
 }
 
-float pulseqlib_get_tr_duration_us(
+static float pulseqlib__get_tr_duration_us(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -121,7 +121,7 @@ float pulseqlib_get_tr_duration_us(
     return coll->descriptors[subseq_idx].tr_descriptor.tr_duration_us;
 }
 
-int pulseqlib_get_num_trs(
+static int pulseqlib__get_num_trs(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -130,7 +130,7 @@ int pulseqlib_get_num_trs(
     return coll->descriptors[subseq_idx].tr_descriptor.num_trs;
 }
 
-int pulseqlib_get_tr_size(
+static int pulseqlib__get_tr_size(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -139,7 +139,7 @@ int pulseqlib_get_tr_size(
     return coll->descriptors[subseq_idx].tr_descriptor.tr_size;
 }
 
-int pulseqlib_get_num_prep_blocks(
+static int pulseqlib__get_num_prep_blocks(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -148,7 +148,7 @@ int pulseqlib_get_num_prep_blocks(
     return coll->descriptors[subseq_idx].tr_descriptor.num_prep_blocks;
 }
 
-int pulseqlib_get_num_cooldown_blocks(
+static int pulseqlib__get_num_cooldown_blocks(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -157,7 +157,7 @@ int pulseqlib_get_num_cooldown_blocks(
     return coll->descriptors[subseq_idx].tr_descriptor.num_cooldown_blocks;
 }
 
-int pulseqlib_get_degenerate_prep(
+static int pulseqlib__get_degenerate_prep(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -166,7 +166,7 @@ int pulseqlib_get_degenerate_prep(
     return coll->descriptors[subseq_idx].tr_descriptor.degenerate_prep;
 }
 
-int pulseqlib_get_degenerate_cooldown(
+static int pulseqlib__get_degenerate_cooldown(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -175,7 +175,7 @@ int pulseqlib_get_degenerate_cooldown(
     return coll->descriptors[subseq_idx].tr_descriptor.degenerate_cooldown;
 }
 
-int pulseqlib_get_num_prep_trs(
+static int pulseqlib__get_num_prep_trs(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -184,7 +184,7 @@ int pulseqlib_get_num_prep_trs(
     return coll->descriptors[subseq_idx].tr_descriptor.num_prep_trs;
 }
 
-int pulseqlib_get_num_cooldown_trs(
+static int pulseqlib__get_num_cooldown_trs(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -193,7 +193,7 @@ int pulseqlib_get_num_cooldown_trs(
     return coll->descriptors[subseq_idx].tr_descriptor.num_cooldown_trs;
 }
 
-int pulseqlib_get_num_unique_adcs(
+static int pulseqlib__get_num_unique_adcs(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -202,7 +202,7 @@ int pulseqlib_get_num_unique_adcs(
     return coll->descriptors[subseq_idx].num_unique_adcs;
 }
 
-int pulseqlib_is_pmc_enabled(
+static int pulseqlib__is_pmc_enabled(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -211,7 +211,7 @@ int pulseqlib_is_pmc_enabled(
     return coll->descriptors[subseq_idx].enable_pmc;
 }
 
-int pulseqlib_get_subseq_segment_offset(
+static int pulseqlib__get_subseq_segment_offset(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -223,7 +223,7 @@ int pulseqlib_get_subseq_segment_offset(
     return offset;
 }
 
-float pulseqlib_get_total_duration_us(
+static float pulseqlib__get_total_duration_us(
     const pulseqlib_collection* coll)
 {
     if (!coll) return 0.0f;
@@ -279,7 +279,7 @@ int pulseqlib_get_scan_time(
 /*  RF accessors                                                      */
 /* ================================================================== */
 
-int pulseqlib_get_num_unique_rf(
+static int pulseqlib__get_num_unique_rf(
     const pulseqlib_collection* coll,
     int subseq_idx)
 {
@@ -305,21 +305,6 @@ int pulseqlib_get_rf_stats(
 
     *stats = desc->rf_definitions[rf_idx].stats;
     return PULSEQLIB_OK;
-}
-
-float pulseqlib_get_rf_base_amplitude_hz(
-    const pulseqlib_collection* coll,
-    int subseq_idx, int rf_idx)
-{
-    const pulseqlib_sequence_descriptor* desc;
-
-    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return 0.0f;
-    desc = &coll->descriptors[subseq_idx];
-    if (rf_idx < 0 || rf_idx >= desc->num_unique_rfs)
-        return 0.0f;
-
-    return desc->rf_definitions[rf_idx].stats.base_amplitude_hz;
 }
 #endif
 
@@ -481,7 +466,7 @@ int pulseqlib_get_rf_array(
 /*  ADC collection accessors                                          */
 /* ================================================================== */
 
-int pulseqlib_get_total_readouts(
+static int pulseqlib__get_total_readouts(
     const pulseqlib_collection* coll)
 {
     int i, b, total;
@@ -530,7 +515,7 @@ int pulseqlib_get_total_readouts(
     return total;
 }
 
-int pulseqlib_get_max_adc_samples(
+static int pulseqlib__get_max_adc_samples(
     const pulseqlib_collection* coll)
 {
     int i, j, max_samples;
@@ -547,7 +532,7 @@ int pulseqlib_get_max_adc_samples(
     return max_samples;
 }
 
-int pulseqlib_get_adc_dwell_us(
+static int pulseqlib__get_adc_dwell_us(
     const pulseqlib_collection* coll, int adc_idx)
 {
     int i, global_idx, num_adcs, local;
@@ -567,7 +552,7 @@ int pulseqlib_get_adc_dwell_us(
     return 0;
 }
 
-int pulseqlib_get_adc_num_samples(
+static int pulseqlib__get_adc_num_samples(
     const pulseqlib_collection* coll, int adc_idx)
 {
     int i, global_idx, num_adcs, local;
@@ -588,17 +573,17 @@ int pulseqlib_get_adc_num_samples(
 }
 
 /* ================================================================== */
-/*  Segment accessors                                                 */
+/*  Segment accessors (internal helpers for batch getters)             */
 /* ================================================================== */
 
-int pulseqlib_get_num_segments(
+static int pulseqlib__get_num_segments(
     const pulseqlib_collection* coll)
 {
     if (!coll) return 0;
     return coll->total_unique_segments;
 }
 
-int pulseqlib_get_segment_duration_us(
+static int pulseqlib__get_segment_duration_us(
     const pulseqlib_collection* coll, int seg_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
@@ -616,7 +601,7 @@ int pulseqlib_get_segment_duration_us(
     return total;
 }
 
-int pulseqlib_is_segment_pure_delay(
+static int pulseqlib__is_segment_pure_delay(
     const pulseqlib_collection* coll, int seg_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
@@ -637,7 +622,7 @@ int pulseqlib_is_segment_pure_delay(
     return 0;
 }
 
-int pulseqlib_get_segment_num_blocks(
+static int pulseqlib__get_segment_num_blocks(
     const pulseqlib_collection* coll, int seg_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
@@ -649,7 +634,7 @@ int pulseqlib_get_segment_num_blocks(
     return desc->segment_definitions[local_seg].num_blocks;
 }
 
-int pulseqlib_get_segment_start_block(
+static int pulseqlib__get_segment_start_block(
     const pulseqlib_collection* coll, int seg_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
@@ -665,7 +650,7 @@ int pulseqlib_get_segment_start_block(
 /*  Segment table queries                                             */
 /* ================================================================== */
 
-int pulseqlib_get_num_prep_segments(
+static int pulseqlib__get_num_prep_segments(
     const pulseqlib_collection* coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
@@ -673,7 +658,7 @@ int pulseqlib_get_num_prep_segments(
     return coll->descriptors[subseq_idx].segment_table.num_prep_segments;
 }
 
-int pulseqlib_get_num_main_segments(
+static int pulseqlib__get_num_main_segments(
     const pulseqlib_collection* coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
@@ -681,7 +666,7 @@ int pulseqlib_get_num_main_segments(
     return coll->descriptors[subseq_idx].segment_table.num_main_segments;
 }
 
-int pulseqlib_get_num_cooldown_segments(
+static int pulseqlib__get_num_cooldown_segments(
     const pulseqlib_collection* coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
@@ -738,7 +723,7 @@ int pulseqlib_get_cooldown_segment_table(
 /*  Segment timing queries                                            */
 /* ================================================================== */
 
-int pulseqlib_get_segment_num_kzero_crossings(
+static int pulseqlib__get_segment_num_kzero_crossings(
     const pulseqlib_collection* coll, int seg_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
@@ -750,7 +735,7 @@ int pulseqlib_get_segment_num_kzero_crossings(
     return desc->segment_definitions[local_seg].timing.num_kzero_crossings;
 }
 
-int pulseqlib_get_segment_rf_adc_gap_us(
+static int pulseqlib__get_segment_rf_adc_gap_us(
     const pulseqlib_collection* coll, int seg_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
@@ -783,7 +768,7 @@ int pulseqlib_get_segment_rf_adc_gap_us(
     }
 }
 
-int pulseqlib_get_segment_adc_adc_gap_us(
+static int pulseqlib__get_segment_adc_adc_gap_us(
     const pulseqlib_collection* coll, int seg_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
@@ -809,10 +794,10 @@ int pulseqlib_get_segment_adc_adc_gap_us(
 }
 
 /* ================================================================== */
-/*  Block-level queries                                               */
+/*  Block-level queries (internal helpers for batch getter)            */
 /* ================================================================== */
 
-int pulseqlib_get_block_start_time_us(
+static int pulseqlib__get_block_start_time_us(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -830,7 +815,7 @@ int pulseqlib_get_block_start_time_us(
     return start_time;
 }
 
-int pulseqlib_get_block_duration_us(
+static int pulseqlib__get_block_duration_us(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -845,10 +830,10 @@ int pulseqlib_get_block_duration_us(
 }
 
 /* ================================================================== */
-/*  RF queries                                                        */
+/*  RF queries (internal helpers + public waveform getters)            */
 /* ================================================================== */
 
-int pulseqlib_block_has_rf(
+static int pulseqlib__block_has_rf(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -864,7 +849,7 @@ int pulseqlib_block_has_rf(
     return (bdef->rf_id != -1) ? 1 : 0;
 }
 
-int pulseqlib_block_rf_has_uniform_raster(
+static int pulseqlib__block_rf_has_uniform_raster(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -884,7 +869,7 @@ int pulseqlib_block_rf_has_uniform_raster(
     return (rdef->time_shape_id != 0) ? 1 : 0;
 }
 
-int pulseqlib_block_rf_is_complex(
+static int pulseqlib__block_rf_is_complex(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -904,7 +889,7 @@ int pulseqlib_block_rf_is_complex(
     return (rdef->phase_shape_id != 0) ? 1 : 0;
 }
 
-int pulseqlib_get_rf_num_samples(
+static int pulseqlib__get_rf_num_samples(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -955,7 +940,7 @@ int pulseqlib_get_rf_num_samples(
     return total / nch;
 }
 
-int pulseqlib_get_rf_delay_us(
+static int pulseqlib__get_rf_delay_us(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -973,7 +958,7 @@ int pulseqlib_get_rf_delay_us(
     return desc->rf_definitions[bdef->rf_id].delay;
 }
 
-int pulseqlib_get_rf_num_channels(
+static int pulseqlib__get_rf_num_channels(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -1176,10 +1161,10 @@ float* pulseqlib_get_rf_time_us(
 }
 
 /* ================================================================== */
-/*  Gradient queries                                                  */
+/*  Gradient queries (internal helpers + public waveform getters)      */
 /* ================================================================== */
 
-int pulseqlib_block_has_grad(
+static int pulseqlib__block_has_grad(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx, int axis)
 {
@@ -1197,7 +1182,7 @@ int pulseqlib_block_has_grad(
     return (grad_id != -1) ? 1 : 0;
 }
 
-int pulseqlib_block_grad_is_trapezoid(
+static int pulseqlib__block_grad_is_trapezoid(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx, int axis)
 {
@@ -1221,7 +1206,7 @@ int pulseqlib_block_grad_is_trapezoid(
     return 0;
 }
 
-int pulseqlib_get_grad_num_samples(
+static int pulseqlib__get_grad_num_samples(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx, int axis)
 {
@@ -1258,7 +1243,7 @@ int pulseqlib_get_grad_num_samples(
     return -1;
 }
 
-int pulseqlib_get_grad_num_shots(
+static int pulseqlib__get_grad_num_shots(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx, int axis)
 {
@@ -1278,7 +1263,7 @@ int pulseqlib_get_grad_num_shots(
     return desc->grad_definitions[grad_id].num_shots;
 }
 
-int pulseqlib_get_grad_delay_us(
+static int pulseqlib__get_grad_delay_us(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx, int axis)
 {
@@ -1522,10 +1507,10 @@ float* pulseqlib_get_grad_time_us(
 }
 
 /* ================================================================== */
-/*  ADC block queries                                                 */
+/*  ADC block queries (internal helpers)                               */
 /* ================================================================== */
 
-int pulseqlib_block_has_adc(
+static int pulseqlib__block_has_adc(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -1544,7 +1529,7 @@ int pulseqlib_block_has_adc(
     return (bte->adc_id != -1) ? 1 : 0;
 }
 
-int pulseqlib_get_adc_delay_us(
+static int pulseqlib__get_adc_delay_us(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -1568,7 +1553,7 @@ int pulseqlib_get_adc_delay_us(
     return desc->adc_definitions[adc_id].delay;
 }
 
-int pulseqlib_get_adc_library_index(
+static int pulseqlib__get_adc_library_index(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -1599,10 +1584,10 @@ int pulseqlib_get_adc_library_index(
 }
 
 /* ================================================================== */
-/*  Digital output / trigger / rotation / flag queries                */
+/*  Digital output / trigger / flag queries (internal helpers)         */
 /* ================================================================== */
 
-int pulseqlib_block_has_digitalout(
+static int pulseqlib__block_has_digitalout(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -1616,7 +1601,7 @@ int pulseqlib_block_has_digitalout(
     return seg->has_digitalout[local_blk];
 }
 
-int pulseqlib_get_digitalout_delay_us(
+static int pulseqlib__get_digitalout_delay_us(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -1637,7 +1622,7 @@ int pulseqlib_get_digitalout_delay_us(
     return (int)desc->trigger_events[digitalout_id].delay;
 }
 
-int pulseqlib_get_digitalout_duration_us(
+static int pulseqlib__get_digitalout_duration_us(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -1660,7 +1645,7 @@ int pulseqlib_get_digitalout_duration_us(
 
 /* ---- Segment-level physio trigger queries ------------------------ */
 
-int pulseqlib_segment_has_trigger(
+static int pulseqlib__segment_has_trigger(
     const pulseqlib_collection* coll,
     int seg_idx)
 {
@@ -1673,7 +1658,7 @@ int pulseqlib_segment_has_trigger(
     return (desc->segment_definitions[local_seg].trigger_id >= 0) ? 1 : 0;
 }
 
-int pulseqlib_get_segment_trigger_delay_us(
+static int pulseqlib__get_segment_trigger_delay_us(
     const pulseqlib_collection* coll,
     int seg_idx)
 {
@@ -1689,7 +1674,7 @@ int pulseqlib_get_segment_trigger_delay_us(
     return (int)desc->trigger_events[tid].delay;
 }
 
-int pulseqlib_get_segment_trigger_duration_us(
+static int pulseqlib__get_segment_trigger_duration_us(
     const pulseqlib_collection* coll,
     int seg_idx)
 {
@@ -1707,7 +1692,7 @@ int pulseqlib_get_segment_trigger_duration_us(
 
 /* ---- Navigator flag query ---------------------------------------- */
 
-int pulseqlib_segment_is_nav(
+static int pulseqlib__segment_is_nav(
     const pulseqlib_collection* coll,
     int seg_idx)
 {
@@ -1720,7 +1705,7 @@ int pulseqlib_segment_is_nav(
     return desc->segment_definitions[local_seg].is_nav;
 }
 
-int pulseqlib_block_has_freq_mod(
+static int pulseqlib__block_has_freq_mod(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -1736,7 +1721,7 @@ int pulseqlib_block_has_freq_mod(
     return (bte->freq_mod_id >= 0) ? 1 : 0;
 }
 
-int pulseqlib_block_has_rotation(
+static int pulseqlib__block_has_rotation(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -1750,7 +1735,7 @@ int pulseqlib_block_has_rotation(
     return seg->has_rotation[local_blk];
 }
 
-int pulseqlib_block_has_norot(
+static int pulseqlib__block_has_norot(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -1764,7 +1749,7 @@ int pulseqlib_block_has_norot(
     return seg->norot_flag[local_blk];
 }
 
-int pulseqlib_block_has_nopos(
+static int pulseqlib__block_has_nopos(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx)
 {
@@ -2066,7 +2051,7 @@ int pulseqlib_get_label_limits(const pulseqlib_collection* coll,
     return PULSEQLIB_OK;
 }
 
-int pulseqlib_get_num_adc_occurrences(const pulseqlib_collection* coll,
+static int pulseqlib__get_num_adc_occurrences(const pulseqlib_collection* coll,
                                       int subseq_idx)
 {
     if (!coll) return 0;
@@ -2074,7 +2059,7 @@ int pulseqlib_get_num_adc_occurrences(const pulseqlib_collection* coll,
     return coll->descriptors[subseq_idx].label_num_entries;
 }
 
-int pulseqlib_get_num_label_columns(const pulseqlib_collection* coll,
+static int pulseqlib__get_num_label_columns(const pulseqlib_collection* coll,
                                     int subseq_idx)
 {
     if (!coll) return 0;
@@ -2104,6 +2089,153 @@ int pulseqlib_get_adc_label(const pulseqlib_collection* coll,
     row_start = occurrence_idx * ncols;
     for (c = 0; c < ncols; ++c)
         out_values[c] = desc->label_table[row_start + c];
+
+    return PULSEQLIB_OK;
+}
+
+/* ================================================================== */
+/*  Batch getters (public API)                                        */
+/* ================================================================== */
+
+int pulseqlib_get_collection_info(
+    const pulseqlib_collection* coll,
+    pulseqlib_collection_info*  info)
+{
+    if (!coll || !info) return PULSEQLIB_ERR_NULL_POINTER;
+
+    info->num_subsequences = pulseqlib__get_num_subsequences(coll);
+    info->num_segments     = pulseqlib__get_num_segments(coll);
+    info->max_adc_samples  = pulseqlib__get_max_adc_samples(coll);
+    info->total_readouts   = pulseqlib__get_total_readouts(coll);
+    info->total_duration_us = pulseqlib__get_total_duration_us(coll);
+
+    return PULSEQLIB_OK;
+}
+
+int pulseqlib_get_subseq_info(
+    const pulseqlib_collection* coll,
+    int                         subseq_idx,
+    pulseqlib_subseq_info*      info)
+{
+    if (!coll || !info) return PULSEQLIB_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    info->tr_duration_us       = pulseqlib__get_tr_duration_us(coll, subseq_idx);
+    info->num_trs              = pulseqlib__get_num_trs(coll, subseq_idx);
+    info->tr_size              = pulseqlib__get_tr_size(coll, subseq_idx);
+    info->num_prep_blocks      = pulseqlib__get_num_prep_blocks(coll, subseq_idx);
+    info->num_cooldown_blocks  = pulseqlib__get_num_cooldown_blocks(coll, subseq_idx);
+    info->num_prep_trs         = pulseqlib__get_num_prep_trs(coll, subseq_idx);
+    info->num_cooldown_trs     = pulseqlib__get_num_cooldown_trs(coll, subseq_idx);
+    info->degenerate_prep      = pulseqlib__get_degenerate_prep(coll, subseq_idx);
+    info->degenerate_cooldown  = pulseqlib__get_degenerate_cooldown(coll, subseq_idx);
+    info->num_unique_adcs      = pulseqlib__get_num_unique_adcs(coll, subseq_idx);
+    info->num_unique_rf        = pulseqlib__get_num_unique_rf(coll, subseq_idx);
+    info->pmc_enabled          = pulseqlib__is_pmc_enabled(coll, subseq_idx);
+    info->segment_offset       = pulseqlib__get_subseq_segment_offset(coll, subseq_idx);
+    info->num_prep_segments    = pulseqlib__get_num_prep_segments(coll, subseq_idx);
+    info->num_main_segments    = pulseqlib__get_num_main_segments(coll, subseq_idx);
+    info->num_cooldown_segments = pulseqlib__get_num_cooldown_segments(coll, subseq_idx);
+    info->num_adc_occurrences  = pulseqlib__get_num_adc_occurrences(coll, subseq_idx);
+    info->num_label_columns    = pulseqlib__get_num_label_columns(coll, subseq_idx);
+
+    return PULSEQLIB_OK;
+}
+
+int pulseqlib_get_segment_info(
+    const pulseqlib_collection* coll,
+    int                         seg_idx,
+    pulseqlib_segment_info*     info)
+{
+    if (!coll || !info) return PULSEQLIB_ERR_NULL_POINTER;
+
+    info->duration_us          = pulseqlib__get_segment_duration_us(coll, seg_idx);
+    info->num_blocks           = pulseqlib__get_segment_num_blocks(coll, seg_idx);
+    info->start_block          = pulseqlib__get_segment_start_block(coll, seg_idx);
+    info->pure_delay           = pulseqlib__is_segment_pure_delay(coll, seg_idx);
+    info->has_trigger          = pulseqlib__segment_has_trigger(coll, seg_idx);
+    info->trigger_delay_us     = pulseqlib__get_segment_trigger_delay_us(coll, seg_idx);
+    info->trigger_duration_us  = pulseqlib__get_segment_trigger_duration_us(coll, seg_idx);
+    info->is_nav               = pulseqlib__segment_is_nav(coll, seg_idx);
+    info->num_kzero_crossings  = pulseqlib__get_segment_num_kzero_crossings(coll, seg_idx);
+    info->rf_adc_gap_us        = pulseqlib__get_segment_rf_adc_gap_us(coll, seg_idx);
+    info->adc_adc_gap_us       = pulseqlib__get_segment_adc_adc_gap_us(coll, seg_idx);
+
+    return PULSEQLIB_OK;
+}
+
+int pulseqlib_get_block_info(
+    const pulseqlib_collection* coll,
+    int                         seg_idx,
+    int                         blk_idx,
+    pulseqlib_block_info*       info)
+{
+    int axis;
+
+    if (!coll || !info) return PULSEQLIB_ERR_NULL_POINTER;
+
+    info->duration_us   = pulseqlib__get_block_duration_us(coll, seg_idx, blk_idx);
+    info->start_time_us = pulseqlib__get_block_start_time_us(coll, seg_idx, blk_idx);
+
+    /* Gradient (per axis) */
+    for (axis = 0; axis < 3; ++axis) {
+        info->has_grad[axis]           = pulseqlib__block_has_grad(coll, seg_idx, blk_idx, axis);
+        info->grad_is_trapezoid[axis]  = info->has_grad[axis] ?
+            pulseqlib__block_grad_is_trapezoid(coll, seg_idx, blk_idx, axis) : 0;
+        info->grad_delay_us[axis]      = info->has_grad[axis] ?
+            pulseqlib__get_grad_delay_us(coll, seg_idx, blk_idx, axis) : -1;
+        info->grad_num_shots[axis]     = info->has_grad[axis] ?
+            pulseqlib__get_grad_num_shots(coll, seg_idx, blk_idx, axis) : -1;
+        info->grad_num_samples[axis]   = info->has_grad[axis] ?
+            pulseqlib__get_grad_num_samples(coll, seg_idx, blk_idx, axis) : -1;
+    }
+
+    /* RF */
+    info->has_rf            = pulseqlib__block_has_rf(coll, seg_idx, blk_idx);
+    info->rf_delay_us       = info->has_rf ?
+        pulseqlib__get_rf_delay_us(coll, seg_idx, blk_idx) : -1;
+    info->rf_num_channels   = info->has_rf ?
+        pulseqlib__get_rf_num_channels(coll, seg_idx, blk_idx) : -1;
+    info->rf_num_samples    = info->has_rf ?
+        pulseqlib__get_rf_num_samples(coll, seg_idx, blk_idx) : -1;
+    info->rf_is_complex     = info->has_rf ?
+        pulseqlib__block_rf_is_complex(coll, seg_idx, blk_idx) : 0;
+    info->rf_uniform_raster = info->has_rf ?
+        pulseqlib__block_rf_has_uniform_raster(coll, seg_idx, blk_idx) : 0;
+
+    /* ADC */
+    info->has_adc     = pulseqlib__block_has_adc(coll, seg_idx, blk_idx);
+    info->adc_delay_us = info->has_adc ?
+        pulseqlib__get_adc_delay_us(coll, seg_idx, blk_idx) : -1;
+    info->adc_def_id  = info->has_adc ?
+        pulseqlib__get_adc_library_index(coll, seg_idx, blk_idx) : -1;
+
+    /* Digital output */
+    info->has_digitalout      = pulseqlib__block_has_digitalout(coll, seg_idx, blk_idx);
+    info->digitalout_delay_us = info->has_digitalout ?
+        pulseqlib__get_digitalout_delay_us(coll, seg_idx, blk_idx) : -1;
+    info->digitalout_duration_us = info->has_digitalout ?
+        pulseqlib__get_digitalout_duration_us(coll, seg_idx, blk_idx) : -1;
+
+    /* Flags */
+    info->has_rotation = pulseqlib__block_has_rotation(coll, seg_idx, blk_idx);
+    info->norot_flag   = pulseqlib__block_has_norot(coll, seg_idx, blk_idx);
+    info->nopos_flag   = pulseqlib__block_has_nopos(coll, seg_idx, blk_idx);
+    info->has_freq_mod = pulseqlib__block_has_freq_mod(coll, seg_idx, blk_idx);
+
+    return PULSEQLIB_OK;
+}
+
+int pulseqlib_get_adc_def(
+    const pulseqlib_collection* coll,
+    int                         adc_idx,
+    pulseqlib_adc_def*          def)
+{
+    if (!coll || !def) return PULSEQLIB_ERR_NULL_POINTER;
+
+    def->dwell_us    = pulseqlib__get_adc_dwell_us(coll, adc_idx);
+    def->num_samples = pulseqlib__get_adc_num_samples(coll, adc_idx);
 
     return PULSEQLIB_OK;
 }

@@ -334,65 +334,57 @@ void pulseqlib_pns_result_free(pulseqlib_pns_result* r);
 /*  Subsequence getters                                               */
 /* ================================================================== */
 
-/** @brief Return number of subsequences in the collection. */
-int pulseqlib_get_num_subsequences(const pulseqlib_collection* coll);
-
-/** @brief Return TR duration for a subsequence (us). */
-float pulseqlib_get_tr_duration_us(const pulseqlib_collection* coll,
-                                   int subseq_idx);
-
-/** @brief Return number of TRs in a subsequence. */
-int pulseqlib_get_num_trs(const pulseqlib_collection* coll,
-                          int subseq_idx);
-
-/** @brief Return number of blocks per TR in a subsequence. */
-int pulseqlib_get_tr_size(const pulseqlib_collection* coll,
-                          int subseq_idx);
-
-/** @brief Return number of preparation blocks before the first TR. */
-int pulseqlib_get_num_prep_blocks(const pulseqlib_collection* coll,
-                                  int subseq_idx);
-
-/** @brief Return number of cooldown blocks after the last TR. */
-int pulseqlib_get_num_cooldown_blocks(const pulseqlib_collection* coll,
-                                      int subseq_idx);
-
-/** @brief Return 1 if preparation blocks are degenerate (same as first TR). */
-int pulseqlib_get_degenerate_prep(const pulseqlib_collection* coll,
-                                  int subseq_idx);
-
-/** @brief Return 1 if cooldown blocks are degenerate (same as last TR). */
-int pulseqlib_get_degenerate_cooldown(const pulseqlib_collection* coll,
-                                      int subseq_idx);
-
-/** @brief Return number of preparation TRs. */
-int pulseqlib_get_num_prep_trs(const pulseqlib_collection* coll,
-                               int subseq_idx);
-
-/** @brief Return number of cooldown TRs. */
-int pulseqlib_get_num_cooldown_trs(const pulseqlib_collection* coll,
-                                   int subseq_idx);
-
-/** @brief Return number of unique ADC events in a subsequence. */
-int pulseqlib_get_num_unique_adcs(const pulseqlib_collection* coll,
-                                  int subseq_idx);
-
-/** @brief Return 1 if PMC (prospective motion correction) is enabled. */
-int pulseqlib_is_pmc_enabled(const pulseqlib_collection* coll,
-                             int subseq_idx);
-
-/** @brief Return global segment offset for subsequence @p subseq_idx. */
-int pulseqlib_get_subseq_segment_offset(const pulseqlib_collection* coll,
-                                        int subseq_idx);
+/**
+ * @brief Fill a pulseqlib_collection_info with collection-level summary.
+ *
+ * Replaces pulseqlib_get_num_subsequences, pulseqlib_get_num_segments,
+ * pulseqlib_get_max_adc_samples, pulseqlib_get_total_readouts,
+ * pulseqlib_get_total_duration_us.
+ */
+int pulseqlib_get_collection_info(const pulseqlib_collection* coll,
+                                  pulseqlib_collection_info*  info);
 
 /**
- * @brief Return total number of ADC readout events across all
- *        subsequences (accounting for TR repetitions, prep, cooldown).
+ * @brief Fill a pulseqlib_subseq_info for one subsequence.
+ *
+ * Replaces ~18 individual per-subsequence getters (TR structure,
+ * prep/cooldown counts, degenerate flags, segment counts, label info).
  */
-int pulseqlib_get_total_readouts(const pulseqlib_collection* coll);
+int pulseqlib_get_subseq_info(const pulseqlib_collection* coll,
+                              int                         subseq_idx,
+                              pulseqlib_subseq_info*      info);
 
-/** @brief Return total sequence duration (us). */
-float pulseqlib_get_total_duration_us(const pulseqlib_collection* coll);
+/**
+ * @brief Fill a pulseqlib_segment_info for one segment.
+ *
+ * Replaces ~11 individual per-segment getters (duration, blocks,
+ * trigger, NAV, timing gaps).
+ */
+int pulseqlib_get_segment_info(const pulseqlib_collection* coll,
+                               int                         seg_idx,
+                               pulseqlib_segment_info*     info);
+
+/**
+ * @brief Fill a pulseqlib_block_info for one block within a segment.
+ *
+ * Replaces all block-level has_xxx / get_xxx accessor pairs.
+ * Waveform data is NOT included; use the dedicated waveform getters
+ * keyed by metadata from this struct.
+ */
+int pulseqlib_get_block_info(const pulseqlib_collection* coll,
+                             int                         seg_idx,
+                             int                         blk_idx,
+                             pulseqlib_block_info*       info);
+
+/**
+ * @brief Fill a pulseqlib_adc_def for a unique ADC definition.
+ *
+ * @p adc_idx is a global index across all subsequences (same as
+ * block_info.adc_def_id).
+ */
+int pulseqlib_get_adc_def(const pulseqlib_collection* coll,
+                          int                         adc_idx,
+                          pulseqlib_adc_def*          def);
 
 /**
  * @brief Compute scan-time info from a fully loaded collection.
@@ -418,43 +410,8 @@ int pulseqlib_get_scan_time(const pulseqlib_collection* coll,
                            pulseqlib_scan_time_info*  info);
 
 /* ================================================================== */
-/*  Segment getters                                                   */
+/*  Segment table getters (copy to caller buffer)                     */
 /* ================================================================== */
-
-/** @brief Return total number of unique segments across all subsequences. */
-int pulseqlib_get_num_segments(const pulseqlib_collection* coll);
-
-/** @brief Return duration of segment @p seg_idx (us). */
-int pulseqlib_get_segment_duration_us(const pulseqlib_collection* coll,
-                                      int seg_idx);
-
-/** @brief Return 1 if segment contains only delays (no events). */
-int pulseqlib_is_segment_pure_delay(const pulseqlib_collection* coll,
-                                    int seg_idx);
-
-/** @brief Return number of unique blocks in a segment. */
-int pulseqlib_get_segment_num_blocks(const pulseqlib_collection* coll,
-                                     int seg_idx);
-
-/** @brief Return start block index (in the original sequence) for a segment. */
-int pulseqlib_get_segment_start_block(const pulseqlib_collection* coll,
-                                      int seg_idx);
-
-/* ================================================================== */
-/*  Segment table getters                                             */
-/* ================================================================== */
-
-/** @brief Return number of segments in the prep region. */
-int pulseqlib_get_num_prep_segments(const pulseqlib_collection* coll,
-                                    int subseq_idx);
-
-/** @brief Return number of segments in the main TR region. */
-int pulseqlib_get_num_main_segments(const pulseqlib_collection* coll,
-                                    int subseq_idx);
-
-/** @brief Return number of segments in the cooldown region. */
-int pulseqlib_get_num_cooldown_segments(const pulseqlib_collection* coll,
-                                        int subseq_idx);
 
 /**
  * @brief Copy prep segment IDs into caller-supplied buffer.
@@ -481,24 +438,8 @@ int pulseqlib_get_cooldown_segment_table(const pulseqlib_collection* coll,
                                          int subseq_idx, int* out_ids);
 
 /* ================================================================== */
-/*  Block getters (within segments)                                   */
-/* ================================================================== */
-
-/** @brief Return start time of block within segment (us). */
-int pulseqlib_get_block_start_time_us(const pulseqlib_collection* coll,
-                                      int seg_idx, int blk_idx);
-
-/** @brief Return duration of a block (us). */
-int pulseqlib_get_block_duration_us(const pulseqlib_collection* coll,
-                                    int seg_idx, int blk_idx);
-
-/* ================================================================== */
 /*  RF getters                                                        */
 /* ================================================================== */
-
-/** @brief Return number of unique RF events in a subsequence. */
-int pulseqlib_get_num_unique_rf(const pulseqlib_collection* coll,
-                                int subseq_idx);
 
 /**
  * @brief Get RF statistics for a unique RF definition.
@@ -507,10 +448,6 @@ int pulseqlib_get_num_unique_rf(const pulseqlib_collection* coll,
 int pulseqlib_get_rf_stats(const pulseqlib_collection* coll,
                            pulseqlib_rf_stats* stats,
                            int subseq_idx, int rf_idx);
-
-/** @brief Get base (peak) RF amplitude in Hz. */
-float pulseqlib_get_rf_base_amplitude_hz(const pulseqlib_collection* coll,
-                                         int subseq_idx, int rf_idx);
 
 /**
  * @brief Get per-block RF definition IDs for one TR.
@@ -534,46 +471,16 @@ int pulseqlib_get_tr_rf_ids(const pulseqlib_collection* coll,
  * free() it when done.  On return @p *out_pulses is NULL if the region
  * contains no RF events.
  *
- * Region semantics:
- *   PULSEQLIB_TR_REGION_PREP     — prep blocks + first main TR (1 instance)
- *   PULSEQLIB_TR_REGION_MAIN     — one main TR (num_trs adjusted for
- *                                   non-degenerate prep/cooldown)
- *   PULSEQLIB_TR_REGION_COOLDOWN — last main TR + cooldown blocks (1 instance)
- *
  * @param[in]  coll          Loaded collection.
  * @param[out] out_pulses    Set to a malloc'd array; caller must free().
  * @param[in]  subseq_idx    Subsequence index.
  * @param[in]  region        PULSEQLIB_TR_REGION_PREP/_MAIN/_COOLDOWN.
- * @return Number of RF entries (≥ 0), or negative error code.
+ * @return Number of RF entries (>= 0), or negative error code.
  */
 int pulseqlib_get_rf_array(const pulseqlib_collection* coll,
                            pulseqlib_rf_stats** out_pulses,
                            int subseq_idx,
                            int region);
-
-/** @brief Return 1 if block has an RF event. */
-int pulseqlib_block_has_rf(const pulseqlib_collection* coll,
-                           int seg_idx, int blk_idx);
-
-/** @brief Return 1 if block's RF has uniform time raster. */
-int pulseqlib_block_rf_has_uniform_raster(const pulseqlib_collection* coll,
-                                          int seg_idx, int blk_idx);
-
-/** @brief Return 1 if block's RF has a nonzero phase shape. */
-int pulseqlib_block_rf_is_complex(const pulseqlib_collection* coll,
-                                  int seg_idx, int blk_idx);
-
-/** @brief Return RF per-channel sample count. */
-int pulseqlib_get_rf_num_samples(const pulseqlib_collection* coll,
-                                 int seg_idx, int blk_idx);
-
-/** @brief Return number of RF channels (1 for standard, >1 for pTx). */
-int pulseqlib_get_rf_num_channels(const pulseqlib_collection* coll,
-                                  int seg_idx, int blk_idx);
-
-/** @brief Return RF delay within block (us). */
-int pulseqlib_get_rf_delay_us(const pulseqlib_collection* coll,
-                              int seg_idx, int blk_idx);
 
 /**
  * @brief Return decompressed RF magnitude waveform (multi-channel).
@@ -606,36 +513,14 @@ float** pulseqlib_get_rf_phase(const pulseqlib_collection* coll,
  *
  * For multi-channel RF the tiled time shape is truncated to the
  * first channel (all channels share the same time base).
- * The number of time points equals num_samples from
- * pulseqlib_get_rf_magnitude.
  * Caller must free the returned array with PULSEQLIB_FREE.
  */
 float* pulseqlib_get_rf_time_us(const pulseqlib_collection* coll,
                                 int seg_idx, int blk_idx);
 
 /* ================================================================== */
-/*  Gradient getters                                                  */
+/*  Gradient getters (waveform data only)                             */
 /* ================================================================== */
-
-/** @brief Return 1 if block has a gradient on the given axis. */
-int pulseqlib_block_has_grad(const pulseqlib_collection* coll,
-                             int seg_idx, int blk_idx, int axis);
-
-/** @brief Return 1 if the gradient is a trapezoid (not arbitrary). */
-int pulseqlib_block_grad_is_trapezoid(const pulseqlib_collection* coll,
-                                      int seg_idx, int blk_idx, int axis);
-
-/** @brief Return gradient waveform sample count. */
-int pulseqlib_get_grad_num_samples(const pulseqlib_collection* coll,
-                                   int seg_idx, int blk_idx, int axis);
-
-/** @brief Return number of gradient shots. */
-int pulseqlib_get_grad_num_shots(const pulseqlib_collection* coll,
-                                 int seg_idx, int blk_idx, int axis);
-
-/** @brief Return gradient delay within block (us). */
-int pulseqlib_get_grad_delay_us(const pulseqlib_collection* coll,
-                                int seg_idx, int blk_idx, int axis);
 
 /**
  * @brief Return decompressed gradient amplitude waveforms (Hz/m).
@@ -669,113 +554,6 @@ float* pulseqlib_get_grad_time_us(const pulseqlib_collection* coll,
                                   int seg_idx, int blk_idx, int axis);
 
 /* ================================================================== */
-/*  ADC getters                                                       */
-/* ================================================================== */
-
-/** @brief Return max ADC sample count across all ADC events. */
-int pulseqlib_get_max_adc_samples(const pulseqlib_collection* coll);
-
-/** @brief Return dwell time for an ADC event (us). */
-int pulseqlib_get_adc_dwell_us(const pulseqlib_collection* coll,
-                               int adc_idx);
-
-/** @brief Return sample count for an ADC event. */
-int pulseqlib_get_adc_num_samples(const pulseqlib_collection* coll,
-                                  int adc_idx);
-
-/** @brief Return 1 if block has an ADC event. */
-int pulseqlib_block_has_adc(const pulseqlib_collection* coll,
-                            int seg_idx, int blk_idx);
-
-/** @brief Return ADC delay within block (us). */
-int pulseqlib_get_adc_delay_us(const pulseqlib_collection* coll,
-                               int seg_idx, int blk_idx);
-
-/** @brief Return ADC library index for a block. */
-int pulseqlib_get_adc_library_index(const pulseqlib_collection* coll,
-                                    int seg_idx, int blk_idx);
-
-/* ================================================================== */
-/*  Digital output getters (block-level, OUTPUT-type triggers)        */
-/* ================================================================== */
-
-/** @brief Return 1 if block has a digital output event. */
-int pulseqlib_block_has_digitalout(const pulseqlib_collection* coll,
-                                   int seg_idx, int blk_idx);
-
-/** @brief Return digital output delay within block (us). */
-int pulseqlib_get_digitalout_delay_us(const pulseqlib_collection* coll,
-                                      int seg_idx, int blk_idx);
-
-/** @brief Return digital output duration within block (us). */
-int pulseqlib_get_digitalout_duration_us(const pulseqlib_collection* coll,
-                                         int seg_idx, int blk_idx);
-
-/* ================================================================== */
-/*  Physio trigger getters (segment-level, INPUT-type triggers)       */
-/* ================================================================== */
-
-/** @brief Return 1 if segment has a physio trigger. */
-int pulseqlib_segment_has_trigger(const pulseqlib_collection* coll,
-                                  int seg_idx);
-
-/** @brief Return physio trigger delay (us) for a segment. */
-int pulseqlib_get_segment_trigger_delay_us(const pulseqlib_collection* coll,
-                                           int seg_idx);
-
-/** @brief Return physio trigger duration (us) for a segment. */
-int pulseqlib_get_segment_trigger_duration_us(const pulseqlib_collection* coll,
-                                              int seg_idx);
-
-/** @brief Return 1 if segment is a navigator (NAV) segment. */
-int pulseqlib_segment_is_nav(const pulseqlib_collection* coll,
-                             int seg_idx);
-
-/** @brief Return 1 if block has a frequency modulation event. */
-int pulseqlib_block_has_freq_mod(const pulseqlib_collection* coll,
-                                 int seg_idx, int blk_idx);
-
-/** @brief Return 1 if block has a rotation event. */
-int pulseqlib_block_has_rotation(const pulseqlib_collection* coll,
-                                 int seg_idx, int blk_idx);
-
-/** @brief Return 1 if block has a no-rotation flag. */
-int pulseqlib_block_has_norot(const pulseqlib_collection* coll,
-                              int seg_idx, int blk_idx);
-
-/** @brief Return 1 if block has a no-position flag. */
-int pulseqlib_block_has_nopos(const pulseqlib_collection* coll,
-                              int seg_idx, int blk_idx);
-
-/* ================================================================== */
-/*  Segment timing getters                                            */
-/* ================================================================== */
-
-/** @brief Return number of k-space zero-crossings in a segment. */
-int pulseqlib_get_segment_num_kzero_crossings(
-    const pulseqlib_collection* coll, int seg_idx);
-
-/**
- * @brief Return RF-to-ADC gap within a segment (us).
- *
- * Finds the last RF anchor and the first following ADC anchor in the
- * segment and returns (adc_start - rf_end) in us.  Returns -1 if the
- * segment has no RF+ADC pair in that order.
- */
-int pulseqlib_get_segment_rf_adc_gap_us(
-    const pulseqlib_collection* coll, int seg_idx);
-
-/**
- * @brief Return minimum ADC-to-ADC gap within a segment (us).
- *
- * For consecutive ADC anchors in the segment, returns the smallest
- * (next_adc_start - prev_adc_end).  Returns -1 if the segment has
- * fewer than 2 ADC events.
- */
-int pulseqlib_get_segment_adc_adc_gap_us(
-    const pulseqlib_collection* coll, int seg_idx);
-
-/* ================================================================== */
 /*  Label getters                                                     */
 /* ================================================================== */
 
@@ -784,20 +562,11 @@ int pulseqlib_get_label_limits(const pulseqlib_collection* coll,
                                int subseq_idx,
                                pulseqlib_label_limits* limits);
 
-/** @brief Return number of ADC occurrences in the label table. */
-int pulseqlib_get_num_adc_occurrences(const pulseqlib_collection* coll,
-                                      int subseq_idx);
-
-/** @brief Return number of label columns (vendor-dependent). */
-int pulseqlib_get_num_label_columns(const pulseqlib_collection* coll,
-                                    int subseq_idx);
-
 /**
  * @brief Get label values for a specific ADC occurrence.
  *
  * @p out_values must point to a pre-allocated array of at least
- * num_label_columns ints.  For GEHC, the 3 columns are
- * [lin, slc, eco] in that order.
+ * subseq_info.num_label_columns ints.
  *
  * @return PULSEQLIB_OK on success, negative error code on failure.
  */

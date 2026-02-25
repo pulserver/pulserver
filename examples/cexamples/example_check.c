@@ -146,25 +146,28 @@ int main(int argc, char** argv)
     /* ============================================================= */
     {
         float max_b1_hz = 0.0f;
+        pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
 
-        nsub = pulseqlib_get_num_subsequences(coll);
+        rc = pulseqlib_get_collection_info(coll, &ci);
+        CHECK(rc, &g_diag);
+        nsub = ci.num_subsequences;
 
         for (s = 0; s < nsub; ++s) {
-            int deg_prep = pulseqlib_get_degenerate_prep(coll, s);
-            int deg_cool = pulseqlib_get_degenerate_cooldown(coll, s);
-            float tr_dur_us = pulseqlib_get_tr_duration_us(coll, s);
-
+            pulseqlib_subseq_info si = PULSEQLIB_SUBSEQ_INFO_INIT;
             pulseqlib_rf_stats* pulses = NULL;
             int   npulses;
             float min_tr_us, b1;
 
+            rc = pulseqlib_get_subseq_info(coll, s, &si);
+            CHECK(rc, &g_diag);
+
             /* -- Prep (if non-degenerate) ------------------------- */
-            if (!deg_prep) {
+            if (!si.degenerate_prep) {
                 npulses = pulseqlib_get_rf_array(
                     coll, &pulses, s, PULSEQLIB_TR_REGION_PREP);
                 if (npulses > 0) {
                     min_tr_us = vendor_check_rf_safety(pulses, npulses);
-                    if (min_tr_us > tr_dur_us) {
+                    if (min_tr_us > si.tr_duration_us) {
                         free(pulses);
                         fprintf(stderr,
                             "RF safety: subseq %d prep TR too short\n", s);
@@ -181,12 +184,12 @@ int main(int argc, char** argv)
             }
 
             /* -- Cooldown (if non-degenerate) --------------------- */
-            if (!deg_cool) {
+            if (!si.degenerate_cooldown) {
                 npulses = pulseqlib_get_rf_array(
                     coll, &pulses, s, PULSEQLIB_TR_REGION_COOLDOWN);
                 if (npulses > 0) {
                     min_tr_us = vendor_check_rf_safety(pulses, npulses);
-                    if (min_tr_us > tr_dur_us) {
+                    if (min_tr_us > si.tr_duration_us) {
                         free(pulses);
                         fprintf(stderr,
                             "RF safety: subseq %d cooldown TR too short\n", s);
@@ -207,7 +210,7 @@ int main(int argc, char** argv)
                 coll, &pulses, s, PULSEQLIB_TR_REGION_MAIN);
             if (npulses > 0) {
                 min_tr_us = vendor_check_rf_safety(pulses, npulses);
-                if (min_tr_us > tr_dur_us) {
+                if (min_tr_us > si.tr_duration_us) {
                     free(pulses);
                     fprintf(stderr,
                         "RF safety: subseq %d main TR too short\n", s);
@@ -229,17 +232,27 @@ int main(int argc, char** argv)
     /* ============================================================= */
     /*  5. Gradient safety per segment                               */
     /* ============================================================= */
-    nseg = pulseqlib_get_num_segments(coll);
+    {
+        pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
+        rc = pulseqlib_get_collection_info(coll, &ci);
+        CHECK(rc, &g_diag);
+        nseg = ci.num_segments;
+    }
 
     for (s = 0; s < nseg; ++s) {
-        int  seg_dur_us = pulseqlib_get_segment_duration_us(coll, s);
-        float min_dur   = vendor_check_grad_safety(coll, s);
+        pulseqlib_segment_info segi = PULSEQLIB_SEGMENT_INFO_INIT;
+        float min_dur;
 
-        if (min_dur > (float)seg_dur_us) {
+        rc = pulseqlib_get_segment_info(coll, s, &segi);
+        CHECK(rc, &g_diag);
+
+        min_dur = vendor_check_grad_safety(coll, s);
+
+        if (min_dur > (float)segi.duration_us) {
             fprintf(stderr,
                 "Gradient safety: segment %d too short "
                 "(%.0f us < %.0f us min)\n",
-                s, (float)seg_dur_us, min_dur);
+                s, (float)segi.duration_us, min_dur);
             goto fail;
         }
     }
@@ -249,11 +262,20 @@ int main(int argc, char** argv)
     /*  6. Echo filters and data storage dimensions                  */
     /* ============================================================= */
     {
-        int max_samples       = pulseqlib_get_max_adc_samples(coll);
-        int total_readouts    = pulseqlib_get_total_readouts(coll);
-        int num_unique_adcs   = pulseqlib_get_num_unique_adcs(coll, 0);
+        pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
+        pulseqlib_subseq_info     si = PULSEQLIB_SUBSEQ_INFO_INIT;
+        int max_samples, total_readouts, num_unique_adcs;
         int calibration_samples = 0;
         int a;
+
+        rc = pulseqlib_get_collection_info(coll, &ci);
+        CHECK(rc, &g_diag);
+        max_samples    = ci.max_adc_samples;
+        total_readouts = ci.total_readouts;
+
+        rc = pulseqlib_get_subseq_info(coll, 0, &si);
+        CHECK(rc, &g_diag);
+        num_unique_adcs = si.num_unique_adcs;
 
         /*
          * calibration_samples = first ADC sample count from the
@@ -261,12 +283,16 @@ int main(int argc, char** argv)
          * Walking unique ADCs in that subsequence:
          */
         {
-            int n_adcs = pulseqlib_get_num_unique_adcs(coll,
-                                                       max_b1_subseq);
-            for (a = 0; a < n_adcs; ++a) {
-                int ns = pulseqlib_get_adc_num_samples(coll, a);
-                if (ns > 0) {
-                    calibration_samples = ns;
+            pulseqlib_subseq_info si_cal = PULSEQLIB_SUBSEQ_INFO_INIT;
+            rc = pulseqlib_get_subseq_info(coll, max_b1_subseq, &si_cal);
+            CHECK(rc, &g_diag);
+
+            for (a = 0; a < si_cal.num_unique_adcs; ++a) {
+                pulseqlib_adc_def ad = PULSEQLIB_ADC_DEF_INIT;
+                rc = pulseqlib_get_adc_def(coll, a, &ad);
+                CHECK(rc, &g_diag);
+                if (ad.num_samples > 0) {
+                    calibration_samples = ad.num_samples;
                     break;
                 }
             }
@@ -282,10 +308,10 @@ int main(int argc, char** argv)
          * In a real vendor driver you would now:
          *
          * 1. Set up echo filters per unique ADC event:
-         *      dwell     = pulseqlib_get_adc_dwell_us(coll, a);
-         *      nsamples  = pulseqlib_get_adc_num_samples(coll, a);
-         *      bw        = <vendor formula from dwell>;
-         *      calcfilter(&echo_filt[a], bw, nsamples, ...);
+         *      pulseqlib_adc_def ad;
+         *      pulseqlib_get_adc_def(coll, a, &ad);
+         *      bw        = <vendor formula from ad.dwell_us>;
+         *      calcfilter(&echo_filt[a], bw, ad.num_samples, ...);
          *      setfilter(&echo_filt[a], SCAN | PRESCAN);
          *
          * 2. Set data storage dimensions from total_readouts,
@@ -293,9 +319,11 @@ int main(int argc, char** argv)
          */
 
         for (a = 0; a < num_unique_adcs; ++a) {
-            int dwell = pulseqlib_get_adc_dwell_us(coll, a);
-            int nsamp = pulseqlib_get_adc_num_samples(coll, a);
-            printf("  ADC %d: dwell=%d us, nsamples=%d\n", a, dwell, nsamp);
+            pulseqlib_adc_def ad = PULSEQLIB_ADC_DEF_INIT;
+            rc = pulseqlib_get_adc_def(coll, a, &ad);
+            CHECK(rc, &g_diag);
+            printf("  ADC %d: dwell=%d us, nsamples=%d\n",
+                   a, ad.dwell_us, ad.num_samples);
         }
     }
 
