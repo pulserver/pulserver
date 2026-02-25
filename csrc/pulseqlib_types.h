@@ -458,6 +458,30 @@ typedef struct pulseqlib_block_instance {
 }
 
 /* ================================================================== */
+/*  Cursor info                                                       */
+/* ================================================================== */
+
+/**
+ * @brief Position and context metadata for the current cursor block.
+ *
+ * Returned by pulseqlib_cursor_get_info() after a successful
+ * pulseqlib_cursor_next() call.
+ */
+typedef struct pulseqlib_cursor_info {
+    int subseq_idx;       /**< current subsequence index                     */
+    int scan_pos;         /**< scan-table position (for freq-mod lookup)     */
+    int segment_id;       /**< current segment ID (global)                   */
+    int segment_start;    /**< 1 if first block of current segment           */
+    int segment_end;      /**< 1 if last block of current segment            */
+    int is_nav;           /**< 1 if current segment is a NAV segment         */
+    int has_trigger;      /**< 1 if current segment has a trigger/digitalout */
+    int tr_start;         /**< 1 if first block of a main-region TR          */
+    int pmc;              /**< 1 if current subsequence has PMC enabled      */
+} pulseqlib_cursor_info;
+
+#define PULSEQLIB_CURSOR_INFO_INIT {0, 0, -1, 0, 0, 0, 0, 0, 0}
+
+/* ================================================================== */
 /*  Scan-time query result                                            */
 /* ================================================================== */
 

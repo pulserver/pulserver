@@ -192,6 +192,61 @@ int pulseqlib__build_scan_table(
 }
 
 /* ================================================================== */
+/*  Compute scan_table_tr_start flags                                 */
+/* ================================================================== */
+
+/**
+ * @brief Set scan_table_tr_start[i] = 1 at the first block of each
+ *        main-region TR.
+ *
+ * Derives main_tr_id from the TR descriptor flags, then walks the
+ * scan table marking every tr_size-th main-region block.
+ * Safe to call multiple times (re-allocates and re-computes).
+ */
+void pulseqlib__compute_scan_table_tr_start(
+    pulseqlib_sequence_descriptor* desc)
+{
+    int has_nd_prep, has_nd_cool, main_tr_id;
+    int first_main, i, tr_size;
+
+    if (!desc || desc->scan_table_len == 0) return;
+
+    /* (Re)allocate */
+    if (desc->scan_table_tr_start)
+        PULSEQLIB_FREE(desc->scan_table_tr_start);
+    desc->scan_table_tr_start = (int*)PULSEQLIB_ALLOC(
+        (size_t)desc->scan_table_len * sizeof(int));
+    if (!desc->scan_table_tr_start) return;
+    memset(desc->scan_table_tr_start, 0,
+           (size_t)desc->scan_table_len * sizeof(int));
+
+    /* Derive main_tr_id from TR descriptor */
+    has_nd_prep = (desc->tr_descriptor.num_prep_blocks > 0 &&
+                   !desc->tr_descriptor.degenerate_prep);
+    has_nd_cool = (desc->tr_descriptor.num_cooldown_blocks > 0 &&
+                   !desc->tr_descriptor.degenerate_cooldown);
+    if (!has_nd_prep && !has_nd_cool)      main_tr_id = 0;
+    else if (has_nd_prep && !has_nd_cool)  main_tr_id = 1;
+    else if (!has_nd_prep && has_nd_cool)  main_tr_id = 0;
+    else                                   main_tr_id = 1;
+
+    tr_size = desc->tr_descriptor.tr_size;
+    if (tr_size <= 0) return;
+
+    first_main = -1;
+    for (i = 0; i < desc->scan_table_len; ++i) {
+        if (desc->scan_table_tr_id[i] == main_tr_id) {
+            if (first_main < 0) {
+                first_main = i;
+                desc->scan_table_tr_start[i] = 1;
+            } else if ((i - first_main) % tr_size == 0) {
+                desc->scan_table_tr_start[i] = 1;
+            }
+        }
+    }
+}
+
+/* ================================================================== */
 /*  find_tr_in_sequence                                               */
 /* ================================================================== */
 

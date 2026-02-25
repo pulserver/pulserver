@@ -1824,9 +1824,64 @@ void pulseqlib_cursor_reset(pulseqlib_collection* coll)
 
     cursor = &coll->block_cursor;
 
-    /* Go back by the number of blocks advanced since the last reset */
+    /* Go back by the number of blocks advanced since the last mark */
     cursor->scan_table_position -= cursor->from_last_reset;
     cursor->from_last_reset = 0;
+}
+
+void pulseqlib_cursor_mark(pulseqlib_collection* coll)
+{
+    if (!coll) return;
+    coll->block_cursor.from_last_reset = 0;
+}
+
+int pulseqlib_cursor_get_info(
+    const pulseqlib_collection* coll,
+    pulseqlib_cursor_info* info)
+{
+    const pulseqlib_block_cursor* cursor;
+    const pulseqlib_sequence_descriptor* desc;
+    int pos, seg_id;
+
+    if (!coll || !info) return PULSEQLIB_ERR_NULL_POINTER;
+
+    cursor = &coll->block_cursor;
+    if (cursor->sequence_index < 0 ||
+        cursor->sequence_index >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    desc = &coll->descriptors[cursor->sequence_index];
+    pos  = cursor->scan_table_position;
+    if (pos < 0 || pos >= desc->scan_table_len)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+
+    seg_id = desc->scan_table_seg_id[pos];
+
+    info->subseq_idx    = cursor->sequence_index;
+    info->scan_pos      = pos;
+    info->segment_id    = seg_id + coll->subsequence_info[cursor->sequence_index].segment_id_offset;
+    info->segment_start = (pos == 0 || desc->scan_table_seg_id[pos] !=
+                                       desc->scan_table_seg_id[pos - 1]) ? 1 : 0;
+    info->segment_end   = (pos == desc->scan_table_len - 1 ||
+                           desc->scan_table_seg_id[pos] !=
+                           desc->scan_table_seg_id[pos + 1]) ? 1 : 0;
+    info->tr_start      = desc->scan_table_tr_start
+                          ? desc->scan_table_tr_start[pos] : 0;
+    info->pmc           = desc->enable_pmc;
+
+    /* Segment properties via local segment index */
+    {
+        int local_seg = seg_id;   /* seg_id in scan table is local (before offset) */
+        if (local_seg >= 0 && local_seg < desc->num_unique_segments) {
+            info->is_nav      = desc->segment_definitions[local_seg].is_nav;
+            info->has_trigger = (desc->segment_definitions[local_seg].trigger_id >= 0) ? 1 : 0;
+        } else {
+            info->is_nav      = 0;
+            info->has_trigger = 0;
+        }
+    }
+
+    return PULSEQLIB_OK;
 }
 
 int pulseqlib_get_block_instance(

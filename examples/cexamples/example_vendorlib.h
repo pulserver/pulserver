@@ -134,6 +134,8 @@ static void vendor_report_error(
 /*  5. Convenience: fill an opts struct from the #defines above       */
 /* ================================================================== */
 
+#include "pulseqlib_config.h"
+#include "pulseqlib_types.h"
 #include "pulseqlib_methods.h"
 
 /**

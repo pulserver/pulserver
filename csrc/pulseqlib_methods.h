@@ -815,8 +815,23 @@ int pulseqlib_get_adc_label(const pulseqlib_collection* coll,
  */
 int pulseqlib_cursor_next(pulseqlib_collection* coll);
 
-/** @brief Reset the cursor to the start of the sequence. */
+/**
+ * @brief Reset the cursor to the last marked position.
+ *
+ * Rewinds the cursor by the number of blocks advanced since the last
+ * pulseqlib_cursor_mark() call (or since the start of the current
+ * subsequence if no mark was set).  Typically used for PMC rescan.
+ */
 void pulseqlib_cursor_reset(pulseqlib_collection* coll);
+
+/**
+ * @brief Bookmark the current cursor position.
+ *
+ * Sets the rewind anchor so that a subsequent pulseqlib_cursor_reset()
+ * returns to this position.  Call at each TR boundary to enable
+ * single-TR rescans.
+ */
+void pulseqlib_cursor_mark(pulseqlib_collection* coll);
 
 /**
  * @brief Get the resolved block instance at the current cursor position.
@@ -824,6 +839,19 @@ void pulseqlib_cursor_reset(pulseqlib_collection* coll);
  */
 int pulseqlib_get_block_instance(const pulseqlib_collection* coll,
                                  pulseqlib_block_instance*    inst);
+
+/**
+ * @brief Get position and context metadata at the current cursor block.
+ *
+ * Returns segment boundaries, TR boundaries, trigger/NAV status, and
+ * the scan-table position needed for freq-mod library lookup.
+ *
+ * @param[in]  coll  Loaded collection.
+ * @param[out] info  Filled with cursor metadata.
+ * @return PULSEQLIB_OK on success.
+ */
+int pulseqlib_cursor_get_info(const pulseqlib_collection* coll,
+                              pulseqlib_cursor_info*       info);
 
 /* ================================================================== */
 /*  Frequency modulation library                                      */

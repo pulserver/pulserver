@@ -386,6 +386,7 @@ typedef struct pulseqlib_sequence_descriptor {
     int* scan_table_block_idx;  /* [scan_table_len] index into block_table */
     int* scan_table_tr_id;      /* [scan_table_len] TR region id           */
     int* scan_table_seg_id;     /* [scan_table_len] segment id             */
+    int* scan_table_tr_start;   /* [scan_table_len] 1 at first block of each main-region TR */
 
     /* label table (populated by dry-run if parse_labels is set) */
     int label_num_columns;
@@ -404,7 +405,7 @@ typedef struct pulseqlib_sequence_descriptor {
     0, NULL, 0, NULL, 0, NULL, \
     PULSEQLIB_TR_DESCRIPTOR_INIT, \
     0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT, \
-    0, NULL, NULL, NULL, \
+    0, NULL, NULL, NULL, NULL, \
     0, 0, NULL, {{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}} \
 }
 
@@ -426,11 +427,11 @@ typedef struct pulseqlib_subsequence_info {
 
 typedef struct pulseqlib_block_cursor {
     int sequence_index;
-    int scan_table_position;
+    int scan_table_position;   /* -1 = before first block */
     int from_last_reset;
 } pulseqlib_block_cursor;
 
-#define PULSEQLIB_BLOCK_CURSOR_INIT {0, 0, 0}
+#define PULSEQLIB_BLOCK_CURSOR_INIT {0, -1, 0}
 
 /* ================================================================== */
 /*  Sequence descriptor collection                                    */
@@ -887,6 +888,7 @@ int   pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseql
 int   pulseqlib__fill_scan_seg_id_from_blocktable(pulseqlib_sequence_descriptor* desc);
 int   pulseqlib__get_scan_table_segments(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib_opts* opts);
 int   pulseqlib__build_freq_mod_flags(pulseqlib_sequence_descriptor* desc);
+void  pulseqlib__compute_scan_table_tr_start(pulseqlib_sequence_descriptor* desc);
 int   pulseqlib__build_label_table(pulseqlib_sequence_descriptor* desc, const pulseqlib__seq_file* seq);
 
 /* --- pulseqlib_core.c (continued) --- */
