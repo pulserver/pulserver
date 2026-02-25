@@ -1270,6 +1270,7 @@ int pulseqlib__fill_scan_seg_id_from_blocktable(
     } else {
         prep_tr_id = 0;  main_tr_id = 1; cool_tr_id = 2;
     }
+    (void)main_tr_id;  /* walk uses prep/cool ids; main is the else branch */
 
     /* ---- Build main map [tr_size] ---- */
     main_len = tr->tr_size;

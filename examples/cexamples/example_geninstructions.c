@@ -14,7 +14,7 @@
  *       get trigger info        (segment-level physio trigger)
  *       get rotation flags      (has_rotation + norot)
  *       check freq-mod presence (spans whole block, uniform raster)
- *       vendorCreateInstruction(...)
+ *       vendor_create_instruction(...)
  *       t += block_duration_us
  *
  * Board waveform layout:
@@ -32,8 +32,7 @@
  *      ../../csrc/pulseqlib_*.c -lm -o geninstructions
  */
 
-#include "example_vendorlib.h"   /* must come first */
-#include "pulseqlib_methods.h"
+#include "example_vendorlib.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,12 +55,12 @@
  *
  * @param[in] t_us         absolute time in segment
  * @param[in] delay_us     delay from block start
- * @param[in] num_shots    leftmost dimension
- * @param[in] num_samples  per-shot sample counts
+ * @param[in] num_shots    number of interleaved shots
+ * @param[in] num_samples  samples per shot (same for all shots)
  * @param[in] amps         [num_shots][num_samples] amplitude values
  * @param[in] time_us      optional time array (NULL for uniform raster)
  */
-static void vendorCreateGradInstruction(
+static void vendor_create_grad_instruction(
     int axis,
     int t_us, int delay_us,
     int num_shots, int num_samples,
@@ -81,7 +80,7 @@ static void vendorCreateGradInstruction(
  * @param[in] phase        [num_channels][num_samples] phase (NULL if real)
  * @param[in] time_us      optional time array (NULL for uniform raster)
  */
-static void vendorCreateRFInstruction(
+static void vendor_create_rf_instruction(
     int t_us, int delay_us,
     int num_channels, int num_samples,
     float** mag, float** phase, float* time_us)
@@ -97,7 +96,7 @@ static void vendorCreateRFInstruction(
  * @param[in] delay_us     delay from block start
  * @param[in] adc_def_id   unique ADC definition index (maps to echo filter)
  */
-static void vendorCreateADCInstruction(int t_us, int delay_us, int adc_def_id)
+static void vendor_create_adc_instruction(int t_us, int delay_us, int adc_def_id)
 {
     (void)t_us; (void)delay_us; (void)adc_def_id;
 }
@@ -113,7 +112,7 @@ static void vendorCreateADCInstruction(int t_us, int delay_us, int adc_def_id)
  *
  * @param[in] num_samples  block_duration_us / raster_us
  */
-static void vendorCreateFreqModInstruction(int num_samples)
+static void vendor_create_freq_mod_instruction(int num_samples)
 {
     (void)num_samples;
 }
@@ -125,7 +124,7 @@ static void vendorCreateFreqModInstruction(int num_samples)
  * @param[in] delay_us    delay from block start
  * @param[in] duration_us digital output duration
  */
-static void vendorCreateDigitaloutInstruction(int t_us, int delay_us, int duration_us)
+static void vendor_create_digitalout_instruction(int t_us, int delay_us, int duration_us)
 {
     (void)t_us; (void)delay_us; (void)duration_us; 
 }
@@ -136,7 +135,7 @@ static void vendorCreateDigitaloutInstruction(int t_us, int delay_us, int durati
  * @param[in] has_rotation 1 if block carries ANY rotation ID
  * @param[in] norot_flag   1 if block has the no-rotation override
  */
-static void vendorSetRotation(int has_rotation, int norot_flag)
+static void vendor_set_rotation(int has_rotation, int norot_flag)
 {
     (void)has_rotation; (void)norot_flag;
 }
@@ -152,7 +151,7 @@ static void vendorSetRotation(int has_rotation, int norot_flag)
  * @param[in] gap_us   RF end -> next ADC start (us), or -1 if no following
  *                      ADC before the next RF or end of segment.
  */
-static void vendorAdjustRFForGap(int blk_idx, int gap_us)
+static void vendor_adjust_rf_for_gap(int blk_idx, int gap_us)
 {
     (void)blk_idx; (void)gap_us;
 }
@@ -169,7 +168,7 @@ static void vendorAdjustRFForGap(int blk_idx, int gap_us)
  *                      or -1 if this is the first event in the segment.
  * @param[in] from_rf  1 if the preceding event was RF, 0 if it was ADC.
  */
-static void vendorAdjustADCForGap(int blk_idx, int gap_us, int from_rf)
+static void vendor_adjust_adc_for_gap(int blk_idx, int gap_us, int from_rf)
 {
     (void)blk_idx; (void)gap_us; (void)from_rf;
 }
@@ -186,7 +185,7 @@ static void vendorAdjustADCForGap(int blk_idx, int gap_us, int from_rf)
  *  1. Find the first RF or ADC event.
  *     a) RF first: look ahead for the next ADC before the next RF or
  *        end-of-segment.  If found, compute the RF->ADC gap and call
- *        vendorAdjustRFForGap() to decide RF params.
+ *        vendor_adjust_rf_for_gap() to decide RF params.
  *        If no ADC before the next RF or end, no adjustment needed.
  *     b) ADC first: no preceding RF to worry about.
  *
@@ -194,10 +193,10 @@ static void vendorAdjustADCForGap(int blk_idx, int gap_us, int from_rf)
  *     a) RF: same as 1a.
  *     b) ADC:
  *        - If the preceding event was RF, compute the preceding-RF->ADC
- *          gap and call vendorAdjustADCForGap(..., from_rf=1) to decide
+ *          gap and call vendor_adjust_adc_for_gap(..., from_rf=1) to decide
  *          ADC params.
  *        - If the preceding event was ADC, compute the ADC->ADC gap and
- *          call vendorAdjustADCForGap(..., from_rf=0).
+ *          call vendor_adjust_adc_for_gap(..., from_rf=0).
  *
  *  3. Repeat step 2 until end of segment.
  */
@@ -283,17 +282,17 @@ static void walk_segment_events(
                 if (events[j].kind == EVT_RF)
                     break;  /* next RF before any ADC — no RF->ADC pair */
             }
-            vendorAdjustRFForGap(events[i].blk_idx, rf_adc_gap);
+            vendor_adjust_rf_for_gap(events[i].blk_idx, rf_adc_gap);
         }
         else { /* EVT_ADC */
             if (i == 0) {
                 /* First event is ADC — no preceding RF or ADC */
-                vendorAdjustADCForGap(events[i].blk_idx, -1, 0);
+                vendor_adjust_adc_for_gap(events[i].blk_idx, -1, 0);
             }
             else {
                 int gap     = events[i].start_us - events[i - 1].end_us;
                 int from_rf = (events[i - 1].kind == EVT_RF) ? 1 : 0;
-                vendorAdjustADCForGap(events[i].blk_idx, gap, from_rf);
+                vendor_adjust_adc_for_gap(events[i].blk_idx, gap, from_rf);
             }
         }
     }
@@ -327,7 +326,7 @@ static void generate_block_instructions(
     for (axis = 0; axis < 3; ++axis) {
         int   delay_us;
         int   num_shots;
-        int  num_samples;
+        int   num_samples;
         float** amps;
         float* time_arr;
 
@@ -344,9 +343,9 @@ static void generate_block_instructions(
         /* Optional time array (for traps / extended traps) */
         time_arr = pulseqlib_get_grad_time_us(coll, seg_idx, blk_idx, axis);
 
-        vendorCreateGradInstruction(
+        vendor_create_grad_instruction(
             axis, t_us, delay_us,
-            num_samples, num_shots,
+            num_shots, num_samples,
             amps, time_arr);
 
         free(time_arr);
@@ -384,7 +383,7 @@ static void generate_block_instructions(
             time_arr = pulseqlib_get_rf_time_us(coll, seg_idx, blk_idx);
         }
 
-        vendorCreateRFInstruction(
+        vendor_create_rf_instruction(
             t_us, delay_us,
             num_channels, num_samples,
             mag, phase, time_arr);
@@ -401,7 +400,7 @@ skip_rf:
         int adc_def_id = pulseqlib_get_adc_library_index(coll, seg_idx, blk_idx);
         int delay_us = pulseqlib_get_adc_delay_us(coll, seg_idx, blk_idx);
 
-        vendorCreateADCInstruction(t_us, delay_us, adc_def_id);
+        vendor_create_adc_instruction(t_us, delay_us, adc_def_id);
     }
 
     /* -- Digitalout ------------------------------------------------ */
@@ -409,14 +408,14 @@ skip_rf:
         int delay_us = pulseqlib_get_digitalout_delay_us(coll, seg_idx, blk_idx);
         int duration_us = pulseqlib_get_digitalout_duration_us(coll, seg_idx, blk_idx);
 
-        vendorCreateDigitaloutInstruction(t_us, delay_us, duration_us);
+        vendor_create_digitalout_instruction(t_us, delay_us, duration_us);
     }
 
     /* -- Rotation flags -------------------------------------------- */
     {
         int has_rot = pulseqlib_block_has_rotation(coll, seg_idx, blk_idx);
         int norot   = pulseqlib_block_has_norot(coll, seg_idx, blk_idx);
-        vendorSetRotation(has_rot, norot);
+        vendor_set_rotation(has_rot, norot);
     }
 
     /* -- Freq-mod (independent channel) ---------------------------- */
@@ -432,7 +431,7 @@ skip_rf:
             int dur = pulseqlib_get_block_duration_us(coll, seg_idx, blk_idx);
             int raster_us = 2;  /* vendor-specific raster (e.g. 2 us on GE) */
             int num_samples = dur / raster_us;
-            vendorCreateFreqModInstruction(num_samples);
+            vendor_create_freq_mod_instruction(num_samples);
         }
     }
 }

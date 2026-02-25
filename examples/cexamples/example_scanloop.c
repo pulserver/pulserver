@@ -23,7 +23,6 @@
  *   ./scanloop path/to/sequence.seq
  */
 
-#include "pulseqlib_methods.h"
 #include "example_vendorlib.h"
 
 #include <stdio.h>

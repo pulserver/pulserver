@@ -641,12 +641,13 @@ int pulseqlib_get_grad_delay_us(const pulseqlib_collection* coll,
  * @brief Return decompressed gradient amplitude waveforms (Hz/m).
  *
  * For multi-shot gradients, returns one waveform per shot.
+ * All shots share the same number of samples.
  * Caller must free the returned array with PULSEQLIB_FREE.
  */
 float** pulseqlib_get_grad_amplitude(const pulseqlib_collection* coll,
                                      int seg_idx, int blk_idx, int axis,
                                      int* num_shots,
-                                     int** num_samples_per_shot);
+                                     int* num_samples);
 
 /** @brief Return initial amplitude of a gradient event (Hz/m). */
 float pulseqlib_get_grad_initial_amplitude_hz_per_m(

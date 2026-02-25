@@ -17,7 +17,6 @@
  */
 
 #include "example_vendorlib.h"
-#include "pulseqlib_methods.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,7 +56,7 @@ int                      g_num_bands;
  * array of RF pulses (each carrying act_amplitude_hz, duration,
  * duty_cycle, num_instances, …).  Returns minimum TR in us.
  */
-static float vendorCheckRFSafety(const pulseqlib_rf_stats* pulses,
+static float vendor_check_rf_safety(const pulseqlib_rf_stats* pulses,
                                  int num_pulses)
 {
     /* Placeholder: return 0 = no constraint */
@@ -68,7 +67,7 @@ static float vendorCheckRFSafety(const pulseqlib_rf_stats* pulses,
 /**
  * @brief Vendor max-B1 finder — returns peak |gamma*B1| (Hz).
  */
-static float vendorFindRFMax(const pulseqlib_rf_stats* pulses,
+static float vendor_find_rf_max(const pulseqlib_rf_stats* pulses,
                              int num_pulses)
 {
     float mx = 0.0f;
@@ -83,7 +82,7 @@ static float vendorFindRFMax(const pulseqlib_rf_stats* pulses,
 /**
  * @brief Vendor gradient safety per segment — returns min duration (us).
  */
-static float vendorCheckGradSafety(const pulseqlib_collection* coll,
+static float vendor_check_grad_safety(const pulseqlib_collection* coll,
                                    int seg_idx)
 {
     /* Placeholder: return 0 = no constraint */
@@ -164,14 +163,14 @@ int main(int argc, char** argv)
                 npulses = pulseqlib_get_rf_array(
                     coll, &pulses, s, PULSEQLIB_TR_REGION_PREP);
                 if (npulses > 0) {
-                    min_tr_us = vendorCheckRFSafety(pulses, npulses);
+                    min_tr_us = vendor_check_rf_safety(pulses, npulses);
                     if (min_tr_us > tr_dur_us) {
                         free(pulses);
                         fprintf(stderr,
                             "RF safety: subseq %d prep TR too short\n", s);
                         goto fail;
                     }
-                    b1 = vendorFindRFMax(pulses, npulses);
+                    b1 = vendor_find_rf_max(pulses, npulses);
                     if (b1 > max_b1_hz) {
                         max_b1_hz = b1;
                         max_b1_subseq = s;
@@ -186,14 +185,14 @@ int main(int argc, char** argv)
                 npulses = pulseqlib_get_rf_array(
                     coll, &pulses, s, PULSEQLIB_TR_REGION_COOLDOWN);
                 if (npulses > 0) {
-                    min_tr_us = vendorCheckRFSafety(pulses, npulses);
+                    min_tr_us = vendor_check_rf_safety(pulses, npulses);
                     if (min_tr_us > tr_dur_us) {
                         free(pulses);
                         fprintf(stderr,
                             "RF safety: subseq %d cooldown TR too short\n", s);
                         goto fail;
                     }
-                    b1 = vendorFindRFMax(pulses, npulses);
+                    b1 = vendor_find_rf_max(pulses, npulses);
                     if (b1 > max_b1_hz) {
                         max_b1_hz = b1;
                         max_b1_subseq = s;
@@ -207,14 +206,14 @@ int main(int argc, char** argv)
             npulses = pulseqlib_get_rf_array(
                 coll, &pulses, s, PULSEQLIB_TR_REGION_MAIN);
             if (npulses > 0) {
-                min_tr_us = vendorCheckRFSafety(pulses, npulses);
+                min_tr_us = vendor_check_rf_safety(pulses, npulses);
                 if (min_tr_us > tr_dur_us) {
                     free(pulses);
                     fprintf(stderr,
                         "RF safety: subseq %d main TR too short\n", s);
                     goto fail;
                 }
-                b1 = vendorFindRFMax(pulses, npulses);
+                b1 = vendor_find_rf_max(pulses, npulses);
                 if (b1 > max_b1_hz) {
                     max_b1_hz = b1;
                     max_b1_subseq = s;
@@ -234,7 +233,7 @@ int main(int argc, char** argv)
 
     for (s = 0; s < nseg; ++s) {
         int  seg_dur_us = pulseqlib_get_segment_duration_us(coll, s);
-        float min_dur   = vendorCheckGradSafety(coll, s);
+        float min_dur   = vendor_check_grad_safety(coll, s);
 
         if (min_dur > (float)seg_dur_us) {
             fprintf(stderr,

@@ -1301,7 +1301,7 @@ int pulseqlib_get_grad_delay_us(
 float** pulseqlib_get_grad_amplitude(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx, int axis,
-    int* num_shots, int** num_samples_per_shot)
+    int* num_shots, int* num_samples)
 {
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_segment* seg;
@@ -1314,13 +1314,13 @@ float** pulseqlib_get_grad_amplitude(
     int flat_time;
     pulseqlib_shape_arbitrary decompressed;
 
-    if (!num_shots || !num_samples_per_shot) {
+    if (!num_shots || !num_samples) {
         if (num_shots) *num_shots = 0;
-        if (num_samples_per_shot) *num_samples_per_shot = NULL;
+        if (num_samples) *num_samples = 0;
         return NULL;
     }
     *num_shots = 0;
-    *num_samples_per_shot = NULL;
+    *num_samples = 0;
 
     if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) return NULL;
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
@@ -1332,30 +1332,23 @@ float** pulseqlib_get_grad_amplitude(
 
     gdef = &desc->grad_definitions[grad_id];
 
-    *num_samples_per_shot = (int*)PULSEQLIB_ALLOC(gdef->num_shots * sizeof(int));
-    if (!*num_samples_per_shot) return NULL;
-
     waveforms = (float**)PULSEQLIB_ALLOC(gdef->num_shots * sizeof(float*));
-    if (!waveforms) {
-        PULSEQLIB_FREE(*num_samples_per_shot);
-        *num_samples_per_shot = NULL;
-        return NULL;
-    }
+    if (!waveforms) return NULL;
 
     *num_shots = gdef->num_shots;
 
     if (gdef->type == 0) {
         flat_time = gdef->flat_time_or_unused;
         samples_per_shot = (flat_time > 0) ? 4 : 3;
+        *num_samples = samples_per_shot;
 
         for (shot = 0; shot < gdef->num_shots; ++shot) {
             trap_waveform = (float*)PULSEQLIB_ALLOC(samples_per_shot * sizeof(float));
             if (!trap_waveform) {
                 for (k = 0; k < shot; ++k) PULSEQLIB_FREE(waveforms[k]);
                 PULSEQLIB_FREE(waveforms);
-                PULSEQLIB_FREE(*num_samples_per_shot);
-                *num_samples_per_shot = NULL;
                 *num_shots = 0;
+                *num_samples = 0;
                 return NULL;
             }
 
@@ -1369,20 +1362,17 @@ float** pulseqlib_get_grad_amplitude(
             }
 
             waveforms[shot] = trap_waveform;
-            (*num_samples_per_shot)[shot] = samples_per_shot;
         }
     } else {
         for (shot = 0; shot < gdef->num_shots; ++shot) {
             if (gdef->shot_shape_ids[shot] <= 0) {
                 waveforms[shot] = NULL;
-                (*num_samples_per_shot)[shot] = 0;
                 continue;
             }
 
             shape_idx = gdef->shot_shape_ids[shot] - 1;
             if (shape_idx < 0 || shape_idx >= desc->num_shapes) {
                 waveforms[shot] = NULL;
-                (*num_samples_per_shot)[shot] = 0;
                 continue;
             }
 
@@ -1393,12 +1383,12 @@ float** pulseqlib_get_grad_amplitude(
             if (!pulseqlib__decompress_shape(&decompressed, &desc->shapes[shape_idx],
                                              gdef->max_amplitude[shot])) {
                 waveforms[shot] = NULL;
-                (*num_samples_per_shot)[shot] = 0;
                 continue;
             }
 
             waveforms[shot] = decompressed.samples;
-            (*num_samples_per_shot)[shot] = decompressed.num_samples;
+            if (*num_samples == 0)
+                *num_samples = decompressed.num_samples;
         }
     }
 

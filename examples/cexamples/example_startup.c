@@ -12,7 +12,6 @@
  */
 
 #include "example_vendorlib.h"
-#include "pulseqlib_methods.h"
 
 #include <stdio.h>
 

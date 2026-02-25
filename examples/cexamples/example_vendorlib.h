@@ -16,12 +16,19 @@
  *
  * Usage (in every .c file that calls pulseqlib):
  *
- *     #include "example_vendorlib.h"   // <-- first
- *     #include "pulseqlib_methods.h"   // <-- then the library
+ *     #include "example_vendorlib.h"   // includes pulseqlib headers
  */
 
 #ifndef EXAMPLE_VENDORLIB_H
 #define EXAMPLE_VENDORLIB_H
+
+/* Suppress unused-function warnings for static helpers that may
+ * not be called in every translation unit. */
+#ifdef __GNUC__
+#define VENDOR_MAYBE_UNUSED __attribute__((unused))
+#else
+#define VENDOR_MAYBE_UNUSED
+#endif
 
 /* ================================================================== */
 /*  1. Vendor selector                                                */
@@ -91,6 +98,14 @@
 #define VENDOR_BLOCK_RASTER_US      10.0f
 
 /* ================================================================== */
+/*  Pulseqlib headers (after allocator + vendor overrides)            */
+/* ================================================================== */
+
+#include "pulseqlib_config.h"
+#include "pulseqlib_types.h"
+#include "pulseqlib_methods.h"
+
+/* ================================================================== */
 /*  4. Vendor error reporting facade                                  */
 /* ================================================================== */
 
@@ -114,7 +129,7 @@
  * @param code  pulseqlib error code (negative PULSEQLIB_ERR_*).
  * @param diag  Diagnostic struct (may be NULL).
  */
-static void vendor_report_error(
+static VENDOR_MAYBE_UNUSED void vendor_report_error(
     int code,
     const pulseqlib_diagnostic* diag
 ) {
@@ -134,17 +149,13 @@ static void vendor_report_error(
 /*  5. Convenience: fill an opts struct from the #defines above       */
 /* ================================================================== */
 
-#include "pulseqlib_config.h"
-#include "pulseqlib_types.h"
-#include "pulseqlib_methods.h"
-
 /**
  * @brief Initialise a pulseqlib_opts from the vendor constants.
  *
  * Call this once at startup; pass the result to every pulseqlib_read()
  * and pulseqlib_check_safety() call.
  */
-static void vendor_opts_init(
+static VENDOR_MAYBE_UNUSED void vendor_opts_init(
     pulseqlib_opts* opts, 
     float gamma_hz_per_t, 
     float b0_t, 
@@ -165,7 +176,7 @@ static void vendor_opts_init(
 /**
  * @brief Initialise PNS parameters from the vendor constants.
  */
-static void vendor_pns_params_init(
+static VENDOR_MAYBE_UNUSED void vendor_pns_params_init(
     pulseqlib_pns_params* p,
     pulseqlib_opts* opts,
     float chronaxie_us, 
