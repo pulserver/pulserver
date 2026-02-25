@@ -5,7 +5,8 @@
  * Demonstrates the recommended scan-loop architecture:
  *
  *   1. Load the cached sequence collection.
- *   2. Build per-subsequence frequency-modulation libraries.
+ *   2. Build per-subsequence frequency-modulation libraries,
+ *      using a binary cache when available.
  *   3. Walk every block via pulseqlib_cursor_next(); use
  *      pulseqlib_cursor_get_info() for segment / TR boundaries,
  *      trigger flags, NAV status, and the scan-table position
@@ -116,7 +117,7 @@ int main(int argc, char** argv)
     }
 
     /* ============================================================== */
-    /*  2. Build per-subsequence freq-mod libraries                   */
+    /*  2. Build per-subsequence freq-mod libraries (with caching)    */
     /* ============================================================== */
     freqlibs = (pulseqlib_freq_mod_library**)calloc(
         (size_t)nsub, sizeof(*freqlibs));
@@ -124,9 +125,33 @@ int main(int argc, char** argv)
     nlibs = nsub;
 
     for (s = 0; s < nsub; ++s) {
-        rc = pulseqlib_build_freq_mod_library(
-            &freqlibs[s], coll, s, fovshift);
+        char cache_path[512];
+        pulseqlib_subseq_info si = PULSEQLIB_SUBSEQ_INFO_INIT;
+
+        rc = pulseqlib_get_subseq_info(coll, s, &si);
         CHECK(rc, &diag);
+
+        /* Build cache filename: <seqfile>.fmod.<idx>.bin */
+        sprintf(cache_path, "%s.fmod.%d.bin", seq_path, s);
+
+        /* Try loading from cache first. */
+        rc = pulseqlib_freq_mod_library_read_cache(
+            &freqlibs[s], cache_path, fovshift, si.pmc_enabled);
+
+        if (PULSEQLIB_FAILED(rc)) {
+            /* Cache miss or stale: build from scratch and store. */
+            rc = pulseqlib_build_freq_mod_library(
+                &freqlibs[s], coll, s, fovshift);
+            CHECK(rc, &diag);
+
+            rc = pulseqlib_freq_mod_library_write_cache(
+                freqlibs[s], cache_path);
+            CHECK(rc, &diag);
+
+            printf("  subseq %d: built + cached\n", s);
+        } else {
+            printf("  subseq %d: loaded from cache\n", s);
+        }
     }
 
     /* ============================================================== */

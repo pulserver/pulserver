@@ -117,7 +117,6 @@
 /*  Max-size constants                                                */
 /* ================================================================== */
 #define PULSEQLIB_MAX_GRAD_SHOTS       16
-#define PULSEQLIB_MAX_RF_SHIM_CHANNELS 64
 #define PULSEQLIB_DIAG_MSG_LEN        256
 
 /* ================================================================== */
@@ -163,15 +162,6 @@ typedef struct pulseqlib_opts {
 #define PULSEQLIB_OPTS_INIT {0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f}
 
 /* ================================================================== */
-/*  RF use types                                                      */
-/* ================================================================== */
-#define PULSEQLIB_RF_USE_UNKNOWN     0
-#define PULSEQLIB_RF_USE_EXCITATION  1
-#define PULSEQLIB_RF_USE_REFOCUSING  2
-#define PULSEQLIB_RF_USE_INVERSION   3
-#define PULSEQLIB_RF_USE_SATURATION  4
-
-/* ================================================================== */
 /*  RF statistics                                                     */
 /* ================================================================== */
 
@@ -201,7 +191,6 @@ typedef struct pulseqlib_rf_stats {
 /* ================================================================== */
 /*  TR region selectors (for freq-mod plan)                           */
 /* ================================================================== */
-#define PULSEQLIB_TR_REGION_ALL      (-1)
 #define PULSEQLIB_TR_REGION_PREP       0
 #define PULSEQLIB_TR_REGION_MAIN       1
 #define PULSEQLIB_TR_REGION_COOLDOWN   2

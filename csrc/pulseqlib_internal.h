@@ -15,8 +15,17 @@
 
 
 /* ================================================================== */
-/*  Types moved from public header (implementation details)           */
+/*  Constants moved from public header (implementation details)       */
 /* ================================================================== */
+#define PULSEQLIB_RF_USE_UNKNOWN     0
+#define PULSEQLIB_RF_USE_EXCITATION  1
+#define PULSEQLIB_RF_USE_REFOCUSING  2
+#define PULSEQLIB_RF_USE_INVERSION   3
+#define PULSEQLIB_RF_USE_SATURATION  4
+
+#define PULSEQLIB_MAX_RF_SHIM_CHANNELS 64
+
+#define PULSEQLIB_TR_REGION_ALL      (-1)
 
 /* ================================================================== */
 /*  Segment timing anchors (internal)                                 */
