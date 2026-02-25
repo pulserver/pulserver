@@ -207,50 +207,22 @@ typedef struct pulseqlib_rf_stats {
 #define PULSEQLIB_TR_REGION_COOLDOWN   2
 
 /* ================================================================== */
-/*  Frequency modulation                               */
+/*  Frequency modulation                                              */
 /* ================================================================== */
 
 /**
- * @brief Opaque handle to a precomputed frequency modulation plan.
+ * @brief Opaque handle to a frequency modulation library.
  *
- * Created by pulseqlib_build_freq_mod_plan(), queried via
- * pulseqlib_get_freq_mod_waveform(), freed by
- * pulseqlib_freq_mod_plan_free().
- */
-typedef struct pulseqlib_freq_mod_plan pulseqlib_freq_mod_plan;
-
-/**
- * @brief Frequency modulation for a given Block instance.
+ * Built per-subsequence by pulseqlib_build_freq_mod_library().
+ * Contains precomputed 3-channel gradient modulators (for PMC
+ * recomputation) and shift-resolved 1D waveforms (for scan-time
+ * lookup).  Owns a separate binary cache.
  *
- * Contains the instantaneous frequency (Hz) at each sample point for the
- * specified Block.  The time base is uniform at the ADC/RF raster (us). 
- * It also includes a phase compensation term (rad) to set the event
- * reference time to zero phase.
+ * Created by pulseqlib_build_freq_mod_library(), queried via
+ * pulseqlib_freq_mod_library_get(), freed by
+ * pulseqlib_freq_mod_library_free().
  */
-typedef struct pulseqlib_freq_mod_instance {
-    int num_samples;       /**< number of samples in waveform         */
-    float* freq_hz;       /**< instantaneous frequency at each sample (Hz) */
-    float phase_offset_rad; /**< phase compensation to set ref time to zero (rad) */
-} pulseqlib_freq_mod_instance;
-
-#define PULSEQLIB_FREQ_MOD_INSTANCE_INIT {0, NULL, 0.0f}
-
-/**
- * @brief Per-block frequency modulation event metadata.
- *
- * Lightweight descriptor of the freq-mod event associated with a
- * block.  Provides the active-region geometry and reference time
- * without requiring a full modulation plan.
- */
-typedef struct pulseqlib_freq_mod_event {
-    int   def_idx;         /**< freq-mod definition index (-1 = none)      */
-    int   num_samples;     /**< number of waveform samples                 */
-    float raster_us;       /**< uniform sample spacing (us)                */
-    float duration_us;     /**< active event duration (us)                 */
-    float ref_time_us;     /**< reference time within active region (us)   */
-} pulseqlib_freq_mod_event;
-
-#define PULSEQLIB_FREQ_MOD_EVENT_INIT {-1, 0, 0.0f, 0.0f, 0.0f}
+typedef struct pulseqlib_freq_mod_library pulseqlib_freq_mod_library;
 
 /* ================================================================== */
 /*  Opaque collection handle                                          */

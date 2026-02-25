@@ -12,7 +12,7 @@
 /* ================================================================== */
 
 #define PULSEQLIB_CACHE_ENDIAN_MARKER  0x01020304
-#define PULSEQLIB_CACHE_VERSION        11
+#define PULSEQLIB_CACHE_VERSION        12
 
 /* ------ Byte-swap helpers ------ */
 
@@ -231,21 +231,10 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &d->adc_table[i].phase_offset, 1)) return 0;
     }
 
-    /* freq_mod definitions */
-    if (!write4(f, &d->num_freq_mod_defs, 1)) return 0;
-    for (i = 0; i < d->num_freq_mod_defs; ++i) {
-        const pulseqlib_freq_mod_definition* fm = &d->freq_mod_definitions[i];
-        if (!write4(f, &fm->id, 1)) return 0;
-        if (!write4(f, &fm->num_samples, 1)) return 0;
-        if (!write4(f, &fm->raster_us, 1)) return 0;
-        if (!write4(f, &fm->duration_us, 1)) return 0;
-        if (fm->num_samples > 0) {
-            if (!write4(f, fm->waveform_gx, fm->num_samples)) return 0;
-            if (!write4(f, fm->waveform_gy, fm->num_samples)) return 0;
-            if (!write4(f, fm->waveform_gz, fm->num_samples)) return 0;
-        }
-        if (!write4(f, fm->ref_integral, 3)) return 0;
-        if (!write4(f, &fm->ref_time_us, 1)) return 0;
+    /* freq_mod definitions (no longer stored; write count = 0) */
+    {
+        int zero = 0;
+        if (!write4(f, &zero, 1)) return 0;
     }
 
     /* rf_shim definitions */
@@ -501,49 +490,11 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         if (do_swap) swap4_array(&d->adc_table[i].id, 3);
     }
 
-    /* freq_mod definitions */
+    /* freq_mod definitions (legacy: read and skip if count > 0) */
     if (!read4(f, &d->num_freq_mod_defs, 1)) return 0;
     if (do_swap) swap4(&d->num_freq_mod_defs);
-    if (d->num_freq_mod_defs > 0) {
-        d->freq_mod_definitions = (pulseqlib_freq_mod_definition*)PULSEQLIB_ALLOC(
-            (size_t)d->num_freq_mod_defs * sizeof(pulseqlib_freq_mod_definition));
-        if (!d->freq_mod_definitions) return 0;
-        for (i = 0; i < d->num_freq_mod_defs; ++i) {
-            pulseqlib_freq_mod_definition* fm = &d->freq_mod_definitions[i];
-            memset(fm, 0, sizeof(*fm));
-            if (!read4(f, &fm->id, 1)) return 0;
-            if (!read4(f, &fm->num_samples, 1)) return 0;
-            if (!read4(f, &fm->raster_us, 1)) return 0;
-            if (!read4(f, &fm->duration_us, 1)) return 0;
-            if (do_swap) {
-                swap4(&fm->id);
-                swap4(&fm->num_samples);
-                swap4(&fm->raster_us);
-                swap4(&fm->duration_us);
-            }
-            n = fm->num_samples;
-            if (n > 0) {
-                fm->waveform_gx = (float*)PULSEQLIB_ALLOC((size_t)n * sizeof(float));
-                fm->waveform_gy = (float*)PULSEQLIB_ALLOC((size_t)n * sizeof(float));
-                fm->waveform_gz = (float*)PULSEQLIB_ALLOC((size_t)n * sizeof(float));
-                if (!fm->waveform_gx || !fm->waveform_gy || !fm->waveform_gz) return 0;
-                if (!read4(f, fm->waveform_gx, n)) return 0;
-                if (!read4(f, fm->waveform_gy, n)) return 0;
-                if (!read4(f, fm->waveform_gz, n)) return 0;
-                if (do_swap) {
-                    swap4_array(fm->waveform_gx, n);
-                    swap4_array(fm->waveform_gy, n);
-                    swap4_array(fm->waveform_gz, n);
-                }
-            }
-            if (!read4(f, fm->ref_integral, 3)) return 0;
-            if (!read4(f, &fm->ref_time_us, 1)) return 0;
-            if (do_swap) {
-                swap4_array(fm->ref_integral, 3);
-                swap4(&fm->ref_time_us);
-            }
-        }
-    }
+    d->num_freq_mod_defs = 0;
+    d->freq_mod_definitions = NULL;
 
     /* rf_shim definitions */
     if (!read4(f, &d->num_rf_shims, 1)) return 0;

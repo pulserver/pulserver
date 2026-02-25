@@ -1,35 +1,23 @@
 /**
  * @file example_scanloop.c
- * @brief Segment-based real-time scan loop with PMC support.
+ * @brief Flat scan-table scan loop with PMC support.
  *
- * This example demonstrates the recommended scan-loop architecture
- * for a vendor driver.  The loop is structured around segments rather
- * than a flat cursor walk, giving the driver explicit control over:
+ * Demonstrates the recommended scan-loop architecture:
  *
- *   - Subsequence ordering
- *   - Prep / main-TR / cooldown regions
- *   - Per-segment physio trigger wait + pure-delay handling
- *   - Per-block frequency modulation and FOV rotation
- *   - Prospective motion correction (PMC) with NAV rescan/rewind
- *
- * Workflow:
  *   1. Load the cached sequence collection.
- *   2. Outer loop over subsequences.
- *   3. For each subsequence:
- *        a. Query segment tables (prep, main, cooldown).
- *        b. Build freq-mod plans (per TR-region).
- *        c. Play prep segments (once).
- *        d. TR loop: play main segments per TR.
- *             - Pure-delay segments  → vendor_play_delay()
- *             - NAV segments (PMC)   → vendor_play_segment() then
- *                                      evaluate motion; rescan TR if
- *                                      threshold exceeded.
- *             - Normal segments      → iterate blocks via cursor,
- *                                      apply block_instance + freq-mod
- *                                      + FOV rotation, then
- *                                      vendor_play_segment().
- *        e. Play cooldown segments (once).
- *   4. Label readout for reconstruction metadata.
+ *   2. Build per-subsequence frequency-modulation libraries.
+ *      Non-PMC: computed once, 3-channel data freed immediately.
+ *      PMC:     3-channel data retained for TR-boundary updates.
+ *   3. For each subsequence, walk the flat scan table
+ *      (prep + main x num_trs + cooldown segments).
+ *      For each segment:
+ *        - Iterate blocks: fetch block_instance + freq-mod,
+ *          program each block via vendor_set_block().
+ *        - Set FOV rotation, arm trigger if flagged, play segment.
+ *   4. PMC-enabled subsequences: at main-TR boundaries, update the
+ *      freq-mod library with the new position; after NAV segments,
+ *      evaluate motion and optionally rescan the TR.
+ *   5. Label readout for reconstruction metadata.
  *
  * Compile:
  *   cc -I../../csrc example_scanloop.c ../../csrc/pulseqlib_*.c -lm -o scanloop
@@ -38,16 +26,12 @@
  *   ./scanloop path/to/sequence.seq
  */
 
-#include "example_vendorlib.h"   /* must come first */
 #include "pulseqlib_methods.h"
+#include "example_vendorlib.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <math.h>
-
-/* ================================================================== */
-/*  Error check macro                                                 */
-/* ================================================================== */
 
 #define CHECK(rc, diag)                                 \
     do {                                                \
@@ -58,259 +42,182 @@
     } while (0)
 
 /* ================================================================== */
-/*  Vendor stubs                                                      */
+/*  Global mutable state                                              */
 /* ================================================================== */
-/*
- * In a real vendor integration each of these would talk to the
- * hardware sequencer.  Here they are no-ops for illustration.
- */
 
-/** @brief Play a pure-delay segment (no waveforms). */
-static void vendor_play_delay(int duration_us)
-{
-    printf("    [DELAY] %d us\n", duration_us);
-    /* vendor_hw_idle(duration_us); */
-}
+/** Patient-table / prescription shift in metres (in the physical frame). */
+static float g_fovshift[3] = {0.05f, 0.0f, 0.0f};
 
-/**
- * @brief Wait for a physio trigger (cardiac / respiratory gate).
- *
- * In a real driver, blocks until the trigger fires or a timeout
- * expires, then returns 1 (trigger received) or 0 (timeout).
- */
-static int vendor_wait_trigger(int delay_us, int duration_us)
-{
-    printf("    [TRIGGER] wait delay=%d us duration=%d us\n",
-           delay_us, duration_us);
-    /* return vendor_hw_wait_physio(delay_us, duration_us); */
-    return 1;
-}
+/** FOV rotation matrix (3x3 row-major, logical -> physical). */
+static float g_fovrotation[9] = {1,0,0, 0,1,0, 0,0,1};
+
+/** Per-subsequence freq-mod libraries. */
+static pulseqlib_freq_mod_library** g_freqlibs = NULL;
+static int                          g_nlibs    = 0;
+
+/* ================================================================== */
+/*  Freq-mod library helpers                                          */
+/* ================================================================== */
 
 /**
- * @brief Evaluate NAV data and check motion threshold.
+ * @brief Build freq-mod libraries for every subsequence.
  *
- * @param[out] new_shift_m  Updated spatial shift (dx,dy,dz) if
- *                          motion is within threshold.
- * @return 1 if motion is within the acceptance window (proceed),
- *         0 if motion exceeds the threshold (rescan this TR).
+ * Called once after loading the collection.  Each library is built
+ * with the current g_fovshift.  Non-PMC libraries immediately
+ * discard 3-channel data; PMC libraries keep it for in-place
+ * update at TR boundaries.
  */
-static int vendor_evaluate_nav(float new_shift_m[3])
+static int build_freqmod_libraries(pulseqlib_collection* coll)
 {
-    /*
-     * In a real driver:
-     *   1. Read navigator k-space / image data from the last ADC.
-     *   2. Estimate translation (dx, dy, dz) and rotation.
-     *   3. Compare against acceptance window.
-     *   4. If accepted, write new_shift_m for freq-mod update.
-     *
-     * For this example, always accept with a small Z shift.
-     */
-    new_shift_m[0] = 0.05f;
-    new_shift_m[1] = 0.0f;
-    new_shift_m[2] = 0.001f;   /* 1 mm drift in Z */
-    return 1;                  /* accepted */
-}
+    int nsub = pulseqlib_get_num_subsequences(coll);
+    int s, rc;
 
-/**
- * @brief Apply FOV rotation to gradient amplitudes.
- *
- * Multiplies the logical gradient amplitudes (gx, gy, gz) by the
- * block's 3x3 rotation matrix to produce physical-axis amplitudes.
- */
-static void vendor_apply_rotation(pulseqlib_block_instance* inst)
-{
-    float lx = inst->gx_amp_hz_per_m;
-    float ly = inst->gy_amp_hz_per_m;
-    float lz = inst->gz_amp_hz_per_m;
-    const float* R = inst->rotmat;
+    g_freqlibs = (pulseqlib_freq_mod_library**)calloc(
+        (size_t)nsub, sizeof(*g_freqlibs));
+    if (!g_freqlibs) return PULSEQLIB_ERR_ALLOC_FAILED;
+    g_nlibs = nsub;
 
-    inst->gx_amp_hz_per_m = R[0]*lx + R[1]*ly + R[2]*lz;
-    inst->gy_amp_hz_per_m = R[3]*lx + R[4]*ly + R[5]*lz;
-    inst->gz_amp_hz_per_m = R[6]*lx + R[7]*ly + R[8]*lz;
-}
-
-/**
- * @brief Apply frequency-modulation corrections to a block instance.
- *
- * For RF blocks, adds the grad-induced frequency offset to rf_freq_hz
- * and the phase compensation to rf_phase_rad.  For ADC blocks, adds
- * the centre-sample frequency offset to adc_freq_hz and the phase
- * compensation to adc_phase_rad.
- */
-static void vendor_apply_freq_mod(
-    pulseqlib_block_instance* inst,
-    const pulseqlib_freq_mod_plan* plan,
-    int block_idx)
-{
-    const float* fmod_waveform = NULL;
-    int           fmod_nsamples = 0;
-    float         fmod_phase_rad = 0.0f;
-
-    if (!plan) return;
-
-    if (pulseqlib_get_freq_mod_waveform(plan, block_idx, &fmod_waveform, &fmod_nsamples, &fmod_phase_rad))
-    {
-        vendor_set_freq_mod_waveform()
-        if (inst->rf_amp_hz != 0.0f) {
-            /*
-             * For RF: the waveform contains instantaneous frequency
-             * offsets at each sample point — the vendor would merge
-             * this into the RF frequency modulation channel.
-             * The scalar phase offset compensates the reference time.
-             */
-            inst->rf_phase_rad += fmod_phase_rad;
-        }
-
-        if (inst->adc_flag) {
-            /*
-             * For ADC: use the centre-sample frequency as the ADC
-             * demodulation offset; apply phase compensation.
-             */
-            inst->adc_phase_rad += fmod_phase_rad;
-        }
+    for (s = 0; s < nsub; ++s) {
+        rc = pulseqlib_build_freq_mod_library(
+            &g_freqlibs[s], coll, s, g_fovshift);
+        if (PULSEQLIB_FAILED(rc)) return rc;
     }
+    return PULSEQLIB_OK;
 }
-
-/* ================================================================== */
-/*  Print helper                                                      */
-/* ================================================================== */
-
-static void print_block(const pulseqlib_block_instance* b, int idx)
-{
-    printf("      [%04d] dur=%5d us", idx, b->duration_us);
-
-    if (b->rf_amp_hz != 0.0f)
-        printf("  RF(%.1f Hz, %.1f Hz, %.3f rad)",
-               b->rf_amp_hz, b->rf_freq_hz, b->rf_phase_rad);
-
-    if (b->gx_amp_hz_per_m != 0.0f)
-        printf("  GX(%.0f)", b->gx_amp_hz_per_m);
-    if (b->gy_amp_hz_per_m != 0.0f)
-        printf("  GY(%.0f)", b->gy_amp_hz_per_m);
-    if (b->gz_amp_hz_per_m != 0.0f)
-        printf("  GZ(%.0f)", b->gz_amp_hz_per_m);
-
-    if (b->adc_flag)
-        printf("  ADC");
-    if (b->digitalout_flag)
-        printf("  DIGOUT");
-    if (!b->norot_flag)
-        printf("  ROT");
-
-    printf("\n");
-}
-
-/* ================================================================== */
-/*  Segment player                                                    */
-/* ================================================================== */
 
 /**
- * @brief Play one segment by iterating its blocks through the cursor.
+ * @brief Update the freq-mod library for a PMC-enabled subsequence.
  *
- * Advances the cursor through @p num_blocks blocks (the exact count
- * for a segment), resolving each block_instance, applying freq-mod
- * and FOV rotation, and printing the first few for demo purposes.
- *
- * @param coll          Collection (cursor state is advanced).
- * @param fmod_plan     Freq-mod plan (may be NULL).
- * @param[in,out] block_counter  Running block index (for freq-mod lookup).
- * @param[in,out] adc_counter    Running ADC count.
- * @param num_blocks    Number of blocks in this segment.
- * @param verbose_limit Print blocks while block_counter < this.
- * @return 0 on success, -1 on cursor error.
+ * Recomputes 1D plan waveforms from the retained 3-channel entries
+ * using the current g_fovshift.  No allocation -- O(entries x samples).
  */
-static int play_segment_blocks(
-    pulseqlib_collection* coll,
-    const pulseqlib_freq_mod_plan* fmod_plan,
-    int* block_counter,
-    int* adc_counter,
-    int  num_blocks,
-    int  verbose_limit)
+static int update_freqmod_library(int subseq_idx)
 {
-    int b;
-    for (b = 0; b < num_blocks; ++b) {
-        pulseqlib_block_instance inst = PULSEQLIB_BLOCK_INSTANCE_INIT;
-
-        if (pulseqlib_cursor_next(coll) != PULSEQLIB_CURSOR_BLOCK)
-            return -1;
-
-        if (PULSEQLIB_FAILED(pulseqlib_get_block_instance(coll, &inst)))
-            return -1;
-
-        /* Frequency modulation */
-        vendor_apply_freq_mod(&inst, fmod_plan, *block_counter);
-
-        /* FOV rotation */
-        if (!inst.norot_flag)
-            vendor_apply_rotation(&inst);
-
-        /* Demo print */
-        if (*block_counter < verbose_limit)
-            print_block(&inst, *block_counter);
-        else if (*block_counter == verbose_limit)
-            printf("      ... (remaining blocks omitted)\n");
-
-        if (inst.adc_flag)
-            (*adc_counter)++;
-
-        (*block_counter)++;
-    }
-    return 0;
+    if (!g_freqlibs || subseq_idx >= g_nlibs || !g_freqlibs[subseq_idx])
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    return pulseqlib_update_freq_mod_library(
+        g_freqlibs[subseq_idx], g_fovshift);
 }
 
-/* ================================================================== */
-/*  Region player (prep / cooldown)                                   */
-/* ================================================================== */
+/**
+ * @brief Look up precomputed freq-mod for a scan-table position.
+ *
+ * @param s           Subsequence index.
+ * @param scan_pos    Scan-table position within the subsequence.
+ * @return 1 if the block has a freq-mod event, 0 otherwise.
+ */
+static int get_freq_modulation(int s, int scan_pos,
+                               const float** waveform,
+                               int* nsamples,
+                               float* phase_rad)
+{
+    *waveform = NULL;
+    *nsamples = 0;
+    *phase_rad = 0.0f;
+    if (!g_freqlibs || s >= g_nlibs || !g_freqlibs[s]) return 0;
+    return pulseqlib_freq_mod_library_get(
+        g_freqlibs[s], scan_pos, waveform, nsamples, phase_rad);
+}
 
 /**
- * @brief Play a list of segments (prep or cooldown region).
- *
- * Handles pure-delay segments, physio triggers, and normal
- * block-by-block iteration for each segment in the list.
+ * @brief Free all freq-mod libraries.
  */
-static int play_region(
-    pulseqlib_collection* coll,
-    const pulseqlib_freq_mod_plan* fmod_plan,
-    const int* seg_ids,
-    int        num_segments,
-    int*       block_counter,
-    int*       adc_counter,
-    int        verbose_limit,
-    const char* region_name)
+static void free_freqmod_libraries(void)
 {
     int s;
-    for (s = 0; s < num_segments; ++s) {
-        int seg_id     = seg_ids[s];
-        int seg_nblocks = pulseqlib_get_segment_num_blocks(coll, seg_id);
+    if (!g_freqlibs) return;
+    for (s = 0; s < g_nlibs; ++s)
+        if (g_freqlibs[s]) pulseqlib_freq_mod_library_free(g_freqlibs[s]);
+    free(g_freqlibs);
+    g_freqlibs = NULL;
+    g_nlibs    = 0;
+}
 
-        /* Pure-delay segment: skip cursor, just idle */
-        if (pulseqlib_is_segment_pure_delay(coll, seg_id)) {
-            int dur = pulseqlib_get_segment_duration_us(coll, seg_id);
-            printf("  %s seg %d: pure delay\n", region_name, seg_id);
-            vendor_play_delay(dur);
-            continue;
-        }
+/* ================================================================== */
+/*  Vendor stubs                                                      */
+/* ================================================================== */
 
-        /* Physio trigger at segment boundary */
-        if (pulseqlib_segment_has_trigger(coll, seg_id)) {
-            int delay = pulseqlib_get_segment_trigger_delay_us(coll, seg_id);
-            int dur   = pulseqlib_get_segment_trigger_duration_us(coll, seg_id);
-            printf("  %s seg %d: physio trigger\n", region_name, seg_id);
-            vendor_wait_trigger(delay, dur);
-        }
+/**
+ * @brief Program one block on the hardware sequencer.
+ */
+static void vendor_set_block(const pulseqlib_block_instance* inst,
+                             const float* fmod_waveform,
+                             int fmod_nsamples,
+                             float fmod_phase_rad)
+{
+    (void)inst;
+    (void)fmod_waveform;
+    (void)fmod_nsamples;
+    (void)fmod_phase_rad;
+}
 
-        /* Normal segment: iterate blocks */
-        printf("  %s seg %d: %d blocks\n", region_name, seg_id, seg_nblocks);
-        if (play_segment_blocks(coll, fmod_plan, block_counter,
-                                adc_counter, seg_nblocks,
-                                verbose_limit) < 0)
-        {
-            fprintf(stderr, "Cursor error in %s seg %d\n",
-                    region_name, seg_id);
-            return -1;
-        }
-    }
-    return 0;
+/** @brief Set FOV rotation matrix for the next segment play. */
+static void vendor_set_rotation(const float* rot)
+{
+    (void)rot;
+}
+
+/** @brief Arm the physio trigger gate for the next segment play. */
+static void vendor_set_trigger(void)
+{
+    /* vendor_hw_arm_physio_trigger(); */
+}
+
+/** @brief Issue hardware play for the prepared segment. */
+static void vendor_play_segment(int seg_idx)
+{
+    (void)seg_idx;
+}
+
+/**
+ * @brief Evaluate PMC (navigator) feedback.
+ *
+ * In a real driver:
+ *   1. Receives motion estimate from the reconstruction pipeline.
+ *   2. If accepted: updates g_fovshift and g_fovrotation.
+ *   3. Returns 0 (accepted, proceed) or 1 (rescan this TR).
+ */
+static int vendor_get_pmc_feedback(void)
+{
+    g_fovshift[2] += 0.001f;
+    return 0;   /* 0 = accepted, 1 = rescan */
+}
+
+/* ================================================================== */
+/*  Scan-table builder                                                */
+/* ================================================================== */
+
+/**
+ * @brief Build a flat scan table for subsequence @p s.
+ *
+ * Flattens [prep, main x num_trs, cooldown] into a single ordered
+ * array of segment IDs, matching the internal scan-table expansion.
+ */
+static int build_scan_table(const pulseqlib_collection* coll,
+                            int s, int* out_ids)
+{
+    int prep[64], main_seg[64], cool[64];
+    int n_p, n_m, n_c, n_tr, pos, i, tr;
+
+    n_p  = pulseqlib_get_num_prep_segments(coll, s);
+    n_m  = pulseqlib_get_num_main_segments(coll, s);
+    n_c  = pulseqlib_get_num_cooldown_segments(coll, s);
+    n_tr = pulseqlib_get_num_trs(coll, s);
+
+    pulseqlib_get_prep_segment_table(coll, s, prep);
+    pulseqlib_get_main_segment_table(coll, s, main_seg);
+    pulseqlib_get_cooldown_segment_table(coll, s, cool);
+
+    pos = 0;
+    for (i = 0; i < n_p; ++i)
+        out_ids[pos++] = prep[i];
+    for (tr = 0; tr < n_tr; ++tr)
+        for (i = 0; i < n_m; ++i)
+            out_ids[pos++] = main_seg[i];
+    for (i = 0; i < n_c; ++i)
+        out_ids[pos++] = cool[i];
+
+    return pos;
 }
 
 /* ================================================================== */
@@ -319,25 +226,12 @@ static int play_region(
 
 int main(int argc, char** argv)
 {
-    const char*              seq_path;
-    pulseqlib_opts           opts = PULSEQLIB_OPTS_INIT;
-    pulseqlib_diagnostic     diag = PULSEQLIB_DIAGNOSTIC_INIT;
-    pulseqlib_collection*    coll = NULL;
-    int rc;
-
-    /* Per-subsequence freq-mod plans (freed at end) */
-    pulseqlib_freq_mod_plan* fmod_prep = NULL;
-    pulseqlib_freq_mod_plan* fmod_main = NULL;
-    pulseqlib_freq_mod_plan* fmod_cool = NULL;
-
-    /* Segment table scratch buffers (sized to MAX plausible) */
-    int seg_ids_prep[64];
-    int seg_ids_main[64];
-    int seg_ids_cool[64];
-
-    int block_counter = 0;
-    int adc_counter   = 0;
-    int nsub, s;
+    const char*           seq_path;
+    pulseqlib_opts        opts = PULSEQLIB_OPTS_INIT;
+    pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    pulseqlib_collection* coll = NULL;
+    int rc, nsub, s;
+    int n = 0;   /* global block counter (across all subsequences) */
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <sequence.seq>\n", argv[0]);
@@ -345,7 +239,6 @@ int main(int argc, char** argv)
     }
     seq_path = argv[1];
 
-    /* --- Scanner parameters (Siemens 3 T example) --- */
     vendor_opts_init(&opts, 42577478.0f, 3.0f, 50.0f, 200.0f);
 
     /* ============================================================== */
@@ -355,235 +248,144 @@ int main(int argc, char** argv)
     CHECK(rc, &diag);
 
     nsub = pulseqlib_get_num_subsequences(coll);
-    printf("Loaded: %d subsequences, total duration %.2f s\n",
+    printf("Loaded: %d subsequences, %.2f s\n",
            nsub, pulseqlib_get_total_duration_us(coll) / 1e6);
 
     /* ============================================================== */
-    /*  2. Label table overview                                       */
+    /*  2. Build per-subsequence freq-mod libraries                   */
     /* ============================================================== */
-    for (s = 0; s < nsub; ++s) {
-        int num_adc  = pulseqlib_get_num_adc_occurrences(coll, s);
-        int num_cols = pulseqlib_get_num_label_columns(coll, s);
-        printf("  Subseq %d: %d TRs, %d ADC occurrences, %d label cols",
-               s, pulseqlib_get_num_trs(coll, s), num_adc, num_cols);
-        if (pulseqlib_is_pmc_enabled(coll, s))
-            printf("  [PMC]");
-        printf("\n");
-    }
+    rc = build_freqmod_libraries(coll);
+    CHECK(rc, &diag);
 
     /* ============================================================== */
-    /*  3. Segment-based scan loop                                    */
+    /*  3. Scan loop                                                  */
     /* ============================================================== */
-    /*
-     * The loop walks subsequences → regions → segments → blocks.
-     * The cursor is used inside play_segment_blocks() to iterate
-     * individual blocks; segment-level decisions (pure delay,
-     * trigger wait, NAV evaluation) happen at a higher level.
-     *
-     * Frequency-modulation plans are built per TR-region so that
-     * the block_idx passed to get_freq_mod_waveform matches the
-     * plan's internal indexing.  For the first TR (which includes
-     * prep blocks) and for cooldown, we build separate plans to
-     * get the correct waveform-to-block mapping.
-     */
-
-    /* Example: 5 cm shift in X, on-isocenter in Y/Z */
     {
-        float shift_m[3] = {0.05f, 0.0f, 0.0f};
+        int trigger_on = 0;
+        int is_nav     = 0;
+        int reset      = 0;
 
-        printf("\n--- Scan loop ---\n");
         pulseqlib_cursor_reset(coll);
 
         for (s = 0; s < nsub; ++s) {
-            int n_prep = pulseqlib_get_num_prep_segments(coll, s);
-            int n_main = pulseqlib_get_num_main_segments(coll, s);
-            int n_cool = pulseqlib_get_num_cooldown_segments(coll, s);
-            int num_trs = pulseqlib_get_num_trs(coll, s);
-            int pmc     = pulseqlib_is_pmc_enabled(coll, s);
-            int tr;
+            int scan_table[4096];
+            int scan_table_size;
+            int n_prep, n_main, num_trs, pmc;
+            int tr_start_i, tr_start_scan;
+            int i;
+            int scan_pos = 0;   /* per-subsequence scan-table position */
 
-            printf("\n=== Subsequence %d: %d TRs, "
-                   "segments prep=%d main=%d cool=%d%s ===\n",
-                   s, num_trs, n_prep, n_main, n_cool,
+            n_prep  = pulseqlib_get_num_prep_segments(coll, s);
+            n_main  = pulseqlib_get_num_main_segments(coll, s);
+            num_trs = pulseqlib_get_num_trs(coll, s);
+            pmc     = pulseqlib_is_pmc_enabled(coll, s);
+
+            scan_table_size = build_scan_table(coll, s, scan_table);
+
+            printf("\nSubseq %d: %d entries, %d TRs%s\n",
+                   s, scan_table_size, num_trs,
                    pmc ? " [PMC]" : "");
 
-            /* --- Fetch segment tables --- */
-            pulseqlib_get_prep_segment_table(coll, s, seg_ids_prep);
-            pulseqlib_get_main_segment_table(coll, s, seg_ids_main);
-            pulseqlib_get_cooldown_segment_table(coll, s, seg_ids_cool);
+            tr_start_i    = n_prep;
+            tr_start_scan = scan_pos;
 
-            /* -------------------------------------------------------- */
-            /*  Build freq-mod plans per region                         */
-            /* -------------------------------------------------------- */
-            /*
-             * PREP plan:   covers prep blocks + first main TR.
-             * MAIN plan:   covers one steady-state main TR (reused
-             *              for TRs 1 .. num_trs-1, updated for PMC).
-             * COOLDOWN plan: covers last main TR + cooldown blocks.
-             *
-             * Block indices within each plan start at 0 and are
-             * independent of the global block counter.
-             */
-            if (fmod_prep) { pulseqlib_freq_mod_plan_free(fmod_prep); fmod_prep = NULL; }
-            if (fmod_main) { pulseqlib_freq_mod_plan_free(fmod_main); fmod_main = NULL; }
-            if (fmod_cool) { pulseqlib_freq_mod_plan_free(fmod_cool); fmod_cool = NULL; }
-
-            rc = pulseqlib_build_freq_mod_plan(
-                &fmod_prep, coll, shift_m,
-                PULSEQLIB_TR_REGION_PREP, 0);
-            CHECK(rc, &diag);
-
-            rc = pulseqlib_build_freq_mod_plan(
-                &fmod_main, coll, shift_m,
-                PULSEQLIB_TR_REGION_MAIN, 0);
-            CHECK(rc, &diag);
-
-            rc = pulseqlib_build_freq_mod_plan(
-                &fmod_cool, coll, shift_m,
-                PULSEQLIB_TR_REGION_COOLDOWN, 0);
-            CHECK(rc, &diag);
-
-            /* -------------------------------------------------------- */
-            /*  3a. Play prep segments (once)                           */
-            /* -------------------------------------------------------- */
-            if (n_prep > 0) {
-                printf("\n  --- Prep region ---\n");
-                if (play_region(coll, fmod_prep, seg_ids_prep, n_prep,
-                                &block_counter, &adc_counter, 20,
-                                "PREP") < 0)
-                    goto fail;
-            }
-
-            /* -------------------------------------------------------- */
-            /*  3b. Main TR loop                                        */
-            /* -------------------------------------------------------- */
-            for (tr = 0; tr < num_trs; ++tr) {
-                int seg_s;
-                int tr_rescan = 0;
-
-                printf("\n  --- TR %d/%d ---\n", tr + 1, num_trs);
-
-            rescan_tr:
-
-                for (seg_s = 0; seg_s < n_main; ++seg_s) {
-                    int seg_id     = seg_ids_main[seg_s];
-                    int seg_nblocks = pulseqlib_get_segment_num_blocks(
-                                         coll, seg_id);
-
-                    /* -- Pure-delay segment -- */
-                    if (pulseqlib_is_segment_pure_delay(coll, seg_id)) {
-                        int dur = pulseqlib_get_segment_duration_us(
+            i = 0;
+            while (i < scan_table_size) {
+                int seg_id      = scan_table[i];
+                int seg_nblocks = pulseqlib_get_segment_num_blocks(
                                       coll, seg_id);
-                        printf("  MAIN seg %d: pure delay\n", seg_id);
-                        vendor_play_delay(dur);
-                        continue;
-                    }
+                int j;
 
-                    /* -- Physio trigger at segment boundary -- */
-                    if (pulseqlib_segment_has_trigger(coll, seg_id)) {
-                        int delay = pulseqlib_get_segment_trigger_delay_us(
-                                        coll, seg_id);
-                        int dur   = pulseqlib_get_segment_trigger_duration_us(
-                                        coll, seg_id);
-                        printf("  MAIN seg %d: physio trigger\n", seg_id);
-                        vendor_wait_trigger(delay, dur);
-                    }
+                /* -------------------------------------------------- */
+                /*  PMC sync at main-TR start                         */
+                /* -------------------------------------------------- */
+                {
+                    int in_main = (i >= n_prep)
+                                  && (i < n_prep + num_trs * n_main);
+                    int at_tr_start = in_main
+                                  && (((i - n_prep) % n_main) == 0);
 
-                    /* -- NAV segment (PMC) -- */
-                    if (pmc && pulseqlib_segment_is_nav(coll, seg_id)) {
-                        float nav_shift[3];
+                    if (pmc && at_tr_start) {
+                        rc = update_freqmod_library(s);
+                        if (PULSEQLIB_FAILED(rc)) goto fail;
 
-                        printf("  MAIN seg %d: NAV (%d blocks)\n",
-                               seg_id, seg_nblocks);
-
-                        /* Play the NAV segment blocks normally */
-                        if (play_segment_blocks(coll, fmod_main,
-                                                &block_counter,
-                                                &adc_counter,
-                                                seg_nblocks, 20) < 0)
-                            goto fail;
-
-                        /* Evaluate navigator result */
-                        if (!vendor_evaluate_nav(nav_shift)) {
-                            /*
-                             * Motion exceeds threshold — rescan this TR.
-                             * Reset the cursor to the start of the TR and
-                             * update the freq-mod plan with the last
-                             * accepted position.
-                             *
-                             * In a real driver, rewind hardware buffers
-                             * and re-arm acquisition for this TR.
-                             */
-                            tr_rescan++;
-                            if (tr_rescan > 5) {
-                                printf("    PMC: max rescans reached, "
-                                       "accepting with drift\n");
-                            } else {
-                                printf("    PMC: motion rejected, "
-                                       "rescan #%d\n", tr_rescan);
-                                /*
-                                 * NOTE: in a real driver you would
-                                 * pulseqlib_cursor_reset() and advance
-                                 * to the start of this TR, or use a
-                                 * vendor-specific rewind mechanism.
-                                 * For this demo we simply re-enter
-                                 * the segment loop.
-                                 */
-                                goto rescan_tr;
-                            }
-                        } else {
-                            printf("    PMC: motion accepted "
-                                   "(dz=%.1f mm)\n",
-                                   nav_shift[2] * 1000.0f);
-
-                            /* Update freq-mod plan with new position */
-                            pulseqlib_update_freq_mod_plan(
-                                fmod_main, nav_shift);
+                        if (reset) {
+                            int k;
+                            int rewind_blocks = scan_pos - tr_start_scan;
+                            pulseqlib_cursor_reset(coll);
+                            for (k = 0; k < n - rewind_blocks; ++k)
+                                pulseqlib_cursor_next(coll);
+                            i        = tr_start_i;
+                            scan_pos = tr_start_scan;
+                            n       -= rewind_blocks;
+                            reset    = 0;
+                            continue;
                         }
 
-                        continue;  /* NAV segment already played */
-                    }
-
-                    /* -- Normal segment: iterate blocks -- */
-                    printf("  MAIN seg %d: %d blocks\n",
-                           seg_id, seg_nblocks);
-                    if (play_segment_blocks(coll, fmod_main,
-                                            &block_counter,
-                                            &adc_counter,
-                                            seg_nblocks, 20) < 0)
-                    {
-                        fprintf(stderr,
-                                "Cursor error in TR %d seg %d\n",
-                                tr, seg_id);
-                        goto fail;
+                        tr_start_i    = i;
+                        tr_start_scan = scan_pos;
                     }
                 }
-            }
 
-            /* -------------------------------------------------------- */
-            /*  3c. Play cooldown segments (once)                       */
-            /* -------------------------------------------------------- */
-            if (n_cool > 0) {
-                printf("\n  --- Cooldown region ---\n");
-                if (play_region(coll, fmod_cool, seg_ids_cool, n_cool,
-                                &block_counter, &adc_counter, 20,
-                                "COOL") < 0)
-                    goto fail;
+                /* -------------------------------------------------- */
+                /*  Iterate blocks in segment                         */
+                /* -------------------------------------------------- */
+                trigger_on = 0;
+                is_nav     = pulseqlib_segment_is_nav(coll, seg_id);
+
+                if (pulseqlib_segment_has_trigger(coll, seg_id))
+                    trigger_on = 1;
+
+                for (j = 0; j < seg_nblocks; ++j) {
+                    pulseqlib_block_instance inst =
+                        PULSEQLIB_BLOCK_INSTANCE_INIT;
+                    const float* fmod_waveform = NULL;
+                    int   fmod_nsamples = 0;
+                    float fmod_phase    = 0.0f;
+
+                    get_freq_modulation(s, scan_pos,
+                                        &fmod_waveform,
+                                        &fmod_nsamples, &fmod_phase);
+
+                    if (pulseqlib_cursor_next(coll)
+                            != PULSEQLIB_CURSOR_BLOCK)
+                        goto fail;
+                    if (PULSEQLIB_FAILED(
+                            pulseqlib_get_block_instance(coll, &inst)))
+                        goto fail;
+
+                    vendor_set_block(&inst, fmod_waveform,
+                                     fmod_nsamples, fmod_phase);
+                    ++scan_pos;
+                    ++n;
+                }
+
+                /* -------------------------------------------------- */
+                /*  Play segment                                      */
+                /* -------------------------------------------------- */
+                vendor_set_rotation(g_fovrotation);
+                if (trigger_on)
+                    vendor_set_trigger();
+                vendor_play_segment(seg_id);
+                trigger_on = 0;
+
+                /* -------------------------------------------------- */
+                /*  PMC feedback after NAV                            */
+                /* -------------------------------------------------- */
+                if (pmc && is_nav) {
+                    reset = vendor_get_pmc_feedback();
+                }
+
+                ++i;
             }
         }
 
-        printf("\nScan loop complete: %d blocks, %d ADC windows\n",
-               block_counter, adc_counter);
+        printf("\nScan loop complete: %d blocks\n", n);
     }
 
     /* ============================================================== */
-    /*  4. Label readout — reconstruction metadata                    */
+    /*  4. Label readout                                              */
     /* ============================================================== */
-    /*
-     * After the scan loop, read back labels for each ADC occurrence.
-     * This tells the reconstruction pipeline where each readout goes
-     * in k-space (lin, slc, eco, ...).
-     */
     for (s = 0; s < nsub; ++s) {
         int num_adc  = pulseqlib_get_num_adc_occurrences(coll, s);
         int num_cols = pulseqlib_get_num_label_columns(coll, s);
@@ -594,7 +396,7 @@ int main(int argc, char** argv)
         if (num_cols > 16) num_cols = 16;
 
         printf("\nSubseq %d: first 10 ADC labels "
-               "(of %d total, %d columns):\n", s, num_adc, num_cols);
+               "(%d total, %d cols):\n", s, num_adc, num_cols);
 
         for (occ = 0; occ < num_adc && occ < 10; ++occ) {
             rc = pulseqlib_get_adc_label(coll, s, occ, label_vals);
@@ -612,16 +414,12 @@ int main(int argc, char** argv)
     /* ============================================================== */
     /*  Cleanup                                                       */
     /* ============================================================== */
-    if (fmod_prep) pulseqlib_freq_mod_plan_free(fmod_prep);
-    if (fmod_main) pulseqlib_freq_mod_plan_free(fmod_main);
-    if (fmod_cool) pulseqlib_freq_mod_plan_free(fmod_cool);
+    free_freqmod_libraries();
     pulseqlib_collection_free(coll);
     return 0;
 
 fail:
-    if (fmod_prep) pulseqlib_freq_mod_plan_free(fmod_prep);
-    if (fmod_main) pulseqlib_freq_mod_plan_free(fmod_main);
-    if (fmod_cool) pulseqlib_freq_mod_plan_free(fmod_cool);
-    if (coll)      pulseqlib_collection_free(coll);
+    free_freqmod_libraries();
+    if (coll) pulseqlib_collection_free(coll);
     return 1;
 }

@@ -50,11 +50,6 @@ void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
     d->adc_table_size = 0;
 
     if (d->freq_mod_definitions) {
-        for (i = 0; i < d->num_freq_mod_defs; ++i) {
-            if (d->freq_mod_definitions[i].waveform_gx) PULSEQLIB_FREE(d->freq_mod_definitions[i].waveform_gx);
-            if (d->freq_mod_definitions[i].waveform_gy) PULSEQLIB_FREE(d->freq_mod_definitions[i].waveform_gy);
-            if (d->freq_mod_definitions[i].waveform_gz) PULSEQLIB_FREE(d->freq_mod_definitions[i].waveform_gz);
-        }
         PULSEQLIB_FREE(d->freq_mod_definitions);
         d->freq_mod_definitions = NULL;
     }
@@ -544,7 +539,7 @@ int pulseqlib__get_collection_descriptors(
         result = pulseqlib__calc_segment_timing(&desc, diag);
         if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
 
-        result = pulseqlib__build_freq_mod_library(&desc);
+        result = pulseqlib__build_freq_mod_flags(&desc);
         if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
 
         if (parse_labels) {

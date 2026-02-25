@@ -11,6 +11,7 @@ set(PULSEQLIB_SOURCES
     pulseqlib_cache.c
     pulseqlib_safety.c
     pulseqlib_getters.c
+    pulseqlib_freqmod.c
 )
 
 # MD5 source (needed by pulseqlib_parse for signature verification)

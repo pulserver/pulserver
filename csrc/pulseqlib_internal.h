@@ -176,25 +176,52 @@ typedef struct pulseqlib_freq_mod_definition {
     {0, 0, 0.0f, 0.0f, NULL, NULL, NULL, {0.0f, 0.0f, 0.0f}, 0.0f}
 
 /* ================================================================== */
-/*  Frequency modulation plan (full struct, opaque from public API)   */
+/*  Frequency modulation library (full struct, opaque from public API) */
 /* ================================================================== */
 
-/* The public header only has a forward declaration.  Callers allocate
- * and free through pulseqlib_build_freq_mod_plan / _free.             */
-struct pulseqlib_freq_mod_plan {
-    int num_instances;      /* number of freq-mod events in plan */
-    int max_samples;        /* longest waveform (zero-padded length) */
-    int num_blocks;         /* total blocks in descriptor (block_table size) */
-    float raster_us;        /* common raster (us) */
-    float** waveforms;      /* [num_instances] pointers, each -> max_samples Hz */
-    int* num_samples;       /* [num_instances] actual length per row */
-    float* phase_offset;    /* [num_instances] phase compensation in rad */
-    int* block_to_instance; /* [num_blocks] absolute block idx -> instance, -1 */
-    float* _waveform_data;  /* backing store (flat), freed by plan_free */
-    const void* _desc;      /* opaque pointer to descriptor (for update) */
-};
+/*
+ * Per-subsequence library of precomputed frequency modulators.
+ *
+ * Contains amplitude-scaled 3-channel gradient waveforms (entries) and
+ * shift-resolved 1D plan waveforms.  Built by
+ * pulseqlib_build_freq_mod_library(); queried by
+ * pulseqlib_freq_mod_library_get() using scan-table position.
+ *
+ * For PMC-enabled subsequences the 3-channel entries are kept so that
+ * update() can recompute plan waveforms with a new shift.  For
+ * non-PMC subsequences they are freed after the initial plan build.
+ */
+struct pulseqlib_freq_mod_library {
+    /* --- Deduped 3-channel entries (shift-independent) --- */
+    int  num_entries;           /* unique (base_shape, eff_amp) combos     */
+    int  max_samples;           /* longest entry waveform (zero-padded)    */
+    float raster_us;            /* common time raster (us)                 */
+    int* entry_num_samples;     /* [num_entries]                           */
 
-#define PULSEQLIB_FREQ_MOD_PLAN_INIT {0, 0, 0, 0.0f, NULL, NULL, NULL, NULL, NULL, NULL}
+    /* Planar layout: 3ch[e * max_samples * 3 + ch * max_samples + s].
+     * NULL after construction for non-PMC subsequences.               */
+    float* entry_waveform_3ch;  /* [num_entries * max_samples * 3] or NULL */
+    float* entry_ref_3ch;       /* [num_entries * 3]               or NULL */
+
+    /* Deep-copy rotation matrices from descriptor. */
+    int   num_rotations;
+    float (*rotations)[9];      /* [num_rotations][9]                      */
+
+    /* --- Plan instances (deduped on entry_idx x rotation_idx) --- */
+    int  num_plan_instances;
+    int* pi_entry_idx;          /* [num_plan_instances]                    */
+    int* pi_rotation_idx;       /* [num_plan_instances]                    */
+
+    /* Precomputed 1D waveforms (shift-dependent). */
+    float* plan_waveform_data;  /* flat [num_plan_instances * max_samples] */
+    float** plan_waveforms;     /* [num_plan_instances] row pointers       */
+    int* plan_num_samples;      /* [num_plan_instances] actual length      */
+    float* plan_phase;          /* [num_plan_instances] phase comp (rad)   */
+
+    /* O(1) accessor by scan-table position. */
+    int  scan_table_len;
+    int* scan_to_plan;          /* [scan_table_len] -> plan instance, -1   */
+};
 
 /* ================================================================== */
 /*  Block definitions and table                                       */
@@ -226,7 +253,7 @@ typedef struct pulseqlib_block_table_element {
     int nopos_flag;
     int pmc_flag;
     int nav_flag;
-    int freq_mod_id;    /* index into freq_mod_definitions, or -1 */
+    int freq_mod_id;    /* boolean: >= 0 if block needs freq-mod, -1 otherwise */
     int rf_shim_id;     /* index into rf_shim_definitions, or -1 */
 } pulseqlib_block_table_element;
 
@@ -859,7 +886,7 @@ int   pulseqlib__build_scan_table(pulseqlib_sequence_descriptor* desc, int num_a
 int   pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib__seq_file* seq);
 int   pulseqlib__fill_scan_seg_id_from_blocktable(pulseqlib_sequence_descriptor* desc);
 int   pulseqlib__get_scan_table_segments(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib_opts* opts);
-int   pulseqlib__build_freq_mod_library(pulseqlib_sequence_descriptor* desc);
+int   pulseqlib__build_freq_mod_flags(pulseqlib_sequence_descriptor* desc);
 int   pulseqlib__build_label_table(pulseqlib_sequence_descriptor* desc, const pulseqlib__seq_file* seq);
 
 /* --- pulseqlib_core.c (continued) --- */
