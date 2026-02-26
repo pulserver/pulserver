@@ -185,22 +185,23 @@ typedef struct pulseqlib_freq_mod_definition {
     {0, 0, 0.0f, 0.0f, NULL, NULL, NULL, {0.0f, 0.0f, 0.0f}, 0.0f}
 
 /* ================================================================== */
-/*  Frequency modulation library (full struct, opaque from public API) */
+/*  Frequency modulation library (internal per-subsequence struct)     */
 /* ================================================================== */
 
 /*
  * Per-subsequence library of precomputed frequency modulators.
  *
  * Contains amplitude-scaled 3-channel gradient waveforms (entries) and
- * shift-resolved 1D plan waveforms.  Built by
- * pulseqlib_build_freq_mod_library(); queried by
- * pulseqlib_freq_mod_library_get() using scan-table position.
+ * shift-resolved 1D plan waveforms.  Built internally by
+ * pulseqlib_build_freq_mod_collection(); queried via
+ * pulseqlib_freq_mod_collection_get() using subsequence index and
+ * scan-table position.
  *
  * For PMC-enabled subsequences the 3-channel entries are kept so that
  * update() can recompute plan waveforms with a new shift.  For
  * non-PMC subsequences they are freed after the initial plan build.
  */
-struct pulseqlib_freq_mod_library {
+typedef struct pulseqlib_freq_mod_library {
     /* --- Deduped 3-channel entries (shift-independent) --- */
     int  num_entries;           /* unique (base_shape, eff_amp) combos     */
     int  max_samples;           /* longest entry waveform (zero-padded)    */
@@ -230,6 +231,19 @@ struct pulseqlib_freq_mod_library {
     /* O(1) accessor by scan-table position. */
     int  scan_table_len;
     int* scan_to_plan;          /* [scan_table_len] -> plan instance, -1   */
+} pulseqlib_freq_mod_library;
+
+/* ================================================================== */
+/*  Frequency modulation collection (opaque from public API)          */
+/* ================================================================== */
+
+/*
+ * Wraps per-subsequence freq-mod libraries into a single object.
+ * The public opaque type pulseqlib_freq_mod_collection points here.
+ */
+struct pulseqlib_freq_mod_collection {
+    int num_subsequences;
+    pulseqlib_freq_mod_library** libs;   /* [num_subsequences] (owned) */
 };
 
 /* ================================================================== */

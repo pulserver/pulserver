@@ -624,7 +624,7 @@ int pulseqlib_cursor_get_info(const pulseqlib_collection* coll,
                               pulseqlib_cursor_info*       info);
 
 /* ================================================================== */
-/*  Frequency modulation library                                      */
+/*  Frequency modulation collection                                   */
 /* ================================================================== */
 
 /**
@@ -642,88 +642,93 @@ int pulseqlib_get_freq_mod_count_tr(const pulseqlib_collection* coll,
                                     int tr_type, int tr_index);
 
 /**
- * @brief Build a frequency modulation library for one subsequence.
+ * @brief Build frequency modulation data for all subsequences.
  *
  * Constructs deduped amplitude-scaled 3-channel gradient modulators
- * and computes shift-resolved 1D plan waveforms.
+ * and computes shift-resolved 1D plan waveforms for every subsequence
+ * in the collection.
  *
  * For PMC-enabled subsequences the 3-channel data is retained so that
- * pulseqlib_update_freq_mod_library() can recompute waveforms with a
- * new shift at each TR boundary.  For non-PMC subsequences the
+ * pulseqlib_update_freq_mod_collection() can recompute waveforms with
+ * a new shift at each TR boundary.  For non-PMC subsequences the
  * 3-channel data is discarded after the initial plan computation to
  * save memory.
  *
- * @param[out] lib         Receives an allocated library (caller frees).
- * @param[in]  coll        Loaded collection.
- * @param[in]  subseq_idx  0-based subsequence index.
+ * @param[out] out_fmc     Receives an allocated collection (caller frees).
+ * @param[in]  coll        Loaded sequence collection.
  * @param[in]  shift_m     Spatial shift (dx, dy, dz) in metres.
  * @return PULSEQLIB_OK on success.
  */
-int pulseqlib_build_freq_mod_library(
-    pulseqlib_freq_mod_library** lib,
+int pulseqlib_build_freq_mod_collection(
+    pulseqlib_freq_mod_collection** out_fmc,
     const pulseqlib_collection* coll,
-    int subseq_idx,
     const float* shift_m);
 
 /**
- * @brief Recompute library waveforms with a new spatial shift.
+ * @brief Recompute freq-mod waveforms for one subsequence.
  *
- * Only valid for PMC-enabled libraries (3-channel data is still
+ * Only valid for PMC-enabled subsequences (3-channel data is still
  * resident).  Returns an error if the 3-channel data was freed.
  *
- * @param[in,out] lib       Built library.
- * @param[in]     shift_m   New spatial shift (dx, dy, dz) in metres.
+ * @param[in,out] fmc         Freq-mod collection.
+ * @param[in]     subseq_idx  0-based subsequence index.
+ * @param[in]     shift_m     New spatial shift (dx, dy, dz) in metres.
  * @return PULSEQLIB_OK on success.
  */
-int pulseqlib_update_freq_mod_library(
-    pulseqlib_freq_mod_library* lib,
+int pulseqlib_update_freq_mod_collection(
+    pulseqlib_freq_mod_collection* fmc,
+    int subseq_idx,
     const float* shift_m);
 
 /**
  * @brief Look up the freq-mod waveform for a scan-table position.
  *
- * @param[in]  lib              Built library.
- * @param[in]  scan_table_pos   Position in the subsequence scan table.
- * @param[out] out_waveform     Pointer into library (do NOT free).
- * @param[out] out_num_samples  Waveform length.
- * @param[out] out_phase_rad    Phase compensation (rad).
+ * @param[in]  fmc             Freq-mod collection.
+ * @param[in]  subseq_idx     0-based subsequence index.
+ * @param[in]  scan_table_pos Position in the subsequence scan table.
+ * @param[out] out_waveform   Pointer into library (do NOT free).
+ * @param[out] out_num_samples Waveform length.
+ * @param[out] out_phase_rad  Phase compensation (rad).
  * @return 1 if the block has a freq-mod event, 0 if not.
  */
-int pulseqlib_freq_mod_library_get(
-    const pulseqlib_freq_mod_library* lib,
+int pulseqlib_freq_mod_collection_get(
+    const pulseqlib_freq_mod_collection* fmc,
+    int subseq_idx,
     int scan_table_pos,
     const float** out_waveform,
     int* out_num_samples,
     float* out_phase_rad);
 
 /**
- * @brief Write the shift-independent library data to a binary cache.
+ * @brief Write all per-subsequence freq-mod data to a single cache file.
  *
- * @param[in]  lib   Built library (3-channel data must be resident).
- * @param[in]  path  Output file path (e.g. "seq.fmod.0.bin").
+ * @param[in]  fmc   Built collection (3-channel data must be resident
+ *                    for at least one subsequence).
+ * @param[in]  path  Output file path (e.g. "seq.fmod.bin").
  * @return PULSEQLIB_OK on success.
  */
-int pulseqlib_freq_mod_library_write_cache(
-    const pulseqlib_freq_mod_library* lib,
+int pulseqlib_freq_mod_collection_write_cache(
+    const pulseqlib_freq_mod_collection* fmc,
     const char* path);
 
 /**
- * @brief Read library from cache and compute plan for given shift.
+ * @brief Read freq-mod collection from cache and compute plans.
  *
- * @param[out] lib         Receives an allocated library (caller frees).
+ * @param[out] out_fmc     Receives an allocated collection (caller frees).
  * @param[in]  path        Cache file path.
+ * @param[in]  coll        Loaded sequence collection (provides PMC flags
+ *                          and subsequence count).
  * @param[in]  shift_m     Spatial shift for plan computation.
- * @param[in]  pmc_enabled If 0, 3-channel data is freed after plan.
  * @return PULSEQLIB_OK on success.
  */
-int pulseqlib_freq_mod_library_read_cache(
-    pulseqlib_freq_mod_library** lib,
+int pulseqlib_freq_mod_collection_read_cache(
+    pulseqlib_freq_mod_collection** out_fmc,
     const char* path,
-    const float* shift_m,
-    int pmc_enabled);
+    const pulseqlib_collection* coll,
+    const float* shift_m);
 
-/** @brief Free a frequency modulation library. */
-void pulseqlib_freq_mod_library_free(pulseqlib_freq_mod_library* lib);
+/** @brief Free a frequency modulation collection and all owned memory. */
+void pulseqlib_freq_mod_collection_free(pulseqlib_freq_mod_collection* fmc);
 
 #ifdef __cplusplus
 }

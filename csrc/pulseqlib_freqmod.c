@@ -1,16 +1,16 @@
 /*
- * pulseqlib_freqmod.c -- Per-subsequence frequency modulation library.
+ * pulseqlib_freqmod.c -- Frequency modulation collection.
  *
  * Builds deduped amplitude-scaled 3-channel gradient modulators and
- * shift-resolved 1D plan waveforms.  Supports PMC re-computation and
- * binary cache for fast reload.
+ * shift-resolved 1D plan waveforms for all subsequences.  Supports
+ * PMC re-computation and binary cache for fast reload.
  *
- * Main entry points:
- *   pulseqlib_build_freq_mod_library   -- build from collection
- *   pulseqlib_update_freq_mod_library  -- recompute plan with new shift
- *   pulseqlib_freq_mod_library_get     -- look up by scan-table position
- *   pulseqlib_freq_mod_library_write_cache / _read_cache
- *   pulseqlib_freq_mod_library_free
+ * Public entry points (collection-level):
+ *   pulseqlib_build_freq_mod_collection    -- build all subsequences
+ *   pulseqlib_update_freq_mod_collection   -- recompute one subseq
+ *   pulseqlib_freq_mod_collection_get      -- look up by subseq + pos
+ *   pulseqlib_freq_mod_collection_write_cache / _read_cache
+ *   pulseqlib_freq_mod_collection_free
  *
  * Copyright (c) 2024, see LICENSE.txt
  */
@@ -21,8 +21,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Forward declaration (used in error path of build). */
-void pulseqlib_freq_mod_library_free(pulseqlib_freq_mod_library* lib);
+/* Forward declarations (used in error paths). */
+static void freq_mod_library_free(pulseqlib_freq_mod_library* lib);
+void pulseqlib_freq_mod_collection_free(pulseqlib_freq_mod_collection* fmc);
 
 /* ================================================================== */
 /*  Helper: generic byte-key deduplication (O(n*u))                   */
@@ -373,7 +374,7 @@ typedef struct { int entry_idx; int rot_idx; } plan_key_t;
 /*  Build                                                             */
 /* ================================================================== */
 
-int pulseqlib_build_freq_mod_library(
+static int build_freq_mod_library(
     pulseqlib_freq_mod_library** out_lib,
     const pulseqlib_collection* coll,
     int subseq_idx,
@@ -767,7 +768,7 @@ build_fail:
     if (plan_unique)    PULSEQLIB_FREE(plan_unique);
     if (plan_map)       PULSEQLIB_FREE(plan_map);
     if (block_rotation) PULSEQLIB_FREE(block_rotation);
-    if (lib)            { pulseqlib_freq_mod_library_free(lib); }
+    if (lib)            { freq_mod_library_free(lib); }
     return PULSEQLIB_ERR_ALLOC_FAILED;
 }
 
@@ -775,7 +776,7 @@ build_fail:
 /*  Update                                                            */
 /* ================================================================== */
 
-int pulseqlib_update_freq_mod_library(
+static int update_freq_mod_library(
     pulseqlib_freq_mod_library* lib,
     const float* shift_m)
 {
@@ -794,7 +795,7 @@ int pulseqlib_update_freq_mod_library(
 /*  Accessor                                                          */
 /* ================================================================== */
 
-int pulseqlib_freq_mod_library_get(
+static int freq_mod_library_get(
     const pulseqlib_freq_mod_library* lib,
     int scan_table_pos,
     const float** out_waveform,
@@ -822,46 +823,39 @@ int pulseqlib_freq_mod_library_get(
 #define FMOD_CACHE_MAGIC   0x464D4F44   /* "FMOD" */
 #define FMOD_CACHE_VERSION 1
 
-int pulseqlib_freq_mod_library_write_cache(
+static int freq_mod_library_write_cache(
     const pulseqlib_freq_mod_library* lib,
-    const char* path)
+    FILE* f)
 {
-    FILE* f;
-    int magic, version;
+    int has_3ch;
 
-    if (!lib || !path)
+    if (!lib || !f)
         return PULSEQLIB_ERR_NULL_POINTER;
-    if (!lib->entry_waveform_3ch || !lib->entry_ref_3ch)
-        return PULSEQLIB_ERR_INVALID_ARGUMENT;  /* 3ch data already freed */
 
-    f = fopen(path, "wb");
-    if (!f) return PULSEQLIB_ERR_FILE_READ_FAILED;
-
-    magic   = FMOD_CACHE_MAGIC;
-    version = FMOD_CACHE_VERSION;
-
-    if (fwrite(&magic,   sizeof(int), 1, f) != 1) goto write_fail;
-    if (fwrite(&version, sizeof(int), 1, f) != 1) goto write_fail;
+    has_3ch = (lib->entry_waveform_3ch != NULL && lib->entry_ref_3ch != NULL);
 
     /* Entry metadata */
     if (fwrite(&lib->num_entries,  sizeof(int),   1, f) != 1) goto write_fail;
     if (fwrite(&lib->max_samples,  sizeof(int),   1, f) != 1) goto write_fail;
     if (fwrite(&lib->raster_us,    sizeof(float), 1, f) != 1) goto write_fail;
-    if (fwrite(lib->entry_num_samples,
-               sizeof(int), (size_t)lib->num_entries, f)
-        != (size_t)lib->num_entries) goto write_fail;
+    if (fwrite(&has_3ch,           sizeof(int),   1, f) != 1) goto write_fail;
 
-    /* 3-channel waveforms */
-    {
+    if (lib->num_entries > 0) {
+        if (fwrite(lib->entry_num_samples,
+                   sizeof(int), (size_t)lib->num_entries, f)
+            != (size_t)lib->num_entries) goto write_fail;
+    }
+
+    /* 3-channel waveforms (PMC-enabled only) */
+    if (has_3ch && lib->num_entries > 0) {
         size_t total = (size_t)lib->num_entries * lib->max_samples * 3;
         if (fwrite(lib->entry_waveform_3ch, sizeof(float), total, f) != total)
             goto write_fail;
-    }
 
-    /* Reference integrals */
-    if (fwrite(lib->entry_ref_3ch, sizeof(float),
-               (size_t)lib->num_entries * 3, f)
-        != (size_t)lib->num_entries * 3) goto write_fail;
+        if (fwrite(lib->entry_ref_3ch, sizeof(float),
+                   (size_t)lib->num_entries * 3, f)
+            != (size_t)lib->num_entries * 3) goto write_fail;
+    }
 
     /* Rotations */
     if (fwrite(&lib->num_rotations, sizeof(int), 1, f) != 1) goto write_fail;
@@ -883,6 +877,16 @@ int pulseqlib_freq_mod_library_write_cache(
         if (fwrite(lib->plan_num_samples, sizeof(int),
                    (size_t)lib->num_plan_instances, f)
             != (size_t)lib->num_plan_instances) goto write_fail;
+
+        /* Pre-computed plan waveforms (shift-dependent) */
+        {
+            size_t total = (size_t)lib->num_plan_instances * lib->max_samples;
+            if (fwrite(lib->plan_waveform_data, sizeof(float), total, f)
+                != total) goto write_fail;
+        }
+        if (fwrite(lib->plan_phase, sizeof(float),
+                   (size_t)lib->num_plan_instances, f)
+            != (size_t)lib->num_plan_instances) goto write_fail;
     }
 
     /* Scan-table mapping */
@@ -893,11 +897,9 @@ int pulseqlib_freq_mod_library_write_cache(
             != (size_t)lib->scan_table_len) goto write_fail;
     }
 
-    fclose(f);
     return PULSEQLIB_OK;
 
 write_fail:
-    fclose(f);
     return PULSEQLIB_ERR_FILE_READ_FAILED;
 }
 
@@ -905,36 +907,28 @@ write_fail:
 /*  Cache read                                                        */
 /* ================================================================== */
 
-int pulseqlib_freq_mod_library_read_cache(
+static int freq_mod_library_read_cache(
     pulseqlib_freq_mod_library** out_lib,
-    const char* path,
+    FILE* f,
     const float* shift_m,
     int pmc_enabled)
 {
-    FILE* f;
     pulseqlib_freq_mod_library* lib = NULL;
-    int magic, version, result;
+    int result, has_3ch;
 
-    if (!out_lib || !path || !shift_m)
+    if (!out_lib || !f || !shift_m)
         return PULSEQLIB_ERR_NULL_POINTER;
     *out_lib = NULL;
 
-    f = fopen(path, "rb");
-    if (!f) return PULSEQLIB_ERR_FILE_READ_FAILED;
-
-    if (fread(&magic, sizeof(int), 1, f) != 1 || magic != FMOD_CACHE_MAGIC)
-        { fclose(f); return PULSEQLIB_ERR_FILE_READ_FAILED; }
-    if (fread(&version, sizeof(int), 1, f) != 1 || version != FMOD_CACHE_VERSION)
-        { fclose(f); return PULSEQLIB_ERR_FILE_READ_FAILED; }
-
     lib = (pulseqlib_freq_mod_library*)PULSEQLIB_ALLOC(sizeof(*lib));
-    if (!lib) { fclose(f); return PULSEQLIB_ERR_ALLOC_FAILED; }
+    if (!lib) return PULSEQLIB_ERR_ALLOC_FAILED;
     memset(lib, 0, sizeof(*lib));
 
     /* Entry metadata */
     if (fread(&lib->num_entries,  sizeof(int),   1, f) != 1) goto read_fail;
     if (fread(&lib->max_samples,  sizeof(int),   1, f) != 1) goto read_fail;
     if (fread(&lib->raster_us,    sizeof(float), 1, f) != 1) goto read_fail;
+    if (fread(&has_3ch,           sizeof(int),   1, f) != 1) goto read_fail;
 
     if (lib->num_entries > 0) {
         lib->entry_num_samples = (int*)PULSEQLIB_ALLOC(
@@ -945,24 +939,23 @@ int pulseqlib_freq_mod_library_read_cache(
             != (size_t)lib->num_entries) goto read_fail;
     }
 
-    /* 3-channel waveforms */
-    if (lib->num_entries > 0 && lib->max_samples > 0) {
+    /* 3-channel waveforms (present only if written with has_3ch) */
+    if (has_3ch && lib->num_entries > 0 && lib->max_samples > 0) {
         size_t total = (size_t)lib->num_entries * lib->max_samples * 3;
         lib->entry_waveform_3ch = (float*)PULSEQLIB_ALLOC(
             total * sizeof(float));
         if (!lib->entry_waveform_3ch) goto read_fail;
         if (fread(lib->entry_waveform_3ch, sizeof(float), total, f) != total)
             goto read_fail;
-    }
 
-    /* Reference integrals */
-    if (lib->num_entries > 0) {
-        size_t total = (size_t)lib->num_entries * 3;
-        lib->entry_ref_3ch = (float*)PULSEQLIB_ALLOC(
-            total * sizeof(float));
-        if (!lib->entry_ref_3ch) goto read_fail;
-        if (fread(lib->entry_ref_3ch, sizeof(float), total, f) != total)
-            goto read_fail;
+        {
+            size_t reftotal = (size_t)lib->num_entries * 3;
+            lib->entry_ref_3ch = (float*)PULSEQLIB_ALLOC(
+                reftotal * sizeof(float));
+            if (!lib->entry_ref_3ch) goto read_fail;
+            if (fread(lib->entry_ref_3ch, sizeof(float), reftotal, f)
+                != reftotal) goto read_fail;
+        }
     }
 
     /* Rotations */
@@ -992,12 +985,30 @@ int pulseqlib_freq_mod_library_read_cache(
                   (size_t)lib->num_plan_instances, f)
             != (size_t)lib->num_plan_instances) goto read_fail;
 
-        /* plan_num_samples */
+        /* Allocate plan arrays */
         result = alloc_plan(lib);
         if (PULSEQLIB_FAILED(result)) goto read_fail;
         if (fread(lib->plan_num_samples, sizeof(int),
                   (size_t)lib->num_plan_instances, f)
             != (size_t)lib->num_plan_instances) goto read_fail;
+
+        /* Pre-computed plan waveforms */
+        {
+            size_t total = (size_t)lib->num_plan_instances * lib->max_samples;
+            if (fread(lib->plan_waveform_data, sizeof(float), total, f)
+                != total) goto read_fail;
+        }
+        if (fread(lib->plan_phase, sizeof(float),
+                  (size_t)lib->num_plan_instances, f)
+            != (size_t)lib->num_plan_instances) goto read_fail;
+
+        /* Set up row pointers */
+        {
+            int n;
+            for (n = 0; n < lib->num_plan_instances; ++n)
+                lib->plan_waveforms[n] = lib->plan_waveform_data
+                    + (size_t)n * lib->max_samples;
+        }
     }
 
     /* Scan-table mapping */
@@ -1011,13 +1022,12 @@ int pulseqlib_freq_mod_library_read_cache(
             != (size_t)lib->scan_table_len) goto read_fail;
     }
 
-    fclose(f);
-
-    /* Compute plan waveforms from cached entries + current shift */
-    if (lib->num_plan_instances > 0 && lib->entry_waveform_3ch)
+    /* If 3ch data present and PMC enabled: recompute plan for new shift.
+     * Otherwise plan waveforms from cache are used as-is. */
+    if (has_3ch && lib->num_plan_instances > 0 && lib->entry_waveform_3ch)
         compute_plan_waveforms(lib, shift_m);
 
-    /* For non-PMC: discard 3-channel data */
+    /* If not PMC-enabled: discard 3-channel data */
     if (!pmc_enabled) {
         if (lib->entry_waveform_3ch) {
             PULSEQLIB_FREE(lib->entry_waveform_3ch);
@@ -1033,8 +1043,7 @@ int pulseqlib_freq_mod_library_read_cache(
     return PULSEQLIB_OK;
 
 read_fail:
-    fclose(f);
-    if (lib) pulseqlib_freq_mod_library_free(lib);
+    if (lib) freq_mod_library_free(lib);
     return PULSEQLIB_ERR_FILE_READ_FAILED;
 }
 
@@ -1042,7 +1051,7 @@ read_fail:
 /*  Free                                                              */
 /* ================================================================== */
 
-void pulseqlib_freq_mod_library_free(pulseqlib_freq_mod_library* lib)
+static void freq_mod_library_free(pulseqlib_freq_mod_library* lib)
 {
     if (!lib) return;
 
@@ -1061,4 +1070,195 @@ void pulseqlib_freq_mod_library_free(pulseqlib_freq_mod_library* lib)
     if (lib->scan_to_plan)        PULSEQLIB_FREE(lib->scan_to_plan);
 
     PULSEQLIB_FREE(lib);
+}
+
+/* ================================================================== */
+/*  Public: collection build                                          */
+/* ================================================================== */
+
+int pulseqlib_build_freq_mod_collection(
+    pulseqlib_freq_mod_collection** out_fmc,
+    const pulseqlib_collection* coll,
+    const float* shift_m)
+{
+    pulseqlib_freq_mod_collection* fmc = NULL;
+    int s, nsub;
+
+    if (!out_fmc || !coll || !shift_m)
+        return PULSEQLIB_ERR_NULL_POINTER;
+    *out_fmc = NULL;
+
+    nsub = coll->num_subsequences;
+
+    fmc = (pulseqlib_freq_mod_collection*)PULSEQLIB_ALLOC(sizeof(*fmc));
+    if (!fmc) return PULSEQLIB_ERR_ALLOC_FAILED;
+    memset(fmc, 0, sizeof(*fmc));
+
+    fmc->num_subsequences = nsub;
+    fmc->libs = (pulseqlib_freq_mod_library**)PULSEQLIB_ALLOC(
+        (size_t)nsub * sizeof(*fmc->libs));
+    if (!fmc->libs) {
+        PULSEQLIB_FREE(fmc);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    memset(fmc->libs, 0, (size_t)nsub * sizeof(*fmc->libs));
+
+    for (s = 0; s < nsub; ++s) {
+        int rc = build_freq_mod_library(&fmc->libs[s], coll, s, shift_m);
+        if (PULSEQLIB_FAILED(rc)) {
+            pulseqlib_freq_mod_collection_free(fmc);
+            return rc;
+        }
+    }
+
+    *out_fmc = fmc;
+    return PULSEQLIB_OK;
+}
+
+/* ================================================================== */
+/*  Public: collection update (one subsequence)                       */
+/* ================================================================== */
+
+int pulseqlib_update_freq_mod_collection(
+    pulseqlib_freq_mod_collection* fmc,
+    int subseq_idx,
+    const float* shift_m)
+{
+    if (!fmc || !shift_m)
+        return PULSEQLIB_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= fmc->num_subsequences)
+        return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    return update_freq_mod_library(fmc->libs[subseq_idx], shift_m);
+}
+
+/* ================================================================== */
+/*  Public: collection accessor                                       */
+/* ================================================================== */
+
+int pulseqlib_freq_mod_collection_get(
+    const pulseqlib_freq_mod_collection* fmc,
+    int subseq_idx,
+    int scan_table_pos,
+    const float** out_waveform,
+    int* out_num_samples,
+    float* out_phase_rad)
+{
+    if (!fmc || subseq_idx < 0 || subseq_idx >= fmc->num_subsequences)
+        return 0;
+    return freq_mod_library_get(fmc->libs[subseq_idx], scan_table_pos,
+                                out_waveform, out_num_samples, out_phase_rad);
+}
+
+/* ================================================================== */
+/*  Public: collection cache write (single file)                      */
+/* ================================================================== */
+
+#define FMCOL_CACHE_MAGIC   0x464D434F  /* "FMCO" */
+#define FMCOL_CACHE_VERSION 1
+
+int pulseqlib_freq_mod_collection_write_cache(
+    const pulseqlib_freq_mod_collection* fmc,
+    const char* path)
+{
+    FILE* f;
+    int magic, version, s;
+
+    if (!fmc || !path)
+        return PULSEQLIB_ERR_NULL_POINTER;
+
+    f = fopen(path, "wb");
+    if (!f) return PULSEQLIB_ERR_FILE_READ_FAILED;
+
+    magic   = FMCOL_CACHE_MAGIC;
+    version = FMCOL_CACHE_VERSION;
+
+    if (fwrite(&magic,   sizeof(int), 1, f) != 1) goto col_write_fail;
+    if (fwrite(&version, sizeof(int), 1, f) != 1) goto col_write_fail;
+    if (fwrite(&fmc->num_subsequences, sizeof(int), 1, f) != 1)
+        goto col_write_fail;
+
+    for (s = 0; s < fmc->num_subsequences; ++s) {
+        int rc = freq_mod_library_write_cache(fmc->libs[s], f);
+        if (PULSEQLIB_FAILED(rc)) goto col_write_fail;
+    }
+
+    fclose(f);
+    return PULSEQLIB_OK;
+
+col_write_fail:
+    fclose(f);
+    return PULSEQLIB_ERR_FILE_READ_FAILED;
+}
+
+/* ================================================================== */
+/*  Public: collection cache read (single file)                       */
+/* ================================================================== */
+
+int pulseqlib_freq_mod_collection_read_cache(
+    pulseqlib_freq_mod_collection** out_fmc,
+    const char* path,
+    const pulseqlib_collection* coll,
+    const float* shift_m)
+{
+    FILE* f;
+    pulseqlib_freq_mod_collection* fmc = NULL;
+    int magic, version, nsub, s;
+
+    if (!out_fmc || !path || !coll || !shift_m)
+        return PULSEQLIB_ERR_NULL_POINTER;
+    *out_fmc = NULL;
+
+    f = fopen(path, "rb");
+    if (!f) return PULSEQLIB_ERR_FILE_READ_FAILED;
+
+    if (fread(&magic, sizeof(int), 1, f) != 1 || magic != FMCOL_CACHE_MAGIC)
+        { fclose(f); return PULSEQLIB_ERR_FILE_READ_FAILED; }
+    if (fread(&version, sizeof(int), 1, f) != 1 || version != FMCOL_CACHE_VERSION)
+        { fclose(f); return PULSEQLIB_ERR_FILE_READ_FAILED; }
+    if (fread(&nsub, sizeof(int), 1, f) != 1 || nsub != coll->num_subsequences)
+        { fclose(f); return PULSEQLIB_ERR_FILE_READ_FAILED; }
+
+    fmc = (pulseqlib_freq_mod_collection*)PULSEQLIB_ALLOC(sizeof(*fmc));
+    if (!fmc) { fclose(f); return PULSEQLIB_ERR_ALLOC_FAILED; }
+    memset(fmc, 0, sizeof(*fmc));
+
+    fmc->num_subsequences = nsub;
+    fmc->libs = (pulseqlib_freq_mod_library**)PULSEQLIB_ALLOC(
+        (size_t)nsub * sizeof(*fmc->libs));
+    if (!fmc->libs) {
+        PULSEQLIB_FREE(fmc);
+        fclose(f);
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    }
+    memset(fmc->libs, 0, (size_t)nsub * sizeof(*fmc->libs));
+
+    for (s = 0; s < nsub; ++s) {
+        int pmc = coll->descriptors[s].enable_pmc;
+        int rc = freq_mod_library_read_cache(&fmc->libs[s], f, shift_m, pmc);
+        if (PULSEQLIB_FAILED(rc)) {
+            fclose(f);
+            pulseqlib_freq_mod_collection_free(fmc);
+            return rc;
+        }
+    }
+
+    fclose(f);
+    *out_fmc = fmc;
+    return PULSEQLIB_OK;
+}
+
+/* ================================================================== */
+/*  Public: collection free                                           */
+/* ================================================================== */
+
+void pulseqlib_freq_mod_collection_free(pulseqlib_freq_mod_collection* fmc)
+{
+    if (!fmc) return;
+    if (fmc->libs) {
+        int s;
+        for (s = 0; s < fmc->num_subsequences; ++s)
+            if (fmc->libs[s]) freq_mod_library_free(fmc->libs[s]);
+        PULSEQLIB_FREE(fmc->libs);
+    }
+    PULSEQLIB_FREE(fmc);
 }

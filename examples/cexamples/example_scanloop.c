@@ -82,16 +82,15 @@ int main(int argc, char** argv)
     pulseqlib_opts        opts = PULSEQLIB_OPTS_INIT;
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
     pulseqlib_collection* coll = NULL;
-    int rc, nsub, s;
+    int rc, nsub;
 
     /* Patient-table / prescription shift (metres). */
     float fovshift[3]    = {0.05f, 0.0f, 0.0f};
     /* FOV rotation matrix (3x3 row-major, logical -> physical). */
     float fovrotation[9] = {1,0,0, 0,1,0, 0,0,1};
 
-    /* Per-subsequence freq-mod libraries (opaque, heap-allocated). */
-    pulseqlib_freq_mod_library** freqlibs = NULL;
-    int nlibs = 0;
+    /* Per-subsequence freq-mod collection (opaque, heap-allocated). */
+    pulseqlib_freq_mod_collection* freqmods = NULL;
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <sequence.seq>\n", argv[0]);
@@ -117,40 +116,29 @@ int main(int argc, char** argv)
     }
 
     /* ============================================================== */
-    /*  2. Build per-subsequence freq-mod libraries (with caching)    */
+    /*  2. Build freq-mod collection (with caching)                   */
     /* ============================================================== */
-    freqlibs = (pulseqlib_freq_mod_library**)calloc(
-        (size_t)nsub, sizeof(*freqlibs));
-    if (!freqlibs) { rc = PULSEQLIB_ERR_ALLOC_FAILED; goto fail; }
-    nlibs = nsub;
-
-    for (s = 0; s < nsub; ++s) {
+    {
         char cache_path[512];
-        pulseqlib_subseq_info si = PULSEQLIB_SUBSEQ_INFO_INIT;
-
-        rc = pulseqlib_get_subseq_info(coll, s, &si);
-        CHECK(rc, &diag);
-
-        /* Build cache filename: <seqfile>.fmod.<idx>.bin */
-        sprintf(cache_path, "%s.fmod.%d.bin", seq_path, s);
+        sprintf(cache_path, "%s.fmod.bin", seq_path);
 
         /* Try loading from cache first. */
-        rc = pulseqlib_freq_mod_library_read_cache(
-            &freqlibs[s], cache_path, fovshift, si.pmc_enabled);
+        rc = pulseqlib_freq_mod_collection_read_cache(
+            &freqmods, cache_path, coll, fovshift);
 
         if (PULSEQLIB_FAILED(rc)) {
             /* Cache miss or stale: build from scratch and store. */
-            rc = pulseqlib_build_freq_mod_library(
-                &freqlibs[s], coll, s, fovshift);
+            rc = pulseqlib_build_freq_mod_collection(
+                &freqmods, coll, fovshift);
             CHECK(rc, &diag);
 
-            rc = pulseqlib_freq_mod_library_write_cache(
-                freqlibs[s], cache_path);
+            rc = pulseqlib_freq_mod_collection_write_cache(
+                freqmods, cache_path);
             CHECK(rc, &diag);
 
-            printf("  subseq %d: built + cached\n", s);
+            printf("  freq-mod: built + cached\n");
         } else {
-            printf("  subseq %d: loaded from cache\n", s);
+            printf("  freq-mod: loaded from cache\n");
         }
     }
 
@@ -178,8 +166,8 @@ int main(int argc, char** argv)
             /*  PMC: at main-TR start, update freq-mod and rescan     */
             /* ------------------------------------------------------ */
             if (ci.pmc && ci.tr_start) {
-                rc = pulseqlib_update_freq_mod_library(
-                    freqlibs[ci.subseq_idx], fovshift);
+                rc = pulseqlib_update_freq_mod_collection(
+                    freqmods, ci.subseq_idx, fovshift);
                 if (PULSEQLIB_FAILED(rc)) goto fail;
 
                 if (rescan) {
@@ -210,9 +198,9 @@ int main(int argc, char** argv)
             rc = pulseqlib_get_block_instance(coll, &inst);
             if (PULSEQLIB_FAILED(rc)) goto fail;
 
-            if (freqlibs[ci.subseq_idx])
-                pulseqlib_freq_mod_library_get(
-                    freqlibs[ci.subseq_idx], ci.scan_pos,
+            if (freqmods)
+                pulseqlib_freq_mod_collection_get(
+                    freqmods, ci.subseq_idx, ci.scan_pos,
                     &fmod_waveform, &fmod_nsamples, &fmod_phase);
 
             vendor_set_block(&inst, fmod_waveform,
@@ -237,18 +225,12 @@ int main(int argc, char** argv)
     /* ============================================================== */
     /*  Cleanup                                                       */
     /* ============================================================== */
-    for (s = 0; s < nlibs; ++s)
-        if (freqlibs[s]) pulseqlib_freq_mod_library_free(freqlibs[s]);
-    free(freqlibs);
+    pulseqlib_freq_mod_collection_free(freqmods);
     pulseqlib_collection_free(coll);
     return 0;
 
 fail:
-    if (freqlibs) {
-        for (s = 0; s < nlibs; ++s)
-            if (freqlibs[s]) pulseqlib_freq_mod_library_free(freqlibs[s]);
-        free(freqlibs);
-    }
+    if (freqmods) pulseqlib_freq_mod_collection_free(freqmods);
     if (coll) pulseqlib_collection_free(coll);
     return 1;
 }

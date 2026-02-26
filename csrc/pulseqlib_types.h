@@ -196,22 +196,21 @@ typedef struct pulseqlib_rf_stats {
 #define PULSEQLIB_TR_REGION_COOLDOWN   2
 
 /* ================================================================== */
-/*  Frequency modulation                                              */
+/*  Frequency modulation collection                                   */
 /* ================================================================== */
 
 /**
- * @brief Opaque handle to a frequency modulation library.
+ * @brief Opaque handle to frequency modulation data for all subsequences.
  *
- * Built per-subsequence by pulseqlib_build_freq_mod_library().
- * Contains precomputed 3-channel gradient modulators (for PMC
- * recomputation) and shift-resolved 1D waveforms (for scan-time
- * lookup).  Owns a separate binary cache.
+ * Wraps per-subsequence libraries into a single object.  The entire
+ * collection is built, cached, and freed as a unit.
  *
- * Created by pulseqlib_build_freq_mod_library(), queried via
- * pulseqlib_freq_mod_library_get(), freed by
- * pulseqlib_freq_mod_library_free().
+ * Created by pulseqlib_build_freq_mod_collection() or
+ * pulseqlib_freq_mod_collection_read_cache(), queried via
+ * pulseqlib_freq_mod_collection_get(), freed by
+ * pulseqlib_freq_mod_collection_free().
  */
-typedef struct pulseqlib_freq_mod_library pulseqlib_freq_mod_library;
+typedef struct pulseqlib_freq_mod_collection pulseqlib_freq_mod_collection;
 
 /* ================================================================== */
 /*  Opaque collection handle                                          */

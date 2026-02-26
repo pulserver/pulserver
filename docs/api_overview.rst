@@ -22,7 +22,7 @@ Data model
        ├── segment[]     contiguous non-interruptible hardware play units
        │   └── block[]   elementary timed events (RF, grad, ADC, …)
        ├── TR structure   periodic repetition pattern (prep → main TRs → cooldown)
-       └── freq-mod lib   precomputed gradient frequency-modulation waveforms
+       └── freq-mod collection   precomputed gradient frequency-modulation waveforms
 
 A **segment** groups consecutive blocks whose gradient boundary
 amplitudes are non-zero; the hardware plays an entire segment without
@@ -34,15 +34,15 @@ automatically by the library.
 Opaque handles
 --------------
 
-====================================  ======================================
-Type                                  Description
-====================================  ======================================
-``pulseqlib_collection``              Loaded sequence (all subsequences).
-``pulseqlib_freq_mod_library``        Per-subsequence freq-mod waveforms.
-====================================  ======================================
+==========================================  ========================================
+Type                                        Description
+==========================================  ========================================
+``pulseqlib_collection``                    Loaded sequence (all subsequences).
+``pulseqlib_freq_mod_collection``            Freq-mod waveforms for all subsequences.
+==========================================  ========================================
 
 Both are heap-allocated by the library and freed by the caller via
-``pulseqlib_collection_free()`` / ``pulseqlib_freq_mod_library_free()``.
+``pulseqlib_collection_free()`` / ``pulseqlib_freq_mod_collection_free()``.
 
 ----
 
@@ -263,18 +263,18 @@ Function                                        Notes
 Frequency modulation
 ~~~~~~~~~~~~~~~~~~~~
 
-==============================================  =========================================
-Function                                        Notes
-==============================================  =========================================
-``pulseqlib_get_freq_mod_count``                Count RF+ADC events (whole sequence).
-``pulseqlib_get_freq_mod_count_tr``             Count RF+ADC events (specific region).
-``pulseqlib_build_freq_mod_library``            Build library from loaded collection.
-``pulseqlib_update_freq_mod_library``           Recompute with new shift (PMC).
-``pulseqlib_freq_mod_library_get``              Look up waveform by scan-table position.
-``pulseqlib_freq_mod_library_write_cache``      Persist library to binary file.
-``pulseqlib_freq_mod_library_read_cache``       Restore library from binary file.
-``pulseqlib_freq_mod_library_free``             Free library.
-==============================================  =========================================
+====================================================  =============================================
+Function                                              Notes
+====================================================  =============================================
+``pulseqlib_get_freq_mod_count``                      Count RF+ADC events (whole sequence).
+``pulseqlib_get_freq_mod_count_tr``                   Count RF+ADC events (specific region).
+``pulseqlib_build_freq_mod_collection``               Build collection for all subsequences.
+``pulseqlib_update_freq_mod_collection``              Recompute one subsequence (PMC shift).
+``pulseqlib_freq_mod_collection_get``                 Look up waveform (subseq idx + scan pos).
+``pulseqlib_freq_mod_collection_write_cache``         Persist collection to single binary file.
+``pulseqlib_freq_mod_collection_read_cache``          Restore collection from binary file.
+``pulseqlib_freq_mod_collection_free``                Free collection.
+====================================================  =============================================
 
 TR gradient waveforms (plotting)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -324,12 +324,12 @@ Typical usage pattern
    pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
    pulseqlib_get_collection_info(coll, &ci);
 
-   /* 3. Build freq-mod (with caching) */
-   pulseqlib_freq_mod_library *fmod = NULL;
-   if (PULSEQLIB_FAILED(pulseqlib_freq_mod_library_read_cache(
-           &fmod, "scan.fmod.0.bin", shift, pmc))) {
-       pulseqlib_build_freq_mod_library(&fmod, coll, 0, shift);
-       pulseqlib_freq_mod_library_write_cache(fmod, "scan.fmod.0.bin");
+   /* 3. Build freq-mod collection (with caching) */
+   pulseqlib_freq_mod_collection *fmc = NULL;
+   if (PULSEQLIB_FAILED(pulseqlib_freq_mod_collection_read_cache(
+           &fmc, "scan.fmod.bin", coll, shift))) {
+       pulseqlib_build_freq_mod_collection(&fmc, coll, shift);
+       pulseqlib_freq_mod_collection_write_cache(fmc, "scan.fmod.bin");
    }
 
    /* 4. Iterate blocks */
@@ -343,5 +343,5 @@ Typical usage pattern
    }
 
    /* 5. Clean up */
-   pulseqlib_freq_mod_library_free(fmod);
+   pulseqlib_freq_mod_collection_free(fmc);
    pulseqlib_collection_free(coll);
