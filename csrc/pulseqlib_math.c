@@ -391,7 +391,7 @@ int pulseqlib__calc_convolution_fft(
     float re, im, scale;
     int result;
 
-    result = PULSEQLIB_OK;
+    result = PULSEQLIB_SUCCESS;
     fwd = NULL;
     inv = NULL;
     pad_sig  = NULL;

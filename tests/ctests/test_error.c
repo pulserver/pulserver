@@ -19,7 +19,7 @@
 
 MU_TEST(test_error_message_ok)
 {
-    const char* msg = pulseqlib_get_error_message(PULSEQLIB_OK);
+    const char* msg = pulseqlib_get_error_message(PULSEQLIB_SUCCESS);
     mu_assert(msg != NULL, "OK message should be non-NULL");
     mu_assert(strlen(msg) > 0, "OK message should be non-empty");
 }
@@ -30,7 +30,6 @@ MU_TEST(test_error_message_known_codes)
     static const int codes[] = {
         PULSEQLIB_ERR_NULL_POINTER,
         PULSEQLIB_ERR_FILE_NOT_FOUND,
-        PULSEQLIB_ERR_PARSE_FAILED,
         PULSEQLIB_ERR_MAX_GRAD_EXCEEDED,
         PULSEQLIB_ERR_MAX_SLEW_EXCEEDED,
         PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC,
@@ -76,9 +75,9 @@ MU_TEST(test_error_message_unknown_code)
 
 MU_TEST(test_succeeded_failed_macros)
 {
-    mu_assert(PULSEQLIB_SUCCEEDED(PULSEQLIB_OK),
+    mu_assert(PULSEQLIB_SUCCEEDED(PULSEQLIB_SUCCESS),
               "OK should be SUCCEEDED");
-    mu_assert(!PULSEQLIB_FAILED(PULSEQLIB_OK),
+    mu_assert(!PULSEQLIB_FAILED(PULSEQLIB_SUCCESS),
               "OK should not be FAILED");
 
     mu_assert(PULSEQLIB_FAILED(PULSEQLIB_ERR_NULL_POINTER),

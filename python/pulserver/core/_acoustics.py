@@ -1,6 +1,6 @@
-"""Acoustic spectra analysis for PulserverSequence."""
+"""Acoustic spectra analysis for SequenceCollection."""
 
-__all__ = ['get_tr_acoustic_spectra']
+__all__ = ['grad_spectrum']
 
 import warnings
 from types import SimpleNamespace
@@ -12,12 +12,12 @@ from matplotlib.colors import Normalize
 
 from ._extension._pulseqlib_wrapper import _calc_acoustic_spectra
 from ._helpers import _add_echo_spacing_axis
-from ._sequence import PulserverSequence
+from ._sequence import SequenceCollection
 from ._analysis import get_tr_gradient_waveforms
 
 
-def get_tr_acoustic_spectra(
-    seq: PulserverSequence,
+def grad_spectrum(
+    seq: SequenceCollection,
     window_duration: float = 25.0e-3,
     spectral_resolution: float = 5.0,
     max_frequency: float = 3000.0,
@@ -33,7 +33,7 @@ def get_tr_acoustic_spectra(
 
     Parameters
     ----------
-    seq : PulserverSequence
+    seq : SequenceCollection
         The sequence to analyze.
     window_duration : float
         Target window size in seconds for sliding window analysis.
@@ -219,7 +219,7 @@ def get_tr_acoustic_spectra(
 
 def _plot_acoustic_spectra(
     spectra: SimpleNamespace,
-    seq: PulserverSequence | None = None,
+    seq: SequenceCollection | None = None,
     forbidden_bands: list[dict] | None = None,
 ) -> tuple:
     """
@@ -234,8 +234,8 @@ def _plot_acoustic_spectra(
     Parameters
     ----------
     spectra : SimpleNamespace
-        Output from :func:`get_tr_acoustic_spectra` with ``combined=False``.
-    seq : PulserverSequence | None
+        Output from :func:`grad_spectrum` with ``combined=False``.
+    seq : SequenceCollection | None
         The sequence object (needed to get waveforms and system parameters).
         If ``None``, waveform panel is skipped.
     forbidden_bands : list[dict] | None
@@ -247,7 +247,7 @@ def _plot_acoustic_spectra(
         ``(fig, axes)`` for further customisation.
     """
     if not hasattr(spectra, 'spectra_gx') or not hasattr(spectra, 'peaks_gx'):
-        raise ValueError("spectra must be from get_tr_acoustic_spectra() with combined=False")
+        raise ValueError("spectra must be from grad_spectrum() with combined=False")
 
     if spectra.peaks_gx is None:
         raise ValueError("Spectra must have peaks detected (combined=False)")
@@ -414,7 +414,7 @@ def _plot_acoustic_spectra(
 
 def _check_acoustic_forbidden_bands(
     spectra: SimpleNamespace,
-    seq: PulserverSequence,
+    seq: SequenceCollection,
     forbidden_bands: list[dict],
 ) -> None:
     """

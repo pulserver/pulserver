@@ -897,3 +897,27 @@ int pulseqlib__try_read_cache(pulseqlib_collection* coll,
     PULSEQLIB_FREE(cache_path);
     return ok;
 }
+
+/* ================================================================== */
+/*  Public API: explicit-path cache save / load                       */
+/* ================================================================== */
+
+int pulseqlib_save_cache(const pulseqlib_collection* coll,
+                         const char* path,
+                         int source_size)
+{
+    if (!coll || !path) return PULSEQLIB_ERR_NULL_POINTER;
+    if (source_size <= 0) return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    return write_cache(path, coll, source_size)
+         ? PULSEQLIB_SUCCESS : PULSEQLIB_ERR_FILE_READ_FAILED;
+}
+
+int pulseqlib_load_cache(pulseqlib_collection* coll,
+                         const char* path,
+                         int source_size)
+{
+    if (!coll || !path) return PULSEQLIB_ERR_NULL_POINTER;
+    if (source_size <= 0) return PULSEQLIB_ERR_INVALID_ARGUMENT;
+    return read_cache(path, coll, source_size)
+         ? PULSEQLIB_SUCCESS : PULSEQLIB_ERR_FILE_READ_FAILED;
+}

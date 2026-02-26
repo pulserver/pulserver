@@ -28,84 +28,23 @@
 /* ================================================================== */
 
 /** @defgroup errcodes Error codes
- *  Positive = success, negative = error.
+ *  Every public function returns a plain int:
+ *    positive  = success (PULSEQLIB_SUCCESS)
+ *    negative  = failure
+ *
+ *  On failure the caller should read the diagnostic message string
+ *  (filled by every function that accepts a pulseqlib_diagnostic*)
+ *  and pass it to the vendor error-reporting routine.  Specific
+ *  negative values are library-internal and must NOT be matched by
+ *  consumers.
  *  @{ */
 
-#define PULSEQLIB_OK                          1
+#define PULSEQLIB_SUCCESS  1
 
-/* Generic errors (-1 to -9) */
-#define PULSEQLIB_ERR_NULL_POINTER           -1
-#define PULSEQLIB_ERR_INVALID_ARGUMENT       -2
-#define PULSEQLIB_ERR_ALLOC_FAILED           -3
-
-/* Parsing / file errors (-10 to -19) */
-#define PULSEQLIB_ERR_FILE_NOT_FOUND        -10
-#define PULSEQLIB_ERR_FILE_READ_FAILED      -11
-#define PULSEQLIB_ERR_UNSUPPORTED_VERSION   -12
-#define PULSEQLIB_ERR_PARSE_FAILED          -13
-
-/* Unique-block errors (-50 to -59) */
-#define PULSEQLIB_ERR_INVALID_PREP_POSITION      -50
-#define PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION  -51
-#define PULSEQLIB_ERR_INVALID_ONCE_FLAGS         -52
-#define PULSEQLIB_ERR_RASTER_MISMATCH            -53
-#define PULSEQLIB_ERR_SIGNATURE_MISMATCH         -54
-#define PULSEQLIB_ERR_SIGNATURE_MISSING          -55
-
-/* TR detection errors (-100 to -199) */
-#define PULSEQLIB_ERR_TR_NO_BLOCKS          -100
-#define PULSEQLIB_ERR_TR_NO_IMAGING_REGION  -101
-#define PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN -102
-#define PULSEQLIB_ERR_TR_PATTERN_MISMATCH   -103
-#define PULSEQLIB_ERR_TR_PREP_TOO_LONG      -104
-#define PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG  -105
-
-/* Block definition errors (-56 to -59) */
-#define PULSEQLIB_ERR_ADC_DEFINITION_CONFLICT      -56
-
-/* Segmentation errors (-200 to -299) */
-#define PULSEQLIB_ERR_SEG_NONZERO_START_GRAD -200
-#define PULSEQLIB_ERR_SEG_NONZERO_END_GRAD   -201
-#define PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND  -202
-#define PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS    -203
-#define PULSEQLIB_ERR_SEG_MULTIPLE_PHYSIO_TRIGGERS -204
-#define PULSEQLIB_ERR_SEG_MULTIPLE_NAV_SEGMENTS    -205
-
-/* Acoustic errors (-400 to -449) */
-#define PULSEQLIB_ERR_ACOUSTIC_INVALID_WINDOW    -400
-#define PULSEQLIB_ERR_ACOUSTIC_INVALID_RESOLUTION -401
-#define PULSEQLIB_ERR_ACOUSTIC_NO_WAVEFORM       -402
-#define PULSEQLIB_ERR_ACOUSTIC_FFT_FAILED        -403
-#define PULSEQLIB_ERR_ACOUSTIC_VIOLATION         -404
-
-/* PNS errors (-450 to -499) */
-#define PULSEQLIB_ERR_PNS_INVALID_PARAMS         -450
-#define PULSEQLIB_ERR_PNS_INVALID_CHRONAXIE      -451
-#define PULSEQLIB_ERR_PNS_INVALID_RHEOBASE       -452
-#define PULSEQLIB_ERR_PNS_NO_WAVEFORM            -453
-#define PULSEQLIB_ERR_PNS_FFT_FAILED             -454
-#define PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED     -455
-
-/* Collection errors (-500 to -559) */
-#define PULSEQLIB_ERR_COLLECTION_EMPTY           -500
-#define PULSEQLIB_ERR_COLLECTION_CHAIN_BROKEN    -501
-#define PULSEQLIB_ERR_COLLECTION_MAX_DEPTH       -503
-#define PULSEQLIB_ERR_MAX_GRAD_EXCEEDED          -550
-#define PULSEQLIB_ERR_GRAD_DISCONTINUITY         -551
-#define PULSEQLIB_ERR_MAX_SLEW_EXCEEDED          -552
-
-/* Consistency errors (-560 to -569) */
-#define PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH   -560
-#define PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC    -561
-#define PULSEQLIB_ERR_CONSISTENCY_RF_SHIM_PERIODIC -562
-
-#define PULSEQLIB_ERR_NOT_IMPLEMENTED      -999
-
-/** @} */
-
-/* Code checking macros */
 #define PULSEQLIB_SUCCEEDED(code) ((code) > 0)
 #define PULSEQLIB_FAILED(code)    ((code) < 0)
+
+/** @} */
 
 /* ================================================================== */
 /*  Cursor states                                                     */
@@ -135,7 +74,7 @@ typedef struct pulseqlib_diagnostic {
     char message[PULSEQLIB_DIAG_MSG_LEN];
 } pulseqlib_diagnostic;
 
-#define PULSEQLIB_DIAGNOSTIC_INIT {PULSEQLIB_OK, {'\0'}}
+#define PULSEQLIB_DIAGNOSTIC_INIT {PULSEQLIB_SUCCESS, {'\0'}}
 
 /* ================================================================== */
 /*  System options                                                    */
@@ -261,6 +200,95 @@ typedef struct pulseqlib_tr_gradient_waveforms {
     PULSEQLIB_GRAD_AXIS_WAVEFORM_INIT, \
     PULSEQLIB_GRAD_AXIS_WAVEFORM_INIT, \
     PULSEQLIB_GRAD_AXIS_WAVEFORM_INIT  \
+}
+
+/* ================================================================== */
+/*  Native-timing TR waveforms (for plotting)                        */
+/* ================================================================== */
+
+/** @brief Amplitude modes for pulseqlib_get_tr_waveforms. */
+#define PULSEQLIB_AMP_MAX_POS  0  /**< Position-max (safety worst case) */
+#define PULSEQLIB_AMP_MIN_ABS  1  /**< Definition-min (best-case k-space) */
+#define PULSEQLIB_AMP_ACTUAL   2  /**< Actual signed amplitude for given TR */
+
+/**
+ * @brief Single-channel waveform with native (non-uniform) timing.
+ *
+ * Both arrays have @c num_samples elements.  Units depend on the
+ * channel:  Hz/m for gradients, Hz for RF magnitude, radians for
+ * RF phase.
+ */
+typedef struct pulseqlib_channel_waveform {
+    int    num_samples;
+    float* time_us;       /**< [num_samples] */
+    float* amplitude;     /**< [num_samples] */
+} pulseqlib_channel_waveform;
+
+#define PULSEQLIB_CHANNEL_WAVEFORM_INIT {0, NULL, NULL}
+
+/**
+ * @brief ADC event descriptor within a TR.
+ */
+typedef struct pulseqlib_adc_event {
+    float onset_us;           /**< start time within TR (us)         */
+    float duration_us;        /**< num_samples * dwell_time (us)     */
+    int   num_samples;        /**< number of ADC samples             */
+    float freq_offset_hz;     /**< per-instance freq offset (Hz)     */
+    float phase_offset_rad;   /**< per-instance phase offset (rad)   */
+} pulseqlib_adc_event;
+
+#define PULSEQLIB_ADC_EVENT_INIT {0.0f, 0.0f, 0, 0.0f, 0.0f}
+
+/**
+ * @brief Per-block metadata within a TR.
+ */
+typedef struct pulseqlib_tr_block_descriptor {
+    float start_us;           /**< block start time within TR (us)   */
+    float duration_us;        /**< block duration (us)               */
+    int   segment_idx;        /**< segment index, or -1 (prep/cooldown) */
+} pulseqlib_tr_block_descriptor;
+
+#define PULSEQLIB_TR_BLOCK_DESCRIPTOR_INIT {0.0f, 0.0f, -1}
+
+/**
+ * @brief Complete native-timing TR waveforms for plotting.
+ *
+ * Each channel carries its own time base.  Gradient channels
+ * preserve native timing (trap corner-points, arb raster samples).
+ * RF channels use the RF raster.  ADC events are descriptors only.
+ *
+ * Block descriptors provide timing and segment assignment for
+ * drawing block/segment boundaries.
+ */
+typedef struct pulseqlib_tr_waveforms {
+    /* Gradient channels (Hz/m) */
+    pulseqlib_channel_waveform gx;
+    pulseqlib_channel_waveform gy;
+    pulseqlib_channel_waveform gz;
+
+    /* RF channels (channel-0 only for pTx) */
+    pulseqlib_channel_waveform rf_mag;    /**< amplitude in Hz           */
+    pulseqlib_channel_waveform rf_phase;  /**< amplitude in rad          */
+
+    /* ADC events */
+    int                  num_adc_events;
+    pulseqlib_adc_event* adc_events;
+
+    /* Block-level metadata */
+    int                          num_blocks;
+    pulseqlib_tr_block_descriptor* blocks;
+
+    /* Total duration */
+    float total_duration_us;
+} pulseqlib_tr_waveforms;
+
+#define PULSEQLIB_TR_WAVEFORMS_INIT { \
+    PULSEQLIB_CHANNEL_WAVEFORM_INIT, \
+    PULSEQLIB_CHANNEL_WAVEFORM_INIT, \
+    PULSEQLIB_CHANNEL_WAVEFORM_INIT, \
+    PULSEQLIB_CHANNEL_WAVEFORM_INIT, \
+    PULSEQLIB_CHANNEL_WAVEFORM_INIT, \
+    0, NULL,  0, NULL,  0.0f \
 }
 
 /* ================================================================== */

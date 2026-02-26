@@ -95,6 +95,18 @@ public:
     const pulseqlib_collection* handle() const { return coll_; }
     const pulseqlib_opts&       opts()   const { return opts_;  }
 
+    // ── Cache (serialization / deserialization) ──────────────────
+
+    /** Save collection to a binary cache file. */
+    void save_cache(const std::string& path, int source_size) const {
+        check(pulseqlib_save_cache(coll_, path.c_str(), source_size));
+    }
+
+    /** Load collection from a binary cache file (mutates this). */
+    void load_cache(const std::string& path, int source_size) {
+        check(pulseqlib_load_cache(coll_, path.c_str(), source_size));
+    }
+
     // ── Batch info queries ──────────────────────────────────────
 
     pulseqlib_collection_info collection_info() const {
@@ -228,6 +240,63 @@ public:
         copy_axis(w.gz, cw.gz);
 
         pulseqlib_tr_gradient_waveforms_free(&cw);
+        return w;
+    }
+
+    // ── Native-timing TR waveforms (for plotting) ────────────────
+
+    TrWaveforms get_tr_waveforms(
+        int ss                = 0,
+        int amplitude_mode    = PULSEQLIB_AMP_MAX_POS,
+        int tr_index          = 0,
+        bool include_prep     = false,
+        bool include_cooldown = false) const
+    {
+        pulseqlib_tr_waveforms cw;
+        pulseqlib_diagnostic diag;
+        memset(&cw, 0, sizeof(cw));
+        pulseqlib_diagnostic_init(&diag);
+
+        int code = pulseqlib_get_tr_waveforms(
+            coll_, ss, amplitude_mode, tr_index,
+            include_prep ? 1 : 0, include_cooldown ? 1 : 0,
+            &cw, &diag);
+        check(code, diag);
+
+        TrWaveforms w;
+        auto copy_ch = [](ChannelWaveform& dst, const pulseqlib_channel_waveform& src) {
+            if (src.num_samples > 0 && src.time_us && src.amplitude) {
+                dst.time_us.assign(src.time_us, src.time_us + src.num_samples);
+                dst.amplitude.assign(src.amplitude, src.amplitude + src.num_samples);
+            }
+        };
+        copy_ch(w.gx,       cw.gx);
+        copy_ch(w.gy,       cw.gy);
+        copy_ch(w.gz,       cw.gz);
+        copy_ch(w.rf_mag,   cw.rf_mag);
+        copy_ch(w.rf_phase, cw.rf_phase);
+
+        w.adc_events.resize(static_cast<size_t>(cw.num_adc_events));
+        for (int i = 0; i < cw.num_adc_events; ++i) {
+            AdcEvent& a = w.adc_events[static_cast<size_t>(i)];
+            a.onset_us         = cw.adc_events[i].onset_us;
+            a.duration_us      = cw.adc_events[i].duration_us;
+            a.num_samples      = cw.adc_events[i].num_samples;
+            a.freq_offset_hz   = cw.adc_events[i].freq_offset_hz;
+            a.phase_offset_rad = cw.adc_events[i].phase_offset_rad;
+        }
+
+        w.blocks.resize(static_cast<size_t>(cw.num_blocks));
+        for (int i = 0; i < cw.num_blocks; ++i) {
+            TrBlockDescriptor& b = w.blocks[static_cast<size_t>(i)];
+            b.start_us    = cw.blocks[i].start_us;
+            b.duration_us = cw.blocks[i].duration_us;
+            b.segment_idx = cw.blocks[i].segment_idx;
+        }
+
+        w.total_duration_us = cw.total_duration_us;
+
+        pulseqlib_tr_waveforms_free(&cw);
         return w;
     }
 

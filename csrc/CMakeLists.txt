@@ -9,6 +9,7 @@ set(PULSEQLIB_SOURCES
     pulseqlib_structure.c
     pulseqlib_core.c
     pulseqlib_cache.c
+    pulseqlib_waveforms.c
     pulseqlib_safety.c
     pulseqlib_getters.c
     pulseqlib_freqmod.c

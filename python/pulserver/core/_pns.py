@@ -1,6 +1,6 @@
-"""Peripheral Nerve Stimulation (PNS) analysis for PulserverSequence."""
+"""Peripheral Nerve Stimulation (PNS) analysis for SequenceCollection."""
 
-__all__ = ['get_pns']
+__all__ = ['pns']
 
 import warnings
 from types import SimpleNamespace
@@ -11,12 +11,12 @@ import matplotlib.pyplot as plt
 
 from ._extension._pulseqlib_wrapper import _calc_pns
 from ._helpers import _circular_pad
-from ._sequence import PulserverSequence
+from ._sequence import SequenceCollection
 from ._analysis import get_tr_gradient_waveforms
 
 
-def get_pns(
-    seq: PulserverSequence,
+def pns(
+    seq: SequenceCollection,
     chronaxie_us: float | None = None,
     rheobase: float | None = None,
     alpha: float | None = None,
@@ -31,7 +31,7 @@ def get_pns(
 
     Parameters
     ----------
-    seq : PulserverSequence
+    seq : SequenceCollection
         The sequence to analyze.
     chronaxie_us : float | None
         Chronaxie time constant in microseconds.
@@ -83,7 +83,7 @@ def get_pns(
 
     Examples
     --------
-    >>> result = get_pns(seq, chronaxie_us=360.0, rheobase=20.0, alpha=0.333)
+    >>> result = pns(seq, chronaxie_us=360.0, rheobase=20.0, alpha=0.333)
     >>> print(f"Max PNS: {result.max_pns:.1f}%")
     """
     if chronaxie_us is None or rheobase is None or alpha is None:
@@ -134,7 +134,7 @@ def get_pns(
 
 def _plot_pns(
     pns: SimpleNamespace,
-    seq: PulserverSequence | None = None,
+    seq: SequenceCollection | None = None,
 ) -> tuple:
     """
     Plot PNS waveforms with TR gradient waveforms circularly padded to match.
@@ -142,8 +142,8 @@ def _plot_pns(
     Parameters
     ----------
     pns : SimpleNamespace
-        Output from :func:`get_pns`.
-    seq : PulserverSequence | None
+        Output from :func:`pns`.
+    seq : SequenceCollection | None
         The sequence object (needed to get gradient waveforms).
 
     Returns

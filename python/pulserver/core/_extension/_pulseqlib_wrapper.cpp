@@ -51,43 +51,48 @@ public:
         coll_ = std::unique_ptr<pulseqlib::Collection>(
             new pulseqlib::Collection(
                 &buf_ptr, &buf_size, 1, opts, parse_labels, num_averages));
+        source_size_ = buf_size;
     }
 
     pulseqlib::Collection& coll() { return *coll_; }
     const pulseqlib::Collection& coll() const { return *coll_; }
+    int source_size() const { return source_size_; }
 
 private:
     std::unique_ptr<pulseqlib::Collection> coll_;
+    int source_size_ = 0;
 };
 
 // ─── Thin conversion functions ──────────────────────────────────────
 
 static py::dict _find_tr(_PulseqCollection& pc) {
     const auto& c = pc.coll();
+    auto si = c.subseq_info(0);
     py::dict out;
-    out["tr_size"]              = c.tr_size();
-    out["num_trs"]              = c.num_trs();
-    out["num_prep_blocks"]      = c.num_prep_blocks();
-    out["num_cooldown_blocks"]  = c.num_cooldown_blocks();
-    out["degenerate_prep"]      = c.degenerate_prep();
-    out["degenerate_cooldown"]  = c.degenerate_cooldown();
-    out["num_prep_trs"]         = c.num_prep_trs();
-    out["num_cooldown_trs"]     = c.num_cooldown_trs();
-    out["tr_duration_us"]       = c.tr_duration_us();
+    out["tr_size"]              = si.tr_size;
+    out["num_trs"]              = si.num_trs;
+    out["num_prep_blocks"]      = si.num_prep_blocks;
+    out["num_cooldown_blocks"]  = si.num_cooldown_blocks;
+    out["degenerate_prep"]      = si.degenerate_prep;
+    out["degenerate_cooldown"]  = si.degenerate_cooldown;
+    out["num_prep_trs"]         = si.num_prep_trs;
+    out["num_cooldown_trs"]     = si.num_cooldown_trs;
+    out["tr_duration_us"]       = si.tr_duration_us;
     return out;
 }
 
 static py::dict _find_segments(_PulseqCollection& pc) {
     const auto& c = pc.coll();
-    int nseg = c.num_segments();
+    auto ci = c.collection_info();
     py::dict out;
 
     py::list segments;
-    for (int i = 0; i < nseg; ++i) {
-        py::dict seg;
-        seg["start_block"] = c.segment_start_block(i);
-        seg["num_blocks"]  = c.segment_num_blocks(i);
-        segments.append(seg);
+    for (int i = 0; i < ci.num_segments; ++i) {
+        auto seg = c.segment_info(i);
+        py::dict segd;
+        segd["start_block"] = seg.start_block;
+        segd["num_blocks"]  = seg.num_blocks;
+        segments.append(segd);
     }
     out["unique_segments"]        = segments;
     out["prep_segment_table"]     = c.prep_segment_table();
@@ -105,6 +110,57 @@ static py::dict _get_tr_gradient_waveforms(_PulseqCollection& pc) {
     out["waveform_gy"] = wf.gy.amplitude_hz_per_m;
     out["time_gz"]     = wf.gz.time_us;
     out["waveform_gz"] = wf.gz.amplitude_hz_per_m;
+    return out;
+}
+
+static py::dict _get_tr_waveforms(
+    _PulseqCollection& pc,
+    int amplitude_mode,
+    int tr_index,
+    bool include_prep,
+    bool include_cooldown)
+{
+    auto wf = pc.coll().get_tr_waveforms(
+        0, amplitude_mode, tr_index, include_prep, include_cooldown);
+    py::dict out;
+
+    auto ch_to_dict = [](const pulseqlib::ChannelWaveform& ch) -> py::dict {
+        py::dict d;
+        d["time_us"]   = ch.time_us;
+        d["amplitude"] = ch.amplitude;
+        return d;
+    };
+    out["gx"]       = ch_to_dict(wf.gx);
+    out["gy"]       = ch_to_dict(wf.gy);
+    out["gz"]       = ch_to_dict(wf.gz);
+    out["rf_mag"]   = ch_to_dict(wf.rf_mag);
+    out["rf_phase"] = ch_to_dict(wf.rf_phase);
+
+    // ADC events
+    py::list adc_list;
+    for (const auto& a : wf.adc_events) {
+        py::dict ad;
+        ad["onset_us"]         = a.onset_us;
+        ad["duration_us"]      = a.duration_us;
+        ad["num_samples"]      = a.num_samples;
+        ad["freq_offset_hz"]   = a.freq_offset_hz;
+        ad["phase_offset_rad"] = a.phase_offset_rad;
+        adc_list.append(ad);
+    }
+    out["adc_events"] = adc_list;
+
+    // Block descriptors
+    py::list blk_list;
+    for (const auto& b : wf.blocks) {
+        py::dict bd;
+        bd["start_us"]    = b.start_us;
+        bd["duration_us"] = b.duration_us;
+        bd["segment_idx"] = b.segment_idx;
+        blk_list.append(bd);
+    }
+    out["blocks"]             = blk_list;
+    out["total_duration_us"]  = wf.total_duration_us;
+
     return out;
 }
 
@@ -182,6 +238,135 @@ static py::dict _calc_pns(
     return out;
 }
 
+// ─── Check functions ────────────────────────────────────────────────
+
+static void _check_consistency(_PulseqCollection& pc) {
+    pc.coll().check_consistency();
+}
+
+static void _check_safety(
+    _PulseqCollection& pc,
+    py::list py_bands,
+    float pns_chronaxie_us,
+    float pns_rheobase,
+    float pns_alpha,
+    float pns_threshold_percent,
+    bool  skip_pns)
+{
+    std::vector<pulseqlib::ForbiddenBand> bands;
+    for (auto item : py_bands) {
+        py::dict d = item.cast<py::dict>();
+        pulseqlib::ForbiddenBand b;
+        b.freq_min_hz            = d["freq_min_hz"].cast<float>();
+        b.freq_max_hz            = d["freq_max_hz"].cast<float>();
+        b.max_amplitude_hz_per_m = d["max_amplitude"].cast<float>();
+        bands.push_back(b);
+    }
+
+    const pulseqlib::PnsParams* pns_ptr = nullptr;
+    pulseqlib::PnsParams pns;
+    if (!skip_pns) {
+        pns.chronaxie_us            = pns_chronaxie_us;
+        pns.rheobase_hz_per_m_per_s = pns_rheobase;
+        pns.alpha                   = pns_alpha;
+        pns_ptr = &pns;
+    }
+
+    pc.coll().check_safety(bands, pns_ptr, pns_threshold_percent);
+}
+
+// ─── Report (collection + subseq + segment info) ───────────────────
+
+static py::dict _get_report(_PulseqCollection& pc) {
+    const auto& c = pc.coll();
+    py::dict out;
+
+    /* Collection-level */
+    auto ci = c.collection_info();
+    out["num_subsequences"]  = ci.num_subsequences;
+    out["num_segments"]      = ci.num_segments;
+    out["total_duration_us"] = ci.total_duration_us;
+
+    /* Per-subsequence */
+    py::list subseqs;
+    for (int ss = 0; ss < ci.num_subsequences; ++ss) {
+        auto si = c.subseq_info(ss);
+        py::dict sd;
+        sd["tr_size"]               = si.tr_size;
+        sd["num_trs"]               = si.num_trs;
+        sd["num_prep_blocks"]       = si.num_prep_blocks;
+        sd["num_cooldown_blocks"]   = si.num_cooldown_blocks;
+        sd["tr_duration_us"]        = si.tr_duration_us;
+        sd["num_unique_segments"]   = si.num_prep_segments + si.num_main_segments + si.num_cooldown_segments;
+        sd["segment_offset"]        = si.segment_offset;
+
+        /* Unique segments in this subsequence */
+        int seg_start = si.segment_offset;
+        int seg_count = si.num_prep_segments + si.num_main_segments + si.num_cooldown_segments;
+        py::list segs;
+        for (int j = seg_start; j < seg_start + seg_count; ++j) {
+            auto seg = c.segment_info(j);
+            py::dict segd;
+            segd["start_block"] = seg.start_block;
+            segd["num_blocks"]  = seg.num_blocks;
+            segs.append(segd);
+        }
+        sd["segments"] = segs;
+
+        /* Segment tables */
+        sd["prep_segment_table"]     = c.prep_segment_table(ss);
+        sd["main_segment_table"]     = c.main_segment_table(ss);
+        sd["cooldown_segment_table"] = c.cooldown_segment_table(ss);
+
+        subseqs.append(sd);
+    }
+    out["subsequences"] = subseqs;
+    return out;
+}
+
+// ─── Block info ─────────────────────────────────────────────────────
+
+static py::dict _get_block_info(_PulseqCollection& pc, int seg, int blk) {
+    auto info = pc.coll().block_info(seg, blk);
+    py::dict out;
+    out["duration_us"]   = info.duration_us;
+    out["start_time_us"] = info.start_time_us;
+
+    /* Gradient per axis */
+    for (int ax = 0; ax < 3; ++ax) {
+        std::string prefix = std::string(1, "xyz"[ax]);
+        out[(prefix + "_has_grad").c_str()]       = info.has_grad[ax] != 0;
+        out[(prefix + "_is_trapezoid").c_str()]   = info.grad_is_trapezoid[ax] != 0;
+        out[(prefix + "_grad_delay_us").c_str()]  = info.grad_delay_us[ax];
+        out[(prefix + "_num_samples").c_str()]     = info.grad_num_samples[ax];
+    }
+
+    /* RF */
+    out["has_rf"]           = info.has_rf != 0;
+    out["rf_delay_us"]      = info.rf_delay_us;
+    out["rf_num_samples"]   = info.rf_num_samples;
+
+    /* ADC */
+    out["has_adc"]          = info.has_adc != 0;
+    out["adc_delay_us"]     = info.adc_delay_us;
+
+    return out;
+}
+
+// ─── Cache functions ────────────────────────────────────────────────
+
+static void _save_cache(_PulseqCollection& pc,
+                        const std::string& path,
+                        int source_size) {
+    int sz = (source_size > 0) ? source_size : pc.source_size();
+    pc.coll().save_cache(path, sz);
+}
+
+static void _load_cache(_PulseqCollection& pc,
+                        const std::string& path) {
+    pc.coll().load_cache(path, pc.source_size());
+}
+
 // ─── Module ─────────────────────────────────────────────────────────
 
 PYBIND11_MODULE(_pulseqlib_wrapper, m) {
@@ -210,6 +395,13 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     m.def("_get_tr_gradient_waveforms", &_get_tr_gradient_waveforms,
           py::arg("collection"));
 
+    m.def("_get_tr_waveforms", &_get_tr_waveforms,
+          py::arg("collection"),
+          py::arg("amplitude_mode") = 0,
+          py::arg("tr_index") = 0,
+          py::arg("include_prep") = false,
+          py::arg("include_cooldown") = false);
+
     m.def("_calc_acoustic_spectra", &_calc_acoustic_spectra,
           py::arg("collection"),
           py::arg("target_window_size"),
@@ -222,4 +414,33 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
           py::arg("chronaxie_us"),
           py::arg("rheobase"),
           py::arg("alpha"));
+
+    m.def("_check_consistency", &_check_consistency,
+          py::arg("collection"));
+
+    m.def("_check_safety", &_check_safety,
+          py::arg("collection"),
+          py::arg("forbidden_bands") = py::list(),
+          py::arg("pns_chronaxie_us") = 0.0f,
+          py::arg("pns_rheobase") = 0.0f,
+          py::arg("pns_alpha") = 0.0f,
+          py::arg("pns_threshold_percent") = 100.0f,
+          py::arg("skip_pns") = true);
+
+    m.def("_save_cache", &_save_cache,
+          py::arg("collection"),
+          py::arg("path"),
+          py::arg("source_size"));
+
+    m.def("_load_cache", &_load_cache,
+          py::arg("collection"),
+          py::arg("path"));
+
+    m.def("_get_report", &_get_report,
+          py::arg("collection"));
+
+    m.def("_get_block_info", &_get_block_info,
+          py::arg("collection"),
+          py::arg("seg"),
+          py::arg("blk"));
 }

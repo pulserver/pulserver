@@ -5,15 +5,21 @@ This sub-package contains core routines for TR-based representation.
 """
 
 __all__ = [
-    'PulserverSequence',
-    'find_tr',
-    'find_segments_in_tr',
-    'get_tr_gradient_waveforms',
-    'get_tr_acoustic_spectra',
-    'get_pns',
+    'SequenceCollection',
+    'plot',
+    'pns',
+    'grad_spectrum',
+    'check',
+    'validate',
+    'report',
+    'serialize',
+    'deserialize',
 ]
 
-from ._sequence import PulserverSequence
-from ._analysis import find_tr, find_segments_in_tr, get_tr_gradient_waveforms
-from ._acoustics import get_tr_acoustic_spectra
-from ._pns import get_pns
+from ._sequence import SequenceCollection
+from ._plot import plot
+from ._pns import pns
+from ._acoustics import grad_spectrum
+from ._check import check
+from ._validate import validate
+from ._report import report

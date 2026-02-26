@@ -75,7 +75,7 @@ int pulseqlib__hint2enum(const char *hint)
 void pulseqlib_diagnostic_init(pulseqlib_diagnostic* diag)
 {
     if (!diag) return;
-    diag->code = PULSEQLIB_OK;
+    diag->code = PULSEQLIB_SUCCESS;
     diag->message[0] = '\0';
 }
 
@@ -99,14 +99,13 @@ void pulseqlib__diag_printf(pulseqlib_diagnostic* diag, const char* fmt, ...)
 const char* pulseqlib_get_error_message(int code)
 {
     switch (code) {
-        case PULSEQLIB_OK:                            return "Success";
+        case PULSEQLIB_SUCCESS:                            return "Success";
         case PULSEQLIB_ERR_NULL_POINTER:              return "Required pointer argument is NULL";
         case PULSEQLIB_ERR_INVALID_ARGUMENT:          return "Invalid argument value";
         case PULSEQLIB_ERR_ALLOC_FAILED:              return "Memory allocation failed";
         case PULSEQLIB_ERR_FILE_NOT_FOUND:            return "Sequence file not found or could not be opened";
         case PULSEQLIB_ERR_FILE_READ_FAILED:          return "Error reading from sequence file";
         case PULSEQLIB_ERR_UNSUPPORTED_VERSION:       return "Unsupported sequence file version (requires >= 1.5.0)";
-        case PULSEQLIB_ERR_PARSE_FAILED:              return "Failed to parse sequence data";
         case PULSEQLIB_ERR_INVALID_PREP_POSITION:     return "Invalid preparation block position";
         case PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION: return "Invalid cooldown block position";
         case PULSEQLIB_ERR_INVALID_ONCE_FLAGS:        return "ONCE flags were found outside preparation/cooldown sections";
@@ -124,10 +123,7 @@ const char* pulseqlib_get_error_message(int code)
         case PULSEQLIB_ERR_SEG_NONZERO_START_GRAD:    return "TR does not start with zero gradient amplitude";
         case PULSEQLIB_ERR_SEG_NONZERO_END_GRAD:      return "TR does not end with zero gradient amplitude";
         case PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND:     return "No segment boundaries could be identified in TR";
-        case PULSEQLIB_ERR_ACOUSTIC_INVALID_WINDOW:   return "Invalid window size for acoustic analysis";
-        case PULSEQLIB_ERR_ACOUSTIC_INVALID_RESOLUTION: return "Invalid spectral resolution for acoustic analysis";
         case PULSEQLIB_ERR_ACOUSTIC_NO_WAVEFORM:      return "No waveform data for acoustic analysis";
-        case PULSEQLIB_ERR_ACOUSTIC_FFT_FAILED:       return "FFT computation failed during acoustic analysis";
         case PULSEQLIB_ERR_ACOUSTIC_VIOLATION:        return "Acoustic resonance violation detected";
         case PULSEQLIB_ERR_PNS_INVALID_PARAMS:        return "Invalid PNS parameters";
         case PULSEQLIB_ERR_PNS_INVALID_CHRONAXIE:     return "Invalid chronaxie value for PNS";
@@ -152,7 +148,7 @@ const char* pulseqlib_get_error_message(int code)
 const char* pulseqlib_get_error_hint(int code)
 {
     switch (code) {
-        case PULSEQLIB_OK:
+        case PULSEQLIB_SUCCESS:
             return "";
         case PULSEQLIB_ERR_INVALID_PREP_POSITION:
             return "Ensure that the preparation section is marked with ONCE labels "

@@ -123,10 +123,10 @@
  *         VENDOR_ERR_PSD_PULSEQ_FAILURE,    // vendor error code
  *         0);                               // extra args
  *
- * The vendor error code can be derived from the pulseqlib code with
- * a simple mapping table.
+ * The pulseqlib code is an opaque negative int — the vendor maps
+ * every failure to a single vendor error code.
  *
- * @param code  pulseqlib error code (negative PULSEQLIB_ERR_*).
+ * @param code  pulseqlib return code (negative on failure).
  * @param diag  Diagnostic struct (may be NULL).
  */
 static VENDOR_MAYBE_UNUSED void vendor_report_error(

@@ -3,12 +3,13 @@
  * @brief Minimal error-handling snippet for pulseqlib.
  *
  * Every pulseqlib function returns an int status code:
- *   positive (PULSEQLIB_OK)   = success
- *   negative (PULSEQLIB_ERR_*) = failure
+ *   positive  = success  (check with PULSEQLIB_SUCCEEDED)
+ *   negative  = failure  (check with PULSEQLIB_FAILED)
  *
  * On failure, diag.message contains a human-readable explanation.
  * vendor_report_error() in example_vendorlib.h formats and prints it
- * through the vendor error channel.
+ * through the vendor error channel.  The specific negative value is
+ * an opaque library detail — consumers must not match on it.
  *
  * The CHECK macro below is the only boilerplate needed — it mirrors
  * the pattern used by vendor toolchains (e.g. EPIC_CHECK).

@@ -253,7 +253,7 @@ static int build_freq_mod_for_block(
     PULSEQLIB_FREE(raw_time);
     PULSEQLIB_FREE(raw_wave);
     PULSEQLIB_FREE(uniform_t);
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 
 fmod_fail:
     if (fmod->waveform_gx) { PULSEQLIB_FREE(fmod->waveform_gx); fmod->waveform_gx = NULL; }
@@ -342,7 +342,7 @@ static int alloc_plan(pulseqlib_freq_mod_library* lib)
     for (r = 0; r < lib->num_plan_instances; ++r)
         lib->plan_waveforms[r] = lib->plan_waveform_data + (size_t)r * ms;
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -439,7 +439,7 @@ static int build_freq_mod_library(
     if (count == 0) {
         /* No freq-mod blocks: empty library */
         *out_lib = lib;
-        return PULSEQLIB_OK;
+        return PULSEQLIB_SUCCESS;
     }
 
     /* ---- Allocate working arrays ---- */
@@ -752,7 +752,7 @@ static int build_freq_mod_library(
     PULSEQLIB_FREE(block_rotation);
 
     *out_lib = lib;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 
 build_fail:
     free_base_defs(base_defs, num_base);
@@ -785,10 +785,10 @@ static int update_freq_mod_library(
     if (!lib->entry_waveform_3ch || !lib->entry_ref_3ch)
         return PULSEQLIB_ERR_INVALID_ARGUMENT;  /* 3ch data already freed */
     if (lib->num_plan_instances == 0)
-        return PULSEQLIB_OK;
+        return PULSEQLIB_SUCCESS;
 
     compute_plan_waveforms(lib, shift_m);
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -897,7 +897,7 @@ static int freq_mod_library_write_cache(
             != (size_t)lib->scan_table_len) goto write_fail;
     }
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 
 write_fail:
     return PULSEQLIB_ERR_FILE_READ_FAILED;
@@ -1040,7 +1040,7 @@ static int freq_mod_library_read_cache(
     }
 
     *out_lib = lib;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 
 read_fail:
     if (lib) freq_mod_library_free(lib);
@@ -1112,7 +1112,7 @@ int pulseqlib_build_freq_mod_collection(
     }
 
     *out_fmc = fmc;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -1183,7 +1183,7 @@ int pulseqlib_freq_mod_collection_write_cache(
     }
 
     fclose(f);
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 
 col_write_fail:
     fclose(f);
@@ -1244,7 +1244,7 @@ int pulseqlib_freq_mod_collection_read_cache(
 
     fclose(f);
     *out_fmc = fmc;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */

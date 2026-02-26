@@ -45,7 +45,7 @@ extern "C" {
  *                              file in the chain.
  * @param[in]  parse_labels     1 = build ADC label table via dry-run.
  * @param[in]  num_averages     Number of scan averages (>= 1).
- * @return PULSEQLIB_OK on success, negative error code on failure.
+ * @return PULSEQLIB_SUCCESS on success, negative error code on failure.
  */
 int pulseqlib_read(
     pulseqlib_collection** out_coll,
@@ -72,7 +72,7 @@ int pulseqlib_read(
  * @param[in]  num_buffers   Number of buffers (>= 1).
  * @param[in]  opts          Scanner limits / rasters.
  * @param[in]  num_averages  Number of scan averages (>= 1).
- * @return PULSEQLIB_OK on success, negative error code on failure.
+ * @return PULSEQLIB_SUCCESS on success, negative error code on failure.
  */
 int pulseqlib_read_from_buffers(
     pulseqlib_collection** out_coll,
@@ -146,7 +146,7 @@ int pulseqlib_format_error(
  *
  * @param[in]  coll  Loaded collection.
  * @param[out] diag  Diagnostic (may be NULL).
- * @return PULSEQLIB_OK on success, negative error code on failure.
+ * @return PULSEQLIB_SUCCESS on success, negative error code on failure.
  */
 int pulseqlib_check_consistency(
     const pulseqlib_collection* coll,
@@ -176,7 +176,7 @@ int pulseqlib_check_consistency(
  * @param[in]  file_path  Path to the first .seq file.
  * @param[in]  opts       Scanner limits (used for chain traversal).
  * @param[in]  num_reps   Number of repetitions (>= 1).
- * @return PULSEQLIB_OK on success, negative error code on failure.
+ * @return PULSEQLIB_SUCCESS on success, negative error code on failure.
  */
 int pulseqlib_peek_scan_time(
     pulseqlib_scan_time_info* info,
@@ -190,6 +190,45 @@ int pulseqlib_peek_scan_time(
 
 /** @brief Free a collection and all owned memory. */
 void pulseqlib_collection_free(pulseqlib_collection* coll);
+
+/* ================================================================== */
+/*  Binary cache (serialization / deserialization)                    */
+/* ================================================================== */
+
+/**
+ * @brief Save a loaded collection to a binary cache file.
+ *
+ * @param[in]  coll          Collection to save.
+ * @param[in]  path          Output file path (e.g. "my_sequence.bin").
+ * @param[in]  source_size   Size (in bytes) of the original .seq buffer
+ *                            used to load this collection.  Written into
+ *                            the cache header for integrity validation on
+ *                            reload.
+ * @return PULSEQLIB_SUCCESS on success, negative on failure.
+ */
+int pulseqlib_save_cache(
+    const pulseqlib_collection* coll,
+    const char*                 path,
+    int                         source_size);
+
+/**
+ * @brief Load a collection from a binary cache file.
+ *
+ * The caller must allocate a pulseqlib_collection (e.g. via calloc)
+ * before calling this function.  On success the collection is populated
+ * from the cache.  On failure the collection is unchanged.
+ *
+ * @param[out] coll          Pre-allocated collection to populate.
+ * @param[in]  path          Cache file path.
+ * @param[in]  source_size   Expected size (bytes) of the original .seq
+ *                            buffer.  Must match the value stored in the
+ *                            cache header (guards against stale caches).
+ * @return PULSEQLIB_SUCCESS on success, negative on failure.
+ */
+int pulseqlib_load_cache(
+    pulseqlib_collection* coll,
+    const char*           path,
+    int                   source_size);
 
 /* ================================================================== */
 /*  TR gradient waveforms (for plotting)                              */
@@ -212,7 +251,7 @@ void pulseqlib_collection_free(pulseqlib_collection* coll);
  * @param[out] waveforms   Receives the waveform data (caller frees
  *                          via pulseqlib_tr_gradient_waveforms_free).
  * @param[out] diag        Diagnostic on failure.
- * @return PULSEQLIB_OK on success, negative error code on failure.
+ * @return PULSEQLIB_SUCCESS on success, negative error code on failure.
  */
 int pulseqlib_get_tr_gradient_waveforms(
     const pulseqlib_collection*    coll,
@@ -222,6 +261,57 @@ int pulseqlib_get_tr_gradient_waveforms(
 
 /** @brief Free waveform arrays inside a pulseqlib_tr_gradient_waveforms. */
 void pulseqlib_tr_gradient_waveforms_free(pulseqlib_tr_gradient_waveforms* w);
+
+/* ================================================================== */
+/*  Native-timing TR waveforms (for plotting)                        */
+/* ================================================================== */
+
+/**
+ * @brief Extract native-timing TR waveforms for all channels.
+ *
+ * Returns gradient (gx, gy, gz), RF (magnitude, phase), and ADC
+ * event descriptors for the requested TR view.  Gradient waveforms
+ * use native timing (trap corner-points, arb raster samples) and are
+ * NOT interpolated to a uniform raster.  RF uses the RF raster.
+ *
+ * Amplitude modes:
+ *   - PULSEQLIB_AMP_MAX_POS (0) — position-max across all TRs
+ *   - PULSEQLIB_AMP_MIN_ABS (1) — definition-min amplitude
+ *   - PULSEQLIB_AMP_ACTUAL  (2) — signed amplitude for given TR index
+ *
+ * For modes 0 and 1, @p tr_index is ignored (canonical main TR is used).
+ * For mode 2, @p tr_index selects the TR instance (0-based).
+ *
+ * @p include_prep / @p include_cooldown add prep / cooldown blocks
+ * before / after the main TR.  Prep is only valid for the first TR,
+ * cooldown only for the last.
+ *
+ * Block descriptors in the output carry segment assignment (or -1 for
+ * prep / cooldown blocks).  The caller is responsible for freeing via
+ * pulseqlib_tr_waveforms_free().
+ *
+ * @param[in]  coll               Loaded collection.
+ * @param[in]  subseq_idx         Subsequence index (0 for single-seq).
+ * @param[in]  amplitude_mode     PULSEQLIB_AMP_MAX_POS / _MIN_ABS / _ACTUAL.
+ * @param[in]  tr_index           TR instance (only for _ACTUAL mode).
+ * @param[in]  include_prep       Non-zero to prepend prep blocks.
+ * @param[in]  include_cooldown   Non-zero to append cooldown blocks.
+ * @param[out] out                Output waveforms (caller frees).
+ * @param[out] diag               Diagnostic on error.
+ * @return PULSEQLIB_SUCCESS on success, negative error code on failure.
+ */
+int pulseqlib_get_tr_waveforms(
+    const pulseqlib_collection*     coll,
+    int                             subseq_idx,
+    int                             amplitude_mode,
+    int                             tr_index,
+    int                             include_prep,
+    int                             include_cooldown,
+    pulseqlib_tr_waveforms*         out,
+    pulseqlib_diagnostic*           diag);
+
+/** @brief Free all arrays inside a pulseqlib_tr_waveforms. */
+void pulseqlib_tr_waveforms_free(pulseqlib_tr_waveforms* w);
 
 /* ================================================================== */
 /*  Safety checks (detect violation and return immediately)           */
@@ -245,7 +335,7 @@ void pulseqlib_tr_gradient_waveforms_free(pulseqlib_tr_gradient_waveforms* w);
  * @param[in]  forbidden_bands        Array of forbidden bands.
  * @param[in]  pns_params             PNS model parameters (NULL to skip PNS).
  * @param[in]  pns_threshold_percent  PNS threshold (100 = 100 %).
- * @return PULSEQLIB_OK if safe, negative error code on violation.
+ * @return PULSEQLIB_SUCCESS if safe, negative error code on violation.
  */
 int pulseqlib_check_safety(
     pulseqlib_collection*          coll,
@@ -280,7 +370,7 @@ int pulseqlib_check_safety(
  * @param[in]  max_freq_hz             Max frequency to report (0 = auto).
  * @param[in]  num_forbidden_bands      Number of forbidden bands.
  * @param[in]  forbidden_bands          Array of forbidden bands.
- * @return PULSEQLIB_OK on success, negative error code on failure.
+ * @return PULSEQLIB_SUCCESS on success, negative error code on failure.
  */
 int pulseqlib_calc_acoustic_spectra(
     pulseqlib_acoustic_spectra*    spectra,
@@ -317,7 +407,7 @@ void pulseqlib_acoustic_spectra_free(pulseqlib_acoustic_spectra* s);
  * @param[in]  subseq_idx   Subsequence index.
  * @param[in]  opts         Scanner limits.
  * @param[in]  params       PNS model parameters.
- * @return PULSEQLIB_OK on success, negative error code on failure.
+ * @return PULSEQLIB_SUCCESS on success, negative error code on failure.
  */
 int pulseqlib_calc_pns(
     pulseqlib_pns_result*       result,
@@ -403,7 +493,7 @@ int pulseqlib_get_adc_def(const pulseqlib_collection* coll,
  * @param[in]  coll      Loaded collection.
  * @param[in]  num_reps  Number of repetitions (>= 1).
  * @param[out] info      Receives scan time summary.
- * @return PULSEQLIB_OK on success, negative error code on failure.
+ * @return PULSEQLIB_SUCCESS on success, negative error code on failure.
  */
 int pulseqlib_get_scan_time(const pulseqlib_collection* coll,
                            int                        num_reps,
@@ -443,7 +533,7 @@ int pulseqlib_get_cooldown_segment_table(const pulseqlib_collection* coll,
 
 /**
  * @brief Get RF statistics for a unique RF definition.
- * @return PULSEQLIB_OK on success.
+ * @return PULSEQLIB_SUCCESS on success.
  */
 int pulseqlib_get_rf_stats(const pulseqlib_collection* coll,
                            pulseqlib_rf_stats* stats,
@@ -568,7 +658,7 @@ int pulseqlib_get_label_limits(const pulseqlib_collection* coll,
  * @p out_values must point to a pre-allocated array of at least
  * subseq_info.num_label_columns ints.
  *
- * @return PULSEQLIB_OK on success, negative error code on failure.
+ * @return PULSEQLIB_SUCCESS on success, negative error code on failure.
  */
 int pulseqlib_get_adc_label(const pulseqlib_collection* coll,
                             int subseq_idx,
@@ -605,7 +695,7 @@ void pulseqlib_cursor_mark(pulseqlib_collection* coll);
 
 /**
  * @brief Get the resolved block instance at the current cursor position.
- * @return PULSEQLIB_OK on success, error code if cursor is done.
+ * @return PULSEQLIB_SUCCESS on success, error code if cursor is done.
  */
 int pulseqlib_get_block_instance(const pulseqlib_collection* coll,
                                  pulseqlib_block_instance*    inst);
@@ -618,7 +708,7 @@ int pulseqlib_get_block_instance(const pulseqlib_collection* coll,
  *
  * @param[in]  coll  Loaded collection.
  * @param[out] info  Filled with cursor metadata.
- * @return PULSEQLIB_OK on success.
+ * @return PULSEQLIB_SUCCESS on success.
  */
 int pulseqlib_cursor_get_info(const pulseqlib_collection* coll,
                               pulseqlib_cursor_info*       info);
@@ -657,7 +747,7 @@ int pulseqlib_get_freq_mod_count_tr(const pulseqlib_collection* coll,
  * @param[out] out_fmc     Receives an allocated collection (caller frees).
  * @param[in]  coll        Loaded sequence collection.
  * @param[in]  shift_m     Spatial shift (dx, dy, dz) in metres.
- * @return PULSEQLIB_OK on success.
+ * @return PULSEQLIB_SUCCESS on success.
  */
 int pulseqlib_build_freq_mod_collection(
     pulseqlib_freq_mod_collection** out_fmc,
@@ -673,7 +763,7 @@ int pulseqlib_build_freq_mod_collection(
  * @param[in,out] fmc         Freq-mod collection.
  * @param[in]     subseq_idx  0-based subsequence index.
  * @param[in]     shift_m     New spatial shift (dx, dy, dz) in metres.
- * @return PULSEQLIB_OK on success.
+ * @return PULSEQLIB_SUCCESS on success.
  */
 int pulseqlib_update_freq_mod_collection(
     pulseqlib_freq_mod_collection* fmc,
@@ -705,7 +795,7 @@ int pulseqlib_freq_mod_collection_get(
  * @param[in]  fmc   Built collection (3-channel data must be resident
  *                    for at least one subsequence).
  * @param[in]  path  Output file path (e.g. "seq.fmod.bin").
- * @return PULSEQLIB_OK on success.
+ * @return PULSEQLIB_SUCCESS on success.
  */
 int pulseqlib_freq_mod_collection_write_cache(
     const pulseqlib_freq_mod_collection* fmc,
@@ -719,7 +809,7 @@ int pulseqlib_freq_mod_collection_write_cache(
  * @param[in]  coll        Loaded sequence collection (provides PMC flags
  *                          and subsequence count).
  * @param[in]  shift_m     Spatial shift for plan computation.
- * @return PULSEQLIB_OK on success.
+ * @return PULSEQLIB_SUCCESS on success.
  */
 int pulseqlib_freq_mod_collection_read_cache(
     pulseqlib_freq_mod_collection** out_fmc,

@@ -272,7 +272,7 @@ int pulseqlib_get_scan_time(
         }
     }
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -304,7 +304,7 @@ int pulseqlib_get_rf_stats(
         return PULSEQLIB_ERR_INVALID_ARGUMENT;
 
     *stats = desc->rf_definitions[rf_idx].stats;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 #endif
 
@@ -1856,7 +1856,7 @@ int pulseqlib_cursor_get_info(
         }
     }
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 int pulseqlib_get_block_instance(
@@ -1957,7 +1957,7 @@ int pulseqlib_get_block_instance(
     /* RF shimming */
     inst->rf_shim_id = bte->rf_shim_id;
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -2048,7 +2048,7 @@ int pulseqlib_get_label_limits(const pulseqlib_collection* coll,
     if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return PULSEQLIB_ERR_INVALID_ARGUMENT;
     *limits = coll->descriptors[subseq_idx].label_limits;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 static int pulseqlib__get_num_adc_occurrences(const pulseqlib_collection* coll,
@@ -2090,7 +2090,7 @@ int pulseqlib_get_adc_label(const pulseqlib_collection* coll,
     for (c = 0; c < ncols; ++c)
         out_values[c] = desc->label_table[row_start + c];
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -2109,7 +2109,7 @@ int pulseqlib_get_collection_info(
     info->total_readouts   = pulseqlib__get_total_readouts(coll);
     info->total_duration_us = pulseqlib__get_total_duration_us(coll);
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 int pulseqlib_get_subseq_info(
@@ -2140,7 +2140,7 @@ int pulseqlib_get_subseq_info(
     info->num_adc_occurrences  = pulseqlib__get_num_adc_occurrences(coll, subseq_idx);
     info->num_label_columns    = pulseqlib__get_num_label_columns(coll, subseq_idx);
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 int pulseqlib_get_segment_info(
@@ -2162,7 +2162,7 @@ int pulseqlib_get_segment_info(
     info->rf_adc_gap_us        = pulseqlib__get_segment_rf_adc_gap_us(coll, seg_idx);
     info->adc_adc_gap_us       = pulseqlib__get_segment_adc_adc_gap_us(coll, seg_idx);
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 int pulseqlib_get_block_info(
@@ -2224,7 +2224,7 @@ int pulseqlib_get_block_info(
     info->nopos_flag   = pulseqlib__block_has_nopos(coll, seg_idx, blk_idx);
     info->has_freq_mod = pulseqlib__block_has_freq_mod(coll, seg_idx, blk_idx);
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 int pulseqlib_get_adc_def(
@@ -2237,5 +2237,5 @@ int pulseqlib_get_adc_def(
     def->dwell_us    = pulseqlib__get_adc_dwell_us(coll, adc_idx);
     def->num_samples = pulseqlib__get_adc_num_samples(coll, adc_idx);
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }

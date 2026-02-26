@@ -357,7 +357,7 @@ static int compute_grad_shot_indices(
     int def_idx, i, j;
     int shape_id, found, shot_count;
 
-    if (num_rows <= 0 || num_unique_grads <= 0) return PULSEQLIB_OK;
+    if (num_rows <= 0 || num_unique_grads <= 0) return PULSEQLIB_SUCCESS;
 
     for (def_idx = 0; def_idx < num_unique_grads; ++def_idx) {
         int grad_type = grad_defs[def_idx].type;
@@ -396,7 +396,7 @@ static int compute_grad_shot_indices(
         }
         grad_defs[def_idx].num_shots = shot_count > 0 ? shot_count : 1;
     }
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -457,7 +457,7 @@ static int compute_grad_stats(
     float* time_us    = NULL;
     pulseqlib_grad_definition* gd;
 
-    if (!seq || !grad_defs || num_unique <= 0) return PULSEQLIB_OK;
+    if (!seq || !grad_defs || num_unique <= 0) return PULSEQLIB_SUCCESS;
 
     if (seq->reserved_definitions_library.gradient_raster_time > 0.0f)
         grad_raster_us = seq->reserved_definitions_library.gradient_raster_time;
@@ -568,7 +568,7 @@ static int compute_grad_stats(
             if (time_us) { PULSEQLIB_FREE(time_us); time_us = NULL; }
         }
     }
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 
 fail:
     if (waveform)          PULSEQLIB_FREE(waveform);
@@ -658,7 +658,7 @@ static int compute_rf_stats(
     float rf_abs, sum_signed, sum_signed_re, sum_signed_im;
     float sum_abs, sum_sq, time_above_threshold, temp_pw, maxpw;
 
-    if (!seq || !rf_defs || num_unique <= 0) return PULSEQLIB_OK;
+    if (!seq || !rf_defs || num_unique <= 0) return PULSEQLIB_SUCCESS;
 
     if (seq->reserved_definitions_library.radiofrequency_raster_time > 0.0f)
         rf_raster_us = seq->reserved_definitions_library.radiofrequency_raster_time;
@@ -945,7 +945,7 @@ static int compute_rf_stats(
     if (fft_in)  KISS_FFT_FREE(fft_in);
     if (fft_out) KISS_FFT_FREE(fft_out);
     if (fft_cfg) kiss_fft_free(fft_cfg);
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 
 fail:
     if (tt)      PULSEQLIB_FREE(tt);
@@ -981,7 +981,7 @@ static int copy_rotation_library(const pulseqlib__seq_file* seq, pulseqlib_seque
 
     desc->num_rotations = 0;
     desc->rotation_matrices = NULL;
-    if (num <= 0 || !seq->rotation_quaternion_library) return PULSEQLIB_OK;
+    if (num <= 0 || !seq->rotation_quaternion_library) return PULSEQLIB_SUCCESS;
 
     desc->rotation_matrices = (float(*)[9])PULSEQLIB_ALLOC(num * sizeof(float[9]));
     if (!desc->rotation_matrices) return PULSEQLIB_ERR_ALLOC_FAILED;
@@ -989,7 +989,7 @@ static int copy_rotation_library(const pulseqlib__seq_file* seq, pulseqlib_seque
     for (i = 0; i < num; ++i)
         pulseqlib__quaternion_to_matrix(desc->rotation_matrices[i], seq->rotation_quaternion_library[i]);
     desc->num_rotations = num;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 static int copy_trigger_library(const pulseqlib__seq_file* seq, pulseqlib_sequence_descriptor* desc)
@@ -998,7 +998,7 @@ static int copy_trigger_library(const pulseqlib__seq_file* seq, pulseqlib_sequen
 
     desc->num_triggers = 0;
     desc->trigger_events = NULL;
-    if (num <= 0 || !seq->trigger_library) return PULSEQLIB_OK;
+    if (num <= 0 || !seq->trigger_library) return PULSEQLIB_SUCCESS;
 
     desc->trigger_events = (pulseqlib_trigger_event*)PULSEQLIB_ALLOC(num * sizeof(pulseqlib_trigger_event));
     if (!desc->trigger_events) return PULSEQLIB_ERR_ALLOC_FAILED;
@@ -1011,7 +1011,7 @@ static int copy_trigger_library(const pulseqlib__seq_file* seq, pulseqlib_sequen
         desc->trigger_events[i].duration        = (long)seq->trigger_library[i][3];
     }
     desc->num_triggers = num;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 static int copy_rf_shim_library(const pulseqlib__seq_file* seq, pulseqlib_sequence_descriptor* desc)
@@ -1021,7 +1021,7 @@ static int copy_rf_shim_library(const pulseqlib__seq_file* seq, pulseqlib_sequen
 
     desc->num_rf_shims = 0;
     desc->rf_shim_definitions = NULL;
-    if (num <= 0 || !seq->rf_shim_library) return PULSEQLIB_OK;
+    if (num <= 0 || !seq->rf_shim_library) return PULSEQLIB_SUCCESS;
 
     desc->rf_shim_definitions = (pulseqlib_rf_shim_definition*)PULSEQLIB_ALLOC(
         num * sizeof(pulseqlib_rf_shim_definition));
@@ -1041,7 +1041,7 @@ static int copy_rf_shim_library(const pulseqlib__seq_file* seq, pulseqlib_sequen
         }
     }
     desc->num_rf_shims = num;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 static int copy_shapes_library(const pulseqlib__seq_file* seq, pulseqlib_sequence_descriptor* desc)
@@ -1051,7 +1051,7 @@ static int copy_shapes_library(const pulseqlib__seq_file* seq, pulseqlib_sequenc
 
     desc->num_shapes = 0;
     desc->shapes = NULL;
-    if (num <= 0 || !seq->shapes_library) return PULSEQLIB_OK;
+    if (num <= 0 || !seq->shapes_library) return PULSEQLIB_SUCCESS;
 
     desc->shapes = (pulseqlib_shape_arbitrary*)PULSEQLIB_ALLOC(num * sizeof(pulseqlib_shape_arbitrary));
     if (!desc->shapes) return PULSEQLIB_ERR_ALLOC_FAILED;
@@ -1079,7 +1079,7 @@ static int copy_shapes_library(const pulseqlib__seq_file* seq, pulseqlib_sequenc
         }
     }
     desc->num_shapes = num;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -1104,7 +1104,7 @@ static int rasters_compatible(float a, float b)
 
 /*
  * Check all four raster pairs (sequence-defined vs system opts).
- * Returns PULSEQLIB_OK or PULSEQLIB_ERR_RASTER_MISMATCH.
+ * Returns PULSEQLIB_SUCCESS or PULSEQLIB_ERR_RASTER_MISMATCH.
  */
 static int check_raster_times(const pulseqlib__seq_file* seq)
 {
@@ -1127,7 +1127,7 @@ static int check_raster_times(const pulseqlib__seq_file* seq)
         !rasters_compatible(rd->block_duration_raster, opts->block_raster_us))
         return PULSEQLIB_ERR_RASTER_MISMATCH;
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -1388,7 +1388,7 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
             else if ((int)(seq->labelset_library[n][0]) == 2) has_cooldown = 1;
         }
     }
-    if (!has_prep && !has_cooldown) return PULSEQLIB_OK;
+    if (!has_prep && !has_cooldown) return PULSEQLIB_SUCCESS;
 
     if (has_prep) {
         pulseqlib__get_raw_block_content_ids(seq, &raw, 0, 1);
@@ -1427,7 +1427,7 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
         pulseqlib_sequence_descriptor_free(desc);
         return PULSEQLIB_ERR_INVALID_ONCE_FLAGS;
     }
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 
 fail:
     if (tmp_rf_defs)   PULSEQLIB_FREE(tmp_rf_defs);

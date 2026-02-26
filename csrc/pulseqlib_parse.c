@@ -1177,7 +1177,7 @@ int pulseqlib__read_seq_from_buffer(pulseqlib__seq_file* seq, FILE* f)
     read_adc_library(seq, f);
     read_shapes_library(seq, f);
     read_extensions_library(seq, f);
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 int pulseqlib__read_seq(pulseqlib__seq_file* seq, const char* file_path)
@@ -1293,7 +1293,7 @@ int pulseqlib__read_seq_collection(pulseqlib__seq_file_collection* coll,
     }
     PULSEQLIB_FREE(current_path);
     coll->num_sequences = num_seq;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -1942,7 +1942,7 @@ int pulseqlib__verify_signature(const char* file_path)
     if (strcmp(computed, stored_hash) != 0)
         return PULSEQLIB_ERR_SIGNATURE_MISMATCH;
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -1966,7 +1966,7 @@ static int read_definitions_only(pulseqlib__seq_file* seq, const char* path)
     read_definitions_library(seq, f);
     read_definitions(seq);
     fclose(f);
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 int pulseqlib_peek_scan_time(
@@ -2021,5 +2021,5 @@ int pulseqlib_peek_scan_time(
 
     PULSEQLIB_FREE(current_path);
     PULSEQLIB_FREE(base_path);
-    return (count > 0) ? PULSEQLIB_OK : PULSEQLIB_ERR_COLLECTION_EMPTY;
+    return (count > 0) ? PULSEQLIB_SUCCESS : PULSEQLIB_ERR_COLLECTION_EMPTY;
 }

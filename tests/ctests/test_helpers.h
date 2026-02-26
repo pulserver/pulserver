@@ -25,6 +25,7 @@
 #include <math.h>
 
 #include "pulseqlib_methods.h"
+#include "pulseqlib_internal.h"  /* tests need internal error codes */
 
 /* ------------------------------------------------------------------ */
 /*  Scanner constants (3T GE-style defaults)                          */
@@ -61,7 +62,7 @@ static void test_opts_init(pulseqlib_opts* opts) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Load a .seq file -> collection (returns PULSEQLIB_OK on success)  */
+/*  Load a .seq file -> collection (returns PULSEQLIB_SUCCESS on success)  */
 /* ------------------------------------------------------------------ */
 static int load_seq(const char* rel_path,
                     pulseqlib_collection** out,

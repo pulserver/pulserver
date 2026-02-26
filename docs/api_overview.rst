@@ -102,7 +102,7 @@ Type                                  Purpose
 Public macros
 -------------
 
-**Error codes** (``PULSEQLIB_OK``, ``PULSEQLIB_ERR_*``)
+**Error codes** (``PULSEQLIB_SUCCESS``, ``PULSEQLIB_ERR_*``)
    ~40 codes grouped by category (generic, parse, TR, segmentation,
    acoustic, PNS, collection, consistency).  Check with
    ``PULSEQLIB_SUCCEEDED(rc)`` / ``PULSEQLIB_FAILED(rc)``.

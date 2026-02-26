@@ -13,6 +13,75 @@
 #include "pulseqlib_config.h"
 #include "pulseqlib_types.h"
 
+/* ================================================================== */
+/*  Internal error codes                                              */
+/*  NOT part of the public API.  Consumers must use                   */
+/*  PULSEQLIB_FAILED() / PULSEQLIB_SUCCEEDED() and the diagnostic    */
+/*  message string rather than matching on specific values.           */
+/* ================================================================== */
+
+/* Generic errors (-1 to -9) */
+#define PULSEQLIB_ERR_NULL_POINTER           -1
+#define PULSEQLIB_ERR_INVALID_ARGUMENT       -2
+#define PULSEQLIB_ERR_ALLOC_FAILED           -3
+
+/* Parsing / file errors (-10 to -19) */
+#define PULSEQLIB_ERR_FILE_NOT_FOUND        -10
+#define PULSEQLIB_ERR_FILE_READ_FAILED      -11
+#define PULSEQLIB_ERR_UNSUPPORTED_VERSION   -12
+
+/* Unique-block errors (-50 to -59) */
+#define PULSEQLIB_ERR_INVALID_PREP_POSITION      -50
+#define PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION  -51
+#define PULSEQLIB_ERR_INVALID_ONCE_FLAGS         -52
+#define PULSEQLIB_ERR_RASTER_MISMATCH            -53
+#define PULSEQLIB_ERR_SIGNATURE_MISMATCH         -54
+#define PULSEQLIB_ERR_SIGNATURE_MISSING          -55
+#define PULSEQLIB_ERR_ADC_DEFINITION_CONFLICT    -56
+
+/* TR detection errors (-100 to -199) */
+#define PULSEQLIB_ERR_TR_NO_BLOCKS          -100
+#define PULSEQLIB_ERR_TR_NO_IMAGING_REGION  -101
+#define PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN -102
+#define PULSEQLIB_ERR_TR_PATTERN_MISMATCH   -103
+#define PULSEQLIB_ERR_TR_PREP_TOO_LONG      -104
+#define PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG  -105
+
+/* Segmentation errors (-200 to -299) */
+#define PULSEQLIB_ERR_SEG_NONZERO_START_GRAD -200
+#define PULSEQLIB_ERR_SEG_NONZERO_END_GRAD   -201
+#define PULSEQLIB_ERR_SEG_NO_SEGMENTS_FOUND  -202
+#define PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS    -203
+#define PULSEQLIB_ERR_SEG_MULTIPLE_PHYSIO_TRIGGERS -204
+#define PULSEQLIB_ERR_SEG_MULTIPLE_NAV_SEGMENTS    -205
+
+/* Acoustic errors (-400 to -449) */
+#define PULSEQLIB_ERR_ACOUSTIC_NO_WAVEFORM       -402
+#define PULSEQLIB_ERR_ACOUSTIC_VIOLATION         -404
+
+/* PNS errors (-450 to -499) */
+#define PULSEQLIB_ERR_PNS_INVALID_PARAMS         -450
+#define PULSEQLIB_ERR_PNS_INVALID_CHRONAXIE      -451
+#define PULSEQLIB_ERR_PNS_INVALID_RHEOBASE       -452
+#define PULSEQLIB_ERR_PNS_NO_WAVEFORM            -453
+#define PULSEQLIB_ERR_PNS_FFT_FAILED             -454
+#define PULSEQLIB_ERR_PNS_THRESHOLD_EXCEEDED     -455
+
+/* Collection / safety errors (-500 to -559) */
+#define PULSEQLIB_ERR_COLLECTION_EMPTY           -500
+#define PULSEQLIB_ERR_COLLECTION_CHAIN_BROKEN    -501
+#define PULSEQLIB_ERR_MAX_GRAD_EXCEEDED          -550
+#define PULSEQLIB_ERR_GRAD_DISCONTINUITY         -551
+#define PULSEQLIB_ERR_MAX_SLEW_EXCEEDED          -552
+
+/* Consistency errors (-560 to -569) */
+#define PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH   -560
+#define PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC    -561
+#define PULSEQLIB_ERR_CONSISTENCY_RF_SHIM_PERIODIC -562
+
+/* Sentinel */
+#define PULSEQLIB_ERR_NOT_IMPLEMENTED      -999
+
 
 /* ================================================================== */
 /*  Constants moved from public header (implementation details)       */
@@ -922,28 +991,28 @@ void  pulseqlib_segment_table_result_free(pulseqlib_segment_table_result* result
 /* --- pulseqlib_safety.c --- */
 int   pulseqlib__calc_segment_timing(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);
 
-/* Gradient waveform extraction (private -- public wrapper adds seg labels).
- *
- * include_seg_labels: 0 = skip label computation (faster, for safety checks);
- *                     1 = populate seg_label arrays (for public API / plotting). */
-int   pulseqlib__get_tr_grad_raw(
-          const pulseqlib_sequence_descriptor* desc,
-          pulseqlib_tr_gradient_waveforms* waveforms,
-          pulseqlib_diagnostic* diag,
-          int block_start, int block_count,
-          int amplitude_mode,
-          const int* tr_group_labels, int target_group,
-          int include_seg_labels);
-
-/* Interpolate raw per-axis waveforms to uniform raster. */
-int   pulseqlib__interpolate_axes_uniform(
-          pulseqlib__uniform_grad_waveforms* out,
-          const pulseqlib_tr_gradient_waveforms* raw,
-          float target_raster_us);
+/* --- pulseqlib_waveforms.c --- */
 
 /* Free uniform waveforms. */
 void  pulseqlib__uniform_grad_waveforms_free(
           pulseqlib__uniform_grad_waveforms* w);
+
+/* Extract gradient waveforms for an arbitrary block range,
+ * interpolated to uniform raster (half gradient raster). */
+int   pulseqlib__get_gradient_waveforms_range(
+          const pulseqlib_sequence_descriptor* desc,
+          pulseqlib__uniform_grad_waveforms* out,
+          pulseqlib_diagnostic* diag,
+          int block_start, int block_count,
+          int amplitude_mode,
+          const int* tr_group_labels, int target_group);
+
+/* Find unique shot-index TR variants (multi-shot).
+ * Returns count of unique groups; caller frees both output arrays. */
+int   pulseqlib__find_unique_shot_trs(
+          const pulseqlib_sequence_descriptor* desc,
+          int** out_unique_tr_indices,
+          int** out_tr_group_labels);
 
 /* --- pulseqlib_cache.c --- */
 int   pulseqlib__try_read_cache(pulseqlib_collection* coll, const char* seq_path);

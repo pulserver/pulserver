@@ -118,8 +118,10 @@ struct RfStats {
 // ── Label limits ────────────────────────────────────────────────────
 
 struct LabelLimit {
-    int min = 0;
-    int max = 0;
+    int min;
+    int max;
+    LabelLimit() : min(0), max(0) {}
+    LabelLimit(int mn, int mx) : min(mn), max(mx) {}
 };
 
 struct LabelLimits {
@@ -127,16 +129,16 @@ struct LabelLimits {
 
     static LabelLimits from_c(const pulseqlib_label_limits& c) {
         LabelLimits l;
-        l.slc = {c.slc.min, c.slc.max};
-        l.phs = {c.phs.min, c.phs.max};
-        l.rep = {c.rep.min, c.rep.max};
-        l.avg = {c.avg.min, c.avg.max};
-        l.seg = {c.seg.min, c.seg.max};
-        l.set = {c.set.min, c.set.max};
-        l.eco = {c.eco.min, c.eco.max};
-        l.par = {c.par.min, c.par.max};
-        l.lin = {c.lin.min, c.lin.max};
-        l.acq = {c.acq.min, c.acq.max};
+        l.slc = LabelLimit(c.slc.min, c.slc.max);
+        l.phs = LabelLimit(c.phs.min, c.phs.max);
+        l.rep = LabelLimit(c.rep.min, c.rep.max);
+        l.avg = LabelLimit(c.avg.min, c.avg.max);
+        l.seg = LabelLimit(c.seg.min, c.seg.max);
+        l.set = LabelLimit(c.set.min, c.set.max);
+        l.eco = LabelLimit(c.eco.min, c.eco.max);
+        l.par = LabelLimit(c.par.min, c.par.max);
+        l.lin = LabelLimit(c.lin.min, c.lin.max);
+        l.acq = LabelLimit(c.acq.min, c.acq.max);
         return l;
     }
 };
@@ -153,6 +155,38 @@ struct TrGradientWaveforms {
     GradAxisWaveform gx;
     GradAxisWaveform gy;
     GradAxisWaveform gz;
+};
+
+// ── Native-timing TR waveforms (for plotting) ──────────────────────
+
+struct ChannelWaveform {
+    std::vector<float> time_us;
+    std::vector<float> amplitude;
+};
+
+struct AdcEvent {
+    float onset_us          = 0.0f;
+    float duration_us       = 0.0f;
+    int   num_samples       = 0;
+    float freq_offset_hz    = 0.0f;
+    float phase_offset_rad  = 0.0f;
+};
+
+struct TrBlockDescriptor {
+    float start_us      = 0.0f;
+    float duration_us   = 0.0f;
+    int   segment_idx   = -1;
+};
+
+struct TrWaveforms {
+    ChannelWaveform gx;         // Hz/m
+    ChannelWaveform gy;         // Hz/m
+    ChannelWaveform gz;         // Hz/m
+    ChannelWaveform rf_mag;     // Hz
+    ChannelWaveform rf_phase;   // rad
+    std::vector<AdcEvent>        adc_events;
+    std::vector<TrBlockDescriptor> blocks;
+    float total_duration_us = 0.0f;
 };
 
 // ── Acoustic spectra ────────────────────────────────────────────────

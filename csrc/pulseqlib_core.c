@@ -217,7 +217,7 @@ static int check_rf_amplitude_periodicity(
         }
     }
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /*
@@ -262,7 +262,7 @@ static int check_rf_shim_periodicity(
         }
     }
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /*
@@ -333,7 +333,7 @@ static int check_scan_table_segments(
 
         ++pos_in_seg;
     }
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 static int check_consistency(
@@ -411,7 +411,7 @@ static int check_consistency(
         }
     }
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* Public wrapper around check_consistency */
@@ -579,7 +579,7 @@ int pulseqlib__get_collection_descriptors(
     coll->total_unique_segments = seg_off;
     coll->total_unique_adcs     = adc_off;
     coll->total_blocks          = blk_off;
-    diag->code = PULSEQLIB_OK;
+    diag->code = PULSEQLIB_SUCCESS;
     return raw->num_sequences;
 
 fail:
@@ -635,7 +635,7 @@ int pulseqlib_read(
             pulseqlib__compute_scan_table_tr_start(&collection->descriptors[i]);
         }
         *out_coll = collection;
-        return PULSEQLIB_OK;
+        return PULSEQLIB_SUCCESS;
     }
 
     /* Full parse */
@@ -668,7 +668,7 @@ int pulseqlib_read(
     if (cache_binary) pulseqlib__write_cache(collection, file_path);
 
     *out_coll = collection;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 
 fail:
     pulseqlib__seq_file_collection_free(&raw_coll);
@@ -756,7 +756,7 @@ int pulseqlib_read_from_buffers(
     pulseqlib__seq_file_collection_free(&raw_coll);
 
     *out_coll = collection;
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 
 fail_coll:
     PULSEQLIB_FREE(collection);

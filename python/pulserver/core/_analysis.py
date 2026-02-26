@@ -1,4 +1,4 @@
-"""TR and segment analysis for PulserverSequence."""
+"""TR and segment analysis for SequenceCollection."""
 
 __all__ = [
     'find_tr',
@@ -16,11 +16,11 @@ from ._extension._pulseqlib_wrapper import (
     _find_segments,
     _get_tr_gradient_waveforms,
 )
-from ._sequence import PulserverSequence
+from ._sequence import SequenceCollection
 
 
 def find_tr(
-    seq: PulserverSequence,
+    seq: SequenceCollection,
     num_reps: int = 1,
 ) -> SimpleNamespace:
     """
@@ -31,7 +31,7 @@ def find_tr(
 
     Parameters
     ----------
-    seq : PulserverSequence
+    seq : SequenceCollection
         The sequence to analyze.
     num_reps : int
         Number of repetitions (for output structure).
@@ -108,14 +108,14 @@ def find_tr(
 
 
 def find_segments_in_tr(
-    seq: PulserverSequence,
+    seq: SequenceCollection,
 ) -> tuple[list[pp.Sequence], SimpleNamespace]:
     """
     Find segment definitions within the TR structure of a sequence.
 
     Parameters
     ----------
-    seq : PulserverSequence
+    seq : SequenceCollection
         The sequence to analyze.
 
     Returns
@@ -155,13 +155,13 @@ def find_segments_in_tr(
     return unique_segments, result
 
 
-def get_tr_gradient_waveforms(seq: PulserverSequence) -> SimpleNamespace:
+def get_tr_gradient_waveforms(seq: SequenceCollection) -> SimpleNamespace:
     """
     Extract concatenated gradient waveforms for a single TR.
 
     Parameters
     ----------
-    seq : PulserverSequence
+    seq : SequenceCollection
         The sequence to analyze.
 
     Returns

@@ -187,8 +187,8 @@ int pulseqlib__build_scan_table(
         }
     }
 
-    diag->code = PULSEQLIB_OK;
-    return PULSEQLIB_OK;
+    diag->code = PULSEQLIB_SUCCESS;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -364,9 +364,9 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
             for (i = 0; i < desc->num_blocks; ++i)
                 tr_dur += (float)block_dur[i];
             tr->tr_duration_us = tr_dur;
-            diag->code = PULSEQLIB_OK;
+            diag->code = PULSEQLIB_SUCCESS;
             PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
-            return PULSEQLIB_OK;
+            return PULSEQLIB_SUCCESS;
         }
         diag->code = (mismatch_pos >= 0)
             ? PULSEQLIB_ERR_TR_PATTERN_MISMATCH
@@ -442,9 +442,9 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
         }
     }
 
-    diag->code = PULSEQLIB_OK;
+    diag->code = PULSEQLIB_SUCCESS;
     PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -1202,7 +1202,7 @@ int pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib
     PULSEQLIB_FREE(exp_segs); exp_segs = NULL;
     num_exp_alloc = 0;
 
-    diag->code = PULSEQLIB_OK;
+    diag->code = PULSEQLIB_SUCCESS;
     return num_unique;
 
 fail:
@@ -1354,7 +1354,7 @@ int pulseqlib__fill_scan_seg_id_from_blocktable(
     PULSEQLIB_FREE(main_map);
     if (prep_map) PULSEQLIB_FREE(prep_map);
     if (cool_map) PULSEQLIB_FREE(cool_map);
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -1375,7 +1375,7 @@ int pulseqlib__build_freq_mod_flags(pulseqlib_sequence_descriptor* desc)
 {
     int n;
 
-    if (!desc) return PULSEQLIB_OK;
+    if (!desc) return PULSEQLIB_SUCCESS;
 
     desc->num_freq_mod_defs    = 0;
     desc->freq_mod_definitions = NULL;
@@ -1390,7 +1390,7 @@ int pulseqlib__build_freq_mod_flags(pulseqlib_sequence_descriptor* desc)
         desc->block_table[n].freq_mod_id = ((has_rf || has_adc) && has_grad) ? 0 : -1;
     }
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 }
 
 /* ================================================================== */
@@ -1568,7 +1568,7 @@ int pulseqlib__build_label_table(
         desc->label_num_entries = 0;
         desc->label_table       = NULL;
         memset(&desc->label_limits, 0, sizeof(desc->label_limits));
-        return PULSEQLIB_OK;
+        return PULSEQLIB_SUCCESS;
     }
 
     /* Allocate table */
@@ -1623,7 +1623,7 @@ int pulseqlib__build_label_table(
     desc->label_num_entries = entry_idx;
     desc->label_table       = table;
 
-    return PULSEQLIB_OK;
+    return PULSEQLIB_SUCCESS;
 #endif
 }
 
@@ -2270,7 +2270,7 @@ int pulseqlib__get_scan_table_segments(
     PULSEQLIB_FREE(exp_segs); exp_segs = NULL;
     PULSEQLIB_FREE(scan_pat); scan_pat = NULL;
 
-    diag->code = PULSEQLIB_OK;
+    diag->code = PULSEQLIB_SUCCESS;
     return num_unique;
 
 scan_seg_fail:
