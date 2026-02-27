@@ -77,7 +77,8 @@ public:
         /*  load — parse .seq bytes and return collection handle    */
         /* ──────────────────────────────────────────────────────── */
         if (cmd == "load") {
-            /* inputs: 'load', seq_bytes(uint8), gamma, B0, max_grad, max_slew,
+            /* inputs: 'load', seq_bytes_cell(cell of uint8 arrays),
+             *         gamma, B0, max_grad, max_slew,
              *         rf_raster, grad_raster, adc_raster, block_raster,
              *         parse_labels(logical), num_averages(double) */
             if (inputs.size() < 12) {
@@ -87,10 +88,18 @@ public:
                 return;
             }
 
-            TypedArray<uint8_t> bytes = inputs[1];
-            std::vector<char> buf(bytes.begin(), bytes.end());
-            const char* buf_ptr  = buf.data();
-            int buf_size = static_cast<int>(buf.size());
+            /* Unpack cell array of byte buffers */
+            CellArray cell_bufs = inputs[1];
+            int n_seqs = static_cast<int>(cell_bufs.getNumberOfElements());
+            std::vector<std::vector<char>> bufs(n_seqs);
+            std::vector<const char*> buf_ptrs(n_seqs);
+            std::vector<int> buf_sizes(n_seqs);
+            for (int i = 0; i < n_seqs; ++i) {
+                TypedArray<uint8_t> bytes = cell_bufs[i];
+                bufs[i].assign(bytes.begin(), bytes.end());
+                buf_ptrs[i]  = bufs[i].data();
+                buf_sizes[i] = static_cast<int>(bufs[i].size());
+            }
 
             pulseqlib_opts opts;
             opts.gamma_hz_per_t          = static_cast<float>(TypedArray<double>(inputs[2])[0]);
@@ -109,14 +118,14 @@ public:
             pulseqlib_diagnostic_init(&diag);
 
             int code = pulseqlib_read_from_buffers(
-                &coll, &diag, &buf_ptr, &buf_size, 1,
+                &coll, &diag, buf_ptrs.data(), buf_sizes.data(), n_seqs,
                 &opts, parse_labels, num_averages);
             check_code(code, diag, eng);
 
             /* Store and return 1-based handle */
             g_collections.push_back(coll);
             g_opts_store.push_back(opts);
-            g_source_sizes.push_back(buf_size);
+            g_source_sizes.push_back((n_seqs > 0) ? buf_sizes[0] : 0);
 
             outputs[0] = factory.createScalar(
                 static_cast<double>(g_collections.size()));
@@ -214,10 +223,12 @@ public:
         /* ──────────────────────────────────────────────────────── */
         else if (cmd == "get_tr_waveforms") {
             int idx       = static_cast<int>(TypedArray<double>(inputs[1])[0]) - 1;
-            int amp_mode  = (inputs.size() > 2) ? static_cast<int>(TypedArray<double>(inputs[2])[0]) : 0;
-            int tr_idx    = (inputs.size() > 3) ? static_cast<int>(TypedArray<double>(inputs[3])[0]) : 0;
-            int inc_prep  = (inputs.size() > 4) ? (TypedArray<bool>(inputs[4])[0] ? 1 : 0) : 0;
-            int inc_cool  = (inputs.size() > 5) ? (TypedArray<bool>(inputs[5])[0] ? 1 : 0) : 0;
+            int ss_idx    = (inputs.size() > 2) ? static_cast<int>(TypedArray<double>(inputs[2])[0]) : 0;
+            int amp_mode  = (inputs.size() > 3) ? static_cast<int>(TypedArray<double>(inputs[3])[0]) : 0;
+            int tr_idx    = (inputs.size() > 4) ? static_cast<int>(TypedArray<double>(inputs[4])[0]) : 0;
+            int inc_prep  = (inputs.size() > 5) ? (TypedArray<bool>(inputs[5])[0] ? 1 : 0) : 0;
+            int inc_cool  = (inputs.size() > 6) ? (TypedArray<bool>(inputs[6])[0] ? 1 : 0) : 0;
+            int col_delay = (inputs.size() > 7) ? (TypedArray<bool>(inputs[7])[0] ? 1 : 0) : 0;
 
             pulseqlib_collection* coll = g_collections[idx];
 
@@ -227,7 +238,7 @@ public:
             pulseqlib_diagnostic_init(&diag);
 
             int code = pulseqlib_get_tr_waveforms(
-                coll, 0, amp_mode, tr_idx, inc_prep, inc_cool, &cw, &diag);
+                coll, ss_idx, amp_mode, tr_idx, inc_prep, inc_cool, col_delay, &cw, &diag);
             check_code(code, diag, eng);
 
             auto copy_ch = [&](const pulseqlib_channel_waveform& ch) -> StructArray {
@@ -262,16 +273,62 @@ public:
         /*  check — consistency + safety                            */
         /* ──────────────────────────────────────────────────────── */
         else if (cmd == "check") {
+            /* inputs: 'check', handle, stim_threshold, decay_constant_us,
+             *         pns_threshold_percent, forbidden_bands (Nx3 matrix) */
             int idx = static_cast<int>(TypedArray<double>(inputs[1])[0]) - 1;
             pulseqlib_collection* coll = g_collections[idx];
             pulseqlib_diagnostic diag;
             pulseqlib_diagnostic_init(&diag);
 
+            /* --- consistency ---------------------------------------- */
             int code = pulseqlib_check_consistency(coll, &diag);
             check_code(code, diag, eng);
 
+            /* --- parse optional inputs ------------------------------ */
+            float stim_threshold        = 0.0f;
+            float decay_constant_us     = 0.0f;
+            float pns_threshold_percent = 100.0f;
+            int   num_bands = 0;
+            std::vector<pulseqlib_forbidden_band> cbands;
+
+            if (inputs.size() > 2)
+                stim_threshold = static_cast<float>(
+                    TypedArray<double>(inputs[2])[0]);
+            if (inputs.size() > 3)
+                decay_constant_us = static_cast<float>(
+                    TypedArray<double>(inputs[3])[0]);
+            if (inputs.size() > 4)
+                pns_threshold_percent = static_cast<float>(
+                    TypedArray<double>(inputs[4])[0]);
+            if (inputs.size() > 5) {
+                TypedArray<double> bmat(inputs[5]);
+                auto dims = bmat.getDimensions();
+                num_bands = static_cast<int>(dims[0]);
+                cbands.resize(num_bands);
+                for (int i = 0; i < num_bands; ++i) {
+                    cbands[i].freq_min_hz            = static_cast<float>(bmat[i][0]);
+                    cbands[i].freq_max_hz            = static_cast<float>(bmat[i][1]);
+                    cbands[i].max_amplitude_hz_per_m = static_cast<float>(bmat[i][2]);
+                }
+            }
+
+            /* --- PNS params ----------------------------------------- */
+            const pulseqlib_pns_params* pns_ptr = nullptr;
+            pulseqlib_pns_params pns;
+            if (stim_threshold > 0.0f && decay_constant_us > 0.0f) {
+                pns.vendor                  = 0;
+                pns.chronaxie_us            = decay_constant_us;
+                pns.rheobase_hz_per_m_per_s = stim_threshold;
+                pns.alpha                   = 1.0f;
+                pns_ptr = &pns;
+            }
+
+            /* --- safety --------------------------------------------- */
             code = pulseqlib_check_safety(
-                coll, &diag, &g_opts_store[idx], 0, nullptr, nullptr, 100.0f);
+                coll, &diag, &g_opts_store[idx],
+                num_bands,
+                cbands.empty() ? nullptr : cbands.data(),
+                pns_ptr, pns_threshold_percent);
             check_code(code, diag, eng);
         }
 
@@ -407,10 +464,11 @@ public:
         /*  pns — peripheral nerve stimulation                      */
         /* ──────────────────────────────────────────────────────── */
         else if (cmd == "pns") {
-            int idx = static_cast<int>(TypedArray<double>(inputs[1])[0]) - 1;
-            float chronaxie_us = static_cast<float>(TypedArray<double>(inputs[2])[0]);
-            float rheobase     = static_cast<float>(TypedArray<double>(inputs[3])[0]);
-            float alpha        = static_cast<float>(TypedArray<double>(inputs[4])[0]);
+            int idx    = static_cast<int>(TypedArray<double>(inputs[1])[0]) - 1;
+            int ss_idx = static_cast<int>(TypedArray<double>(inputs[2])[0]);
+            float chronaxie_us = static_cast<float>(TypedArray<double>(inputs[3])[0]);
+            float rheobase     = static_cast<float>(TypedArray<double>(inputs[4])[0]);
+            float alpha        = static_cast<float>(TypedArray<double>(inputs[5])[0]);
 
             pulseqlib_collection* coll = g_collections[idx];
 
@@ -423,7 +481,7 @@ public:
             pulseqlib_diagnostic diag;
             pulseqlib_diagnostic_init(&diag);
 
-            int code = pulseqlib_calc_pns(&cr, &diag, coll, 0,
+            int code = pulseqlib_calc_pns(&cr, &diag, coll, ss_idx,
                                           &g_opts_store[idx], &params);
             check_code(code, diag, eng);
 
@@ -452,10 +510,11 @@ public:
         /*  grad_spectrum — acoustic spectral analysis              */
         /* ──────────────────────────────────────────────────────── */
         else if (cmd == "grad_spectrum") {
-            int idx = static_cast<int>(TypedArray<double>(inputs[1])[0]) - 1;
-            int target_window_size      = static_cast<int>(TypedArray<double>(inputs[2])[0]);
-            float target_resolution_hz  = static_cast<float>(TypedArray<double>(inputs[3])[0]);
-            float max_freq_hz           = static_cast<float>(TypedArray<double>(inputs[4])[0]);
+            int idx    = static_cast<int>(TypedArray<double>(inputs[1])[0]) - 1;
+            int ss_idx = static_cast<int>(TypedArray<double>(inputs[2])[0]);
+            int target_window_size      = static_cast<int>(TypedArray<double>(inputs[3])[0]);
+            float target_resolution_hz  = static_cast<float>(TypedArray<double>(inputs[4])[0]);
+            float max_freq_hz           = static_cast<float>(TypedArray<double>(inputs[5])[0]);
 
             pulseqlib_collection* coll = g_collections[idx];
 
@@ -464,7 +523,7 @@ public:
             pulseqlib_diagnostic_init(&diag);
 
             int code = pulseqlib_calc_acoustic_spectra(
-                &sp, &diag, coll, 0, &g_opts_store[idx],
+                &sp, &diag, coll, ss_idx, &g_opts_store[idx],
                 target_window_size, target_resolution_hz, max_freq_hz,
                 0, nullptr);
             check_code(code, diag, eng);
@@ -552,6 +611,56 @@ public:
 
             pulseqlib_acoustic_spectra_free(&sp);
             outputs[0] = result;
+        }
+
+        /* ──────────────────────────────────────────────────────── */
+        /*  Unique-block / segment-block queries                    */
+        /* ──────────────────────────────────────────────────────── */
+        else if (cmd == "num_unique_blocks") {
+            /* inputs: 'num_unique_blocks', handle, seq_idx */
+            int idx = static_cast<int>(TypedArray<double>(inputs[1])[0]) - 1;
+            pulseqlib_collection* coll = g_collections[idx];
+            int seq_idx = static_cast<int>(TypedArray<double>(inputs[2])[0]);
+            int n = pulseqlib_get_num_unique_blocks(coll, seq_idx);
+            if (n < 0) {
+                pulseqlib_diagnostic diag;
+                pulseqlib_diagnostic_init(&diag);
+                check_code(n, diag, eng);
+            }
+            outputs[0] = factory.createScalar(static_cast<double>(n));
+        }
+
+        else if (cmd == "unique_block_id") {
+            /* inputs: 'unique_block_id', handle, seq_idx, blk_def_idx */
+            int idx = static_cast<int>(TypedArray<double>(inputs[1])[0]) - 1;
+            pulseqlib_collection* coll = g_collections[idx];
+            int seq_idx = static_cast<int>(TypedArray<double>(inputs[2])[0]);
+            int blk_def_idx = static_cast<int>(TypedArray<double>(inputs[3])[0]);
+            int id = pulseqlib_get_unique_block_id(coll, seq_idx, blk_def_idx);
+            if (id < 0) {
+                pulseqlib_diagnostic diag;
+                pulseqlib_diagnostic_init(&diag);
+                check_code(id, diag, eng);
+            }
+            outputs[0] = factory.createScalar(static_cast<double>(id));
+        }
+
+        else if (cmd == "segment_block_def_indices") {
+            /* inputs: 'segment_block_def_indices', handle, seg_idx */
+            int idx = static_cast<int>(TypedArray<double>(inputs[1])[0]) - 1;
+            pulseqlib_collection* coll = g_collections[idx];
+            int seg_idx = static_cast<int>(TypedArray<double>(inputs[2])[0]);
+
+            pulseqlib_segment_info si;
+            pulseqlib_get_segment_info(coll, seg_idx, &si);
+            std::vector<int> ids(si.num_blocks);
+            if (si.num_blocks > 0)
+                pulseqlib_get_segment_block_def_indices(coll, seg_idx, ids.data());
+
+            TypedArray<double> arr = factory.createArray<double>({1, (size_t)si.num_blocks});
+            for (int i = 0; i < si.num_blocks; ++i)
+                arr[0][i] = static_cast<double>(ids[i]);
+            outputs[0] = arr;
         }
 
         /* ──────────────────────────────────────────────────────── */

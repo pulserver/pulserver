@@ -1,18 +1,20 @@
 function wf = get_tr_waveforms(seq, varargin)
 % get_tr_waveforms - Extract native-timing waveforms for one TR.
 %
-%   wf = pulserver.get_tr_waveforms(seq)
-%   wf = pulserver.get_tr_waveforms(seq, 'amplitude_mode', 'actual', ...)
+%   wf = get_tr_waveforms(seq)
+%   wf = get_tr_waveforms(seq, 'amplitude_mode', 'actual', ...)
 %
 % Inputs
 %   seq     double | SequenceCollection   Collection handle or object.
 %
 % Name-value options
+%   subsequence_idx  double   Subsequence index (1-based). Default: 1
 %   amplitude_mode   char     'max_pos' (0) | 'actual' (1) | 'first' (2).
 %                             Default: 'max_pos'
-%   tr_index         double   0-based TR index. Default: 0
+%   tr_index         double   TR index (1-based). Default: 1
 %   include_prep     logical  Include preparation blocks. Default: false
 %   include_cooldown logical  Include cooldown blocks. Default: false
+%   collapse_delays  logical  Shrink pure delays. Default: false
 %
 % Output
 %   wf      struct with fields: gx, gy, gz, rf_mag, rf_phase, total_duration_us.
@@ -21,10 +23,12 @@ function wf = get_tr_waveforms(seq, varargin)
 % See also: pulserver.SequenceCollection, pulserver.plot
 
     p = inputParser;
+    addParameter(p, 'subsequence_idx', 1,        @isnumeric);
     addParameter(p, 'amplitude_mode', 'max_pos', @ischar);
-    addParameter(p, 'tr_index',       0,         @isnumeric);
+    addParameter(p, 'tr_index',       1,         @isnumeric);
     addParameter(p, 'include_prep',   false,     @islogical);
     addParameter(p, 'include_cooldown', false,    @islogical);
+    addParameter(p, 'collapse_delays',  false,    @islogical);
     parse(p, varargin{:});
     o = p.Results;
 
@@ -35,8 +39,10 @@ function wf = get_tr_waveforms(seq, varargin)
     end
     amp_mode = modes(o.amplitude_mode);
 
-    wf = pulseqlib_mex('get_tr_waveforms', to_handle(seq), amp_mode, ...
-                        o.tr_index, o.include_prep, o.include_cooldown);
+    wf = pulseqlib_mex('get_tr_waveforms', to_handle(seq), ...
+                        o.subsequence_idx - 1, amp_mode, ...
+                        o.tr_index - 1, o.include_prep, o.include_cooldown, ...
+                        o.collapse_delays);
 end
 
 function h = to_handle(seq)

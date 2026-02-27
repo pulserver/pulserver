@@ -29,7 +29,7 @@
 
 /** @defgroup errcodes Error codes
  *  Every public function returns a plain int:
- *    positive  = success (PULSEQLIB_SUCCESS)
+ *    positive  = success (PULSEQLIB_OK)
  *    negative  = failure
  *
  *  On failure the caller should read the diagnostic message string
@@ -74,7 +74,7 @@ typedef struct pulseqlib_diagnostic {
     char message[PULSEQLIB_DIAG_MSG_LEN];
 } pulseqlib_diagnostic;
 
-#define PULSEQLIB_DIAGNOSTIC_INIT {PULSEQLIB_SUCCESS, {'\0'}}
+#define PULSEQLIB_DIAGNOSTIC_INIT {PULSEQLIB_OK, {'\0'}}
 
 /* ================================================================== */
 /*  System options                                                    */

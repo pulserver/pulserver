@@ -307,6 +307,7 @@ int pulseqlib_get_tr_waveforms(
     int                             tr_index,
     int                             include_prep,
     int                             include_cooldown,
+    int                             collapse_delays,
     pulseqlib_tr_waveforms*         out,
     pulseqlib_diagnostic*           diag);
 
@@ -819,6 +820,50 @@ int pulseqlib_freq_mod_collection_read_cache(
 
 /** @brief Free a frequency modulation collection and all owned memory. */
 void pulseqlib_freq_mod_collection_free(pulseqlib_freq_mod_collection* fmc);
+
+/* ================================================================== */
+/*  Unique-block and segment-block getters                            */
+/* ================================================================== */
+
+/**
+ * @brief Return the number of unique block definitions for a subsequence.
+ *
+ * @param[in]  coll        Loaded collection.
+ * @param[in]  subseq_idx  0-based subsequence index.
+ * @return Number of unique blocks (>= 0), or negative error code.
+ */
+int pulseqlib_get_num_unique_blocks(const pulseqlib_collection* coll,
+                                    int subseq_idx);
+
+/**
+ * @brief Return the 1-based .seq block ID for the n-th unique block.
+ *
+ * This is the key into pypulseq's block_events / Pulseq MATLAB toolbox
+ * block_events table.  The ID corresponds to the FIRST occurrence of
+ * that unique block pattern in the original .seq file.
+ *
+ * @param[in]  coll        Loaded collection.
+ * @param[in]  subseq_idx  0-based subsequence index.
+ * @param[in]  blk_def_idx 0-based index into the unique block list.
+ * @return 1-based block ID (> 0), or negative error code.
+ */
+int pulseqlib_get_unique_block_id(const pulseqlib_collection* coll,
+                                  int subseq_idx, int blk_def_idx);
+
+/**
+ * @brief Copy unique-block-definition indices for a segment.
+ *
+ * For segment @p seg_idx, writes @c segment_info.num_blocks indices
+ * to @p out_ids.  Each value is a 0-based index into the unique block
+ * list (suitable for passing to pulseqlib_get_unique_block_id).
+ *
+ * @param[in]  coll      Loaded collection.
+ * @param[in]  seg_idx   Global segment index.
+ * @param[out] out_ids   Caller buffer (at least num_blocks ints).
+ * @return Number of IDs written (>= 0), or negative error code.
+ */
+int pulseqlib_get_segment_block_def_indices(const pulseqlib_collection* coll,
+                                            int seg_idx, int* out_ids);
 
 #ifdef __cplusplus
 }

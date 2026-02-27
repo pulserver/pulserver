@@ -250,7 +250,8 @@ public:
         int amplitude_mode    = PULSEQLIB_AMP_MAX_POS,
         int tr_index          = 0,
         bool include_prep     = false,
-        bool include_cooldown = false) const
+        bool include_cooldown = false,
+        bool collapse_delays  = false) const
     {
         pulseqlib_tr_waveforms cw;
         pulseqlib_diagnostic diag;
@@ -260,6 +261,7 @@ public:
         int code = pulseqlib_get_tr_waveforms(
             coll_, ss, amplitude_mode, tr_index,
             include_prep ? 1 : 0, include_cooldown ? 1 : 0,
+            collapse_delays ? 1 : 0,
             &cw, &diag);
         check(code, diag);
 
@@ -423,6 +425,33 @@ public:
         pulseqlib_block_instance ci = PULSEQLIB_BLOCK_INSTANCE_INIT;
         check(pulseqlib_get_block_instance(coll_, &ci));
         return BlockInstance::from_c(ci);
+    }
+
+    // ── Unique-block and segment-block queries ───────────────────
+
+    /** Number of unique block definitions in subsequence @p ss. */
+    int num_unique_blocks(int ss = 0) const {
+        int n = pulseqlib_get_num_unique_blocks(coll_, ss);
+        if (n < 0) check(n);
+        return n;
+    }
+
+    /** 1-based .seq block ID for the @p blk_def_idx-th unique block. */
+    int unique_block_id(int ss, int blk_def_idx) const {
+        int id = pulseqlib_get_unique_block_id(coll_, ss, blk_def_idx);
+        if (id < 0) check(id);
+        return id;
+    }
+
+    /** Unique-block-definition indices for a global segment. */
+    std::vector<int> segment_block_def_indices(int seg_idx) const {
+        auto si = segment_info(seg_idx);
+        std::vector<int> ids(si.num_blocks);
+        if (si.num_blocks > 0) {
+            int rc = pulseqlib_get_segment_block_def_indices(coll_, seg_idx, ids.data());
+            if (rc < 0) check(rc);
+        }
+        return ids;
     }
 
     // ── Frequency modulation ─────────────────────────────────────

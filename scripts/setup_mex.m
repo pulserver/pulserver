@@ -46,9 +46,6 @@ cSources = { ...
 mexSource = fullfile(mexSrcDir, 'pulseqlib_mex.cpp');
 
 %% ---------- compiler flags ----------
-% C sources compiled as C; MEX gateway compiled as C++
-cFlags = {'-DKISS_FFT_USE_ALLOCA'};
-
 % Include path for C headers
 incFlag = ['-I' csrcDir];
 
@@ -65,7 +62,6 @@ try
     mex('-R2018a', ...
         '-outdir', outDir, ...
         incFlag, ...
-        cFlags{:}, ...
         allSources{:});
     fprintf('Build successful: %s\n', ...
         fullfile(outDir, ['pulseqlib_mex.' mexext]));
@@ -82,4 +78,4 @@ assert(exist(mexFile, 'file') == 3, ...
 
 fprintf('Done. Add the matlab/ folder to your MATLAB path:\n');
 fprintf('  >> addpath(''%s'')\n', fullfile(rootDir, 'matlab'));
-fprintf('Then use:  seq = pulserver.load(''myseq.seq'');\n');
+fprintf('Then use:  sc = pulserver.SequenceCollection(''scan_001.seq'');\n');

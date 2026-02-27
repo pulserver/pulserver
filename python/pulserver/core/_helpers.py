@@ -5,40 +5,6 @@ __all__ = []
 import numpy as np
 
 
-def _circular_pad(waveform: np.ndarray, target_length: int) -> np.ndarray:
-    """
-    Circularly pad a waveform to a target length.
-
-    Uses circular (modulo) indexing so that when extended, the waveform
-    wraps around to the beginning (true circular padding).
-
-    If target_length == len(waveform), returns a copy.
-    If target_length > len(waveform), uses modulo indexing to repeat cyclically.
-    If target_length < len(waveform), truncates the waveform.
-
-    Parameters
-    ----------
-    waveform : np.ndarray
-        Input waveform.
-    target_length : int
-        Desired output length.
-
-    Returns
-    -------
-    np.ndarray
-        Circularly padded waveform of length target_length.
-    """
-    current_length = len(waveform)
-
-    if current_length == target_length:
-        return waveform.copy()
-    elif current_length > target_length:
-        return waveform[:target_length].copy()
-    else:
-        indices = np.arange(target_length) % current_length
-        return waveform[indices].copy()
-
-
 def _add_echo_spacing_axis(ax, freq_min, freq_max):
     """
     Add a secondary x-axis showing echo spacing (us) = 1/(2*frequency).

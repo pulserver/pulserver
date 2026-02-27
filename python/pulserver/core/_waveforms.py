@@ -97,10 +97,12 @@ AMP_ACTUAL = 2
 
 def get_tr_waveforms(
     seq: SequenceCollection,
+    subsequence_idx: int = 0,
     amplitude_mode: Literal['max_pos', 'min_abs', 'actual'] = 'max_pos',
     tr_index: int = 0,
     include_prep: bool = False,
     include_cooldown: bool = False,
+    collapse_delays: bool = False,
 ) -> TrWaveforms:
     """Extract native-timing TR waveforms from the segmented representation.
 
@@ -112,6 +114,8 @@ def get_tr_waveforms(
     ----------
     seq : SequenceCollection
         The sequence to analyse.
+    subsequence_idx : int
+        Subsequence index (0-based, default 0).
     amplitude_mode : {'max_pos', 'min_abs', 'actual'}
         How to resolve multi-shot gradient amplitudes:
 
@@ -124,6 +128,9 @@ def get_tr_waveforms(
         Prepend preparation blocks (only valid for first TR).
     include_cooldown : bool
         Append cooldown blocks (only valid for last TR).
+    collapse_delays : bool
+        Shrink pure-delay blocks (no RF, no grad, no ADC) to 0.1 ms
+        at the C level, producing a compact waveform timeline.
 
     Returns
     -------
@@ -138,10 +145,12 @@ def get_tr_waveforms(
     # Call C extension
     raw = _get_tr_waveforms(
         seq._cseq,
+        subsequence_idx=subsequence_idx,
         amplitude_mode=c_mode,
         tr_index=tr_index,
         include_prep=include_prep,
         include_cooldown=include_cooldown,
+        collapse_delays=collapse_delays,
     )
 
     # Unit conversions:
@@ -182,7 +191,7 @@ def get_tr_waveforms(
     ]
 
     # Get TR timing info for pypulseq overlay
-    tr_info = _find_tr(seq._cseq)
+    tr_info = _find_tr(seq._cseq, subsequence_idx=subsequence_idx)
     tr_dur = tr_info['tr_duration_us']
     prep_dur = sum(
         b['duration_us'] for b in raw['blocks']

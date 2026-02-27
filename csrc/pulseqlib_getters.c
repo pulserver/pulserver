@@ -2239,3 +2239,52 @@ int pulseqlib_get_adc_def(
 
     return PULSEQLIB_SUCCESS;
 }
+
+/* ================================================================== */
+/*  Unique-block and segment-block getters                            */
+/* ================================================================== */
+
+int pulseqlib_get_num_unique_blocks(
+    const pulseqlib_collection* coll,
+    int                         subseq_idx)
+{
+    if (!coll) return PULSEQLIB_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INDEX;
+    return coll->descriptors[subseq_idx].num_unique_blocks;
+}
+
+int pulseqlib_get_unique_block_id(
+    const pulseqlib_collection* coll,
+    int                         subseq_idx,
+    int                         blk_def_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    if (!coll) return PULSEQLIB_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEQLIB_ERR_INDEX;
+    desc = &coll->descriptors[subseq_idx];
+    if (blk_def_idx < 0 || blk_def_idx >= desc->num_unique_blocks)
+        return PULSEQLIB_ERR_INDEX;
+    /* block_definitions[].id is the 1-based .seq block index */
+    return desc->block_definitions[blk_def_idx].id;
+}
+
+int pulseqlib_get_segment_block_def_indices(
+    const pulseqlib_collection* coll,
+    int                         seg_idx,
+    int*                        out_ids)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_tr_segment* seg;
+    int local_seg, i;
+
+    if (!coll || !out_ids) return PULSEQLIB_ERR_NULL_POINTER;
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return PULSEQLIB_ERR_INDEX;
+
+    seg = &desc->segment_definitions[local_seg];
+    for (i = 0; i < seg->num_blocks; ++i)
+        out_ids[i] = seg->unique_block_indices[i];
+    return seg->num_blocks;
+}

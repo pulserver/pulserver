@@ -1,21 +1,46 @@
-function deserialize(seq, path)
-% deserialize - Restore a collection from a previously serialized binary cache.
+function seqs = deserialize(path)
+% deserialize - Read a linked chain of .seq files into a cell array.
 %
-%   pulserver.deserialize(seq, 'output.bin')
+%   seqs = pulserver.deserialize('scan_001.seq')
+%
+%   Starting from the given path, each file is read with seq.read().
+%   If the [DEFINITIONS] section contains a 'next' key the referenced
+%   file (resolved relative to the directory of the current file) is
+%   loaded as well, and so on until no 'next' key is found.
 %
 % Inputs
-%   seq     double | SequenceCollection   Collection handle or object.
-%   path    char        Path to the binary cache file.
+%   path    char   Path to the first .seq file in the chain.
 %
-% See also: pulserver.serialize, pulserver.SequenceCollection
+% Outputs
+%   seqs    cell array of mr.Sequence   Ordered list of loaded sequences.
+%
+% See also: pulserver.serialize
 
-    pulseqlib_mex('load_cache', to_handle(seq), path);
-end
+    seqs = {};
+    current = path;
 
-function h = to_handle(seq)
-    if isa(seq, 'pulserver.SequenceCollection')
-        h = seq.Handle;
-    else
-        h = seq;
+    while ~isempty(current)
+        if ~isfile(current)
+            error('pulserver:deserialize', ...
+                  'Sequence file not found: %s', current);
+        end
+
+        seq = mr.Sequence();
+        seq.read(current);
+        seqs{end+1} = seq; %#ok<AGROW>
+
+        % Follow the "next" link if present
+        if isfield(seq.definitions, 'next') || ...
+           (isa(seq.definitions, 'containers.Map') && isKey(seq.definitions, 'next'))
+            if isa(seq.definitions, 'containers.Map')
+                nextName = seq.definitions('next');
+            else
+                nextName = seq.definitions.next;
+            end
+            folder = fileparts(current);
+            current = fullfile(folder, nextName);
+        else
+            current = '';
+        end
     end
 end

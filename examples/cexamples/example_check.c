@@ -311,8 +311,7 @@ int main(int argc, char** argv)
          *      pulseqlib_adc_def ad;
          *      pulseqlib_get_adc_def(coll, a, &ad);
          *      bw        = <vendor formula from ad.dwell_us>;
-         *      calcfilter(&echo_filt[a], bw, ad.num_samples, ...);
-         *      setfilter(&echo_filt[a], SCAN | PRESCAN);
+         *      calcfilter(...);
          *
          * 2. Set data storage dimensions from total_readouts,
          *    max_samples, and vendor-specific limits.

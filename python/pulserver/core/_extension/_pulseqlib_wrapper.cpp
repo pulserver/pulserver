@@ -22,7 +22,7 @@ namespace py = pybind11;
 
 class _PulseqCollection {
 public:
-    _PulseqCollection(const py::bytes& seq_bytes,
+    _PulseqCollection(const py::list& seq_bytes_list,
                       float gamma,
                       float B0,
                       float max_grad,
@@ -44,14 +44,21 @@ public:
         opts.adc_raster_us           = adc_raster_time * 1e6f;
         opts.block_raster_us         = block_duration_raster * 1e6f;
 
-        std::string buffer = seq_bytes;
-        const char* buf_ptr  = buffer.data();
-        int         buf_size = static_cast<int>(buffer.size());
+        int n = static_cast<int>(seq_bytes_list.size());
+        std::vector<std::string> buffers(n);
+        std::vector<const char*> buf_ptrs(n);
+        std::vector<int>         buf_sizes(n);
+        for (int i = 0; i < n; ++i) {
+            buffers[i]   = seq_bytes_list[i].cast<py::bytes>();
+            buf_ptrs[i]  = buffers[i].data();
+            buf_sizes[i] = static_cast<int>(buffers[i].size());
+        }
 
         coll_ = std::unique_ptr<pulseqlib::Collection>(
             new pulseqlib::Collection(
-                &buf_ptr, &buf_size, 1, opts, parse_labels, num_averages));
-        source_size_ = buf_size;
+                buf_ptrs.data(), buf_sizes.data(), n,
+                opts, parse_labels, num_averages));
+        source_size_ = (n > 0) ? buf_sizes[0] : 0;
     }
 
     pulseqlib::Collection& coll() { return *coll_; }
@@ -65,9 +72,9 @@ private:
 
 // ─── Thin conversion functions ──────────────────────────────────────
 
-static py::dict _find_tr(_PulseqCollection& pc) {
+static py::dict _find_tr(_PulseqCollection& pc, int subsequence_idx = 0) {
     const auto& c = pc.coll();
-    auto si = c.subseq_info(0);
+    auto si = c.subseq_info(subsequence_idx);
     py::dict out;
     out["tr_size"]              = si.tr_size;
     out["num_trs"]              = si.num_trs;
@@ -81,47 +88,18 @@ static py::dict _find_tr(_PulseqCollection& pc) {
     return out;
 }
 
-static py::dict _find_segments(_PulseqCollection& pc) {
-    const auto& c = pc.coll();
-    auto ci = c.collection_info();
-    py::dict out;
-
-    py::list segments;
-    for (int i = 0; i < ci.num_segments; ++i) {
-        auto seg = c.segment_info(i);
-        py::dict segd;
-        segd["start_block"] = seg.start_block;
-        segd["num_blocks"]  = seg.num_blocks;
-        segments.append(segd);
-    }
-    out["unique_segments"]        = segments;
-    out["prep_segment_table"]     = c.prep_segment_table();
-    out["main_segment_table"]     = c.main_segment_table();
-    out["cooldown_segment_table"] = c.cooldown_segment_table();
-    return out;
-}
-
-static py::dict _get_tr_gradient_waveforms(_PulseqCollection& pc) {
-    auto wf = pc.coll().get_tr_gradient_waveforms();
-    py::dict out;
-    out["time_gx"]     = wf.gx.time_us;
-    out["waveform_gx"] = wf.gx.amplitude_hz_per_m;
-    out["time_gy"]     = wf.gy.time_us;
-    out["waveform_gy"] = wf.gy.amplitude_hz_per_m;
-    out["time_gz"]     = wf.gz.time_us;
-    out["waveform_gz"] = wf.gz.amplitude_hz_per_m;
-    return out;
-}
-
 static py::dict _get_tr_waveforms(
     _PulseqCollection& pc,
+    int subsequence_idx,
     int amplitude_mode,
     int tr_index,
     bool include_prep,
-    bool include_cooldown)
+    bool include_cooldown,
+    bool collapse_delays)
 {
     auto wf = pc.coll().get_tr_waveforms(
-        0, amplitude_mode, tr_index, include_prep, include_cooldown);
+        subsequence_idx, amplitude_mode, tr_index, include_prep, include_cooldown,
+        collapse_delays);
     py::dict out;
 
     auto ch_to_dict = [](const pulseqlib::ChannelWaveform& ch) -> py::dict {
@@ -166,6 +144,7 @@ static py::dict _get_tr_waveforms(
 
 static py::dict _calc_acoustic_spectra(
     _PulseqCollection& pc,
+    int subsequence_idx,
     int target_window_size,
     float target_resolution_hz,
     float max_freq_hz,
@@ -173,16 +152,16 @@ static py::dict _calc_acoustic_spectra(
 {
     std::vector<pulseqlib::ForbiddenBand> bands;
     for (auto item : py_bands) {
-        py::dict d = item.cast<py::dict>();
+        py::tuple t = item.cast<py::tuple>();
         pulseqlib::ForbiddenBand b;
-        b.freq_min_hz            = d["freq_min_hz"].cast<float>();
-        b.freq_max_hz            = d["freq_max_hz"].cast<float>();
-        b.max_amplitude_hz_per_m = d["max_amplitude"].cast<float>();
+        b.freq_min_hz            = t[0].cast<float>();
+        b.freq_max_hz            = t[1].cast<float>();
+        b.max_amplitude_hz_per_m = t[2].cast<float>();
         bands.push_back(b);
     }
 
     auto sp = pc.coll().calc_acoustic_spectra(
-        0, target_window_size, target_resolution_hz, max_freq_hz, bands);
+        subsequence_idx, target_window_size, target_resolution_hz, max_freq_hz, bands);
 
     py::dict out;
     out["freq_min_hz"]       = sp.freq_min_hz;
@@ -219,6 +198,7 @@ static py::dict _calc_acoustic_spectra(
 
 static py::dict _calc_pns(
     _PulseqCollection& pc,
+    int subsequence_idx,
     float chronaxie_us,
     float rheobase,
     float alpha)
@@ -228,7 +208,7 @@ static py::dict _calc_pns(
     params.rheobase_hz_per_m_per_s = rheobase;
     params.alpha                   = alpha;
 
-    auto r = pc.coll().calc_pns(0, params);
+    auto r = pc.coll().calc_pns(subsequence_idx, params);
 
     py::dict out;
     out["num_samples"] = r.num_samples;
@@ -247,28 +227,27 @@ static void _check_consistency(_PulseqCollection& pc) {
 static void _check_safety(
     _PulseqCollection& pc,
     py::list py_bands,
-    float pns_chronaxie_us,
-    float pns_rheobase,
-    float pns_alpha,
+    float stim_threshold,
+    float decay_constant_us,
     float pns_threshold_percent,
     bool  skip_pns)
 {
     std::vector<pulseqlib::ForbiddenBand> bands;
     for (auto item : py_bands) {
-        py::dict d = item.cast<py::dict>();
+        py::tuple t = item.cast<py::tuple>();
         pulseqlib::ForbiddenBand b;
-        b.freq_min_hz            = d["freq_min_hz"].cast<float>();
-        b.freq_max_hz            = d["freq_max_hz"].cast<float>();
-        b.max_amplitude_hz_per_m = d["max_amplitude"].cast<float>();
+        b.freq_min_hz            = t[0].cast<float>();
+        b.freq_max_hz            = t[1].cast<float>();
+        b.max_amplitude_hz_per_m = t[2].cast<float>();
         bands.push_back(b);
     }
 
     const pulseqlib::PnsParams* pns_ptr = nullptr;
     pulseqlib::PnsParams pns;
     if (!skip_pns) {
-        pns.chronaxie_us            = pns_chronaxie_us;
-        pns.rheobase_hz_per_m_per_s = pns_rheobase;
-        pns.alpha                   = pns_alpha;
+        pns.chronaxie_us            = decay_constant_us;
+        pns.rheobase_hz_per_m_per_s = stim_threshold;   // rheobase/alpha combined
+        pns.alpha                   = 1.0f;             // folded into stim_threshold
         pns_ptr = &pns;
     }
 
@@ -324,56 +303,23 @@ static py::dict _get_report(_PulseqCollection& pc) {
     return out;
 }
 
-// ─── Block info ─────────────────────────────────────────────────────
+// ─── Unique-block queries ────────────────────────────────────────────
 
-static py::dict _get_block_info(_PulseqCollection& pc, int seg, int blk) {
-    auto info = pc.coll().block_info(seg, blk);
-    py::dict out;
-    out["duration_us"]   = info.duration_us;
-    out["start_time_us"] = info.start_time_us;
-
-    /* Gradient per axis */
-    for (int ax = 0; ax < 3; ++ax) {
-        std::string prefix = std::string(1, "xyz"[ax]);
-        out[(prefix + "_has_grad").c_str()]       = info.has_grad[ax] != 0;
-        out[(prefix + "_is_trapezoid").c_str()]   = info.grad_is_trapezoid[ax] != 0;
-        out[(prefix + "_grad_delay_us").c_str()]  = info.grad_delay_us[ax];
-        out[(prefix + "_num_samples").c_str()]     = info.grad_num_samples[ax];
-    }
-
-    /* RF */
-    out["has_rf"]           = info.has_rf != 0;
-    out["rf_delay_us"]      = info.rf_delay_us;
-    out["rf_num_samples"]   = info.rf_num_samples;
-
-    /* ADC */
-    out["has_adc"]          = info.has_adc != 0;
-    out["adc_delay_us"]     = info.adc_delay_us;
-
-    return out;
+static int _get_num_unique_blocks(_PulseqCollection& pc, int seq_idx) {
+    return pc.coll().num_unique_blocks(seq_idx);
 }
 
-// ─── Cache functions ────────────────────────────────────────────────
-
-static void _save_cache(_PulseqCollection& pc,
-                        const std::string& path,
-                        int source_size) {
-    int sz = (source_size > 0) ? source_size : pc.source_size();
-    pc.coll().save_cache(path, sz);
-}
-
-static void _load_cache(_PulseqCollection& pc,
-                        const std::string& path) {
-    pc.coll().load_cache(path, pc.source_size());
+static int _get_unique_block_id(_PulseqCollection& pc, int seq_idx, int blk_def_idx) {
+    return pc.coll().unique_block_id(seq_idx, blk_def_idx);
 }
 
 // ─── Module ─────────────────────────────────────────────────────────
 
 PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     py::class_<_PulseqCollection>(m, "_PulseqCollection")
-        .def(py::init<py::bytes, float, float, float, float,
+        .def(py::init<py::list, float, float, float, float,
                        float, float, float, float, bool, int>(),
-             py::arg("seq_bytes"),
+             py::arg("seq_bytes_list"),
              py::arg("gamma"),
              py::arg("B0"),
              py::arg("max_grad"),
@@ -387,23 +333,21 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
         ;
 
     m.def("_find_tr", &_find_tr,
-          py::arg("collection"));
-
-    m.def("_find_segments", &_find_segments,
-          py::arg("collection"));
-
-    m.def("_get_tr_gradient_waveforms", &_get_tr_gradient_waveforms,
-          py::arg("collection"));
+          py::arg("collection"),
+          py::arg("subsequence_idx") = 0);
 
     m.def("_get_tr_waveforms", &_get_tr_waveforms,
           py::arg("collection"),
+          py::arg("subsequence_idx") = 0,
           py::arg("amplitude_mode") = 0,
           py::arg("tr_index") = 0,
           py::arg("include_prep") = false,
-          py::arg("include_cooldown") = false);
+          py::arg("include_cooldown") = false,
+          py::arg("collapse_delays") = false);
 
     m.def("_calc_acoustic_spectra", &_calc_acoustic_spectra,
           py::arg("collection"),
+          py::arg("subsequence_idx") = 0,
           py::arg("target_window_size"),
           py::arg("target_resolution_hz"),
           py::arg("max_freq_hz"),
@@ -411,6 +355,7 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
 
     m.def("_calc_pns", &_calc_pns,
           py::arg("collection"),
+          py::arg("subsequence_idx") = 0,
           py::arg("chronaxie_us"),
           py::arg("rheobase"),
           py::arg("alpha"));
@@ -421,26 +366,21 @@ PYBIND11_MODULE(_pulseqlib_wrapper, m) {
     m.def("_check_safety", &_check_safety,
           py::arg("collection"),
           py::arg("forbidden_bands") = py::list(),
-          py::arg("pns_chronaxie_us") = 0.0f,
-          py::arg("pns_rheobase") = 0.0f,
-          py::arg("pns_alpha") = 0.0f,
+          py::arg("stim_threshold") = 0.0f,
+          py::arg("decay_constant_us") = 0.0f,
           py::arg("pns_threshold_percent") = 100.0f,
           py::arg("skip_pns") = true);
-
-    m.def("_save_cache", &_save_cache,
-          py::arg("collection"),
-          py::arg("path"),
-          py::arg("source_size"));
-
-    m.def("_load_cache", &_load_cache,
-          py::arg("collection"),
-          py::arg("path"));
 
     m.def("_get_report", &_get_report,
           py::arg("collection"));
 
-    m.def("_get_block_info", &_get_block_info,
+    m.def("_get_num_unique_blocks", &_get_num_unique_blocks,
           py::arg("collection"),
-          py::arg("seg"),
-          py::arg("blk"));
+          py::arg("seq_idx"));
+
+    m.def("_get_unique_block_id", &_get_unique_block_id,
+          py::arg("collection"),
+          py::arg("seq_idx"),
+          py::arg("blk_def_idx"));
+
 }

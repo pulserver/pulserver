@@ -1,15 +1,17 @@
-"""Validation: compare pulserver waveforms against pypulseq reference."""
+"""Validation: compare pulserver waveforms against a reference source."""
 
 __all__ = ['validate']
 
-from typing import Literal
+from pathlib import Path
+from typing import Union
 
 import numpy as np
-import pypulseq as pp
 
 from ._sequence import SequenceCollection
 from ._waveforms import get_tr_waveforms
 
+
+# ── helpers ──────────────────────────────────────────────────────────
 
 def _interp_to_ref(t_ref, a_ref, t_test, a_test):
     """Interpolate *test* waveform onto *ref* time base, return aligned pair."""
@@ -27,164 +29,332 @@ def _rms_error(ref, test):
     return 100.0 * np.sqrt(np.mean((ref - test) ** 2)) / norm
 
 
-def validate(
-    seq: SequenceCollection,
-    *,
-    block_range: tuple[int, int] | None = None,
-    grad_atol: float | None = None,
-    rf_rms_percent: float = 10.0,
-    amplitude_mode: Literal['max_pos', 'min_abs', 'actual'] = 'actual',
-    tr_index: int = 0,
-    plot: bool = False,
-) -> dict:
-    """Compare pulserver waveform extraction against pypulseq reference.
+def _abs_tr_start_s(src_seq, num_prep_blocks: int, tr_idx: int,
+                     tr_duration_us: float) -> float:
+    """Compute the absolute start time (in seconds) of a TR.
 
-    For every gradient axis and the RF envelope, the waveforms produced
-    by pulserver's C backend are compared against pypulseq's built-in
-    ``seq.waveforms_and_times()`` output.  This gives confidence that
-    the C library interprets the ``.seq`` file identically to the
-    reference Python implementation.
+    Sums block durations over the preparation region and adds
+    ``tr_idx * tr_duration``.
+    """
+    prep_s = 0.0
+    bd = src_seq.block_durations
+    for k in range(1, num_prep_blocks + 1):
+        prep_s += bd.get(k, 0.0) if isinstance(bd, dict) else bd[k - 1]
+    return prep_s + tr_idx * (tr_duration_us * 1e-6)
 
-    Parameters
-    ----------
-    seq : SequenceCollection
-        Sequence to validate.
-    block_range : (start, end) or None
-        1-based block range to compare (None = full TR).
-    grad_atol : float or None
-        Absolute gradient error tolerance in mT/m.  If ``None``,
-        defaults to ``3 * max_slew * grad_raster_time`` (one slew
-        step) to account for raster-edge interpolation differences.
-    rf_rms_percent : float
-        RF magnitude percent-RMS error threshold.
-    amplitude_mode : str
-        Amplitude mode for pulserver extraction.
-    tr_index : int
-        TR instance for ``'actual'`` mode.
-    plot : bool
-        If ``True``, show a comparison plot (requires matplotlib).
+
+# ── reference extraction ─────────────────────────────────────────────
+
+def _pypulseq_reference(seq, sequence_idx, tr_idx, tr_info):
+    """Extract reference waveforms from pypulseq for a single TR.
 
     Returns
     -------
     dict
-        Keys:
-
-        - ``'ok'`` : bool — ``True`` if all channels pass.
-        - ``'errors'`` : dict[str, float] — per-channel max error.
-        - ``'messages'`` : list[str] — human-readable violation messages.
+        Mapping of channel name to ``(time_us, amplitude)`` tuples.
+        Times are relative to TR start; amplitudes in mT/m (grad) or
+        µT (RF magnitude).
     """
+    src_seq = seq._seqs[sequence_idx]
+    gamma = seq.system.gamma
+
+    t0 = _abs_tr_start_s(
+        src_seq, tr_info['num_prep_blocks'], tr_idx,
+        tr_info['tr_duration_us'],
+    )
+    t1 = t0 + tr_info['tr_duration_us'] * 1e-6
+
+    # waveforms_and_times returns
+    #   (wave_data, tfp_exc, tfp_ref, t_adc, fp_adc)
+    # wave_data is a list of (2, N) ndarrays per channel.
+    result = src_seq.waveforms_and_times(append_RF=True,
+                                          time_range=[t0, t1])
+    channels = result[0]  # list of (2,N) ndarrays
+
+    hz_to_mT_per_m = 1.0 / (gamma * 1e-3)
+    hz_to_uT = 1e6 / gamma
+
+    ref: dict[str, tuple] = {}
+    for ch_idx, ch_name in enumerate(('gx', 'gy', 'gz')):
+        if ch_idx < len(channels):
+            arr = channels[ch_idx]
+            if arr.shape[1] > 0:
+                ref[ch_name] = (
+                    (arr[0] - t0) * 1e6,        # relative µs
+                    arr[1] * hz_to_mT_per_m,
+                )
+                continue
+        ref[ch_name] = (np.empty(0), np.empty(0))
+
+    # RF (index 3 when append_RF=True)
+    if len(channels) > 3:
+        arr = channels[3]
+        if arr.shape[1] > 0:
+            ref['rf_mag'] = (
+                (arr[0] - t0) * 1e6,
+                np.abs(arr[1]) * hz_to_uT,
+            )
+        else:
+            ref['rf_mag'] = (np.empty(0), np.empty(0))
+    else:
+        ref['rf_mag'] = (np.empty(0), np.empty(0))
+
+    return ref
+
+
+def _xml_reference(xml_path):
+    """Extract reference waveforms from an XML file.
+
+    Returns
+    -------
+    dict
+        Same format as :func:`_pypulseq_reference`.
+    """
+    import xml.etree.ElementTree as ET
+
+    tree = ET.parse(str(xml_path))
+    root = tree.getroot()
+
+    g_per_cm_to_mT_per_m = 10.0
+    g_to_uT = 100.0
+
+    ref: dict[str, tuple] = {}
+    for ch_name in ('gx', 'gy', 'gz'):
+        elem = root.find(f'.//{ch_name}')
+        if elem is not None and elem.text:
+            data = np.fromstring(elem.text, sep=' ')
+            if data.size >= 2:
+                n = data.size // 2
+                ref[ch_name] = (data[:n], data[n:] * g_per_cm_to_mT_per_m)
+                continue
+        ref[ch_name] = (np.empty(0), np.empty(0))
+
+    rf_elem = root.find('.//rf')
+    if rf_elem is not None and rf_elem.text:
+        data = np.fromstring(rf_elem.text, sep=' ')
+        if data.size >= 2:
+            n = data.size // 2
+            ref['rf_mag'] = (data[:n], np.abs(data[n:]) * g_to_uT)
+        else:
+            ref['rf_mag'] = (np.empty(0), np.empty(0))
+    else:
+        ref['rf_mag'] = (np.empty(0), np.empty(0))
+
+    return ref
+
+
+# ── public entry point ───────────────────────────────────────────────
+
+def validate(
+    seq: SequenceCollection,
+    *,
+    sequence_idx: int = 0,
+    xml_path: Union[str, Path, None] = None,
+    do_plot: bool = False,
+    tr_range: tuple[int, int] = (0, 1),
+    hide_prep: bool = True,
+    hide_cooldown: bool = True,
+    show_rf_centers: bool = False,
+    show_echoes: bool = False,
+    show_segments: bool = True,
+    show_blocks: bool = False,
+    max_grad_mT_per_m: Union[float, bool, None] = True,
+    grad_atol: float | None = None,
+    rf_rms_percent: float = 10.0,
+) -> dict:
+    """Compare pulserver C-backend waveforms against a reference.
+
+    The reference is either the source pypulseq ``Sequence`` (default,
+    ``xml_path=None``) or an exported XML waveform file.  Gradient
+    channels are compared by maximum absolute error; RF magnitude is
+    compared by RMS percentage error.
+
+    When *do_plot* is ``True`` the base TR waveform plot is created from
+    the C backend (using :func:`_plot.plot` Branch 1) and the reference
+    is overlaid (Branch 2 for pypulseq, Branch 3 for XML).
+
+    Parameters
+    ----------
+    seq : SequenceCollection
+        Sequence collection to validate.
+    sequence_idx : int
+        Subsequence index (0-based, default 0).
+    xml_path : str, Path or None
+        Path to an XML waveform file.  ``None`` (default) validates
+        against the stored pypulseq ``Sequence``.
+    do_plot : bool
+        Show a comparison overlay plot (default ``False``).
+    tr_range : (int, int)
+        Half-open TR index range ``[start, stop)`` to validate
+        (default ``(0, 1)`` — first TR only).
+    hide_prep : bool
+        Hide preparation blocks in the plot (default ``True``).
+    hide_cooldown : bool
+        Hide cooldown blocks in the plot (default ``True``).
+    show_rf_centers : bool
+        Mark RF iso-centres on the plot (default ``False``).
+    show_echoes : bool
+        Mark echo (ADC centre) on the plot (default ``False``).
+    show_segments : bool
+        Colour-code gradients by segment (default ``True``).
+    show_blocks : bool
+        Block-boundary lines on the plot (default ``False``).
+    max_grad_mT_per_m : float, bool or None
+        Gradient-limit reference line.  ``True`` (default) derives the
+        value from system limits; a float is used directly; ``False``
+        or ``None`` disables the line.
+    grad_atol : float or None
+        Absolute gradient error tolerance in mT/m.  ``None`` (default)
+        uses ``3 × max_slew × grad_raster_time``.
+    rf_rms_percent : float
+        RF magnitude percent-RMS error threshold (default 10).
+
+    Returns
+    -------
+    dict
+        ``'ok'`` : bool — ``True`` if all channels pass.
+        ``'errors'`` : dict[str, float] — per-channel max/RMS error.
+        ``'messages'`` : list[str] — human-readable violation messages.
+    """
+    from ._extension._pulseqlib_wrapper import _find_tr
+
     sys = seq.system
 
     # Default gradient tolerance: 3 slew steps (mT/m)
     if grad_atol is None:
-        # max_slew in T/m/s, grad_raster in s → T/m per raster step → mT/m
         grad_atol = 3.0 * sys.max_slew * sys.grad_raster_time * 1e3
 
-    # --- pypulseq reference waveforms ---
-    if block_range is not None:
-        ref_waves = seq._seq.waveforms_and_times(append_zero=True,
-                                                  block_range=block_range)
+    # Resolve max-grad line for plotting
+    if max_grad_mT_per_m is True:
+        _max_grad_plot = sys.max_grad * 1e3          # T/m → mT/m
+    elif isinstance(max_grad_mT_per_m, (int, float)) and max_grad_mT_per_m is not False:
+        _max_grad_plot = float(max_grad_mT_per_m)
     else:
-        ref_waves = seq._seq.waveforms_and_times(append_zero=True)
+        _max_grad_plot = None
 
-    # ref_waves is (gx, gy, gz, rf, adc) where each is (2, N): row0=time(s), row1=value
-    gamma = sys.gamma  # Hz/T
+    # TR metadata
+    tr_info = _find_tr(seq._cseq, subsequence_idx=sequence_idx)
 
-    ref_gx_t = ref_waves[0][0] * 1e6  # s → µs
-    ref_gx_a = ref_waves[0][1] / (gamma * 1e-3)  # Hz/m → mT/m
-    ref_gy_t = ref_waves[1][0] * 1e6
-    ref_gy_a = ref_waves[1][1] / (gamma * 1e-3)
-    ref_gz_t = ref_waves[2][0] * 1e6
-    ref_gz_a = ref_waves[2][1] / (gamma * 1e-3)
+    # ── Validate each TR in range ────────────────────────────
+    errors_per_tr: list[dict[str, float]] = []
+    messages: list[str] = []
+    multi_tr = (tr_range[1] - tr_range[0]) > 1
 
-    # RF magnitude
-    ref_rf_t = ref_waves[3][0] * 1e6  # s → µs
-    ref_rf_mag = np.abs(ref_waves[3][1]) / gamma * 1e6  # Hz → µT
+    for tr_idx in range(tr_range[0], tr_range[1]):
+        # C-backend waveforms
+        wf = get_tr_waveforms(
+            seq,
+            subsequence_idx=sequence_idx,
+            amplitude_mode='actual',
+            tr_index=tr_idx,
+        )
 
-    # --- pulserver waveforms ---
-    wf = get_tr_waveforms(seq, amplitude_mode=amplitude_mode, tr_index=tr_index)
-
-    # --- compare gradients ---
-    errors = {}
-    messages = []
-
-    for axis, ref_t, ref_a, test_ch in [
-        ('gx', ref_gx_t, ref_gx_a, wf.gx),
-        ('gy', ref_gy_t, ref_gy_a, wf.gy),
-        ('gz', ref_gz_t, ref_gz_a, wf.gz),
-    ]:
-        r, t = _interp_to_ref(ref_t, ref_a, test_ch.time_us, test_ch.amplitude)
-        if len(r) > 0:
-            err = float(np.max(np.abs(r - t)))
+        # Reference waveforms
+        if xml_path is None:
+            ref = _pypulseq_reference(seq, sequence_idx, tr_idx, tr_info)
         else:
-            err = 0.0
-        errors[axis] = err
-        if err > grad_atol:
-            messages.append(
-                f'{axis} waveform mismatch: max diff {err:.4f} mT/m '
-                f'(tolerance {grad_atol:.4f} mT/m)')
+            ref = _xml_reference(xml_path)
 
-    # --- compare RF ---
-    r, t = _interp_to_ref(ref_rf_t, ref_rf_mag,
-                           wf.rf_mag.time_us, wf.rf_mag.amplitude)
-    rf_err = _rms_error(r, t)
-    errors['rf_mag'] = rf_err
-    if rf_err > rf_rms_percent:
-        messages.append(
-            f'RF magnitude mismatch: {rf_err:.1f}% RMS error '
-            f'(tolerance {rf_rms_percent:.1f}%)')
+        # Compare gradients
+        tr_err: dict[str, float] = {}
+        for ch in ('gx', 'gy', 'gz'):
+            ref_t, ref_a = ref[ch]
+            test_ch = getattr(wf, ch)
+            r, t = _interp_to_ref(ref_t, ref_a,
+                                   test_ch.time_us, test_ch.amplitude)
+            err = float(np.max(np.abs(r - t))) if len(r) > 0 else 0.0
+            tr_err[ch] = err
+            if err > grad_atol:
+                pfx = f'TR {tr_idx}: ' if multi_tr else ''
+                messages.append(
+                    f'{pfx}{ch} mismatch: max diff {err:.4f} mT/m '
+                    f'(tol {grad_atol:.4f} mT/m)')
+
+        # Compare RF
+        ref_t, ref_a = ref['rf_mag']
+        r, t = _interp_to_ref(ref_t, ref_a,
+                               wf.rf_mag.time_us, wf.rf_mag.amplitude)
+        rf_err = _rms_error(r, t)
+        tr_err['rf_mag'] = rf_err
+        if rf_err > rf_rms_percent:
+            pfx = f'TR {tr_idx}: ' if multi_tr else ''
+            messages.append(
+                f'{pfx}RF mismatch: {rf_err:.1f}% RMS '
+                f'(tol {rf_rms_percent:.1f}%)')
+
+        errors_per_tr.append(tr_err)
+
+    # Aggregate: worst-case across TRs
+    errors: dict[str, float] = {}
+    if errors_per_tr:
+        for key in errors_per_tr[0]:
+            errors[key] = max(e[key] for e in errors_per_tr)
 
     ok = len(messages) == 0
 
-    # --- optional plot ---
-    if plot:
-        _plot_comparison(
-            ref_gx_t, ref_gx_a,
-            ref_gy_t, ref_gy_a,
-            ref_gz_t, ref_gz_a,
-            ref_rf_t, ref_rf_mag,
-            wf, ok, messages,
+    # ── Optional overlay plot ────────────────────────────────
+    if do_plot:
+        _validation_plot(
+            seq,
+            sequence_idx=sequence_idx,
+            xml_path=xml_path,
+            tr_idx=tr_range[0],
+            hide_prep=hide_prep,
+            hide_cooldown=hide_cooldown,
+            show_rf_centers=show_rf_centers,
+            show_echoes=show_echoes,
+            show_segments=show_segments,
+            show_blocks=show_blocks,
+            max_grad_mT_per_m=_max_grad_plot,
+            ok=ok,
+            messages=messages,
         )
 
     return {'ok': ok, 'errors': errors, 'messages': messages}
 
 
-def _plot_comparison(
-    ref_gx_t, ref_gx_a,
-    ref_gy_t, ref_gy_a,
-    ref_gz_t, ref_gz_a,
-    ref_rf_t, ref_rf_mag,
-    wf, ok, messages,
+# ── validation plot (private) ────────────────────────────────────────
+
+def _validation_plot(
+    seq, *, sequence_idx, xml_path, tr_idx,
+    hide_prep, hide_cooldown,
+    show_rf_centers, show_echoes,
+    show_segments, show_blocks,
+    max_grad_mT_per_m,
+    ok, messages,
 ):
-    """Side-by-side comparison plot."""
-    import matplotlib.pyplot as plt
+    """Create the comparison overlay using :func:`_plot.plot`."""
+    from ._plot import plot as _plot_impl
 
-    fig, axes = plt.subplots(4, 1, figsize=(14, 8), sharex=True)
+    # Branch 1: C-backend base figure
+    handle = _plot_impl(
+        seq,
+        subsequence_idx=sequence_idx,
+        tr_idx=tr_idx,
+        hide_prep=hide_prep,
+        hide_cooldown=hide_cooldown,
+        collapse_delays=False,
+        show_segments=show_segments,
+        show_blocks=show_blocks,
+        show_slew=False,
+        show_rf_centers=show_rf_centers,
+        show_echoes=show_echoes,
+        max_grad_mT_per_m=max_grad_mT_per_m,
+        max_slew_T_per_m_per_s=None,
+    )
+
+    # Branch 2 (pypulseq) or Branch 3 (XML) overlay
+    label = 'XML' if xml_path is not None else 'pypulseq'
+    overlay_source = (str(xml_path) if xml_path is not None
+                      else seq._seqs[sequence_idx])
+    _plot_impl(overlay_source, fig=handle, label=label)
+
+    # Annotate pass / fail
     status = 'PASS' if ok else 'FAIL'
-
-    axes[0].set_title(f'validate() — {status}', fontweight='bold')
-
-    # RF magnitude
-    axes[0].plot(ref_rf_t / 1e3, ref_rf_mag, 'k-', label='pypulseq', linewidth=0.8)
-    axes[0].plot(wf.rf_mag.time_us / 1e3, wf.rf_mag.amplitude, 'r.', label='pulserver',
-                 markersize=2)
-    axes[0].set_ylabel('|RF| (µT)')
-    axes[0].legend(loc='upper right', fontsize=7)
-
-    for ax_idx, (label, ref_t, ref_a, ch) in enumerate([
-        ('Gx', ref_gx_t, ref_gx_a, wf.gx),
-        ('Gy', ref_gy_t, ref_gy_a, wf.gy),
-        ('Gz', ref_gz_t, ref_gz_a, wf.gz),
-    ], start=1):
-        axes[ax_idx].plot(ref_t / 1e3, ref_a, 'k-', linewidth=0.8)
-        axes[ax_idx].plot(ch.time_us / 1e3, ch.amplitude, 'r.', markersize=2)
-        axes[ax_idx].set_ylabel(f'{label} (mT/m)')
-
-    axes[-1].set_xlabel('Time (ms)')
-
+    colour = 'green' if ok else 'red'
+    handle.fig.suptitle(f'validate()  \u2014  {status}',
+                        fontweight='bold', color=colour)
     if messages:
-        fig.text(0.5, 0.01, '\n'.join(messages), ha='center', fontsize=8,
-                 color='red')
-
-    plt.tight_layout(rect=[0, 0.05 if messages else 0, 1, 1])
-    plt.show()
+        handle.fig.text(0.5, 0.01, '\n'.join(messages),
+                        ha='center', fontsize=8, color='red')
+    handle.fig.tight_layout(rect=[0, 0.05 if messages else 0, 1, 0.95])

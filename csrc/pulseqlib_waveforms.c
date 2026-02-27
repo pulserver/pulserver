@@ -1022,6 +1022,7 @@ int pulseqlib_get_tr_waveforms(
     int tr_index,
     int include_prep,
     int include_cooldown,
+    int collapse_delays,
     pulseqlib_tr_waveforms* out,
     pulseqlib_diagnostic* diag)
 {
@@ -1191,6 +1192,18 @@ int pulseqlib_get_tr_waveforms(
         bdef = &desc->block_definitions[bte->id];
         block_dur_us = (bte->duration_us >= 0) ? (float)bte->duration_us
                                                : (float)bdef->duration_us;
+
+        /* Pure-delay shrinkage: if collapse_delays is set and this block
+         * has no RF, no gradients, and no ADC, clamp its display duration
+         * to a short dummy value (100 µs = 0.1 ms). */
+        if (collapse_delays &&
+            bdef->rf_id < 0 &&
+            bte->gx_id < 0 && bte->gy_id < 0 && bte->gz_id < 0 &&
+            (bte->adc_id < 0 || bte->adc_id >= desc->num_unique_adcs) &&
+            block_dur_us > 100.0f)
+        {
+            block_dur_us = 100.0f;  /* 0.1 ms dummy delay */
+        }
 
         /* block metadata */
         out->blocks[n].start_us    = t0;
