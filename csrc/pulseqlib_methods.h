@@ -745,15 +745,20 @@ int pulseqlib_get_freq_mod_count_tr(const pulseqlib_collection* coll,
  * 3-channel data is discarded after the initial plan computation to
  * save memory.
  *
- * @param[out] out_fmc     Receives an allocated collection (caller frees).
- * @param[in]  coll        Loaded sequence collection.
- * @param[in]  shift_m     Spatial shift (dx, dy, dz) in metres.
+ * @param[out] out_fmc       Receives an allocated collection (caller frees).
+ * @param[in]  coll          Loaded sequence collection.
+ * @param[in]  shift_m       Spatial shift (dx, dy, dz) in metres.
+ * @param[in]  fov_rotation  FOV rotation matrix (3x3, row-major,
+ *                           logical-to-physical).  Used to correct
+ *                           frequency modulation for blocks flagged
+ *                           with @c norot.  Pass NULL for identity.
  * @return PULSEQLIB_SUCCESS on success.
  */
 int pulseqlib_build_freq_mod_collection(
     pulseqlib_freq_mod_collection** out_fmc,
     const pulseqlib_collection* coll,
-    const float* shift_m);
+    const float* shift_m,
+    const float* fov_rotation);
 
 /**
  * @brief Recompute freq-mod waveforms for one subsequence.

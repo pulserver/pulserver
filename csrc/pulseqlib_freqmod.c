@@ -62,6 +62,45 @@ static int dedup_keys(int* unique_first, int* map,
 }
 
 /* ================================================================== */
+/*  Helper: 3x3 matrix multiply C = A^T @ B  (row-major)             */
+/* ================================================================== */
+
+static void matmul_AtB(float* C, const float* A, const float* B)
+{
+    int i, j;
+    for (i = 0; i < 3; ++i)
+        for (j = 0; j < 3; ++j)
+            C[i * 3 + j] = A[0 * 3 + i] * B[0 * 3 + j]
+                          + A[1 * 3 + i] * B[1 * 3 + j]
+                          + A[2 * 3 + i] * B[2 * 3 + j];
+}
+
+/* ================================================================== */
+/*  Helper: check if 3x3 matrix is identity                           */
+/* ================================================================== */
+
+static int is_identity3(const float* M)
+{
+    static const float I[9] = {1,0,0, 0,1,0, 0,0,1};
+    int i;
+    for (i = 0; i < 9; ++i)
+        if (fabsf(M[i] - I[i]) > 1e-7f) return 0;
+    return 1;
+}
+
+/* ================================================================== */
+/*  Helper: compare two 3x3 matrices with tolerance                   */
+/* ================================================================== */
+
+static int rotmat_equal(const float* A, const float* B)
+{
+    int i;
+    for (i = 0; i < 9; ++i)
+        if (fabsf(A[i] - B[i]) > 1e-7f) return 0;
+    return 1;
+}
+
+/* ================================================================== */
 /*  Helper: check if waveform has any nonzero sample                  */
 /* ================================================================== */
 
@@ -378,7 +417,8 @@ static int build_freq_mod_library(
     pulseqlib_freq_mod_library** out_lib,
     const pulseqlib_collection* coll,
     int subseq_idx,
-    const float* shift_m)
+    const float* shift_m,
+    const float* fov_rotation)
 {
     const pulseqlib_sequence_descriptor* desc;
     pulseqlib_freq_mod_library* lib = NULL;
@@ -402,6 +442,7 @@ static int build_freq_mod_library(
     int  num_plan;
 
     int* block_rotation      = NULL;   /* [count] rotation_idx per event  */
+    int* block_norot         = NULL;   /* [count] norot flag per event    */
     pulseqlib_freq_mod_definition* base_defs = NULL;  /* [num_base] temp */
     int* base_active_mask    = NULL;   /* [num_base * 3] per-axis flag    */
     int  max_samples;
@@ -454,10 +495,12 @@ static int build_freq_mod_library(
     plan_unique    = (int*)PULSEQLIB_ALLOC((size_t)count * sizeof(int));
     plan_map       = (int*)PULSEQLIB_ALLOC((size_t)count * sizeof(int));
     block_rotation = (int*)PULSEQLIB_ALLOC((size_t)count * sizeof(int));
+    block_norot    = (int*)PULSEQLIB_ALLOC((size_t)count * sizeof(int));
 
     if (!block_indices || !base_rows || !base_unique || !base_map ||
         !entry_keys || !entry_unique || !entry_map ||
-        !plan_keys || !plan_unique || !plan_map || !block_rotation)
+        !plan_keys || !plan_unique || !plan_map || !block_rotation ||
+        !block_norot)
         goto build_fail;
 
     /* ==== Pass 1: gather per-event info ==== */
@@ -481,11 +524,10 @@ static int build_freq_mod_library(
             base_rows[idx][3] = bdef->gy_id;
             base_rows[idx][4] = bdef->gz_id;
 
-            /* Rotation */
-            if (bte->rotation_id >= 0 && !bte->norot_flag)
-                block_rotation[idx] = bte->rotation_id;
-            else
-                block_rotation[idx] = -1;
+            /* Rotation: record both rotation_id and norot_flag */
+            block_rotation[idx] = (bte->rotation_id >= 0)
+                ? bte->rotation_id : -1;
+            block_norot[idx] = bte->norot_flag;
 
             idx++;
         }
@@ -674,6 +716,103 @@ static int build_freq_mod_library(
                (size_t)desc->num_rotations * sizeof(float[9]));
     }
 
+    /* ==== Handle rotation for frequency modulation ====
+     *
+     * compute_plan_waveforms() computes  u = R^T @ shift_m  where R is
+     * the per-plan-instance rotation.  The four relevant cases are:
+     *
+     *   norot=0, rot event R_ext:  R = R_ext   → u = R_ext^T @ shift
+     *       The rotation event is "undone" so that the gradient rotation
+     *       is applied in the prescribed FOV orientation (e.g. for
+     *       consistent diffusion direction independent of prescribed FOV).
+     *
+     *   norot=0, no rot event:     R = I       → u = shift
+     *       No rotation to undo.
+     *
+     * Both norot=0 cases are handled by keeping block_rotation at its
+     * original value (rotation_id or -1); they are NOT modified below.
+     *
+     * For blocks with norot=1, the scanner does NOT apply R_prescription
+     * (the FOV rotation) to the gradients — the rotation event is applied
+     * in axial (physical) orientation rather than the prescribed FOV.
+     * The shift vector, however, implicitly includes R_prescription.
+     * We therefore compute effective rotations:
+     *
+     *   norot=1, rot event R_ext:  R_eff = R_presc^T @ R_ext
+     *       → u = R_ext^T @ R_presc @ shift
+     *
+     *   norot=1, no rot event:     R_eff = R_presc^T
+     *       → u = R_presc @ shift
+     *
+     * The effective rotation is appended to the rotation library so that
+     * compute_plan_waveforms() can use it transparently.
+     */
+    {
+        int has_norot = 0;
+        for (n = 0; n < count; ++n)
+            if (block_norot[n]) { has_norot = 1; break; }
+
+        if (has_norot && fov_rotation && !is_identity3(fov_rotation)) {
+            /* Non-identity FOV rotation: compute R_eff for norot blocks */
+            int cap = lib->num_rotations + count;  /* upper bound */
+            float (*expanded)[9] = PULSEQLIB_ALLOC((size_t)cap * sizeof(float[9]));
+            int num_exp;
+
+            if (!expanded) goto build_fail;
+
+            /* Copy existing rotations */
+            if (lib->num_rotations > 0 && lib->rotations)
+                memcpy(expanded, lib->rotations,
+                       (size_t)lib->num_rotations * sizeof(float[9]));
+            num_exp = lib->num_rotations;
+
+            for (n = 0; n < count; ++n) {
+                float R_eff[9];
+                int found, u;
+
+                if (!block_norot[n]) continue;
+
+                /* Compute R_eff = R_presc^T @ R_ext (or R_presc^T if no
+                 * rotation event). */
+                if (block_rotation[n] >= 0 &&
+                    block_rotation[n] < desc->num_rotations) {
+                    matmul_AtB(R_eff, fov_rotation,
+                               desc->rotation_matrices[block_rotation[n]]);
+                } else {
+                    /* No rotation event: R_eff = R_presc^T */
+                    int i, j;
+                    for (i = 0; i < 3; ++i)
+                        for (j = 0; j < 3; ++j)
+                            R_eff[i * 3 + j] = fov_rotation[j * 3 + i];
+                }
+
+                /* Dedup: search for R_eff among existing + new entries */
+                found = -1;
+                for (u = 0; u < num_exp; ++u) {
+                    if (rotmat_equal(R_eff, expanded[u])) {
+                        found = u;
+                        break;
+                    }
+                }
+                if (found < 0) {
+                    memcpy(expanded[num_exp], R_eff, sizeof(float[9]));
+                    found = num_exp++;
+                }
+                block_rotation[n] = found;
+            }
+
+            /* Replace rotation library with expanded version */
+            if (lib->rotations) PULSEQLIB_FREE(lib->rotations);
+            lib->rotations = expanded;
+            lib->num_rotations = num_exp;
+        } else if (has_norot) {
+            /* FOV rotation is identity (or NULL): for norot blocks the
+             * effective rotation equals the original rotation event
+             * (which may be -1 = identity).  No expansion needed, but
+             * block_rotation already holds the correct value. */
+        }
+    }
+
     /* ==== Pass 3: build plan dedup keys ==== */
     for (n = 0; n < count; ++n) {
         memset(&plan_keys[n], 0, sizeof(plan_keys[n]));
@@ -750,6 +889,7 @@ static int build_freq_mod_library(
     PULSEQLIB_FREE(plan_unique);
     PULSEQLIB_FREE(plan_map);
     PULSEQLIB_FREE(block_rotation);
+    PULSEQLIB_FREE(block_norot);
 
     *out_lib = lib;
     return PULSEQLIB_SUCCESS;
@@ -768,6 +908,7 @@ build_fail:
     if (plan_unique)    PULSEQLIB_FREE(plan_unique);
     if (plan_map)       PULSEQLIB_FREE(plan_map);
     if (block_rotation) PULSEQLIB_FREE(block_rotation);
+    if (block_norot)    PULSEQLIB_FREE(block_norot);
     if (lib)            { freq_mod_library_free(lib); }
     return PULSEQLIB_ERR_ALLOC_FAILED;
 }
@@ -1079,7 +1220,8 @@ static void freq_mod_library_free(pulseqlib_freq_mod_library* lib)
 int pulseqlib_build_freq_mod_collection(
     pulseqlib_freq_mod_collection** out_fmc,
     const pulseqlib_collection* coll,
-    const float* shift_m)
+    const float* shift_m,
+    const float* fov_rotation)
 {
     pulseqlib_freq_mod_collection* fmc = NULL;
     int s, nsub;
@@ -1104,7 +1246,8 @@ int pulseqlib_build_freq_mod_collection(
     memset(fmc->libs, 0, (size_t)nsub * sizeof(*fmc->libs));
 
     for (s = 0; s < nsub; ++s) {
-        int rc = build_freq_mod_library(&fmc->libs[s], coll, s, shift_m);
+        int rc = build_freq_mod_library(&fmc->libs[s], coll, s, shift_m,
+                                        fov_rotation);
         if (PULSEQLIB_FAILED(rc)) {
             pulseqlib_freq_mod_collection_free(fmc);
             return rc;
