@@ -135,12 +135,104 @@ MU_TEST(test_freq_mod_build_seq1)
  */
 
 /* ------------------------------------------------------------------ */
+/*  Norot effective rotation math test                                */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Validates that the effective rotation for norot blocks satisfies:
+ *
+ *   R_eff = R_presc^T @ R_ext    (norot with rotation event)
+ *   R_eff = R_presc^T            (norot without rotation event)
+ *
+ * so that R_eff^T @ shift == R_ext^T @ R_presc @ shift  (case 1)
+ *     and R_eff^T @ shift == R_presc @ shift             (case 2).
+ */
+MU_TEST(test_freq_mod_norot_effective_rotation)
+{
+    /* 90-degree rotation around Z axis (row-major) */
+    float R_presc[9] = {0,-1,0, 1,0,0, 0,0,1};
+    /* 90-degree rotation around X axis */
+    float R_ext[9]   = {1,0,0, 0,0,-1, 0,1,0};
+    float shift[3]   = {1.0f, 2.0f, 3.0f};
+    float u_expected[3], u_got[3], tmp[3];
+    float R_eff[9];
+    int i, j;
+
+    /* ---- Case 1: norot + rotation event ----
+     * u_expected = R_ext^T @ (R_presc @ shift) */
+    pulseqlib__apply_rotation(tmp, R_presc, shift, 0);
+    pulseqlib__apply_rotation(u_expected, R_ext, tmp, 1);
+
+    /* Compute R_eff = R_presc^T @ R_ext (same formula as freqmod.c) */
+    for (i = 0; i < 3; ++i)
+        for (j = 0; j < 3; ++j)
+            R_eff[i*3+j] = R_presc[0*3+i]*R_ext[0*3+j]
+                          + R_presc[1*3+i]*R_ext[1*3+j]
+                          + R_presc[2*3+i]*R_ext[2*3+j];
+
+    pulseqlib__apply_rotation(u_got, R_eff, shift, 1);
+
+    for (i = 0; i < 3; ++i) {
+        mu_assert((float)fabs(u_got[i] - u_expected[i]) < 1e-5f,
+                  "norot+rot: R_eff^T @ shift == R_ext^T @ R_presc @ shift");
+    }
+
+    /* ---- Case 2: norot without rotation event ----
+     * u_expected = R_presc @ shift */
+    pulseqlib__apply_rotation(u_expected, R_presc, shift, 0);
+
+    /* R_eff = R_presc^T (transpose) */
+    for (i = 0; i < 3; ++i)
+        for (j = 0; j < 3; ++j)
+            R_eff[i*3+j] = R_presc[j*3+i];
+
+    pulseqlib__apply_rotation(u_got, R_eff, shift, 1);
+
+    for (i = 0; i < 3; ++i) {
+        mu_assert((float)fabs(u_got[i] - u_expected[i]) < 1e-5f,
+                  "norot+no_rot: R_eff^T @ shift == R_presc @ shift");
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Build with fov_rotation (NULL vs non-NULL, identity case)         */
+/* ------------------------------------------------------------------ */
+
+MU_TEST(test_freq_mod_build_with_fov_rotation)
+{
+    pulseqlib_collection*          coll = NULL;
+    pulseqlib_diagnostic           diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    pulseqlib_freq_mod_collection* fmc1 = NULL;
+    pulseqlib_freq_mod_collection* fmc2 = NULL;
+    float shift[3]   = {0.0f, 0.0f, 0.0f};
+    float fov_id[9]  = {1,0,0, 0,1,0, 0,0,1};
+    int rc;
+
+    rc = load_seq("expected_output/seq1.seq", &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+
+    /* Build with NULL fov_rotation */
+    rc = pulseqlib_build_freq_mod_collection(&fmc1, coll, shift, NULL);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "build with NULL fov_rotation");
+
+    /* Build with identity fov_rotation (should give same result) */
+    rc = pulseqlib_build_freq_mod_collection(&fmc2, coll, shift, fov_id);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "build with identity fov_rotation");
+
+    pulseqlib_freq_mod_collection_free(fmc1);
+    pulseqlib_freq_mod_collection_free(fmc2);
+    pulseqlib_collection_free(coll);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Suite                                                             */
 /* ------------------------------------------------------------------ */
 
 MU_TEST_SUITE(test_freq_mod_suite)
 {
     MU_RUN_TEST(test_freq_mod_build_seq1);
+    MU_RUN_TEST(test_freq_mod_norot_effective_rotation);
+    MU_RUN_TEST(test_freq_mod_build_with_fov_rotation);
     /* MU_RUN_TEST(test_freq_mod_nonzero_shift); */
 }
 
