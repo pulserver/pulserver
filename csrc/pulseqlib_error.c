@@ -108,11 +108,12 @@ const char* pulseqlib_get_error_message(int code)
         case PULSEQLIB_ERR_UNSUPPORTED_VERSION:       return "Unsupported sequence file version (requires >= 1.5.0)";
         case PULSEQLIB_ERR_INVALID_PREP_POSITION:     return "Invalid preparation block position";
         case PULSEQLIB_ERR_INVALID_COOLDOWN_POSITION: return "Invalid cooldown block position";
-        case PULSEQLIB_ERR_INVALID_ONCE_FLAGS:        return "ONCE flags were found outside preparation/cooldown sections";
+        case PULSEQLIB_ERR_INVALID_ONCE_FLAGS:        return "ONCE flags define non-identical inner-loop repetitions";
         case PULSEQLIB_ERR_RASTER_MISMATCH:            return "System and sequence raster times are not integer multiples";
         case PULSEQLIB_ERR_SIGNATURE_MISMATCH:         return "MD5 signature verification failed";
         case PULSEQLIB_ERR_SIGNATURE_MISSING:          return "Sequence file has no [SIGNATURE] section or stored hash";
         case PULSEQLIB_ERR_ADC_DEFINITION_CONFLICT:    return "Block definition has conflicting ADC definitions across instances";
+        case PULSEQLIB_ERR_INDEX:                      return "Index out of range";
         case PULSEQLIB_ERR_TOO_MANY_GRAD_SHOTS:       return "Number of waveform shots exceeds maximum allowed";
         case PULSEQLIB_ERR_TR_NO_BLOCKS:              return "Sequence contains no blocks";
         case PULSEQLIB_ERR_TR_NO_IMAGING_REGION:      return "No imaging region found (preparation + cooldown >= total blocks)";
@@ -157,7 +158,9 @@ const char* pulseqlib_get_error_hint(int code)
             return "Ensure that the cooldown section is marked with ONCE labels "
                    "and ends at the last block of the sequence.";
         case PULSEQLIB_ERR_INVALID_ONCE_FLAGS:
-            return "Ensure that ONCE flags are only used in preparation and cooldown sections.";
+            return "Ensure that ONCE flags define structurally identical inner-loop "
+                   "repetitions. All periods delimited by ONCE sections must have the "
+                   "same block structure.";
         case PULSEQLIB_ERR_RASTER_MISMATCH:
             return "System raster times and sequence-defined raster times must be "
                    "integer multiples of each other for piecewise-constant "

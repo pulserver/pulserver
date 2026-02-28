@@ -1430,7 +1430,7 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
          * identical (same block definition IDs and once_flag values),
          * fold the block table to a single period + trailing cooldown
          * and recount prep/cooldown from the folded result. */
-        int trailing, effective, period, num_reps;
+        int trailing, effective, period, num_reps, pl;
         int i, j, ok;
 
         /* Count trailing once==2 blocks at the very end */
@@ -1445,36 +1445,34 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
          * by checking both block definition id and once_flag. */
         period = 0;
         if (effective > 1) {
-            int l;
-            for (l = 1; l <= effective / 2; ++l) {
-                if (effective % l != 0) continue;
+            for (pl = 1; pl <= effective / 2; ++pl) {
+                if (effective % pl != 0) continue;
                 ok = 1;
-                for (i = l; i < effective; ++i) {
-                    if (desc->block_table[i].id != desc->block_table[i % l].id ||
-                        desc->block_table[i].once_flag != desc->block_table[i % l].once_flag) {
+                for (i = pl; i < effective; ++i) {
+                    if (desc->block_table[i].id != desc->block_table[i % pl].id ||
+                        desc->block_table[i].once_flag != desc->block_table[i % pl].once_flag) {
                         ok = 0;
                         break;
                     }
                 }
-                if (ok) { period = l; break; }
+                if (ok) { period = pl; break; }
             }
         }
 
         /* If no period found with trailing cooldown separated,
          * try the entire sequence as periodic. */
         if (period <= 0 && trailing > 0) {
-            int l;
-            for (l = 1; l <= num_blocks / 2; ++l) {
-                if (num_blocks % l != 0) continue;
+            for (pl = 1; pl <= num_blocks / 2; ++pl) {
+                if (num_blocks % pl != 0) continue;
                 ok = 1;
-                for (i = l; i < num_blocks; ++i) {
-                    if (desc->block_table[i].id != desc->block_table[i % l].id ||
-                        desc->block_table[i].once_flag != desc->block_table[i % l].once_flag) {
+                for (i = pl; i < num_blocks; ++i) {
+                    if (desc->block_table[i].id != desc->block_table[i % pl].id ||
+                        desc->block_table[i].once_flag != desc->block_table[i % pl].once_flag) {
                         ok = 0;
                         break;
                     }
                 }
-                if (ok) { period = l; trailing = 0; break; }
+                if (ok) { period = pl; trailing = 0; break; }
             }
         }
 

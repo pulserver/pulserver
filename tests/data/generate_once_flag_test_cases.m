@@ -180,7 +180,10 @@ seq.addBlock(gx_rdown1_long, mr.makeLabel('SET','ONCE', 2)); % we also label thi
 seq.write('09_cooldown_too_long.seq');
 
 %% ------------------------------------------------------------------------
-% Invalid: Once in the middle of sequence
+% Invalid: Once in the middle of sequence (non-identical inner loop periods)
+% Note: once in the middle is allowed if all inner loop repetitions are
+% structurally identical.  This case is invalid because the once=1
+% sections produce periods of different lengths / block-ID patterns.
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
