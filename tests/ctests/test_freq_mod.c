@@ -41,7 +41,7 @@ MU_TEST(test_freq_mod_build_seq1)
         return;
     }
 
-    rc = pulseqlib_build_freq_mod_collection(&fmc, coll, shift);
+    rc = pulseqlib_build_freq_mod_collection(&fmc, coll, shift, NULL);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "build collection should succeed");
     mu_assert(fmc != NULL, "fmc should be non-NULL");
 
@@ -87,7 +87,7 @@ MU_TEST(test_freq_mod_build_seq1)
  *     count = pulseqlib_get_freq_mod_count(coll);
  *     mu_assert(count > 0, "GRE should have RF+ADC");
  *
- *     rc = pulseqlib_build_freq_mod_collection(&fmc, coll, shift);
+ *     rc = pulseqlib_build_freq_mod_collection(&fmc, coll, shift, NULL);
  *     mu_assert(PULSEQLIB_SUCCEEDED(rc), "build collection");
  *
  *     // At least one block should have nonzero waveform

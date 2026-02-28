@@ -328,7 +328,7 @@ Typical usage pattern
    pulseqlib_freq_mod_collection *fmc = NULL;
    if (PULSEQLIB_FAILED(pulseqlib_freq_mod_collection_read_cache(
            &fmc, "scan.fmod.bin", coll, shift))) {
-       pulseqlib_build_freq_mod_collection(&fmc, coll, shift);
+       pulseqlib_build_freq_mod_collection(&fmc, coll, shift, fov_rotation);
        pulseqlib_freq_mod_collection_write_cache(fmc, "scan.fmod.bin");
    }
 

@@ -129,7 +129,7 @@ int main(int argc, char** argv)
         if (PULSEQLIB_FAILED(rc)) {
             /* Cache miss or stale: build from scratch and store. */
             rc = pulseqlib_build_freq_mod_collection(
-                &freqmods, coll, fovshift);
+                &freqmods, coll, fovshift, fovrotation);
             CHECK(rc, &diag);
 
             rc = pulseqlib_freq_mod_collection_write_cache(
