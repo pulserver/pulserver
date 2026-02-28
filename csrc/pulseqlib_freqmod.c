@@ -716,15 +716,33 @@ static int build_freq_mod_library(
                (size_t)desc->num_rotations * sizeof(float[9]));
     }
 
-    /* ==== Handle norot blocks ====
+    /* ==== Handle rotation for frequency modulation ====
      *
-     * For blocks with norot, the scanner does NOT apply R_prescription
-     * (the FOV rotation) to the gradients.  The shift vector, however,
-     * implicitly includes R_prescription.  We therefore "undo" it by
-     * computing effective rotations:
+     * compute_plan_waveforms() computes  u = R^T @ shift_m  where R is
+     * the per-plan-instance rotation.  The four relevant cases are:
      *
-     *   norot + rotation event R_ext:  R_eff = R_presc^T @ R_ext
-     *   norot + no rotation event:     R_eff = R_presc^T
+     *   norot=0, rot event R_ext:  R = R_ext   → u = R_ext^T @ shift
+     *       The rotation event is "undone" so that the gradient rotation
+     *       is applied in the prescribed FOV orientation (e.g. for
+     *       consistent diffusion direction independent of prescribed FOV).
+     *
+     *   norot=0, no rot event:     R = I       → u = shift
+     *       No rotation to undo.
+     *
+     * Both norot=0 cases are handled by keeping block_rotation at its
+     * original value (rotation_id or -1); they are NOT modified below.
+     *
+     * For blocks with norot=1, the scanner does NOT apply R_prescription
+     * (the FOV rotation) to the gradients — the rotation event is applied
+     * in axial (physical) orientation rather than the prescribed FOV.
+     * The shift vector, however, implicitly includes R_prescription.
+     * We therefore compute effective rotations:
+     *
+     *   norot=1, rot event R_ext:  R_eff = R_presc^T @ R_ext
+     *       → u = R_ext^T @ R_presc @ shift
+     *
+     *   norot=1, no rot event:     R_eff = R_presc^T
+     *       → u = R_presc @ shift
      *
      * The effective rotation is appended to the rotation library so that
      * compute_plan_waveforms() can use it transparently.
