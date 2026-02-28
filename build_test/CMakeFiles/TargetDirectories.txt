@@ -1,6 +1,0 @@
-/home/runner/work/pulserver/pulserver/build_test/CMakeFiles/run_tests.dir
-/home/runner/work/pulserver/pulserver/build_test/CMakeFiles/edit_cache.dir
-/home/runner/work/pulserver/pulserver/build_test/CMakeFiles/rebuild_cache.dir
-/home/runner/work/pulserver/pulserver/build_test/csrc_build/CMakeFiles/pulseqlib.dir
-/home/runner/work/pulserver/pulserver/build_test/csrc_build/CMakeFiles/edit_cache.dir
-/home/runner/work/pulserver/pulserver/build_test/csrc_build/CMakeFiles/rebuild_cache.dir

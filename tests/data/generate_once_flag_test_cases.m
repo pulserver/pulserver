@@ -211,4 +211,4 @@ fprintf('All sequences generated.\n')
 %   14 - [M,M,C1, M,M,C2]                  different cooldown block types
 %   15 - [P1,M,M, P2,M,M]                  different prep block types
 %   16 - [P1,M,M,C, P2,M,M,C]             different prep types with cooldown
-%   17 - [P,M,M,C1, P,M,M,C2]             different cooldown types with prep;
+%   17 - [P,M,M,C1, P,M,M,C2]             different cooldown types with prep
