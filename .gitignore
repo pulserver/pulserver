@@ -23,4 +23,5 @@ docs/generated/
 docs_build/
 jupyter_execute/
 
-src/pulserver/_version.py
+src/pulserver/_version.py_codeql_detected_source_root
+build_test/

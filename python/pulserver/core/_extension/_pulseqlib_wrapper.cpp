@@ -85,6 +85,7 @@ static py::dict _find_tr(_PulseqCollection& pc, int subsequence_idx = 0) {
     out["num_prep_trs"]         = si.num_prep_trs;
     out["num_cooldown_trs"]     = si.num_cooldown_trs;
     out["tr_duration_us"]       = si.tr_duration_us;
+    out["num_passes"]           = si.num_passes;
     return out;
 }
 
@@ -276,6 +277,7 @@ static py::dict _get_report(_PulseqCollection& pc) {
         sd["num_prep_blocks"]       = si.num_prep_blocks;
         sd["num_cooldown_blocks"]   = si.num_cooldown_blocks;
         sd["tr_duration_us"]        = si.tr_duration_us;
+        sd["num_passes"]            = si.num_passes;
         sd["num_unique_segments"]   = si.num_prep_segments + si.num_main_segments + si.num_cooldown_segments;
         sd["segment_offset"]        = si.segment_offset;
 

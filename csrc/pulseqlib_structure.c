@@ -101,16 +101,18 @@ int pulseqlib__build_scan_table(
     pulseqlib_diagnostic* diag)
 {
     pulseqlib_diagnostic local_diag;
-    int avg, blk, once, count, idx;
+    int pass, avg, blk, once, count, idx;
     int has_nd_prep, has_nd_cool;
     int prep_tr_id, main_tr_id, cool_tr_id;
     int play_prep, play_main, play_cool;
+    int num_passes;
 
     if (!diag) { pulseqlib_diagnostic_init(&local_diag); diag = &local_diag; }
     else       pulseqlib_diagnostic_init(diag);
 
     if (!desc) { diag->code = PULSEQLIB_ERR_NULL_POINTER; return diag->code; }
     if (num_averages < 1) num_averages = 1;
+    num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
 
     has_nd_prep = (desc->tr_descriptor.num_prep_blocks > 0 &&
                    !desc->tr_descriptor.degenerate_prep);
@@ -128,18 +130,23 @@ int pulseqlib__build_scan_table(
         prep_tr_id = 0;  main_tr_id = 1; cool_tr_id = 2;
     }
 
-    /* Pass 1: count entries */
+    /* Pass 1: count entries.
+     * Passes are the outer loop: each pass plays an average-expanded
+     * copy of the folded block table (prep on first avg, cooldown on
+     * last avg, main on every avg). */
     count = 0;
-    for (avg = 0; avg < num_averages; ++avg) {
-        play_prep = (avg == 0) ? 1 : 0;
-        play_main = 1;
-        play_cool = (avg == num_averages - 1) ? 1 : 0;
+    for (pass = 0; pass < num_passes; ++pass) {
+        for (avg = 0; avg < num_averages; ++avg) {
+            play_prep = (avg == 0) ? 1 : 0;
+            play_main = 1;
+            play_cool = (avg == num_averages - 1) ? 1 : 0;
 
-        for (blk = 0; blk < desc->num_blocks; ++blk) {
-            once = desc->block_table[blk].once_flag;
-            if (once == 1 && play_prep)      ++count;
-            else if (once == 0 && play_main) ++count;
-            else if (once == 2 && play_cool) ++count;
+            for (blk = 0; blk < desc->num_blocks; ++blk) {
+                once = desc->block_table[blk].once_flag;
+                if (once == 1 && play_prep)      ++count;
+                else if (once == 0 && play_main) ++count;
+                else if (once == 2 && play_cool) ++count;
+            }
         }
     }
 
@@ -161,28 +168,30 @@ int pulseqlib__build_scan_table(
 
     /* Pass 2: fill */
     idx = 0;
-    for (avg = 0; avg < num_averages; ++avg) {
-        play_prep = (avg == 0) ? 1 : 0;
-        play_main = 1;
-        play_cool = (avg == num_averages - 1) ? 1 : 0;
+    for (pass = 0; pass < num_passes; ++pass) {
+        for (avg = 0; avg < num_averages; ++avg) {
+            play_prep = (avg == 0) ? 1 : 0;
+            play_main = 1;
+            play_cool = (avg == num_averages - 1) ? 1 : 0;
 
-        for (blk = 0; blk < desc->num_blocks; ++blk) {
-            once = desc->block_table[blk].once_flag;
-            if (once == 1 && play_prep) {
-                desc->scan_table_block_idx[idx] = blk;
-                desc->scan_table_tr_id[idx]     = prep_tr_id;
-                desc->scan_table_seg_id[idx]    = -1;
-                ++idx;
-            } else if (once == 0 && play_main) {
-                desc->scan_table_block_idx[idx] = blk;
-                desc->scan_table_tr_id[idx]     = main_tr_id;
-                desc->scan_table_seg_id[idx]    = -1;
-                ++idx;
-            } else if (once == 2 && play_cool) {
-                desc->scan_table_block_idx[idx] = blk;
-                desc->scan_table_tr_id[idx]     = cool_tr_id;
-                desc->scan_table_seg_id[idx]    = -1;
-                ++idx;
+            for (blk = 0; blk < desc->num_blocks; ++blk) {
+                once = desc->block_table[blk].once_flag;
+                if (once == 1 && play_prep) {
+                    desc->scan_table_block_idx[idx] = blk;
+                    desc->scan_table_tr_id[idx]     = prep_tr_id;
+                    desc->scan_table_seg_id[idx]    = -1;
+                    ++idx;
+                } else if (once == 0 && play_main) {
+                    desc->scan_table_block_idx[idx] = blk;
+                    desc->scan_table_tr_id[idx]     = main_tr_id;
+                    desc->scan_table_seg_id[idx]    = -1;
+                    ++idx;
+                } else if (once == 2 && play_cool) {
+                    desc->scan_table_block_idx[idx] = blk;
+                    desc->scan_table_tr_id[idx]     = cool_tr_id;
+                    desc->scan_table_seg_id[idx]    = -1;
+                    ++idx;
+                }
             }
         }
     }

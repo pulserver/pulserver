@@ -180,7 +180,10 @@ seq.addBlock(gx_rdown1_long, mr.makeLabel('SET','ONCE', 2)); % we also label thi
 seq.write('09_cooldown_too_long.seq');
 
 %% ------------------------------------------------------------------------
-% Invalid: Once in the middle of sequence
+% Invalid: Once in the middle of sequence (non-identical inner loop periods)
+% Note: once in the middle is allowed if all inner loop repetitions are
+% structurally identical.  This case is invalid because the once=1
+% sections produce periods of different lengths / block-ID patterns.
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
@@ -196,4 +199,16 @@ seq.addBlock(gx_flat1);
 seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2)); % we also label this block as the exit block, which excludes it from all but last repetitions if the sequence is repeated
 seq.write('10_multi_tr_nonvalid_once_in_the_middle.seq');
 
-fprintf('All sequences generated.\n');
+fprintf('All sequences generated.\n')
+
+%% TODO: additional test cases for full once-flag pattern coverage
+%
+% Valid patterns (inner-loop / multi-pass):
+%   12 - [M,M,C, M,M,C, M,M,C]            repeating (M,M,C) groups
+%   13 - [P,M,M,C, P,M,M,C, P,M,M,C]      repeating (P,M,M,C) groups
+%
+% Invalid patterns:
+%   14 - [M,M,C1, M,M,C2]                  different cooldown block types
+%   15 - [P1,M,M, P2,M,M]                  different prep block types
+%   16 - [P1,M,M,C, P2,M,M,C]             different prep types with cooldown
+%   17 - [P,M,M,C1, P,M,M,C2]             different cooldown types with prep

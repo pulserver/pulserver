@@ -73,6 +73,7 @@ void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
 
     d->num_prep_blocks    = 0;
     d->num_cooldown_blocks = 0;
+    d->num_passes          = 1;
 
     if (d->segment_definitions) {
         for (i = 0; i < d->num_unique_segments; ++i) {

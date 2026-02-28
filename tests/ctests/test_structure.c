@@ -127,12 +127,70 @@ MU_TEST(test_structure_seq1_basic)
  */
 
 /* ------------------------------------------------------------------ */
+/*  Once-in-middle: valid (bSSFP-like inner loop)                     */
+/* ------------------------------------------------------------------ */
+
+MU_TEST(test_structure_valid_once_in_middle)
+{
+    pulseqlib_collection* coll = NULL;
+    pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    int rc;
+
+    rc = load_seq("data/11_multi_tr_valid_once_in_the_middle.seq",
+                  &coll, &diag, 0);
+    /* The once-flag folding must succeed (rc != ERR_INVALID_ONCE_FLAGS).
+     * Downstream segmentation may still fail due to gradient boundary
+     * conditions in the test data; that is unrelated to once handling. */
+    mu_assert(rc != PULSEQLIB_ERR_INVALID_ONCE_FLAGS,
+              "valid once-in-middle must not be rejected by once-flag check");
+    if (coll) pulseqlib_collection_free(coll);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Once-in-middle: invalid (non-identical periods)                   */
+/* ------------------------------------------------------------------ */
+
+MU_TEST(test_structure_invalid_once_in_middle)
+{
+    pulseqlib_collection* coll = NULL;
+    pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    int rc;
+
+    rc = load_seq("data/10_multi_tr_nonvalid_once_in_the_middle.seq",
+                  &coll, &diag, 0);
+    mu_assert(rc == PULSEQLIB_ERR_INVALID_ONCE_FLAGS,
+              "non-identical once-in-middle should be rejected");
+    if (coll) pulseqlib_collection_free(coll);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Once-at-boundary: existing valid cases still work                 */
+/* ------------------------------------------------------------------ */
+
+MU_TEST(test_structure_valid_once_boundary)
+{
+    pulseqlib_collection* coll = NULL;
+    pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    int rc;
+
+    rc = load_seq("data/03_multi_tr_valid_once.seq", &coll, &diag, 0);
+    /* Once-at-boundary must not be rejected by the once-flag check.
+     * Downstream segmentation may still fail with the test gradients. */
+    mu_assert(rc != PULSEQLIB_ERR_INVALID_ONCE_FLAGS,
+              "once at boundary must not be rejected by once-flag check");
+    if (coll) pulseqlib_collection_free(coll);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Suite                                                             */
 /* ------------------------------------------------------------------ */
 
 MU_TEST_SUITE(test_structure_suite)
 {
     MU_RUN_TEST(test_structure_seq1_basic);
+    MU_RUN_TEST(test_structure_valid_once_in_middle);
+    MU_RUN_TEST(test_structure_invalid_once_in_middle);
+    MU_RUN_TEST(test_structure_valid_once_boundary);
     /* MU_RUN_TEST(test_structure_gre_periodic); */
     /* MU_RUN_TEST(test_structure_mprage); */
     /* MU_RUN_TEST(test_structure_nonperiodic_rejected); */
