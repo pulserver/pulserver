@@ -3,7 +3,6 @@ name: Generate Test Data (MATLAB)
 on:
   workflow_dispatch:
   push:
-    branches: [main]
     paths:
       - 'tests/generators/*.m'
 
@@ -15,14 +14,33 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - name: Set up MATLAB
         uses: matlab-actions/setup-matlab@v2
+        with:
+          products: Signal_Processing_Toolbox
+
+      - name: Install Pulseq toolbox
+        run: |
+          git clone --depth 1 https://github.com/pulseq/pulseq.git /tmp/pulseq-toolbox
+
+      - name: Patch Pulseq toolbox for continuity test generator
+        run: |
+          # The grad continuity generator intentionally creates sequences
+          # that violate gradient continuity.  Comment out the continuity
+          # check in mr.Sequence/setBlock so the generator can run.
+          SETBLOCK="/tmp/pulseq-toolbox/matlab/+mr/@Sequence/setBlock.m"
+          if [ -f "$SETBLOCK" ]; then
+            sed -i '1032,1096s/^/%/' "$SETBLOCK" 2>/dev/null || true
+          fi
 
       - name: Run MATLAB generators
         uses: matlab-actions/run-command@v2
         with:
           command: |
+            addpath('/tmp/pulseq-toolbox/matlab');
             cd('tests/generators');
             generate_grad_continuity_test_cases;
             generate_grad_limits_test_cases;
@@ -30,10 +48,11 @@ jobs:
             generate_rf_test_cases;
             generate_segmentation_test_sequences;
 
-      - name: Move generated .seq files to tests/data
+      - name: Move generated files to tests/data
         run: |
-          # Move any newly generated .seq/.csv/.txt files
-          find tests/generators -maxdepth 1 \( -name '*.seq' -o -name '*.csv' -o -name '*.txt' \) \
+          mkdir -p tests/data
+          find tests/generators -maxdepth 1 \
+            \( -name '*.seq' -o -name '*.csv' -o -name '*.txt' -o -name '*.dat' \) \
             -exec mv {} tests/data/ \;
 
       - name: Commit and push generated test data
@@ -44,6 +63,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "chore: regenerate MATLAB test data [skip ci]"
+            git commit -m "chore: regenerate MATLAB test data"
             git push
           fi

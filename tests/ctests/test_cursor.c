@@ -8,23 +8,23 @@
  *   3. Block instance fields look reasonable (duration, rotation).
  *   4. Cursor info metadata is consistent.
  *
- * Requires: data/seq1.seq
+ * Requires: data/01_ok_trap_extended_trap.seq
  */
 #include "test_helpers.h"
 
 /* ------------------------------------------------------------------ */
-/*  Basic cursor walk on seq1                                         */
+/*  Basic cursor walk on ok_trap                                         */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_cursor_seq1_walk)
+MU_TEST(test_cursor_ok_walk)
 {
     pulseqlib_collection*  coll = NULL;
     pulseqlib_diagnostic   diag = PULSEQLIB_DIAGNOSTIC_INIT;
     pulseqlib_block_instance inst = PULSEQLIB_BLOCK_INSTANCE_INIT;
     int rc, count;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
     /* Walk and count */
     count = 0;
@@ -49,8 +49,8 @@ MU_TEST(test_cursor_mark_reset)
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
     int rc, total, after_reset;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
     /* Count total blocks first */
     total = 0;
@@ -62,8 +62,8 @@ MU_TEST(test_cursor_mark_reset)
 
     /* Reload and test mark/reset */
     coll = NULL;
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "reload seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "reload ok_trap");
 
     /* Mark at start, walk 2 blocks, reset, walk to end */
     pulseqlib_cursor_mark(coll);
@@ -96,8 +96,8 @@ MU_TEST(test_cursor_instance_fields)
     pulseqlib_block_instance inst = PULSEQLIB_BLOCK_INSTANCE_INIT;
     int rc;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
     /* First block */
     rc = pulseqlib_cursor_next(coll);
@@ -132,8 +132,8 @@ MU_TEST(test_cursor_info)
     pulseqlib_cursor_info  ci;
     int rc;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
     rc = pulseqlib_cursor_next(coll);
     mu_assert(rc == PULSEQLIB_CURSOR_BLOCK, "first next");
@@ -153,7 +153,7 @@ MU_TEST(test_cursor_info)
 
 MU_TEST_SUITE(test_cursor_suite)
 {
-    MU_RUN_TEST(test_cursor_seq1_walk);
+    MU_RUN_TEST(test_cursor_ok_walk);
     MU_RUN_TEST(test_cursor_mark_reset);
     MU_RUN_TEST(test_cursor_instance_fields);
     MU_RUN_TEST(test_cursor_info);

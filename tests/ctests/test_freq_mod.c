@@ -7,16 +7,16 @@
  *   3. Rotation math: all four norot/rotation cases.
  *   4. Build with fov_rotation (NULL vs identity).
  *
- * Requires: data/seq1.seq
+ * Requires: data/01_ok_trap_extended_trap.seq
  */
 #include "test_helpers.h"
 #include "pulseqlib_internal.h"  /* for fmc->libs[0]->scan_table_len */
 
 /* ------------------------------------------------------------------ */
-/*  Smoke: build collection on seq1                                   */
+/*  Smoke: build collection on ok_trap                                   */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_freq_mod_build_seq1)
+MU_TEST(test_freq_mod_build_ok)
 {
     pulseqlib_collection*          coll = NULL;
     pulseqlib_diagnostic           diag = PULSEQLIB_DIAGNOSTIC_INIT;
@@ -24,8 +24,8 @@ MU_TEST(test_freq_mod_build_seq1)
     float shift[3] = {0.0f, 0.0f, 0.0f};
     int rc, count, i;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
     count = pulseqlib_get_freq_mod_count(coll);
     mu_assert(count >= 0, "freq_mod_count >= 0");
@@ -197,8 +197,8 @@ MU_TEST(test_freq_mod_build_with_fov_rotation)
     float fov_id[9]  = {1,0,0, 0,1,0, 0,0,1};
     int rc;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
     /* Build with NULL fov_rotation */
     rc = pulseqlib_build_freq_mod_collection(&fmc1, coll, shift, NULL);
@@ -219,7 +219,7 @@ MU_TEST(test_freq_mod_build_with_fov_rotation)
 
 MU_TEST_SUITE(test_freq_mod_suite)
 {
-    MU_RUN_TEST(test_freq_mod_build_seq1);
+    MU_RUN_TEST(test_freq_mod_build_ok);
     MU_RUN_TEST(test_freq_mod_rotation_all_cases);
     MU_RUN_TEST(test_freq_mod_build_with_fov_rotation);
 }

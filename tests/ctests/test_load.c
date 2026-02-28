@@ -2,12 +2,12 @@
  * test_load.c -- basic load / read / error-path tests.
  *
  * Tests:
- *   - seq1.seq loads successfully
+ *   - MATLAB-generated .seq loads successfully
  *   - Getters return expected counts (num_subsequences, etc.)
  *   - Non-existent file returns a negative error code
  *   - Collection can be freed without crash
  *
- * Requires: data/seq1.seq
+ * Requires: data/01_ok_trap_extended_trap.seq
  */
 #include "test_helpers.h"
 
@@ -15,15 +15,15 @@
 /*  Tests                                                             */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_load_seq1)
+MU_TEST(test_load_ok)
 {
     pulseqlib_collection* coll = NULL;
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
     int rc;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
     mu_assert(PULSEQLIB_SUCCEEDED(rc),
-              "seq1.seq should load successfully");
+              "ok seq should load successfully");
     mu_assert(coll != NULL,
               "collection pointer should be non-NULL");
 
@@ -61,7 +61,7 @@ MU_TEST(test_free_after_load)
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
     int rc;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "load should succeed");
     pulseqlib_collection_free(coll);
 }
@@ -83,7 +83,7 @@ MU_TEST(test_null_pointer)
 
 MU_TEST_SUITE(test_load_suite)
 {
-    MU_RUN_TEST(test_load_seq1);
+    MU_RUN_TEST(test_load_ok);
     MU_RUN_TEST(test_load_file_not_found);
     MU_RUN_TEST(test_free_after_load);
     MU_RUN_TEST(test_null_pointer);

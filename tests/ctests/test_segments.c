@@ -7,23 +7,23 @@
  *   3. Block start times are non-decreasing within a segment.
  *   4. Block durations are positive.
  *
- * Requires: data/seq1.seq
+ * Requires: data/01_ok_trap_extended_trap.seq
  */
 #include "test_helpers.h"
 
 /* ------------------------------------------------------------------ */
-/*  Smoke: segment queries on seq1                                    */
+/*  Smoke: segment queries on ok_trap                                    */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_segments_seq1_smoke)
+MU_TEST(test_segments_ok_smoke)
 {
     pulseqlib_collection* coll = NULL;
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
     pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
     int rc, s;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
     rc = pulseqlib_get_collection_info(coll, &ci);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "collection_info");
@@ -67,7 +67,7 @@ MU_TEST(test_segments_seq1_smoke)
 
 MU_TEST_SUITE(test_segments_suite)
 {
-    MU_RUN_TEST(test_segments_seq1_smoke);
+    MU_RUN_TEST(test_segments_ok_smoke);
 }
 
 int test_segments_main(void)

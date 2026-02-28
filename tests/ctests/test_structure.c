@@ -2,18 +2,18 @@
  * test_structure.c -- TR detection, prep / cooldown, once-flag tests.
  *
  * Tests:
- *   - seq1 loads and has structural metadata
+ *   - ok_trap loads and has structural metadata
  *   - Once-flag valid / invalid detection
  *
- * Requires: data/seq1.seq, data/once-flag test files
+ * Requires: data/01_ok_trap_extended_trap.seq, data/once-flag test files
  */
 #include "test_helpers.h"
 
 /* ------------------------------------------------------------------ */
-/*  Smoke: seq1 loads and has structural metadata                     */
+/*  Smoke: ok_trap loads and has structural metadata                     */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_structure_seq1_basic)
+MU_TEST(test_structure_ok_basic)
 {
     pulseqlib_collection* coll = NULL;
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
@@ -21,7 +21,7 @@ MU_TEST(test_structure_seq1_basic)
     pulseqlib_subseq_info     si = PULSEQLIB_SUBSEQ_INFO_INIT;
     int rc;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "load should succeed");
 
     rc = pulseqlib_get_collection_info(coll, &ci);
@@ -98,7 +98,7 @@ MU_TEST(test_structure_valid_once_boundary)
 
 MU_TEST_SUITE(test_structure_suite)
 {
-    MU_RUN_TEST(test_structure_seq1_basic);
+    MU_RUN_TEST(test_structure_ok_basic);
     MU_RUN_TEST(test_structure_valid_once_in_middle);
     MU_RUN_TEST(test_structure_invalid_once_in_middle);
     MU_RUN_TEST(test_structure_valid_once_boundary);

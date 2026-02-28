@@ -3,9 +3,9 @@
  *
  * Tests:
  *   1. parse_labels=0: label getters return empty / error.
- *   2. parse_labels=1: smoke test on seq1.
+ *   2. parse_labels=1: smoke test on ok_trap.
  *
- * Requires: data/seq1.seq
+ * Requires: data/01_ok_trap_extended_trap.seq
  */
 #include "test_helpers.h"
 
@@ -20,8 +20,8 @@ MU_TEST(test_labels_disabled)
     pulseqlib_label_limits limits;
     int rc;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1 without labels");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap without labels");
 
     rc = pulseqlib_get_label_limits(coll, 0, &limits);
     /* When labels were not parsed, this should fail or return
@@ -34,7 +34,7 @@ MU_TEST(test_labels_disabled)
 }
 
 /* ------------------------------------------------------------------ */
-/*  parse_labels=1: smoke test on seq1                                */
+/*  parse_labels=1: smoke test on ok_trap                                */
 /* ------------------------------------------------------------------ */
 
 MU_TEST(test_labels_enabled_smoke)
@@ -44,8 +44,8 @@ MU_TEST(test_labels_enabled_smoke)
     pulseqlib_subseq_info si   = PULSEQLIB_SUBSEQ_INFO_INIT;
     int rc;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 1);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1 with labels");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 1);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap with labels");
 
     rc = pulseqlib_get_subseq_info(coll, 0, &si);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "subseq_info");

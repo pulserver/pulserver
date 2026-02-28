@@ -2,12 +2,14 @@
  * test_safety_grad.c -- gradient amplitude and slew-rate limit tests.
  *
  * Test strategy:
- *   - seq1.seq has combined gradient amplitudes exceeding default
- *     limits -> check_safety must detect the violation.
- *   - Intentionally broken sequences from the grad-limits test set
- *     must also fail with the correct error codes.
+ *   - MATLAB-generated sequences with known gradient content are tested
+ *     against various limit configurations.
+ *   - Intentionally broken sequences from the grad-limits generator
+ *     must also fail with tight limits.
  *
- * Requires: data/seq1.seq, data/01_grad_amplitude_violation.seq, etc.
+ * Requires: data/01_ok_trap_extended_trap.seq,
+ *           data/01_grad_amplitude_violation.seq,
+ *           data/02_grad_slew_violation.seq
  */
 #include "test_helpers.h"
 
@@ -39,30 +41,29 @@ static int check_grads(const char* seq_rel,
 }
 
 /* ------------------------------------------------------------------ */
-/*  seq1 has combined gradients exceeding default limits               */
+/*  ok_trap exceeds default slew limits                               */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_grad_seq1_exceeds_default)
+MU_TEST(test_grad_ok_trap_exceeds_default)
 {
-    int rc = check_grads("data/seq1.seq",
+    int rc = check_grads(TEST_SEQ_OK,
                          TEST_MAX_GRAD, TEST_MAX_SLEW);
-    mu_assert(rc == PULSEQLIB_ERR_MAX_GRAD_EXCEEDED,
-              "seq1 combined gradients should exceed default limits");
+    mu_assert(rc == PULSEQLIB_ERR_MAX_SLEW_EXCEEDED,
+              "ok_trap should exceed default slew limits");
 }
 
 /* ------------------------------------------------------------------ */
-/*  seq1 with very generous limits should pass                        */
+/*  ok_trap with very generous limits should pass                     */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_grad_seq1_generous_passes)
+MU_TEST(test_grad_ok_trap_generous_passes)
 {
-    /* 100 mT/m = well above the ~56 mT/m RSS in seq1 */
     float generous_grad = 100.0f * TEST_GAMMA * 1e-3f;
     float generous_slew = 500.0f * TEST_GAMMA;
-    int rc = check_grads("data/seq1.seq",
+    int rc = check_grads(TEST_SEQ_OK,
                          generous_grad, generous_slew);
     mu_assert(PULSEQLIB_SUCCEEDED(rc),
-              "seq1 should pass with very generous limits");
+              "ok_trap should pass with very generous limits");
 }
 
 /* ------------------------------------------------------------------ */
@@ -71,8 +72,6 @@ MU_TEST(test_grad_seq1_generous_passes)
 
 MU_TEST(test_grad_amplitude_violation_file)
 {
-    /* The MATLAB-generated file has very small amplitudes by design;
-     * use a tight limit to trigger the violation.                    */
     int rc = check_grads("data/01_grad_amplitude_violation.seq",
                          10.0f, TEST_MAX_SLEW);
     mu_assert(rc == PULSEQLIB_ERR_MAX_GRAD_EXCEEDED,
@@ -85,7 +84,6 @@ MU_TEST(test_grad_amplitude_violation_file)
 
 MU_TEST(test_grad_slew_violation_file)
 {
-    /* Use a very tight slew limit so the file triggers the check.   */
     int rc = check_grads("data/02_grad_slew_violation.seq",
                          TEST_MAX_GRAD, 1.0f);
     mu_assert(PULSEQLIB_FAILED(rc),
@@ -98,8 +96,8 @@ MU_TEST(test_grad_slew_violation_file)
 
 MU_TEST_SUITE(test_safety_grad_suite)
 {
-    MU_RUN_TEST(test_grad_seq1_exceeds_default);
-    MU_RUN_TEST(test_grad_seq1_generous_passes);
+    MU_RUN_TEST(test_grad_ok_trap_exceeds_default);
+    MU_RUN_TEST(test_grad_ok_trap_generous_passes);
     MU_RUN_TEST(test_grad_amplitude_violation_file);
     MU_RUN_TEST(test_grad_slew_violation_file);
 }

@@ -3,28 +3,31 @@
  *
  * Tests:
  *   1. Consistent sequence passes check_consistency()
+ *   2. VFA RF pattern fails RF periodicity check
+ *   3. RF shim pattern fails periodicity check
  *
- * Requires: data/seq1.seq
+ * Requires: data/01_ok_trap_extended_trap.seq,
+ *           data/02_rfamp_fail_vfa.seq, data/04_rfshim_fail_gre.seq
  */
 #include "test_helpers.h"
 
 /* ------------------------------------------------------------------ */
-/*  Pass-path: seq1 should pass consistency                           */
+/*  Pass-path: ok_trap should pass consistency                        */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_consistency_seq1_passes)
+MU_TEST(test_consistency_ok_passes)
 {
     pulseqlib_collection* coll = NULL;
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
     int rc;
 
-    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
     pulseqlib_diagnostic_init(&diag);
     rc = pulseqlib_check_consistency(coll, &diag);
     mu_assert(PULSEQLIB_SUCCEEDED(rc),
-              "seq1 should pass consistency check");
+              "ok_trap should pass consistency check");
 
     pulseqlib_collection_free(coll);
 }
@@ -80,7 +83,7 @@ MU_TEST(test_consistency_rfshim_fail)
 
 MU_TEST_SUITE(test_consistency_suite)
 {
-    MU_RUN_TEST(test_consistency_seq1_passes);
+    MU_RUN_TEST(test_consistency_ok_passes);
     MU_RUN_TEST(test_consistency_rfamp_fail);
     MU_RUN_TEST(test_consistency_rfshim_fail);
 }
