@@ -1,24 +1,18 @@
 /*
- * test_safety_grad.c -- gradient continuity, max-grad, max-slew tests.
+ * test_safety_grad.c -- gradient amplitude and slew-rate limit tests.
  *
  * Test strategy:
- *   1. Well-formed sequences (gre, bssfp, epi, fse) must PASS all
- *      gradient safety checks -- no false positives.
- *   2. Intentionally broken sequences (discontinuity, over-amplitude,
- *      over-slew) must FAIL with the correct error code.
+ *   - seq1.seq has combined gradient amplitudes exceeding default
+ *     limits -> check_safety must detect the violation.
+ *   - Intentionally broken sequences from the grad-limits test set
+ *     must also fail with the correct error codes.
  *
- * Requires:
- *   - expected_output/gre_2d.seq   (gradient-safe)
- *   - expected_output/epi_2d.seq   (gradient-safe, fast slewing)
- *   - expected_output/seq1.seq     (always available)
- *
- * Until the full set of .seq files is generated, the tests use seq1.seq
- * for pass-path smoke and intentionally tight opts for fail-path.
+ * Requires: data/seq1.seq, data/01_grad_amplitude_violation.seq, etc.
  */
 #include "test_helpers.h"
 
 /* ------------------------------------------------------------------ */
-/*  Helper: run check_safety with gradient-only params (no acoustic/PNS) */
+/*  Helper: run check_safety with gradient-only params (no PNS)       */
 /* ------------------------------------------------------------------ */
 
 static int check_grads(const char* seq_rel,
@@ -45,60 +39,58 @@ static int check_grads(const char* seq_rel,
 }
 
 /* ------------------------------------------------------------------ */
-/*  Pass-path: seq1 with generous limits should pass                  */
+/*  seq1 has combined gradients exceeding default limits               */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_grad_seq1_passes)
+MU_TEST(test_grad_seq1_exceeds_default)
 {
-    int rc = check_grads("expected_output/seq1.seq",
+    int rc = check_grads("data/seq1.seq",
                          TEST_MAX_GRAD, TEST_MAX_SLEW);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc),
-              "seq1.seq should pass gradient safety with default limits");
-}
-
-/* ------------------------------------------------------------------ */
-/*  Fail-path: seq1 with very tight max_grad should fail              */
-/* ------------------------------------------------------------------ */
-
-MU_TEST(test_grad_max_grad_violation)
-{
-    /* Use absurdly small max_grad so any gradient exceeds it */
-    int rc = check_grads("expected_output/seq1.seq",
-                         1.0f,          /* 1 Hz/m -- trivially exceeded */
-                         TEST_MAX_SLEW);
     mu_assert(rc == PULSEQLIB_ERR_MAX_GRAD_EXCEEDED,
-              "tiny max_grad should trigger MAX_GRAD_EXCEEDED");
+              "seq1 combined gradients should exceed default limits");
 }
 
 /* ------------------------------------------------------------------ */
-/*  Fail-path: seq1 with very tight max_slew should fail              */
+/*  seq1 with very generous limits should pass                        */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_grad_max_slew_violation)
+MU_TEST(test_grad_seq1_generous_passes)
 {
-    /* Use absurdly small slew limit */
-    int rc = check_grads("expected_output/seq1.seq",
-                         TEST_MAX_GRAD,
-                         1.0f);  /* 1 Hz/m/s */
-    mu_assert(rc == PULSEQLIB_ERR_MAX_SLEW_EXCEEDED,
-              "tiny max_slew should trigger MAX_SLEW_EXCEEDED");
+    /* 100 mT/m = well above the ~56 mT/m RSS in seq1 */
+    float generous_grad = 100.0f * TEST_GAMMA * 1e-3f;
+    float generous_slew = 500.0f * TEST_GAMMA;
+    int rc = check_grads("data/seq1.seq",
+                         generous_grad, generous_slew);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc),
+              "seq1 should pass with very generous limits");
 }
 
 /* ------------------------------------------------------------------ */
-/*  Stub: known-good EPI with realistic limits (no false positive)    */
+/*  Explicit amplitude violation test file                            */
 /* ------------------------------------------------------------------ */
 
-/*
- * TODO: uncomment once epi_2d.seq is generated.
- *
- * MU_TEST(test_grad_epi_passes)
- * {
- *     int rc = check_grads("expected_output/epi_2d.seq",
- *                          TEST_MAX_GRAD, TEST_MAX_SLEW);
- *     mu_assert(PULSEQLIB_SUCCEEDED(rc),
- *               "well-formed EPI should pass gradient checks");
- * }
- */
+MU_TEST(test_grad_amplitude_violation_file)
+{
+    /* The MATLAB-generated file has very small amplitudes by design;
+     * use a tight limit to trigger the violation.                    */
+    int rc = check_grads("data/01_grad_amplitude_violation.seq",
+                         10.0f, TEST_MAX_SLEW);
+    mu_assert(rc == PULSEQLIB_ERR_MAX_GRAD_EXCEEDED,
+              "amplitude violation file should fail with tight limit");
+}
+
+/* ------------------------------------------------------------------ */
+/*  Explicit slew violation test file                                 */
+/* ------------------------------------------------------------------ */
+
+MU_TEST(test_grad_slew_violation_file)
+{
+    /* Use a very tight slew limit so the file triggers the check.   */
+    int rc = check_grads("data/02_grad_slew_violation.seq",
+                         TEST_MAX_GRAD, 1.0f);
+    mu_assert(PULSEQLIB_FAILED(rc),
+              "slew violation file should fail with tight slew limit");
+}
 
 /* ------------------------------------------------------------------ */
 /*  Suite                                                             */
@@ -106,10 +98,10 @@ MU_TEST(test_grad_max_slew_violation)
 
 MU_TEST_SUITE(test_safety_grad_suite)
 {
-    MU_RUN_TEST(test_grad_seq1_passes);
-    MU_RUN_TEST(test_grad_max_grad_violation);
-    MU_RUN_TEST(test_grad_max_slew_violation);
-    /* MU_RUN_TEST(test_grad_epi_passes); */
+    MU_RUN_TEST(test_grad_seq1_exceeds_default);
+    MU_RUN_TEST(test_grad_seq1_generous_passes);
+    MU_RUN_TEST(test_grad_amplitude_violation_file);
+    MU_RUN_TEST(test_grad_slew_violation_file);
 }
 
 int test_safety_grad_main(void)

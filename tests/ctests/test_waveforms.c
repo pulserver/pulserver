@@ -1,22 +1,11 @@
 /*
- * test_waveforms.c -- TR gradient waveform extraction and
- *                     cross-validation with pulseq toolbox.
+ * test_waveforms.c -- TR gradient waveform extraction.
  *
  * Tests:
- *   1. get_tr_gradient_waveforms returns non-empty arrays for
- *      sequences with gradients.
+ *   1. get_tr_gradient_waveforms returns non-empty arrays.
  *   2. Time arrays are monotonically increasing.
- *   3. First / last amplitudes match gradient continuity
- *      (should be zero at TR boundaries for safe sequences).
- *   4. Cross-validation: gradient waveforms in .dat files
- *      (produced by Python toolbox get_gradient_waveforms)
- *      match the C library output within tolerance.
  *
- * Requires:
- *   - expected_output/seq1.seq
- *   - expected_output/spgr_waveform.dat   (from make_test_waveforms.py)
- *   - expected_output/bssfp_waveform.dat
- *   - expected_output/megre_waveform.dat
+ * Requires: data/seq1.seq
  */
 #include "test_helpers.h"
 
@@ -31,7 +20,7 @@ MU_TEST(test_waveforms_seq1_smoke)
     pulseqlib_tr_gradient_waveforms w = PULSEQLIB_TR_GRADIENT_WAVEFORMS_INIT;
     int rc;
 
-    rc = load_seq("expected_output/seq1.seq", &coll, &diag, 0);
+    rc = load_seq("data/seq1.seq", &coll, &diag, 0);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
 
     rc = pulseqlib_get_tr_gradient_waveforms(coll, 0, &w, &diag);
@@ -57,40 +46,12 @@ MU_TEST(test_waveforms_seq1_smoke)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Stub: cross-validate against Python-generated .dat file           */
-/* ------------------------------------------------------------------ */
-
-/*
- * TODO: implement once the .dat format is standardized.
- *
- * The reference waveform files are produced by make_test_waveforms.py
- * which calls pypulseq's get_gradient_waveforms() and dumps
- * (time_us, gx, gy, gz) as whitespace-separated columns.
- *
- * Strategy:
- *   1. Load .seq -> get_tr_gradient_waveforms -> interpolate to 10 us raster
- *   2. Read .dat into arrays
- *   3. Compare point-by-point within tolerance (1e-2 Hz/m)
- *
- * MU_TEST(test_waveforms_spgr_crossval)
- * {
- *     // Load seq
- *     // Extract waveforms
- *     // Read expected_output/spgr_waveform.dat
- *     // Per-sample comparison
- * }
- */
-
-/* ------------------------------------------------------------------ */
 /*  Suite                                                             */
 /* ------------------------------------------------------------------ */
 
 MU_TEST_SUITE(test_waveforms_suite)
 {
     MU_RUN_TEST(test_waveforms_seq1_smoke);
-    /* MU_RUN_TEST(test_waveforms_spgr_crossval); */
-    /* MU_RUN_TEST(test_waveforms_bssfp_crossval); */
-    /* MU_RUN_TEST(test_waveforms_megre_crossval); */
 }
 
 int test_waveforms_main(void)

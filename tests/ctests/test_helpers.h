@@ -62,7 +62,7 @@ static void test_opts_init(pulseqlib_opts* opts) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Load a .seq file -> collection (returns PULSEQLIB_SUCCESS on success)  */
+/*  Load a .seq file -> collection                                    */
 /* ------------------------------------------------------------------ */
 static int load_seq(const char* rel_path,
                     pulseqlib_collection** out,
