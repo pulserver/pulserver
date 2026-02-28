@@ -14,7 +14,7 @@ def make_test_sequence(write: bool = False) -> pp.Sequence:
     # real valued RF event
     rf_shim = SimpleNamespace(
         type="rf_shim", shim_vector=np.ones(8, dtype=complex)
-    )  # t rivial rf shim
+    )  # trivial rf shim
     rf_real = pp.make_sinc_pulse(flip_angle=0.5 * np.pi)
 
     # complex valued RF event
