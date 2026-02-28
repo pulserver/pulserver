@@ -30,10 +30,23 @@ jobs:
         run: |
           # The grad continuity generator intentionally creates sequences
           # that violate gradient continuity.  Comment out the continuity
-          # check in mr.Sequence/setBlock so the generator can run.
-          SETBLOCK="/tmp/pulseq-toolbox/matlab/+mr/@Sequence/setBlock.m"
-          if [ -f "$SETBLOCK" ]; then
-            sed -i '1032,1096s/^/%/' "$SETBLOCK" 2>/dev/null || true
+          # check in mr.Sequence so the generator can run.
+          # We match the block between "check if connection to the previous
+          # block is correct" and the end of the for-loop that follows.
+          SEQFILE="/tmp/pulseq-toolbox/matlab/+mr/@Sequence/Sequence.m"
+          if [ -f "$SEQFILE" ]; then
+            python3 -c "
+import re, sys
+with open('$SEQFILE', 'r') as f:
+    text = f.read()
+# Comment out the gradient continuity check block
+text = re.sub(
+    r'(% check if connection to the previous block is correct.*?)(\n                end\n)',
+    lambda m: ''.join('%' + line if line.strip() else line for line in m.group(0).splitlines(True)),
+    text, count=1, flags=re.DOTALL)
+with open('$SEQFILE', 'w') as f:
+    f.write(text)
+" 2>/dev/null || echo "Warning: could not patch Pulseq toolbox"
           fi
 
       - name: Run MATLAB generators

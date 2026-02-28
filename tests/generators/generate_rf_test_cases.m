@@ -1,6 +1,6 @@
 %% generate_rf_safety_sequences
 %
-% Generates Pulseq .seq files covering rf safety cases.
+% Generates Pulseq .seq files covering RF safety cases.
 %
 
 clear; clc;
