@@ -1424,8 +1424,90 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
         }
     }
     if (once_counter != (desc->num_prep_blocks > 0 ? 1 : 0) + (desc->num_cooldown_blocks > 0 ? 1 : 0)) {
-        pulseqlib_sequence_descriptor_free(desc);
-        return PULSEQLIB_ERR_INVALID_ONCE_FLAGS;
+        /* Once flags in the middle of the sequence.
+         * Try to detect a periodic inner-loop pattern defined by the
+         * once-flag transitions.  If all repetitions are structurally
+         * identical (same block definition IDs and once_flag values),
+         * fold the block table to a single period + trailing cooldown
+         * and recount prep/cooldown from the folded result. */
+        int trailing, effective, period, num_reps;
+        int i, j, ok;
+
+        /* Count trailing once==2 blocks at the very end */
+        trailing = 0;
+        for (i = num_blocks - 1; i >= 0; --i) {
+            if (desc->block_table[i].once_flag == 2) trailing++;
+            else break;
+        }
+        effective = num_blocks - trailing;
+
+        /* Find shortest repeating period in the first 'effective' blocks
+         * by checking both block definition id and once_flag. */
+        period = 0;
+        if (effective > 1) {
+            int l;
+            for (l = 1; l <= effective / 2; ++l) {
+                if (effective % l != 0) continue;
+                ok = 1;
+                for (i = l; i < effective; ++i) {
+                    if (desc->block_table[i].id != desc->block_table[i % l].id ||
+                        desc->block_table[i].once_flag != desc->block_table[i % l].once_flag) {
+                        ok = 0;
+                        break;
+                    }
+                }
+                if (ok) { period = l; break; }
+            }
+        }
+
+        /* If no period found with trailing cooldown separated,
+         * try the entire sequence as periodic. */
+        if (period <= 0 && trailing > 0) {
+            int l;
+            for (l = 1; l <= num_blocks / 2; ++l) {
+                if (num_blocks % l != 0) continue;
+                ok = 1;
+                for (i = l; i < num_blocks; ++i) {
+                    if (desc->block_table[i].id != desc->block_table[i % l].id ||
+                        desc->block_table[i].once_flag != desc->block_table[i % l].once_flag) {
+                        ok = 0;
+                        break;
+                    }
+                }
+                if (ok) { period = l; trailing = 0; break; }
+            }
+        }
+
+        if (period <= 0) {
+            pulseqlib_sequence_descriptor_free(desc);
+            return PULSEQLIB_ERR_INVALID_ONCE_FLAGS;
+        }
+
+        num_reps = (num_blocks - trailing) / period;
+        if (num_reps < 2) {
+            pulseqlib_sequence_descriptor_free(desc);
+            return PULSEQLIB_ERR_INVALID_ONCE_FLAGS;
+        }
+
+        /* Fold: keep only the first period, then append trailing cooldown */
+        for (j = 0; j < trailing; ++j)
+            desc->block_table[period + j] = desc->block_table[num_blocks - trailing + j];
+        desc->num_blocks = period + trailing;
+
+        /* Recount prep from the folded block table */
+        desc->num_prep_blocks = 0;
+        for (i = 0; i < desc->num_blocks; ++i) {
+            if (desc->block_table[i].once_flag == 0 ||
+                desc->block_table[i].once_flag == 2) break;
+            desc->num_prep_blocks++;
+        }
+
+        /* Recount cooldown from the folded block table */
+        desc->num_cooldown_blocks = 0;
+        for (i = desc->num_blocks - 1; i >= 0; --i) {
+            if (desc->block_table[i].once_flag != 2) break;
+            desc->num_cooldown_blocks++;
+        }
     }
     return PULSEQLIB_SUCCESS;
 

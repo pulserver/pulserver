@@ -74,7 +74,7 @@ typedef struct pulseqlib_diagnostic {
     char message[PULSEQLIB_DIAG_MSG_LEN];
 } pulseqlib_diagnostic;
 
-#define PULSEQLIB_DIAGNOSTIC_INIT {PULSEQLIB_OK, {'\0'}}
+#define PULSEQLIB_DIAGNOSTIC_INIT {PULSEQLIB_SUCCESS, {'\0'}}
 
 /* ================================================================== */
 /*  System options                                                    */
