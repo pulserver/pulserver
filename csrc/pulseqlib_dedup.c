@@ -1491,6 +1491,7 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
         for (j = 0; j < trailing; ++j)
             desc->block_table[period + j] = desc->block_table[num_blocks - trailing + j];
         desc->num_blocks = period + trailing;
+        desc->num_passes = num_reps;
 
         /* Recount prep from the folded block table */
         desc->num_prep_blocks = 0;

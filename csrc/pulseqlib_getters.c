@@ -2139,6 +2139,7 @@ int pulseqlib_get_subseq_info(
     info->num_cooldown_segments = pulseqlib__get_num_cooldown_segments(coll, subseq_idx);
     info->num_adc_occurrences  = pulseqlib__get_num_adc_occurrences(coll, subseq_idx);
     info->num_label_columns    = pulseqlib__get_num_label_columns(coll, subseq_idx);
+    info->num_passes           = coll->descriptors[subseq_idx].num_passes;
 
     return PULSEQLIB_SUCCESS;
 }

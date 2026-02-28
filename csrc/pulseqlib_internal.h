@@ -430,6 +430,7 @@ typedef struct pulseqlib_sequence_descriptor {
     int ignore_fov_shift;
     int enable_pmc;
     int ignore_averages;
+    int num_passes;
 
     int num_unique_blocks;
     pulseqlib_block_definition* block_definitions;
@@ -489,7 +490,7 @@ typedef struct pulseqlib_sequence_descriptor {
 } pulseqlib_sequence_descriptor;
 
 #define PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT { \
-    0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, \
+    0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 1, \
     0, NULL, 0, NULL, \
     0, NULL, 0, NULL, \
     0, NULL, 0, NULL, \
