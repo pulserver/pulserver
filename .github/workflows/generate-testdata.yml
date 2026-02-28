@@ -1,0 +1,47 @@
+name: Generate Test Data (MATLAB)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/generators/*.m'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+
+      - name: Run MATLAB generators
+        uses: matlab-actions/run-command@v2
+        with:
+          command: |
+            cd('tests/generators');
+            generate_grad_continuity_test_cases;
+            generate_grad_limits_test_cases;
+            generate_once_flag_test_cases;
+            generate_rf_test_cases;
+            generate_segmentation_test_sequences;
+
+      - name: Move generated .seq files to tests/data
+        run: |
+          # Move any newly generated .seq/.csv/.txt files
+          find tests/generators -maxdepth 1 \( -name '*.seq' -o -name '*.csv' -o -name '*.txt' \) \
+            -exec mv {} tests/data/ \;
+
+      - name: Commit and push generated test data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tests/data/
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: regenerate MATLAB test data [skip ci]"
+            git push
+          fi
