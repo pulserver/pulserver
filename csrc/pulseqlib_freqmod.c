@@ -84,7 +84,19 @@ static int is_identity3(const float* M)
     static const float I[9] = {1,0,0, 0,1,0, 0,0,1};
     int i;
     for (i = 0; i < 9; ++i)
-        if (M[i] != I[i]) return 0;
+        if (fabsf(M[i] - I[i]) > 1e-7f) return 0;
+    return 1;
+}
+
+/* ================================================================== */
+/*  Helper: compare two 3x3 matrices with tolerance                   */
+/* ================================================================== */
+
+static int rotmat_equal(const float* A, const float* B)
+{
+    int i;
+    for (i = 0; i < 9; ++i)
+        if (fabsf(A[i] - B[i]) > 1e-7f) return 0;
     return 1;
 }
 
@@ -759,7 +771,7 @@ static int build_freq_mod_library(
                 /* Dedup: search for R_eff among existing + new entries */
                 found = -1;
                 for (u = 0; u < num_exp; ++u) {
-                    if (memcmp(R_eff, expanded[u], sizeof(float[9])) == 0) {
+                    if (rotmat_equal(R_eff, expanded[u])) {
                         found = u;
                         break;
                     }
