@@ -100,20 +100,20 @@ and cooldown block detection, validity of once-flag patterns).
 
 **Output files:**
 
-================================================= =============================================
-File                                              Description
-================================================= =============================================
-``01_single_tr_valid_once.seq``                   Single TR with valid ONCE blocks
-``02_dual_tr_valid_once.seq``                     Two TRs with valid ONCE blocks
-``03_multi_tr_valid_once.seq``                    Multi-TR with valid ONCE blocks
-``04_multi_tr_valid_once_degenerate.seq``          Multi-TR valid ONCE, degenerate case
-``05_multi_tr_once_prep_only.seq``                Multi-TR with ONCE prep blocks only
-``06_multi_tr_once_cooldown_only.seq``            Multi-TR with ONCE cooldown blocks only
-``07_single_tr_nonvalid_once.seq``                Single TR with invalid ONCE pattern
-``08_prep_too_long.seq``                          Prep region exceeds allowed length
-``09_cooldown_too_long.seq``                      Cooldown region exceeds allowed length
-``10_multi_tr_nonvalid_once_in_the_middle.seq``   Multi-TR invalid ONCE in middle of sequence
-================================================= =============================================
+===================================================== ==============================================
+File                                                  Description
+===================================================== ==============================================
+``01_single_tr_valid_once.seq``                       Single TR with valid ONCE blocks
+``02_dual_tr_valid_once.seq``                         Two TRs with valid ONCE blocks
+``03_multi_tr_valid_once.seq``                        Multi-TR with valid ONCE blocks
+``04_multi_tr_valid_once_degenerate.seq``             Multi-TR valid ONCE, degenerate case
+``05_multi_tr_once_prep_only.seq``                    Multi-TR with ONCE prep blocks only
+``06_multi_tr_once_cooldown_only.seq``                Multi-TR with ONCE cooldown blocks only
+``07_single_tr_nonvalid_once.seq``                    Single TR with invalid ONCE pattern
+``08_prep_too_long.seq``                              Prep region exceeds allowed length
+``09_cooldown_too_long.seq``                          Cooldown region exceeds allowed length
+``10_multi_tr_nonvalid_once_in_the_middle.seq``       Multi-TR invalid ONCE in middle of sequence
+===================================================== ==============================================
 
 .. note::
 
@@ -155,16 +155,16 @@ gradient amplitude verification**.
 **Output files** (each with associated ``_blocks.csv``, ``_meta.txt``,
 and axis-specific waveform ``.csv`` files):
 
-============================================= ==============================================
-File pattern                                  Description
-============================================= ==============================================
-``bssfp_2d_<N>avg.seq``                       2D bSSFP, N averages
-``gre_2d_<S>sl_<N>avg.seq``                   2D GRE, S slices, N averages
-``fse_2d_<S>sl_<N>avg.seq``                   2D FSE, S slices, N averages
-``epi_2d_<S>sl_<N>avg.seq``                   2D EPI, S slices, N averages
-``mprage_3d_<N>avg.seq``                       3D MPRAGE, N averages
-``mprage_noncart_3d_<K>shots[_rotext]_<N>avg.seq`` 3D non-Cartesian MPRAGE
-============================================= ==============================================
+======================================================== ==============================
+File pattern                                             Description
+======================================================== ==============================
+``bssfp_2d_<N>avg.seq``                                  2D bSSFP, N averages
+``gre_2d_<S>sl_<N>avg.seq``                              2D GRE, S slices, N averages
+``fse_2d_<S>sl_<N>avg.seq``                              2D FSE, S slices, N averages
+``epi_2d_<S>sl_<N>avg.seq``                              2D EPI, S slices, N averages
+``mprage_3d_<N>avg.seq``                                 3D MPRAGE, N averages
+``mprage_noncart_3d_<K>shots[_rotext]_<N>avg.seq``       3D non-Cartesian MPRAGE
+======================================================== ==============================
 
 Specific parameter combinations generated:
 
