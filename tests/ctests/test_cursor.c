@@ -2,34 +2,29 @@
  * test_cursor.c -- block cursor / iterator tests.
  *
  * Tests:
- *   1. Cursor walks all blocks exactly num_trs * tr_size times.
- *   2. Cursor reset re-delivers the same blocks.
- *   3. navg=1 (default): cursor visits main TRs once.
- *   4. navg>1: cursor visits main TRs * navg times.
- *      (requires sequence with Averages > 1 definition)
- *   5. ignoreRepetitions: cursor visits only 1 average.
- *      (requires sequence with Repetitions > 0)
+ *   1. Cursor walks all blocks to completion.
+ *   2. Mark / reset: after marking and advancing, reset returns to
+ *      the marked position and re-delivers the same blocks.
+ *   3. Block instance fields look reasonable (duration, rotation).
+ *   4. Cursor info metadata is consistent.
  *
- * Requires:
- *   - expected_output/seq1.seq          (basic cursor)
- *   - expected_output/gre_2d_navg2.seq  (navg=2)
- *   - expected_output/gre_2d_rep2.seq   (repetitions=2)
+ * Requires: data/01_ok_trap_extended_trap.seq
  */
 #include "test_helpers.h"
 
 /* ------------------------------------------------------------------ */
-/*  Basic cursor walk on seq1                                         */
+/*  Basic cursor walk on ok_trap                                         */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_cursor_seq1_walk)
+MU_TEST(test_cursor_ok_walk)
 {
     pulseqlib_collection*  coll = NULL;
     pulseqlib_diagnostic   diag = PULSEQLIB_DIAGNOSTIC_INIT;
     pulseqlib_block_instance inst = PULSEQLIB_BLOCK_INSTANCE_INIT;
     int rc, count;
 
-    rc = load_seq("expected_output/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
     /* Walk and count */
     count = 0;
@@ -45,31 +40,47 @@ MU_TEST(test_cursor_seq1_walk)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Cursor reset delivers the same count                              */
+/*  Mark / reset: re-delivers blocks after the mark                   */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_cursor_reset)
+MU_TEST(test_cursor_mark_reset)
 {
     pulseqlib_collection* coll = NULL;
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
-    int rc, count1, count2;
+    int rc, total, after_reset;
 
-    rc = load_seq("expected_output/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
-    /* First walk */
-    count1 = 0;
+    /* Count total blocks first */
+    total = 0;
     while (pulseqlib_cursor_next(coll) == PULSEQLIB_CURSOR_BLOCK)
-        count1++;
+        total++;
+    mu_assert(total > 0, "should have blocks");
 
-    /* Reset and second walk */
+    pulseqlib_collection_free(coll);
+
+    /* Reload and test mark/reset */
+    coll = NULL;
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "reload ok_trap");
+
+    /* Mark at start, walk 2 blocks, reset, walk to end */
+    pulseqlib_cursor_mark(coll);
+
+    rc = pulseqlib_cursor_next(coll);
+    mu_assert(rc == PULSEQLIB_CURSOR_BLOCK, "next after mark");
+    rc = pulseqlib_cursor_next(coll);
+    mu_assert(rc == PULSEQLIB_CURSOR_BLOCK, "second next");
+
     pulseqlib_cursor_reset(coll);
-    count2 = 0;
-    while (pulseqlib_cursor_next(coll) == PULSEQLIB_CURSOR_BLOCK)
-        count2++;
 
-    mu_assert(count1 == count2,
-              "cursor should deliver same count after reset");
+    after_reset = 0;
+    while (pulseqlib_cursor_next(coll) == PULSEQLIB_CURSOR_BLOCK)
+        after_reset++;
+
+    mu_assert(after_reset == total,
+              "reset to start should deliver all blocks");
 
     pulseqlib_collection_free(coll);
 }
@@ -85,8 +96,8 @@ MU_TEST(test_cursor_instance_fields)
     pulseqlib_block_instance inst = PULSEQLIB_BLOCK_INSTANCE_INIT;
     int rc;
 
-    rc = load_seq("expected_output/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
     /* First block */
     rc = pulseqlib_cursor_next(coll);
@@ -111,39 +122,30 @@ MU_TEST(test_cursor_instance_fields)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Stub: navg > 1                                                    */
+/*  Cursor info metadata is filled                                    */
 /* ------------------------------------------------------------------ */
 
-/*
- * TODO: uncomment once gre_2d_navg2.seq is generated.
- *
- * MU_TEST(test_cursor_navg2)
- * {
- *     pulseqlib_collection* coll = NULL;
- *     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
- *     int rc, count;
- *     int nsub, ntrs, tr_size;
- *
- *     rc = load_seq("expected_output/gre_2d_navg2.seq",
- *                   &coll, &diag, 0);
- *     mu_assert(PULSEQLIB_SUCCEEDED(rc), "load navg2");
- *
- *     nsub    = pulseqlib_get_num_subsequences(coll);
- *     ntrs    = pulseqlib_get_num_trs(coll, 0);
- *     tr_size = pulseqlib_get_tr_size(coll, 0);
- *
- *     count = 0;
- *     while (pulseqlib_cursor_next(coll) == PULSEQLIB_CURSOR_BLOCK)
- *         count++;
- *
- *     // cursor should visit prep + main*navg*ntrs + cooldown blocks
- *     // exact count depends on sequence structure
- *     mu_assert(count >= ntrs * tr_size * 2,
- *               "navg=2 should double the main-region block count");
- *
- *     pulseqlib_collection_free(coll);
- * }
- */
+MU_TEST(test_cursor_info)
+{
+    pulseqlib_collection*  coll = NULL;
+    pulseqlib_diagnostic   diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    pulseqlib_cursor_info  ci;
+    int rc;
+
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
+
+    rc = pulseqlib_cursor_next(coll);
+    mu_assert(rc == PULSEQLIB_CURSOR_BLOCK, "first next");
+
+    rc = pulseqlib_cursor_get_info(coll, &ci);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "cursor_get_info");
+
+    mu_assert(ci.subseq_idx >= 0, "subseq_idx >= 0");
+    mu_assert(ci.segment_id >= 0, "segment_id >= 0");
+
+    pulseqlib_collection_free(coll);
+}
 
 /* ------------------------------------------------------------------ */
 /*  Suite                                                             */
@@ -151,10 +153,10 @@ MU_TEST(test_cursor_instance_fields)
 
 MU_TEST_SUITE(test_cursor_suite)
 {
-    MU_RUN_TEST(test_cursor_seq1_walk);
-    MU_RUN_TEST(test_cursor_reset);
+    MU_RUN_TEST(test_cursor_ok_walk);
+    MU_RUN_TEST(test_cursor_mark_reset);
     MU_RUN_TEST(test_cursor_instance_fields);
-    /* MU_RUN_TEST(test_cursor_navg2); */
+    MU_RUN_TEST(test_cursor_info);
 }
 
 int test_cursor_main(void)

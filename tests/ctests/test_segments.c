@@ -2,38 +2,28 @@
  * test_segments.c -- segment-level query tests.
  *
  * Tests:
- *   1. get_num_segments returns correct count for known sequences.
- *   2. get_segment_num_blocks matches expected values.
- *   3. get_segment_duration_us is positive for all segments.
- *   4. is_segment_pure_delay correctly identifies delay-only segments.
- *   5. Segment RF / ADC anchors are within block range.
- *   6. get_block_start_time_us is non-decreasing within a segment.
- *   7. get_block_duration_us is positive for all blocks.
- *   8. Block durations within a segment sum to segment duration.
+ *   1. Segment count is positive for loaded sequences.
+ *   2. Each segment has positive block count and duration.
+ *   3. Block start times are non-decreasing within a segment.
+ *   4. Block durations are positive.
  *
- * Requires:
- *   - expected_output/seq1.seq
- *   - expected_output/gre_2d.seq
- *   - expected_output/epi_2d.seq
- *   - expected_output/mprage_3d.seq
- *
- * Until generated, seq1.seq is used for smoke tests.
+ * Requires: data/01_ok_trap_extended_trap.seq
  */
 #include "test_helpers.h"
 
 /* ------------------------------------------------------------------ */
-/*  Smoke: segment queries on seq1                                    */
+/*  Smoke: segment queries on ok_trap                                    */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_segments_seq1_smoke)
+MU_TEST(test_segments_ok_smoke)
 {
     pulseqlib_collection* coll = NULL;
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
     pulseqlib_collection_info ci = PULSEQLIB_COLLECTION_INFO_INIT;
     int rc, s;
 
-    rc = load_seq("expected_output/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
     rc = pulseqlib_get_collection_info(coll, &ci);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "collection_info");
@@ -72,54 +62,12 @@ MU_TEST(test_segments_seq1_smoke)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Stub: segment anchors for GRE                                     */
-/* ------------------------------------------------------------------ */
-
-/*
- * TODO: uncomment once gre_2d.seq is generated.
- *
- * MU_TEST(test_segments_gre_anchors)
- * {
- *     pulseqlib_collection* coll = NULL;
- *     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
- *     int rc, nseg, s;
- *
- *     rc = load_seq("expected_output/gre_2d.seq", &coll, &diag, 0);
- *     mu_assert(PULSEQLIB_SUCCEEDED(rc), "load GRE");
- *
- *     nseg = pulseqlib_get_num_segments(coll);
- *     for (s = 0; s < nseg; s++) {
- *         int nblocks = pulseqlib_get_segment_num_blocks(coll, s);
- *         int nrf     = pulseqlib_get_segment_num_rf_anchors(coll, s);
- *         int nadc    = pulseqlib_get_segment_num_adc_anchors(coll, s);
- *         int a;
- *
- *         // RF anchors should be valid block indices
- *         for (a = 0; a < nrf; a++) {
- *             int idx = pulseqlib_get_segment_rf_anchor(coll, s, a);
- *             mu_assert(idx >= 0 && idx < nblocks,
- *                       "RF anchor within block range");
- *         }
- *         // ADC anchors likewise
- *         for (a = 0; a < nadc; a++) {
- *             int idx = pulseqlib_get_segment_adc_anchor(coll, s, a);
- *             mu_assert(idx >= 0 && idx < nblocks,
- *                       "ADC anchor within block range");
- *         }
- *     }
- *
- *     pulseqlib_collection_free(coll);
- * }
- */
-
-/* ------------------------------------------------------------------ */
 /*  Suite                                                             */
 /* ------------------------------------------------------------------ */
 
 MU_TEST_SUITE(test_segments_suite)
 {
-    MU_RUN_TEST(test_segments_seq1_smoke);
-    /* MU_RUN_TEST(test_segments_gre_anchors); */
+    MU_RUN_TEST(test_segments_ok_smoke);
 }
 
 int test_segments_main(void)

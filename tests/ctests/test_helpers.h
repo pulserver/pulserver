@@ -40,6 +40,11 @@
 #define TEST_BLOCK_RASTER   10.0f             /* us                  */
 
 /* ------------------------------------------------------------------ */
+/*  Standard test data (MATLAB-generated)                             */
+/* ------------------------------------------------------------------ */
+#define TEST_SEQ_OK   "data/01_ok_trap_extended_trap.seq"
+
+/* ------------------------------------------------------------------ */
 /*  Path helper                                                       */
 /* ------------------------------------------------------------------ */
 static char test_path_buf[2048];
@@ -62,7 +67,7 @@ static void test_opts_init(pulseqlib_opts* opts) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Load a .seq file -> collection (returns PULSEQLIB_SUCCESS on success)  */
+/*  Load a .seq file -> collection                                    */
 /* ------------------------------------------------------------------ */
 static int load_seq(const char* rel_path,
                     pulseqlib_collection** out,

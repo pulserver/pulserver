@@ -52,6 +52,12 @@ dev = [
   "pytest-sugar", 
   "pytest-xdist",
 ]
+test = [
+  "pytest",
+  "pytest-cov",
+  "pytest-sugar",
+  "pytest-xdist",
+]
 doc = [
   "sphinx", 
   "pydata-sphinx-theme", 

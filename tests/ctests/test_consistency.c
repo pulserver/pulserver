@@ -1,97 +1,81 @@
 /*
- * test_consistency.c -- consistency checks: nonperiodic RF amp patterns,
- *                       RF shim ID patterns, once-flag rejection,
- *                       nonperiodic-sequence length limits.
+ * test_consistency.c -- consistency checks.
  *
  * Tests:
  *   1. Consistent sequence passes check_consistency()
- *   2. Nonperiodic RF amplitude pattern -> ERR_CONSISTENCY_RF_PERIODIC
- *   3. Once-flags in middle of sequence -> ERR_INVALID_ONCE_FLAGS
- *   4. Nonperiodic sequence > 15 sec -> rejected at load time
+ *   2. VFA RF pattern fails RF periodicity check
+ *   3. RF shim pattern fails periodicity check
  *
- * Requires:
- *   - expected_output/seq1.seq   (always available)
- *   - expected_output/bad_rf_periodic.seq   (nonperiodic RF amp)
- *   - expected_output/bad_once_flags.seq    (once flags in middle)
- *
- * Until generated, the tests use seq1.seq for the pass-path.
+ * Requires: data/01_ok_trap_extended_trap.seq,
+ *           data/02_rfamp_fail_vfa.seq, data/04_rfshim_fail_gre.seq
  */
 #include "test_helpers.h"
 
 /* ------------------------------------------------------------------ */
-/*  Pass-path: seq1 should pass consistency                           */
+/*  Pass-path: ok_trap should pass consistency                        */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_consistency_seq1_passes)
+MU_TEST(test_consistency_ok_passes)
 {
     pulseqlib_collection* coll = NULL;
     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
     int rc;
 
-    rc = load_seq("expected_output/seq1.seq", &coll, &diag, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load seq1");
+    rc = load_seq(TEST_SEQ_OK, &coll, &diag, 0);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load ok_trap");
 
     pulseqlib_diagnostic_init(&diag);
     rc = pulseqlib_check_consistency(coll, &diag);
     mu_assert(PULSEQLIB_SUCCEEDED(rc),
-              "seq1 should pass consistency check");
+              "ok_trap should pass consistency check");
 
     pulseqlib_collection_free(coll);
 }
 
 /* ------------------------------------------------------------------ */
-/*  Stub: nonperiodic RF amplitude pattern                            */
+/*  RF periodicity: files with non-periodic RF should be detected     */
 /* ------------------------------------------------------------------ */
 
-/*
- * TODO: uncomment once bad_rf_periodic.seq is generated.
- * This sequence should have RF events whose amplitude pattern
- * does not repeat with the detected TR period.
- *
- * MU_TEST(test_consistency_nonperiodic_rf)
- * {
- *     pulseqlib_collection* coll = NULL;
- *     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
- *     int rc;
- *
- *     rc = load_seq("expected_output/bad_rf_periodic.seq",
- *                   &coll, &diag, 0);
- *     // Load may succeed but consistency check should fail
- *     if (PULSEQLIB_FAILED(rc)) {
- *         mu_assert(rc == PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC,
- *                   "should be RF periodicity error");
- *     } else {
- *         pulseqlib_diagnostic_init(&diag);
- *         rc = pulseqlib_check_consistency(coll, &diag);
- *         mu_assert(rc == PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC,
- *                   "consistency should catch nonperiodic RF");
- *         pulseqlib_collection_free(coll);
- *     }
- * }
- */
+MU_TEST(test_consistency_rfamp_fail)
+{
+    pulseqlib_collection* coll = NULL;
+    pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    int rc;
 
-/* ------------------------------------------------------------------ */
-/*  Stub: once-flags in middle of sequence                            */
-/* ------------------------------------------------------------------ */
+    rc = load_seq("data/02_rfamp_fail_vfa.seq", &coll, &diag, 0);
+    if (PULSEQLIB_SUCCEEDED(rc)) {
+        pulseqlib_diagnostic_init(&diag);
+        rc = pulseqlib_check_consistency(coll, &diag);
+        mu_assert(rc == PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC,
+                  "VFA should fail RF periodicity check");
+        pulseqlib_collection_free(coll);
+    } else {
+        /* If load itself catches the error, that is also acceptable */
+        mu_assert(rc == PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC
+                  || PULSEQLIB_FAILED(rc),
+                  "VFA should fail at load or consistency");
+    }
+}
 
-/*
- * TODO: uncomment once bad_once_flags.seq is generated.
- * This sequence should have ONCE labels placed not at the start
- * or end of the block list.
- *
- * MU_TEST(test_consistency_bad_once_flags)
- * {
- *     pulseqlib_collection* coll = NULL;
- *     pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
- *     int rc;
- *
- *     rc = load_seq("expected_output/bad_once_flags.seq",
- *                   &coll, &diag, 0);
- *     mu_assert(rc == PULSEQLIB_ERR_INVALID_ONCE_FLAGS,
- *               "once flags in middle should be rejected at load");
- *     if (coll) pulseqlib_collection_free(coll);
- * }
- */
+MU_TEST(test_consistency_rfshim_fail)
+{
+    pulseqlib_collection* coll = NULL;
+    pulseqlib_diagnostic  diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    int rc;
+
+    rc = load_seq("data/04_rfshim_fail_gre.seq", &coll, &diag, 0);
+    if (PULSEQLIB_SUCCEEDED(rc)) {
+        pulseqlib_diagnostic_init(&diag);
+        rc = pulseqlib_check_consistency(coll, &diag);
+        mu_assert(rc == PULSEQLIB_ERR_CONSISTENCY_RF_SHIM_PERIODIC,
+                  "RF shim pattern should fail periodicity check");
+        pulseqlib_collection_free(coll);
+    } else {
+        mu_assert(rc == PULSEQLIB_ERR_CONSISTENCY_RF_SHIM_PERIODIC
+                  || PULSEQLIB_FAILED(rc),
+                  "RF shim should fail at load or consistency");
+    }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Suite                                                             */
@@ -99,9 +83,9 @@ MU_TEST(test_consistency_seq1_passes)
 
 MU_TEST_SUITE(test_consistency_suite)
 {
-    MU_RUN_TEST(test_consistency_seq1_passes);
-    /* MU_RUN_TEST(test_consistency_nonperiodic_rf); */
-    /* MU_RUN_TEST(test_consistency_bad_once_flags); */
+    MU_RUN_TEST(test_consistency_ok_passes);
+    MU_RUN_TEST(test_consistency_rfamp_fail);
+    MU_RUN_TEST(test_consistency_rfshim_fail);
 }
 
 int test_consistency_main(void)

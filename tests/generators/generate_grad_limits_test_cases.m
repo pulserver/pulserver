@@ -1,6 +1,6 @@
 %% generate_gradient_limit_sequences
 %
-% Generates Pulseq .seq files covering gradient amplitude and slew
+% Generates Pulseq .seq files covering gradient amplitude and slew-rate
 % limit edge cases (single-axis and RSS violations).
 %
 
