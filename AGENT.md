@@ -21,7 +21,15 @@ High-level wrappers expose the C library to **MATLAB** (via MEX) and
 a `SequenceCollection` class with methods: `report()`, `check()`,
 `plot()`, `pns()`, `grad_spectrum()`, `validate()`, etc.
 
-Target vendor: **GE HealthCare** (compile-time `PULSEQLIB_VENDOR`).
+The target vendor is selected at **compile time** via the
+`PULSEQLIB_VENDOR` preprocessor constant (default: GEHC, overrideable
+with `-DPULSEQLIB_VENDOR=N`). There is **no runtime vendor field**;
+all vendor-specific behaviour is behind `#if PULSEQLIB_VENDOR` guards
+in the C source (dedup, math, freqmod, cache, getters, structure).
+
+> **Note**: the long-term intent is to migrate to a **flag-based**
+> runtime vendor selection. If you see a runtime vendor field or enum
+> added later, prefer it over the compile-time constant.
 
 ---
 
@@ -56,8 +64,14 @@ For each subsequence the library executes (in order):
    shortest repeating period in the **imaging region** block-ID pattern.
    Pattern detection **always** runs on block definition IDs. It is NOT
    triggered by ONCE flags (see §6).
-5. **Scan table construction** — Maps block indices through prep ×
-   main × cooldown regions, expanded for `num_averages`.
+5. **Scan table construction** — The scan table is the fully-expanded
+   play order.  The outer loop is over **passes** (`num_passes`),
+   the inner loop is over **averages** (`num_averages`).  Within each
+   average, the block table is walked as
+   `prep + main + cooldown` with ONCE semantics (prep only on the
+   first average, cooldown only on the last, main on every average).
+   Total scan table length =
+   `num_passes × (prep×1 + main×num_averages + cooldown×1)`.
 6. **Segmentation** — A state machine splits TRs into segments based
    on RF/ADC boundaries and gradient continuity (see §7).
 7. **Segment timing** — RF and ADC anchors (isocenters, k-zero
@@ -168,6 +182,12 @@ expected 0–2 for a simple prep+cooldown), the library attempts folding:
 **Valid multipass**: all passes have identical `(block_id, once_flag)`.
 **Invalid**: passes differ → `PULSEQLIB_ERR_INVALID_ONCE_FLAGS`.
 
+> **Simplification opportunity**: the folding algorithm could instead
+> count ONCE sections (1→0, 0→2, 2→1, etc.) and compare the set of
+> unique block definition IDs per section.  Two consecutive sections
+> with identical unique block def ID sets confirm a pass boundary.
+> This is conceptually simpler than period-finding.
+
 ---
 
 ## 6. TR Identification
@@ -228,9 +248,27 @@ States:
 
 ### 7.3 Scan-table segmentation fallback
 
-If block-table segmentation fails due to non-zero gradient boundaries
-(at TR edges), the library falls back to scan-table-based segmentation,
-which resolves blocks through scan table indirection.
+Block-table segmentation requires that the first and last blocks of
+each TR have near-zero gradient first/last values (within
+`max_slew × grad_raster_s`).  When this condition is violated —
+typically in **bSSFP** sequences where gradients are intentionally
+non-zero at TR edges — segmentation returns
+`PULSEQLIB_ERR_SEG_NONZERO_START_GRAD` or
+`PULSEQLIB_ERR_SEG_NONZERO_END_GRAD`.
+
+The library then falls back to **scan-table-based segmentation**
+(`find_segments_on_scan_table`).  This variant:
+
+1. Builds a block-def-ID pattern from the scan table.
+2. Finds the repeating period via `first_repeating_segment()`.
+3. Runs the same segment state machine but resolves blocks through
+   scan-table indirection (positions are scan-table indices, not
+   block-table indices).
+4. The first/last block gradient-zero checks now apply to the
+   **entire scan-table period** edges, not individual TR edges.
+   For bSSFP, this typically means the whole pass is one segment
+   (because non-zero gradient edges suppress all internal boundary
+   candidates).
 
 ---
 
@@ -253,6 +291,41 @@ which resolves blocks through scan table indirection.
      frequency bands.
    - PNS: per-axis slew rate convolved with nerve stimulation kernel,
      check combined magnitude vs threshold percentage.
+
+### 8.1 TR waveform amplitude modes
+
+When extracting gradient waveforms for safety checks or k-space
+analysis, the library supports three **amplitude modes**
+(parameter `amplitude_mode` in `get_gradient_waveforms_range`):
+
+| Mode | Name | Description |
+|------|------|-------------|
+| 0 | Actual | Uses the per-instance amplitude from the block table entry (one shot index). |
+| 1 | Position-max | For each block **position** within the TR, computes the worst-case (maximum \|amplitude\|) across **all TR instances** that share the same shot-index group. Used for **safety checks** — gives the worst-case gradient waveform at every position. |
+| 2 | Definition-min | For each gradient definition, uses `gd->min_amplitude[shot]` (the minimum \|amplitude\| observed across all table entries for that definition and shot index). Used for **k-space zero-crossing detection** — gives the best-case (smallest) gradient amplitude, which is more robust for identifying crossings. |
+
+The position-max computation (`compute_position_max_amplitudes_filtered`)
+groups TR instances by shot-index fingerprint
+(`find_unique_shot_trs`), then for each position in the TR template
+takes `max(|amplitude|)` across all instances in the matching group.
+
+> **Note**: `min_amplitude` is currently the minimum **absolute**
+> amplitude across all table entries for a grad definition + shot.  A
+> more robust alternative would be **min positional amplitude** (the
+> minimum at each TR position across instances, analogous to how
+> position-max works) rather than global min across all entries.
+
+### 8.2 Max-energy segment instance
+
+After segment deduplication, each unique segment may have many
+instances in the expanded segment table.  The library tracks which
+instance has the **highest total gradient energy**
+(`inst_energy = Σ energy[shot] × amplitude²` across all 3 gradient
+axes and all blocks in the instance).  The winning instance's
+`start_block` is stored in
+`segment_definitions[unique_idx].max_energy_start_block` and is used
+as the representative instance for gradient initial-state definition
+(connect waveforms, etc.).
 
 `pulseqlib_check_consistency()` is a separate lighter check run at load
 time (file-format validation, raster compatibility).
@@ -405,4 +478,10 @@ non-copyable) wraps all C getters as methods. Value types: `Opts`,
   rotation), not logical. A sequence that is safe in logical coordinates
   may fail after rotation.
 - The segmentation state machine can fall back to scan-table-based
-  segmentation if block-table boundaries have non-zero gradients.
+  segmentation if block-table boundaries have non-zero gradients
+  (e.g., bSSFP). See §7.3 for details.
+- **Safety TR selection** uses position-max amplitude (mode 1) to get
+  worst-case gradients across all TR instances. **k-space crossing
+  detection** uses definition-min amplitude (mode 2). See §8.1.
+- The max-energy segment instance (§8.2) determines which instance's
+  gradients define the initial state for waveform connection.
