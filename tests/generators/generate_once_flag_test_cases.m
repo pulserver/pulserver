@@ -205,120 +205,124 @@ seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2)); % we also label this blo
 seq.write(fullfile(dataDir, '10_multi_tr_nonvalid_once_in_the_middle.seq'));
 
 %% ------------------------------------------------------------------------
-% Valid multipass: 3 identical [P, clear, M, M, C] passes
-% (valid counterpart of case 10 — once flags in the middle form identical
-%  repeating periods; C library folds into 1 period with num_passes=3)
+% Valid multipass: [P, M, M, C] x 3 passes
+% Simplest complete multipass case: each pass has prep + 2 main + cooldown.
+% ONCE=0 on first main block clears the ONCE flag.
+% After folding: num_passes=3, num_prep=1, num_cooldown=1, 2 main blocks
+% Period detection: whole-sequence tiling at pl=4, trailing=0.
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
 for pass = 1:3
-    seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));
-    seq.addBlock(mr.makeLabel('SET','ONCE', 0));
-    seq.addBlock(rf, gx_flat1);
-    seq.addBlock(gx_flat1);
-    seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));
+    seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));       % P: ramp 0→100k
+    seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));  % M: clears once
+    seq.addBlock(gx_flat1);                                      % M
+    seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));     % C: ramp 100k→0
 end
-seq.write(fullfile(dataDir, '11_multi_tr_valid_once_in_the_middle.seq'));
+seq.write(fullfile(dataDir, '11_multipass_valid_prep_cooldown.seq'));
 
 %% ------------------------------------------------------------------------
-% Valid multipass, cooldown only: 3 identical [M, M, C] passes
-% No prep blocks. Each pass has 2 main blocks and 1 cooldown block.
+% Valid multipass: [P, M, M] x 3 passes   (prep only, no cooldown)
+% Tests the branch where has_cooldown=0 (ONCE=2 never appears in labelset).
+% After folding: num_passes=3, num_prep=1, num_cooldown=0
+% Period detection: trailing=0 (no trailing once==2), pl=3 tiles directly.
+% ------------------------------------------------------------------------
+
+seq = mr.Sequence();
+for pass = 1:3
+    seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));       % P: ramp 0→100k
+    seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));  % M: excitation
+    seq.addBlock(gx_rdown1);                                     % M: ramp 100k→0
+end
+seq.write(fullfile(dataDir, '12_multipass_valid_prep_only.seq'));
+
+%% ------------------------------------------------------------------------
+% Valid multipass: [M, M, C] x 3 passes   (cooldown only, no prep)
+% Tests the branch where has_prep=0 (ONCE=1 never appears in labelset).
 % After folding: num_passes=3, num_prep=0, num_cooldown=1
+% Period detection: whole-sequence tiling at pl=3, trailing=0.
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
 for pass = 1:3
-    seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 0));
-    seq.addBlock(rf, gx_flat1);
-    seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));
+    seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 0));       % M: ramp 0→100k
+    seq.addBlock(rf, gx_flat1);                                  % M: excitation
+    seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));     % C: ramp 100k→0
 end
-seq.write(fullfile(dataDir, '12_multipass_valid_cooldown_only.seq'));
+seq.write(fullfile(dataDir, '13_multipass_valid_cooldown_only.seq'));
 
 %% ------------------------------------------------------------------------
-% Valid multipass, prep + cooldown: 3 identical [P, M, M, C] passes
-% Each pass has 1 prep, 2 main, 1 cooldown block.
-% After folding: num_passes=3, num_prep=1, num_cooldown=1
+% Valid multipass: [P, M, M] x 2 passes + trailing [C]
+% Exercises the folding path where trailing cooldown blocks (once_flag==2)
+% are separated before period detection:
+%   trailing = 1 (the final delay/ONCE=2 block)
+%   effective = 6 blocks → period pl=3 tiles twice → num_passes=2
+% Folded result: [P, M, M, C] with num_passes=2, num_prep=1, num_cool=1.
+% Also tests the 2-pass minimum (num_reps == 2).
+% ------------------------------------------------------------------------
+
+seq = mr.Sequence();
+for pass = 1:2
+    seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));       % P: ramp 0→100k
+    seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));  % M: excitation
+    seq.addBlock(gx_rdown1);                                     % M: ramp 100k→0
+end
+seq.addBlock(mr.makeDelay(0.1e-3), mr.makeLabel('SET','ONCE', 2));  % trailing C
+seq.write(fullfile(dataDir, '14_multipass_valid_trailing_cooldown.seq'));
+
+%% ------------------------------------------------------------------------
+% Valid multipass: [P, M, M, M, M, C] x 3 passes  (multi-TR per pass)
+% Each pass has 4 main blocks = 2 TRs (each TR = [rf+gx_flat1, gx_flat1]).
+% After folding: num_passes=3, num_prep=1, num_cooldown=1, num_trs=2
+% Tests that TR identification works correctly within a multipass period.
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
 for pass = 1:3
-    seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));
-    seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));
-    seq.addBlock(gx_flat1);
-    seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));
+    seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));       % P: ramp 0→100k
+    seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));  % M: TR1 excitation
+    seq.addBlock(gx_flat1);                                      % M: TR1 readout
+    seq.addBlock(rf, gx_flat1);                                  % M: TR2 excitation
+    seq.addBlock(gx_flat1);                                      % M: TR2 readout
+    seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));     % C: ramp 100k→0
 end
-seq.write(fullfile(dataDir, '13_multipass_valid_prep_cooldown.seq'));
+seq.write(fullfile(dataDir, '15_multipass_valid_multi_tr.seq'));
 
 %% ------------------------------------------------------------------------
-% Invalid multipass: different cooldown block types across passes
-% [M, M, C1,  M, M, C2]  where C1 != C2 (C2 has extra RF event)
-% No valid period found -> PULSEQLIB_ERR_INVALID_ONCE_FLAGS
+% Invalid multipass: different main block types across passes
+% Pass 1: [P, rf+gx_flat1, C]     -- main block has RF
+% Pass 2: [P, gx_flat1,    C]     -- main block has NO RF (different def)
+% No valid period → PULSEQLIB_ERR_INVALID_ONCE_FLAGS
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
 % Pass 1
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 0));
-seq.addBlock(rf, gx_flat1);
-seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));       % C1: no RF
-% Pass 2 (different cooldown block)
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 0));
-seq.addBlock(rf, gx_flat1);
-seq.addBlock(rf, gx_rdown1, mr.makeLabel('SET','ONCE', 2));   % C2: has RF -> different block ID
-seq.write(fullfile(dataDir, '14_multipass_fail_diff_cooldown.seq'));
+seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));           % P
+seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));      % M: with RF
+seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));         % C
+% Pass 2 (different main block)
+seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));           % P
+seq.addBlock(gx_flat1, mr.makeLabel('SET','ONCE', 0));          % M': no RF → different block def
+seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));         % C
+seq.write(fullfile(dataDir, '16_multipass_fail_diff_main.seq'));
 
 %% ------------------------------------------------------------------------
-% Invalid multipass: different prep block types across passes
-% [P1, M, M,  P2, M, M]  where P1 != P2 (P2 has extra RF event)
-% No valid period found -> PULSEQLIB_ERR_INVALID_ONCE_FLAGS
+% Invalid multipass: different pass lengths
+% Pass 1: [P, M, M, C]  (4 blocks)
+% Pass 2: [P, M, C]     (3 blocks)
+% Total 7 blocks, 7 is prime → no valid period → ERR_INVALID_ONCE_FLAGS
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
-% Pass 1
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));          % P1: no RF
-seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));
-seq.addBlock(gx_rdown1);
-% Pass 2 (different prep block)
-seq.addBlock(rf, gx_rup1, mr.makeLabel('SET','ONCE', 1));      % P2: has RF -> different block ID
-seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));
-seq.addBlock(gx_rdown1);
-seq.write(fullfile(dataDir, '15_multipass_fail_diff_prep.seq'));
-
-%% ------------------------------------------------------------------------
-% Invalid multipass: different prep types with cooldown
-% [P1, M, M, C,  P2, M, M, C]  where P1 != P2
-% No valid period found -> PULSEQLIB_ERR_INVALID_ONCE_FLAGS
-% ------------------------------------------------------------------------
-
-seq = mr.Sequence();
-% Pass 1
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));          % P1: no RF
-seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));
-seq.addBlock(gx_flat1);
-seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));
-% Pass 2 (different prep block)
-seq.addBlock(rf, gx_rup1, mr.makeLabel('SET','ONCE', 1));      % P2: has RF -> different block ID
-seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));
-seq.addBlock(gx_flat1);
-seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));
-seq.write(fullfile(dataDir, '16_multipass_fail_diff_prep_with_cooldown.seq'));
-
-%% ------------------------------------------------------------------------
-% Invalid multipass: different cooldown types with prep
-% [P, M, M, C1,  P, M, M, C2]  where C1 != C2
-% No valid period found -> PULSEQLIB_ERR_INVALID_ONCE_FLAGS
-% ------------------------------------------------------------------------
-
-seq = mr.Sequence();
-% Pass 1
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));
-seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));
-seq.addBlock(gx_flat1);
-seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));        % C1: no RF
-% Pass 2 (different cooldown block)
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));
-seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));
-seq.addBlock(gx_flat1);
-seq.addBlock(rf, gx_rdown1, mr.makeLabel('SET','ONCE', 2));    % C2: has RF -> different block ID
-seq.write(fullfile(dataDir, '17_multipass_fail_diff_cooldown_with_prep.seq'));
+% Pass 1 (4 blocks)
+seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));           % P
+seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));      % M
+seq.addBlock(gx_flat1);                                          % M
+seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));         % C
+% Pass 2 (3 blocks — shorter)
+seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));           % P
+seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));      % M
+seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));         % C
+seq.write(fullfile(dataDir, '17_multipass_fail_diff_length.seq'));
 
 fprintf('All sequences generated.\n')
