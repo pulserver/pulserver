@@ -6,6 +6,11 @@
 clear; clc;
 import mr.*
 
+%% Output directory
+scriptDir = fileparts(mfilename('fullpath'));
+dataDir = fullfile(scriptDir, '..', 'data');
+if ~exist(dataDir, 'dir'), mkdir(dataDir); end
+
 %% ------------------------------------------------------------------------
 % Gradient definitions
 % ------------------------------------------------------------------------
@@ -38,7 +43,7 @@ for n = 1:10
     seq.addBlock(rf90);
     seq.addBlock(gx_trap);
 end
-seq.write('01_rfamp_ok_mrfingerprinting.seq');
+seq.write(fullfile(dataDir, '01_rfamp_ok_mrfingerprinting.seq'));
 
 %% ------------------------------------------------------------------------
 % Nonperiodic rf amplitude sequence (VFA) - error (must be splitted in multiple SPGR subsequences)
@@ -57,7 +62,7 @@ for n = 1:10
     seq.addBlock(rf90);
     seq.addBlock(gx_trap);
 end
-seq.write('02_rfamp_fail_vfa.seq');
+seq.write(fullfile(dataDir, '02_rfamp_fail_vfa.seq'));
 
 %% ------------------------------------------------------------------------
 % Periodic rf shim sequence (e.g., PnP-MRF)
@@ -90,7 +95,7 @@ for n = 1:10
     seq.addBlock(rf90, mode);
     seq.addBlock(gx_trap);
 end
-seq.write('03_rfshim_ok_pnpmrfingerprinting.seq');
+seq.write(fullfile(dataDir, '03_rfshim_ok_pnpmrfingerprinting.seq'));
 
 %% ------------------------------------------------------------------------
 % Nonperiodic rf shim sequence - error (must be splitted in multiple Shimmed subsequences)
@@ -110,7 +115,7 @@ for n = 1:10
     seq.addBlock(rf90, gradMode);
     seq.addBlock(gx_trap);
 end
-seq.write('04_rfshim_fail_gre.seq');
+seq.write(fullfile(dataDir, '04_rfshim_fail_gre.seq'));
 
 
 fprintf('All sequences generated.\n');

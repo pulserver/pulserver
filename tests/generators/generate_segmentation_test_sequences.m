@@ -23,6 +23,9 @@ import mr.*
 write_bssfp(1);
 write_bssfp(3);
 
+write_bssfp(1, 3);
+write_bssfp(3, 3);
+
 write_spgr(1, 1);
 write_spgr(1, 3);
 write_spgr(3, 1);
@@ -79,6 +82,8 @@ end
 function check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt)
 % Timing check, definitions, write, ground truth.
 %
+% Output is written to ../data/ relative to this script.
+%
 % gt (optional struct) contains structural ground truth:
 %   .tr_min          - mr.Sequence: representative TR with zero PE
 %                      (matches C library amplitude mode 2 = definition-min)
@@ -98,6 +103,11 @@ function check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt)
 %   .degenerate_cool - 1 if cooldown pattern == main pattern, 0 otherwise
 
     if nargin < 7, gt = struct(); end
+
+    % Write to data directory
+    dataDir = fullfile(fileparts(mfilename('fullpath')), '..', 'data');
+    if ~exist(dataDir, 'dir'), mkdir(dataDir); end
+    fname = fullfile(dataDir, fname);
 
     [ok, err] = seq.checkTiming;
     if ok
@@ -131,7 +141,8 @@ function export_ground_truth(seq, seq_fname, num_averages, gt)
     if nargin < 4, gt = struct(); end
 
     N = length(seq.blockDurations);
-    [~, base, ~] = fileparts(seq_fname);
+    [fdir, base, ~] = fileparts(seq_fname);
+    base = fullfile(fdir, base);  % preserve output directory in base path
 
     % --- per-block data ---
     fid = fopen([base '_blocks.csv'], 'w');
@@ -180,6 +191,9 @@ function export_ground_truth(seq, seq_fname, num_averages, gt)
     end
     if isfield(gt, 'seg_unique_ids')
         fprintf(fid, 'num_segments %d\n', length(gt.seg_unique_ids));
+    end
+    if isfield(gt, 'num_passes')
+        fprintf(fid, 'num_passes %d\n', gt.num_passes);
     end
     fclose(fid);
 
@@ -319,19 +333,29 @@ end
 function export_scan_table(base, N, num_averages, gt)
 % Build and export the expected scan table for the given number of averages.
 % The scan table maps scan positions to 0-based block indices, accounting
-% for prep (once), main (repeated num_averages times), and cooldown (once).
+% for prep (once per pass), main (repeated num_averages times per pass),
+% cooldown (once per pass), and multiple passes.
 %
 % Output: _scan_table.csv with columns (scan_pos, block_idx)
 
     num_prep = gt.num_prep_blocks;
     num_cool = gt.num_cool_blocks;
     num_main = N - num_prep - num_cool;
+    num_passes = 1;
+    if isfield(gt, 'num_passes'), num_passes = gt.num_passes; end
 
     prep_idx = 0:(num_prep - 1);
     main_idx = num_prep:(num_prep + num_main - 1);
     cool_idx = (num_prep + num_main):(N - 1);
 
-    block_idx = [prep_idx, repmat(main_idx, 1, num_averages), cool_idx];
+    % Per-pass scan order: prep on first avg, cooldown on last avg
+    pass_idx = [];
+    for avg = 0:(num_averages - 1)
+        if avg == 0,              pass_idx = [pass_idx, prep_idx]; end %#ok<AGROW>
+        pass_idx = [pass_idx, main_idx]; %#ok<AGROW>
+        if avg == num_averages-1, pass_idx = [pass_idx, cool_idx]; end %#ok<AGROW>
+    end
+    block_idx = repmat(pass_idx, 1, num_passes);
 
     fid = fopen([base '_scan_table.csv'], 'w');
     fprintf(fid, 'scan_pos,block_idx\n');
@@ -381,8 +405,9 @@ end
 %  bSSFP  (True FISP)
 %  ========================================================================
 
-function write_bssfp(num_averages)
-    fprintf('Generating bSSFP (1 slice, %d avg) ...\n', num_averages);
+function write_bssfp(num_averages, num_slices)
+    if nargin < 2, num_slices = 1; end
+    fprintf('Generating bSSFP (%d slice, %d avg) ...\n', num_slices, num_averages);
 
     sys   = make_system();
     seq   = mr.Sequence(sys);
@@ -438,47 +463,56 @@ function write_bssfp(num_averages)
 
     % --- phase-encode template (max area, will be scaled) ---
     maxPeArea = max(abs(phaseAreas));
-    gyMax     = mr.makeTrapezoid('y', 'Area', maxPeArea, ...
-                                'Duration', pe_dur, 'system', sys);
+    gyMax     = mr.makeTrapezoid('y', 'Area', maxPeArea, 'Duration', pe_dur, 'system', sys);
 
     % --- pre-create labels ---
     lblOnce1 = mr.makeLabel('SET', 'ONCE', 1);
     lblOnce0 = mr.makeLabel('SET', 'ONCE', 0);
     lblOnce2 = mr.makeLabel('SET', 'ONCE', 2);
 
-    % --- alpha/2 prep (ONCE=1) ---
+    % --- prep RF: half flip angle ---
     rf05        = rf;
     rf05.signal = 0.5 * rf.signal;
-    seq.addBlock(rf05, gz_1, lblOnce1);
 
-    prepDelay = mr.makeDelay( ...
-        round((TR/2 - mr.calcDuration(gz_1)) / sys.gradRasterTime) ...
-        * sys.gradRasterTime);
+    % --- prep delay to center main acquisition around TR/2 ---
+    prepDelay = mr.makeDelay( round((TR/2 - mr.calcDuration(gz_1)) / sys.gradRasterTime) * sys.gradRasterTime);
     gx_1_1    = mr.makeExtendedTrapezoidArea('x', 0, gx_2.first, -gx_2.area, sys);
     gyPre_2   = mr.scaleGrad(gyMax, phaseAreas(end) / maxPeArea);
-    seq.addBlock(mr.align('left', prepDelay, gz_2, gyPre_2, 'right', gx_1_1));
 
-    seq.addBlock(lblOnce0);   % clear ONCE flag -> first main block
+    for z = 1:num_slices
+        rf05.freqOffset = gz.amplitude * thick * (z - 1 - (num_slices-1)/2);
+        rf.freqOffset = gz.amplitude * thick * (z - 1 - (num_slices-1)/2);
+        
+        % --- alpha/2 prep (ONCE=1) ---
+        seq.addBlock(rf05, gz_1, lblOnce1);
+        seq.addBlock(mr.align('left', prepDelay, gz_2, gyPre_2, 'right', gx_1_1));
 
-    % --- main loop ---
-    for i = 1:Ny
-        rf.phaseOffset  = pi * mod(i, 2);
-        adc.phaseOffset = pi * mod(i, 2);
+        % --- main loop ---
+        for i = 1:Ny
+            rf.phaseOffset  = pi * mod(i, 2);
+            adc.phaseOffset = pi * mod(i, 2);
 
-        gyPre_1 = mr.scaleGrad(gyPre_2, -1);             % undo previous PE
-        gyPre_2 = mr.scaleGrad(gyMax, phaseAreas(i) / maxPeArea);  % new PE
+            gyPre_1 = mr.scaleGrad(gyPre_2, -1);             % undo previous PE
+            gyPre_2 = mr.scaleGrad(gyMax, phaseAreas(i) / maxPeArea);  % new PE
 
-        seq.addBlock(rf, gz_1, gyPre_1, gx_2);
-        seq.addBlock(gx_1, gyPre_2, gz_2, adc);
+            if i == 1
+                seq.addBlock(rf, gz_1, gyPre_1, gx_1, lblOnce0); % clear ONCE flag -> first main block
+            else
+                seq.addBlock(rf, gz_1, gyPre_1, gx_1);
+            end
+            seq.addBlock(rf, gz_1, gyPre_1, gx_2);
+            seq.addBlock(gx_1, gyPre_2, gz_2, adc);
+        end
+
+        % --- exit block (ONCE=2) ---
+        seq.addBlock(gx_2, lblOnce2);
     end
 
-    % --- exit block (ONCE=2) ---
-    seq.addBlock(gx_2, lblOnce2);
-
-    % sanity: prep = 3 blocks (rf05+gz_1, align block, lblOnce0)
-    % first main TR starts at block 4
-    assert(abs(TR - (mr.calcDuration(seq.getBlock(4)) ...
-                   + mr.calcDuration(seq.getBlock(5)))) < 1e-12);
+    % sanity: prep = 2 blocks (rf05+gz_1, align block).
+    % Block 3 has lblOnce0 which sets once_flag=0 → first main block.
+    % Main TR = blocks 4+5 (blocks of type [rf+gz_1+gy+gx_2] and
+    %           [gx_1+gy+gz_2+adc]), verified below.
+    assert(abs(TR - (mr.calcDuration(seq.getBlock(4)) + mr.calcDuration(seq.getBlock(5)))) < 1e-12);
 
     fprintf('  TR = %.3f ms   TE = %.3f ms\n', TR * 1e3, TE * 1e3);
 
@@ -505,12 +539,15 @@ function write_bssfp(num_averages)
     gt.adc_dwell_s     = adc.dwell;
     gt.seg_unique_ids  = {[0, 1]};   % single segment, full 2-block TR
     gt.unique_blocks   = [0, 1];
-    gt.num_prep_blocks = 3;          % alpha/2 + align + lblOnce0
+    gt.num_prep_blocks = 2;          % alpha/2 + align (lblOnce0 block is first main)
     gt.num_cool_blocks = 1;          % exit gx_2 block
     gt.degenerate_prep = 0;          % alpha/2 prep ~= main pattern
     gt.degenerate_cool = 0;          % exit block ~= main pattern
+    if num_slices > 1
+        gt.num_passes = num_slices;  % C library folds identical per-slice patterns
+    end
 
-    fname = sprintf('bssfp_2d_%davg.seq', num_averages);
+    fname = sprintf('bssfp_2d_%dsl_%davg.seq', num_slices, num_averages);
     check_and_write(seq, fname, fov, thick, 1, num_averages, gt);
 end
 

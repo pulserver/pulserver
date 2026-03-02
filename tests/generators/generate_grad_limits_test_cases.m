@@ -7,6 +7,11 @@
 clear; clc;
 import mr.*
 
+%% Output directory
+scriptDir = fileparts(mfilename('fullpath'));
+dataDir = fullfile(scriptDir, '..', 'data');
+if ~exist(dataDir, 'dir'), mkdir(dataDir); end
+
 %% ------------------------------------------------------------------------
 % 01 — Single-axis gradient amplitude violation
 % ------------------------------------------------------------------------
@@ -20,7 +25,7 @@ gx = makeTrapezoid('x', ...
     'System', sys);
 
 seq.addBlock(gx);
-seq.write('01_grad_amplitude_violation.seq');
+seq.write(fullfile(dataDir, '01_grad_amplitude_violation.seq'));
 
 
 %% ------------------------------------------------------------------------
@@ -42,7 +47,7 @@ gx = makeTrapezoid('x', ...
     'System', sys);
 
 seq.addBlock(gx);
-seq.write('02_slew_violation.seq');
+seq.write(fullfile(dataDir, '02_slew_violation.seq'));
 
 
 %% ------------------------------------------------------------------------
@@ -61,7 +66,7 @@ gy = makeTrapezoid('y', 'Amplitude', g, 'Duration', 1e-3, 'System', sys);
 
 % sqrt(8^2 + 8^2) ≈ 11.3 > 10
 seq.addBlock(gx, gy);
-seq.write('03_grad_rss_violation.seq');
+seq.write(fullfile(dataDir, '03_grad_rss_violation.seq'));
 
 
 %% ------------------------------------------------------------------------
@@ -92,6 +97,6 @@ gy = makeTrapezoid('y', ...
 
 % sqrt(80^2 + 80^2) ≈ 113 > 100
 seq.addBlock(gx, gy);
-seq.write('04_slew_rss_violation.seq');
+seq.write(fullfile(dataDir, '04_slew_rss_violation.seq'));
 
 fprintf('All gradient limit test sequences generated.\n');
