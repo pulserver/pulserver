@@ -288,7 +288,6 @@ static int pulseqlib__get_num_unique_rf(
     return coll->descriptors[subseq_idx].num_unique_rfs;
 }
 
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
 int pulseqlib_get_rf_stats(
     const pulseqlib_collection* coll,
     pulseqlib_rf_stats* stats,
@@ -306,7 +305,6 @@ int pulseqlib_get_rf_stats(
     *stats = desc->rf_definitions[rf_idx].stats;
     return PULSEQLIB_SUCCESS;
 }
-#endif
 
 /*
  * pulseqlib_get_tr_rf_ids --
@@ -1012,14 +1010,14 @@ float** pulseqlib_get_rf_magnitude(
     decompressed.num_uncompressed_samples = 0;
     decompressed.samples = NULL;
 
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
-    if (!pulseqlib__decompress_shape(&decompressed, &desc->shapes[shape_idx],
-                                     rdef->stats.base_amplitude_hz))
-        return NULL;
-#else
-    if (!pulseqlib__decompress_shape(&decompressed, &desc->shapes[shape_idx], 1.0f))
-        return NULL;
-#endif
+    {
+        float amplitude_scale = (desc->vendor == PULSEQLIB_VENDOR_GEHC)
+            ? rdef->stats.base_amplitude_hz
+            : 1.0f;
+        if (!pulseqlib__decompress_shape(&decompressed, &desc->shapes[shape_idx],
+                                         amplitude_scale))
+            return NULL;
+    }
 
     flat = decompressed.samples;
     nch  = (rdef->num_channels > 1) ? rdef->num_channels : 1;

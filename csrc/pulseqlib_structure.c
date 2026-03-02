@@ -1544,13 +1544,10 @@ int pulseqlib__build_label_table(
 
     if (!desc || !seq) return PULSEQLIB_ERR_NULL_POINTER;
 
-#if PULSEQLIB_VENDOR != 2
-    (void)num_columns; (void)total_adcs; (void)adcs_per_tr;
-    (void)imaging_start; (void)cooldown_start; (void)num_trs;
-    (void)b; (void)rep; (void)entry_idx;
-    (void)state; (void)table; (void)raw;
-    return PULSEQLIB_ERR_NOT_IMPLEMENTED;
-#else
+    if (desc->vendor != PULSEQLIB_VENDOR_GEHC) {
+        return PULSEQLIB_ERR_NOT_IMPLEMENTED;
+    }
+
     num_columns = 3; /* GEHC: [lin, slc, eco] */
 
     imaging_start  = desc->num_prep_blocks;
@@ -1633,7 +1630,6 @@ int pulseqlib__build_label_table(
     desc->label_table       = table;
 
     return PULSEQLIB_SUCCESS;
-#endif
 }
 
 /* ================================================================== */

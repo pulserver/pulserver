@@ -371,7 +371,6 @@ size_t pulseqlib__next_pow2(size_t x)
 /* ------------------------------------------------------------------ */
 /*  FFT convolution (real signals)                                    */
 /* ------------------------------------------------------------------ */
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
 #include "external_kiss_fft.h"
 #include "external_kiss_fftr.h"
 
@@ -446,4 +445,3 @@ fail:
     if (inv)      kiss_fftr_free(inv);
     return result;
 }
-#endif /* PULSEQLIB_VENDOR_GEHC */

@@ -21,15 +21,21 @@ High-level wrappers expose the C library to **MATLAB** (via MEX) and
 a `SequenceCollection` class with methods: `report()`, `check()`,
 `plot()`, `pns()`, `grad_spectrum()`, `validate()`, etc.
 
-The target vendor is selected at **compile time** via the
-`PULSEQLIB_VENDOR` preprocessor constant (default: GEHC, overrideable
-with `-DPULSEQLIB_VENDOR=N`). There is **no runtime vendor field**;
-all vendor-specific behaviour is behind `#if PULSEQLIB_VENDOR` guards
-in the C source (dedup, math, freqmod, cache, getters, structure).
+The target vendor is selected at **runtime** via the `opts->vendor`
+field (a `PULSEQLIB_VENDOR_*` constant from `pulseqlib_config.h`).
+`pulseqlib_opts_init()` sets `vendor` to the compile-time default
+(`PULSEQLIB_VENDOR`, which defaults to `PULSEQLIB_VENDOR_GEHC` unless
+overridden with `-DPULSEQLIB_VENDOR=N`).  Callers may override
+`opts->vendor` after calling `opts_init`.  The vendor propagates from
+`seq->opts.vendor` → `desc->vendor` (copied in `get_unique_blocks`).
 
-> **Note**: the long-term intent is to migrate to a **flag-based**
-> runtime vendor selection. If you see a runtime vendor field or enum
-> added later, prefer it over the compile-time constant.
+All vendor-specific behaviour uses **runtime** `if (vendor == …)`
+checks — there are **no** `#if PULSEQLIB_VENDOR` guards in the C
+source.  Vendor-gated features include: RF statistics/bandwidth
+(GEHC), FFT convolution for PNS (GEHC), label table columns (GEHC),
+RF shape amplitude scaling (GEHC), and freq-mod active region
+calculation (GEHC uses RF-stats duration/isodelay, others use block
+duration).
 
 ---
 
@@ -168,25 +174,27 @@ until `ext.flag.once == 2` is encountered (that block is included).
 ### 5.4 Multipass (inner-loop) folding
 
 When ONCE flags appear mid-sequence (`once_counter` exceeds the
-expected 0–2 for a simple prep+cooldown), the library attempts folding:
+expected 0–2 for a simple prep+cooldown), the library attempts folding
+by **whole-pass comparison** (no period-finding — that belongs to
+`get_tr_in_sequence`):
 
-1. Count trailing `once_flag == 2` blocks → `trailing`.
-2. `effective = num_blocks - trailing`.
-3. Find shortest period `pl` where `effective % pl == 0` and the
-   `(block_id, once_flag)` pattern tiles identically.
-4. If not found with trailing separated, try the entire sequence.
-5. Fold: keep first period + trailing cooldown.
-6. `num_passes = effective / period` (must be ≥ 2).
+1. Record `first_once = block_table[0].once_flag`.
+2. Walk the block table; every transition **to** `first_once` from a
+   different once_flag marks a new **pass boundary**.
+3. Derive `pass_len` from the first pass (blocks between boundary 0
+   and boundary 1).
+4. If the last pass is longer than `pass_len` and the extra tail
+   blocks are all `once==2`, treat the tail as **trailing cooldown**.
+   If the last pass is shorter and all `once==2`, treat the entire
+   last segment as trailing cooldown and decrement the pass count.
+5. Verify every pass has the same length and identical
+   `(block_id, once_flag)` at each position.
+6. Fold: keep first pass + trailing cooldown.
+   `num_passes ≥ 2` required.
 7. Re-count prep/cooldown from the folded table.
 
-**Valid multipass**: all passes have identical `(block_id, once_flag)`.
+**Valid multipass**: all passes are identical block-for-block.
 **Invalid**: passes differ → `PULSEQLIB_ERR_INVALID_ONCE_FLAGS`.
-
-> **Simplification opportunity**: the folding algorithm could instead
-> count ONCE sections (1→0, 0→2, 2→1, etc.) and compare the set of
-> unique block definition IDs per section.  Two consecutive sections
-> with identical unique block def ID sets confirm a pass boundary.
-> This is conceptually simpler than period-finding.
 
 ---
 

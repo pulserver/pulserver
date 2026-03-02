@@ -208,8 +208,8 @@ seq.write(fullfile(dataDir, '10_multi_tr_nonvalid_once_in_the_middle.seq'));
 % Valid multipass: [P, M, M, C] x 3 passes
 % Simplest complete multipass case: each pass has prep + 2 main + cooldown.
 % ONCE=0 on first main block clears the ONCE flag.
-% After folding: num_passes=3, num_prep=1, num_cooldown=1, 2 main blocks
-% Period detection: whole-sequence tiling at pl=4, trailing=0.
+% After folding: num_passes=3, num_prep=1, num_cooldown=1, 2 main blocks.
+% Pass boundaries at blocks 0, 4, 8 (transitions back to once=1).
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
@@ -224,8 +224,8 @@ seq.write(fullfile(dataDir, '11_multipass_valid_prep_cooldown.seq'));
 %% ------------------------------------------------------------------------
 % Valid multipass: [P, M, M] x 3 passes   (prep only, no cooldown)
 % Tests the branch where has_cooldown=0 (ONCE=2 never appears in labelset).
-% After folding: num_passes=3, num_prep=1, num_cooldown=0
-% Period detection: trailing=0 (no trailing once==2), pl=3 tiles directly.
+% After folding: num_passes=3, num_prep=1, num_cooldown=0.
+% Pass boundaries at blocks 0, 3, 6 (transitions back to once=1).
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
@@ -239,8 +239,8 @@ seq.write(fullfile(dataDir, '12_multipass_valid_prep_only.seq'));
 %% ------------------------------------------------------------------------
 % Valid multipass: [M, M, C] x 3 passes   (cooldown only, no prep)
 % Tests the branch where has_prep=0 (ONCE=1 never appears in labelset).
-% After folding: num_passes=3, num_prep=0, num_cooldown=1
-% Period detection: whole-sequence tiling at pl=3, trailing=0.
+% After folding: num_passes=3, num_prep=0, num_cooldown=1.
+% Pass boundaries at blocks 0, 3, 6 (transitions back to once=0).
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
@@ -253,12 +253,10 @@ seq.write(fullfile(dataDir, '13_multipass_valid_cooldown_only.seq'));
 
 %% ------------------------------------------------------------------------
 % Valid multipass: [P, M, M] x 2 passes + trailing [C]
-% Exercises the folding path where trailing cooldown blocks (once_flag==2)
-% are separated before period detection:
-%   trailing = 1 (the final delay/ONCE=2 block)
-%   effective = 6 blocks → period pl=3 tiles twice → num_passes=2
-% Folded result: [P, M, M, C] with num_passes=2, num_prep=1, num_cool=1.
-% Also tests the 2-pass minimum (num_reps == 2).
+% Exercises the trailing-cooldown branch: the last detected pass has one
+% extra block (once==2) beyond pass_len.  That tail is separated as
+% trailing cooldown.  Folded result: [P, M, M, C] with num_passes=2,
+% num_prep=1, num_cooldown=1.  Also tests the 2-pass minimum.
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
@@ -310,7 +308,7 @@ seq.write(fullfile(dataDir, '16_multipass_fail_diff_main.seq'));
 % Invalid multipass: different pass lengths
 % Pass 1: [P, M, M, C]  (4 blocks)
 % Pass 2: [P, M, C]     (3 blocks)
-% Total 7 blocks, 7 is prime → no valid period → ERR_INVALID_ONCE_FLAGS
+% Pass lengths differ (4 vs 3) → ERR_INVALID_ONCE_FLAGS
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();

@@ -12,7 +12,7 @@
 /* ================================================================== */
 
 #define PULSEQLIB_CACHE_ENDIAN_MARKER  0x01020304
-#define PULSEQLIB_CACHE_VERSION        13
+#define PULSEQLIB_CACHE_VERSION        14
 
 /* ------ Byte-swap helpers ------ */
 
@@ -118,6 +118,7 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
     if (!write4(f, &d->enable_pmc, 1)) return 0;
     if (!write4(f, &d->ignore_averages, 1)) return 0;
     if (!write4(f, &d->num_passes, 1)) return 0;
+    if (!write4(f, &d->vendor, 1)) return 0;
 
     /* block definitions */
     if (!write4(f, &d->num_unique_blocks, 1)) return 0;
@@ -161,7 +162,6 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &d->rf_definitions[i].time_shape_id, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].delay, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].num_channels, 1)) return 0;
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
         if (!write4(f, &d->rf_definitions[i].stats.flip_angle_deg, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].stats.area, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].stats.abs_width, 1)) return 0;
@@ -173,7 +173,6 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
         if (!write4(f, &d->rf_definitions[i].stats.bandwidth_hz, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].stats.base_amplitude_hz, 1)) return 0;
         if (!write4(f, &d->rf_definitions[i].stats.num_samples, 1)) return 0;
-#endif
     }
 
     /* RF table */
@@ -359,7 +358,8 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
     if (!read4(f, &d->enable_pmc, 1)) return 0;
     if (!read4(f, &d->ignore_averages, 1)) return 0;
     if (!read4(f, &d->num_passes, 1)) return 0;
-    if (do_swap) swap4_array(&d->num_prep_blocks, 10);
+    if (!read4(f, &d->vendor, 1)) return 0;
+    if (do_swap) swap4_array(&d->num_prep_blocks, 11);
 
     /* block definitions */
     if (!read4(f, &d->num_unique_blocks, 1)) return 0;
@@ -403,7 +403,6 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         if (!read4(f, &d->rf_definitions[i].delay, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].num_channels, 1)) return 0;
         if (do_swap) swap4_array(&d->rf_definitions[i].id, 6);
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
         if (!read4(f, &d->rf_definitions[i].stats.flip_angle_deg, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].stats.area, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].stats.abs_width, 1)) return 0;
@@ -416,7 +415,6 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
         if (!read4(f, &d->rf_definitions[i].stats.base_amplitude_hz, 1)) return 0;
         if (!read4(f, &d->rf_definitions[i].stats.num_samples, 1)) return 0;
         if (do_swap) swap4_array(&d->rf_definitions[i].stats.flip_angle_deg, 11);
-#endif
     }
 
     /* RF table */

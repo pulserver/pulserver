@@ -19,10 +19,7 @@
 
 #include "pulseqlib_internal.h"
 #include "pulseqlib_methods.h"
-
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
 #include "external_kiss_fft.h"
-#endif
 
 /* ================================================================== */
 /*  File-scope constants                                              */
@@ -580,10 +577,8 @@ fail:
 }
 
 /* ================================================================== */
-/*  RF statistics (GEHC only)                                         */
+/*  RF statistics                                                     */
 /* ================================================================== */
-
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
 
 static float compute_rf_bandwidth_fft(const float* rf_re, const float* rf_im,
                                       kiss_fft_cfg cfg, int nn,
@@ -969,8 +964,6 @@ fail:
     return PULSEQLIB_ERR_ALLOC_FAILED;
 }
 
-#endif /* PULSEQLIB_VENDOR_GEHC */
-
 /* ================================================================== */
 /*  Copy auxiliary libraries                                          */
 /* ================================================================== */
@@ -1191,6 +1184,7 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
     desc->ignore_fov_shift = seq->reserved_definitions_library.ignore_fov_shift;
     desc->enable_pmc       = seq->reserved_definitions_library.enable_pmc;
     desc->ignore_averages  = seq->reserved_definitions_library.ignore_averages;
+    desc->vendor           = seq->opts.vendor;
 
     /* verify system and sequence raster times are integer multiples */
     {
@@ -1223,10 +1217,10 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
         num_unique_rf = deduplicate_rf_library(seq, tmp_rf_defs, tmp_rf_tab);
         desc->num_unique_rfs = num_unique_rf;
         desc->rf_table_size  = seq->rf_library_size;
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
-        result = compute_rf_stats(seq, tmp_rf_defs, num_unique_rf, tmp_rf_tab, seq->rf_library_size);
-        if (PULSEQLIB_FAILED(result)) goto fail;
-#endif
+        if (seq->opts.vendor == PULSEQLIB_VENDOR_GEHC) {
+            result = compute_rf_stats(seq, tmp_rf_defs, num_unique_rf, tmp_rf_tab, seq->rf_library_size);
+            if (PULSEQLIB_FAILED(result)) goto fail;
+        }
     }
     if (seq->grad_library_size > 0) {
         num_unique_grad = deduplicate_grad_library(seq, tmp_grad_defs, tmp_grad_tab);
@@ -1424,74 +1418,101 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
         }
     }
     if (once_counter != (desc->num_prep_blocks > 0 ? 1 : 0) + (desc->num_cooldown_blocks > 0 ? 1 : 0)) {
-        /* Once flags in the middle of the sequence.
-         * Try to detect a periodic inner-loop pattern defined by the
-         * once-flag transitions.  If all repetitions are structurally
-         * identical (same block definition IDs and once_flag values),
-         * fold the block table to a single period + trailing cooldown
-         * and recount prep/cooldown from the folded result. */
-        int trailing, effective, period, num_reps, pl;
+        /* Multi-pass detection by whole-pass comparison.
+         *
+         * A pass boundary is where the once_flag transitions back to
+         * the value of the first block (e.g. 2→1 or 0→1).  We split
+         * the block table at every such transition, compare the
+         * resulting passes as whole units, and fold if identical.
+         * No period-finding here — that is get_tr's responsibility. */
+        int first_once, prev_once_val;
+        int *pass_starts;
+        int num_passes_found, pass_len, trailing_blks;
         int i, j, ok;
 
-        /* Count trailing once==2 blocks at the very end */
-        trailing = 0;
-        for (i = num_blocks - 1; i >= 0; --i) {
-            if (desc->block_table[i].once_flag == 2) trailing++;
-            else break;
-        }
-        effective = num_blocks - trailing;
+        first_once = desc->block_table[0].once_flag;
 
-        /* Find shortest repeating period in the first 'effective' blocks
-         * by checking both block definition id and once_flag. */
-        period = 0;
-        if (effective > 1) {
-            for (pl = 1; pl <= effective / 2; ++pl) {
-                if (effective % pl != 0) continue;
-                ok = 1;
-                for (i = pl; i < effective; ++i) {
-                    if (desc->block_table[i].id != desc->block_table[i % pl].id ||
-                        desc->block_table[i].once_flag != desc->block_table[i % pl].once_flag) {
-                        ok = 0;
-                        break;
+        /* --- 1. Find pass boundaries --- */
+        pass_starts = (int*)PULSEQLIB_ALLOC((size_t)(num_blocks + 1) * sizeof(int));
+        if (!pass_starts) {
+            pulseqlib_sequence_descriptor_free(desc);
+            return PULSEQLIB_ERR_ALLOC_FAILED;
+        }
+
+        num_passes_found = 1;
+        pass_starts[0] = 0;
+        prev_once_val = first_once;
+        for (i = 1; i < num_blocks; ++i) {
+            int cur = desc->block_table[i].once_flag;
+            if (cur == first_once && prev_once_val != first_once)
+                pass_starts[num_passes_found++] = i;
+            prev_once_val = cur;
+        }
+        pass_starts[num_passes_found] = num_blocks; /* sentinel */
+
+        /* --- 2. Handle trailing cooldown in the last pass --- */
+        trailing_blks = 0;
+        pass_len = pass_starts[1] - pass_starts[0];
+        if (num_passes_found >= 2) {
+            int last_start = pass_starts[num_passes_found - 1];
+            int last_len   = num_blocks - last_start;
+            if (last_len > pass_len) {
+                /* Extra blocks at the tail — accept if all once==2 */
+                int extra = last_len - pass_len;
+                int all_cd = 1;
+                for (i = last_start + pass_len; i < num_blocks; ++i) {
+                    if (desc->block_table[i].once_flag != 2) {
+                        all_cd = 0; break;
                     }
                 }
-                if (ok) { period = pl; break; }
+                if (all_cd) {
+                    trailing_blks = extra;
+                    pass_starts[num_passes_found] = num_blocks - trailing_blks;
+                }
+            } else if (last_len < pass_len) {
+                /* Shorter last segment — treat as trailing if all once==2 */
+                int all_cd = 1;
+                for (i = last_start; i < num_blocks; ++i) {
+                    if (desc->block_table[i].once_flag != 2) {
+                        all_cd = 0; break;
+                    }
+                }
+                if (all_cd) {
+                    trailing_blks = last_len;
+                    num_passes_found--;
+                    pass_starts[num_passes_found] = num_blocks - trailing_blks;
+                }
             }
         }
 
-        /* If no period found with trailing cooldown separated,
-         * try the entire sequence as periodic. */
-        if (period <= 0 && trailing > 0) {
-            for (pl = 1; pl <= num_blocks / 2; ++pl) {
-                if (num_blocks % pl != 0) continue;
-                ok = 1;
-                for (i = pl; i < num_blocks; ++i) {
-                    if (desc->block_table[i].id != desc->block_table[i % pl].id ||
-                        desc->block_table[i].once_flag != desc->block_table[i % pl].once_flag) {
-                        ok = 0;
-                        break;
-                    }
+        /* --- 3. Verify all passes are identical --- */
+        ok = (num_passes_found >= 2) ? 1 : 0;
+        for (i = 1; i < num_passes_found && ok; ++i) {
+            int this_len = pass_starts[i + 1] - pass_starts[i];
+            if (this_len != pass_len) { ok = 0; break; }
+            for (j = 0; j < pass_len; ++j) {
+                int a = pass_starts[0] + j;
+                int b = pass_starts[i] + j;
+                if (desc->block_table[a].id != desc->block_table[b].id ||
+                    desc->block_table[a].once_flag != desc->block_table[b].once_flag) {
+                    ok = 0; break;
                 }
-                if (ok) { period = pl; trailing = 0; break; }
             }
         }
 
-        if (period <= 0) {
+        PULSEQLIB_FREE(pass_starts);
+
+        if (!ok) {
             pulseqlib_sequence_descriptor_free(desc);
             return PULSEQLIB_ERR_INVALID_ONCE_FLAGS;
         }
 
-        num_reps = (num_blocks - trailing) / period;
-        if (num_reps < 2) {
-            pulseqlib_sequence_descriptor_free(desc);
-            return PULSEQLIB_ERR_INVALID_ONCE_FLAGS;
-        }
-
-        /* Fold: keep only the first period, then append trailing cooldown */
-        for (j = 0; j < trailing; ++j)
-            desc->block_table[period + j] = desc->block_table[num_blocks - trailing + j];
-        desc->num_blocks = period + trailing;
-        desc->num_passes = num_reps;
+        /* --- 4. Fold: keep first pass, append trailing cooldown --- */
+        for (j = 0; j < trailing_blks; ++j)
+            desc->block_table[pass_len + j] =
+                desc->block_table[num_blocks - trailing_blks + j];
+        desc->num_blocks = pass_len + trailing_blks;
+        desc->num_passes = num_passes_found;
 
         /* Recount prep from the folded block table */
         desc->num_prep_blocks = 0;

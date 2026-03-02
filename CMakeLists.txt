@@ -52,39 +52,39 @@ endfunction()
 # -------------------------
 # _cpd module
 # -------------------------
-add_pybind_module(_cpd_wrapper "" 
-    SOURCES
-        "${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension/_cpd_wrapper.cpp"
-        "${CMAKE_SOURCE_DIR}/external/cpdlib/misc.c"
-        "${CMAKE_SOURCE_DIR}/external/cpdlib/udcpd.c"
-        "${CMAKE_SOURCE_DIR}/external/cpdlib/vdcpd.c"
-    INCLUDES
-        ${CMAKE_SOURCE_DIR}/external
-)
+# add_pybind_module(_cpd_wrapper "" 
+#     SOURCES
+#         "${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension/_cpd_wrapper.cpp"
+#         "${CMAKE_SOURCE_DIR}/external/cpdlib/misc.c"
+#         "${CMAKE_SOURCE_DIR}/external/cpdlib/udcpd.c"
+#         "${CMAKE_SOURCE_DIR}/external/cpdlib/vdcpd.c"
+#     INCLUDES
+#         ${CMAKE_SOURCE_DIR}/external
+# )
 
-# Install built extensions to the source tree for editable mode
-file(GLOB CPD_WRAPPERS "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/pulseq/_extension/_cpd_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
-install(
-    FILES  ${CPD_WRAPPERS} DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension
-)
+# # Install built extensions to the source tree for editable mode
+# file(GLOB CPD_WRAPPERS "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/pulseq/_extension/_cpd_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+# install(
+#     FILES  ${CPD_WRAPPERS} DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension
+# )
 
 # -------------------------
 # _vds module
 # -------------------------
-add_pybind_module(_vds_wrapper ""
-    SOURCES
-        "${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension/_vds_wrapper.cpp"
-        "${CMAKE_SOURCE_DIR}/external/vdslib/vds.c"
-    INCLUDES
-        ${CMAKE_SOURCE_DIR}/external
-        #${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension
-)
+# add_pybind_module(_vds_wrapper ""
+#     SOURCES
+#         "${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension/_vds_wrapper.cpp"
+#         "${CMAKE_SOURCE_DIR}/external/vdslib/vds.c"
+#     INCLUDES
+#         ${CMAKE_SOURCE_DIR}/external
+#         #${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension
+# )
 
-# Install built extensions to the source tree for editable mode
-file(GLOB VDS_WRAPPERS "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/pulseq/_extension/_vds_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
-install(
-    FILES  ${VDS_WRAPPERS} DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension
-)
+# # Install built extensions to the source tree for editable mode
+# file(GLOB VDS_WRAPPERS "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/pulseq/_extension/_vds_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+# install(
+#     FILES  ${VDS_WRAPPERS} DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/pulseq/_extension
+# )
 
 # -------------------------
 # _pulseqlib module

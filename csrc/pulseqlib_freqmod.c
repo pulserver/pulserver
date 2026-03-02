@@ -561,13 +561,13 @@ static int build_freq_mod_library(
         if (has_rf && bdef->rf_id < desc->num_unique_rfs) {
             const pulseqlib_rf_definition* rdef = &desc->rf_definitions[bdef->rf_id];
             active_start_us = (float)rdef->delay;
-#if PULSEQLIB_VENDOR == PULSEQLIB_VENDOR_GEHC
-            active_end_us = active_start_us + rdef->stats.duration_us;
-            ref_time_us   = (float)rdef->stats.isodelay_us;
-#else
-            active_end_us = (float)bdef->duration_us;
-            ref_time_us   = 0.0f;
-#endif
+            if (desc->vendor == PULSEQLIB_VENDOR_GEHC) {
+                active_end_us = active_start_us + rdef->stats.duration_us;
+                ref_time_us   = (float)rdef->stats.isodelay_us;
+            } else {
+                active_end_us = (float)bdef->duration_us;
+                ref_time_us   = 0.0f;
+            }
         } else if (has_adc) {
             adc_def_id_local = desc->adc_table[bte->adc_id].id;
             if (adc_def_id_local >= 0 && adc_def_id_local < desc->num_unique_adcs) {

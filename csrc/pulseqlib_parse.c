@@ -1080,6 +1080,7 @@ void pulseqlib_opts_init(pulseqlib_opts* opts,
                          float adc_raster_time, float block_duration_raster)
 {
     if (!opts) return;
+    opts->vendor = PULSEQLIB_VENDOR;
     opts->gamma_hz_per_t = gamma;
     opts->b0_t = b0;
     opts->max_grad_hz_per_m = max_grad;
