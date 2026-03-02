@@ -477,7 +477,7 @@ function write_bssfp(num_averages, num_slices)
     prepDelay = mr.makeDelay( round((TR/2 - mr.calcDuration(gz_1)) / sys.gradRasterTime) * sys.gradRasterTime);
     gx_1_1    = mr.makeExtendedTrapezoidArea('x', 0, gx_2.first, -gx_2.area, sys);
     gyPre_2   = mr.scaleGrad(gyMax, phaseAreas(end) / maxPeArea);
-    [prepDelay, gx_1_1, gyPre_2] = mr.align('left', prepDelay, gz_2, gyPre_2, 'right', gx_1_1);
+    [prepDelay, gz_2, gyPre_2, gx_1_1] = mr.align('left', prepDelay, gz_2, gyPre_2, 'right', gx_1_1);
 
     for z = 1:num_slices
         rf05.freqOffset = gz.amplitude * thick * (z - 1 - (num_slices-1)/2);
@@ -485,7 +485,7 @@ function write_bssfp(num_averages, num_slices)
         
         % --- alpha/2 prep (ONCE=1) ---
         seq.addBlock(rf05, gz_1, lblOnce1);
-        seq.addBlock(prepDelay, gx_1_1, gyPre_2);
+        seq.addBlock(prepDelay, gz_2, gyPre_2, gx_1_1);
 
         % --- main loop ---
         for i = 1:Ny
@@ -496,11 +496,10 @@ function write_bssfp(num_averages, num_slices)
             gyPre_2 = mr.scaleGrad(gyMax, phaseAreas(i) / maxPeArea);  % new PE
 
             if i == 1
-                seq.addBlock(rf, gz_1, gyPre_1, gx_1, lblOnce0); % clear ONCE flag -> first main block
+                seq.addBlock(rf, gz_1, gyPre_1, gx_2, lblOnce0); % clear ONCE flag -> first main block
             else
-                seq.addBlock(rf, gz_1, gyPre_1, gx_1);
+                seq.addBlock(rf, gz_1, gyPre_1, gx_2);
             end
-            seq.addBlock(rf, gz_1, gyPre_1, gx_2);
             seq.addBlock(gx_1, gyPre_2, gz_2, adc);
         end
 

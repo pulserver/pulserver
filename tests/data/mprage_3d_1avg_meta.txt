@@ -1,0 +1,10 @@
+num_blocks 16371
+num_averages 1
+total_duration_us 42500000
+num_adcs 3840
+num_prep_blocks 963
+num_cool_blocks 0
+degenerate_prep 0
+degenerate_cool 0
+tr_size 7
+num_segments 1
