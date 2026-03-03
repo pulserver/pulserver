@@ -4,7 +4,7 @@
 set -e
 
 # Define paths
-BUILD_DIR="tests/csrc/build"
+BUILD_DIR="tests/ctests/build"
 
 # Run the compiled tests
 echo "Running the tests..."

@@ -4,8 +4,8 @@
 set -e
 
 # Define paths
-BUILD_DIR="tests/csrc/build"
-SOURCE_DIR="tests/csrc"
+BUILD_DIR="tests/ctests/build"
+SOURCE_DIR="tests/ctests"
 
 # Clean the build directory if it exists, then recreate it
 if [ -d "$BUILD_DIR" ]; then

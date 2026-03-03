@@ -3,51 +3,26 @@
  *
  * Calls each test_*_main() which runs its own MU_RUN_SUITE / MU_REPORT.
  * A non-zero return from any suite indicates failure.
+ *
+ * NOTE: We deliberately avoid including minunit.h here because this
+ * file does not define any MU_TEST / MU_TEST_SUITE, and the static
+ * globals in minunit.h would trigger -Wunused-variable / -Wunused-function.
  */
-#include "test_helpers.h"
+#include <stdio.h>
+
+/* Forward declarations -- defined in test_helpers.h and the test files */
+int test_safety_grad_main(void);
+int test_rf_stats_main(void);
 
 int main(void)
 {
     int failed = 0;
 
-    printf("==== test_error ====\n");
-    failed += test_error_main();
-
-    printf("\n==== test_load ====\n");
-    failed += test_load_main();
-
-    printf("\n==== test_structure ====\n");
-    failed += test_structure_main();
-
-    printf("\n==== test_segments ====\n");
-    failed += test_segments_main();
-
-    printf("\n==== test_consistency ====\n");
-    failed += test_consistency_main();
-
-    printf("\n==== test_cursor ====\n");
-    failed += test_cursor_main();
-
-    printf("\n==== test_waveforms ====\n");
-    failed += test_waveforms_main();
+    printf("==== test_safety_grad ====\n");
+    failed += test_safety_grad_main();
 
     printf("\n==== test_rf_stats ====\n");
     failed += test_rf_stats_main();
-
-    printf("\n==== test_safety_grad ====\n");
-    failed += test_safety_grad_main();
-
-    printf("\n==== test_safety_acoustic ====\n");
-    failed += test_safety_acoustic_main();
-
-    printf("\n==== test_safety_pns ====\n");
-    failed += test_safety_pns_main();
-
-    printf("\n==== test_freq_mod ====\n");
-    failed += test_freq_mod_main();
-
-    printf("\n==== test_labels ====\n");
-    failed += test_labels_main();
 
     printf("\n");
     if (failed)

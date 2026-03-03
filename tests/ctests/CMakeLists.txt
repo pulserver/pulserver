@@ -11,9 +11,9 @@ file(GLOB TEST_SOURCES "*.c")
 # Create an executable for the tests
 add_executable(run_tests ${TEST_SOURCES})
 
-# Define the test root folder at compile time
+# Define the test root folder at compile time (repo root = two levels up from tests/ctests)
 target_compile_definitions(run_tests PRIVATE
-    TEST_ROOT_DIR="${CMAKE_SOURCE_DIR}/.."
+    TEST_ROOT_DIR="${CMAKE_SOURCE_DIR}/../.."
 )
 
 # Specify the output directory for the compiled test executable
@@ -26,5 +26,9 @@ target_link_libraries(run_tests PRIVATE pulseqlib m)
 # Public API headers live in csrc/
 target_include_directories(run_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc)
 
-# Enable warnings and enforce ANSI C89 compliance
-target_compile_options(run_tests PRIVATE -Wall -Wextra -std=c89 -pedantic -Werror)
+# Expose POSIX timers for minunit.h (clockid_t, clock_gettime, etc.)
+target_compile_definitions(run_tests PRIVATE _POSIX_C_SOURCE=200112L)
+
+# Enable warnings; use C99 for the test harness (minunit needs POSIX timers).
+# The library itself is verified as C89-clean by scripts/check_c89_compliance.sh.
+target_compile_options(run_tests PRIVATE -Wall -Wextra -std=c99 -pedantic -Werror)

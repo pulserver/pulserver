@@ -471,9 +471,8 @@ static int find_segments_internal(
     int grad_ids[3];
     float phys_first, phys_last;
     float grad_last_cur[3], grad_first_next[3];
-    const pulseqlib_block_definition* bdef;
     const pulseqlib_grad_definition* gdef;
-    int bdef_id, shot_idx;
+    int shot_idx;
     int* seg_starts = NULL;
     int* seg_sizes  = NULL;
     int num_seg, seg_start;
@@ -496,48 +495,46 @@ static int find_segments_internal(
     }
 
     /* first block gradient check */
-    bdef_id = desc->block_table[tr_start].id;
-    bdef = &desc->block_definitions[bdef_id];
-    grad_ids[0] = bdef->gx_id; grad_ids[1] = bdef->gy_id; grad_ids[2] = bdef->gz_id;
+    grad_ids[0] = desc->block_table[tr_start].gx_id;
+    grad_ids[1] = desc->block_table[tr_start].gy_id;
+    grad_ids[2] = desc->block_table[tr_start].gz_id;
     for (i = 0; i < 3; ++i) {
         if (grad_ids[i] < 0) continue;
-        gdef = &desc->grad_definitions[grad_ids[i]];
-        for (shot_idx = 0; shot_idx < gdef->num_shots; ++shot_idx) {
-            phys_first = gdef->first_value[shot_idx] * gdef->max_amplitude[shot_idx];
-            if ((float)fabs(phys_first) > max_allowed) {
-                if (diag) {
-                    diag->code = PULSEQLIB_ERR_SEG_NONZERO_START_GRAD;
-                    pulseqlib__diag_printf(diag, " block=%d", tr_start);
-                    pulseqlib__diag_printf(diag, " channel=%d", i);
-                    pulseqlib__diag_printf(diag, " gradient_amplitude=%g", (double)phys_first);
-                    pulseqlib__diag_printf(diag, " max_allowed_amplitude=%g", (double)max_allowed);
-                }
-                PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
-                return 0;
+        gdef = &desc->grad_definitions[desc->grad_table[grad_ids[i]].id];
+        shot_idx = desc->grad_table[grad_ids[i]].shot_index;
+        phys_first = gdef->first_value[shot_idx] * gdef->max_amplitude[shot_idx];
+        if ((float)fabs(phys_first) > max_allowed) {
+            if (diag) {
+                diag->code = PULSEQLIB_ERR_SEG_NONZERO_START_GRAD;
+                pulseqlib__diag_printf(diag, " block=%d", tr_start);
+                pulseqlib__diag_printf(diag, " channel=%d", i);
+                pulseqlib__diag_printf(diag, " gradient_amplitude=%g", (double)phys_first);
+                pulseqlib__diag_printf(diag, " max_allowed_amplitude=%g", (double)max_allowed);
             }
+            PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
+            return 0;
         }
     }
 
     /* last block gradient check */
-    bdef_id = desc->block_table[tr_start + nb - 1].id;
-    bdef = &desc->block_definitions[bdef_id];
-    grad_ids[0] = bdef->gx_id; grad_ids[1] = bdef->gy_id; grad_ids[2] = bdef->gz_id;
+    grad_ids[0] = desc->block_table[tr_start + nb - 1].gx_id;
+    grad_ids[1] = desc->block_table[tr_start + nb - 1].gy_id;
+    grad_ids[2] = desc->block_table[tr_start + nb - 1].gz_id;
     for (i = 0; i < 3; ++i) {
         if (grad_ids[i] < 0) continue;
-        gdef = &desc->grad_definitions[grad_ids[i]];
-        for (shot_idx = 0; shot_idx < gdef->num_shots; ++shot_idx) {
-            phys_last = gdef->last_value[shot_idx] * gdef->max_amplitude[shot_idx];
-            if ((float)fabs(phys_last) > max_allowed) {
-                if (diag) {
-                    diag->code = PULSEQLIB_ERR_SEG_NONZERO_END_GRAD;
-                    pulseqlib__diag_printf(diag, " block=%d", tr_start + nb - 1);
-                    pulseqlib__diag_printf(diag, " channel=%d", i);
-                    pulseqlib__diag_printf(diag, " gradient_amplitude=%g", (double)phys_last);
-                    pulseqlib__diag_printf(diag, " max_allowed_amplitude=%g", (double)max_allowed);
-                }
-                PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
-                return 0;
+        gdef = &desc->grad_definitions[desc->grad_table[grad_ids[i]].id];
+        shot_idx = desc->grad_table[grad_ids[i]].shot_index;
+        phys_last = gdef->last_value[shot_idx] * gdef->max_amplitude[shot_idx];
+        if ((float)fabs(phys_last) > max_allowed) {
+            if (diag) {
+                diag->code = PULSEQLIB_ERR_SEG_NONZERO_END_GRAD;
+                pulseqlib__diag_printf(diag, " block=%d", tr_start + nb - 1);
+                pulseqlib__diag_printf(diag, " channel=%d", i);
+                pulseqlib__diag_printf(diag, " gradient_amplitude=%g", (double)phys_last);
+                pulseqlib__diag_printf(diag, " max_allowed_amplitude=%g", (double)max_allowed);
             }
+            PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
+            return 0;
         }
     }
 
@@ -554,33 +551,27 @@ static int find_segments_internal(
         if (n > tr_start) {
             is_cand = 1;
 
-            bdef_id = desc->block_table[n - 1].id;
-            bdef = &desc->block_definitions[bdef_id];
-            grad_ids[0] = bdef->gx_id; grad_ids[1] = bdef->gy_id; grad_ids[2] = bdef->gz_id;
+            grad_ids[0] = desc->block_table[n - 1].gx_id;
+            grad_ids[1] = desc->block_table[n - 1].gy_id;
+            grad_ids[2] = desc->block_table[n - 1].gz_id;
             for (i = 0; i < 3; ++i) {
                 grad_last_cur[i] = 0.0f;
                 if (grad_ids[i] >= 0) {
-                    gdef = &desc->grad_definitions[grad_ids[i]];
-                    for (shot_idx = 0; shot_idx < gdef->num_shots; ++shot_idx) {
-                        phys_last = gdef->last_value[shot_idx] * gdef->max_amplitude[shot_idx];
-                        if ((float)fabs(phys_last) > (float)fabs(grad_last_cur[i]))
-                            grad_last_cur[i] = phys_last;
-                    }
+                    gdef = &desc->grad_definitions[desc->grad_table[grad_ids[i]].id];
+                    shot_idx = desc->grad_table[grad_ids[i]].shot_index;
+                    grad_last_cur[i] = gdef->last_value[shot_idx] * gdef->max_amplitude[shot_idx];
                 }
             }
 
-            bdef_id = desc->block_table[n].id;
-            bdef = &desc->block_definitions[bdef_id];
-            grad_ids[0] = bdef->gx_id; grad_ids[1] = bdef->gy_id; grad_ids[2] = bdef->gz_id;
+            grad_ids[0] = desc->block_table[n].gx_id;
+            grad_ids[1] = desc->block_table[n].gy_id;
+            grad_ids[2] = desc->block_table[n].gz_id;
             for (i = 0; i < 3; ++i) {
                 grad_first_next[i] = 0.0f;
                 if (grad_ids[i] >= 0) {
-                    gdef = &desc->grad_definitions[grad_ids[i]];
-                    for (shot_idx = 0; shot_idx < gdef->num_shots; ++shot_idx) {
-                        phys_first = gdef->first_value[shot_idx] * gdef->max_amplitude[shot_idx];
-                        if ((float)fabs(phys_first) > (float)fabs(grad_first_next[i]))
-                            grad_first_next[i] = phys_first;
-                    }
+                    gdef = &desc->grad_definitions[desc->grad_table[grad_ids[i]].id];
+                    shot_idx = desc->grad_table[grad_ids[i]].shot_index;
+                    grad_first_next[i] = gdef->first_value[shot_idx] * gdef->max_amplitude[shot_idx];
                 }
             }
 
@@ -860,6 +851,53 @@ static int nav_split_merge(
 }
 
 /* ================================================================== */
+/*  Quick boundary pre-check for segmentation retry                   */
+/* ================================================================== */
+
+/*
+ * Check whether the first block's start-gradients and the last block's
+ * end-gradients are within max_allowed, using each block's *actual*
+ * shot (not all shots of the grad definition).
+ *
+ * Returns 1 if OK, 0 if any axis violates.
+ * Arguments are block-table indices.
+ */
+static int boundary_gradients_ok(
+    const pulseqlib_sequence_descriptor* desc,
+    int first_bt_idx, int last_bt_idx, float max_allowed)
+{
+    int ch, gid, si;
+    float pv;
+    const pulseqlib_grad_definition* gdef;
+
+    /* First block: check first_value on gx, gy, gz */
+    for (ch = 0; ch < 3; ++ch) {
+        gid = (ch == 0) ? desc->block_table[first_bt_idx].gx_id
+            : (ch == 1) ? desc->block_table[first_bt_idx].gy_id
+            :             desc->block_table[first_bt_idx].gz_id;
+        if (gid < 0) continue;
+        si   = desc->grad_table[gid].shot_index;
+        gdef = &desc->grad_definitions[desc->grad_table[gid].id];
+        pv   = gdef->first_value[si] * gdef->max_amplitude[si];
+        if ((float)fabs(pv) > max_allowed) return 0;
+    }
+
+    /* Last block: check last_value on gx, gy, gz */
+    for (ch = 0; ch < 3; ++ch) {
+        gid = (ch == 0) ? desc->block_table[last_bt_idx].gx_id
+            : (ch == 1) ? desc->block_table[last_bt_idx].gy_id
+            :             desc->block_table[last_bt_idx].gz_id;
+        if (gid < 0) continue;
+        si   = desc->grad_table[gid].shot_index;
+        gdef = &desc->grad_definitions[desc->grad_table[gid].id];
+        pv   = gdef->last_value[si] * gdef->max_amplitude[si];
+        if ((float)fabs(pv) > max_allowed) return 0;
+    }
+
+    return 1;
+}
+
+/* ================================================================== */
 /*  find_segments_in_tr                                               */
 /* ================================================================== */
 
@@ -885,6 +923,9 @@ int pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib
     float* max_energy = NULL;
     float inst_energy, e, amp;
     int num_raw_alloc, num_exp_alloc;
+    int mult, max_mult, orig_tr_size, num_prep_blk, num_cool_blk;
+    int all_covered;
+    float max_allowed, new_tr_dur;
 
     if (!diag) { pulseqlib_diagnostic_init(&local_diag); diag = &local_diag; }
     else       pulseqlib_diagnostic_init(diag);
@@ -895,33 +936,130 @@ int pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib
     n_prep = 0; n_main = 0; n_cool = 0;
     num_total = 0; num_unique = 0;
     num_raw_alloc = 0; num_exp_alloc = 0;
-    total_blocks = tr->tr_size + tr->num_prep_blocks + tr->num_cooldown_blocks;
+    all_covered = 0;
 
-    raw_segs = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(total_blocks * sizeof(pulseqlib_tr_segment));
+    /*
+     * Three-section segmentation with per-section retry.
+     *
+     * Each section (prep, main, cooldown) starts with its natural span
+     * and appends multiples of tr_size when a gradient boundary check
+     * fails.  Before calling the expensive state machine a fast boundary
+     * pre-check is done on the first/last block of the candidate region.
+     *
+     *   Prep:     [0,  prep_blocks + k*tr_size)           k = 1,2,…
+     *   Main:     [prep_blocks,  prep_blocks + k*tr_size) k = 1,2,…
+     *   Cooldown: [N - cool_blocks - k*tr_size,  N)       k = 1,2,…
+     *
+     * If any section exhausts the entire block table the remaining
+     * sections are skipped (the whole pass is a single segment group).
+     */
+    orig_tr_size = desc->tr_descriptor.tr_size;
+    num_prep_blk = desc->tr_descriptor.num_prep_blocks;
+    num_cool_blk = desc->tr_descriptor.num_cooldown_blocks;
+    max_mult     = desc->tr_descriptor.num_trs;
+    if (max_mult < 1) max_mult = 1;
+
+    total_blocks = seq->num_blocks;
+    max_allowed  = seq->opts.max_slew_hz_per_m_per_s
+                 * desc->grad_raster_us * 1e-6f;
+
+    raw_segs = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(
+                   total_blocks * sizeof(pulseqlib_tr_segment));
     if (!raw_segs) { diag->code = PULSEQLIB_ERR_ALLOC_FAILED; return 0; }
 
-    /* ---- raw segments per section ---- */
-    if (tr->degenerate_prep == 0 && tr->num_prep_blocks > 0) {
+    /* ---- Prep section ---- */
+    if (desc->tr_descriptor.degenerate_prep == 0 && num_prep_blk > 0) {
         tr_start = 0;
-        tr_size  = tr->num_prep_blocks + tr->tr_size;
-        seg_result = find_segments_internal(desc, raw_segs, num_raw, diag, &seq->opts, tr_start, tr_size);
-        if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) { PULSEQLIB_FREE(raw_segs); return 0; }
+        seg_result = 0;
+        for (mult = 1; mult <= max_mult; ++mult) {
+            tr_size = num_prep_blk + mult * orig_tr_size;
+            if (tr_size > total_blocks) break;
+            if (mult > 1 &&
+                !boundary_gradients_ok(desc, tr_start, tr_start + tr_size - 1,
+                                      max_allowed))
+                continue;
+            pulseqlib_diagnostic_init(diag);
+            seg_result = find_segments_internal(
+                desc, raw_segs, num_raw, diag, &seq->opts, tr_start, tr_size);
+            if (seg_result > 0) break;
+            if (diag->code != PULSEQLIB_ERR_SEG_NONZERO_START_GRAD &&
+                diag->code != PULSEQLIB_ERR_SEG_NONZERO_END_GRAD)
+                break;
+        }
+        if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) {
+            PULSEQLIB_FREE(raw_segs); return 0;
+        }
         n_prep_raw = seg_result;
         num_raw += n_prep_raw;
+        if (tr_size >= total_blocks) all_covered = 1;
     }
 
-    tr_start = tr->num_prep_blocks;
-    tr_size  = tr->tr_size;
-    seg_result = find_segments_internal(desc, raw_segs, num_raw, diag, &seq->opts, tr_start, tr_size);
-    if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) { PULSEQLIB_FREE(raw_segs); return 0; }
-    n_main_raw = seg_result;
-    num_raw += n_main_raw;
+    /* ---- Main section ---- */
+    if (!all_covered) {
+        tr_start = num_prep_blk;
+        seg_result = 0;
+        for (mult = 1; mult <= max_mult; ++mult) {
+            tr_size = mult * orig_tr_size;
+            if (tr_start + tr_size > total_blocks) break;
+            if (mult > 1 &&
+                !boundary_gradients_ok(desc, tr_start, tr_start + tr_size - 1,
+                                      max_allowed))
+                continue;
+            pulseqlib_diagnostic_init(diag);
+            seg_result = find_segments_internal(
+                desc, raw_segs, num_raw, diag, &seq->opts, tr_start, tr_size);
+            if (seg_result > 0) break;
+            if (diag->code != PULSEQLIB_ERR_SEG_NONZERO_START_GRAD &&
+                diag->code != PULSEQLIB_ERR_SEG_NONZERO_END_GRAD)
+                break;
+        }
+        if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) {
+            PULSEQLIB_FREE(raw_segs); return 0;
+        }
+        n_main_raw = seg_result;
+        num_raw += n_main_raw;
 
-    if (tr->degenerate_cooldown == 0 && tr->num_cooldown_blocks > 0) {
-        tr_start = seq->num_blocks - tr->num_cooldown_blocks - tr->tr_size;
-        tr_size  = tr->num_cooldown_blocks + tr->tr_size;
-        seg_result = find_segments_internal(desc, raw_segs, num_raw, diag, &seq->opts, tr_start, tr_size);
-        if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) { PULSEQLIB_FREE(raw_segs); return 0; }
+        /* Update TR descriptor when main needed more than one original TR */
+        if (mult > 1 && seg_result > 0) {
+            new_tr_dur = 0.0f;
+            for (n = tr_start; n < tr_start + tr_size; ++n) {
+                blk_def_id = desc->block_table[n].id;
+                new_tr_dur += (float)desc->block_definitions[blk_def_id]
+                                  .duration_us;
+            }
+            desc->tr_descriptor.tr_size        = mult * orig_tr_size;
+            desc->tr_descriptor.num_trs        =
+                (total_blocks - num_prep_blk - num_cool_blk)
+                / (mult * orig_tr_size);
+            desc->tr_descriptor.tr_duration_us = new_tr_dur;
+        }
+
+        if (tr_start + tr_size >= total_blocks) all_covered = 1;
+    }
+
+    /* ---- Cooldown section ---- */
+    if (!all_covered &&
+        desc->tr_descriptor.degenerate_cooldown == 0 && num_cool_blk > 0) {
+        seg_result = 0;
+        for (mult = 1; mult <= max_mult; ++mult) {
+            tr_size  = num_cool_blk + mult * orig_tr_size;
+            tr_start = total_blocks - tr_size;
+            if (tr_start < 0) break;
+            if (mult > 1 &&
+                !boundary_gradients_ok(desc, tr_start, tr_start + tr_size - 1,
+                                      max_allowed))
+                continue;
+            pulseqlib_diagnostic_init(diag);
+            seg_result = find_segments_internal(
+                desc, raw_segs, num_raw, diag, &seq->opts, tr_start, tr_size);
+            if (seg_result > 0) break;
+            if (diag->code != PULSEQLIB_ERR_SEG_NONZERO_START_GRAD &&
+                diag->code != PULSEQLIB_ERR_SEG_NONZERO_END_GRAD)
+                break;
+        }
+        if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) {
+            PULSEQLIB_FREE(raw_segs); return 0;
+        }
         n_cool_raw = seg_result;
         num_raw += n_cool_raw;
     }
@@ -1655,9 +1793,8 @@ static int find_segments_on_scan_table(
     int grad_ids[3];
     float phys_first, phys_last;
     float grad_last_cur[3], grad_first_next[3];
-    const pulseqlib_block_definition* bdef;
     const pulseqlib_grad_definition* gdef;
-    int bdef_id, shot_idx, bt_idx, prev_bt;
+    int shot_idx, bt_idx, prev_bt;
     int* seg_starts = NULL;
     int* seg_sizes  = NULL;
     int num_seg, seg_start;
@@ -1681,45 +1818,43 @@ static int find_segments_on_scan_table(
 
     /* first block gradient check */
     bt_idx = scan_block_idx[pat_start];
-    bdef_id = desc->block_table[bt_idx].id;
-    bdef = &desc->block_definitions[bdef_id];
-    grad_ids[0] = bdef->gx_id; grad_ids[1] = bdef->gy_id; grad_ids[2] = bdef->gz_id;
+    grad_ids[0] = desc->block_table[bt_idx].gx_id;
+    grad_ids[1] = desc->block_table[bt_idx].gy_id;
+    grad_ids[2] = desc->block_table[bt_idx].gz_id;
     for (i = 0; i < 3; ++i) {
         if (grad_ids[i] < 0) continue;
-        gdef = &desc->grad_definitions[grad_ids[i]];
-        for (shot_idx = 0; shot_idx < gdef->num_shots; ++shot_idx) {
-            phys_first = gdef->first_value[shot_idx] * gdef->max_amplitude[shot_idx];
-            if ((float)fabs(phys_first) > max_allowed) {
-                if (diag) {
-                    diag->code = PULSEQLIB_ERR_SEG_NONZERO_START_GRAD;
-                    pulseqlib__diag_printf(diag, " scan_pos=%d block=%d", pat_start, bt_idx);
-                    pulseqlib__diag_printf(diag, " channel=%d", i);
-                }
-                PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
-                return 0;
+        gdef = &desc->grad_definitions[desc->grad_table[grad_ids[i]].id];
+        shot_idx = desc->grad_table[grad_ids[i]].shot_index;
+        phys_first = gdef->first_value[shot_idx] * gdef->max_amplitude[shot_idx];
+        if ((float)fabs(phys_first) > max_allowed) {
+            if (diag) {
+                diag->code = PULSEQLIB_ERR_SEG_NONZERO_START_GRAD;
+                pulseqlib__diag_printf(diag, " scan_pos=%d block=%d", pat_start, bt_idx);
+                pulseqlib__diag_printf(diag, " channel=%d", i);
             }
+            PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
+            return 0;
         }
     }
 
     /* last block gradient check */
     bt_idx = scan_block_idx[pat_start + nb - 1];
-    bdef_id = desc->block_table[bt_idx].id;
-    bdef = &desc->block_definitions[bdef_id];
-    grad_ids[0] = bdef->gx_id; grad_ids[1] = bdef->gy_id; grad_ids[2] = bdef->gz_id;
+    grad_ids[0] = desc->block_table[bt_idx].gx_id;
+    grad_ids[1] = desc->block_table[bt_idx].gy_id;
+    grad_ids[2] = desc->block_table[bt_idx].gz_id;
     for (i = 0; i < 3; ++i) {
         if (grad_ids[i] < 0) continue;
-        gdef = &desc->grad_definitions[grad_ids[i]];
-        for (shot_idx = 0; shot_idx < gdef->num_shots; ++shot_idx) {
-            phys_last = gdef->last_value[shot_idx] * gdef->max_amplitude[shot_idx];
-            if ((float)fabs(phys_last) > max_allowed) {
-                if (diag) {
-                    diag->code = PULSEQLIB_ERR_SEG_NONZERO_END_GRAD;
-                    pulseqlib__diag_printf(diag, " scan_pos=%d block=%d", pat_start + nb - 1, bt_idx);
-                    pulseqlib__diag_printf(diag, " channel=%d", i);
-                }
-                PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
-                return 0;
+        gdef = &desc->grad_definitions[desc->grad_table[grad_ids[i]].id];
+        shot_idx = desc->grad_table[grad_ids[i]].shot_index;
+        phys_last = gdef->last_value[shot_idx] * gdef->max_amplitude[shot_idx];
+        if ((float)fabs(phys_last) > max_allowed) {
+            if (diag) {
+                diag->code = PULSEQLIB_ERR_SEG_NONZERO_END_GRAD;
+                pulseqlib__diag_printf(diag, " scan_pos=%d block=%d", pat_start + nb - 1, bt_idx);
+                pulseqlib__diag_printf(diag, " channel=%d", i);
             }
+            PULSEQLIB_FREE(seg_starts); PULSEQLIB_FREE(seg_sizes);
+            return 0;
         }
     }
 
@@ -1738,33 +1873,27 @@ static int find_segments_on_scan_table(
             prev_bt = scan_block_idx[n - 1];
             is_cand = 1;
 
-            bdef_id = desc->block_table[prev_bt].id;
-            bdef = &desc->block_definitions[bdef_id];
-            grad_ids[0] = bdef->gx_id; grad_ids[1] = bdef->gy_id; grad_ids[2] = bdef->gz_id;
+            grad_ids[0] = desc->block_table[prev_bt].gx_id;
+            grad_ids[1] = desc->block_table[prev_bt].gy_id;
+            grad_ids[2] = desc->block_table[prev_bt].gz_id;
             for (i = 0; i < 3; ++i) {
                 grad_last_cur[i] = 0.0f;
                 if (grad_ids[i] >= 0) {
-                    gdef = &desc->grad_definitions[grad_ids[i]];
-                    for (shot_idx = 0; shot_idx < gdef->num_shots; ++shot_idx) {
-                        phys_last = gdef->last_value[shot_idx] * gdef->max_amplitude[shot_idx];
-                        if ((float)fabs(phys_last) > (float)fabs(grad_last_cur[i]))
-                            grad_last_cur[i] = phys_last;
-                    }
+                    gdef = &desc->grad_definitions[desc->grad_table[grad_ids[i]].id];
+                    shot_idx = desc->grad_table[grad_ids[i]].shot_index;
+                    grad_last_cur[i] = gdef->last_value[shot_idx] * gdef->max_amplitude[shot_idx];
                 }
             }
 
-            bdef_id = desc->block_table[bt_idx].id;
-            bdef = &desc->block_definitions[bdef_id];
-            grad_ids[0] = bdef->gx_id; grad_ids[1] = bdef->gy_id; grad_ids[2] = bdef->gz_id;
+            grad_ids[0] = desc->block_table[bt_idx].gx_id;
+            grad_ids[1] = desc->block_table[bt_idx].gy_id;
+            grad_ids[2] = desc->block_table[bt_idx].gz_id;
             for (i = 0; i < 3; ++i) {
                 grad_first_next[i] = 0.0f;
                 if (grad_ids[i] >= 0) {
-                    gdef = &desc->grad_definitions[grad_ids[i]];
-                    for (shot_idx = 0; shot_idx < gdef->num_shots; ++shot_idx) {
-                        phys_first = gdef->first_value[shot_idx] * gdef->max_amplitude[shot_idx];
-                        if ((float)fabs(phys_first) > (float)fabs(grad_first_next[i]))
-                            grad_first_next[i] = phys_first;
-                    }
+                    gdef = &desc->grad_definitions[desc->grad_table[grad_ids[i]].id];
+                    shot_idx = desc->grad_table[grad_ids[i]].shot_index;
+                    grad_first_next[i] = gdef->first_value[shot_idx] * gdef->max_amplitude[shot_idx];
                 }
             }
 
@@ -1920,6 +2049,7 @@ int pulseqlib__get_scan_table_segments(
     float inst_energy, e, amp;
     const pulseqlib_block_table_element* bte;
     const pulseqlib_block_definition* bdef;
+    int base_scan_tr_size, mult, max_mult, pat_size;
 
     if (!diag) { pulseqlib_diagnostic_init(&local_diag); diag = &local_diag; }
     else       pulseqlib_diagnostic_init(diag);
@@ -1956,17 +2086,41 @@ int pulseqlib__get_scan_table_segments(
     }
 
     /* ---- 3. Find segments on the scan TR pattern ---- */
+    /* When gradient boundary checks fail at scan_tr_size, retry with
+     * 2×, 3×, … multiples (same as the block-table path). */
+    base_scan_tr_size = scan_tr_size;
+    max_mult = (base_scan_tr_size > 0) ? (scan_len / base_scan_tr_size) : 1;
+    if (max_mult < 1) max_mult = 1;
+
     raw_segs = (pulseqlib_tr_segment*)PULSEQLIB_ALLOC(
-        (size_t)scan_tr_size * sizeof(pulseqlib_tr_segment));
+        (size_t)scan_len * sizeof(pulseqlib_tr_segment));
     if (!raw_segs) {
         PULSEQLIB_FREE(scan_pat);
         diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
         return 0;
     }
 
-    seg_result = find_segments_on_scan_table(
-        desc, raw_segs, 0, diag, opts,
-        desc->scan_table_block_idx, 0, scan_tr_size);
+    seg_result = 0;
+    for (mult = 1; mult <= max_mult; ++mult) {
+        pat_size = mult * base_scan_tr_size;
+        if (pat_size > scan_len) break;
+        /* Verify the expanded pattern still tiles */
+        {
+            int ok = 1;
+            for (n = 0; n < scan_len; ++n) {
+                if (scan_pat[n] != scan_pat[n % pat_size]) { ok = 0; break; }
+            }
+            if (!ok) break;
+        }
+        pulseqlib_diagnostic_init(diag);
+        seg_result = find_segments_on_scan_table(
+            desc, raw_segs, 0, diag, opts,
+            desc->scan_table_block_idx, 0, pat_size);
+        if (seg_result > 0) { scan_tr_size = pat_size; break; }
+        if (diag->code != PULSEQLIB_ERR_SEG_NONZERO_START_GRAD &&
+            diag->code != PULSEQLIB_ERR_SEG_NONZERO_END_GRAD)
+            break;  /* non-boundary error — do not retry */
+    }
     if (seg_result == 0 && PULSEQLIB_FAILED(diag->code)) {
         PULSEQLIB_FREE(scan_pat);
         PULSEQLIB_FREE(raw_segs);
