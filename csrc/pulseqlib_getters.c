@@ -1982,12 +1982,12 @@ static int get_block_range(
         *out_count = tr->tr_size;
         return 1;
     case PULSEQLIB_TR_REGION_COOLDOWN:
-        *out_start = desc->num_blocks - desc->num_cooldown_blocks;
+        *out_start = desc->pass_len - desc->num_cooldown_blocks;
         *out_count = desc->num_cooldown_blocks;
         return 1;
     case PULSEQLIB_TR_REGION_ALL:
         *out_start = 0;
-        *out_count = desc->num_blocks;
+        *out_count = desc->pass_len;
         return 1;
     default:
         return 0;

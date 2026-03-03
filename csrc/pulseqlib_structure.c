@@ -132,17 +132,18 @@ int pulseqlib__build_scan_table(
 
     /* Pass 1: count entries.
      * Passes are the outer loop: each pass plays an average-expanded
-     * copy of the folded block table (prep on first avg, cooldown on
+     * copy of the per-pass block table (prep on first avg, cooldown on
      * last avg, main on every avg). */
     count = 0;
     for (pass = 0; pass < num_passes; ++pass) {
+        int base = pass * desc->pass_len;
         for (avg = 0; avg < num_averages; ++avg) {
             play_prep = (avg == 0) ? 1 : 0;
             play_main = 1;
             play_cool = (avg == num_averages - 1) ? 1 : 0;
 
-            for (blk = 0; blk < desc->num_blocks; ++blk) {
-                once = desc->block_table[blk].once_flag;
+            for (blk = 0; blk < desc->pass_len; ++blk) {
+                once = desc->block_table[base + blk].once_flag;
                 if (once == 1 && play_prep)      ++count;
                 else if (once == 0 && play_main) ++count;
                 else if (once == 2 && play_cool) ++count;
@@ -169,25 +170,26 @@ int pulseqlib__build_scan_table(
     /* Pass 2: fill */
     idx = 0;
     for (pass = 0; pass < num_passes; ++pass) {
+        int base = pass * desc->pass_len;
         for (avg = 0; avg < num_averages; ++avg) {
             play_prep = (avg == 0) ? 1 : 0;
             play_main = 1;
             play_cool = (avg == num_averages - 1) ? 1 : 0;
 
-            for (blk = 0; blk < desc->num_blocks; ++blk) {
-                once = desc->block_table[blk].once_flag;
+            for (blk = 0; blk < desc->pass_len; ++blk) {
+                once = desc->block_table[base + blk].once_flag;
                 if (once == 1 && play_prep) {
-                    desc->scan_table_block_idx[idx] = blk;
+                    desc->scan_table_block_idx[idx] = base + blk;
                     desc->scan_table_tr_id[idx]     = prep_tr_id;
                     desc->scan_table_seg_id[idx]    = -1;
                     ++idx;
                 } else if (once == 0 && play_main) {
-                    desc->scan_table_block_idx[idx] = blk;
+                    desc->scan_table_block_idx[idx] = base + blk;
                     desc->scan_table_tr_id[idx]     = main_tr_id;
                     desc->scan_table_seg_id[idx]    = -1;
                     ++idx;
                 } else if (once == 2 && play_cool) {
-                    desc->scan_table_block_idx[idx] = blk;
+                    desc->scan_table_block_idx[idx] = base + blk;
                     desc->scan_table_tr_id[idx]     = cool_tr_id;
                     desc->scan_table_seg_id[idx]    = -1;
                     ++idx;
@@ -288,7 +290,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
         diag->code = PULSEQLIB_ERR_INVALID_ARGUMENT;
         return diag->code;
     }
-    if (desc->num_prep_blocks + desc->num_cooldown_blocks > desc->num_blocks) {
+    if (desc->num_prep_blocks + desc->num_cooldown_blocks > desc->pass_len) {
         diag->code = PULSEQLIB_ERR_TR_NO_IMAGING_REGION;
         return diag->code;
     }
@@ -304,7 +306,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
     tr->num_cooldown_trs    = 1;
 
     imaging_start = desc->num_prep_blocks;
-    imaging_end   = desc->num_blocks - desc->num_cooldown_blocks;
+    imaging_end   = desc->pass_len - desc->num_cooldown_blocks;
     imaging_len   = imaging_end - imaging_start;
     pulseqlib__diag_printf(diag, "imaging region length=%d", imaging_len);
 
@@ -313,16 +315,16 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
         return diag->code;
     }
 
-    /* unique-block count for diagnostics */
+    /* unique-block count for diagnostics (first pass only) */
     {
         int max_u = 0;
-        for (n = 0; n < desc->num_blocks; ++n)
+        for (n = 0; n < desc->pass_len; ++n)
             if (desc->block_table[n].id > max_u) max_u = desc->block_table[n].id;
         pulseqlib__diag_printf(diag, " unique blocks=%d", max_u + 1);
     }
 
-    seq_pat   = (int*)PULSEQLIB_ALLOC(desc->num_blocks * sizeof(int));
-    block_dur = (int*)PULSEQLIB_ALLOC(desc->num_blocks * sizeof(int));
+    seq_pat   = (int*)PULSEQLIB_ALLOC(desc->pass_len * sizeof(int));
+    block_dur = (int*)PULSEQLIB_ALLOC(desc->pass_len * sizeof(int));
     if (!seq_pat || !block_dur) {
         if (seq_pat)   PULSEQLIB_FREE(seq_pat);
         if (block_dur) PULSEQLIB_FREE(block_dur);
@@ -330,7 +332,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
         return diag->code;
     }
 
-    for (n = 0; n < desc->num_blocks; ++n) {
+    for (n = 0; n < desc->pass_len; ++n) {
         block_dur[n] = desc->block_definitions[desc->block_table[n].id].duration_us;
         seq_pat[n] = (desc->block_table[n].duration_us >= 0)
             ? block_dur[n]
@@ -338,13 +340,13 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
     }
 
     /* Save a copy of seq_pat before RF augmentation (used for VFA check) */
-    base_pat = (int*)PULSEQLIB_ALLOC(desc->num_blocks * sizeof(int));
+    base_pat = (int*)PULSEQLIB_ALLOC(desc->pass_len * sizeof(int));
     if (!base_pat) {
         PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
         diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
         return diag->code;
     }
-    for (n = 0; n < desc->num_blocks; ++n)
+    for (n = 0; n < desc->pass_len; ++n)
         base_pat[n] = seq_pat[n];
 
     /* ----------------------------------------------------------------
@@ -364,21 +366,21 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
      * ---------------------------------------------------------------- */
     {
         int max_pat, rf_id, shim_id, q_amp;
-        int* rf_rows;       /* [num_blocks * 3]  (base, amp, shim) */
-        int* rf_labels;     /* [num_blocks]       dedup label      */
-        int* rf_unique;     /* [num_blocks]       unique row idx   */
+        int* rf_rows;       /* [pass_len * 3]  (base, amp, shim) */
+        int* rf_labels;     /* [pass_len]       dedup label      */
+        int* rf_unique;     /* [pass_len]       unique row idx   */
         int  num_rf_combos;
 
         /* Find current max absolute value in seq_pat */
         max_pat = 0;
-        for (n = 0; n < desc->num_blocks; ++n) {
+        for (n = 0; n < desc->pass_len; ++n) {
             int v = seq_pat[n] < 0 ? -seq_pat[n] : seq_pat[n];
             if (v > max_pat) max_pat = v;
         }
 
-        rf_rows   = (int*)PULSEQLIB_ALLOC(desc->num_blocks * 3 * sizeof(int));
-        rf_labels = (int*)PULSEQLIB_ALLOC(desc->num_blocks * sizeof(int));
-        rf_unique = (int*)PULSEQLIB_ALLOC(desc->num_blocks * sizeof(int));
+        rf_rows   = (int*)PULSEQLIB_ALLOC(desc->pass_len * 3 * sizeof(int));
+        rf_labels = (int*)PULSEQLIB_ALLOC(desc->pass_len * sizeof(int));
+        rf_unique = (int*)PULSEQLIB_ALLOC(desc->pass_len * sizeof(int));
         if (!rf_rows || !rf_labels || !rf_unique) {
             if (rf_rows)   PULSEQLIB_FREE(rf_rows);
             if (rf_labels) PULSEQLIB_FREE(rf_labels);
@@ -390,7 +392,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
         }
 
         /* Build 3-column rows: (base_pat, quantised_rf_amp, rf_shim_id) */
-        for (n = 0; n < desc->num_blocks; ++n) {
+        for (n = 0; n < desc->pass_len; ++n) {
             rf_id   = desc->block_table[n].rf_id;
             shim_id = desc->block_table[n].rf_shim_id;
 
@@ -408,11 +410,11 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
         }
 
         num_rf_combos = pulseqlib__deduplicate_int_rows(
-            rf_unique, rf_labels, rf_rows, desc->num_blocks, 3);
+            rf_unique, rf_labels, rf_rows, desc->pass_len, 3);
 
         /* Remap: each label becomes max_pat + 1 + label */
         if (num_rf_combos > 0) {
-            for (n = 0; n < desc->num_blocks; ++n)
+            for (n = 0; n < desc->pass_len; ++n)
                 seq_pat[n] = max_pat + 1 + rf_labels[n];
         }
 
@@ -464,13 +466,13 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
         if (!base_ok) {
             /* Base pattern also non-periodic → genuine single-TR. */
             active_dur_us = 0;
-            for (n = 0; n < desc->num_blocks; ++n)
+            for (n = 0; n < desc->pass_len; ++n)
                 if (desc->block_table[n].duration_us < 0)
                     active_dur_us += desc->block_definitions[
                         desc->block_table[n].id].duration_us;
 
             if (active_dur_us <= SINGLE_TR_MAX_DURATION_US) {
-                tr->tr_size             = desc->num_blocks;
+                tr->tr_size             = desc->pass_len;
                 tr->num_trs             = 1;
                 tr->degenerate_prep     = 1;
                 tr->num_prep_blocks     = 0;
@@ -479,7 +481,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
                 tr->num_cooldown_blocks = 0;
                 tr->num_cooldown_trs    = 0;
                 tr_dur = 0.0f;
-                for (i = 0; i < desc->num_blocks; ++i)
+                for (i = 0; i < desc->pass_len; ++i)
                     tr_dur += (float)block_dur[i];
                 tr->tr_duration_us = tr_dur;
                 diag->code = PULSEQLIB_SUCCESS;
@@ -916,7 +918,7 @@ int pulseqlib__build_label_table(
     num_columns = 3; /* GEHC: [lin, slc, eco] */
 
     imaging_start  = desc->num_prep_blocks;
-    cooldown_start = desc->num_blocks - desc->num_cooldown_blocks;
+    cooldown_start = desc->pass_len - desc->num_cooldown_blocks;
     num_trs        = desc->tr_descriptor.num_trs;
 
     /* Count total ADC occurrences */
@@ -930,7 +932,7 @@ int pulseqlib__build_label_table(
         if (desc->block_table[b].adc_id >= 0) ++adcs_per_tr;
     }
     total_adcs += adcs_per_tr * num_trs;
-    for (b = cooldown_start; b < desc->num_blocks; ++b) {
+    for (b = cooldown_start; b < desc->pass_len; ++b) {
         if (desc->block_table[b].adc_id >= 0) ++total_adcs;
     }
 
@@ -979,7 +981,7 @@ int pulseqlib__build_label_table(
     }
 
     /* 3. Cooldown blocks */
-    for (b = cooldown_start; b < desc->num_blocks; ++b) {
+    for (b = cooldown_start; b < desc->pass_len; ++b) {
         pulseqlib__get_raw_block_content_ids(seq, &raw, b, 1);
         apply_block_labels(state, seq, &raw);
         if (desc->block_table[b].adc_id >= 0) {

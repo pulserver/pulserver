@@ -271,10 +271,6 @@ static int check_rf_shim_periodicity(
  *   For multi-pass sequences, verify that the RF amplitude and shim ID
  *   patterns are identical across passes.  Pass 0 is the reference;
  *   passes 1..N-1 are compared position-by-position.
- *
- *   NOTE: with the current multipass folding, passes 2..N share the
- *   same block_table entries as pass 0 so this is structurally a no-op.
- *   It will become a real check once folding preserves per-pass entries.
  */
 static int check_cross_pass_rf_consistency(
     const pulseqlib_sequence_descriptor* desc,

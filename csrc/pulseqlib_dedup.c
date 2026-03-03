@@ -1382,7 +1382,10 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
             else if ((int)(seq->labelset_library[n][0]) == 2) has_cooldown = 1;
         }
     }
-    if (!has_prep && !has_cooldown) return PULSEQLIB_SUCCESS;
+    if (!has_prep && !has_cooldown) {
+        desc->pass_len = desc->num_blocks;
+        return PULSEQLIB_SUCCESS;
+    }
 
     if (has_prep) {
         pulseqlib__get_raw_block_content_ids(seq, &raw, 0, 1);
@@ -1418,21 +1421,24 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
         }
     }
     if (once_counter != (desc->num_prep_blocks > 0 ? 1 : 0) + (desc->num_cooldown_blocks > 0 ? 1 : 0)) {
-        /* Multi-pass detection by whole-pass comparison.
+        /* Multi-pass detection with per-section verification.
          *
          * A pass boundary is where the once_flag transitions back to
-         * the value of the first block (e.g. 2→1 or 0→1).  We split
-         * the block table at every such transition, compare the
-         * resulting passes as whole units, and fold if identical.
+         * the value of the first block (e.g. 2->1 or 0->1).  We split
+         * the block table at every such transition, verify per-section
+         * structural identity across passes, and set pass_len.
+         * No folding — the full block table is preserved so that
+         * per-instance RF/ADC freq/phase data is retained.
          * No period-finding here — that is get_tr's responsibility. */
         int first_once, prev_once_val;
         int *pass_starts;
-        int num_passes_found, pass_len, trailing_blks;
-        int i, j, ok;
+        int num_passes_found, pass_len;
+        int num_prep_in_pass, num_cool_in_pass, num_main_in_pass;
+        int i, j, p, ok;
 
         first_once = desc->block_table[0].once_flag;
 
-        /* --- 1. Find pass boundaries --- */
+        /* --- Phase A: Find pass boundaries --- */
         pass_starts = (int*)PULSEQLIB_ALLOC((size_t)(num_blocks + 1) * sizeof(int));
         if (!pass_starts) {
             pulseqlib_sequence_descriptor_free(desc);
@@ -1450,52 +1456,80 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
         }
         pass_starts[num_passes_found] = num_blocks; /* sentinel */
 
-        /* --- 2. Handle trailing cooldown in the last pass --- */
-        trailing_blks = 0;
+        /* --- Phase B: Reject uneven passes --- */
         pass_len = pass_starts[1] - pass_starts[0];
-        if (num_passes_found >= 2) {
-            int last_start = pass_starts[num_passes_found - 1];
-            int last_len   = num_blocks - last_start;
-            if (last_len > pass_len) {
-                /* Extra blocks at the tail — accept if all once==2 */
-                int extra = last_len - pass_len;
-                int all_cd = 1;
-                for (i = last_start + pass_len; i < num_blocks; ++i) {
-                    if (desc->block_table[i].once_flag != 2) {
-                        all_cd = 0; break;
-                    }
-                }
-                if (all_cd) {
-                    trailing_blks = extra;
-                    pass_starts[num_passes_found] = num_blocks - trailing_blks;
-                }
-            } else if (last_len < pass_len) {
-                /* Shorter last segment — treat as trailing if all once==2 */
-                int all_cd = 1;
-                for (i = last_start; i < num_blocks; ++i) {
-                    if (desc->block_table[i].once_flag != 2) {
-                        all_cd = 0; break;
-                    }
-                }
-                if (all_cd) {
-                    trailing_blks = last_len;
-                    num_passes_found--;
-                    pass_starts[num_passes_found] = num_blocks - trailing_blks;
-                }
-            }
+        if (num_passes_found < 2 || num_blocks != num_passes_found * pass_len) {
+            PULSEQLIB_FREE(pass_starts);
+            pulseqlib_sequence_descriptor_free(desc);
+            return PULSEQLIB_ERR_INVALID_ONCE_FLAGS;
         }
 
-        /* --- 3. Verify all passes are identical --- */
-        ok = (num_passes_found >= 2) ? 1 : 0;
+        /* Verify every pass has the same length */
+        ok = 1;
         for (i = 1; i < num_passes_found && ok; ++i) {
-            int this_len = pass_starts[i + 1] - pass_starts[i];
-            if (this_len != pass_len) { ok = 0; break; }
-            for (j = 0; j < pass_len; ++j) {
-                int a = pass_starts[0] + j;
-                int b = pass_starts[i] + j;
-                if (desc->block_table[a].id != desc->block_table[b].id ||
-                    desc->block_table[a].once_flag != desc->block_table[b].once_flag) {
-                    ok = 0; break;
+            if (pass_starts[i + 1] - pass_starts[i] != pass_len)
+                ok = 0;
+        }
+        if (!ok) {
+            PULSEQLIB_FREE(pass_starts);
+            pulseqlib_sequence_descriptor_free(desc);
+            return PULSEQLIB_ERR_INVALID_ONCE_FLAGS;
+        }
+
+        /* --- Phase C: Count section sizes within first pass --- */
+        num_prep_in_pass = 0;
+        for (i = pass_starts[0]; i < pass_starts[0] + pass_len; ++i) {
+            if (desc->block_table[i].once_flag != 1) break;
+            num_prep_in_pass++;
+        }
+
+        num_cool_in_pass = 0;
+        for (i = pass_starts[0] + pass_len - 1; i >= pass_starts[0]; --i) {
+            if (desc->block_table[i].once_flag != 2) break;
+            num_cool_in_pass++;
+        }
+
+        num_main_in_pass = pass_len - num_prep_in_pass - num_cool_in_pass;
+        if (num_main_in_pass < 0) {
+            PULSEQLIB_FREE(pass_starts);
+            pulseqlib_sequence_descriptor_free(desc);
+            return PULSEQLIB_ERR_INVALID_ONCE_FLAGS;
+        }
+
+        /* --- Phase D+E: Compare passes 1..N-1 per section --- */
+        for (p = 1; p < num_passes_found && ok; ++p) {
+            int base_ref = pass_starts[0];
+            int base_chk = pass_starts[p];
+
+            /* Prep section */
+            for (j = 0; j < num_prep_in_pass && ok; ++j) {
+                if (desc->block_table[base_chk + j].id !=
+                    desc->block_table[base_ref + j].id ||
+                    desc->block_table[base_chk + j].once_flag !=
+                    desc->block_table[base_ref + j].once_flag) {
+                    ok = 0;
+                }
+            }
+
+            /* Main section */
+            for (j = 0; j < num_main_in_pass && ok; ++j) {
+                int off = num_prep_in_pass + j;
+                if (desc->block_table[base_chk + off].id !=
+                    desc->block_table[base_ref + off].id ||
+                    desc->block_table[base_chk + off].once_flag !=
+                    desc->block_table[base_ref + off].once_flag) {
+                    ok = 0;
+                }
+            }
+
+            /* Cooldown section */
+            for (j = 0; j < num_cool_in_pass && ok; ++j) {
+                int off = num_prep_in_pass + num_main_in_pass + j;
+                if (desc->block_table[base_chk + off].id !=
+                    desc->block_table[base_ref + off].id ||
+                    desc->block_table[base_chk + off].once_flag !=
+                    desc->block_table[base_ref + off].once_flag) {
+                    ok = 0;
                 }
             }
         }
@@ -1507,27 +1541,15 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
             return PULSEQLIB_ERR_INVALID_ONCE_FLAGS;
         }
 
-        /* --- 4. Fold: keep first pass, append trailing cooldown --- */
-        for (j = 0; j < trailing_blks; ++j)
-            desc->block_table[pass_len + j] =
-                desc->block_table[num_blocks - trailing_blks + j];
-        desc->num_blocks = pass_len + trailing_blks;
-        desc->num_passes = num_passes_found;
-
-        /* Recount prep from the folded block table */
-        desc->num_prep_blocks = 0;
-        for (i = 0; i < desc->num_blocks; ++i) {
-            if (desc->block_table[i].once_flag == 0 ||
-                desc->block_table[i].once_flag == 2) break;
-            desc->num_prep_blocks++;
-        }
-
-        /* Recount cooldown from the folded block table */
-        desc->num_cooldown_blocks = 0;
-        for (i = desc->num_blocks - 1; i >= 0; --i) {
-            if (desc->block_table[i].once_flag != 2) break;
-            desc->num_cooldown_blocks++;
-        }
+        /* --- Phase F: Set descriptor fields (NO folding) --- */
+        desc->num_passes          = num_passes_found;
+        desc->pass_len            = pass_len;
+        desc->num_prep_blocks     = num_prep_in_pass;
+        desc->num_cooldown_blocks = num_cool_in_pass;
+        /* num_blocks stays as-is — full unfolded block table preserved */
+    } else {
+        /* Single-pass: pass_len equals num_blocks */
+        desc->pass_len = desc->num_blocks;
     }
     return PULSEQLIB_SUCCESS;
 

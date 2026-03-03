@@ -64,18 +64,24 @@ For each subsequence the library executes (in order):
    way. Gradient shot indices and statistics are computed.
 2. **Prep / cooldown detection** — ONCE flags are parsed to determine
    prep block count and cooldown block count (see §5).
-3. **Multipass folding** — If ONCE flags appear mid-sequence, the block
-   table is folded to a single period (see §5).
+3. **Multipass verification** — If ONCE flags appear mid-sequence, the
+   block table is verified per-section across passes but NOT folded.
+   The full unfolded block table is preserved. `pass_len` is set to
+   the number of blocks per pass (see §5).
 4. **TR identification** — `first_repeating_segment()` finds the
-   shortest repeating period in the **imaging region** block-ID pattern.
-   Pattern detection **always** runs on block definition IDs. It is NOT
-   triggered by ONCE flags (see §6).
+   shortest repeating period in the **imaging region** of the first
+   pass (`[0, pass_len)`).  Pattern detection runs on block definition
+   IDs augmented with RF amplitude/shim info. It is NOT triggered by
+   ONCE flags (see §6).
 5. **Scan table construction** — The scan table is the fully-expanded
    play order.  The outer loop is over **passes** (`num_passes`),
    the inner loop is over **averages** (`num_averages`).  Within each
-   average, the block table is walked as
+   average, the per-pass block table slice is walked as
    `prep + main + cooldown` with ONCE semantics (prep only on the
    first average, cooldown only on the last, main on every average).
+   Each pass uses its own block-table offset (`base = pass × pass_len`)
+   so that `scan_table_block_idx` values point to the correct per-pass
+   block-table entries (preserving per-instance RF/ADC data).
    Total scan table length =
    `num_passes × (prep×1 + main×num_averages + cooldown×1)`.
 6. **Segmentation** — A state machine splits the first pass of the
@@ -172,30 +178,35 @@ part of prep.
 Cooldown counting walks **backward from the last block**, incrementing
 until `ext.flag.once == 2` is encountered (that block is included).
 
-### 5.4 Multipass (inner-loop) folding
+### 5.4 Multipass verification (no folding)
 
 When ONCE flags appear mid-sequence (`once_counter` exceeds the
-expected 0–2 for a simple prep+cooldown), the library attempts folding
-by **whole-pass comparison** (no period-finding — that belongs to
-`get_tr_in_sequence`):
+expected 0–2 for a simple prep+cooldown), the library detects passes
+and verifies per-section structural identity without folding:
 
 1. Record `first_once = block_table[0].once_flag`.
 2. Walk the block table; every transition **to** `first_once` from a
    different once_flag marks a new **pass boundary**.
 3. Derive `pass_len` from the first pass (blocks between boundary 0
    and boundary 1).
-4. If the last pass is longer than `pass_len` and the extra tail
-   blocks are all `once==2`, treat the tail as **trailing cooldown**.
-   If the last pass is shorter and all `once==2`, treat the entire
-   last segment as trailing cooldown and decrement the pass count.
-5. Verify every pass has the same length and identical
-   `(block_id, once_flag)` at each position.
-6. Fold: keep first pass + trailing cooldown.
-   `num_passes ≥ 2` required.
-7. Re-count prep/cooldown from the folded table.
+4. Reject uneven passes: verify `num_blocks == num_passes × pass_len`.
+   No trailing-cooldown special-casing: the last pass's cooldown runs
+   to EOF and is naturally the same length as every other pass's
+   cooldown.
+5. Count section sizes within first pass: leading `once==1` blocks
+   → `num_prep_in_pass`, trailing `once==2` → `num_cool_in_pass`,
+   remainder → `num_main_in_pass`.
+6. Verify all passes per section: for each pass 1..N-1, compare
+   `(block_id, once_flag)` at each position in prep, main, and
+   cooldown sections against the first pass.
+7. Set `desc->num_passes`, `desc->pass_len`, `desc->num_prep_blocks`,
+   `desc->num_cooldown_blocks`. The full block table is preserved
+   (no folding) so that per-instance RF/ADC freq/phase data is retained.
 
-**Valid multipass**: all passes are identical block-for-block.
-**Invalid**: passes differ → `PULSEQLIB_ERR_INVALID_ONCE_FLAGS`.
+**Valid multipass**: all passes are structurally identical per-section.
+**Invalid**: any section differs → `PULSEQLIB_ERR_INVALID_ONCE_FLAGS`.
+
+For single-pass sequences, `pass_len = num_blocks`.
 
 ---
 
@@ -346,10 +357,14 @@ spurious `PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH`.
 
 `check_cross_pass_rf_consistency` (in `check_consistency`) compares
 RF amplitude and shim ID patterns across passes.  Pass 0 is the
-reference; passes 1..N-1 are compared position-by-position.
-Currently a structural no-op because multipass folding makes all
-passes share the same block_table entries; will become a real check
-once folding preserves per-pass entries.
+reference; passes 1..N-1 are compared position-by-position via
+`scan_table_block_idx`, which now points to each pass's own
+block-table entries (no folding).  Mismatches produce
+`PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC` or
+`PULSEQLIB_ERR_CONSISTENCY_RF_SHIM_PERIODIC`.
+
+Note: `freq_offset` and `phase_offset` are NOT compared — they
+legitimately differ across passes (e.g. multi-slice selection).
 
 ---
 
@@ -584,8 +599,14 @@ non-copyable) wraps all C getters as methods. Value types: `Opts`,
   attempt over the full first pass runs as a last resort.
 - **Cross-pass RF/shim check** (§7.6): after segmentation,
   `check_cross_pass_rf_consistency` verifies RF amplitude and shim ID
-  patterns are identical across passes. Currently a no-op due to
-  multipass folding.
+  patterns are identical across passes.  This is a real check since
+  the unfolded block table preserves per-pass entries.
+- **`pass_len` vs `num_blocks`**: after the unfolding change,
+  `num_blocks = num_passes × pass_len` (total across all passes).
+  `pass_len` is the per-pass count.  Code that operates on a single
+  pass (TR detection, label table, etc.) must use `pass_len`, not
+  `num_blocks`.  Getter bounds checks use `num_blocks` since they
+  accept indices into the full block table.
 - **Scan-table consistency** resets `pos_in_seg` at TR boundaries
   (§7.5), not just on segment-ID changes. Without this, the same
   segment spanning consecutive TRs triggers a false SEG_MISMATCH.
