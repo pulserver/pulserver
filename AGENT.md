@@ -104,7 +104,7 @@ For each subsequence the library executes (in order):
 | Event type | Dedup columns (timing only) | Per-instance scalars |
 |---|---|---|
 | **RF** | mag_shape_id, phase_shape_id, time_shape_id, delay | amplitude, freq_offset, phase_offset |
-| **Gradient** | type, rise/flat/fall (trap) or num_samples+time_shape_id (arb), delay | amplitude |
+| **Gradient** | type, rise/flat/fall (trap) or num_samples+time_shape_id (arb), delay | amplitude, shot_index |
 | **ADC** | num_samples, dwell_time, delay | freq_offset, phase_offset |
 | **Block** | `[block_duration, rf_def_id, gx_def_id, gy_def_id, gz_def_id]` | — |
 
