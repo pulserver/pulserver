@@ -205,10 +205,35 @@ and cooldown) using block definition IDs:
 
 1. Build `seq_pat[n]` from block def IDs (pure delays get special
    negative values).
-2. `first_repeating_segment()` finds the shortest repeating period `l`.
-3. Verify the entire imaging region tiles with period `l`.
-4. If no period found and total active duration ≤ 15 s → single-TR
-   fallback (entire sequence is one TR).
+2. **RF-aware pattern augmentation** — before period detection, `seq_pat`
+   is augmented so that blocks sharing the same structural definition
+   but differing in RF amplitude or RF shim ID receive distinct pattern
+   values.  A copy of the pre-augmentation pattern (`base_pat`) is
+   saved for VFA rejection (step 4b).
+
+   Implementation: quantise the RF amplitude to an integer
+   (`amplitude × 1e6`, rounded), form 3-column integer rows
+   `(base_pat, quantised_amp, shim_id)`, run them through the existing
+   hash-based dedup (`pulseqlib__deduplicate_int_rows`), then remap
+   `seq_pat` entries to `max_existing_pat + 1 + label`.  This
+   makes MRF-style flip-angle schedules that repeat every N TRs
+   produce the correct RF-period-aware TR size.
+3. `first_repeating_segment()` finds the shortest repeating period `l`
+   in the RF-augmented `seq_pat`.
+4. Verify the entire imaging region tiles with period `l`.
+   - **4a. If period found**: validate that every block in the imaging
+     region matches the pattern. Any mismatch → falls into the
+     "not found" path.
+   - **4b. If no period found — VFA rejection**: compare against the
+     saved `base_pat` (structural pattern without RF).  If the base
+     pattern **does** have a valid repeating period, the sequence has
+     non-periodic RF over a repeating structure (e.g. VFA SPGR).  Such
+     sequences must be designed as separate subsequences, so the library
+     rejects with `PULSEQLIB_ERR_TR_PATTERN_MISMATCH` instead of
+     falling through to single-TR.
+   - **4c. If no period found and base also non-periodic**: if total
+     active duration ≤ 15 s → single-TR fallback (entire sequence is
+     one TR).  Otherwise → `PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN`.
 5. **Prep check**: if `num_prep_blocks % l == 0` and all prep "TRs"
    match the imaging pattern → `degenerate_prep = 1` (prep is just
    extra copies of main TR, not structurally different).
@@ -219,20 +244,26 @@ and cooldown) using block definition IDs:
 **Key**: pattern detection **always** happens. It is NOT triggered by
 or dependent on ONCE flags. ONCE only determines which blocks are
 prep/cooldown; TR detection operates purely on block definition ID
-patterns.
+patterns (augmented with RF info).
 
 ---
 
 ## 7. Segmentation
 
 The segmentation state machine splits a TR into segments. It runs on
-each section (prep+main, main, main+cooldown) independently.
+each section (prep, main, cooldown) independently.
 
 ### 7.1 Segment boundary rules
 
 A boundary candidate exists between consecutive blocks if all 3 gradient
 axes have physical first/last values within the max-slew-per-raster
 threshold (i.e., gradients are at or near zero at the boundary).
+
+Gradient first/last values are resolved using the **per-instance
+shot index** (`desc->grad_table[gid].shot_index`), not shot 0.
+This ensures that deduped gradient definitions with multiple shots
+(e.g. phase-encode tables) use the correct amplitude for the specific
+block table entry being checked.
 
 States:
 - `SEEKING_FIRST_ADC` — before any ADC is seen. If an RF appears, save
@@ -243,7 +274,27 @@ States:
   safe candidate → enter OPTIMIZED_MODE (single segment for the TR).
 - `OPTIMIZED_MODE` — no further splitting.
 
-### 7.2 Post-processing
+### 7.2 Three-section retry for deduped gradients
+
+When gradient deduplication merges multiple shots into one definition,
+the first/last values of the representative shot may have non-zero
+boundaries even though the original blocks had zero-crossing gradients.
+To handle this, segmentation uses a **three-section retry** strategy:
+
+1. Each section (prep, main, cooldown) starts with its natural span
+   (e.g. `num_prep_blocks` for prep, `tr_size` for main).
+2. If `find_segments_internal` fails with `SEG_NONZERO_START_GRAD` or
+   `SEG_NONZERO_END_GRAD`, the section expands by appending multiples
+   of `tr_size` (e.g. `prep_blocks + 2*tr_size`, etc.).
+3. Before each retry, a fast `boundary_gradients_ok()` pre-check tests
+   whether the first/last blocks of the candidate region have near-zero
+   gradient values (skips the full state machine if not).
+4. If any section covers the entire block table, remaining sections are
+   skipped.
+5. When the main section needed `mult > 1` TRs to succeed, the
+   `tr_descriptor` is updated with the expanded TR size and duration.
+
+### 7.3 Post-processing
 
 1. **Strip pure delays** — single-block delay-only segments are split
    off from segment cores.
@@ -254,7 +305,7 @@ States:
 4. **Per-block flags** — `has_digitalout`, `has_rotation`, `norot_flag`,
    `nopos_flag`, trigger classification (INPUT vs OUTPUT).
 
-### 7.3 Scan-table segmentation fallback
+### 7.4 Scan-table segmentation fallback
 
 Block-table segmentation requires that the first and last blocks of
 each TR have near-zero gradient first/last values (within
@@ -277,6 +328,16 @@ The library then falls back to **scan-table-based segmentation**
    For bSSFP, this typically means the whole pass is one segment
    (because non-zero gradient edges suppress all internal boundary
    candidates).
+
+### 7.5 Scan-table consistency validation
+
+`check_scan_table_segments` validates the expanded scan table against
+segment definitions.  It tracks `pos_in_seg` (position within the
+current segment) and resets it to 0 when the segment ID changes **or**
+at a TR boundary (`scan_table_tr_start[n]` is set).  Without the TR
+boundary reset, the same segment spanning consecutive TRs would
+accumulate `pos_in_seg` past the segment's `num_blocks`, causing a
+spurious `PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH`.
 
 ---
 
@@ -487,9 +548,26 @@ non-copyable) wraps all C getters as methods. Value types: `Opts`,
   may fail after rotation.
 - The segmentation state machine can fall back to scan-table-based
   segmentation if block-table boundaries have non-zero gradients
-  (e.g., bSSFP). See §7.3 for details.
+  (e.g., bSSFP). See §7.4 for details.
 - **Safety TR selection** uses position-max amplitude (mode 1) to get
   worst-case gradients across all TR instances. **k-space crossing
   detection** uses definition-min amplitude (mode 2). See §8.1.
 - The max-energy segment instance (§8.2) determines which instance's
   gradients define the initial state for waveform connection.
+- **TR detection is RF-aware** — blocks identical in structure but
+  differing in RF amplitude or shim ID get distinct pattern values.
+  MRF-style sequences (variable flip angle, periodic RF schedule) are
+  correctly handled. VFA SPGR-style concatenations (non-periodic RF
+  over a repeating structure) are rejected at load time with
+  `PULSEQLIB_ERR_TR_PATTERN_MISMATCH`. See §6 step 4b.
+- **Segmentation uses per-instance shot indices** for gradient
+  first/last value lookups, not shot 0. Deduped gradient definitions
+  with multiple shots resolve to the correct amplitude for each block
+  table entry.
+- **Three-section segmentation retry** (§7.2): when the natural
+  section span fails the gradient-zero boundary check, the section
+  expands by TR-size multiples. This handles deduped gradients whose
+  representative shots may have non-zero boundaries.
+- **Scan-table consistency** resets `pos_in_seg` at TR boundaries
+  (§7.5), not just on segment-ID changes. Without this, the same
+  segment spanning consecutive TRs triggers a false SEG_MISMATCH.

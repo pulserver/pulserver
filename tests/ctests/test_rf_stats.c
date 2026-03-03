@@ -72,15 +72,7 @@ MU_TEST_SUITE(suite_rf_stats)
 
 /* ================================================================== */
 /*  Suite B — RF consistency (periodicity) checks                     */
-/*                                                                    */
-/*  DISABLED: all four .seq files fail to load with                   */
-/*  PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH (-560) because the         */
-/*  library's segmentation check rejects the scan-table structure     */
-/*  before the RF periodicity check can run.  Re-enable (#if 1)      */
-/*  once the segmentation issue is resolved.                          */
 /* ================================================================== */
-
-#if 0
 
 static pulseqlib_opts s_rf_opts;
 
@@ -96,7 +88,13 @@ static void run_consistency_check(const char* filename, int expected_code)
     int rc;
 
     rc = load_seq(&coll, filename, &s_rf_opts);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed");
+    if (PULSEQLIB_FAILED(rc)) {
+        /* Load failed — only acceptable if we expected this error */
+        if (expected_code > 0)
+            mu_fail("load_seq failed unexpectedly");
+        mu_assert_int_eq(expected_code, rc);
+        return;
+    }
 
     rc = pulseqlib_check_consistency(coll, &diag);
 
@@ -118,7 +116,7 @@ MU_TEST(test_rf_periodic_ok)
 MU_TEST(test_rf_periodic_fail)
 {
     run_consistency_check("02_rfamp_fail_vfa.seq",
-                          PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC);
+                          PULSEQLIB_ERR_TR_PATTERN_MISMATCH);
 }
 
 MU_TEST(test_rfshim_periodic_ok)
@@ -130,7 +128,7 @@ MU_TEST(test_rfshim_periodic_ok)
 MU_TEST(test_rfshim_periodic_fail)
 {
     run_consistency_check("04_rfshim_fail_gre.seq",
-                          PULSEQLIB_ERR_CONSISTENCY_RF_SHIM_PERIODIC);
+                          PULSEQLIB_ERR_TR_PATTERN_MISMATCH);
 }
 
 MU_TEST_SUITE(suite_rf_consistency)
@@ -141,8 +139,6 @@ MU_TEST_SUITE(suite_rf_consistency)
     MU_RUN_TEST(test_rfshim_periodic_ok);
     MU_RUN_TEST(test_rfshim_periodic_fail);
 }
-
-#endif /* disabled suite_rf_consistency */
 
 /* ================================================================== */
 /*  Entry point                                                       */
@@ -158,11 +154,7 @@ int test_rf_stats_main(void)
     minunit_proc_timer = 0;
 
     MU_RUN_SUITE(suite_rf_stats);
-    /* suite_rf_consistency: skipped — all four .seq files fail to load
-     * with PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH (-560) because the
-     * library's segmentation check rejects the scan-table structure
-     * before the RF periodicity check can run.  Re-enable once the
-     * segmentation issue is resolved. */
+    MU_RUN_SUITE(suite_rf_consistency);
     MU_REPORT();
     return MU_EXIT_CODE;
 }

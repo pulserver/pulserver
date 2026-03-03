@@ -266,6 +266,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
     int i, n;
     int imaging_start, imaging_end, imaging_len;
     int* seq_pat       = NULL;
+    int* base_pat      = NULL;
     int* block_dur     = NULL;
     int prep_dur_us, cooldown_dur_us, active_dur_us;
     int found, l;
@@ -336,6 +337,90 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
             : -1 * desc->block_table[desc->block_table[n].id].id;
     }
 
+    /* Save a copy of seq_pat before RF augmentation (used for VFA check) */
+    base_pat = (int*)PULSEQLIB_ALLOC(desc->num_blocks * sizeof(int));
+    if (!base_pat) {
+        PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
+        diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+        return diag->code;
+    }
+    for (n = 0; n < desc->num_blocks; ++n)
+        base_pat[n] = seq_pat[n];
+
+    /* ----------------------------------------------------------------
+     * RF-aware pattern augmentation.
+     *
+     * Blocks that share the same structural definition (same seq_pat
+     * value) but differ in RF amplitude or RF shim ID must get distinct
+     * pattern values so that first_repeating_segment discovers the true
+     * period.  We quantise the RF amplitude to an integer, form a tuple
+     * (base_pat, quant_amp, shim_id) and use the existing hash-based
+     * dedup to assign a unique label to each distinct combination.
+     * A new synthetic pattern value (above the current maximum) is then
+     * assigned to every RF-carrying block.
+     *
+     * This only affects the temporary seq_pat array — the original
+     * block table and definitions are untouched.
+     * ---------------------------------------------------------------- */
+    {
+        int max_pat, rf_id, shim_id, q_amp;
+        int* rf_rows;       /* [num_blocks * 3]  (base, amp, shim) */
+        int* rf_labels;     /* [num_blocks]       dedup label      */
+        int* rf_unique;     /* [num_blocks]       unique row idx   */
+        int  num_rf_combos;
+
+        /* Find current max absolute value in seq_pat */
+        max_pat = 0;
+        for (n = 0; n < desc->num_blocks; ++n) {
+            int v = seq_pat[n] < 0 ? -seq_pat[n] : seq_pat[n];
+            if (v > max_pat) max_pat = v;
+        }
+
+        rf_rows   = (int*)PULSEQLIB_ALLOC(desc->num_blocks * 3 * sizeof(int));
+        rf_labels = (int*)PULSEQLIB_ALLOC(desc->num_blocks * sizeof(int));
+        rf_unique = (int*)PULSEQLIB_ALLOC(desc->num_blocks * sizeof(int));
+        if (!rf_rows || !rf_labels || !rf_unique) {
+            if (rf_rows)   PULSEQLIB_FREE(rf_rows);
+            if (rf_labels) PULSEQLIB_FREE(rf_labels);
+            if (rf_unique) PULSEQLIB_FREE(rf_unique);
+            PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
+            PULSEQLIB_FREE(base_pat);
+            diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+            return diag->code;
+        }
+
+        /* Build 3-column rows: (base_pat, quantised_rf_amp, rf_shim_id) */
+        for (n = 0; n < desc->num_blocks; ++n) {
+            rf_id   = desc->block_table[n].rf_id;
+            shim_id = desc->block_table[n].rf_shim_id;
+
+            /* Quantise amplitude: multiply by 1e6 and round to int.
+             * This makes amplitudes differing by < 1e-6 identical.
+             * Blocks without RF get (base, 0, -1) which dedup will
+             * still group correctly. */
+            q_amp = (rf_id >= 0 && rf_id < desc->rf_table_size)
+                  ? (int)(desc->rf_table[rf_id].amplitude * 1e6f + 0.5f)
+                  : 0;
+
+            rf_rows[n * 3 + 0] = seq_pat[n];
+            rf_rows[n * 3 + 1] = q_amp;
+            rf_rows[n * 3 + 2] = shim_id;
+        }
+
+        num_rf_combos = pulseqlib__deduplicate_int_rows(
+            rf_unique, rf_labels, rf_rows, desc->num_blocks, 3);
+
+        /* Remap: each label becomes max_pat + 1 + label */
+        if (num_rf_combos > 0) {
+            for (n = 0; n < desc->num_blocks; ++n)
+                seq_pat[n] = max_pat + 1 + rf_labels[n];
+        }
+
+        PULSEQLIB_FREE(rf_rows);
+        PULSEQLIB_FREE(rf_labels);
+        PULSEQLIB_FREE(rf_unique);
+    }
+
     l = first_repeating_segment(&seq_pat[imaging_start], imaging_len);
     pulseqlib__diag_printf(diag, " candidate TR=%d", l);
 
@@ -355,32 +440,62 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
     }
 
     if (!found) {
-        active_dur_us = 0;
-        for (n = 0; n < desc->num_blocks; ++n)
-            if (desc->block_table[n].duration_us < 0)
-                active_dur_us += desc->block_definitions[desc->block_table[n].id].duration_us;
-
-        if (active_dur_us <= SINGLE_TR_MAX_DURATION_US) {
-            tr->tr_size             = desc->num_blocks;
-            tr->num_trs             = 1;
-            tr->degenerate_prep     = 1;
-            tr->num_prep_blocks     = 0;
-            tr->num_prep_trs        = 0;
-            tr->degenerate_cooldown = 1;
-            tr->num_cooldown_blocks = 0;
-            tr->num_cooldown_trs    = 0;
-            tr_dur = 0.0f;
-            for (i = 0; i < desc->num_blocks; ++i)
-                tr_dur += (float)block_dur[i];
-            tr->tr_duration_us = tr_dur;
-            diag->code = PULSEQLIB_SUCCESS;
-            PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
-            return PULSEQLIB_SUCCESS;
+        /* ---------------------------------------------------------
+         * VFA rejection: if the structural (base) pattern has a
+         * valid shorter period but the RF-augmented pattern does
+         * not, the sequence contains non-periodic RF over a
+         * repeating structure (e.g. VFA SPGR).  Such sequences
+         * should be designed as separate subsequences, so we
+         * reject them instead of falling through to single-TR.
+         * --------------------------------------------------------- */
+        int base_l, base_ok;
+        base_l = first_repeating_segment(
+                     &base_pat[imaging_start], imaging_len);
+        base_ok = 0;
+        if (base_l > 0 && base_l < imaging_len) {
+            base_ok = 1;
+            for (i = 0; i < imaging_len && base_ok; ++i) {
+                if (base_pat[imaging_start + i] !=
+                    base_pat[imaging_start + (i % base_l)])
+                    base_ok = 0;
+            }
         }
+
+        if (!base_ok) {
+            /* Base pattern also non-periodic → genuine single-TR. */
+            active_dur_us = 0;
+            for (n = 0; n < desc->num_blocks; ++n)
+                if (desc->block_table[n].duration_us < 0)
+                    active_dur_us += desc->block_definitions[
+                        desc->block_table[n].id].duration_us;
+
+            if (active_dur_us <= SINGLE_TR_MAX_DURATION_US) {
+                tr->tr_size             = desc->num_blocks;
+                tr->num_trs             = 1;
+                tr->degenerate_prep     = 1;
+                tr->num_prep_blocks     = 0;
+                tr->num_prep_trs        = 0;
+                tr->degenerate_cooldown = 1;
+                tr->num_cooldown_blocks = 0;
+                tr->num_cooldown_trs    = 0;
+                tr_dur = 0.0f;
+                for (i = 0; i < desc->num_blocks; ++i)
+                    tr_dur += (float)block_dur[i];
+                tr->tr_duration_us = tr_dur;
+                diag->code = PULSEQLIB_SUCCESS;
+                PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
+                PULSEQLIB_FREE(base_pat);
+                return PULSEQLIB_SUCCESS;
+            }
+        }
+
+        /* VFA case (base_ok=1) or genuinely too-long non-periodic:
+         * reject with a pattern error. */
         diag->code = (mismatch_pos >= 0)
             ? PULSEQLIB_ERR_TR_PATTERN_MISMATCH
             : PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN;
         PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
+        PULSEQLIB_FREE(base_pat);
         return diag->code;
     }
 
@@ -400,6 +515,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
                     if (prep_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
                         diag->code = PULSEQLIB_ERR_TR_PREP_TOO_LONG;
                         PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
+                        PULSEQLIB_FREE(base_pat);
                         return diag->code;
                     }
                     tr->degenerate_prep = 0;
@@ -415,6 +531,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
             if (prep_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
                 diag->code = PULSEQLIB_ERR_TR_PREP_TOO_LONG;
                 PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
+                PULSEQLIB_FREE(base_pat);
                 return diag->code;
             }
             tr->degenerate_prep = 0;
@@ -430,6 +547,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
                     if (cooldown_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
                         diag->code = PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG;
                         PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
+                        PULSEQLIB_FREE(base_pat);
                         return diag->code;
                     }
                     tr->degenerate_cooldown = 0;
@@ -445,6 +563,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
             if (cooldown_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
                 diag->code = PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG;
                 PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
+                PULSEQLIB_FREE(base_pat);
                 return diag->code;
             }
             tr->degenerate_cooldown = 0;
@@ -453,6 +572,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
 
     diag->code = PULSEQLIB_SUCCESS;
     PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
+    PULSEQLIB_FREE(base_pat);
     return PULSEQLIB_SUCCESS;
 }
 

@@ -292,7 +292,11 @@ static int check_scan_table_segments(
             pos_in_seg  = 0;
             continue;
         }
-        if (seg_id != prev_seg_id) {
+        /* Reset position when segment changes OR at a TR boundary
+         * (the same segment can span consecutive TRs). */
+        if (seg_id != prev_seg_id ||
+            (desc->scan_table_tr_start &&
+             desc->scan_table_tr_start[n])) {
             pos_in_seg  = 0;
             prev_seg_id = seg_id;
         }
