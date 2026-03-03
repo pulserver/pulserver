@@ -78,8 +78,9 @@ For each subsequence the library executes (in order):
    first average, cooldown only on the last, main on every average).
    Total scan table length =
    `num_passes × (prep×1 + main×num_averages + cooldown×1)`.
-6. **Segmentation** — A state machine splits TRs into segments based
-   on RF/ADC boundaries and gradient continuity (see §7).
+6. **Segmentation** — A state machine splits the first pass of the
+   scan table into segments (prep/main/cooldown) based on RF/ADC
+   boundaries and gradient continuity (see §7).
 7. **Segment timing** — RF and ADC anchors (isocenters, k-zero
    crossings) are computed per segment.
 8. **Freq mod flags** — Blocks with (RF or ADC) + gradient are flagged
@@ -250,22 +251,26 @@ patterns (augmented with RF info).
 
 ## 7. Segmentation
 
-The segmentation state machine splits a TR into segments. It runs on
-each section (prep, main, cooldown) independently.
+Segmentation operates exclusively on the **scan table** — there is no
+block-table segmentation path.  The entry point is
+`pulseqlib__get_scan_table_segments()` in `pulseqlib_structure.c`,
+called from `pulseqlib_core.c` during sequence loading.
 
 ### 7.1 Segment boundary rules
 
-A boundary candidate exists between consecutive blocks if all 3 gradient
-axes have physical first/last values within the max-slew-per-raster
-threshold (i.e., gradients are at or near zero at the boundary).
+A boundary candidate exists between consecutive scan-table positions if
+all 3 gradient axes have physical first/last values within the
+max-slew-per-raster threshold (i.e., gradients are at or near zero at
+the boundary).  Block-table indices are resolved through the scan table
+(`scan_table_block_idx[pos]`).
 
 Gradient first/last values are resolved using the **per-instance
 shot index** (`desc->grad_table[gid].shot_index`), not shot 0.
 This ensures that deduped gradient definitions with multiple shots
 (e.g. phase-encode tables) use the correct amplitude for the specific
-block table entry being checked.
+scan-table entry being checked.
 
-States:
+States (in `find_segments_on_scan_table`):
 - `SEEKING_FIRST_ADC` — before any ADC is seen. If an RF appears, save
   the pre-RF candidate. When an ADC appears, split at the pre-RF
   candidate (separating "excitation" from "readout").
@@ -274,60 +279,58 @@ States:
   safe candidate → enter OPTIMIZED_MODE (single segment for the TR).
 - `OPTIMIZED_MODE` — no further splitting.
 
-### 7.2 Three-section retry for deduped gradients
+### 7.2 Three-section retry on the first pass
 
-When gradient deduplication merges multiple shots into one definition,
-the first/last values of the representative shot may have non-zero
-boundaries even though the original blocks had zero-crossing gradients.
-To handle this, segmentation uses a **three-section retry** strategy:
+Segmentation operates on the **first pass** of the scan table
+(`pass_size = scan_table_len / num_passes`).  The first pass is divided
+into three sections based on the TR descriptor:
 
-1. Each section (prep, main, cooldown) starts with its natural span
-   (e.g. `num_prep_blocks` for prep, `tr_size` for main).
-2. If `find_segments_internal` fails with `SEG_NONZERO_START_GRAD` or
-   `SEG_NONZERO_END_GRAD`, the section expands by appending multiples
-   of `tr_size` (e.g. `prep_blocks + 2*tr_size`, etc.).
-3. Before each retry, a fast `boundary_gradients_ok()` pre-check tests
-   whether the first/last blocks of the candidate region have near-zero
-   gradient values (skips the full state machine if not).
-4. If any section covers the entire block table, remaining sections are
-   skipped.
+- **Prep**: `[0, num_prep_blocks + k×tr_size)` for k=1,2,…
+  (skipped if `degenerate_prep` or `num_prep_blocks == 0`)
+- **Main**: `[num_prep_blocks, num_prep_blocks + k×tr_size)` for k=1,2,…
+- **Cooldown**: `[pass_size - num_cooldown_blocks - k×tr_size, pass_size)`
+  for k=1,2,…
+  (skipped if `degenerate_cooldown` or `num_cooldown_blocks == 0`)
+
+Each section retries with increasing multiples of `tr_size`:
+1. A fast `scan_boundary_gradients_ok()` pre-check tests whether
+   the first/last scan-table positions of the candidate region have
+   near-zero gradient values (skips the full state machine if not).
+2. `find_segments_on_scan_table()` runs the segment state machine.
+3. If it fails with `SEG_NONZERO_START_GRAD` or `SEG_NONZERO_END_GRAD`,
+   the section expands to the next multiple.
+4. If any section covers the entire first pass, remaining sections
+   are skipped.
 5. When the main section needed `mult > 1` TRs to succeed, the
    `tr_descriptor` is updated with the expanded TR size and duration.
 
+**Fallback**: if all three sections produce zero segments (e.g. when
+all boundary pre-checks skip, or when cooldown has 0 blocks and is
+never entered), a single `find_segments_on_scan_table` call over
+`[0, pass_size)` without boundary pre-check runs as a last resort.
+This either succeeds or propagates the actual gradient error code.
+
 ### 7.3 Post-processing
 
-1. **Strip pure delays** — single-block delay-only segments are split
-   off from segment cores.
-2. **NAV-aware split/merge** (when PMC enabled) — segments with mixed
-   NAV/non-NAV blocks are split; adjacent NAV segments are merged.
+1. **Strip pure delays** (`strip_pure_delays_scan`) — single-block
+   delay-only segments are split off from segment cores.  Applied
+   per section (prep, main, cooldown independently).
+2. **NAV-aware split/merge** (`nav_split_merge`, when PMC enabled) —
+   segments with mixed NAV/non-NAV blocks are split; adjacent NAV
+   segments are merged.  Applied per section.
 3. **Deduplication** — segments with identical `unique_block_indices`
-   arrays are merged into one unique segment definition.
+   arrays are merged into one unique segment definition.  Pure-delay
+   segments share a single definition.  Dedup is across all sections.
 4. **Per-block flags** — `has_digitalout`, `has_rotation`, `norot_flag`,
    `nopos_flag`, trigger classification (INPUT vs OUTPUT).
+5. **Segment tables** — three separate tables (`prep_segment_table`,
+   `main_segment_table`, `cooldown_segment_table`) map expanded
+   segments to unique segment IDs.
 
-### 7.4 Scan-table segmentation fallback
+### 7.4 Scan-table seg_id tiling
 
-Block-table segmentation requires that the first and last blocks of
-each TR have near-zero gradient first/last values (within
-`max_slew × grad_raster_s`).  When this condition is violated —
-typically in **bSSFP** sequences where gradients are intentionally
-non-zero at TR edges — segmentation returns
-`PULSEQLIB_ERR_SEG_NONZERO_START_GRAD` or
-`PULSEQLIB_ERR_SEG_NONZERO_END_GRAD`.
-
-The library then falls back to **scan-table-based segmentation**
-(`find_segments_on_scan_table`).  This variant:
-
-1. Builds a block-def-ID pattern from the scan table.
-2. Finds the repeating period via `first_repeating_segment()`.
-3. Runs the same segment state machine but resolves blocks through
-   scan-table indirection (positions are scan-table indices, not
-   block-table indices).
-4. The first/last block gradient-zero checks now apply to the
-   **entire scan-table period** edges, not individual TR edges.
-   For bSSFP, this typically means the whole pass is one segment
-   (because non-zero gradient edges suppress all internal boundary
-   candidates).
+The seg_id pattern from the first pass is tiled across all passes
+in `scan_table_seg_id[n] = pattern[n % pass_size]`.
 
 ### 7.5 Scan-table consistency validation
 
@@ -338,6 +341,15 @@ at a TR boundary (`scan_table_tr_start[n]` is set).  Without the TR
 boundary reset, the same segment spanning consecutive TRs would
 accumulate `pos_in_seg` past the segment's `num_blocks`, causing a
 spurious `PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH`.
+
+### 7.6 Cross-pass RF/shim consistency
+
+`check_cross_pass_rf_consistency` (in `check_consistency`) compares
+RF amplitude and shim ID patterns across passes.  Pass 0 is the
+reference; passes 1..N-1 are compared position-by-position.
+Currently a structural no-op because multipass folding makes all
+passes share the same block_table entries; will become a real check
+once folding preserves per-pass entries.
 
 ---
 
@@ -546,9 +558,11 @@ non-copyable) wraps all C getters as methods. Value types: `Opts`,
 - Gradient continuity is checked in **physical** coordinates (after
   rotation), not logical. A sequence that is safe in logical coordinates
   may fail after rotation.
-- The segmentation state machine can fall back to scan-table-based
-  segmentation if block-table boundaries have non-zero gradients
-  (e.g., bSSFP). See §7.4 for details.
+- Segmentation operates exclusively on the scan table (no block-table
+  segmentation path). The three-section retry (prep/main/cooldown)
+  expands regions by TR-size multiples when gradient boundaries are
+  non-zero.  A final fallback over the entire first pass runs without
+  boundary pre-check to propagate the actual error code. See §7.
 - **Safety TR selection** uses position-max amplitude (mode 1) to get
   worst-case gradients across all TR instances. **k-space crossing
   detection** uses definition-min amplitude (mode 2). See §8.1.
@@ -564,10 +578,14 @@ non-copyable) wraps all C getters as methods. Value types: `Opts`,
   first/last value lookups, not shot 0. Deduped gradient definitions
   with multiple shots resolve to the correct amplitude for each block
   table entry.
-- **Three-section segmentation retry** (§7.2): when the natural
-  section span fails the gradient-zero boundary check, the section
-  expands by TR-size multiples. This handles deduped gradients whose
-  representative shots may have non-zero boundaries.
+- **Three-section segmentation retry** (§7.2): prep/main/cooldown
+  each retry with increasing TR-size multiples on the first pass of
+  the scan table. If all sections produce nothing, a single un-gated
+  attempt over the full first pass runs as a last resort.
+- **Cross-pass RF/shim check** (§7.6): after segmentation,
+  `check_cross_pass_rf_consistency` verifies RF amplitude and shim ID
+  patterns are identical across passes. Currently a no-op due to
+  multipass folding.
 - **Scan-table consistency** resets `pos_in_seg` at TR boundaries
   (§7.5), not just on segment-ID changes. Without this, the same
   segment spanning consecutive TRs triggers a false SEG_MISMATCH.

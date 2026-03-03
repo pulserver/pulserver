@@ -979,8 +979,6 @@ int   pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const pu
 /* --- pulseqlib_structure.c --- */
 int   pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);
 int   pulseqlib__build_scan_table(pulseqlib_sequence_descriptor* desc, int num_averages, pulseqlib_diagnostic* diag);
-int   pulseqlib__get_segments_in_tr(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib__seq_file* seq);
-int   pulseqlib__fill_scan_seg_id_from_blocktable(pulseqlib_sequence_descriptor* desc);
 int   pulseqlib__get_scan_table_segments(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag, const pulseqlib_opts* opts);
 int   pulseqlib__build_freq_mod_flags(pulseqlib_sequence_descriptor* desc);
 void  pulseqlib__compute_scan_table_tr_start(pulseqlib_sequence_descriptor* desc);

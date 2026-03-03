@@ -267,6 +267,67 @@ static int check_rf_shim_periodicity(
 }
 
 /*
+ * check_cross_pass_rf_consistency --
+ *   For multi-pass sequences, verify that the RF amplitude and shim ID
+ *   patterns are identical across passes.  Pass 0 is the reference;
+ *   passes 1..N-1 are compared position-by-position.
+ *
+ *   NOTE: with the current multipass folding, passes 2..N share the
+ *   same block_table entries as pass 0 so this is structurally a no-op.
+ *   It will become a real check once folding preserves per-pass entries.
+ */
+static int check_cross_pass_rf_consistency(
+    const pulseqlib_sequence_descriptor* desc,
+    pulseqlib_diagnostic* diag)
+{
+    int num_passes, pass_size, p, j;
+    int ref_bt, chk_bt;
+    float ref_amp, chk_amp;
+    int ref_shim, chk_shim;
+
+    num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
+    if (num_passes <= 1) return PULSEQLIB_SUCCESS;
+
+    pass_size = desc->scan_table_len / num_passes;
+    if (pass_size <= 0) return PULSEQLIB_SUCCESS;
+
+    for (p = 1; p < num_passes; ++p) {
+        for (j = 0; j < pass_size; ++j) {
+            ref_bt = desc->scan_table_block_idx[j];
+            chk_bt = desc->scan_table_block_idx[p * pass_size + j];
+
+            /* RF amplitude */
+            ref_amp = get_block_rf_amplitude(desc, ref_bt);
+            chk_amp = get_block_rf_amplitude(desc, chk_bt);
+            if (ref_amp != chk_amp) {
+                if (diag) {
+                    pulseqlib__diag_printf(diag,
+                        "Cross-pass RF amplitude mismatch: pass %d "
+                        "pos %d has %.6g, pass 0 has %.6g\n",
+                        p, j, (double)chk_amp, (double)ref_amp);
+                }
+                return PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC;
+            }
+
+            /* RF shim ID */
+            ref_shim = get_block_rf_shim_id(desc, ref_bt);
+            chk_shim = get_block_rf_shim_id(desc, chk_bt);
+            if (ref_shim != chk_shim) {
+                if (diag) {
+                    pulseqlib__diag_printf(diag,
+                        "Cross-pass RF shim mismatch: pass %d "
+                        "pos %d has shim_id %d, pass 0 has %d\n",
+                        p, j, chk_shim, ref_shim);
+                }
+                return PULSEQLIB_ERR_CONSISTENCY_RF_SHIM_PERIODIC;
+            }
+        }
+    }
+
+    return PULSEQLIB_SUCCESS;
+}
+
+/*
  * check_scan_table_segments --
  *   Walk the scan table and verify that each entry's block definition ID
  *   matches the segment definition indicated by scan_table_seg_id.
@@ -414,6 +475,20 @@ static int check_consistency(
                 }
             }
         }
+
+        /* (d) Cross-pass RF amplitude + shim ID consistency */
+        if (desc->num_passes > 1) {
+            rc = check_cross_pass_rf_consistency(desc, diag);
+            if (PULSEQLIB_FAILED(rc)) {
+                if (diag) {
+                    pulseqlib__diag_printf(diag,
+                        "Consistency check failed: cross-pass RF "
+                        "mismatch in subsequence %d\n",
+                        subseq_idx);
+                }
+                return rc;
+            }
+        }
     }
 
     return PULSEQLIB_SUCCESS;
@@ -524,23 +599,9 @@ int pulseqlib__get_collection_descriptors(
         result = pulseqlib__build_scan_table(&desc, num_averages, diag);
         if (PULSEQLIB_FAILED(diag->code)) goto fail;
 
-        /* Try blockTable-based segmentation first */
-        result = pulseqlib__get_segments_in_tr(&desc, diag, &raw->sequences[i]);
-        if (PULSEQLIB_FAILED(diag->code)) {
-            /* Gradient boundary error → fall back to scanTable segmentation */
-            if (diag->code == PULSEQLIB_ERR_SEG_NONZERO_START_GRAD ||
-                diag->code == PULSEQLIB_ERR_SEG_NONZERO_END_GRAD) {
-                pulseqlib_diagnostic_init(diag);
-                result = pulseqlib__get_scan_table_segments(&desc, diag, &raw->sequences[i].opts);
-                if (PULSEQLIB_FAILED(diag->code)) goto fail;
-            } else {
-                goto fail;
-            }
-        } else {
-            /* blockTable segmentation succeeded: backfill scan_table_seg_id */
-            result = pulseqlib__fill_scan_seg_id_from_blocktable(&desc);
-            if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
-        }
+        /* Scan-table-only segmentation (prep / main / cooldown) */
+        result = pulseqlib__get_scan_table_segments(&desc, diag, &raw->sequences[i].opts);
+        if (PULSEQLIB_FAILED(diag->code)) goto fail;
 
         result = pulseqlib__calc_segment_timing(&desc, diag);
         if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
