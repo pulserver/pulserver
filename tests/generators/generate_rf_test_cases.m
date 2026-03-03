@@ -23,6 +23,7 @@ gx_trap = makeTrapezoid('x', 'Area', 1000, 'Duration', 1e-3);
 rf180 = makeBlockPulse(pi,'Duration', 1e-3, 'use', 'excitation');
 seq = mr.Sequence();
 seq.addBlock(rf180);
+seq.write(fullfile(dataDir, '00_basic_rfstat.seq'));
 
 %% ------------------------------------------------------------------------
 % Periodic rf amplitude sequence (e.g., MRF)
