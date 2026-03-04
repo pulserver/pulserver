@@ -13,6 +13,7 @@
 /* Forward declarations -- defined in test_helpers.h and the test files */
 int test_safety_grad_main(void);
 int test_rf_stats_main(void);
+int test_segmentation_main(void);
 
 int main(void)
 {
@@ -23,6 +24,9 @@ int main(void)
 
     printf("\n==== test_rf_stats ====\n");
     failed += test_rf_stats_main();
+
+    printf("\n==== test_segmentation ====\n");
+    failed += test_segmentation_main();
 
     printf("\n");
     if (failed)

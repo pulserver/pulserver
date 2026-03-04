@@ -545,7 +545,7 @@ class SequenceCollection(pp.Sequence):
         ----------
         sequence_idx : int
             Subsequence index (0-based, default 0).
-        tr_instance : int or {'max_pos', 'min_abs'}
+        tr_instance : int or {'max_pos', 'min_pos', 'min_abs'}
             TR instance to display.  Integer values select a specific
             TR (0 … num_averages * num_trs − 1).  Instance 0 may
             include preparation blocks; the last instance may include
@@ -555,7 +555,8 @@ class SequenceCollection(pp.Sequence):
             Special strings:
 
             - ``'max_pos'`` — position-maximum envelope (default).
-            - ``'min_abs'`` — definition-minimum envelope.
+            - ``'min_pos'`` — min |amplitude|, preserve sign.
+            - ``'min_abs'`` — deprecated alias for ``'min_pos'``.
         hide_prep : bool
             Hide preparation blocks (default ``True``).  Only relevant
             when *tr_instance* is 0 and the subsequence has a

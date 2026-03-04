@@ -335,26 +335,39 @@ function export_scan_table(base, N, num_averages, gt)
 % for prep (once per pass), main (repeated num_averages times per pass),
 % cooldown (once per pass), and multiple passes.
 %
+% Each pass operates on its own slice of the block table:
+%   pass_len = N / num_passes
+%   base_offset = pass * pass_len
+%   prep_idx  = base_offset .. base_offset + num_prep - 1
+%   main_idx  = base_offset + num_prep .. base_offset + pass_len - num_cool - 1
+%   cool_idx  = base_offset + pass_len - num_cool .. base_offset + pass_len - 1
+%
+% Per-pass scan order: prep on first avg, cooldown on last avg, main every avg.
+% Total rows = num_passes * (num_prep + num_averages * num_main_per_pass + num_cool)
+%
 % Output: _scan_table.csv with columns (scan_pos, block_idx)
 
     num_prep = gt.num_prep_blocks;
     num_cool = gt.num_cool_blocks;
-    num_main = N - num_prep - num_cool;
     num_passes = 1;
     if isfield(gt, 'num_passes'), num_passes = gt.num_passes; end
 
-    prep_idx = 0:(num_prep - 1);
-    main_idx = num_prep:(num_prep + num_main - 1);
-    cool_idx = (num_prep + num_main):(N - 1);
+    pass_len = N / num_passes;
+    num_main = pass_len - num_prep - num_cool;
 
-    % Per-pass scan order: prep on first avg, cooldown on last avg
-    pass_idx = [];
-    for avg = 0:(num_averages - 1)
-        if avg == 0,              pass_idx = [pass_idx, prep_idx]; end %#ok<AGROW>
-        pass_idx = [pass_idx, main_idx]; %#ok<AGROW>
-        if avg == num_averages-1, pass_idx = [pass_idx, cool_idx]; end %#ok<AGROW>
+    block_idx = [];
+    for pass = 0:(num_passes - 1)
+        base_offset = pass * pass_len;
+        prep_idx = base_offset:(base_offset + num_prep - 1);
+        main_idx = (base_offset + num_prep):(base_offset + num_prep + num_main - 1);
+        cool_idx = (base_offset + pass_len - num_cool):(base_offset + pass_len - 1);
+
+        for avg = 0:(num_averages - 1)
+            if avg == 0,              block_idx = [block_idx, prep_idx]; end %#ok<AGROW>
+            block_idx = [block_idx, main_idx]; %#ok<AGROW>
+            if avg == num_averages-1, block_idx = [block_idx, cool_idx]; end %#ok<AGROW>
+        end
     end
-    block_idx = repmat(pass_idx, 1, num_passes);
 
     fid = fopen([base '_scan_table.csv'], 'w');
     fprintf(fid, 'scan_pos,block_idx\n');

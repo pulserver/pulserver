@@ -276,7 +276,7 @@ void pulseqlib_tr_gradient_waveforms_free(pulseqlib_tr_gradient_waveforms* w);
  *
  * Amplitude modes:
  *   - PULSEQLIB_AMP_MAX_POS (0) — position-max across all TRs
- *   - PULSEQLIB_AMP_MIN_ABS (1) — definition-min amplitude
+ *   - PULSEQLIB_AMP_MIN_POS (1) — min |amplitude|, preserve sign
  *   - PULSEQLIB_AMP_ACTUAL  (2) — signed amplitude for given TR index
  *
  * For modes 0 and 1, @p tr_index is ignored (canonical main TR is used).
@@ -292,7 +292,7 @@ void pulseqlib_tr_gradient_waveforms_free(pulseqlib_tr_gradient_waveforms* w);
  *
  * @param[in]  coll               Loaded collection.
  * @param[in]  subseq_idx         Subsequence index (0 for single-seq).
- * @param[in]  amplitude_mode     PULSEQLIB_AMP_MAX_POS / _MIN_ABS / _ACTUAL.
+ * @param[in]  amplitude_mode     PULSEQLIB_AMP_MAX_POS / _MIN_POS / _ACTUAL.
  * @param[in]  tr_index           TR instance (only for _ACTUAL mode).
  * @param[in]  include_prep       Non-zero to prepend prep blocks.
  * @param[in]  include_cooldown   Non-zero to append cooldown blocks.

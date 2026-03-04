@@ -197,13 +197,14 @@ typedef struct pulseqlib_grad_definition {
     int shot_shape_ids[PULSEQLIB_MAX_GRAD_SHOTS];
     float max_amplitude[PULSEQLIB_MAX_GRAD_SHOTS];
     float min_amplitude[PULSEQLIB_MAX_GRAD_SHOTS];
+    float min_amplitude_signed[PULSEQLIB_MAX_GRAD_SHOTS];
     float slew_rate[PULSEQLIB_MAX_GRAD_SHOTS];
     float energy[PULSEQLIB_MAX_GRAD_SHOTS];
     float first_value[PULSEQLIB_MAX_GRAD_SHOTS];
     float last_value[PULSEQLIB_MAX_GRAD_SHOTS];
 } pulseqlib_grad_definition;
 
-#define PULSEQLIB_GRAD_DEFINITION_INIT {0, 0, 0, 0, 0, 0, 0, 1, {0}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}}
+#define PULSEQLIB_GRAD_DEFINITION_INIT {0, 0, 0, 0, 0, 0, 0, 1, {0}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}}
 
 typedef struct pulseqlib_grad_table_element {
     int id;

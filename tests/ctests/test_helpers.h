@@ -131,11 +131,34 @@ static TEST_MAYBE_UNUSED int load_seq(
                           1);  /* num_averages     */
 }
 
+/**
+ * Load a .seq file from TEST_DATA_DIR with a custom num_averages.
+ *
+ * Identical to load_seq but accepts num_averages as a parameter.
+ */
+static TEST_MAYBE_UNUSED int load_seq_with_averages(
+    pulseqlib_collection** coll,
+    const char* filename,
+    const pulseqlib_opts* opts,
+    int num_averages)
+{
+    pulseqlib_diagnostic diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    char path[512];
+
+    (void)snprintf(path, sizeof(path), "%s%s", TEST_DATA_DIR, filename);
+    return pulseqlib_read(coll, &diag, path, opts,
+                          0,   /* cache_binary     */
+                          0,   /* verify_signature */
+                          0,   /* parse_labels     */
+                          num_averages);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Forward declarations for suite entry points                       */
 /* ------------------------------------------------------------------ */
 
 int test_safety_grad_main(void);
 int test_rf_stats_main(void);
+int test_segmentation_main(void);
 
 #endif /* TEST_HELPERS_H */

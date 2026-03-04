@@ -693,11 +693,11 @@ int pulseqlib__get_gradient_waveforms_range(
                 gz_def, gz_tab, t0,
                 &pos_max_gz[n * PULSEQLIB_MAX_GRAD_SHOTS], block_dur_us);
         } else if (amplitude_mode == 2) {
-            /* definition-min mode: use gd->min_amplitude */
+            /* definition-min mode: use gd->min_amplitude_signed (preserve sign) */
             for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
             if (gx_def) {
                 for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
-                    actual_amp[k] = gx_def->min_amplitude[k];
+                    actual_amp[k] = gx_def->min_amplitude_signed[k];
             }
             idx_gx += fill_grad_waveform_for_block(desc,
                 time_gx, wf_gx, idx_gx,
@@ -706,7 +706,7 @@ int pulseqlib__get_gradient_waveforms_range(
             for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
             if (gy_def) {
                 for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
-                    actual_amp[k] = gy_def->min_amplitude[k];
+                    actual_amp[k] = gy_def->min_amplitude_signed[k];
             }
             idx_gy += fill_grad_waveform_for_block(desc,
                 time_gy, wf_gy, idx_gy,
@@ -715,7 +715,7 @@ int pulseqlib__get_gradient_waveforms_range(
             for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
             if (gz_def) {
                 for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
-                    actual_amp[k] = gz_def->min_amplitude[k];
+                    actual_amp[k] = gz_def->min_amplitude_signed[k];
             }
             idx_gz += fill_grad_waveform_for_block(desc,
                 time_gz, wf_gz, idx_gz,
@@ -1249,17 +1249,17 @@ int pulseqlib_get_tr_waveforms(
                 out->gz.time_us, out->gz.amplitude, idx_gz,
                 gz_def, gz_tab, t0,
                 &pos_max_gz[pos_in_tr * PULSEQLIB_MAX_GRAD_SHOTS], block_dur_us);
-        } else if (amplitude_mode == PULSEQLIB_AMP_MIN_ABS) {
+        } else if (amplitude_mode == PULSEQLIB_AMP_MIN_POS) {
             for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
-            if (gx_def) { for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = gx_def->min_amplitude[k]; }
+            if (gx_def) { for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = gx_def->min_amplitude_signed[k]; }
             idx_gx += fill_grad_waveform_for_block(desc, out->gx.time_us, out->gx.amplitude, idx_gx, gx_def, gx_tab, t0, actual_amp, block_dur_us);
 
             for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
-            if (gy_def) { for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = gy_def->min_amplitude[k]; }
+            if (gy_def) { for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = gy_def->min_amplitude_signed[k]; }
             idx_gy += fill_grad_waveform_for_block(desc, out->gy.time_us, out->gy.amplitude, idx_gy, gy_def, gy_tab, t0, actual_amp, block_dur_us);
 
             for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
-            if (gz_def) { for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = gz_def->min_amplitude[k]; }
+            if (gz_def) { for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = gz_def->min_amplitude_signed[k]; }
             idx_gz += fill_grad_waveform_for_block(desc, out->gz.time_us, out->gz.amplitude, idx_gz, gz_def, gz_tab, t0, actual_amp, block_dur_us);
         } else {
             /* PULSEQLIB_AMP_ACTUAL or MAX_POS for prep/cooldown blocks */

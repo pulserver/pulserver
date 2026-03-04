@@ -208,7 +208,7 @@ typedef struct pulseqlib_tr_gradient_waveforms {
 
 /** @brief Amplitude modes for pulseqlib_get_tr_waveforms. */
 #define PULSEQLIB_AMP_MAX_POS  0  /**< Position-max (safety worst case) */
-#define PULSEQLIB_AMP_MIN_ABS  1  /**< Definition-min (best-case k-space) */
+#define PULSEQLIB_AMP_MIN_POS  1  /**< Min |amplitude|, preserve sign (k-space view) */
 #define PULSEQLIB_AMP_ACTUAL   2  /**< Actual signed amplitude for given TR */
 
 /**

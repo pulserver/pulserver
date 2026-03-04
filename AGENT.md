@@ -396,22 +396,30 @@ analysis, the library supports three **amplitude modes**
 
 | Mode | Name | Description |
 |------|------|-------------|
-| 0 | Actual | Uses the per-instance amplitude from the block table entry (one shot index). |
-| 1 | Position-max | For each block **position** within the TR, computes the worst-case (maximum \|amplitude\|) across **all TR instances** that share the same shot-index group. Used for **safety checks** — gives the worst-case gradient waveform at every position. |
-| 2 | Definition-min | For each gradient definition, uses `gd->min_amplitude[shot]` (the minimum \|amplitude\| observed across all table entries for that definition and shot index). Used for **k-space zero-crossing detection** — gives the best-case (smallest) gradient amplitude, which is more robust for identifying crossings. |
+| 0 | MAX_POS (Position-max) | For each block **position** within the TR, computes the worst-case (maximum \|amplitude\|) across **all TR instances** that share the same shot-index group. Used for **safety checks**. |
+| 1 | MIN_POS (Min-positive) | For each gradient definition, uses `gd->min_amplitude_signed[shot]` — the **signed** value whose \|amplitude\| is smallest across all table entries for that definition and shot index. Used for **k-space analysis** — gives the smallest gradient amplitude while preserving the sign for correct phase accumulation. |
+| 2 | ACTUAL | Uses the per-instance amplitude from the block table entry (one shot index). |
 
 The position-max computation (`compute_position_max_amplitudes_filtered`)
 groups TR instances by shot-index fingerprint
 (`find_unique_shot_trs`), then for each position in the TR template
 takes `max(|amplitude|)` across all instances in the matching group.
 
-> **Note**: `min_amplitude` is currently the minimum **absolute**
-> amplitude across all table entries for a grad definition + shot.  A
-> more robust alternative would be **min positional amplitude** (the
-> minimum at each TR position across instances, analogous to how
-> position-max works) rather than global min across all entries.
+> **Note**: `min_amplitude_signed` preserves the sign of the value
+> whose absolute magnitude is smallest.  The `min_amplitude` field
+> stores the corresponding `|amplitude|` for internal comparison.
+> Both are computed during gradient deduplication in `dedup.c`.
 
-### 8.2 Max-energy segment instance
+### 8.2 K-zero refinement (per-ADC)
+
+For each ADC event in a segment, the kzero sample index is determined
+by finding the minimum of `krss` (k-space RSS magnitude) within the
+ADC's time window.  This per-ADC approach replaces the previous global
+zero-crossing search and is more robust for sequences with multiple
+readout types or non-Cartesian trajectories.  The N/2 fallback is
+used when no k-space trajectory is available.
+
+### 8.3 Max-energy segment instance
 
 After segment deduplication, each unique segment may have many
 instances in the expanded segment table.  The library tracks which
@@ -581,7 +589,7 @@ non-copyable) wraps all C getters as methods. Value types: `Opts`,
 - **Safety TR selection** uses position-max amplitude (mode 1) to get
   worst-case gradients across all TR instances. **k-space crossing
   detection** uses definition-min amplitude (mode 2). See §8.1.
-- The max-energy segment instance (§8.2) determines which instance's
+- The max-energy segment instance (§8.3) determines which instance's
   gradients define the initial state for waveform connection.
 - **TR detection is RF-aware** — blocks identical in structure but
   differing in RF amplitude or shim ID get distinct pattern values.

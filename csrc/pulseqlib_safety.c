@@ -181,11 +181,13 @@ int pulseqlib__calc_segment_timing(
     int  num_refocus;
 
     /* ADC-to-kzero mapping variables */
-    int a, s, closest_idx, zi, kz_sample;
-    float seg_time_offset, adc_mid_us, best_dist, dist;
-    float kzero_time_us, kzero_in_adc;
+    int a, s, kz_sample;
+    float seg_time_offset;
+    float kzero_in_adc;
     int pos_in_tr, num_prep;
     int tr_size;
+    int adc_raster_start, adc_raster_end, min_raster_idx;
+    float min_krss_val;
 
     int has_kspace;
 
@@ -455,32 +457,33 @@ int pulseqlib__calc_segment_timing(
                         (float)(adef->num_samples / 2) *
                         (float)adef->dwell_time * 1e-3f;
 
-                    /* refine kzero via k-space trajectory */
-                    if (has_kspace && num_kzero > 0 &&
+                    /* refine kzero via per-ADC local krss minimum */
+                    if (has_kspace && krss && n_samples > 0 &&
                         seg->start_block >= num_prep &&
                         seg->start_block < num_prep + tr_size) {
 
-                        adc_mid_us = seg_time_offset +
-                            adc_arr[adc_count].start_us +
-                            0.5f * adc_dur_us;
+                        /* convert ADC window to raster indices */
+                        adc_raster_start = (int)((seg_time_offset +
+                            adc_arr[adc_count].start_us) / dt_us);
+                        adc_raster_end   = (int)((seg_time_offset +
+                            adc_arr[adc_count].end_us) / dt_us);
+                        if (adc_raster_start < 0) adc_raster_start = 0;
+                        if (adc_raster_end >= n_samples)
+                            adc_raster_end = n_samples - 1;
 
-                        /* find closest k=0 crossing */
-                        closest_idx = 0;
-                        best_dist   = 1e30f;
-                        for (a = 0; a < num_kzero; ++a) {
-                            zi = kzero_indices[a];
-                            dist = (float)zi * dt_us - adc_mid_us;
-                            if (dist < 0.0f) dist = -dist;
-                            if (dist < best_dist) {
-                                best_dist   = dist;
-                                closest_idx = a;
+                        /* find raster index of minimum krss in window */
+                        min_raster_idx = adc_raster_start;
+                        min_krss_val   = krss[adc_raster_start];
+                        for (a = adc_raster_start + 1;
+                             a <= adc_raster_end; ++a) {
+                            if (krss[a] < min_krss_val) {
+                                min_krss_val   = krss[a];
+                                min_raster_idx = a;
                             }
                         }
 
-                        /* convert to ADC sample index */
-                        kzero_time_us = (float)kzero_indices[closest_idx] *
-                                        dt_us;
-                        kzero_in_adc  = kzero_time_us -
+                        /* convert global raster index to ADC sample */
+                        kzero_in_adc = (float)min_raster_idx * dt_us -
                             (seg_time_offset + adc_arr[adc_count].start_us);
                         kz_sample = (int)(kzero_in_adc /
                             ((float)adef->dwell_time * 1e-3f));
@@ -489,7 +492,7 @@ int pulseqlib__calc_segment_timing(
                             kz_sample = adef->num_samples - 1;
                         adc_arr[adc_count].kzero_index = kz_sample;
                         adc_arr[adc_count].kzero_us    =
-                            kzero_time_us - seg_time_offset;
+                            (float)min_raster_idx * dt_us - seg_time_offset;
                     }
 
                     adc_count++;

@@ -1,6 +1,21 @@
 %% generate_once_flag_sequences
 %
 % Generates Pulseq .seq files to test proper usage of ONCE flag.
+%
+% 13 test cases:
+%   01: single TR valid
+%   02: dual TR valid
+%   03: triple TR valid
+%   04: degenerate prep/cooldown
+%   05: prep too long
+%   06: cooldown too long
+%   07: ONCE in middle, invalid
+%   08: multipass valid [P,M,M,C]×3
+%   09: multipass valid prep only
+%   10: multipass valid cooldown only
+%   11: multipass multi-TR
+%   12: multipass fail diff main
+%   13: multipass fail diff length
 
 clear; clc;
 import mr.*
@@ -40,57 +55,61 @@ gx_rdown2 = makeExtendedTrapezoid('x', ...
     'Amplitude', [200000, 0], ...
     'Times',     [0, 1e-4]);
 
+lblOnce0 = mr.makeLabel('SET','ONCE', 0);
+
 %% ------------------------------------------------------------------------
-% Single TR, valid case (first TR is also last TR)
+% 01: Single TR, valid case (first TR is also last TR)
+% Merged: ONCE=0 into first main block (rf + gx_flat1)
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1)); % we label the first as preparing to exclude them if the sequence is repeated
-seq.addBlock(mr.makeLabel('SET','ONCE', 0)); % remove preparing block label
-seq.addBlock(rf, gx_flat1);
+seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));
+seq.addBlock(rf, gx_flat1, lblOnce0);
 seq.addBlock(gx_flat1);
-seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2)); % we also label this block as the exit block, which excludes it from all but last repetitions if the sequence is repeated
+seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));
 seq.write(fullfile(dataDir, '01_single_tr_valid_once.seq'));
 
 %% ------------------------------------------------------------------------
-% Double TR, valid case
+% 02: Double TR, valid case
+% Merged: ONCE=0 into first main block
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1)); % we label the first as preparing to exclude them if the sequence is repeated
-seq.addBlock(mr.makeLabel('SET','ONCE', 0)); % remove preparing block label
-seq.addBlock(rf, gx_flat1);
+seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));
+seq.addBlock(rf, gx_flat1, lblOnce0);
 seq.addBlock(gx_flat1);
 seq.addBlock(rf, gx_flat1);
 seq.addBlock(gx_flat1);
-seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2)); % we also label this block as the exit block, which excludes it from all but last repetitions if the sequence is repeated
+seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));
 seq.write(fullfile(dataDir, '02_dual_tr_valid_once.seq'));
 
 %% ------------------------------------------------------------------------
-% Triple TR (same as N-TRs), valid case
+% 03: Triple TR (same as N-TRs), valid case
+% Merged: ONCE=0 into first main block
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1)); % we label the first as preparing to exclude them if the sequence is repeated
-seq.addBlock(mr.makeLabel('SET','ONCE', 0)); % remove preparing block label
-seq.addBlock(rf, gx_flat1);
+seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));
+seq.addBlock(rf, gx_flat1, lblOnce0);
 seq.addBlock(gx_flat1);
 seq.addBlock(rf, gx_flat1);
 seq.addBlock(gx_flat1);
 seq.addBlock(rf, gx_flat1);
 seq.addBlock(gx_flat1);
-seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2)); % we also label this block as the exit block, which excludes it from all but last repetitions if the sequence is repeated
+seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));
 seq.write(fullfile(dataDir, '03_multi_tr_valid_once.seq'));
 
 %% ------------------------------------------------------------------------
-% Triple TR (same as N-TRs), degenerate prep-cooldown
+% 04: Triple TR (same as N-TRs), degenerate prep-cooldown
+% This matches original test 04 with merged ONCE=0.
+% Prep pattern == first main TR, cooldown pattern == last main TR.
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
 seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));
 seq.addBlock(rf, gx_flat1);
 seq.addBlock(gx_rdown1);
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 0));
+seq.addBlock(gx_rup1, lblOnce0);
 seq.addBlock(rf, gx_flat1);
 seq.addBlock(gx_rdown1);
 seq.addBlock(gx_rup1);
@@ -105,107 +124,57 @@ seq.addBlock(gx_rdown1);
 seq.write(fullfile(dataDir, '04_multi_tr_valid_once_degenerate.seq'));
 
 %% ------------------------------------------------------------------------
-% Triple TR (same as N-TRs), valid case - prep only
+% 05: Prep too long (was 08)
+% Merged: ONCE=0 into first main block
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
-seq.addBlock(mr.makeDelay(0.1e-3), mr.makeLabel('SET','ONCE', 1)); % we label the first as preparing to exclude them if the sequence is repeated
-seq.addBlock(mr.makeLabel('SET','ONCE', 0)); % remove preparing block label
-seq.addBlock(gx_rup1);
-seq.addBlock(rf, gx_flat1);
+seq.addBlock(gx_rup1_long, mr.makeLabel('SET','ONCE', 1));
+seq.addBlock(rf, gx_flat1, lblOnce0);
 seq.addBlock(gx_flat1);
 seq.addBlock(rf, gx_flat1);
 seq.addBlock(gx_flat1);
 seq.addBlock(rf, gx_flat1);
 seq.addBlock(gx_flat1);
-seq.addBlock(gx_rdown1);
-seq.write(fullfile(dataDir, '05_multi_tr_once_prep_only.seq'));
+seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));
+seq.write(fullfile(dataDir, '05_prep_too_long.seq'));
 
 %% ------------------------------------------------------------------------
-% Triple TR (same as N-TRs), valid case - cooldown only
+% 06: Cooldown too long (was 09)
+% Merged: ONCE=0 into first main block
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
-seq.addBlock(gx_rup1);
-seq.addBlock(rf, gx_flat1);
+seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));
+seq.addBlock(rf, gx_flat1, lblOnce0);
 seq.addBlock(gx_flat1);
 seq.addBlock(rf, gx_flat1);
 seq.addBlock(gx_flat1);
 seq.addBlock(rf, gx_flat1);
 seq.addBlock(gx_flat1);
-seq.addBlock(gx_rdown1);
-seq.addBlock(mr.makeDelay(0.1e-3), mr.makeLabel('SET','ONCE', 2)); % we also label this block as the exit block, which excludes it from all but last repetitions if the sequence is repeated
-seq.write(fullfile(dataDir, '06_multi_tr_once_cooldown_only.seq'));
+seq.addBlock(gx_rdown1_long, mr.makeLabel('SET','ONCE', 2));
+seq.write(fullfile(dataDir, '06_cooldown_too_long.seq'));
 
 %% ------------------------------------------------------------------------
-% Nonvalid case (first TR is also last TR)
+% 07: Invalid: ONCE in the middle (was 10)
+% Two ONCE=0 blocks merged into their respective next main blocks.
+% The once=1 sections produce periods of different lengths / block-ID
+% patterns → ERR_INVALID_ONCE_FLAGS.
 % ------------------------------------------------------------------------
 
 seq = mr.Sequence();
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1)); % we label the first as preparing to exclude them if the sequence is repeated
-seq.addBlock(mr.makeLabel('SET','ONCE', 0)); % remove preparing block label
-seq.addBlock(rf, gx_flat1);
-seq.addBlock(gx_flat1);
-seq.addBlock(gx_rup2);
-seq.addBlock(gx_flat2);
-seq.addBlock(gx_rdown2, mr.makeLabel('SET','ONCE', 2)); % we also label this block as the exit block, which excludes it from all but last repetitions if the sequence is repeated
-seq.write(fullfile(dataDir, '07_single_tr_nonvalid_once.seq'));
-
-
-%% ------------------------------------------------------------------------
-% Triple TR (same as N-TRs), nonvalid case - prep too long
-% ------------------------------------------------------------------------
-
-seq = mr.Sequence();
-seq.addBlock(gx_rup1_long, mr.makeLabel('SET','ONCE', 1)); % we label the first as preparing to exclude them if the sequence is repeated
-seq.addBlock(mr.makeLabel('SET','ONCE', 0)); % remove preparing block label
-seq.addBlock(rf, gx_flat1);
-seq.addBlock(gx_flat1);
-seq.addBlock(rf, gx_flat1);
-seq.addBlock(gx_flat1);
-seq.addBlock(rf, gx_flat1);
-seq.addBlock(gx_flat1);
-seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2)); % we also label this block as the exit block, which excludes it from all but last repetitions if the sequence is repeated
-seq.write(fullfile(dataDir, '08_prep_too_long.seq'));
-
-%% ------------------------------------------------------------------------
-% Triple TR (same as N-TRs), nonvalid case - cooldown too long
-% ------------------------------------------------------------------------
-
-seq = mr.Sequence();
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1)); % we label the first as preparing to exclude them if the sequence is repeated
-seq.addBlock(mr.makeLabel('SET','ONCE', 0)); % remove preparing block label
-seq.addBlock(rf, gx_flat1);
-seq.addBlock(gx_flat1);
-seq.addBlock(rf, gx_flat1);
-seq.addBlock(gx_flat1);
-seq.addBlock(rf, gx_flat1);
-seq.addBlock(gx_flat1);
-seq.addBlock(gx_rdown1_long, mr.makeLabel('SET','ONCE', 2)); % we also label this block as the exit block, which excludes it from all but last repetitions if the sequence is repeated
-seq.write(fullfile(dataDir, '09_cooldown_too_long.seq'));
-
-%% ------------------------------------------------------------------------
-% Invalid: Once in the middle of sequence (non-identical inner loop periods)
-% Note: once in the middle is allowed if all inner loop repetitions are
-% structurally identical.  This case is invalid because the once=1
-% sections produce periods of different lengths / block-ID patterns.
-% ------------------------------------------------------------------------
-
-seq = mr.Sequence();
-seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1)); % we label the first as preparing to exclude them if the sequence is repeated
-seq.addBlock(mr.makeLabel('SET','ONCE', 0)); % remove preparing block label
-seq.addBlock(rf, gx_flat1);
+seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));
+seq.addBlock(rf, gx_flat1, lblOnce0);
 seq.addBlock(gx_flat1);
 seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 1));
 seq.addBlock(gx_flat1);
-seq.addBlock(mr.makeLabel('SET','ONCE', 0)); % remove preparing block label
-seq.addBlock(rf, gx_flat1);
+seq.addBlock(rf, gx_flat1, lblOnce0);
 seq.addBlock(gx_flat1);
-seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2)); % we also label this block as the exit block, which excludes it from all but last repetitions if the sequence is repeated
-seq.write(fullfile(dataDir, '10_multi_tr_nonvalid_once_in_the_middle.seq'));
+seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));
+seq.write(fullfile(dataDir, '07_multi_tr_nonvalid_once_in_the_middle.seq'));
 
 %% ------------------------------------------------------------------------
-% Valid multipass: [P, M, M, C] x 3 passes
+% 08: Valid multipass: [P, M, M, C] x 3 passes (was 11)
 % Simplest complete multipass case: each pass has prep + 2 main + cooldown.
 % ONCE=0 on first main block clears the ONCE flag.
 % After folding: num_passes=3, num_prep=1, num_cooldown=1, 2 main blocks.
@@ -219,10 +188,11 @@ for pass = 1:3
     seq.addBlock(gx_flat1);                                      % M
     seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));     % C: ramp 100k→0
 end
-seq.write(fullfile(dataDir, '11_multipass_valid_prep_cooldown.seq'));
+seq.write(fullfile(dataDir, '08_multipass_valid_prep_cooldown.seq'));
 
 %% ------------------------------------------------------------------------
-% Valid multipass: [P, M, M] x 3 passes   (prep only, no cooldown)
+% 09: Valid multipass: [P, M, M] x 3 passes   (prep only, no cooldown)
+%     (was 12)
 % Tests the branch where has_cooldown=0 (ONCE=2 never appears in labelset).
 % After folding: num_passes=3, num_prep=1, num_cooldown=0.
 % Pass boundaries at blocks 0, 3, 6 (transitions back to once=1).
@@ -234,10 +204,11 @@ for pass = 1:3
     seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));  % M: excitation
     seq.addBlock(gx_rdown1);                                     % M: ramp 100k→0
 end
-seq.write(fullfile(dataDir, '12_multipass_valid_prep_only.seq'));
+seq.write(fullfile(dataDir, '09_multipass_valid_prep_only.seq'));
 
 %% ------------------------------------------------------------------------
-% Valid multipass: [M, M, C] x 3 passes   (cooldown only, no prep)
+% 10: Valid multipass: [M, M, C] x 3 passes   (cooldown only, no prep)
+%     (was 13)
 % Tests the branch where has_prep=0 (ONCE=1 never appears in labelset).
 % After folding: num_passes=3, num_prep=0, num_cooldown=1.
 % Pass boundaries at blocks 0, 3, 6 (transitions back to once=0).
@@ -249,27 +220,11 @@ for pass = 1:3
     seq.addBlock(rf, gx_flat1);                                  % M: excitation
     seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));     % C: ramp 100k→0
 end
-seq.write(fullfile(dataDir, '13_multipass_valid_cooldown_only.seq'));
+seq.write(fullfile(dataDir, '10_multipass_valid_cooldown_only.seq'));
 
 %% ------------------------------------------------------------------------
-% Valid multipass: [P, M, M] x 2 passes + trailing [C]
-% Exercises the trailing-cooldown branch: the last detected pass has one
-% extra block (once==2) beyond pass_len.  That tail is separated as
-% trailing cooldown.  Folded result: [P, M, M, C] with num_passes=2,
-% num_prep=1, num_cooldown=1.  Also tests the 2-pass minimum.
-% ------------------------------------------------------------------------
-
-seq = mr.Sequence();
-for pass = 1:2
-    seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));       % P: ramp 0→100k
-    seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));  % M: excitation
-    seq.addBlock(gx_rdown1);                                     % M: ramp 100k→0
-end
-seq.addBlock(mr.makeDelay(0.1e-3), mr.makeLabel('SET','ONCE', 2));  % trailing C
-seq.write(fullfile(dataDir, '14_multipass_valid_trailing_cooldown.seq'));
-
-%% ------------------------------------------------------------------------
-% Valid multipass: [P, M, M, M, M, C] x 3 passes  (multi-TR per pass)
+% 11: Valid multipass: [P, M, M, M, M, C] x 3 passes  (multi-TR per pass)
+%     (was 15)
 % Each pass has 4 main blocks = 2 TRs (each TR = [rf+gx_flat1, gx_flat1]).
 % After folding: num_passes=3, num_prep=1, num_cooldown=1, num_trs=2
 % Tests that TR identification works correctly within a multipass period.
@@ -284,10 +239,10 @@ for pass = 1:3
     seq.addBlock(gx_flat1);                                      % M: TR2 readout
     seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));     % C: ramp 100k→0
 end
-seq.write(fullfile(dataDir, '15_multipass_valid_multi_tr.seq'));
+seq.write(fullfile(dataDir, '11_multipass_valid_multi_tr.seq'));
 
 %% ------------------------------------------------------------------------
-% Invalid multipass: different main block types across passes
+% 12: Invalid multipass: different main block types across passes (was 16)
 % Pass 1: [P, rf+gx_flat1, C]     -- main block has RF
 % Pass 2: [P, gx_flat1,    C]     -- main block has NO RF (different def)
 % No valid period → PULSEQLIB_ERR_INVALID_ONCE_FLAGS
@@ -302,10 +257,10 @@ seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));         % C
 seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));           % P
 seq.addBlock(gx_flat1, mr.makeLabel('SET','ONCE', 0));          % M': no RF → different block def
 seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));         % C
-seq.write(fullfile(dataDir, '16_multipass_fail_diff_main.seq'));
+seq.write(fullfile(dataDir, '12_multipass_fail_diff_main.seq'));
 
 %% ------------------------------------------------------------------------
-% Invalid multipass: different pass lengths
+% 13: Invalid multipass: different pass lengths (was 17)
 % Pass 1: [P, M, M, C]  (4 blocks)
 % Pass 2: [P, M, C]     (3 blocks)
 % Pass lengths differ (4 vs 3) → ERR_INVALID_ONCE_FLAGS
@@ -321,6 +276,6 @@ seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));         % C
 seq.addBlock(gx_rup1, mr.makeLabel('SET','ONCE', 1));           % P
 seq.addBlock(rf, gx_flat1, mr.makeLabel('SET','ONCE', 0));      % M
 seq.addBlock(gx_rdown1, mr.makeLabel('SET','ONCE', 2));         % C
-seq.write(fullfile(dataDir, '17_multipass_fail_diff_length.seq'));
+seq.write(fullfile(dataDir, '13_multipass_fail_diff_length.seq'));
 
 fprintf('All sequences generated.\n')
