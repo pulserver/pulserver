@@ -283,6 +283,7 @@ static void seg_def_test(const char* basename, int num_segments)
         mu_assert(PULSEQLIB_SUCCEEDED(rc),
                   "get_segment_block_def_indices failed");
         mu_assert(rc <= MAX_SEG_IDS, "segment too large for ids_buf");
+        mu_assert_int_eq(expected.count, rc);
 
         for (i = 0; i < expected.count; ++i) {
             if (expected.ids[i] != ids_buf[i]) {
@@ -302,9 +303,9 @@ static void seg_def_test(const char* basename, int num_segments)
 MU_TEST(test_segdef_bssfp)   { seg_def_test("bssfp_2d_1sl_1avg", 1); }
 MU_TEST(test_segdef_gre)     { seg_def_test("gre_2d_1sl_1avg",   1); }
 MU_TEST(test_segdef_fse)     { seg_def_test("fse_2d_1sl_1avg",   2); }
-MU_TEST(test_segdef_epi)     { seg_def_test("epi_2d_1sl_1avg",   1); }
-MU_TEST(test_segdef_mprage)  { seg_def_test("mprage_3d_1avg",    1); }
-MU_TEST(test_segdef_mpnc240) { seg_def_test("mprage_noncart_3d_240shots_1avg", 1); }
+MU_TEST(test_segdef_epi)     { seg_def_test("epi_2d_1sl_1avg",   3); }
+MU_TEST(test_segdef_mprage)  { seg_def_test("mprage_3d_1avg",    2); }
+MU_TEST(test_segdef_mpnc240) { seg_def_test("mprage_noncart_3d_240shots_1avg", 2); }
 
 MU_TEST_SUITE(suite_c_segment_defs) {
     MU_SUITE_CONFIGURE(&setup_gre, NULL);

@@ -84,10 +84,10 @@ function check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt)
 % Output is written to ../data/ relative to this script.
 %
 % gt (optional struct) contains structural ground truth:
-%   .tr_min          - mr.Sequence: representative TR with zero PE
-%                      (matches C library amplitude mode 2 = definition-min)
+%   .tr_min          - mr.Sequence: representative TR with min |PE|
+%                      (matches C library amplitude mode 1 = min positional)
 %   .tr_max          - mr.Sequence: representative TR with max |PE|
-%                      (matches C library amplitude mode 1 = position-max)
+%                      (matches C library amplitude mode 0 = max positional)
 %   .rf_center_s     - RF isocenter offset within the shape (seconds)
 %   .adc_num_samples - number of ADC samples per readout
 %   .adc_dwell_s     - ADC dwell time (seconds)
@@ -191,9 +191,10 @@ function export_ground_truth(seq, seq_fname, num_averages, gt)
     if isfield(gt, 'degenerate_cool')
         fprintf(fid, 'degenerate_cool %d\n', gt.degenerate_cool);
     end
-    if isfield(gt, 'unique_blocks')
-        tr_size = length(gt.unique_blocks);
-        fprintf(fid, 'tr_size %d\n', tr_size);
+    if isfield(gt, 'tr_size')
+        fprintf(fid, 'tr_size %d\n', gt.tr_size);
+    elseif isfield(gt, 'unique_blocks')
+        fprintf(fid, 'tr_size %d\n', length(gt.unique_blocks));
     end
     if isfield(gt, 'seg_unique_ids')
         fprintf(fid, 'num_segments %d\n', length(gt.seg_unique_ids));
@@ -222,7 +223,7 @@ function export_ground_truth(seq, seq_fname, num_averages, gt)
         export_scan_table(base, N, num_averages, gt);
     end
 
-    % --- TR gradient waveforms (min amplitude = definition-min, mode 2) ---
+    % --- TR gradient waveforms (min positional amplitude, mode 1) ---
     if isfield(gt, 'tr_min') && ~isempty(gt.tr_min)
         export_tr_waveforms(gt.tr_min, base, '_min', gt);
     elseif isfield(gt, 'tr_min_range') && ~isempty(gt.tr_min_range)
@@ -551,9 +552,8 @@ function write_bssfp(num_averages, num_slices)
     %
     % Main loop: i=1..Ny, each TR = 2 blocks starting at block 4.
     %   phaseAreas = ((0:Ny-1) - Ny/2) * deltak
-    %   i = Ny/2+1 -> zero PE (min),  i = 1 -> max negative PE (max)
-    i_min = Ny/2 + 1;   % zero PE
-    i_max = 1;           % max |PE|
+    [~, i_min] = min(abs(phaseAreas));  % min |PE| (mode 1)
+    [~, i_max] = max(abs(phaseAreas));  % max |PE| (mode 0)
     blk_min = [4 + 2*(i_min-1), 4 + 2*(i_min-1) + 1];  % [start, end]
     blk_max = [4 + 2*(i_max-1), 4 + 2*(i_max-1) + 1];
 
@@ -566,8 +566,8 @@ function write_bssfp(num_averages, num_slices)
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
-    gt.seg_unique_ids  = {[0, 1]};   % single segment, full 2-block TR
-    gt.unique_blocks   = [0, 1];
+    gt.seg_unique_ids  = {[0, 1, repmat([2, 3], 1, Ny), 4]};
+    gt.unique_blocks   = 0:4;
     gt.num_prep_blocks = 2;          % alpha/2 + align (lblOnce0 block is first main)
     gt.num_cool_blocks = 1;          % exit gx_2 block
     gt.degenerate_prep = 0;          % alpha/2 prep ~= main pattern
@@ -652,17 +652,20 @@ function write_spgr(num_slices, num_averages)
     seg_unique_ids = {[0, 1, 2, 3, 4]};  % single segment = full TR
 
     % --- representative TRs for waveform ground truth ---
-    tr_min = mr.Sequence(sys);   % zero PE  (C library mode 2: definition-min)
-    tr_max = mr.Sequence(sys);   % max  |PE| (C library mode 1: position-max)
+    [~, iPEmin] = min(abs(phaseAreas));
+    pe_min_scale = phaseAreas(iPEmin) / maxPeArea;
 
-    % --- build representative TR: min amplitude (zero PE, mode 2) ---
+    tr_min = mr.Sequence(sys);   % min positional amplitude (mode 1)
+    tr_max = mr.Sequence(sys);   % max positional amplitude (mode 0)
+
+    % --- build representative TR: min positional amplitude (mode 1) ---
     tr_min.addBlock(rf, gz);
-    tr_min.addBlock(gxPre, mr.scaleGrad(gyMax, 0.0), gzReph);
+    tr_min.addBlock(gxPre, mr.scaleGrad(gyMax, pe_min_scale), gzReph);
     tr_min.addBlock(evDelayTE);
     tr_min.addBlock(gx, adc);
-    tr_min.addBlock(gxSpoil, mr.scaleGrad(gyMax, 0.0), gzSpoil, evDelayTR);
+    tr_min.addBlock(gxSpoil, mr.scaleGrad(gyMax, -pe_min_scale), gzSpoil, evDelayTR);
 
-    % --- build representative TR: max positional amplitude (full PE, mode 1) ---
+    % --- build representative TR: max positional amplitude (mode 0) ---
     tr_max.addBlock(rf, gz);
     tr_max.addBlock(gxPre, gyMax, gzReph);
     tr_max.addBlock(evDelayTE);
@@ -912,30 +915,36 @@ function write_fse(num_slices, num_averages)
     %   2: GS3 + GR3                    (transition + readout prephasing)
     %   3: GS4 + rfref                  (refocusing)
     %   4: GS5 + GR5 + GPpre            (spoiler + readout pre + PE)
+    %       [same def as GS7 + GR7 + GPrew: timing-only dedup
+    %        merges the time-reversed pre/post spoiler blocks]
     %   5: GR6                           (readout flat, +/- ADC)
-    %   6: GS7 + GR7 + GPrew            (spoiler + readout post + PE rewind)
-    %   7: GS4                           (end crusher, no RF)
-    %   8: GS5                           (end spoiler)
-    %   9: delayTR                       (TR fill delay)
-    echo_pattern = repmat([3, 4, 5, 6], 1, necho);
-    seg0_ids = [0, 1, 2, echo_pattern, 7, 8];  % echo train segment
-    seg1_ids = 9;                                % delay segment
+    %   6: GS4                           (end crusher, no RF)
+    %   7: GS5                           (end spoiler)
+    %   8: delayTR                       (TR fill delay)
+    echo_pattern = repmat([3, 4, 5, 4], 1, necho);
+    seg0_ids = [0, 1, 2, echo_pattern, 6, 7];  % echo train segment
+    seg1_ids = 8;                                % delay segment
     seg_unique_ids = {seg0_ids, seg1_ids};
-    unique_blocks  = [seg0_ids, seg1_ids];
+    unique_blocks  = 0:8;
 
     % --- representative TRs for waveform ground truth ---
-    tr_min = mr.Sequence(sys);  % zero PE (C library mode 2: definition-min)
-    tr_max = mr.Sequence(sys);  % max |PE| (C library mode 1: position-max)
+    % Find echo with min |PE| across echo train (mode 1: min positional)
+    [~, iPEmin] = min(abs(phaseAreas(:)));
+    [kech_min, kex_min] = ind2sub(size(phaseAreas), iPEmin);
+    pe_min_scale = phaseAreas(kech_min, kex_min) / maxPeArea;
 
-    % Build tr_min (zero PE throughout)
+    tr_min = mr.Sequence(sys);  % min positional amplitude (mode 1)
+    tr_max = mr.Sequence(sys);  % max positional amplitude (mode 0)
+
+    % Build tr_min (min |PE| throughout)
     tr_min.addBlock(GS1);
     tr_min.addBlock(GS2, rfex);
     tr_min.addBlock(GS3, GR3);
     for kech = 1:necho
         tr_min.addBlock(GS4, rfref);
-        tr_min.addBlock(GS5, GR5, mr.scaleGrad(gyMax, 0));
+        tr_min.addBlock(GS5, GR5, mr.scaleGrad(gyMax, pe_min_scale));
         tr_min.addBlock(GR6, adc);
-        tr_min.addBlock(GS7, GR7, mr.scaleGrad(gyMax, 0));
+        tr_min.addBlock(GS7, GR7, mr.scaleGrad(gyMax, -pe_min_scale));
     end
     tr_min.addBlock(GS4);
     tr_min.addBlock(GS5);
@@ -1295,8 +1304,8 @@ function write_epi(num_slices, num_averages)
     %   then Ny_meas readout blocks: gx + blip + adc
     %   Ny_meas+...: lblIncSlc, TRdelay
 
-    tr_min = mr.Sequence(sys);  % definition-min (mode 2)
-    tr_max = mr.Sequence(sys);  % position-max (mode 1)
+    tr_min = mr.Sequence(sys);  % min positional amplitude (mode 1)
+    tr_max = mr.Sequence(sys);  % max positional amplitude (mode 0)
 
     % For EPI the readout gradient alternates polarity each line.
     % min-amplitude: just the readout train structure (no PE blips contribute)
@@ -1350,16 +1359,26 @@ function write_epi(num_slices, num_averages)
     % --- structural ground truth ---
     % Block defs (dedup key = duration, rf_def, gx_def, gy_def, gz_def;
     %             amplitude is scalar, NOT in key):
-    %   0: label-only               (min-duration: REV, SEG, AVG, INC SLC, etc.)
-    %   1: rf_fs + gz_fs            (fat-sat)
-    %   2: rf + gz + trig           (excitation + slice-select)
-    %   3: gxPre + gzReph           (nav/readout prephasing)
+    %   0: rf_fs + gz_fs            (fat-sat)
+    %   1: rf + gz + trig           (excitation + slice-select)
+    %   2: gxPre + gzReph           (nav/readout prephasing)
+    %   3: label-only               (min-duration: REV, SEG, AVG labels)
     %   4: gx                       (nav readout — ADC not in def key)
     %   5: gyPre                    (PE prephasing)
     %   6: gx + gy_blipup           (first readout line)
     %   7: gx + gy_blipdownup       (middle readout lines)
     %   8: gx + gy_blipdown         (last readout line)
     %   9: TRdelay                  (per-slice delay)
+    %
+    % Note: label-only blocks (nav labels, lblIncSlc) all map to def 3
+    %       because labels are not part of the block dedup key.
+
+    % Full per-slice segment pattern (expanded):
+    nav_pattern = repmat([3, 4], 1, Nnav);  % label + nav readout × Nnav
+    readout_pattern = [6, repmat(7, 1, Ny_meas - 2), 8];
+    seg0_ids = [0, 1, 2, nav_pattern, 5, readout_pattern];  % main readout
+    seg1_ids = 3;                                             % lblIncSlc (same def as nav labels)
+    seg2_ids = 9;                                             % TR delay
 
     % Per-slice block count (prep mirrors main):
     %   fatsat + excite + prephase + 2*Nnav(label+nav) + gyPre + Ny_meas(ro) + lblIncSlc + delay
@@ -1369,7 +1388,7 @@ function write_epi(num_slices, num_averages)
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
-    gt.seg_unique_ids  = {0:9};       % single segment = full per-volume TR
+    gt.seg_unique_ids  = {seg0_ids, seg1_ids, seg2_ids};  % 3 segments
     gt.unique_blocks   = 0:9;
     % lblOnce1/lblOnce0 merged into first fat-sat block of each section
     % (sticky flag propagates to all subsequent blocks until changed).
@@ -1378,6 +1397,11 @@ function write_epi(num_slices, num_averages)
     gt.degenerate_prep = 1;            % dummy volume structure == main (same block defs)
     gt.degenerate_cool = 1;            % no cooldown (absent = degenerate)
     gt.num_once1_blocks = blocks_per_slice * Nslices * NDummyVolumes;
+    if Nslices > 1
+        gt.tr_size = blocks_per_slice;   % per-slice period (library detects slice repeat)
+    else
+        gt.tr_size = blocks_per_slice;  % single-slice: library detects per-slice period
+    end
 
     fname = seq_filename('epi_2d', num_slices, num_averages);
     check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt);
@@ -1520,13 +1544,19 @@ function write_mprage(num_averages)
     seq.setDefinition('OrientationMapping', 'AX');
 
     % --- representative TRs for waveform ground truth ---
-    tr_min = mr.Sequence(sys);  % zero PE (mode 2: definition-min)
-    tr_max = mr.Sequence(sys);  % max |PE| (mode 1: position-max)
+    % Find min |PE| steps for mode 1 (min positional amplitude)
+    [~, iPE1min] = min(abs(pe1Steps));
+    [~, iPE2min] = min(abs(pe2Steps));
+    pe1_min = pe1Steps(iPE1min);
+    pe2_min = pe2Steps(iPE2min);
+
+    tr_min = mr.Sequence(sys);  % min positional amplitude (mode 1)
+    tr_max = mr.Sequence(sys);  % max positional amplitude (mode 0)
 
     tr_min.addBlock(rf);
-    tr_min.addBlock(gxPre, mr.scaleGrad(gpe1, 0), mr.scaleGrad(gpe2, 0));
+    tr_min.addBlock(gxPre, mr.scaleGrad(gpe1, pe1_min), mr.scaleGrad(gpe2, pe2_min));
     tr_min.addBlock(gx_ext, adc);
-    tr_min.addBlock(gxSp_ext, mr.scaleGrad(gpe1, 0), mr.scaleGrad(gpe2, 0));
+    tr_min.addBlock(gxSp_ext, mr.scaleGrad(gpe1, -pe1_min), mr.scaleGrad(gpe2, -pe2_min));
 
     tr_max.addBlock(rf);
     tr_max.addBlock(gxPre, gpe1, gpe2);
@@ -1547,13 +1577,14 @@ function write_mprage(num_averages)
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
-    gt.seg_unique_ids  = {[0, 1, 2, 3, 4, 5, 6]};  % outer TR (j>1 pattern)
+    gt.seg_unique_ids  = {[0, 1, repmat([2, 3, 4, 5], 1, Ny)], 6};  % 2 segments
     gt.unique_blocks   = 0:6;
     gt.num_prep_blocks = 0;            % degenerate: absorbed into main
     gt.num_cool_blocks = 0;
     gt.degenerate_prep = 1;            % j==0 TR treated as degenerate prep
     gt.degenerate_cool = 1;            % no cooldown (absent = degenerate)
     gt.num_once1_blocks = 2 + 4 * Ny + 1;  % j==0 iteration for scan table
+    gt.tr_size = 2 + 4 * Ny + 1;
 
     fname = sprintf('mprage_3d_%davg.seq', num_averages);
     check_and_write(seq, fname, fov(1), fov(3), 1, num_averages, gt);
@@ -1765,16 +1796,40 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     seq.setDefinition('OrientationMapping', 'AX');
 
     % --- representative TRs for waveform ground truth ---
-    tr_min = mr.Sequence(sys);  % zero PE (mode 2: definition-min)
-    tr_max = mr.Sequence(sys);  % max |PE| (mode 1: position-max)
+    % All readout grads are rotated versions of the same base waveform →
+    % amplitude magnitude is constant across shots.  Only the partition-
+    % encode (PE) gradient varies.  For mode-1 (min positional amplitude)
+    % we pick the partition with smallst |PE|; for mode-0 (max positional
+    % amplitude) we pick the largest |PE|.  Because rotation is amplitude-
+    % invariant, the readout part is the same in both cases.
+    [~, iPEmin] = min(abs(peSteps));
+    pe_min_scale = peSteps(iPEmin);
 
-    tr_min.addBlock(rf);
-    tr_min.addBlock(adc, groArbX, groArbY, mr.scaleGrad(gpe, 0));
-    tr_min.addBlock(gslSp);
+    tr_min = mr.Sequence(sys);  % min positional amplitude (mode 1)
+    tr_max = mr.Sequence(sys);  % max positional amplitude (mode 0)
 
-    tr_max.addBlock(rf);
-    tr_max.addBlock(adc, groArbX, groArbY, gpe);
-    tr_max.addBlock(gslSp);
+    if ~use_rotext
+        % Without rotext, readout grads are explicitly rotated per shot;
+        % use the first shot's actual waveforms (arbitrary choice — all
+        % have the same magnitude).
+        tr_min.addBlock(rf);
+        tr_min.addBlock(adc, groX_shots{1}, groY_shots{1}, mr.scaleGrad(gpe, pe_min_scale));
+        tr_min.addBlock(gslSp);
+
+        tr_max.addBlock(rf);
+        tr_max.addBlock(adc, groX_shots{1}, groY_shots{1}, gpe);
+        tr_max.addBlock(gslSp);
+    else
+        % With rotext extension, library handles rotation;
+        % use unrotated template.
+        tr_min.addBlock(rf);
+        tr_min.addBlock(adc, groArbX, groArbY, mr.scaleGrad(gpe, pe_min_scale));
+        tr_min.addBlock(gslSp);
+
+        tr_max.addBlock(rf);
+        tr_max.addBlock(adc, groArbX, groArbY, gpe);
+        tr_max.addBlock(gslSp);
+    end
 
     % --- structural ground truth ---
     % Block defs:
@@ -1789,13 +1844,14 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
-    gt.seg_unique_ids  = {[0, 1, 2, 3, 4, 5]};  % outer TR (j>1 pattern)
+    gt.seg_unique_ids  = {[0, 1, repmat([2, 3, 4], 1, num_shots)], 5};  % 2 segments
     gt.unique_blocks   = 0:5;
     gt.num_prep_blocks = 0;             % degenerate: absorbed into main
     gt.num_cool_blocks = 0;
     gt.degenerate_prep = 1;             % j==0 TR treated as degenerate prep
     gt.degenerate_cool = 1;             % no cooldown (absent = degenerate)
     gt.num_once1_blocks = 3 + 3 * num_shots;  % j==0 iteration for scan table
+    gt.tr_size = 3 + 3 * num_shots;
 
     if use_rotext
         rotext_tag = '_rotext';

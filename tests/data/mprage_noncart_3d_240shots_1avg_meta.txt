@@ -6,5 +6,5 @@ num_prep_blocks 0
 num_cool_blocks 0
 degenerate_prep 1
 degenerate_cool 1
-tr_size 6
-num_segments 1
+tr_size 723
+num_segments 2

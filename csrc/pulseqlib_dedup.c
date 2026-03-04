@@ -1559,6 +1559,7 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
         /* Single-pass: pass_len equals num_blocks */
         desc->pass_len = desc->num_blocks;
     }
+
     return PULSEQLIB_SUCCESS;
 
 fail:

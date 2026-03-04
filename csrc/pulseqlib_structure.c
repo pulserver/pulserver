@@ -52,21 +52,22 @@ static double sum_durations_us(const int* dur, int start, int count)
 
 static int first_repeating_segment(const int* s, int len)
 {
-    int start, sub_len, l, i, match;
-    const int* p;
+    int l, i, match;
 
     if (len <= 1) return len;
 
-    for (start = 0; start < len; ++start) {
-        p = s + start;
-        sub_len = len - start;
-        for (l = 1; l <= sub_len / 2; ++l) {
-            match = 1;
-            for (i = 0; i < l; ++i) {
-                if (p[i] != p[i + l]) { match = 0; break; }
-            }
-            if (match) return l;
+    /* Find the shortest period starting at offset 0.
+     * The caller already strips the prep region, so the repeating
+     * pattern always starts at the beginning of the array.
+     * Searching from non-zero offsets is harmful: it picks up short
+     * sub-patterns (e.g. [rephaser,nav,rephaser,nav] inside an EPI
+     * readout train) that don't span the whole array.               */
+    for (l = 1; l <= len / 2; ++l) {
+        match = 1;
+        for (i = 0; i < l; ++i) {
+            if (s[i] != s[i + l]) { match = 0; break; }
         }
+        if (match) return l;
     }
     return len;
 }
@@ -298,17 +299,22 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
     tr->tr_size             = 0;
     tr->num_trs             = 0;
     tr->tr_duration_us      = 0.0f;
-    tr->degenerate_prep     = 1;
+    tr->degenerate_prep     = (desc->num_prep_blocks == 0) ? 1 : 0;
+    tr->degenerate_cooldown = (desc->num_cooldown_blocks == 0) ? 1 : 0;
     tr->num_prep_blocks     = desc->num_prep_blocks;
     tr->num_prep_trs        = 1;
-    tr->degenerate_cooldown = 1;
     tr->num_cooldown_blocks = desc->num_cooldown_blocks;
     tr->num_cooldown_trs    = 1;
 
+    /* Always search main region only for TR pattern.
+     * After finding the period, we compare prep/cooldown to the
+     * pattern to determine degeneracy.  Once-flags are preserved
+     * on the block table for scan-table construction. */
     imaging_start = desc->num_prep_blocks;
     imaging_end   = desc->pass_len - desc->num_cooldown_blocks;
     imaging_len   = imaging_end - imaging_start;
-    pulseqlib__diag_printf(diag, "imaging region length=%d", imaging_len);
+    pulseqlib__diag_printf(diag, "imaging region length=%d (prep=%d cool=%d)",
+                           imaging_len, desc->num_prep_blocks, desc->num_cooldown_blocks);
 
     if (imaging_len <= 0) {
         diag->code = PULSEQLIB_ERR_TR_NO_IMAGING_REGION;
@@ -464,7 +470,9 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
         }
 
         if (!base_ok) {
-            /* Base pattern also non-periodic → genuine single-TR. */
+            /* Base pattern also non-periodic → genuine single-TR.
+             * The main region IS the single TR.  Then compare
+             * prep/cooldown to the TR pattern for degeneracy. */
             active_dur_us = 0;
             for (n = 0; n < desc->pass_len; ++n)
                 if (desc->block_table[n].duration_us < 0)
@@ -472,103 +480,90 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
                         desc->block_table[n].id].duration_us;
 
             if (active_dur_us <= SINGLE_TR_MAX_DURATION_US) {
-                tr->tr_size             = desc->pass_len;
-                tr->num_trs             = 1;
-                tr->degenerate_prep     = 1;
-                tr->num_prep_blocks     = 0;
-                tr->num_prep_trs        = 0;
-                tr->degenerate_cooldown = 1;
-                tr->num_cooldown_blocks = 0;
-                tr->num_cooldown_trs    = 0;
-                tr_dur = 0.0f;
-                for (i = 0; i < desc->pass_len; ++i)
-                    tr_dur += (float)block_dur[i];
-                tr->tr_duration_us = tr_dur;
-                diag->code = PULSEQLIB_SUCCESS;
-                PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
-                PULSEQLIB_FREE(base_pat);
-                return PULSEQLIB_SUCCESS;
+                l = imaging_len;  /* single-TR = entire main region */
+                found = 1;        /* fall through to post-hoc degenerate check */
             }
         }
 
-        /* VFA case (base_ok=1) or genuinely too-long non-periodic:
-         * reject with a pattern error. */
-        diag->code = (mismatch_pos >= 0)
-            ? PULSEQLIB_ERR_TR_PATTERN_MISMATCH
-            : PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN;
-        PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
-        PULSEQLIB_FREE(base_pat);
-        return diag->code;
+        if (!found) {
+            /* VFA case (base_ok=1) or genuinely too-long non-periodic:
+             * reject with a pattern error. */
+            diag->code = (mismatch_pos >= 0)
+                ? PULSEQLIB_ERR_TR_PATTERN_MISMATCH
+                : PULSEQLIB_ERR_TR_NO_PERIODIC_PATTERN;
+            PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
+            PULSEQLIB_FREE(base_pat);
+            return diag->code;
+        }
     }
 
     tr->tr_size = l;
-    tr->num_trs = imaging_len / l;
     tr_dur = 0.0f;
     tr_start = imaging_start;
     for (i = 0; i < l; ++i) tr_dur += (float)block_dur[tr_start + i];
     tr->tr_duration_us = tr_dur;
 
-    /* prep check */
-    if (desc->num_prep_blocks) {
-        if (desc->num_prep_blocks % l == 0) {
-            for (n = 0; n < (int)(desc->num_prep_blocks / l); ++n) {
-                if (!array_equal(&seq_pat[imaging_start], &seq_pat[n * l], l)) {
-                    prep_dur_us = (int)sum_durations_us(block_dur, 0, desc->num_prep_blocks);
-                    if (prep_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
-                        diag->code = PULSEQLIB_ERR_TR_PREP_TOO_LONG;
-                        PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
-                        PULSEQLIB_FREE(base_pat);
-                        return diag->code;
-                    }
-                    tr->degenerate_prep = 0;
-                    break;
-                }
-            }
-            if (tr->degenerate_prep == 1) {
-                tr->num_prep_blocks = 0;
-                tr->num_prep_trs    = desc->num_prep_blocks / l;
-            }
-        } else {
-            prep_dur_us = (int)sum_durations_us(block_dur, 0, desc->num_prep_blocks);
-            if (prep_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
-                diag->code = PULSEQLIB_ERR_TR_PREP_TOO_LONG;
-                PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
-                PULSEQLIB_FREE(base_pat);
-                return diag->code;
-            }
-            tr->degenerate_prep = 0;
+    /* num_trs counts main-region TRs */
+    tr->num_trs = imaging_len / l;
+
+    /* ----------------------------------------------------------------
+     * Post-hoc degenerate prep/cooldown detection.
+     *
+     * Now that we know the TR period l found in the main region,
+     * compare each once-flagged region to the TR pattern.  If the
+     * prep/cooldown seq_pat matches the corresponding portion of
+     * the repeating pattern AND its length is a multiple of l, the
+     * region is "degenerate" — structurally identical to main.
+     * ---------------------------------------------------------------- */
+    /* Prep: compare [0..np-1] against TR pattern starting at imaging_start */
+    if (desc->num_prep_blocks > 0 && desc->num_prep_blocks % l == 0) {
+        int match = 1;
+        for (i = 0; i < desc->num_prep_blocks && match; ++i) {
+            if (seq_pat[i] != seq_pat[imaging_start + (i % l)])
+                match = 0;
+        }
+        if (match) {
+            tr->degenerate_prep     = 1;
+            tr->num_prep_blocks     = 0;
+            tr->num_prep_trs        = desc->num_prep_blocks / l;
+        }
+    }
+    /* Cooldown: compare [pass_len-nc..pass_len-1] against TR pattern */
+    if (desc->num_cooldown_blocks > 0 && desc->num_cooldown_blocks % l == 0) {
+        int nc = desc->num_cooldown_blocks;
+        int cool_start = desc->pass_len - nc;
+        int match = 1;
+        for (i = 0; i < nc && match; ++i) {
+            if (seq_pat[cool_start + i] != seq_pat[imaging_start + (i % l)])
+                match = 0;
+        }
+        if (match) {
+            tr->degenerate_cooldown  = 1;
+            tr->num_cooldown_blocks  = 0;
+            tr->num_cooldown_trs     = nc / l;
         }
     }
 
-    /* cooldown check */
-    if (desc->num_cooldown_blocks) {
-        if (desc->num_cooldown_blocks % l == 0) {
-            for (n = 0; n < (int)(desc->num_cooldown_blocks / l); ++n) {
-                if (!array_equal(&seq_pat[imaging_start], &seq_pat[imaging_end + n * l], l)) {
-                    cooldown_dur_us = (int)sum_durations_us(block_dur, imaging_end, desc->num_cooldown_blocks);
-                    if (cooldown_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
-                        diag->code = PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG;
-                        PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
-                        PULSEQLIB_FREE(base_pat);
-                        return diag->code;
-                    }
-                    tr->degenerate_cooldown = 0;
-                    break;
-                }
-            }
-            if (tr->degenerate_cooldown == 1) {
-                tr->num_cooldown_blocks = 0;
-                tr->num_cooldown_trs    = desc->num_cooldown_blocks / l;
-            }
-        } else {
-            cooldown_dur_us = (int)sum_durations_us(block_dur, imaging_end, desc->num_cooldown_blocks);
-            if (cooldown_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
-                diag->code = PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG;
-                PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
-                PULSEQLIB_FREE(base_pat);
-                return diag->code;
-            }
-            tr->degenerate_cooldown = 0;
+    /* Non-degenerate prep: verify duration is within threshold */
+    if (!tr->degenerate_prep && desc->num_prep_blocks > 0) {
+        prep_dur_us = (int)sum_durations_us(block_dur, 0, desc->num_prep_blocks);
+        if (prep_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
+            diag->code = PULSEQLIB_ERR_TR_PREP_TOO_LONG;
+            PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
+            PULSEQLIB_FREE(base_pat);
+            return diag->code;
+        }
+    }
+    /* Non-degenerate cooldown: verify duration is within threshold */
+    if (!tr->degenerate_cooldown && desc->num_cooldown_blocks > 0) {
+        cooldown_dur_us = (int)sum_durations_us(block_dur,
+            desc->pass_len - desc->num_cooldown_blocks,
+            desc->num_cooldown_blocks);
+        if (cooldown_dur_us > PREP_COOLDOWN_THRESHOLD_US) {
+            diag->code = PULSEQLIB_ERR_TR_COOLDOWN_TOO_LONG;
+            PULSEQLIB_FREE(seq_pat); PULSEQLIB_FREE(block_dur);
+            PULSEQLIB_FREE(base_pat);
+            return diag->code;
         }
     }
 
@@ -1322,7 +1317,6 @@ int pulseqlib__get_scan_table_segments(
     int n_prep, n_main, n_cool;
     int n, b, i, found, offset;
     int num_raw_alloc, num_exp_alloc;
-    int pure_delay_idx, is_pure;
     int seg_result, max_expanded;
     int nb, unique_idx, blk_tab_idx, blk_def_id, shot_idx;
     int ax_grad_ids[3], ax_def_ids[3], ax;
@@ -1688,56 +1682,33 @@ int pulseqlib__get_scan_table_segments(
 
     /* ---- 7. Deduplicate segments across all sections ---- */
     num_unique = 0;
-    pure_delay_idx = -1;
 
     for (n = 0; n < num_total; ++n) {
-        is_pure = (exp_segs[n].num_blocks == 1 &&
-                   desc->block_table[
-                       desc->scan_table_block_idx[exp_segs[n].start_block]
-                   ].duration_us >= 0);
-
-        if (is_pure) {
-            if (pure_delay_idx == -1) {
-                uniq_segs[num_unique].num_blocks  = 1;
-                uniq_segs[num_unique].start_block = exp_segs[n].start_block;
-                uniq_segs[num_unique].unique_block_indices =
-                    (int*)PULSEQLIB_ALLOC(sizeof(int));
-                if (!uniq_segs[num_unique].unique_block_indices) {
-                    diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
-                    goto scan_seg_fail;
-                }
-                uniq_segs[num_unique].unique_block_indices[0] =
-                    exp_segs[n].unique_block_indices[0];
-                pure_delay_idx = num_unique;
-                num_unique++;
+        /* Find existing match by UBI (works for both pure-delay and
+         * active segments — pure delays have num_blocks==1). */
+        found = -1;
+        for (i = 0; i < num_unique; ++i) {
+            if (exp_segs[n].num_blocks == uniq_segs[i].num_blocks &&
+                array_equal(exp_segs[n].unique_block_indices,
+                            uniq_segs[i].unique_block_indices,
+                            exp_segs[n].num_blocks)) {
+                found = i; break;
             }
-            found = pure_delay_idx;
-        } else {
-            found = -1;
-            for (i = 0; i < num_unique; ++i) {
-                if (i == pure_delay_idx) continue;
-                if (exp_segs[n].num_blocks == uniq_segs[i].num_blocks &&
-                    array_equal(exp_segs[n].unique_block_indices,
-                                uniq_segs[i].unique_block_indices,
-                                exp_segs[n].num_blocks)) {
-                    found = i; break;
-                }
+        }
+        if (found == -1) {
+            uniq_segs[num_unique].num_blocks  = exp_segs[n].num_blocks;
+            uniq_segs[num_unique].start_block = exp_segs[n].start_block;
+            uniq_segs[num_unique].unique_block_indices =
+                (int*)PULSEQLIB_ALLOC(exp_segs[n].num_blocks * sizeof(int));
+            if (!uniq_segs[num_unique].unique_block_indices) {
+                diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
+                goto scan_seg_fail;
             }
-            if (found == -1) {
-                uniq_segs[num_unique].num_blocks  = exp_segs[n].num_blocks;
-                uniq_segs[num_unique].start_block = exp_segs[n].start_block;
-                uniq_segs[num_unique].unique_block_indices =
-                    (int*)PULSEQLIB_ALLOC(exp_segs[n].num_blocks * sizeof(int));
-                if (!uniq_segs[num_unique].unique_block_indices) {
-                    diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
-                    goto scan_seg_fail;
-                }
-                for (i = 0; i < exp_segs[n].num_blocks; ++i)
-                    uniq_segs[num_unique].unique_block_indices[i] =
-                        exp_segs[n].unique_block_indices[i];
-                found = num_unique;
-                num_unique++;
-            }
+            for (i = 0; i < exp_segs[n].num_blocks; ++i)
+                uniq_segs[num_unique].unique_block_indices[i] =
+                    exp_segs[n].unique_block_indices[i];
+            found = num_unique;
+            num_unique++;
         }
 
         /* Assign to the appropriate section table */
