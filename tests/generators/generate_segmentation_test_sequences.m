@@ -193,8 +193,6 @@ function export_ground_truth(seq, seq_fname, num_averages, gt)
     end
     if isfield(gt, 'tr_size')
         fprintf(fid, 'tr_size %d\n', gt.tr_size);
-    elseif isfield(gt, 'unique_blocks')
-        fprintf(fid, 'tr_size %d\n', length(gt.unique_blocks));
     end
     if isfield(gt, 'seg_unique_ids')
         fprintf(fid, 'num_segments %d\n', length(gt.seg_unique_ids));
@@ -568,6 +566,7 @@ function write_bssfp(num_averages, num_slices)
     gt.adc_dwell_s     = adc.dwell;
     gt.seg_unique_ids  = {[0, 1, repmat([2, 3], 1, Ny), 4]};
     gt.unique_blocks   = 0:4;
+    gt.tr_size         = 2;           % 2 blocks per TR (rf+gz+gy+gx, gx+gy+gz+adc)
     gt.num_prep_blocks = 2;          % alpha/2 + align (lblOnce0 block is first main)
     gt.num_cool_blocks = 1;          % exit gx_2 block
     gt.degenerate_prep = 0;          % alpha/2 prep ~= main pattern
@@ -736,6 +735,7 @@ function write_spgr(num_slices, num_averages)
     gt.adc_dwell_s     = adc.dwell;                         % dwell time (s)
     gt.seg_unique_ids  = seg_unique_ids;
     gt.unique_blocks   = [0, 1, 2, 3, 4];
+    gt.tr_size         = 5;             % 5 blocks per TR (rf+gz, prewinder, delayTE, readout, spoiler)
     gt.num_prep_blocks = 0;            % degenerate: absorbed into main
     gt.num_cool_blocks = 0;
     gt.degenerate_prep = 1;            % dummy TR pattern == imaging TR pattern
@@ -1031,6 +1031,7 @@ function write_fse(num_slices, num_averages)
     gt.adc_dwell_s         = adc.dwell;
     gt.seg_unique_ids      = seg_unique_ids;
     gt.unique_blocks       = unique_blocks;
+    gt.tr_size             = blocks_per_tr;  % 3 + 4*necho + 3 blocks per TR
     gt.num_prep_blocks     = 0;  % degenerate: absorbed into main
     gt.num_cool_blocks     = 0;
     gt.degenerate_prep     = 1;  % dummy uses same block defs (ADC not in dedup key)

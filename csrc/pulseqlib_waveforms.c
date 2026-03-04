@@ -1146,8 +1146,13 @@ int pulseqlib_get_tr_waveforms(
         total_gz += count_grad_samples_for_block(desc, gz_def, block_dur_us);
         total_rf += count_rf_samples_for_flat_block(desc, block_idx);
 
-        if (bte->adc_id >= 0 && bte->adc_id < desc->num_unique_adcs)
-            total_adc++;
+        if (amplitude_mode == PULSEQLIB_AMP_ACTUAL) {
+            if (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size)
+                total_adc++;
+        } else {
+            if (bdef->adc_id >= 0 && bdef->adc_id < desc->num_unique_adcs)
+                total_adc++;
+        }
     }
 
     /* ---- allocate ---- */
@@ -1199,7 +1204,7 @@ int pulseqlib_get_tr_waveforms(
         if (collapse_delays &&
             bdef->rf_id < 0 &&
             bte->gx_id < 0 && bte->gy_id < 0 && bte->gz_id < 0 &&
-            (bte->adc_id < 0 || bte->adc_id >= desc->num_unique_adcs) &&
+            bdef->adc_id < 0 &&
             block_dur_us > 100.0f)
         {
             block_dur_us = 100.0f;  /* 0.1 ms dummy delay */
@@ -1300,20 +1305,33 @@ int pulseqlib_get_tr_waveforms(
             out->rf_phase.amplitude, idx_rf, t0);
 
         /* ---- ADC ---- */
-        if (bte->adc_id >= 0 && bte->adc_id < desc->num_unique_adcs) {
-            const pulseqlib_adc_definition* adef = &desc->adc_definitions[bte->adc_id];
-            pulseqlib_adc_event* ev = &out->adc_events[idx_adc];
-            ev->onset_us         = t0 + (float)adef->delay;
-            ev->duration_us      = (float)adef->num_samples * (float)adef->dwell_time * 1e-3f;
-            ev->num_samples      = adef->num_samples;
-            ev->freq_offset_hz   = 0.0f;
-            ev->phase_offset_rad = 0.0f;
-            /* per-instance ADC offsets if table exists */
-            if (desc->adc_table && bte->adc_id < desc->adc_table_size) {
-                ev->freq_offset_hz   = desc->adc_table[bte->adc_id].freq_offset;
-                ev->phase_offset_rad = desc->adc_table[bte->adc_id].phase_offset;
+        if (amplitude_mode == PULSEQLIB_AMP_ACTUAL) {
+            /* ACTUAL mode: per-instance ADC from block table */
+            if (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size) {
+                int adc_def_id = desc->adc_table[bte->adc_id].id;
+                if (adc_def_id >= 0 && adc_def_id < desc->num_unique_adcs) {
+                    const pulseqlib_adc_definition* adef = &desc->adc_definitions[adc_def_id];
+                    pulseqlib_adc_event* ev = &out->adc_events[idx_adc];
+                    ev->onset_us         = t0 + (float)adef->delay;
+                    ev->duration_us      = (float)adef->num_samples * (float)adef->dwell_time * 1e-3f;
+                    ev->num_samples      = adef->num_samples;
+                    ev->freq_offset_hz   = desc->adc_table[bte->adc_id].freq_offset;
+                    ev->phase_offset_rad = desc->adc_table[bte->adc_id].phase_offset;
+                    idx_adc++;
+                }
             }
-            idx_adc++;
+        } else {
+            /* MAX_POS / MIN_POS: canonical ADC from block definition */
+            if (bdef->adc_id >= 0 && bdef->adc_id < desc->num_unique_adcs) {
+                const pulseqlib_adc_definition* adef = &desc->adc_definitions[bdef->adc_id];
+                pulseqlib_adc_event* ev = &out->adc_events[idx_adc];
+                ev->onset_us         = t0 + (float)adef->delay;
+                ev->duration_us      = (float)adef->num_samples * (float)adef->dwell_time * 1e-3f;
+                ev->num_samples      = adef->num_samples;
+                ev->freq_offset_hz   = 0.0f;
+                ev->phase_offset_rad = 0.0f;
+                idx_adc++;
+            }
         }
 
         t0 += block_dur_us;
