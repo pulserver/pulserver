@@ -42,7 +42,7 @@ typedef struct seg_meta {
 /*  Anchor struct                                                     */
 /* ------------------------------------------------------------------ */
 
-#define MAX_ANCHORS 64
+#define MAX_ANCHORS 512
 
 typedef struct seg_anchors {
     int   num_rf_isocenters;

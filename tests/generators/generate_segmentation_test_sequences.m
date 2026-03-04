@@ -273,9 +273,28 @@ function export_tr_waveforms(tr_seq, base, mode_suffix, gt, blockRange)
 %   _tr<mode>_anchors.txt  (RF isocenter + ADC k=0 center times)
 
     if nargin >= 5 && ~isempty(blockRange)
-        [wave, tfp_exc, tfp_ref, t_adc] = tr_seq.waveforms_and_times(false, blockRange);
+        [wave, tfp_exc, tfp_ref, t_adc] = tr_seq.waveforms_and_times(true, blockRange);
     else
-        [wave, tfp_exc, tfp_ref, t_adc] = tr_seq.waveforms_and_times();
+        [wave, tfp_exc, tfp_ref, t_adc] = tr_seq.waveforms_and_times(true);
+    end
+
+    % Build union of all sampling times across gx, gy, gz, rf (channels 1-4)
+    all_times = [];
+    for c = 1:min(4, length(wave))
+        if ~isempty(wave{c})
+            all_times = [all_times, wave{c}(1,:)]; %#ok<AGROW>
+        end
+    end
+    times = unique(all_times);
+
+    % Interpolate each gradient channel onto the common time grid
+    samples = cell(1, 3);
+    for c = 1:3
+        if c <= length(wave) && ~isempty(wave{c})
+            samples{c} = interp1(wave{c}(1,:), wave{c}(2,:), times, 'linear', 0);
+        else
+            samples{c} = zeros(size(times));
+        end
     end
 
     axis_labels = {'gx', 'gy', 'gz'};
@@ -284,12 +303,10 @@ function export_tr_waveforms(tr_seq, base, mode_suffix, gt, blockRange)
         fid = fopen(fname, 'w');
         fprintf(fid, 'time_us,amplitude_hz_per_m\n');
 
-        if c <= length(wave) && ~isempty(wave{c})
-            t = wave{c}(1,:) * 1e6;   % seconds -> us
-            a = wave{c}(2,:);          % Hz/m (Pulseq native)
-            for k = 1:length(t)
-                fprintf(fid, '%.6f,%.8g\n', t(k), a(k));
-            end
+        t = times * 1e6;   % seconds -> us
+        a = samples{c};    % Hz/m (Pulseq native)
+        for k = 1:length(t)
+            fprintf(fid, '%.6f,%.8g\n', t(k), a(k));
         end
         fclose(fid);
     end
@@ -1544,25 +1561,11 @@ function write_mprage(num_averages)
     seq.setDefinition('Name', 'mprage');
     seq.setDefinition('OrientationMapping', 'AX');
 
-    % --- representative TRs for waveform ground truth ---
-    % Find min |PE| steps for mode 1 (min positional amplitude)
-    [~, iPE1min] = min(abs(pe1Steps));
-    [~, iPE2min] = min(abs(pe2Steps));
-    pe1_min = pe1Steps(iPE1min);
-    pe2_min = pe2Steps(iPE2min);
-
-    tr_min = mr.Sequence(sys);  % min positional amplitude (mode 1)
-    tr_max = mr.Sequence(sys);  % max positional amplitude (mode 0)
-
-    tr_min.addBlock(rf);
-    tr_min.addBlock(gxPre, mr.scaleGrad(gpe1, pe1_min), mr.scaleGrad(gpe2, pe2_min));
-    tr_min.addBlock(gx_ext, adc);
-    tr_min.addBlock(gxSp_ext, mr.scaleGrad(gpe1, -pe1_min), mr.scaleGrad(gpe2, -pe2_min));
-
-    tr_max.addBlock(rf);
-    tr_max.addBlock(gxPre, gpe1, gpe2);
-    tr_max.addBlock(gx_ext, adc);
-    tr_max.addBlock(gxSp_ext, mr.scaleGrad(gpe1, -1), mr.scaleGrad(gpe2, -1));
+    % --- canonical TR = full inversion-to-inversion block range ---
+    % For MPRAGE, the canonical TR spans all blocks in one partition:
+    %   [rf180, TIdelay, Ny*(rf+prewind+readout+spoil), TRoutDelay]
+    % Total = 2 + 4*Ny + 1 blocks.  Use blockRange on the full sequence.
+    blocks_per_partition = 2 + 4 * Ny + 1;
 
     % --- structural ground truth ---
     % Block defs:
@@ -1573,8 +1576,8 @@ function write_mprage(num_averages)
     %   4: gx_ext + adc                  (readout, ramps into spoiler amp)
     %   5: gxSp_ext + gpe1 + gpe2        (spoiler continuation + PE rewind)
     %   6: TRoutDelay                    (end-of-partition delay)
-    gt.tr_min          = tr_min;
-    gt.tr_max          = tr_max;
+    gt.tr_min_range    = {seq, [1, blocks_per_partition]};  % full canonical TR
+    gt.tr_max_range    = {seq, [1, blocks_per_partition]};
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
@@ -1796,41 +1799,11 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     seq.setDefinition('Name', 'mprage_noncart');
     seq.setDefinition('OrientationMapping', 'AX');
 
-    % --- representative TRs for waveform ground truth ---
-    % All readout grads are rotated versions of the same base waveform →
-    % amplitude magnitude is constant across shots.  Only the partition-
-    % encode (PE) gradient varies.  For mode-1 (min positional amplitude)
-    % we pick the partition with smallst |PE|; for mode-0 (max positional
-    % amplitude) we pick the largest |PE|.  Because rotation is amplitude-
-    % invariant, the readout part is the same in both cases.
-    [~, iPEmin] = min(abs(peSteps));
-    pe_min_scale = peSteps(iPEmin);
-
-    tr_min = mr.Sequence(sys);  % min positional amplitude (mode 1)
-    tr_max = mr.Sequence(sys);  % max positional amplitude (mode 0)
-
-    if ~use_rotext
-        % Without rotext, readout grads are explicitly rotated per shot;
-        % use the first shot's actual waveforms (arbitrary choice — all
-        % have the same magnitude).
-        tr_min.addBlock(rf);
-        tr_min.addBlock(adc, groX_shots{1}, groY_shots{1}, mr.scaleGrad(gpe, pe_min_scale));
-        tr_min.addBlock(gslSp);
-
-        tr_max.addBlock(rf);
-        tr_max.addBlock(adc, groX_shots{1}, groY_shots{1}, gpe);
-        tr_max.addBlock(gslSp);
-    else
-        % With rotext extension, library handles rotation;
-        % use unrotated template.
-        tr_min.addBlock(rf);
-        tr_min.addBlock(adc, groArbX, groArbY, mr.scaleGrad(gpe, pe_min_scale));
-        tr_min.addBlock(gslSp);
-
-        tr_max.addBlock(rf);
-        tr_max.addBlock(adc, groArbX, groArbY, gpe);
-        tr_max.addBlock(gslSp);
-    end
+    % --- canonical TR = full inversion-to-inversion block range ---
+    % For noncartesian MPRAGE, the canonical TR spans all blocks in one
+    % partition: [rf180, TIdelay, num_shots*(rf+readout+spoil), TRoutDelay]
+    % Total = 3 + 3*num_shots blocks.  Use blockRange on the full sequence.
+    blocks_per_partition = 3 + 3 * num_shots;
 
     % --- structural ground truth ---
     % Block defs:
@@ -1840,8 +1813,8 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     %   3: groArbX + groArbY + gpe + adc (rotated readout + partition encode)
     %   4: gslSp                         (post-readout z-axis spoiler)
     %   5: TRoutDelay                    (end-of-partition delay)
-    gt.tr_min          = tr_min;
-    gt.tr_max          = tr_max;
+    gt.tr_min_range    = {seq, [1, blocks_per_partition]};  % full canonical TR
+    gt.tr_max_range    = {seq, [1, blocks_per_partition]};
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
