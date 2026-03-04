@@ -15,15 +15,14 @@ RadiofrequencyRasterTime 1e-06
 # Format of blocks:
 # NUM DUR RF  GX  GY  GZ  ADC  EXT
 [BLOCKS]
-1 20000   0   1   0   0  0  1
-2   0   0   0   0   0  0  2
-3  10   1   2   0   0  0  0
-4  10   0   2   0   0  0  0
-5  10   1   2   0   0  0  0
-6  10   0   2   0   0  0  0
-7  10   1   2   0   0  0  0
-8  10   0   2   0   0  0  0
-9  10   0   3   0   0  0  3
+1  10   0   1   0   0  0  1
+2  10   1   2   0   0  0  2
+3  10   0   2   0   0  0  0
+4  10   1   2   0   0  0  0
+5  10   0   2   0   0  0  0
+6  10   1   2   0   0  0  0
+7  10   0   2   0   0  0  0
+8 20000   0   3   0   0  0  3
 
 # Format of RF events:
 # id ampl. mag_id phase_id time_shape_id center delay freqPPM phasePPM freq phase use
@@ -31,7 +30,7 @@ RadiofrequencyRasterTime 1e-06
 # Field 'use' is the initial of: 
 #   excitation refocusing inversion saturation preparation other undefined
 [RF]
-1          500 3 4 5 5 0 0 0 0 0 e
+1          500 3 4 2 5 0 0 0 0 0 e
 
 # Format of arbitrary gradients:
 #   time_shape_id of 0 means default timing (stepping with grad_raster starting at 1/2 of grad_raster)
@@ -39,8 +38,8 @@ RadiofrequencyRasterTime 1e-06
 # ..      Hz/m  Hz/m Hz/m        ..         ..          us
 [GRADIENTS]
 1       100000            0       100000 1 2 0
-2       100000       100000       100000 3 5 0
-3       100000       100000            0 6 5 0
+2       100000       100000       100000 3 2 0
+3       100000       100000            0 5 6 0
 
 # Format of extension lists:
 # id type ref next_id
@@ -69,7 +68,7 @@ num_samples 2
 shape_id 2
 num_samples 2
 0
-20000
+10
 
 shape_id 3
 num_samples 2
@@ -83,13 +82,13 @@ num_samples 2
 
 shape_id 5
 num_samples 2
+1
 0
-10
 
 shape_id 6
 num_samples 2
-1
 0
+20000
 
 
 [SIGNATURE]
@@ -99,4 +98,4 @@ num_samples 2
 # preceding [SIGNATURE] BELONGS to the signature (and needs to be sripped away
 # for recalculating/verification)
 Type md5
-Hash 4f1a133812089b0c5321f7246e185a91
+Hash b59c4fd695a94c931d56dab7820d2145

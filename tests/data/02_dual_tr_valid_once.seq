@@ -16,12 +16,11 @@ RadiofrequencyRasterTime 1e-06
 # NUM DUR RF  GX  GY  GZ  ADC  EXT
 [BLOCKS]
 1  10   0   1   0   0  0  1
-2   0   0   0   0   0  0  2
-3  10   1   2   0   0  0  0
-4  10   0   2   0   0  0  0
-5  10   1   2   0   0  0  0
-6  10   0   2   0   0  0  0
-7  10   0   3   0   0  0  3
+2  10   1   2   0   0  0  2
+3  10   0   2   0   0  0  0
+4  10   1   2   0   0  0  0
+5  10   0   2   0   0  0  0
+6  10   0   3   0   0  0  3
 
 # Format of RF events:
 # id ampl. mag_id phase_id time_shape_id center delay freqPPM phasePPM freq phase use
@@ -92,4 +91,4 @@ num_samples 2
 # preceding [SIGNATURE] BELONGS to the signature (and needs to be sripped away
 # for recalculating/verification)
 Type md5
-Hash 691a393166fe60cfa8a0d50387843843
+Hash c3d3d0980785798ed3ca9ee41ee6b0be
