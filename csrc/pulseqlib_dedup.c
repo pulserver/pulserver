@@ -1288,7 +1288,7 @@ int pulseqlib__get_unique_blocks(pulseqlib_sequence_descriptor* desc, const puls
             pmc_flag   = (ext.flag.pmc   >= 0) ? ext.flag.pmc   : pmc_flag;
             nav_flag   = (ext.flag.nav   >= 0) ? ext.flag.nav   : nav_flag;
             once_flag  = (ext.flag.once  >= 0) ? ext.flag.once  : once_flag;
-            if (once_flag > 0) ++once_counter;
+            if (ext.flag.once > 0) ++once_counter;
         } else {
             tmp_blk_tab[n].rotation_id    = -1;
             tmp_blk_tab[n].digitalout_id  = -1;

@@ -391,14 +391,16 @@ legitimately differ across passes (e.g. multi-slice selection).
 ### 8.1 TR waveform amplitude modes
 
 When extracting gradient waveforms for safety checks or k-space
-analysis, the library supports three **amplitude modes**
-(parameter `amplitude_mode` in `get_gradient_waveforms_range`):
+analysis, the library supports three **amplitude modes**.  The same
+`PULSEQLIB_AMP_*` defines are used consistently in both the public API
+(`pulseqlib_get_tr_waveforms`) and the internal helper
+(`pulseqlib__get_gradient_waveforms_range`):
 
-| Mode | Name | Description |
-|------|------|-------------|
-| 0 | MAX_POS (Position-max) | For each block **position** within the TR, computes the worst-case (maximum \|amplitude\|) across **all TR instances** that share the same shot-index group. Used for **safety checks**. |
-| 1 | MIN_POS (Min-positive) | For each gradient definition, uses `gd->min_amplitude_signed[shot]` — the **signed** value whose \|amplitude\| is smallest across all table entries for that definition and shot index. Used for **k-space analysis** — gives the smallest gradient amplitude while preserving the sign for correct phase accumulation. |
-| 2 | ACTUAL | Uses the per-instance amplitude from the block table entry (one shot index). |
+| Define | Value | Name | Description |
+|--------|-------|------|-------------|
+| `PULSEQLIB_AMP_MAX_POS` | 0 | Position-max | For each block **position** within the TR, computes the worst-case (maximum \|amplitude\|) across **all TR instances** that share the same shot-index group. Used for **safety checks**. |
+| `PULSEQLIB_AMP_MIN_POS` | 1 | Min-positive | For each gradient definition, uses `gd->min_amplitude_signed[shot]` — the **signed** value whose \|amplitude\| is smallest across all table entries for that definition and shot index. Used for **k-space analysis** — gives the smallest gradient amplitude while preserving the sign for correct phase accumulation. |
+| `PULSEQLIB_AMP_ACTUAL` | 2 | Actual | Uses the per-instance amplitude from the block table entry (one shot index). |
 
 The position-max computation (`compute_position_max_amplitudes_filtered`)
 groups TR instances by shot-index fingerprint

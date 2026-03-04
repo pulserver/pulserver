@@ -79,10 +79,10 @@ MU_TEST(test_once_03_multi_tr_valid) {
         1, 1, 1, 0, 0);
 }
 
-/* 04: degenerate prep/cooldown */
+/* 04: degenerate prep/cooldown – blocks absorbed into main TR */
 MU_TEST(test_once_04_degenerate) {
     once_expect_success("04_multi_tr_valid_once_degenerate.seq",
-        3, 3, 1, 1, 1);
+        0, 0, 1, 1, 1);
 }
 
 /* 05: prep too long */
@@ -109,16 +109,16 @@ MU_TEST(test_once_08_multipass_valid) {
         1, 1, 3, 0, 0);
 }
 
-/* 09: multipass valid prep only */
+/* 09: multipass valid prep only – absent cooldown is degenerate */
 MU_TEST(test_once_09_multipass_prep_only) {
     once_expect_success("09_multipass_valid_prep_only.seq",
-        1, 0, 3, 0, 0);
+        1, 0, 3, 0, 1);
 }
 
-/* 10: multipass valid cooldown only */
+/* 10: multipass valid cooldown only – absent prep is degenerate */
 MU_TEST(test_once_10_multipass_cool_only) {
     once_expect_success("10_multipass_valid_cooldown_only.seq",
-        0, 1, 3, 0, 0);
+        0, 1, 3, 1, 0);
 }
 
 /* 11: multipass multi-TR */
@@ -282,10 +282,18 @@ static void seg_def_test(const char* basename, int num_segments)
         rc = pulseqlib_get_segment_block_def_indices(coll, s, ids_buf);
         mu_assert(PULSEQLIB_SUCCEEDED(rc),
                   "get_segment_block_def_indices failed");
+        mu_assert(rc <= MAX_SEG_IDS, "segment too large for ids_buf");
 
         for (i = 0; i < expected.count; ++i) {
-            mu_assert_int_eq(expected.ids[i], ids_buf[i]);
+            if (expected.ids[i] != ids_buf[i]) {
+                char msg[128];
+                (void)snprintf(msg, sizeof(msg),
+                    "seg[%d] block[%d]: expected %d got %d",
+                    s, i, expected.ids[i], ids_buf[i]);
+                mu_fail(msg);
+            }
         }
+        mu_check(1); /* single pass assertion per segment */
     }
 
     pulseqlib_collection_free(coll);
@@ -317,7 +325,8 @@ MU_TEST_SUITE(suite_c_segment_defs) {
 #define WF_AMP_TOL   0.1f
 
 /* Compare a single axis waveform from the library against a CSV file.
- * The library output has corner-point (native) timing. */
+ * The library output has corner-point (native) timing.
+ * Reports one assertion for sample count and one for the array contents. */
 static void compare_waveform(const char* csv_path,
                              const pulseqlib_channel_waveform* lib_wf)
 {
@@ -330,20 +339,23 @@ static void compare_waveform(const char* csv_path,
         return;
     }
 
-    /* Allow library to have ≥ ground truth samples (library may emit
-     * extra zero-padding or segment-transition duplicates).
-     * We only compare that every ground truth point has a matching
-     * library point. */
     mu_assert_int_eq(gt.num_samples, lib_wf->num_samples);
 
     for (i = 0; i < gt.num_samples && i < lib_wf->num_samples; ++i) {
-        (void)snprintf(msg, sizeof(msg), "waveform time mismatch at i=%d", i);
-        mu_assert_float_near(msg, gt.time_us[i],
-                             lib_wf->time_us[i], WF_TIME_TOL);
-        (void)snprintf(msg, sizeof(msg), "waveform amp mismatch at i=%d", i);
-        mu_assert_float_near(msg, gt.amplitude[i],
-                             lib_wf->amplitude[i], WF_AMP_TOL);
+        if ((float)fabs((double)(gt.time_us[i] - lib_wf->time_us[i])) > WF_TIME_TOL) {
+            (void)snprintf(msg, sizeof(msg),
+                "waveform time mismatch at i=%d: expected %.4f got %.4f",
+                i, (double)gt.time_us[i], (double)lib_wf->time_us[i]);
+            mu_fail(msg);
+        }
+        if ((float)fabs((double)(gt.amplitude[i] - lib_wf->amplitude[i])) > WF_AMP_TOL) {
+            (void)snprintf(msg, sizeof(msg),
+                "waveform amp mismatch at i=%d: expected %.4f got %.4f",
+                i, (double)gt.amplitude[i], (double)lib_wf->amplitude[i]);
+            mu_fail(msg);
+        }
     }
+    mu_check(1); /* single pass assertion for this axis */
 }
 
 /* Test waveforms for a _1sl_1avg sequence, one amplitude mode */
@@ -513,14 +525,18 @@ static void scan_table_test(const char* basename, int num_averages)
     /* Compare scan table length */
     mu_assert_int_eq(gt.count, coll->descriptors[0].scan_table_len);
 
-    /* Compare block indices */
+    /* Compare block indices (single assertion for the whole array) */
     for (i = 0; i < gt.count && i < coll->descriptors[0].scan_table_len; ++i) {
-        char msg[128];
-        (void)snprintf(msg, sizeof(msg),
-                       "scan_table[%d] block_idx mismatch", i);
-        mu_assert_int_eq(gt.block_idx[i],
-                         coll->descriptors[0].scan_table_block_idx[i]);
+        if (gt.block_idx[i] != coll->descriptors[0].scan_table_block_idx[i]) {
+            char msg[128];
+            (void)snprintf(msg, sizeof(msg),
+                "scan_table[%d] block_idx: expected %d got %d",
+                i, gt.block_idx[i],
+                coll->descriptors[0].scan_table_block_idx[i]);
+            mu_fail(msg);
+        }
     }
+    mu_check(1); /* single pass assertion for the scan table */
 
     pulseqlib_collection_free(coll);
 }

@@ -349,11 +349,8 @@ static int check_scan_table_segments(
             pos_in_seg  = 0;
             continue;
         }
-        /* Reset position when segment changes OR at a TR boundary
-         * (the same segment can span consecutive TRs). */
-        if (seg_id != prev_seg_id ||
-            (desc->scan_table_tr_start &&
-             desc->scan_table_tr_start[n])) {
+        /* Reset position when the segment type changes. */
+        if (seg_id != prev_seg_id) {
             pos_in_seg  = 0;
             prev_seg_id = seg_id;
         }
@@ -369,14 +366,12 @@ static int check_scan_table_segments(
         }
 
         seg = &desc->segment_definitions[seg_id];
+
+        /* When the same segment repeats across consecutive TRs (same
+         * seg_id throughout), pos_in_seg naturally reaches num_blocks.
+         * Wrap it so the next repetition is verified from UBI[0]. */
         if (pos_in_seg >= seg->num_blocks) {
-            if (diag) {
-                pulseqlib__diag_printf(diag,
-                    "Consistency: scan pos %d, segment %d position %d "
-                    "exceeds num_blocks %d\n",
-                    n, seg_id, pos_in_seg, seg->num_blocks);
-            }
-            return PULSEQLIB_ERR_CONSISTENCY_SEG_MISMATCH;
+            pos_in_seg = 0;
         }
 
         bt_idx      = desc->scan_table_block_idx[n];

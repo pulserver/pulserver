@@ -508,10 +508,10 @@ static int interpolate_to_uniform(
 /*  Gradient waveforms for an arbitrary block range                   */
 /* ================================================================== */
 
-/*  amplitude_mode:
- *    0 = actual block amplitude (single-TR)
- *    1 = position-max (worst-case safety)
- *    2 = definition-min (best-case k-space)
+/*  amplitude_mode (uses PULSEQLIB_AMP_* defines from pulseqlib_types.h):
+ *    PULSEQLIB_AMP_MAX_POS (0) = position-max (worst-case safety)
+ *    PULSEQLIB_AMP_MIN_POS (1) = min |amplitude|, preserve sign (k-space)
+ *    PULSEQLIB_AMP_ACTUAL  (2) = actual block amplitude (single-TR)
  */
 int pulseqlib__get_gradient_waveforms_range(
     const pulseqlib_sequence_descriptor* desc,
@@ -582,7 +582,7 @@ int pulseqlib__get_gradient_waveforms_range(
     }
 
     /* position-max amplitudes (only for worst-case main-TR mode) */
-    if (amplitude_mode == 1) {
+    if (amplitude_mode == PULSEQLIB_AMP_MAX_POS) {
         pos_max_gx = (float*)PULSEQLIB_ALLOC(
             (size_t)block_count * PULSEQLIB_MAX_GRAD_SHOTS * sizeof(float));
         pos_max_gy = (float*)PULSEQLIB_ALLOC(
@@ -679,7 +679,7 @@ int pulseqlib__get_gradient_waveforms_range(
         gz_def = (gz_tab && gz_tab->id >= 0 && gz_tab->id < desc->num_unique_grads)
                  ? &desc->grad_definitions[gz_tab->id] : NULL;
 
-        if (amplitude_mode == 1) {
+        if (amplitude_mode == PULSEQLIB_AMP_MAX_POS) {
             idx_gx += fill_grad_waveform_for_block(desc,
                 time_gx, wf_gx, idx_gx,
                 gx_def, gx_tab, t0,
@@ -692,8 +692,8 @@ int pulseqlib__get_gradient_waveforms_range(
                 time_gz, wf_gz, idx_gz,
                 gz_def, gz_tab, t0,
                 &pos_max_gz[n * PULSEQLIB_MAX_GRAD_SHOTS], block_dur_us);
-        } else if (amplitude_mode == 2) {
-            /* definition-min mode: use gd->min_amplitude_signed (preserve sign) */
+        } else if (amplitude_mode == PULSEQLIB_AMP_MIN_POS) {
+            /* min-positive mode: use gd->min_amplitude_signed (preserve sign) */
             for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
             if (gx_def) {
                 for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
@@ -847,7 +847,7 @@ int pulseqlib_get_tr_gradient_waveforms(
     rc = pulseqlib__get_gradient_waveforms_range(desc, &uw, diag,
         desc->tr_descriptor.num_prep_blocks,
         desc->tr_descriptor.tr_size,
-        1, NULL, 0);
+        PULSEQLIB_AMP_MAX_POS, NULL, 0);
     if (PULSEQLIB_FAILED(rc)) return rc;
     if (!waveforms) { pulseqlib__uniform_grad_waveforms_free(&uw); return PULSEQLIB_ERR_NULL_POINTER; }
     memset(waveforms, 0, sizeof(*waveforms));

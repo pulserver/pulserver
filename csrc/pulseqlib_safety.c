@@ -212,7 +212,7 @@ int pulseqlib__calc_segment_timing(
     /* ---- Step A: build min-amplitude k-space trajectory ---- */
     if (tr_size > 0) {
         result = pulseqlib__get_gradient_waveforms_range(desc, &min_waveforms, diag,
-            num_prep, tr_size, 2, NULL, 0);
+            num_prep, tr_size, PULSEQLIB_AMP_MIN_POS, NULL, 0);
 
         if (!PULSEQLIB_FAILED(result) && min_waveforms.num_samples >= 2) {
             n_samples = min_waveforms.num_samples;
@@ -1421,7 +1421,7 @@ int pulseqlib_calc_acoustic_spectra(
     desc = &coll->descriptors[subseq_idx];
     trd = &desc->tr_descriptor;
     rc = pulseqlib__get_gradient_waveforms_range(desc, &uw, diag,
-        trd->num_prep_blocks, trd->tr_size, 1, NULL, 0);
+        trd->num_prep_blocks, trd->tr_size, PULSEQLIB_AMP_MAX_POS, NULL, 0);
     if (PULSEQLIB_FAILED(rc)) return rc;
     rc = calc_acoustic_spectra_from_uniform(spectra, diag, &uw,
         target_window_size, target_resolution_hz, max_freq_hz,
@@ -1674,7 +1674,7 @@ int pulseqlib_calc_pns(
     desc = &coll->descriptors[subseq_idx];
     rc = pulseqlib__get_gradient_waveforms_range(desc, &uw, diag,
         desc->tr_descriptor.num_prep_blocks,
-        desc->tr_descriptor.tr_size, 1, NULL, 0);
+        desc->tr_descriptor.tr_size, PULSEQLIB_AMP_MAX_POS, NULL, 0);
     if (PULSEQLIB_FAILED(rc)) return rc;
     rc = calc_pns_from_uniform(result, diag, opts->gamma_hz_per_t, &uw, params);
     pulseqlib__uniform_grad_waveforms_free(&uw);
@@ -2048,7 +2048,7 @@ int pulseqlib_check_safety(
         if (trd->num_prep_blocks > 0 && !trd->degenerate_prep) {
             memset(&uw, 0, sizeof(uw));
             rc = pulseqlib__get_gradient_waveforms_range(desc, &uw, diag,
-                0, trd->num_prep_blocks + trd->tr_size, 0,
+                0, trd->num_prep_blocks + trd->tr_size, PULSEQLIB_AMP_ACTUAL,
                 NULL, 0);
             if (PULSEQLIB_FAILED(rc)) return rc;
 
@@ -2106,7 +2106,7 @@ int pulseqlib_check_safety(
         for (u = 0; u < num_unique_trs; ++u) {
             memset(&uw, 0, sizeof(uw));
             rc = pulseqlib__get_gradient_waveforms_range(desc, &uw, diag,
-                trd->num_prep_blocks, trd->tr_size, 1,
+                trd->num_prep_blocks, trd->tr_size, PULSEQLIB_AMP_MAX_POS,
                 tr_group_labels, u);
             if (PULSEQLIB_FAILED(rc)) {
                 if (unique_tr_indices) PULSEQLIB_FREE(unique_tr_indices);
@@ -2172,7 +2172,7 @@ int pulseqlib_check_safety(
 
             memset(&uw, 0, sizeof(uw));
             rc = pulseqlib__get_gradient_waveforms_range(desc, &uw, diag,
-                cd_start, cd_size, 0,
+                cd_start, cd_size, PULSEQLIB_AMP_ACTUAL,
                 NULL, 0);
             if (PULSEQLIB_FAILED(rc)) return rc;
 

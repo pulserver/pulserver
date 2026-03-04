@@ -83,7 +83,7 @@ typedef struct seg_scan_table {
 /*  Segment IDs data                                                  */
 /* ------------------------------------------------------------------ */
 
-#define MAX_SEG_IDS 256
+#define MAX_SEG_IDS 8192
 
 typedef struct seg_ids {
     int count;

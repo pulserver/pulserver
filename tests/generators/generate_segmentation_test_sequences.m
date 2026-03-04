@@ -97,9 +97,16 @@ function check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt)
 %   .unique_blocks   - int array of unique block def IDs for the
 %                      full TR (all segments concatenated)
 %   .num_prep_blocks - number of preparation blocks (ONCE=1 region)
+%                      0 when degenerate (absorbed into main)
 %   .num_cool_blocks - number of cooldown blocks (ONCE=2 region)
-%   .degenerate_prep - 1 if prep pattern == main pattern, 0 otherwise
-%   .degenerate_cool - 1 if cooldown pattern == main pattern, 0 otherwise
+%                      0 when degenerate (absorbed into main)
+%   .degenerate_prep - 1 if prep is absent or pattern == main, 0 otherwise
+%   .degenerate_cool - 1 if cooldown is absent or pattern == main, 0 otherwise
+%   .num_once1_blocks - (optional) total blocks with ONCE=1 flag; used by
+%                       scan table export to exclude from replication even
+%                       when degenerate.  Defaults to num_prep_blocks.
+%   .num_once2_blocks - (optional) total blocks with ONCE=2 flag; defaults
+%                       to num_cool_blocks.
 
     if nargin < 7, gt = struct(); end
 
@@ -335,15 +342,17 @@ function export_scan_table(base, N, num_averages, gt)
 % for prep (once per pass), main (repeated num_averages times per pass),
 % cooldown (once per pass), and multiple passes.
 %
-% Each pass operates on its own slice of the block table:
-%   pass_len = N / num_passes
-%   base_offset = pass * pass_len
-%   prep_idx  = base_offset .. base_offset + num_prep - 1
-%   main_idx  = base_offset + num_prep .. base_offset + pass_len - num_cool - 1
-%   cool_idx  = base_offset + pass_len - num_cool .. base_offset + pass_len - 1
+% Two modes:
+%   Non-degenerate: num_prep/num_cool define contiguous prefix/suffix
+%     prep_idx  = base_offset .. base_offset + num_prep - 1
+%     main_idx  = base_offset + num_prep .. base_offset + pass_len - num_cool - 1
+%     cool_idx  = base_offset + pass_len - num_cool .. base_offset + pass_len - 1
+%
+%   Degenerate: the ONCE-flagged blocks sit inside the main region,
+%     but still play once only (first/last repetition).  The number of
+%     such blocks is given by num_once1_blocks / num_once2_blocks.
 %
 % Per-pass scan order: prep on first avg, cooldown on last avg, main every avg.
-% Total rows = num_passes * (num_prep + num_averages * num_main_per_pass + num_cool)
 %
 % Output: _scan_table.csv with columns (scan_pos, block_idx)
 
@@ -352,15 +361,23 @@ function export_scan_table(base, N, num_averages, gt)
     num_passes = 1;
     if isfield(gt, 'num_passes'), num_passes = gt.num_passes; end
 
+    % For degenerate prep/cool the metadata num_prep/num_cool is 0, but
+    % there are still ONCE-flagged blocks that play only once.  Use the
+    % optional num_once1/once2_blocks fields when provided.
+    num_once1 = num_prep;
+    num_once2 = num_cool;
+    if isfield(gt, 'num_once1_blocks'), num_once1 = gt.num_once1_blocks; end
+    if isfield(gt, 'num_once2_blocks'), num_once2 = gt.num_once2_blocks; end
+
     pass_len = N / num_passes;
-    num_main = pass_len - num_prep - num_cool;
+    num_main = pass_len - num_once1 - num_once2;
 
     block_idx = [];
     for pass = 0:(num_passes - 1)
         base_offset = pass * pass_len;
-        prep_idx = base_offset:(base_offset + num_prep - 1);
-        main_idx = (base_offset + num_prep):(base_offset + num_prep + num_main - 1);
-        cool_idx = (base_offset + pass_len - num_cool):(base_offset + pass_len - 1);
+        prep_idx = base_offset:(base_offset + num_once1 - 1);
+        main_idx = (base_offset + num_once1):(base_offset + num_once1 + num_main - 1);
+        cool_idx = (base_offset + pass_len - num_once2):(base_offset + pass_len - 1);
 
         for avg = 0:(num_averages - 1)
             if avg == 0,              block_idx = [block_idx, prep_idx]; end %#ok<AGROW>
@@ -716,10 +733,11 @@ function write_spgr(num_slices, num_averages)
     gt.adc_dwell_s     = adc.dwell;                         % dwell time (s)
     gt.seg_unique_ids  = seg_unique_ids;
     gt.unique_blocks   = [0, 1, 2, 3, 4];
-    gt.num_prep_blocks = Ndummy * 5;  % 5 blocks per dummy TR (no slice loop in dummies)
+    gt.num_prep_blocks = 0;            % degenerate: absorbed into main
     gt.num_cool_blocks = 0;
-    gt.degenerate_prep = 1;    % dummy TR pattern == imaging TR pattern
-    gt.degenerate_cool = 0;    % no cooldown blocks
+    gt.degenerate_prep = 1;            % dummy TR pattern == imaging TR pattern
+    gt.degenerate_cool = 1;            % no cooldown blocks (absent = degenerate)
+    gt.num_once1_blocks = Ndummy * 5;  % 5 blocks per dummy TR, once-flagged for scan table
 
     fname = seq_filename('gre_2d', num_slices, num_averages);
     check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt);
@@ -1004,10 +1022,11 @@ function write_fse(num_slices, num_averages)
     gt.adc_dwell_s         = adc.dwell;
     gt.seg_unique_ids      = seg_unique_ids;
     gt.unique_blocks       = unique_blocks;
-    gt.num_prep_blocks     = Ndummy * blocks_per_tr * Nslices;
+    gt.num_prep_blocks     = 0;  % degenerate: absorbed into main
     gt.num_cool_blocks     = 0;
     gt.degenerate_prep     = 1;  % dummy uses same block defs (ADC not in dedup key)
-    gt.degenerate_cool     = 0;
+    gt.degenerate_cool     = 1;  % no cooldown blocks (absent = degenerate)
+    gt.num_once1_blocks    = Ndummy * blocks_per_tr * Nslices;
 
     fname = seq_filename('fse_2d', num_slices, num_averages);
     check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt);
@@ -1121,103 +1140,141 @@ function write_epi(num_slices, num_averages)
     lblIncSlc = mr.makeLabel('INC', 'SLC', 1);
     lblIncRep = mr.makeLabel('INC', 'REP', 1);
 
+    % Hardcoded volume number
+    NDummyVolumes = 1; % in fMRI, dummy scans to reach steady state
+    NVolumes = 1; % number of volumes to sample hemodynamics
+
     % --- prep (ONCE=1): one dummy volume ---
-    seq.addBlock(lblOnce1);
-    seq.addBlock(lblSetSlc);
-    for s = 1:Nslices
-        seq.addBlock(rf_fs, gz_fs);
-        rf.freqOffset  = gz.amplitude * slicePositions(s);
-        rf.phaseOffset = -2*pi * rf.freqOffset * rf.center;
-        seq.addBlock(rf, gz, trig);
-
-        % Prephasing (reverse for navigator)
-        gxPre_nav = mr.scaleGrad(gxPre, -1);
-        gx_nav    = mr.scaleGrad(gx, -1);
-        seq.addBlock(gxPre_nav, gzReph);
-        gxPre_nav = mr.scaleGrad(gxPre_nav, -1);  % restore
-
-        for n = 1:Nnav
-            seq.addBlock(gx_nav);     % no ADC during dummies
-            gx_nav = mr.scaleGrad(gx_nav, -1);
-        end
-
-        seq.addBlock(gyPre);
-
-        for i = 1:Ny_meas
-            if i == 1
-                seq.addBlock(gx, gy_blipup);
-            elseif i == Ny_meas
-                seq.addBlock(gx, gy_blipdown);
+    % Structure mirrors main section (same block defs & ordering) so the C
+    % library detects degenerate prep.  ADC is omitted because it does not
+    % contribute to the block definition key; dummy data is not acquired.
+    for v = 1:NDummyVolumes
+        for s = 1:Nslices
+            if v == 1 && s == 1
+                seq.addBlock(rf_fs, gz_fs, lblOnce1, lblSetSlc);
+            elseif s == 1
+                seq.addBlock(rf_fs, gz_fs, lblSetSlc);
             else
-                seq.addBlock(gx, gy_blipdownup);
+                seq.addBlock(rf_fs, gz_fs);
             end
-            gx = mr.scaleGrad(gx, -1);
-        end
+            rf.freqOffset  = gz.amplitude * slicePositions(s);
+            rf.phaseOffset = -2*pi * rf.freqOffset * rf.center;
+            seq.addBlock(rf, gz, trig);
 
-        seq.addBlock(lblIncSlc);
-        if sign(gx.amplitude) ~= ROpolarity
-            gx = mr.scaleGrad(gx, -1);
+            if Nnav > 0
+                gxPre_nav = mr.scaleGrad(gxPre, -1);
+                gx_nav    = mr.scaleGrad(gx, -1);
+                seq.addBlock(gxPre_nav, gzReph, ...
+                    mr.makeLabel('SET', 'NAV', 1), ...
+                    mr.makeLabel('SET', 'LIN', floor(Ny/2)));
+                gxPre_nav = mr.scaleGrad(gxPre_nav, -1);
+
+                for n = 1:Nnav
+                    seq.addBlock( ...
+                        mr.makeLabel('SET', 'REV', sign(gx_nav.amplitude) ~= ROpolarity), ...
+                        mr.makeLabel('SET', 'SEG', sign(gx_nav.amplitude) ~= ROpolarity), ...
+                        mr.makeLabel('SET', 'AVG', n == Nnav));
+                    seq.addBlock(gx_nav);
+                    gx_nav = mr.scaleGrad(gx_nav, -1);
+                end
+
+                seq.addBlock(gyPre, ...
+                    mr.makeLabel('SET', 'LIN', -1), ...
+                    mr.makeLabel('SET', 'NAV', 0), ...
+                    mr.makeLabel('SET', 'AVG', 0));
+            else
+                seq.addBlock(gxPre, gyPre, gzReph, ...
+                    mr.makeLabel('SET', 'LIN', -1), ...
+                    mr.makeLabel('SET', 'NAV', 0), ...
+                    mr.makeLabel('SET', 'AVG', 0));
+            end
+
+            for i = 1:Ny_meas
+                lrev = mr.makeLabel('SET', 'REV', sign(gx.amplitude) ~= ROpolarity);
+                lseg = mr.makeLabel('SET', 'SEG', sign(gx.amplitude) ~= ROpolarity);
+                llin = mr.makeLabel('INC', 'LIN', 1);
+
+                if i == 1
+                    seq.addBlock(gx, gy_blipup, lrev, lseg, llin);
+                elseif i == Ny_meas
+                    seq.addBlock(gx, gy_blipdown, lrev, lseg, llin);
+                else
+                    seq.addBlock(gx, gy_blipdownup, lrev, lseg, llin);
+                end
+                gx = mr.scaleGrad(gx, -1);
+            end
+
+            seq.addBlock(lblIncSlc);
+            if sign(gx.amplitude) ~= ROpolarity
+                gx = mr.scaleGrad(gx, -1);
+            end
+            seq.addBlock(TRdelay_perSlice);
         end
-        seq.addBlock(TRdelay_perSlice);
     end
-    seq.addBlock(lblOnce0);  % end prep
 
     % --- main: imaging volume ---
-    seq.addBlock(lblSetSlc);
-    for s = 1:Nslices
-        seq.addBlock(rf_fs, gz_fs);
-        rf.freqOffset  = gz.amplitude * slicePositions(s);
-        rf.phaseOffset = -2*pi * rf.freqOffset * rf.center;
-        seq.addBlock(rf, gz, trig);
-
-        if Nnav > 0
-            gxPre_nav = mr.scaleGrad(gxPre, -1);
-            gx_tmp    = mr.scaleGrad(gx, -1);
-            seq.addBlock(gxPre_nav, gzReph, ...
-                mr.makeLabel('SET', 'NAV', 1), ...
-                mr.makeLabel('SET', 'LIN', floor(Ny/2)));
-            gxPre_nav = mr.scaleGrad(gxPre_nav, -1);
-
-            for n = 1:Nnav
-                seq.addBlock( ...
-                    mr.makeLabel('SET', 'REV', sign(gx_tmp.amplitude) ~= ROpolarity), ...
-                    mr.makeLabel('SET', 'SEG', sign(gx_tmp.amplitude) ~= ROpolarity), ...
-                    mr.makeLabel('SET', 'AVG', n == Nnav));
-                seq.addBlock(gx_tmp, adc);
-                gx_tmp = mr.scaleGrad(gx_tmp, -1);
-            end
-
-            seq.addBlock(gyPre, ...
-                mr.makeLabel('SET', 'LIN', -1), ...
-                mr.makeLabel('SET', 'NAV', 0), ...
-                mr.makeLabel('SET', 'AVG', 0));
-        else
-            seq.addBlock(gxPre, gyPre, gzReph, ...
-                mr.makeLabel('SET', 'LIN', -1), ...
-                mr.makeLabel('SET', 'NAV', 0), ...
-                mr.makeLabel('SET', 'AVG', 0));
-        end
-
-        for i = 1:Ny_meas
-            lrev = mr.makeLabel('SET', 'REV', sign(gx.amplitude) ~= ROpolarity);
-            lseg = mr.makeLabel('SET', 'SEG', sign(gx.amplitude) ~= ROpolarity);
-            llin = mr.makeLabel('INC', 'LIN', 1);
-
-            if i == 1
-                seq.addBlock(gx, gy_blipup, adc, lrev, lseg, llin);
-            elseif i == Ny_meas
-                seq.addBlock(gx, gy_blipdown, adc, lrev, lseg, llin);
+    for v = 1:NVolumes
+        for s = 1:Nslices
+            if v == 1 && s == 1
+                seq.addBlock(rf_fs, gz_fs, lblOnce0, lblSetSlc);
+            elseif s == 1
+                seq.addBlock(rf_fs, gz_fs, lblSetSlc);
             else
-                seq.addBlock(gx, gy_blipdownup, adc, lrev, lseg, llin);
+                seq.addBlock(rf_fs, gz_fs);
             end
-            gx = mr.scaleGrad(gx, -1);
-        end
+            rf.freqOffset  = gz.amplitude * slicePositions(s);
+            rf.phaseOffset = -2*pi * rf.freqOffset * rf.center;
+            seq.addBlock(rf, gz, trig);
 
-        seq.addBlock(lblIncSlc);
-        if sign(gx.amplitude) ~= ROpolarity
-            gx = mr.scaleGrad(gx, -1);
+            if Nnav > 0
+                gxPre_nav = mr.scaleGrad(gxPre, -1);
+                gx_tmp    = mr.scaleGrad(gx, -1);
+                seq.addBlock(gxPre_nav, gzReph, ...
+                    mr.makeLabel('SET', 'NAV', 1), ...
+                    mr.makeLabel('SET', 'LIN', floor(Ny/2)));
+                gxPre_nav = mr.scaleGrad(gxPre_nav, -1);
+
+                for n = 1:Nnav
+                    seq.addBlock( ...
+                        mr.makeLabel('SET', 'REV', sign(gx_tmp.amplitude) ~= ROpolarity), ...
+                        mr.makeLabel('SET', 'SEG', sign(gx_tmp.amplitude) ~= ROpolarity), ...
+                        mr.makeLabel('SET', 'AVG', n == Nnav));
+                    seq.addBlock(gx_tmp, adc);
+                    gx_tmp = mr.scaleGrad(gx_tmp, -1);
+                end
+
+                seq.addBlock(gyPre, ...
+                    mr.makeLabel('SET', 'LIN', -1), ...
+                    mr.makeLabel('SET', 'NAV', 0), ...
+                    mr.makeLabel('SET', 'AVG', 0));
+            else
+                seq.addBlock(gxPre, gyPre, gzReph, ...
+                    mr.makeLabel('SET', 'LIN', -1), ...
+                    mr.makeLabel('SET', 'NAV', 0), ...
+                    mr.makeLabel('SET', 'AVG', 0));
+            end
+
+            for i = 1:Ny_meas
+                lrev = mr.makeLabel('SET', 'REV', sign(gx.amplitude) ~= ROpolarity);
+                lseg = mr.makeLabel('SET', 'SEG', sign(gx.amplitude) ~= ROpolarity);
+                llin = mr.makeLabel('INC', 'LIN', 1);
+
+                if i == 1
+                    seq.addBlock(gx, gy_blipup, adc, lrev, lseg, llin);
+                elseif i == Ny_meas
+                    seq.addBlock(gx, gy_blipdown, adc, lrev, lseg, llin);
+                else
+                    seq.addBlock(gx, gy_blipdownup, adc, lrev, lseg, llin);
+                end
+                gx = mr.scaleGrad(gx, -1);
+            end
+
+            seq.addBlock(lblIncSlc);
+            if sign(gx.amplitude) ~= ROpolarity
+                gx = mr.scaleGrad(gx, -1);
+            end
+            seq.addBlock(TRdelay_perSlice);
         end
-        seq.addBlock(TRdelay_perSlice);
     end
 
     % Definitions
@@ -1293,19 +1350,20 @@ function write_epi(num_slices, num_averages)
     % --- structural ground truth ---
     % Block defs (dedup key = duration, rf_def, gx_def, gy_def, gz_def;
     %             amplitude is scalar, NOT in key):
-    %   0: label-only               (min-duration: ONCE, SLC, NAV, SEG, etc.)
+    %   0: label-only               (min-duration: REV, SEG, AVG, INC SLC, etc.)
     %   1: rf_fs + gz_fs            (fat-sat)
     %   2: rf + gz + trig           (excitation + slice-select)
     %   3: gxPre + gzReph           (nav/readout prephasing)
-    %   4: gx + adc                 (nav readout, shape-only)
+    %   4: gx                       (nav readout — ADC not in def key)
     %   5: gyPre                    (PE prephasing)
-    %   6: gx + gy_blipup + adc     (first readout line)
-    %   7: gx + gy_blipdownup + adc (middle readout lines)
-    %   8: gx + gy_blipdown + adc   (last readout line)
+    %   6: gx + gy_blipup           (first readout line)
+    %   7: gx + gy_blipdownup       (middle readout lines)
+    %   8: gx + gy_blipdown         (last readout line)
     %   9: TRdelay                  (per-slice delay)
 
-    % Prep: lblOnce1 + lblSetSlc + Nslices*(2+1+Nnav+1+Ny_meas+1+1) + lblOnce0
-    blocks_per_slice_prep = 2 + 1 + Nnav + 1 + Ny_meas + 1 + 1;
+    % Per-slice block count (prep mirrors main):
+    %   fatsat + excite + prephase + 2*Nnav(label+nav) + gyPre + Ny_meas(ro) + lblIncSlc + delay
+    blocks_per_slice = 2 + 1 + 2 * Nnav + 1 + Ny_meas + 1 + 1;
     gt.tr_min          = tr_min;
     gt.tr_max          = tr_max;
     gt.rf_center_s     = rf.center;
@@ -1313,10 +1371,13 @@ function write_epi(num_slices, num_averages)
     gt.adc_dwell_s     = adc.dwell;
     gt.seg_unique_ids  = {0:9};       % single segment = full per-volume TR
     gt.unique_blocks   = 0:9;
-    gt.num_prep_blocks = 2 + blocks_per_slice_prep * Nslices + 1;
+    % lblOnce1/lblOnce0 merged into first fat-sat block of each section
+    % (sticky flag propagates to all subsequent blocks until changed).
+    gt.num_prep_blocks = 0;            % degenerate: absorbed into main
     gt.num_cool_blocks = 0;
-    gt.degenerate_prep = 0;           % nav structure differs (no ADC, no labels)
-    gt.degenerate_cool = 0;
+    gt.degenerate_prep = 1;            % dummy volume structure == main (same block defs)
+    gt.degenerate_cool = 1;            % no cooldown (absent = degenerate)
+    gt.num_once1_blocks = blocks_per_slice * Nslices * NDummyVolumes;
 
     fname = seq_filename('epi_2d', num_slices, num_averages);
     check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt);
@@ -1488,10 +1549,11 @@ function write_mprage(num_averages)
     gt.adc_dwell_s     = adc.dwell;
     gt.seg_unique_ids  = {[0, 1, 2, 3, 4, 5, 6]};  % outer TR (j>1 pattern)
     gt.unique_blocks   = 0:6;
-    gt.num_prep_blocks = 2 + 4 * Ny + 1;  % j==0 iteration: rf180+TI + Ny*(rf+pre+ro+spoil) + delay
+    gt.num_prep_blocks = 0;            % degenerate: absorbed into main
     gt.num_cool_blocks = 0;
-    gt.degenerate_prep = 0;
-    gt.degenerate_cool = 0;
+    gt.degenerate_prep = 1;            % j==0 TR treated as degenerate prep
+    gt.degenerate_cool = 1;            % no cooldown (absent = degenerate)
+    gt.num_once1_blocks = 2 + 4 * Ny + 1;  % j==0 iteration for scan table
 
     fname = sprintf('mprage_3d_%davg.seq', num_averages);
     check_and_write(seq, fname, fov(1), fov(3), 1, num_averages, gt);
@@ -1624,6 +1686,31 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     phi      = 0;
     dphi     = 137.51 * pi / 180;  % golden angle [rad]
 
+    % --- Pre-compute per-shot rotated readout gradients (non-rotext path) ---
+    % For the non-rotext path we apply a 2-D rotation to the base
+    % (waveform, 0*waveform) pair ourselves so that every shot produces
+    % arbitrary-grad events with identical numSamples.  This keeps the C
+    % library's dedup happy (grad definition = timing only; amplitude is
+    % per-instance).
+    if ~use_rotext
+        % Total number of unique angles across all partitions (j>0).
+        % j==0 uses unrotated grads, so we only rotate for j = 1..Nz.
+        total_spokes = Nz * num_shots;
+        groX_shots = cell(1, total_spokes);
+        groY_shots = cell(1, total_spokes);
+        spoke_phi  = 0;
+        for s = 1:total_spokes
+            c = cos(spoke_phi);
+            sn = sin(spoke_phi);
+            wx = c * waveform;   % rotated x component
+            wy = sn * waveform;  % rotated y component
+            groX_shots{s} = mr.makeArbitraryGrad('x', wx, 'system', sys, 'first', 0, 'last', 0);
+            groY_shots{s} = mr.makeArbitraryGrad('y', wy, 'system', sys, 'first', 0, 'last', 0);
+            spoke_phi = spoke_phi + dphi;
+        end
+        spoke_idx = 0;  % running index into groX/Y_shots
+    end
+
     % Build sequence
     for j = 0:Nz
         if j == 0
@@ -1645,17 +1732,21 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
             rf.phaseOffset  = rf_phase / 180 * pi;
             adc.phaseOffset = rf_phase / 180 * pi;
 
-            % RF block: first shot = rf only; subsequent = rf + spoiler + PE2 rewind
+            % RF block
             seq.addBlock(rf, lblIncLin);
             
             % Readout block: rotated arbitrary gradients + ADC
             if j == 0
+                % Dummy partition: unrotated, no ADC
                 seq.addBlock(groArbX, groArbY, gpeJ);
             elseif use_rotext
+                % Rotation-extension path: hardware rotation descriptor
                 seq.addBlock(adc, groArbX, groArbY, gpeJ, ...
                     mr.makeRotation('axis', 'z', 'angle', phi));
             else
-                seq.addBlock(mr.rotate('z', phi, adc, groArbX, groArbY, gpeJ));
+                % Explicit rotation path: pre-computed per-shot grads
+                spoke_idx = spoke_idx + 1;
+                seq.addBlock(adc, groX_shots{spoke_idx}, groY_shots{spoke_idx}, gpeJ);
             end
             seq.addBlock(gslSp);
             
@@ -1700,10 +1791,11 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     gt.adc_dwell_s     = adc.dwell;
     gt.seg_unique_ids  = {[0, 1, 2, 3, 4, 5]};  % outer TR (j>1 pattern)
     gt.unique_blocks   = 0:5;
-    gt.num_prep_blocks = 3 + 3 * num_shots;  % j==0 iteration: rf180+TI + num_shots*(rf+ro+spoil) + delay
+    gt.num_prep_blocks = 0;             % degenerate: absorbed into main
     gt.num_cool_blocks = 0;
-    gt.degenerate_prep = 0;
-    gt.degenerate_cool = 0;
+    gt.degenerate_prep = 1;             % j==0 TR treated as degenerate prep
+    gt.degenerate_cool = 1;             % no cooldown (absent = degenerate)
+    gt.num_once1_blocks = 3 + 3 * num_shots;  % j==0 iteration for scan table
 
     if use_rotext
         rotext_tag = '_rotext';

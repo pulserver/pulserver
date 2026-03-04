@@ -1331,6 +1331,8 @@ int pulseqlib__get_scan_table_segments(
     const pulseqlib_block_definition* bdef;
     int mult, max_mult, all_covered;
     int num_prep_blk, num_cool_blk, tr_size, region_start, region_size;
+    int prep_absorbed_trs, cool_absorbed_trs;
+    int main_region_start, main_region_size;
     float max_allowed, new_tr_dur;
 
     if (!diag) { pulseqlib_diagnostic_init(&local_diag); diag = &local_diag; }
@@ -1365,6 +1367,10 @@ int pulseqlib__get_scan_table_segments(
     n_prep = 0; n_main = 0; n_cool = 0;
     num_raw_alloc = 0; num_exp_alloc = 0;
     all_covered = 0;
+    prep_absorbed_trs = 0;
+    cool_absorbed_trs = 0;
+    main_region_start = num_prep_blk;
+    main_region_size  = 0;
 
     /* ---- 1. Map first pass of scan table to block-def-ID pattern ---- */
     scan_pat = (int*)PULSEQLIB_ALLOC((size_t)pass_size * sizeof(int));
@@ -1417,11 +1423,14 @@ int pulseqlib__get_scan_table_segments(
         n_prep_raw = seg_result;
         num_raw += n_prep_raw;
         if (region_size >= pass_size) all_covered = 1;
+        /* Record how many main TRs the prep section absorbed */
+        prep_absorbed_trs = mult;
     }
 
     /* ---- 2b. Main section ---- */
     if (!all_covered) {
-        region_start = num_prep_blk;
+        /* Start main after the TRs already absorbed by prep */
+        region_start = num_prep_blk + prep_absorbed_trs * tr_size;
         seg_result = 0;
         for (mult = 1; mult <= max_mult; ++mult) {
             region_size = mult * tr_size;
@@ -1448,6 +1457,10 @@ int pulseqlib__get_scan_table_segments(
         n_main_raw = seg_result;
         num_raw += n_main_raw;
 
+        /* Record main region geometry for tiling in step 11 */
+        main_region_start = region_start;
+        main_region_size  = region_size;
+
         /* Update TR descriptor when main needed more than one original TR */
         if (mult > 1 && seg_result > 0) {
             new_tr_dur = 0.0f;
@@ -1470,11 +1483,16 @@ int pulseqlib__get_scan_table_segments(
     /* ---- 2c. Cooldown section ---- */
     if (!all_covered &&
         !desc->tr_descriptor.degenerate_cooldown && num_cool_blk > 0) {
+        /* Use (updated) tr_size: if main absorbed multiple original TRs,
+         * the effective TR size has been enlarged above. */
         seg_result = 0;
         for (mult = 1; mult <= max_mult; ++mult) {
-            region_size  = num_cool_blk + mult * tr_size;
+            region_size  = num_cool_blk + mult * desc->tr_descriptor.tr_size;
             region_start = pass_size - region_size;
             if (region_start < 0) break;
+            /* Cooldown must not overlap the main segmentation region */
+            if (region_start < main_region_start + main_region_size)
+                break;
             if (!scan_boundary_gradients_ok(desc,
                     desc->scan_table_block_idx,
                     region_start, pass_size - 1, max_allowed))
@@ -1496,6 +1514,7 @@ int pulseqlib__get_scan_table_segments(
         if (!all_covered) {
             n_cool_raw = seg_result;
             num_raw += n_cool_raw;
+            cool_absorbed_trs = mult;
         }
     }
 
@@ -1883,6 +1902,26 @@ int pulseqlib__get_scan_table_segments(
             i = exp_segs[n].start_block + b;
             if (i >= 0 && i < pass_size)
                 pattern_seg_id[i] = unique_idx;
+        }
+    }
+
+    /* ---- 11b. Tile main-section seg_id across all main TRs ---------
+     *
+     * Steps 2a-2c only segment a single instance of each section.
+     * The main section's pattern (covering main_region_size blocks
+     * starting at main_region_start) repeats with the same period
+     * for every subsequent main TR.  Fill remaining -1 gaps by
+     * tiling; positions already assigned by prep/cooldown are kept. */
+    if (main_region_size > 0) {
+        int src_start = main_region_start;
+        int src_len   = main_region_size;
+
+        for (i = src_start + src_len; i < pass_size; ++i) {
+            if (pattern_seg_id[i] == -1) {
+                int src = src_start + ((i - src_start) % src_len);
+                if (pattern_seg_id[src] >= 0)
+                    pattern_seg_id[i] = pattern_seg_id[src];
+            }
         }
     }
 
