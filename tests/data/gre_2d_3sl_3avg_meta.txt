@@ -1,6 +1,6 @@
 num_blocks 3865
 num_averages 3
-total_duration_us 7730000
+total_duration_us 11301260
 num_adcs 768
 num_prep_blocks 0
 num_cool_blocks 0

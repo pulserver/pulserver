@@ -731,10 +731,9 @@ function write_spgr(num_slices, num_averages)
     delayTE = ceil((TE - mr.calcDuration(gxPre) - gz.fallTime ...
               - gz.flatTime / 2 - mr.calcDuration(gx) / 2) ...
               / sys.gradRasterTime) * sys.gradRasterTime;
-    delayTR = ceil((TR - mr.calcDuration(gz) - mr.calcDuration(gxPre) ...
-              - mr.calcDuration(gx) - delayTE) ...
+    delayTR = 0.1e-3 + ceil((mr.calcDuration(gz) + mr.calcDuration(gxPre) ...
+              + mr.calcDuration(gx) + delayTE) ...
               / sys.gradRasterTime) * sys.gradRasterTime;
-    delayTR = 0.1e-3;  % override for short TR test (no delay, but still valid since spoilers fit within TR)
     assert(delayTE >= 0, 'TE too short');
     assert(delayTR >= mr.calcDuration(gxSpoil, gzSpoil), 'TR too short');
     evDelayTE = mr.makeDelay(delayTE);
@@ -747,7 +746,6 @@ function write_spgr(num_slices, num_averages)
     lblSetLin = mr.makeLabel('SET', 'LIN', 0);
     lblIncSlc = mr.makeLabel('INC', 'SLC', 1);
     lblSetSlc = mr.makeLabel('SET', 'SLC', 0);
-    lblIncRep = mr.makeLabel('INC', 'REP', 1);
 
     rf_phase = 0;
     rf_inc   = 0;
@@ -1239,12 +1237,8 @@ function write_epi(num_slices, num_averages)
     slicePositions = slicePositions([1:2:Nslices, 2:2:Nslices]);
 
     % TR timing
-    minTR_1slice = mr.calcDuration(gz_fs) + mr.calcDuration(gz) ...
-                 + mr.calcDuration(gzReph) + Nnav * mr.calcDuration(gx) ...
-                 + mr.calcDuration(gyPre) + Ny_meas * mr.calcDuration(gx);
-    TRdelay = TR - minTR_1slice * Nslices;
+    TRdelay = 0.1e-3;
     TRdelay_perSlice = round(TRdelay / Nslices / sys.blockDurationRaster) * sys.blockDurationRaster;
-    TRdelay_perSlice = 0.1e-3;
     assert(TRdelay_perSlice > 0, 'TR too short for EPI');
 
     ROpolarity = sign(gx.amplitude);
@@ -1254,7 +1248,6 @@ function write_epi(num_slices, num_averages)
     lblOnce0  = mr.makeLabel('SET', 'ONCE', 0);
     lblSetSlc = mr.makeLabel('SET', 'SLC', 0);
     lblIncSlc = mr.makeLabel('INC', 'SLC', 1);
-    lblIncRep = mr.makeLabel('INC', 'REP', 1);
 
     % Hardcoded volume number
     NDummyVolumes = 1; % in fMRI, dummy scans to reach steady state
@@ -1282,7 +1275,6 @@ function write_epi(num_slices, num_averages)
                 seq.addBlock(gxPre_nav, gzReph, ...
                     mr.makeLabel('SET', 'NAV', 1), ...
                     mr.makeLabel('SET', 'LIN', floor(Ny/2)));
-                gxPre_nav = mr.scaleGrad(gxPre_nav, -1);
 
                 for n = 1:Nnav
                     seq.addBlock( ...
@@ -1347,7 +1339,6 @@ function write_epi(num_slices, num_averages)
                 seq.addBlock(gxPre_nav, gzReph, ...
                     mr.makeLabel('SET', 'NAV', 1), ...
                     mr.makeLabel('SET', 'LIN', floor(Ny/2)));
-                gxPre_nav = mr.scaleGrad(gxPre_nav, -1);
 
                 for n = 1:Nnav
                     seq.addBlock( ...
@@ -1585,17 +1576,12 @@ function write_mprage(num_averages)
             + mr.calcDuration(gx_ext) ...
             + max([mr.calcDuration(gxSp_ext), mr.calcDuration(gpe1), mr.calcDuration(gpe2)]);
 
-    TIdelay = round((TI - (find(pe1Steps==0) - 1) * TRinner ...
-              - (mr.calcDuration(rf180) - mr.calcRfCenter(rf180) - rf180.delay) ...
-              - mr.calcRfCenter(rf)) / sys.blockDurationRaster) ...
-              * sys.blockDurationRaster;
-    TIdelay = 0.1e-3;
-    TRoutDelay = max(TRout - TRinner * Ny - TIdelay - mr.calcDuration(rf180), 0);
+    TIdelay = mr.makeDelay(0.1e-3);
+    TRoutDelay = 0.1e-3;
     TRoutDelay = round(TRoutDelay / sys.blockDurationRaster) * sys.blockDurationRaster;
     if TRoutDelay < sys.blockDurationRaster
         TRoutDelay = sys.blockDurationRaster;
     end
-    TRoutDelay = 0.1e-3;
 
     % Pre-create labels
     lblIncLin   = mr.makeLabel('INC', 'LIN', 1);
@@ -1816,17 +1802,12 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
 
     % TI delay — for radial, every spoke passes through k-center,
     % so TI targets the first excitation of each partition
-    TIdelay = round((TI ...
-              - (mr.calcDuration(rf180) + mr.calcRfCenter(rf180) ...
-              - mr.calcRfCenter(rf) + minTE)) / sys.blockDurationRaster) ...
-              * sys.blockDurationRaster;
-    TIdelay = 0.1e-3;
-    TRoutDelay = max(TRout - TRinner * num_shots - TIdelay - mr.calcDuration(rf180), 0);
+    TIdelay = mr.makeDelay(0.1e-3);
+    TRoutDelay = 0.1e-3;  % override for fast test generation (shorten end-of-partition delay)
     TRoutDelay = round(TRoutDelay / sys.blockDurationRaster) * sys.blockDurationRaster;
     if TRoutDelay < sys.blockDurationRaster
         TRoutDelay = sys.blockDurationRaster;
     end
-    TRoutDelay = 0.1e-3;  % override for fast test generation (shorten end-of-partition delay)
 
     % Pre-create labels
     lblIncLin   = mr.makeLabel('INC', 'LIN', 1);

@@ -18,7 +18,7 @@ ReadoutOversamplingFactor 2
 SliceGap 0.0015 
 SlicePositions -0.0045 0.0045 0 
 SliceThickness 0.003 
-TotalDuration 6 
+TotalDuration 0.47028 
 
 # Format of blocks:
 # NUM DUR RF  GX  GY  GZ  ADC  EXT
@@ -130,7 +130,7 @@ TotalDuration 6
 105  33   0   6   9   0  0 17
 106  33   0   5  10   0  0 19
 107   0   0   0   0   0  0 20
-108 46083   0   0   0   0  0  0
+108   2   0   0   0   0  0  0
 109 458   1   0   0   1  0  0
 110 112   3   0   0   2  0  3
 111  40   0   3   0   4  0  5
@@ -238,7 +238,7 @@ TotalDuration 6
 213  33   0   6   9   0  0 17
 214  33   0   5  10   0  0 19
 215   0   0   0   0   0  0 20
-216 46083   0   0   0   0  0  0
+216   2   0   0   0   0  0  0
 217 458   1   0   0   1  0  0
 218 112   4   0   0   2  0  3
 219  40   0   3   0   4  0  5
@@ -346,9 +346,9 @@ TotalDuration 6
 321  33   0   6   9   0  0 17
 322  33   0   5  10   0  0 19
 323   0   0   0   0   0  0 20
-324 46083   0   0   0   0  0  0
+324   2   0   0   0   0  0  0
 325 458   1   0   0   1  0 22
-326 112   2   0   0   2  0  3
+326 112   5   0   0   2  0  3
 327  40   0   3   0   4  0  5
 328   0   0   0   0   0  0  8
 329  33   0   5   0   0  1  0
@@ -356,7 +356,7 @@ TotalDuration 6
 331  33   0   6   0   0  1  0
 332   0   0   0   0   0  0 12
 333  33   0   5   0   0  1  0
-334  40   0   0   7   0  0 14
+334  40   0   0  11   0  0 14
 335  33   0   6   8   0  1 17
 336  33   0   5   9   0  1 19
 337  33   0   6   9   0  1 17
@@ -454,9 +454,9 @@ TotalDuration 6
 429  33   0   6   9   0  1 17
 430  33   0   5  10   0  1 19
 431   0   0   0   0   0  0 20
-432 46083   0   0   0   0  0  0
+432   2   0   0   0   0  0  0
 433 458   1   0   0   1  0  0
-434 112   3   0   0   2  0  3
+434 112   6   0   0   2  0  3
 435  40   0   3   0   4  0  5
 436   0   0   0   0   0  0  8
 437  33   0   5   0   0  1  0
@@ -464,7 +464,7 @@ TotalDuration 6
 439  33   0   6   0   0  1  0
 440   0   0   0   0   0  0 12
 441  33   0   5   0   0  1  0
-442  40   0   0   7   0  0 14
+442  40   0   0  11   0  0 14
 443  33   0   6   8   0  1 17
 444  33   0   5   9   0  1 19
 445  33   0   6   9   0  1 17
@@ -562,9 +562,9 @@ TotalDuration 6
 537  33   0   6   9   0  1 17
 538  33   0   5  10   0  1 19
 539   0   0   0   0   0  0 20
-540 46083   0   0   0   0  0  0
+540   2   0   0   0   0  0  0
 541 458   1   0   0   1  0  0
-542 112   4   0   0   2  0  3
+542 112   7   0   0   2  0  3
 543  40   0   3   0   4  0  5
 544   0   0   0   0   0  0  8
 545  33   0   5   0   0  1  0
@@ -572,7 +572,7 @@ TotalDuration 6
 547  33   0   6   0   0  1  0
 548   0   0   0   0   0  0 12
 549  33   0   5   0   0  1  0
-550  40   0   0   7   0  0 14
+550  40   0   0  11   0  0 14
 551  33   0   6   8   0  1 17
 552  33   0   5   9   0  1 19
 553  33   0   6   9   0  1 17
@@ -670,7 +670,7 @@ TotalDuration 6
 645  33   0   6   9   0  1 17
 646  33   0   5  10   0  1 19
 647   0   0   0   0   0  0 20
-648 46083   0   0   0   0  0  0
+648   2   0   0   0   0  0  0
 
 # Format of RF events:
 # id ampl. mag_id phase_id time_shape_id center delay freqPPM phasePPM freq phase use
@@ -679,9 +679,12 @@ TotalDuration 6
 #   excitation refocusing inversion saturation preparation other undefined
 [RF]
 1       67.529 1 2 0 4000 100 -3.35 0.0841947 0 0 s
-2      502.446 3 4 0 1000 120 0 0 -3000 18.8496 e
-3      502.446 3 4 0 1000 120 0 0 3000 -18.8496 e
-4      502.446 3 4 0 1000 120 0 0 0 -0 e
+2      502.446 3 4 0 1000 120 0 0 -3000 0 e
+3      502.446 3 4 0 1000 120 0 0 3000 0 e
+4      502.446 3 4 0 1000 120 0 0 0 0 e
+5      502.446 3 4 0 1000 120 0 0 -3000 18.8496 e
+6      502.446 3 4 0 1000 120 0 0 3000 -18.8496 e
+7      502.446 3 4 0 1000 120 0 0 0 -0 e
 
 # Format of arbitrary gradients:
 #   time_shape_id of 0 means default timing (stepping with grad_raster starting at 1/2 of grad_raster)
@@ -702,7 +705,8 @@ TotalDuration 6
  4 -1.17778e+06 200  400 200   0
  5      -858018 140  380 140   0
  6       858018 140  380 140   0
- 7       288698  60  680  60   0
+ 7            0  60  680  60   0
+11       288698  60  680  60   0
 
 # Format of ADC events:
 # id num dwell delay freqPPM phasePPM freq phase phase_id
@@ -5840,4 +5844,4 @@ num_samples 3
 # preceding [SIGNATURE] BELONGS to the signature (and needs to be sripped away
 # for recalculating/verification)
 Type md5
-Hash 2ac78355c4bf49b857b395ce0c4111f2
+Hash b62e9db40f662c9b22aded01c309fc26

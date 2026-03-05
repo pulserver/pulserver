@@ -1,6 +1,5 @@
 rf_isocenter_us 2860.000000
 rf_isocenter_us 1250.000000
-rf_isocenter_us 1572046.326795
 rf_refocus_isocenter_us 9100.000000
 rf_refocus_isocenter_us 1500.000000
 rf_refocus_isocenter_us 1500.000000

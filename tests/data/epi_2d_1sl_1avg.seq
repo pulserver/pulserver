@@ -18,7 +18,7 @@ ReadoutOversamplingFactor 2
 SliceGap 0.0015 
 SlicePositions 0 
 SliceThickness 0.003 
-TotalDuration 6 
+TotalDuration 0.15688 
 
 # Format of blocks:
 # NUM DUR RF  GX  GY  GZ  ADC  EXT
@@ -130,9 +130,9 @@ TotalDuration 6
 105  33   0   6   9   0  0 17
 106  33   0   5  10   0  0 19
 107   0   0   0   0   0  0 20
-108 146083   0   0   0   0  0  0
+108   5   0   0   0   0  0  0
 109 458   1   0   0   1  0 22
-110 112   2   0   0   2  0  3
+110 112   3   0   0   2  0  3
 111  40   0   3   0   4  0  5
 112   0   0   0   0   0  0  8
 113  33   0   5   0   0  1  0
@@ -140,7 +140,7 @@ TotalDuration 6
 115  33   0   6   0   0  1  0
 116   0   0   0   0   0  0 12
 117  33   0   5   0   0  1  0
-118  40   0   0   7   0  0 14
+118  40   0   0  11   0  0 14
 119  33   0   6   8   0  1 17
 120  33   0   5   9   0  1 19
 121  33   0   6   9   0  1 17
@@ -238,7 +238,7 @@ TotalDuration 6
 213  33   0   6   9   0  1 17
 214  33   0   5  10   0  1 19
 215   0   0   0   0   0  0 20
-216 146083   0   0   0   0  0  0
+216   5   0   0   0   0  0  0
 
 # Format of RF events:
 # id ampl. mag_id phase_id time_shape_id center delay freqPPM phasePPM freq phase use
@@ -247,7 +247,8 @@ TotalDuration 6
 #   excitation refocusing inversion saturation preparation other undefined
 [RF]
 1       67.529 1 2 0 4000 100 -3.35 0.0841947 0 0 s
-2      502.446 3 4 0 1000 120 0 0 0 -0 e
+2      502.446 3 4 0 1000 120 0 0 0 0 e
+3      502.446 3 4 0 1000 120 0 0 0 -0 e
 
 # Format of arbitrary gradients:
 #   time_shape_id of 0 means default timing (stepping with grad_raster starting at 1/2 of grad_raster)
@@ -268,7 +269,8 @@ TotalDuration 6
  4 -1.17778e+06 200  400 200   0
  5      -858018 140  380 140   0
  6       858018 140  380 140   0
- 7       288698  60  680  60   0
+ 7            0  60  680  60   0
+11       288698  60  680  60   0
 
 # Format of ADC events:
 # id num dwell delay freqPPM phasePPM freq phase phase_id
@@ -5406,4 +5408,4 @@ num_samples 3
 # preceding [SIGNATURE] BELONGS to the signature (and needs to be sripped away
 # for recalculating/verification)
 Type md5
-Hash 3b5916b92166f087017103cccd0d239b
+Hash 725edf5b8d42ae1a9754d71277e5c647
