@@ -305,6 +305,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
     tr->num_prep_trs        = 1;
     tr->num_cooldown_blocks = desc->num_cooldown_blocks;
     tr->num_cooldown_trs    = 1;
+    tr->imaging_tr_start    = 0;
 
     /* Always search main region only for TR pattern.
      * After finding the period, we compare prep/cooldown to the
@@ -526,6 +527,7 @@ int pulseqlib__get_tr_in_sequence(pulseqlib_sequence_descriptor* desc, pulseqlib
             tr->degenerate_prep     = 1;
             tr->num_prep_blocks     = 0;
             tr->num_prep_trs        = desc->num_prep_blocks / l;
+            tr->imaging_tr_start    = desc->num_prep_blocks;
         }
     }
     /* Cooldown: compare [pass_len-nc..pass_len-1] against TR pattern */

@@ -1055,13 +1055,18 @@ function write_fse(num_slices, num_averages)
     tr_min.addBlock(delayTR);
 
     % Build tr_max (max |PE|)
+    % For each echo position the C library computes
+    %   sign(amp_first_imaging_TR) * max(abs(amp)) across all imaging TRs.
+    % The first imaging TR uses phaseAreas(:, 1).
     tr_max.addBlock(GS1);
     tr_max.addBlock(GS2, rfex);
     tr_max.addBlock(GS3, GR3);
     for kech = 1:necho
-        phaseArea = phaseAreas(kech, 1);
-        if maxPeArea > 0
-            pe_scale = phaseArea / maxPeArea;
+        maxAbsArea = max(abs(phaseAreas(kech, :)));
+        if maxPeArea > 0 && maxAbsArea > 0
+            pe_sign = sign(phaseAreas(kech, 1));
+            if pe_sign == 0; pe_sign = 1; end
+            pe_scale = pe_sign * maxAbsArea / maxPeArea;
         else
             pe_scale = 0;
         end
@@ -1474,8 +1479,8 @@ function write_epi(num_slices, num_averages)
     nav_pattern = repmat([3, 4], 1, Nnav);  % label + nav readout × Nnav
     readout_pattern = [6, repmat(7, 1, Ny_meas - 2), 8];
     seg0_ids = [0, 1, 2, nav_pattern, 5, readout_pattern];  % main readout
-    seg1_ids = 3;                                             % lblIncSlc (same def as nav labels)
-    seg2_ids = 9;                                             % TR delay
+    seg1_ids = 3;                                           % lblIncSlc (same def as nav labels)
+    seg2_ids = 9;                                           % TR delay
 
     % Per-slice block count (prep mirrors main):
     %   fatsat + excite + prephase + 2*Nnav(label+nav) + gyPre + Ny_meas(ro) + lblIncSlc + delay
@@ -1643,16 +1648,19 @@ function write_mprage(num_averages)
     % partition: [rf180, TIdelay, Ny*(rf+pre+readout+spoil), TRoutDelay]
     blocks_per_partition = 2 + 4 * Ny + 1;
 
-    % MAX_POS: PE1 and PE2 at full scale (sign from first instance = +1
-    % because the first instance is the j=0 dummy with PE=0 → sign(0)=+1).
+    % MAX_POS: PE1 at actual per-line scale (constant across partitions),
+    % PE2 at full scale with sign from first imaging partition (j=1).
+    % pe2Steps(1) = -1 (most negative), so sign = -1.
+    pe2_sign = sign(pe2Steps(1));
+    if pe2_sign == 0; pe2_sign = 1; end
     pass_max = mr.Sequence(sys);
     pass_max.addBlock(rf180);
     pass_max.addBlock(TIdelay, gslSp);
     for i = 1:Ny
         pass_max.addBlock(rf);
-        pass_max.addBlock(gxPre, mr.scaleGrad(gpe1, pe1Steps(i)), mr.scaleGrad(gpe2, 1));
+        pass_max.addBlock(gxPre, mr.scaleGrad(gpe1, pe1Steps(i)), mr.scaleGrad(gpe2, pe2_sign));
         pass_max.addBlock(gx_ext, adc);
-        pass_max.addBlock(gxSp_ext, mr.scaleGrad(gpe1, -pe1Steps(i)), mr.scaleGrad(gpe2, -1));
+        pass_max.addBlock(gxSp_ext, mr.scaleGrad(gpe1, -pe1Steps(i)), mr.scaleGrad(gpe2, -pe2_sign));
     end
     pass_max.addBlock(mr.makeDelay(TRoutDelay));
 
@@ -1905,16 +1913,19 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     %   [rf180, TIdelay+gslSp, num_shots*(rf+readout+gslSp), TRoutDelay]
     blocks_per_partition = 3 + 3 * num_shots;
 
-    % MAX_POS: partition encode at full scale (sign from first instance
-    % j=0 dummy with GPE=0 → sign=+1).  Readout rotation does NOT affect
-    % pos_max for the C library (all shots share the same gradient
-    % definition; rotation only changes amplitudes).
+    % MAX_POS: partition encode at full scale with sign from first
+    % imaging partition (j=1).  peSteps(1) = -1, so sign = -1.
+    % Readout rotation does NOT affect pos_max for the C library (all
+    % shots share the same gradient definition; rotation only changes
+    % amplitudes).
+    pe_sign = sign(peSteps(1));
+    if pe_sign == 0; pe_sign = 1; end
     pass_max = mr.Sequence(sys);
     pass_max.addBlock(rf180);
     pass_max.addBlock(TIdelay, gslSp);
     for i = 1:num_shots
         pass_max.addBlock(rf);
-        pass_max.addBlock(adc, groArbX, groArbY, mr.scaleGrad(gpe, 1));
+        pass_max.addBlock(adc, groArbX, groArbY, mr.scaleGrad(gpe, pe_sign));
         pass_max.addBlock(gslSp);
     end
     pass_max.addBlock(mr.makeDelay(TRoutDelay));
@@ -1960,8 +1971,8 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
-    gt.seg_unique_ids  = {[0, 1, repmat([2, 3, 4], 1, num_shots)], 5};  % 2 segments
-    gt.unique_blocks   = 0:5;
+    gt.seg_unique_ids  = {[0, 1, repmat([2, 3, 1], 1, num_shots)], 4};  % 2 segments
+    gt.unique_blocks   = 0:4;
     gt.num_prep_blocks = 0;             % degenerate: absorbed into main
     gt.num_cool_blocks = 0;
     gt.degenerate_prep = 1;             % j==0 TR treated as degenerate prep

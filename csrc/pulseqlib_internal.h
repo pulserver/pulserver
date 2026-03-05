@@ -365,10 +365,11 @@ typedef struct pulseqlib_tr_descriptor {
     int degenerate_prep;
     int num_cooldown_trs;
     int degenerate_cooldown;
+    int imaging_tr_start;
     float tr_duration_us;
 } pulseqlib_tr_descriptor;
 
-#define PULSEQLIB_TR_DESCRIPTOR_INIT {0, 0, 0, 0, 0, 0, 0, 0, 0.0f}
+#define PULSEQLIB_TR_DESCRIPTOR_INIT {0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0f}
 
 /* Per-segment timing summary */
 typedef struct pulseqlib_segment_timing {

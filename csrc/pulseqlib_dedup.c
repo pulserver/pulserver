@@ -217,6 +217,7 @@ static void build_grad_def_row(const pulseqlib__seq_file* seq, int* row, float* 
         row[2] = (int)grad[3];  /* flat */
         row[3] = (int)grad[4];  /* fall */
         row[4] = 0;
+        row[5] = (int)grad[5];  /* delay (trap: 6th column = grad[5]) */
     } else {
         row[1] = 0;
         row[2] = 0;
@@ -228,8 +229,8 @@ static void build_grad_def_row(const pulseqlib__seq_file* seq, int* row, float* 
             row[3] = 0;
         }
         row[4] = (int)grad[5];  /* time shape id */
+        row[5] = (int)grad[6];  /* delay (arb: 7th column = grad[6]) */
     }
-    row[5] = (int)grad[6];      /* delay */
     *param = grad[1];            /* amplitude */
 }
 

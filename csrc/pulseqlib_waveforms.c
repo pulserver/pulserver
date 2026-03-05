@@ -138,7 +138,9 @@ static int compute_position_max_amplitudes_filtered(
         pos_max_gz[n] = 0.0f;
     }
 
-    for (tr_idx = 0; tr_idx < num_trs; ++tr_idx) {
+    for (tr_idx = tr->imaging_tr_start / tr_size;
+         tr_idx < tr->imaging_tr_start / tr_size + num_trs;
+         ++tr_idx) {
         /* skip TRs not in the target group */
         if (tr_group_labels && tr_group_labels[tr_idx] != target_group)
             continue;
@@ -918,7 +920,8 @@ int pulseqlib_get_tr_gradient_waveforms(
     }
     desc = &coll->descriptors[subseq_idx];
     rc = pulseqlib__get_gradient_waveforms_range(desc, &uw, diag,
-        desc->tr_descriptor.num_prep_blocks,
+        desc->tr_descriptor.num_prep_blocks
+            + desc->tr_descriptor.imaging_tr_start,
         desc->tr_descriptor.tr_size,
         PULSEQLIB_AMP_MAX_POS, NULL, 0);
     if (PULSEQLIB_FAILED(rc)) return rc;
@@ -1154,8 +1157,8 @@ int pulseqlib_get_tr_waveforms(
         }
         tr_block_start = tr->num_prep_blocks + tr_index * tr->tr_size;
     } else {
-        /* canonical main TR (first instance) */
-        tr_block_start = tr->num_prep_blocks;
+        /* canonical main TR (first imaging instance) */
+        tr_block_start = tr->num_prep_blocks + tr->imaging_tr_start;
     }
 
     block_start = tr_block_start;

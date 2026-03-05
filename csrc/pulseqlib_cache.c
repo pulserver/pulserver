@@ -12,7 +12,7 @@
 /* ================================================================== */
 
 #define PULSEQLIB_CACHE_ENDIAN_MARKER  0x01020304
-#define PULSEQLIB_CACHE_VERSION        14
+#define PULSEQLIB_CACHE_VERSION        15
 
 /* ------ Byte-swap helpers ------ */
 
@@ -277,7 +277,7 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
             if (!write4(f, d->shapes[i].samples, n)) return 0;
     }
 
-    /* TR descriptor (9 fields: 8 int + 1 float) */
+    /* TR descriptor (10 fields: 9 int + 1 float) */
     if (!write4(f, &d->tr_descriptor.num_prep_blocks, 1)) return 0;
     if (!write4(f, &d->tr_descriptor.num_cooldown_blocks, 1)) return 0;
     if (!write4(f, &d->tr_descriptor.tr_size, 1)) return 0;
@@ -286,6 +286,7 @@ static int write_descriptor(FILE* f, const pulseqlib_sequence_descriptor* d)
     if (!write4(f, &d->tr_descriptor.degenerate_prep, 1)) return 0;
     if (!write4(f, &d->tr_descriptor.num_cooldown_trs, 1)) return 0;
     if (!write4(f, &d->tr_descriptor.degenerate_cooldown, 1)) return 0;
+    if (!write4(f, &d->tr_descriptor.imaging_tr_start, 1)) return 0;
     if (!write4(f, &d->tr_descriptor.tr_duration_us, 1)) return 0;
 
     /* segment definitions */
@@ -585,8 +586,9 @@ static int read_descriptor(FILE* f, pulseqlib_sequence_descriptor* d, int do_swa
     if (!read4(f, &d->tr_descriptor.degenerate_prep, 1)) return 0;
     if (!read4(f, &d->tr_descriptor.num_cooldown_trs, 1)) return 0;
     if (!read4(f, &d->tr_descriptor.degenerate_cooldown, 1)) return 0;
+    if (!read4(f, &d->tr_descriptor.imaging_tr_start, 1)) return 0;
     if (!read4(f, &d->tr_descriptor.tr_duration_us, 1)) return 0;
-    if (do_swap) swap4_array(&d->tr_descriptor.num_prep_blocks, 9);
+    if (do_swap) swap4_array(&d->tr_descriptor.num_prep_blocks, 10);
 
     /* segment definitions */
     if (!read4(f, &d->num_unique_segments, 1)) return 0;
