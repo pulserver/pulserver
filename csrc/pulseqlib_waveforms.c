@@ -195,6 +195,88 @@ static int compute_position_max_amplitudes_filtered(
 }
 
 /* ================================================================== */
+/*  Compute per-position variable-gradient flags (ZERO_VAR mode)      */
+/* ================================================================== */
+
+/**
+ * For each (position, axis) within the canonical TR, determine whether
+ * the gradient amplitude varies across TR instances.  A flag of 1 means
+ * variable (will be zeroed in ZERO_VAR mode); 0 means constant (keeps
+ * its actual amplitude).
+ *
+ * The test is simple: record the amplitude from the first TR instance
+ * that has a non-null gradient at (pos, axis), then check all subsequent
+ * TRs.  If any differ, set the flag.
+ */
+int pulseqlib__compute_variable_grad_flags(pulseqlib_sequence_descriptor* desc)
+{
+    const pulseqlib_tr_descriptor* tr;
+    int tr_size, num_trs, n, pos, block_idx, raw_id, tr_idx;
+    const pulseqlib_block_table_element* bte;
+    const pulseqlib_grad_table_element* gte;
+    float first_amp[3];  /* per axis: amplitude from first TR */
+    int   seen[3];       /* per axis: 1 if first TR recorded */
+
+    if (!desc) return PULSEQLIB_ERR_NULL_POINTER;
+
+    tr      = &desc->tr_descriptor;
+    tr_size = tr->tr_size;
+    num_trs = tr->num_trs;
+
+    /* free any prior allocation */
+    if (desc->variable_grad_flags) {
+        PULSEQLIB_FREE(desc->variable_grad_flags);
+        desc->variable_grad_flags = NULL;
+    }
+
+    if (tr_size <= 0 || num_trs <= 0)
+        return PULSEQLIB_SUCCESS;
+
+    n = tr_size * 3;
+    desc->variable_grad_flags = (int*)PULSEQLIB_ALLOC((size_t)n * sizeof(int));
+    if (!desc->variable_grad_flags)
+        return PULSEQLIB_ERR_ALLOC_FAILED;
+    for (pos = 0; pos < n; ++pos)
+        desc->variable_grad_flags[pos] = 0;
+
+    for (pos = 0; pos < tr_size; ++pos) {
+        first_amp[0] = 0.0f; first_amp[1] = 0.0f; first_amp[2] = 0.0f;
+        seen[0] = 0; seen[1] = 0; seen[2] = 0;
+
+        for (tr_idx = 0; tr_idx < num_trs; ++tr_idx) {
+            block_idx = tr->num_prep_blocks + tr_idx * tr_size + pos;
+            if (block_idx < 0 || block_idx >= desc->num_blocks) continue;
+            bte = &desc->block_table[block_idx];
+
+            /* axis 0 = gx, 1 = gy, 2 = gz */
+            {
+                int axis;
+                int raw_ids[3];
+                raw_ids[0] = bte->gx_id;
+                raw_ids[1] = bte->gy_id;
+                raw_ids[2] = bte->gz_id;
+
+                for (axis = 0; axis < 3; ++axis) {
+                    raw_id = raw_ids[axis];
+                    if (raw_id >= 0 && raw_id < desc->grad_table_size) {
+                        gte = &desc->grad_table[raw_id];
+                        if (!seen[axis]) {
+                            first_amp[axis] = gte->amplitude;
+                            seen[axis] = 1;
+                        } else {
+                            if (gte->amplitude != first_amp[axis]) {
+                                desc->variable_grad_flags[pos * 3 + axis] = 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return PULSEQLIB_SUCCESS;
+}
+
+/* ================================================================== */
 /*  Find unique shot-index TR variants                                */
 /* ================================================================== */
 
@@ -509,9 +591,9 @@ static int interpolate_to_uniform(
 /* ================================================================== */
 
 /*  amplitude_mode (uses PULSEQLIB_AMP_* defines from pulseqlib_types.h):
- *    PULSEQLIB_AMP_MAX_POS (0) = position-max (worst-case safety)
- *    PULSEQLIB_AMP_MIN_POS (1) = min |amplitude|, preserve sign (k-space)
- *    PULSEQLIB_AMP_ACTUAL  (2) = actual block amplitude (single-TR)
+ *    PULSEQLIB_AMP_MAX_POS  (0) = position-max (worst-case safety)
+ *    PULSEQLIB_AMP_ZERO_VAR (1) = zero variable grads, keep constant (k-space)
+ *    PULSEQLIB_AMP_ACTUAL   (2) = actual block amplitude (single-TR)
  */
 int pulseqlib__get_gradient_waveforms_range(
     const pulseqlib_sequence_descriptor* desc,
@@ -582,7 +664,8 @@ int pulseqlib__get_gradient_waveforms_range(
     }
 
     /* position-max amplitudes (only for worst-case main-TR mode) */
-    if (amplitude_mode == PULSEQLIB_AMP_MAX_POS) {
+    if (amplitude_mode == PULSEQLIB_AMP_MAX_POS ||
+        amplitude_mode == PULSEQLIB_AMP_ZERO_VAR) {
         pos_max_gx = (float*)PULSEQLIB_ALLOC(
             (size_t)block_count * PULSEQLIB_MAX_GRAD_SHOTS * sizeof(float));
         pos_max_gy = (float*)PULSEQLIB_ALLOC(
@@ -599,6 +682,23 @@ int pulseqlib__get_gradient_waveforms_range(
         compute_position_max_amplitudes_filtered(desc,
             pos_max_gx, pos_max_gy, pos_max_gz,
             tr_group_labels, target_group);
+
+        /* ZERO_VAR: zero out positions whose gradients vary across TRs */
+        if (amplitude_mode == PULSEQLIB_AMP_ZERO_VAR &&
+            desc->variable_grad_flags) {
+            int vp;
+            for (vp = 0; vp < block_count && vp < desc->tr_descriptor.tr_size; ++vp) {
+                if (desc->variable_grad_flags[vp * 3 + 0])
+                    for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
+                        pos_max_gx[vp * PULSEQLIB_MAX_GRAD_SHOTS + k] = 0.0f;
+                if (desc->variable_grad_flags[vp * 3 + 1])
+                    for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
+                        pos_max_gy[vp * PULSEQLIB_MAX_GRAD_SHOTS + k] = 0.0f;
+                if (desc->variable_grad_flags[vp * 3 + 2])
+                    for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
+                        pos_max_gz[vp * PULSEQLIB_MAX_GRAD_SHOTS + k] = 0.0f;
+            }
+        }
     }
 
     /* ---- pass 1: count samples ---- */
@@ -679,7 +779,8 @@ int pulseqlib__get_gradient_waveforms_range(
         gz_def = (gz_tab && gz_tab->id >= 0 && gz_tab->id < desc->num_unique_grads)
                  ? &desc->grad_definitions[gz_tab->id] : NULL;
 
-        if (amplitude_mode == PULSEQLIB_AMP_MAX_POS) {
+        if (amplitude_mode == PULSEQLIB_AMP_MAX_POS ||
+            amplitude_mode == PULSEQLIB_AMP_ZERO_VAR) {
             idx_gx += fill_grad_waveform_for_block(desc,
                 time_gx, wf_gx, idx_gx,
                 gx_def, gx_tab, t0,
@@ -692,34 +793,6 @@ int pulseqlib__get_gradient_waveforms_range(
                 time_gz, wf_gz, idx_gz,
                 gz_def, gz_tab, t0,
                 &pos_max_gz[n * PULSEQLIB_MAX_GRAD_SHOTS], block_dur_us);
-        } else if (amplitude_mode == PULSEQLIB_AMP_MIN_POS) {
-            /* min-positive mode: use gd->min_amplitude_signed (preserve sign) */
-            for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
-            if (gx_def) {
-                for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
-                    actual_amp[k] = gx_def->min_amplitude_signed[k];
-            }
-            idx_gx += fill_grad_waveform_for_block(desc,
-                time_gx, wf_gx, idx_gx,
-                gx_def, gx_tab, t0, actual_amp, block_dur_us);
-
-            for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
-            if (gy_def) {
-                for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
-                    actual_amp[k] = gy_def->min_amplitude_signed[k];
-            }
-            idx_gy += fill_grad_waveform_for_block(desc,
-                time_gy, wf_gy, idx_gy,
-                gy_def, gy_tab, t0, actual_amp, block_dur_us);
-
-            for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
-            if (gz_def) {
-                for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
-                    actual_amp[k] = gz_def->min_amplitude_signed[k];
-            }
-            idx_gz += fill_grad_waveform_for_block(desc,
-                time_gz, wf_gz, idx_gz,
-                gz_def, gz_tab, t0, actual_amp, block_dur_us);
         } else {
             for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
             if (gx_tab) {
@@ -1106,7 +1179,8 @@ int pulseqlib_get_tr_waveforms(
     }
 
     /* ---- precompute position-max if needed ---- */
-    if (amplitude_mode == PULSEQLIB_AMP_MAX_POS) {
+    if (amplitude_mode == PULSEQLIB_AMP_MAX_POS ||
+        amplitude_mode == PULSEQLIB_AMP_ZERO_VAR) {
         pos_max_gx = (float*)PULSEQLIB_ALLOC(
             (size_t)tr->tr_size * PULSEQLIB_MAX_GRAD_SHOTS * sizeof(float));
         pos_max_gy = (float*)PULSEQLIB_ALLOC(
@@ -1116,6 +1190,23 @@ int pulseqlib_get_tr_waveforms(
         if (!pos_max_gx || !pos_max_gy || !pos_max_gz) goto alloc_fail;
         compute_position_max_amplitudes_filtered(desc,
             pos_max_gx, pos_max_gy, pos_max_gz, NULL, 0);
+
+        /* ZERO_VAR: zero out positions whose gradients vary across TRs */
+        if (amplitude_mode == PULSEQLIB_AMP_ZERO_VAR &&
+            desc->variable_grad_flags) {
+            int vp;
+            for (vp = 0; vp < tr->tr_size; ++vp) {
+                if (desc->variable_grad_flags[vp * 3 + 0])
+                    for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
+                        pos_max_gx[vp * PULSEQLIB_MAX_GRAD_SHOTS + k] = 0.0f;
+                if (desc->variable_grad_flags[vp * 3 + 1])
+                    for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
+                        pos_max_gy[vp * PULSEQLIB_MAX_GRAD_SHOTS + k] = 0.0f;
+                if (desc->variable_grad_flags[vp * 3 + 2])
+                    for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k)
+                        pos_max_gz[vp * PULSEQLIB_MAX_GRAD_SHOTS + k] = 0.0f;
+            }
+        }
     }
 
     /* ---- PASS 1: count samples ---- */
@@ -1241,7 +1332,9 @@ int pulseqlib_get_tr_waveforms(
         gz_def = (gz_tab && gz_tab->id >= 0 && gz_tab->id < desc->num_unique_grads)
                  ? &desc->grad_definitions[gz_tab->id] : NULL;
 
-        if (amplitude_mode == PULSEQLIB_AMP_MAX_POS && pos_in_tr >= 0 && pos_in_tr < tr->tr_size) {
+        if ((amplitude_mode == PULSEQLIB_AMP_MAX_POS ||
+             amplitude_mode == PULSEQLIB_AMP_ZERO_VAR) &&
+            pos_in_tr >= 0 && pos_in_tr < tr->tr_size) {
             idx_gx += fill_grad_waveform_for_block(desc,
                 out->gx.time_us, out->gx.amplitude, idx_gx,
                 gx_def, gx_tab, t0,
@@ -1254,20 +1347,8 @@ int pulseqlib_get_tr_waveforms(
                 out->gz.time_us, out->gz.amplitude, idx_gz,
                 gz_def, gz_tab, t0,
                 &pos_max_gz[pos_in_tr * PULSEQLIB_MAX_GRAD_SHOTS], block_dur_us);
-        } else if (amplitude_mode == PULSEQLIB_AMP_MIN_POS) {
-            for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
-            if (gx_def) { for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = gx_def->min_amplitude_signed[k]; }
-            idx_gx += fill_grad_waveform_for_block(desc, out->gx.time_us, out->gx.amplitude, idx_gx, gx_def, gx_tab, t0, actual_amp, block_dur_us);
-
-            for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
-            if (gy_def) { for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = gy_def->min_amplitude_signed[k]; }
-            idx_gy += fill_grad_waveform_for_block(desc, out->gy.time_us, out->gy.amplitude, idx_gy, gy_def, gy_tab, t0, actual_amp, block_dur_us);
-
-            for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
-            if (gz_def) { for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = gz_def->min_amplitude_signed[k]; }
-            idx_gz += fill_grad_waveform_for_block(desc, out->gz.time_us, out->gz.amplitude, idx_gz, gz_def, gz_tab, t0, actual_amp, block_dur_us);
         } else {
-            /* PULSEQLIB_AMP_ACTUAL or MAX_POS for prep/cooldown blocks */
+            /* PULSEQLIB_AMP_ACTUAL, or MAX_POS/ZERO_VAR for prep/cooldown blocks */
             for (k = 0; k < PULSEQLIB_MAX_GRAD_SHOTS; ++k) actual_amp[k] = 0.0f;
             if (gx_tab) {
                 k = gx_tab->shot_index;
@@ -1321,7 +1402,7 @@ int pulseqlib_get_tr_waveforms(
                 }
             }
         } else {
-            /* MAX_POS / MIN_POS: canonical ADC from block definition */
+            /* MAX_POS / ZERO_VAR: canonical ADC from block definition */
             if (bdef->adc_id >= 0 && bdef->adc_id < desc->num_unique_adcs) {
                 const pulseqlib_adc_definition* adef = &desc->adc_definitions[bdef->adc_id];
                 pulseqlib_adc_event* ev = &out->adc_events[idx_adc];

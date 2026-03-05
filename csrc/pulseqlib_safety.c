@@ -212,7 +212,7 @@ int pulseqlib__calc_segment_timing(
     /* ---- Step A: build min-amplitude k-space trajectory ---- */
     if (tr_size > 0) {
         result = pulseqlib__get_gradient_waveforms_range(desc, &min_waveforms, diag,
-            num_prep, tr_size, PULSEQLIB_AMP_MIN_POS, NULL, 0);
+            num_prep, tr_size, PULSEQLIB_AMP_ZERO_VAR, NULL, 0);
 
         if (!PULSEQLIB_FAILED(result) && min_waveforms.num_samples >= 2) {
             n_samples = min_waveforms.num_samples;

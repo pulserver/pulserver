@@ -252,7 +252,7 @@ classdef SequenceCollection < handle
         %
         % Name-value options
         %   sequence_idx              int     Subsequence (1-based). Default: 1
-        %   tr_instance               int|char TR instance or 'max_pos'/'min_pos'/'min_abs'.
+        %   tr_instance               int|char TR instance or 'max_pos'/'zero_var'.
         %   hide_prep                 logical Hide prep blocks. Default: true
         %   hide_cooldown             logical Hide cooldown blocks. Default: true
         %   collapse_delays           logical Shrink pure delays. Default: false

@@ -100,6 +100,8 @@ void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
     if (d->scan_table_tr_start)  { PULSEQLIB_FREE(d->scan_table_tr_start);  d->scan_table_tr_start  = NULL; }
     d->scan_table_len = 0;
 
+    if (d->variable_grad_flags) { PULSEQLIB_FREE(d->variable_grad_flags); d->variable_grad_flags = NULL; }
+
     if (d->label_table) { PULSEQLIB_FREE(d->label_table); d->label_table = NULL; }
     d->label_num_columns = 0;
     d->label_num_entries = 0;
@@ -586,6 +588,9 @@ int pulseqlib__get_collection_descriptors(
 
         result = pulseqlib__get_tr_in_sequence(&desc, diag);
         if (PULSEQLIB_FAILED(diag->code)) goto fail;
+
+        result = pulseqlib__compute_variable_grad_flags(&desc);
+        if (PULSEQLIB_FAILED(result)) { diag->code = result; goto fail; }
 
         result = pulseqlib__build_scan_table(&desc, num_averages, diag);
         if (PULSEQLIB_FAILED(diag->code)) goto fail;

@@ -321,38 +321,67 @@ MU_TEST_SUITE(suite_c_segment_defs) {
 /*  Suite D — Waveform tests                                          */
 /* ================================================================== */
 
-/* Tolerance: time ±1 raster (20 us), amplitude ±0.1 Hz/m */
-#define WF_TIME_TOL  20.0f
-#define WF_AMP_TOL   0.1f
+/* Tolerance: amplitude ±1.0 Hz/m  (≈ 23 pT/m, accounts for float32
+ * rounding and uniform-raster interpolation offsets) */
+#define WF_AMP_TOL   1.0f
+
+/*
+ * Linearly interpolate the library corner-point waveform at time t_us.
+ * Handles step discontinuities (duplicate times) by using the later value.
+ * Returns 0.0 for times outside the waveform range.
+ */
+static float interp_lib_wf(const pulseqlib_channel_waveform* wf, float t_us)
+{
+    int j;
+    float t0, t1, a0, a1, frac;
+
+    if (!wf || wf->num_samples <= 0) return 0.0f;
+    if (t_us <= wf->time_us[0])
+        return wf->amplitude[0];
+    if (t_us >= wf->time_us[wf->num_samples - 1])
+        return wf->amplitude[wf->num_samples - 1];
+
+    for (j = 0; j < wf->num_samples - 1; ++j) {
+        t0 = wf->time_us[j];
+        t1 = wf->time_us[j + 1];
+        if (t_us >= t0 && t_us <= t1) {
+            if ((t1 - t0) < 0.001f) {
+                /* duplicate or near-duplicate time: step — use later value */
+                return wf->amplitude[j + 1];
+            }
+            frac = (t_us - t0) / (t1 - t0);
+            a0 = wf->amplitude[j];
+            a1 = wf->amplitude[j + 1];
+            return a0 + frac * (a1 - a0);
+        }
+    }
+    return wf->amplitude[wf->num_samples - 1];
+}
 
 /* Compare a single axis waveform from the library against a CSV file.
- * The library output has corner-point (native) timing.
- * Reports one assertion for sample count and one for the array contents. */
+ * Evaluates the library corner-point waveform at each CSV time point via
+ * linear interpolation and checks that amplitudes match within WF_AMP_TOL.
+ * This is robust to block-boundary padding differences between C and MATLAB. */
 static void compare_waveform(const char* csv_path,
                              const pulseqlib_channel_waveform* lib_wf)
 {
     seg_waveform gt;
     int i;
     char msg[256];
+    float lib_amp;
 
     if (!parse_waveform_csv(csv_path, &gt)) {
         /* CSV might not exist or be empty — skip quietly */
         return;
     }
 
-    mu_assert_int_eq(gt.num_samples, lib_wf->num_samples);
-
-    for (i = 0; i < gt.num_samples && i < lib_wf->num_samples; ++i) {
-        if ((float)fabs((double)(gt.time_us[i] - lib_wf->time_us[i])) > WF_TIME_TOL) {
+    for (i = 0; i < gt.num_samples; ++i) {
+        lib_amp = interp_lib_wf(lib_wf, gt.time_us[i]);
+        if ((float)fabs((double)(gt.amplitude[i] - lib_amp)) > WF_AMP_TOL) {
             (void)snprintf(msg, sizeof(msg),
-                "waveform time mismatch at i=%d: expected %.4f got %.4f",
-                i, (double)gt.time_us[i], (double)lib_wf->time_us[i]);
-            mu_fail(msg);
-        }
-        if ((float)fabs((double)(gt.amplitude[i] - lib_wf->amplitude[i])) > WF_AMP_TOL) {
-            (void)snprintf(msg, sizeof(msg),
-                "waveform amp mismatch at i=%d: expected %.4f got %.4f",
-                i, (double)gt.amplitude[i], (double)lib_wf->amplitude[i]);
+                "waveform amp mismatch at i=%d t=%.1f us: expected %.4f got %.4f",
+                i, (double)gt.time_us[i],
+                (double)gt.amplitude[i], (double)lib_amp);
             mu_fail(msg);
         }
     }
@@ -404,13 +433,13 @@ MU_TEST(test_wf_epi_max)    { waveform_test("epi_2d_1sl_1avg",   PULSEQLIB_AMP_M
 MU_TEST(test_wf_mprage_max) { waveform_test("mprage_3d_1avg",    PULSEQLIB_AMP_MAX_POS, "max"); }
 MU_TEST(test_wf_mpnc_max)   { waveform_test("mprage_noncart_3d_240shots_1avg", PULSEQLIB_AMP_MAX_POS, "max"); }
 
-/* MIN_POS mode (mode 1) — will match _tr_min_* CSVs once regenerated */
-MU_TEST(test_wf_bssfp_min)  { waveform_test("bssfp_2d_1sl_1avg", PULSEQLIB_AMP_MIN_POS, "min"); }
-MU_TEST(test_wf_gre_min)    { waveform_test("gre_2d_1sl_1avg",   PULSEQLIB_AMP_MIN_POS, "min"); }
-MU_TEST(test_wf_fse_min)    { waveform_test("fse_2d_1sl_1avg",   PULSEQLIB_AMP_MIN_POS, "min"); }
-MU_TEST(test_wf_epi_min)    { waveform_test("epi_2d_1sl_1avg",   PULSEQLIB_AMP_MIN_POS, "min"); }
-MU_TEST(test_wf_mprage_min) { waveform_test("mprage_3d_1avg",    PULSEQLIB_AMP_MIN_POS, "min"); }
-MU_TEST(test_wf_mpnc_min)   { waveform_test("mprage_noncart_3d_240shots_1avg", PULSEQLIB_AMP_MIN_POS, "min"); }
+/* ZERO_VAR mode (mode 1) — will match _tr_min_* CSVs once regenerated */
+MU_TEST(test_wf_bssfp_min)  { waveform_test("bssfp_2d_1sl_1avg", PULSEQLIB_AMP_ZERO_VAR, "min"); }
+MU_TEST(test_wf_gre_min)    { waveform_test("gre_2d_1sl_1avg",   PULSEQLIB_AMP_ZERO_VAR, "min"); }
+MU_TEST(test_wf_fse_min)    { waveform_test("fse_2d_1sl_1avg",   PULSEQLIB_AMP_ZERO_VAR, "min"); }
+MU_TEST(test_wf_epi_min)    { waveform_test("epi_2d_1sl_1avg",   PULSEQLIB_AMP_ZERO_VAR, "min"); }
+MU_TEST(test_wf_mprage_min) { waveform_test("mprage_3d_1avg",    PULSEQLIB_AMP_ZERO_VAR, "min"); }
+MU_TEST(test_wf_mpnc_min)   { waveform_test("mprage_noncart_3d_240shots_1avg", PULSEQLIB_AMP_ZERO_VAR, "min"); }
 
 MU_TEST_SUITE(suite_d_waveforms) {
     MU_SUITE_CONFIGURE(&setup_gre, NULL);
@@ -477,12 +506,12 @@ MU_TEST(test_anch_mprage_max){ anchor_test("mprage_3d_1avg",    "max", PULSEQLIB
 MU_TEST(test_anch_mpnc_max)  { anchor_test("mprage_noncart_3d_240shots_1avg", "max", PULSEQLIB_AMP_MAX_POS); }
 
 /* MIN_POS mode */
-MU_TEST(test_anch_bssfp_min) { anchor_test("bssfp_2d_1sl_1avg", "min", PULSEQLIB_AMP_MIN_POS); }
-MU_TEST(test_anch_gre_min)   { anchor_test("gre_2d_1sl_1avg",   "min", PULSEQLIB_AMP_MIN_POS); }
-MU_TEST(test_anch_fse_min)   { anchor_test("fse_2d_1sl_1avg",   "min", PULSEQLIB_AMP_MIN_POS); }
-MU_TEST(test_anch_epi_min)   { anchor_test("epi_2d_1sl_1avg",   "min", PULSEQLIB_AMP_MIN_POS); }
-MU_TEST(test_anch_mprage_min){ anchor_test("mprage_3d_1avg",    "min", PULSEQLIB_AMP_MIN_POS); }
-MU_TEST(test_anch_mpnc_min)  { anchor_test("mprage_noncart_3d_240shots_1avg", "min", PULSEQLIB_AMP_MIN_POS); }
+MU_TEST(test_anch_bssfp_min) { anchor_test("bssfp_2d_1sl_1avg", "min", PULSEQLIB_AMP_ZERO_VAR); }
+MU_TEST(test_anch_gre_min)   { anchor_test("gre_2d_1sl_1avg",   "min", PULSEQLIB_AMP_ZERO_VAR); }
+MU_TEST(test_anch_fse_min)   { anchor_test("fse_2d_1sl_1avg",   "min", PULSEQLIB_AMP_ZERO_VAR); }
+MU_TEST(test_anch_epi_min)   { anchor_test("epi_2d_1sl_1avg",   "min", PULSEQLIB_AMP_ZERO_VAR); }
+MU_TEST(test_anch_mprage_min){ anchor_test("mprage_3d_1avg",    "min", PULSEQLIB_AMP_ZERO_VAR); }
+MU_TEST(test_anch_mpnc_min)  { anchor_test("mprage_noncart_3d_240shots_1avg", "min", PULSEQLIB_AMP_ZERO_VAR); }
 
 MU_TEST_SUITE(suite_e_anchors) {
     MU_SUITE_CONFIGURE(&setup_gre, NULL);

@@ -91,15 +91,14 @@ class TrWaveforms:
 
 # Amplitude mode constants (must match C defines)
 AMP_MAX_POS = 0
-AMP_MIN_POS = 1
-AMP_MIN_ABS = AMP_MIN_POS  # backward compat alias
+AMP_ZERO_VAR = 1
 AMP_ACTUAL = 2
 
 
 def get_tr_waveforms(
     seq: SequenceCollection,
     subsequence_idx: int = 0,
-    amplitude_mode: Literal['max_pos', 'min_pos', 'min_abs', 'actual'] = 'max_pos',
+    amplitude_mode: Literal['max_pos', 'zero_var', 'actual'] = 'max_pos',
     tr_index: int = 0,
     include_prep: bool = False,
     include_cooldown: bool = False,
@@ -117,12 +116,11 @@ def get_tr_waveforms(
         The sequence to analyse.
     subsequence_idx : int
         Subsequence index (0-based, default 0).
-    amplitude_mode : {'max_pos', 'min_pos', 'min_abs', 'actual'}
+    amplitude_mode : {'max_pos', 'zero_var', 'actual'}
         How to resolve multi-shot gradient amplitudes:
 
         - ``'max_pos'`` — position-max across all TRs (safety view).
-        - ``'min_pos'`` — min |amplitude|, preserve sign (k-space view).
-        - ``'min_abs'`` — deprecated alias for ``'min_pos'``.
+        - ``'zero_var'`` — zero variable grads, keep constant (k-space view).
         - ``'actual'``  — signed amplitude for a specific TR instance.
     tr_index : int
         TR instance index (0-based).  Only used for ``'actual'`` mode.
@@ -139,7 +137,7 @@ def get_tr_waveforms(
     TrWaveforms
         Dataclass with per-channel waveforms and metadata.
     """
-    mode_map = {'max_pos': AMP_MAX_POS, 'min_pos': AMP_MIN_POS, 'min_abs': AMP_MIN_POS, 'actual': AMP_ACTUAL}
+    mode_map = {'max_pos': AMP_MAX_POS, 'zero_var': AMP_ZERO_VAR, 'actual': AMP_ACTUAL}
     c_mode = mode_map[amplitude_mode]
 
     gamma = seq.system.gamma  # Hz/T

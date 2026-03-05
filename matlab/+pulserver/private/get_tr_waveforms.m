@@ -9,7 +9,7 @@ function wf = get_tr_waveforms(seq, varargin)
 %
 % Name-value options
 %   subsequence_idx  double   Subsequence index (1-based). Default: 1
-%   amplitude_mode   char     'max_pos' (0) | 'min_pos' (1) | 'actual' (2).
+%   amplitude_mode   char     'max_pos' (0) | 'zero_var' (1) | 'actual' (2).
 %                             Default: 'max_pos'
 %   tr_index         double   TR index (1-based). Default: 1
 %   include_prep     logical  Include preparation blocks. Default: false
@@ -33,11 +33,11 @@ function wf = get_tr_waveforms(seq, varargin)
     o = p.Results;
 
     modes = containers.Map( ...
-        {'max_pos','min_pos','min_abs','actual'}, ...
-        {0,        1,        1,        2});
+        {'max_pos','zero_var','actual'}, ...
+        {0,        1,         2});
     if ~modes.isKey(o.amplitude_mode)
         error('pulserver:get_tr_waveforms', ...
-              'amplitude_mode must be ''max_pos'', ''min_pos'', or ''actual''');
+              'amplitude_mode must be ''max_pos'', ''zero_var'', or ''actual''');
     end
     amp_mode = modes(o.amplitude_mode);
 

@@ -13,7 +13,7 @@ function handle = plot_impl(seq, varargin)
 %
 % Name-value options (forwarded to get_tr_waveforms)
 %   sequence_idx       double|char  Subsequence index (1-based). Default: 1
-%   tr_idx             double|char  TR index (1-based) or 'max_pos'/'min_pos'/'min_abs'.
+%   tr_idx             double|char  TR index (1-based) or 'max_pos'/'zero_var'.
 %                                   Default: 'max_pos'
 %   hide_prep          logical      Hide preparation blocks. Default: true
 %   hide_cooldown      logical      Hide cooldown blocks. Default: true

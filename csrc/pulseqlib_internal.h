@@ -197,14 +197,13 @@ typedef struct pulseqlib_grad_definition {
     int shot_shape_ids[PULSEQLIB_MAX_GRAD_SHOTS];
     float max_amplitude[PULSEQLIB_MAX_GRAD_SHOTS];
     float min_amplitude[PULSEQLIB_MAX_GRAD_SHOTS];
-    float min_amplitude_signed[PULSEQLIB_MAX_GRAD_SHOTS];
     float slew_rate[PULSEQLIB_MAX_GRAD_SHOTS];
     float energy[PULSEQLIB_MAX_GRAD_SHOTS];
     float first_value[PULSEQLIB_MAX_GRAD_SHOTS];
     float last_value[PULSEQLIB_MAX_GRAD_SHOTS];
 } pulseqlib_grad_definition;
 
-#define PULSEQLIB_GRAD_DEFINITION_INIT {0, 0, 0, 0, 0, 0, 0, 1, {0}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}}
+#define PULSEQLIB_GRAD_DEFINITION_INIT {0, 0, 0, 0, 0, 0, 0, 1, {0}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}}
 
 typedef struct pulseqlib_grad_table_element {
     int id;
@@ -485,6 +484,13 @@ typedef struct pulseqlib_sequence_descriptor {
     int* scan_table_seg_id;     /* [scan_table_len] segment id             */
     int* scan_table_tr_start;   /* [scan_table_len] 1 at first block of each main-region TR */
 
+    /* Per-position variable-gradient flags  [tr_size * 3].
+     * Layout: flags[pos * 3 + axis] where axis 0=gx, 1=gy, 2=gz.
+     * Value 1 means the gradient amplitude varies across TR instances
+     * at that (position, axis); 0 means constant (or absent).  Used by
+     * ZERO_VAR amplitude mode to zero out only the variable axes. */
+    int* variable_grad_flags;
+
     /* label table (populated by dry-run if parse_labels is set) */
     int label_num_columns;
     int label_num_entries;
@@ -503,6 +509,7 @@ typedef struct pulseqlib_sequence_descriptor {
     PULSEQLIB_TR_DESCRIPTOR_INIT, \
     0, NULL, PULSEQLIB_SEGMENT_TABLE_RESULT_INIT, \
     0, NULL, NULL, NULL, NULL, \
+    NULL, \
     0, 0, NULL, {{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}} \
 }
 
@@ -995,6 +1002,11 @@ void  pulseqlib_segment_table_result_free(pulseqlib_segment_table_result* result
 int   pulseqlib__calc_segment_timing(pulseqlib_sequence_descriptor* desc, pulseqlib_diagnostic* diag);
 
 /* --- pulseqlib_waveforms.c --- */
+
+/* Compute per-position variable-gradient flags for ZERO_VAR mode.
+ * Allocates desc->variable_grad_flags (tr_size * 3 ints).
+ * Must be called after pulseqlib__get_tr_in_sequence. */
+int   pulseqlib__compute_variable_grad_flags(pulseqlib_sequence_descriptor* desc);
 
 /* Free uniform waveforms. */
 void  pulseqlib__uniform_grad_waveforms_free(

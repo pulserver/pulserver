@@ -399,7 +399,7 @@ analysis, the library supports three **amplitude modes**.  The same
 | Define | Value | Name | Description |
 |--------|-------|------|-------------|
 | `PULSEQLIB_AMP_MAX_POS` | 0 | Position-max | For each block **position** within the TR, computes the worst-case (maximum \|amplitude\|) across **all TR instances** that share the same shot-index group. Used for **safety checks**. |
-| `PULSEQLIB_AMP_MIN_POS` | 1 | Min-positive | For each gradient definition, uses `gd->min_amplitude_signed[shot]` — the **signed** value whose \|amplitude\| is smallest across all table entries for that definition and shot index. Used for **k-space analysis** — gives the smallest gradient amplitude while preserving the sign for correct phase accumulation. |
+| `PULSEQLIB_AMP_ZERO_VAR` | 1 | Zero-variable | For each block position, zeros out gradient axes that **vary** across TR instances (detected via `variable_grad_flags`), while keeping constant-amplitude gradients at their actual value. Uses the position-max arrays with variable positions zeroed. Used for **k-space analysis**. |
 | `PULSEQLIB_AMP_ACTUAL` | 2 | Actual | Uses the per-instance amplitude from the block table entry (one shot index). |
 
 The position-max computation (`compute_position_max_amplitudes_filtered`)
@@ -407,10 +407,11 @@ groups TR instances by shot-index fingerprint
 (`find_unique_shot_trs`), then for each position in the TR template
 takes `max(|amplitude|)` across all instances in the matching group.
 
-> **Note**: `min_amplitude_signed` preserves the sign of the value
-> whose absolute magnitude is smallest.  The `min_amplitude` field
-> stores the corresponding `|amplitude|` for internal comparison.
-> Both are computed during gradient deduplication in `dedup.c`.
+> **Note**: `variable_grad_flags` is an `int*` array of size `tr_size * 3`
+> stored in `pulseqlib_sequence_descriptor`.  Layout: `flags[pos * 3 + axis]`
+> where axis 0=gx, 1=gy, 2=gz.  Value 1 = variable, 0 = constant.
+> Computed once by `pulseqlib__compute_variable_grad_flags()` during
+> sequence analysis (called from `pulseqlib_core.c`).
 
 ### 8.2 K-zero refinement (per-ADC)
 

@@ -475,16 +475,13 @@ static int compute_grad_stats(
         for (i = 0; i < PULSEQLIB_MAX_GRAD_SHOTS; ++i) {
             gd->max_amplitude[i] = 0.0f;
             gd->min_amplitude[i] = 1e30f;
-            gd->min_amplitude_signed[i] = 0.0f;
             gd->slew_rate[i]     = 0.0f;
             gd->energy[i]        = 0.0f;
             gd->first_value[i]   = 0.0f;
             gd->last_value[i]    = 0.0f;
         }
 
-        /* max amplitude and min-pos amplitude per shot from table.
-         * min_amplitude stores the SIGNED value whose |amplitude| is
-         * smallest across all TR instances (MIN_POS semantics). */
+        /* max amplitude and min amplitude per shot from table. */
         if (grad_table && grad_table_size > 0) {
             for (i = 0; i < grad_table_size; ++i) {
                 if (grad_table[i].id == def_idx) {
@@ -496,8 +493,6 @@ static int compute_grad_stats(
                             gd->max_amplitude[shot_idx] = abs_amp;
                         if (abs_amp < gd->min_amplitude[shot_idx]) {
                             gd->min_amplitude[shot_idx] = abs_amp;
-                            gd->min_amplitude_signed[shot_idx] =
-                                grad_table[i].amplitude;
                         }
                     }
                 }
@@ -508,7 +503,6 @@ static int compute_grad_stats(
         for (i = 0; i < PULSEQLIB_MAX_GRAD_SHOTS; ++i) {
             if (gd->min_amplitude[i] > 1e29f) {
                 gd->min_amplitude[i] = 0.0f;
-                gd->min_amplitude_signed[i] = 0.0f;
             }
         }
 

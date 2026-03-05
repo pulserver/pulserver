@@ -84,8 +84,8 @@ function check_and_write(seq, fname, fov, thick, num_slices, num_averages, gt)
 % Output is written to ../data/ relative to this script.
 %
 % gt (optional struct) contains structural ground truth:
-%   .tr_min          - mr.Sequence: representative TR with min |PE|
-%                      (matches C library amplitude mode 1 = min positional)
+%   .tr_min          - mr.Sequence: representative TR with zero-var amplitudes
+%                      (matches C library amplitude mode 1 = ZERO_VAR)
 %   .tr_max          - mr.Sequence: representative TR with max |PE|
 %                      (matches C library amplitude mode 0 = max positional)
 %   .rf_center_s     - RF isocenter offset within the shape (seconds)
@@ -221,7 +221,7 @@ function export_ground_truth(seq, seq_fname, num_averages, gt)
         export_scan_table(base, N, num_averages, gt);
     end
 
-    % --- TR gradient waveforms (min positional amplitude, mode 1) ---
+    % --- TR gradient waveforms (ZERO_VAR amplitude, mode 1) ---
     if isfield(gt, 'tr_min') && ~isempty(gt.tr_min)
         export_tr_waveforms(gt.tr_min, base, '_min', gt);
     elseif isfield(gt, 'tr_min_range') && ~isempty(gt.tr_min_range)
@@ -235,61 +235,57 @@ function export_ground_truth(seq, seq_fname, num_averages, gt)
         export_tr_waveforms(gt.tr_max_range{1}, base, '_max', gt, gt.tr_max_range{2});
     end
 
-    % --- prep TR waveforms (actual amplitude, mode 0) ---
+    % --- prep TR waveforms (actual amplitude) ---
     if isfield(gt, 'tr_prep') && ~isempty(gt.tr_prep)
         export_tr_waveforms(gt.tr_prep, base, '_prep', gt);
+    elseif isfield(gt, 'tr_prep_range') && ~isempty(gt.tr_prep_range)
+        export_tr_waveforms(gt.tr_prep_range{1}, base, '_prep', gt, gt.tr_prep_range{2});
     end
 
-    % --- cooldown TR waveforms (actual amplitude, mode 0) ---
+    % --- cooldown TR waveforms (actual amplitude) ---
     if isfield(gt, 'tr_cool') && ~isempty(gt.tr_cool)
         export_tr_waveforms(gt.tr_cool, base, '_cool', gt);
+    elseif isfield(gt, 'tr_cool_range') && ~isempty(gt.tr_cool_range)
+        export_tr_waveforms(gt.tr_cool_range{1}, base, '_cool', gt, gt.tr_cool_range{2});
     end
 end
 
-function export_tr_waveforms(tr_seq, base, mode_suffix, gt, blockRange)
-% Export per-axis gradient waveforms from a representative TR sequence.
-% Uses waveforms_and_times to get native-timing waveform points.
+function export_tr_waveforms(pass_seq, base, mode_suffix, gt, blockRange)
+% Export per-axis gradient waveforms from a canonical pass sequence.
+%
+% Approach: evaluate waveforms_and_times on the full canonical pass, then
+% resample onto a uniform raster (0.5 * gradRasterTime) and extract
+% the desired portion by simple time indexing.  The half-raster spacing
+% ensures correct capture of arbitrary-gradient samples (center-of-raster)
+% consistent with the C library's interpolation convention.
 %
 % Args:
-%   tr_seq      - mr.Sequence with one TR worth of blocks (or full seq if
-%                 blockRange is given)
+%   pass_seq    - mr.Sequence with the full canonical pass (prep + TR + cool)
+%                 or just one TR if no prep/cool.
 %   base        - output filename base (no extension)
 %   mode_suffix - '_min' or '_max' appended to filenames
 %   gt          - ground truth struct with rf_center_s, adc_num_samples,
 %                 adc_dwell_s for proper anchor computation
-%   blockRange  - (optional) [start, end] 1-based block indices to extract
-%                 waveforms from tr_seq (used when standalone TR sequence
-%                 cannot be built, e.g. bSSFP split gradients)
-%
-% waveforms_and_times returns:
-%   wave_data      - cell array {gx, gy, gz}, each 2xN (time;amplitude)
-%   tfp_excitation - Nx3 [time, freq, phase] for excitation RF pulses
-%                    time = block_start + rf.delay (shape onset, NOT isocenter)
-%   tfp_refocusing - Nx3 [time, freq, phase] for refocusing RF pulses
-%   t_adc          - vector of ALL ADC sample times (s)
+%   blockRange  - (optional) [start, end] 1-based block indices of the
+%                 main TR within pass_seq.  If omitted, uses the entire
+%                 sequence.  The waveform is ALWAYS evaluated on the full
+%                 pass; blockRange only selects which time portion to export.
 %
 % Output files:
 %   _tr<mode>_gx.csv, _tr<mode>_gy.csv, _tr<mode>_gz.csv
 %   _tr<mode>_anchors.txt  (RF isocenter + ADC k=0 center times)
 
-    if nargin >= 5 && ~isempty(blockRange)
-        [wave, tfp_exc, tfp_ref, t_adc] = tr_seq.waveforms_and_times(true, blockRange);
-    else
-        [wave, tfp_exc, tfp_ref, t_adc] = tr_seq.waveforms_and_times(true);
-    end
+    % Always evaluate the full pass (no blockRange to waveforms_and_times)
+    [wave, tfp_exc, tfp_ref, t_adc] = pass_seq.waveforms_and_times(true);
 
-    % Build union of gradient sampling times (gx, gy, gz channels only —
-    % RF channel is excluded because the C library corner points are
-    % gradient-boundary-driven, not RF-raster-driven)
-    all_times = [];
-    for c = 1:3
-        if c <= length(wave) && ~isempty(wave{c})
-            all_times = [all_times, wave{c}(1,:)]; %#ok<AGROW>
-        end
-    end
-    times = unique(all_times);
+    % Uniform raster: 0.5 * gradRasterTime (matches C library convention;
+    % arbitrary grads are sampled at center of raster intervals)
+    raster = pass_seq.sys.gradRasterTime / 2;  % seconds
+    t_end = sum(pass_seq.blockDurations);
+    times = 0 : raster : t_end;
+    if isempty(times), times = 0; end
 
-    % Interpolate each gradient channel onto the common time grid
+    % Interpolate each gradient channel (1=gx, 2=gy, 3=gz) onto the raster
     samples = cell(1, 3);
     for c = 1:3
         if c <= length(wave) && ~isempty(wave{c})
@@ -299,13 +295,54 @@ function export_tr_waveforms(tr_seq, base, mode_suffix, gt, blockRange)
         end
     end
 
+    % --- Determine TR time range ---
+    if nargin >= 5 && ~isempty(blockRange)
+        blk_start = blockRange(1);
+        blk_end   = blockRange(2);
+        durations = pass_seq.blockDurations;
+        t_tr_start = sum(durations(1:blk_start-1));
+        t_tr_end   = sum(durations(1:blk_end));
+    else
+        t_tr_start = 0;
+        t_tr_end   = t_end;
+    end
+
+    % Extract TR portion (with small tolerance for floating point)
+    idx = (times >= t_tr_start - 1e-9) & (times <= t_tr_end + 1e-9);
+    t_tr = times(idx) - t_tr_start;  % shift to start at 0
+    for c = 1:3
+        samples{c} = samples{c}(idx);
+    end
+
+    % Also shift anchor times to be relative to TR start
+    tfp_exc_shifted = tfp_exc;
+    tfp_ref_shifted = tfp_ref;
+    t_adc_shifted   = t_adc;
+    if ~isempty(tfp_exc_shifted)
+        tfp_exc_shifted(:,1) = tfp_exc_shifted(:,1) - t_tr_start;
+        % Keep only anchors within the TR
+        keep = tfp_exc_shifted(:,1) >= -1e-9 & tfp_exc_shifted(:,1) <= (t_tr_end - t_tr_start) + 1e-9;
+        tfp_exc_shifted = tfp_exc_shifted(keep, :);
+    end
+    if ~isempty(tfp_ref_shifted)
+        tfp_ref_shifted(:,1) = tfp_ref_shifted(:,1) - t_tr_start;
+        keep = tfp_ref_shifted(:,1) >= -1e-9 & tfp_ref_shifted(:,1) <= (t_tr_end - t_tr_start) + 1e-9;
+        tfp_ref_shifted = tfp_ref_shifted(keep, :);
+    end
+    if ~isempty(t_adc_shifted)
+        t_adc_shifted = t_adc_shifted - t_tr_start;
+        keep = t_adc_shifted >= -1e-9 & t_adc_shifted <= (t_tr_end - t_tr_start) + 1e-9;
+        t_adc_shifted = t_adc_shifted(keep);
+    end
+
+    % --- Write gradient CSVs ---
     axis_labels = {'gx', 'gy', 'gz'};
     for c = 1:3
         fname = sprintf('%s_tr%s_%s.csv', base, mode_suffix, axis_labels{c});
         fid = fopen(fname, 'w');
         fprintf(fid, 'time_us,amplitude_hz_per_m\n');
 
-        t = times * 1e6;   % seconds -> us
+        t = t_tr * 1e6;    % seconds -> us
         a = samples{c};    % Hz/m (Pulseq native)
         for k = 1:length(t)
             fprintf(fid, '%.6f,%.8g\n', t(k), a(k));
@@ -320,33 +357,32 @@ function export_tr_waveforms(tr_seq, base, mode_suffix, gt, blockRange)
     rf_center = 0;
     if isfield(gt, 'rf_center_s'), rf_center = gt.rf_center_s; end
 
-    if ~isempty(tfp_exc)
-        for k = 1:size(tfp_exc, 1)
-            isocenter_us = (tfp_exc(k, 1) + rf_center) * 1e6;
+    if ~isempty(tfp_exc_shifted)
+        for k = 1:size(tfp_exc_shifted, 1)
+            isocenter_us = (tfp_exc_shifted(k, 1) + rf_center) * 1e6;
             fprintf(fid, 'rf_isocenter_us %.6f\n', isocenter_us);
         end
     end
 
-    if ~isempty(tfp_ref)
+    if ~isempty(tfp_ref_shifted)
         rf_center_ref = rf_center;
         if isfield(gt, 'rf_refocus_center_s')
             rf_center_ref = gt.rf_refocus_center_s;
         end
-        for k = 1:size(tfp_ref, 1)
-            isocenter_us = (tfp_ref(k, 1) + rf_center_ref) * 1e6;
+        for k = 1:size(tfp_ref_shifted, 1)
+            isocenter_us = (tfp_ref_shifted(k, 1) + rf_center_ref) * 1e6;
             fprintf(fid, 'rf_refocus_isocenter_us %.6f\n', isocenter_us);
         end
     end
 
     % ADC k-space center = first_sample_time + ceil(N/2) * dwell
-    if ~isempty(t_adc) && isfield(gt, 'adc_num_samples') && isfield(gt, 'adc_dwell_s')
-        % t_adc contains ALL sample times; find center of each ADC event
+    if ~isempty(t_adc_shifted) && isfield(gt, 'adc_num_samples') && isfield(gt, 'adc_dwell_s')
         N_adc = gt.adc_num_samples;
         dwell = gt.adc_dwell_s;
-        num_events = length(t_adc) / N_adc;
+        num_events = floor(length(t_adc_shifted) / N_adc);
         for ev = 1:num_events
             first_idx = (ev - 1) * N_adc + 1;
-            kzero_us = (t_adc(first_idx) + ceil(N_adc / 2) * dwell) * 1e6;
+            kzero_us = (t_adc_shifted(first_idx) + ceil(N_adc / 2) * dwell) * 1e6;
             fprintf(fid, 'adc_kzero_us %.6f\n', kzero_us);
         end
     end
@@ -564,22 +600,71 @@ function write_bssfp(num_averages, num_slices)
     fprintf('  TR = %.3f ms   TE = %.3f ms\n', TR * 1e3, TE * 1e3);
 
     % --- structural ground truth ---
-    % bSSFP uses split/merged gradients; use blockRange on main seq
-    % to extract representative TR waveforms.
+    % bSSFP uses split/merged gradients that connect across block
+    % boundaries.  A standalone Sequence for just the main TR would fail
+    % the MATLAB boundary check.  Instead, build full canonical pass
+    % sequences (prep + 1 TR + cooldown) and extract the TR portion via
+    % time indexing in export_tr_waveforms.
     %
-    % Main loop: i=1..Ny, each TR = 2 blocks starting at block 4.
-    %   phaseAreas = ((0:Ny-1) - Ny/2) * deltak
-    [~, i_min] = min(abs(phaseAreas));  % min |PE| (mode 1)
-    [~, i_max] = max(abs(phaseAreas));  % max |PE| (mode 0)
-    blk_min = [4 + 2*(i_min-1), 4 + 2*(i_min-1) + 1];  % [start, end]
-    blk_max = [4 + 2*(i_max-1), 4 + 2*(i_max-1) + 1];
+    % For MAX_POS (mode 0): GY amplitude = max|PE| with sign from the
+    %   first TR instance.  Other axes use actual amplitudes.
+    % For ZERO_VAR (mode 1): GY = 0 (variable across TRs); GX/GZ at
+    %   actual amplitudes (constant across TRs).
+
+    % First TR instance PE signs (i=1 in main loop):
+    %   pos 0 (block 3): undo previous PE = -phaseAreas(end)
+    %   pos 1 (block 4): new PE = phaseAreas(1)
+    pe_undo_sign = sign(-phaseAreas(end));
+    if pe_undo_sign == 0, pe_undo_sign = 1; end
+    pe_enc_sign  = sign(phaseAreas(1));
+    if pe_enc_sign  == 0, pe_enc_sign  = 1; end
+
+    % MAX_POS canonical pass: prep + 1 TR (full-scale GY) + cool
+    pass_max = mr.Sequence(sys);
+    pass_max.addBlock(rf05, gz_1);                                          % prep 1
+    pass_max.addBlock(prepDelay, gz_2, ...                                  % prep 2
+        mr.scaleGrad(gyMax, phaseAreas(end) / maxPeArea), gx_1_1);
+    pass_max.addBlock(rf, gz_1, mr.scaleGrad(gyMax, pe_undo_sign), gx_2);  % TR pos 0
+    pass_max.addBlock(gx_1, mr.scaleGrad(gyMax, pe_enc_sign), gz_2, adc);  % TR pos 1
+    pass_max.addBlock(gx_2);                                                % cool
+
+    % ZERO_VAR canonical pass: GY = 0 (variable across TRs); other axes actual
+    pass_min = mr.Sequence(sys);
+    pass_min.addBlock(rf05, gz_1);                                          % prep 1
+    pass_min.addBlock(prepDelay, gz_2, ...                                  % prep 2
+        mr.scaleGrad(gyMax, 0), gx_1_1);
+    pass_min.addBlock(rf, gz_1, mr.scaleGrad(gyMax, 0), gx_2);             % TR pos 0
+    pass_min.addBlock(gx_1, mr.scaleGrad(gyMax, 0), gz_2, adc);            % TR pos 1
+    pass_min.addBlock(gx_2);                                                % cool
+
+    % PREP canonical pass: actual amplitudes for first TR instance (i=1)
+    pass_prep = mr.Sequence(sys);
+    pass_prep.addBlock(rf05, gz_1);                                         % prep 1
+    pass_prep.addBlock(prepDelay, gz_2, ...                                 % prep 2
+        mr.scaleGrad(gyMax, phaseAreas(end) / maxPeArea), gx_1_1);
+    pass_prep.addBlock(rf, gz_1, ...                                        % TR pos 0: undo prep PE
+        mr.scaleGrad(gyMax, -phaseAreas(end) / maxPeArea), gx_2);
+    pass_prep.addBlock(gx_1, ...                                            % TR pos 1: encode PE(1)
+        mr.scaleGrad(gyMax, phaseAreas(1) / maxPeArea), gz_2, adc);
+    pass_prep.addBlock(gx_2);                                               % cool
+
+    % COOL canonical pass: actual amplitudes for last TR instance (i=Ny)
+    pass_cool = mr.Sequence(sys);
+    pass_cool.addBlock(rf05, gz_1);                                         % prep 1
+    pass_cool.addBlock(prepDelay, gz_2, ...                                 % prep 2
+        mr.scaleGrad(gyMax, phaseAreas(end) / maxPeArea), gx_1_1);
+    pass_cool.addBlock(rf, gz_1, ...                                        % TR pos 0: undo PE(Ny-1)
+        mr.scaleGrad(gyMax, -phaseAreas(Ny-1) / maxPeArea), gx_2);
+    pass_cool.addBlock(gx_1, ...                                            % TR pos 1: encode PE(Ny)
+        mr.scaleGrad(gyMax, phaseAreas(Ny) / maxPeArea), gz_2, adc);
+    pass_cool.addBlock(gx_2);                                               % cool
 
     gt.tr_min          = [];
     gt.tr_max          = [];
-    gt.tr_min_range    = {seq, blk_min};
-    gt.tr_max_range    = {seq, blk_max};
-    gt.tr_prep         = [];
-    gt.tr_cool         = [];
+    gt.tr_min_range    = {pass_min, [3, 4]};   % TR = blocks 3-4 of pass
+    gt.tr_max_range    = {pass_max, [3, 4]};
+    gt.tr_prep_range   = {pass_prep, [1, 4]};  % prep = blocks 1-4 (actual amps for i=1)
+    gt.tr_cool_range   = {pass_cool, [3, 5]};  % cool = blocks 3-5 (actual amps for i=Ny)
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
@@ -649,6 +734,7 @@ function write_spgr(num_slices, num_averages)
     delayTR = ceil((TR - mr.calcDuration(gz) - mr.calcDuration(gxPre) ...
               - mr.calcDuration(gx) - delayTE) ...
               / sys.gradRasterTime) * sys.gradRasterTime;
+    delayTR = 0.1e-3;  % override for short TR test (no delay, but still valid since spoilers fit within TR)
     assert(delayTE >= 0, 'TE too short');
     assert(delayTR >= mr.calcDuration(gxSpoil, gzSpoil), 'TR too short');
     evDelayTE = mr.makeDelay(delayTE);
@@ -673,15 +759,15 @@ function write_spgr(num_slices, num_averages)
     [~, iPEmin] = min(abs(phaseAreas));
     pe_min_scale = phaseAreas(iPEmin) / maxPeArea;
 
-    tr_min = mr.Sequence(sys);   % min positional amplitude (mode 1)
+    tr_min = mr.Sequence(sys);   % ZERO_VAR: GY=0 (variable), GX/GZ actual (constant)
     tr_max = mr.Sequence(sys);   % max positional amplitude (mode 0)
 
-    % --- build representative TR: min positional amplitude (mode 1) ---
+    % --- build representative TR: ZERO_VAR (mode 1) ---
     tr_min.addBlock(rf, gz);
-    tr_min.addBlock(gxPre, mr.scaleGrad(gyMax, pe_min_scale), gzReph);
+    tr_min.addBlock(gxPre, mr.scaleGrad(gyMax, 0.0), gzReph);
     tr_min.addBlock(evDelayTE);
     tr_min.addBlock(gx, adc);
-    tr_min.addBlock(gxSpoil, mr.scaleGrad(gyMax, -pe_min_scale), gzSpoil, evDelayTR);
+    tr_min.addBlock(gxSpoil, mr.scaleGrad(gyMax, 0.0), gzSpoil, evDelayTR);
 
     % --- build representative TR: max positional amplitude (mode 0) ---
     tr_max.addBlock(rf, gz);
@@ -921,6 +1007,7 @@ function write_fse(num_slices, num_averages)
         fprintf('  Warning: TR too short, adapted to %.1f ms\n', ...
                 1000 * Nslices * (tETrain + TRfill));
     end
+    TRfill = 0.1e-3;  % override for short TR test (no fill, but still valid since echoes fit within TR)
     delayTR = mr.makeDelay(TRfill);
 
     % --- labels ---
@@ -947,23 +1034,23 @@ function write_fse(num_slices, num_averages)
     unique_blocks  = 0:8;
 
     % --- representative TRs for waveform ground truth ---
-    % Find echo with min |PE| across echo train (mode 1: min positional)
+    % ZERO_VAR: GY = 0 (variable across excitations); GX/GZ at actual
     [~, iPEmin] = min(abs(phaseAreas(:)));
     [kech_min, kex_min] = ind2sub(size(phaseAreas), iPEmin);
     pe_min_scale = phaseAreas(kech_min, kex_min) / maxPeArea;
 
-    tr_min = mr.Sequence(sys);  % min positional amplitude (mode 1)
+    tr_min = mr.Sequence(sys);  % ZERO_VAR: GY=0 (variable), GX/GZ actual (constant)
     tr_max = mr.Sequence(sys);  % max positional amplitude (mode 0)
 
-    % Build tr_min (min |PE| throughout)
+    % Build tr_min (ZERO_VAR: all GY = 0)
     tr_min.addBlock(GS1);
     tr_min.addBlock(GS2, rfex);
     tr_min.addBlock(GS3, GR3);
     for kech = 1:necho
         tr_min.addBlock(GS4, rfref);
-        tr_min.addBlock(GS5, GR5, mr.scaleGrad(gyMax, pe_min_scale));
+        tr_min.addBlock(GS5, GR5, mr.scaleGrad(gyMax, 0.0));
         tr_min.addBlock(GR6, adc);
-        tr_min.addBlock(GS7, GR7, mr.scaleGrad(gyMax, -pe_min_scale));
+        tr_min.addBlock(GS7, GR7, mr.scaleGrad(gyMax, 0.0));
     end
     tr_min.addBlock(GS4);
     tr_min.addBlock(GS5);
@@ -1156,8 +1243,8 @@ function write_epi(num_slices, num_averages)
                  + mr.calcDuration(gzReph) + Nnav * mr.calcDuration(gx) ...
                  + mr.calcDuration(gyPre) + Ny_meas * mr.calcDuration(gx);
     TRdelay = TR - minTR_1slice * Nslices;
-    TRdelay_perSlice = round(TRdelay / Nslices / sys.blockDurationRaster) ...
-                       * sys.blockDurationRaster;
+    TRdelay_perSlice = round(TRdelay / Nslices / sys.blockDurationRaster) * sys.blockDurationRaster;
+    TRdelay_perSlice = 0.1e-3;
     assert(TRdelay_perSlice > 0, 'TR too short for EPI');
 
     ROpolarity = sign(gx.amplitude);
@@ -1187,7 +1274,6 @@ function write_epi(num_slices, num_averages)
                 seq.addBlock(rf_fs, gz_fs);
             end
             rf.freqOffset  = gz.amplitude * slicePositions(s);
-            rf.phaseOffset = -2*pi * rf.freqOffset * rf.center;
             seq.addBlock(rf, gz, trig);
 
             if Nnav > 0
@@ -1207,12 +1293,12 @@ function write_epi(num_slices, num_averages)
                     gx_nav = mr.scaleGrad(gx_nav, -1);
                 end
 
-                seq.addBlock(gyPre, ...
+                seq.addBlock(mr.scaleGrad(gyPre, 0.0), ...
                     mr.makeLabel('SET', 'LIN', -1), ...
                     mr.makeLabel('SET', 'NAV', 0), ...
                     mr.makeLabel('SET', 'AVG', 0));
             else
-                seq.addBlock(gxPre, gyPre, gzReph, ...
+                seq.addBlock(gxPre, mr.scaleGrad(gyPre, 0.0), gzReph, ...
                     mr.makeLabel('SET', 'LIN', -1), ...
                     mr.makeLabel('SET', 'NAV', 0), ...
                     mr.makeLabel('SET', 'AVG', 0));
@@ -1324,13 +1410,13 @@ function write_epi(num_slices, num_averages)
     %   then Ny_meas readout blocks: gx + blip + adc
     %   Ny_meas+...: lblIncSlc, TRdelay
 
-    tr_min = mr.Sequence(sys);  % min positional amplitude (mode 1)
+    tr_min = mr.Sequence(sys);  % ZERO_VAR: all grads constant → same as MAX_POS
     tr_max = mr.Sequence(sys);  % max positional amplitude (mode 0)
 
-    % For EPI the readout gradient alternates polarity each line.
-    % min-amplitude: just the readout train structure (no PE blips contribute)
-    % max-amplitude: same structure (PE blips are same for all shots)
-    % Both are identical for EPI since there's only one shot pattern.
+    % For EPI the readout gradient alternates polarity each line, but the
+    % pattern is identical in every TR instance (dummy and imaging use the
+    % same gradient structure).  All gradients are constant across TRs,
+    % so ZERO_VAR mode produces the same waveforms as MAX_POS.
 
     % Fat-sat + excitation
     tr_min.addBlock(rf_fs, gz_fs);
@@ -1349,7 +1435,7 @@ function write_epi(num_slices, num_averages)
         gx_tmp = mr.scaleGrad(gx_tmp, -1);
     end
 
-    % PE prephasing
+    % PE prephasing (constant across TRs → kept at actual amplitude)
     tr_min.addBlock(gyPre);
     tr_max.addBlock(gyPre);
 
@@ -1503,11 +1589,13 @@ function write_mprage(num_averages)
               - (mr.calcDuration(rf180) - mr.calcRfCenter(rf180) - rf180.delay) ...
               - mr.calcRfCenter(rf)) / sys.blockDurationRaster) ...
               * sys.blockDurationRaster;
+    TIdelay = 0.1e-3;
     TRoutDelay = max(TRout - TRinner * Ny - TIdelay - mr.calcDuration(rf180), 0);
     TRoutDelay = round(TRoutDelay / sys.blockDurationRaster) * sys.blockDurationRaster;
     if TRoutDelay < sys.blockDurationRaster
         TRoutDelay = sys.blockDurationRaster;
     end
+    TRoutDelay = 0.1e-3;
 
     % Pre-create labels
     lblIncLin   = mr.makeLabel('INC', 'LIN', 1);
@@ -1564,10 +1652,38 @@ function write_mprage(num_averages)
     seq.setDefinition('OrientationMapping', 'AX');
 
     % --- canonical TR = full inversion-to-inversion block range ---
-    % For MPRAGE, the canonical TR spans all blocks in one partition:
-    %   [rf180, TIdelay, Ny*(rf+prewind+readout+spoil), TRoutDelay]
-    % Total = 2 + 4*Ny + 1 blocks.  Use blockRange on the full sequence.
+    % Build standalone canonical pass sequences.  For MPRAGE with
+    % degenerate prep (num_prep=0), the canonical TR spans one full
+    % partition: [rf180, TIdelay, Ny*(rf+pre+readout+spoil), TRoutDelay]
     blocks_per_partition = 2 + 4 * Ny + 1;
+
+    % MAX_POS: PE1 and PE2 at full scale (sign from first instance = +1
+    % because the first instance is the j=0 dummy with PE=0 → sign(0)=+1).
+    pass_max = mr.Sequence(sys);
+    pass_max.addBlock(rf180);
+    pass_max.addBlock(TIdelay, gslSp);
+    for i = 1:Ny
+        pass_max.addBlock(rf);
+        pass_max.addBlock(gxPre, mr.scaleGrad(gpe1, pe1Steps(i)), mr.scaleGrad(gpe2, 1));
+        pass_max.addBlock(gx_ext, adc);
+        pass_max.addBlock(gxSp_ext, mr.scaleGrad(gpe1, -pe1Steps(i)), mr.scaleGrad(gpe2, -1));
+    end
+    pass_max.addBlock(mr.makeDelay(TRoutDelay));
+
+    % ZERO_VAR: PE1 and PE2 = 0 (both variable across TRs because
+    % j=0 dummy uses 0 while j>0 uses pe1Steps(i)/pe2Steps(j)).
+    % All other gradients (gxPre, gx_ext, gxSp_ext, gslSp) are constant
+    % across TRs → kept at actual amplitude.
+    pass_min = mr.Sequence(sys);
+    pass_min.addBlock(rf180);
+    pass_min.addBlock(TIdelay, gslSp);
+    for i = 1:Ny
+        pass_min.addBlock(rf);
+        pass_min.addBlock(gxPre, mr.scaleGrad(gpe1, 0), mr.scaleGrad(gpe2, 0));
+        pass_min.addBlock(gx_ext, adc);
+        pass_min.addBlock(gxSp_ext, mr.scaleGrad(gpe1, 0), mr.scaleGrad(gpe2, 0));
+    end
+    pass_min.addBlock(mr.makeDelay(TRoutDelay));
 
     % --- structural ground truth ---
     % Block defs:
@@ -1578,8 +1694,8 @@ function write_mprage(num_averages)
     %   4: gx_ext + adc                  (readout, ramps into spoiler amp)
     %   5: gxSp_ext + gpe1 + gpe2        (spoiler continuation + PE rewind)
     %   6: TRoutDelay                    (end-of-partition delay)
-    gt.tr_min_range    = {seq, [1, blocks_per_partition]};  % full canonical TR
-    gt.tr_max_range    = {seq, [1, blocks_per_partition]};
+    gt.tr_min_range    = {pass_min, []};  % full canonical pass = canonical TR
+    gt.tr_max_range    = {pass_max, []};
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
@@ -1704,11 +1820,13 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
               - (mr.calcDuration(rf180) + mr.calcRfCenter(rf180) ...
               - mr.calcRfCenter(rf) + minTE)) / sys.blockDurationRaster) ...
               * sys.blockDurationRaster;
+    TIdelay = 0.1e-3;
     TRoutDelay = max(TRout - TRinner * num_shots - TIdelay - mr.calcDuration(rf180), 0);
     TRoutDelay = round(TRoutDelay / sys.blockDurationRaster) * sys.blockDurationRaster;
     if TRoutDelay < sys.blockDurationRaster
         TRoutDelay = sys.blockDurationRaster;
     end
+    TRoutDelay = 0.1e-3;  % override for fast test generation (shorten end-of-partition delay)
 
     % Pre-create labels
     lblIncLin   = mr.makeLabel('INC', 'LIN', 1);
@@ -1802,10 +1920,51 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     seq.setDefinition('OrientationMapping', 'AX');
 
     % --- canonical TR = full inversion-to-inversion block range ---
-    % For noncartesian MPRAGE, the canonical TR spans all blocks in one
-    % partition: [rf180, TIdelay, num_shots*(rf+readout+spoil), TRoutDelay]
-    % Total = 3 + 3*num_shots blocks.  Use blockRange on the full sequence.
+    % Build canonical pass sequences.  Structure per partition:
+    %   [rf180, TIdelay+gslSp, num_shots*(rf+readout+gslSp), TRoutDelay]
     blocks_per_partition = 3 + 3 * num_shots;
+
+    % MAX_POS: partition encode at full scale (sign from first instance
+    % j=0 dummy with GPE=0 → sign=+1).  Readout rotation does NOT affect
+    % pos_max for the C library (all shots share the same gradient
+    % definition; rotation only changes amplitudes).
+    pass_max = mr.Sequence(sys);
+    pass_max.addBlock(rf180);
+    pass_max.addBlock(TIdelay, gslSp);
+    for i = 1:num_shots
+        pass_max.addBlock(rf);
+        pass_max.addBlock(adc, groArbX, groArbY, mr.scaleGrad(gpe, 1));
+        pass_max.addBlock(gslSp);
+    end
+    pass_max.addBlock(mr.makeDelay(TRoutDelay));
+
+    % ZERO_VAR: For rotext path, only partition encode varies (gpe = 0);
+    % readout base grads are constant in the block table (rotation stored
+    % externally → C library does not detect gx/gy as variable).
+    % For non-rotext path, readout grads also vary (different per-spoke
+    % waveforms in the block table) → gx, gy, gz all zeroed at readout
+    % positions.
+    pass_min = mr.Sequence(sys);
+    pass_min.addBlock(rf180);
+    pass_min.addBlock(TIdelay, gslSp);
+    if use_rotext
+        % Rotext: gx/gy constant (same base), gz variable (gpe)
+        for i = 1:num_shots
+            pass_min.addBlock(rf);
+            pass_min.addBlock(adc, groArbX, groArbY, mr.scaleGrad(gpe, 0));
+            pass_min.addBlock(gslSp);
+        end
+    else
+        % Non-rotext: gx/gy/gz all variable at readout positions
+        for i = 1:num_shots
+            pass_min.addBlock(rf);
+            pass_min.addBlock(adc, ...
+                mr.scaleGrad(groArbX, 0), mr.scaleGrad(groArbY, 0), ...
+                mr.scaleGrad(gpe, 0));
+            pass_min.addBlock(gslSp);
+        end
+    end
+    pass_min.addBlock(mr.makeDelay(TRoutDelay));
 
     % --- structural ground truth ---
     % Block defs:
@@ -1815,8 +1974,8 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     %   3: groArbX + groArbY + gpe + adc (rotated readout + partition encode)
     %   4: gslSp                         (post-readout z-axis spoiler)
     %   5: TRoutDelay                    (end-of-partition delay)
-    gt.tr_min_range    = {seq, [1, blocks_per_partition]};  % full canonical TR
-    gt.tr_max_range    = {seq, [1, blocks_per_partition]};
+    gt.tr_min_range    = {pass_min, []};  % full canonical pass = canonical TR
+    gt.tr_max_range    = {pass_max, []};
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;

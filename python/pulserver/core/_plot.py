@@ -109,7 +109,7 @@ def plot(
         overlays onto an existing figure (``fig`` must be provided).
     subsequence_idx : int
         Subsequence index (default 0).
-    tr_idx : int or {'max_pos', 'min_pos', 'min_abs'}
+    tr_idx : int or {'max_pos', 'zero_var'}
         TR index (0-based) or amplitude-mode string.
     hide_prep : bool
         Hide preparation blocks (default True).
@@ -175,7 +175,7 @@ def plot(
 
     # ── Determine amplitude mode and tr_index ──
     if isinstance(tr_idx, str):
-        amplitude_mode = tr_idx  # 'max_pos', 'min_pos', or 'min_abs'
+        amplitude_mode = tr_idx  # 'max_pos' or 'zero_var'
         tr_index = 0
     else:
         amplitude_mode = 'actual' if tr_idx > 0 else 'max_pos'
