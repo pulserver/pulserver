@@ -278,10 +278,12 @@ function export_tr_waveforms(tr_seq, base, mode_suffix, gt, blockRange)
         [wave, tfp_exc, tfp_ref, t_adc] = tr_seq.waveforms_and_times(true);
     end
 
-    % Build union of all sampling times across gx, gy, gz, rf (channels 1-4)
+    % Build union of gradient sampling times (gx, gy, gz channels only —
+    % RF channel is excluded because the C library corner points are
+    % gradient-boundary-driven, not RF-raster-driven)
     all_times = [];
-    for c = 1:min(4, length(wave))
-        if ~isempty(wave{c})
+    for c = 1:3
+        if c <= length(wave) && ~isempty(wave{c})
             all_times = [all_times, wave{c}(1,:)]; %#ok<AGROW>
         end
     end
