@@ -1283,10 +1283,10 @@ function write_epi(num_slices, num_averages)
 
                 for n = 1:Nnav
                     seq.addBlock( ...
+                        gx_nav, ...
                         mr.makeLabel('SET', 'REV', sign(gx_nav.amplitude) ~= ROpolarity), ...
                         mr.makeLabel('SET', 'SEG', sign(gx_nav.amplitude) ~= ROpolarity), ...
                         mr.makeLabel('SET', 'AVG', n == Nnav));
-                    seq.addBlock(gx_nav);
                     gx_nav = mr.scaleGrad(gx_nav, -1);
                 end
 
@@ -1316,11 +1316,10 @@ function write_epi(num_slices, num_averages)
                 gx = mr.scaleGrad(gx, -1);
             end
 
-            seq.addBlock(lblIncSlc);
             if sign(gx.amplitude) ~= ROpolarity
                 gx = mr.scaleGrad(gx, -1);
             end
-            seq.addBlock(TRdelay_perSlice);
+            seq.addBlock(lblIncSlc, TRdelay_perSlice);
         end
     end
 
@@ -1347,10 +1346,10 @@ function write_epi(num_slices, num_averages)
 
                 for n = 1:Nnav
                     seq.addBlock( ...
+                        gx_tmp, adc, ...
                         mr.makeLabel('SET', 'REV', sign(gx_tmp.amplitude) ~= ROpolarity), ...
                         mr.makeLabel('SET', 'SEG', sign(gx_tmp.amplitude) ~= ROpolarity), ...
                         mr.makeLabel('SET', 'AVG', n == Nnav));
-                    seq.addBlock(gx_tmp, adc);
                     gx_tmp = mr.scaleGrad(gx_tmp, -1);
                 end
 
@@ -1380,11 +1379,10 @@ function write_epi(num_slices, num_averages)
                 gx = mr.scaleGrad(gx, -1);
             end
 
-            seq.addBlock(lblIncSlc);
             if sign(gx.amplitude) ~= ROpolarity
                 gx = mr.scaleGrad(gx, -1);
             end
-            seq.addBlock(TRdelay_perSlice);
+            seq.addBlock(lblIncSlc, TRdelay_perSlice);
         end
     end
 
@@ -1464,23 +1462,19 @@ function write_epi(num_slices, num_averages)
     %   0: rf_fs + gz_fs            (fat-sat)
     %   1: rf + gz + trig           (excitation + slice-select)
     %   2: gxPre + gzReph           (nav/readout prephasing)
-    %   3: label-only               (min-duration: REV, SEG, AVG labels)
-    %   4: gx                       (nav readout — ADC not in def key)
-    %   5: gyPre                    (PE prephasing)
-    %   6: gx + gy_blipup           (first readout line)
-    %   7: gx + gy_blipdownup       (middle readout lines)
-    %   8: gx + gy_blipdown         (last readout line)
-    %   9: TRdelay                  (per-slice delay)
-    %
-    % Note: label-only blocks (nav labels, lblIncSlc) all map to def 3
-    %       because labels are not part of the block dedup key.
+    %   3: gx                       (nav readout — ADC not in def key)
+    %   4: gyPre                    (PE prephasing)
+    %   5: gx + gy_blipup           (first readout line)
+    %   6: gx + gy_blipdownup       (middle readout lines)
+    %   7: gx + gy_blipdown         (last readout line)
+    %   8: TRdelay                  (per-slice delay)
 
     % Full per-slice segment pattern (expanded):
-    nav_pattern = repmat([3, 4], 1, Nnav);  % label + nav readout × Nnav
-    readout_pattern = [6, repmat(7, 1, Ny_meas - 2), 8];
-    seg0_ids = [0, 1, 2, nav_pattern, 5, readout_pattern];  % main readout
-    seg1_ids = 3;                                           % lblIncSlc (same def as nav labels)
-    seg2_ids = 9;                                           % TR delay
+    nav_pattern = 3 * ones(1, Nnav);  % nav readout × Nnav
+    readout_pattern = [5, repmat(6, 1, Ny_meas - 2), 7];
+    seg0_ids = 0;  % Fat saturation
+    seg1_ids = [1, 2, nav_pattern, 4, readout_pattern];  % main EPI readout
+    seg2_ids = 8; % TR delay
 
     % Per-slice block count (prep mirrors main):
     %   fatsat + excite + prephase + 2*Nnav(label+nav) + gyPre + Ny_meas(ro) + lblIncSlc + delay
@@ -1693,7 +1687,7 @@ function write_mprage(num_averages)
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
-    gt.seg_unique_ids  = {[0, 1, repmat([2, 3, 4, 5], 1, Ny)], 6};  % 2 segments
+    gt.seg_unique_ids  = {[0, 1], [2, 3, 4, 5], 6};  % 3 segments
     gt.unique_blocks   = 0:6;
     gt.num_prep_blocks = 0;            % degenerate: absorbed into main
     gt.num_cool_blocks = 0;
@@ -1964,14 +1958,14 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     %   1: TIdelay + gslSp               (TI delay + z-axis slab spoiler)
     %   2: rf + lblIncLin                (FLASH excitation)
     %   3: groArbX + groArbY + gpe + adc (rotated readout + partition encode)
-    %   4: gslSp                         (post-readout z-axis spoiler)
-    %   5: TRoutDelay                    (end-of-partition delay)
+    %   1: gslSp                         (post-readout z-axis spoiler)
+    %   4: TRoutDelay                    (end-of-partition delay)
     gt.tr_min_range    = {pass_min, []};  % full canonical pass = canonical TR
     gt.tr_max_range    = {pass_max, []};
     gt.rf_center_s     = rf.center;
     gt.adc_num_samples = adc.numSamples;
     gt.adc_dwell_s     = adc.dwell;
-    gt.seg_unique_ids  = {[0, 1, repmat([2, 3, 1], 1, num_shots)], 4};  % 2 segments
+    gt.seg_unique_ids  = {[0, 1], [2, 3, 1], 4};  % 3 segments
     gt.unique_blocks   = 0:4;
     gt.num_prep_blocks = 0;             % degenerate: absorbed into main
     gt.num_cool_blocks = 0;
