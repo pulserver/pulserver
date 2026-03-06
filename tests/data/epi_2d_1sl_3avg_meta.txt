@@ -1,4 +1,4 @@
-num_blocks 216
+num_blocks 208
 num_averages 3
 total_duration_us 156880
 num_adcs 99
