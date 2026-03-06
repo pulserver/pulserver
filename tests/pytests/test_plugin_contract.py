@@ -28,17 +28,8 @@ from pulserver.sequences import (
 
 @pytest.fixture
 def default_opts() -> pp.Opts:
-    """Minimal hardware opts matching a typical 3T system."""
-    return pp.Opts(
-        max_grad=1_703_040.0,  # Hz/m  (≈ 40 mT/m)
-        max_slew=7_237_920_000.0,  # Hz/m/s  (≈ 170 T/m/s)
-        grad_raster_time=10e-6,
-        rf_dead_time=100e-6,
-        rf_ringdown_time=30e-6,
-        adc_dead_time=20e-6,
-        B0=3.0,
-        gamma=42.576e6,
-    )
+    """Default pypulseq hardware opts."""
+    return pp.Opts()
 
 
 # ── UIParam ─────────────────────────────────────────────────────────────────
