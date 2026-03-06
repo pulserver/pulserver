@@ -1,0 +1,38 @@
+"""Abstract base class for pulserver sequence plugins."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+
+from ._params import Protocol
+
+
+class PulseqSequence(ABC):
+    """Contract that every sequence plugin must satisfy.
+
+    Subclass this and implement the three abstract methods.
+    The bridge discovers the subclass automatically via ``inspect``.
+    """
+
+    @abstractmethod
+    def get_default_protocol(self, opts: dict) -> Protocol:
+        """Return the default protocol for this sequence.
+
+        Called once when the plugin is loaded.
+        """
+        ...
+
+    @abstractmethod
+    def validate_protocol(self, opts: dict, protocol: Protocol) -> dict:
+        """Validate *protocol* against hardware *opts*.
+
+        Called on every parameter change — must be fast, no file I/O.
+
+        Returns ``{"valid": bool, "duration": float | None, "info": str | None}``.
+        """
+        ...
+
+    @abstractmethod
+    def make_sequence(self, opts: dict, protocol: Protocol) -> str:
+        """Build the full sequence and return ``.seq`` file content as a string."""
+        ...
