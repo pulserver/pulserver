@@ -29,8 +29,8 @@ __all__ = [
     "dict_to_protocol",
 ]
 
-from ._base import PulseqSequence
-from ._params import (
+from ..core._base import PulseqSequence
+from ..core._params import (
     BoolParam,
     Description,
     FloatParam,

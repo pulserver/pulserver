@@ -1,4 +1,5 @@
 *.npy
+*.so
 build/
 dist/
 *.egg-info/

@@ -9,8 +9,8 @@ from pathlib import Path
 import numpy as np
 import pypulseq as pp
 
-from ._base import PulseqSequence
-from ._params import (
+from ..core._base import PulseqSequence
+from ..core._params import (
     BoolParam,
     Description,
     FloatParam,
@@ -24,7 +24,7 @@ from ._params import (
 class GRE2D(PulseqSequence):
     """2D Cartesian Gradient Echo built with pypulseq."""
 
-    def get_default_protocol(self, opts: dict) -> Protocol:
+    def get_default_protocol(self, opts: pp.Opts) -> Protocol:
         return {
             "Description": Description("2D GRE (pypulseq)"),
             "D_Resolution": Description("Resolution"),
@@ -45,15 +45,8 @@ class GRE2D(PulseqSequence):
     # -----------------------------------------------------------------
 
     @staticmethod
-    def _make_system(opts: dict) -> pp.Opts:
-        return pp.Opts(
-            max_grad=opts["maxGrad"],
-            max_slew=opts["maxSlew"],
-            grad_raster_time=opts["gradRasterTime"],
-            rf_dead_time=opts["rfDeadTime"],
-            rf_ringdown_time=opts["rfRingdownTime"],
-            adc_dead_time=opts["adcDeadTime"],
-        )
+    def _make_system(opts: pp.Opts) -> pp.Opts:
+        return opts
 
     @staticmethod
     def _read_params(protocol: Protocol) -> dict:
@@ -73,7 +66,7 @@ class GRE2D(PulseqSequence):
     # Contract
     # -----------------------------------------------------------------
 
-    def validate_protocol(self, opts: dict, protocol: Protocol) -> dict:
+    def validate_protocol(self, opts: pp.Opts, protocol: Protocol) -> dict:
         try:
             system = self._make_system(opts)
             p = self._read_params(protocol)
@@ -182,7 +175,7 @@ class GRE2D(PulseqSequence):
         except Exception as exc:
             return {"valid": False, "duration": None, "info": str(exc)}
 
-    def make_sequence(self, opts: dict, protocol: Protocol) -> str:
+    def make_sequence(self, opts: pp.Opts, protocol: Protocol) -> str:
         system = self._make_system(opts)
         p = self._read_params(protocol)
         seq = pp.Sequence(system=system)
