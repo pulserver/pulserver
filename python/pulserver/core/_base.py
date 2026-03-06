@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+import pypulseq as pp
+
 from ._params import Protocol
 
 
@@ -15,7 +17,7 @@ class PulseqSequence(ABC):
     """
 
     @abstractmethod
-    def get_default_protocol(self, opts: dict) -> Protocol:
+    def get_default_protocol(self, opts: pp.Opts) -> Protocol:
         """Return the default protocol for this sequence.
 
         Called once when the plugin is loaded.
@@ -23,7 +25,7 @@ class PulseqSequence(ABC):
         ...
 
     @abstractmethod
-    def validate_protocol(self, opts: dict, protocol: Protocol) -> dict:
+    def validate_protocol(self, opts: pp.Opts, protocol: Protocol) -> dict:
         """Validate *protocol* against hardware *opts*.
 
         Called on every parameter change — must be fast, no file I/O.
@@ -33,6 +35,6 @@ class PulseqSequence(ABC):
         ...
 
     @abstractmethod
-    def make_sequence(self, opts: dict, protocol: Protocol) -> str:
+    def make_sequence(self, opts: pp.Opts, protocol: Protocol) -> str:
         """Build the full sequence and return ``.seq`` file content as a string."""
         ...
