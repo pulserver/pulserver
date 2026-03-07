@@ -140,25 +140,29 @@ proc wrapValidateProtocol*(plugin: PyPlugin): ProcValidateProtocol =
   return proc(opts: Opts, prot: MRProtocolRef): bool =
     return richValidator(opts, prot).valid
 
-proc wrapMakeSequence*(plugin: PyPlugin): ProcMakeSequence =
-  ## Wraps ``plugin.make_sequence(opts_dict, prot_dict) → str`` as ``ProcMakeSequence``.
-  ##
-  ## **GUI path only**. nimpulseq has no ``readSeq`` (it is write-only), so for the
-  ## GUI mode we require a future ``readSeq`` implementation. For now this raises
-  ## a descriptive error if actually called through the GUI. Headless modes bypass
-  ## this entirely (see ``callMakeSequenceString``).
-  return proc(opts: Opts, prot: MRProtocolRef): Sequence =
-    # TODO: blocked on nimpulseq readSeq implementation.
-    raise newException(Defect,
-      "GUI-mode make_sequence requires a readSeq implementation in nimpulseq. " &
-      "Use headless modes (--persistent, --validate-only) for now.")
-
 proc callMakeSequenceString*(plugin: PyPlugin, opts: Opts, prot: MRProtocolRef): string =
-  ## Calls Python ``make_sequence`` and returns the ``.seq`` file content as string.
-  ## Used by headless modes where we write the file directly (no ``Sequence`` needed).
+  ## Calls Python ``make_sequence`` and returns the ``.seq`` file content as a string.
+  ## The caller is responsible for writing it to disk.
   let pyResult = plugin.module.callMethod("make_sequence",
                                            optsToPyDict(opts), protToPyDict(prot))
   return pyResult.to(string)
+
+proc wrapMakeSequence*(plugin: PyPlugin): ProcMakeSequence =
+  ## Wraps ``plugin.make_sequence`` as nimpulseqgui's ``ProcMakeSequence``.
+  ##
+  ## In both the GUI and GE headless paths, the end goal is the same: write a
+  ## ``.seq`` file to disk. The Python plugin returns the file content as a string;
+  ## for headless modes ``callMakeSequenceString`` is used directly.
+  ##
+  ## For the GUI path, nimpulseqgui expects ``ProcMakeSequence`` to return a
+  ## ``Sequence`` object (nimpulseq in-memory representation) so it can call
+  ## ``writeSeq``. Since nimpulseq is write-only (no ``readSeq`` to parse a
+  ## ``.seq`` string back into a ``Sequence``), this wrapper cannot yet produce
+  ## the required return type. Blocked on nimpulseq adding ``readSeq``.
+  return proc(opts: Opts, prot: MRProtocolRef): Sequence =
+    raise newException(Defect,
+      "GUI-path make_sequence blocked on nimpulseq readSeq. " &
+      "Use headless modes (--persistent, --validate-only, --no-gui) for now.")
 
 # ── CLI ────────────────────────────────────────────────────────────────────
 
