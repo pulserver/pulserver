@@ -12,7 +12,7 @@
 ## for the GUI path the bridge wraps it down to ``bool``.
 
 import bridge_common
-import nimpulseqgui/io  # makeProtocolPreamble
+import nimpulseqgui/io  # makeProtocolPreamble (GUI path only)
 import nimpy
 import std/[os, strutils, parseopt]
 
@@ -26,21 +26,22 @@ const pythonHome {.strdefine.} = "python"  ## Bundled CPython relative to exe di
 
 # ── Marshalling: Nim → Python ──────────────────────────────────────────────
 
-proc optsToPyDict*(opts: Opts): PyObject =
-  ## Converts scanner ``Opts`` to a Python dict consumable by the plugin.
-  let builtins = pyBuiltinsModule()
-  result = builtins.callMethod("dict")
-  result["maxGrad"] = opts.maxGrad
-  result["maxSlew"] = opts.maxSlew
-  result["gradRasterTime"] = opts.gradRasterTime
-  result["rfDeadTime"] = opts.rfDeadTime
-  result["rfRingdownTime"] = opts.rfRingdownTime
-  result["adcDeadTime"] = opts.adcDeadTime
-  result["adcRasterTime"] = opts.adcRasterTime
-  result["rfRasterTime"] = opts.rfRasterTime
-  result["blockDurationRaster"] = opts.blockDurationRaster
-  result["B0"] = opts.B0
-  result["gamma"] = opts.gamma
+proc nimOptsToPyOpts*(opts: Opts): PyObject =
+  ## Constructs a ``pypulseq.Opts`` Python object from Nim ``Opts``.
+  ## Both sides store maxGrad/maxSlew in Hz/m and Hz/m/s respectively.
+  let pp = pyImport("pypulseq")
+  result = pp.callMethod("Opts",
+    max_grad = opts.maxGrad,
+    max_slew = opts.maxSlew,
+    grad_raster_time = opts.gradRasterTime,
+    rf_dead_time = opts.rfDeadTime,
+    rf_ringdown_time = opts.rfRingdownTime,
+    adc_dead_time = opts.adcDeadTime,
+    adc_raster_time = opts.adcRasterTime,
+    rf_raster_time = opts.rfRasterTime,
+    block_duration_raster = opts.blockDurationRaster,
+    B0 = opts.B0,
+    gamma = opts.gamma)
 
 proc protToPyDict*(prot: MRProtocolRef): PyObject =
   ## Serializes ``MRProtocolRef`` → Python dict of property dicts.
@@ -116,17 +117,17 @@ proc loadPyPlugin*(scriptPath: string): PyPlugin =
 # ── Callback wrappers ─────────────────────────────────────────────────────
 
 proc wrapGetDefaultProtocol*(plugin: PyPlugin): ProcGetDefaultProtocol =
-  ## Wraps ``plugin.get_default_protocol(opts_dict) → dict`` as ``ProcGetDefaultProtocol``.
+  ## Wraps ``plugin.get_default_protocol(pyOpts) → dict`` as ``ProcGetDefaultProtocol``.
   return proc(opts: Opts): MRProtocolRef =
-    let pyResult = plugin.module.callMethod("get_default_protocol", optsToPyDict(opts))
+    let pyResult = plugin.module.callMethod("get_default_protocol", nimOptsToPyOpts(opts))
     return pyDictToProt(pyResult)
 
 proc wrapValidateRich*(plugin: PyPlugin): ProcValidateRich =
-  ## Wraps ``plugin.validate_protocol(opts_dict, prot_dict) → dict`` as ``ProcValidateRich``.
+  ## Wraps ``plugin.validate_protocol(pyOpts, prot_dict) → dict`` as ``ProcValidateRich``.
   ## Returns the full ``ValidationResult{valid, duration, info}``.
   return proc(opts: Opts, prot: MRProtocolRef): ValidationResult =
     let pyResult = plugin.module.callMethod("validate_protocol",
-                                             optsToPyDict(opts), protToPyDict(prot))
+                                             nimOptsToPyOpts(opts), protToPyDict(prot))
     result.valid = pyResult["valid"].to(bool)
     let pyDur = pyResult["duration"]
     result.duration = if pyDur.isPyNone(): -1.0 else: pyDur.to(float)
@@ -140,25 +141,22 @@ proc wrapValidateProtocol*(plugin: PyPlugin): ProcValidateProtocol =
   return proc(opts: Opts, prot: MRProtocolRef): bool =
     return richValidator(opts, prot).valid
 
-proc callMakeSequenceString*(plugin: PyPlugin, opts: Opts, prot: MRProtocolRef): string =
-  ## Calls Python ``make_sequence`` and returns the ``.seq`` file content as a string.
-  ## The caller is responsible for writing it to disk.
-  let pyResult = plugin.module.callMethod("make_sequence",
-                                           optsToPyDict(opts), protToPyDict(prot))
-  return pyResult.to(string)
+proc callMakeSequenceFile*(plugin: PyPlugin, opts: Opts, prot: MRProtocolRef, outPath: string) =
+  ## Calls Python ``make_sequence(opts, protocol, output_path)``.
+  ## The plugin writes the ``.seq`` file to *outPath* directly.
+  discard plugin.module.callMethod("make_sequence",
+                                    nimOptsToPyOpts(opts), protToPyDict(prot), outPath)
 
 proc wrapMakeSequence*(plugin: PyPlugin): ProcMakeSequence =
   ## Wraps ``plugin.make_sequence`` as nimpulseqgui's ``ProcMakeSequence``.
   ##
-  ## In both the GUI and GE headless paths, the end goal is the same: write a
-  ## ``.seq`` file to disk. The Python plugin returns the file content as a string;
-  ## for headless modes ``callMakeSequenceString`` is used directly.
+  ## nimpulseqgui expects ``ProcMakeSequence`` to return a ``Sequence`` object
+  ## (nimpulseq in-memory representation) so it can call ``writeSeq`` and
+  ## prepend the protocol preamble. Since nimpulseq is write-only (no
+  ## ``readSeq``), this wrapper cannot produce the required return type.
+  ## Blocked on nimpulseq adding ``readSeq``.
   ##
-  ## For the GUI path, nimpulseqgui expects ``ProcMakeSequence`` to return a
-  ## ``Sequence`` object (nimpulseq in-memory representation) so it can call
-  ## ``writeSeq``. Since nimpulseq is write-only (no ``readSeq`` to parse a
-  ## ``.seq`` string back into a ``Sequence``), this wrapper cannot yet produce
-  ## the required return type. Blocked on nimpulseq adding ``readSeq``.
+  ## Headless modes bypass this entirely via ``callMakeSequenceFile``.
   return proc(opts: Opts, prot: MRProtocolRef): Sequence =
     raise newException(Defect,
       "GUI-path make_sequence blocked on nimpulseq readSeq. " &
@@ -255,39 +253,48 @@ proc main() =
     # by calling through the same pipeline, but for headless we need the
     # protocol + opts ourselves. Parse just --manufacturer/--model/--B0 etc.
     let opts = newOpts()  # TODO: parse forwarded hardware flags for full fidelity
-    var prot = getDefault(opts)
-    if not validateBool(opts, prot):
+    let defaultProt = getDefault(opts)
+    if not validateBool(opts, defaultProt):
       echo "FATAL ERROR: default protocol is not valid!"
       quit(1)
 
     # Apply inline protocol if given
     if inputProtocolString.len > 0:
+      var prot = defaultProt.copy
       let warnings = readProtocolFromString(inputProtocolString, opts, prot, validateBool)
       for w in warnings: echo w
 
-    if listProtocol:
-      echo "PROTOCOL"
-      echo makeProtocolPreamble(prot)
-      quit(0)
+      if validateOnly:
+        let vr = validateRich(opts, prot)
+        echo formatValidationJson(vr)
+        quit(if vr.valid: 0 else: 1)
 
-    if validateOnly:
-      let vr = validateRich(opts, prot)
+    elif validateOnly:
+      let vr = validateRich(opts, defaultProt)
       echo formatValidationJson(vr)
       quit(if vr.valid: 0 else: 1)
 
+    if listProtocol:
+      echo "PROTOCOL"
+      echo makeProtocolPreamble(defaultProt)
+      quit(0)
+
     if persistentMode:
-      # Persistent stdin/stdout command loop.
+      # Stateless stdin/stdout command loop.
+      # Each command starts from defaultProt (the plugin's fixed schema).
+      # No state is carried between commands — persistence is purely about
+      # keeping the Python interpreter warm.
       while true:
         let cmd = stdin.readLine().strip()
         if cmd == "QUIT" or cmd == "":
           break
         elif cmd == "LIST_PROTOCOL":
           echo "PROTOCOL"
-          echo makeProtocolPreamble(prot)
+          echo makeProtocolPreamble(defaultProt)
           flushFile(stdout)
         elif cmd == "VALIDATE":
           let preambleStr = readPreambleFromStdin()
-          var localProt = prot.copy
+          var localProt = defaultProt.copy
           discard readProtocolFromString(preambleStr, opts, localProt, validateBool)
           let vr = validateRich(opts, localProt)
           echo formatValidationPlain(vr)
@@ -295,12 +302,10 @@ proc main() =
         elif cmd.startsWith("GENERATE "):
           let outPath = cmd[9..^1].strip()
           let preambleStr = readPreambleFromStdin()
-          var localProt = prot.copy
+          var localProt = defaultProt.copy
           discard readProtocolFromString(preambleStr, opts, localProt, validateBool)
           try:
-            let seqContent = callMakeSequenceString(plugin, opts, localProt)
-            let preamble = makeProtocolPreamble(localProt)
-            writeFile(outPath, preamble & "\n" & seqContent)
+            callMakeSequenceFile(plugin, opts, localProt, outPath)
             echo "GENERATED " & outPath
           except Exception as e:
             echo "ERROR " & e.msg

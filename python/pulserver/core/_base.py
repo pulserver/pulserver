@@ -35,6 +35,8 @@ class PulseqSequence(ABC):
         ...
 
     @abstractmethod
-    def make_sequence(self, opts: pp.Opts, protocol: Protocol) -> str:
-        """Build the full sequence and return ``.seq`` file content as a string."""
+    def make_sequence(
+        self, opts: pp.Opts, protocol: Protocol, output_path: str
+    ) -> None:
+        """Build the full sequence and write the ``.seq`` file to *output_path*."""
         ...

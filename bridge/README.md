@@ -43,7 +43,18 @@ Headless modes (`--validate-only`, `--persistent`) are handled **by the bridge
 itself**, bypassing `makeSequenceExe`, so the GE driver always gets the full
 `ValidationResult{valid, duration, info}`.
 
+## Plugin Contract
+
+Python plugins receive `pypulseq.Opts` objects (not dicts) for hardware specs.
+`make_sequence(opts, protocol, output_path)` writes `.seq` to disk directly —
+no temp files, no string return. No nimpulseqgui preamble is written in
+headless mode.
+
 ## Persistent Protocol (stdin/stdout)
+
+**Stateless** — each command starts from the plugin's default protocol.
+No state is carried between commands. Persistence is purely about keeping
+the Python interpreter warm (avoiding startup cost).
 
 ```
 → VALIDATE\n

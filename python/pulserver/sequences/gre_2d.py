@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import math
-import tempfile
-from pathlib import Path
 
 import numpy as np
 import pypulseq as pp
@@ -175,7 +173,9 @@ class GRE2D(PulseqSequence):
         except Exception as exc:
             return {"valid": False, "duration": None, "info": str(exc)}
 
-    def make_sequence(self, opts: pp.Opts, protocol: Protocol) -> str:
+    def make_sequence(
+        self, opts: pp.Opts, protocol: Protocol, output_path: str
+    ) -> None:
         system = self._make_system(opts)
         p = self._read_params(protocol)
         seq = pp.Sequence(system=system)
@@ -281,12 +281,7 @@ class GRE2D(PulseqSequence):
         seq.set_definition("Name", "gre_2d")
         seq.set_definition("FOV", [p["fov"], p["fov"], p["slice_thickness"]])
 
-        tmp = Path(tempfile.mktemp(suffix=".seq"))
-        try:
-            seq.write(str(tmp))
-            return tmp.read_text()
-        finally:
-            tmp.unlink(missing_ok=True)
+        seq.write(output_path)
 
 
 # Auto-expose for bridge fallback + direct import + testing

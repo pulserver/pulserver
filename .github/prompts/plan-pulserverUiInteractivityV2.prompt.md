@@ -1,6 +1,6 @@
 # Plan: Pulserver UI Interactivity — Python/MATLAB Bridge via nimpulseqgui (v4)
 
-**TL;DR**: Replace TCP/Docker server with persistent local process. Host executables embed CPython/MCR, delegate to user plugins. GE driver communicates via stdin/stdout pipes (plain text, no JSON, no temp files). Python plugins enforced via ABC in the `pulserver` package with auto-discovery. A self-extracting installer script packages everything for deployment. **nimpulseqgui is used as a stock Nimble dependency — never modified.**
+**TL;DR**: Replace TCP/Docker server with persistent local process. Host executables embed CPython/MCR, delegate to user plugins. GE driver communicates via stdin/stdout pipes (plain text, no JSON, no temp files). Python plugins receive `pp.Opts` objects (not dicts) and write `.seq` files to disk directly via `seq.write(output_path)`. Persistent mode is stateless — only the interpreter is kept warm; no state carried between commands. Python plugins enforced via ABC in the `pulserver` package with auto-discovery. A self-extracting installer script packages everything for deployment. **nimpulseqgui is used as a stock Nimble dependency — never modified.**
 
 ---
 
@@ -72,7 +72,15 @@ imported by the host executables. **nimpulseqgui source is never touched.**
 
 ## Phase 2: Persistent Process Protocol
 
-Plain-text wire protocol over stdin/stdout pipes (C89-native `sprintf`/`fgets`):
+Plain-text wire protocol over stdin/stdout pipes (C89-native `sprintf`/`fgets`).
+**Purely stateless** — persistence is only about keeping the interpreter warm.
+Each command starts from the plugin's default protocol (fixed schema); no state
+is carried between LIST_PROTOCOL / VALIDATE / GENERATE calls.
+
+GE usage pattern:
+- `cvinit()` → `LIST_PROTOCOL` — get the set of parameters and toggle corresponding UI buttons
+- `cveval()` → `VALIDATE` (repeated, on every UI edit) — harvest params on GE side, serialize to preamble, get pass/fail + scan time
+- `predownload()` → `GENERATE` (once) — write `.seq` file to disk
 
 | Command | Response |
 |---------|----------|
@@ -81,7 +89,9 @@ Plain-text wire protocol over stdin/stdout pipes (C89-native `sprintf`/`fgets`):
 | `LIST_PROTOCOL\n` | `PROTOCOL\n` + preamble |
 | `QUIT\n` | (process exits) |
 
-`--persistent` in `sequenceexe.nim`: read-loop on stdin, dispatch, flush stdout, loop until QUIT/EOF.
+`--persistent` in `pypulseq_host.nim`: stateless read-loop on stdin, dispatch,
+flush stdout, loop until QUIT/EOF. `defaultProt` cached once at startup (schema
+only). Each command creates a fresh copy from `defaultProt`.
 
 ---
 
@@ -180,16 +190,26 @@ def dict_to_param(d: dict) -> ProtocolValue:
 
 ```python
 from abc import ABC, abstractmethod
+import pypulseq as pp
 from ._params import Protocol
 
 class PulseqSequence(ABC):
     @abstractmethod
-    def get_default_protocol(self, opts: dict) -> Protocol: ...
+    def get_default_protocol(self, opts: pp.Opts) -> Protocol: ...
     @abstractmethod
-    def validate_protocol(self, opts: dict, protocol: Protocol) -> dict: ...
+    def validate_protocol(self, opts: pp.Opts, protocol: Protocol) -> dict: ...
     @abstractmethod
-    def make_sequence(self, opts: dict, protocol: Protocol) -> str: ...
+    def make_sequence(self, opts: pp.Opts, protocol: Protocol, output_path: str) -> None: ...
 ```
+
+**Notes on `opts`**: The bridge constructs a real `pypulseq.Opts` object on
+the Nim side via nimpy — plugins receive a proper `pp.Opts`, not a dict.
+Both nimpulseq and pypulseq store `maxGrad`/`max_grad` in Hz/m.
+
+**Notes on `make_sequence`**: The plugin receives `output_path` and writes
+the `.seq` file directly via `seq.write(output_path)`. No temp files, no
+string return. The bridge does NOT prepend a nimpulseqgui preamble in
+headless mode; preambles are only written by nimpulseqgui in GUI mode.
 
 **Why ABC is a good idea here:**
 - **Enforcement**: miss a method → `TypeError` at instantiation, not a cryptic runtime error from Nim
@@ -203,7 +223,7 @@ class PulseqSequence(ABC):
 class GRE2D(PulseqSequence):
     def get_default_protocol(self, opts): ...
     def validate_protocol(self, opts, protocol): ...
-    def make_sequence(self, opts, protocol): ...
+    def make_sequence(self, opts, protocol, output_path): ...
 
 # Auto-expose for bridge fallback + direct import + testing
 _instance = GRE2D()
@@ -224,7 +244,10 @@ make_sequence = _instance.make_sequence
 
 - Compiled once per platform, links `nimpy`, `--script <path.py>` loads plugin at runtime
 - Auto-discovers `PulseqSequence` subclass or falls back to module functions
-- Calls `makeSequenceExe(...)` — inherits all CLI modes including `--persistent`
+- `nimOptsToPyOpts` constructs a `pypulseq.Opts` Python object from Nim `Opts`
+- `callMakeSequenceFile` passes `output_path` to the plugin; plugin writes `.seq` to disk
+- Persistent mode is stateless: `defaultProt` cached once, each command gets a fresh copy
+- Falls through to `makeSequenceExe(...)` for GUI mode (preamble written by nimpulseqgui)
 
 ---
 
@@ -285,6 +308,9 @@ Phases 1 and 3 are independent and can proceed in parallel. Phase 2 depends on P
 ## Decisions
 
 - **ABC for Python plugins**: `pulserver.sequences.PulseqSequence` — enforced, auto-discovered, with module-level function fallback
+- **`pp.Opts` over dict**: bridge constructs `pypulseq.Opts(...)` on the Nim side via nimpy — plugins receive a proper `pp.Opts`, not a dict
+- **`make_sequence` writes to disk**: plugin receives `output_path`, calls `seq.write(output_path)` — no temp files, no string return, no preamble in headless mode
+- **Stateless persistence**: `defaultProt` cached once at startup (schema only). Each command starts from a fresh copy. No state leak between LIST_PROTOCOL / VALIDATE / GENERATE calls. Persistence is purely about keeping the Python interpreter warm.
 - **`UIParam(StrEnum)`** for protocol keys: standard params as enum members, `UIParam.user(n)` for GE user CVs, raw strings allowed for one-offs
 - **Dataclass protocol values**: `FloatParam`, `IntParam`, `BoolParam`, `StringListParam`, `Description` — IDE-friendly, self-documenting, `asdict()` for free serialization at bridge boundary
 - **`Validate(StrEnum)`**: `SEARCH` (binary-search min/max), `CLIP` (clamp), `NONE` — controls nimpulseqgui's `PropertyValidate` behavior per-param

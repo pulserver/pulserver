@@ -29,5 +29,6 @@ def validate_protocol(opts, protocol):
     return {"valid": True, "duration": duration, "info": f"TA = {duration:.2f} s"}
 
 
-def make_sequence(opts, protocol):
-    return "# Minimal .seq file\n[VERSION] 1.4.0\n"
+def make_sequence(opts, protocol, output_path):
+    with open(output_path, "w") as f:
+        f.write("# Minimal .seq file\n[VERSION] 1.4.0\n")
