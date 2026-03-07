@@ -1,6 +1,6 @@
-# Plan: Pulserver UI Interactivity — Python/MATLAB Bridge via nimpulseqgui (v3)
+# Plan: Pulserver UI Interactivity — Python/MATLAB Bridge via nimpulseqgui (v4)
 
-**TL;DR**: Replace TCP/Docker server with persistent local process. Host executables embed CPython/MCR, delegate to user plugins. GE driver communicates via stdin/stdout pipes (plain text, no JSON, no temp files). Python plugins enforced via ABC in the `pulserver` package with auto-discovery. A self-extracting installer script packages everything for deployment.
+**TL;DR**: Replace TCP/Docker server with persistent local process. Host executables embed CPython/MCR, delegate to user plugins. GE driver communicates via stdin/stdout pipes (plain text, no JSON, no temp files). Python plugins enforced via ABC in the `pulserver` package with auto-discovery. A self-extracting installer script packages everything for deployment. **nimpulseqgui is used as a stock Nimble dependency — never modified.**
 
 ---
 
@@ -20,17 +20,21 @@ pulserver/                         # PUSHED
 ├── matlab/+pulserver/
 │   ├── SequenceCollection.m       # existing wrapper
 │   └── +sequences/gre_2d.m       # NEW — MATLAB GRE example
-├── bridge/                        # NEW — Nim host executables
-│   ├── pypulseq_host.nim
-│   ├── matlab_host.nim
+├── bridge/                        # NEW — Nim host executables (standalone apps)
+│   ├── bridge_common.nim          #   ValidationResult, readProtocolFromString, helpers
+│   ├── pypulseq_host.nim          #   Python host (nimpy + stock nimpulseqgui)
+│   ├── matlab_host.nim            #   MATLAB host (stub, Phase 5)
+│   ├── bridge.nimble              #   Nimble package (depends on nimpulseqgui)
+│   ├── tests/
+│   │   └── test_bridge_common.nim #   Nim test suite
 │   └── README.md
 ├── scripts/
 │   ├── make_installer.sh          # NEW — self-extracting archive builder
 │   └── ...                        # existing build scripts
 ├── tests/pytests/
 │   └── test_plugin_contract.py    # NEW
-├── external/                      # GITIGNORED — modified nimpulseq copies
-│   ├── nimpulseqgui/
+├── external/                      # GITIGNORED — local copies for development
+│   ├── nimpulseqgui/              #   stock (Nimble dependency, NOT modified)
 │   ├── nimpulseq/
 │   └── PulseqSystems/
 │
@@ -41,14 +45,28 @@ pulserver/                         # PUSHED
 
 ---
 
-## Phase 1: nimpulseqgui Modifications (in `external/`)
+## Phase 1: bridge_common.nim (standalone, no nimpulseqgui modifications)
 
-| Step | File | Change |
-|------|------|--------|
-| 1.1 | `definitions.nim` | `ValidationResult{valid,duration,info}` + converter `bool→ValidationResult` |
-| 1.2 | `utils/gui/propertyedit/sequenceexe.nim` | `.valid` checks (~5 lines) |
-| 1.3 | `io.nim` | Extract `readProtocolFromString` |
-| 1.4 | `sequenceexe.nim` | `--protocol`, `--validate-only`, `--list-protocol`, `--persistent`, `--input -` |
+All bridge-specific types and helpers live in `bridge/bridge_common.nim`,
+imported by the host executables. **nimpulseqgui source is never touched.**
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `ValidationResult` type | `bridge_common.nim` | Rich `{valid, duration, info}` for headless modes |
+| `ProcValidateRich` | `bridge_common.nim` | Callback alias for rich validation |
+| `converter toBool` | `bridge_common.nim` | Lets `ValidationResult` satisfy `ProcValidateProtocol` (bool) |
+| `readProtocolFromString` | `bridge_common.nim` | In-memory preamble parser (no file I/O) |
+| `readPreambleFromStdin` | `bridge_common.nim` | Persistent-mode stdin reader |
+| `formatValidationJson` | `bridge_common.nim` | JSON serialization for `--validate-only` |
+| `formatValidationPlain` | `bridge_common.nim` | Plain-text line for persistent protocol |
+
+### Design rationale — bridge-as-app, not fork
+
+- **GUI mode**: delegates to `makeSequenceExe` with a `bool`-wrapping adapter
+- **Headless modes** (`--validate-only`, `--persistent`): bridge handles CLI itself,
+  calls plugin directly, gets full `ValidationResult`
+- nimpulseqgui remains a stock Nimble dependency — no maintenance burden
+- Tests in `bridge/tests/test_bridge_common.nim` cover the bridge layer independently
 
 ---
 
@@ -243,7 +261,7 @@ __ARCHIVE__
 ## Implementation Order
 
 ```
-Phase 1 (nimpulseqgui mods) ─┐
+Phase 1 (bridge_common.nim) ──┐
                               ├→ Phase 2 (persistent protocol) → Phase 4 (pypulseq_host) → Phase 7 (installer)
 Phase 3 (ABC + tests) ───────┘
                                                                   Phase 5 (matlab_host) → Phase 6 (GE integration)
@@ -261,6 +279,6 @@ Phases 1 and 3 are independent and can proceed in parallel. Phase 2 depends on P
 - **`Validate(StrEnum)`**: `SEARCH` (binary-search min/max), `CLIP` (clamp), `NONE` — controls nimpulseqgui's `PropertyValidate` behavior per-param
 - **No JSON/temp files**: plain-text preamble via pipes, C89-native
 - **Persistent process via popen()**: interpreter stays warm across CVEval calls
-- **Modified nimpulseqgui in `external/`**: gitignored, eventually upstream PR + submodule
+- **Modified nimpulseqgui**: NEVER — used as stock Nimble dependency, all extensions in `bridge/`
 - **Self-extracting installer**: in public `scripts/`, reused by private driver repo
 - **All GE code in `3p/`**: never pushed
