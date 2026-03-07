@@ -105,3 +105,15 @@ file (GLOB PULSEQLIB_WRAPPERS "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/core
 install(
     FILES  ${PULSEQLIB_WRAPPERS} DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/core/_extension
 )
+
+option(PULSERVER_BUILD_GADGETRON_EXTENSIONS "Build gadgetron/ge2mrd extension libraries" OFF)
+if(PULSERVER_BUILD_GADGETRON_EXTENSIONS)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/extensions/gadgetronlib ${CMAKE_BINARY_DIR}/gadgetronlib_build)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/extensions/ge2mrdlib ${CMAKE_BINARY_DIR}/ge2mrdlib_build)
+endif()
+
+option(PULSERVER_BUILD_CPP_TESTS "Build lightweight C++ unit tests" OFF)
+if(PULSERVER_BUILD_CPP_TESTS)
+    enable_testing()
+    add_subdirectory(${CMAKE_SOURCE_DIR}/tests/cpptests ${CMAKE_BINARY_DIR}/cpptests_build)
+endif()
