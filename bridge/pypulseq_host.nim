@@ -14,7 +14,13 @@
 import bridge_common
 import nimpulseqgui/io  # makeProtocolPreamble
 import nimpy
-import std/[os, strutils, strformat, parseopt]
+import std/[os, strutils, parseopt]
+
+proc isPyNone*(o: PyObject): bool =
+  ## Returns true if the Python object is ``None``.
+  if o.isNil: return true
+  let none = pyBuiltinsModule().getAttr("None")
+  return o == none
 
 const pythonHome {.strdefine.} = "python"  ## Bundled CPython relative to exe dir.
 
@@ -62,6 +68,10 @@ proc protToPyDict*(prot: MRProtocolRef): PyObject =
 
 # ── Marshalling: Python → Nim ──────────────────────────────────────────────
 
+proc pyDictGet(d: PyObject, key: string, default: string): string =
+  ## Safely get a string from a Python dict, returning *default* if missing.
+  return d.callMethod("get", key, default).to(string)
+
 proc pyDictToProt*(pyDict: PyObject): MRProtocolRef =
   ## Deserializes Python dict → ``MRProtocolRef``.
   result = newProtocol()
@@ -69,8 +79,8 @@ proc pyDictToProt*(pyDict: PyObject): MRProtocolRef =
     let k = key.to(string)
     let d = pyDict[key]
     let ptype = d["type"].to(string)
-    let validate = if d["validate"].to(string) == "search": pvDoSearch else: pvNoSearch
-    let unit = d["unit"].to(string)
+    let validate = if pyDictGet(d, "validate", "none") == "search": pvDoSearch else: pvNoSearch
+    let unit = pyDictGet(d, "unit", "")
     case ptype
     of "int":
       result[k] = newIntProperty(d["value"].to(int), d["min"].to(int),
@@ -100,7 +110,7 @@ proc loadPyPlugin*(scriptPath: string): PyPlugin =
   let importlib = pyImport("importlib.util")
   let spec = importlib.callMethod("spec_from_file_location", "plugin", scriptPath)
   let module = importlib.callMethod("module_from_spec", spec)
-  spec.loader.callMethod("exec_module", module)
+  discard spec.loader.callMethod("exec_module", module)
   result.module = module
 
 # ── Callback wrappers ─────────────────────────────────────────────────────
@@ -119,9 +129,9 @@ proc wrapValidateRich*(plugin: PyPlugin): ProcValidateRich =
                                              optsToPyDict(opts), protToPyDict(prot))
     result.valid = pyResult["valid"].to(bool)
     let pyDur = pyResult["duration"]
-    result.duration = if pyDur.isNone(): -1.0 else: pyDur.to(float)
+    result.duration = if pyDur.isPyNone(): -1.0 else: pyDur.to(float)
     let pyInfo = pyResult["info"]
-    result.info = if pyInfo.isNone(): "" else: pyInfo.to(string)
+    result.info = if pyInfo.isPyNone(): "" else: pyInfo.to(string)
 
 proc wrapValidateProtocol*(plugin: PyPlugin): ProcValidateProtocol =
   ## Wraps the Python validator as nimpulseqgui's ``ProcValidateProtocol`` (bool).
@@ -180,15 +190,28 @@ proc main() =
   var listProtocol = false
   var persistentMode = false
   var forwardArgs: seq[string] = @[]  # args to forward to makeSequenceExe
+  var expectScriptPath = false
+  var expectProtocolString = false
 
   for kind, key, val in getopt():
     case kind
+    of cmdArgument:
+      if expectScriptPath:
+        scriptPath = key
+        expectScriptPath = false
+      elif expectProtocolString:
+        inputProtocolString = key
+        expectProtocolString = false
+      else:
+        forwardArgs.add(key)
     of cmdLongOption, cmdShortOption:
       case key
       of "script":
-        scriptPath = val
+        if val.len > 0: scriptPath = val
+        else: expectScriptPath = true
       of "protocol", "p":
-        inputProtocolString = val
+        if val.len > 0: inputProtocolString = val
+        else: expectProtocolString = true
       of "validate-only":
         validateOnly = true
       of "list-protocol":
@@ -204,8 +227,6 @@ proc main() =
           forwardArgs.add("--" & key & "=" & val)
         else:
           forwardArgs.add("--" & key)
-    of cmdArgument:
-      forwardArgs.add(key)
     of cmdEnd:
       discard
 
