@@ -246,9 +246,16 @@ function write_gre_2d_base_case(num_slices, num_averages)
     % --- exports: TR waveform (binary float32) ---
     export_tr_waveform(fullfile(out_dir, [base '_tr_waveform.bin']), times_us, waveform_samples);
 
+    % --- exports: block-level ground truth (phase 3) ---
+    export_block_meta(fullfile(out_dir, [base '_block_meta.txt']), ...
+                      seq, sys, rf, adc, gz, gx_pre, gz_reph, gx, gx_spoil, gy_phase, gz_spoil, ...
+                      max_seg_energy_idx, num_blocks_in_tr, canonical_scale);
+    export_rf_magnitude(fullfile(out_dir, [base '_rf_mag.bin']), rf);
+    export_arb_grad(fullfile(out_dir, [base '_arb_grad_b2_x.bin']), gx);
+    export_arb_grad(fullfile(out_dir, [base '_arb_grad_b3_x.bin']), gx_spoil);
+
     % --- placeholders for upcoming phases ---
-    % TODO(phase2): export scan table truth with ONCE + ignoreRepetitions behavior.
-    % TODO(phase3): export waveform truth for max-energy segment instance.
+    % TODO(phase4): export scan table truth with ONCE + ignoreRepetitions behavior.
     % TODO(phase5): export frequency-modulation ground truth and k-space crossings.
 
     fprintf('Wrote %s and minimal truth files.\n', [base '.seq']);
@@ -420,6 +427,116 @@ function [times_us, samples] = build_canonical_tr(canonical_seq, sys)
 
     % Convert times from seconds to microseconds.
     times_us = times(:) * 1e6;
+end
+
+
+function export_tr_waveform(path, times_us, samples)
+
+
+function export_block_meta(path, seq, sys, rf, adc, gz, gx_pre, gz_reph, gx, gx_spoil, gy_phase, gz_spoil, ...
+                           max_seg_energy_idx, num_blocks, canonical_scale)
+% EXPORT_BLOCK_META  Write per-block ground truth for geninstruction tests.
+%   Extracts timing, gradient, RF, and ADC metadata from the max-energy
+%   segment instance into a key-value text file.
+    fid = fopen(path, 'w');
+    if fid < 0, error('Failed to open %s', path); end
+
+    % Block durations and cumulative start times.
+    start_us = 0;
+    for b = 1:num_blocks
+        blk = seq.getBlock(max_seg_energy_idx + b - 1);
+        dur_us = round(seq.blockDurations(max_seg_energy_idx + b - 1) * 1e6);
+        fprintf(fid, 'block_%d_duration_us %d\n', b - 1, dur_us);
+        fprintf(fid, 'block_%d_start_time_us %d\n', b - 1, start_us);
+        start_us = start_us + dur_us;
+    end
+
+    % RF (block 0): always the rf+gz block.
+    fprintf(fid, 'block_0_rf_delay_us %d\n', round(rf.delay * 1e6));
+    fprintf(fid, 'block_0_rf_num_samples %d\n', length(rf.signal));
+    % Windowed sinc with negative sidelobes: phase shape encodes sign flips.
+    rf_is_complex = any(rf.signal < 0);
+    fprintf(fid, 'block_0_rf_is_complex %d\n', rf_is_complex);
+    fprintf(fid, 'block_0_rf_num_channels %d\n', 1);
+
+    % Trap gradients — write corner parameters for each trapezoid.
+    % Block 0: Gz (slice-select trap)
+    write_trap_meta(fid, 0, 'z', gz);
+
+    % Block 1: Gx_pre, Gy_pre (scaled), Gz_reph — all traps.
+    write_trap_meta(fid, 1, 'x', gx_pre);
+    % Gy is scaled by canonical_scale(2,2) — amplitude is template × scale.
+    gy_pre_scaled = mr.scaleGrad(gy_phase, canonical_scale(2, 2));
+    write_trap_meta(fid, 1, 'y', gy_pre_scaled);
+    write_trap_meta(fid, 1, 'z', gz_reph);
+
+    % Block 2: Gx is arbitrary (split trap), ADC.
+    fprintf(fid, 'block_2_gx_is_arb %d\n', 1);
+    fprintf(fid, 'block_2_gx_num_samples %d\n', length(gx.waveform));
+    fprintf(fid, 'block_2_gx_delay_us %d\n', round(gx.delay * 1e6));
+    fprintf(fid, 'block_2_adc_delay_us %d\n', round(adc.delay * 1e6));
+
+    % Block 3: Gx_spoil (arb extended trap), Gy_rew (scaled trap), Gz_spoil (trap).
+    fprintf(fid, 'block_3_gx_is_arb %d\n', 1);
+    fprintf(fid, 'block_3_gx_num_samples %d\n', length(gx_spoil.waveform));
+    fprintf(fid, 'block_3_gx_delay_us %d\n', round(gx_spoil.delay * 1e6));
+    gy_rew_scaled = mr.scaleGrad(gy_phase, canonical_scale(4, 2));
+    write_trap_meta(fid, 3, 'y', gy_rew_scaled);
+    write_trap_meta(fid, 3, 'z', gz_spoil);
+
+    % RF-ADC gap: ADC_start − RF_end (within segment, in us).
+    block_durs_s = seq.blockDurations(max_seg_energy_idx : max_seg_energy_idx + num_blocks - 1);
+    rf_end_us = round((rf.delay + length(rf.signal) * sys.rfRasterTime) * 1e6);
+    adc_start_us = round((block_durs_s(1) + block_durs_s(2) + adc.delay) * 1e6);
+    fprintf(fid, 'rf_adc_gap_us %d\n', adc_start_us - rf_end_us);
+
+    fclose(fid);
+end
+
+
+function write_trap_meta(fid, block_idx, axis, g)
+% WRITE_TRAP_META  Write trapezoid corner parameters for one gradient.
+    prefix = sprintf('block_%d_g%s', block_idx, axis);
+    fprintf(fid, '%s_amplitude_hz_m %.8g\n', prefix, g.amplitude);
+    fprintf(fid, '%s_rise_us %d\n',  prefix, round(g.riseTime * 1e6));
+    fprintf(fid, '%s_flat_us %d\n',  prefix, round(g.flatTime * 1e6));
+    fprintf(fid, '%s_fall_us %d\n',  prefix, round(g.fallTime * 1e6));
+    fprintf(fid, '%s_delay_us %d\n', prefix, round(g.delay * 1e6));
+end
+
+
+function export_rf_magnitude(path, rf)
+% EXPORT_RF_MAGNITUDE  Write normalized RF magnitude as binary float32.
+%   Layout: int32 num_samples, then float32[N] normalized magnitude.
+    fid = fopen(path, 'w');
+    if fid < 0, error('Failed to open %s', path); end
+
+    mag = abs(rf.signal(:));
+    mag_norm = mag / max(mag);
+
+    fwrite(fid, length(mag_norm), 'int32');
+    fwrite(fid, single(mag_norm), 'float32');
+
+    fclose(fid);
+end
+
+
+function export_arb_grad(path, g)
+% EXPORT_ARB_GRAD  Write arbitrary gradient waveform as binary float32.
+%   Layout: int32 num_samples, then float32[N] amplitude (Hz/m),
+%   then float32[N] time (us).
+    fid = fopen(path, 'w');
+    if fid < 0, error('Failed to open %s', path); end
+
+    amp = g.waveform(:);
+    t_us = g.tt(:) * 1e6;
+    N = length(amp);
+
+    fwrite(fid, N, 'int32');
+    fwrite(fid, single(amp), 'float32');
+    fwrite(fid, single(t_us), 'float32');
+
+    fclose(fid);
 end
 
 

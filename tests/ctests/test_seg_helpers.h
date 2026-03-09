@@ -153,4 +153,207 @@ static TSEG_MAYBE_UNUSED int parse_tr_waveform(const char* path, seg_tr_waveform
     return 1;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Phase 3: Block-level ground truth (geninstruction tests)          */
+/* ------------------------------------------------------------------ */
+
+#define MAX_BLOCKS 8
+
+/** Per-block timing + per-axis trapezoid corners. */
+typedef struct block_meta {
+    int num_blocks;
+
+    /* Per-block timing */
+    int duration_us[MAX_BLOCKS];
+    int start_time_us[MAX_BLOCKS];
+
+    /* RF (block 0) */
+    int rf_delay_us;
+    int rf_num_samples;
+    int rf_is_complex;
+    int rf_num_channels;
+
+    /* Trap gradient corners (indexed by [block][axis 0=x,1=y,2=z]).
+     * Only filled for blocks/axes that are actual trapezoids. */
+    int   has_trap[MAX_BLOCKS][3];
+    float trap_amplitude[MAX_BLOCKS][3];
+    int   trap_rise_us[MAX_BLOCKS][3];
+    int   trap_flat_us[MAX_BLOCKS][3];
+    int   trap_fall_us[MAX_BLOCKS][3];
+    int   trap_delay_us[MAX_BLOCKS][3];
+
+    /* Arb gradient metadata (indexed by [block][axis]). */
+    int has_arb[MAX_BLOCKS][3];
+    int arb_num_samples[MAX_BLOCKS][3];
+    int arb_delay_us[MAX_BLOCKS][3];
+
+    /* ADC */
+    int adc_delay_us;
+
+    /* Segment gap */
+    int rf_adc_gap_us;
+} block_meta;
+
+#define BLOCK_META_INIT { \
+    0, {0}, {0}, \
+    0, 0, 0, 0, \
+    {{0}}, {{0}}, {{0}}, {{0}}, {{0}}, {{0}}, \
+    {{0}}, {{0}}, {{0}}, \
+    0, 0 \
+}
+
+static TSEG_MAYBE_UNUSED int parse_block_meta(const char* path, block_meta* out)
+{
+    FILE* f;
+    char key[80];
+    char val_str[80];
+    block_meta m = BLOCK_META_INIT;
+    int idx;
+    char axis_ch, suffix[40];
+
+    f = fopen(path, "r");
+    if (!f) return 0;
+
+    while (fscanf(f, "%79s %79s", key, val_str) == 2) {
+        /* Per-block timing */
+        if (sscanf(key, "block_%d_duration_us", &idx) == 1 && idx < MAX_BLOCKS) {
+            m.duration_us[idx] = atoi(val_str);
+            if (idx >= m.num_blocks) m.num_blocks = idx + 1;
+        }
+        else if (sscanf(key, "block_%d_start_time_us", &idx) == 1 && idx < MAX_BLOCKS) {
+            m.start_time_us[idx] = atoi(val_str);
+        }
+        /* RF (block 0) */
+        else if (strcmp(key, "block_0_rf_delay_us") == 0)     m.rf_delay_us     = atoi(val_str);
+        else if (strcmp(key, "block_0_rf_num_samples") == 0)   m.rf_num_samples  = atoi(val_str);
+        else if (strcmp(key, "block_0_rf_is_complex") == 0)    m.rf_is_complex   = atoi(val_str);
+        else if (strcmp(key, "block_0_rf_num_channels") == 0)  m.rf_num_channels = atoi(val_str);
+        /* Trap gradients: block_B_gA_suffix */
+        else if (sscanf(key, "block_%d_g%c_%39s", &idx, &axis_ch, suffix) == 3
+                 && idx < MAX_BLOCKS) {
+            int ax = (axis_ch == 'x') ? 0 : (axis_ch == 'y') ? 1 : 2;
+            if (strcmp(suffix, "amplitude_hz_m") == 0) {
+                m.has_trap[idx][ax] = 1;
+                m.trap_amplitude[idx][ax] = (float)atof(val_str);
+            }
+            else if (strcmp(suffix, "rise_us") == 0)  m.trap_rise_us[idx][ax]  = atoi(val_str);
+            else if (strcmp(suffix, "flat_us") == 0)   m.trap_flat_us[idx][ax]  = atoi(val_str);
+            else if (strcmp(suffix, "fall_us") == 0)   m.trap_fall_us[idx][ax]  = atoi(val_str);
+            else if (strcmp(suffix, "delay_us") == 0)  m.trap_delay_us[idx][ax] = atoi(val_str);
+            /* Arb keys */
+            else if (strcmp(suffix, "is_arb") == 0)       m.has_arb[idx][ax]         = atoi(val_str);
+            else if (strcmp(suffix, "num_samples") == 0)   m.arb_num_samples[idx][ax] = atoi(val_str);
+        }
+        /* Arb keys without axis in gradient pattern — use block_B_gA_KEY */
+        /* ADC */
+        else if (strcmp(key, "block_2_adc_delay_us") == 0) m.adc_delay_us = atoi(val_str);
+        /* Segment gap */
+        else if (strcmp(key, "rf_adc_gap_us") == 0) m.rf_adc_gap_us = atoi(val_str);
+    }
+
+    fclose(f);
+    *out = m;
+    return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/*  RF magnitude waveform (binary float32)                            */
+/* ------------------------------------------------------------------ */
+
+typedef struct rf_mag_waveform {
+    int    num_samples;
+    float* magnitude;
+} rf_mag_waveform;
+
+#define RF_MAG_WAVEFORM_INIT {0, NULL}
+
+static TSEG_MAYBE_UNUSED void free_rf_mag(rf_mag_waveform* w)
+{
+    if (!w) return;
+    free(w->magnitude); w->magnitude = NULL;
+    w->num_samples = 0;
+}
+
+static TSEG_MAYBE_UNUSED int parse_rf_mag(const char* path, rf_mag_waveform* out)
+{
+    FILE* f;
+    int n;
+    size_t ns;
+    rf_mag_waveform w = RF_MAG_WAVEFORM_INIT;
+
+    f = fopen(path, "rb");
+    if (!f) return 0;
+
+    if (fread(&n, sizeof(int), 1, f) != 1 || n <= 0) { fclose(f); return 0; }
+    ns = (size_t)n;
+
+    w.num_samples = n;
+    w.magnitude = (float*)malloc(ns * sizeof(float));
+    if (!w.magnitude) { fclose(f); return 0; }
+
+    if (fread(w.magnitude, sizeof(float), ns, f) != ns) {
+        free_rf_mag(&w);
+        fclose(f);
+        return 0;
+    }
+
+    fclose(f);
+    *out = w;
+    return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Arbitrary gradient waveform (binary float32)                      */
+/* ------------------------------------------------------------------ */
+
+typedef struct arb_grad_waveform {
+    int    num_samples;
+    float* amplitude;
+    float* time_us;
+} arb_grad_waveform;
+
+#define ARB_GRAD_WAVEFORM_INIT {0, NULL, NULL}
+
+static TSEG_MAYBE_UNUSED void free_arb_grad(arb_grad_waveform* w)
+{
+    if (!w) return;
+    free(w->amplitude); w->amplitude = NULL;
+    free(w->time_us);   w->time_us = NULL;
+    w->num_samples = 0;
+}
+
+static TSEG_MAYBE_UNUSED int parse_arb_grad(const char* path, arb_grad_waveform* out)
+{
+    FILE* f;
+    int n;
+    size_t ns;
+    arb_grad_waveform w = ARB_GRAD_WAVEFORM_INIT;
+
+    f = fopen(path, "rb");
+    if (!f) return 0;
+
+    if (fread(&n, sizeof(int), 1, f) != 1 || n <= 0) { fclose(f); return 0; }
+    ns = (size_t)n;
+
+    w.num_samples = n;
+    w.amplitude = (float*)malloc(ns * sizeof(float));
+    w.time_us   = (float*)malloc(ns * sizeof(float));
+    if (!w.amplitude || !w.time_us) {
+        free_arb_grad(&w);
+        fclose(f);
+        return 0;
+    }
+
+    if (fread(w.amplitude, sizeof(float), ns, f) != ns ||
+        fread(w.time_us,   sizeof(float), ns, f) != ns) {
+        free_arb_grad(&w);
+        fclose(f);
+        return 0;
+    }
+
+    fclose(f);
+    *out = w;
+    return 1;
+}
+
 #endif /* TEST_SEG_HELPERS_H */
