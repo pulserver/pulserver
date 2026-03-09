@@ -257,7 +257,7 @@ function export_meta(path, adc, TR)
     % Only the quantities needed by example_check.c step 6.
     fprintf(fid, 'num_unique_adcs %d\n', 1);
     fprintf(fid, 'adc_0_samples %d\n', adc.numSamples);
-    fprintf(fid, 'adc_0_dwell_us %d\n', round(adc.dwell * 1e6));
+    fprintf(fid, 'adc_0_dwell_us %d\n', round(adc.dwell * 1e9));
     fprintf(fid, 'max_b1_subseq %d\n', 0);
     fprintf(fid, 'tr_duration_us %d\n', round(TR * 1e6));
 
