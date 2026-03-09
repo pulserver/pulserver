@@ -10,7 +10,7 @@ clear; clc;
 import mr.*
 
 write_gre_2d_base_case(1, 1);
-fprintf('\n[v2] Base GRE segmentation case generated.\n');
+fprintf('\n SPGR segmentation case generated.\n');
 
 
 function write_gre_2d_base_case(num_slices, num_averages)
@@ -32,6 +32,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
         'SliceThickness', slice_thickness, ...
         'timeBwProduct', 4, ...
         'apodization', 0.5, ...
+        'use', 'excitation', ...
         'system', sys);
     gz_reph = mr.makeTrapezoid('z', 'Area', -gz.area/2, 'Duration', 1.0e-3, 'system', sys);
     gz_spoil = mr.makeTrapezoid('z', 'Area', 4 / slice_thickness, 'Duration', 1.0e-3, 'system', sys);
@@ -41,15 +42,15 @@ function write_gre_2d_base_case(num_slices, num_averages)
     gx_full = mr.makeTrapezoid('x', 'FlatArea', Nx/fov, 'FlatTime', readout_time, 'system', sys);
     gx_parts = mr.splitGradientAt(gx_full, gx_full.riseTime + gx_full.flatTime);
     gx = gx_parts(1); % truncate at end of flat
-    adc = mr.makeAdc(Nx, 'Duration', gx.flatTime, 'Delay', gx.riseTime, 'system', sys);
+    adc = mr.makeAdc(Nx, 'Duration', gx_full.flatTime, 'Delay', gx_full.riseTime, 'system', sys);
     dummy_adc = mr.makeDelay(mr.calcDuration(adc));
 
     % Pre/rewinder templates
-    gx_pre = mr.makeTrapezoid('x', 'Area', -gx.area/2, 'Duration', 1.0e-3, 'system', sys);
-    gx_spoil_area = 2 * Nx / fov;
+    gx_pre = mr.makeTrapezoid('x', 'Area', -gx_full.area/2, 'Duration', 1.0e-3, 'system', sys);
+    gx_spoil_area = 4 / slice_thickness;
 
     % Bridged spoiler that starts at gx flat amplitude for continuity.
-    gx_spoil = mr.makeExtendedTrapezoidArea('x', gx.amplitude, 0, gx_spoil_area, sys);
+    gx_spoil = mr.makeExtendedTrapezoidArea('x', gx_full.amplitude, 0, gx_spoil_area, sys);
 
     pe_areas = ((0:Ny-1) - floor(Ny/2)) / fov;
     max_pe_area = max(abs(pe_areas));
@@ -81,7 +82,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
     peakRF = 0.0;
 
     % Dummy TRs (once region): same 4-block TR shape with PE=0.
-    for d = 1:ndummy;
+    for d = 1:ndummy
         rf_inc = mod(rf_inc + rf_spoil_inc, 360.0);
         rf_phase = mod(rf_phase + rf_inc, 360.0);
         rf_curr = rf;
@@ -108,7 +109,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
         tr_scale_min(tr_scale_tmp < tr_scale_min) = tr_scale_tmp(tr_scale_tmp < tr_scale_min);
         
         % Bookkeeping for segment energy: track which segment has the highest total gradient energy, as a proxy for which will be most important to get right in segmentation. This is a heuristic to help guide the design of segmentation test cases and their expected outputs, and is not meant to be a perfect measure of "segment importance" in general.
-        seg_energy_tmp = seg_energy_tmp + grad_energy(gx_pre) + grad_energy(gz_reph) + ...
+        seg_energy_tmp = grad_energy(gx_pre) + grad_energy(gz_reph) + ...
                          grad_energy(gx) + ...
                          grad_energy(gx_spoil) + grad_energy(gz_spoil);
         if seg_energy_tmp > seg_energy
@@ -219,7 +220,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
     % TODO(phase4): export TR safety waveforms (max_pos_amp, zero_var).
     % TODO(phase5): export frequency-modulation ground truth and k-space crossings.
 
-    fprintf('[v2] Wrote %s and minimal truth files.\n', [base '.seq']);
+    fprintf('Wrote %s and minimal truth files.\n', [base '.seq']);
 end
 
 
@@ -242,9 +243,6 @@ function sys = make_system()
     sys = mr.opts( ...
         'MaxGrad',   28,   'GradUnit', 'mT/m', ...
         'MaxSlew',   150,  'SlewUnit', 'T/m/s', ...
-        'rfRingdownTime',      20e-6, ...
-        'rfDeadTime',         100e-6, ...
-        'adcDeadTime',         10e-6, ...
         'rfRasterTime',         2e-6, ...
         'gradRasterTime',      20e-6, ...
         'adcRasterTime',        2e-6, ...
