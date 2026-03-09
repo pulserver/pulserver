@@ -71,6 +71,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
     tr_scale_tmp = zeros(num_blocks_in_tr, 3);
     tr_scale_max = zeros(num_blocks_in_tr, 3);
     tr_scale_min = zeros(num_blocks_in_tr, 3) + inf;
+    tr_scale_sign = zeros(num_blocks_in_tr, 3); % track sign of each block's gradient amplitudes for later TR safety analysis.
     
     % Segment bookkeeping: track energy of each segment and which has the max. Energy is
     max_seg_energy_idx = 1;
@@ -85,6 +86,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
     for d = 1:ndummy
         rf_inc = mod(rf_inc + rf_spoil_inc, 360.0);
         rf_phase = mod(rf_phase + rf_inc, 360.0);
+
         rf_curr = rf;
         rf_curr.phaseOffset = rf_phase / 180 * pi;
 
@@ -105,10 +107,12 @@ function write_gre_2d_base_case(num_slices, num_averages)
         tr_scale_tmp(2, :) = [1, 0, 1];
         tr_scale_tmp(3, :) = [1, 0, 0];
         tr_scale_tmp(4, :) = [1, 0, 1];
-        tr_scale_max(tr_scale_tmp > tr_scale_max) = tr_scale_tmp(tr_scale_tmp > tr_scale_max);
-        tr_scale_min(tr_scale_tmp < tr_scale_min) = tr_scale_tmp(tr_scale_tmp < tr_scale_min);
-        
-        % Bookkeeping for segment energy: track which segment has the highest total gradient energy, as a proxy for which will be most important to get right in segmentation. This is a heuristic to help guide the design of segmentation test cases and their expected outputs, and is not meant to be a perfect measure of "segment importance" in general.
+        tr_scale_max(abs(tr_scale_tmp) > abs(tr_scale_max)) = tr_scale_tmp(abs(tr_scale_tmp) > abs(tr_scale_max));
+        tr_scale_min(abs(tr_scale_tmp) < abs(tr_scale_min)) = tr_scale_tmp(abs(tr_scale_tmp) < abs(tr_scale_min));
+        sign_mask = (tr_scale_sign == 0) & (tr_scale_tmp ~= 0);
+        tr_scale_sign(sign_mask) = sign(tr_scale_tmp(sign_mask));
+
+        % Bookkeeping for segment energy.
         seg_energy_tmp = grad_energy(gx_pre) + grad_energy(gz_reph) + ...
                          grad_energy(gx) + ...
                          grad_energy(gx_spoil) + grad_energy(gz_spoil);
@@ -138,6 +142,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
 
             rf_curr = rf;
             slc_shift = (sl - 1 - (num_slices - 1) / 2);
+
             rf_curr.freqOffset = gz.amplitude * slice_thickness * slc_shift;
             rf_curr.phaseOffset = rf_phase / 180 * pi - 2 * pi * rf_curr.freqOffset * rf_center;
 
@@ -163,8 +168,10 @@ function write_gre_2d_base_case(num_slices, num_averages)
             tr_scale_tmp(2, :) = [1, yscale, 1];
             tr_scale_tmp(3, :) = [1, 0, 0];
             tr_scale_tmp(4, :) = [1, -yscale, 1];
-            tr_scale_max(tr_scale_tmp > tr_scale_max) = tr_scale_tmp(tr_scale_tmp > tr_scale_max);
-            tr_scale_min(tr_scale_tmp < tr_scale_min) = tr_scale_tmp(tr_scale_tmp < tr_scale_min);
+            tr_scale_max(abs(tr_scale_tmp) > abs(tr_scale_max)) = tr_scale_tmp(abs(tr_scale_tmp) > abs(tr_scale_max));
+            tr_scale_min(abs(tr_scale_tmp) < abs(tr_scale_min)) = tr_scale_tmp(abs(tr_scale_tmp) < abs(tr_scale_min));
+            sign_mask = (tr_scale_sign == 0) & (tr_scale_tmp ~= 0);
+            tr_scale_sign(sign_mask) = sign(tr_scale_tmp(sign_mask));
 
             % Bookkeeping for segment energy.
             seg_energy_tmp = grad_energy(gz) + ...
@@ -184,12 +191,13 @@ function write_gre_2d_base_case(num_slices, num_averages)
         end
     end
 
-    % Compute tr duration
-    TR = 0;
-    TR = TR + mr.calcDuration(rf, gz);
-    TR = TR + mr.calcDuration(gx_pre, gy_pre, gz_reph);
-    TR = TR + mr.calcDuration(gx, adc);
-    TR = TR + mr.calcDuration(gx_spoil, gy_rew, gz_spoil);
+    % Default unset sign entries to +1 (for always-zero gradient positions).
+    tr_scale_sign(tr_scale_sign == 0) = 1;
+
+    % Build canonical (worst-case) TR waveform for safety checks.
+    [times_us, waveform_samples, TR] = build_canonical_tr( ...
+        sys, rf, gz, gx_pre, gz_reph, gx, adc, gx_spoil, gz_spoil, ...
+        gy_phase, tr_scale_sign, tr_scale_max);
 
     seq.setDefinition('FOV', [fov fov slice_thickness * num_slices]);
     seq.setDefinition('NumSlices', num_slices);
@@ -212,12 +220,14 @@ function write_gre_2d_base_case(num_slices, num_averages)
     seq.write(seq_path);
 
     % --- exports: meta ---
-    export_meta(fullfile(out_dir, [base '_meta.txt']), adc, TR);
+    export_meta(fullfile(out_dir, [base '_meta.txt']), adc, TR, num_blocks_in_tr);
+
+    % --- exports: TR waveform (binary float32) ---
+    export_tr_waveform(fullfile(out_dir, [base '_tr_waveform.bin']), times_us, waveform_samples);
 
     % --- placeholders for upcoming phases ---
     % TODO(phase2): export scan table truth with ONCE + ignoreRepetitions behavior.
     % TODO(phase3): export waveform truth for max-energy segment instance.
-    % TODO(phase4): export TR safety waveforms (max_pos_amp, zero_var).
     % TODO(phase5): export frequency-modulation ground truth and k-space crossings.
 
     fprintf('Wrote %s and minimal truth files.\n', [base '.seq']);
@@ -250,16 +260,23 @@ function sys = make_system()
 end
 
 
-function export_meta(path, adc, TR)
+function export_meta(path, adc, TR, num_blocks_in_tr)
     fid = fopen(path, 'w');
     if fid < 0, error('Failed to open %s', path); end
 
-    % Only the quantities needed by example_check.c step 6.
+    % Quantities from example_check.c step 6.
     fprintf(fid, 'num_unique_adcs %d\n', 1);
     fprintf(fid, 'adc_0_samples %d\n', adc.numSamples);
     fprintf(fid, 'adc_0_dwell_ns %d\n', round(adc.dwell * 1e9));
     fprintf(fid, 'max_b1_subseq %d\n', 0);
     fprintf(fid, 'tr_duration_us %d\n', round(TR * 1e6));
+
+    % Segment structure (example_check.c step 5).
+    fprintf(fid, 'num_segments %d\n', 1);
+    fprintf(fid, 'segment_0_num_blocks %d\n', num_blocks_in_tr);
+
+    % Canonical TR count (1 for single-shot trajectories).
+    fprintf(fid, 'num_canonical_trs %d\n', 1);
 
     fclose(fid);
 end
@@ -362,4 +379,64 @@ function e = grad_energy(g)
     else
         e = 0;
     end
+end
+
+
+function [times_us, samples, TR] = build_canonical_tr( ...
+        sys, rf, gz, gx_pre, gz_reph, gx, adc, gx_spoil, gz_spoil, ...
+        gy_phase, tr_scale_sign, tr_scale_max)
+% BUILD_CANONICAL_TR  Construct worst-case TR and resample to uniform raster.
+%   Returns times in microseconds, gradient samples in Hz/m (Nx3), and TR in seconds.
+%   Uses tr_scale_sign .* tr_scale_max to match the C library AMP_MAX_POS mode.
+
+    % Compute signed worst-case scale per block position.
+    canonical_scale = tr_scale_sign .* tr_scale_max;
+
+    % Build canonical sequence using worst-case scaled gradients.
+    gy_pre  = mr.scaleGrad(gy_phase, canonical_scale(2, 2));
+    gy_rew  = mr.scaleGrad(gy_phase, canonical_scale(4, 2));
+
+    canonical_seq = mr.Sequence(sys);
+    canonical_seq.addBlock(rf, gz);
+    canonical_seq.addBlock(gx_pre, gy_pre, gz_reph);
+    canonical_seq.addBlock(gx, adc);
+    canonical_seq.addBlock(gx_spoil, gy_rew, gz_spoil);
+
+    % Compute TR duration from block durations.
+    TR = 0;
+    TR = TR + mr.calcDuration(rf, gz);
+    TR = TR + mr.calcDuration(gx_pre, gy_pre, gz_reph);
+    TR = TR + mr.calcDuration(gx, adc);
+    TR = TR + mr.calcDuration(gx_spoil, gy_rew, gz_spoil);
+
+    % Extract waveform data and interpolate to uniform half-gradient-raster grid.
+    wave_data = canonical_seq.waveforms_and_times(false);
+    raster = 0.5 * sys.gradRasterTime;  % 10 us — matches C library
+    times = 0.0 : raster : canonical_seq.duration;
+    samples = zeros(length(times), 3);
+    for c = 1:3
+        if c <= length(wave_data) && ~isempty(wave_data{c})
+            samples(:, c) = interp1(wave_data{c}(1,:), wave_data{c}(2,:), times, 'linear', 0);
+        end
+    end
+
+    % Convert times from seconds to microseconds.
+    times_us = times(:) * 1e6;
+end
+
+
+function export_tr_waveform(path, times_us, samples)
+% EXPORT_TR_WAVEFORM  Write canonical TR waveform as binary float32.
+%   Layout: int32 num_samples, then float32 arrays: time_us[N], gx[N], gy[N], gz[N].
+    fid = fopen(path, 'w');
+    if fid < 0, error('Failed to open %s', path); end
+
+    N = length(times_us);
+    fwrite(fid, N, 'int32');
+    fwrite(fid, single(times_us), 'float32');
+    fwrite(fid, single(samples(:, 1)), 'float32');
+    fwrite(fid, single(samples(:, 2)), 'float32');
+    fwrite(fid, single(samples(:, 3)), 'float32');
+
+    fclose(fid);
 end
