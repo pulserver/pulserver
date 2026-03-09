@@ -117,6 +117,9 @@ MU_TEST(test_segmentation_gre_safety_waveforms)
         mu_assert_int_eq(meta.segment_num_blocks[s], segi.num_blocks);
     }
 
+    /* Number of canonical TR waveforms to compare */
+    mu_assert_int_eq(meta.num_canonical_trs, sinfo.num_passes);
+
     /* 5. Worst-case TR gradient waveforms */
     ok = parse_tr_waveform(TEST_DATA_DIR "gre_2d_1sl_1avg_tr_waveform.bin", &ref_wf);
     mu_assert(ok, "failed to parse gre_2d_1sl_1avg_tr_waveform.bin");
