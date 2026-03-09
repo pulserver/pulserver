@@ -263,14 +263,19 @@ function write_gre_2d_base_case(num_slices, num_averages)
     adc_rf_gap(1, 3) = rf_adc_gap_value;
     adc_adc_gap = zeros(1, num_blocks_in_tr); % no back-to-back ADCs in this sequence
 
-    % here add write segment_def header (num segments)
+    % Prepare segment definition data structure
+    segment_data = struct();
+    segment_data.num_segments = num_segments;
+    segment_data.segments = {};
+
+    % Write segment-def header and blocks
     for s = 1:num_segments
         block_start = 0.0;
         has_digital_out = 0;
         digital_out_delay = 0.0;
         digital_out_duration = 0.0;
 
-        % here add write num_blocks per current segment in segment_def
+        segment_data.segments{s} = struct('blocks', {});
 
         for b = 1:segment_size(s)
             block = seq.getBlock(max_seg_energy_idx + b - 1);
@@ -447,21 +452,78 @@ function write_gre_2d_base_case(num_slices, num_averages)
 
             % get frequency modulation
             has_freq_mod = false;
-            num_freq_mod_samples = [];
-            if has_rf && has_grad: % actually, grad should be nonzero on all three axis in rf active window
-                has_freq_mod = true;
-                num_freq_mod_samples = block.blockDuration / sys.rfRasterTime;
+            num_freq_mod_samples = 0;
+            
+            % Define RF window: [rf.delay, rf.delay + rf.tt(end)]
+            rf_window_start = rf.delay;
+            rf_window_end = rf.delay + rf.tt(end);
+            
+            % Define ADC window: [adc.delay, adc.delay + adc.numSamples * adc.dwell]
+            adc_window_start = adc.delay;
+            adc_window_end = adc.delay + adc.numSamples * adc.dwell;
+            
+            if has_rf
+                % Check if any gradient has nonzero samples in RF window
+                gx_nonzero_in_rf = has_grad && grad_nonzero_in_window(block.gx, rf_window_start, rf_window_end);
+                gy_nonzero_in_rf = has_grad && grad_nonzero_in_window(block.gy, rf_window_start, rf_window_end);
+                gz_nonzero_in_rf = has_grad && grad_nonzero_in_window(block.gz, rf_window_start, rf_window_end);
+                
+                if gx_nonzero_in_rf || gy_nonzero_in_rf || gz_nonzero_in_rf
+                    has_freq_mod = true;
+                    num_freq_mod_samples = round(block.blockDuration / sys.rfRasterTime);
+                end
             end
-            if has_adc && has_grad % actually, grad should be nonzero on all three axis in adc active window
-                has_freq_mod = true;
-                num_freq_mod_samples = block.blockDuration / sys.adcRasterTime;
+            
+            if has_adc
+                % Check if any gradient has nonzero samples in ADC window
+                gx_nonzero_in_adc = has_grad && grad_nonzero_in_window(block.gx, adc_window_start, adc_window_end);
+                gy_nonzero_in_adc = has_grad && grad_nonzero_in_window(block.gy, adc_window_start, adc_window_end);
+                gz_nonzero_in_adc = has_grad && grad_nonzero_in_window(block.gz, adc_window_start, adc_window_end);
+                
+                if gx_nonzero_in_adc || gy_nonzero_in_adc || gz_nonzero_in_adc
+                    has_freq_mod = true;
+                    num_freq_mod_samples = round(block.blockDuration / sys.adcRasterTime);
+                end
             end
 
-            % here write rf, gx, gy, gz, adc, digital_out, freq_mod, rotate in seg_def(s, b)
+            % Store block data in segment structure
+            block_data = struct();
+            block_data.has_rf = has_rf;
+            block_data.rf_delay = rf_delay;
+            block_data.rf_rho = rf_rho;
+            block_data.rf_theta = rf_theta;
+            block_data.rf_amp = rf_amp;
+            block_data.rf_time = rf_time;
+            block_data.gx_delay = gx_delay;
+            block_data.gx_wave = gx_wave;
+            block_data.gx_amp = gx_amp;
+            block_data.gx_time = gx_time;
+            block_data.gy_delay = gy_delay;
+            block_data.gy_wave = gy_wave;
+            block_data.gy_amp = gy_amp;
+            block_data.gy_time = gy_time;
+            block_data.gz_delay = gz_delay;
+            block_data.gz_wave = gz_wave;
+            block_data.gz_amp = gz_amp;
+            block_data.gz_time = gz_time;
+            block_data.has_adc = has_adc;
+            block_data.adc_delay = adc_delay;
+            block_data.adc_id = adc_id;
+            block_data.rotate = rotate;
+            block_data.has_digital_out = has_digital_out;
+            block_data.digital_out_delay = digital_out_delay;
+            block_data.digital_out_duration = digital_out_duration;
+            block_data.has_freq_mod = has_freq_mod;
+            block_data.num_freq_mod_samples = num_freq_mod_samples;
+            
+            segment_data.segments{s}.blocks{b} = block_data;
 
             block_start = block_start + block_dur;
         end
     end
+
+    % Export segment definition binary file
+    export_segment_def(fullfile(out_dir, [base '_segment_def.bin']), segment_data, sys);
 
     % --- placeholders for upcoming phases ---
     % TODO(phase4): export scan table truth with ONCE + ignoreRepetitions behavior.
@@ -765,4 +827,125 @@ function export_tr_waveform(path, times_us, samples)
     fwrite(fid, single(samples(:, 3)), 'float32');
 
     fclose(fid);
+end
+
+
+function export_segment_def(path, segment_data, sys)
+% EXPORT_SEGMENT_DEF  Write segment definition as binary file.
+%   Structure: 
+%   int32 num_segments
+%   For each segment:
+%     int32 num_blocks
+%     For each block:
+%       uint8 flags (bit-packed: has_rf, gx, gy, gz, adc, rotation, digital_out, freq_mod)
+%       float32 rf_delay, rf_amp, rf samples
+%       float32 gx/gy/gz delays, amplitudes, waveform samples
+%       float32 adc_delay, digital_out_delay, digital_out_duration
+%       int32 freq_mod_sample_count
+    fid = fopen(path, 'wb');
+    if fid < 0, error('Failed to open %s', path); end
+
+    % Write header
+    fwrite(fid, segment_data.num_segments, 'int32');
+    
+    % Write per-segment data
+    for s = 1:segment_data.num_segments
+        blocks = segment_data.segments{s}.blocks;
+        fwrite(fid, length(blocks), 'int32');
+        
+        % Write per-block data
+        for b = 1:length(blocks)
+            block_data = blocks{b};
+            
+            % Pack flags as single byte (bit 0-7: rf, gx, gy, gz, adc, rotation, digital_out, freq_mod)
+            flags = 0;
+            flags = flags + (block_data.has_rf * (2^0));
+            flags = flags + (~isempty(block_data.gx_wave) * (2^1));
+            flags = flags + (~isempty(block_data.gy_wave) * (2^2));
+            flags = flags + (~isempty(block_data.gz_wave) * (2^3));
+            flags = flags + (block_data.has_adc * (2^4));
+            flags = flags + (block_data.rotate * (2^5));
+            flags = flags + (block_data.has_digital_out * (2^6));
+            flags = flags + (block_data.has_freq_mod * (2^7));
+            fwrite(fid, uint8(flags), 'uint8');
+            
+            % RF parameters
+            fwrite(fid, single(block_data.rf_delay), 'float32');
+            fwrite(fid, single(block_data.rf_amp), 'float32');
+            if block_data.has_rf && ~isempty(block_data.rf_rho)
+                fwrite(fid, int32(length(block_data.rf_rho)), 'int32');
+                fwrite(fid, single(block_data.rf_rho), 'float32');
+            else
+                fwrite(fid, int32(0), 'int32');
+            end
+            
+            % Gradient parameters (x, y, z)
+            for axis = 1:3
+                switch axis
+                    case 1, wave = block_data.gx_wave; delay = block_data.gx_delay; amp = block_data.gx_amp;
+                    case 2, wave = block_data.gy_wave; delay = block_data.gy_delay; amp = block_data.gy_amp;
+                    case 3, wave = block_data.gz_wave; delay = block_data.gz_delay; amp = block_data.gz_amp;
+                end
+                fwrite(fid, single(delay), 'float32');
+                fwrite(fid, single(amp), 'float32');
+                if ~isempty(wave)
+                    fwrite(fid, int32(length(wave)), 'int32');
+                    fwrite(fid, single(wave), 'float32');
+                else
+                    fwrite(fid, int32(0), 'int32');
+                end
+            end
+            
+            % ADC parameters
+            fwrite(fid, single(block_data.adc_delay), 'float32');
+            
+            % Digital output parameters
+            fwrite(fid, single(block_data.digital_out_delay), 'float32');
+            fwrite(fid, single(block_data.digital_out_duration), 'float32');
+            
+            % Frequency modulation parameters
+            fwrite(fid, int32(block_data.num_freq_mod_samples), 'int32');
+        end
+    end
+    
+    fclose(fid);
+end
+
+
+function has_nonzero = grad_nonzero_in_window(grad, window_start, window_end)
+% GRAD_NONZERO_IN_WINDOW  Check if gradient has nonzero samples within [window_start, window_end].
+%   For trapezoid: check if flat region overlaps with window.
+%   For arbitrary: check if samples within window (after accounting for delay) are nonzero.
+    
+    has_nonzero = false;
+    
+    if isempty(grad)
+        return;
+    end
+    
+    if strcmp(grad.type, 'trap') || strcmp(grad.type, 'trapezoid')
+        % Trapezoid gradient: nonzero region is [delay + riseTime, delay + riseTime + flatTime]
+        flat_start = grad.delay + grad.riseTime;
+        flat_end = grad.delay + grad.riseTime + grad.flatTime;
+        
+        % Check if flat region overlaps with [window_start, window_end]
+        has_nonzero = (flat_start < window_end) && (flat_end > window_start);
+    else
+        % Arbitrary waveform: check if samples within window are nonzero
+        % Convert window bounds to local time (relative to gradient delay)
+        local_window_start = window_start - grad.delay;
+        local_window_end = window_end - grad.delay;
+        
+        % Find indices where gradient time samples fall within the window
+        time_samples = grad.tt;
+        waveform_samples = grad.waveform;
+        
+        % Find samples within the window
+        in_window = (time_samples >= local_window_start) & (time_samples <= local_window_end);
+        
+        if any(in_window)
+            % Check if any sample in the window is nonzero
+            has_nonzero = any(abs(waveform_samples(in_window)) > 0);
+        end
+    end
 end
