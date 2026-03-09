@@ -25,6 +25,9 @@ int main(void)
     printf("\n==== test_rf_stats ====\n");
     failed += test_rf_stats_main();
 
+    printf("\n==== test_segmentation ====\n");
+    failed += test_segmentation_main();
+
     printf("\n");
     if (failed)
         printf("OVERALL: %d test(s) FAILED\n", failed);
