@@ -669,7 +669,7 @@ typedef struct pulseqlib_block_info {
  * Returned by pulseqlib_get_adc_def().
  */
 typedef struct pulseqlib_adc_def {
-    int   dwell_us;             /**< dwell time (us)                     */
+    int   dwell_ns;             /**< dwell time (ns)                     */
     int   num_samples;          /**< sample count                        */
 } pulseqlib_adc_def;
 

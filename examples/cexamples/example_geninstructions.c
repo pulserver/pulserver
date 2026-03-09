@@ -245,7 +245,7 @@ static void walk_segment_events(
             int adc_dur;
 
             pulseqlib_get_adc_def(coll, bi.adc_def_id, &ad);
-            adc_dur = (int)(ad.num_samples * ad.dwell_us * 1e-3f);
+            adc_dur = (int)(ad.num_samples * ad.dwell_ns * 1e-3f);
 
             events[num_events].kind     = EVT_ADC;
             events[num_events].blk_idx  = i;

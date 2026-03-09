@@ -1,7 +1,7 @@
 /* pulseqlib_accessors.c -- collection-level accessor functions
  *
  * Public functions:
- *   pulseqlib_get_max_adc_samples    pulseqlib_get_adc_dwell_us
+ *   pulseqlib_get_max_adc_samples    pulseqlib_get_adc_dwell_ns
  *   pulseqlib_get_adc_num_samples    pulseqlib_get_num_segments
  *   pulseqlib_is_segment_pure_delay  pulseqlib_get_segment_num_blocks
  *   pulseqlib_get_block_start_time_us   pulseqlib_get_block_duration_us
@@ -530,7 +530,7 @@ static int pulseqlib__get_max_adc_samples(
     return max_samples;
 }
 
-static int pulseqlib__get_adc_dwell_us(
+static int pulseqlib__get_adc_dwell_ns(
     const pulseqlib_collection* coll, int adc_idx)
 {
     int i, global_idx, num_adcs, local;
@@ -2233,7 +2233,7 @@ int pulseqlib_get_adc_def(
 {
     if (!coll || !def) return PULSEQLIB_ERR_NULL_POINTER;
 
-    def->dwell_us    = pulseqlib__get_adc_dwell_us(coll, adc_idx);
+    def->dwell_ns    = pulseqlib__get_adc_dwell_ns(coll, adc_idx);
     def->num_samples = pulseqlib__get_adc_num_samples(coll, adc_idx);
 
     return PULSEQLIB_SUCCESS;

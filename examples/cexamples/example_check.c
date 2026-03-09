@@ -310,7 +310,7 @@ int main(int argc, char** argv)
          * 1. Set up echo filters per unique ADC event:
          *      pulseqlib_adc_def ad;
          *      pulseqlib_get_adc_def(coll, a, &ad);
-         *      bw        = <vendor formula from ad.dwell_us>;
+         *      bw        = <vendor formula from ad.dwell_ns>;
          *      calcfilter(...);
          *
          * 2. Set data storage dimensions from total_readouts,
@@ -321,8 +321,8 @@ int main(int argc, char** argv)
             pulseqlib_adc_def ad = PULSEQLIB_ADC_DEF_INIT;
             rc = pulseqlib_get_adc_def(coll, a, &ad);
             CHECK(rc, &g_diag);
-            printf("  ADC %d: dwell=%d us, nsamples=%d\n",
-                   a, ad.dwell_us, ad.num_samples);
+            printf("  ADC %d: dwell=%d ns, nsamples=%d\n",
+                   a, ad.dwell_ns, ad.num_samples);
         }
     }
 

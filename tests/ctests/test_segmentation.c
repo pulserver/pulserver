@@ -2,7 +2,7 @@
  * test_segmentation.c -- phase-1 segmentation tests.
  *
  * Validates the three example_check.c quantities against MATLAB ground truth:
- *   1. Unique ADC definitions (count, num_samples, dwell_us)
+ *   1. Unique ADC definitions (count, num_samples, dwell_ns)
  *   2. max_b1_subseq index
  *   3. Nominal TR duration
  */
@@ -43,7 +43,7 @@ MU_TEST(test_segmentation_gre_example_check)
         rc = pulseqlib_get_adc_def(coll, a, &ad);
         mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_adc_def failed");
         mu_assert_int_eq(meta.adc_samples[a], ad.num_samples);
-        mu_assert_int_eq(meta.adc_dwell_us[a], ad.dwell_us);
+        mu_assert_int_eq(meta.adc_dwell_ns[a], ad.dwell_ns);
     }
 
     /* 2. max_b1_subseq — trivially 0 for single-subsequence collection */

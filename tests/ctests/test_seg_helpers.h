@@ -25,7 +25,7 @@
 typedef struct seg_meta {
     int num_unique_adcs;
     int adc_samples[MAX_UNIQUE_ADCS];
-    int adc_dwell_us[MAX_UNIQUE_ADCS];
+    int adc_dwell_ns[MAX_UNIQUE_ADCS];
     int max_b1_subseq;
     int tr_duration_us;
 } seg_meta;
@@ -54,8 +54,8 @@ static TSEG_MAYBE_UNUSED int parse_meta(const char* path, seg_meta* out)
             if (idx >= 0 && idx < MAX_UNIQUE_ADCS) {
                 if (strcmp(suffix, "samples") == 0)
                     m.adc_samples[idx] = val;
-                else if (strcmp(suffix, "dwell_us") == 0)
-                    m.adc_dwell_us[idx] = val;
+                else if (strcmp(suffix, "dwell_ns") == 0)
+                    m.adc_dwell_ns[idx] = val;
             }
         } else if (strcmp(key, "max_b1_subseq") == 0) {
             m.max_b1_subseq = val;
