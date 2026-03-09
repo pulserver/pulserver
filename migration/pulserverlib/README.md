@@ -1,14 +1,13 @@
-# pulserverlib
+# pulserverlib-source
 
-This scaffold contains the high-level Python and MATLAB interfaces over Pulseq core libraries.
+This scaffold contains the low-level C source for Pulseq core functionality.
 
 ## Included from monorepo
-- `python/pulserver/core/`
-- `python/pulserver/__init__.py`
-- `matlab/`
-- `pyproject.toml`, `setup.py`, `CMakeLists.txt`
-- `tests/pytests/`
+- `csrc/`
+- `extensions/pulseqlib/`
+- `README.rst`
+- `LICENSE.txt`
 
 ## Notes
-- Designed to consume `pulserverlib-source` as a submodule/dependency.
-- Python layout and scikit-build backend are kept for extension builds.
+- Intended to become a standalone repo and/or submodule dependency for higher-level packages.
+- History-preserving extraction is recommended for this repository.
