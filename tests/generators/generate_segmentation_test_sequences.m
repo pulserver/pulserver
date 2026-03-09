@@ -246,13 +246,222 @@ function write_gre_2d_base_case(num_slices, num_averages)
     % --- exports: TR waveform (binary float32) ---
     export_tr_waveform(fullfile(out_dir, [base '_tr_waveform.bin']), times_us, waveform_samples);
 
-    % --- exports: block-level ground truth (phase 3) ---
-    export_block_meta(fullfile(out_dir, [base '_block_meta.txt']), ...
-                      seq, sys, rf, adc, gz, gx_pre, gz_reph, gx, gx_spoil, gy_phase, gz_spoil, ...
-                      max_seg_energy_idx, num_blocks_in_tr, canonical_scale);
-    export_rf_magnitude(fullfile(out_dir, [base '_rf_mag.bin']), rf);
-    export_arb_grad(fullfile(out_dir, [base '_arb_grad_b2_x.bin']), gx);
-    export_arb_grad(fullfile(out_dir, [base '_arb_grad_b3_x.bin']), gx_spoil);
+    % --- exports: segment-level ground truth (phase 3) ---
+    num_segments = 1;
+    segment_size = [num_blocks_in_tr]; % single segment with all blocks (worst-case energy)
+    has_rot = zeros(1, num_blocks_in_tr);
+    norot = zeros(1, num_blocks_in_tr);
+    adc_id = zeros(1, num_blocks_in_tr);
+    adc_id(1, 3) = 1;
+
+    % ------ gaps
+    rf_adc_gap_value = -rf.delay + mr.calcDuration(rf, gz) + mr.calcDuration(gx_pre, gy_pre, gz_reph) + adc.delay;
+
+    rf_adc_gap = zeros(1, num_blocks_in_tr);
+    rf_adc_gap(1, 1) = rf_adc_gap_value;
+    adc_rf_gap = zeros(1, num_blocks_in_tr);
+    adc_rf_gap(1, 3) = rf_adc_gap_value;
+    adc_adc_gap = zeros(1, num_blocks_in_tr); % no back-to-back ADCs in this sequence
+
+    % here add write segment_def header (num segments)
+    for s = 1:num_segments
+        block_start = 0.0;
+        has_digital_out = 0;
+        digital_out_delay = 0.0;
+        digital_out_duration = 0.0;
+
+        % here add write num_blocks per current segment in segment_def
+
+        for b = 1:segment_size(s)
+            block = seq.getBlock(max_seg_energy_idx + b - 1);
+            block_dur = block.blockDuration;
+
+            % get RF
+            if isfield(block, 'rf') && ~isempty(block.rf)
+                has_rf = true;
+                rf_delay = block.rf.delay; % RF delay within block (s)
+                rf_samples = block.rf.signal;
+                rf_amp = max(abs(rf_samples));
+                if rf_amp > 0
+                    rf_samples = rf_samples / rf_amp; % normalize to max amplitude 1
+                end
+
+                % if it imaginary part is 0, make it real-valued
+                if ~any(imag(rf_samples))
+                    rf_rho = real(rf_samples);
+                    rf_theta = [];                    
+                else
+                    rf_rho = abs(rf_samples);
+                    rf_theta = angle(rf_samples);
+                end
+
+                % get time points for rf samples
+                rf_time = block.rf.tt; % time points for RF samples
+                dt = rf_time(2) - rf_time(1);
+                if length(unique(diff(rf_time))) == 1 && dt == sys.rfRasterTime
+                    rf_time = []; % uniform sampling, can be inferred from start time and dwell
+                end
+            else
+                has_rf = false;
+                rf_delay = [];
+                rf_time = [];
+                rf_rho = [];
+                rf_theta = [];
+                rf_amp = 0.0;
+            end
+
+            % get gradients
+            has_grad = 0;
+            if isfield(block, 'gx') && ~isempty(block.gx)
+                has_grad = 1;
+                gx_delay = block.gx.delay; % Gx delay within block (s)
+                if strcat(block.gx.type, 'trap')
+                    gx_amp = block.gx.amplitude;
+                    gx_rise = block.gx.riseTime;
+                    gx_flat = block.gx.flatTime;
+                    gx_fall = block.gx.fallTime;
+                    if gx_flat == 0
+                        gx_time = cumsum([0, gx_rise, gx_fall]);
+                        gx_wave = [0, 1, 0]; % normalized trapezoid waveform
+                    else
+                        gx_time = cumsum([0, gx_rise, gx_flat, gx_fall]);
+                        gx_wave = [0, 1, 1, 0]; % normalized trapezoid waveform
+                    end
+                else
+                    gx_wave = block.gx.waveform;
+                    gx_amp = max(abs(gx_wave));
+                    if gx_amp > 0
+                        gx_wave = gx_wave / gx_amp; % normalize to max amplitude 1
+                    end
+
+                     % get time points for gx samples
+                    gx_time = block.gx.tt;
+                    dt = gx_time(2) - gx_time(1);
+                    if length(unique(diff(gx_time))) == 1 && dt == sys.gradRasterTime
+                        gx_time = []; % uniform sampling, can be inferred from start time and dwell
+                    end
+                end
+            else
+                gx_delay = [];
+                gx_time = [];
+                gx_wave = [];
+                gx_amp = 0.0;
+            end
+
+            if isfield(block, 'gy') && ~isempty(block.gy)
+                has_grad = 1;
+                gy_delay = block.gy.delay; % Gy delay within block (s)
+                if strcat(block.gy.type, 'trap')
+                    gy_amp = block.gy.amplitude;
+                    gy_rise = block.gy.riseTime;
+                    gy_flat = block.gy.flatTime;
+                    gy_fall = block.gy.fallTime;
+                    if gy_flat == 0
+                        gy_time = cumsum([0, gy_rise, gy_fall]);
+                        gy_wave = [0, 1, 0]; % normalized trapezoid waveform
+                    else
+                        gy_time = cumsum([0, gy_rise, gy_flat, gy_fall]);
+                        gy_wave = [0, 1, 1, 0]; % normalized trapezoid waveform
+                    end
+                else
+                    gy_wave = block.gy.waveform;
+                    gy_amp = max(abs(gy_wave));
+                    if gy_amp > 0
+                        gy_wave = gy_wave / gy_amp; % normalize to max amplitude 1
+                    end
+
+                     % get time points for gy samples
+                    gy_time = block.gy.tt;
+                    dt = gy_time(2) - gy_time(1);
+                    if length(unique(diff(gy_time))) == 1 && dt == sys.gradRasterTime
+                        gy_time = []; % uniform sampling, can be inferred from start time and dwell
+                    end
+                end
+            else
+                gy_delay = [];
+                gy_time = [];
+                gy_wave = [];
+                gy_amp = 0.0;
+            end
+
+            if isfield(block, 'gz') && ~isempty(block.gz)
+                has_grad = 1;
+                gz_delay = block.gz.delay; % Gz delay within block (s)
+                if strcat(block.gz.type, 'trap')
+                    gz_amp = block.gz.amplitude;
+                    gz_rise = block.gz.riseTime;
+                    gz_flat = block.gz.flatTime;
+                    gz_fall = block.gz.fallTime;
+                    if gz_flat == 0
+                        gz_time = cumsum([0, gz_rise, gz_fall]);
+                        gz_wave = [0, 1, 0]; % normalized trapezoid waveform
+                    else
+                        gz_time = cumsum([0, gz_rise, gz_flat, gz_fall]);
+                        gz_wave = [0, 1, 1, 0]; % normalized trapezoid waveform
+                    end
+                else
+                    gz_wave = block.gz.waveform;
+                    gz_amp = max(abs(gz_wave));
+                    if gz_amp > 0
+                        gz_wave = gz_wave / gz_amp; % normalize to max amplitude 1
+                    end
+
+                     % get time points for gz samples
+                    gz_time = block.gz.tt;
+                    dt = gz_time(2) - gz_time(1);
+                    if length(unique(diff(gz_time))) == 1 && dt == sys.gradRasterTime
+                        gz_time = []; % uniform sampling, can be inferred from start time and dwell
+                    end
+                end
+            else
+                gz_delay = [];
+                gz_time = [];
+                gz_wave = [];
+                gz_amp = 0.0;
+            end
+
+            % get adc
+            if isfield(block, 'adc') && ~isempty(block.adc)
+                has_adc = adc_id(s, b);
+                adc_delay = block.adc.delay; % ADC delay within block (s)
+                adc_id = 1; % we have only a single ADC definition in this sequence
+            else
+                has_adc = 0;
+                adc_delay = [];
+                adc_id = [];
+            end
+
+            % get rotation flag
+            rotate = has_rot(s, b) || norot(s, b);
+
+            % get trigger
+            if isfield(block, 'trig') && ~isempty(block.trig)
+                for t = 1:length(block.trig)
+                    if strcat(block.trig.type, 'output')
+                        has_digital_out = 1;
+                        digital_out_delay = block.trig(t).delay; % digital output delay within block (s)
+                        digital_out_duration = block.trig(t).duration; % digital output duration (s)
+                    end
+                end
+            end
+
+            % get frequency modulation
+            has_freq_mod = false;
+            num_freq_mod_samples = [];
+            if has_rf && has_grad: % actually, grad should be nonzero on all three axis in rf active window
+                has_freq_mod = true;
+                num_freq_mod_samples = block.blockDuration / sys.rfRasterTime;
+            end
+            if has_adc && has_grad % actually, grad should be nonzero on all three axis in adc active window
+                has_freq_mod = true;
+                num_freq_mod_samples = block.blockDuration / sys.adcRasterTime;
+            end
+
+            % here write rf, gx, gy, gz, adc, digital_out, freq_mod, rotate in seg_def(s, b)
+
+            block_start = block_start + block_dur;
+        end
+    end
 
     % --- placeholders for upcoming phases ---
     % TODO(phase4): export scan table truth with ONCE + ignoreRepetitions behavior.
@@ -453,6 +662,7 @@ function export_block_meta(path, seq, sys, rf, adc, gz, gx_pre, gz_reph, gx, gx_
 
     % RF (block 0): always the rf+gz block.
     fprintf(fid, 'block_0_rf_delay_us %d\n', round(rf.delay * 1e6));
+
     fprintf(fid, 'block_0_rf_num_samples %d\n', length(rf.signal));
     % Windowed sinc with negative sidelobes: phase shape encodes sign flips.
     rf_is_complex = any(rf.signal < 0);
@@ -465,6 +675,7 @@ function export_block_meta(path, seq, sys, rf, adc, gz, gx_pre, gz_reph, gx, gx_
 
     % Block 1: Gx_pre, Gy_pre (scaled), Gz_reph — all traps.
     write_trap_meta(fid, 1, 'x', gx_pre);
+
     % Gy is scaled by canonical_scale(2,2) — amplitude is template × scale.
     gy_pre_scaled = mr.scaleGrad(gy_phase, canonical_scale(2, 2));
     write_trap_meta(fid, 1, 'y', gy_pre_scaled);
