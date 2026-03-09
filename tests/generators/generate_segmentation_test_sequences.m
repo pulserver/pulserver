@@ -194,10 +194,31 @@ function write_gre_2d_base_case(num_slices, num_averages)
     % Default unset sign entries to +1 (for always-zero gradient positions).
     tr_scale_sign(tr_scale_sign == 0) = 1;
 
+    % Compute signed worst-case scale per block position.
+    % tr_scale_max stores the signed value with max absolute amplitude;
+    % tr_scale_sign stores the sign of the first nonzero occurrence.
+    % The C library AMP_MAX_POS mode uses: sign(first) × max(|amp|).
+    canonical_scale = tr_scale_sign .* abs(tr_scale_max);
+
+    % Build canonical sequence using worst-case scaled gradients.
+    gy_pre  = mr.scaleGrad(gy_phase, canonical_scale(2, 2));
+    gy_rew  = mr.scaleGrad(gy_phase, canonical_scale(4, 2));
+
+    canonical_seq = mr.Sequence(sys);
+    canonical_seq.addBlock(rf, gz);
+    canonical_seq.addBlock(gx_pre, gy_pre, gz_reph);
+    canonical_seq.addBlock(gx, adc);
+    canonical_seq.addBlock(gx_spoil, gy_rew, gz_spoil);
+
+    % Compute TR duration from block durations.
+    TR = 0;
+    TR = TR + mr.calcDuration(rf, gz);
+    TR = TR + mr.calcDuration(gx_pre, gy_pre, gz_reph);
+    TR = TR + mr.calcDuration(gx, adc);
+    TR = TR + mr.calcDuration(gx_spoil, gy_rew, gz_spoil);
+
     % Build canonical (worst-case) TR waveform for safety checks.
-    [times_us, waveform_samples, TR] = build_canonical_tr( ...
-        sys, rf, gz, gx_pre, gz_reph, gx, adc, gx_spoil, gz_spoil, ...
-        gy_phase, tr_scale_sign, tr_scale_max);
+    [times_us, waveform_samples] = build_canonical_tr(canonical_seq, sys);
 
     seq.setDefinition('FOV', [fov fov slice_thickness * num_slices]);
     seq.setDefinition('NumSlices', num_slices);
@@ -382,32 +403,9 @@ function e = grad_energy(g)
 end
 
 
-function [times_us, samples, TR] = build_canonical_tr( ...
-        sys, rf, gz, gx_pre, gz_reph, gx, adc, gx_spoil, gz_spoil, ...
-        gy_phase, tr_scale_sign, tr_scale_max)
+function [times_us, samples] = build_canonical_tr(canonical_seq, sys)
 % BUILD_CANONICAL_TR  Construct worst-case TR and resample to uniform raster.
 %   Returns times in microseconds, gradient samples in Hz/m (Nx3), and TR in seconds.
-%   Uses tr_scale_sign .* tr_scale_max to match the C library AMP_MAX_POS mode.
-
-    % Compute signed worst-case scale per block position.
-    canonical_scale = tr_scale_sign .* tr_scale_max;
-
-    % Build canonical sequence using worst-case scaled gradients.
-    gy_pre  = mr.scaleGrad(gy_phase, canonical_scale(2, 2));
-    gy_rew  = mr.scaleGrad(gy_phase, canonical_scale(4, 2));
-
-    canonical_seq = mr.Sequence(sys);
-    canonical_seq.addBlock(rf, gz);
-    canonical_seq.addBlock(gx_pre, gy_pre, gz_reph);
-    canonical_seq.addBlock(gx, adc);
-    canonical_seq.addBlock(gx_spoil, gy_rew, gz_spoil);
-
-    % Compute TR duration from block durations.
-    TR = 0;
-    TR = TR + mr.calcDuration(rf, gz);
-    TR = TR + mr.calcDuration(gx_pre, gy_pre, gz_reph);
-    TR = TR + mr.calcDuration(gx, adc);
-    TR = TR + mr.calcDuration(gx_spoil, gy_rew, gz_spoil);
 
     % Extract waveform data and interpolate to uniform half-gradient-raster grid.
     wave_data = canonical_seq.waveforms_and_times(false);
