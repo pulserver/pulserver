@@ -533,21 +533,6 @@ function write_gre_2d_base_case(num_slices, num_averages)
 end
 
 
-function export_tr_scales(path, scale_max, scale_min)
-    fid = fopen(path, 'w');
-    if fid < 0, error('Failed to open %s', path); end
-
-    fprintf(fid, 'tr_block_idx,x_max,y_max,z_max,x_min,y_min,z_min\n');
-    for b = 1:size(scale_max, 1)
-        fprintf(fid, '%d,%.8g,%.8g,%.8g,%.8g,%.8g,%.8g\n', b - 1, ...
-            scale_max(b, 1), scale_max(b, 2), scale_max(b, 3), ...
-            scale_min(b, 1), scale_min(b, 2), scale_min(b, 3));
-    end
-
-    fclose(fid);
-end
-
-
 function sys = make_system()
     sys = mr.opts( ...
         'MaxGrad',   28,   'GradUnit', 'mT/m', ...
@@ -581,88 +566,8 @@ function export_meta(path, adc, TR, num_blocks_in_tr)
 end
 
 
-function export_blocks_csv(path, seq)
-    fid = fopen(path, 'w');
-    if fid < 0, error('Failed to open %s', path); end
-
-    fprintf(fid, 'idx,duration_us,rf_amp_hz,rf_freq_hz,rf_phase_rad,gx_amp,gy_amp,gz_amp,adc_flag,adc_freq_hz,adc_phase_rad\n');
-
-    for n = 1:length(seq.blockDurations)
-        blk = seq.getBlock(n);
-        dur_us = round(seq.blockDurations(n) * 1e6);
-
-        [rf_amp, rf_freq, rf_phase] = extract_rf(blk);
-        gx_amp = extract_grad_amp(blk, 'gx');
-        gy_amp = extract_grad_amp(blk, 'gy');
-        gz_amp = extract_grad_amp(blk, 'gz');
-        [adc_flag, adc_freq, adc_phase] = extract_adc(blk);
-
-        fprintf(fid, '%d,%d,%.8g,%.8g,%.8g,%.8g,%.8g,%.8g,%d,%.8g,%.8g\n', ...
-            n - 1, dur_us, rf_amp, rf_freq, rf_phase, gx_amp, gy_amp, gz_amp, adc_flag, adc_freq, adc_phase);
-    end
-
-    fclose(fid);
-end
 
 
-function export_segments_stub(path, num_blocks_in_tr)
-    % Phase-1 stub: one segment line. Will be replaced with exact unique
-    % block-definition IDs when segment truth tests are added.
-    fid = fopen(path, 'w');
-    if fid < 0, error('Failed to open %s', path); end
-    fprintf(fid, '0');
-    for b = 2:num_blocks_in_tr
-        fprintf(fid, ' %d', b - 1);
-    end
-    fprintf(fid, '\n');
-    fclose(fid);
-end
-
-
-function n = count_adcs(seq)
-    n = 0;
-    for ii = 1:length(seq.blockDurations)
-        b = seq.getBlock(ii);
-        if isfield(b, 'adc') && ~isempty(b.adc)
-            n = n + 1;
-        end
-    end
-end
-
-
-function [rf_amp, rf_freq, rf_phase] = extract_rf(blk)
-    rf_amp = 0; rf_freq = 0; rf_phase = 0;
-    if isfield(blk, 'rf') && ~isempty(blk.rf)
-        rf_amp = blk.rf.signal(1);
-        if isfield(blk.rf, 'freqOffset'),  rf_freq  = blk.rf.freqOffset;  end
-        if isfield(blk.rf, 'phaseOffset'), rf_phase = blk.rf.phaseOffset; end
-    end
-end
-
-
-function amp = extract_grad_amp(blk, axis)
-    amp = 0;
-    if isfield(blk, axis)
-        g = blk.(axis);
-        if ~isempty(g)
-            if isfield(g, 'amplitude')
-                amp = g.amplitude;
-            elseif isfield(g, 'waveform') && ~isempty(g.waveform)
-                amp = max(abs(g.waveform));
-            end
-        end
-    end
-end
-
-
-function [adc_flag, adc_freq, adc_phase] = extract_adc(blk)
-    adc_flag = 0; adc_freq = 0; adc_phase = 0;
-    if isfield(blk, 'adc') && ~isempty(blk.adc)
-        adc_flag = 1;
-        if isfield(blk.adc, 'freqOffset'),  adc_freq  = blk.adc.freqOffset;  end
-        if isfield(blk.adc, 'phaseOffset'), adc_phase = blk.adc.phaseOffset; end
-    end
-end
 
 
 function e = grad_energy(g)
@@ -698,118 +603,6 @@ function [times_us, samples] = build_canonical_tr(canonical_seq, sys)
 
     % Convert times from seconds to microseconds.
     times_us = times(:) * 1e6;
-end
-
-
-function export_tr_waveform(path, times_us, samples)
-
-
-function export_block_meta(path, seq, sys, rf, adc, gz, gx_pre, gz_reph, gx, gx_spoil, gy_phase, gz_spoil, ...
-                           max_seg_energy_idx, num_blocks, canonical_scale)
-% EXPORT_BLOCK_META  Write per-block ground truth for geninstruction tests.
-%   Extracts timing, gradient, RF, and ADC metadata from the max-energy
-%   segment instance into a key-value text file.
-    fid = fopen(path, 'w');
-    if fid < 0, error('Failed to open %s', path); end
-
-    % Block durations and cumulative start times.
-    start_us = 0;
-    for b = 1:num_blocks
-        blk = seq.getBlock(max_seg_energy_idx + b - 1);
-        dur_us = round(seq.blockDurations(max_seg_energy_idx + b - 1) * 1e6);
-        fprintf(fid, 'block_%d_duration_us %d\n', b - 1, dur_us);
-        fprintf(fid, 'block_%d_start_time_us %d\n', b - 1, start_us);
-        start_us = start_us + dur_us;
-    end
-
-    % RF (block 0): always the rf+gz block.
-    fprintf(fid, 'block_0_rf_delay_us %d\n', round(rf.delay * 1e6));
-
-    fprintf(fid, 'block_0_rf_num_samples %d\n', length(rf.signal));
-    % Windowed sinc with negative sidelobes: phase shape encodes sign flips.
-    rf_is_complex = any(rf.signal < 0);
-    fprintf(fid, 'block_0_rf_is_complex %d\n', rf_is_complex);
-    fprintf(fid, 'block_0_rf_num_channels %d\n', 1);
-
-    % Trap gradients — write corner parameters for each trapezoid.
-    % Block 0: Gz (slice-select trap)
-    write_trap_meta(fid, 0, 'z', gz);
-
-    % Block 1: Gx_pre, Gy_pre (scaled), Gz_reph — all traps.
-    write_trap_meta(fid, 1, 'x', gx_pre);
-
-    % Gy is scaled by canonical_scale(2,2) — amplitude is template × scale.
-    gy_pre_scaled = mr.scaleGrad(gy_phase, canonical_scale(2, 2));
-    write_trap_meta(fid, 1, 'y', gy_pre_scaled);
-    write_trap_meta(fid, 1, 'z', gz_reph);
-
-    % Block 2: Gx is arbitrary (split trap), ADC.
-    fprintf(fid, 'block_2_gx_is_arb %d\n', 1);
-    fprintf(fid, 'block_2_gx_num_samples %d\n', length(gx.waveform));
-    fprintf(fid, 'block_2_gx_delay_us %d\n', round(gx.delay * 1e6));
-    fprintf(fid, 'block_2_adc_delay_us %d\n', round(adc.delay * 1e6));
-
-    % Block 3: Gx_spoil (arb extended trap), Gy_rew (scaled trap), Gz_spoil (trap).
-    fprintf(fid, 'block_3_gx_is_arb %d\n', 1);
-    fprintf(fid, 'block_3_gx_num_samples %d\n', length(gx_spoil.waveform));
-    fprintf(fid, 'block_3_gx_delay_us %d\n', round(gx_spoil.delay * 1e6));
-    gy_rew_scaled = mr.scaleGrad(gy_phase, canonical_scale(4, 2));
-    write_trap_meta(fid, 3, 'y', gy_rew_scaled);
-    write_trap_meta(fid, 3, 'z', gz_spoil);
-
-    % RF-ADC gap: ADC_start − RF_end (within segment, in us).
-    block_durs_s = seq.blockDurations(max_seg_energy_idx : max_seg_energy_idx + num_blocks - 1);
-    rf_end_us = round((rf.delay + length(rf.signal) * sys.rfRasterTime) * 1e6);
-    adc_start_us = round((block_durs_s(1) + block_durs_s(2) + adc.delay) * 1e6);
-    fprintf(fid, 'rf_adc_gap_us %d\n', adc_start_us - rf_end_us);
-
-    fclose(fid);
-end
-
-
-function write_trap_meta(fid, block_idx, axis, g)
-% WRITE_TRAP_META  Write trapezoid corner parameters for one gradient.
-    prefix = sprintf('block_%d_g%s', block_idx, axis);
-    fprintf(fid, '%s_amplitude_hz_m %.8g\n', prefix, g.amplitude);
-    fprintf(fid, '%s_rise_us %d\n',  prefix, round(g.riseTime * 1e6));
-    fprintf(fid, '%s_flat_us %d\n',  prefix, round(g.flatTime * 1e6));
-    fprintf(fid, '%s_fall_us %d\n',  prefix, round(g.fallTime * 1e6));
-    fprintf(fid, '%s_delay_us %d\n', prefix, round(g.delay * 1e6));
-end
-
-
-function export_rf_magnitude(path, rf)
-% EXPORT_RF_MAGNITUDE  Write normalized RF magnitude as binary float32.
-%   Layout: int32 num_samples, then float32[N] normalized magnitude.
-    fid = fopen(path, 'w');
-    if fid < 0, error('Failed to open %s', path); end
-
-    mag = abs(rf.signal(:));
-    mag_norm = mag / max(mag);
-
-    fwrite(fid, length(mag_norm), 'int32');
-    fwrite(fid, single(mag_norm), 'float32');
-
-    fclose(fid);
-end
-
-
-function export_arb_grad(path, g)
-% EXPORT_ARB_GRAD  Write arbitrary gradient waveform as binary float32.
-%   Layout: int32 num_samples, then float32[N] amplitude (Hz/m),
-%   then float32[N] time (us).
-    fid = fopen(path, 'w');
-    if fid < 0, error('Failed to open %s', path); end
-
-    amp = g.waveform(:);
-    t_us = g.tt(:) * 1e6;
-    N = length(amp);
-
-    fwrite(fid, N, 'int32');
-    fwrite(fid, single(amp), 'float32');
-    fwrite(fid, single(t_us), 'float32');
-
-    fclose(fid);
 end
 
 
