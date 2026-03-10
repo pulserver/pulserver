@@ -478,6 +478,46 @@ int pulseqlib_get_adc_def(const pulseqlib_collection* coll,
                           pulseqlib_adc_def*          def);
 
 /**
+ * @brief Check if a block needs frequency modulation.
+ *
+ * Returns 1 if the block requires freq-mod: the block must have RF or ADC,
+ * must NOT have the nopos flag set, and at least one gradient axis must have
+ * nonzero amplitude within the RF or ADC temporal window (overlap check).
+ *
+ * For trapezoid gradients the flat region is tested; for arbitrary gradients
+ * the decompressed waveform samples within the window are checked.
+ *
+ * If @p num_samples is non-NULL and the function returns 1, the number of
+ * freq-mod samples (block_duration / raster) is written.  The raster used
+ * is rf_raster_us when triggered by an RF overlap, or adc_raster_us when
+ * triggered by an ADC overlap.
+ */
+int pulseqlib_block_needs_freq_mod(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx,
+    int* num_samples);
+
+/**
+ * @brief Return the RF isocenter time (us) relative to segment start.
+ *
+ * Looks up the segment timing RF anchor matching @p blk_idx.
+ * Returns -1.0f if the block has no RF anchor.
+ */
+float pulseqlib_get_rf_isocenter_us(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx);
+
+/**
+ * @brief Return the ADC k-zero time (us) relative to segment start.
+ *
+ * Looks up the segment timing ADC anchor matching @p blk_idx.
+ * Returns -1.0f if the block has no ADC anchor.
+ */
+float pulseqlib_get_adc_kzero_us(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx);
+
+/**
  * @brief Compute scan-time info from a fully loaded collection.
  *
  * Uses the accurate formula that accounts for prep/cooldown block

@@ -370,8 +370,17 @@ MU_TEST(test_segmentation_gre_geninstructions)
         {
             int ref_rf_adc = (int)roundf(ref.rf_adc_gap_us[s]);
             int ref_adc_adc = (int)roundf(ref.adc_adc_gap_us[s]);
-            mu_assert_int_eq(ref_rf_adc,  segi.rf_adc_gap_us);
-            mu_assert_int_eq(ref_adc_adc, segi.adc_adc_gap_us);
+
+            if (ref_rf_adc >= 0) {
+                mu_assert_int_eq(ref_rf_adc, segi.rf_adc_gap_us);
+            } else {
+                mu_assert_int_eq(ref_rf_adc, segi.rf_adc_gap_us);
+            }
+            if (ref_adc_adc >= 0) {
+                mu_assert_int_eq(ref_adc_adc, segi.adc_adc_gap_us);
+            } else {
+                mu_assert_int_eq(ref_adc_adc, segi.adc_adc_gap_us);
+            }
         }
     }
 

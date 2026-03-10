@@ -160,7 +160,7 @@ int pulseqlib__calc_segment_timing(
     const pulseqlib_block_definition* bdef;
     int rf_count, adc_count;
     float t_accum, block_dur_us;
-    int rf_raw, adc_raw;
+    int rf_raw;
     const pulseqlib_rf_definition* rdef;
     const pulseqlib_adc_definition* adef;
     const pulseqlib_rf_table_element* rte;
@@ -347,15 +347,18 @@ int pulseqlib__calc_segment_timing(
     for (seg_idx = 0; seg_idx < desc->num_unique_segments; ++seg_idx) {
         seg = &desc->segment_definitions[seg_idx];
 
-        /* count RF and ADC events */
+        /* count RF and ADC events (use block_definitions, not
+           block_table, because start_block may point to a dummy TR
+           instance where ADC/RF events are inactive)                */
         rf_count  = 0;
         adc_count = 0;
         for (blk = 0; blk < seg->num_blocks; ++blk) {
             block_idx = seg->start_block + blk;
             if (block_idx < 0 || block_idx >= desc->num_blocks) continue;
-            bte = &desc->block_table[block_idx];
-            if (bte->rf_id >= 0)  rf_count++;
-            if (bte->adc_id >= 0) adc_count++;
+            bte  = &desc->block_table[block_idx];
+            bdef = &desc->block_definitions[bte->id];
+            if (bdef->rf_id >= 0)  rf_count++;
+            if (bdef->adc_id >= 0) adc_count++;
         }
 
         /* allocate anchor arrays */
@@ -436,11 +439,11 @@ int pulseqlib__calc_segment_timing(
                 }
             }
 
-            /* ADC anchor */
-            adc_raw = bte->adc_id;
-            if (adc_raw >= 0 && adc_raw < desc->adc_table_size) {
-                adc_def_id = desc->adc_table[adc_raw].id;
-                if (adc_def_id >= 0 && adc_def_id < desc->num_unique_adcs) {
+            /* ADC anchor — use block_definition (bdef->adc_id is the
+               unique ADC def index, not a raw event ref) because
+               start_block may point to a dummy TR without ADC.      */
+            adc_def_id = bdef->adc_id;
+            if (adc_def_id >= 0 && adc_def_id < desc->num_unique_adcs) {
                     adef = &desc->adc_definitions[adc_def_id];
                     adc_dur_us = (float)adef->num_samples *
                                  (float)adef->dwell_time * 1e-3f;
@@ -496,7 +499,6 @@ int pulseqlib__calc_segment_timing(
                     }
 
                     adc_count++;
-                }
             }
 
             t_accum += block_dur_us;

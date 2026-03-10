@@ -823,7 +823,10 @@ static int compute_rf_stats(
         if (!has_time) {
             time_us = (float*)PULSEQLIB_ALLOC(num_samples * sizeof(float));
             if (!time_us) goto fail;
-            for (i = 0; i < num_samples; ++i) time_us[i] = (float)i * rf_raster_us;
+            /* Pulseq places uniform-raster samples at bin centres:
+               t = ((1:N)-0.5)*dwell, i.e. (i+0.5)*raster in 0-based */
+            for (i = 0; i < num_samples; ++i)
+                time_us[i] = ((float)i + 0.5f) * rf_raster_us;
             has_time = 1;
         }
 
