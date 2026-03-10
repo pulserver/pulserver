@@ -449,6 +449,10 @@ function write_gre_2d_base_case(num_slices, num_averages)
                         digital_out_duration = block.trig(t).duration; % digital output duration (s)
                     end
                 end
+            else
+                has_digital_out = 0;
+                digital_out_delay = 0.0;
+                digital_out_duration = 0.0;
             end
 
             % get frequency modulation

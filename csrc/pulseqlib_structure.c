@@ -1747,10 +1747,12 @@ int pulseqlib__get_scan_table_segments(
         desc->segment_definitions[i].has_rotation = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].norot_flag   = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].nopos_flag   = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
+        desc->segment_definitions[i].has_freq_mod = (int*)PULSEQLIB_ALLOC(nb * sizeof(int));
         if (!desc->segment_definitions[i].has_digitalout ||
             !desc->segment_definitions[i].has_rotation ||
             !desc->segment_definitions[i].norot_flag ||
-            !desc->segment_definitions[i].nopos_flag) {
+            !desc->segment_definitions[i].nopos_flag ||
+            !desc->segment_definitions[i].has_freq_mod) {
             diag->code = PULSEQLIB_ERR_ALLOC_FAILED;
             goto scan_seg_fail;
         }
@@ -1759,11 +1761,14 @@ int pulseqlib__get_scan_table_segments(
             desc->segment_definitions[i].has_rotation[n] = 0;
             desc->segment_definitions[i].norot_flag[n]   = 0;
             desc->segment_definitions[i].nopos_flag[n]   = 0;
+            desc->segment_definitions[i].has_freq_mod[n] = 0;
         }
         desc->segment_definitions[i].trigger_id = -1;
     }
 
     /* ---- 10. Walk expanded segments, populate flags + max energy ---- */
+    fprintf(stderr, "DBG max_energy_loop: num_total=%d num_unique=%d n_prep=%d n_main=%d\n",
+            num_total, num_unique, n_prep, n_main);
     max_energy = (float*)PULSEQLIB_ALLOC((size_t)num_unique * sizeof(float));
     if (!max_energy) { diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto scan_seg_fail; }
     for (i = 0; i < num_unique; ++i) {
@@ -1833,10 +1838,15 @@ int pulseqlib__get_scan_table_segments(
             max_energy[unique_idx] = inst_energy;
             desc->segment_definitions[unique_idx].max_energy_start_block =
                 desc->scan_table_block_idx[exp_segs[n].start_block];
+            fprintf(stderr, "DBG max_energy: n=%d unique_idx=%d inst_energy=%e new_start=%d "
+                    "exp_num_blocks=%d\n",
+                    n, unique_idx, inst_energy,
+                    desc->scan_table_block_idx[exp_segs[n].start_block],
+                    exp_segs[n].num_blocks);
         }
     }
 
-    PULSEQLIB_FREE(max_energy); max_energy = NULL;
+    /* max_energy freed after step 11b rescan */
 
     /* ---- tag segments as NAV; verify at most 1 unique NAV ---- */
     if (desc->enable_pmc) {
@@ -1903,6 +1913,146 @@ int pulseqlib__get_scan_table_segments(
         desc->scan_table_seg_id[n] = pattern_seg_id[n % pass_size];
 
     PULSEQLIB_FREE(pattern_seg_id); pattern_seg_id = NULL;
+
+    /* ---- 11c. Rescan full scan table for max-energy per segment ----
+     *
+     * Step 10 only saw one instance per segment (the first one).
+     * Now that scan_table_seg_id covers all tiled repetitions we
+     * can walk the entire scan table, group consecutive blocks into
+     * segment instances, compute their energy, and update
+     * max_energy_start_block when a higher-energy repetition is found. */
+    for (i = 0; i < num_unique; ++i) max_energy[i] = 0.0f;
+
+    for (n = 0; n < scan_len; /* advance inside */) {
+        int seg_id = desc->scan_table_seg_id[n];
+        if (seg_id < 0 || seg_id >= num_unique) { ++n; continue; }
+
+        nb = desc->segment_definitions[seg_id].num_blocks;
+        if (n + nb > scan_len) { ++n; continue; }
+
+        /* Verify all nb positions belong to the same segment */
+        {
+            int ok = 1;
+            for (b = 1; b < nb; ++b) {
+                if (desc->scan_table_seg_id[n + b] != seg_id) { ok = 0; break; }
+            }
+            if (!ok) { ++n; continue; }
+        }
+
+        /* Compute energy for this instance */
+        inst_energy = 0.0f;
+        for (b = 0; b < nb; ++b) {
+            blk_tab_idx = desc->scan_table_block_idx[n + b];
+            bte  = &desc->block_table[blk_tab_idx];
+            bdef = &desc->block_definitions[bte->id];
+
+            ax_grad_ids[0] = bte->gx_id;
+            ax_grad_ids[1] = bte->gy_id;
+            ax_grad_ids[2] = bte->gz_id;
+            ax_def_ids[0]  = bdef->gx_id;
+            ax_def_ids[1]  = bdef->gy_id;
+            ax_def_ids[2]  = bdef->gz_id;
+
+            for (ax = 0; ax < 3; ++ax) {
+                if (ax_grad_ids[ax] >= 0 &&
+                    ax_grad_ids[ax] < desc->grad_table_size &&
+                    ax_def_ids[ax]  >= 0 &&
+                    ax_def_ids[ax]  < desc->num_unique_grads) {
+                    amp      = desc->grad_table[ax_grad_ids[ax]].amplitude;
+                    shot_idx = desc->grad_table[ax_grad_ids[ax]].shot_index;
+                    e = desc->grad_definitions[ax_def_ids[ax]].energy[shot_idx];
+                    inst_energy += e * amp * amp;
+                }
+            }
+        }
+
+        if (inst_energy > max_energy[seg_id]) {
+            max_energy[seg_id] = inst_energy;
+            desc->segment_definitions[seg_id].max_energy_start_block =
+                desc->scan_table_block_idx[n];
+        }
+
+        n += nb;
+    }
+
+    PULSEQLIB_FREE(max_energy); max_energy = NULL;
+
+    /* ---- 11d. OR-reduce per-block flags across ALL segment instances ----
+     *
+     * Step 10 only populated flags from the first expanded instance of
+     * each segment.  Flags like has_digitalout, has_rotation, norot,
+     * nopos, and has_freq_mod must reflect ANY instance (e.g. ADC
+     * only appears in main TRs, not dummies, so freq_mod would be
+     * missed if only the dummy instance was scanned).
+     *
+     * Repetitions (num_averages > 1) share the same block_table
+     * entries.  For multi-pass sequences the pass dimension is the
+     * outer loop (passes are interleaved), but all passes have the
+     * same structure by definition.  Walking just the first pass
+     * (0 .. pass_size-1) is therefore sufficient.                     */
+    for (i = 0; i < num_unique; ++i) {
+        nb = desc->segment_definitions[i].num_blocks;
+        for (n = 0; n < nb; ++n) {
+            desc->segment_definitions[i].has_digitalout[n] = 0;
+            desc->segment_definitions[i].has_rotation[n]   = 0;
+            desc->segment_definitions[i].norot_flag[n]     = 0;
+            desc->segment_definitions[i].nopos_flag[n]     = 0;
+            desc->segment_definitions[i].has_freq_mod[n]   = 0;
+        }
+        desc->segment_definitions[i].trigger_id = -1;
+    }
+
+    for (n = 0; n < pass_size; /* advance inside */) {
+        int seg_id = desc->scan_table_seg_id[n];
+        if (seg_id < 0 || seg_id >= num_unique) { ++n; continue; }
+
+        nb = desc->segment_definitions[seg_id].num_blocks;
+        if (n + nb > pass_size) { ++n; continue; }
+
+        /* Verify contiguous segment instance */
+        {
+            int ok = 1;
+            for (b = 1; b < nb; ++b) {
+                if (desc->scan_table_seg_id[n + b] != seg_id) { ok = 0; break; }
+            }
+            if (!ok) { ++n; continue; }
+        }
+
+        for (b = 0; b < nb; ++b) {
+            bte  = &desc->block_table[n + b];
+            bdef = &desc->block_definitions[bte->id];
+
+            /* digitalout / trigger */
+            if (bte->digitalout_id != -1 && bte->digitalout_id < desc->num_triggers) {
+                const pulseqlib_trigger_event* te = &desc->trigger_events[bte->digitalout_id];
+                if (te->trigger_type == PULSEQLIB__TRIGGER_TYPE_OUTPUT) {
+                    desc->segment_definitions[seg_id].has_digitalout[b] = 1;
+                } else if (te->trigger_type == PULSEQLIB__TRIGGER_TYPE_INPUT) {
+                    int prev = desc->segment_definitions[seg_id].trigger_id;
+                    if (prev < 0)
+                        desc->segment_definitions[seg_id].trigger_id = bte->digitalout_id;
+                }
+            }
+            if (bte->rotation_id != -1)
+                desc->segment_definitions[seg_id].has_rotation[b] = 1;
+            if (bte->norot_flag)
+                desc->segment_definitions[seg_id].norot_flag[b]   = 1;
+            if (bte->nopos_flag)
+                desc->segment_definitions[seg_id].nopos_flag[b]   = 1;
+
+            /* freq_mod: computed inline because build_freq_mod_flags
+             * has not run yet at this point in the pipeline.         */
+            {
+                int has_rf_b   = (bdef->rf_id >= 0);
+                int has_adc_b  = (bte->adc_id >= 0);
+                int has_grad_b = (bdef->gx_id >= 0 || bdef->gy_id >= 0 || bdef->gz_id >= 0);
+                if ((has_rf_b || has_adc_b) && has_grad_b)
+                    desc->segment_definitions[seg_id].has_freq_mod[b] = 1;
+            }
+        }
+
+        n += nb;
+    }
 
     /* ---- Cleanup ---- */
     for (n = 0; n < num_exp_alloc; ++n)

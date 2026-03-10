@@ -236,9 +236,18 @@ MU_TEST(test_segmentation_gre_geninstructions)
             mu_assert_int_eq(ref_blk->has_rf,          bi.has_rf);
             for (ax = 0; ax < 3; ++ax)
                 mu_assert_int_eq(ref_blk->has_grad[ax], bi.has_grad[ax]);
+            if (ref_blk->has_adc != bi.has_adc)
+                fprintf(stderr, "has_adc mismatch seg=%d blk=%d ref=%d lib=%d\n",
+                        s, b, ref_blk->has_adc, bi.has_adc);
             mu_assert_int_eq(ref_blk->has_adc,         bi.has_adc);
             mu_assert_int_eq(ref_blk->has_rotation,    bi.has_rotation);
+            if (ref_blk->has_digital_out != bi.has_digitalout)
+                fprintf(stderr, "DBG dout mismatch: seg=%d blk=%d ref=%d lib=%d\n",
+                        s, b, ref_blk->has_digital_out, bi.has_digitalout);
             mu_assert_int_eq(ref_blk->has_digital_out, bi.has_digitalout);
+            if (ref_blk->has_freq_mod != bi.has_freq_mod)
+                fprintf(stderr, "DBG freq_mod mismatch: seg=%d blk=%d ref=%d lib=%d\n",
+                        s, b, ref_blk->has_freq_mod, bi.has_freq_mod);
             mu_assert_int_eq(ref_blk->has_freq_mod,    bi.has_freq_mod);
 
             /* --- RF ----------------------------------------------- */
@@ -256,11 +265,13 @@ MU_TEST(test_segmentation_gre_geninstructions)
                 mu_assert(mag != NULL, "pulseqlib_get_rf_magnitude returned NULL");
                 mu_assert_int_eq(ref_blk->rf_n, num_samples);
 
-                /* Library returns normalised shape (amplitude_scale = 1.0
-                   for non-GEHC); MATLAB rf_rho is also normalised to
-                   peak = 1 — compare directly. */
+                /* For GEHC builds the library returns physical Hz
+                   (shape × base_amplitude_hz); MATLAB stores normalised
+                   wave (peak=1) + amplitude. Reconstruct full-scale
+                   reference for comparison. */
                 for (i = 0; i < num_samples; ++i) {
-                    mu_assert(GENI_AMP_NEAR(ref_blk->rf_rho[i], mag[0][i]),
+                    float ref_val = ref_blk->rf_rho[i] * ref_blk->rf_amp;
+                    mu_assert(GENI_AMP_NEAR(ref_val, mag[0][i]),
                               "RF magnitude shape mismatch");
                 }
 
@@ -285,11 +296,17 @@ MU_TEST(test_segmentation_gre_geninstructions)
                     mu_assert(amps != NULL, "pulseqlib_get_grad_amplitude returned NULL");
                     mu_assert_int_eq(ref_blk->grad_n[ax], num_samples);
 
-                    /* Library returns physical Hz/m (shape × max_amplitude);
-                       MATLAB stores normalised wave (peak=1) + amplitude.
+                    /* Library returns shape × per-instance amplitude from
+                       the max-energy segment instance (signed).  MATLAB
+                       stores normalised wave (peak=1) + signed amplitude.
                        Reconstruct full-scale reference for comparison. */
                     for (i = 0; i < num_samples; ++i) {
                         float ref_val = ref_blk->grad_wave[ax][i] * ref_blk->grad_amp[ax];
+                        if (!GENI_AMP_NEAR(ref_val, amps[0][i])) {
+                            fprintf(stderr, "GRAD MISMATCH seg=%d blk=%d ax=%d i=%d ref=%e lib=%e ref_wave=%e ref_amp=%e\n",
+                                    s, b, ax, i, ref_val, amps[0][i],
+                                    ref_blk->grad_wave[ax][i], ref_blk->grad_amp[ax]);
+                        }
                         mu_assert(GENI_AMP_NEAR(ref_val, amps[0][i]),
                                   "grad waveform amplitude mismatch");
                     }

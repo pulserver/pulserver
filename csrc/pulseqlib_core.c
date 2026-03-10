@@ -82,6 +82,7 @@ void pulseqlib_sequence_descriptor_free(pulseqlib_sequence_descriptor* d)
             if (d->segment_definitions[i].has_rotation)         PULSEQLIB_FREE(d->segment_definitions[i].has_rotation);
             if (d->segment_definitions[i].norot_flag)           PULSEQLIB_FREE(d->segment_definitions[i].norot_flag);
             if (d->segment_definitions[i].nopos_flag)           PULSEQLIB_FREE(d->segment_definitions[i].nopos_flag);
+            if (d->segment_definitions[i].has_freq_mod)          PULSEQLIB_FREE(d->segment_definitions[i].has_freq_mod);
             if (d->segment_definitions[i].timing.rf_anchors)    PULSEQLIB_FREE(d->segment_definitions[i].timing.rf_anchors);
             if (d->segment_definitions[i].timing.adc_anchors)   PULSEQLIB_FREE(d->segment_definitions[i].timing.adc_anchors);
             if (d->segment_definitions[i].timing.kzero_crossing_indices) PULSEQLIB_FREE(d->segment_definitions[i].timing.kzero_crossing_indices);
