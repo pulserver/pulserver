@@ -175,372 +175,166 @@ MU_TEST_SUITE(suite_segmentation_phase2)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Phase 3: block-level geninstruction tests                         */
+/*  Phase 3: geninstruction pipeline validation                        */
+/*                                                                     */
+/*  Mirrors example_geninstructions.c block-walk against the binary   */
+/*  segment definition produced by export_segment_def in MATLAB.      */
+/*  For each segment/block we check:                                   */
+/*    - flags  (has_rf, has_grad[3], has_adc, has_rotation,           */
+/*              has_digital_out, has_freq_mod)                         */
+/*    - RF     (delay, amp, num_samples, waveform shape)               */
+/*    - Grads  (delay, amp, num_samples, waveform shape per axis)      */
+/*    - ADC    (delay)                                                 */
+/*    - Digitalout (delay, duration)                                   */
+/*    - Freq-mod  (num_samples)                                        */
 /* ------------------------------------------------------------------ */
 
-/* Tolerances */
-#define BLK_AMP_REL_TOL   1e-3f   /* 0.1% relative for waveforms */
-#define BLK_AMP_ABS_FLOOR 1.0f    /* Hz/m absolute floor          */
-#define BLK_TIME_TOL      1.0f    /* us for time values            */
-#define BLK_RF_TOL        1e-5f   /* absolute for normalized RF    */
+#define GENI_AMP_REL_TOL  1e-3f   /* relative tolerance for normalised amps */
+#define GENI_DELAY_ABS_TOL 1.0f   /* us — half a raster step                */
 
-static void free_2d(float** arr, int n)
-{
-    int i;
-    if (!arr) return;
-    for (i = 0; i < n; ++i)
-        free(arr[i]);
-    free(arr);
-}
+/* Relative amplitude comparison with absolute floor of 1.0 */
+#define GENI_AMP_NEAR(a, b) \
+    (fabsf((a) - (b)) <= (((fabsf(a) > 1.0f ? fabsf(a) : 1.0f)) * GENI_AMP_REL_TOL))
 
-MU_TEST(test_segmentation_gre_block_instructions)
+MU_TEST(test_segmentation_gre_geninstructions)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
-    pulseqlib_segment_info segi = PULSEQLIB_SEGMENT_INFO_INIT;
-    block_meta bm = BLOCK_META_INIT;
-    rf_mag_waveform rf_ref = RF_MAG_WAVEFORM_INIT;
-    arb_grad_waveform arb_b2x = ARB_GRAD_WAVEFORM_INIT;
-    arb_grad_waveform arb_b3x = ARB_GRAD_WAVEFORM_INIT;
-    int rc, b, ok, axis;
+    pulseqlib_collection_info cinfo = PULSEQLIB_COLLECTION_INFO_INIT;
+    static seg_def_file ref;   /* static: too large (~8 MB) for stack */
+    int rc, ok;
+    int s, b, ax;
 
     /* Load sequence */
     gre_opts_init(&opts);
     rc = load_seq(&coll, "gre_2d_1sl_1avg.seq", &opts);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for GRE baseline");
 
-    /* Parse ground truth files */
-    ok = parse_block_meta(TEST_DATA_DIR "gre_2d_1sl_1avg_block_meta.txt", &bm);
-    mu_assert(ok, "failed to parse gre_2d_1sl_1avg_block_meta.txt");
+    rc = pulseqlib_get_collection_info(coll, &cinfo);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_collection_info failed");
 
-    ok = parse_rf_mag(TEST_DATA_DIR "gre_2d_1sl_1avg_rf_mag.bin", &rf_ref);
-    mu_assert(ok, "failed to parse gre_2d_1sl_1avg_rf_mag.bin");
+    /* Load MATLAB ground truth */
+    ok = parse_seg_def(TEST_DATA_DIR "gre_2d_1sl_1avg_segment_def.bin", &ref);
+    mu_assert(ok, "failed to parse gre_2d_1sl_1avg_segment_def.bin");
 
-    ok = parse_arb_grad(TEST_DATA_DIR "gre_2d_1sl_1avg_arb_grad_b2_x.bin", &arb_b2x);
-    mu_assert(ok, "failed to parse arb_grad_b2_x.bin");
+    /* Number of segments must match */
+    mu_assert_int_eq(ref.num_segments, cinfo.num_segments);
 
-    ok = parse_arb_grad(TEST_DATA_DIR "gre_2d_1sl_1avg_arb_grad_b3_x.bin", &arb_b3x);
-    mu_assert(ok, "failed to parse arb_grad_b3_x.bin");
+    for (s = 0; s < ref.num_segments; ++s) {
+        pulseqlib_segment_info segi = PULSEQLIB_SEGMENT_INFO_INIT;
+        rc = pulseqlib_get_segment_info(coll, s, &segi);
+        mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_segment_info failed");
+        mu_assert_int_eq(ref.num_blocks[s], segi.num_blocks);
 
-    /* --- Segment gap ------------------------------------------------- */
-    rc = pulseqlib_get_segment_info(coll, 0, &segi);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_segment_info failed");
-    mu_assert_int_eq(bm.rf_adc_gap_us, segi.rf_adc_gap_us);
+        for (b = 0; b < ref.num_blocks[s]; ++b) {
+            const seg_block_def* ref_blk = &ref.blocks[s][b];
+            pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
+            rc = pulseqlib_get_block_info(coll, s, b, &bi);
+            mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_block_info failed");
 
-    /* --- Per-block metadata ------------------------------------------ */
-    for (b = 0; b < bm.num_blocks; ++b) {
-        pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
-        rc = pulseqlib_get_block_info(coll, 0, b, &bi);
-        mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_block_info failed");
+            /* --- Flags -------------------------------------------- */
+            mu_assert_int_eq(ref_blk->has_rf,          bi.has_rf);
+            for (ax = 0; ax < 3; ++ax)
+                mu_assert_int_eq(ref_blk->has_grad[ax], bi.has_grad[ax]);
+            mu_assert_int_eq(ref_blk->has_adc,         bi.has_adc);
+            mu_assert_int_eq(ref_blk->has_rotation,    bi.has_rotation);
+            mu_assert_int_eq(ref_blk->has_digital_out, bi.has_digitalout);
+            mu_assert_int_eq(ref_blk->has_freq_mod,    bi.has_freq_mod);
 
-        /* Timing */
-        mu_assert_int_eq(bm.duration_us[b], bi.duration_us);
-        mu_assert_int_eq(bm.start_time_us[b], bi.start_time_us);
+            /* --- RF ----------------------------------------------- */
+            if (ref_blk->has_rf) {
+                int num_channels = 0, num_samples = 0;
+                float** mag;
+                int i;
 
-        /* Boolean flags (SPGR: no digitalout, no rotation) */
-        mu_assert_int_eq(0, bi.has_digitalout);
-        mu_assert_int_eq(0, bi.has_rotation);
-        mu_assert_int_eq(0, bi.norot_flag);
-        mu_assert_int_eq(0, bi.nopos_flag);
+                mu_assert(fabsf(ref_blk->rf_delay - (float)bi.rf_delay_us * 1e-6f)
+                          <= GENI_DELAY_ABS_TOL * 1e-6f,
+                          "RF delay mismatch");
+                mu_assert_int_eq(ref_blk->rf_n, bi.rf_num_samples);
 
-        /* freq_mod: blocks 0,2 have (rf||adc)+grad; blocks 1,3 do not */
-        mu_assert_int_eq((b == 0 || b == 2) ? 1 : 0, bi.has_freq_mod);
-    }
+                mag = pulseqlib_get_rf_magnitude(coll, s, b, &num_channels, &num_samples);
+                mu_assert(mag != NULL, "pulseqlib_get_rf_magnitude returned NULL");
+                mu_assert_int_eq(ref_blk->rf_n, num_samples);
 
-    /* --- Block 0: RF ------------------------------------------------- */
-    {
-        pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
-        int nch = 0, ns = 0, i;
-        float** mag;
+                /* Library returns normalised shape (amplitude_scale = 1.0
+                   for non-GEHC); MATLAB rf_rho is also normalised to
+                   peak = 1 — compare directly. */
+                for (i = 0; i < num_samples; ++i) {
+                    mu_assert(GENI_AMP_NEAR(ref_blk->rf_rho[i], mag[0][i]),
+                              "RF magnitude shape mismatch");
+                }
 
-        pulseqlib_get_block_info(coll, 0, 0, &bi);
-
-        mu_assert_int_eq(1, bi.has_rf);
-        mu_assert_int_eq(bm.rf_delay_us, bi.rf_delay_us);
-        mu_assert_int_eq(bm.rf_num_samples, bi.rf_num_samples);
-        mu_assert_int_eq(bm.rf_is_complex, bi.rf_is_complex);
-        mu_assert_int_eq(bm.rf_num_channels, bi.rf_num_channels);
-
-        /* RF magnitude waveform */
-        mag = pulseqlib_get_rf_magnitude(coll, 0, 0, &nch, &ns);
-        mu_assert(mag != NULL, "pulseqlib_get_rf_magnitude returned NULL");
-        mu_assert_int_eq(bm.rf_num_channels, nch);
-        mu_assert_int_eq(rf_ref.num_samples, ns);
-
-        for (i = 0; i < ns; ++i) {
-            mu_assert_float_near("RF magnitude sample",
-                rf_ref.magnitude[i], mag[0][i], BLK_RF_TOL);
-        }
-        free_2d(mag, nch);
-    }
-
-    /* --- Block 0: Gz trap (slice-select) ----------------------------- */
-    {
-        pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
-        int nshots = 0, ns = 0;
-        float** amps;
-        float* times;
-
-        pulseqlib_get_block_info(coll, 0, 0, &bi);
-        mu_assert_int_eq(1, bi.has_grad[2]);
-        mu_assert_int_eq(1, bi.grad_is_trapezoid[2]);
-
-        amps = pulseqlib_get_grad_amplitude(coll, 0, 0, 2, &nshots, &ns);
-        mu_assert(amps != NULL, "grad amp block 0 Gz NULL");
-        times = pulseqlib_get_grad_time_us(coll, 0, 0, 2);
-        mu_assert(times != NULL, "grad time block 0 Gz NULL");
-
-        /* Trap corners: 4 points (has flat) or 3 (no flat) */
-        {
-            int rise = bm.trap_rise_us[0][2];
-            int flat = bm.trap_flat_us[0][2];
-            int fall = bm.trap_fall_us[0][2];
-            float amp = bm.trap_amplitude[0][2];
-            int expected_ns = (flat > 0) ? 4 : 3;
-
-            mu_assert_int_eq(expected_ns, ns);
-            /* Time corners */
-            mu_assert_float_near("Gz b0 t0", 0.0f, times[0], BLK_TIME_TOL);
-            mu_assert_float_near("Gz b0 t1", (float)rise, times[1], BLK_TIME_TOL);
-            if (flat > 0) {
-                mu_assert_float_near("Gz b0 t2", (float)(rise + flat), times[2], BLK_TIME_TOL);
-                mu_assert_float_near("Gz b0 t3", (float)(rise + flat + fall), times[3], BLK_TIME_TOL);
-            } else {
-                mu_assert_float_near("Gz b0 t2", (float)(rise + fall), times[2], BLK_TIME_TOL);
-            }
-            /* Amplitude corners */
-            mu_assert_float_near("Gz b0 a0", 0.0f, amps[0][0], BLK_AMP_ABS_FLOOR);
-            mu_assert_float_near("Gz b0 a1", amp, amps[0][1], fabsf(amp) * BLK_AMP_REL_TOL + BLK_AMP_ABS_FLOOR);
-            if (flat > 0) {
-                mu_assert_float_near("Gz b0 a2", amp, amps[0][2], fabsf(amp) * BLK_AMP_REL_TOL + BLK_AMP_ABS_FLOOR);
-                mu_assert_float_near("Gz b0 a3", 0.0f, amps[0][3], BLK_AMP_ABS_FLOOR);
-            } else {
-                mu_assert_float_near("Gz b0 a2", 0.0f, amps[0][2], BLK_AMP_ABS_FLOOR);
-            }
-        }
-        free(times);
-        free_2d(amps, nshots);
-    }
-
-    /* --- Block 1: Gx_pre, Gy_pre, Gz_reph (all traps) --------------- */
-    for (axis = 0; axis < 3; ++axis) {
-        pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
-        int nshots = 0, ns = 0;
-        float** amps;
-        float* times;
-        int rise, flat, fall;
-        float amp;
-        int expected_ns;
-
-        if (!bm.has_trap[1][axis]) continue;
-
-        pulseqlib_get_block_info(coll, 0, 1, &bi);
-        mu_assert_int_eq(1, bi.has_grad[axis]);
-        mu_assert_int_eq(1, bi.grad_is_trapezoid[axis]);
-
-        amps = pulseqlib_get_grad_amplitude(coll, 0, 1, axis, &nshots, &ns);
-        mu_assert(amps != NULL, "grad amp block 1 NULL");
-        times = pulseqlib_get_grad_time_us(coll, 0, 1, axis);
-        mu_assert(times != NULL, "grad time block 1 NULL");
-
-        rise = bm.trap_rise_us[1][axis];
-        flat = bm.trap_flat_us[1][axis];
-        fall = bm.trap_fall_us[1][axis];
-        amp  = bm.trap_amplitude[1][axis];
-        expected_ns = (flat > 0) ? 4 : 3;
-        mu_assert_int_eq(expected_ns, ns);
-
-        /* Time corners */
-        mu_assert_float_near("b1 t0", 0.0f, times[0], BLK_TIME_TOL);
-        mu_assert_float_near("b1 t1", (float)rise, times[1], BLK_TIME_TOL);
-        if (flat > 0) {
-            mu_assert_float_near("b1 t2", (float)(rise + flat), times[2], BLK_TIME_TOL);
-            mu_assert_float_near("b1 t3", (float)(rise + flat + fall), times[3], BLK_TIME_TOL);
-        } else {
-            mu_assert_float_near("b1 t2", (float)(rise + fall), times[2], BLK_TIME_TOL);
-        }
-
-        /* Amplitude corners */
-        mu_assert_float_near("b1 a0", 0.0f, amps[0][0], BLK_AMP_ABS_FLOOR);
-        mu_assert_float_near("b1 a1", amp, amps[0][1], fabsf(amp) * BLK_AMP_REL_TOL + BLK_AMP_ABS_FLOOR);
-        if (flat > 0) {
-            mu_assert_float_near("b1 a2", amp, amps[0][2], fabsf(amp) * BLK_AMP_REL_TOL + BLK_AMP_ABS_FLOOR);
-            mu_assert_float_near("b1 a3", 0.0f, amps[0][3], BLK_AMP_ABS_FLOOR);
-        } else {
-            mu_assert_float_near("b1 a2", 0.0f, amps[0][2], BLK_AMP_ABS_FLOOR);
-        }
-
-        free(times);
-        free_2d(amps, nshots);
-    }
-
-    /* --- Block 2: Gx arbitrary (split readout trap) + ADC ------------ */
-    {
-        pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
-        int nshots = 0, ns = 0, i, n;
-        float** amps;
-        float* times;
-
-        pulseqlib_get_block_info(coll, 0, 2, &bi);
-
-        /* ADC metadata */
-        mu_assert_int_eq(1, bi.has_adc);
-        mu_assert_int_eq(bm.adc_delay_us, bi.adc_delay_us);
-        mu_assert_int_eq(0, bi.adc_def_id);  /* single ADC type */
-
-        /* Gx arbitrary */
-        mu_assert_int_eq(1, bi.has_grad[0]);
-        mu_assert_int_eq(0, bi.grad_is_trapezoid[0]);
-
-        amps = pulseqlib_get_grad_amplitude(coll, 0, 2, 0, &nshots, &ns);
-        mu_assert(amps != NULL, "grad amp block 2 Gx NULL");
-        times = pulseqlib_get_grad_time_us(coll, 0, 2, 0);
-        mu_assert(times != NULL, "grad time block 2 Gx NULL");
-
-        n = (arb_b2x.num_samples < ns) ? arb_b2x.num_samples : ns;
-        mu_assert(abs(arb_b2x.num_samples - ns) <= 1, "arb b2 Gx sample count mismatch > 1");
-
-        for (i = 0; i < n; ++i) {
-            float ref_a = arb_b2x.amplitude[i];
-            float tol = fabsf(ref_a) * BLK_AMP_REL_TOL;
-            if (tol < BLK_AMP_ABS_FLOOR) tol = BLK_AMP_ABS_FLOOR;
-            mu_assert_float_near("b2 Gx amp", ref_a, amps[0][i], tol);
-            mu_assert_float_near("b2 Gx time", arb_b2x.time_us[i], times[i], BLK_TIME_TOL);
-        }
-
-        free(times);
-        free_2d(amps, nshots);
-    }
-
-    /* --- Block 3: Gx_spoil arbitrary + Gy_rew trap + Gz_spoil trap --- */
-    {
-        pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
-        pulseqlib_get_block_info(coll, 0, 3, &bi);
-
-        /* Gx_spoil (arbitrary) */
-        {
-            int nshots = 0, ns = 0, i, n;
-            float** amps;
-            float* times;
-
-            mu_assert_int_eq(1, bi.has_grad[0]);
-            mu_assert_int_eq(0, bi.grad_is_trapezoid[0]);
-
-            amps = pulseqlib_get_grad_amplitude(coll, 0, 3, 0, &nshots, &ns);
-            mu_assert(amps != NULL, "grad amp block 3 Gx NULL");
-            times = pulseqlib_get_grad_time_us(coll, 0, 3, 0);
-            mu_assert(times != NULL, "grad time block 3 Gx NULL");
-
-            n = (arb_b3x.num_samples < ns) ? arb_b3x.num_samples : ns;
-            mu_assert(abs(arb_b3x.num_samples - ns) <= 1,
-                      "arb b3 Gx sample count mismatch > 1");
-
-            for (i = 0; i < n; ++i) {
-                float ref_a = arb_b3x.amplitude[i];
-                float tol = fabsf(ref_a) * BLK_AMP_REL_TOL;
-                if (tol < BLK_AMP_ABS_FLOOR) tol = BLK_AMP_ABS_FLOOR;
-                mu_assert_float_near("b3 Gx amp", ref_a, amps[0][i], tol);
-                mu_assert_float_near("b3 Gx time", arb_b3x.time_us[i], times[i], BLK_TIME_TOL);
+                { int ch; for (ch = 0; ch < num_channels; ++ch) free(mag[ch]); free(mag); }
             }
 
-            free(times);
-            free_2d(amps, nshots);
-        }
+            /* --- Gradients ---------------------------------------- */
+            for (ax = 0; ax < 3; ++ax) {
+                if (ref_blk->has_grad[ax]) {
+                    int num_shots = 0, num_samples = 0;
+                    float** amps;
+                    int i;
 
-        /* Gy_rew (trap) */
-        if (bm.has_trap[3][1]) {
-            int nshots = 0, ns = 0;
-            float** amps;
-            float* times;
-            int rise = bm.trap_rise_us[3][1];
-            int flat = bm.trap_flat_us[3][1];
-            int fall = bm.trap_fall_us[3][1];
-            float amp = bm.trap_amplitude[3][1];
-            int expected_ns = (flat > 0) ? 4 : 3;
+                    mu_assert(fabsf(ref_blk->grad_delay[ax]
+                                    - (float)bi.grad_delay_us[ax] * 1e-6f)
+                              <= GENI_DELAY_ABS_TOL * 1e-6f,
+                              "grad delay mismatch");
+                    mu_assert_int_eq(ref_blk->grad_n[ax], bi.grad_num_samples[ax]);
 
-            mu_assert_int_eq(1, bi.has_grad[1]);
-            mu_assert_int_eq(1, bi.grad_is_trapezoid[1]);
+                    amps = pulseqlib_get_grad_amplitude(coll, s, b, ax,
+                                                        &num_shots, &num_samples);
+                    mu_assert(amps != NULL, "pulseqlib_get_grad_amplitude returned NULL");
+                    mu_assert_int_eq(ref_blk->grad_n[ax], num_samples);
 
-            amps = pulseqlib_get_grad_amplitude(coll, 0, 3, 1, &nshots, &ns);
-            mu_assert(amps != NULL, "grad amp block 3 Gy NULL");
-            times = pulseqlib_get_grad_time_us(coll, 0, 3, 1);
-            mu_assert(times != NULL, "grad time block 3 Gy NULL");
+                    /* Library returns physical Hz/m (shape × max_amplitude);
+                       MATLAB stores normalised wave (peak=1) + amplitude.
+                       Reconstruct full-scale reference for comparison. */
+                    for (i = 0; i < num_samples; ++i) {
+                        float ref_val = ref_blk->grad_wave[ax][i] * ref_blk->grad_amp[ax];
+                        mu_assert(GENI_AMP_NEAR(ref_val, amps[0][i]),
+                                  "grad waveform amplitude mismatch");
+                    }
 
-            mu_assert_int_eq(expected_ns, ns);
-            mu_assert_float_near("b3 Gy t0", 0.0f, times[0], BLK_TIME_TOL);
-            mu_assert_float_near("b3 Gy t1", (float)rise, times[1], BLK_TIME_TOL);
-            if (flat > 0) {
-                mu_assert_float_near("b3 Gy t2", (float)(rise + flat), times[2], BLK_TIME_TOL);
-                mu_assert_float_near("b3 Gy t3", (float)(rise + flat + fall), times[3], BLK_TIME_TOL);
-            } else {
-                mu_assert_float_near("b3 Gy t2", (float)(rise + fall), times[2], BLK_TIME_TOL);
-            }
-            mu_assert_float_near("b3 Gy a0", 0.0f, amps[0][0], BLK_AMP_ABS_FLOOR);
-            mu_assert_float_near("b3 Gy a1", amp, amps[0][1], fabsf(amp) * BLK_AMP_REL_TOL + BLK_AMP_ABS_FLOOR);
-            if (flat > 0) {
-                mu_assert_float_near("b3 Gy a2", amp, amps[0][2], fabsf(amp) * BLK_AMP_REL_TOL + BLK_AMP_ABS_FLOOR);
-                mu_assert_float_near("b3 Gy a3", 0.0f, amps[0][3], BLK_AMP_ABS_FLOOR);
-            } else {
-                mu_assert_float_near("b3 Gy a2", 0.0f, amps[0][2], BLK_AMP_ABS_FLOOR);
+                    { int sh; for (sh = 0; sh < num_shots; ++sh) free(amps[sh]); free(amps); }
+                }
             }
 
-            free(times);
-            free_2d(amps, nshots);
-        }
-
-        /* Gz_spoil (trap) */
-        if (bm.has_trap[3][2]) {
-            int nshots = 0, ns = 0;
-            float** amps;
-            float* times;
-            int rise = bm.trap_rise_us[3][2];
-            int flat = bm.trap_flat_us[3][2];
-            int fall = bm.trap_fall_us[3][2];
-            float amp = bm.trap_amplitude[3][2];
-            int expected_ns = (flat > 0) ? 4 : 3;
-
-            mu_assert_int_eq(1, bi.has_grad[2]);
-            mu_assert_int_eq(1, bi.grad_is_trapezoid[2]);
-
-            amps = pulseqlib_get_grad_amplitude(coll, 0, 3, 2, &nshots, &ns);
-            mu_assert(amps != NULL, "grad amp block 3 Gz NULL");
-            times = pulseqlib_get_grad_time_us(coll, 0, 3, 2);
-            mu_assert(times != NULL, "grad time block 3 Gz NULL");
-
-            mu_assert_int_eq(expected_ns, ns);
-            mu_assert_float_near("b3 Gz t0", 0.0f, times[0], BLK_TIME_TOL);
-            mu_assert_float_near("b3 Gz t1", (float)rise, times[1], BLK_TIME_TOL);
-            if (flat > 0) {
-                mu_assert_float_near("b3 Gz t2", (float)(rise + flat), times[2], BLK_TIME_TOL);
-                mu_assert_float_near("b3 Gz t3", (float)(rise + flat + fall), times[3], BLK_TIME_TOL);
-            } else {
-                mu_assert_float_near("b3 Gz t2", (float)(rise + fall), times[2], BLK_TIME_TOL);
-            }
-            mu_assert_float_near("b3 Gz a0", 0.0f, amps[0][0], BLK_AMP_ABS_FLOOR);
-            mu_assert_float_near("b3 Gz a1", amp, amps[0][1], fabsf(amp) * BLK_AMP_REL_TOL + BLK_AMP_ABS_FLOOR);
-            if (flat > 0) {
-                mu_assert_float_near("b3 Gz a2", amp, amps[0][2], fabsf(amp) * BLK_AMP_REL_TOL + BLK_AMP_ABS_FLOOR);
-                mu_assert_float_near("b3 Gz a3", 0.0f, amps[0][3], BLK_AMP_ABS_FLOOR);
-            } else {
-                mu_assert_float_near("b3 Gz a2", 0.0f, amps[0][2], BLK_AMP_ABS_FLOOR);
+            /* --- ADC ---------------------------------------------- */
+            if (ref_blk->has_adc) {
+                mu_assert(fabsf(ref_blk->adc_delay - (float)bi.adc_delay_us * 1e-6f)
+                          <= GENI_DELAY_ABS_TOL * 1e-6f,
+                          "ADC delay mismatch");
             }
 
-            free(times);
-            free_2d(amps, nshots);
+            /* --- Digital output ------------------------------------ */
+            if (ref_blk->has_digital_out) {
+                mu_assert(fabsf(ref_blk->digital_out_delay
+                                - (float)bi.digitalout_delay_us * 1e-6f)
+                          <= GENI_DELAY_ABS_TOL * 1e-6f,
+                          "digital-out delay mismatch");
+                mu_assert(fabsf(ref_blk->digital_out_duration
+                                - (float)bi.digitalout_duration_us * 1e-6f)
+                          <= GENI_DELAY_ABS_TOL * 1e-6f,
+                          "digital-out duration mismatch");
+            }
+
+            /* --- Freq-mod ----------------------------------------- */
+            if (ref_blk->has_freq_mod) {
+                int raster_us = 2; /* vendor raster, matches MATLAB sys.rfRasterTime/adcRasterTime */
+                int lib_num_samples = bi.duration_us / raster_us;
+                mu_assert_int_eq(ref_blk->freq_mod_num_samples, lib_num_samples);
+            }
         }
     }
 
-    /* Cleanup */
-    free_arb_grad(&arb_b3x);
-    free_arb_grad(&arb_b2x);
-    free_rf_mag(&rf_ref);
     pulseqlib_collection_free(coll);
 }
 
 MU_TEST_SUITE(suite_segmentation_phase3)
 {
-    MU_RUN_TEST(test_segmentation_gre_block_instructions);
+    MU_RUN_TEST(test_segmentation_gre_geninstructions);
 }
+
+
 
 int test_segmentation_main(void)
 {

@@ -257,6 +257,145 @@ static TSEG_MAYBE_UNUSED int parse_block_meta(const char* path, block_meta* out)
 }
 
 /* ------------------------------------------------------------------ */
+/*  Segment definition binary (Phase 3 ground truth)                 */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Binary layout written by export_segment_def() in MATLAB:
+ *
+ *   int32  num_segments
+ *   for each segment:
+ *     int32  num_blocks
+ *     for each block:
+ *       uint8  flags  (bit 0=rf, 1=gx, 2=gy, 3=gz, 4=adc,
+ *                       5=rotation, 6=digital_out, 7=freq_mod)
+ *       float32 rf_delay,  rf_amp
+ *       int32   rf_n;  float32 rf_rho[rf_n]
+ *       for axis in {x,y,z}:
+ *         float32 grad_delay,  grad_amp
+ *         int32   grad_n;  float32 grad_wave[grad_n]
+ *       float32 adc_delay
+ *       float32 digital_out_delay, digital_out_duration
+ *       int32   freq_mod_num_samples
+ */
+
+#define SEG_DEF_MAX_BLOCKS   8
+#define SEG_DEF_MAX_WAVE     4096   /* generous upper bound per axis */
+
+typedef struct seg_block_def {
+    /* flags */
+    int has_rf;
+    int has_grad[3];   /* [0]=x [1]=y [2]=z */
+    int has_adc;
+    int has_rotation;
+    int has_digital_out;
+    int has_freq_mod;
+
+    /* RF */
+    float rf_delay;
+    float rf_amp;
+    int   rf_n;
+    float rf_rho[SEG_DEF_MAX_WAVE];
+
+    /* Gradients (x,y,z) */
+    float grad_delay[3];
+    float grad_amp[3];
+    int   grad_n[3];
+    float grad_wave[3][SEG_DEF_MAX_WAVE];
+
+    /* ADC */
+    float adc_delay;
+
+    /* Digital output */
+    float digital_out_delay;
+    float digital_out_duration;
+
+    /* Freq-mod */
+    int freq_mod_num_samples;
+} seg_block_def;
+
+typedef struct seg_def_file {
+    int           num_segments;
+    int           num_blocks[MAX_SEGMENTS];
+    seg_block_def blocks[MAX_SEGMENTS][SEG_DEF_MAX_BLOCKS];
+} seg_def_file;
+
+#define SEG_DEF_FILE_INIT {0, {0}, {{{0}}}}
+
+static TSEG_MAYBE_UNUSED int parse_seg_def(const char* path, seg_def_file* out)
+{
+    FILE* f;
+    int s, b, ax, n;
+    memset(out, 0, sizeof(*out));
+
+    f = fopen(path, "rb");
+    if (!f) return 0;
+
+#define RD4(dst)  if (fread(&(dst), 4, 1, f) != 1) { fclose(f); return 0; }
+#define RDU1(dst) { unsigned char _u; if (fread(&_u, 1, 1, f) != 1) { fclose(f); return 0; } (dst) = _u; }
+#define RDF(dst)  { float _v; if (fread(&_v, sizeof(float), 1, f) != 1) { fclose(f); return 0; } (dst) = _v; }
+#define RDFN(arr,n) if ((n) > 0) { if (fread((arr), sizeof(float), (size_t)(n), f) != (size_t)(n)) { fclose(f); return 0; } }
+
+    RD4(out->num_segments);
+    if (out->num_segments < 0 || out->num_segments > MAX_SEGMENTS) { fclose(f); return 0; }
+
+    for (s = 0; s < out->num_segments; ++s) {
+        RD4(out->num_blocks[s]);
+        if (out->num_blocks[s] < 0 || out->num_blocks[s] > SEG_DEF_MAX_BLOCKS) { fclose(f); return 0; }
+
+        for (b = 0; b < out->num_blocks[s]; ++b) {
+            seg_block_def* blk = &out->blocks[s][b];
+            int flags;
+            RDU1(flags);
+            blk->has_rf          = (flags >> 0) & 1;
+            blk->has_grad[0]     = (flags >> 1) & 1;
+            blk->has_grad[1]     = (flags >> 2) & 1;
+            blk->has_grad[2]     = (flags >> 3) & 1;
+            blk->has_adc         = (flags >> 4) & 1;
+            blk->has_rotation    = (flags >> 5) & 1;
+            blk->has_digital_out = (flags >> 6) & 1;
+            blk->has_freq_mod    = (flags >> 7) & 1;
+
+            /* RF */
+            RDF(blk->rf_delay);
+            RDF(blk->rf_amp);
+            RD4(n);
+            blk->rf_n = n;
+            if (n > SEG_DEF_MAX_WAVE) { fclose(f); return 0; }
+            RDFN(blk->rf_rho, n);
+
+            /* Gradients */
+            for (ax = 0; ax < 3; ++ax) {
+                RDF(blk->grad_delay[ax]);
+                RDF(blk->grad_amp[ax]);
+                RD4(n);
+                blk->grad_n[ax] = n;
+                if (n > SEG_DEF_MAX_WAVE) { fclose(f); return 0; }
+                RDFN(blk->grad_wave[ax], n);
+            }
+
+            /* ADC */
+            RDF(blk->adc_delay);
+
+            /* Digital output */
+            RDF(blk->digital_out_delay);
+            RDF(blk->digital_out_duration);
+
+            /* Freq-mod */
+            RD4(blk->freq_mod_num_samples);
+        }
+    }
+
+#undef RD4
+#undef RDU1
+#undef RDF
+#undef RDFN
+
+    fclose(f);
+    return 1;
+}
+
+/* ------------------------------------------------------------------ */
 /*  RF magnitude waveform (binary float32)                            */
 /* ------------------------------------------------------------------ */
 

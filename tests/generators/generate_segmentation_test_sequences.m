@@ -274,10 +274,9 @@ function write_gre_2d_base_case(num_slices, num_averages)
         has_digital_out = 0;
         digital_out_delay = 0.0;
         digital_out_duration = 0.0;
-        
-        segment_data.segments{s} = struct();
-        segment_data.segments{s}.blocks = {};
-        
+
+        segment_data.segments{s} = struct('blocks', {});
+
         for b = 1:segment_size(s)
             block = seq.getBlock(max_seg_energy_idx + b - 1);
             block_dur = block.blockDuration;
@@ -302,14 +301,14 @@ function write_gre_2d_base_case(num_slices, num_averages)
                 end
 
                 % get time points for rf samples
-                rf_time = block.rf.t; % time points for RF samples
+                rf_time = block.rf.tt; % time points for RF samples
                 dt = rf_time(2) - rf_time(1);
                 if length(unique(diff(rf_time))) == 1 && dt == sys.rfRasterTime
                     rf_time = []; % uniform sampling, can be inferred from start time and dwell
                 end
             else
                 has_rf = false;
-                rf_delay = [];
+                rf_delay = 0;
                 rf_time = [];
                 rf_rho = [];
                 rf_theta = [];
@@ -321,7 +320,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             if isfield(block, 'gx') && ~isempty(block.gx)
                 has_grad = 1;
                 gx_delay = block.gx.delay; % Gx delay within block (s)
-                if strcmp(block.gx.type, 'trap')
+                if strcat(block.gx.type, 'trap')
                     gx_amp = block.gx.amplitude;
                     gx_rise = block.gx.riseTime;
                     gx_flat = block.gx.flatTime;
@@ -348,7 +347,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
                     end
                 end
             else
-                gx_delay = [];
+                gx_delay = 0;
                 gx_time = [];
                 gx_wave = [];
                 gx_amp = 0.0;
@@ -357,7 +356,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             if isfield(block, 'gy') && ~isempty(block.gy)
                 has_grad = 1;
                 gy_delay = block.gy.delay; % Gy delay within block (s)
-                if strcmp(block.gy.type, 'trap')
+                if strcat(block.gy.type, 'trap')
                     gy_amp = block.gy.amplitude;
                     gy_rise = block.gy.riseTime;
                     gy_flat = block.gy.flatTime;
@@ -384,7 +383,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
                     end
                 end
             else
-                gy_delay = [];
+                gy_delay = 0;
                 gy_time = [];
                 gy_wave = [];
                 gy_amp = 0.0;
@@ -393,7 +392,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             if isfield(block, 'gz') && ~isempty(block.gz)
                 has_grad = 1;
                 gz_delay = block.gz.delay; % Gz delay within block (s)
-                if strcmp(block.gz.type, 'trap')
+                if strcat(block.gz.type, 'trap')
                     gz_amp = block.gz.amplitude;
                     gz_rise = block.gz.riseTime;
                     gz_flat = block.gz.flatTime;
@@ -420,7 +419,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
                     end
                 end
             else
-                gz_delay = [];
+                gz_delay = 0;
                 gz_time = [];
                 gz_wave = [];
                 gz_amp = 0.0;
@@ -430,11 +429,11 @@ function write_gre_2d_base_case(num_slices, num_averages)
             if isfield(block, 'adc') && ~isempty(block.adc)
                 has_adc = adc_id(s, b);
                 adc_delay = block.adc.delay; % ADC delay within block (s)
-                adc_id_value = 1; % we have only a single ADC definition in this sequence
+                adc_id = 1; % we have only a single ADC definition in this sequence
             else
                 has_adc = 0;
-                adc_delay = [];
-                adc_id_value = [];
+                adc_delay = 0;
+                adc_id = [];
             end
 
             % get rotation flag
@@ -457,7 +456,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             
             % Define RF window: [rf.delay, rf.delay + rf.tt(end)]
             rf_window_start = rf.delay;
-            rf_window_end = rf.delay + rf.t(end);
+            rf_window_end = rf.delay + rf.tt(end);
             
             % Define ADC window: [adc.delay, adc.delay + adc.numSamples * adc.dwell]
             adc_window_start = adc.delay;
@@ -509,7 +508,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             block_data.gz_time = gz_time;
             block_data.has_adc = has_adc;
             block_data.adc_delay = adc_delay;
-            block_data.adc_id = adc_id_value;
+            block_data.adc_id = adc_id;
             block_data.rotate = rotate;
             block_data.has_digital_out = has_digital_out;
             block_data.digital_out_delay = digital_out_delay;
@@ -565,10 +564,6 @@ function export_meta(path, adc, TR, num_blocks_in_tr)
 
     fclose(fid);
 end
-
-
-
-
 
 
 function e = grad_energy(g)
