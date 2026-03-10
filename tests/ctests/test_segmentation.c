@@ -1,5 +1,5 @@
 /*
- * test_segmentation.c -- segmentation tests (phases 1-4).
+ * test_segmentation.c -- segmentation tests (phases 1-5).
  *
  * Phase 1: Validates example_check.c step 6 quantities:
  *   1. Unique ADC definitions (count, num_samples, dwell_ns)
@@ -11,8 +11,14 @@
  *   5. Worst-case TR gradient waveforms vs MATLAB ground truth
  *
  * Phase 4: Frequency-modulation base definitions:
- *   Builds freq-mod collection with a known shift vector, compares
+ *   Builds freq-mod collection with known shift vectors, compares
  *   1D output against MATLAB-serialized 3-channel waveforms.
+ *   Tests orthogonal shifts (X/Y/Z/combined) x 4 FOV rotations.
+ *
+ * Phase 5: Scan table — block instance validation:
+ *   Walks the full scan table via cursor, comparing each block
+ *   instance against MATLAB ground truth (amplitudes, offsets,
+ *   flags, rotation matrices).
  */
 #include "test_helpers.h"
 #include "test_seg_helpers.h"
@@ -521,6 +527,129 @@ MU_TEST_SUITE(suite_segmentation_phase4)
     MU_RUN_TEST(test_freq_mod_definitions);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Phase 5: Scan table — block instance validation                   */
+/* ------------------------------------------------------------------ */
+
+MU_TEST(test_scan_table)
+{
+    pulseqlib_opts opts;
+    pulseqlib_collection* coll = NULL;
+    scan_table_file ref = SCAN_TABLE_FILE_INIT;
+    int rc, ok, pos;
+
+    gre_opts_init(&opts);
+    rc = load_seq(&coll, "gre_2d_1sl_1avg.seq", &opts);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed");
+
+    ok = parse_scan_table(TEST_DATA_DIR "gre_2d_1sl_1avg_scan_table.bin", &ref);
+    mu_assert(ok, "failed to parse scan_table.bin");
+    mu_assert(ref.num_entries > 0, "scan_table has no entries");
+
+    /* Walk the scan table via cursor and compare each block instance */
+    pulseqlib_cursor_reset(coll);
+    pos = 0;
+
+    while (pulseqlib_cursor_next(coll) == PULSEQLIB_CURSOR_BLOCK) {
+        pulseqlib_block_instance inst = PULSEQLIB_BLOCK_INSTANCE_INIT;
+        const scan_table_entry* e;
+        float tol;
+        int i;
+
+        mu_assert(pos < ref.num_entries, "more blocks than scan_table entries");
+
+        rc = pulseqlib_get_block_instance(coll, &inst);
+        mu_assert(PULSEQLIB_SUCCEEDED(rc), "get_block_instance failed");
+
+        e = &ref.entries[pos];
+
+        /* RF amplitude (relative tolerance or absolute for zero) */
+        tol = (float)fabs(e->rf_amp_hz) * 1e-4f;
+        if (tol < 1e-6f) tol = 1e-6f;
+        if (pos < 8) {
+            printf("C[%d] rf=%.4f gx=%.2f gy=%.2f gz=%.2f adc=%d dout=%d dur=%d\n",
+                   pos, inst.rf_amp_hz, inst.gx_amp_hz_per_m,
+                   inst.gy_amp_hz_per_m, inst.gz_amp_hz_per_m,
+                   inst.adc_flag, inst.digitalout_flag, inst.duration_us);
+        }
+        if ((float)fabs(inst.rf_amp_hz - e->rf_amp_hz) > tol) {
+            printf("pos=%d rf_amp: C=%.6f MATLAB=%.6f diff=%.6e "
+                   "gx=%.2f gy=%.2f gz=%.2f adc=%d dur=%d\n",
+                   pos, inst.rf_amp_hz, e->rf_amp_hz,
+                   inst.rf_amp_hz - e->rf_amp_hz,
+                   inst.gx_amp_hz_per_m, inst.gy_amp_hz_per_m,
+                   inst.gz_amp_hz_per_m, inst.adc_flag, inst.duration_us);
+        }
+        mu_assert((float)fabs(inst.rf_amp_hz - e->rf_amp_hz) <= tol,
+                  "rf_amp_hz mismatch");
+
+        /* RF phase */
+        tol = (float)fabs(e->rf_phase_rad) * 1e-4f;
+        if (tol < 1e-8f) tol = 1e-8f;
+        mu_assert((float)fabs(inst.rf_phase_rad - e->rf_phase_rad) <= tol,
+                  "rf_phase_rad mismatch");
+
+        /* RF freq */
+        tol = (float)fabs(e->rf_freq_hz) * 1e-4f;
+        if (tol < 1e-6f) tol = 1e-6f;
+        mu_assert((float)fabs(inst.rf_freq_hz - e->rf_freq_hz) <= tol,
+                  "rf_freq_hz mismatch");
+
+        /* GX amplitude */
+        tol = (float)fabs(e->gx_amp_hz_per_m) * 1e-4f;
+        if (tol < 1e-6f) tol = 1e-6f;
+        mu_assert((float)fabs(inst.gx_amp_hz_per_m - e->gx_amp_hz_per_m) <= tol,
+                  "gx_amp mismatch");
+
+        /* GY amplitude */
+        tol = (float)fabs(e->gy_amp_hz_per_m) * 1e-4f;
+        if (tol < 1e-6f) tol = 1e-6f;
+        mu_assert((float)fabs(inst.gy_amp_hz_per_m - e->gy_amp_hz_per_m) <= tol,
+                  "gy_amp mismatch");
+
+        /* GZ amplitude */
+        tol = (float)fabs(e->gz_amp_hz_per_m) * 1e-4f;
+        if (tol < 1e-6f) tol = 1e-6f;
+        mu_assert((float)fabs(inst.gz_amp_hz_per_m - e->gz_amp_hz_per_m) <= tol,
+                  "gz_amp mismatch");
+
+        /* ADC flag */
+        mu_assert_int_eq(e->adc_flag, inst.adc_flag);
+
+        /* ADC phase */
+        tol = (float)fabs(e->adc_phase_rad) * 1e-4f;
+        if (tol < 1e-8f) tol = 1e-8f;
+        mu_assert((float)fabs(inst.adc_phase_rad - e->adc_phase_rad) <= tol,
+                  "adc_phase_rad mismatch");
+
+        /* ADC freq */
+        tol = (float)fabs(e->adc_freq_hz) * 1e-4f;
+        if (tol < 1e-6f) tol = 1e-6f;
+        mu_assert((float)fabs(inst.adc_freq_hz - e->adc_freq_hz) <= tol,
+                  "adc_freq_hz mismatch");
+
+        /* Digital output flag */
+        mu_assert_int_eq(e->digitalout_flag, inst.digitalout_flag);
+
+        /* Rotation matrix */
+        for (i = 0; i < 9; ++i) {
+            mu_assert((float)fabs(inst.rotmat[i] - e->rotmat[i]) < 1e-5f,
+                      "rotmat mismatch");
+        }
+
+        ++pos;
+    }
+
+    mu_assert_int_eq(ref.num_entries, pos);
+
+    pulseqlib_collection_free(coll);
+}
+
+MU_TEST_SUITE(suite_segmentation_phase5)
+{
+    MU_RUN_TEST(test_scan_table);
+}
+
 
 int test_segmentation_main(void)
 {
@@ -535,6 +664,7 @@ int test_segmentation_main(void)
     MU_RUN_SUITE(suite_segmentation_phase2);
     MU_RUN_SUITE(suite_segmentation_phase3);
     MU_RUN_SUITE(suite_segmentation_phase4);
+    MU_RUN_SUITE(suite_segmentation_phase5);
     MU_REPORT();
     return MU_EXIT_CODE;
 }

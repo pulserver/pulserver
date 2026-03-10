@@ -573,4 +573,71 @@ static TSEG_MAYBE_UNUSED int parse_fmod_defs(const char* path, fmod_def_file* ou
     return 1;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Scan table ground truth (binary)                                  */
+/* ------------------------------------------------------------------ */
+
+#define MAX_SCAN_TABLE_ENTRIES 4096
+
+typedef struct scan_table_entry {
+    float rf_amp_hz;
+    float rf_phase_rad;
+    float rf_freq_hz;
+    float gx_amp_hz_per_m;
+    float gy_amp_hz_per_m;
+    float gz_amp_hz_per_m;
+    int   adc_flag;
+    float adc_phase_rad;
+    float adc_freq_hz;
+    int   digitalout_flag;
+    int   trigger_flag;
+    float rotmat[9];
+    int   freq_mod_id;    /* 0=none, 1-based fmod def index */
+} scan_table_entry;
+
+typedef struct scan_table_file {
+    int               num_entries;
+    scan_table_entry  entries[MAX_SCAN_TABLE_ENTRIES];
+} scan_table_file;
+
+#define SCAN_TABLE_FILE_INIT {0, {{0}}}
+
+static TSEG_MAYBE_UNUSED int parse_scan_table(const char* path, scan_table_file* out)
+{
+    FILE* f;
+    int i;
+    scan_table_file res;
+
+    memset(&res, 0, sizeof(res));
+
+    f = fopen(path, "rb");
+    if (!f) return 0;
+
+    if (fread(&res.num_entries, sizeof(int), 1, f) != 1 ||
+        res.num_entries < 0 || res.num_entries > MAX_SCAN_TABLE_ENTRIES) {
+        fclose(f); return 0;
+    }
+
+    for (i = 0; i < res.num_entries; ++i) {
+        scan_table_entry* e = &res.entries[i];
+        if (fread(&e->rf_amp_hz,       sizeof(float), 1, f) != 1) { fclose(f); return 0; }
+        if (fread(&e->rf_phase_rad,     sizeof(float), 1, f) != 1) { fclose(f); return 0; }
+        if (fread(&e->rf_freq_hz,       sizeof(float), 1, f) != 1) { fclose(f); return 0; }
+        if (fread(&e->gx_amp_hz_per_m,  sizeof(float), 1, f) != 1) { fclose(f); return 0; }
+        if (fread(&e->gy_amp_hz_per_m,  sizeof(float), 1, f) != 1) { fclose(f); return 0; }
+        if (fread(&e->gz_amp_hz_per_m,  sizeof(float), 1, f) != 1) { fclose(f); return 0; }
+        if (fread(&e->adc_flag,         sizeof(int),   1, f) != 1) { fclose(f); return 0; }
+        if (fread(&e->adc_phase_rad,    sizeof(float), 1, f) != 1) { fclose(f); return 0; }
+        if (fread(&e->adc_freq_hz,      sizeof(float), 1, f) != 1) { fclose(f); return 0; }
+        if (fread(&e->digitalout_flag,  sizeof(int),   1, f) != 1) { fclose(f); return 0; }
+        if (fread(&e->trigger_flag,     sizeof(int),   1, f) != 1) { fclose(f); return 0; }
+        if (fread(e->rotmat,            sizeof(float), 9, f) != 9) { fclose(f); return 0; }
+        if (fread(&e->freq_mod_id,      sizeof(int),   1, f) != 1) { fclose(f); return 0; }
+    }
+
+    fclose(f);
+    *out = res;
+    return 1;
+}
+
 #endif /* TEST_SEG_HELPERS_H */
