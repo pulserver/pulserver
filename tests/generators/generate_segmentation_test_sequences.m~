@@ -274,10 +274,9 @@ function write_gre_2d_base_case(num_slices, num_averages)
         has_digital_out = 0;
         digital_out_delay = 0.0;
         digital_out_duration = 0.0;
-        
-        segment_data.segments{s} = struct();
-        segment_data.segments{s}.blocks = {};
-        
+
+        segment_data.segments{s} = struct('blocks', {});
+
         for b = 1:segment_size(s)
             block = seq.getBlock(max_seg_energy_idx + b - 1);
             block_dur = block.blockDuration;
@@ -321,7 +320,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             if isfield(block, 'gx') && ~isempty(block.gx)
                 has_grad = 1;
                 gx_delay = block.gx.delay; % Gx delay within block (s)
-                if strcmp(block.gx.type, 'trap')
+                if strcat(block.gx.type, 'trap')
                     gx_amp = block.gx.amplitude;
                     gx_rise = block.gx.riseTime;
                     gx_flat = block.gx.flatTime;
@@ -357,7 +356,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             if isfield(block, 'gy') && ~isempty(block.gy)
                 has_grad = 1;
                 gy_delay = block.gy.delay; % Gy delay within block (s)
-                if strcmp(block.gy.type, 'trap')
+                if strcat(block.gy.type, 'trap')
                     gy_amp = block.gy.amplitude;
                     gy_rise = block.gy.riseTime;
                     gy_flat = block.gy.flatTime;
@@ -393,7 +392,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             if isfield(block, 'gz') && ~isempty(block.gz)
                 has_grad = 1;
                 gz_delay = block.gz.delay; % Gz delay within block (s)
-                if strcmp(block.gz.type, 'trap')
+                if strcat(block.gz.type, 'trap')
                     gz_amp = block.gz.amplitude;
                     gz_rise = block.gz.riseTime;
                     gz_flat = block.gz.flatTime;
@@ -430,11 +429,11 @@ function write_gre_2d_base_case(num_slices, num_averages)
             if isfield(block, 'adc') && ~isempty(block.adc)
                 has_adc = adc_id(s, b);
                 adc_delay = block.adc.delay; % ADC delay within block (s)
-                adc_id_value = 1; % we have only a single ADC definition in this sequence
+                adc_id = 1; % we have only a single ADC definition in this sequence
             else
                 has_adc = 0;
                 adc_delay = [];
-                adc_id_value = [];
+                adc_id = [];
             end
 
             % get rotation flag
@@ -509,7 +508,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             block_data.gz_time = gz_time;
             block_data.has_adc = has_adc;
             block_data.adc_delay = adc_delay;
-            block_data.adc_id = adc_id_value;
+            block_data.adc_id = adc_id;
             block_data.rotate = rotate;
             block_data.has_digital_out = has_digital_out;
             block_data.digital_out_delay = digital_out_delay;
