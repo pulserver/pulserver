@@ -342,6 +342,36 @@ MU_TEST(test_segmentation_gre_geninstructions)
                 int lib_num_samples = bi.duration_us / raster_us;
                 mu_assert_int_eq(ref_blk->freq_mod_num_samples, lib_num_samples);
             }
+
+            /* --- Freq-mod (overlap API) --------------------------- */
+            {
+                int need_ns = 0;
+                int need = pulseqlib_block_needs_freq_mod(coll, s, b, &need_ns);
+                mu_assert_int_eq(ref_blk->has_freq_mod, need);
+                if (ref_blk->has_freq_mod) {
+                    mu_assert_int_eq(ref_blk->freq_mod_num_samples, need_ns);
+                }
+            }
+
+            /* --- Anchors ------------------------------------------ */
+            if (ref_blk->has_rf) {
+                float lib_iso = pulseqlib_get_rf_isocenter_us(coll, s, b);
+                mu_assert(fabsf(ref_blk->rf_isocenter_us - lib_iso) <= 1.0f,
+                          "RF isocenter_us mismatch");
+            }
+            if (ref_blk->has_adc) {
+                float lib_kz = pulseqlib_get_adc_kzero_us(coll, s, b);
+                mu_assert(fabsf(ref_blk->adc_kzero_us - lib_kz) <= 1.0f,
+                          "ADC kzero_us mismatch");
+            }
+        }
+
+        /* --- Segment-level gaps ------------------------------- */
+        {
+            int ref_rf_adc = (int)roundf(ref.rf_adc_gap_us[s]);
+            int ref_adc_adc = (int)roundf(ref.adc_adc_gap_us[s]);
+            mu_assert_int_eq(ref_rf_adc,  segi.rf_adc_gap_us);
+            mu_assert_int_eq(ref_adc_adc, segi.adc_adc_gap_us);
         }
     }
 

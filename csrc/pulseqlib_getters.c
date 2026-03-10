@@ -801,6 +801,48 @@ static int pulseqlib__get_segment_adc_adc_gap_us(
     return best;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Per-block RF isocenter and ADC k-zero from segment timing anchors */
+/* ------------------------------------------------------------------ */
+
+float pulseqlib_get_rf_isocenter_us(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg, i;
+    const pulseqlib_segment_timing* tm;
+
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return -1.0f;
+
+    tm = &desc->segment_definitions[local_seg].timing;
+    for (i = 0; i < tm->num_rf_anchors; ++i) {
+        if (tm->rf_anchors[i].block_offset == blk_idx)
+            return tm->rf_anchors[i].isocenter_us;
+    }
+    return -1.0f;
+}
+
+float pulseqlib_get_adc_kzero_us(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    int local_seg, i;
+    const pulseqlib_segment_timing* tm;
+
+    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+        return -1.0f;
+
+    tm = &desc->segment_definitions[local_seg].timing;
+    for (i = 0; i < tm->num_adc_anchors; ++i) {
+        if (tm->adc_anchors[i].block_offset == blk_idx)
+            return tm->adc_anchors[i].kzero_us;
+    }
+    return -1.0f;
+}
+
 /* ================================================================== */
 /*  Block-level queries (internal helpers for batch getter)            */
 /* ================================================================== */
@@ -1830,6 +1872,159 @@ static int pulseqlib__block_has_nopos(
         return -1;
 
     return seg->nopos_flag[local_blk];
+}
+
+/* ------------------------------------------------------------------ */
+/*  pulseqlib_block_needs_freq_mod — precise overlap + nopos check    */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Check whether a trapezoid gradient's flat region overlaps [win_start, win_end].
+ * All times in us, relative to block start.
+ */
+static int trap_overlaps_window(
+    const pulseqlib_grad_definition* gdef,
+    float win_start, float win_end)
+{
+    float flat_start = (float)gdef->delay +
+                       (float)gdef->rise_time_or_unused;
+    float flat_end   = flat_start + (float)gdef->flat_time_or_unused;
+    return (flat_start < win_end) && (flat_end > win_start);
+}
+
+/*
+ * Check whether an arbitrary gradient waveform has any nonzero sample
+ * within [win_start, win_end].  Times in us, relative to block start.
+ */
+static int arb_nonzero_in_window(
+    const pulseqlib_sequence_descriptor* desc,
+    const pulseqlib_grad_definition* gdef,
+    float win_start, float win_end)
+{
+    int shape_idx, i, ns;
+    float raster, local_start, local_end;
+    int idx_lo, idx_hi;
+    pulseqlib_shape_arbitrary decomp;
+
+    if (gdef->num_shots < 1 || gdef->shot_shape_ids[0] <= 0)
+        return 0;
+
+    shape_idx = gdef->shot_shape_ids[0] - 1;
+    if (shape_idx < 0 || shape_idx >= desc->num_shapes)
+        return 0;
+
+    decomp.num_samples = 0;
+    decomp.num_uncompressed_samples = 0;
+    decomp.samples = NULL;
+    if (!pulseqlib__decompress_shape(&decomp, &desc->shapes[shape_idx], 1.0f))
+        return 0;
+
+    ns = decomp.num_samples;
+    raster = desc->grad_raster_us;
+    local_start = win_start - (float)gdef->delay;
+    local_end   = win_end   - (float)gdef->delay;
+
+    idx_lo = (int)(local_start / raster);
+    if (idx_lo < 0) idx_lo = 0;
+    idx_hi = (int)(local_end / raster);
+    if (idx_hi >= ns) idx_hi = ns - 1;
+
+    for (i = idx_lo; i <= idx_hi; ++i) {
+        if (decomp.samples[i] != 0.0f) {
+            PULSEQLIB_FREE(decomp.samples);
+            return 1;
+        }
+    }
+
+    PULSEQLIB_FREE(decomp.samples);
+    return 0;
+}
+
+/*
+ * Check whether any gradient axis has nonzero amplitude within the
+ * given temporal window (us, relative to block start).
+ */
+static int any_grad_overlaps_window(
+    const pulseqlib_sequence_descriptor* desc,
+    const pulseqlib_block_definition* bdef,
+    float win_start, float win_end)
+{
+    int axis, grad_id;
+
+    for (axis = 0; axis < 3; ++axis) {
+        grad_id = get_grad_id_by_axis(bdef, axis);
+        if (grad_id < 0) continue;
+
+        if (desc->grad_definitions[grad_id].type == 0) {
+            /* trapezoid */
+            if (trap_overlaps_window(&desc->grad_definitions[grad_id],
+                                     win_start, win_end))
+                return 1;
+        } else {
+            /* arbitrary */
+            if (arb_nonzero_in_window(desc, &desc->grad_definitions[grad_id],
+                                      win_start, win_end))
+                return 1;
+        }
+    }
+    return 0;
+}
+
+int pulseqlib_block_needs_freq_mod(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx,
+    int* num_samples)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_tr_segment* seg;
+    int local_blk;
+    const pulseqlib_block_definition* bdef;
+    int has_rf, has_adc, nopos;
+
+    if (num_samples) *num_samples = 0;
+
+    if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+        return 0;
+
+    nopos = seg->nopos_flag[local_blk];
+    if (nopos) return 0;
+
+    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    has_rf  = (bdef->rf_id >= 0);
+    has_adc = (bdef->adc_id >= 0);
+    if (!has_rf && !has_adc) return 0;
+
+    /* Check RF window overlap */
+    if (has_rf) {
+        const pulseqlib_rf_definition* rdef = &desc->rf_definitions[bdef->rf_id];
+        float rf_start = (float)rdef->delay;
+        float rf_end   = rf_start + rdef->stats.duration_us;
+
+        if (any_grad_overlaps_window(desc, bdef, rf_start, rf_end)) {
+            if (num_samples)
+                *num_samples = (int)((float)bdef->duration_us /
+                                     desc->rf_raster_us);
+            return 1;
+        }
+    }
+
+    /* Check ADC window overlap */
+    if (has_adc) {
+        const pulseqlib_adc_definition* adef = &desc->adc_definitions[bdef->adc_id];
+        float adc_start = (float)adef->delay;
+        float adc_end   = adc_start +
+                          (float)adef->num_samples *
+                          (float)adef->dwell_time * 1e-3f;
+
+        if (any_grad_overlaps_window(desc, bdef, adc_start, adc_end)) {
+            if (num_samples)
+                *num_samples = (int)((float)bdef->duration_us /
+                                     desc->adc_raster_us);
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 int pulseqlib_cursor_next(pulseqlib_collection* coll)

@@ -19,7 +19,7 @@
  *       get digitalout info     (delay + duration)
  *       get trigger info        (segment-level physio trigger)
  *       get rotation flags      (has_rotation + norot)
- *       check freq-mod presence (spans whole block, uniform raster)
+ *       check freq-mod (overlap + nopos via pulseqlib_block_needs_freq_mod)
  *       t += block_duration_us
  *
  * Amplitude convention:
@@ -470,18 +470,11 @@ skip_rf:
     vendor_set_rotation(bi.has_rotation, bi.norot_flag);
 
     /* -- Freq-mod (independent channel) ---------------------------- */
-    if (bi.has_freq_mod && (bi.has_rf || bi.has_adc)) {
-        int grad_active = 0;
-        for (axis = 0; axis < 3; ++axis) {
-            if (bi.has_grad[axis]) {
-                grad_active = 1;
-                break;
-            }
-        }
-        if (grad_active) {
-            int raster_us = 2;  /* vendor-specific raster (e.g. 2 us on GE) */
-            int num_samples = bi.duration_us / raster_us;
-            vendor_create_freq_mod_instruction(num_samples);
+    {
+        int freq_mod_samples = 0;
+        if (pulseqlib_block_needs_freq_mod(coll, seg_idx, blk_idx,
+                                           &freq_mod_samples)) {
+            vendor_create_freq_mod_instruction(freq_mod_samples);
         }
     }
 }

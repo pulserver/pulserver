@@ -312,12 +312,20 @@ typedef struct seg_block_def {
 
     /* Freq-mod */
     int freq_mod_num_samples;
+
+    /* Anchors (us, relative to segment start; -1 if absent) */
+    float rf_isocenter_us;
+    float adc_kzero_us;
 } seg_block_def;
 
 typedef struct seg_def_file {
     int           num_segments;
     int           num_blocks[MAX_SEGMENTS];
     seg_block_def blocks[MAX_SEGMENTS][SEG_DEF_MAX_BLOCKS];
+
+    /* Segment-level gaps (us; -1 if not applicable) */
+    float rf_adc_gap_us[MAX_SEGMENTS];
+    float adc_adc_gap_us[MAX_SEGMENTS];
 } seg_def_file;
 
 #define SEG_DEF_FILE_INIT {0, {0}, {{{0}}}}
@@ -383,7 +391,15 @@ static TSEG_MAYBE_UNUSED int parse_seg_def(const char* path, seg_def_file* out)
 
             /* Freq-mod */
             RD4(blk->freq_mod_num_samples);
+
+            /* Anchors */
+            RDF(blk->rf_isocenter_us);
+            RDF(blk->adc_kzero_us);
         }
+
+        /* Segment-level gaps */
+        RDF(out->rf_adc_gap_us[s]);
+        RDF(out->adc_adc_gap_us[s]);
     }
 
 #undef RD4

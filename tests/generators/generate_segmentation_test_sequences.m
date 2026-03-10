@@ -520,11 +520,73 @@ function write_gre_2d_base_case(num_slices, num_averages)
             block_data.digital_out_duration = digital_out_duration;
             block_data.has_freq_mod = has_freq_mod;
             block_data.num_freq_mod_samples = num_freq_mod_samples;
+
+            % Anchor times (relative to segment start, in seconds)
+            if has_rf
+                rf_iso = mr.calcRfCenter(block.rf);
+                block_data.rf_isocenter_us = (block_start + block.rf.delay + rf_iso) * 1e6;
+                block_data.rf_start_us = (block_start + block.rf.delay) * 1e6;
+                block_data.rf_end_us   = (block_start + block.rf.delay + block.rf.t(end)) * 1e6;
+            else
+                block_data.rf_isocenter_us = -1;
+                block_data.rf_start_us = -1;
+                block_data.rf_end_us   = -1;
+            end
+            if has_adc
+                adc_dur_s = block.adc.numSamples * block.adc.dwell;
+                block_data.adc_kzero_us = (block_start + block.adc.delay + 0.5 * adc_dur_s) * 1e6;
+                block_data.adc_start_us = (block_start + block.adc.delay) * 1e6;
+                block_data.adc_end_us   = (block_start + block.adc.delay + adc_dur_s) * 1e6;
+            else
+                block_data.adc_kzero_us = -1;
+                block_data.adc_start_us = -1;
+                block_data.adc_end_us   = -1;
+            end
             
             segment_data.segments{s}.blocks{b} = block_data;
 
             block_start = block_start + block_dur;
         end
+
+        % Compute segment-level gaps from RF/ADC anchor times
+        rf_ends = [];
+        adc_starts = [];
+        adc_ends = [];
+        for b2 = 1:segment_size(s)
+            bd = segment_data.segments{s}.blocks{b2};
+            if bd.rf_end_us >= 0
+                rf_ends = [rf_ends, bd.rf_end_us]; %#ok<AGROW>
+            end
+            if bd.adc_start_us >= 0
+                adc_starts = [adc_starts, bd.adc_start_us]; %#ok<AGROW>
+                adc_ends   = [adc_ends,   bd.adc_end_us];   %#ok<AGROW>
+            end
+        end
+        % RF->ADC gap: for each RF, find first ADC after RF end; take minimum
+        seg_rf_adc_gap = -1;
+        for r = 1:length(rf_ends)
+            candidates = adc_starts(adc_starts >= rf_ends(r));
+            if ~isempty(candidates)
+                gap = min(candidates) - rf_ends(r);
+                if seg_rf_adc_gap < 0 || gap < seg_rf_adc_gap
+                    seg_rf_adc_gap = gap;
+                end
+            end
+        end
+        % ADC->ADC gap: minimum gap between consecutive ADCs
+        seg_adc_adc_gap = -1;
+        if length(adc_starts) >= 2
+            sorted_starts = sort(adc_starts);
+            sorted_ends = sort(adc_ends);
+            for a = 2:length(sorted_starts)
+                gap = sorted_starts(a) - sorted_ends(a-1);
+                if seg_adc_adc_gap < 0 || gap < seg_adc_adc_gap
+                    seg_adc_adc_gap = gap;
+                end
+            end
+        end
+        segment_data.segments{s}.rf_adc_gap_us = seg_rf_adc_gap;
+        segment_data.segments{s}.adc_adc_gap_us = seg_adc_adc_gap;
     end
 
     % Export segment definition binary file
@@ -636,6 +698,8 @@ function export_segment_def(path, segment_data, sys)
 %       float32 gx/gy/gz delays, amplitudes, waveform samples
 %       float32 adc_delay, digital_out_delay, digital_out_duration
 %       int32 freq_mod_sample_count
+%       float32 rf_isocenter_us, adc_kzero_us  (relative to segment start)
+%     float32 rf_adc_gap_us, adc_adc_gap_us  (segment-level)
     fid = fopen(path, 'wb');
     if fid < 0, error('Failed to open %s', path); end
 
@@ -699,7 +763,15 @@ function export_segment_def(path, segment_data, sys)
             
             % Frequency modulation parameters
             fwrite(fid, int32(block_data.num_freq_mod_samples), 'int32');
+
+            % Anchor times (us, relative to segment start; -1 if absent)
+            fwrite(fid, single(block_data.rf_isocenter_us), 'float32');
+            fwrite(fid, single(block_data.adc_kzero_us), 'float32');
         end
+
+        % Segment-level gap values (us; -1 if not applicable)
+        fwrite(fid, single(segment_data.segments{s}.rf_adc_gap_us), 'float32');
+        fwrite(fid, single(segment_data.segments{s}.adc_adc_gap_us), 'float32');
     end
     
     fclose(fid);
