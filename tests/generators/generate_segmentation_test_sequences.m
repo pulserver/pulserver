@@ -275,7 +275,8 @@ function write_gre_2d_base_case(num_slices, num_averages)
         digital_out_delay = 0.0;
         digital_out_duration = 0.0;
 
-        segment_data.segments{s} = struct('blocks', {});
+        segment_data.segments{s} = struct();
+        segment_data.segments{s}.blocks = {};
 
         for b = 1:segment_size(s)
             block = seq.getBlock(max_seg_energy_idx + b - 1);
@@ -301,7 +302,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
                 end
 
                 % get time points for rf samples
-                rf_time = block.rf.tt; % time points for RF samples
+                rf_time = block.rf.t; % time points for RF samples
                 dt = rf_time(2) - rf_time(1);
                 if length(unique(diff(rf_time))) == 1 && dt == sys.rfRasterTime
                     rf_time = []; % uniform sampling, can be inferred from start time and dwell
@@ -320,7 +321,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             if isfield(block, 'gx') && ~isempty(block.gx)
                 has_grad = 1;
                 gx_delay = block.gx.delay; % Gx delay within block (s)
-                if strcat(block.gx.type, 'trap')
+                if strcmp(block.gx.type, 'trap')
                     gx_amp = block.gx.amplitude;
                     gx_rise = block.gx.riseTime;
                     gx_flat = block.gx.flatTime;
@@ -356,7 +357,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             if isfield(block, 'gy') && ~isempty(block.gy)
                 has_grad = 1;
                 gy_delay = block.gy.delay; % Gy delay within block (s)
-                if strcat(block.gy.type, 'trap')
+                if strcmp(block.gy.type, 'trap')
                     gy_amp = block.gy.amplitude;
                     gy_rise = block.gy.riseTime;
                     gy_flat = block.gy.flatTime;
@@ -392,7 +393,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             if isfield(block, 'gz') && ~isempty(block.gz)
                 has_grad = 1;
                 gz_delay = block.gz.delay; % Gz delay within block (s)
-                if strcat(block.gz.type, 'trap')
+                if strcmp(block.gz.type, 'trap')
                     gz_amp = block.gz.amplitude;
                     gz_rise = block.gz.riseTime;
                     gz_flat = block.gz.flatTime;
@@ -429,11 +430,11 @@ function write_gre_2d_base_case(num_slices, num_averages)
             if isfield(block, 'adc') && ~isempty(block.adc)
                 has_adc = adc_id(s, b);
                 adc_delay = block.adc.delay; % ADC delay within block (s)
-                adc_id = 1; % we have only a single ADC definition in this sequence
+                adc_id_value = 1; % we have only a single ADC definition in this sequence
             else
                 has_adc = 0;
                 adc_delay = 0;
-                adc_id = [];
+                adc_id_value = [];
             end
 
             % get rotation flag
@@ -442,7 +443,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             % get trigger
             if isfield(block, 'trig') && ~isempty(block.trig)
                 for t = 1:length(block.trig)
-                    if strcat(block.trig.type, 'output')
+                    if strcmp(block.trig.type, 'output')
                         has_digital_out = 1;
                         digital_out_delay = block.trig(t).delay; % digital output delay within block (s)
                         digital_out_duration = block.trig(t).duration; % digital output duration (s)
@@ -456,7 +457,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             
             % Define RF window: [rf.delay, rf.delay + rf.tt(end)]
             rf_window_start = rf.delay;
-            rf_window_end = rf.delay + rf.tt(end);
+            rf_window_end = rf.delay + rf.t(end);
             
             % Define ADC window: [adc.delay, adc.delay + adc.numSamples * adc.dwell]
             adc_window_start = adc.delay;
@@ -508,7 +509,7 @@ function write_gre_2d_base_case(num_slices, num_averages)
             block_data.gz_time = gz_time;
             block_data.has_adc = has_adc;
             block_data.adc_delay = adc_delay;
-            block_data.adc_id = adc_id;
+            block_data.adc_id = adc_id_value;
             block_data.rotate = rotate;
             block_data.has_digital_out = has_digital_out;
             block_data.digital_out_delay = digital_out_delay;
