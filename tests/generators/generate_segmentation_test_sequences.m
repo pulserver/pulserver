@@ -625,12 +625,108 @@ function write_gre_2d_base_case(num_slices, num_averages)
     export_freq_mod_defs(fullfile(out_dir, [base '_freqmod_def.bin']), ...
                          fmod_defs, fmod_types);
 
-    % --- placeholders for upcoming phases ---
-    % TODO(phase4): export scan table truth with ONCE + ignoreRepetitions behavior.
-    % TODO(phase5b): export freq-mod lookup table (scan_to_plan) together
-    %                with scan table tests.
+    % --- export scan table (phase 5) ---
+    num_cols = 11;
+    num_blocks = num_averages * length(seq.blockEvents);
+    scan_table = zeros(num_blocks, num_cols);
+    rotmat_table = zeros(num_blocks, 9);
+    freq_mod_table = zeros(num_blocks, 1);  % 0=none, 1=RF, 2=ADC (1-based fmod def index)
+    act_blocks = 1;
 
-    fprintf('Wrote %s and minimal truth files.\n', [base '.seq']);
+    base_rot = eye(3); % eye is AX; we may have COR, SAG or OBLIQUE
+    ppm_to_hz = 1e-6 * sys.gamma * sys.B0;
+    once = 0;
+    norot = 0;
+    for avg = 1:num_averages
+        for b = 1:length(seq.blockEvents)
+            block = seq.getBlock(b);
+            
+            % get sticky ONCE label value for this block, if it exists
+            if isfield(block, 'labels') && ~isempty(block.labels)
+                for l = 1:length(block.labels)
+                    if strcmp(block.labels(l).label, 'ONCE')
+                        once = block.labels(l).value;
+                    end
+                    if strcmp(block.labels(l).label, 'NOROT')
+                        norot = block.labels(l).value;
+                    end
+                end
+            end
+
+            if once == 0 || (once == 1 && avg == 1) || (once == 2 && avg == num_averages)
+                if isfield(block, 'rf') && ~isempty(block.rf)
+                    scan_table(act_blocks, 1) = max(abs(block.rf.signal));
+                    scan_table(act_blocks, 2) = block.rf.phaseOffset + ppm_to_hz * block.rf.phasePPM;
+                    scan_table(act_blocks, 3) = block.rf.freqOffset + ppm_to_hz * block.rf.freqPPM;
+                    % freq_mod_table: find definition index for RF type
+                    rf_def_idx = find(fmod_types == 0, 1);
+                    if ~isempty(rf_def_idx)
+                        freq_mod_table(act_blocks) = rf_def_idx;
+                    end
+                end
+                if isfield(block, 'gx') && ~isempty(block.gx)
+                    if strcmp(block.gx.type, 'trap')
+                        scan_table(act_blocks, 4) = block.gx.amplitude;
+                    else
+                        scan_table(act_blocks, 4) = max(abs(block.gx.waveform));
+                    end
+                end
+                if isfield(block, 'gy') && ~isempty(block.gy)
+                    if strcmp(block.gy.type, 'trap')
+                        scan_table(act_blocks, 5) = block.gy.amplitude;
+                    else
+                        scan_table(act_blocks, 5) = max(abs(block.gy.waveform));
+                    end
+                end
+                if isfield(block, 'gz') && ~isempty(block.gz)
+                    if strcmp(block.gz.type, 'trap')
+                        scan_table(act_blocks, 6) = block.gz.amplitude;
+                    else
+                        scan_table(act_blocks, 6) = max(abs(block.gz.waveform));
+                    end
+                end
+                if isfield(block, 'adc') && ~isempty(block.adc)
+                    scan_table(act_blocks, 7) = 1;
+                    scan_table(act_blocks, 8) = block.adc.phaseOffset + ppm_to_hz * block.adc.phasePPM;
+                    scan_table(act_blocks, 9) = block.adc.freqOffset + ppm_to_hz * block.adc.freqPPM;
+                    % freq_mod_table: find definition index for ADC type
+                    adc_def_idx = find(fmod_types == 1, 1);
+                    if ~isempty(adc_def_idx)
+                        freq_mod_table(act_blocks) = adc_def_idx;
+                    end
+                end
+                if isfield(block, 'trig') && ~isempty(block.trig)
+                    for t = 1:length(block.trig)
+                        if strcmp(block.trig(t).type, 'output') % digital output
+                            scan_table(act_blocks, 10) = 1;
+                        end
+                        if strcmp(block.trig(t).type, 'trigger') % trigger
+                            scan_table(act_blocks, 11) = 1;
+                        end
+                    end
+                end
+                if isfield(block, 'rotation')
+                    rotmat = mr.aux.quat.toRotMat(block.rotation.rotQuaternion);
+                else
+                    rotmat = eye(3);
+                end
+                if norot == 1
+                    act_rotmat = rotmat; % ignore FOV rotation
+                else 
+                    act_rotmat = base_rot * rotmat; % apply sequence-level rotation (e.g. for oblique scans)
+                end
+                rotmat_table(act_blocks, :) = reshape(act_rotmat', 1, 9); % row-major order
+                act_blocks = act_blocks + 1;
+            end
+        end
+    end
+    num_entries = act_blocks - 1;
+    scan_table = scan_table(1:num_entries, :);
+    rotmat_table = rotmat_table(1:num_entries, :);
+    freq_mod_table = freq_mod_table(1:num_entries, :);
+
+    export_scan_table(fullfile(out_dir, [base '_scan_table.bin']), ...
+                      scan_table, rotmat_table, freq_mod_table);
 end
 
 
@@ -1002,6 +1098,50 @@ function export_freq_mod_defs(path, fmod_defs, types)
         fwrite(fid, single(fm.waveform(:, 1)), 'float32');  % gx
         fwrite(fid, single(fm.waveform(:, 2)), 'float32');  % gy
         fwrite(fid, single(fm.waveform(:, 3)), 'float32');  % gz
+    end
+
+    fclose(fid);
+end
+
+
+function export_scan_table(path, scan_table, rotmat_table, freq_mod_table)
+% EXPORT_SCAN_TABLE  Write scan-table ground truth as binary file.
+%   Layout:
+%     int32   num_entries
+%     Per entry (row):
+%       float32 rf_amp_hz           (col 1)
+%       float32 rf_phase_rad        (col 2)
+%       float32 rf_freq_hz          (col 3)
+%       float32 gx_amp_hz_per_m     (col 4)
+%       float32 gy_amp_hz_per_m     (col 5)
+%       float32 gz_amp_hz_per_m     (col 6)
+%       int32   adc_flag            (col 7)
+%       float32 adc_phase_rad       (col 8)
+%       float32 adc_freq_hz         (col 9)
+%       int32   digitalout_flag     (col 10)
+%       int32   trigger_flag        (col 11)
+%       float32 rotmat[9]           (row-major 3x3)
+%       int32   freq_mod_id         (0=none, 1-based def index)
+    fid = fopen(path, 'wb');
+    if fid < 0, error('Failed to open %s', path); end
+
+    n = size(scan_table, 1);
+    fwrite(fid, int32(n), 'int32');
+
+    for i = 1:n
+        fwrite(fid, single(scan_table(i, 1)), 'float32');  % rf_amp
+        fwrite(fid, single(scan_table(i, 2)), 'float32');  % rf_phase
+        fwrite(fid, single(scan_table(i, 3)), 'float32');  % rf_freq
+        fwrite(fid, single(scan_table(i, 4)), 'float32');  % gx_amp
+        fwrite(fid, single(scan_table(i, 5)), 'float32');  % gy_amp
+        fwrite(fid, single(scan_table(i, 6)), 'float32');  % gz_amp
+        fwrite(fid, int32(scan_table(i, 7)),  'int32');     % adc_flag
+        fwrite(fid, single(scan_table(i, 8)), 'float32');  % adc_phase
+        fwrite(fid, single(scan_table(i, 9)), 'float32');  % adc_freq
+        fwrite(fid, int32(scan_table(i, 10)), 'int32');     % digitalout
+        fwrite(fid, int32(scan_table(i, 11)), 'int32');     % trigger
+        fwrite(fid, single(rotmat_table(i, :)), 'float32'); % rotmat[9]
+        fwrite(fid, int32(freq_mod_table(i)), 'int32');     % freq_mod_id
     end
 
     fclose(fid);
