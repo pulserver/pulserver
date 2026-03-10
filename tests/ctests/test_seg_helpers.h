@@ -511,4 +511,66 @@ static TSEG_MAYBE_UNUSED int parse_arb_grad(const char* path, arb_grad_waveform*
     return 1;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Frequency modulation definitions (binary)                         */
+/* ------------------------------------------------------------------ */
+
+#define MAX_FMOD_DEFS   8
+#define MAX_FMOD_SAMPLES 2048
+
+typedef struct fmod_def {
+    int   type;           /* 0=RF, 1=ADC */
+    int   num_samples;
+    float raster_us;
+    float duration_us;
+    float ref_time_us;
+    float ref_integral[3];
+    float waveform_gx[MAX_FMOD_SAMPLES];
+    float waveform_gy[MAX_FMOD_SAMPLES];
+    float waveform_gz[MAX_FMOD_SAMPLES];
+} fmod_def;
+
+typedef struct fmod_def_file {
+    int      num_defs;
+    fmod_def defs[MAX_FMOD_DEFS];
+} fmod_def_file;
+
+#define FMOD_DEF_FILE_INIT {0, {{0,0,0,0,0,{0},{0},{0},{0}}}}
+
+static TSEG_MAYBE_UNUSED int parse_fmod_defs(const char* path, fmod_def_file* out)
+{
+    FILE* f;
+    int d, ns;
+    fmod_def_file res;
+
+    memset(&res, 0, sizeof(res));
+
+    f = fopen(path, "rb");
+    if (!f) return 0;
+
+    if (fread(&res.num_defs, sizeof(int), 1, f) != 1 ||
+        res.num_defs < 0 || res.num_defs > MAX_FMOD_DEFS) {
+        fclose(f); return 0;
+    }
+
+    for (d = 0; d < res.num_defs; ++d) {
+        fmod_def* fd = &res.defs[d];
+        if (fread(&fd->type, sizeof(int), 1, f) != 1) { fclose(f); return 0; }
+        if (fread(&fd->num_samples, sizeof(int), 1, f) != 1) { fclose(f); return 0; }
+        ns = fd->num_samples;
+        if (ns <= 0 || ns > MAX_FMOD_SAMPLES) { fclose(f); return 0; }
+        if (fread(&fd->raster_us, sizeof(float), 1, f) != 1) { fclose(f); return 0; }
+        if (fread(&fd->duration_us, sizeof(float), 1, f) != 1) { fclose(f); return 0; }
+        if (fread(&fd->ref_time_us, sizeof(float), 1, f) != 1) { fclose(f); return 0; }
+        if (fread(fd->ref_integral, sizeof(float), 3, f) != 3) { fclose(f); return 0; }
+        if (fread(fd->waveform_gx, sizeof(float), (size_t)ns, f) != (size_t)ns) { fclose(f); return 0; }
+        if (fread(fd->waveform_gy, sizeof(float), (size_t)ns, f) != (size_t)ns) { fclose(f); return 0; }
+        if (fread(fd->waveform_gz, sizeof(float), (size_t)ns, f) != (size_t)ns) { fclose(f); return 0; }
+    }
+
+    fclose(f);
+    *out = res;
+    return 1;
+}
+
 #endif /* TEST_SEG_HELPERS_H */

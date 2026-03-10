@@ -592,9 +592,43 @@ function write_gre_2d_base_case(num_slices, num_averages)
     % Export segment definition binary file
     export_segment_def(fullfile(out_dir, [base '_segment_def.bin']), segment_data, sys);
 
+    % --- exports: frequency modulation definitions (phase 5 partial) ---
+    %
+    % Build the two unique freq-mod definitions (RF and ADC) exactly as the
+    % C library does.  GEHC vendor path:
+    %   RF  — active region = [rf.delay, rf.delay + rf.t(end)],
+    %          ref_time = isodelay = duration - center
+    %   ADC — active region = [adc.delay, adc.delay + numSamples*dwell],
+    %          ref_time = 0.5 * numSamples * dwell
+    % Waveforms are on the gradient raster, amplitude-scaled (Hz/m).
+
+    % RF definition: use block 1 (first RF+gz block)
+    rf_block = seq.getBlock(1);
+    rf_active_start = rf_block.rf.delay;
+    rf_active_end   = rf_block.rf.delay + rf_block.rf.t(end);
+    rf_isodelay     = rf_block.rf.t(end) - mr.calcRfCenter(rf_block.rf);
+    rf_fmod = build_freq_mod_definition(rf_block, rf_active_start, ...
+                rf_active_end, rf_isodelay, sys.gradRasterTime, sys.rfRasterTime);
+
+    % ADC definition: use first main-TR ADC block (dummy TRs have no ADC)
+    first_main_adc = ndummy * num_blocks_in_tr + 3;
+    adc_block = seq.getBlock(first_main_adc);
+    adc_dur      = adc_block.adc.numSamples * adc_block.adc.dwell;
+    adc_active_start = adc_block.adc.delay;
+    adc_active_end   = adc_block.adc.delay + adc_dur;
+    adc_ref_time     = 0.5 * adc_dur;
+    adc_fmod = build_freq_mod_definition(adc_block, adc_active_start, ...
+                 adc_active_end, adc_ref_time, sys.gradRasterTime, sys.adcRasterTime);
+
+    fmod_defs = {rf_fmod, adc_fmod};
+    fmod_types = [0, 1];  % 0=RF, 1=ADC
+    export_freq_mod_defs(fullfile(out_dir, [base '_freqmod_def.bin']), ...
+                         fmod_defs, fmod_types);
+
     % --- placeholders for upcoming phases ---
     % TODO(phase4): export scan table truth with ONCE + ignoreRepetitions behavior.
-    % TODO(phase5): export frequency-modulation ground truth and k-space crossings.
+    % TODO(phase5b): export freq-mod lookup table (scan_to_plan) together
+    %                with scan table tests.
 
     fprintf('Wrote %s and minimal truth files.\n', [base '.seq']);
 end
@@ -814,4 +848,162 @@ function has_nonzero = grad_nonzero_in_window(grad, window_start, window_end)
             has_nonzero = any(abs(waveform_samples(in_window)) > 0);
         end
     end
+end
+
+
+function fmod = build_freq_mod_definition(block, active_start_s, active_end_s, ref_time_s, grad_raster_s, target_raster_s)
+% BUILD_FREQ_MOD_DEFINITION  Build a freq-mod base definition.
+%   Matches the C library's build_freq_mod_for_block() exactly:
+%   - Interpolate per-axis gradient waveforms onto uniform grad_raster grid
+%     within the active region [active_start, active_end].
+%   - ZOH upsample from grad raster to target (RF/ADC) raster.
+%   - Waveforms are amplitude-scaled (Hz/m), NOT peak-normalized.
+%   - Compute ref_integral via trapezoidal rule up to ref_sample.
+
+    active_dur_s  = active_end_s - active_start_s;
+    grad_raster_us = grad_raster_s * 1e6;
+    active_dur_us  = active_dur_s * 1e6;
+    ref_time_us    = ref_time_s * 1e6;
+
+    num_samples = floor(active_dur_us / grad_raster_us) + 1;
+    if num_samples < 2, num_samples = 2; end
+
+    % Uniform time grid (in seconds, relative to active_start)
+    uniform_t = (0:num_samples-1)' * grad_raster_s;
+
+    axes = {'gx', 'gy', 'gz'};
+    waveform = zeros(num_samples, 3);
+    ref_integral = zeros(1, 3);
+
+    for ch = 1:3
+        ax = axes{ch};
+        if isfield(block, ax) && ~isempty(block.(ax))
+            grad = block.(ax);
+            [raw_t, raw_w] = grad_to_knots(grad);
+
+            % Shift times relative to active_start
+            raw_t = raw_t - active_start_s;
+
+            % Pad boundaries: ensure coverage of [0, active_dur_s]
+            if raw_t(1) > 0
+                raw_t = [0; raw_t(:)]; %#ok<AGROW>
+                raw_w = [0; raw_w(:)]; %#ok<AGROW>
+            end
+            if raw_t(end) < active_dur_s
+                raw_t = [raw_t(:); active_dur_s]; %#ok<AGROW>
+                raw_w = [raw_w(:); 0];            %#ok<AGROW>
+            end
+
+            waveform(:, ch) = interp1(raw_t(:), raw_w(:), uniform_t, 'linear', 0);
+        end
+
+        % ref_integral: 2*pi*1e-6 * trapz(waveform[0..ref_sample], raster_us)
+        ref_sample = floor(ref_time_us / grad_raster_us);
+        ref_sample = max(0, min(ref_sample, num_samples - 1));
+        if ref_sample > 0
+            ref_integral(ch) = 2 * pi * 1e-6 * ...
+                trapz(waveform(1:ref_sample+1, ch)) * grad_raster_us;
+        else
+            ref_integral(ch) = 0;
+        end
+    end
+
+    fmod.num_samples   = num_samples;
+    fmod.raster_us     = grad_raster_us;
+    fmod.duration_us   = active_dur_us;
+    fmod.ref_time_us   = ref_time_us;
+    fmod.ref_integral  = ref_integral;
+    fmod.waveform      = waveform;  % (num_samples, 3) in Hz/m
+
+    % ZOH upsample from grad raster to target (RF/ADC) raster
+    if target_raster_s > 0 && target_raster_s < grad_raster_s - 1e-9
+        target_raster_us = target_raster_s * 1e6;
+        fine_num = floor(active_dur_us / target_raster_us) + 1;
+        if fine_num < 2, fine_num = 2; end
+
+        fine_waveform = zeros(fine_num, 3);
+        for j = 1:fine_num
+            orig_idx = min(floor((j-1) * target_raster_us / grad_raster_us) + 1, num_samples);
+            fine_waveform(j, :) = waveform(orig_idx, :);
+        end
+
+        % Recompute ref_integral on fine grid
+        for ch = 1:3
+            ref_sample = floor(ref_time_us / target_raster_us);
+            ref_sample = max(0, min(ref_sample, fine_num - 1));
+            if ref_sample > 0
+                ref_integral(ch) = 2 * pi * 1e-6 * ...
+                    trapz(fine_waveform(1:ref_sample+1, ch)) * target_raster_us;
+            else
+                ref_integral(ch) = 0;
+            end
+        end
+
+        fmod.num_samples  = fine_num;
+        fmod.raster_us    = target_raster_us;
+        fmod.ref_integral = ref_integral;
+        fmod.waveform     = fine_waveform;
+    end
+end
+
+
+function [t, w] = grad_to_knots(grad)
+% GRAD_TO_KNOTS  Convert a Pulseq gradient struct to time/amplitude knots.
+%   Returns t (seconds, absolute within block) and w (Hz/m).
+    if strcmp(grad.type, 'trap') || strcmp(grad.type, 'trapezoid')
+        delay = grad.delay;
+        rise  = grad.riseTime;
+        flat  = grad.flatTime;
+        fall  = grad.fallTime;
+        amp   = grad.amplitude;
+        if flat > 0
+            t = [delay; delay+rise; delay+rise+flat; delay+rise+flat+fall];
+            w = [0; amp; amp; 0];
+        else
+            t = [delay; delay+rise; delay+rise+fall];
+            w = [0; amp; 0];
+        end
+    else
+        % Arbitrary gradient (e.g. after splitGradientAt)
+        t = grad.delay + grad.tt(:);
+        w = grad.waveform(:);
+    end
+end
+
+
+function export_freq_mod_defs(path, fmod_defs, types)
+% EXPORT_FREQ_MOD_DEFS  Write freq-mod definitions as binary file.
+%   Layout:
+%     int32  num_definitions
+%     Per definition:
+%       int32   type            (0=RF, 1=ADC)
+%       int32   num_samples
+%       float32 raster_us
+%       float32 duration_us
+%       float32 ref_time_us
+%       float32 ref_integral[3]
+%       float32 waveform_gx[num_samples]
+%       float32 waveform_gy[num_samples]
+%       float32 waveform_gz[num_samples]
+    fid = fopen(path, 'wb');
+    if fid < 0, error('Failed to open %s', path); end
+
+    nd = length(fmod_defs);
+    fwrite(fid, int32(nd), 'int32');
+
+    for d = 1:nd
+        fm = fmod_defs{d};
+        fwrite(fid, int32(types(d)), 'int32');
+        fwrite(fid, int32(fm.num_samples), 'int32');
+        fwrite(fid, single(fm.raster_us), 'float32');
+        fwrite(fid, single(fm.duration_us), 'float32');
+        fwrite(fid, single(fm.ref_time_us), 'float32');
+        fwrite(fid, single(fm.ref_integral), 'float32');  % [3]
+        fwrite(fid, single(fm.waveform(:, 1)), 'float32');  % gx
+        fwrite(fid, single(fm.waveform(:, 2)), 'float32');  % gy
+        fwrite(fid, single(fm.waveform(:, 3)), 'float32');  % gz
+    end
+
+    fclose(fid);
+    fprintf('  Wrote freq-mod definitions: %s (%d defs)\n', path, nd);
 end

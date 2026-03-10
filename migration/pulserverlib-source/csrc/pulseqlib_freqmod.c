@@ -128,6 +128,7 @@ static int build_freq_mod_for_block(
     int bdef_idx,
     float active_start_us, float active_end_us,
     float ref_time_us,
+    float target_raster_us,
     pulseqlib_freq_mod_definition* fmod)
 {
     float grad_raster_us = desc->grad_raster_us;
@@ -288,6 +289,57 @@ static int build_freq_mod_for_block(
     }
 
     fmod->ref_time_us = ref_time_us;
+
+    /* ZOH upsample from grad raster to target (RF/ADC) raster */
+    if (target_raster_us > 0.0f && target_raster_us < grad_raster_us - 0.001f) {
+        int fine_num;
+        float *fine_gx, *fine_gy, *fine_gz;
+
+        fine_num = (int)(active_dur_us / target_raster_us) + 1;
+        if (fine_num < 2) fine_num = 2;
+
+        fine_gx = (float*)PULSEQLIB_ALLOC((size_t)fine_num * sizeof(float));
+        fine_gy = (float*)PULSEQLIB_ALLOC((size_t)fine_num * sizeof(float));
+        fine_gz = (float*)PULSEQLIB_ALLOC((size_t)fine_num * sizeof(float));
+        if (!fine_gx || !fine_gy || !fine_gz) {
+            if (fine_gx) PULSEQLIB_FREE(fine_gx);
+            if (fine_gy) PULSEQLIB_FREE(fine_gy);
+            if (fine_gz) PULSEQLIB_FREE(fine_gz);
+            goto fmod_fail;
+        }
+
+        for (i = 0; i < fine_num; ++i) {
+            int orig_idx = (int)((float)i * target_raster_us / grad_raster_us);
+            if (orig_idx >= fmod->num_samples) orig_idx = fmod->num_samples - 1;
+            fine_gx[i] = fmod->waveform_gx[orig_idx];
+            fine_gy[i] = fmod->waveform_gy[orig_idx];
+            fine_gz[i] = fmod->waveform_gz[orig_idx];
+        }
+
+        PULSEQLIB_FREE(fmod->waveform_gx);
+        PULSEQLIB_FREE(fmod->waveform_gy);
+        PULSEQLIB_FREE(fmod->waveform_gz);
+        fmod->waveform_gx = fine_gx;
+        fmod->waveform_gy = fine_gy;
+        fmod->waveform_gz = fine_gz;
+        fmod->num_samples = fine_num;
+        fmod->raster_us   = target_raster_us;
+
+        /* Recompute ref_integral on fine grid */
+        for (axis = 0; axis < 3; ++axis) {
+            float* w = (axis == 0) ? fmod->waveform_gx :
+                       (axis == 1) ? fmod->waveform_gy : fmod->waveform_gz;
+            int ref_sample = (int)(ref_time_us / target_raster_us);
+            if (ref_sample < 0) ref_sample = 0;
+            if (ref_sample >= fine_num) ref_sample = fine_num - 1;
+            if (ref_sample > 0)
+                fmod->ref_integral[axis] = (float)(PULSEQLIB__TWO_PI * 1e-6) *
+                    pulseqlib__trapz_real_uniform(w, ref_sample + 1,
+                                                 target_raster_us);
+            else
+                fmod->ref_integral[axis] = 0.0f;
+        }
+    }
 
     PULSEQLIB_FREE(raw_time);
     PULSEQLIB_FREE(raw_wave);
@@ -553,6 +605,7 @@ static int build_freq_mod_library(
         const pulseqlib_block_definition* bdef = &desc->block_definitions[bte->id];
         int has_rf, has_adc, adc_def_id_local;
         float active_start_us, active_end_us, ref_time_us;
+        float target_raster_us;
 
         has_rf  = (bdef->rf_id >= 0);
         has_adc = (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size);
@@ -599,8 +652,12 @@ static int build_freq_mod_library(
         if (ref_time_us > (active_end_us - active_start_us))
             ref_time_us = active_end_us - active_start_us;
 
+        target_raster_us = (has_rf && bdef->rf_id < desc->num_unique_rfs)
+                           ? desc->rf_raster_us : desc->adc_raster_us;
+
         result = build_freq_mod_for_block(desc, bte->id,
-            active_start_us, active_end_us, ref_time_us, &base_defs[n]);
+            active_start_us, active_end_us, ref_time_us,
+            target_raster_us, &base_defs[n]);
         if (PULSEQLIB_FAILED(result)) {
             base_active_mask[n * 3 + 0] = 0;
             base_active_mask[n * 3 + 1] = 0;

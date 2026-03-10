@@ -1,5 +1,5 @@
 /*
- * test_segmentation.c -- segmentation tests (phases 1 & 2).
+ * test_segmentation.c -- segmentation tests (phases 1-4).
  *
  * Phase 1: Validates example_check.c step 6 quantities:
  *   1. Unique ADC definitions (count, num_samples, dwell_ns)
@@ -9,6 +9,10 @@
  * Phase 2: Validates example_check.c step 5 quantities + TR waveforms:
  *   4. Segment structure (count, blocks per segment)
  *   5. Worst-case TR gradient waveforms vs MATLAB ground truth
+ *
+ * Phase 4: Frequency-modulation base definitions:
+ *   Builds freq-mod collection with a known shift vector, compares
+ *   1D output against MATLAB-serialized 3-channel waveforms.
  */
 #include "test_helpers.h"
 #include "test_seg_helpers.h"
@@ -392,6 +396,130 @@ MU_TEST_SUITE(suite_segmentation_phase3)
     MU_RUN_TEST(test_segmentation_gre_geninstructions);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Phase 4: Frequency-modulation definition waveforms                */
+/* ------------------------------------------------------------------ */
+
+/* Helper: verify freq-mod waveforms + phase for a given shift/rotation. */
+static void check_fmod_shift(
+    const pulseqlib_collection* coll,
+    const fmod_def_file* ref,
+    const float* shift,
+    const float* fov_rotation,
+    const int* test_positions,
+    const char* label)
+{
+    pulseqlib_freq_mod_collection* fmc = NULL;
+    int rc, d;
+
+    rc = pulseqlib_build_freq_mod_collection(&fmc, coll, shift, fov_rotation);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), label);
+
+    for (d = 0; d < ref->num_defs; ++d) {
+        const fmod_def* fd = &ref->defs[d];
+        const float* waveform = NULL;
+        int ns = 0, s;
+        float phase_rad = 0.0f;
+        int has;
+
+        has = pulseqlib_freq_mod_collection_get(
+            fmc, 0, test_positions[d], &waveform, &ns, &phase_rad);
+        mu_assert(has, "expected freq_mod at test position");
+        mu_assert_int_eq(fd->num_samples, ns);
+
+        /* Compare 1D waveform: expected = gx*s[0] + gy*s[1] + gz*s[2] */
+        {
+            float max_val = 0.0f;
+            float tol;
+
+            for (s = 0; s < ns; ++s) {
+                float expected = fd->waveform_gx[s] * shift[0]
+                               + fd->waveform_gy[s] * shift[1]
+                               + fd->waveform_gz[s] * shift[2];
+                if ((float)fabs(expected) > max_val)
+                    max_val = (float)fabs(expected);
+            }
+            tol = max_val * 1e-4f;
+            if (tol < 1e-6f) tol = 1e-6f;
+
+            for (s = 0; s < ns; ++s) {
+                float expected = fd->waveform_gx[s] * shift[0]
+                               + fd->waveform_gy[s] * shift[1]
+                               + fd->waveform_gz[s] * shift[2];
+                mu_assert((float)fabs(waveform[s] - expected) <= tol,
+                          "freq_mod waveform sample mismatch");
+            }
+        }
+
+        /* Compare phase: expected = ref_integral . shift */
+        {
+            float expected_phase = fd->ref_integral[0] * shift[0]
+                                 + fd->ref_integral[1] * shift[1]
+                                 + fd->ref_integral[2] * shift[2];
+            float phase_tol = (float)fabs(expected_phase) * 1e-4f;
+            if (phase_tol < 1e-8f) phase_tol = 1e-8f;
+            mu_assert((float)fabs(phase_rad - expected_phase) <= phase_tol,
+                      "freq_mod phase mismatch");
+        }
+    }
+
+    pulseqlib_freq_mod_collection_free(fmc);
+}
+
+MU_TEST(test_freq_mod_definitions)
+{
+    pulseqlib_opts opts;
+    pulseqlib_collection* coll = NULL;
+    fmod_def_file ref = FMOD_DEF_FILE_INIT;
+    int rc, ok, t;
+
+    /* RF block: scan pos 0.  ADC block: scan pos 22. */
+    int test_positions[2] = {0, 22};
+
+    /* Three orthogonal shifts + one combined shift */
+    float shifts[4][3] = {
+        {1.0e-3f, 0.0f,    0.0f   },  /* X only */
+        {0.0f,    2.0e-3f, 0.0f   },  /* Y only */
+        {0.0f,    0.0f,    3.0e-3f},  /* Z only */
+        {1.0e-3f, 2.0e-3f, 3.0e-3f}   /* combined */
+    };
+
+    /* Three representative FOV rotations (ax, cor, sag) +
+     * identity.  For blocks WITHOUT norot flag the rotation
+     * has no effect — we verify invariance. */
+    float rotations[4][9] = {
+        {1,0,0, 0,1,0, 0,0,1},   /* identity (axial) */
+        {1,0,0, 0,0,1, 0,-1,0},  /* coronal:  y->z, z->-y */
+        {0,0,-1, 0,1,0, 1,0,0},  /* sagittal: x->-z, z->x */
+        {0.6f,0.8f,0, -0.8f,0.6f,0, 0,0,1}  /* oblique 53° */
+    };
+
+    gre_opts_init(&opts);
+    rc = load_seq(&coll, "gre_2d_1sl_1avg.seq", &opts);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed");
+
+    ok = parse_fmod_defs(TEST_DATA_DIR "gre_2d_1sl_1avg_freqmod_def.bin", &ref);
+    mu_assert(ok, "failed to parse freqmod_def.bin");
+    mu_assert_int_eq(2, ref.num_defs);
+
+    /* For each shift, test all rotations — results must be identical
+     * because this sequence has no rotation events / norot blocks. */
+    for (t = 0; t < 4; ++t) {
+        int r;
+        for (r = 0; r < 4; ++r) {
+            check_fmod_shift(coll, &ref, shifts[t],
+                             rotations[r], test_positions,
+                             "build_freq_mod_collection failed");
+        }
+    }
+
+    pulseqlib_collection_free(coll);
+}
+
+MU_TEST_SUITE(suite_segmentation_phase4)
+{
+    MU_RUN_TEST(test_freq_mod_definitions);
+}
 
 
 int test_segmentation_main(void)
@@ -406,6 +534,7 @@ int test_segmentation_main(void)
     MU_RUN_SUITE(suite_segmentation_phase1);
     MU_RUN_SUITE(suite_segmentation_phase2);
     MU_RUN_SUITE(suite_segmentation_phase3);
+    MU_RUN_SUITE(suite_segmentation_phase4);
     MU_REPORT();
     return MU_EXIT_CODE;
 }
