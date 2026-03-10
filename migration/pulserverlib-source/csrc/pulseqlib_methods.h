@@ -577,8 +577,9 @@ int pulseqlib_get_rf_array(const pulseqlib_collection* coll,
  * @brief Return decompressed RF magnitude waveform (multi-channel).
  *
  * Returns an array of num_channels pointers, each pointing to
- * num_samples floats.  For single-channel RF num_channels == 1.
- * On GEHC targets magnitudes are pre-scaled by base_amplitude_hz.
+ * num_samples floats.  The waveform is normalised (peak \u2248 1.0).
+ * Use pulseqlib_get_rf_initial_amplitude_hz() and
+ * pulseqlib_get_rf_max_amplitude_hz() for the physical scale.
  * Caller must free each result[ch] with PULSEQLIB_FREE, then
  * free the result pointer itself with PULSEQLIB_FREE.
  */
@@ -609,13 +610,26 @@ float** pulseqlib_get_rf_phase(const pulseqlib_collection* coll,
 float* pulseqlib_get_rf_time_us(const pulseqlib_collection* coll,
                                 int seg_idx, int blk_idx);
 
+/** @brief Return initial RF amplitude (Hz) from the max-energy segment instance. */
+float pulseqlib_get_rf_initial_amplitude_hz(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx);
+
+/** @brief Return peak RF amplitude (Hz) from the definition (unsigned max). */
+float pulseqlib_get_rf_max_amplitude_hz(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx);
+
 /* ================================================================== */
 /*  Gradient getters (waveform data only)                             */
 /* ================================================================== */
 
 /**
- * @brief Return decompressed gradient amplitude waveforms (Hz/m).
+ * @brief Return decompressed gradient amplitude waveforms (normalised).
  *
+ * Waveforms are normalised (peak \u2248 1.0).  Use
+ * pulseqlib_get_grad_initial_amplitude_hz_per_m() and
+ * pulseqlib_get_grad_max_amplitude_hz_per_m() for the physical scale.
  * For multi-shot gradients, returns one waveform per shot.
  * All shots share the same number of samples.
  * Caller must free the returned array with PULSEQLIB_FREE.
@@ -633,6 +647,11 @@ float pulseqlib_get_grad_initial_amplitude_hz_per_m(
 /** @brief Return initial shot ID for a gradient event. */
 int pulseqlib_get_grad_initial_shot_id(const pulseqlib_collection* coll,
                                        int seg_idx, int blk_idx, int axis);
+
+/** @brief Return peak gradient amplitude (Hz/m, unsigned) from the definition. */
+float pulseqlib_get_grad_max_amplitude_hz_per_m(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx, int axis);
 
 /**
  * @brief Return gradient time-point array (us).

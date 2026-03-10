@@ -2,30 +2,38 @@
  * @file example_geninstructions.c
  * @brief Generate hardware instructions from a cached collection.
  *
- * Workflow (per segment, per block):
+ * Workflow overview:
+ *
  *   FOREACH segment:
  *     walk RF/ADC events for per-event gap computation
  *     t = 0
  *     FOREACH block in segment:
- *       get gradient waveforms  (X, Y, Z)
- *       get RF waveforms        (magnitude + optional phase + optional time)
+ *       -- Create waveforms (normalised, peak ~ 1.0) --
+ *       get gradient waveforms  (X, Y, Z)  → vendor_create_grad_waveform(t_us, delay)
+ *       get RF waveforms        (mag+phase) → vendor_create_rf_waveform(t_us, delay)
+ *       -- Set initial amplitude state (from max-energy instance) --
+ *       get grad initial + max amplitude  → vendor_set_grad_amplitude
+ *       get RF initial + max amplitude    → vendor_set_rf_amplitude
+ *       -- Ancillary channels --
  *       get ADC definition ID   (maps to echo filter from check phase)
- *       get digitalout info      (delay + duration)
+ *       get digitalout info     (delay + duration)
  *       get trigger info        (segment-level physio trigger)
  *       get rotation flags      (has_rotation + norot)
  *       check freq-mod presence (spans whole block, uniform raster)
- *       vendor_create_instruction(...)
  *       t += block_duration_us
  *
- * Board waveform layout:
- *   Gradient:  [num_shots x num_samples] amplitude + optional time array
- *   RF:        [num_channels x num_samples] magnitude + optional phase
- *              + optional time array
- *   ADC:       delay + unique definition ID (links to echo filter)
- *   Digitalout: delay + duration (block-level digital output)
- *   Trigger:   segment-level physio trigger (delay + duration)
- *   Rotation:  presence flag + norot flag
- *   Freq-mod:  presence flag only (uniform raster, no delay, no time array)
+ * Amplitude convention:
+ *   Waveforms returned by the library are normalised (peak ≈ 1.0).
+ *   The vendor creates hardware waveforms once at full DAC scale
+ *   (e.g. 32 767).  The amplitude state is set separately:
+ *
+ *       hw_amplitude = DAC_MAX × initial_amp / max_amp
+ *
+ *   where initial_amp is the signed physical amplitude from the
+ *   max-energy segment instance and max_amp is the unsigned peak
+ *   from the gradient/RF definition.  During the scan loop
+ *   (see example_scanloop.c) the amplitude is updated per-TR
+ *   via block_instance.gx_amp_hz_per_m / rf_amp_hz.
  *
  * Compile:
  *   cc -I../../csrc example_geninstructions.c \
@@ -51,42 +59,79 @@
 /* ================================================================== */
 
 /**
- * @brief Create a gradient instruction for one axis.
+ * @brief Create a gradient waveform on the hardware sequencer.
  *
- * @param[in] t_us         absolute time in segment
+ * The waveform is normalised (peak ≈ 1.0).  The vendor scales it to
+ * full DAC range (e.g. 32 767) internally.  Amplitude state is set
+ * separately by vendor_set_grad_amplitude().
+ *
+ * @param[in] axis         0=X, 1=Y, 2=Z
+ * @param[in] t_us         absolute time of block start in segment (us)
  * @param[in] delay_us     delay from block start
  * @param[in] num_shots    number of interleaved shots
- * @param[in] num_samples  samples per shot (same for all shots)
- * @param[in] amps         [num_shots][num_samples] amplitude values
+ * @param[in] num_samples  samples per shot
+ * @param[in] wave         [num_shots][num_samples] normalised waveform
  * @param[in] time_us      optional time array (NULL for uniform raster)
  */
-static void vendor_create_grad_instruction(
-    int axis,
-    int t_us, int delay_us,
+static void vendor_create_grad_waveform(
+    int axis, int t_us, int delay_us,
     int num_shots, int num_samples,
-    float** amps, float* time_us)
+    float** wave, float* time_us)
 {
-    (void)axis; (void)delay_us; (void)t_us; (void)num_shots; (void)num_samples; (void)amps; (void)time_us; 
+    (void)axis; (void)t_us; (void)delay_us; (void)num_shots; (void)num_samples;
+    (void)wave; (void)time_us;
 }
 
 /**
- * @brief Create an RF instruction.
+ * @brief Set the gradient amplitude state for one axis.
  *
- * @param[in] t_us         absolute time in segment
- * @param[in] delay_us     delay from block start
- * @param[in] num_channels Tx channel count
- * @param[in] num_samples  samples per channel
- * @param[in] mag          [num_channels][num_samples] magnitude
- * @param[in] phase        [num_channels][num_samples] phase (NULL if real)
- * @param[in] time_us      optional time array (NULL for uniform raster)
+ * The vendor computes the hardware amplitude register as:
+ *     hw_amplitude = DAC_MAX × initial_amp / max_amp
+ *
+ * @param[in] axis          0=X, 1=Y, 2=Z
+ * @param[in] initial_amp   signed amplitude (Hz/m) from max-energy instance
+ * @param[in] max_amp       unsigned peak amplitude (Hz/m) from definition
  */
-static void vendor_create_rf_instruction(
+static void vendor_set_grad_amplitude(
+    int axis, float initial_amp, float max_amp)
+{
+    (void)axis; (void)initial_amp; (void)max_amp;
+}
+
+/**
+ * @brief Create an RF waveform on the hardware sequencer.
+ *
+ * The magnitude waveform is normalised (peak ≈ 1.0).
+ *
+ * @param[in] t_us          absolute time of block start in segment (us)
+ * @param[in] delay_us      delay from block start
+ * @param[in] num_channels  Tx channel count
+ * @param[in] num_samples   samples per channel
+ * @param[in] mag           [num_channels][num_samples] normalised magnitude
+ * @param[in] phase         [num_channels][num_samples] phase (NULL if real)
+ * @param[in] time_us       optional time array (NULL for uniform raster)
+ */
+static void vendor_create_rf_waveform(
     int t_us, int delay_us,
     int num_channels, int num_samples,
     float** mag, float** phase, float* time_us)
 {
-    (void)delay_us; (void)t_us; (void)num_channels; (void)num_samples; (void)mag; (void)phase; (void)time_us; 
-    
+    (void)t_us; (void)delay_us; (void)num_channels; (void)num_samples;
+    (void)mag; (void)phase; (void)time_us;
+}
+
+/**
+ * @brief Set the RF amplitude state.
+ *
+ * The vendor computes the hardware amplitude register as:
+ *     hw_amplitude = DAC_MAX × initial_amp / max_amp
+ *
+ * @param[in] initial_amp   signed amplitude (Hz) from max-energy instance
+ * @param[in] max_amp       unsigned peak amplitude (Hz) from definition
+ */
+static void vendor_set_rf_amplitude(float initial_amp, float max_amp)
+{
+    (void)initial_amp; (void)max_amp;
 }
 
 /**
@@ -325,67 +370,88 @@ static void generate_block_instructions(
 
     /* -- Gradients (X=0, Y=1, Z=2) ------------------------------- */
     for (axis = 0; axis < 3; ++axis) {
-        int   num_shots;
-        int   num_samples;
-        float** amps;
-        float* time_arr;
+        int     num_shots;
+        int     num_samples;
+        float** wave;
+        float*  time_arr;
+        float   initial_amp, max_amp;
 
         if (!bi.has_grad[axis])
             continue;
 
+        /* 1) Create normalised waveform (peak ≈ 1.0). */
         num_shots = 0;
         num_samples = 0;
-        amps = pulseqlib_get_grad_amplitude(coll, seg_idx, blk_idx, axis, &num_shots, &num_samples);
-        if (!amps)
+        wave = pulseqlib_get_grad_amplitude(coll, seg_idx, blk_idx, axis,
+                                            &num_shots, &num_samples);
+        if (!wave)
             continue;
 
-        /* Optional time array (for traps / extended traps) */
         time_arr = pulseqlib_get_grad_time_us(coll, seg_idx, blk_idx, axis);
 
-        vendor_create_grad_instruction(
+        vendor_create_grad_waveform(
             axis, t_us, bi.grad_delay_us[axis],
             num_shots, num_samples,
-            amps, time_arr);
+            wave, time_arr);
 
         free(time_arr);
-        free_2d(amps, num_shots);
+        free_2d(wave, num_shots);
+
+        /* 2) Set initial amplitude state.
+         *    initial_amp = signed Hz/m from max-energy instance.
+         *    max_amp     = unsigned peak Hz/m from definition.
+         *    Vendor computes: hw_amplitude = DAC_MAX × initial / max */
+        initial_amp = pulseqlib_get_grad_initial_amplitude_hz_per_m(
+            coll, seg_idx, blk_idx, axis);
+        max_amp = pulseqlib_get_grad_max_amplitude_hz_per_m(
+            coll, seg_idx, blk_idx, axis);
+
+        vendor_set_grad_amplitude(axis, initial_amp, max_amp);
     }
 
     /* -- RF -------------------------------------------------------- */
     if (bi.has_rf) {
-        int   num_channels;
-        int   num_samples;
+        int     num_channels;
+        int     num_samples;
         float** mag;
         float** phase;
-        float* time_arr;
+        float*  time_arr;
+        float   initial_amp, max_amp;
 
+        /* 1) Create normalised RF waveform (peak ≈ 1.0). */
         num_channels = 0;
         num_samples = 0;
-        mag = pulseqlib_get_rf_magnitude(coll, seg_idx, blk_idx, &num_channels, &num_samples);
+        mag = pulseqlib_get_rf_magnitude(coll, seg_idx, blk_idx,
+                                         &num_channels, &num_samples);
         if (!mag)
             goto skip_rf;
 
-        /* Phase: NULL if RF is real-valued */
         phase = NULL;
         if (bi.rf_is_complex) {
             int pch = 0, pns = 0;
             phase = pulseqlib_get_rf_phase(coll, seg_idx, blk_idx, &pch, &pns);
         }
 
-        /* Optional time array (same length as mag samples) */
         time_arr = NULL;
-        if (!bi.rf_uniform_raster) {
+        if (!bi.rf_uniform_raster)
             time_arr = pulseqlib_get_rf_time_us(coll, seg_idx, blk_idx);
-        }
 
-        vendor_create_rf_instruction(
+        vendor_create_rf_waveform(
             t_us, bi.rf_delay_us,
             num_channels, num_samples,
             mag, phase, time_arr);
 
-        if (time_arr)free(time_arr);
+        if (time_arr) free(time_arr);
         if (phase) free_2d(phase, num_channels);
         free_2d(mag, num_channels);
+
+        /* 2) Set initial RF amplitude state. */
+        initial_amp = pulseqlib_get_rf_initial_amplitude_hz(
+            coll, seg_idx, blk_idx);
+        max_amp = pulseqlib_get_rf_max_amplitude_hz(
+            coll, seg_idx, blk_idx);
+
+        vendor_set_rf_amplitude(initial_amp, max_amp);
     }
 skip_rf:
 

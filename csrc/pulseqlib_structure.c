@@ -1767,8 +1767,6 @@ int pulseqlib__get_scan_table_segments(
     }
 
     /* ---- 10. Walk expanded segments, populate flags + max energy ---- */
-    fprintf(stderr, "DBG max_energy_loop: num_total=%d num_unique=%d n_prep=%d n_main=%d\n",
-            num_total, num_unique, n_prep, n_main);
     max_energy = (float*)PULSEQLIB_ALLOC((size_t)num_unique * sizeof(float));
     if (!max_energy) { diag->code = PULSEQLIB_ERR_ALLOC_FAILED; goto scan_seg_fail; }
     for (i = 0; i < num_unique; ++i) {
@@ -1838,11 +1836,6 @@ int pulseqlib__get_scan_table_segments(
             max_energy[unique_idx] = inst_energy;
             desc->segment_definitions[unique_idx].max_energy_start_block =
                 desc->scan_table_block_idx[exp_segs[n].start_block];
-            fprintf(stderr, "DBG max_energy: n=%d unique_idx=%d inst_energy=%e new_start=%d "
-                    "exp_num_blocks=%d\n",
-                    n, unique_idx, inst_energy,
-                    desc->scan_table_block_idx[exp_segs[n].start_block],
-                    exp_segs[n].num_blocks);
         }
     }
 

@@ -1,7 +1,7 @@
 /* pulseqlib_accessors.c -- collection-level accessor functions
  *
  * Public functions:
- *   pulseqlib_get_max_adc_samples    pulseqlib_get_adc_dwell_us
+ *   pulseqlib_get_max_adc_samples    pulseqlib_get_adc_dwell_ns
  *   pulseqlib_get_adc_num_samples    pulseqlib_get_num_segments
  *   pulseqlib_is_segment_pure_delay  pulseqlib_get_segment_num_blocks
  *   pulseqlib_get_block_start_time_us   pulseqlib_get_block_duration_us
@@ -97,6 +97,16 @@ static int get_grad_id_by_axis(const pulseqlib_block_definition* bdef, int axis)
         case PULSEQLIB_GRAD_AXIS_X: return bdef->gx_id;
         case PULSEQLIB_GRAD_AXIS_Y: return bdef->gy_id;
         case PULSEQLIB_GRAD_AXIS_Z: return bdef->gz_id;
+        default: return -1;
+    }
+}
+
+static int get_grad_event_id_by_axis(const pulseqlib_block_table_element* bte, int axis)
+{
+    switch (axis) {
+        case PULSEQLIB_GRAD_AXIS_X: return bte->gx_id;
+        case PULSEQLIB_GRAD_AXIS_Y: return bte->gy_id;
+        case PULSEQLIB_GRAD_AXIS_Z: return bte->gz_id;
         default: return -1;
     }
 }
@@ -530,7 +540,7 @@ static int pulseqlib__get_max_adc_samples(
     return max_samples;
 }
 
-static int pulseqlib__get_adc_dwell_us(
+static int pulseqlib__get_adc_dwell_ns(
     const pulseqlib_collection* coll, int adc_idx)
 {
     int i, global_idx, num_adcs, local;
@@ -1010,14 +1020,9 @@ float** pulseqlib_get_rf_magnitude(
     decompressed.num_uncompressed_samples = 0;
     decompressed.samples = NULL;
 
-    {
-        float amplitude_scale = (desc->vendor == PULSEQLIB_VENDOR_GEHC)
-            ? rdef->stats.base_amplitude_hz
-            : 1.0f;
-        if (!pulseqlib__decompress_shape(&decompressed, &desc->shapes[shape_idx],
-                                         amplitude_scale))
-            return NULL;
-    }
+    if (!pulseqlib__decompress_shape(&decompressed, &desc->shapes[shape_idx],
+                                     1.0f))
+        return NULL;
 
     flat = decompressed.samples;
     nch  = (rdef->num_channels > 1) ? rdef->num_channels : 1;
@@ -1156,6 +1161,52 @@ float* pulseqlib_get_rf_time_us(
     }
 
     return result;
+}
+
+float pulseqlib_get_rf_initial_amplitude_hz(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_tr_segment* seg;
+    int local_blk, bt_idx, rf_event_id;
+    const pulseqlib_block_definition* bdef;
+    const pulseqlib_rf_definition* rdef;
+
+    if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+        return 0.0f;
+
+    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    if (bdef->rf_id == -1) return 0.0f;
+
+    rdef = &desc->rf_definitions[bdef->rf_id];
+
+    bt_idx = seg->max_energy_start_block + local_blk;
+    rf_event_id = desc->block_table[bt_idx].rf_id;
+    if (rf_event_id >= 0 && rf_event_id < desc->rf_table_size)
+        return desc->rf_table[rf_event_id].amplitude;
+
+    return rdef->stats.base_amplitude_hz;
+}
+
+float pulseqlib_get_rf_max_amplitude_hz(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_tr_segment* seg;
+    int local_blk;
+    const pulseqlib_block_definition* bdef;
+    const pulseqlib_rf_definition* rdef;
+
+    if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+        return 0.0f;
+
+    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    if (bdef->rf_id == -1) return 0.0f;
+
+    rdef = &desc->rf_definitions[bdef->rf_id];
+    return rdef->stats.base_amplitude_hz;
 }
 
 /* ================================================================== */
@@ -1336,9 +1387,9 @@ float** pulseqlib_get_grad_amplitude(
             }
 
             trap_waveform[0] = 0.0f;
-            trap_waveform[1] = gdef->max_amplitude[shot];
+            trap_waveform[1] = 1.0f;
             if (flat_time > 0) {
-                trap_waveform[2] = gdef->max_amplitude[shot];
+                trap_waveform[2] = 1.0f;
                 trap_waveform[3] = 0.0f;
             } else {
                 trap_waveform[2] = 0.0f;
@@ -1364,7 +1415,7 @@ float** pulseqlib_get_grad_amplitude(
             decompressed.samples = NULL;
 
             if (!pulseqlib__decompress_shape(&decompressed, &desc->shapes[shape_idx],
-                                             gdef->max_amplitude[shot])) {
+                                             1.0f)) {
                 waveforms[shot] = NULL;
                 continue;
             }
@@ -1434,6 +1485,40 @@ int pulseqlib_get_grad_initial_shot_id(
         return 0;
 
     return desc->grad_table[grad_event_id].shot_index;
+}
+
+float pulseqlib_get_grad_max_amplitude_hz_per_m(
+    const pulseqlib_collection* coll,
+    int seg_idx, int blk_idx, int axis)
+{
+    const pulseqlib_sequence_descriptor* desc;
+    const pulseqlib_tr_segment* seg;
+    int local_blk, grad_id, shot_idx;
+    const pulseqlib_block_definition* bdef;
+    const pulseqlib_grad_definition* gdef;
+    int block_table_idx, grad_event_id;
+    const pulseqlib_block_table_element* bte;
+
+    if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) return 0.0f;
+    if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+        return 0.0f;
+
+    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    grad_id = get_grad_id_by_axis(bdef, axis);
+    if (grad_id == -1) return 0.0f;
+
+    gdef = &desc->grad_definitions[grad_id];
+
+    /* Resolve shot index from the max-energy segment instance. */
+    block_table_idx = seg->max_energy_start_block + local_blk;
+    bte = &desc->block_table[block_table_idx];
+    grad_event_id = get_grad_event_id_by_axis(bte, axis);
+    shot_idx = (grad_event_id >= 0 && grad_event_id < desc->grad_table_size)
+        ? desc->grad_table[grad_event_id].shot_index : 0;
+    if (shot_idx < 0 || shot_idx >= PULSEQLIB_MAX_GRAD_SHOTS)
+        shot_idx = 0;
+
+    return gdef->max_amplitude[shot_idx];
 }
 
 float* pulseqlib_get_grad_time_us(
@@ -1516,15 +1601,13 @@ static int pulseqlib__block_has_adc(
     const pulseqlib_tr_segment* seg;
     int local_blk;
     const pulseqlib_block_definition* bdef;
-    const pulseqlib_block_table_element* bte;
 
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
         return -1;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
-    bte  = &desc->block_table[bdef->id];
 
-    return (bte->adc_id != -1) ? 1 : 0;
+    return (bdef->adc_id != -1) ? 1 : 0;
 }
 
 static int pulseqlib__get_adc_delay_us(
@@ -1535,17 +1618,12 @@ static int pulseqlib__get_adc_delay_us(
     const pulseqlib_tr_segment* seg;
     int local_blk, adc_id;
     const pulseqlib_block_definition* bdef;
-    const pulseqlib_block_table_element* bte;
 
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
         return -1;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
-    bte  = &desc->block_table[bdef->id];
-
-    if (bte->adc_id == -1) return -1;
-
-    adc_id = bte->adc_id;
+    adc_id = bdef->adc_id;
     if (adc_id < 0 || adc_id >= desc->num_unique_adcs) return -1;
 
     return desc->adc_definitions[adc_id].delay;
@@ -1559,17 +1637,12 @@ static int pulseqlib__get_adc_library_index(
     const pulseqlib_tr_segment* seg;
     int local_blk, adc_id, global_adc_idx, i;
     const pulseqlib_block_definition* bdef;
-    const pulseqlib_block_table_element* bte;
 
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
         return -1;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
-    bte  = &desc->block_table[bdef->id];
-
-    if (bte->adc_id == -1) return -1;
-
-    adc_id = bte->adc_id;
+    adc_id = bdef->adc_id;
     if (adc_id < 0 || adc_id >= desc->num_unique_adcs) return -1;
 
     /* compute global index: sum ADC counts from prior subsequences */
@@ -1710,13 +1783,11 @@ static int pulseqlib__block_has_freq_mod(
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_segment* seg;
     int local_blk;
-    const pulseqlib_block_table_element* bte;
 
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
         return 0;
 
-    bte = &desc->block_table[seg->start_block + local_blk];
-    return (bte->freq_mod_id >= 0) ? 1 : 0;
+    return seg->has_freq_mod[local_blk];
 }
 
 static int pulseqlib__block_has_rotation(
@@ -2233,7 +2304,7 @@ int pulseqlib_get_adc_def(
 {
     if (!coll || !def) return PULSEQLIB_ERR_NULL_POINTER;
 
-    def->dwell_us    = pulseqlib__get_adc_dwell_us(coll, adc_idx);
+    def->dwell_ns    = pulseqlib__get_adc_dwell_ns(coll, adc_idx);
     def->num_samples = pulseqlib__get_adc_num_samples(coll, adc_idx);
 
     return PULSEQLIB_SUCCESS;

@@ -42,7 +42,20 @@
 /*  Vendor stubs                                                      */
 /* ================================================================== */
 
-/** @brief Program one block on the hardware sequencer. */
+/** @brief Program one block on the hardware sequencer.
+ *
+ * This is called once per block during the scan loop.  The
+ * block_instance contains per-TR amplitude values (signed, physical
+ * units) that are used to update the hardware amplitude registers
+ * established during geninstruction:
+ *
+ *   grad: hw_amp = DAC_MAX × inst->gx_amp_hz_per_m / max_amp
+ *   rf:   hw_amp = DAC_MAX × inst->rf_amp_hz       / max_amp
+ *
+ * where max_amp was stored at geninstruction time (see
+ * example_geninstructions.c).  The normalised waveform shapes do
+ * not change — only the amplitude scalar is updated each TR.
+ */
 static void vendor_set_block(const pulseqlib_block_instance* inst,
                              const float* fmod_waveform,
                              int fmod_nsamples,
