@@ -1005,5 +1005,4 @@ function export_freq_mod_defs(path, fmod_defs, types)
     end
 
     fclose(fid);
-    fprintf('  Wrote freq-mod definitions: %s (%d defs)\n', path, nd);
 end
