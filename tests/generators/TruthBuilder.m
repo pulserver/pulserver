@@ -340,7 +340,12 @@ classdef TruthBuilder < handle
                         args{end+1} = block.adc; %#ok<AGROW>
                     end
 
-                    cseq.addBlock(args{:});
+                    if isempty(args)
+                        % Delay-only blocks have no RF/grad/ADC events; emit explicit delay.
+                        cseq.addBlock(mr.makeDelay(block.blockDuration));
+                    else
+                        cseq.addBlock(args{:});
+                    end
                     tr_dur = tr_dur + block.blockDuration;
                 end
 
