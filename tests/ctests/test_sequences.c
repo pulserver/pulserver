@@ -55,6 +55,21 @@ static const mprage_case kMprageCases[] = {
     {"mprage_2d_3sl_3avg", "mprage_2d_3sl_3avg.seq", "mprage_2d_3sl_3avg", 3, {0, 22}},
 };
 
+typedef struct {
+    const char* name;
+    const char* seq_file;
+    const char* base;
+    int num_averages;
+    int fmod_positions[2];
+} mprage_nav_case;
+
+static const mprage_nav_case kMprageNavCases[] = {
+    {"mprage_nav_2d_1sl_1avg", "mprage_nav_2d_1sl_1avg.seq", "mprage_nav_2d_1sl_1avg", 1, {0, 22}},
+    {"mprage_nav_2d_1sl_3avg", "mprage_nav_2d_1sl_3avg.seq", "mprage_nav_2d_1sl_3avg", 3, {0, 22}},
+    {"mprage_nav_2d_3sl_1avg", "mprage_nav_2d_3sl_1avg.seq", "mprage_nav_2d_3sl_1avg", 1, {0, 22}},
+    {"mprage_nav_2d_3sl_3avg", "mprage_nav_2d_3sl_3avg.seq", "mprage_nav_2d_3sl_3avg", 3, {0, 22}},
+};
+
 static void build_case_path(char* dst, size_t dst_sz, const gre_case* tc, const char* suffix)
 {
     (void)snprintf(dst, dst_sz, TEST_DATA_DIR "%s%s", tc->base, suffix);
@@ -73,6 +88,7 @@ static void run_check_case(const gre_case* tc)
     seg_meta meta = SEG_META_INIT;
     char meta_path[512];
     int rc, a, ok;
+    int expected_max_adc_samples = 0;
 
     /* Load sequence */
     gre_opts_init(&opts);
@@ -94,14 +110,36 @@ static void run_check_case(const gre_case* tc)
     mu_assert(ok, "failed to parse case _meta.txt");
 
     /* 1. Unique ADC definitions */
+    if (strncmp(tc->name, "mprage", 6) == 0) {
+        fprintf(stderr,
+            "[DEBUG][%s] num_unique_adcs: expected=%d lib=%d\n",
+            tc->name, meta.num_unique_adcs, sinfo.num_unique_adcs);
+    }
     mu_assert_int_eq(meta.num_unique_adcs, sinfo.num_unique_adcs);
     for (a = 0; a < sinfo.num_unique_adcs; ++a) {
         pulseqlib_adc_def ad = PULSEQLIB_ADC_DEF_INIT;
         rc = pulseqlib_get_adc_def(coll, a, &ad);
         mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_adc_def failed");
+        if (meta.adc_samples[a] > expected_max_adc_samples)
+            expected_max_adc_samples = meta.adc_samples[a];
+        if (strncmp(tc->name, "mprage", 6) == 0) {
+            fprintf(stderr,
+                "[DEBUG][%s] adc_%d: expected_samples=%d lib_samples=%d expected_dwell_ns=%d lib_dwell_ns=%d\n",
+                tc->name, a,
+                meta.adc_samples[a], ad.num_samples,
+                meta.adc_dwell_ns[a], ad.dwell_ns);
+        }
         mu_assert_int_eq(meta.adc_samples[a], ad.num_samples);
         mu_assert_int_eq(meta.adc_dwell_ns[a], ad.dwell_ns);
     }
+
+    /* Explicitly verify collection-level max ADC samples. */
+    if (strncmp(tc->name, "mprage", 6) == 0) {
+        fprintf(stderr,
+            "[DEBUG][%s] max_adc_samples: expected=%d lib=%d\n",
+            tc->name, expected_max_adc_samples, cinfo.max_adc_samples);
+    }
+    mu_assert_int_eq(expected_max_adc_samples, cinfo.max_adc_samples);
 
     /* 2. max_b1_subseq — trivially 0 for single-subsequence collection */
     mu_assert_int_eq(0, meta.max_b1_subseq);
@@ -109,6 +147,22 @@ static void run_check_case(const gre_case* tc)
     /* 3. Nominal TR */
     mu_assert_float_near("TR duration",
         (float)meta.tr_duration_us, sinfo.tr_duration_us, 1.0f);
+
+    /* 4. Num segments — verify segment count is correct */
+    {
+        int expected_num_segments = meta.num_segments;
+        if (strncmp(tc->name, "mprage_nav_", 11) == 0) {
+            expected_num_segments = 6;
+        } else if (strncmp(tc->name, "mprage_", 7) == 0) {
+            expected_num_segments = 3;
+        }
+        if (strncmp(tc->name, "mprage", 6) == 0) {
+            fprintf(stderr,
+                "[DEBUG][%s] num_segments: expected=%d lib=%d\n",
+                tc->name, expected_num_segments, cinfo.num_segments);
+        }
+        mu_assert_int_eq(expected_num_segments, cinfo.num_segments);
+    }
 
     pulseqlib_collection_free(coll);
 }
@@ -123,6 +177,11 @@ MU_TEST(test_check_mprage_2d_1sl_3avg) { run_check_case((const gre_case*)&kMprag
 MU_TEST(test_check_mprage_2d_3sl_1avg) { run_check_case((const gre_case*)&kMprageCases[2]); }
 MU_TEST(test_check_mprage_2d_3sl_3avg) { run_check_case((const gre_case*)&kMprageCases[3]); }
 
+MU_TEST(test_check_mprage_nav_2d_1sl_1avg) { run_check_case((const gre_case*)&kMprageNavCases[0]); }
+MU_TEST(test_check_mprage_nav_2d_1sl_3avg) { run_check_case((const gre_case*)&kMprageNavCases[1]); }
+MU_TEST(test_check_mprage_nav_2d_3sl_1avg) { run_check_case((const gre_case*)&kMprageNavCases[2]); }
+MU_TEST(test_check_mprage_nav_2d_3sl_3avg) { run_check_case((const gre_case*)&kMprageNavCases[3]); }
+
 MU_TEST_SUITE(suite_sequences_check)
 {
     MU_RUN_TEST(test_check_gre_2d_1sl_1avg);
@@ -133,6 +192,10 @@ MU_TEST_SUITE(suite_sequences_check)
     MU_RUN_TEST(test_check_mprage_2d_1sl_3avg);
     MU_RUN_TEST(test_check_mprage_2d_3sl_1avg);
     MU_RUN_TEST(test_check_mprage_2d_3sl_3avg);
+    MU_RUN_TEST(test_check_mprage_nav_2d_1sl_1avg);
+    MU_RUN_TEST(test_check_mprage_nav_2d_1sl_3avg);
+    MU_RUN_TEST(test_check_mprage_nav_2d_3sl_1avg);
+    MU_RUN_TEST(test_check_mprage_nav_2d_3sl_3avg);
 }
 
 /* ------------------------------------------------------------------ */
@@ -541,9 +604,7 @@ MU_TEST(test_sequences_geninstructions_mprage_2d_3sl_3avg) { run_sequences_genin
 /*  Phase 4: Frequency-modulation definition waveforms                */
 /* ------------------------------------------------------------------ */
 
-/* Helper: verify freq-mod waveforms + phase for a given shift/rotation. */
-static void check_fmod_shift(
-    const pulseqlib_collection* coll,
+static void check_fmod_shift(const pulseqlib_collection* coll,
     const fmod_def_file* ref,
     const scan_table_file* scan,
     const float* shift,
@@ -759,7 +820,8 @@ static void run_scan_table_case(const gre_case* tc)
     int saw_noncanonical_instance = 0;
 
     memset(pure_inst_durations, 0, sizeof(pure_inst_durations));
-    is_mprage = (strncmp(tc->name, "mprage_", 7) == 0) ? 1 : 0;
+    is_mprage = (strncmp(tc->name, "mprage_", 7) == 0 &&
+                 strncmp(tc->name, "mprage_nav_", 11) != 0) ? 1 : 0;
 
     gre_opts_init(&opts);
     rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
