@@ -178,6 +178,7 @@ function seq = write_mprage(write, num_slices, num_averages)
         'Duration', 20.0e-3, ...
         'use', 'excitation', ... % should be 'inversion', but this way we get timing
         'system', sys);
+    delayTI = mr.makeDelay(0.1e-3);
 
     % RF and slice-select
     [rf, gz] = mr.makeSincPulse(alpha, ...
@@ -221,7 +222,7 @@ function seq = write_mprage(write, num_slices, num_averages)
         
         seq.addBlock(rf180);
         seq.addBlock(gz_spoil);
-        seq.addBlock(delayTR);
+        seq.addBlock(delayTI);
         
         for pe = 1:Ny
             if max_pe_area > 0
@@ -269,7 +270,7 @@ function seq = write_mprage(write, num_slices, num_averages)
     tb = TruthBuilder(seq, sys);
     tb.setBlocksPerTR(2 + 1 + 4 * Ny + 1);
     tb.setSegments([2, 1, 4]);
-    tb.setSegmentOrder([1, 2, repmat(3, 1, Ny), 2]);
+    tb.setSegmentOrder([1, 2, 3 * ones(1, Ny), 2]);
     tb.setNumAverages(num_averages);
     tb.export(out_dir, base);
 end
