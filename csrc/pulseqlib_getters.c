@@ -825,18 +825,26 @@ float pulseqlib_get_rf_isocenter_us(
     int seg_idx, int blk_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
-    int local_seg, i;
-    const pulseqlib_segment_timing* tm;
+    const pulseqlib_tr_segment* seg;
+    const pulseqlib_block_definition* bdef;
+    const pulseqlib_rf_definition* rdef;
+    int local_blk, k;
+    float start_us = 0.0f;
 
-    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
         return -1.0f;
 
-    tm = &desc->segment_definitions[local_seg].timing;
-    for (i = 0; i < tm->num_rf_anchors; ++i) {
-        if (tm->rf_anchors[i].block_offset == blk_idx)
-            return tm->rf_anchors[i].isocenter_us;
-    }
-    return -1.0f;
+    for (k = 0; k < local_blk; ++k)
+        start_us += (float)desc->block_definitions[
+            seg->unique_block_indices[k]
+        ].duration_us;
+
+    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    if (bdef->rf_id < 0 || bdef->rf_id >= desc->num_unique_rfs)
+        return -1.0f;
+
+    rdef = &desc->rf_definitions[bdef->rf_id];
+    return start_us + (float)rdef->delay + (float)rdef->stats.isodelay_us;
 }
 
 float pulseqlib_get_adc_kzero_us(
@@ -844,18 +852,27 @@ float pulseqlib_get_adc_kzero_us(
     int seg_idx, int blk_idx)
 {
     const pulseqlib_sequence_descriptor* desc;
-    int local_seg, i;
-    const pulseqlib_segment_timing* tm;
+    const pulseqlib_tr_segment* seg;
+    const pulseqlib_block_definition* bdef;
+    const pulseqlib_adc_definition* adef;
+    int local_blk, k;
+    float start_us = 0.0f;
 
-    if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
         return -1.0f;
 
-    tm = &desc->segment_definitions[local_seg].timing;
-    for (i = 0; i < tm->num_adc_anchors; ++i) {
-        if (tm->adc_anchors[i].block_offset == blk_idx)
-            return tm->adc_anchors[i].kzero_us;
-    }
-    return -1.0f;
+    for (k = 0; k < local_blk; ++k)
+        start_us += (float)desc->block_definitions[
+            seg->unique_block_indices[k]
+        ].duration_us;
+
+    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    if (bdef->adc_id < 0 || bdef->adc_id >= desc->num_unique_adcs)
+        return -1.0f;
+
+    adef = &desc->adc_definitions[bdef->adc_id];
+    return start_us + (float)adef->delay +
+        (float)(adef->num_samples / 2) * (float)adef->dwell_time * 1e-3f;
 }
 
 /* ================================================================== */
@@ -1559,34 +1576,13 @@ float pulseqlib_get_grad_max_amplitude_hz_per_m(
     const pulseqlib_collection* coll,
     int seg_idx, int blk_idx, int axis)
 {
-    const pulseqlib_sequence_descriptor* desc;
-    const pulseqlib_tr_segment* seg;
-    int local_blk, grad_id, shot_idx;
-    const pulseqlib_block_definition* bdef;
-    const pulseqlib_grad_definition* gdef;
-    int block_table_idx, grad_event_id;
-    const pulseqlib_block_table_element* bte;
+    float init_amp;
 
-    if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z) return 0.0f;
-    if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (axis < PULSEQLIB_GRAD_AXIS_X || axis > PULSEQLIB_GRAD_AXIS_Z)
         return 0.0f;
-
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
-    grad_id = get_grad_id_by_axis(bdef, axis);
-    if (grad_id == -1) return 0.0f;
-
-    gdef = &desc->grad_definitions[grad_id];
-
-    /* Resolve shot index from the max-energy segment instance. */
-    block_table_idx = seg->max_energy_start_block + local_blk;
-    bte = &desc->block_table[block_table_idx];
-    grad_event_id = get_grad_event_id_by_axis(bte, axis);
-    shot_idx = (grad_event_id >= 0 && grad_event_id < desc->grad_table_size)
-        ? desc->grad_table[grad_event_id].shot_index : 0;
-    if (shot_idx < 0 || shot_idx >= PULSEQLIB_MAX_GRAD_SHOTS)
-        shot_idx = 0;
-
-    return gdef->max_amplitude[shot_idx];
+    init_amp = pulseqlib_get_grad_initial_amplitude_hz_per_m(
+        coll, seg_idx, blk_idx, axis);
+    return (init_amp >= 0.0f) ? init_amp : -init_amp;
 }
 
 float* pulseqlib_get_grad_time_us(

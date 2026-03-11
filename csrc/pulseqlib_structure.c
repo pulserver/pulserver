@@ -751,17 +751,19 @@ static int nav_split_merge(
 
 /*
  * Set freq_mod_id in each block_table entry:
- *   >= 0  if the block has (RF or ADC) and at least one gradient axis
- *   -1    otherwise
+ *   >= 0  unique frequency-modulation definition id
+ *   -1    block does not need frequency modulation
  *
- * This is a lightweight pass; the actual entry/plan computation is
- * done lazily in pulseqlib_build_freq_mod_library() (freqmod.c).
+ * Definition IDs are deduplicated in first-seen order across keys:
+ *   (rf_def_id, adc_def_id, gx_def_id, gy_def_id, gz_def_id,
+ *    effective_block_duration_us).
  *
  * Must be called after unique blocks are resolved.
  */
 int pulseqlib__build_freq_mod_flags(pulseqlib_sequence_descriptor* desc)
 {
     int n;
+    int num_defs = 0;
 
     if (!desc) return PULSEQLIB_SUCCESS;
 
@@ -772,11 +774,55 @@ int pulseqlib__build_freq_mod_flags(pulseqlib_sequence_descriptor* desc)
         const pulseqlib_block_table_element* bte = &desc->block_table[n];
         const pulseqlib_block_definition* bdef   = &desc->block_definitions[bte->id];
         int has_rf   = (bdef->rf_id >= 0);
-        int has_adc  = (bte->adc_id >= 0);
+        int has_adc  = (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size);
         int has_grad = (bdef->gx_id >= 0 || bdef->gy_id >= 0 || bdef->gz_id >= 0);
 
-        desc->block_table[n].freq_mod_id = ((has_rf || has_adc) && has_grad) ? 0 : -1;
+        if ((has_rf || has_adc) && has_grad) {
+            int adc_def_id = has_adc ? desc->adc_table[bte->adc_id].id : -1;
+            int effective_duration_us = bdef->duration_us;
+            int m, found = -1;
+
+            for (m = 0; m < n; ++m) {
+                const pulseqlib_block_table_element* pbte = &desc->block_table[m];
+                const pulseqlib_block_definition* pbdef;
+                int phas_rf, phas_adc, phas_grad;
+                int padc_def_id;
+                int peffective_duration_us;
+
+                if (pbte->freq_mod_id < 0) continue;
+
+                pbdef = &desc->block_definitions[pbte->id];
+                phas_rf   = (pbdef->rf_id >= 0);
+                phas_adc  = (pbte->adc_id >= 0 && pbte->adc_id < desc->adc_table_size);
+                phas_grad = (pbdef->gx_id >= 0 || pbdef->gy_id >= 0 || pbdef->gz_id >= 0);
+                if (!(phas_rf || phas_adc) || !phas_grad) continue;
+
+                padc_def_id = phas_adc ? desc->adc_table[pbte->adc_id].id : -1;
+                peffective_duration_us = pbdef->duration_us;
+
+                if (pbdef->rf_id == bdef->rf_id &&
+                    padc_def_id == adc_def_id &&
+                    pbdef->gx_id == bdef->gx_id &&
+                    pbdef->gy_id == bdef->gy_id &&
+                    pbdef->gz_id == bdef->gz_id &&
+                    peffective_duration_us == effective_duration_us) {
+                    found = pbte->freq_mod_id;
+                    break;
+                }
+            }
+
+            if (found >= 0) {
+                desc->block_table[n].freq_mod_id = found;
+            } else {
+                desc->block_table[n].freq_mod_id = num_defs;
+                num_defs++;
+            }
+        } else {
+            desc->block_table[n].freq_mod_id = -1;
+        }
     }
+
+    desc->num_freq_mod_defs = num_defs;
 
     return PULSEQLIB_SUCCESS;
 }

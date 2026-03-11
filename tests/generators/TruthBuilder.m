@@ -45,6 +45,8 @@ classdef TruthBuilder < handle
         unique_adcs         = []   % struct array: (numSamples, dwell)
         fmod_defs           = {}
         fmod_types          = []
+        fmod_durations      = []   % blockDuration of each def (for scan-table matching)
+        fmod_kinds          = []   % 0=RF, 1=ADC (same as fmod_types)
         scan_table          = []
         rotmat_table        = []
         freq_mod_table      = []
@@ -457,68 +459,79 @@ classdef TruthBuilder < handle
         function buildFreqModDefs(obj)
             import mr.*
 
-            nbt = obj.num_blocks_in_tr;
             num_total_blocks = length(obj.seq.blockEvents);
-
-            % Scan all unique block "shapes" to discover RF and ADC freq-mod defs.
-            % RF: first block with RF + nonzero gradient in RF window.
-            % ADC: first imaging (non-dummy) block with ADC + nonzero gradient in ADC window.
-            rf_def_block  = [];
-            adc_def_block = [];
-
-            % Find number of dummy blocks: walk blocks until ONCE=0 label is seen.
             num_dummy_blocks = obj.findNumDummyBlocks();
+
+            % Collect ALL unique freq-mod block types.
+            % Key: blockDuration (distinguishes shapes with different timing).
+            % We keep separate lists for RF-type and ADC-type defs.
+            defs = {};
+            types = [];
+            def_durations = [];   % blockDuration of each def (for matching)
+            def_kinds     = [];   % 0=RF, 1=ADC
 
             for blk = 1:num_total_blocks
                 block = obj.seq.getBlock(blk);
 
-                if isempty(rf_def_block) && isfield(block, 'rf') && ~isempty(block.rf)
-                    % Check if any gradient overlaps the RF window.
+                if isfield(block, 'rf') && ~isempty(block.rf)
                     rf_start = block.rf.delay;
                     rf_end   = block.rf.delay + block.rf.t(end);
                     if obj.anyGradNonzeroInWindow(block, rf_start, rf_end)
-                        rf_def_block = block;
+                        % Check if we already have an RF def with this blockDuration.
+                        dur = block.blockDuration;
+                        already = false;
+                        for k = 1:length(def_durations)
+                            if def_kinds(k) == 0 && abs(def_durations(k) - dur) < 1e-9
+                                already = true;
+                                break;
+                            end
+                        end
+                        if ~already
+                            rf_active_start = block.rf.delay;
+                            rf_active_end   = block.rf.delay + block.rf.t(end);
+                            rf_isodelay     = block.rf.t(end) - mr.calcRfCenter(block.rf);
+                            defs{end+1} = TruthBuilder.buildFreqModDefinition( ...
+                                block, rf_active_start, rf_active_end, rf_isodelay, ...
+                                obj.sys.gradRasterTime, obj.sys.rfRasterTime); %#ok<AGROW>
+                            types(end+1) = 0;         %#ok<AGROW>
+                            def_durations(end+1) = dur; %#ok<AGROW>
+                            def_kinds(end+1) = 0;      %#ok<AGROW>
+                        end
                     end
                 end
 
-                if isempty(adc_def_block) && blk > num_dummy_blocks && ...
-                        isfield(block, 'adc') && ~isempty(block.adc)
+                if isfield(block, 'adc') && ~isempty(block.adc) && blk > num_dummy_blocks
                     adc_start = block.adc.delay;
                     adc_end   = block.adc.delay + block.adc.numSamples * block.adc.dwell;
                     if obj.anyGradNonzeroInWindow(block, adc_start, adc_end)
-                        adc_def_block = block;
+                        dur = block.blockDuration;
+                        already = false;
+                        for k = 1:length(def_durations)
+                            if def_kinds(k) == 1 && abs(def_durations(k) - dur) < 1e-9
+                                already = true;
+                                break;
+                            end
+                        end
+                        if ~already
+                            adc_dur = block.adc.numSamples * block.adc.dwell;
+                            adc_active_start = block.adc.delay;
+                            adc_active_end   = adc_active_start + adc_dur;
+                            adc_ref_time     = 0.5 * adc_dur;
+                            defs{end+1} = TruthBuilder.buildFreqModDefinition( ...
+                                block, adc_active_start, adc_active_end, adc_ref_time, ...
+                                obj.sys.gradRasterTime, obj.sys.adcRasterTime); %#ok<AGROW>
+                            types(end+1) = 1;           %#ok<AGROW>
+                            def_durations(end+1) = dur;  %#ok<AGROW>
+                            def_kinds(end+1) = 1;        %#ok<AGROW>
+                        end
                     end
                 end
-
-                if ~isempty(rf_def_block) && ~isempty(adc_def_block)
-                    break;
-                end
             end
 
-            defs = {};
-            types = [];
-            if ~isempty(rf_def_block)
-                rf_active_start = rf_def_block.rf.delay;
-                rf_active_end   = rf_def_block.rf.delay + rf_def_block.rf.t(end);
-                rf_isodelay     = rf_def_block.rf.t(end) - mr.calcRfCenter(rf_def_block.rf);
-                defs{end+1} = TruthBuilder.buildFreqModDefinition( ...
-                    rf_def_block, rf_active_start, rf_active_end, rf_isodelay, ...
-                    obj.sys.gradRasterTime, obj.sys.rfRasterTime);
-                types(end+1) = 0;  %#ok<AGROW>
-            end
-            if ~isempty(adc_def_block)
-                adc_dur = adc_def_block.adc.numSamples * adc_def_block.adc.dwell;
-                adc_active_start = adc_def_block.adc.delay;
-                adc_active_end   = adc_def_block.adc.delay + adc_dur;
-                adc_ref_time     = 0.5 * adc_dur;
-                defs{end+1} = TruthBuilder.buildFreqModDefinition( ...
-                    adc_def_block, adc_active_start, adc_active_end, adc_ref_time, ...
-                    obj.sys.gradRasterTime, obj.sys.adcRasterTime);
-                types(end+1) = 1;  %#ok<AGROW>
-            end
-
-            obj.fmod_defs  = defs;
-            obj.fmod_types = types;
+            obj.fmod_defs       = defs;
+            obj.fmod_types      = types;
+            obj.fmod_durations  = def_durations;
+            obj.fmod_kinds      = def_kinds;
         end
 
         % ---- Phase 5: scan table ----
@@ -574,9 +587,12 @@ classdef TruthBuilder < handle
                             rf_start = block.rf.delay;
                             rf_end   = block.rf.delay + block.rf.t(end);
                             if obj.anyGradNonzeroInWindow(block, rf_start, rf_end)
-                                rf_idx = find(obj.fmod_types == 0, 1);
-                                if ~isempty(rf_idx)
-                                    fmt(act) = rf_idx;
+                                dur = block.blockDuration;
+                                for ki = 1:length(obj.fmod_durations)
+                                    if obj.fmod_kinds(ki) == 0 && abs(obj.fmod_durations(ki) - dur) < 1e-9
+                                        fmt(act) = ki;
+                                        break;
+                                    end
                                 end
                             end
                         end
@@ -600,9 +616,12 @@ classdef TruthBuilder < handle
                             adc_start = block.adc.delay;
                             adc_end   = block.adc.delay + block.adc.numSamples * block.adc.dwell;
                             if obj.anyGradNonzeroInWindow(block, adc_start, adc_end)
-                                adc_idx = find(obj.fmod_types == 1, 1);
-                                if ~isempty(adc_idx)
-                                    fmt(act) = adc_idx;
+                                dur = block.blockDuration;
+                                for ki = 1:length(obj.fmod_durations)
+                                    if obj.fmod_kinds(ki) == 1 && abs(obj.fmod_durations(ki) - dur) < 1e-9
+                                        fmt(act) = ki;
+                                        break;
+                                    end
                                 end
                             end
                         end

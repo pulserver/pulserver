@@ -125,6 +125,7 @@ static int axis_is_active(const float* waveform, int num_samples)
  */
 static int build_freq_mod_for_block(
     const pulseqlib_sequence_descriptor* desc,
+    const pulseqlib_block_table_element* bte,
     int bdef_idx,
     float active_start_us, float active_end_us,
     float ref_time_us,
@@ -211,9 +212,18 @@ static int build_freq_mod_for_block(
                 raw_wave[idx] = 0.0f; idx++;
             }
         } else {
-            num_samples   = gdef->fall_time_or_num_uncompressed_samples;
+            int grad_event_id;
+            int shot_idx;
+
+            grad_event_id = (axis == 0) ? bte->gx_id :
+                            (axis == 1) ? bte->gy_id : bte->gz_id;
+            shot_idx = (grad_event_id >= 0 && grad_event_id < desc->grad_table_size)
+                ? desc->grad_table[grad_event_id].shot_index : 0;
+            if (shot_idx < 0 || shot_idx >= PULSEQLIB_MAX_GRAD_SHOTS)
+                shot_idx = 0;
+
             time_shape_id = gdef->unused_or_time_shape_id;
-            shape_id      = gdef->shot_shape_ids[0];
+            shape_id      = gdef->shot_shape_ids[shot_idx];
 
             if (shape_id <= 0 || shape_id > desc->num_shapes) {
                 for (i = 0; i < fmod->num_samples; ++i) out_wave[i] = 0.0f;
@@ -227,6 +237,8 @@ static int build_freq_mod_for_block(
                 fmod->ref_integral[axis] = 0.0f;
                 continue;
             }
+
+            num_samples = decomp_wave.num_uncompressed_samples;
 
             has_time_shape = 0;
             if (time_shape_id > 0 && time_shape_id <= desc->num_shapes) {
@@ -456,7 +468,7 @@ static void free_base_defs(pulseqlib_freq_mod_definition* defs, int n)
 /*  Dedup key types                                                   */
 /* ================================================================== */
 
-#define FREQ_MOD_BASE_COLS  5   /* rf_def_id, adc_def_id, gx, gy, gz */
+#define FREQ_MOD_BASE_COLS  7   /* freq_mod_id, rf_def_id, adc_def_id, gx_evt_id, gy_evt_id, gz_evt_id, effective_duration_us */
 
 typedef struct { int base_idx; float amp[3]; } entry_key_t;
 typedef struct { int entry_idx; int rot_idx; } plan_key_t;
@@ -562,19 +574,23 @@ static int build_freq_mod_library(
             const pulseqlib_block_table_element* bte = &desc->block_table[n];
             const pulseqlib_block_definition* bdef = &desc->block_definitions[bte->id];
             int has_adc, adc_def_id;
+            int effective_duration_us;
 
             if (bte->freq_mod_id < 0) continue;
 
             block_indices[idx] = n;
 
             /* Base dedup key */
-            base_rows[idx][0] = bdef->rf_id;
+            base_rows[idx][0] = bte->freq_mod_id;
+            base_rows[idx][1] = bdef->rf_id;
             has_adc = (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size);
             adc_def_id = has_adc ? desc->adc_table[bte->adc_id].id : -1;
-            base_rows[idx][1] = adc_def_id;
-            base_rows[idx][2] = bdef->gx_id;
-            base_rows[idx][3] = bdef->gy_id;
-            base_rows[idx][4] = bdef->gz_id;
+            base_rows[idx][2] = adc_def_id;
+            base_rows[idx][3] = bte->gx_id;
+            base_rows[idx][4] = bte->gy_id;
+            base_rows[idx][5] = bte->gz_id;
+            effective_duration_us = bdef->duration_us;
+            base_rows[idx][6] = effective_duration_us;
 
             /* Rotation: record both rotation_id and norot_flag */
             block_rotation[idx] = (bte->rotation_id >= 0)
@@ -606,21 +622,28 @@ static int build_freq_mod_library(
         int has_rf, has_adc, adc_def_id_local;
         float active_start_us, active_end_us, ref_time_us;
         float target_raster_us;
+        int effective_duration_us;
 
         has_rf  = (bdef->rf_id >= 0);
         has_adc = (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size);
+        effective_duration_us = bdef->duration_us;
 
         /* ---- Determine active region ---- */
         if (has_rf && bdef->rf_id < desc->num_unique_rfs) {
             const pulseqlib_rf_definition* rdef = &desc->rf_definitions[bdef->rf_id];
+            float rf_end_us;
             active_start_us = (float)rdef->delay;
-            if (desc->vendor == PULSEQLIB_VENDOR_GEHC) {
-                active_end_us = active_start_us + rdef->stats.duration_us;
-                ref_time_us   = (float)rdef->stats.isodelay_us;
+            rf_end_us = active_start_us + rdef->stats.duration_us;
+
+            /* Navigator-like RF blocks can have gradients that extend far
+               beyond the RF pulse; in that case use the full effective
+               block duration for freq-mod synthesis. */
+            if (!has_adc && rf_end_us < 0.75f * (float)effective_duration_us) {
+                active_end_us = (float)effective_duration_us;
             } else {
-                active_end_us = (float)bdef->duration_us;
-                ref_time_us   = 0.0f;
+                active_end_us = rf_end_us;
             }
+            ref_time_us   = (float)rdef->stats.isodelay_us;
         } else if (has_adc) {
             adc_def_id_local = desc->adc_table[bte->adc_id].id;
             if (adc_def_id_local >= 0 && adc_def_id_local < desc->num_unique_adcs) {
@@ -646,8 +669,8 @@ static int build_freq_mod_library(
 
         /* Clamp */
         if (active_start_us < 0.0f) active_start_us = 0.0f;
-        if (active_end_us > (float)bdef->duration_us)
-            active_end_us = (float)bdef->duration_us;
+        if (active_end_us > (float)effective_duration_us)
+            active_end_us = (float)effective_duration_us;
         if (ref_time_us < 0.0f) ref_time_us = 0.0f;
         if (ref_time_us > (active_end_us - active_start_us))
             ref_time_us = active_end_us - active_start_us;
@@ -655,7 +678,7 @@ static int build_freq_mod_library(
         target_raster_us = (has_rf && bdef->rf_id < desc->num_unique_rfs)
                            ? desc->rf_raster_us : desc->adc_raster_us;
 
-        result = build_freq_mod_for_block(desc, bte->id,
+        result = build_freq_mod_for_block(desc, bte, bte->id,
             active_start_us, active_end_us, ref_time_us,
             target_raster_us, &base_defs[n]);
         if (PULSEQLIB_FAILED(result)) {
