@@ -341,6 +341,9 @@ static int check_scan_table_segments(
     int n, seg_id, prev_seg_id, pos_in_seg;
     int bt_idx, bdef_id, expected_id;
     const pulseqlib_tr_segment* seg;
+    const pulseqlib_block_definition* bdef_actual;
+    const pulseqlib_block_definition* bdef_expected;
+    int both_pure_delay;
 
     prev_seg_id = -2;  /* impossible value to force reset */
     pos_in_seg  = 0;
@@ -381,7 +384,21 @@ static int check_scan_table_segments(
         bdef_id     = desc->block_table[bt_idx].id;
         expected_id = seg->unique_block_indices[pos_in_seg];
 
-        if (bdef_id != expected_id) {
+        both_pure_delay = 0;
+        if (bdef_id >= 0 && bdef_id < desc->num_unique_blocks &&
+            expected_id >= 0 && expected_id < desc->num_unique_blocks) {
+            bdef_actual   = &desc->block_definitions[bdef_id];
+            bdef_expected = &desc->block_definitions[expected_id];
+            both_pure_delay =
+                (bdef_actual->rf_id  == -1 && bdef_actual->gx_id  == -1 &&
+                 bdef_actual->gy_id  == -1 && bdef_actual->gz_id  == -1 &&
+                 bdef_actual->adc_id == -1 &&
+                 bdef_expected->rf_id  == -1 && bdef_expected->gx_id  == -1 &&
+                 bdef_expected->gy_id  == -1 && bdef_expected->gz_id  == -1 &&
+                 bdef_expected->adc_id == -1) ? 1 : 0;
+        }
+
+        if (bdef_id != expected_id && !both_pure_delay) {
             if (diag) {
                 pulseqlib__diag_printf(diag,
                     "Consistency: scan pos %d (block_table[%d]) has def ID %d, "

@@ -477,6 +477,14 @@ static void run_sequences_geninstructions_case(const gre_case* tc)
                 mu_assert_int_eq(ref_blk->freq_mod_num_samples, lib_num_samples);
             }
 
+            /* --- Pure-delay segment-def duration canonicalization -- */
+            if (!ref_blk->has_rf &&
+                !ref_blk->has_grad[0] && !ref_blk->has_grad[1] && !ref_blk->has_grad[2] &&
+                !ref_blk->has_adc) {
+                int expected_delay_us = (int)(opts.block_raster_us + 0.5f);
+                mu_assert_int_eq(expected_delay_us, bi.duration_us);
+            }
+
             /* --- Freq-mod (overlap API) --------------------------- */
             {
                 mu_assert_int_eq(ref_blk->has_freq_mod, need);
@@ -743,6 +751,15 @@ static void run_scan_table_case(const gre_case* tc)
     scan_table_file ref = SCAN_TABLE_FILE_INIT;
     char scan_path[512];
     int rc, ok, pos;
+    int is_mprage;
+    int pure_seg_id = -1;
+    int pure_seg_duration_us = -1;
+    int pure_inst_durations[8];
+    int pure_inst_unique = 0;
+    int saw_noncanonical_instance = 0;
+
+    memset(pure_inst_durations, 0, sizeof(pure_inst_durations));
+    is_mprage = (strncmp(tc->name, "mprage_", 7) == 0) ? 1 : 0;
 
     gre_opts_init(&opts);
     rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
@@ -759,6 +776,7 @@ static void run_scan_table_case(const gre_case* tc)
 
     while (pulseqlib_cursor_next(coll) == PULSEQLIB_CURSOR_BLOCK) {
         pulseqlib_block_instance inst = PULSEQLIB_BLOCK_INSTANCE_INIT;
+        pulseqlib_cursor_info ci = PULSEQLIB_CURSOR_INFO_INIT;
         const scan_table_entry* e;
         float tol;
         int i;
@@ -767,6 +785,42 @@ static void run_scan_table_case(const gre_case* tc)
 
         rc = pulseqlib_get_block_instance(coll, &inst);
         mu_assert(PULSEQLIB_SUCCEEDED(rc), "get_block_instance failed");
+
+        rc = pulseqlib_cursor_get_info(coll, &ci);
+        mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_cursor_get_info failed");
+
+        if (is_mprage) {
+            pulseqlib_segment_info segi = PULSEQLIB_SEGMENT_INFO_INIT;
+            rc = pulseqlib_get_segment_info(coll, ci.segment_id, &segi);
+            mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_segment_info failed");
+
+            if (segi.pure_delay) {
+                int found = 0;
+                if (pure_seg_id < 0) {
+                    pure_seg_id = ci.segment_id;
+                    pure_seg_duration_us = segi.duration_us;
+                } else {
+                    mu_assert_int_eq(pure_seg_id, ci.segment_id);
+                    mu_assert_int_eq(pure_seg_duration_us, segi.duration_us);
+                }
+
+                /* Segment definition stays canonical (one block raster). */
+                mu_assert_int_eq((int)(opts.block_raster_us + 0.5f), segi.duration_us);
+
+                if (inst.duration_us != segi.duration_us)
+                    saw_noncanonical_instance = 1;
+
+                for (i = 0; i < pure_inst_unique; ++i) {
+                    if (pure_inst_durations[i] == inst.duration_us) {
+                        found = 1;
+                        break;
+                    }
+                }
+                if (!found && pure_inst_unique < (int)(sizeof(pure_inst_durations)/sizeof(pure_inst_durations[0]))) {
+                    pure_inst_durations[pure_inst_unique++] = inst.duration_us;
+                }
+            }
+        }
 
         e = &ref.entries[pos];
 
@@ -834,6 +888,14 @@ static void run_scan_table_case(const gre_case* tc)
     }
 
     mu_assert_int_eq(ref.num_entries, pos);
+
+    if (is_mprage) {
+        mu_assert(pure_seg_id >= 0, "expected a pure-delay segment in MPRAGE scan loop");
+        mu_assert(pure_inst_unique >= 2,
+                  "expected multiple pure-delay instance durations (e.g. TI and TR delays)");
+        mu_assert(saw_noncanonical_instance,
+                  "expected scan-loop pure-delay instance duration to differ from canonical segment-def duration");
+    }
 
     pulseqlib_collection_free(coll);
 }

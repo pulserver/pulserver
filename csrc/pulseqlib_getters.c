@@ -597,11 +597,25 @@ static int pulseqlib__get_segment_duration_us(
     const pulseqlib_sequence_descriptor* desc;
     int local_seg, k, total;
     const pulseqlib_tr_segment* seg;
+    const pulseqlib_block_definition* bdef;
 
     if (!pulseqlib__resolve_segment(&desc, &local_seg, coll, seg_idx))
         return -1;
 
     seg = &desc->segment_definitions[local_seg];
+
+    /* Segment-definition pure delays are canonicalized to one block raster;
+     * scan-loop instances still expose per-instance delay from block table. */
+    if (seg->num_blocks == 1) {
+        bdef = &desc->block_definitions[seg->unique_block_indices[0]];
+        if (bdef->rf_id == -1 && bdef->gx_id == -1 && bdef->gy_id == -1 &&
+            bdef->gz_id == -1 && bdef->adc_id == -1) {
+            if (desc->block_raster_us > 0.0f)
+                return (int)(desc->block_raster_us + 0.5f);
+            return 0;
+        }
+    }
+
     total = 0;
     for (k = 0; k < seg->num_blocks; ++k)
         total += desc->block_definitions[seg->unique_block_indices[k]].duration_us;
@@ -624,7 +638,8 @@ static int pulseqlib__is_segment_pure_delay(
     if (seg->num_blocks == 1) {
         bdef = &desc->block_definitions[seg->unique_block_indices[0]];
         if (bdef->rf_id == -1 && bdef->gx_id == -1 &&
-            bdef->gy_id == -1 && bdef->gz_id == -1)
+            bdef->gy_id == -1 && bdef->gz_id == -1 &&
+            bdef->adc_id == -1)
             return 1;
     }
     return 0;
@@ -872,9 +887,20 @@ static int pulseqlib__get_block_duration_us(
     const pulseqlib_sequence_descriptor* desc;
     const pulseqlib_tr_segment* seg;
     int local_blk;
+    const pulseqlib_block_definition* bdef;
 
     if (!pulseqlib__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
         return -1;
+
+    if (seg->num_blocks == 1 && local_blk == 0) {
+        bdef = &desc->block_definitions[seg->unique_block_indices[0]];
+        if (bdef->rf_id == -1 && bdef->gx_id == -1 && bdef->gy_id == -1 &&
+            bdef->gz_id == -1 && bdef->adc_id == -1) {
+            if (desc->block_raster_us > 0.0f)
+                return (int)(desc->block_raster_us + 0.5f);
+            return 0;
+        }
+    }
 
     return desc->block_definitions[seg->unique_block_indices[local_blk]].duration_us;
 }

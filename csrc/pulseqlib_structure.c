@@ -38,6 +38,21 @@ static int array_equal(const int* a, const int* b, int len)
     return 1;
 }
 
+/* After strip_pure_delays_scan, pure delays are represented as one-block
+ * segments whose block-table entry carries duration_us >= 0. */
+static int is_single_pure_delay_segment_scan(
+    const pulseqlib_tr_segment* seg,
+    const pulseqlib_block_table_element* bt,
+    const int* scan_block_idx)
+{
+    int bt_idx;
+    if (!seg || !bt || !scan_block_idx) return 0;
+    if (seg->num_blocks != 1 || seg->start_block < 0) return 0;
+
+    bt_idx = scan_block_idx[seg->start_block];
+    return (bt_idx >= 0 && bt[bt_idx].duration_us >= 0) ? 1 : 0;
+}
+
 /* ================================================================== */
 /*  TR detection helpers                                              */
 /* ================================================================== */
@@ -1686,11 +1701,23 @@ int pulseqlib__get_scan_table_segments(
     num_unique = 0;
 
     for (n = 0; n < num_total; ++n) {
-        /* Find existing match by UBI (works for both pure-delay and
-         * active segments — pure delays have num_blocks==1). */
+        int n_is_pure_delay = is_single_pure_delay_segment_scan(
+            &exp_segs[n], desc->block_table, desc->scan_table_block_idx);
+
+        /* Find existing match by UBI, except one-block pure delays:
+         * those are definition-equivalent regardless of delay duration. */
         found = -1;
         for (i = 0; i < num_unique; ++i) {
-            if (exp_segs[n].num_blocks == uniq_segs[i].num_blocks &&
+            int i_is_pure_delay = is_single_pure_delay_segment_scan(
+                &uniq_segs[i], desc->block_table, desc->scan_table_block_idx);
+
+            if (n_is_pure_delay && i_is_pure_delay) {
+                found = i;
+                break;
+            }
+
+            if (!n_is_pure_delay && !i_is_pure_delay &&
+                exp_segs[n].num_blocks == uniq_segs[i].num_blocks &&
                 array_equal(exp_segs[n].unique_block_indices,
                             uniq_segs[i].unique_block_indices,
                             exp_segs[n].num_blocks)) {
