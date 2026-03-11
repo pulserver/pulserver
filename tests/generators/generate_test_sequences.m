@@ -269,8 +269,8 @@ function seq = write_mprage(write, num_slices, num_averages)
 
     tb = TruthBuilder(seq, sys);
     tb.setBlocksPerTR(2 + 1 + 4 * Ny + 1);
-    tb.setSegments([2, 1, 4]);
-    tb.setSegmentOrder([1, 2, 3 * ones(1, Ny), 2]);
+    tb.setSegments([2, 1, 4, 1]);
+    tb.setSegmentOrder([1, 2, 3 * ones(1, Ny), 4]);
     tb.setNumAverages(num_averages);
     tb.export(out_dir, base);
 end
