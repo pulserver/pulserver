@@ -1148,10 +1148,10 @@ classdef TruthBuilder < handle
 
         function [sid, shapes] = matchOrAddShape(grad, shapes)
         % MATCHORADDSHAPE  Return shape ID for a gradient, adding to cache if new.
-        %   For trapezoids: fingerprint = (riseTime, flatTime, fallTime, sign(amp))
+        %   For trapezoids: fingerprint = (riseTime, flatTime, fallTime)
         %   For arbitrary:  fingerprint = normalized waveform (waveform / peak)
             if strcmp(grad.type, 'trap') || strcmp(grad.type, 'trapezoid')
-                fp = [grad.riseTime, grad.flatTime, grad.fallTime, sign(grad.amplitude)];
+                fp = [grad.riseTime, grad.flatTime, grad.fallTime];
             else
                 w = grad.waveform(:)';
                 pk = max(abs(w));
