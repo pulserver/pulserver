@@ -29,7 +29,7 @@
 /*  Phase 1: example_check step 6 (ADC, max_b1, TR)                  */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_segmentation_gre_example_check)
+MU_TEST(test_check)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
@@ -76,9 +76,9 @@ MU_TEST(test_segmentation_gre_example_check)
     pulseqlib_collection_free(coll);
 }
 
-MU_TEST_SUITE(suite_segmentation_phase1)
+MU_TEST_SUITE(suite_sequences_check)
 {
-    MU_RUN_TEST(test_segmentation_gre_example_check);
+    MU_RUN_TEST(test_check);
 }
 
 /* ------------------------------------------------------------------ */
@@ -89,7 +89,7 @@ MU_TEST_SUITE(suite_segmentation_phase1)
 #define WAVE_REL_TOL 1e-3f
 #define WAVE_TIME_ABS_TOL 0.5f  /* us — half a raster step */
 
-MU_TEST(test_segmentation_gre_safety_waveforms)
+MU_TEST(test_sequences_uieval)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
@@ -179,9 +179,9 @@ MU_TEST(test_segmentation_gre_safety_waveforms)
     pulseqlib_collection_free(coll);
 }
 
-MU_TEST_SUITE(suite_segmentation_phase2)
+MU_TEST_SUITE(suite_sequences_uieval)
 {
-    MU_RUN_TEST(test_segmentation_gre_safety_waveforms);
+    MU_RUN_TEST(test_sequences_uieval);
 }
 
 /* ------------------------------------------------------------------ */
@@ -206,7 +206,7 @@ MU_TEST_SUITE(suite_segmentation_phase2)
 #define GENI_AMP_NEAR(a, b) \
     (fabsf((a) - (b)) <= (((fabsf(a) > 1.0f ? fabsf(a) : 1.0f)) * GENI_AMP_REL_TOL))
 
-MU_TEST(test_segmentation_gre_geninstructions)
+MU_TEST(test_sequences_geninstructions)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
@@ -397,11 +397,6 @@ MU_TEST(test_segmentation_gre_geninstructions)
     pulseqlib_collection_free(coll);
 }
 
-MU_TEST_SUITE(suite_segmentation_phase3)
-{
-    MU_RUN_TEST(test_segmentation_gre_geninstructions);
-}
-
 /* ------------------------------------------------------------------ */
 /*  Phase 4: Frequency-modulation definition waveforms                */
 /* ------------------------------------------------------------------ */
@@ -522,10 +517,12 @@ MU_TEST(test_freq_mod_definitions)
     pulseqlib_collection_free(coll);
 }
 
-MU_TEST_SUITE(suite_segmentation_phase4)
+MU_TEST_SUITE(suite_sequences_geninstructions)
 {
+    MU_RUN_TEST(test_sequences_geninstructions);
     MU_RUN_TEST(test_freq_mod_definitions);
 }
+
 
 /* ------------------------------------------------------------------ */
 /*  Phase 5: Scan table — block instance validation                   */
@@ -631,13 +628,13 @@ MU_TEST(test_scan_table)
     pulseqlib_collection_free(coll);
 }
 
-MU_TEST_SUITE(suite_segmentation_phase5)
+MU_TEST_SUITE(suite_sequences_scanloop)
 {
     MU_RUN_TEST(test_scan_table);
 }
 
 
-int test_segmentation_main(void)
+int test_sequences_main(void)
 {
     minunit_run = 0;
     minunit_fail = 0;
@@ -646,11 +643,10 @@ int test_segmentation_main(void)
     minunit_real_timer = 0;
     minunit_proc_timer = 0;
 
-    MU_RUN_SUITE(suite_segmentation_phase1);
-    MU_RUN_SUITE(suite_segmentation_phase2);
-    MU_RUN_SUITE(suite_segmentation_phase3);
-    MU_RUN_SUITE(suite_segmentation_phase4);
-    MU_RUN_SUITE(suite_segmentation_phase5);
+    MU_RUN_SUITE(suite_sequences_check);
+    MU_RUN_SUITE(suite_sequences_uieval);
+    MU_RUN_SUITE(suite_sequences_geninstructions);
+    MU_RUN_SUITE(suite_sequences_scanloop);
     MU_REPORT();
     return MU_EXIT_CODE;
 }
