@@ -55,11 +55,11 @@ TotalDuration 0.07882
 33  50   0   3  10   5  0  0
 34 129   0   6   0   0  3  0
 35  50   0   7   9   1  0  0
-36  39   9  17  17  18  0  0
+36  39   9  17  17  18  0  1
 37  16   0  19  19  20  8  0
-38  39   9  17  18  17  0  0
+38  39   9  17  18  17  0  1
 39  16   0  19  20  19  8  0
-40  39   9  18  17  17  0  0
+40  39   9  18  17  17  0  1
 41  16   0  20  19  19  8  0
 42  25   0   0   0   0  0  0
 
@@ -122,6 +122,18 @@ TotalDuration 0.07882
 6 64 40000 20 0 0 0 5.65487 0
 7 64 40000 20 0 0 0 3.35103 0
 8 16 10000 80 0 0 0 0 0
+
+# Format of extension lists:
+# id type ref next_id
+# next_id of 0 terminates the list
+# Extension list is followed by extension specifications
+[EXTENSIONS]
+1 1 1 0
+
+# Extension specification for setting labels:
+# id set labelstring
+extension LABELSET 1
+1 1 NAV
 
 # Sequence Shapes
 [SHAPES]
@@ -1461,4 +1473,4 @@ num_samples 250
 # preceding [SIGNATURE] BELONGS to the signature (and needs to be sripped away
 # for recalculating/verification)
 Type md5
-Hash b7a2955235c98a8993ba84294a82fab6
+Hash 5be856c82d90c9003e69b079f13334c5
