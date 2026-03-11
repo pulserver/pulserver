@@ -31,18 +31,20 @@ classdef TruthBuilder < handle
         base_rot          = eye(3)
 
         % Derived quantities (computed by prepare())
-        peakRF            = 0
-        canonical_scale   = []   % (num_blocks_in_tr, 3) signed worst-case
-        canonical_seq     = []   % mr.Sequence for worst-case TR
-        TR                = 0
-        tr_times_us       = []
-        tr_waveform       = []   % (N, 3) Hz/m
-        segment_data      = []   % struct for binary export
-        fmod_defs         = {}
-        fmod_types        = []
-        scan_table        = []
-        rotmat_table      = []
-        freq_mod_table    = []
+        peakRF              = 0
+        num_canonical_trs   = 0    % number of unique canonical TR groups
+        tr_group_labels     = []   % (num_imaging_trs, 1) 0-based group IDs
+        canonical_scales    = {}   % cell array of (nbt, 3) per group
+        canonical_seqs      = {}   % cell array of mr.Sequence per group
+        TR                  = 0
+        tr_times_list       = {}   % cell array of time vectors per group
+        tr_waveforms        = {}   % cell array of (N_i, 3) per group
+        segment_data        = []   % struct for binary export
+        fmod_defs           = {}
+        fmod_types          = []
+        scan_table          = []
+        rotmat_table        = []
+        freq_mod_table      = []
 
         prepared          = false
     end
@@ -124,8 +126,8 @@ classdef TruthBuilder < handle
         function prepare(obj)
             if obj.prepared, return; end
 
-            obj.computePeakRFAndCanonicalScale();
-            obj.buildCanonicalTR();
+            obj.computePeakRFAndCanonicalScales();
+            obj.buildCanonicalTRs();
             obj.buildSegmentData();
             obj.buildFreqModDefs();
             obj.buildScanTableData();
@@ -138,150 +140,215 @@ classdef TruthBuilder < handle
             obj.prepared = true;
         end
 
-        % ---- Phase 1: peak RF + canonical scale + segment energy ----
-        function computePeakRFAndCanonicalScale(obj)
+        % ---- TR group discovery ----
+        function discoverTRGroups(obj)
+        % DISCOVERTGROUPS  Fingerprint imaging TRs by gradient shape;
+        %   group TRs with identical shot-index patterns.
+        %   Mirrors C library's pulseqlib__find_unique_shot_trs().
+            nbt = obj.num_blocks_in_tr;
+            num_dummy = obj.findNumDummyBlocks();
+            num_imaging_blocks = length(obj.seq.blockEvents) - num_dummy;
+            num_trs = num_imaging_blocks / nbt;
+            assert(num_trs == floor(num_trs) && num_trs > 0, ...
+                'Imaging block count is not a multiple of blocks-per-TR');
+
+            % Shape cache: cell array of fingerprint vectors (one per unique shape).
+            shapes = {};
+
+            % Build per-TR fingerprint: one shape ID per (position, axis).
+            fp_matrix = zeros(num_trs, nbt * 3);
+
+            for tr_i = 1:num_trs
+                base_blk = num_dummy + (tr_i - 1) * nbt;
+                for pos = 1:nbt
+                    block = obj.seq.getBlock(base_blk + pos);
+                    ax_names = {'gx', 'gy', 'gz'};
+                    for a = 1:3
+                        axn = ax_names{a};
+                        if isfield(block, axn) && ~isempty(block.(axn))
+                            [sid, shapes] = TruthBuilder.matchOrAddShape(block.(axn), shapes);
+                        else
+                            sid = 0;
+                        end
+                        fp_matrix(tr_i, (pos - 1) * 3 + a) = sid;
+                    end
+                end
+            end
+
+            % Deduplicate fingerprints.
+            [~, ia, ic] = unique(fp_matrix, 'rows', 'stable');
+
+            obj.num_canonical_trs = length(ia);
+            obj.tr_group_labels = ic(:) - 1;  % 0-based to match C convention
+        end
+
+        % ---- Phase 1: peak RF + per-group canonical scale + segment energy ----
+        function computePeakRFAndCanonicalScales(obj)
             import mr.*
+
+            obj.discoverTRGroups();
 
             nbt = obj.num_blocks_in_tr;
             num_total_blocks = length(obj.seq.blockEvents);
+            num_dummy = obj.findNumDummyBlocks();
+            num_imaging_blocks = num_total_blocks - num_dummy;
+            num_trs = num_imaging_blocks / nbt;
+            M = obj.num_canonical_trs;
 
-            % Track worst-case gradient amplitude per block position in TR.
-            % tr_amp_max stores the signed value with the largest absolute amplitude.
-            % tr_amp_sign stores the sign of the first nonzero occurrence.
-            tr_amp_max  = zeros(nbt, 3);
-            tr_amp_sign = zeros(nbt, 3);
-
-            % Segment energy tracking: one energy value per TR, keep the best.
-            best_energy = 0;
-            best_energy_idx = 1;
-
+            % Global peak RF (across all blocks including dummies).
             peak_rf = 0;
-
             for blk = 1:num_total_blocks
                 block = obj.seq.getBlock(blk);
-
-                % Position within TR (1-based)
-                pos = mod(blk - 1, nbt) + 1;
-
-                % Gradient amplitudes for this block position.
-                amp_tmp = [0, 0, 0];
-                ax_names = {'gx', 'gy', 'gz'};
-                for a = 1:3
-                    axn = ax_names{a};
-                    if isfield(block, axn) && ~isempty(block.(axn))
-                        amp_tmp(a) = TruthBuilder.gradPeakAmpSigned(block.(axn));
-                    end
-                end
-
-                % Update max (by absolute value): keep the signed value with largest |amp|
-                bigger = abs(amp_tmp) > abs(tr_amp_max(pos, :));
-                tr_amp_max(pos, bigger) = amp_tmp(bigger);
-                % Update sign (first nonzero)
-                first_nz = (tr_amp_sign(pos, :) == 0) & (amp_tmp ~= 0);
-                tr_amp_sign(pos, first_nz) = sign(amp_tmp(first_nz));
-
-                % Peak RF
                 if isfield(block, 'rf') && ~isempty(block.rf)
                     pk = max(abs(block.rf.signal));
                     if pk > peak_rf, peak_rf = pk; end
                 end
+            end
+            obj.peakRF = peak_rf;
 
-                % Segment energy: accumulate per-TR and keep the maximum.
-                if pos == 1
-                    seg_start = blk;
-                end
-                if pos == nbt
-                    energy = 0;
-                    for sb = seg_start:blk
-                        b2 = obj.seq.getBlock(sb);
-                        for a2 = 1:3
-                            axn2 = ax_names{a2};
-                            if isfield(b2, axn2) && ~isempty(b2.(axn2))
-                                energy = energy + TruthBuilder.gradEnergy(b2.(axn2));
+            % Per-group: canonical scale + max-energy representative.
+            obj.canonical_scales = cell(M, 1);
+            repr_energy_indices = zeros(M, 1);
+            overall_best_energy = 0;
+            overall_best_idx = num_dummy + 1;
+
+            ax_names = {'gx', 'gy', 'gz'};
+
+            for g = 1:M
+                tr_amp_max  = zeros(nbt, 3);
+                tr_amp_sign = zeros(nbt, 3);
+                best_energy = 0;
+                best_idx = 0;
+
+                for tr_i = 1:num_trs
+                    if obj.tr_group_labels(tr_i) ~= (g - 1)
+                        continue;
+                    end
+
+                    base_blk = num_dummy + (tr_i - 1) * nbt;
+                    tr_energy = 0;
+
+                    for pos = 1:nbt
+                        block = obj.seq.getBlock(base_blk + pos);
+
+                        % Gradient amplitudes for this position.
+                        amp_tmp = [0, 0, 0];
+                        for a = 1:3
+                            axn = ax_names{a};
+                            if isfield(block, axn) && ~isempty(block.(axn))
+                                amp_tmp(a) = TruthBuilder.gradPeakAmpSigned(block.(axn));
+                                tr_energy = tr_energy + TruthBuilder.gradEnergy(block.(axn));
                             end
                         end
+
+                        % Update max (by absolute value).
+                        bigger = abs(amp_tmp) > abs(tr_amp_max(pos, :));
+                        tr_amp_max(pos, bigger) = amp_tmp(bigger);
+                        % Update sign (first nonzero).
+                        first_nz = (tr_amp_sign(pos, :) == 0) & (amp_tmp ~= 0);
+                        tr_amp_sign(pos, first_nz) = sign(amp_tmp(first_nz));
                     end
-                    if energy > best_energy
-                        best_energy = energy;
-                        best_energy_idx = seg_start;
+
+                    if tr_energy > best_energy
+                        best_energy = tr_energy;
+                        best_idx = base_blk + 1;
                     end
+                end
+
+                % Default unset sign entries to +1.
+                tr_amp_sign(tr_amp_sign == 0) = 1;
+
+                obj.canonical_scales{g} = tr_amp_sign .* abs(tr_amp_max);
+                repr_energy_indices(g) = best_idx;
+
+                if best_energy > overall_best_energy
+                    overall_best_energy = best_energy;
+                    overall_best_idx = best_idx;
                 end
             end
 
-            % Default unset sign entries to +1.
-            tr_amp_sign(tr_amp_sign == 0) = 1;
-
-            % Canonical amplitude: sign(first) * max(|amplitude|).
-            obj.canonical_scale = tr_amp_sign .* abs(tr_amp_max);
-            obj.peakRF = peak_rf;
-
-            % Store the best-energy segment start index for segment def export.
+            % Store the overall best-energy index for segment def export.
             obj.segment_data = struct();
-            obj.segment_data.max_seg_energy_idx = best_energy_idx;
+            obj.segment_data.max_seg_energy_idx = overall_best_idx;
+            obj.segment_data.repr_energy_indices = repr_energy_indices;
         end
 
-        % ---- Phase 2: canonical TR waveform ----
-        function buildCanonicalTR(obj)
+        % ---- Phase 2: canonical TR waveforms (one per group) ----
+        function buildCanonicalTRs(obj)
             import mr.*
 
             nbt = obj.num_blocks_in_tr;
-            max_idx = obj.segment_data.max_seg_energy_idx;
+            M = obj.num_canonical_trs;
+            repr = obj.segment_data.repr_energy_indices;
 
-            % Build canonical sequence with worst-case amplitudes.
-            % For each block position, scale each gradient so its amplitude
-            % matches the canonical amplitude: canonical_amp / ref_amp.
-            cseq = mr.Sequence(obj.sys);
-            tr_dur = 0;
+            obj.canonical_seqs = cell(M, 1);
+            obj.tr_waveforms   = cell(M, 1);
+            obj.tr_times_list  = cell(M, 1);
 
-            for pos = 1:nbt
-                block = obj.seq.getBlock(max_idx + pos - 1);
-                args = {};
+            for g = 1:M
+                max_idx = repr(g);
+                can_scale = obj.canonical_scales{g};
 
-                % RF: same shape in every TR, use as-is
-                if isfield(block, 'rf') && ~isempty(block.rf)
-                    args{end+1} = block.rf; %#ok<AGROW>
+                cseq = mr.Sequence(obj.sys);
+                tr_dur = 0;
+
+                for pos = 1:nbt
+                    block = obj.seq.getBlock(max_idx + pos - 1);
+                    args = {};
+
+                    % RF: same shape in every TR, use as-is
+                    if isfield(block, 'rf') && ~isempty(block.rf)
+                        args{end+1} = block.rf; %#ok<AGROW>
+                    end
+
+                    % Gradients: scale to canonical amplitude
+                    ax_names = {'gx', 'gy', 'gz'};
+                    for a = 1:3
+                        axn = ax_names{a};
+                        if isfield(block, axn) && ~isempty(block.(axn))
+                            ref_amp = TruthBuilder.gradPeakAmpSigned(block.(axn));
+                            can_amp = can_scale(pos, a);
+                            if ref_amp ~= 0
+                                scale = can_amp / ref_amp;
+                            else
+                                scale = 0;
+                            end
+                            args{end+1} = mr.scaleGrad(block.(axn), scale); %#ok<AGROW>
+                        end
+                    end
+
+                    % ADC: include if present
+                    if isfield(block, 'adc') && ~isempty(block.adc)
+                        args{end+1} = block.adc; %#ok<AGROW>
+                    end
+
+                    cseq.addBlock(args{:});
+                    tr_dur = tr_dur + block.blockDuration;
                 end
 
-                % Gradients: scale to canonical amplitude
-                ax_names = {'gx', 'gy', 'gz'};
-                for a = 1:3
-                    axn = ax_names{a};
-                    if isfield(block, axn) && ~isempty(block.(axn))
-                        ref_amp = TruthBuilder.gradPeakAmpSigned(block.(axn));
-                        can_amp = obj.canonical_scale(pos, a);
-                        if ref_amp ~= 0
-                            scale = can_amp / ref_amp;
-                        else
-                            scale = 0;
-                        end
-                        args{end+1} = mr.scaleGrad(block.(axn), scale); %#ok<AGROW>
+                obj.canonical_seqs{g} = cseq;
+
+                % Resample to half-gradient raster (matches C library).
+                wave_data = cseq.waveforms_and_times(false);
+                raster = 0.5 * obj.sys.gradRasterTime;
+                times = 0.0 : raster : cseq.duration;
+                samples = zeros(length(times), 3);
+                for c = 1:3
+                    if c <= length(wave_data) && ~isempty(wave_data{c})
+                        samples(:, c) = interp1(wave_data{c}(1,:), wave_data{c}(2,:), times, 'linear', 0);
                     end
                 end
-
-                % ADC: include if present
-                if isfield(block, 'adc') && ~isempty(block.adc)
-                    args{end+1} = block.adc; %#ok<AGROW>
-                end
-
-                cseq.addBlock(args{:});
-                tr_dur = tr_dur + block.blockDuration;
+                obj.tr_times_list{g} = times(:) * 1e6;
+                obj.tr_waveforms{g}  = samples;
             end
 
-            obj.canonical_seq = cseq;
-            obj.TR = tr_dur;
-
-            % Resample to half-gradient raster (matches C library).
-            wave_data = cseq.waveforms_and_times(false);
-            raster = 0.5 * obj.sys.gradRasterTime;
-            times = 0.0 : raster : cseq.duration;
-            samples = zeros(length(times), 3);
-            for c = 1:3
-                if c <= length(wave_data) && ~isempty(wave_data{c})
-                    samples(:, c) = interp1(wave_data{c}(1,:), wave_data{c}(2,:), times, 'linear', 0);
-                end
+            % TR duration (same for all groups — same block structure).
+            first_idx = obj.segment_data.repr_energy_indices(1);
+            obj.TR = 0;
+            for pos = 1:nbt
+                block = obj.seq.getBlock(first_idx + pos - 1);
+                obj.TR = obj.TR + block.blockDuration;
             end
-            obj.tr_times_us = times(:) * 1e6;
-            obj.tr_waveform = samples;
         end
 
         % ---- Phase 3: segment definition ----
@@ -759,7 +826,7 @@ classdef TruthBuilder < handle
             for s = 1:length(obj.segment_sizes)
                 fprintf(fid, 'segment_%d_num_blocks %d\n', s - 1, obj.segment_sizes(s));
             end
-            fprintf(fid, 'num_canonical_trs %d\n', 1);
+            fprintf(fid, 'num_canonical_trs %d\n', obj.num_canonical_trs);
 
             fclose(fid);
         end
@@ -769,12 +836,19 @@ classdef TruthBuilder < handle
             fid = fopen(path, 'w');
             if fid < 0, error('Failed to open %s', path); end
 
-            N = length(obj.tr_times_us);
-            fwrite(fid, N, 'int32');
-            fwrite(fid, single(obj.tr_times_us), 'float32');
-            fwrite(fid, single(obj.tr_waveform(:, 1)), 'float32');
-            fwrite(fid, single(obj.tr_waveform(:, 2)), 'float32');
-            fwrite(fid, single(obj.tr_waveform(:, 3)), 'float32');
+            M = obj.num_canonical_trs;
+            fwrite(fid, int32(M), 'int32');
+
+            for g = 1:M
+                times = obj.tr_times_list{g};
+                wf    = obj.tr_waveforms{g};
+                N = length(times);
+                fwrite(fid, int32(N), 'int32');
+                fwrite(fid, single(times), 'float32');
+                fwrite(fid, single(wf(:, 1)), 'float32');
+                fwrite(fid, single(wf(:, 2)), 'float32');
+                fwrite(fid, single(wf(:, 3)), 'float32');
+            end
 
             fclose(fid);
         end
@@ -1057,6 +1131,34 @@ classdef TruthBuilder < handle
                 fmod.ref_integral = ref_integral;
                 fmod.waveform     = fine_waveform;
             end
+        end
+
+        function [sid, shapes] = matchOrAddShape(grad, shapes)
+        % MATCHORADDSHAPE  Return shape ID for a gradient, adding to cache if new.
+        %   For trapezoids: fingerprint = (riseTime, flatTime, fallTime, sign(amp))
+        %   For arbitrary:  fingerprint = normalized waveform (waveform / peak)
+            if strcmp(grad.type, 'trap') || strcmp(grad.type, 'trapezoid')
+                fp = [grad.riseTime, grad.flatTime, grad.fallTime, sign(grad.amplitude)];
+            else
+                w = grad.waveform(:)';
+                pk = max(abs(w));
+                if pk > 0
+                    fp = w / pk;
+                else
+                    fp = w;
+                end
+            end
+
+            for i = 1:length(shapes)
+                if length(fp) == length(shapes{i}) && ...
+                        max(abs(fp - shapes{i})) < 1e-8
+                    sid = i;
+                    return;
+                end
+            end
+
+            sid = length(shapes) + 1;
+            shapes{sid} = fp;
         end
     end
 end

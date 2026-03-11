@@ -109,47 +109,77 @@ static TSEG_MAYBE_UNUSED void free_tr_waveform(seg_tr_waveform* w)
     w->num_samples = 0;
 }
 
+#define MAX_CANONICAL_TRS 256
+
+typedef struct seg_tr_waveform_set {
+    int num_trs;
+    seg_tr_waveform waveforms[MAX_CANONICAL_TRS];
+} seg_tr_waveform_set;
+
+#define SEG_TR_WAVEFORM_SET_INIT {0, {{0}}}
+
+static TSEG_MAYBE_UNUSED void free_tr_waveform_set(seg_tr_waveform_set* s)
+{
+    int i;
+    if (!s) return;
+    for (i = 0; i < s->num_trs; ++i)
+        free_tr_waveform(&s->waveforms[i]);
+    s->num_trs = 0;
+}
+
 /**
- * Parse binary TR waveform file.
- * Layout: int32 num_samples, then 4 contiguous float32 arrays:
+ * Parse binary TR waveform file (multi-TR format).
+ * Layout: int32 num_canonical_trs, then for each TR:
+ *   int32 num_samples, then 4 contiguous float32 arrays:
  *   time_us[N], gx[N], gy[N], gz[N].
  * Returns 1 on success, 0 on failure.
  */
-static TSEG_MAYBE_UNUSED int parse_tr_waveform(const char* path, seg_tr_waveform* out)
+static TSEG_MAYBE_UNUSED int parse_tr_waveform_set(const char* path, seg_tr_waveform_set* out)
 {
     FILE* f;
-    int n;
+    int m, i, n;
     size_t ns;
-    seg_tr_waveform w = SEG_TR_WAVEFORM_INIT;
+    seg_tr_waveform_set ws = SEG_TR_WAVEFORM_SET_INIT;
 
     f = fopen(path, "rb");
     if (!f) return 0;
 
-    if (fread(&n, sizeof(int), 1, f) != 1 || n <= 0) { fclose(f); return 0; }
-    ns = (size_t)n;
-
-    w.num_samples = n;
-    w.time_us = (float*)malloc(ns * sizeof(float));
-    w.gx      = (float*)malloc(ns * sizeof(float));
-    w.gy      = (float*)malloc(ns * sizeof(float));
-    w.gz      = (float*)malloc(ns * sizeof(float));
-    if (!w.time_us || !w.gx || !w.gy || !w.gz) {
-        free_tr_waveform(&w);
+    if (fread(&m, sizeof(int), 1, f) != 1 || m <= 0 || m > MAX_CANONICAL_TRS) {
         fclose(f);
         return 0;
     }
+    ws.num_trs = m;
 
-    if (fread(w.time_us, sizeof(float), ns, f) != ns ||
-        fread(w.gx,      sizeof(float), ns, f) != ns ||
-        fread(w.gy,      sizeof(float), ns, f) != ns ||
-        fread(w.gz,      sizeof(float), ns, f) != ns) {
-        free_tr_waveform(&w);
-        fclose(f);
-        return 0;
+    for (i = 0; i < m; ++i) {
+        if (fread(&n, sizeof(int), 1, f) != 1 || n <= 0) {
+            free_tr_waveform_set(&ws);
+            fclose(f);
+            return 0;
+        }
+        ns = (size_t)n;
+        ws.waveforms[i].num_samples = n;
+        ws.waveforms[i].time_us = (float*)malloc(ns * sizeof(float));
+        ws.waveforms[i].gx      = (float*)malloc(ns * sizeof(float));
+        ws.waveforms[i].gy      = (float*)malloc(ns * sizeof(float));
+        ws.waveforms[i].gz      = (float*)malloc(ns * sizeof(float));
+        if (!ws.waveforms[i].time_us || !ws.waveforms[i].gx ||
+            !ws.waveforms[i].gy      || !ws.waveforms[i].gz) {
+            free_tr_waveform_set(&ws);
+            fclose(f);
+            return 0;
+        }
+        if (fread(ws.waveforms[i].time_us, sizeof(float), ns, f) != ns ||
+            fread(ws.waveforms[i].gx,      sizeof(float), ns, f) != ns ||
+            fread(ws.waveforms[i].gy,      sizeof(float), ns, f) != ns ||
+            fread(ws.waveforms[i].gz,      sizeof(float), ns, f) != ns) {
+            free_tr_waveform_set(&ws);
+            fclose(f);
+            return 0;
+        }
     }
 
     fclose(f);
-    *out = w;
+    *out = ws;
     return 1;
 }
 
