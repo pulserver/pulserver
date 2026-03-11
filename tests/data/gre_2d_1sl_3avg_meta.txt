@@ -5,4 +5,4 @@ max_b1_subseq 0
 tr_duration_us 6740
 num_segments 1
 segment_0_num_blocks 4
-num_canonical_trs 1
+num_canonical_trs 3
