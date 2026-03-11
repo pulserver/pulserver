@@ -110,11 +110,6 @@ static void run_check_case(const gre_case* tc)
     mu_assert(ok, "failed to parse case _meta.txt");
 
     /* 1. Unique ADC definitions */
-    if (strncmp(tc->name, "mprage", 6) == 0) {
-        fprintf(stderr,
-            "[DEBUG][%s] num_unique_adcs: expected=%d lib=%d\n",
-            tc->name, meta.num_unique_adcs, sinfo.num_unique_adcs);
-    }
     mu_assert_int_eq(meta.num_unique_adcs, sinfo.num_unique_adcs);
     for (a = 0; a < sinfo.num_unique_adcs; ++a) {
         pulseqlib_adc_def ad = PULSEQLIB_ADC_DEF_INIT;
@@ -122,23 +117,11 @@ static void run_check_case(const gre_case* tc)
         mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_adc_def failed");
         if (meta.adc_samples[a] > expected_max_adc_samples)
             expected_max_adc_samples = meta.adc_samples[a];
-        if (strncmp(tc->name, "mprage", 6) == 0) {
-            fprintf(stderr,
-                "[DEBUG][%s] adc_%d: expected_samples=%d lib_samples=%d expected_dwell_ns=%d lib_dwell_ns=%d\n",
-                tc->name, a,
-                meta.adc_samples[a], ad.num_samples,
-                meta.adc_dwell_ns[a], ad.dwell_ns);
-        }
         mu_assert_int_eq(meta.adc_samples[a], ad.num_samples);
         mu_assert_int_eq(meta.adc_dwell_ns[a], ad.dwell_ns);
     }
 
     /* Explicitly verify collection-level max ADC samples. */
-    if (strncmp(tc->name, "mprage", 6) == 0) {
-        fprintf(stderr,
-            "[DEBUG][%s] max_adc_samples: expected=%d lib=%d\n",
-            tc->name, expected_max_adc_samples, cinfo.max_adc_samples);
-    }
     mu_assert_int_eq(expected_max_adc_samples, cinfo.max_adc_samples);
 
     /* 2. max_b1_subseq — trivially 0 for single-subsequence collection */
@@ -155,11 +138,6 @@ static void run_check_case(const gre_case* tc)
             expected_num_segments = 4;
         } else if (strncmp(tc->name, "mprage_", 7) == 0) {
             expected_num_segments = 3;
-        }
-        if (strncmp(tc->name, "mprage", 6) == 0) {
-            fprintf(stderr,
-                "[DEBUG][%s] num_segments: expected=%d lib=%d\n",
-                tc->name, expected_num_segments, cinfo.num_segments);
         }
         mu_assert_int_eq(expected_num_segments, cinfo.num_segments);
     }
@@ -249,22 +227,12 @@ static void run_sequences_uieval_case(const gre_case* tc)
     }
 
     /* Number of canonical TR waveforms to compare */
-    if (sinfo.num_passes <= 0) {
-        fprintf(stderr,
-            "[DEBUG][%s] invalid lib num_passes=%d\n",
-            tc->name, sinfo.num_passes);
-    }
     mu_assert(sinfo.num_passes > 0, "invalid num_passes from library");
 
     /* 5. Worst-case TR gradient waveforms */
     build_case_path(tr_path, sizeof(tr_path), tc, "_tr_waveform.bin");
     ok = parse_tr_waveform_set(tr_path, &ref_wfs);
     mu_assert(ok, "failed to parse case _tr_waveform.bin");
-    if (meta.num_canonical_trs != ref_wfs.num_trs) {
-        fprintf(stderr,
-            "[DEBUG][%s] canonical TR mismatch: meta=%d file=%d\n",
-            tc->name, meta.num_canonical_trs, ref_wfs.num_trs);
-    }
     mu_assert_int_eq(meta.num_canonical_trs, ref_wfs.num_trs);
 
     /* Compare first canonical TR against library output.
@@ -280,11 +248,6 @@ static void run_sequences_uieval_case(const gre_case* tc)
            (off-by-one can happen at raster boundary). */
         n = ref_wf->num_samples < lib_wf.gx.num_samples
             ? ref_wf->num_samples : lib_wf.gx.num_samples;
-        if (abs(ref_wf->num_samples - lib_wf.gx.num_samples) > 1) {
-            fprintf(stderr,
-                "[DEBUG][%s] sample count mismatch: ref=%d lib=%d compare_n=%d\n",
-                tc->name, ref_wf->num_samples, lib_wf.gx.num_samples, n);
-        }
         mu_assert(abs(ref_wf->num_samples - lib_wf.gx.num_samples) <= 1,
                   "TR waveform sample count mismatch > 1");
 
@@ -302,11 +265,6 @@ static void run_sequences_uieval_case(const gre_case* tc)
 
             /* Time alignment check */
             if (dt < 0) dt = -dt;
-            if (dt > WAVE_TIME_ABS_TOL) {
-                fprintf(stderr,
-                    "[DEBUG][%s] time mismatch at i=%d: ref_t=%g lib_t=%g dt=%g tol=%g\n",
-                    tc->name, i, ref_t, lib_t, dt, (double)WAVE_TIME_ABS_TOL);
-            }
             mu_assert(dt <= WAVE_TIME_ABS_TOL, "TR waveform time mismatch");
 
             /* Amplitude check: relative tolerance with absolute floor */
@@ -316,22 +274,6 @@ static void run_sequences_uieval_case(const gre_case* tc)
             if (tol_gy < 1.0f) tol_gy = 1.0f;
             tol_gz = (ref_gz < 0 ? -ref_gz : ref_gz) * WAVE_REL_TOL;
             if (tol_gz < 1.0f) tol_gz = 1.0f;
-
-            if (fabsf(ref_gx - lib_gx) > tol_gx) {
-                fprintf(stderr,
-                    "[DEBUG][%s] Gx mismatch at i=%d: ref=%g lib=%g err=%g tol=%g\n",
-                    tc->name, i, ref_gx, lib_gx, fabsf(ref_gx - lib_gx), tol_gx);
-            }
-            if (fabsf(ref_gy - lib_gy) > tol_gy) {
-                fprintf(stderr,
-                    "[DEBUG][%s] Gy mismatch at i=%d: ref=%g lib=%g err=%g tol=%g\n",
-                    tc->name, i, ref_gy, lib_gy, fabsf(ref_gy - lib_gy), tol_gy);
-            }
-            if (fabsf(ref_gz - lib_gz) > tol_gz) {
-                fprintf(stderr,
-                    "[DEBUG][%s] Gz mismatch at i=%d: ref=%g lib=%g err=%g tol=%g\n",
-                    tc->name, i, ref_gz, lib_gz, fabsf(ref_gz - lib_gz), tol_gz);
-            }
 
             mu_assert(fabsf(ref_gx - lib_gx) <= tol_gx, "TR waveform Gx mismatch");
             mu_assert(fabsf(ref_gy - lib_gy) <= tol_gy, "TR waveform Gy mismatch");
@@ -515,12 +457,6 @@ static void run_sequences_geninstructions_case(const gre_case* tc)
                                              coll, s, b, ax);
                         mu_assert(GENI_AMP_NEAR(ref_blk->grad_amp[ax], init_amp),
                                   "grad initial amplitude mismatch");
-                        if (!GENI_AMP_NEAR(fabsf(ref_blk->grad_amp[ax]), max_amp)) {
-                            fprintf(stderr,
-                                "[TMP][%s] grad max mismatch at seg=%d blk=%d ax=%d ref_abs=%g init=%g max=%g\n",
-                                tc->name, s, b, ax,
-                                fabsf(ref_blk->grad_amp[ax]), init_amp, max_amp);
-                        }
                         mu_assert(GENI_AMP_NEAR(fabsf(ref_blk->grad_amp[ax]), max_amp),
                                   "grad max amplitude mismatch");
                     }
@@ -629,8 +565,7 @@ static void check_fmod_shift(const pulseqlib_collection* coll,
     const scan_table_file* scan,
     const float* shift,
     const float* fov_rotation,
-    const char* label,
-    const char* case_name)
+    const char* label)
 {
     pulseqlib_freq_mod_collection* fmc = NULL;
     int rc;
@@ -686,19 +621,6 @@ static void check_fmod_shift(const pulseqlib_collection* coll,
                 used_plan_count++;
             }
 
-            if (fd->num_samples != ns) {
-                fprintf(stderr,
-                    "[TMP][%s] freq_mod num_samples mismatch at scan_pos=%d def_idx=%d plan_idx=%d entry_idx=%d expected=%d got=%d ref_raster=%g ref_dur=%g lib_raster=%g lib_entry_ns=%d shift=(%.6g,%.6g,%.6g)\n",
-                    case_name, pos, def_idx, plan_idx,
-                    (plan_idx >= 0 && plan_idx < lib->num_plan_instances)
-                        ? lib->pi_entry_idx[plan_idx] : -1,
-                    fd->num_samples, ns,
-                    fd->raster_us, fd->duration_us,
-                    lib->raster_us,
-                    (plan_idx >= 0 && plan_idx < lib->num_plan_instances)
-                        ? lib->entry_num_samples[lib->pi_entry_idx[plan_idx]] : -1,
-                    shift[0], shift[1], shift[2]);
-            }
             mu_assert_int_eq(fd->num_samples, ns);
 
             for (s = 0; s < ns; ++s) {
@@ -801,8 +723,7 @@ static void run_freq_mod_definitions_case(const gre_case* tc)
                              &scan,
                              shifts[t],
                              rotations[r],
-                             "build_freq_mod_collection failed",
-                             tc->name);
+                             "build_freq_mod_collection failed");
         }
     }
 
@@ -937,12 +858,6 @@ static void run_scan_table_case(const gre_case* tc)
         }
 
         e = &ref.entries[pos];
-
-        if (strncmp(tc->name, "mprage_nav_", 11) == 0 && pos == 35) {
-            fprintf(stderr,
-                "[TMP][%s] scan_pos=35 inst: rf_amp=%g adc_flag=%d dur_us=%d seg_id=%d\n",
-                tc->name, inst.rf_amp_hz, inst.adc_flag, inst.duration_us, ci.segment_id);
-        }
 
         /* RF amplitude (relative tolerance or absolute for zero) */
         tol = (float)fabs(e->rf_amp_hz) * 1e-4f;
