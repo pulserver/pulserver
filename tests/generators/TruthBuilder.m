@@ -47,6 +47,7 @@ classdef TruthBuilder < handle
         fmod_types          = []
         fmod_durations      = []   % blockDuration of each def (for scan-table matching)
         fmod_kinds          = []   % 0=RF, 1=ADC (same as fmod_types)
+        fmod_gradsigs       = []   % Nx3 peak |grad amplitude| per axis (for dedup)
         scan_table          = []
         rotmat_table        = []
         freq_mod_table      = []
@@ -469,6 +470,7 @@ classdef TruthBuilder < handle
             types = [];
             def_durations = [];   % blockDuration of each def (for matching)
             def_kinds     = [];   % 0=RF, 1=ADC
+            def_gradsigs  = [];   % Nx3 peak |grad amplitude| per axis
 
             for blk = 1:num_total_blocks
                 block = obj.seq.getBlock(blk);
@@ -477,11 +479,12 @@ classdef TruthBuilder < handle
                     rf_start = block.rf.delay;
                     rf_end   = block.rf.delay + block.rf.t(end);
                     if obj.anyGradNonzeroInWindow(block, rf_start, rf_end)
-                        % Check if we already have an RF def with this blockDuration.
                         dur = block.blockDuration;
+                        gsig = TruthBuilder.blockGradSig(block);
                         already = false;
                         for k = 1:length(def_durations)
-                            if def_kinds(k) == 0 && abs(def_durations(k) - dur) < 1e-9
+                            if def_kinds(k) == 0 && abs(def_durations(k) - dur) < 1e-9 ...
+                                    && max(abs(def_gradsigs(k,:) - gsig)) < 1
                                 already = true;
                                 break;
                             end
@@ -496,6 +499,7 @@ classdef TruthBuilder < handle
                             types(end+1) = 0;         %#ok<AGROW>
                             def_durations(end+1) = dur; %#ok<AGROW>
                             def_kinds(end+1) = 0;      %#ok<AGROW>
+                            def_gradsigs(end+1,:) = gsig; %#ok<AGROW>
                         end
                     end
                 end
@@ -505,9 +509,11 @@ classdef TruthBuilder < handle
                     adc_end   = block.adc.delay + block.adc.numSamples * block.adc.dwell;
                     if obj.anyGradNonzeroInWindow(block, adc_start, adc_end)
                         dur = block.blockDuration;
+                        gsig = TruthBuilder.blockGradSig(block);
                         already = false;
                         for k = 1:length(def_durations)
-                            if def_kinds(k) == 1 && abs(def_durations(k) - dur) < 1e-9
+                            if def_kinds(k) == 1 && abs(def_durations(k) - dur) < 1e-9 ...
+                                    && max(abs(def_gradsigs(k,:) - gsig)) < 1
                                 already = true;
                                 break;
                             end
@@ -523,6 +529,7 @@ classdef TruthBuilder < handle
                             types(end+1) = 1;           %#ok<AGROW>
                             def_durations(end+1) = dur;  %#ok<AGROW>
                             def_kinds(end+1) = 1;        %#ok<AGROW>
+                            def_gradsigs(end+1,:) = gsig; %#ok<AGROW>
                         end
                     end
                 end
@@ -532,6 +539,7 @@ classdef TruthBuilder < handle
             obj.fmod_types      = types;
             obj.fmod_durations  = def_durations;
             obj.fmod_kinds      = def_kinds;
+            obj.fmod_gradsigs   = def_gradsigs;
         end
 
         % ---- Phase 5: scan table ----
@@ -588,8 +596,10 @@ classdef TruthBuilder < handle
                             rf_end   = block.rf.delay + block.rf.t(end);
                             if obj.anyGradNonzeroInWindow(block, rf_start, rf_end)
                                 dur = block.blockDuration;
+                                gsig = TruthBuilder.blockGradSig(block);
                                 for ki = 1:length(obj.fmod_durations)
-                                    if obj.fmod_kinds(ki) == 0 && abs(obj.fmod_durations(ki) - dur) < 1e-9
+                                    if obj.fmod_kinds(ki) == 0 && abs(obj.fmod_durations(ki) - dur) < 1e-9 ...
+                                            && max(abs(obj.fmod_gradsigs(ki,:) - gsig)) < 1
                                         fmt(act) = ki;
                                         break;
                                     end
@@ -617,8 +627,10 @@ classdef TruthBuilder < handle
                             adc_end   = block.adc.delay + block.adc.numSamples * block.adc.dwell;
                             if obj.anyGradNonzeroInWindow(block, adc_start, adc_end)
                                 dur = block.blockDuration;
+                                gsig = TruthBuilder.blockGradSig(block);
                                 for ki = 1:length(obj.fmod_durations)
-                                    if obj.fmod_kinds(ki) == 1 && abs(obj.fmod_durations(ki) - dur) < 1e-9
+                                    if obj.fmod_kinds(ki) == 1 && abs(obj.fmod_durations(ki) - dur) < 1e-9 ...
+                                            && max(abs(obj.fmod_gradsigs(ki,:) - gsig)) < 1
                                         fmt(act) = ki;
                                         break;
                                     end
@@ -1100,6 +1112,18 @@ classdef TruthBuilder < handle
                 amp = grad.amplitude;
             else
                 amp = max(abs(grad.waveform));
+            end
+        end
+
+        function sig = blockGradSig(block)
+        % BLOCKGRADSIG  Return [|peak_gx|, |peak_gy|, |peak_gz|] for a block.
+            sig = [0, 0, 0];
+            axes = {'gx', 'gy', 'gz'};
+            for ch = 1:3
+                ax = axes{ch};
+                if isfield(block, ax) && ~isempty(block.(ax))
+                    sig(ch) = abs(TruthBuilder.gradPeakAmp(block.(ax)));
+                end
             end
         end
 
