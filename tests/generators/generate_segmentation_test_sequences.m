@@ -9,11 +9,16 @@
 clear; clc;
 import mr.*
 
-write_gre_2d_base_case(1, 1);
-fprintf('\n SPGR segmentation case generated.\n');
+write_gre_2d_base_case(true, 1, 1);
+write_gre_2d_base_case(true, 3, 1);
+write_gre_2d_base_case(true, 1, 3);
+write_gre_2d_base_case(true, 3, 3);
 
 
-function write_gre_2d_base_case(num_slices, num_averages)
+function seq = write_gre_2d_base_case(write, num_slices, num_averages)
+    base = sprintf('gre_2d_%dsl_%davg', num_slices, num_averages);
+    disp(sprintf('Generating sequence: %s', base));
+
     sys = make_system();
 
     % Basic GRE geometry intentionally small for fast iteration.
@@ -231,12 +236,15 @@ function write_gre_2d_base_case(num_slices, num_averages)
         error('Timing check failed:\n%s', strjoin(err, '\n'));
     end
 
+    if write == false
+        return;
+    end
+
     out_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'data');
     if ~exist(out_dir, 'dir')
         mkdir(out_dir);
     end
 
-    base = sprintf('gre_2d_%dsl_%davg', num_slices, num_averages);
     seq_path = fullfile(out_dir, [base '.seq']);
     seq.write(seq_path);
 
