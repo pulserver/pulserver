@@ -40,6 +40,7 @@ classdef TruthBuilder < handle
         tr_times_list       = {}   % cell array of time vectors per group
         tr_waveforms        = {}   % cell array of (N_i, 3) per group
         segment_data        = []   % struct for binary export
+        unique_adcs         = []   % struct array: (numSamples, dwell)
         fmod_defs           = {}
         fmod_types          = []
         scan_table          = []
@@ -126,6 +127,7 @@ classdef TruthBuilder < handle
         function prepare(obj)
             if obj.prepared, return; end
 
+            obj.discoverUniqueAdcs();
             obj.computePeakRFAndCanonicalScales();
             obj.buildCanonicalTRs();
             obj.buildSegmentData();
@@ -138,6 +140,22 @@ classdef TruthBuilder < handle
             obj.seq.setDefinition('TotalDuration', sum(obj.seq.blockDurations));
 
             obj.prepared = true;
+        end
+
+        % ---- ADC discovery ----
+        function discoverUniqueAdcs(obj)
+        % DISCOVERUNIQUEADCS  Scan all blocks, collect unique (numSamples, dwell) pairs.
+            adcs = zeros(0, 2);  % each row: [numSamples, dwell]
+            for b = 1:length(obj.seq.blockEvents)
+                block = obj.seq.getBlock(b);
+                if isfield(block, 'adc') && ~isempty(block.adc)
+                    key = [block.adc.numSamples, block.adc.dwell];
+                    if isempty(adcs) || ~any(adcs(:,1) == key(1) & abs(adcs(:,2) - key(2)) < 1e-15)
+                        adcs(end+1, :) = key; %#ok<AGROW>
+                    end
+                end
+            end
+            obj.unique_adcs = adcs;
         end
 
         % ---- TR group discovery ----
@@ -678,11 +696,15 @@ classdef TruthBuilder < handle
             if isfield(block, 'adc') && ~isempty(block.adc)
                 bd.has_adc = 1;
                 bd.adc_delay = block.adc.delay;
-                bd.adc_id = 1;
+                % Look up 0-based unique ADC index.
+                key = [block.adc.numSamples, block.adc.dwell];
+                match = find(obj.unique_adcs(:,1) == key(1) & ...
+                             abs(obj.unique_adcs(:,2) - key(2)) < 1e-15, 1);
+                bd.adc_id = match - 1;  % 0-based
             else
                 bd.has_adc = 0;
                 bd.adc_delay = 0;
-                bd.adc_id = [];
+                bd.adc_id = -1;
             end
 
             % Rotation: derive from labels or block rotation presence.
@@ -802,23 +824,14 @@ classdef TruthBuilder < handle
 
         % ---- export: meta text ----
         function exportMeta(obj, path)
-            % Find first ADC block to get samples/dwell.
-            adc_info = [];
-            for b = 1:length(obj.seq.blockEvents)
-                block = obj.seq.getBlock(b);
-                if isfield(block, 'adc') && ~isempty(block.adc)
-                    adc_info = block.adc;
-                    break;
-                end
-            end
-
             fid = fopen(path, 'w');
             if fid < 0, error('Failed to open %s', path); end
 
-            fprintf(fid, 'num_unique_adcs %d\n', 1);
-            if ~isempty(adc_info)
-                fprintf(fid, 'adc_0_samples %d\n', adc_info.numSamples);
-                fprintf(fid, 'adc_0_dwell_ns %d\n', round(adc_info.dwell * 1e9));
+            num_adcs = size(obj.unique_adcs, 1);
+            fprintf(fid, 'num_unique_adcs %d\n', num_adcs);
+            for a = 1:num_adcs
+                fprintf(fid, 'adc_%d_samples %d\n', a - 1, obj.unique_adcs(a, 1));
+                fprintf(fid, 'adc_%d_dwell_ns %d\n', a - 1, round(obj.unique_adcs(a, 2) * 1e9));
             end
             fprintf(fid, 'max_b1_subseq %d\n', 0);
             fprintf(fid, 'tr_duration_us %d\n', round(obj.TR * 1e6));
