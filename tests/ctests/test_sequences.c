@@ -40,6 +40,21 @@ static const gre_case kGreCases[] = {
     {"gre_2d_3sl_3avg", "gre_2d_3sl_3avg.seq", "gre_2d_3sl_3avg", 3, {0, 22}},
 };
 
+typedef struct {
+    const char* name;
+    const char* seq_file;
+    const char* base;
+    int num_averages;
+    int fmod_positions[2];
+} mprage_case;
+
+static const mprage_case kMprageCases[] = {
+    {"mprage_2d_1sl_1avg", "mprage_2d_1sl_1avg.seq", "mprage_2d_1sl_1avg", 1, {0, 22}},
+    {"mprage_2d_1sl_3avg", "mprage_2d_1sl_3avg.seq", "mprage_2d_1sl_3avg", 3, {0, 22}},
+    {"mprage_2d_3sl_1avg", "mprage_2d_3sl_1avg.seq", "mprage_2d_3sl_1avg", 1, {0, 22}},
+    {"mprage_2d_3sl_3avg", "mprage_2d_3sl_3avg.seq", "mprage_2d_3sl_3avg", 3, {0, 22}},
+};
+
 static void build_case_path(char* dst, size_t dst_sz, const gre_case* tc, const char* suffix)
 {
     (void)snprintf(dst, dst_sz, TEST_DATA_DIR "%s%s", tc->base, suffix);
@@ -103,12 +118,21 @@ MU_TEST(test_check_gre_2d_1sl_3avg) { run_check_case(&kGreCases[1]); }
 MU_TEST(test_check_gre_2d_3sl_1avg) { run_check_case(&kGreCases[2]); }
 MU_TEST(test_check_gre_2d_3sl_3avg) { run_check_case(&kGreCases[3]); }
 
+MU_TEST(test_check_mprage_2d_1sl_1avg) { run_check_case((const gre_case*)&kMprageCases[0]); }
+MU_TEST(test_check_mprage_2d_1sl_3avg) { run_check_case((const gre_case*)&kMprageCases[1]); }
+MU_TEST(test_check_mprage_2d_3sl_1avg) { run_check_case((const gre_case*)&kMprageCases[2]); }
+MU_TEST(test_check_mprage_2d_3sl_3avg) { run_check_case((const gre_case*)&kMprageCases[3]); }
+
 MU_TEST_SUITE(suite_sequences_check)
 {
     MU_RUN_TEST(test_check_gre_2d_1sl_1avg);
     MU_RUN_TEST(test_check_gre_2d_1sl_3avg);
     MU_RUN_TEST(test_check_gre_2d_3sl_1avg);
     MU_RUN_TEST(test_check_gre_2d_3sl_3avg);
+    MU_RUN_TEST(test_check_mprage_2d_1sl_1avg);
+    MU_RUN_TEST(test_check_mprage_2d_1sl_3avg);
+    MU_RUN_TEST(test_check_mprage_2d_3sl_1avg);
+    MU_RUN_TEST(test_check_mprage_2d_3sl_3avg);
 }
 
 /* ------------------------------------------------------------------ */
@@ -262,12 +286,21 @@ MU_TEST(test_sequences_uieval_gre_2d_1sl_3avg) { run_sequences_uieval_case(&kGre
 MU_TEST(test_sequences_uieval_gre_2d_3sl_1avg) { run_sequences_uieval_case(&kGreCases[2]); }
 MU_TEST(test_sequences_uieval_gre_2d_3sl_3avg) { run_sequences_uieval_case(&kGreCases[3]); }
 
+MU_TEST(test_sequences_uieval_mprage_2d_1sl_1avg) { run_sequences_uieval_case((const gre_case*)&kMprageCases[0]); }
+MU_TEST(test_sequences_uieval_mprage_2d_1sl_3avg) { run_sequences_uieval_case((const gre_case*)&kMprageCases[1]); }
+MU_TEST(test_sequences_uieval_mprage_2d_3sl_1avg) { run_sequences_uieval_case((const gre_case*)&kMprageCases[2]); }
+MU_TEST(test_sequences_uieval_mprage_2d_3sl_3avg) { run_sequences_uieval_case((const gre_case*)&kMprageCases[3]); }
+
 MU_TEST_SUITE(suite_sequences_uieval)
 {
     MU_RUN_TEST(test_sequences_uieval_gre_2d_1sl_1avg);
     MU_RUN_TEST(test_sequences_uieval_gre_2d_1sl_3avg);
     MU_RUN_TEST(test_sequences_uieval_gre_2d_3sl_1avg);
     MU_RUN_TEST(test_sequences_uieval_gre_2d_3sl_3avg);
+    MU_RUN_TEST(test_sequences_uieval_mprage_2d_1sl_1avg);
+    MU_RUN_TEST(test_sequences_uieval_mprage_2d_1sl_3avg);
+    MU_RUN_TEST(test_sequences_uieval_mprage_2d_3sl_1avg);
+    MU_RUN_TEST(test_sequences_uieval_mprage_2d_3sl_3avg);
 }
 
 /* ------------------------------------------------------------------ */
@@ -490,6 +523,11 @@ MU_TEST(test_sequences_geninstructions_gre_2d_1sl_3avg) { run_sequences_geninstr
 MU_TEST(test_sequences_geninstructions_gre_2d_3sl_1avg) { run_sequences_geninstructions_case(&kGreCases[2]); }
 MU_TEST(test_sequences_geninstructions_gre_2d_3sl_3avg) { run_sequences_geninstructions_case(&kGreCases[3]); }
 
+MU_TEST(test_sequences_geninstructions_mprage_2d_1sl_1avg) { run_sequences_geninstructions_case((const gre_case*)&kMprageCases[0]); }
+MU_TEST(test_sequences_geninstructions_mprage_2d_1sl_3avg) { run_sequences_geninstructions_case((const gre_case*)&kMprageCases[1]); }
+MU_TEST(test_sequences_geninstructions_mprage_2d_3sl_1avg) { run_sequences_geninstructions_case((const gre_case*)&kMprageCases[2]); }
+MU_TEST(test_sequences_geninstructions_mprage_2d_3sl_3avg) { run_sequences_geninstructions_case((const gre_case*)&kMprageCases[3]); }
+
 /* ------------------------------------------------------------------ */
 /*  Phase 4: Frequency-modulation definition waveforms                */
 /* ------------------------------------------------------------------ */
@@ -614,16 +652,29 @@ MU_TEST(test_freq_mod_definitions_gre_2d_1sl_3avg) { run_freq_mod_definitions_ca
 MU_TEST(test_freq_mod_definitions_gre_2d_3sl_1avg) { run_freq_mod_definitions_case(&kGreCases[2]); }
 MU_TEST(test_freq_mod_definitions_gre_2d_3sl_3avg) { run_freq_mod_definitions_case(&kGreCases[3]); }
 
+MU_TEST(test_freq_mod_definitions_mprage_2d_1sl_1avg) { run_freq_mod_definitions_case((const gre_case*)&kMprageCases[0]); }
+MU_TEST(test_freq_mod_definitions_mprage_2d_1sl_3avg) { run_freq_mod_definitions_case((const gre_case*)&kMprageCases[1]); }
+MU_TEST(test_freq_mod_definitions_mprage_2d_3sl_1avg) { run_freq_mod_definitions_case((const gre_case*)&kMprageCases[2]); }
+MU_TEST(test_freq_mod_definitions_mprage_2d_3sl_3avg) { run_freq_mod_definitions_case((const gre_case*)&kMprageCases[3]); }
+
 MU_TEST_SUITE(suite_sequences_geninstructions)
 {
     MU_RUN_TEST(test_sequences_geninstructions_gre_2d_1sl_1avg);
     MU_RUN_TEST(test_sequences_geninstructions_gre_2d_1sl_3avg);
     MU_RUN_TEST(test_sequences_geninstructions_gre_2d_3sl_1avg);
     MU_RUN_TEST(test_sequences_geninstructions_gre_2d_3sl_3avg);
+    MU_RUN_TEST(test_sequences_geninstructions_mprage_2d_1sl_1avg);
+    MU_RUN_TEST(test_sequences_geninstructions_mprage_2d_1sl_3avg);
+    MU_RUN_TEST(test_sequences_geninstructions_mprage_2d_3sl_1avg);
+    MU_RUN_TEST(test_sequences_geninstructions_mprage_2d_3sl_3avg);
     MU_RUN_TEST(test_freq_mod_definitions_gre_2d_1sl_1avg);
     MU_RUN_TEST(test_freq_mod_definitions_gre_2d_1sl_3avg);
     MU_RUN_TEST(test_freq_mod_definitions_gre_2d_3sl_1avg);
     MU_RUN_TEST(test_freq_mod_definitions_gre_2d_3sl_3avg);
+    MU_RUN_TEST(test_freq_mod_definitions_mprage_2d_1sl_1avg);
+    MU_RUN_TEST(test_freq_mod_definitions_mprage_2d_1sl_3avg);
+    MU_RUN_TEST(test_freq_mod_definitions_mprage_2d_3sl_1avg);
+    MU_RUN_TEST(test_freq_mod_definitions_mprage_2d_3sl_3avg);
 }
 
 
@@ -738,12 +789,21 @@ MU_TEST(test_scan_table_gre_2d_1sl_3avg) { run_scan_table_case(&kGreCases[1]); }
 MU_TEST(test_scan_table_gre_2d_3sl_1avg) { run_scan_table_case(&kGreCases[2]); }
 MU_TEST(test_scan_table_gre_2d_3sl_3avg) { run_scan_table_case(&kGreCases[3]); }
 
+MU_TEST(test_scan_table_mprage_2d_1sl_1avg) { run_scan_table_case((const gre_case*)&kMprageCases[0]); }
+MU_TEST(test_scan_table_mprage_2d_1sl_3avg) { run_scan_table_case((const gre_case*)&kMprageCases[1]); }
+MU_TEST(test_scan_table_mprage_2d_3sl_1avg) { run_scan_table_case((const gre_case*)&kMprageCases[2]); }
+MU_TEST(test_scan_table_mprage_2d_3sl_3avg) { run_scan_table_case((const gre_case*)&kMprageCases[3]); }
+
 MU_TEST_SUITE(suite_sequences_scanloop)
 {
     MU_RUN_TEST(test_scan_table_gre_2d_1sl_1avg);
     MU_RUN_TEST(test_scan_table_gre_2d_1sl_3avg);
     MU_RUN_TEST(test_scan_table_gre_2d_3sl_1avg);
     MU_RUN_TEST(test_scan_table_gre_2d_3sl_3avg);
+    MU_RUN_TEST(test_scan_table_mprage_2d_1sl_1avg);
+    MU_RUN_TEST(test_scan_table_mprage_2d_1sl_3avg);
+    MU_RUN_TEST(test_scan_table_mprage_2d_3sl_1avg);
+    MU_RUN_TEST(test_scan_table_mprage_2d_3sl_3avg);
 }
 
 

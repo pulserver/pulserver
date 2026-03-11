@@ -15,6 +15,9 @@ write_gre(true, 1, 3);
 write_gre(true, 3, 3);
 
 write_mprage(true, 1, 1);
+write_mprage(true, 3, 1);
+write_mprage(true, 1, 3);
+write_mprage(true, 3, 3);
 
 
 function seq = write_gre(write, num_slices, num_averages)
