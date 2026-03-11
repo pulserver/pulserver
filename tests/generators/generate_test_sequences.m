@@ -643,22 +643,21 @@ function seq = write_gre_2d_base_case(write, num_slices, num_averages)
 
     base_rot = eye(3); % eye is AX; we may have COR, SAG or OBLIQUE
     ppm_to_hz = 1e-6 * sys.gamma * sys.B0;
+    num_dummy_blocks = ndummy * num_blocks_in_tr;
     once = 0;
     norot = 0;
     for avg = 1:num_averages
         for b = 1:length(seq.blockEvents)
             block = seq.getBlock(b);
             
-            % get sticky ONCE label value for this block, if it exists
-            if isfield(block, 'labels') && ~isempty(block.labels)
-                for l = 1:length(block.labels)
-                    if strcmp(block.labels(l).label, 'ONCE')
-                        once = block.labels(l).value;
-                    end
-                    if strcmp(block.labels(l).label, 'NOROT')
-                        norot = block.labels(l).value;
-                    end
-                end
+            % Track sticky ONCE/NOROT state directly.
+            % seq.getBlock() does not return labels, so we mirror the
+            % construction logic: block 1 carries SET ONCE 1 (prep region),
+            % first main block carries SET ONCE 0.
+            if b == 1
+                once = 1;
+            elseif b == num_dummy_blocks + 1
+                once = 0;
             end
 
             if once == 0 || (once == 1 && avg == 1) || (once == 2 && avg == num_averages)

@@ -2012,7 +2012,7 @@ int pulseqlib__get_scan_table_segments(
         }
 
         for (b = 0; b < nb; ++b) {
-            bte  = &desc->block_table[n + b];
+            bte  = &desc->block_table[desc->scan_table_block_idx[n + b]];
             bdef = &desc->block_definitions[bte->id];
 
             /* digitalout / trigger */

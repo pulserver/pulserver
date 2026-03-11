@@ -25,23 +25,44 @@
 
 #include <math.h>
 
+typedef struct {
+    const char* name;
+    const char* seq_file;
+    const char* base;
+    int num_averages;
+    int fmod_positions[2];
+} gre_case;
+
+static const gre_case kGreCases[] = {
+    {"gre_2d_1sl_1avg", "gre_2d_1sl_1avg.seq", "gre_2d_1sl_1avg", 1, {0, 22}},
+    {"gre_2d_1sl_3avg", "gre_2d_1sl_3avg.seq", "gre_2d_1sl_3avg", 3, {0, 22}},
+    {"gre_2d_3sl_1avg", "gre_2d_3sl_1avg.seq", "gre_2d_3sl_1avg", 1, {0, 22}},
+    {"gre_2d_3sl_3avg", "gre_2d_3sl_3avg.seq", "gre_2d_3sl_3avg", 3, {0, 22}},
+};
+
+static void build_case_path(char* dst, size_t dst_sz, const gre_case* tc, const char* suffix)
+{
+    (void)snprintf(dst, dst_sz, TEST_DATA_DIR "%s%s", tc->base, suffix);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Phase 1: example_check step 6 (ADC, max_b1, TR)                  */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_check)
+static void run_check_case(const gre_case* tc)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
     pulseqlib_collection_info cinfo = PULSEQLIB_COLLECTION_INFO_INIT;
     pulseqlib_subseq_info sinfo = PULSEQLIB_SUBSEQ_INFO_INIT;
     seg_meta meta = SEG_META_INIT;
+    char meta_path[512];
     int rc, a, ok;
 
     /* Load sequence */
     gre_opts_init(&opts);
-    rc = load_seq(&coll, "gre_2d_1sl_1avg.seq", &opts);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for GRE baseline");
+    rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for GRE test case");
 
     /* Collection must have exactly one subsequence */
     rc = pulseqlib_get_collection_info(coll, &cinfo);
@@ -53,8 +74,9 @@ MU_TEST(test_check)
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_subseq_info failed");
 
     /* Parse MATLAB ground truth */
-    ok = parse_meta(TEST_DATA_DIR "gre_2d_1sl_1avg_meta.txt", &meta);
-    mu_assert(ok, "failed to parse gre_2d_1sl_1avg_meta.txt");
+    build_case_path(meta_path, sizeof(meta_path), tc, "_meta.txt");
+    ok = parse_meta(meta_path, &meta);
+    mu_assert(ok, "failed to parse case _meta.txt");
 
     /* 1. Unique ADC definitions */
     mu_assert_int_eq(meta.num_unique_adcs, sinfo.num_unique_adcs);
@@ -76,9 +98,17 @@ MU_TEST(test_check)
     pulseqlib_collection_free(coll);
 }
 
+MU_TEST(test_check_gre_2d_1sl_1avg) { run_check_case(&kGreCases[0]); }
+MU_TEST(test_check_gre_2d_1sl_3avg) { run_check_case(&kGreCases[1]); }
+MU_TEST(test_check_gre_2d_3sl_1avg) { run_check_case(&kGreCases[2]); }
+MU_TEST(test_check_gre_2d_3sl_3avg) { run_check_case(&kGreCases[3]); }
+
 MU_TEST_SUITE(suite_sequences_check)
 {
-    MU_RUN_TEST(test_check);
+    MU_RUN_TEST(test_check_gre_2d_1sl_1avg);
+    MU_RUN_TEST(test_check_gre_2d_1sl_3avg);
+    MU_RUN_TEST(test_check_gre_2d_3sl_1avg);
+    MU_RUN_TEST(test_check_gre_2d_3sl_3avg);
 }
 
 /* ------------------------------------------------------------------ */
@@ -89,7 +119,7 @@ MU_TEST_SUITE(suite_sequences_check)
 #define WAVE_REL_TOL 1e-3f
 #define WAVE_TIME_ABS_TOL 0.5f  /* us — half a raster step */
 
-MU_TEST(test_sequences_uieval)
+static void run_sequences_uieval_case(const gre_case* tc)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
@@ -99,12 +129,14 @@ MU_TEST(test_sequences_uieval)
     seg_tr_waveform ref_wf = SEG_TR_WAVEFORM_INIT;
     pulseqlib_tr_gradient_waveforms lib_wf = PULSEQLIB_TR_GRADIENT_WAVEFORMS_INIT;
     pulseqlib_diagnostic diag;
+    char meta_path[512];
+    char tr_path[512];
     int rc, s, i, ok, n;
 
     /* Load sequence */
     gre_opts_init(&opts);
-    rc = load_seq(&coll, "gre_2d_1sl_1avg.seq", &opts);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for GRE baseline");
+    rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for GRE test case");
 
     /* Collection info */
     rc = pulseqlib_get_collection_info(coll, &cinfo);
@@ -115,8 +147,9 @@ MU_TEST(test_sequences_uieval)
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_subseq_info failed");
 
     /* Parse MATLAB ground truth */
-    ok = parse_meta(TEST_DATA_DIR "gre_2d_1sl_1avg_meta.txt", &meta);
-    mu_assert(ok, "failed to parse gre_2d_1sl_1avg_meta.txt");
+    build_case_path(meta_path, sizeof(meta_path), tc, "_meta.txt");
+    ok = parse_meta(meta_path, &meta);
+    mu_assert(ok, "failed to parse case _meta.txt");
 
     /* 4. Segment structure */
     mu_assert_int_eq(meta.num_segments, cinfo.num_segments);
@@ -131,8 +164,9 @@ MU_TEST(test_sequences_uieval)
     mu_assert_int_eq(meta.num_canonical_trs, sinfo.num_passes);
 
     /* 5. Worst-case TR gradient waveforms */
-    ok = parse_tr_waveform(TEST_DATA_DIR "gre_2d_1sl_1avg_tr_waveform.bin", &ref_wf);
-    mu_assert(ok, "failed to parse gre_2d_1sl_1avg_tr_waveform.bin");
+    build_case_path(tr_path, sizeof(tr_path), tc, "_tr_waveform.bin");
+    ok = parse_tr_waveform(tr_path, &ref_wf);
+    mu_assert(ok, "failed to parse case _tr_waveform.bin");
 
     pulseqlib_diagnostic_init(&diag);
     rc = pulseqlib_get_tr_gradient_waveforms(coll, 0, &lib_wf, &diag);
@@ -179,9 +213,17 @@ MU_TEST(test_sequences_uieval)
     pulseqlib_collection_free(coll);
 }
 
+MU_TEST(test_sequences_uieval_gre_2d_1sl_1avg) { run_sequences_uieval_case(&kGreCases[0]); }
+MU_TEST(test_sequences_uieval_gre_2d_1sl_3avg) { run_sequences_uieval_case(&kGreCases[1]); }
+MU_TEST(test_sequences_uieval_gre_2d_3sl_1avg) { run_sequences_uieval_case(&kGreCases[2]); }
+MU_TEST(test_sequences_uieval_gre_2d_3sl_3avg) { run_sequences_uieval_case(&kGreCases[3]); }
+
 MU_TEST_SUITE(suite_sequences_uieval)
 {
-    MU_RUN_TEST(test_sequences_uieval);
+    MU_RUN_TEST(test_sequences_uieval_gre_2d_1sl_1avg);
+    MU_RUN_TEST(test_sequences_uieval_gre_2d_1sl_3avg);
+    MU_RUN_TEST(test_sequences_uieval_gre_2d_3sl_1avg);
+    MU_RUN_TEST(test_sequences_uieval_gre_2d_3sl_3avg);
 }
 
 /* ------------------------------------------------------------------ */
@@ -206,26 +248,28 @@ MU_TEST_SUITE(suite_sequences_uieval)
 #define GENI_AMP_NEAR(a, b) \
     (fabsf((a) - (b)) <= (((fabsf(a) > 1.0f ? fabsf(a) : 1.0f)) * GENI_AMP_REL_TOL))
 
-MU_TEST(test_sequences_geninstructions)
+static void run_sequences_geninstructions_case(const gre_case* tc)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
     pulseqlib_collection_info cinfo = PULSEQLIB_COLLECTION_INFO_INIT;
     static seg_def_file ref;   /* static: too large (~8 MB) for stack */
+    char seg_path[512];
     int rc, ok;
     int s, b, ax;
 
     /* Load sequence */
     gre_opts_init(&opts);
-    rc = load_seq(&coll, "gre_2d_1sl_1avg.seq", &opts);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for GRE baseline");
+    rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
+    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for GRE test case");
 
     rc = pulseqlib_get_collection_info(coll, &cinfo);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_collection_info failed");
 
     /* Load MATLAB ground truth */
-    ok = parse_seg_def(TEST_DATA_DIR "gre_2d_1sl_1avg_segment_def.bin", &ref);
-    mu_assert(ok, "failed to parse gre_2d_1sl_1avg_segment_def.bin");
+    build_case_path(seg_path, sizeof(seg_path), tc, "_segment_def.bin");
+    ok = parse_seg_def(seg_path, &ref);
+    mu_assert(ok, "failed to parse case _segment_def.bin");
 
     /* Number of segments must match */
     mu_assert_int_eq(ref.num_segments, cinfo.num_segments);
@@ -397,6 +441,11 @@ MU_TEST(test_sequences_geninstructions)
     pulseqlib_collection_free(coll);
 }
 
+MU_TEST(test_sequences_geninstructions_gre_2d_1sl_1avg) { run_sequences_geninstructions_case(&kGreCases[0]); }
+MU_TEST(test_sequences_geninstructions_gre_2d_1sl_3avg) { run_sequences_geninstructions_case(&kGreCases[1]); }
+MU_TEST(test_sequences_geninstructions_gre_2d_3sl_1avg) { run_sequences_geninstructions_case(&kGreCases[2]); }
+MU_TEST(test_sequences_geninstructions_gre_2d_3sl_3avg) { run_sequences_geninstructions_case(&kGreCases[3]); }
+
 /* ------------------------------------------------------------------ */
 /*  Phase 4: Frequency-modulation definition waveforms                */
 /* ------------------------------------------------------------------ */
@@ -467,15 +516,13 @@ static void check_fmod_shift(
     pulseqlib_freq_mod_collection_free(fmc);
 }
 
-MU_TEST(test_freq_mod_definitions)
+static void run_freq_mod_definitions_case(const gre_case* tc)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
     fmod_def_file ref = FMOD_DEF_FILE_INIT;
+    char fmod_path[512];
     int rc, ok, t;
-
-    /* RF block: scan pos 0.  ADC block: scan pos 22. */
-    int test_positions[2] = {0, 22};
 
     /* Three orthogonal shifts + one combined shift */
     float shifts[4][3] = {
@@ -496,10 +543,11 @@ MU_TEST(test_freq_mod_definitions)
     };
 
     gre_opts_init(&opts);
-    rc = load_seq(&coll, "gre_2d_1sl_1avg.seq", &opts);
+    rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed");
 
-    ok = parse_fmod_defs(TEST_DATA_DIR "gre_2d_1sl_1avg_freqmod_def.bin", &ref);
+    build_case_path(fmod_path, sizeof(fmod_path), tc, "_freqmod_def.bin");
+    ok = parse_fmod_defs(fmod_path, &ref);
     mu_assert(ok, "failed to parse freqmod_def.bin");
     mu_assert_int_eq(2, ref.num_defs);
 
@@ -509,7 +557,7 @@ MU_TEST(test_freq_mod_definitions)
         int r;
         for (r = 0; r < 4; ++r) {
             check_fmod_shift(coll, &ref, shifts[t],
-                             rotations[r], test_positions,
+                             rotations[r], tc->fmod_positions,
                              "build_freq_mod_collection failed");
         }
     }
@@ -517,10 +565,21 @@ MU_TEST(test_freq_mod_definitions)
     pulseqlib_collection_free(coll);
 }
 
+MU_TEST(test_freq_mod_definitions_gre_2d_1sl_1avg) { run_freq_mod_definitions_case(&kGreCases[0]); }
+MU_TEST(test_freq_mod_definitions_gre_2d_1sl_3avg) { run_freq_mod_definitions_case(&kGreCases[1]); }
+MU_TEST(test_freq_mod_definitions_gre_2d_3sl_1avg) { run_freq_mod_definitions_case(&kGreCases[2]); }
+MU_TEST(test_freq_mod_definitions_gre_2d_3sl_3avg) { run_freq_mod_definitions_case(&kGreCases[3]); }
+
 MU_TEST_SUITE(suite_sequences_geninstructions)
 {
-    MU_RUN_TEST(test_sequences_geninstructions);
-    MU_RUN_TEST(test_freq_mod_definitions);
+    MU_RUN_TEST(test_sequences_geninstructions_gre_2d_1sl_1avg);
+    MU_RUN_TEST(test_sequences_geninstructions_gre_2d_1sl_3avg);
+    MU_RUN_TEST(test_sequences_geninstructions_gre_2d_3sl_1avg);
+    MU_RUN_TEST(test_sequences_geninstructions_gre_2d_3sl_3avg);
+    MU_RUN_TEST(test_freq_mod_definitions_gre_2d_1sl_1avg);
+    MU_RUN_TEST(test_freq_mod_definitions_gre_2d_1sl_3avg);
+    MU_RUN_TEST(test_freq_mod_definitions_gre_2d_3sl_1avg);
+    MU_RUN_TEST(test_freq_mod_definitions_gre_2d_3sl_3avg);
 }
 
 
@@ -528,18 +587,20 @@ MU_TEST_SUITE(suite_sequences_geninstructions)
 /*  Phase 5: Scan table — block instance validation                   */
 /* ------------------------------------------------------------------ */
 
-MU_TEST(test_scan_table)
+static void run_scan_table_case(const gre_case* tc)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
     scan_table_file ref = SCAN_TABLE_FILE_INIT;
+    char scan_path[512];
     int rc, ok, pos;
 
     gre_opts_init(&opts);
-    rc = load_seq(&coll, "gre_2d_1sl_1avg.seq", &opts);
+    rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed");
 
-    ok = parse_scan_table(TEST_DATA_DIR "gre_2d_1sl_1avg_scan_table.bin", &ref);
+    build_case_path(scan_path, sizeof(scan_path), tc, "_scan_table.bin");
+    ok = parse_scan_table(scan_path, &ref);
     mu_assert(ok, "failed to parse scan_table.bin");
     mu_assert(ref.num_entries > 0, "scan_table has no entries");
 
@@ -628,9 +689,17 @@ MU_TEST(test_scan_table)
     pulseqlib_collection_free(coll);
 }
 
+MU_TEST(test_scan_table_gre_2d_1sl_1avg) { run_scan_table_case(&kGreCases[0]); }
+MU_TEST(test_scan_table_gre_2d_1sl_3avg) { run_scan_table_case(&kGreCases[1]); }
+MU_TEST(test_scan_table_gre_2d_3sl_1avg) { run_scan_table_case(&kGreCases[2]); }
+MU_TEST(test_scan_table_gre_2d_3sl_3avg) { run_scan_table_case(&kGreCases[3]); }
+
 MU_TEST_SUITE(suite_sequences_scanloop)
 {
-    MU_RUN_TEST(test_scan_table);
+    MU_RUN_TEST(test_scan_table_gre_2d_1sl_1avg);
+    MU_RUN_TEST(test_scan_table_gre_2d_1sl_3avg);
+    MU_RUN_TEST(test_scan_table_gre_2d_3sl_1avg);
+    MU_RUN_TEST(test_scan_table_gre_2d_3sl_3avg);
 }
 
 
