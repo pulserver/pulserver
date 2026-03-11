@@ -367,35 +367,12 @@ static void run_sequences_geninstructions_case(const gre_case* tc)
             need = pulseqlib_block_needs_freq_mod(coll, s, b, &need_ns);
 
             /* --- Flags -------------------------------------------- */
-            if (ref_blk->has_rf != bi.has_rf ||
-                ref_blk->has_adc != bi.has_adc ||
-                ref_blk->has_rotation != bi.has_rotation ||
-                ref_blk->has_digital_out != bi.has_digitalout ||
-                ref_blk->has_grad[0] != bi.has_grad[0] ||
-                ref_blk->has_grad[1] != bi.has_grad[1] ||
-                ref_blk->has_grad[2] != bi.has_grad[2]) {
-                fprintf(stderr,
-                    "[DEBUG][%s] flag mismatch at s=%d b=%d: ref(rf=%d gx=%d gy=%d gz=%d adc=%d rot=%d dout=%d fmod=%d) lib(rf=%d gx=%d gy=%d gz=%d adc=%d rot=%d dout=%d fmod=%d)\n",
-                    tc->name, s, b,
-                    ref_blk->has_rf, ref_blk->has_grad[0], ref_blk->has_grad[1],
-                    ref_blk->has_grad[2], ref_blk->has_adc, ref_blk->has_rotation,
-                    ref_blk->has_digital_out, ref_blk->has_freq_mod,
-                    bi.has_rf, bi.has_grad[0], bi.has_grad[1], bi.has_grad[2],
-                    bi.has_adc, bi.has_rotation, bi.has_digitalout,
-                    bi.has_freq_mod);
-            }
             mu_assert_int_eq(ref_blk->has_rf,          bi.has_rf);
             for (ax = 0; ax < 3; ++ax)
                 mu_assert_int_eq(ref_blk->has_grad[ax], bi.has_grad[ax]);
             mu_assert_int_eq(ref_blk->has_adc,         bi.has_adc);
             mu_assert_int_eq(ref_blk->has_rotation,    bi.has_rotation);
             mu_assert_int_eq(ref_blk->has_digital_out, bi.has_digitalout);
-            if (ref_blk->has_freq_mod != bi.has_freq_mod) {
-                fprintf(stderr,
-                    "[DEBUG][%s] has_freq_mod mismatch at s=%d b=%d: ref=%d bi=%d overlap_need=%d need_ns=%d\n",
-                    tc->name, s, b,
-                    ref_blk->has_freq_mod, bi.has_freq_mod, need, need_ns);
-            }
             mu_assert_int_eq(ref_blk->has_freq_mod, need);
 
             /* --- RF ----------------------------------------------- */
@@ -593,11 +570,6 @@ static void check_fmod_shift(
             fmc, 0, pos, &waveform, &ns, &phase_rad);
 
         if (se->freq_mod_id <= 0) {
-            if (has) {
-                fprintf(stderr,
-                    "[DEBUG][FMOD] unexpected freq_mod at pos=%d (expected none)\n",
-                    pos);
-            }
             mu_assert(!has, "unexpected freq_mod at scan position");
             continue;
         }
@@ -611,27 +583,12 @@ static void check_fmod_shift(
             int def_idx = se->freq_mod_id - 1;
             int plan_idx = lib->scan_to_plan[pos];
 
-            if (def_idx < 0 || def_idx >= ref->num_defs) {
-                fprintf(stderr,
-                    "[DEBUG][FMOD] invalid expected freq_mod_id=%d at pos=%d (num_defs=%d)\n",
-                    se->freq_mod_id, pos, ref->num_defs);
-            }
             mu_assert(def_idx >= 0 && def_idx < ref->num_defs,
                       "invalid expected freq_mod_id in scan table");
             fd = &ref->defs[def_idx];
 
-            if (!has) {
-                fprintf(stderr,
-                    "[DEBUG][FMOD] missing freq_mod at pos=%d expected_id=%d\n",
-                    pos, se->freq_mod_id);
-            }
             mu_assert(has, "missing freq_mod at expected scan position");
 
-            if (plan_idx < 0 || plan_idx >= lib->num_plan_instances) {
-                fprintf(stderr,
-                    "[DEBUG][FMOD] invalid scan_to_plan at pos=%d: plan_idx=%d num_plan=%d\n",
-                    pos, plan_idx, lib->num_plan_instances);
-            }
             mu_assert(plan_idx >= 0 && plan_idx < lib->num_plan_instances,
                       "invalid scan_to_plan mapping");
             if (!used_plan[plan_idx]) {
@@ -639,11 +596,6 @@ static void check_fmod_shift(
                 used_plan_count++;
             }
 
-            if (ns != fd->num_samples) {
-                fprintf(stderr,
-                    "[DEBUG][FMOD] sample count mismatch at pos=%d id=%d ref=%d lib=%d\n",
-                    pos, se->freq_mod_id, fd->num_samples, ns);
-            }
             mu_assert_int_eq(fd->num_samples, ns);
 
             for (s = 0; s < ns; ++s) {
@@ -660,12 +612,6 @@ static void check_fmod_shift(
                 float expected = fd->waveform_gx[s] * shift[0]
                                + fd->waveform_gy[s] * shift[1]
                                + fd->waveform_gz[s] * shift[2];
-                if ((float)fabs(waveform[s] - expected) > tol) {
-                    fprintf(stderr,
-                        "[DEBUG][FMOD] waveform mismatch pos=%d id=%d i=%d ref=%g lib=%g tol=%g\n",
-                        pos, se->freq_mod_id, s,
-                        (double)expected, (double)waveform[s], (double)tol);
-                }
                 mu_assert((float)fabs(waveform[s] - expected) <= tol,
                           "freq_mod waveform sample mismatch");
             }
@@ -675,12 +621,6 @@ static void check_fmod_shift(
                            + fd->ref_integral[2] * shift[2];
             phase_tol = (float)fabs(expected_phase) * 1e-4f;
             if (phase_tol < 1e-8f) phase_tol = 1e-8f;
-            if ((float)fabs(phase_rad - expected_phase) > phase_tol) {
-                fprintf(stderr,
-                    "[DEBUG][FMOD] phase mismatch pos=%d id=%d ref=%g lib=%g tol=%g\n",
-                    pos, se->freq_mod_id,
-                    (double)expected_phase, (double)phase_rad, (double)phase_tol);
-            }
             mu_assert((float)fabs(phase_rad - expected_phase) <= phase_tol,
                       "freq_mod phase mismatch");
 
@@ -691,19 +631,9 @@ static void check_fmod_shift(
     {
         int d;
         for (d = 0; d < ref->num_defs; ++d) {
-            if (!seen_defs[d]) {
-                fprintf(stderr,
-                    "[DEBUG][FMOD] expected def id=%d never referenced by scan table\n",
-                    d + 1);
-            }
             mu_assert(seen_defs[d], "expected freq_mod definition not referenced");
         }
 
-        if (used_plan_count != ref->num_defs) {
-            fprintf(stderr,
-                "[DEBUG][FMOD] used plan count mismatch: used=%d expected_unique_defs=%d\n",
-                used_plan_count, ref->num_defs);
-        }
         mu_assert_int_eq(ref->num_defs, used_plan_count);
     }
 
