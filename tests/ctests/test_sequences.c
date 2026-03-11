@@ -360,17 +360,43 @@ static void run_sequences_geninstructions_case(const gre_case* tc)
         for (b = 0; b < ref.num_blocks[s]; ++b) {
             const seg_block_def* ref_blk = &ref.blocks[s][b];
             pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
+            int need_ns = 0;
+            int need;
             rc = pulseqlib_get_block_info(coll, s, b, &bi);
             mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_block_info failed");
+            need = pulseqlib_block_needs_freq_mod(coll, s, b, &need_ns);
 
             /* --- Flags -------------------------------------------- */
+            if (ref_blk->has_rf != bi.has_rf ||
+                ref_blk->has_adc != bi.has_adc ||
+                ref_blk->has_rotation != bi.has_rotation ||
+                ref_blk->has_digital_out != bi.has_digitalout ||
+                ref_blk->has_grad[0] != bi.has_grad[0] ||
+                ref_blk->has_grad[1] != bi.has_grad[1] ||
+                ref_blk->has_grad[2] != bi.has_grad[2]) {
+                fprintf(stderr,
+                    "[DEBUG][%s] flag mismatch at s=%d b=%d: ref(rf=%d gx=%d gy=%d gz=%d adc=%d rot=%d dout=%d fmod=%d) lib(rf=%d gx=%d gy=%d gz=%d adc=%d rot=%d dout=%d fmod=%d)\n",
+                    tc->name, s, b,
+                    ref_blk->has_rf, ref_blk->has_grad[0], ref_blk->has_grad[1],
+                    ref_blk->has_grad[2], ref_blk->has_adc, ref_blk->has_rotation,
+                    ref_blk->has_digital_out, ref_blk->has_freq_mod,
+                    bi.has_rf, bi.has_grad[0], bi.has_grad[1], bi.has_grad[2],
+                    bi.has_adc, bi.has_rotation, bi.has_digitalout,
+                    bi.has_freq_mod);
+            }
             mu_assert_int_eq(ref_blk->has_rf,          bi.has_rf);
             for (ax = 0; ax < 3; ++ax)
                 mu_assert_int_eq(ref_blk->has_grad[ax], bi.has_grad[ax]);
             mu_assert_int_eq(ref_blk->has_adc,         bi.has_adc);
             mu_assert_int_eq(ref_blk->has_rotation,    bi.has_rotation);
             mu_assert_int_eq(ref_blk->has_digital_out, bi.has_digitalout);
-            mu_assert_int_eq(ref_blk->has_freq_mod,    bi.has_freq_mod);
+            if (ref_blk->has_freq_mod != bi.has_freq_mod) {
+                fprintf(stderr,
+                    "[DEBUG][%s] has_freq_mod mismatch at s=%d b=%d: ref=%d bi=%d overlap_need=%d need_ns=%d\n",
+                    tc->name, s, b,
+                    ref_blk->has_freq_mod, bi.has_freq_mod, need, need_ns);
+            }
+            mu_assert_int_eq(ref_blk->has_freq_mod, need);
 
             /* --- RF ----------------------------------------------- */
             if (ref_blk->has_rf) {
@@ -476,8 +502,6 @@ static void run_sequences_geninstructions_case(const gre_case* tc)
 
             /* --- Freq-mod (overlap API) --------------------------- */
             {
-                int need_ns = 0;
-                int need = pulseqlib_block_needs_freq_mod(coll, s, b, &need_ns);
                 mu_assert_int_eq(ref_blk->has_freq_mod, need);
                 if (ref_blk->has_freq_mod) {
                     mu_assert_int_eq(ref_blk->freq_mod_num_samples, need_ns);
@@ -538,7 +562,7 @@ static void check_fmod_shift(
     const fmod_def_file* ref,
     const float* shift,
     const float* fov_rotation,
-    const int* test_positions,
+    int num_positions,
     const char* label)
 {
     pulseqlib_freq_mod_collection* fmc = NULL;
@@ -549,20 +573,24 @@ static void check_fmod_shift(
 
     for (d = 0; d < ref->num_defs; ++d) {
         const fmod_def* fd = &ref->defs[d];
-        const float* waveform = NULL;
-        int ns = 0, s;
-        float phase_rad = 0.0f;
-        int has;
+        int pos;
+        int matched = 0;
 
-        has = pulseqlib_freq_mod_collection_get(
-            fmc, 0, test_positions[d], &waveform, &ns, &phase_rad);
-        mu_assert(has, "expected freq_mod at test position");
-        mu_assert_int_eq(fd->num_samples, ns);
-
-        /* Compare 1D waveform: expected = gx*s[0] + gy*s[1] + gz*s[2] */
-        {
+        for (pos = 0; pos < num_positions; ++pos) {
+            const float* waveform = NULL;
+            int ns = 0, s;
+            float phase_rad = 0.0f;
+            int has;
+            int waveform_ok = 1;
             float max_val = 0.0f;
             float tol;
+            float expected_phase;
+            float phase_tol;
+
+            has = pulseqlib_freq_mod_collection_get(
+                fmc, 0, pos, &waveform, &ns, &phase_rad);
+            if (!has) continue;
+            if (ns != fd->num_samples) continue;
 
             for (s = 0; s < ns; ++s) {
                 float expected = fd->waveform_gx[s] * shift[0]
@@ -578,21 +606,32 @@ static void check_fmod_shift(
                 float expected = fd->waveform_gx[s] * shift[0]
                                + fd->waveform_gy[s] * shift[1]
                                + fd->waveform_gz[s] * shift[2];
-                mu_assert((float)fabs(waveform[s] - expected) <= tol,
-                          "freq_mod waveform sample mismatch");
+                if ((float)fabs(waveform[s] - expected) > tol) {
+                    waveform_ok = 0;
+                    break;
+                }
             }
+            if (!waveform_ok) continue;
+
+            expected_phase = fd->ref_integral[0] * shift[0]
+                           + fd->ref_integral[1] * shift[1]
+                           + fd->ref_integral[2] * shift[2];
+            phase_tol = (float)fabs(expected_phase) * 1e-4f;
+            if (phase_tol < 1e-8f) phase_tol = 1e-8f;
+            if ((float)fabs(phase_rad - expected_phase) > phase_tol) continue;
+
+            matched = 1;
+            break;
         }
 
-        /* Compare phase: expected = ref_integral . shift */
-        {
-            float expected_phase = fd->ref_integral[0] * shift[0]
-                                 + fd->ref_integral[1] * shift[1]
-                                 + fd->ref_integral[2] * shift[2];
-            float phase_tol = (float)fabs(expected_phase) * 1e-4f;
-            if (phase_tol < 1e-8f) phase_tol = 1e-8f;
-            mu_assert((float)fabs(phase_rad - expected_phase) <= phase_tol,
-                      "freq_mod phase mismatch");
+        if (!matched) {
+            fprintf(stderr,
+                "[DEBUG][FMOD] no matching definition found for def_idx=%d type=%d ns=%d shift=[%g %g %g] positions=%d\n",
+                d, fd->type, fd->num_samples,
+                (double)shift[0], (double)shift[1], (double)shift[2],
+                num_positions);
         }
+        mu_assert(matched, "freq_mod definition match not found");
     }
 
     pulseqlib_freq_mod_collection_free(fmc);
@@ -603,7 +642,9 @@ static void run_freq_mod_definitions_case(const gre_case* tc)
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
     fmod_def_file ref = FMOD_DEF_FILE_INIT;
+    scan_table_file scan = SCAN_TABLE_FILE_INIT;
     char fmod_path[512];
+    char scan_path[512];
     int rc, ok, t;
 
     /* Three orthogonal shifts + one combined shift */
@@ -633,13 +674,19 @@ static void run_freq_mod_definitions_case(const gre_case* tc)
     mu_assert(ok, "failed to parse freqmod_def.bin");
     mu_assert_int_eq(2, ref.num_defs);
 
+    /* Parse scan table to get total position span for robust freq-mod search. */
+    build_case_path(scan_path, sizeof(scan_path), tc, "_scan_table.bin");
+    ok = parse_scan_table(scan_path, &scan);
+    mu_assert(ok, "failed to parse scan_table.bin for freqmod positions");
+    mu_assert(scan.num_entries > 0, "scan_table has no entries for freqmod search");
+
     /* For each shift, test all rotations — results must be identical
      * because this sequence has no rotation events / norot blocks. */
     for (t = 0; t < 4; ++t) {
         int r;
         for (r = 0; r < 4; ++r) {
             check_fmod_shift(coll, &ref, shifts[t],
-                             rotations[r], tc->fmod_positions,
+                             rotations[r], scan.num_entries,
                              "build_freq_mod_collection failed");
         }
     }

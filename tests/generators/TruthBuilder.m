@@ -407,7 +407,9 @@ classdef TruthBuilder < handle
                 seg.adc_adc_gap_us = adc_adc_gap;
                 obj.segment_data.segments{s} = seg;
 
-                cum_offset = cum_offset + obj.segment_sizes(s);
+                % Advance by full repeated span so following segments map to
+                % the correct block region within the representative TR.
+                cum_offset = cum_offset + obj.segment_sizes(s) * obj.segment_reps(s);
             end
         end
 
