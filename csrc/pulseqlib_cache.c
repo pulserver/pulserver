@@ -848,6 +848,7 @@ static int read_cache(const char* cache_path,
 
     /* init cursor */
     memset(&coll->block_cursor, 0, sizeof(coll->block_cursor));
+    coll->block_cursor.scan_table_position = -1;
 
     fclose(f);
     return 1;

@@ -566,20 +566,6 @@ MU_TEST(test_scan_table)
         /* RF amplitude (relative tolerance or absolute for zero) */
         tol = (float)fabs(e->rf_amp_hz) * 1e-4f;
         if (tol < 1e-6f) tol = 1e-6f;
-        if (pos < 8) {
-            printf("C[%d] rf=%.4f gx=%.2f gy=%.2f gz=%.2f adc=%d dout=%d dur=%d\n",
-                   pos, inst.rf_amp_hz, inst.gx_amp_hz_per_m,
-                   inst.gy_amp_hz_per_m, inst.gz_amp_hz_per_m,
-                   inst.adc_flag, inst.digitalout_flag, inst.duration_us);
-        }
-        if ((float)fabs(inst.rf_amp_hz - e->rf_amp_hz) > tol) {
-            printf("pos=%d rf_amp: C=%.6f MATLAB=%.6f diff=%.6e "
-                   "gx=%.2f gy=%.2f gz=%.2f adc=%d dur=%d\n",
-                   pos, inst.rf_amp_hz, e->rf_amp_hz,
-                   inst.rf_amp_hz - e->rf_amp_hz,
-                   inst.gx_amp_hz_per_m, inst.gy_amp_hz_per_m,
-                   inst.gz_amp_hz_per_m, inst.adc_flag, inst.duration_us);
-        }
         mu_assert((float)fabs(inst.rf_amp_hz - e->rf_amp_hz) <= tol,
                   "rf_amp_hz mismatch");
 

@@ -688,6 +688,7 @@ int pulseqlib_read(
     collection = (pulseqlib_collection*)PULSEQLIB_ALLOC(sizeof(pulseqlib_collection));
     if (!collection) return PULSEQLIB_ERR_ALLOC_FAILED;
     memset(collection, 0, sizeof(*collection));
+    collection->block_cursor.scan_table_position = -1;
     collection->num_repetitions = 1;
 
     /* Try cache */
@@ -808,6 +809,7 @@ int pulseqlib_read_from_buffers(
     collection = (pulseqlib_collection*)PULSEQLIB_ALLOC(sizeof(pulseqlib_collection));
     if (!collection) { rc = PULSEQLIB_ERR_ALLOC_FAILED; goto fail_raw; }
     memset(collection, 0, sizeof(*collection));
+    collection->block_cursor.scan_table_position = -1;
     collection->num_repetitions = 1;
 
     rc = pulseqlib__get_collection_descriptors(collection, diag, &raw_coll, parse_labels, num_averages);

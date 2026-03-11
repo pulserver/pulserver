@@ -129,8 +129,8 @@ static void build_rf_def_row(const pulseqlib__seq_file* seq, int* row, float* pa
     row[3] = (int)rf[5];  /* delay */
 
     params[0] = rf[0];                        /* amplitude */
-    params[1] = rf[7] + ppm_to_hz * rf[4];   /* freq offset */
-    params[2] = rf[8] + ppm_to_hz * rf[6];   /* phase offset */
+    params[1] = rf[8] + ppm_to_hz * rf[6];   /* freq offset + ppm * freqPPM */
+    params[2] = rf[9] + ppm_to_hz * rf[7];   /* phase offset + ppm * phasePPM */
 }
 
 static int deduplicate_rf_library(const pulseqlib__seq_file* seq, pulseqlib_rf_definition* rf_defs, pulseqlib_rf_table_element* rf_table)
