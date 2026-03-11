@@ -19,11 +19,6 @@ write_mprage(true, 3, 1);
 write_mprage(true, 1, 3);
 write_mprage(true, 3, 3);
 
-write_mprage_nav(true, 1, 1);
-write_mprage_nav(true, 3, 1);
-write_mprage_nav(true, 1, 3);
-write_mprage_nav(true, 3, 3);
-
 
 function seq = write_gre(write, num_slices, num_averages)
     base = sprintf('gre_2d_%dsl_%davg', num_slices, num_averages);
@@ -274,15 +269,14 @@ function seq = write_mprage(write, num_slices, num_averages)
 
     tb = TruthBuilder(seq, sys);
     tb.setBlocksPerTR(2 + 1 + 4 * Ny + 1);
-    tb.setSegments([2, 1, 4]);
-    tb.setSegmentOrder([1, 2, 3 * ones(1, Ny), 2]);
+    tb.setSegments([2, 1, 4, 1]);
+    tb.setSegmentOrder([1, 2, 3 * ones(1, Ny), 4]);
     tb.setNumAverages(num_averages);
     tb.export(out_dir, base);
 end
 
-
 function seq = write_mprage_nav(write, num_slices, num_averages)
-    base = sprintf('mprage_nav_2d_%dsl_%davg', num_slices, num_averages);
+    base = sprintf('mprage_2d_%dsl_%davg', num_slices, num_averages);
     fprintf('Generating sequence: %s\n', base);
 
     sys = make_system();
@@ -323,22 +317,17 @@ function seq = write_mprage_nav(write, num_slices, num_averages)
     adc = mr.makeAdc(Nx, 'Duration', gx_full.flatTime, 'Delay', gx_full.riseTime, 'system', sys);
 
     % Navigator readout and ADC
-    [rf_nav, gz_rf_nav] = mr.makeSincPulse(alpha, ...
+    [rf_nav, gz_nav] = mr.makeSincPulse(alpha, ...
         'Duration', 0.5e-3, ...
         'SliceThickness', 10e-3, ...
         'timeBwProduct', 4, ...
         'apodization', 0.5, ...
         'use', 'excitation', ...
         'system', sys);
-    gx_rf_nav = gz_rf_nav; gx_rf_nav.channel = 'x';
-    gy_rf_nav = gz_rf_nav; gy_rf_nav.channel = 'y';
     Nx_nav = 16;
-    
     nav_time = 0.16e-3;
     gx_nav = mr.makeTrapezoid('x', 'FlatArea', Nx_nav/fov, 'FlatTime', nav_time, 'system', sys);
-    gy_nav = mr.makeTrapezoid('y', 'FlatArea', Nx_nav/fov, 'FlatTime', nav_time, 'system', sys);
-    gz_nav = mr.makeTrapezoid('z', 'FlatArea', Nx_nav/fov, 'FlatTime', nav_time, 'system', sys);
-    adc_nav = mr.makeAdc(Nx_nav, 'Duration', gx_nav.flatTime, 'Delay', gx_nav.riseTime, 'system', sys);
+    adc_nav = mr.makeAdc(Nx, 'Duration', gx_nav.flatTime, 'Delay', gx_nav.riseTime, 'system', sys);
 
     % Pre/rewinder templates
     gx_pre = mr.makeTrapezoid('x', 'Area', -gx_full.area/2, 'Duration', 1.0e-3, 'system', sys);
@@ -392,12 +381,9 @@ function seq = write_mprage_nav(write, num_slices, num_averages)
             seq.addBlock(gx, adc_curr);
             seq.addBlock(gx_spoil, gy_rew, gz_spoil);
         end
-        seq.addBlock(rf_nav, gz_rf_nav);
-        seq.addBlock(gx_nav, gy_nav, adc_nav); % Mock axial single shot EPI
-        seq.addBlock(rf_nav, gy_rf_nav);
-        seq.addBlock(gx_nav, gz_nav, adc_nav); % Mock coronal single shot EPI
-        seq.addBlock(rf_nav, gx_rf_nav);
-        seq.addBlock(gy_nav, gz_nav, adc_nav); % Mock sagittal single shot EPI
+        seq.addBlock(rf_nav, gz_nav);
+        seq.addBlock
+        
         seq.addBlock(delayTR);
     end
 
@@ -416,9 +402,9 @@ function seq = write_mprage_nav(write, num_slices, num_averages)
     out_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'data');
 
     tb = TruthBuilder(seq, sys);
-    tb.setBlocksPerTR(2 + 1 + 4 * Ny + 3 * 2 + 1);
-    tb.setSegments([2, 1, 4, 2]);
-    tb.setSegmentOrder([1, 2, 3 * ones(1, Ny), 4 * ones(1, 3), 2]);
+    tb.setBlocksPerTR(2 + 1 + 4 * Ny + 1);
+    tb.setSegments([2, 1, 4, 1]);
+    tb.setSegmentOrder([1, 2, 3 * ones(1, Ny), 4]);
     tb.setNumAverages(num_averages);
     tb.export(out_dir, base);
 end
