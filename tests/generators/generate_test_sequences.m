@@ -1,4 +1,4 @@
-%% generate_segmentation_test_sequences.m (v2 reset)
+%% generate_test_sequences.m
 %
 % Iterative rebuild of segmentation test generation.
 % Phase 1 scope:
@@ -17,7 +17,7 @@ write_gre_2d_base_case(true, 3, 3);
 
 function seq = write_gre_2d_base_case(write, num_slices, num_averages)
     base = sprintf('gre_2d_%dsl_%davg', num_slices, num_averages);
-    disp(sprintf('Generating sequence: %s', base));
+    fprintf('Generating sequence: %s\n', base);
 
     sys = make_system();
 
