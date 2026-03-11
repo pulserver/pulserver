@@ -560,37 +560,91 @@ MU_TEST(test_sequences_geninstructions_mprage_2d_3sl_3avg) { run_sequences_genin
 static void check_fmod_shift(
     const pulseqlib_collection* coll,
     const fmod_def_file* ref,
+    const scan_table_file* scan,
     const float* shift,
     const float* fov_rotation,
-    int num_positions,
     const char* label)
 {
     pulseqlib_freq_mod_collection* fmc = NULL;
-    int rc, d;
+    int rc;
+    int pos;
+    int seen_defs[MAX_FMOD_DEFS] = {0};
+    int used_plan_count = 0;
+    pulseqlib_freq_mod_library* lib;
+    int* used_plan;
 
     rc = pulseqlib_build_freq_mod_collection(&fmc, coll, shift, fov_rotation);
     mu_assert(PULSEQLIB_SUCCEEDED(rc), label);
 
-    for (d = 0; d < ref->num_defs; ++d) {
-        const fmod_def* fd = &ref->defs[d];
-        int pos;
-        int matched = 0;
+    lib = fmc->libs[0];
+    mu_assert(lib != NULL, "freq_mod lib missing for subsequence 0");
+    mu_assert_int_eq(scan->num_entries, lib->scan_table_len);
+    used_plan = (int*)calloc((size_t)lib->num_plan_instances, sizeof(int));
+    mu_assert(used_plan != NULL, "alloc failed for used_plan flags");
 
-        for (pos = 0; pos < num_positions; ++pos) {
-            const float* waveform = NULL;
-            int ns = 0, s;
-            float phase_rad = 0.0f;
-            int has;
-            int waveform_ok = 1;
-            float max_val = 0.0f;
-            float tol;
+    for (pos = 0; pos < scan->num_entries; ++pos) {
+        const scan_table_entry* se = &scan->entries[pos];
+        const float* waveform = NULL;
+        int ns = 0, s;
+        float phase_rad = 0.0f;
+        int has;
+
+        has = pulseqlib_freq_mod_collection_get(
+            fmc, 0, pos, &waveform, &ns, &phase_rad);
+
+        if (se->freq_mod_id <= 0) {
+            if (has) {
+                fprintf(stderr,
+                    "[DEBUG][FMOD] unexpected freq_mod at pos=%d (expected none)\n",
+                    pos);
+            }
+            mu_assert(!has, "unexpected freq_mod at scan position");
+            continue;
+        }
+
+        {
+            const fmod_def* fd;
             float expected_phase;
             float phase_tol;
+            float max_val = 0.0f;
+            float tol;
+            int def_idx = se->freq_mod_id - 1;
+            int plan_idx = lib->scan_to_plan[pos];
 
-            has = pulseqlib_freq_mod_collection_get(
-                fmc, 0, pos, &waveform, &ns, &phase_rad);
-            if (!has) continue;
-            if (ns != fd->num_samples) continue;
+            if (def_idx < 0 || def_idx >= ref->num_defs) {
+                fprintf(stderr,
+                    "[DEBUG][FMOD] invalid expected freq_mod_id=%d at pos=%d (num_defs=%d)\n",
+                    se->freq_mod_id, pos, ref->num_defs);
+            }
+            mu_assert(def_idx >= 0 && def_idx < ref->num_defs,
+                      "invalid expected freq_mod_id in scan table");
+            fd = &ref->defs[def_idx];
+
+            if (!has) {
+                fprintf(stderr,
+                    "[DEBUG][FMOD] missing freq_mod at pos=%d expected_id=%d\n",
+                    pos, se->freq_mod_id);
+            }
+            mu_assert(has, "missing freq_mod at expected scan position");
+
+            if (plan_idx < 0 || plan_idx >= lib->num_plan_instances) {
+                fprintf(stderr,
+                    "[DEBUG][FMOD] invalid scan_to_plan at pos=%d: plan_idx=%d num_plan=%d\n",
+                    pos, plan_idx, lib->num_plan_instances);
+            }
+            mu_assert(plan_idx >= 0 && plan_idx < lib->num_plan_instances,
+                      "invalid scan_to_plan mapping");
+            if (!used_plan[plan_idx]) {
+                used_plan[plan_idx] = 1;
+                used_plan_count++;
+            }
+
+            if (ns != fd->num_samples) {
+                fprintf(stderr,
+                    "[DEBUG][FMOD] sample count mismatch at pos=%d id=%d ref=%d lib=%d\n",
+                    pos, se->freq_mod_id, fd->num_samples, ns);
+            }
+            mu_assert_int_eq(fd->num_samples, ns);
 
             for (s = 0; s < ns; ++s) {
                 float expected = fd->waveform_gx[s] * shift[0]
@@ -607,32 +661,53 @@ static void check_fmod_shift(
                                + fd->waveform_gy[s] * shift[1]
                                + fd->waveform_gz[s] * shift[2];
                 if ((float)fabs(waveform[s] - expected) > tol) {
-                    waveform_ok = 0;
-                    break;
+                    fprintf(stderr,
+                        "[DEBUG][FMOD] waveform mismatch pos=%d id=%d i=%d ref=%g lib=%g tol=%g\n",
+                        pos, se->freq_mod_id, s,
+                        (double)expected, (double)waveform[s], (double)tol);
                 }
+                mu_assert((float)fabs(waveform[s] - expected) <= tol,
+                          "freq_mod waveform sample mismatch");
             }
-            if (!waveform_ok) continue;
 
             expected_phase = fd->ref_integral[0] * shift[0]
                            + fd->ref_integral[1] * shift[1]
                            + fd->ref_integral[2] * shift[2];
             phase_tol = (float)fabs(expected_phase) * 1e-4f;
             if (phase_tol < 1e-8f) phase_tol = 1e-8f;
-            if ((float)fabs(phase_rad - expected_phase) > phase_tol) continue;
+            if ((float)fabs(phase_rad - expected_phase) > phase_tol) {
+                fprintf(stderr,
+                    "[DEBUG][FMOD] phase mismatch pos=%d id=%d ref=%g lib=%g tol=%g\n",
+                    pos, se->freq_mod_id,
+                    (double)expected_phase, (double)phase_rad, (double)phase_tol);
+            }
+            mu_assert((float)fabs(phase_rad - expected_phase) <= phase_tol,
+                      "freq_mod phase mismatch");
 
-            matched = 1;
-            break;
+            seen_defs[def_idx] = 1;
         }
-
-        if (!matched) {
-            fprintf(stderr,
-                "[DEBUG][FMOD] no matching definition found for def_idx=%d type=%d ns=%d shift=[%g %g %g] positions=%d\n",
-                d, fd->type, fd->num_samples,
-                (double)shift[0], (double)shift[1], (double)shift[2],
-                num_positions);
-        }
-        mu_assert(matched, "freq_mod definition match not found");
     }
+
+    {
+        int d;
+        for (d = 0; d < ref->num_defs; ++d) {
+            if (!seen_defs[d]) {
+                fprintf(stderr,
+                    "[DEBUG][FMOD] expected def id=%d never referenced by scan table\n",
+                    d + 1);
+            }
+            mu_assert(seen_defs[d], "expected freq_mod definition not referenced");
+        }
+
+        if (used_plan_count != ref->num_defs) {
+            fprintf(stderr,
+                "[DEBUG][FMOD] used plan count mismatch: used=%d expected_unique_defs=%d\n",
+                used_plan_count, ref->num_defs);
+        }
+        mu_assert_int_eq(ref->num_defs, used_plan_count);
+    }
+
+    free(used_plan);
 
     pulseqlib_freq_mod_collection_free(fmc);
 }
@@ -685,8 +760,10 @@ static void run_freq_mod_definitions_case(const gre_case* tc)
     for (t = 0; t < 4; ++t) {
         int r;
         for (r = 0; r < 4; ++r) {
-            check_fmod_shift(coll, &ref, shifts[t],
-                             rotations[r], scan.num_entries,
+            check_fmod_shift(coll, &ref,
+                             &scan,
+                             shifts[t],
+                             rotations[r],
                              "build_freq_mod_collection failed");
         }
     }

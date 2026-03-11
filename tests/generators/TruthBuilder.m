@@ -531,9 +531,13 @@ classdef TruthBuilder < handle
                             st(act, 1) = max(abs(block.rf.signal));
                             st(act, 2) = block.rf.phaseOffset + ppm_to_hz * block.rf.phasePPM;
                             st(act, 3) = block.rf.freqOffset  + ppm_to_hz * block.rf.freqPPM;
-                            rf_idx = find(obj.fmod_types == 0, 1);
-                            if ~isempty(rf_idx)
-                                fmt(act) = rf_idx;
+                            rf_start = block.rf.delay;
+                            rf_end   = block.rf.delay + block.rf.t(end);
+                            if obj.anyGradNonzeroInWindow(block, rf_start, rf_end)
+                                rf_idx = find(obj.fmod_types == 0, 1);
+                                if ~isempty(rf_idx)
+                                    fmt(act) = rf_idx;
+                                end
                             end
                         end
 
@@ -553,9 +557,13 @@ classdef TruthBuilder < handle
                             st(act, 7) = 1;
                             st(act, 8) = block.adc.phaseOffset + ppm_to_hz * block.adc.phasePPM;
                             st(act, 9) = block.adc.freqOffset  + ppm_to_hz * block.adc.freqPPM;
-                            adc_idx = find(obj.fmod_types == 1, 1);
-                            if ~isempty(adc_idx)
-                                fmt(act) = adc_idx;
+                            adc_start = block.adc.delay;
+                            adc_end   = block.adc.delay + block.adc.numSamples * block.adc.dwell;
+                            if obj.anyGradNonzeroInWindow(block, adc_start, adc_end)
+                                adc_idx = find(obj.fmod_types == 1, 1);
+                                if ~isempty(adc_idx)
+                                    fmt(act) = adc_idx;
+                                end
                             end
                         end
 
