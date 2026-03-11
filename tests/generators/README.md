@@ -46,7 +46,8 @@ function seq = write_my_sequence(write, ...)
 
     tb = TruthBuilder(seq, sys);
     tb.setBlocksPerTR(4);                % blocks per TR
-    tb.setSegments([4], [1]);            % segment sizes & reps
+    tb.setSegments([4]);                 % unique segment definitions
+    tb.setSegmentOrder([1]);             % segment instances per TR
     tb.setNumAverages(1);                % number of averages
     % tb.setBaseRotation(R);             % optional rotation matrix
     tb.export(out_dir, base);
@@ -59,10 +60,16 @@ end
 |--------|---------|
 | `TruthBuilder(seq, sys)` | Constructor — accepts the built sequence and system opts. |
 | `setBlocksPerTR(n)` | Number of sequence blocks that make up one TR. |
-| `setSegments(sizes, reps)` | Vector of block counts per segment and their repetition counts. E.g. `setSegments([3, 4, 1], [1, N, 1])` for prep(3)–imaging(4×N)–end(1). |
+| `setSegments(sizes)` | Unique segment definitions by block count. E.g. `setSegments([2, 1, 4])` for prep, delay, SPGR-shot. |
+| `setSegmentOrder(order)` | Segment instances within one TR (1-based segment IDs). E.g. `setSegmentOrder([1, 2, repmat(3,1,Ny), 2])` for prep -> delay -> Ny shots -> delay. |
 | `setNumAverages(n)` | Number of averages (default 1). |
 | `setBaseRotation(R)` | 3×3 rotation matrix (default `eye(3)`). |
 | `export(out_dir, base_name)` | Run all computation phases and write the 6 output files. |
+
+Notes:
+
+- `setSegments` defines unique segment shapes; `setSegmentOrder` controls reuse/interleaving.
+- Repeated or interleaved delays should be represented by a single delay definition reused in `setSegmentOrder`.
 
 ### Exported files
 
@@ -91,12 +98,11 @@ typedef struct {
     const char* seq_file;
     const char* base;
     int num_averages;
-    int fmod_positions[2];   /* RF block, ADC block within a TR */
 } my_seq_case;
 
 static const my_seq_case kMySeqCases[] = {
-    {"my_seq_v1", "my_seq_v1.seq", "my_seq_v1", 1, {0, 2}},
-    {"my_seq_v2", "my_seq_v2.seq", "my_seq_v2", 3, {0, 2}},
+    {"my_seq_v1", "my_seq_v1.seq", "my_seq_v1", 1},
+    {"my_seq_v2", "my_seq_v2.seq", "my_seq_v2", 3},
 };
 ```
 
@@ -156,7 +162,7 @@ cmake -S . -B build && cmake --build build
 
 - [ ] MATLAB generator builds valid sequence (`seq.checkTiming` passes)
 - [ ] ONCE labels placed on first dummy block and first imaging block
-- [ ] `TruthBuilder` hints match sequence structure (blocks/TR, segments, averages)
+- [ ] `TruthBuilder` hints match sequence structure (blocks/TR, segment defs, segment order, averages)
 - [ ] `.seq` + 5 truth files appear in `tests/data/`
 - [ ] Case struct entry added to `test_sequences.c`
 - [ ] 5 MU_TEST wrappers + suite registrations added

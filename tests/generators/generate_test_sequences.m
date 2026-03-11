@@ -150,7 +150,8 @@ function seq = write_gre(write, num_slices, num_averages)
 
     tb = TruthBuilder(seq, sys);
     tb.setBlocksPerTR(4);
-    tb.setSegments([4], [1]);
+    tb.setSegments([4]);
+    tb.setSegmentOrder([1]);
     tb.setNumAverages(num_averages);
     tb.export(out_dir, base);
 end
@@ -220,6 +221,7 @@ function seq = write_mprage(write, num_slices, num_averages)
         
         seq.addBlock(rf180);
         seq.addBlock(gz_spoil);
+        seq.addBlock(delayTR);
         
         for pe = 1:Ny
             if max_pe_area > 0
@@ -265,8 +267,9 @@ function seq = write_mprage(write, num_slices, num_averages)
     out_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'data');
 
     tb = TruthBuilder(seq, sys);
-    tb.setBlocksPerTR(2 + 4 * Ny + 1);
-    tb.setSegments([2, 4, 1], [1, Ny, 1]);
+    tb.setBlocksPerTR(2 + 1 + 4 * Ny + 1);
+    tb.setSegments([2, 1, 4]);
+    tb.setSegmentOrder([1, 2, repmat(3, 1, Ny), 2]);
     tb.setNumAverages(num_averages);
     tb.export(out_dir, base);
 end

@@ -13,7 +13,8 @@ classdef TruthBuilder < handle
 %
 %       tb = TruthBuilder(seq, sys);
 %       tb.setBlocksPerTR(4);
-%       tb.setSegments([4], [1]);          % sizes, reps
+%       tb.setSegments([4]);               % unique segment sizes
+%       tb.setSegmentOrder([1]);           % segment instances per TR
 %       tb.setNumAverages(3);
 %       tb.setBaseRotation(eye(3));        % optional, default eye(3)
 %       tb.export(out_dir, 'gre_2d_1sl_1avg');
@@ -25,8 +26,9 @@ classdef TruthBuilder < handle
 
         % User-supplied hints
         num_blocks_in_tr  = 0
-        segment_sizes     = []   % [S1, S2, ...] blocks in each segment
-        segment_reps      = []   % [R1, R2, ...] repetitions per segment
+        segment_sizes     = []   % [S1, S2, ...] blocks in each unique segment definition
+        segment_reps      = []   % derived from segment_order
+        segment_order     = []   % expanded segment instances per TR (1-based segment IDs)
         num_averages      = 1
         base_rot          = eye(3)
 
@@ -63,14 +65,36 @@ classdef TruthBuilder < handle
             obj.prepared = false;
         end
 
-        function setSegments(obj, sizes, reps)
-        % SETSEGMENTS  Define segment topology.
-        %   sizes: row vector of block counts per segment
-        %   reps:  row vector of repetition counts per segment
-            assert(length(sizes) == length(reps), ...
-                'sizes and reps must have the same length');
+        function setSegments(obj, sizes)
+        % SETSEGMENTS  Define unique segment definitions.
+        %   sizes: row vector of block counts per unique segment definition
+            assert(all(sizes > 0), ...
+                'segment sizes must be positive');
             obj.segment_sizes = sizes(:)';
-            obj.segment_reps  = reps(:)';
+            obj.segment_reps  = ones(size(obj.segment_sizes));
+            obj.segment_order = 1:length(obj.segment_sizes);
+            obj.prepared = false;
+        end
+
+        function setSegmentOrder(obj, order)
+        % SETSEGMENTORDER  Override segment instance order within a TR.
+        %   order: row vector of 1-based segment IDs, e.g. [1 2 3 3 3 2]
+            assert(~isempty(obj.segment_sizes), ...
+                'Must call setSegments before setSegmentOrder');
+
+            ord = order(:)';
+            num_seg = length(obj.segment_sizes);
+            assert(all(ord >= 1 & ord <= num_seg & floor(ord) == ord), ...
+                'segment order must contain valid 1-based segment IDs');
+
+            obj.segment_order = ord;
+
+            % Keep reps consistent with effective order.
+            reps = zeros(1, num_seg);
+            for s = 1:num_seg
+                reps(s) = sum(ord == s);
+            end
+            obj.segment_reps = reps;
             obj.prepared = false;
         end
 
@@ -121,6 +145,12 @@ classdef TruthBuilder < handle
                 'Must call setBlocksPerTR before export');
             assert(~isempty(obj.segment_sizes), ...
                 'Must call setSegments before export');
+            assert(~isempty(obj.segment_order), ...
+                'Segment order is empty');
+
+            blocks_in_pattern = sum(obj.segment_sizes(obj.segment_order));
+            assert(blocks_in_pattern == obj.num_blocks_in_tr, ...
+                'Segment topology does not match blocks-per-TR');
         end
 
         % ---- prepare all derived data ----
@@ -381,19 +411,33 @@ classdef TruthBuilder < handle
             nbt = obj.num_blocks_in_tr;
             max_idx = obj.segment_data.max_seg_energy_idx;
             num_seg = length(obj.segment_sizes);
+            seg_order = obj.segment_order;
 
             obj.segment_data.num_segments = num_seg;
             obj.segment_data.segments = cell(1, num_seg);
 
-            % Build a flat list of block indices for the max-energy segment group.
-            % For multiple segments: segment 1 occupies blocks 1..S1, segment 2 occupies S1+1..S1+S2, etc.
+            % Compute start offsets of each segment instance in one TR.
+            num_inst = length(seg_order);
+            inst_start = zeros(1, num_inst);
             cum_offset = 0;
+            for k = 1:num_inst
+                inst_start(k) = cum_offset;
+                cum_offset = cum_offset + obj.segment_sizes(seg_order(k));
+            end
+            assert(cum_offset == nbt, ...
+                'Expanded segment order does not span full TR block count');
+
             for s = 1:num_seg
+                first_inst = find(seg_order == s, 1, 'first');
+                assert(~isempty(first_inst), ...
+                    'Every segment definition must appear at least once in segment order');
+
                 seg_blocks = cell(1, obj.segment_sizes(s));
                 block_start = 0.0;
+                seg_offset = inst_start(first_inst);
 
                 for b = 1:obj.segment_sizes(s)
-                    block = obj.seq.getBlock(max_idx + cum_offset + b - 1);
+                    block = obj.seq.getBlock(max_idx + seg_offset + b - 1);
                     seg_blocks{b} = obj.extractBlockData(block, block_start);
                     block_start = block_start + block.blockDuration;
                 end
@@ -406,10 +450,6 @@ classdef TruthBuilder < handle
                 seg.rf_adc_gap_us = rf_adc_gap;
                 seg.adc_adc_gap_us = adc_adc_gap;
                 obj.segment_data.segments{s} = seg;
-
-                % Advance by full repeated span so following segments map to
-                % the correct block region within the representative TR.
-                cum_offset = cum_offset + obj.segment_sizes(s) * obj.segment_reps(s);
             end
         end
 
