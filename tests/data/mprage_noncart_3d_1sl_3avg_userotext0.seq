@@ -1,0 +1,209 @@
+# Pulseq sequence file
+# Created by MATLAB mr toolbox
+
+[VERSION]
+major 1
+minor 5
+revision 1
+
+[DEFINITIONS]
+AdcRasterTime 2e-06 
+BlockDurationRaster 2e-05 
+FOV 0.22 0.22 0.015 
+GradientRasterTime 2e-05 
+NumPartitions 1 
+PeakRF 25 
+RadiofrequencyRasterTime 2e-06 
+TR 0.0744 
+TotalDuration 0.0744 
+
+# Format of blocks:
+# NUM DUR RF  GX  GY  GZ  ADC  EXT
+[BLOCKS]
+ 1 1000   1   0   0   0  0  0
+ 2  50   0   0   0   1  0  0
+ 3   5   0   0   0   0  0  0
+ 4 100   2   0   0   0  0  0
+ 5 180   0   2   3   4  1  0
+ 6  50   0   0   0   1  0  0
+ 7 100   3   0   0   0  0  0
+ 8 180   0   5   6   4  2  0
+ 9  50   0   0   0   1  0  0
+10 100   4   0   0   0  0  0
+11 180   0   7   8   4  3  0
+12  50   0   0   0   1  0  0
+13 100   5   0   0   0  0  0
+14 180   0   9  10   4  4  0
+15  50   0   0   0   1  0  0
+16 100   6   0   0   0  0  0
+17 180   0  11  12   4  5  0
+18  50   0   0   0   1  0  0
+19 100   7   0   0   0  0  0
+20 180   0  13  14   4  6  0
+21  50   0   0   0   1  0  0
+22 100   8   0   0   0  0  0
+23 180   0  15  16   4  7  0
+24  50   0   0   0   1  0  0
+25 100   4   0   0   0  0  0
+26 180   0  17  18   4  3  0
+27  50   0   0   0   1  0  0
+28  25   0   0   0   0  0  0
+
+# Format of RF events:
+# id ampl. mag_id phase_id time_shape_id center delay freqPPM phasePPM freq phase use
+# ..   Hz      ..       ..            ..     us    us     ppm  rad/MHz   Hz   rad  ..
+# Field 'use' is the initial of: 
+#   excitation refocusing inversion saturation preparation other undefined
+[RF]
+1           25 1 2 3 10000 0 0 0 0 0 e
+2      13.8889 1 2 4 1000 0 0 0 0 1.46608 e
+3      13.8889 1 2 4 1000 0 0 0 0 4.39823 e
+4      13.8889 1 2 4 1000 0 0 0 0 2.51327 e
+5      13.8889 1 2 4 1000 0 0 0 0 2.0944 e
+6      13.8889 1 2 4 1000 0 0 0 0 3.14159 e
+7      13.8889 1 2 4 1000 0 0 0 0 5.65487 e
+8      13.8889 1 2 4 1000 0 0 0 0 3.35103 e
+
+# Format of arbitrary gradients:
+#   time_shape_id of 0 means default timing (stepping with grad_raster starting at 1/2 of grad_raster)
+# id amplitude first last amp_shape_id time_shape_id delay
+# ..      Hz/m  Hz/m Hz/m        ..         ..          us
+[GRADIENTS]
+2      -858931            0            0 5 0 0
+3            0            0            0 6 0 0
+4            0            0            0 7 8 280
+5       633372            0            0 5 0 0
+6      -580175            0            0 5 0 0
+7     -75159.5            0            0 5 0 0
+8       855636            0            0 5 0 0
+9      -522527            0            0 5 0 0
+10      -681710            0            0 5 0 0
+11       845778            0            0 5 0 0
+12       149742            0            0 5 0 0
+13      -724818            0            0 5 0 0
+14       460871            0            0 5 0 0
+15       223176            0            0 5 0 0
+16      -829430            0            0 5 0 0
+17       395679            0            0 5 0 0
+18       762365            0            0 5 0 0
+
+# Format of trapezoid gradients:
+# id amplitude rise flat fall delay
+# ..      Hz/m   us   us   us    us
+[TRAP]
+ 1       952381 160  680 160   0
+
+# Format of ADC events:
+# id num dwell delay freqPPM phasePPM freq phase phase_id
+# ..  ..    ns    us     ppm  rad/MHz   Hz   rad       ..
+[ADC]
+1 64 40000 340 0 0 0 1.46608 0
+2 64 40000 340 0 0 0 4.39823 0
+3 64 40000 340 0 0 0 2.51327 0
+4 64 40000 340 0 0 0 2.0944 0
+5 64 40000 340 0 0 0 3.14159 0
+6 64 40000 340 0 0 0 5.65487 0
+7 64 40000 340 0 0 0 3.35103 0
+
+# Sequence Shapes
+[SHAPES]
+
+shape_id 1
+num_samples 2
+1
+1
+
+shape_id 2
+num_samples 2
+0
+0
+
+shape_id 3
+num_samples 2
+0
+10000
+
+shape_id 4
+num_samples 2
+0
+1000
+
+shape_id 5
+num_samples 162
+0.0666667
+0.1333333
+0.1333333
+0
+0.1333334
+0.1333333
+0.1333333
+0
+0.1333334
+0.1333333
+0
+-0.1333333
+-0.1333334
+-0.1333333
+-0.1333333
+0
+-0.1333334
+-0.1333333
+-0.1333333
+0
+-0.1328166
+-0.0661498
+0
+0
+125
+0.0661498
+0.1328166
+0.1333333
+0.1333333
+0
+0.1333334
+0.1333333
+0.1333333
+0
+0.1333334
+0.1333333
+0
+-0.1333333
+-0.1333334
+-0.1333333
+-0.1333333
+0
+-0.1333334
+-0.1333333
+-0.1333333
+0
+
+shape_id 6
+num_samples 162
+0
+0
+160
+
+shape_id 7
+num_samples 6
+0
+0
+4
+
+shape_id 8
+num_samples 6
+0
+1
+2
+164
+165
+166
+
+
+[SIGNATURE]
+# This is the hash of the Pulseq file, calculated right before the [SIGNATURE]
+# section was added. It can be reproduced/verified with md5sum if the file
+# trimmed to the position right above [SIGNATURE]. The new line character
+# preceding [SIGNATURE] BELONGS to the signature (and needs to be sripped away
+# for recalculating/verification)
+Type md5
+Hash 789914eb92862902098d91acdb2cb8f3

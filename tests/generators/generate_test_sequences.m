@@ -25,6 +25,9 @@ write_mprage_nav(true, 1, 3);
 write_mprage_nav(true, 3, 3);
 
 write_mprage_noncart(true, 1, 1, false);
+write_mprage_noncart(true, 3, 1, false);
+write_mprage_noncart(true, 1, 3, false);
+write_mprage_noncart(true, 3, 3, false);
 
 function seq = write_gre(write, num_slices, num_averages)
     base = sprintf('gre_2d_%dsl_%davg', num_slices, num_averages);
