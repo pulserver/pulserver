@@ -269,6 +269,7 @@ classdef TruthBuilder < handle
 
             for g = 1:M
                 ref_shape_ids = zeros(nbt, 3);
+                ref_grads = cell(nbt, 3);
                 can_scale = zeros(nbt, 3);
                 best_energy = 0;
                 best_idx = 0;
@@ -298,9 +299,16 @@ classdef TruthBuilder < handle
 
                                 if ref_shape_ids(pos, a) == 0
                                     ref_shape_ids(pos, a) = sid;
+                                    ref_grads{pos, a} = grad;
                                     can_scale(pos, a) = amp;
-                                elseif sid == ref_shape_ids(pos, a)
-                                    if abs(amp) > abs(can_scale(pos, a))
+                                else
+                                    same_state = false;
+                                    if strcmp(grad.type, 'trap') || strcmp(grad.type, 'trapezoid')
+                                        same_state = (sid == ref_shape_ids(pos, a));
+                                    else
+                                        same_state = TruthBuilder.gradArbStateMatches(ref_grads{pos, a}, grad);
+                                    end
+                                    if same_state && abs(amp) > abs(can_scale(pos, a))
                                         can_scale(pos, a) = sign(can_scale(pos, a)) * abs(amp);
                                     end
                                 end
@@ -1312,6 +1320,28 @@ classdef TruthBuilder < handle
 
             sid = length(shapes) + 1;
             shapes{sid} = fp;
+        end
+
+        function tf = gradArbStateMatches(ref_grad, cand_grad)
+        % GRADARBSTATEMATCHES  True when arbitrary gradients share the same raw state.
+            tol = 1e-9;
+            if isempty(ref_grad) || isempty(cand_grad)
+                tf = false;
+                return;
+            end
+            if ~(strcmp(ref_grad.type, cand_grad.type) && ...
+                    ~(strcmp(ref_grad.type, 'trap') || strcmp(ref_grad.type, 'trapezoid')))
+                tf = false;
+                return;
+            end
+            if length(ref_grad.waveform) ~= length(cand_grad.waveform) || ...
+                    length(ref_grad.tt) ~= length(cand_grad.tt)
+                tf = false;
+                return;
+            end
+            tf = max(abs(ref_grad.waveform(:) - cand_grad.waveform(:))) < 1e-8 && ...
+                 max(abs(ref_grad.tt(:) - cand_grad.tt(:))) < tol && ...
+                 abs(ref_grad.delay - cand_grad.delay) < tol;
         end
     end
 end
