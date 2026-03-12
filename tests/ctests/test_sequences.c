@@ -30,47 +30,34 @@ typedef struct {
     const char* seq_file;
     const char* base;
     int num_averages;
-    int fmod_positions[2];
-} gre_case;
+} seq_case;
 
-static const gre_case kGreCases[] = {
-    {"gre_2d_1sl_1avg", "gre_2d_1sl_1avg.seq", "gre_2d_1sl_1avg", 1, {0, 22}},
-    {"gre_2d_1sl_3avg", "gre_2d_1sl_3avg.seq", "gre_2d_1sl_3avg", 3, {0, 22}},
-    {"gre_2d_3sl_1avg", "gre_2d_3sl_1avg.seq", "gre_2d_3sl_1avg", 1, {0, 22}},
-    {"gre_2d_3sl_3avg", "gre_2d_3sl_3avg.seq", "gre_2d_3sl_3avg", 3, {0, 22}},
+static const seq_case kGreCases[] = {
+    {"gre_2d_1sl_1avg", "gre_2d_1sl_1avg.seq", "gre_2d_1sl_1avg", 1},
+    {"gre_2d_1sl_3avg", "gre_2d_1sl_3avg.seq", "gre_2d_1sl_3avg", 3},
+    {"gre_2d_3sl_1avg", "gre_2d_3sl_1avg.seq", "gre_2d_3sl_1avg", 1},
+    {"gre_2d_3sl_3avg", "gre_2d_3sl_3avg.seq", "gre_2d_3sl_3avg", 3},
 };
 
-typedef struct {
-    const char* name;
-    const char* seq_file;
-    const char* base;
-    int num_averages;
-    int fmod_positions[2];
-} mprage_case;
-
-static const mprage_case kMprageCases[] = {
-    {"mprage_2d_1sl_1avg", "mprage_2d_1sl_1avg.seq", "mprage_2d_1sl_1avg", 1, {0, 22}},
-    {"mprage_2d_1sl_3avg", "mprage_2d_1sl_3avg.seq", "mprage_2d_1sl_3avg", 3, {0, 22}},
-    {"mprage_2d_3sl_1avg", "mprage_2d_3sl_1avg.seq", "mprage_2d_3sl_1avg", 1, {0, 22}},
-    {"mprage_2d_3sl_3avg", "mprage_2d_3sl_3avg.seq", "mprage_2d_3sl_3avg", 3, {0, 22}},
+static const seq_case kMprageCases[] = {
+    {"mprage_2d_1sl_1avg", "mprage_2d_1sl_1avg.seq", "mprage_2d_1sl_1avg", 1},
+    {"mprage_2d_1sl_3avg", "mprage_2d_1sl_3avg.seq", "mprage_2d_1sl_3avg", 3},
+    {"mprage_2d_3sl_1avg", "mprage_2d_3sl_1avg.seq", "mprage_2d_3sl_1avg", 1},
+    {"mprage_2d_3sl_3avg", "mprage_2d_3sl_3avg.seq", "mprage_2d_3sl_3avg", 3},
 };
 
-typedef struct {
-    const char* name;
-    const char* seq_file;
-    const char* base;
-    int num_averages;
-    int fmod_positions[2];
-} mprage_nav_case;
-
-static const mprage_nav_case kMprageNavCases[] = {
-    {"mprage_nav_2d_1sl_1avg", "mprage_nav_2d_1sl_1avg.seq", "mprage_nav_2d_1sl_1avg", 1, {0, 22}},
-    {"mprage_nav_2d_1sl_3avg", "mprage_nav_2d_1sl_3avg.seq", "mprage_nav_2d_1sl_3avg", 3, {0, 22}},
-    {"mprage_nav_2d_3sl_1avg", "mprage_nav_2d_3sl_1avg.seq", "mprage_nav_2d_3sl_1avg", 1, {0, 22}},
-    {"mprage_nav_2d_3sl_3avg", "mprage_nav_2d_3sl_3avg.seq", "mprage_nav_2d_3sl_3avg", 3, {0, 22}},
+static const seq_case kMprageNoncartCases[] = {
+    {"mprage_noncart_3d_1sl_1avg_userotext0", "mprage_noncart_3d_1sl_1avg_userotext0.seq", "mprage_noncart_3d_1sl_1avg_userotext0", 1},
 };
 
-static void build_case_path(char* dst, size_t dst_sz, const gre_case* tc, const char* suffix)
+static const seq_case kMprageNavCases[] = {
+    {"mprage_nav_2d_1sl_1avg", "mprage_nav_2d_1sl_1avg.seq", "mprage_nav_2d_1sl_1avg", 1},
+    {"mprage_nav_2d_1sl_3avg", "mprage_nav_2d_1sl_3avg.seq", "mprage_nav_2d_1sl_3avg", 3},
+    {"mprage_nav_2d_3sl_1avg", "mprage_nav_2d_3sl_1avg.seq", "mprage_nav_2d_3sl_1avg", 1},
+    {"mprage_nav_2d_3sl_3avg", "mprage_nav_2d_3sl_3avg.seq", "mprage_nav_2d_3sl_3avg", 3},
+};
+
+static void build_case_path(char* dst, size_t dst_sz, const seq_case* tc, const char* suffix)
 {
     (void)snprintf(dst, dst_sz, TEST_DATA_DIR "%s%s", tc->base, suffix);
 }
@@ -79,7 +66,7 @@ static void build_case_path(char* dst, size_t dst_sz, const gre_case* tc, const 
 /*  Phase 1: example_check step 6 (ADC, max_b1, TR)                  */
 /* ------------------------------------------------------------------ */
 
-static void run_check_case(const gre_case* tc)
+static void run_check_case(const seq_case* tc)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
@@ -131,16 +118,10 @@ static void run_check_case(const gre_case* tc)
     mu_assert_float_near("TR duration",
         (float)meta.tr_duration_us, sinfo.tr_duration_us, 1.0f);
 
-    /* 4. Num segments — verify segment count is correct */
-    {
-        int expected_num_segments = meta.num_segments;
-        if (strncmp(tc->name, "mprage_nav_", 11) == 0) {
-            expected_num_segments = 4;
-        } else if (strncmp(tc->name, "mprage_", 7) == 0) {
-            expected_num_segments = 3;
-        }
-        mu_assert_int_eq(expected_num_segments, cinfo.num_segments);
-    }
+    /* 4. Num segments — verify segment count matches truth */
+    fprintf(stderr, "[check][%s] num_segments: meta=%d  lib=%d\n",
+            tc->name, meta.num_segments, cinfo.num_segments);
+    mu_assert_int_eq(meta.num_segments, cinfo.num_segments);
 
     pulseqlib_collection_free(coll);
 }
@@ -150,15 +131,16 @@ MU_TEST(test_check_gre_2d_1sl_3avg) { run_check_case(&kGreCases[1]); }
 MU_TEST(test_check_gre_2d_3sl_1avg) { run_check_case(&kGreCases[2]); }
 MU_TEST(test_check_gre_2d_3sl_3avg) { run_check_case(&kGreCases[3]); }
 
-MU_TEST(test_check_mprage_2d_1sl_1avg) { run_check_case((const gre_case*)&kMprageCases[0]); }
-MU_TEST(test_check_mprage_2d_1sl_3avg) { run_check_case((const gre_case*)&kMprageCases[1]); }
-MU_TEST(test_check_mprage_2d_3sl_1avg) { run_check_case((const gre_case*)&kMprageCases[2]); }
-MU_TEST(test_check_mprage_2d_3sl_3avg) { run_check_case((const gre_case*)&kMprageCases[3]); }
+MU_TEST(test_check_mprage_2d_1sl_1avg) { run_check_case(&kMprageCases[0]); }
+MU_TEST(test_check_mprage_2d_1sl_3avg) { run_check_case(&kMprageCases[1]); }
+MU_TEST(test_check_mprage_2d_3sl_1avg) { run_check_case(&kMprageCases[2]); }
+MU_TEST(test_check_mprage_2d_3sl_3avg) { run_check_case(&kMprageCases[3]); }
+MU_TEST(test_check_mprage_nc_1sl_1avg) { run_check_case(&kMprageNoncartCases[0]); }
 
-MU_TEST(test_check_mprage_nav_2d_1sl_1avg) { run_check_case((const gre_case*)&kMprageNavCases[0]); }
-MU_TEST(test_check_mprage_nav_2d_1sl_3avg) { run_check_case((const gre_case*)&kMprageNavCases[1]); }
-MU_TEST(test_check_mprage_nav_2d_3sl_1avg) { run_check_case((const gre_case*)&kMprageNavCases[2]); }
-MU_TEST(test_check_mprage_nav_2d_3sl_3avg) { run_check_case((const gre_case*)&kMprageNavCases[3]); }
+MU_TEST(test_check_mprage_nav_2d_1sl_1avg) { run_check_case(&kMprageNavCases[0]); }
+MU_TEST(test_check_mprage_nav_2d_1sl_3avg) { run_check_case(&kMprageNavCases[1]); }
+MU_TEST(test_check_mprage_nav_2d_3sl_1avg) { run_check_case(&kMprageNavCases[2]); }
+MU_TEST(test_check_mprage_nav_2d_3sl_3avg) { run_check_case(&kMprageNavCases[3]); }
 
 MU_TEST_SUITE(suite_sequences_check)
 {
@@ -170,6 +152,7 @@ MU_TEST_SUITE(suite_sequences_check)
     MU_RUN_TEST(test_check_mprage_2d_1sl_3avg);
     MU_RUN_TEST(test_check_mprage_2d_3sl_1avg);
     MU_RUN_TEST(test_check_mprage_2d_3sl_3avg);
+    MU_RUN_TEST(test_check_mprage_nc_1sl_1avg);
     MU_RUN_TEST(test_check_mprage_nav_2d_1sl_1avg);
     MU_RUN_TEST(test_check_mprage_nav_2d_1sl_3avg);
     MU_RUN_TEST(test_check_mprage_nav_2d_3sl_1avg);
@@ -184,7 +167,7 @@ MU_TEST_SUITE(suite_sequences_check)
 #define WAVE_REL_TOL 1e-3f
 #define WAVE_TIME_ABS_TOL 0.5f  /* us — half a raster step */
 
-static void run_sequences_uieval_case(const gre_case* tc)
+static void run_sequences_uieval_case(const seq_case* tc)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
@@ -218,11 +201,15 @@ static void run_sequences_uieval_case(const gre_case* tc)
 
 
     /* 4. Segment structure */
+    fprintf(stderr, "[uieval][%s] num_segments: meta=%d  lib=%d\n",
+            tc->name, meta.num_segments, cinfo.num_segments);
     mu_assert_int_eq(meta.num_segments, cinfo.num_segments);
     for (s = 0; s < cinfo.num_segments && s < MAX_SEGMENTS; ++s) {
         pulseqlib_segment_info segi = PULSEQLIB_SEGMENT_INFO_INIT;
         rc = pulseqlib_get_segment_info(coll, s, &segi);
         mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_segment_info failed");
+        fprintf(stderr, "[uieval][%s] segment %d num_blocks: meta=%d  lib=%d\n",
+                tc->name, s, meta.segment_num_blocks[s], segi.num_blocks);
         mu_assert_int_eq(meta.segment_num_blocks[s], segi.num_blocks);
     }
 
@@ -275,6 +262,9 @@ static void run_sequences_uieval_case(const gre_case* tc)
             tol_gz = (ref_gz < 0 ? -ref_gz : ref_gz) * WAVE_REL_TOL;
             if (tol_gz < 1.0f) tol_gz = 1.0f;
 
+            if (fabsf(ref_gx - lib_gx) > tol_gx)
+                fprintf(stderr, "[uieval][%s] TR Gx mismatch @%d: ref=%.4g  lib=%.4g\n",
+                        tc->name, i, ref_gx, lib_gx);
             mu_assert(fabsf(ref_gx - lib_gx) <= tol_gx, "TR waveform Gx mismatch");
             mu_assert(fabsf(ref_gy - lib_gy) <= tol_gy, "TR waveform Gy mismatch");
             mu_assert(fabsf(ref_gz - lib_gz) <= tol_gz, "TR waveform Gz mismatch");
@@ -291,15 +281,16 @@ MU_TEST(test_sequences_uieval_gre_2d_1sl_3avg) { run_sequences_uieval_case(&kGre
 MU_TEST(test_sequences_uieval_gre_2d_3sl_1avg) { run_sequences_uieval_case(&kGreCases[2]); }
 MU_TEST(test_sequences_uieval_gre_2d_3sl_3avg) { run_sequences_uieval_case(&kGreCases[3]); }
 
-MU_TEST(test_sequences_uieval_mprage_2d_1sl_1avg) { run_sequences_uieval_case((const gre_case*)&kMprageCases[0]); }
-MU_TEST(test_sequences_uieval_mprage_2d_1sl_3avg) { run_sequences_uieval_case((const gre_case*)&kMprageCases[1]); }
-MU_TEST(test_sequences_uieval_mprage_2d_3sl_1avg) { run_sequences_uieval_case((const gre_case*)&kMprageCases[2]); }
-MU_TEST(test_sequences_uieval_mprage_2d_3sl_3avg) { run_sequences_uieval_case((const gre_case*)&kMprageCases[3]); }
+MU_TEST(test_sequences_uieval_mprage_2d_1sl_1avg) { run_sequences_uieval_case(&kMprageCases[0]); }
+MU_TEST(test_sequences_uieval_mprage_2d_1sl_3avg) { run_sequences_uieval_case(&kMprageCases[1]); }
+MU_TEST(test_sequences_uieval_mprage_2d_3sl_1avg) { run_sequences_uieval_case(&kMprageCases[2]); }
+MU_TEST(test_sequences_uieval_mprage_2d_3sl_3avg) { run_sequences_uieval_case(&kMprageCases[3]); }
+MU_TEST(test_sequences_uieval_mprage_nc_1sl_1avg) { run_sequences_uieval_case(&kMprageNoncartCases[0]); }
 
-MU_TEST(test_sequences_uieval_mprage_nav_2d_1sl_1avg) { run_sequences_uieval_case((const gre_case*)&kMprageNavCases[0]); }
-MU_TEST(test_sequences_uieval_mprage_nav_2d_1sl_3avg) { run_sequences_uieval_case((const gre_case*)&kMprageNavCases[1]); }
-MU_TEST(test_sequences_uieval_mprage_nav_2d_3sl_1avg) { run_sequences_uieval_case((const gre_case*)&kMprageNavCases[2]); }
-MU_TEST(test_sequences_uieval_mprage_nav_2d_3sl_3avg) { run_sequences_uieval_case((const gre_case*)&kMprageNavCases[3]); }
+MU_TEST(test_sequences_uieval_mprage_nav_2d_1sl_1avg) { run_sequences_uieval_case(&kMprageNavCases[0]); }
+MU_TEST(test_sequences_uieval_mprage_nav_2d_1sl_3avg) { run_sequences_uieval_case(&kMprageNavCases[1]); }
+MU_TEST(test_sequences_uieval_mprage_nav_2d_3sl_1avg) { run_sequences_uieval_case(&kMprageNavCases[2]); }
+MU_TEST(test_sequences_uieval_mprage_nav_2d_3sl_3avg) { run_sequences_uieval_case(&kMprageNavCases[3]); }
 
 MU_TEST_SUITE(suite_sequences_uieval)
 {
@@ -311,6 +302,7 @@ MU_TEST_SUITE(suite_sequences_uieval)
     MU_RUN_TEST(test_sequences_uieval_mprage_2d_1sl_3avg);
     MU_RUN_TEST(test_sequences_uieval_mprage_2d_3sl_1avg);
     MU_RUN_TEST(test_sequences_uieval_mprage_2d_3sl_3avg);
+    MU_RUN_TEST(test_sequences_uieval_mprage_nc_1sl_1avg);
     MU_RUN_TEST(test_sequences_uieval_mprage_nav_2d_1sl_1avg);
     MU_RUN_TEST(test_sequences_uieval_mprage_nav_2d_1sl_3avg);
     MU_RUN_TEST(test_sequences_uieval_mprage_nav_2d_3sl_1avg);
@@ -339,7 +331,7 @@ MU_TEST_SUITE(suite_sequences_uieval)
 #define GENI_AMP_NEAR(a, b) \
     (fabsf((a) - (b)) <= (((fabsf(a) > 1.0f ? fabsf(a) : 1.0f)) * GENI_AMP_REL_TOL))
 
-static void run_sequences_geninstructions_case(const gre_case* tc)
+static void run_sequences_geninstructions_case(const seq_case* tc)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
@@ -363,12 +355,16 @@ static void run_sequences_geninstructions_case(const gre_case* tc)
     mu_assert(ok, "failed to parse case _segment_def.bin");
 
     /* Number of segments must match */
+    fprintf(stderr, "[geninstr][%s] num_segments: ref=%d  lib=%d\n",
+            tc->name, ref.num_segments, cinfo.num_segments);
     mu_assert_int_eq(ref.num_segments, cinfo.num_segments);
 
     for (s = 0; s < ref.num_segments; ++s) {
         pulseqlib_segment_info segi = PULSEQLIB_SEGMENT_INFO_INIT;
         rc = pulseqlib_get_segment_info(coll, s, &segi);
         mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_segment_info failed");
+        fprintf(stderr, "[geninstr][%s] segment %d num_blocks: ref=%d  lib=%d\n",
+                tc->name, s, ref.num_blocks[s], segi.num_blocks);
         mu_assert_int_eq(ref.num_blocks[s], segi.num_blocks);
 
         for (b = 0; b < ref.num_blocks[s]; ++b) {
@@ -445,6 +441,10 @@ static void run_sequences_geninstructions_case(const gre_case* tc)
                     /* Both library and MATLAB store normalised shapes
                        (peak ≈ 1.0).  Compare directly. */
                     for (i = 0; i < num_samples; ++i) {
+                        if (!GENI_AMP_NEAR(ref_blk->grad_wave[ax][i], amps[0][i]))
+                            fprintf(stderr, "[geninstr][%s] seg%d blk%d ax%d wave@%d: ref=%.4g  lib=%.4g\n",
+                                    tc->name, s, b, ax, i,
+                                    ref_blk->grad_wave[ax][i], amps[0][i]);
                         mu_assert(GENI_AMP_NEAR(ref_blk->grad_wave[ax][i], amps[0][i]),
                                   "grad waveform shape mismatch");
                     }
@@ -546,15 +546,16 @@ MU_TEST(test_sequences_geninstructions_gre_2d_1sl_3avg) { run_sequences_geninstr
 MU_TEST(test_sequences_geninstructions_gre_2d_3sl_1avg) { run_sequences_geninstructions_case(&kGreCases[2]); }
 MU_TEST(test_sequences_geninstructions_gre_2d_3sl_3avg) { run_sequences_geninstructions_case(&kGreCases[3]); }
 
-MU_TEST(test_sequences_geninstructions_mprage_2d_1sl_1avg) { run_sequences_geninstructions_case((const gre_case*)&kMprageCases[0]); }
-MU_TEST(test_sequences_geninstructions_mprage_2d_1sl_3avg) { run_sequences_geninstructions_case((const gre_case*)&kMprageCases[1]); }
-MU_TEST(test_sequences_geninstructions_mprage_2d_3sl_1avg) { run_sequences_geninstructions_case((const gre_case*)&kMprageCases[2]); }
-MU_TEST(test_sequences_geninstructions_mprage_2d_3sl_3avg) { run_sequences_geninstructions_case((const gre_case*)&kMprageCases[3]); }
+MU_TEST(test_sequences_geninstructions_mprage_2d_1sl_1avg) { run_sequences_geninstructions_case(&kMprageCases[0]); }
+MU_TEST(test_sequences_geninstructions_mprage_2d_1sl_3avg) { run_sequences_geninstructions_case(&kMprageCases[1]); }
+MU_TEST(test_sequences_geninstructions_mprage_2d_3sl_1avg) { run_sequences_geninstructions_case(&kMprageCases[2]); }
+MU_TEST(test_sequences_geninstructions_mprage_2d_3sl_3avg) { run_sequences_geninstructions_case(&kMprageCases[3]); }
+MU_TEST(test_sequences_geninstructions_mprage_nc_1sl_1avg) { run_sequences_geninstructions_case(&kMprageNoncartCases[0]); }
 
-MU_TEST(test_sequences_geninstructions_mprage_nav_2d_1sl_1avg) { run_sequences_geninstructions_case((const gre_case*)&kMprageNavCases[0]); }
-MU_TEST(test_sequences_geninstructions_mprage_nav_2d_1sl_3avg) { run_sequences_geninstructions_case((const gre_case*)&kMprageNavCases[1]); }
-MU_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_1avg) { run_sequences_geninstructions_case((const gre_case*)&kMprageNavCases[2]); }
-MU_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_3avg) { run_sequences_geninstructions_case((const gre_case*)&kMprageNavCases[3]); }
+MU_TEST(test_sequences_geninstructions_mprage_nav_2d_1sl_1avg) { run_sequences_geninstructions_case(&kMprageNavCases[0]); }
+MU_TEST(test_sequences_geninstructions_mprage_nav_2d_1sl_3avg) { run_sequences_geninstructions_case(&kMprageNavCases[1]); }
+MU_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_1avg) { run_sequences_geninstructions_case(&kMprageNavCases[2]); }
+MU_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_3avg) { run_sequences_geninstructions_case(&kMprageNavCases[3]); }
 
 /* ------------------------------------------------------------------ */
 /*  Phase 4: Frequency-modulation definition waveforms                */
@@ -671,7 +672,7 @@ static void check_fmod_shift(const pulseqlib_collection* coll,
     pulseqlib_freq_mod_collection_free(fmc);
 }
 
-static void run_freq_mod_definitions_case(const gre_case* tc)
+static void run_freq_mod_definitions_case(const seq_case* tc)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
@@ -735,15 +736,16 @@ MU_TEST(test_freq_mod_definitions_gre_2d_1sl_3avg) { run_freq_mod_definitions_ca
 MU_TEST(test_freq_mod_definitions_gre_2d_3sl_1avg) { run_freq_mod_definitions_case(&kGreCases[2]); }
 MU_TEST(test_freq_mod_definitions_gre_2d_3sl_3avg) { run_freq_mod_definitions_case(&kGreCases[3]); }
 
-MU_TEST(test_freq_mod_definitions_mprage_2d_1sl_1avg) { run_freq_mod_definitions_case((const gre_case*)&kMprageCases[0]); }
-MU_TEST(test_freq_mod_definitions_mprage_2d_1sl_3avg) { run_freq_mod_definitions_case((const gre_case*)&kMprageCases[1]); }
-MU_TEST(test_freq_mod_definitions_mprage_2d_3sl_1avg) { run_freq_mod_definitions_case((const gre_case*)&kMprageCases[2]); }
-MU_TEST(test_freq_mod_definitions_mprage_2d_3sl_3avg) { run_freq_mod_definitions_case((const gre_case*)&kMprageCases[3]); }
+MU_TEST(test_freq_mod_definitions_mprage_2d_1sl_1avg) { run_freq_mod_definitions_case(&kMprageCases[0]); }
+MU_TEST(test_freq_mod_definitions_mprage_2d_1sl_3avg) { run_freq_mod_definitions_case(&kMprageCases[1]); }
+MU_TEST(test_freq_mod_definitions_mprage_2d_3sl_1avg) { run_freq_mod_definitions_case(&kMprageCases[2]); }
+MU_TEST(test_freq_mod_definitions_mprage_2d_3sl_3avg) { run_freq_mod_definitions_case(&kMprageCases[3]); }
+MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_1avg) { run_freq_mod_definitions_case(&kMprageNoncartCases[0]); }
 
-MU_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_1avg) { run_freq_mod_definitions_case((const gre_case*)&kMprageNavCases[0]); }
-MU_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_3avg) { run_freq_mod_definitions_case((const gre_case*)&kMprageNavCases[1]); }
-MU_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_1avg) { run_freq_mod_definitions_case((const gre_case*)&kMprageNavCases[2]); }
-MU_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_3avg) { run_freq_mod_definitions_case((const gre_case*)&kMprageNavCases[3]); }
+MU_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_1avg) { run_freq_mod_definitions_case(&kMprageNavCases[0]); }
+MU_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_3avg) { run_freq_mod_definitions_case(&kMprageNavCases[1]); }
+MU_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_1avg) { run_freq_mod_definitions_case(&kMprageNavCases[2]); }
+MU_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_3avg) { run_freq_mod_definitions_case(&kMprageNavCases[3]); }
 
 MU_TEST_SUITE(suite_sequences_geninstructions)
 {
@@ -755,6 +757,7 @@ MU_TEST_SUITE(suite_sequences_geninstructions)
     MU_RUN_TEST(test_sequences_geninstructions_mprage_2d_1sl_3avg);
     MU_RUN_TEST(test_sequences_geninstructions_mprage_2d_3sl_1avg);
     MU_RUN_TEST(test_sequences_geninstructions_mprage_2d_3sl_3avg);
+    MU_RUN_TEST(test_sequences_geninstructions_mprage_nc_1sl_1avg);
     MU_RUN_TEST(test_sequences_geninstructions_mprage_nav_2d_1sl_1avg);
     MU_RUN_TEST(test_sequences_geninstructions_mprage_nav_2d_1sl_3avg);
     MU_RUN_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_1avg);
@@ -767,6 +770,7 @@ MU_TEST_SUITE(suite_sequences_geninstructions)
     MU_RUN_TEST(test_freq_mod_definitions_mprage_2d_1sl_3avg);
     MU_RUN_TEST(test_freq_mod_definitions_mprage_2d_3sl_1avg);
     MU_RUN_TEST(test_freq_mod_definitions_mprage_2d_3sl_3avg);
+    MU_RUN_TEST(test_freq_mod_definitions_mprage_nc_1sl_1avg);
     MU_RUN_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_1avg);
     MU_RUN_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_3avg);
     MU_RUN_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_1avg);
@@ -778,7 +782,7 @@ MU_TEST_SUITE(suite_sequences_geninstructions)
 /*  Phase 5: Scan table — block instance validation                   */
 /* ------------------------------------------------------------------ */
 
-static void run_scan_table_case(const gre_case* tc)
+static void run_scan_table_case(const seq_case* tc)
 {
     pulseqlib_opts opts;
     pulseqlib_collection* coll = NULL;
@@ -880,7 +884,10 @@ static void run_scan_table_case(const gre_case* tc)
         /* GX amplitude */
         tol = (float)fabs(e->gx_amp_hz_per_m) * 1e-4f;
         if (tol < 1e-6f) tol = 1e-6f;
-        mu_assert((float)fabs(inst.gx_amp_hz_per_m - e->gx_amp_hz_per_m) <= tol,
+            if ((float)fabs(inst.gx_amp_hz_per_m - e->gx_amp_hz_per_m) > tol)
+                fprintf(stderr, "[scantable][%s] gx_amp @pos%d: ref=%.6g  lib=%.6g\n",
+                    tc->name, pos, e->gx_amp_hz_per_m, inst.gx_amp_hz_per_m);
+            mu_assert((float)fabs(inst.gx_amp_hz_per_m - e->gx_amp_hz_per_m) <= tol,
                   "gx_amp mismatch");
 
         /* GY amplitude */
@@ -925,6 +932,8 @@ static void run_scan_table_case(const gre_case* tc)
     mu_assert_int_eq(ref.num_entries, pos);
 
     if (is_mprage) {
+        fprintf(stderr, "[scantable][%s] pure_seg_id=%d  pure_inst_unique=%d  saw_noncanonical=%d\n",
+                tc->name, pure_seg_id, pure_inst_unique, saw_noncanonical_instance);
         mu_assert(pure_seg_id >= 0, "expected a pure-delay segment in MPRAGE scan loop");
         mu_assert(pure_inst_unique >= 2,
                   "expected multiple pure-delay instance durations (e.g. TI and TR delays)");
@@ -940,15 +949,16 @@ MU_TEST(test_scan_table_gre_2d_1sl_3avg) { run_scan_table_case(&kGreCases[1]); }
 MU_TEST(test_scan_table_gre_2d_3sl_1avg) { run_scan_table_case(&kGreCases[2]); }
 MU_TEST(test_scan_table_gre_2d_3sl_3avg) { run_scan_table_case(&kGreCases[3]); }
 
-MU_TEST(test_scan_table_mprage_2d_1sl_1avg) { run_scan_table_case((const gre_case*)&kMprageCases[0]); }
-MU_TEST(test_scan_table_mprage_2d_1sl_3avg) { run_scan_table_case((const gre_case*)&kMprageCases[1]); }
-MU_TEST(test_scan_table_mprage_2d_3sl_1avg) { run_scan_table_case((const gre_case*)&kMprageCases[2]); }
-MU_TEST(test_scan_table_mprage_2d_3sl_3avg) { run_scan_table_case((const gre_case*)&kMprageCases[3]); }
+MU_TEST(test_scan_table_mprage_2d_1sl_1avg) { run_scan_table_case(&kMprageCases[0]); }
+MU_TEST(test_scan_table_mprage_2d_1sl_3avg) { run_scan_table_case(&kMprageCases[1]); }
+MU_TEST(test_scan_table_mprage_2d_3sl_1avg) { run_scan_table_case(&kMprageCases[2]); }
+MU_TEST(test_scan_table_mprage_2d_3sl_3avg) { run_scan_table_case(&kMprageCases[3]); }
+MU_TEST(test_scan_table_mprage_nc_1sl_1avg) { run_scan_table_case(&kMprageNoncartCases[0]); }
 
-MU_TEST(test_scan_table_mprage_nav_2d_1sl_1avg) { run_scan_table_case((const gre_case*)&kMprageNavCases[0]); }
-MU_TEST(test_scan_table_mprage_nav_2d_1sl_3avg) { run_scan_table_case((const gre_case*)&kMprageNavCases[1]); }
-MU_TEST(test_scan_table_mprage_nav_2d_3sl_1avg) { run_scan_table_case((const gre_case*)&kMprageNavCases[2]); }
-MU_TEST(test_scan_table_mprage_nav_2d_3sl_3avg) { run_scan_table_case((const gre_case*)&kMprageNavCases[3]); }
+MU_TEST(test_scan_table_mprage_nav_2d_1sl_1avg) { run_scan_table_case(&kMprageNavCases[0]); }
+MU_TEST(test_scan_table_mprage_nav_2d_1sl_3avg) { run_scan_table_case(&kMprageNavCases[1]); }
+MU_TEST(test_scan_table_mprage_nav_2d_3sl_1avg) { run_scan_table_case(&kMprageNavCases[2]); }
+MU_TEST(test_scan_table_mprage_nav_2d_3sl_3avg) { run_scan_table_case(&kMprageNavCases[3]); }
 
 MU_TEST_SUITE(suite_sequences_scanloop)
 {
@@ -960,6 +970,7 @@ MU_TEST_SUITE(suite_sequences_scanloop)
     MU_RUN_TEST(test_scan_table_mprage_2d_1sl_3avg);
     MU_RUN_TEST(test_scan_table_mprage_2d_3sl_1avg);
     MU_RUN_TEST(test_scan_table_mprage_2d_3sl_3avg);
+    MU_RUN_TEST(test_scan_table_mprage_nc_1sl_1avg);
     MU_RUN_TEST(test_scan_table_mprage_nav_2d_1sl_1avg);
     MU_RUN_TEST(test_scan_table_mprage_nav_2d_1sl_3avg);
     MU_RUN_TEST(test_scan_table_mprage_nav_2d_3sl_1avg);

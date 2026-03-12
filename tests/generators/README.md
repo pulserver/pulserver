@@ -88,9 +88,9 @@ Notes:
 
 Open `tests/ctests/test_sequences.c` and follow the existing pattern.
 
-### 2a. Define a case struct (if adding a new sequence *type*)
+### 2a. Define a case entry (in the unified `seq_case` struct)
 
-For a brand-new sequence family, add a new `typedef struct` and static array:
+All test sequences use the same `seq_case` struct:
 
 ```c
 typedef struct {
@@ -98,27 +98,35 @@ typedef struct {
     const char* seq_file;
     const char* base;
     int num_averages;
-} my_seq_case;
+} seq_case;
+```
 
-static const my_seq_case kMySeqCases[] = {
+Add your sequence to an appropriate static array:
+
+```c
+static const seq_case kMySeqCases[] = {
     {"my_seq_v1", "my_seq_v1.seq", "my_seq_v1", 1},
     {"my_seq_v2", "my_seq_v2.seq", "my_seq_v2", 3},
 };
 ```
 
-If adding variants of an existing type (e.g. more GRE cases), just append to
-the existing `kGreCases[]` array.
+For a new sequence family, create a new array (e.g. `kMySeqCases`).
+For variants of an existing type (e.g. more GRE cases), append to the existing array.
+For variants of an existing type with a different distinguishing characteristic
+(e.g. noncartesian MPRAGE vs cartesian MPRAGE), create a separate array
+(e.g. `kMprageNoncartCases`), which allows for future expansion with other variants.
 
 ### 2b. Add MU_TEST wrappers and suite registration
 
-For each case index and each phase (check, uieval, geninstructions, freqmod,
-scantable), add a one-liner wrapper and register it:
+For each case index in your array(s) and each phase (check, uieval, geninstructions, freqmod,
+scantable), add a one-liner wrapper and register it. All test functions accept a `seq_case*`:
 
 ```c
 /* Wrappers */
 MU_TEST(test_check_my_seq_v1) { run_check_case(&kMySeqCases[0]); }
 MU_TEST(test_check_my_seq_v2) { run_check_case(&kMySeqCases[1]); }
-/* ... repeat for run_sequences_uieval_case, etc. */
+/* ... repeat for run_sequences_uieval_case, run_sequences_geninstructions_case, 
+       run_freq_mod_definitions_case, run_scan_table_case */
 
 /* Suite */
 MU_TEST_SUITE(suite_my_seq_check)
@@ -128,15 +136,11 @@ MU_TEST_SUITE(suite_my_seq_check)
 }
 ```
 
-Then add the suite to the `main()` runner:
-
-```c
-MU_RUN_SUITE(suite_my_seq_check);
-```
+Then add each phase suite to the `test_sequences_main()` runner.
 
 ### 2c. The five test phases
 
-The existing runner functions work for any case struct with the same fields:
+All runner functions work with the unified `seq_case` struct:
 
 | Runner | What it tests |
 |--------|---------------|

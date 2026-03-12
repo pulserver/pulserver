@@ -260,14 +260,15 @@ classdef TruthBuilder < handle
             % Per-group: canonical scale + max-energy representative.
             obj.canonical_scales = cell(M, 1);
             repr_energy_indices = zeros(M, 1);
+            first_group_indices = zeros(M, 1);
             overall_best_energy = 0;
             overall_best_idx = num_dummy + 1;
 
             ax_names = {'gx', 'gy', 'gz'};
 
             for g = 1:M
-                tr_amp_max  = zeros(nbt, 3);
-                tr_amp_sign = zeros(nbt, 3);
+                ref_grads = cell(nbt, 3);
+                can_scale = zeros(nbt, 3);
                 best_energy = 0;
                 best_idx = 0;
 
@@ -279,25 +280,32 @@ classdef TruthBuilder < handle
                     base_blk = num_dummy + (tr_i - 1) * nbt;
                     tr_energy = 0;
 
+                    if first_group_indices(g) == 0
+                        first_group_indices(g) = base_blk + 1;
+                    end
+
                     for pos = 1:nbt
                         block = obj.seq.getBlock(base_blk + pos);
 
-                        % Gradient amplitudes for this position.
-                        amp_tmp = [0, 0, 0];
                         for a = 1:3
                             axn = ax_names{a};
                             if isfield(block, axn) && ~isempty(block.(axn))
-                                amp_tmp(a) = TruthBuilder.gradPeakAmpSigned(block.(axn));
-                                tr_energy = tr_energy + TruthBuilder.gradEnergy(block.(axn));
+                                grad = block.(axn);
+                                amp = TruthBuilder.gradPeakAmpSigned(grad);
+                                tr_energy = tr_energy + TruthBuilder.gradEnergy(grad);
+
+                                if isempty(ref_grads{pos, a})
+                                    ref_grads{pos, a} = grad;
+                                    can_scale(pos, a) = amp;
+                                elseif TruthBuilder.gradInstanceMatches(ref_grads{pos, a}, grad)
+                                    if abs(amp) > abs(can_scale(pos, a))
+                                        can_scale(pos, a) = sign(can_scale(pos, a)) * abs(amp);
+                                    end
+                                end
+                            elseif isempty(ref_grads{pos, a})
+                                can_scale(pos, a) = 0;
                             end
                         end
-
-                        % Update max (by absolute value).
-                        bigger = abs(amp_tmp) > abs(tr_amp_max(pos, :));
-                        tr_amp_max(pos, bigger) = amp_tmp(bigger);
-                        % Update sign (first nonzero).
-                        first_nz = (tr_amp_sign(pos, :) == 0) & (amp_tmp ~= 0);
-                        tr_amp_sign(pos, first_nz) = sign(amp_tmp(first_nz));
                     end
 
                     if tr_energy > best_energy
@@ -306,10 +314,7 @@ classdef TruthBuilder < handle
                     end
                 end
 
-                % Default unset sign entries to +1.
-                tr_amp_sign(tr_amp_sign == 0) = 1;
-
-                obj.canonical_scales{g} = tr_amp_sign .* abs(tr_amp_max);
+                obj.canonical_scales{g} = can_scale;
                 repr_energy_indices(g) = best_idx;
 
                 if best_energy > overall_best_energy
@@ -322,6 +327,7 @@ classdef TruthBuilder < handle
             obj.segment_data = struct();
             obj.segment_data.max_seg_energy_idx = overall_best_idx;
             obj.segment_data.repr_energy_indices = repr_energy_indices;
+            obj.segment_data.first_group_indices = first_group_indices;
         end
 
         % ---- Phase 2: canonical TR waveforms (one per group) ----
@@ -330,7 +336,7 @@ classdef TruthBuilder < handle
 
             nbt = obj.num_blocks_in_tr;
             M = obj.num_canonical_trs;
-            repr = obj.segment_data.repr_energy_indices;
+            repr = obj.segment_data.first_group_indices;
 
             obj.canonical_seqs = cell(M, 1);
             obj.tr_waveforms   = cell(M, 1);
@@ -609,13 +615,13 @@ classdef TruthBuilder < handle
 
                         % Gradients
                         if isfield(block, 'gx') && ~isempty(block.gx)
-                            st(act, 4) = TruthBuilder.gradPeakAmp(block.gx);
+                            st(act, 4) = TruthBuilder.gradPeakAmpSigned(block.gx);
                         end
                         if isfield(block, 'gy') && ~isempty(block.gy)
-                            st(act, 5) = TruthBuilder.gradPeakAmp(block.gy);
+                            st(act, 5) = TruthBuilder.gradPeakAmpSigned(block.gy);
                         end
                         if isfield(block, 'gz') && ~isempty(block.gz)
-                            st(act, 6) = TruthBuilder.gradPeakAmp(block.gz);
+                            st(act, 6) = TruthBuilder.gradPeakAmpSigned(block.gz);
                         end
 
                         % ADC
@@ -755,8 +761,8 @@ classdef TruthBuilder < handle
                         end
                     else
                         w = grad.waveform;
-                        bd.([axn '_amp']) = max(abs(w));
-                        if bd.([axn '_amp']) > 0
+                        bd.([axn '_amp']) = TruthBuilder.gradPeakAmpSigned(grad);
+                        if bd.([axn '_amp']) ~= 0
                             bd.([axn '_wave']) = w / bd.([axn '_amp']);
                         else
                             bd.([axn '_wave']) = w;
@@ -1107,12 +1113,57 @@ classdef TruthBuilder < handle
         end
 
         function amp = gradPeakAmp(grad)
-        % GRADPEAKAMP  Return the peak amplitude of a gradient (signed).
+        % GRADPEAKAMP  Return the peak magnitude of a gradient.
             if strcmp(grad.type, 'trap') || strcmp(grad.type, 'trapezoid')
                 amp = grad.amplitude;
             else
                 amp = max(abs(grad.waveform));
             end
+        end
+
+        function tf = gradInstanceMatches(ref_grad, cand_grad)
+        % GRADINSTANCEMATCHES  True when two gradients represent the same shot shape.
+            tol = 1e-9;
+
+            if isempty(ref_grad) || isempty(cand_grad)
+                tf = isempty(ref_grad) && isempty(cand_grad);
+                return;
+            end
+
+            if ~strcmp(ref_grad.type, cand_grad.type)
+                tf = false;
+                return;
+            end
+
+            if strcmp(ref_grad.type, 'trap') || strcmp(ref_grad.type, 'trapezoid')
+                tf = abs(ref_grad.riseTime - cand_grad.riseTime) < tol && ...
+                     abs(ref_grad.flatTime - cand_grad.flatTime) < tol && ...
+                     abs(ref_grad.fallTime - cand_grad.fallTime) < tol && ...
+                     abs(ref_grad.delay - cand_grad.delay) < tol;
+                return;
+            end
+
+            if length(ref_grad.waveform) ~= length(cand_grad.waveform) || ...
+                    length(ref_grad.tt) ~= length(cand_grad.tt)
+                tf = false;
+                return;
+            end
+
+            ref_amp = TruthBuilder.gradPeakAmpSigned(ref_grad);
+            cand_amp = TruthBuilder.gradPeakAmpSigned(cand_grad);
+            ref_wave = ref_grad.waveform;
+            cand_wave = cand_grad.waveform;
+
+            if ref_amp ~= 0
+                ref_wave = ref_wave / ref_amp;
+            end
+            if cand_amp ~= 0
+                cand_wave = cand_wave / cand_amp;
+            end
+
+            tf = max(abs(ref_wave - cand_wave)) < 1e-6 && ...
+                 max(abs(ref_grad.tt - cand_grad.tt)) < tol && ...
+                 abs(ref_grad.delay - cand_grad.delay) < tol;
         end
 
         function sig = blockGradSig(block)
