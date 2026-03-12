@@ -436,7 +436,7 @@ end
 
 
 function seq = write_mprage_noncart(write, Nz, num_averages, use_rotext)
-    base = sprintf('mprage_noncart_2d_%dsl_%davg_userotext%', Nz, num_averages, use_rotext);
+    base = sprintf('mprage_noncart_3d_%dsl_%davg_userotext%d', Nz, num_averages, use_rotext);
     fprintf('Generating sequence: %s\n', base);
 
     sys = make_system();
