@@ -263,11 +263,12 @@ classdef TruthBuilder < handle
             first_group_indices = zeros(M, 1);
             overall_best_energy = 0;
             overall_best_idx = num_dummy + 1;
+            shapes = {};
 
             ax_names = {'gx', 'gy', 'gz'};
 
             for g = 1:M
-                ref_grads = cell(nbt, 3);
+                ref_shape_ids = zeros(nbt, 3);
                 can_scale = zeros(nbt, 3);
                 best_energy = 0;
                 best_idx = 0;
@@ -292,17 +293,18 @@ classdef TruthBuilder < handle
                             if isfield(block, axn) && ~isempty(block.(axn))
                                 grad = block.(axn);
                                 amp = TruthBuilder.gradPeakAmpSigned(grad);
+                                [sid, shapes] = TruthBuilder.matchOrAddShape(grad, shapes);
                                 tr_energy = tr_energy + TruthBuilder.gradEnergy(grad);
 
-                                if isempty(ref_grads{pos, a})
-                                    ref_grads{pos, a} = grad;
+                                if ref_shape_ids(pos, a) == 0
+                                    ref_shape_ids(pos, a) = sid;
                                     can_scale(pos, a) = amp;
-                                elseif TruthBuilder.gradInstanceMatches(ref_grads{pos, a}, grad)
+                                elseif sid == ref_shape_ids(pos, a)
                                     if abs(amp) > abs(can_scale(pos, a))
                                         can_scale(pos, a) = sign(can_scale(pos, a)) * abs(amp);
                                     end
                                 end
-                            elseif isempty(ref_grads{pos, a})
+                            elseif ref_shape_ids(pos, a) == 0
                                 can_scale(pos, a) = 0;
                             end
                         end
@@ -418,7 +420,10 @@ classdef TruthBuilder < handle
             import mr.*
 
             nbt = obj.num_blocks_in_tr;
-            max_idx = obj.segment_data.max_seg_energy_idx;
+            num_total_blocks = length(obj.seq.blockEvents);
+            num_dummy = obj.findNumDummyBlocks();
+            num_imaging_blocks = num_total_blocks - num_dummy;
+            num_trs = num_imaging_blocks / nbt;
             num_seg = length(obj.segment_sizes);
             seg_order = obj.segment_order;
 
@@ -437,16 +442,46 @@ classdef TruthBuilder < handle
                 'Expanded segment order does not span full TR block count');
 
             for s = 1:num_seg
-                first_inst = find(seg_order == s, 1, 'first');
-                assert(~isempty(first_inst), ...
+                inst_ids = find(seg_order == s);
+                assert(~isempty(inst_ids), ...
                     'Every segment definition must appear at least once in segment order');
+
+                best_energy = -inf;
+                best_start = -1;
+
+                for tr_i = 1:num_trs
+                    tr_base = num_dummy + (tr_i - 1) * nbt;
+
+                    for ii = 1:length(inst_ids)
+                        inst = inst_ids(ii);
+                        seg_offset = inst_start(inst);
+                        e = 0;
+
+                        for b = 1:obj.segment_sizes(s)
+                            block = obj.seq.getBlock(tr_base + seg_offset + b - 1);
+                            ax_names = {'gx', 'gy', 'gz'};
+                            for a = 1:3
+                                axn = ax_names{a};
+                                if isfield(block, axn) && ~isempty(block.(axn))
+                                    e = e + TruthBuilder.gradEnergy(block.(axn));
+                                end
+                            end
+                        end
+
+                        if e > best_energy
+                            best_energy = e;
+                            best_start = tr_base + seg_offset;
+                        end
+                    end
+                end
+
+                assert(best_start > 0, 'Could not find representative segment instance');
 
                 seg_blocks = cell(1, obj.segment_sizes(s));
                 block_start = 0.0;
-                seg_offset = inst_start(first_inst);
 
                 for b = 1:obj.segment_sizes(s)
-                    block = obj.seq.getBlock(max_idx + seg_offset + b - 1);
+                    block = obj.seq.getBlock(best_start + b - 1);
                     seg_blocks{b} = obj.extractBlockData(block, block_start);
                     block_start = block_start + block.blockDuration;
                 end
@@ -1119,51 +1154,6 @@ classdef TruthBuilder < handle
             else
                 amp = max(abs(grad.waveform));
             end
-        end
-
-        function tf = gradInstanceMatches(ref_grad, cand_grad)
-        % GRADINSTANCEMATCHES  True when two gradients represent the same shot shape.
-            tol = 1e-9;
-
-            if isempty(ref_grad) || isempty(cand_grad)
-                tf = isempty(ref_grad) && isempty(cand_grad);
-                return;
-            end
-
-            if ~strcmp(ref_grad.type, cand_grad.type)
-                tf = false;
-                return;
-            end
-
-            if strcmp(ref_grad.type, 'trap') || strcmp(ref_grad.type, 'trapezoid')
-                tf = abs(ref_grad.riseTime - cand_grad.riseTime) < tol && ...
-                     abs(ref_grad.flatTime - cand_grad.flatTime) < tol && ...
-                     abs(ref_grad.fallTime - cand_grad.fallTime) < tol && ...
-                     abs(ref_grad.delay - cand_grad.delay) < tol;
-                return;
-            end
-
-            if length(ref_grad.waveform) ~= length(cand_grad.waveform) || ...
-                    length(ref_grad.tt) ~= length(cand_grad.tt)
-                tf = false;
-                return;
-            end
-
-            ref_amp = TruthBuilder.gradPeakAmpSigned(ref_grad);
-            cand_amp = TruthBuilder.gradPeakAmpSigned(cand_grad);
-            ref_wave = ref_grad.waveform;
-            cand_wave = cand_grad.waveform;
-
-            if ref_amp ~= 0
-                ref_wave = ref_wave / ref_amp;
-            end
-            if cand_amp ~= 0
-                cand_wave = cand_wave / cand_amp;
-            end
-
-            tf = max(abs(ref_wave - cand_wave)) < 1e-6 && ...
-                 max(abs(ref_grad.tt - cand_grad.tt)) < tol && ...
-                 abs(ref_grad.delay - cand_grad.delay) < tol;
         end
 
         function sig = blockGradSig(block)

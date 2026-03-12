@@ -13,6 +13,7 @@
  *       get RF waveforms        (mag+phase) → vendor_create_rf_waveform(t_us, delay)
  *       -- Set initial amplitude state (from max-energy instance) --
  *       get grad initial + max amplitude  → vendor_set_grad_amplitude
+ *       get grad initial shot id          → vendor_set_grad_state
  *       get RF initial + max amplitude    → vendor_set_rf_amplitude
  *       -- Ancillary channels --
  *       get ADC definition ID   (maps to echo filter from check phase)
@@ -28,6 +29,13 @@
  *   (e.g. 32 767).  The amplitude state is set separately:
  *
  *       hw_amplitude = DAC_MAX × initial_amp / max_amp
+ *
+ * Multi-shot convention:
+ *   For multi-shot trajectories, pulseqlib_get_grad_amplitude() returns a
+ *   2D waveform [num_shots][num_samples]. The vendor stores one instruction
+ *   with a state dimension (state = shot index), then initialises the active
+ *   state with pulseqlib_get_grad_initial_shot_id() from the max-energy
+ *   segment instance.
  *
  *   where initial_amp is the signed physical amplitude from the
  *   max-energy segment instance and max_amp is the unsigned peak
@@ -96,6 +104,20 @@ static void vendor_set_grad_amplitude(
     int axis, float initial_amp, float max_amp)
 {
     (void)axis; (void)initial_amp; (void)max_amp;
+}
+
+/**
+ * @brief Set the active gradient waveform state (shot index).
+ *
+ * For multi-shot gradients, the waveform instruction is stateful and this
+ * selects which shot waveform is active at segment initialisation.
+ *
+ * @param[in] axis      0=X, 1=Y, 2=Z
+ * @param[in] shot_id   shot/state index from max-energy segment instance
+ */
+static void vendor_set_grad_state(int axis, int shot_id)
+{
+    (void)axis; (void)shot_id;
 }
 
 /**
@@ -372,6 +394,7 @@ static void generate_block_instructions(
     for (axis = 0; axis < 3; ++axis) {
         int     num_shots;
         int     num_samples;
+        int     shot_id;
         float** wave;
         float*  time_arr;
         float   initial_amp, max_amp;
@@ -405,8 +428,11 @@ static void generate_block_instructions(
             coll, seg_idx, blk_idx, axis);
         max_amp = pulseqlib_get_grad_max_amplitude_hz_per_m(
             coll, seg_idx, blk_idx, axis);
+        shot_id = pulseqlib_get_grad_initial_shot_id(
+            coll, seg_idx, blk_idx, axis);
 
         vendor_set_grad_amplitude(axis, initial_amp, max_amp);
+        vendor_set_grad_state(axis, shot_id);
     }
 
     /* -- RF -------------------------------------------------------- */

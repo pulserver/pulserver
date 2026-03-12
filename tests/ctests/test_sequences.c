@@ -455,8 +455,14 @@ static void run_sequences_geninstructions_case(const seq_case* tc)
                                              coll, s, b, ax);
                         float max_amp  = pulseqlib_get_grad_max_amplitude_hz_per_m(
                                              coll, s, b, ax);
+                        if (!GENI_AMP_NEAR(ref_blk->grad_amp[ax], init_amp))
+                            fprintf(stderr, "[geninstr][%s] seg%d blk%d ax%d init_amp: ref=%.6g  lib=%.6g\n",
+                                    tc->name, s, b, ax, ref_blk->grad_amp[ax], init_amp);
                         mu_assert(GENI_AMP_NEAR(ref_blk->grad_amp[ax], init_amp),
                                   "grad initial amplitude mismatch");
+                        if (!GENI_AMP_NEAR(fabsf(ref_blk->grad_amp[ax]), max_amp))
+                            fprintf(stderr, "[geninstr][%s] seg%d blk%d ax%d max_amp: ref=%.6g  lib=%.6g\n",
+                                    tc->name, s, b, ax, fabsf(ref_blk->grad_amp[ax]), max_amp);
                         mu_assert(GENI_AMP_NEAR(fabsf(ref_blk->grad_amp[ax]), max_amp),
                                   "grad max amplitude mismatch");
                     }
