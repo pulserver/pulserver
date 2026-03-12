@@ -24,6 +24,7 @@ write_mprage_nav(true, 3, 1);
 write_mprage_nav(true, 1, 3);
 write_mprage_nav(true, 3, 3);
 
+write_mprage_noncart(true, 1, 1, false);
 
 function seq = write_gre(write, num_slices, num_averages)
     base = sprintf('gre_2d_%dsl_%davg', num_slices, num_averages);
@@ -435,7 +436,7 @@ end
 
 
 function seq = write_mprage_noncart(write, Nz, num_averages, use_rotext)
-    base = sprintf('mprage_noncart_2d_%dsl_%davg_userotext%', num_slices, num_averages, use_rotext);
+    base = sprintf('mprage_noncart_2d_%dsl_%davg_userotext%', Nz, num_averages, use_rotext);
     fprintf('Generating sequence: %s\n', base);
 
     sys = make_system();
@@ -462,7 +463,7 @@ function seq = write_mprage_noncart(write, Nz, num_averages, use_rotext)
         'Duration', 2.0e-3, ...
         'use', 'excitation', ...
         'system', sys);
-    gz_spoil = mr.makeTrapezoid('z', 'Area', 4 / slice_thickness, 'Duration', 1.0e-3, 'system', sys);
+    gz_spoil = mr.makeTrapezoid('z', 'Area', 4 / 5.0e-3, 'Duration', 1.0e-3, 'system', sys);
 
     % Readout trapezoid template → arbitrary waveform for rotation
     readout_time = 2.56e-3;
@@ -493,11 +494,11 @@ function seq = write_mprage_noncart(write, Nz, num_averages, use_rotext)
     gy  = mr.makeArbitraryGrad('y', 0 * waveform, 'system', sys, 'first', 0, 'last', 0);
 
     % ADC
-    prewindDuration = mr.calcDuration(gx_pre);
-    adc = mr.makeAdc(Nx * ro_os, 'Duration', ro_dur, 'Delay', prewindDuration+gx.riseTime, 'system', sys);
+    prewind_duration = mr.calcDuration(gx_pre);
+    adc = mr.makeAdc(Nx, 'Duration', readout_time, 'Delay', prewind_duration+gx_trap.riseTime, 'system', sys);
 
     % Partition encoding (along z)
-    gz_phase = mr.makeTrapezoid('z', 'Area', -deltak(3) * Nz / 2, 'system', sys);
+    gz_phase = mr.makeTrapezoid('z', 'Area', -Nz / fov / 2, 'system', sys);
     [gz_phase, ~] = mr.align('right', gz_phase, gx_pre);
     
     if gz_phase.flatTime > 0
@@ -522,16 +523,14 @@ function seq = write_mprage_noncart(write, Nz, num_averages, use_rotext)
     delay = gz_phase.delay;
     gz_phase = mr.makeExtendedTrapezoid('z', 'times', times, 'amplitudes', amplitudes, 'system', sys);
     gz_phase.delay = delay;
+    delayTR = mr.makeDelay(0.5e-3);
 
-    if Nz > 0
+    if Nz > 1
         z_areas = ((0:Nz-1) - floor(Nz/2)) / slab_thickness;
         max_z_area = max(abs(z_areas));
-        gz_phase = mr.makeTrapezoid('z', 'Area', max_z_area, 'Duration', 1.0e-3, 'system', sys);
     else
         z_areas = 0;
         max_z_area = 0;
-        gz_phase = mr.makeTrapezoid('z', 'Area', 1.0, 'Duration', 1.0e-3, 'system', sys);
-        gz_phase = mr.scaleGrad(gz_phase, 0);
     end
 
     phi      = 0;
@@ -605,8 +604,8 @@ function seq = write_mprage_noncart(write, Nz, num_averages, use_rotext)
         seq.addBlock(delayTR);
     end
 
-    seq.setDefinition('FOV', [fov fov slice_thickness * num_slices]);
-    seq.setDefinition('NumSlices', num_slices);
+    seq.setDefinition('FOV', [fov fov slab_thickness]);
+    seq.setDefinition('NumPartitions', Nz);
 
     [ok, err] = seq.checkTiming;
     if ~ok
