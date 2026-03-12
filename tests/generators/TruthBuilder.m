@@ -407,7 +407,13 @@ classdef TruthBuilder < handle
                 samples = zeros(length(times), 3);
                 for c = 1:3
                     if c <= length(wave_data) && ~isempty(wave_data{c})
-                        samples(:, c) = interp1(wave_data{c}(1,:), wave_data{c}(2,:), times, 'linear', 0);
+                        t_raw = wave_data{c}(1, :);
+                        w_raw = wave_data{c}(2, :);
+                        % interp1 requires monotonic unique sample times.
+                        % Keep the last value on duplicated timestamps.
+                        [t_u, iu] = unique(t_raw, 'last');
+                        w_u = w_raw(iu);
+                        samples(:, c) = interp1(t_u, w_u, times, 'linear', 0);
                     end
                 end
                 obj.tr_times_list{g} = times(:) * 1e6;
