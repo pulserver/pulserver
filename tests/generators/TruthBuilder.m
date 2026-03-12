@@ -450,7 +450,8 @@ classdef TruthBuilder < handle
                 best_start = -1;
 
                 for tr_i = 1:num_trs
-                    tr_base = num_dummy + (tr_i - 1) * nbt;
+                    % MATLAB Sequence block indices are 1-based.
+                    tr_base = num_dummy + (tr_i - 1) * nbt + 1;
 
                     for ii = 1:length(inst_ids)
                         inst = inst_ids(ii);
