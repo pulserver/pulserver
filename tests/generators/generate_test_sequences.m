@@ -434,8 +434,8 @@ function seq = write_mprage_nav(write, num_slices, num_averages)
 end
 
 
-function seq = write_mprage_noncart(write, num_slices, num_averages, rotext)
-    base = sprintf('mprage_noncart_2d_%dsl_%davg_userotext%', num_slices, num_averages, rotext);
+function seq = write_mprage_noncart(write, Nz, num_averages, use_rotext)
+    base = sprintf('mprage_noncart_2d_%dsl_%davg_userotext%', num_slices, num_averages, use_rotext);
     fprintf('Generating sequence: %s\n', base);
 
     sys = make_system();
@@ -443,8 +443,8 @@ function seq = write_mprage_noncart(write, num_slices, num_averages, rotext)
     % Basic GRE geometry intentionally small for fast iteration.
     fov = 0.22;
     Nx = 64;
-    Ny = 8;
-    slice_thickness = 5e-3;
+    num_shots = 8;
+    slab_thickness = 15e-3;
 
     alpha = 10 * pi / 180;
     rf_spoil_inc = 84.0; % degrees
@@ -458,74 +458,149 @@ function seq = write_mprage_noncart(write, num_slices, num_averages, rotext)
     delayTI = mr.makeDelay(0.1e-3);
 
     % RF and slice-select
-    [rf, gz] = mr.makeSincPulse(alpha, ...
+    rf = mr.makeBlockPulse(alpha, ...
         'Duration', 2.0e-3, ...
-        'SliceThickness', slice_thickness, ...
-        'timeBwProduct', 4, ...
-        'apodization', 0.5, ...
         'use', 'excitation', ...
         'system', sys);
-    gz_reph = mr.makeTrapezoid('z', 'Area', -gz.area/2, 'Duration', 1.0e-3, 'system', sys);
     gz_spoil = mr.makeTrapezoid('z', 'Area', 4 / slice_thickness, 'Duration', 1.0e-3, 'system', sys);
 
-    % Readout and ADC
+    % Readout trapezoid template → arbitrary waveform for rotation
     readout_time = 2.56e-3;
-    gx_full = mr.makeTrapezoid('x', 'FlatArea', Nx/fov, 'FlatTime', readout_time, 'system', sys);
-    gx_parts = mr.splitGradientAt(gx_full, gx_full.riseTime + gx_full.flatTime);
-    gx = gx_parts(1); % truncate at end of flat
-    adc = mr.makeAdc(Nx, 'Duration', gx_full.flatTime, 'Delay', gx_full.riseTime, 'system', sys);
+    gx_trap = mr.makeTrapezoid('x', 'FlatArea', Nx / fov, 'FlatTime', readout_time, 'system', sys);
+    gx_pre  = mr.makeTrapezoid('x', 'Area', -gx_trap.area / 2, 'system', sys);
 
-    % Pre/rewinder templates
-    gx_pre = mr.makeTrapezoid('x', 'Area', -gx_full.area/2, 'Duration', 1.0e-3, 'system', sys);
-    gx_spoil_area = 4 / slice_thickness;
+    if gx_pre.flatTime > 0
+        times = cumsum([0, ...
+            gx_pre.riseTime, gx_pre.flatTime, gx_pre.fallTime, ...
+            gx_trap.riseTime, gx_trap.flatTime, gx_trap.fallTime, ...
+            gx_pre.riseTime, gx_pre.flatTime, gx_pre.fallTime]);
+        amp = [0, ...
+            gx_pre.amplitude, gx_pre.amplitude, 0, ...
+            gx_trap.amplitude, gx_trap.amplitude, 0, ...
+            gx_pre.amplitude, gx_pre.amplitude, 0];
+    else
+        times = cumsum([0, ...
+            gx_pre.riseTime, gx_pre.fallTime, ...
+            gx_trap.riseTime, gx_trap.flatTime, gx_trap.fallTime, ...
+            gx_pre.riseTime, gx_pre.fallTime]);
+        amp = [0, ...
+            gx_pre.amplitude, 0, ...
+            gx_trap.amplitude, gx_trap.amplitude, 0, ...
+            gx_pre.amplitude, 0];
+    end
+    waveform = mr.pts2waveform(times, amp, sys.gradRasterTime);
+    gx  = mr.makeArbitraryGrad('x', waveform, 'system', sys, 'first', 0, 'last', 0);
+    gy  = mr.makeArbitraryGrad('y', 0 * waveform, 'system', sys, 'first', 0, 'last', 0);
 
-    % Bridged spoiler that starts at gx flat amplitude for continuity.
-    gx_spoil = mr.makeExtendedTrapezoidArea('x', gx_full.amplitude, 0, gx_spoil_area, sys);
-    delayTR = mr.makeDelay(0.5e-3);
+    % ADC
+    prewindDuration = mr.calcDuration(gx_pre);
+    adc = mr.makeAdc(Nx * ro_os, 'Duration', ro_dur, 'Delay', prewindDuration+gx.riseTime, 'system', sys);
 
-    pe_areas = ((0:Ny-1) - floor(Ny/2)) / fov;
-    max_pe_area = max(abs(pe_areas));
-    gy_phase = mr.makeTrapezoid('y', 'Area', max_pe_area, 'Duration', 1.0e-3, 'system', sys);
+    % Partition encoding (along z)
+    gz_phase = mr.makeTrapezoid('z', 'Area', -deltak(3) * Nz / 2, 'system', sys);
+    [gz_phase, ~] = mr.align('right', gz_phase, gx_pre);
+    
+    if gz_phase.flatTime > 0
+        times = cumsum([0, ...,
+            gz_phase.riseTime, gz_phase.flatTime, gz_phase.fallTime, ...
+            mr.calcDuration(gx), ...
+            gz_phase.riseTime, gz_phase.flatTime, gz_phase.fallTime]);
+        amplitudes = [0, ...
+            gz_phase.amplitude, gz_phase.amplitude, 0, ...
+            0, ...
+            -gz_phase.amplitude, -gz_phase.amplitude, 0];
+    else
+        times = cumsum([0, ...,
+            gz_phase.riseTime, gz_phase.fallTime, ...
+            mr.calcDuration(gx), ...
+            gz_phase.riseTime, gz_phase.fallTime]);
+        amplitudes = [0, ...
+            gz_phase.amplitude, 0, ...
+            0, ...
+            -gz_phase.amplitude, 0];
+    end
+    delay = gz_phase.delay;
+    gz_phase = mr.makeExtendedTrapezoid('z', 'times', times, 'amplitudes', amplitudes, 'system', sys);
+    gz_phase.delay = delay;
+
+    if Nz > 0
+        z_areas = ((0:Nz-1) - floor(Nz/2)) / slab_thickness;
+        max_z_area = max(abs(z_areas));
+        gz_phase = mr.makeTrapezoid('z', 'Area', max_z_area, 'Duration', 1.0e-3, 'system', sys);
+    else
+        z_areas = 0;
+        max_z_area = 0;
+        gz_phase = mr.makeTrapezoid('z', 'Area', 1.0, 'Duration', 1.0e-3, 'system', sys);
+        gz_phase = mr.scaleGrad(gz_phase, 0);
+    end
+
+    phi      = 0;
+    dphi     = 137.51 * pi / 180;  % golden angle [rad]
+
+    % --- Pre-compute per-shot rotated readout gradients (non-rotext path) ---
+    % For the non-rotext path we apply a 2-D rotation to the base
+    % (waveform, 0*waveform) pair ourselves so that every shot produces
+    % arbitrary-grad events with identical numSamples.  This keeps the C
+    % library's dedup happy (grad definition = timing only; amplitude is
+    % per-instance).
+    if ~use_rotext
+        % Total number of unique angles across all partitions (j>0).
+        % j==0 uses unrotated grads, so we only rotate for j = 1..Nz.
+        total_spokes = Nz * num_shots;
+        gx_shots = cell(1, total_spokes);
+        gy_shots = cell(1, total_spokes);
+        spoke_phi  = 0;
+        for s = 1:total_spokes
+            c = cos(spoke_phi);
+            sn = sin(spoke_phi);
+            wx = c * waveform;   % rotated x component
+            wy = sn * waveform;  % rotated y component
+            gx_shots{s} = mr.makeArbitraryGrad('x', wx, 'system', sys, 'first', 0, 'last', 0);
+            gy_shots{s} = mr.makeArbitraryGrad('y', wy, 'system', sys, 'first', 0, 'last', 0);
+            spoke_phi = spoke_phi + dphi;
+        end
+        gx = gx_shots;
+        gy = gy_shots;
+        spoke_idx = 0;  % running index into gx/gy_shots
+    end
 
     seq = mr.Sequence(sys);
 
     rf_center = mr.calcRfCenter(rf);
     rf_phase = 0.0;
     rf_inc = 0.0;
-
+    
     % Main imaging loop: PE -> slices (slice is inner loop).
-    for sl = 1:num_slices
-        slc_shift = (sl - 1 - (num_slices - 1) / 2);
+    for z = 1:Nz
+        if max_z_area > 0
+            zscale = z_areas(z) / max_z_area;
+        else
+            zscale = 0;
+        end
         
         seq.addBlock(rf180);
         seq.addBlock(gz_spoil);
         seq.addBlock(delayTI);
         
-        for pe = 1:Ny
-            if max_pe_area > 0
-                yscale = pe_areas(pe) / max_pe_area;
-            else
-                yscale = 0;
-            end
-        
+        for i = 1:num_shots        
             rf_inc = mod(rf_inc + rf_spoil_inc, 360.0);
             rf_phase = mod(rf_phase + rf_inc, 360.0);
 
             rf_curr = rf;
-            rf_curr.freqOffset = gz.amplitude * slice_thickness * slc_shift;
             rf_curr.phaseOffset = rf_phase / 180 * pi - 2 * pi * rf_curr.freqOffset * rf_center;
 
             adc_curr = adc;
-            adc_curr.freqOffset = rf_curr.freqOffset;
             adc_curr.phaseOffset = rf_phase / 180 * pi;
 
-            gy_pre = mr.scaleGrad(gy_phase, yscale);
-            gy_rew = mr.scaleGrad(gy_phase, -yscale);
-
-            seq.addBlock(rf_curr, gz);
-            seq.addBlock(gx_pre, gy_pre, gz_reph);
-            seq.addBlock(gx, adc_curr);
-            seq.addBlock(gx_spoil, gy_rew, gz_spoil);
+            seq.addBlock(rf_curr);
+            if ~use_rotext
+                seq.addBlock(adc_curr, gx{spoke_idx + 1}, gy{spoke_idx + 1}, mr.scaleGrad(gz_phase, zscale));
+                spoke_idx = spoke_idx + 1;
+            else
+                seq.addBlock(adc_curr, gx, gy, mr.scaleGrad(gz_phase, zscale), mr.makeRotation, mr.makeRotation('axis', 'z', 'angle', phi));
+                phi = phi + dphi;
+            end
+            seq.addBlock(gz_spoil);
         end
         seq.addBlock(delayTR);
     end
@@ -545,9 +620,9 @@ function seq = write_mprage_noncart(write, num_slices, num_averages, rotext)
     out_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'data');
 
     tb = TruthBuilder(seq, sys);
-    tb.setBlocksPerTR(2 + 1 + 4 * Ny + 1);
-    tb.setSegments([2, 1, 4]);
-    tb.setSegmentOrder([1, 2, 3 * ones(1, Ny), 2]);
+    tb.setBlocksPerTR(2 + 1 + 3 * num_shots + 1);
+    tb.setSegments([2, 1, 3]);
+    tb.setSegmentOrder([1, 2, 3 * ones(1, num_shots), 2]);
     tb.setNumAverages(num_averages);
     tb.export(out_dir, base);
 end

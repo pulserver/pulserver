@@ -1762,13 +1762,12 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     groArbY  = mr.makeArbitraryGrad('y', 0 * waveform, 'system', sys, 'first', 0, 'last', 0);
 
     % ADC
-    prewindDuration = mr.calcDuration(gxPre);
-    adc = mr.makeAdc(Nx * ro_os, 'Duration', ro_dur, 'Delay', prewindDuration+groTrap.riseTime, 'system', sys);
+    prewind_duration = mr.calcDuration(gxPre);
+    adc = mr.makeAdc(Nx * ro_os, 'Duration', ro_dur, 'Delay', prewind_duration+groTrap.riseTime, 'system', sys);
 
     % Partition encoding (along z)
     gpe = mr.makeTrapezoid('z', 'Area', -deltak(3) * Nz / 2, 'system', sys);
     [gpe, ~] = mr.align('right', gpe, gxPre);
-    minTE = mr.calcDuration(gpe, gxPre) + 0.5 * mr.calcDuration(groTrap);
     
     if gpe.flatTime > 0
         times = cumsum([0, ...,
@@ -1797,10 +1796,7 @@ function write_mprage_noncart(num_averages, num_shots, use_rotext)
     gslSp = mr.makeTrapezoid('z', ...
         'Area', max(deltak .* [Nx 1 Nz]) * 4, 'Duration', 10e-3, 'system', sys);
 
-    % Compute inner TR
-    TRinner = mr.calcDuration(rf) + mr.calcDuration(groArbX) + mr.calcDuration(gslSp);
-
-    peSteps = ((0:Nz-1) - Nz/2) / Nz * 2;
+    pe_steps = ((0:Nz-1) - Nz/2) / Nz * 2;
 
     % TI delay — for radial, every spoke passes through k-center,
     % so TI targets the first excitation of each partition
