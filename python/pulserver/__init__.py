@@ -9,13 +9,13 @@ Public API:
 """
 
 __all__ = [
-    'SequenceCollection',
-    'serialize',
-    'deserialize',
+    "SequenceCollection",
+    "serialize",
+    "deserialize",
 ]
 
 from .core import (  # noqa: F401
     SequenceCollection,
-    serialize,
     deserialize,
+    serialize,
 )

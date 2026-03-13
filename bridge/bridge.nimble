@@ -17,3 +17,4 @@ requires "nimpulseqgui >= 0.1.0"  # stock, unmodified (use `nimble develop` in 3
 
 task test, "Run bridge test suite":
   exec "nim r tests/test_bridge_common.nim"
+  exec "nim r tests/test_isPyNone.nim"

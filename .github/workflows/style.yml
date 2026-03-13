@@ -39,6 +39,6 @@ jobs:
         shell: bash
         run: black . --diff --color --check
 
-      # - name: ruff Check
-        # shell: bash
-        # run: ruff check src
+      - name: Ruff Check
+        shell: bash
+        run: ruff check .

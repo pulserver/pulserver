@@ -24,7 +24,7 @@ jobs:
       - name: Run C tests
         run: ./build_test/bin/run_tests
 
-  test:
+  test-python:
     runs-on: ubuntu-latest
     
     strategy:
@@ -45,17 +45,31 @@ jobs:
           pip install .[test]
 
       - name: Run tests
-        run: pytest --cov --cov-report=xml tests	
+        run: pytest --cov=python/pulserver --cov-report=xml tests/python
       
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.0.1
         with:
           token:  ${{ secrets.CODECOV_TOKEN }}
-          slug: INFN-MRI/pulserver		  
+          slug: INFN-MRI/pulserver
+
+  test-nim:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nim
+        run: |
+          curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
+          echo "$HOME/.nimble/bin" >> $GITHUB_PATH
+
+      - name: Run Nim tests
+        run: bash tests/nim/run_tests.sh
   
   docs:
     runs-on: ubuntu-20.04
-    needs: [test-c, test]
+    needs: [test-c, test-python, test-nim]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

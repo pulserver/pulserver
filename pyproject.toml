@@ -1,0 +1,66 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "setuptools>=69"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "pulserver"
+version = "0.1.0"
+description = "Pulserver Python contracts, protocol types, and bridge helpers"
+readme = "README.md"
+license = { file = "LICENSE.txt" }
+requires-python = ">=3.10"
+authors = [
+  { name = "INFN-MRI" },
+]
+dependencies = [
+  "pypulseq>=1.4.2",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.2",
+  "pytest-cov>=5.0",
+]
+dev = [
+  "black>=24.8",
+  "ruff>=0.6",
+  "pre-commit>=3.8",
+  "pytest>=8.2",
+  "pytest-cov>=5.0",
+]
+doc = [
+  "sphinx>=7.4",
+  "furo>=2024.8.6",
+]
+
+[tool.scikit-build]
+cmake.source-dir = "python"
+wheel.packages = ["python/pulserver"]
+sdist.include = [
+  "python/pulserver/**",
+  "bridge/tests/test_plugin.py",
+  "tests/python/**",
+  "README.md",
+  "LICENSE.txt",
+]
+
+[tool.black]
+line-length = 120
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = [
+  "3p",
+  "build",
+  "build_test",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]
+addopts = "-ra"
