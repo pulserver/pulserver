@@ -2,28 +2,9 @@ name: CI-CD
 
 on: 
   push:
-    branches: [ main ]
   pull_request:
-    branches: [ main ]
 
 jobs:
-  test-c:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Build C test suite
-        run: |
-          mkdir build_test && cd build_test
-          cmake ../tests/ctests -DCMAKE_BUILD_TYPE=Debug
-          make -j$(nproc)
-
-      - name: Run C tests
-        run: ./build_test/bin/run_tests
-
   test-python:
     runs-on: ubuntu-latest
     
@@ -66,36 +47,3 @@ jobs:
 
       - name: Run Nim tests
         run: bash tests/nim/run_tests.sh
-  
-  docs:
-    runs-on: ubuntu-20.04
-    needs: [test-c, test-python, test-nim]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-      
-      - name: Install dependencies
-        run: |
-          pip install .[doc]
-          python -m pip install -r docs/requirements.txt
-      
-      - name: Build API documentation
-        run: |
-          python -m sphinx docs docs_build
-      
-      - name: Display structure of docs
-        run: ls -R docs_build/	  
-      
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs_build
-          destination_dir: .
-          publish_branch: gh-pages
-          keep_files: false

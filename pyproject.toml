@@ -6,7 +6,7 @@ build-backend = "scikit_build_core.build"
 name = "pulserver"
 version = "0.1.0"
 description = "Pulserver Python contracts, protocol types, and bridge helpers"
-readme = "README.md"
+readme = "README.rst"
 license = { file = "LICENSE.txt" }
 requires-python = ">=3.10"
 authors = [
@@ -40,7 +40,7 @@ sdist.include = [
   "python/pulserver/**",
   "bridge/tests/test_plugin.py",
   "tests/python/**",
-  "README.md",
+  "README.rst",
   "LICENSE.txt",
 ]
 

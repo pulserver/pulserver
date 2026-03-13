@@ -119,28 +119,6 @@ proc addPythonPath*(path: string) =
   let sys = pyImport("sys")
   discard sys.path.callMethod("insert", 0, path)
 
-proc resolvePluginPath*(scriptPath: string, pluginFolder: string): string =
-  ## Resolves plugin file path when ``--plugin-folder`` is provided.
-  ## ``scriptPath`` remains mandatory and selects the module file.
-  if pluginFolder.len == 0:
-    return scriptPath
-
-  if scriptPath.len == 0:
-    raise newException(ValueError,
-      "--script is required when --plugin-folder is used.")
-
-  if not dirExists(pluginFolder):
-    raise newException(ValueError,
-      "--plugin-folder does not exist: " & pluginFolder)
-
-  if scriptPath.isAbsolute or scriptPath.contains(DirSep):
-    return scriptPath
-
-  if scriptPath.endsWith(".py"):
-    return pluginFolder / scriptPath
-
-  return pluginFolder / (scriptPath & ".py")
-
 # ── Callback wrappers ─────────────────────────────────────────────────────
 
 proc wrapGetDefaultProtocol*(plugin: PyPlugin): ProcGetDefaultProtocol =
@@ -194,11 +172,10 @@ proc wrapMakeSequence*(plugin: PyPlugin): ProcMakeSequence =
 proc printBridgeHelp() =
   echo "pypulseq_host — Python plugin host for nimpulseqgui"
   echo ""
-  echo "Usage: pypulseq_host --script <plugin.py> [--plugin-folder <dir>] [options]"
+  echo "Usage: pypulseq_host --script <plugin.py> [options]"
   echo ""
   echo "Bridge-specific options:"
   echo "  --script=<path>          Path to the Python plugin .py file (required)"
-  echo "  --plugin-folder=<path>   Folder containing plugin modules (requires --script selector)"
   echo "  -p, --protocol=<text>    Inline protocol preamble string"
   echo "  --validate-only          Validate protocol, print JSON result, and exit"
   echo "  --list-protocol          Print default protocol preamble and exit"
@@ -215,14 +192,12 @@ proc main() =
 
   # ── Parse bridge-specific flags (consumed here, rest forwarded) ──
   var scriptPath = ""
-  var pluginFolder = ""
   var inputProtocolString = ""
   var validateOnly = false
   var listProtocol = false
   var persistentMode = false
   var forwardArgs: seq[string] = @[]  # args to forward to makeSequenceExe
   var expectScriptPath = false
-  var expectPluginFolder = false
   var expectProtocolString = false
 
   for kind, key, val in getopt():
@@ -231,9 +206,6 @@ proc main() =
       if expectScriptPath:
         scriptPath = key
         expectScriptPath = false
-      elif expectPluginFolder:
-        pluginFolder = key
-        expectPluginFolder = false
       elif expectProtocolString:
         inputProtocolString = key
         expectProtocolString = false
@@ -244,9 +216,6 @@ proc main() =
       of "script":
         if val.len > 0: scriptPath = val
         else: expectScriptPath = true
-      of "plugin-folder":
-        if val.len > 0: pluginFolder = val
-        else: expectPluginFolder = true
       of "protocol", "p":
         if val.len > 0: inputProtocolString = val
         else: expectProtocolString = true
@@ -273,20 +242,14 @@ proc main() =
     printBridgeHelp()
     quit(1)
 
-  var pluginScriptPath = ""
-  try:
-    pluginScriptPath = resolvePluginPath(scriptPath, pluginFolder)
-  except ValueError as e:
-    echo "Error: " & e.msg
-    printBridgeHelp()
-    quit(1)
+  let pluginScriptPath = scriptPath
 
   if not fileExists(pluginScriptPath):
     echo "Error: plugin file not found: " & pluginScriptPath
     quit(1)
 
-  if pluginFolder.len > 0:
-    addPythonPath(pluginFolder)
+  # Allow relative imports next to the plugin script.
+  addPythonPath(parentDir(pluginScriptPath))
 
   let plugin = loadPyPlugin(pluginScriptPath)
   let getDefault = wrapGetDefaultProtocol(plugin)

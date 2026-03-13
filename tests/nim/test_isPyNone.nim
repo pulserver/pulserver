@@ -1,6 +1,6 @@
 ## Quick test that isPyNone works for Python None objects.
 import nimpy
-import ../pypulseq_host
+import ../../bridge/pypulseq_host
 import nimpulseqgui/definitions
 
 let builtins = pyBuiltinsModule()
@@ -11,7 +11,7 @@ doAssert isPyNone(none), "Python None should be detected as None"
 doAssert not isPyNone(notNone), "Python int(42) should not be None"
 
 # Test via the actual plugin
-let plugin = loadPyPlugin("tests/test_plugin.py")
+let plugin = loadPyPlugin("bridge/tests/test_plugin.py")
 let validateRich = wrapValidateRich(plugin)
 let opts = newOpts()
 var prot = wrapGetDefaultProtocol(plugin)(opts)

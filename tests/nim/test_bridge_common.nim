@@ -5,7 +5,7 @@
 
 import std/unittest
 import std/strutils
-import ../bridge_common
+import ../../bridge/bridge_common
 import nimpulseqgui/io  # makeProtocolPreamble for round-trip test
 
 # ── Test helpers ───────────────────────────────────────────────────────────
