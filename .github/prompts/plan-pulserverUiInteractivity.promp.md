@@ -123,14 +123,14 @@ class UIParam(StrEnum):
     TA = "TA"
 
     @staticmethod
-    def user(n: int) -> str:
-        """GE user CV slot: UIParam.user(0) → 'User0'."""
-        return f"User{n}"
+    def user_value(n: int) -> str:
+        """SeqParams user key: UIParam.user_value(0) -> 'user0_value'."""
+        return f"user{n}_value"
 ```
 
 - `StrEnum` members *are* strings — zero conversion cost at bridge boundary
 - Typos become `AttributeError` instead of silent wrong keys
-- `UIParam.user(n)` covers GE's `opuser0..opuser47` CVs
+- `UIParam.user_value(n)` / `user_name(n)` / `user_enabled(n)` / `user_min(n)` / `user_max(n)` cover user parameter values and UI control metadata
 - Extensible: plugin authors subclass or use raw strings for one-off params
 
 ### 3b. Typed Protocol Values — dataclasses in `_params.py`
@@ -311,7 +311,7 @@ Phases 1 and 3 are independent and can proceed in parallel. Phase 2 depends on P
 - **`pp.Opts` over dict**: bridge constructs `pypulseq.Opts(...)` on the Nim side via nimpy — plugins receive a proper `pp.Opts`, not a dict
 - **`make_sequence` writes to disk**: plugin receives `output_path`, calls `seq.write(output_path)` — no temp files, no string return, no preamble in headless mode
 - **Stateless persistence**: `defaultProt` cached once at startup (schema only). Each command starts from a fresh copy. No state leak between LIST_PROTOCOL / VALIDATE / GENERATE calls. Persistence is purely about keeping the Python interpreter warm.
-- **`UIParam(StrEnum)`** for protocol keys: standard params as enum members, `UIParam.user(n)` for GE user CVs, raw strings allowed for one-offs
+- **`UIParam(StrEnum)`** for protocol keys: standard params as enum members plus canonical user helpers (`user_value`, `user_name`, `user_enabled`, `user_min`, `user_max`)
 - **Dataclass protocol values**: `FloatParam`, `IntParam`, `BoolParam`, `StringListParam`, `Description` — IDE-friendly, self-documenting, `asdict()` for free serialization at bridge boundary
 - **`Validate(StrEnum)`**: `SEARCH` (binary-search min/max), `CLIP` (clamp), `NONE` — controls nimpulseqgui's `PropertyValidate` behavior per-param
 - **No JSON/temp files**: plain-text preamble via pipes, C89-native

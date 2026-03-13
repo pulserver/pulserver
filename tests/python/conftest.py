@@ -4,14 +4,14 @@ import importlib.util
 from pathlib import Path
 
 import pytest
-from pulserver.core import FloatParam, Protocol, UIParam
+from pulserver.core import Protocol, TypeinFloatParam, UIParam
 
 
 @pytest.fixture
 def sample_protocol() -> Protocol:
     return {
-        UIParam.TE: FloatParam(value=5.0, min=1.0, max=100.0, incr=0.1, unit="ms"),
-        UIParam.TR: FloatParam(value=20.0, min=1.0, max=1000.0, incr=0.1, unit="ms"),
+        UIParam.TE: TypeinFloatParam(value=5.0, min=1.0, max=100.0, incr=0.1, unit="ms"),
+        UIParam.TR: TypeinFloatParam(value=20.0, min=1.0, max=1000.0, incr=0.1, unit="ms"),
     }
 
 

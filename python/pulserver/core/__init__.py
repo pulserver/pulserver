@@ -1,62 +1,79 @@
-"""Core public API for pulserver plugin contracts and protocol types."""
+"""Core public API for pulserver plugin contracts and protocol types.
+
+Examples
+--------
+>>> from pulserver.core import UIParam, TypeinFloatParam
+>>> protocol = {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
+>>> str(next(iter(protocol)))
+'TR'
+"""
 
 from __future__ import annotations
 
 from ._base import PulseqSequence
 from ._params import (
     BoolParam,
+    BoolKey,
     Description,
-    FloatParam,
-    IntParam,
+    DropdownFloatParam,
+    DropdownIntParam,
+    EnumKey,
+    FloatKey,
+    ImagingMode,
+    InputMode,
+    IntKey,
+    ParamKind,
+    PreparationType,
     Protocol,
     ProtocolValue,
+    SequenceType,
     StringListParam,
+    TypeinFloatParam,
+    TypeinIntParam,
+    TriggerType,
     UIParam,
     Validate,
     dict_to_param,
     dict_to_protocol,
+    enum_options,
+    expected_param_kind,
+    make_enum_param,
     param_to_dict,
     protocol_to_dict,
+    validate_protocol,
+    validate_protocol_entry,
 )
-
-try:
-    from ._extension._pulseqlib_wrapper import SequenceCollection, deserialize, serialize
-except Exception as exc:  # pragma: no cover - environment-dependent import guard
-    _IMPORT_ERROR = exc
-
-    def _raise_extension_import_error():
-        raise ImportError(
-            "pulserver C extension is unavailable for this Python ABI. "
-            "Install a compatible wheel or rebuild from source."
-        ) from _IMPORT_ERROR
-
-    class SequenceCollection:  # type: ignore[no-redef]
-        def __init__(self, *_args, **_kwargs):
-            _raise_extension_import_error()
-
-    def serialize(*_args, **_kwargs):  # type: ignore[no-redef]
-        _raise_extension_import_error()
-
-    def deserialize(*_args, **_kwargs):  # type: ignore[no-redef]
-        _raise_extension_import_error()
-
 
 __all__ = [
     "PulseqSequence",
     "UIParam",
     "Validate",
-    "FloatParam",
-    "IntParam",
+    "ParamKind",
+    "InputMode",
+    "FloatKey",
+    "IntKey",
+    "BoolKey",
+    "EnumKey",
+    "SequenceType",
+    "ImagingMode",
+    "PreparationType",
+    "TriggerType",
+    "TypeinFloatParam",
+    "DropdownFloatParam",
+    "TypeinIntParam",
+    "DropdownIntParam",
     "BoolParam",
     "StringListParam",
     "Description",
     "Protocol",
     "ProtocolValue",
+    "expected_param_kind",
+    "enum_options",
+    "make_enum_param",
+    "validate_protocol_entry",
+    "validate_protocol",
     "param_to_dict",
     "dict_to_param",
     "protocol_to_dict",
     "dict_to_protocol",
-    "SequenceCollection",
-    "serialize",
-    "deserialize",
 ]
