@@ -5,13 +5,11 @@ from __future__ import annotations
 __all__ = ["Sequence"]
 
 import math
-
 from copy import deepcopy
 from types import SimpleNamespace
 
 import numpy as np
 import pypulseq as pp
-
 from pypulseq.block_to_events import block_to_events
 from pypulseq.compress_shape import compress_shape
 from pypulseq.event_lib import EventLibrary
@@ -204,7 +202,7 @@ class Sequence(pp.Sequence):
 
     def rf_from_lib_data(self, lib_data: list, use: str | int = "") -> SimpleNamespace:
         """Decode RF use from numeric code (fast path) or legacy char."""
-        if isinstance(use, (int, np.integer)):
+        if isinstance(use, int | np.integer):
             use = _RF_USE_CODE_TO_CHAR.get(int(use), "u")
         return super().rf_from_lib_data(lib_data, use)
 
@@ -347,9 +345,7 @@ class Sequence(pp.Sequence):
 
         shape_IDs = [0, 0, 0]
         mag_shape = compress_shape(mag)
-        shape_IDs[0], _ = self.shape_library.find_or_insert(
-            np.concatenate(([mag_shape.num_samples], mag_shape.data))
-        )
+        shape_IDs[0], _ = self.shape_library.find_or_insert(np.concatenate(([mag_shape.num_samples], mag_shape.data)))
         phase_shape = compress_shape(phase)
         shape_IDs[1], _ = self.shape_library.find_or_insert(
             np.concatenate(([phase_shape.num_samples], phase_shape.data))
@@ -478,7 +474,7 @@ def _dedup_library_approx(lib: EventLibrary, digits: int | tuple[int, ...]) -> t
         rows = [tuple(lib.data[old_id]) for old_id in ids]
 
     row_lengths = {len(row) for row in rows}
-    all_numeric = all(all(isinstance(v, (int, float, np.integer, np.floating)) for v in row) for row in rows)
+    all_numeric = all(all(isinstance(v, int | float | np.integer | np.floating) for v in row) for row in rows)
 
     if len(row_lengths) != 1 or not all_numeric:
         raise RuntimeError("_dedup_library_approx requires uniform, fully numeric payload rows")
@@ -496,7 +492,11 @@ def _dedup_library_approx(lib: EventLibrary, digits: int | tuple[int, ...]) -> t
 
     type_ids = np.asarray([type_code.setdefault(lib.type.get(old_id, ""), len(type_code) + 1) for old_id in ids])
     key_matrix = np.column_stack([type_ids.astype(float), rounded])
-    key_bytes = np.ascontiguousarray(key_matrix).view(np.dtype((np.void, key_matrix.dtype.itemsize * key_matrix.shape[1]))).ravel()
+    key_bytes = (
+        np.ascontiguousarray(key_matrix)
+        .view(np.dtype((np.void, key_matrix.dtype.itemsize * key_matrix.shape[1])))
+        .ravel()
+    )
 
     _, first_idx, inverse = np.unique(key_bytes, return_index=True, return_inverse=True)
     order = np.argsort(first_idx)

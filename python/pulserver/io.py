@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import BinaryIO
 from warnings import warn
 
 import numpy as np
 from pypulseq.supported_labels_rf_use import get_supported_rf_uses
 
 from pulserver.pulseq.sequence import _RF_USE_CODE_TO_CHAR
-
-from typing import BinaryIO
 
 
 def write(
@@ -89,11 +88,11 @@ def write(
             w(f"{keys[block_counter]} ")
             if isinstance(values[block_counter], str):
                 w(values[block_counter] + " ")
-            elif isinstance(values[block_counter], (int, float)):
+            elif isinstance(values[block_counter], int | float):
                 w(f"{values[block_counter]:0.9g} ")
-            elif isinstance(values[block_counter], (list, tuple, np.ndarray)):
+            elif isinstance(values[block_counter], list | tuple | np.ndarray):
                 for i in range(len(values[block_counter])):
-                    if isinstance(values[block_counter][i], (int, float)):
+                    if isinstance(values[block_counter][i], int | float):
                         w(f"{values[block_counter][i]:0.9g} ")
                     else:
                         w(f"{values[block_counter][i]} ")
@@ -134,13 +133,17 @@ def write(
             center = target.rf_library.data[k][4] * 1e6
             delay = round(target.rf_library.data[k][5] / target.rf_raster_time) * target.rf_raster_time * 1e6
             use_type = target.rf_library.type.get(k, "u")
-            use_char = _RF_USE_CODE_TO_CHAR.get(int(use_type), "u") if isinstance(use_type, (int, np.integer)) else use_type
+            use_char = (
+                _RF_USE_CODE_TO_CHAR.get(int(use_type), "u") if isinstance(use_type, int | np.integer) else use_type
+            )
             s = id_format_str.format(k, *lib_data1, center, delay, *lib_data2, use_char)
             w(s)
         w("\n")
 
     grad_keys = np.array(list(target.grad_library.data.keys()), dtype=int) if target.grad_library.data else np.array([])
-    grad_types = np.array([target.grad_library.type[k] for k in grad_keys], dtype=object) if len(grad_keys) else np.array([])
+    grad_types = (
+        np.array([target.grad_library.type[k] for k in grad_keys], dtype=object) if len(grad_keys) else np.array([])
+    )
     arb_grad_mask = grad_types == "g" if len(grad_types) else np.array([], dtype=bool)
     trap_grad_mask = grad_types == "t" if len(grad_types) else np.array([], dtype=bool)
 
@@ -261,8 +264,8 @@ def write(
         w("[SHAPES]\n\n")
         for k in target.shape_library.data:
             shape_data = target.shape_library.data[k]
-            w("shape_id {:.0f}\n".format(k))
-            w("num_samples {:.0f}\n".format(shape_data[0]))
+            w(f"shape_id {k:.0f}\n")
+            w(f"num_samples {shape_data[0]:.0f}\n")
             w(("{:.9g}\n" * len(shape_data[1:])).format(*shape_data[1:]))
             w("\n")
 

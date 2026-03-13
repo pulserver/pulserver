@@ -4,18 +4,31 @@
 def get_default_protocol(opts):
     return {
         "TE": {
-            "type": "float", "value": 5.0, "min": 1.0, "max": 100.0,
-            "incr": 0.1, "unit": "ms", "validate": "search",
+            "type": "float",
+            "value": 5.0,
+            "min": 1.0,
+            "max": 100.0,
+            "incr": 0.1,
+            "unit": "ms",
+            "validate": "search",
         },
         "TR": {
-            "type": "float", "value": 10.0, "min": 1.0, "max": 1000.0,
-            "incr": 0.1, "unit": "ms", "validate": "search",
+            "type": "float",
+            "value": 10.0,
+            "min": 1.0,
+            "max": 1000.0,
+            "incr": 0.1,
+            "unit": "ms",
+            "validate": "search",
         },
         "FatSat": {
-            "type": "bool", "value": False, "validate": "none",
+            "type": "bool",
+            "value": False,
+            "validate": "none",
         },
         "D_Header": {
-            "type": "description", "text": "Minimal Test",
+            "type": "description",
+            "text": "Minimal Test",
         },
     }
 

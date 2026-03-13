@@ -204,7 +204,7 @@ def test_rf_use_stored_as_numeric_code():
     )
     seq.add_block(rf)
     rf_id = int(seq.block_events[1][1])
-    assert isinstance(seq.rf_library.type[rf_id], (int, np.integer))
+    assert isinstance(seq.rf_library.type[rf_id], int | np.integer)
 
 
 def test_write_with_rf_event_serializes_rf_use_as_char():
