@@ -38,7 +38,7 @@ pulserver/                         # PUSHED
 │   ├── nimpulseq/
 │   └── PulseqSystems/
 │
-3p/                                # NOT PUSHED (proprietary)
+external-private/                   # NOT PUSHED (proprietary)
 ├── pulserver-driver/              # GE EPIC (pipe caller, seqparams formatter)
 └── uipython/                      # design drafts
 ```
@@ -253,7 +253,7 @@ make_sequence = _instance.make_sequence
 
 ## Phase 5: matlab_host + Phase 6: GE Integration
 
-(Same as previous plan — subprocess start for MATLAB, MCR later. GE integration via popen + pipe protocol, all in `3p/`.)
+(Same as previous plan — subprocess start for MATLAB, MCR later. GE integration via popen + pipe protocol, all in private external repos.)
 
 ---
 
@@ -318,4 +318,4 @@ Phases 1 and 3 are independent and can proceed in parallel. Phase 2 depends on P
 - **Persistent process via popen()**: interpreter stays warm across CVEval calls
 - **Modified nimpulseqgui**: NEVER — used as stock Nimble dependency, all extensions in `bridge/`
 - **Self-extracting installer**: in public `scripts/`, reused by private driver repo
-- **All GE code in `3p/`**: never pushed
+- **All GE code in private external repos**: never pushed

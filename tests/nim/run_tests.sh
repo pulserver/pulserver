@@ -12,5 +12,7 @@ fi
 echo "Running bridge Nim tests"
 (
   cd "$ROOT_DIR/bridge"
+  echo "Installing nimpulseqgui from GitHub"
+  nimble install -y https://github.com/nimpulseq/nimpulseqgui
   nimble test
 )

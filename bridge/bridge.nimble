@@ -11,7 +11,7 @@ srcDir        = "."
 
 requires "nim >= 2.0.0"
 requires "nimpy >= 0.2.0"
-requires "nimpulseqgui >= 0.1.0"  # stock, unmodified (use `nimble develop` in 3p/nimpulseqgui)
+requires "nimpulseqgui >= 0.1.0"  # stock, unmodified (installed from GitHub in test bootstrap)
 
 # Tasks
 
