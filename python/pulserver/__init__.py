@@ -12,6 +12,8 @@ __all__ = [
     "SequenceCollection",
     "serialize",
     "deserialize",
+    "FastSequence",
+    "write",
 ]
 
 from .core import (  # noqa: F401
@@ -19,3 +21,5 @@ from .core import (  # noqa: F401
     deserialize,
     serialize,
 )
+from .io import write  # noqa: F401
+from .sequence import FastSequence  # noqa: F401

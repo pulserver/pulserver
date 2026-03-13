@@ -48,6 +48,24 @@ Examples:
 ./bridge/pypulseq_host --plugin-folder bridge/tests --script test_plugin --validate-only
 ```
 
+## Fast Sequence Path
+
+`pulserver.FastSequence` is a sequential-only `pypulseq.Sequence` replacement
+for production bridge execution. It disables positional `set_block()` and can
+skip per-block deduplication and continuity checks during build, then relies on
+`write(remove_duplicates=True)` to compact once at the end.
+
+Use `pulserver.write(seq, output=...)` to write either to disk or binary blobs.
+
+```python
+import pulserver
+
+seq = pulserver.FastSequence()
+# seq.add_block(...)
+
+payload = pulserver.write(seq, output=None, check_timing=False)  # bytes
+```
+
 ## Notes
 - Intended as a standalone interface package for bridge/plugin contracts.
 - MATLAB host stubs are kept under `bridge/`.
