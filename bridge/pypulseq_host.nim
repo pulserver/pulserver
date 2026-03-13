@@ -24,6 +24,19 @@ proc isPyNone*(o: PyObject): bool =
 
 const pythonHome {.strdefine.} = "python"  ## Bundled CPython relative to exe dir.
 
+proc resolveBundledPythonHome*(exeDir: string): string =
+  ## Resolves bundled CPython location from host executable directory.
+  ## Checks both developer layout (<exe_dir>/python) and installer layout
+  ## (<install_root>/python where exe is in <install_root>/bin).
+  let bundledCandidates = @[
+    exeDir / pythonHome,
+    parentDir(exeDir) / pythonHome,
+  ]
+  for candidate in bundledCandidates:
+    if dirExists(candidate):
+      return candidate
+  return ""
+
 # ── Marshalling: Nim → Python ──────────────────────────────────────────────
 
 proc nimOptsToPyOpts*(opts: Opts): PyObject =
@@ -186,9 +199,12 @@ proc printBridgeHelp() =
   echo "nimpulseqgui's makeSequenceExe (GUI or --no-gui)."
 
 proc main() =
-  # Init bundled CPython location
-  if dirExists(getAppDir() / pythonHome):
-    putEnv("PYTHONHOME", getAppDir() / pythonHome)
+  # Init bundled CPython location.
+  # In developer layouts this may be under <exe_dir>/python, while
+  # in installer layouts it is typically <install_root>/python.
+  let resolvedPythonHome = resolveBundledPythonHome(getAppDir())
+  if resolvedPythonHome.len > 0:
+    putEnv("PYTHONHOME", resolvedPythonHome)
 
   # ── Parse bridge-specific flags (consumed here, rest forwarded) ──
   var scriptPath = ""

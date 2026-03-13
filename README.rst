@@ -6,17 +6,17 @@ This scaffold contains bridge/interface contracts and host stubs.
 Installation
 ------------
 
-Install pulserver from the repository root:
+Install pulserver from GitHub (dev branch):
 
 .. code-block:: bash
 
-   pip install .
+   pip install "git+ssh://git@github.com/pulserver/pulserver.git@dev"
 
 Development install with test tools:
 
 .. code-block:: bash
 
-   pip install .[dev,test]
+   pip install "git+ssh://git@github.com/pulserver/pulserver.git@dev#egg=pulserver[dev,test]"
 
 Included from monorepo
 ----------------------

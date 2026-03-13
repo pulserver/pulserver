@@ -27,3 +27,5 @@ jupyter_execute/
 
 src/pulserver/_version.py_codeql_detected_source_root
 build_test/
+.nim-test-bundle/
+.nim-test-bundle-installer.sh

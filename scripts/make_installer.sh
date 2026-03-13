@@ -4,7 +4,11 @@
 # Packages the compiled bridge binary, a standalone relocatable CPython
 # (from python-build-standalone), and example plugins into a single .sh
 # archive that can be deployed to any Linux host without a development
-# environment.
+# environment. The bundled Python environment includes:
+#   - numpy
+#   - scipy
+#   - pypulseq
+#   - pulserver
 #
 # Usage:
 #   ./scripts/make_installer.sh [output.sh]
@@ -26,11 +30,40 @@ BUILD_DIR="$(mktemp -d)"
 OUTPUT="${1:-$ROOT_DIR/pulserver_bridge_installer.sh}"
 
 # python-build-standalone release configuration
-PBS_VERSION="20250205"
-PYTHON_VERSION="3.12"
+PYTHON_VERSION="3.11"
 PBS_TRIPLE="x86_64-unknown-linux-gnu"
-PBS_VARIANT="install_only_stripped"
-PBS_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_VERSION}/cpython-${PYTHON_VERSION}+${PBS_VERSION}-${PBS_TRIPLE}-${PBS_VARIANT}.tar.gz"
+PBS_VARIANT="install_only"
+PULSERVER_PIP_SPEC="${PULSERVER_PIP_SPEC:-git+ssh://git@github.com/pulserver/pulserver.git@dev}"
+
+echo "=== Resolving standalone Python ${PYTHON_VERSION} asset ==="
+PBS_URL="$(
+  PBS_PY_MINOR="$PYTHON_VERSION" PBS_TRIPLE="$PBS_TRIPLE" PBS_VARIANT="$PBS_VARIANT" python3 - <<'PY'
+import json
+import os
+import sys
+import urllib.request
+
+minor = os.environ["PBS_PY_MINOR"]
+triple = os.environ["PBS_TRIPLE"]
+variant = os.environ["PBS_VARIANT"]
+prefix = f"cpython-{minor}."
+suffix = f"-{triple}-{variant}.tar.gz"
+
+api_url = "https://api.github.com/repos/astral-sh/python-build-standalone/releases?per_page=10"
+with urllib.request.urlopen(api_url) as resp:
+  releases = json.load(resp)
+
+for rel in releases:
+  for asset in rel.get("assets", []):
+    name = asset.get("name", "")
+    if name.startswith(prefix) and name.endswith(suffix):
+      print(asset["browser_download_url"])
+      raise SystemExit(0)
+
+raise SystemExit("No matching python-build-standalone asset found")
+PY
+)"
+echo "Using standalone asset: $PBS_URL"
 
 cleanup() { rm -rf "$BUILD_DIR"; }
 trap cleanup EXIT
@@ -56,7 +89,23 @@ mkdir -p "$PYTHON_DIR"
 tar xf "$PBS_ARCHIVE" -C "$PYTHON_DIR" --strip-components=1
 
 echo "=== Installing Python packages ==="
-"$PYTHON_DIR/bin/python3" -m pip install --quiet pypulseq numpy scipy
+SITE_PACKAGES="$($PYTHON_DIR/bin/python3 - <<'PY'
+import site
+print(site.getsitepackages()[0])
+PY
+)"
+
+"$PYTHON_DIR/bin/python3" -m pip install --quiet --target "$SITE_PACKAGES" numpy scipy pypulseq
+
+if ! env -u CC -u CXX "$PYTHON_DIR/bin/python3" -m pip install --quiet --target "$SITE_PACKAGES" --no-deps "$PULSERVER_PIP_SPEC"; then
+  echo "Warning: pip install for pulserver failed; falling back to source package copy"
+  if [[ -d "$ROOT_DIR/python/pulserver" ]]; then
+    cp -a "$ROOT_DIR/python/pulserver" "$SITE_PACKAGES/"
+  else
+    echo "Error: fallback source package path not found: $ROOT_DIR/python/pulserver" >&2
+    exit 1
+  fi
+fi
 
 echo "=== Assembling payload ==="
 PAYLOAD_DIR="$BUILD_DIR/payload"
@@ -72,11 +121,6 @@ cp -a "$PYTHON_DIR" "$PAYLOAD_DIR/python"
 # Copy example plugin(s)
 if [ -d "$ROOT_DIR/python/pulserver/sequences" ]; then
   cp "$ROOT_DIR/python/pulserver/sequences/"*.py "$PAYLOAD_DIR/plugins/" 2>/dev/null || true
-fi
-
-# Copy the pulserver Python package (needed by plugins)
-if [ -d "$ROOT_DIR/python/pulserver" ]; then
-  cp -a "$ROOT_DIR/python/pulserver" "$PAYLOAD_DIR/python/lib/python${PYTHON_VERSION}/site-packages/"
 fi
 
 echo "=== Creating self-extracting archive ==="
