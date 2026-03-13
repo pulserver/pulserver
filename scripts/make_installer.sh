@@ -33,7 +33,7 @@ OUTPUT="${1:-$ROOT_DIR/pulserver_bridge_installer.sh}"
 PYTHON_VERSION="3.11"
 PBS_TRIPLE="x86_64-unknown-linux-gnu"
 PBS_VARIANT="install_only"
-PULSERVER_PIP_SPEC="${PULSERVER_PIP_SPEC:-git+ssh://git@github.com/pulserver/pulserver.git@dev}"
+PULSERVER_PIP_SPEC="${PULSERVER_PIP_SPEC:-pulserver}"
 
 echo "=== Resolving standalone Python ${PYTHON_VERSION} asset ==="
 PBS_URL="$(
@@ -50,7 +50,12 @@ prefix = f"cpython-{minor}."
 suffix = f"-{triple}-{variant}.tar.gz"
 
 api_url = "https://api.github.com/repos/astral-sh/python-build-standalone/releases?per_page=10"
-with urllib.request.urlopen(api_url) as resp:
+headers = {}
+token = os.environ.get("GITHUB_TOKEN", "")
+if token:
+  headers["Authorization"] = f"token {token}"
+req = urllib.request.Request(api_url, headers=headers)
+with urllib.request.urlopen(req) as resp:
   releases = json.load(resp)
 
 for rel in releases:
