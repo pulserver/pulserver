@@ -1,5 +1,4 @@
-# pulserverlib-interface
-
+# pulserver
 This scaffold contains bridge/interface contracts and host stubs.
 
 ## Included from monorepo
