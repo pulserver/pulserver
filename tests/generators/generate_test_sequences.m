@@ -29,6 +29,135 @@ write_mprage_noncart(true, 3, 1, false);
 write_mprage_noncart(true, 1, 3, false);
 write_mprage_noncart(true, 3, 3, false);
 
+
+function seq = write_bssfp(write, num_slices, num_averages)
+    base = sprintf('gre_2d_%dsl_%davg', num_slices, num_averages);
+    fprintf('Generating sequence: %s\n', base);
+
+    sys = make_system();
+
+    % Basic GRE geometry intentionally small for fast iteration.
+    fov = 0.22;
+    Nx = 64;
+    Ny = 8;
+    slice_thickness = 5e-3;
+
+    alpha = 10 * pi / 180;
+
+    % --- create events ---
+    [rf, gz, gz_reph] = mr.makeSincPulse(alpha * pi / 180, ...
+        'Duration', rf_dur, 'SliceThickness', thick, ...
+        'apodization', 0.5, 'timeBwProduct', 1.5, ...
+        'system', sys, 'use', 'excitation');
+
+    deltak = 1 / fov;
+    gx = mr.makeTrapezoid('x', ...
+        'FlatArea', Nx * deltak, ...
+        'FlatTime', adc_dur, ...
+        'system', sys);
+    adc = mr.makeAdc(Nx, ...
+        'Duration', gx.flatTime, ...
+        'Delay', gx.riseTime, ...
+        'system', sys);
+    gx_pre = mr.makeTrapezoid('x', 'Area', -gx.area / 2, 'system', sys);
+    phase_areas = ((0:Ny-1) - Ny/2) * deltak;
+
+    % --- split & combine for bSSFP optimal timing ---
+    gz_parts = mr.splitGradientAt(gz, mr.calcDuration(rf));
+    gz_parts(1).delay = mr.calcDuration(gz_reph);
+    gz_1 = mr.addGradients({gz_reph, gz_parts(1)}, 'system', sys);
+    [rf, ~] = mr.align('right', rf, gz_1);
+    gz_parts(2).delay = 0;
+    gz_reph.delay = mr.calcDuration(gz_parts(2));
+    gz_2 = mr.addGradients({gz_parts(2), gz_reph}, 'system', sys);
+
+    gx_parts = mr.splitGradientAt(gx, ...
+        ceil(mr.calcDuration(adc) / sys.gradRasterTime) * sys.gradRasterTime);
+    gx_parts(1).delay = mr.calcDuration(gx_pre);
+    gx_1 = mr.addGradients({gx_pre, gx_parts(1)}, 'system', sys);
+    adc.delay = adc.delay + mr.calcDuration(gx_pre);
+    gx_parts(2).delay = 0;
+    gx_pre.delay = mr.calcDuration(gx_parts(2));
+    gx_2 = mr.addGradients({gx_parts(2), gx_pre}, 'system', sys);
+
+    pe_dur = mr.calcDuration(gx_2);
+
+    gz_1.delay = max(mr.calcDuration(gx_2) - rf.delay + rf.ringdownTime, 0);
+    rf.delay = rf.delay + gz_1.delay;
+
+    TR = mr.calcDuration(gz_1) + mr.calcDuration(gx_1);
+
+    % --- phase-encode template (max area, will be scaled) ---
+    max_pe_area = max(abs(phase_areas));
+    gyMax = mr.makeTrapezoid('y', 'Area', max_pe_area, 'Duration', pe_dur, 'system', sys);
+
+    % --- pre-create labels ---
+    lblOnce1 = mr.makeLabel('SET', 'ONCE', 1);
+    lblOnce0 = mr.makeLabel('SET', 'ONCE', 0);
+    lblOnce2 = mr.makeLabel('SET', 'ONCE', 2);
+
+    % --- prep RF: half flip angle ---
+    rf05 = rf;
+    rf05.signal = 0.5 * rf.signal;
+
+    % --- prep delay to center main acquisition around TR/2 ---
+    prep_delay = mr.makeDelay( round((TR/2 - mr.calcDuration(gz_1)) / sys.gradRasterTime) * sys.gradRasterTime);
+    gx_1_1 = mr.makeExtendedTrapezoidArea('x', 0, gx_2.first, -gx_2.area, sys);
+    gy_pre_2 = mr.scaleGrad(gyMax, phase_areas(end) / max_pe_area);
+    [prep_delay, gz_2, gy_pre_2, gx_1_1] = mr.align('left', prep_delay, gz_2, gy_pre_2, 'right', gx_1_1);
+
+    for z = 1:num_slices
+        rf05.freqOffset = gz.amplitude * thick * (z - 1 - (num_slices-1)/2);
+        rf.freqOffset = gz.amplitude * thick * (z - 1 - (num_slices-1)/2);
+        
+        % --- alpha/2 prep (ONCE=1) ---
+        seq.addBlock(rf05, gz_1, lblOnce1);
+        seq.addBlock(prep_delay, gz_2, gy_pre_2, gx_1_1);
+
+        % --- main loop ---
+        for i = 1:Ny
+            rf.phaseOffset = pi * mod(i, 2);
+            adc.phaseOffset = pi * mod(i, 2);
+
+            gy_pre_1 = mr.scaleGrad(gy_pre_2, -1);             % undo previous PE
+            gy_pre_2 = mr.scaleGrad(gyMax, phase_areas(i) / max_pe_area);  % new PE
+
+            if i == 1
+                seq.addBlock(rf, gz_1, gy_pre_1, gx_2, lblOnce0); % clear ONCE flag -> first main block
+            else
+                seq.addBlock(rf, gz_1, gy_pre_1, gx_2);
+            end
+            seq.addBlock(gx_1, gy_pre_2, gz_2, adc);
+        end
+
+        % --- exit block (ONCE=2) ---
+        seq.addBlock(gx_2, lblOnce2);
+    end
+
+
+    seq.setDefinition('FOV', [fov fov slice_thickness * num_slices]);
+    seq.setDefinition('NumSlices', num_slices);
+
+    [ok, err] = seq.checkTiming;
+    if ~ok
+        error('Timing check failed:\n%s', strjoin(err, '\n'));
+    end
+
+    if write == false
+        return;
+    end
+
+    out_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'data');
+
+    tb = TruthBuilder(seq, sys);
+    tb.setBlocksPerTR(3 + 2*Ny);
+    tb.setSegments([3 + 2*Ny]);
+    tb.setSegmentOrder([1]);
+    tb.setNumAverages(num_averages);
+    tb.export(out_dir, base);
+end
+
+
 function seq = write_gre(write, num_slices, num_averages)
     base = sprintf('gre_2d_%dsl_%davg', num_slices, num_averages);
     fprintf('Generating sequence: %s\n', base);
