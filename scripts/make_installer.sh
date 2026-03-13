@@ -72,7 +72,7 @@ echo "=== Building bridge binary (pypulseq_host) ==="
 cd "$BRIDGE_DIR"
 echo "Installing nimpulseqgui from GitHub"
 nimble install -y https://github.com/nimpulseq/nimpulseqgui
-nim c -d:release pypulseq_host.nim
+nimble c -y -d:release pypulseq_host.nim
 
 echo "=== Downloading standalone Python ${PYTHON_VERSION} ==="
 PBS_ARCHIVE="$BUILD_DIR/cpython.tar.gz"
