@@ -1,25 +1,10 @@
-"""
-Pulserver — offline validation and debugging for pulseq MRI sequences.
+"""Pulserver package root.
 
-Public API:
-
-    SequenceCollection    Wraps a pypulseq Sequence with C-backed analysis.
-    serialize             Save collection to linked .seq file chain.
-    deserialize           Restore collection from linked .seq file chain.
+Use ``pulserver.pulseq`` for Sequence/event helpers and ``pulserver.write`` for
+I/O convenience wrappers.
 """
 
-__all__ = [
-    "SequenceCollection",
-    "serialize",
-    "deserialize",
-    "FastSequence",
-    "write",
-]
-
-from .core import (  # noqa: F401
-    SequenceCollection,
-    deserialize,
-    serialize,
-)
+from . import pulseq  # noqa: F401
 from .io import write  # noqa: F401
-from .sequence import FastSequence  # noqa: F401
+
+__all__ = ["pulseq", "write"]

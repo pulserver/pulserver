@@ -50,7 +50,7 @@ Examples:
 
 ## Fast Sequence Path
 
-`pulserver.FastSequence` is a sequential-only `pypulseq.Sequence` replacement
+`pulserver.pulseq.Sequence` is a sequential-only `pypulseq.Sequence` replacement
 for production bridge execution. It disables positional `set_block()` and can
 skip per-block deduplication and continuity checks during build, then relies on
 `write(remove_duplicates=True)` to compact once at the end.
@@ -58,9 +58,13 @@ skip per-block deduplication and continuity checks during build, then relies on
 Use `pulserver.write(seq, output=...)` to write either to disk or binary blobs.
 
 ```python
+import pypulseq as pp
 import pulserver
+import pulserver.pulseq as ps
 
-seq = pulserver.FastSequence()
+seq = ps.Sequence()
+lab = ps.make_label("MYLAB", "SET", 1)
+seq.add_block(lab)
 # seq.add_block(...)
 
 payload = pulserver.write(seq, output=None, check_timing=False)  # bytes
