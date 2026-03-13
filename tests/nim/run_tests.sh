@@ -80,7 +80,14 @@ if [[ -z "$PY_LIB" ]]; then
   exit 1
 fi
 
-export NIMFLAGS="${NIMFLAGS:-} -d:nimpyTestLibPython=$PY_LIB"
+# Remove any stale nimpyTestLibPython define (e.g. from cached CI env),
+# then set it explicitly to this bundle's libpython.
+NIMFLAGS_CLEAN="$(echo "${NIMFLAGS:-}" | sed -E 's@(^| )-d:nimpyTestLibPython=[^ ]+@@g' | xargs)"
+if [[ -n "$NIMFLAGS_CLEAN" ]]; then
+  export NIMFLAGS="$NIMFLAGS_CLEAN -d:nimpyTestLibPython=$PY_LIB"
+else
+  export NIMFLAGS="-d:nimpyTestLibPython=$PY_LIB"
+fi
 echo "Using libpython: $PY_LIB"
 
 export PATH="$BUNDLE_DIR/python/bin:$PATH"
