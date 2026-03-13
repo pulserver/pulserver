@@ -70,6 +70,8 @@ trap cleanup EXIT
 
 echo "=== Building bridge binaries ==="
 cd "$BRIDGE_DIR"
+echo "Installing nimpulseqgui from GitHub"
+nimble install -y https://github.com/nimpulseq/nimpulseqgui
 nimble build -y
 
 echo "=== Downloading standalone Python ${PYTHON_VERSION} ==="
