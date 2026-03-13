@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from io import BytesIO
+from tempfile import TemporaryDirectory
+
 import numpy as np
+import pulserver.io as pio
 import pulserver.pulseq as ps
 import pypulseq as pp
 import pytest
@@ -30,11 +34,32 @@ def test_fast_sequence_add_block_without_dedup():
     assert len(seq.grad_library.data) == 2
 
 
-def test_write_not_implemented_for_fast_builder():
+def test_write_supports_binary_stream_output():
     seq = ps.Sequence()
     _make_simple_seq(seq)
-    with pytest.raises(NotImplementedError):
-        seq.write("ignored.seq", check_timing=False)
+
+    stream = BytesIO()
+    signature = pio.write(seq, output=stream, check_timing=False)
+
+    assert signature is None
+    payload = stream.getvalue()
+    assert len(payload) > 0
+    assert b"[BLOCKS]" in payload
+
+
+def test_write_supports_path_output():
+    seq = ps.Sequence()
+    _make_simple_seq(seq)
+
+    with TemporaryDirectory() as tmp:
+        out_path = f"{tmp}/fast"
+        signature = pio.write(seq, output=out_path, check_timing=False)
+        assert signature is None
+        with open(f"{out_path}.seq", "rb") as f:
+            payload = f.read()
+
+    assert len(payload) > 0
+    assert b"# Pulseq sequence file" in payload
 
 
 def test_get_block_not_implemented_for_fast_builder():
@@ -42,6 +67,14 @@ def test_get_block_not_implemented_for_fast_builder():
     seq.add_block(pp.make_delay(1e-3))
     with pytest.raises(NotImplementedError):
         seq.get_block(1)
+
+
+def test_seq_write_not_implemented_for_fast_builder():
+    seq = ps.Sequence()
+    _make_simple_seq(seq)
+
+    with pytest.raises(NotImplementedError):
+        seq.write("ignored.seq")
 
 
 def test_custom_label_registered_on_add_block():
@@ -174,7 +207,7 @@ def test_rf_use_stored_as_numeric_code():
     assert isinstance(seq.rf_library.type[rf_id], (int, np.integer))
 
 
-def test_write_with_rf_event_not_implemented():
+def test_write_with_rf_event_serializes_rf_use_as_char():
     seq = ps.Sequence()
     rf, _, _ = pp.make_sinc_pulse(
         flip_angle=np.deg2rad(10.0),
@@ -188,8 +221,42 @@ def test_write_with_rf_event_not_implemented():
     )
     seq.add_block(rf)
 
-    with pytest.raises(NotImplementedError):
-        seq.write("ignored.seq", check_timing=False)
+    stream = BytesIO()
+    pio.write(seq, output=stream, check_timing=False, remove_duplicates=False)
+    content = stream.getvalue().decode("utf-8")
+
+    assert "[RF]" in content
+    assert " e\n" in content
+
+
+def test_write_version_revision_bumped_for_custom_extensions_and_labels():
+    class DummyQuat:
+        def __init__(self, q):
+            self._q = np.asarray(q, dtype=float)
+
+        def as_quat(self, canonical=True, scalar_first=True):
+            assert canonical
+            if scalar_first:
+                return self._q
+            return np.asarray([self._q[1], self._q[2], self._q[3], self._q[0]], dtype=float)
+
+    seq_ext = ps.Sequence()
+    seq_ext.add_block(ps.make_rotation(DummyQuat([1.0, 0.0, 0.0, 0.0])))
+    stream_ext = BytesIO()
+    pio.write(seq_ext, output=stream_ext, check_timing=False)
+    lines_ext = stream_ext.getvalue().decode("utf-8").splitlines()
+    rev_line_ext = next(line for line in lines_ext if line.startswith("revision "))
+    rev_ext = int(rev_line_ext.split()[1])
+    assert rev_ext >= 1
+
+    seq_lbl = ps.Sequence()
+    seq_lbl.add_block(ps.make_label("MY_CUSTOM_LABEL", "SET", 1))
+    stream_lbl = BytesIO()
+    pio.write(seq_lbl, output=stream_lbl, check_timing=False)
+    lines_lbl = stream_lbl.getvalue().decode("utf-8").splitlines()
+    rev_line_lbl = next(line for line in lines_lbl if line.startswith("revision "))
+    rev_lbl = int(rev_line_lbl.split()[1])
+    assert rev_lbl >= 2
 
 
 def test_soft_delay_is_ignored_in_fast_path():

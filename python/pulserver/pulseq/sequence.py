@@ -81,7 +81,7 @@ class Sequence(pp.Sequence):
             seq_copy = deepcopy(self)
             self.block_cache = tmp
 
-        seq_copy.shape_library, shape_map = _dedup_library_approx(seq_copy.shape_library, 9)
+        seq_copy.shape_library, shape_map = seq_copy.shape_library.remove_duplicates(9)
 
         for arb_id in list(seq_copy.arb_library.data):
             data = seq_copy.arb_library.data[arb_id]
@@ -214,10 +214,10 @@ class Sequence(pp.Sequence):
 
     def write(
         self,
-        name: str,
-        create_signature: bool = True,
-        remove_duplicates: bool = True,
-        check_timing: bool = True,
+        name,
+        create_signature: bool = False,
+        remove_duplicates: bool = False,
+        check_timing: bool = False,
         v141_compat: bool = False,
     ):
         """Fast builder does not support writing sequence files."""
@@ -310,10 +310,23 @@ class Sequence(pp.Sequence):
         if extensions:
             sort_idx = np.argsort([e["ref"] for e in extensions])
             extensions = np.take(extensions, sort_idx)
+
+            all_found = True
             extension_id = 0
             for ext in extensions:
                 data = (ext["type"], ext["ref"], extension_id)
-                extension_id = self.extensions_library.insert(0, data)
+                extension_id, found = self.extensions_library.find(data)
+                all_found = all_found and found
+                if not found:
+                    break
+
+            if not all_found:
+                extension_id = 0
+                for ext in extensions:
+                    data = (ext["type"], ext["ref"], extension_id)
+                    extension_id, found = self.extensions_library.find(data)
+                    if not found:
+                        self.extensions_library.insert(extension_id, data)
             new_block[6] = extension_id
 
         self.block_events[block_index] = new_block
@@ -334,12 +347,16 @@ class Sequence(pp.Sequence):
 
         shape_IDs = [0, 0, 0]
         mag_shape = compress_shape(mag)
-        shape_IDs[0] = self.shape_library.insert(0, np.concatenate(([mag_shape.num_samples], mag_shape.data)))
+        shape_IDs[0], _ = self.shape_library.find_or_insert(
+            np.concatenate(([mag_shape.num_samples], mag_shape.data))
+        )
         phase_shape = compress_shape(phase)
-        shape_IDs[1] = self.shape_library.insert(0, np.concatenate(([phase_shape.num_samples], phase_shape.data)))
+        shape_IDs[1], _ = self.shape_library.find_or_insert(
+            np.concatenate(([phase_shape.num_samples], phase_shape.data))
+        )
         if not (np.floor(event.t / self.rf_raster_time) == np.arange(len(event.t))).all():
             time_shape = compress_shape(event.t / self.rf_raster_time)
-            shape_IDs[2] = self.shape_library.insert(0, [time_shape.num_samples, *time_shape.data])
+            shape_IDs[2], _ = self.shape_library.find_or_insert([time_shape.num_samples, *time_shape.data])
 
         if not hasattr(event, "use"):
             raise ValueError('Parameter "use" is not optional since v1.5.0')
@@ -370,7 +387,7 @@ class Sequence(pp.Sequence):
         shape_IDs = [0, 0]
         g = event.waveform / amplitude if amplitude != 0 else event.waveform
         c_shape = compress_shape(g)
-        shape_IDs[0] = self.shape_library.insert(0, np.concatenate(([c_shape.num_samples], c_shape.data)))
+        shape_IDs[0], _ = self.shape_library.find_or_insert(np.concatenate(([c_shape.num_samples], c_shape.data)))
 
         c_time = compress_shape(event.tt / self.grad_raster_time)
         t_data = np.concatenate(([c_time.num_samples], c_time.data))
@@ -379,7 +396,7 @@ class Sequence(pp.Sequence):
         elif len(c_time.data) == 3 and np.allclose(c_time.data, [0.5, 0.5, c_time.num_samples - 2]):
             shape_IDs[1] = -1
         else:
-            shape_IDs[1] = self.shape_library.insert(0, t_data)
+            shape_IDs[1], _ = self.shape_library.find_or_insert(t_data)
 
         data = (amplitude, event.first, event.last, *shape_IDs, event.delay)
         arb_id = self.arb_library.insert(0, data)
@@ -400,7 +417,7 @@ class Sequence(pp.Sequence):
         ):
             phase_shape = compress_shape(np.asarray(event.phase_modulation).flatten())
             shape_data = np.concatenate(([phase_shape.num_samples], phase_shape.data))
-            shape_id = self.shape_library.insert(0, shape_data)
+            shape_id, _ = self.shape_library.find_or_insert(shape_data)
 
         data = (
             event.num_samples,
@@ -523,8 +540,8 @@ def _round_sig_matrix(matrix: np.ndarray, digits: tuple[int, ...]) -> np.ndarray
 
     nonpos_mask = ~pos_mask
     if np.any(nonpos_mask):
-        step = np.power(10.0, -d)
-        rounded_nonpos = np.round(matrix / step) * step
+        mags = np.power(10.0, -d)
+        rounded_nonpos = np.round(matrix * mags) / mags
         out = np.where(nonpos_mask, rounded_nonpos, out)
 
     return out
