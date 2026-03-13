@@ -1,11 +1,10 @@
 # AGENTS
 
-This repository is the active `pulserverlib` codebase.
+This repository scaffold was generated from the `pulserver` migration workspace.
 
 ## Context continuity
-- Refer to `AGENT.md` for domain architecture and implementation guidance.
-- Refer to `.github/prompts/` for planning and implementation prompt context.
+- Refer to the root monorepo `AGENT.md` for architecture and migration rationale.
+- Refer to `.github/prompts/` for planning prompts preserved from the source workspace.
 
 ## Note
-- `migration/` contains historical split scaffolds and planning artifacts.
-- Keep new changes aligned with the current top-level repository layout.
+- This scaffold is an initialization snapshot and requires per-repo refinement of CI, packaging, and docs paths.
