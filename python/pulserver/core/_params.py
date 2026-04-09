@@ -282,38 +282,38 @@ class UIParam:
 
     @staticmethod
     def user_value(n: int) -> str:
-        """SeqParams user value key: user0_value..user19_value."""
+        """SeqParams user value key: user1_value..user19_value."""
         _validate_user_index(n)
         return f"user{n}_value"
 
     @staticmethod
     def user_name(n: int) -> str:
-        """SeqParams/UIControls user-name key: user0_name..user19_name."""
+        """SeqParams/UIControls user-name key: user1_name..user19_name."""
         _validate_user_index(n)
         return f"user{n}_name"
 
     @staticmethod
     def user_enabled(n: int) -> str:
-        """UIControls user-enable key: user0_enabled..user19_enabled."""
+        """UIControls user-enable key: user1_enabled..user19_enabled."""
         _validate_user_index(n)
         return f"user{n}_enabled"
 
     @staticmethod
     def user_min(n: int) -> str:
-        """UIControls user minimum key: user0_min..user19_min."""
+        """UIControls user minimum key: user1_min..user19_min."""
         _validate_user_index(n)
         return f"user{n}_min"
 
     @staticmethod
     def user_max(n: int) -> str:
-        """UIControls user maximum key: user0_max..user19_max."""
+        """UIControls user maximum key: user1_max..user19_max."""
         _validate_user_index(n)
         return f"user{n}_max"
 
 
 def _validate_user_index(n: int) -> None:
-    if not 0 <= n < 20:
-        raise ValueError("User slot index must be in [0, 19].")
+    if not 1 <= n < 20:
+        raise ValueError("User slot index must be in [1, 19] (user0 reserved for PSD).")
 
 
 # ---------------------------------------------------------------------------
