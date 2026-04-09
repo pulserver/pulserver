@@ -3,8 +3,8 @@ from __future__ import annotations
 import pulserver
 import pytest
 from pulserver.core import (
-    BoolParam,
     BoolKey,
+    BoolParam,
     DropdownFloatParam,
     DropdownIntParam,
     EnumKey,
@@ -16,9 +16,9 @@ from pulserver.core import (
     PreparationType,
     SequenceType,
     StringListParam,
+    TriggerType,
     TypeinFloatParam,
     TypeinIntParam,
-    TriggerType,
     UIParam,
     Validate,
     dict_to_protocol,
@@ -64,7 +64,7 @@ def test_dict_to_protocol_keeps_keys_as_is():
             "unit": "deg",
             "validate": "none",
         },
-        UIParam.user_value(0): {
+        UIParam.user_value(1): {
             "type": "float",
             "value": 2.0,
             "min": 0.0,
@@ -78,19 +78,19 @@ def test_dict_to_protocol_keeps_keys_as_is():
     decoded = dict_to_protocol(encoded)
 
     assert UIParam.FLIP.value in decoded
-    assert UIParam.user_value(0) in decoded
+    assert UIParam.user_value(1) in decoded
 
 
 def test_protocol_to_dict_emits_keys_as_given():
     protocol = {
         UIParam.FLIP: TypeinFloatParam(value=10.0, min=0.0, max=180.0, incr=1.0, unit="deg"),
-        UIParam.user_value(0): TypeinFloatParam(value=2.0, min=0.0, max=5.0, incr=0.1),
+        UIParam.user_value(1): TypeinFloatParam(value=2.0, min=0.0, max=5.0, incr=0.1),
     }
 
     encoded = protocol_to_dict(protocol)
 
     assert UIParam.FLIP.value in encoded
-    assert UIParam.user_value(0) in encoded
+    assert UIParam.user_value(1) in encoded
 
 
 def test_float_ui_metadata_roundtrip():
@@ -219,8 +219,8 @@ def test_expected_param_kind_maps_core_keys():
     assert expected_param_kind(UIParam.TE) == ParamKind.FLOAT
     assert expected_param_kind(UIParam.ENABLE_SATURATION_UI) == ParamKind.BOOL
     assert expected_param_kind(UIParam.SEQUENCE_TYPE) == ParamKind.STRINGLIST
-    assert expected_param_kind(UIParam.user_value(0)) == ParamKind.FLOAT
-    assert expected_param_kind(UIParam.user_enabled(0)) == ParamKind.BOOL
+    assert expected_param_kind(UIParam.user_value(1)) == ParamKind.FLOAT
+    assert expected_param_kind(UIParam.user_enabled(1)) == ParamKind.BOOL
 
 
 def test_uiparam_is_convenience_namespace_over_typed_keys():

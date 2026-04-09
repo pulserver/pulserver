@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from ._base import PulseqSequence
 from ._params import (
-    BoolParam,
     BoolKey,
+    BoolParam,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
@@ -28,9 +28,9 @@ from ._params import (
     ProtocolValue,
     SequenceType,
     StringListParam,
+    TriggerType,
     TypeinFloatParam,
     TypeinIntParam,
-    TriggerType,
     UIParam,
     Validate,
     dict_to_param,

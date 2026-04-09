@@ -733,8 +733,7 @@ def validate_protocol_entry(key: ProtocolKey, value: ProtocolValue) -> None:
     if not isinstance(value, expected_types):
         expected_names = ", ".join(cls.__name__ for cls in expected_types)
         raise TypeError(
-            f"Key '{key}' expects {expected.value} parameter type ({expected_names}), "
-            f"got {type(value).__name__}."
+            f"Key '{key}' expects {expected.value} parameter type ({expected_names}), " f"got {type(value).__name__}."
         )
 
 
