@@ -72,9 +72,31 @@ echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
 
 (
   cd "$ROOT_DIR/bridge"
-  rm -rf "$HOME/.cache/nim/test_bridge_common_d" "$HOME/.cache/nim/test_isPyNone_d"
+  rm -rf "$HOME/.cache/nim/test_bridge_common_d"
   echo "Installing nimpulseqgui from GitHub"
   nimble install -y https://github.com/nimpulseq/nimpulseqgui
   echo "Running tests with pythonVenvPath=$ENV_PULSERVER"
-  nimble test
+  nim r $NIMFLAGS ../tests/nim/test_bridge_common.nim
+
+  # Integration check: compile host with canonical EnvPulserver path and verify
+  # it can import and execute a user plugin backed by a PulseqSequence class.
+  TEST_HOST_BIN="$BUNDLE_DIR/bin/pypulseq_host_test"
+  TEST_PLUGIN="$ROOT_DIR/bridge/tests/test_pulserver_sequence_plugin.py"
+  TEST_SEQ_OUT="$BUNDLE_DIR/pulserver_sequence_plugin.seq"
+
+  nim c -d:release -d:pythonVenvPath="$ENV_PULSERVER" -o:"$TEST_HOST_BIN" pypulseq_host.nim
+
+  VALIDATION_OUT="$("$TEST_HOST_BIN" --script "$TEST_PLUGIN" --validate-only)"
+  echo "$VALIDATION_OUT"
+  echo "$VALIDATION_OUT" | grep '"valid": true'
+
+  {
+    echo "GENERATE $TEST_SEQ_OUT"
+    echo "[NimPulseqGUI Protocol]"
+    echo "[NimPulseqGUI Protocol End]"
+    echo "QUIT"
+  } | "$TEST_HOST_BIN" --script "$TEST_PLUGIN" --persistent > "$BUNDLE_DIR/persistent_host_test.out"
+
+  grep "GENERATED $TEST_SEQ_OUT" "$BUNDLE_DIR/persistent_host_test.out"
+  test -s "$TEST_SEQ_OUT"
 )
