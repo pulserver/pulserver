@@ -4,6 +4,9 @@ import ../../bridge/pypulseq_host
 import std/os
 import std/times
 
+# Mirror the strdefine from pypulseq_host so -d:pythonVenvPath=... is visible here.
+const pythonVenvPath {.strdefine.} = ""
+
 let builtins = pyBuiltinsModule()
 let none = builtins.getAttr("None")
 let notNone = builtins.callMethod("int", 42)
