@@ -1,25 +1,28 @@
 #!/usr/bin/env bash
 # make_installer.sh — build a self-extracting installer for pypulseq_host.
 #
-# Packages the compiled bridge binary, a standalone relocatable CPython
-# (from python-build-standalone), and example plugins into a single .sh
-# archive that can be deployed to any Linux host without a development
-# environment. The bundled Python environment includes:
+# Packages the compiled bridge binary, a Python venv with all dependencies,
+# and example plugins into a single .sh archive that can be deployed to any
+# Linux host.  The bundled venv includes:
 #   - numpy
 #   - scipy
 #   - pypulseq
 #   - pulserver
 #
+# The system Python (python3) is used to create the venv, so it must be
+# >= 3.14 on the build host.
+#
 # Usage:
 #   ./scripts/make_installer.sh [output.sh]
 #
+# Environment variables:
+#   PULSERVER_PIP_SPEC  — pip spec to install for pulserver (default: "pulserver"
+#                         from PyPI; set to a local checkout path for testing)
+#   PYTHON              — path to the python3 binary to use (default: python3)
+#
 # Prerequisites:
 #   - nim & nimble on PATH
-#   - bridge/ has been built (nimble build in bridge/)
-#   - curl or wget for downloading python-build-standalone
-#
-# The resulting installer, when run, extracts to $INSTALL_DIR (default ~/pulserver)
-# and creates a ready-to-run pypulseq_host with embedded Python.
+#   - python3 >= 3.11 on PATH (or PYTHON env var)
 
 set -euo pipefail
 
@@ -29,46 +32,8 @@ BRIDGE_DIR="$ROOT_DIR/bridge"
 BUILD_DIR="$(mktemp -d)"
 OUTPUT="${1:-$ROOT_DIR/pulserver_bridge_installer.sh}"
 
-# python-build-standalone release configuration
-PYTHON_VERSION="3.11"
-PBS_TRIPLE="x86_64-unknown-linux-gnu"
-PBS_VARIANT="install_only"
+PYTHON="${PYTHON:-python3}"
 PULSERVER_PIP_SPEC="${PULSERVER_PIP_SPEC:-pulserver}"
-
-echo "=== Resolving standalone Python ${PYTHON_VERSION} asset ==="
-PBS_URL="$(
-  PBS_PY_MINOR="$PYTHON_VERSION" PBS_TRIPLE="$PBS_TRIPLE" PBS_VARIANT="$PBS_VARIANT" python3 - <<'PY'
-import json
-import os
-import sys
-import urllib.request
-
-minor = os.environ["PBS_PY_MINOR"]
-triple = os.environ["PBS_TRIPLE"]
-variant = os.environ["PBS_VARIANT"]
-prefix = f"cpython-{minor}."
-suffix = f"-{triple}-{variant}.tar.gz"
-
-api_url = "https://api.github.com/repos/astral-sh/python-build-standalone/releases?per_page=10"
-headers = {}
-token = os.environ.get("GITHUB_TOKEN", "")
-if token:
-  headers["Authorization"] = f"token {token}"
-req = urllib.request.Request(api_url, headers=headers)
-with urllib.request.urlopen(req) as resp:
-  releases = json.load(resp)
-
-for rel in releases:
-  for asset in rel.get("assets", []):
-    name = asset.get("name", "")
-    if name.startswith(prefix) and name.endswith(suffix):
-      print(asset["browser_download_url"])
-      raise SystemExit(0)
-
-raise SystemExit("No matching python-build-standalone asset found")
-PY
-)"
-echo "Using standalone asset: $PBS_URL"
 
 cleanup() { rm -rf "$BUILD_DIR"; }
 trap cleanup EXIT
@@ -79,33 +44,17 @@ echo "Installing nimpulseqgui from GitHub"
 nimble install -y https://github.com/nimpulseq/nimpulseqgui
 nimble c -y -d:release pypulseq_host.nim
 
-echo "=== Downloading standalone Python ${PYTHON_VERSION} ==="
-PBS_ARCHIVE="$BUILD_DIR/cpython.tar.gz"
-if command -v curl &>/dev/null; then
-  curl -fSL -o "$PBS_ARCHIVE" "$PBS_URL"
-elif command -v wget &>/dev/null; then
-  wget -q -O "$PBS_ARCHIVE" "$PBS_URL"
-else
-  echo "Error: need curl or wget to download python-build-standalone" >&2
-  exit 1
-fi
-
-echo "=== Extracting standalone Python ==="
+echo "=== Creating Python venv ==="
 PYTHON_DIR="$BUILD_DIR/python"
-mkdir -p "$PYTHON_DIR"
-tar xf "$PBS_ARCHIVE" -C "$PYTHON_DIR" --strip-components=1
+"$PYTHON" -m venv "$PYTHON_DIR"
 
 echo "=== Installing Python packages ==="
-SITE_PACKAGES="$($PYTHON_DIR/bin/python3 - <<'PY'
-import site
-print(site.getsitepackages()[0])
-PY
-)"
+"$PYTHON_DIR/bin/pip" install --quiet --upgrade pip
+"$PYTHON_DIR/bin/pip" install --quiet numpy scipy pypulseq
 
-"$PYTHON_DIR/bin/python3" -m pip install --quiet --target "$SITE_PACKAGES" numpy scipy pypulseq
-
-if ! env -u CC -u CXX "$PYTHON_DIR/bin/python3" -m pip install --quiet --target "$SITE_PACKAGES" --no-deps "$PULSERVER_PIP_SPEC"; then
+if ! env -u CC -u CXX "$PYTHON_DIR/bin/pip" install --quiet "$PULSERVER_PIP_SPEC"; then
   echo "Warning: pip install for pulserver failed; falling back to source package copy"
+  SITE_PACKAGES="$("$PYTHON_DIR/bin/python3" -c 'import site; print(site.getsitepackages()[0])')"
   if [[ -d "$ROOT_DIR/python/pulserver" ]]; then
     cp -a "$ROOT_DIR/python/pulserver" "$SITE_PACKAGES/"
   else
@@ -146,10 +95,15 @@ ARCHIVE_LINE=$(awk '/^__ARCHIVE__$/ {print NR + 1; exit}' "$0")
 mkdir -p "$INSTALL_DIR"
 tail -n +"$ARCHIVE_LINE" "$0" | tar xz -C "$INSTALL_DIR" --strip-components=1
 
-# Set up PYTHONHOME for the bridge binary
-PYTHON_HOME="$INSTALL_DIR/python"
-if [ -d "$PYTHON_HOME" ]; then
-  echo "Python environment: $PYTHON_HOME"
+# The venv was built on the build host with absolute paths inside the venv's
+# pyvenv.cfg.  Relocate it to the actual install directory by re-running
+# venv creation over the extracted tree (--upgrade re-uses the existing
+# site-packages, just rewrites the activation scripts and pyvenv.cfg).
+PYTHON="$INSTALL_DIR/python"
+if [ -d "$PYTHON" ]; then
+  echo "Relocating Python venv to $PYTHON ..."
+  python3 -m venv --upgrade "$PYTHON"
+  echo "Python environment: $PYTHON"
 fi
 
 echo ""

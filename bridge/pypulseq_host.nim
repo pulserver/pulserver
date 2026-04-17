@@ -22,20 +22,39 @@ proc isPyNone*(o: PyObject): bool =
   let none = pyBuiltinsModule().getAttr("None")
   return o == none
 
-const pythonHome {.strdefine.} = "python"  ## Bundled CPython relative to exe dir.
+const pythonHome {.strdefine.} = "python"
+  ## Relative path to a bundled Python venv (dir name), checked relative to exe dir
+  ## and its parent.  Used for developer/test layouts.
 
-proc resolveBundledPythonHome*(exeDir: string): string =
-  ## Resolves bundled CPython location from host executable directory.
-  ## Checks both developer layout (<exe_dir>/python) and installer layout
-  ## (<install_root>/python where exe is in <install_root>/bin).
-  let bundledCandidates = @[
+const pythonVenvPath {.strdefine.} = "/usr/g/bin/recon/research/EnvPulserver"
+  ## Absolute path to the canonical scanner venv for pypulseq_host.
+  ## Override at compile time with -d:pythonVenvPath=<path>.
+
+type BundledPythonKind = enum
+  bpkNone, bpkVenv, bpkStandalone
+
+type BundledPythonEnv = object
+  kind: BundledPythonKind
+  home: string  ## Root of the python dir (venv root or standalone prefix)
+
+proc resolveBundledPythonHome*(exeDir: string): BundledPythonEnv =
+  ## Resolves the Python environment for this process.
+  ## Search order:
+  ##   1. Canonical absolute venv path (pythonVenvPath compile-time define)
+  ##   2. <exe_dir>/<pythonHome>  (developer/test layout)
+  ##   3. <exe_dir>/../<pythonHome>  (installer layout: exe in bin/, venv at sibling)
+  let candidates = @[
+    pythonVenvPath,
     exeDir / pythonHome,
     parentDir(exeDir) / pythonHome,
   ]
-  for candidate in bundledCandidates:
+  for candidate in candidates:
     if dirExists(candidate):
-      return candidate
-  return ""
+      if fileExists(candidate / "pyvenv.cfg"):
+        return BundledPythonEnv(kind: bpkVenv, home: candidate)
+      elif dirExists(candidate / "lib") and dirExists(candidate / "bin"):
+        return BundledPythonEnv(kind: bpkStandalone, home: candidate)
+  return BundledPythonEnv(kind: bpkNone, home: "")
 
 # ── Marshalling: Nim → Python ──────────────────────────────────────────────
 
@@ -199,12 +218,37 @@ proc printBridgeHelp() =
   echo "nimpulseqgui's makeSequenceExe (GUI or --no-gui)."
 
 proc main() =
-  # Init bundled CPython location.
-  # In developer layouts this may be under <exe_dir>/python, while
-  # in installer layouts it is typically <install_root>/python.
-  let resolvedPythonHome = resolveBundledPythonHome(getAppDir())
-  if resolvedPythonHome.len > 0:
-    putEnv("PYTHONHOME", resolvedPythonHome)
+  # Init bundled Python environment.
+  # Venv: do NOT set PYTHONHOME (breaks venv); set VIRTUAL_ENV + PYTHONPATH instead.
+  # Standalone: set PYTHONHOME to the prefix (original behaviour).
+  let bundledPy = resolveBundledPythonHome(getAppDir())
+  case bundledPy.kind
+  of bpkVenv:
+    # Activate the venv for this process: VIRTUAL_ENV, updated PATH, PYTHONPATH
+    # to site-packages so nimpy's embedded interpreter finds packages correctly.
+    putEnv("VIRTUAL_ENV", bundledPy.home)
+    let venvBin = bundledPy.home / "bin"
+    let existingPath = getEnv("PATH")
+    putEnv("PATH", venvBin & ":" & existingPath)
+    # Locate site-packages and expose it via PYTHONPATH.
+    let libDir = bundledPy.home / "lib"
+    var sitePkgs = ""
+    for kind, p in walkDir(libDir):
+      if kind == pcDir and p.lastPathPart.startsWith("python"):
+        let sp = p / "site-packages"
+        if dirExists(sp):
+          sitePkgs = sp
+          break
+    if sitePkgs.len > 0:
+      let existingPythonPath = getEnv("PYTHONPATH")
+      if existingPythonPath.len > 0:
+        putEnv("PYTHONPATH", sitePkgs & ":" & existingPythonPath)
+      else:
+        putEnv("PYTHONPATH", sitePkgs)
+  of bpkStandalone:
+    putEnv("PYTHONHOME", bundledPy.home)
+  of bpkNone:
+    discard  # Use system Python
 
   # ── Parse bridge-specific flags (consumed here, rest forwarded) ──
   var scriptPath = ""

@@ -4,7 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUNDLE_DIR="${PULSERVER_TEST_INSTALL_DIR:-$ROOT_DIR/.nim-test-bundle}"
 INSTALLER_PATH="${PULSERVER_TEST_INSTALLER:-$ROOT_DIR/.nim-test-bundle-installer.sh}"
-EXPECTED_BUNDLE_PY_MINOR="${PULSERVER_TEST_PY_MINOR:-3.11}"
 
 NIM_MAJOR="$(nim --version | awk '/Version/{print $4}' | cut -d. -f1)"
 if [[ "$NIM_MAJOR" -lt 2 ]]; then
@@ -15,17 +14,12 @@ fi
 echo "Running bridge Nim tests"
 
 NEED_BUNDLE_BUILD=0
-if [[ ! -x "$BUNDLE_DIR/bin/pypulseq_host" || ! -x "$BUNDLE_DIR/python/bin/python3" ]]; then
+if [[ ! -x "$BUNDLE_DIR/bin/pypulseq_host" || ! -f "$BUNDLE_DIR/python/pyvenv.cfg" ]]; then
   NEED_BUNDLE_BUILD=1
-else
-  BUNDLE_PY_MINOR="$($BUNDLE_DIR/python/bin/python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo unknown)"
-  if [[ "$BUNDLE_PY_MINOR" != "$EXPECTED_BUNDLE_PY_MINOR" ]]; then
-    NEED_BUNDLE_BUILD=1
-  fi
 fi
 
 if [[ "$NEED_BUNDLE_BUILD" -eq 1 ]]; then
-  echo "Building standalone pulserver bundle for tests"
+  echo "Building pulserver bundle for tests"
   rm -rf "$BUNDLE_DIR"
   rm -f "$INSTALLER_PATH"
   # For local/CI validation, prefer installing pulserver from this checkout.
@@ -40,7 +34,7 @@ if [[ ! -x "$PYBIN" ]]; then
   exit 1
 fi
 
-echo "Using bundled Python runtime: $($PYBIN -c 'import sys; print(sys.executable)')"
+echo "Using bundled Python venv: $($PYBIN -c 'import sys; print(sys.executable)')"
 
 # Verify bundled environment content matches production expectations.
 "$PYBIN" -c "import numpy, scipy, pypulseq, pulserver"
@@ -90,27 +84,17 @@ else
 fi
 echo "Using libpython: $PY_LIB"
 
+# Activate the venv for the test sub-shell: update PATH and PYTHONPATH
+# to site-packages.  Do NOT set PYTHONHOME (breaks venv activation).
+export VIRTUAL_ENV="$BUNDLE_DIR/python"
 export PATH="$BUNDLE_DIR/python/bin:$PATH"
 export PYTHONEXECUTABLE="$PYBIN"
 
-PY_HOME="$BUNDLE_DIR/python"
-PY_PATHS="$($PYBIN - <<'PY'
-import site
-paths = []
-try:
-  paths.extend(site.getsitepackages())
-except Exception:
-  pass
-print(":".join(paths))
-PY
-)"
-export PYTHONHOME="$PY_HOME"
-export PYTHONPLATLIBDIR="lib"
-export PYTHONNOUSERSITE="1"
+PY_PATHS="$($PYBIN -c 'import site; print(":".join(site.getsitepackages()))' 2>/dev/null || echo "")"
 if [[ -n "$PY_PATHS" ]]; then
   export PYTHONPATH="$PY_PATHS"
 fi
-echo "Using PYTHONHOME: $PYTHONHOME"
+echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
 
 (
   cd "$ROOT_DIR/bridge"
