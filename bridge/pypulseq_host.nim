@@ -62,7 +62,7 @@ proc nimOptsToPyOpts*(opts: Opts): PyObject =
   ## Constructs a ``pypulseq.Opts`` Python object from Nim ``Opts``.
   ## Both sides store maxGrad/maxSlew in Hz/m and Hz/m/s respectively.
   let pp = pyImport("pypulseq")
-  result = pp.callMethod("Opts",
+  result = callMethod(pp, "Opts",
     max_grad = opts.maxGrad,
     max_slew = opts.maxSlew,
     grad_raster_time = opts.gradRasterTime,
@@ -78,9 +78,9 @@ proc nimOptsToPyOpts*(opts: Opts): PyObject =
 proc protToPyDict*(prot: MRProtocolRef): PyObject =
   ## Serializes ``MRProtocolRef`` → Python dict of property dicts.
   let builtins = pyBuiltinsModule()
-  result = builtins.callMethod("dict")
+  result = callMethod(builtins, "dict")
   for key, prop in prot:
-    let d = builtins.callMethod("dict")
+    let d = callMethod(builtins, "dict")
     case prop.pType
     of ptInt:
       d["type"]  = "int";   d["value"] = prop.intVal
@@ -103,7 +103,7 @@ proc protToPyDict*(prot: MRProtocolRef): PyObject =
 
 proc pyDictGet(d: PyObject, key: string, default: string): string =
   ## Safely get a string from a Python dict, returning *default* if missing.
-  return d.callMethod("get", key, default).to(string)
+  return callMethod(d, "get", key, default).to(string)
 
 proc pyDictToProt*(pyDict: PyObject): MRProtocolRef =
   ## Deserializes Python dict → ``MRProtocolRef``.
@@ -141,15 +141,15 @@ type PyPlugin* = object
 proc loadPyPlugin*(scriptPath: string): PyPlugin =
   ## Loads a Python plugin module from *scriptPath* via ``importlib``.
   let importlib = pyImport("importlib.util")
-  let spec = importlib.callMethod("spec_from_file_location", "plugin", scriptPath)
-  let module = importlib.callMethod("module_from_spec", spec)
-  discard spec.loader.callMethod("exec_module", module)
+  let spec = callMethod(importlib, "spec_from_file_location", "plugin", scriptPath)
+  let module = callMethod(importlib, "module_from_spec", spec)
+  discard callMethod(spec.loader, "exec_module", module)
   result.module = module
 
 proc addPythonPath*(path: string) =
   ## Prepends *path* to ``sys.path`` to support local plugin imports.
   let sys = pyImport("sys")
-  discard sys.path.callMethod("insert", 0, path)
+  discard callMethod(sys.path, "insert", 0, path)
 
 # ── Callback wrappers ─────────────────────────────────────────────────────
 
