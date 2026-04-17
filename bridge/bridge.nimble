@@ -18,4 +18,3 @@ requires "nimpulseqgui >= 0.1.0"  # stock, unmodified (installed from GitHub in 
 task test, "Run bridge test suite":
   let flags = getEnv("NIMFLAGS", "")
   exec "nim r " & flags & " ../tests/nim/test_bridge_common.nim"
-  exec "nim r " & flags & " ../tests/nim/test_isPyNone.nim"

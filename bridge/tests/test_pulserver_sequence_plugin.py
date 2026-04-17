@@ -14,6 +14,7 @@ from pulserver import (
 )
 
 PHASE_ENCODE_STEPS = 128
+MILLISECONDS_PER_SECOND = 1000.0
 EXPECTED_VENV_NAME = "EnvPulserver"
 
 
@@ -28,7 +29,7 @@ class DemoPulseqSequence(PulseqSequence):
         te = protocol[UIParam.TE].value
         tr = protocol[UIParam.TR].value
         valid = te < tr
-        duration = tr * PHASE_ENCODE_STEPS / 1000.0 if valid else None
+        duration = tr * PHASE_ENCODE_STEPS / MILLISECONDS_PER_SECOND if valid else None
         info = f"TA = {duration:.2f} s" if valid else "TE must be < TR"
         return {"valid": valid, "duration": duration, "info": info}
 
@@ -42,6 +43,8 @@ _SEQUENCE = DemoPulseqSequence()
 
 def _assert_envpulserver() -> None:
     virtual_env = os.environ.get("VIRTUAL_ENV", "")
+    if not virtual_env:
+        raise RuntimeError("Expected VIRTUAL_ENV to be set to EnvPulserver, but it is empty")
     venv_root = Path(virtual_env)
     if venv_root.name != EXPECTED_VENV_NAME or not (venv_root / "pyvenv.cfg").is_file():
         raise RuntimeError(f"Expected EnvPulserver virtual env, got: {virtual_env}")

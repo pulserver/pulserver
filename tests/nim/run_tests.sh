@@ -76,7 +76,7 @@ echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
   echo "Installing nimpulseqgui from GitHub"
   nimble install -y https://github.com/nimpulseq/nimpulseqgui
   echo "Running tests with pythonVenvPath=$ENV_PULSERVER"
-  nim r $NIMFLAGS "$ROOT_DIR/tests/nim/test_bridge_common.nim"
+  nimble test
 
   # Integration check: compile host with canonical EnvPulserver path and verify
   # it can import and execute a user plugin backed by a PulseqSequence class.
