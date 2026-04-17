@@ -21,11 +21,16 @@ let installerBin = layoutRoot / "bin"
 discard existsOrCreateDir(installerBin)
 let installerPython = layoutRoot / "python"
 discard existsOrCreateDir(installerPython)
+# Must have lib/ + bin/ so resolveBundledPythonHome recognises it as bpkStandalone.
+discard existsOrCreateDir(installerPython / "lib")
+discard existsOrCreateDir(installerPython / "bin")
 doAssert resolveBundledPythonHome(installerBin, "").home == installerPython,
   "Expected installer layout to resolve to <root>/python"
 
 let devPython = installerBin / "python"
 discard existsOrCreateDir(devPython)
+discard existsOrCreateDir(devPython / "lib")
+discard existsOrCreateDir(devPython / "bin")
 doAssert resolveBundledPythonHome(installerBin, "").home == devPython,
   "Expected dev layout (<exe_dir>/python) to take precedence"
 
