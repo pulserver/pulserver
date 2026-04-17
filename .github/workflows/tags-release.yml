@@ -51,7 +51,10 @@ jobs:
           name: dist-wheels-${{ matrix.os }}
           path: wheelhouse/*.whl
 
-  build-installer:
+  # Build the bridge bundle using the PyPI release of pulserver.
+  # Runs after publish-to-pypi so the tag is already available on PyPI.
+  build-bridge-bundle:
+    needs: [publish-to-pypi]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,15 +64,20 @@ jobs:
         run: |
           curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
           echo "$HOME/.nimble/bin" >> $GITHUB_PATH
-      - name: Build installer
+      - name: Build bridge bundle (from PyPI release)
         env:
-          PULSERVER_PIP_SPEC: ${{ github.workspace }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: bash scripts/make_installer.sh pulserver_bridge_installer.sh
+          # Use the just-published PyPI version, pinned to the release tag.
+          PULSERVER_PIP_SPEC: "pulserver==${{ github.ref_name }}"
+        run: |
+          bash scripts/make_installer.sh pulserver_bridge_installer.sh
+          # Repack as tar.gz: named pulserver_bridge_<tag>.tar.gz
+          INSTALL_DIR="$(mktemp -d)"
+          bash pulserver_bridge_installer.sh "$INSTALL_DIR"
+          tar -czf "pulserver_bridge_${{ github.ref_name }}.tar.gz" -C "$INSTALL_DIR" .
       - uses: actions/upload-artifact@v4
         with:
-          name: pulserver-installer
-          path: pulserver_bridge_installer.sh
+          name: pulserver-bridge-bundle
+          path: pulserver_bridge_${{ github.ref_name }}.tar.gz
 
   publish-to-pypi:
     if: startsWith(github.ref, 'refs/tags/')
@@ -90,7 +98,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
-    needs: [publish-to-pypi, build-installer]
+    needs: [publish-to-pypi, build-bridge-bundle]
     runs-on: ubuntu-latest
     permissions:
       contents: write  # to create releases
@@ -103,8 +111,8 @@ jobs:
           merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
-          name: pulserver-installer
-          path: installer
+          name: pulserver-bridge-bundle
+          path: bundle
       - name: Sign the dists with Sigstore
         uses: sigstore/gh-action-sigstore-python@v2.1.1
         with:
@@ -121,8 +129,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           gh release upload '${{ github.ref_name }}' dist/** --repo '${{ github.repository }}'
-      - name: Upload installer to GitHub Release
+      - name: Upload bridge bundle to GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          gh release upload '${{ github.ref_name }}' installer/pulserver_bridge_installer.sh --repo '${{ github.repository }}'
+          gh release upload '${{ github.ref_name }}' bundle/*.tar.gz --repo '${{ github.repository }}'

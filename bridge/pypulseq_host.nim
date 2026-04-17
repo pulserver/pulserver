@@ -30,12 +30,12 @@ const pythonVenvPath {.strdefine.} = "/usr/g/bin/recon/research/EnvPulserver"
   ## Absolute path to the canonical scanner venv for pypulseq_host.
   ## Override at compile time with -d:pythonVenvPath=<path>.
 
-type BundledPythonKind = enum
+type BundledPythonKind* = enum
   bpkNone, bpkVenv, bpkStandalone
 
-type BundledPythonEnv = object
-  kind: BundledPythonKind
-  home: string  ## Root of the python dir (venv root or standalone prefix)
+type BundledPythonEnv* = object
+  kind*: BundledPythonKind
+  home*: string  ## Root of the python dir (venv root or standalone prefix)
 
 proc resolveBundledPythonHome*(exeDir: string): BundledPythonEnv =
   ## Resolves the Python environment for this process.

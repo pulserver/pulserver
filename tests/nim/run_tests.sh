@@ -74,13 +74,22 @@ if [[ -z "$PY_LIB" ]]; then
   exit 1
 fi
 
+# Create EnvPulserver as a copy of the bundle venv to test the canonical-path
+# code path in resolveBundledPythonHome (candidate 1 / pythonVenvPath define).
+ENV_PULSERVER="$BUNDLE_DIR/EnvPulserver"
+if [[ ! -d "$ENV_PULSERVER" ]]; then
+  echo "Creating EnvPulserver test venv at $ENV_PULSERVER"
+  cp -a "$BUNDLE_DIR/python" "$ENV_PULSERVER"
+  "$PYBIN" -m venv --upgrade "$ENV_PULSERVER"
+fi
+
 # Remove any stale nimpyTestLibPython define (e.g. from cached CI env),
 # then set it explicitly to this bundle's libpython.
 NIMFLAGS_CLEAN="$(echo "${NIMFLAGS:-}" | sed -E 's@(^| )-d:nimpyTestLibPython=[^ ]+@@g' | xargs)"
 if [[ -n "$NIMFLAGS_CLEAN" ]]; then
-  export NIMFLAGS="$NIMFLAGS_CLEAN -d:nimpyTestLibPython=$PY_LIB"
+  export NIMFLAGS="$NIMFLAGS_CLEAN -d:nimpyTestLibPython=$PY_LIB -d:pythonVenvPath=$ENV_PULSERVER"
 else
-  export NIMFLAGS="-d:nimpyTestLibPython=$PY_LIB"
+  export NIMFLAGS="-d:nimpyTestLibPython=$PY_LIB -d:pythonVenvPath=$ENV_PULSERVER"
 fi
 echo "Using libpython: $PY_LIB"
 
@@ -101,5 +110,6 @@ echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
   rm -rf "$HOME/.cache/nim/test_bridge_common_d" "$HOME/.cache/nim/test_isPyNone_d"
   echo "Installing nimpulseqgui from GitHub"
   nimble install -y https://github.com/nimpulseq/nimpulseqgui
+  echo "Running tests with pythonVenvPath=$ENV_PULSERVER"
   nimble test
 )

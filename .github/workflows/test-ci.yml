@@ -46,4 +46,8 @@ jobs:
           echo "$HOME/.nimble/bin" >> $GITHUB_PATH
 
       - name: Run Nim tests
+        # PULSERVER_TEST_PIP_SPEC points to the workspace checkout so the
+        # bundle (and EnvPulserver) are built from the current branch.
+        env:
+          PULSERVER_TEST_PIP_SPEC: ${{ github.workspace }}
         run: bash tests/nim/run_tests.sh
