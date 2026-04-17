@@ -37,14 +37,14 @@ type BundledPythonEnv* = object
   kind*: BundledPythonKind
   home*: string  ## Root of the python dir (venv root or standalone prefix)
 
-proc resolveBundledPythonHome*(exeDir: string): BundledPythonEnv =
+proc resolveBundledPythonHome*(exeDir: string; canonicalVenvPath: string = pythonVenvPath): BundledPythonEnv =
   ## Resolves the Python environment for this process.
   ## Search order:
   ##   1. Canonical absolute venv path (pythonVenvPath compile-time define)
   ##   2. <exe_dir>/<pythonHome>  (developer/test layout)
   ##   3. <exe_dir>/../<pythonHome>  (installer layout: exe in bin/, venv at sibling)
   let candidates = @[
-    pythonVenvPath,
+    canonicalVenvPath,
     exeDir / pythonHome,
     parentDir(exeDir) / pythonHome,
   ]

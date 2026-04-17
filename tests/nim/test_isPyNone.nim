@@ -21,12 +21,12 @@ let installerBin = layoutRoot / "bin"
 discard existsOrCreateDir(installerBin)
 let installerPython = layoutRoot / "python"
 discard existsOrCreateDir(installerPython)
-doAssert resolveBundledPythonHome(installerBin).home == installerPython,
+doAssert resolveBundledPythonHome(installerBin, "").home == installerPython,
   "Expected installer layout to resolve to <root>/python"
 
 let devPython = installerBin / "python"
 discard existsOrCreateDir(devPython)
-doAssert resolveBundledPythonHome(installerBin).home == devPython,
+doAssert resolveBundledPythonHome(installerBin, "").home == devPython,
   "Expected dev layout (<exe_dir>/python) to take precedence"
 
 # Verify the canonical pythonVenvPath (EnvPulserver) takes priority over relative
