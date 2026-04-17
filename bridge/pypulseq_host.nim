@@ -14,7 +14,8 @@
 import bridge_common
 import nimpulseqgui/io  # makeProtocolPreamble (GUI path only)
 import nimpy
-import std/[os, strutils, parseopt]
+import nimpy/py_lib as nimpy_lib
+import std/[dynlib, os, strutils, parseopt]
 
 proc isPyNone*(o: PyObject): bool =
   ## Returns true if the Python object is ``None``.
@@ -56,13 +57,46 @@ proc resolveBundledPythonHome*(exeDir: string; canonicalVenvPath: string = pytho
         return BundledPythonEnv(kind: bpkStandalone, home: candidate)
   return BundledPythonEnv(kind: bpkNone, home: "")
 
+proc findLibPythonInVenv*(venvHome: string): tuple[libPython, baseLibDir: string] =
+  ## Locates the ``libpython3.X.so`` (or ``.so.1.0``) that the venv's
+  ## Python installation provides, plus the base lib directory.
+  ## Returns empty strings if not found.
+  ##
+  ## Strategy: parse ``pyvenv.cfg``'s ``home`` key (the bin dir of the base
+  ## Python installation), then search its sibling ``lib/`` directory for the
+  ## highest-versioned ``libpython3.*.so*`` file.
+  let cfgPath = venvHome / "pyvenv.cfg"
+  if not fileExists(cfgPath):
+    return ("", "")
+  var pythonBinDir = ""
+  for line in lines(cfgPath):
+    let stripped = line.strip()
+    if stripped.startsWith("home ") or stripped.startsWith("home="):
+      let parts = stripped.split('=', maxsplit = 1)
+      if parts.len == 2 and parts[0].strip() == "home":
+        pythonBinDir = parts[1].strip()
+        break
+  if pythonBinDir.len == 0:
+    return ("", "")
+  # The lib dir is typically <prefix>/lib where prefix = parentDir(bindir).
+  let libDir = parentDir(pythonBinDir) / "lib"
+  if not dirExists(libDir):
+    return ("", "")
+  # Prefer the most specific versioned .so first (e.g. libpython3.13.so.1.0).
+  for v in ["3.13", "3.12", "3.11", "3.10", "3.9", "3.8"]:
+    for suffix in [".so.1.0", ".so.1", ".so"]:
+      let candidate = libDir / "libpython" & v & suffix
+      if fileExists(candidate):
+        return (candidate, libDir)
+  return ("", libDir)
+
 # ── Marshalling: Nim → Python ──────────────────────────────────────────────
 
 proc nimOptsToPyOpts*(opts: Opts): PyObject =
   ## Constructs a ``pypulseq.Opts`` Python object from Nim ``Opts``.
   ## Both sides store maxGrad/maxSlew in Hz/m and Hz/m/s respectively.
   let pp = pyImport("pypulseq")
-  result = pp.callMethod("Opts",
+  result = pp.Opts(
     max_grad = opts.maxGrad,
     max_slew = opts.maxSlew,
     grad_raster_time = opts.gradRasterTime,
@@ -156,15 +190,15 @@ proc addPythonPath*(path: string) =
 proc wrapGetDefaultProtocol*(plugin: PyPlugin): ProcGetDefaultProtocol =
   ## Wraps ``plugin.get_default_protocol(pyOpts) → dict`` as ``ProcGetDefaultProtocol``.
   return proc(opts: Opts): MRProtocolRef =
-    let pyResult = plugin.module.callMethod("get_default_protocol", nimOptsToPyOpts(opts))
+    let pyResult = plugin.module.get_default_protocol(nimOptsToPyOpts(opts))
     return pyDictToProt(pyResult)
 
 proc wrapValidateRich*(plugin: PyPlugin): ProcValidateRich =
   ## Wraps ``plugin.validate_protocol(pyOpts, prot_dict) → dict`` as ``ProcValidateRich``.
   ## Returns the full ``ValidationResult{valid, duration, info}``.
   return proc(opts: Opts, prot: MRProtocolRef): ValidationResult =
-    let pyResult = plugin.module.callMethod("validate_protocol",
-                                             nimOptsToPyOpts(opts), protToPyDict(prot))
+    let pyResult = plugin.module.validate_protocol(
+      nimOptsToPyOpts(opts), protToPyDict(prot))
     result.valid = pyResult["valid"].to(bool)
     let pyDur = pyResult["duration"]
     result.duration = if pyDur.isPyNone(): -1.0 else: pyDur.to(float)
@@ -181,8 +215,8 @@ proc wrapValidateProtocol*(plugin: PyPlugin): ProcValidateProtocol =
 proc callMakeSequenceFile*(plugin: PyPlugin, opts: Opts, prot: MRProtocolRef, outPath: string) =
   ## Calls Python ``make_sequence(opts, protocol, output_path)``.
   ## The plugin writes the ``.seq`` file to *outPath* directly.
-  discard plugin.module.callMethod("make_sequence",
-                                    nimOptsToPyOpts(opts), protToPyDict(prot), outPath)
+  discard plugin.module.make_sequence(
+    nimOptsToPyOpts(opts), protToPyDict(prot), outPath)
 
 proc wrapMakeSequence*(plugin: PyPlugin): ProcMakeSequence =
   ## Wraps ``plugin.make_sequence`` as nimpulseqgui's ``ProcMakeSequence``.
@@ -245,6 +279,38 @@ proc main() =
         putEnv("PYTHONPATH", sitePkgs & ":" & existingPythonPath)
       else:
         putEnv("PYTHONPATH", sitePkgs)
+    # Tell nimpy to load the libpython from the venv's base Python installation
+    # instead of whatever the system linker finds first.  This is critical when
+    # the venv's Python version differs from the system Python.
+    # Also preload shared libraries from the base installation's lib dir with
+    # RTLD_GLOBAL so that Python extension modules (e.g. pyexpat) find their
+    # native dependencies (e.g. libexpat) from the same installation.
+    # putEnv("LD_LIBRARY_PATH") does NOT work because glibc caches the value
+    # at process startup; explicit preloading via dlopen is required.
+    let (venvLibPython, baseLibDir) = findLibPythonInVenv(bundledPy.home)
+    if baseLibDir.len > 0:
+      # Preload only the shared libraries that Python's C extension modules
+      # commonly link against.  We avoid loading everything in lib/ because
+      # compiler runtimes (libasan, libhwasan, libtsan, …) can break the
+      # process.  The list below covers the standard-library extensions that
+      # ship with CPython (pyexpat, _ssl, zlib, _bz2, _lzma, _sqlite3,
+      # _ctypes, readline, _curses, _hashlib, _uuid, _dbm).
+      const preloadPrefixes = [
+        "libexpat.so", "libz.so", "libssl.so", "libcrypto.so",
+        "libffi.so", "libbz2.so", "liblzma.so", "libsqlite3.so",
+        "libreadline.so", "libncurses.so", "libncursesw.so",
+        "libuuid.so", "libgdbm.so", "libmpdec.so", "libmpdec++.so",
+      ]
+      for kind, p in walkDir(baseLibDir):
+        if kind != pcFile:
+          continue
+        let name = p.lastPathPart
+        for prefix in preloadPrefixes:
+          if name.startsWith(prefix):
+            discard loadLib(p, globalSymbols = true)
+            break
+    if venvLibPython.len > 0:
+      nimpy_lib.pyInitLibPath(venvLibPython)
   of bpkStandalone:
     putEnv("PYTHONHOME", bundledPy.home)
   of bpkNone:

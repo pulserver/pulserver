@@ -39,41 +39,6 @@ echo "Using bundled Python venv: $($PYBIN -c 'import sys; print(sys.executable)'
 # Verify bundled environment content matches production expectations.
 "$PYBIN" -c "import numpy, scipy, pypulseq, pulserver"
 
-# Force nimpy to load the selected interpreter's libpython.
-PY_LIB="$($PYBIN - <<'PY'
-import glob
-import os
-import sys
-import sysconfig
-
-libdir = sysconfig.get_config_var("LIBDIR") or ""
-ldlib = sysconfig.get_config_var("LDLIBRARY") or ""
-candidates = []
-if libdir and ldlib:
-    candidates.append(os.path.join(libdir, ldlib))
-
-maj, min_ = sys.version_info[:2]
-patterns = [
-    os.path.join(libdir, f"libpython{maj}.{min_}*.so*"),
-    os.path.join(sys.base_prefix, "lib", f"libpython{maj}.{min_}*.so*"),
-]
-for pat in patterns:
-    candidates.extend(sorted(glob.glob(pat)))
-
-for c in candidates:
-    if c and os.path.exists(c):
-        print(c)
-        raise SystemExit(0)
-
-raise SystemExit(1)
-PY
-)"
-
-if [[ -z "$PY_LIB" ]]; then
-  echo "Error: could not locate libpython for $PYBIN"
-  exit 1
-fi
-
 # Create EnvPulserver as a copy of the bundle venv to test the canonical-path
 # code path in resolveBundledPythonHome (candidate 1 / pythonVenvPath define).
 ENV_PULSERVER="$BUNDLE_DIR/EnvPulserver"
@@ -83,15 +48,15 @@ if [[ ! -d "$ENV_PULSERVER" ]]; then
   "$PYBIN" -m venv --upgrade "$ENV_PULSERVER"
 fi
 
-# Remove any stale nimpyTestLibPython define (e.g. from cached CI env),
-# then set it explicitly to this bundle's libpython.
+# Explicitly strip any nimpyTestLibPython define (including inherited NIMFLAGS),
+# because nimpy's test-only libpython hook has shown CI instability/OOM here.
+# Keep only the bridge-specific canonical venv define.
 NIMFLAGS_CLEAN="$(echo "${NIMFLAGS:-}" | sed -E 's@(^| )-d:nimpyTestLibPython=[^ ]+@@g' | xargs)"
 if [[ -n "$NIMFLAGS_CLEAN" ]]; then
-  export NIMFLAGS="$NIMFLAGS_CLEAN -d:nimpyTestLibPython=$PY_LIB -d:pythonVenvPath=$ENV_PULSERVER"
+  export NIMFLAGS="$NIMFLAGS_CLEAN -d:pythonVenvPath=$ENV_PULSERVER"
 else
-  export NIMFLAGS="-d:nimpyTestLibPython=$PY_LIB -d:pythonVenvPath=$ENV_PULSERVER"
+  export NIMFLAGS="-d:pythonVenvPath=$ENV_PULSERVER"
 fi
-echo "Using libpython: $PY_LIB"
 
 # Activate the venv for the test sub-shell: update PATH and PYTHONPATH
 # to site-packages.  Do NOT set PYTHONHOME (breaks venv activation).
@@ -112,4 +77,48 @@ echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
   nimble install -y https://github.com/nimpulseq/nimpulseqgui
   echo "Running tests with pythonVenvPath=$ENV_PULSERVER"
   nimble test
+
+  # Integration check: compile host with canonical EnvPulserver path and verify
+  # it can import and execute a user plugin backed by a PulseqSequence class.
+  mkdir -p "$BUNDLE_DIR/bin"
+  TEST_HOST_BIN="$BUNDLE_DIR/bin/pypulseq_host_test"
+  TEST_PLUGIN="$ROOT_DIR/bridge/tests/test_pulserver_sequence_plugin.py"
+  TEST_SEQ_OUT="$BUNDLE_DIR/pulserver_sequence_plugin.seq"
+
+  if ! nim c -d:release -d:pythonVenvPath="$ENV_PULSERVER" -o:"$TEST_HOST_BIN" "$ROOT_DIR/bridge/pypulseq_host.nim"; then
+    echo "Failed to compile test host binary: $TEST_HOST_BIN" >&2
+    exit 1
+  fi
+
+  if ! VALIDATION_OUT="$("$TEST_HOST_BIN" --script "$TEST_PLUGIN" --validate-only 2>&1)"; then
+    echo "Host validate-only execution failed for $TEST_PLUGIN:" >&2
+    echo "$VALIDATION_OUT" >&2
+    exit 1
+  fi
+  echo "$VALIDATION_OUT"
+  if ! echo "$VALIDATION_OUT" | grep -q '"valid": true'; then
+    echo "Expected validate-only output to contain '\"valid\": true' for $TEST_PLUGIN but got: $VALIDATION_OUT" >&2
+    exit 1
+  fi
+
+  if ! {
+    echo "GENERATE $TEST_SEQ_OUT"
+    echo "[NimPulseqGUI Protocol]"
+    echo "[NimPulseqGUI Protocol End]"
+    echo "QUIT"
+  } | "$TEST_HOST_BIN" --script "$TEST_PLUGIN" --persistent > "$BUNDLE_DIR/persistent_host_test.out" 2>&1; then
+    echo "Host persistent execution failed for $TEST_PLUGIN:" >&2
+    cat "$BUNDLE_DIR/persistent_host_test.out" >&2
+    exit 1
+  fi
+
+  grep "GENERATED $TEST_SEQ_OUT" "$BUNDLE_DIR/persistent_host_test.out" || {
+    echo "Expected GENERATED line not found in $BUNDLE_DIR/persistent_host_test.out" >&2
+    cat "$BUNDLE_DIR/persistent_host_test.out" >&2
+    exit 1
+  }
+  test -s "$TEST_SEQ_OUT" || {
+    echo "Sequence file was not created or is empty: $TEST_SEQ_OUT" >&2
+    exit 1
+  }
 )
