@@ -32,20 +32,17 @@ def _assert_envpulserver() -> None:
         raise RuntimeError(f"Expected EnvPulserver virtual env, got: {virtual_env}")
 
 
-def get_default_protocol(opts):
-    _ = opts
+def get_default_protocol(_opts):
     _assert_envpulserver()
     return _default_protocol()
 
 
-def validate_protocol(opts, protocol):
-    _ = opts
+def validate_protocol(_opts, protocol):
     _assert_envpulserver()
     return _validate(protocol)
 
 
-def make_sequence(opts, protocol, output_path):
-    _ = opts
+def make_sequence(_opts, protocol, output_path):
     _assert_envpulserver()
     _make_sequence(protocol, output_path)
 
