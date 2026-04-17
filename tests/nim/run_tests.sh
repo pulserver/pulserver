@@ -39,41 +39,6 @@ echo "Using bundled Python venv: $($PYBIN -c 'import sys; print(sys.executable)'
 # Verify bundled environment content matches production expectations.
 "$PYBIN" -c "import numpy, scipy, pypulseq, pulserver"
 
-# Force nimpy to load the selected interpreter's libpython.
-PY_LIB="$($PYBIN - <<'PY'
-import glob
-import os
-import sys
-import sysconfig
-
-libdir = sysconfig.get_config_var("LIBDIR") or ""
-ldlib = sysconfig.get_config_var("LDLIBRARY") or ""
-candidates = []
-if libdir and ldlib:
-    candidates.append(os.path.join(libdir, ldlib))
-
-maj, min_ = sys.version_info[:2]
-patterns = [
-    os.path.join(libdir, f"libpython{maj}.{min_}*.so*"),
-    os.path.join(sys.base_prefix, "lib", f"libpython{maj}.{min_}*.so*"),
-]
-for pat in patterns:
-    candidates.extend(sorted(glob.glob(pat)))
-
-for c in candidates:
-    if c and os.path.exists(c):
-        print(c)
-        raise SystemExit(0)
-
-raise SystemExit(1)
-PY
-)"
-
-if [[ -z "$PY_LIB" ]]; then
-  echo "Error: could not locate libpython for $PYBIN"
-  exit 1
-fi
-
 # Create EnvPulserver as a copy of the bundle venv to test the canonical-path
 # code path in resolveBundledPythonHome (candidate 1 / pythonVenvPath define).
 ENV_PULSERVER="$BUNDLE_DIR/EnvPulserver"
@@ -83,15 +48,14 @@ if [[ ! -d "$ENV_PULSERVER" ]]; then
   "$PYBIN" -m venv --upgrade "$ENV_PULSERVER"
 fi
 
-# Remove any stale nimpyTestLibPython define (e.g. from cached CI env),
-# then set it explicitly to this bundle's libpython.
+# Remove any stale nimpyTestLibPython define (its test hook path causes
+# instability with CI runners) and force only the bridge's canonical venv path.
 NIMFLAGS_CLEAN="$(echo "${NIMFLAGS:-}" | sed -E 's@(^| )-d:nimpyTestLibPython=[^ ]+@@g' | xargs)"
 if [[ -n "$NIMFLAGS_CLEAN" ]]; then
-  export NIMFLAGS="$NIMFLAGS_CLEAN -d:nimpyTestLibPython=$PY_LIB -d:pythonVenvPath=$ENV_PULSERVER"
+  export NIMFLAGS="$NIMFLAGS_CLEAN -d:pythonVenvPath=$ENV_PULSERVER"
 else
-  export NIMFLAGS="-d:nimpyTestLibPython=$PY_LIB -d:pythonVenvPath=$ENV_PULSERVER"
+  export NIMFLAGS="-d:pythonVenvPath=$ENV_PULSERVER"
 fi
-echo "Using libpython: $PY_LIB"
 
 # Activate the venv for the test sub-shell: update PATH and PYTHONPATH
 # to site-packages.  Do NOT set PYTHONHOME (breaks venv activation).
