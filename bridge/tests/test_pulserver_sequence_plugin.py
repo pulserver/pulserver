@@ -39,7 +39,7 @@ _SEQUENCE = DemoPulseqSequence()
 
 def _assert_envpulserver() -> None:
     virtual_env = os.environ.get("VIRTUAL_ENV", "")
-    if not virtual_env.endswith("EnvPulserver"):
+    if Path(virtual_env).name != "EnvPulserver":
         raise RuntimeError(f"Expected EnvPulserver virtual env, got: {virtual_env}")
 
 

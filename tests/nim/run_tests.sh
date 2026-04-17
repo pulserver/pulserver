@@ -72,7 +72,7 @@ echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
 
 (
   cd "$ROOT_DIR/bridge"
-  rm -rf "$HOME/.cache/nim/test_bridge_common_d"
+  rm -rf "$HOME/.cache/nim/test_bridge_common_d" "$HOME/.cache/nim/test_isPyNone_d"
   echo "Installing nimpulseqgui from GitHub"
   nimble install -y https://github.com/nimpulseq/nimpulseqgui
   echo "Running tests with pythonVenvPath=$ENV_PULSERVER"
@@ -88,7 +88,10 @@ echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
 
   VALIDATION_OUT="$("$TEST_HOST_BIN" --script "$TEST_PLUGIN" --validate-only)"
   echo "$VALIDATION_OUT"
-  echo "$VALIDATION_OUT" | grep '"valid": true'
+  if ! echo "$VALIDATION_OUT" | grep -q '"valid": true'; then
+    echo "Expected validate-only output to contain '\"valid\": true'" >&2
+    exit 1
+  fi
 
   {
     echo "GENERATE $TEST_SEQ_OUT"
