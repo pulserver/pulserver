@@ -156,15 +156,15 @@ proc addPythonPath*(path: string) =
 proc wrapGetDefaultProtocol*(plugin: PyPlugin): ProcGetDefaultProtocol =
   ## Wraps ``plugin.get_default_protocol(pyOpts) → dict`` as ``ProcGetDefaultProtocol``.
   return proc(opts: Opts): MRProtocolRef =
-    let pyResult = plugin.module.callMethod("get_default_protocol", nimOptsToPyOpts(opts))
+    let pyResult = plugin.module.getAttr("get_default_protocol").call(nimOptsToPyOpts(opts))
     return pyDictToProt(pyResult)
 
 proc wrapValidateRich*(plugin: PyPlugin): ProcValidateRich =
   ## Wraps ``plugin.validate_protocol(pyOpts, prot_dict) → dict`` as ``ProcValidateRich``.
   ## Returns the full ``ValidationResult{valid, duration, info}``.
   return proc(opts: Opts, prot: MRProtocolRef): ValidationResult =
-    let pyResult = plugin.module.callMethod("validate_protocol",
-                                             nimOptsToPyOpts(opts), protToPyDict(prot))
+    let pyResult = plugin.module.getAttr("validate_protocol").call(
+      nimOptsToPyOpts(opts), protToPyDict(prot))
     result.valid = pyResult["valid"].to(bool)
     let pyDur = pyResult["duration"]
     result.duration = if pyDur.isPyNone(): -1.0 else: pyDur.to(float)
@@ -181,8 +181,8 @@ proc wrapValidateProtocol*(plugin: PyPlugin): ProcValidateProtocol =
 proc callMakeSequenceFile*(plugin: PyPlugin, opts: Opts, prot: MRProtocolRef, outPath: string) =
   ## Calls Python ``make_sequence(opts, protocol, output_path)``.
   ## The plugin writes the ``.seq`` file to *outPath* directly.
-  discard plugin.module.callMethod("make_sequence",
-                                    nimOptsToPyOpts(opts), protToPyDict(prot), outPath)
+  discard plugin.module.getAttr("make_sequence").call(
+    nimOptsToPyOpts(opts), protToPyDict(prot), outPath)
 
 proc wrapMakeSequence*(plugin: PyPlugin): ProcMakeSequence =
   ## Wraps ``plugin.make_sequence`` as nimpulseqgui's ``ProcMakeSequence``.
