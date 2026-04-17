@@ -56,7 +56,7 @@ def _default_protocol():
             "max": 100.0,
             "incr": 0.1,
             "unit": "ms",
-            "validate": "search",
+            "validate": "none",
         },
         "TR": {
             "type": "float",
@@ -65,7 +65,7 @@ def _default_protocol():
             "max": 2000.0,
             "incr": 0.1,
             "unit": "ms",
-            "validate": "search",
+            "validate": "none",
         },
     }
 
