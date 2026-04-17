@@ -89,5 +89,9 @@ nimble build
 Compile-time configuration:
 
 ```bash
+# Override the canonical venv path (default: /usr/g/bin/recon/research/EnvPulserver)
+nim c -d:pythonVenvPath=/custom/path/EnvPulserver pypulseq_host.nim
+
+# Override the relative fallback (used when canonical path does not exist)
 nim c -d:pythonHome=./python pypulseq_host.nim
 ```
