@@ -62,7 +62,7 @@ proc nimOptsToPyOpts*(opts: Opts): PyObject =
   ## Constructs a ``pypulseq.Opts`` Python object from Nim ``Opts``.
   ## Both sides store maxGrad/maxSlew in Hz/m and Hz/m/s respectively.
   let pp = pyImport("pypulseq")
-  result = pp.callMethod("Opts",
+  result = pp.Opts(
     max_grad = opts.maxGrad,
     max_slew = opts.maxSlew,
     grad_raster_time = opts.gradRasterTime,
