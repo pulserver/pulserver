@@ -89,7 +89,7 @@ echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
   VALIDATION_OUT="$("$TEST_HOST_BIN" --script "$TEST_PLUGIN" --validate-only)"
   echo "$VALIDATION_OUT"
   if ! echo "$VALIDATION_OUT" | grep -q '"valid": true'; then
-    echo "Expected validate-only output to contain '\"valid\": true' for $TEST_PLUGIN" >&2
+    echo "Expected validate-only output to contain '\"valid\": true' for $TEST_PLUGIN but got: $VALIDATION_OUT" >&2
     exit 1
   fi
 
@@ -102,6 +102,7 @@ echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
 
   grep "GENERATED $TEST_SEQ_OUT" "$BUNDLE_DIR/persistent_host_test.out" || {
     echo "Expected GENERATED line not found in $BUNDLE_DIR/persistent_host_test.out" >&2
+    cat "$BUNDLE_DIR/persistent_host_test.out" >&2
     exit 1
   }
   test -s "$TEST_SEQ_OUT" || {
