@@ -71,9 +71,9 @@ proc findLibPythonInVenv*(venvHome: string): tuple[libPython, baseLibDir: string
   var pythonBinDir = ""
   for line in lines(cfgPath):
     let stripped = line.strip()
-    if stripped.startsWith("home"):
+    if stripped.startsWith("home ") or stripped.startsWith("home="):
       let parts = stripped.split('=', maxsplit = 1)
-      if parts.len == 2:
+      if parts.len == 2 and parts[0].strip() == "home":
         pythonBinDir = parts[1].strip()
         break
   if pythonBinDir.len == 0:
