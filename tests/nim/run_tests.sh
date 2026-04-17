@@ -80,6 +80,7 @@ echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
 
   # Integration check: compile host with canonical EnvPulserver path and verify
   # it can import and execute a user plugin backed by a PulseqSequence class.
+  mkdir -p "$BUNDLE_DIR/bin"
   TEST_HOST_BIN="$BUNDLE_DIR/bin/pypulseq_host_test"
   TEST_PLUGIN="$ROOT_DIR/bridge/tests/test_pulserver_sequence_plugin.py"
   TEST_SEQ_OUT="$BUNDLE_DIR/pulserver_sequence_plugin.seq"

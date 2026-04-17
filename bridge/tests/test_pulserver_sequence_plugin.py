@@ -25,7 +25,8 @@ class DemoPulseqSequence(PulseqSequence):
         te = protocol[UIParam.TE].value
         tr = protocol[UIParam.TR].value
         valid = te < tr
-        duration = tr * 128 / 1000.0 if valid else None
+        phase_encode_steps = 128
+        duration = tr * phase_encode_steps / 1000.0 if valid else None
         info = f"TA = {duration:.2f} s" if valid else "TE must be < TR"
         return {"valid": valid, "duration": duration, "info": info}
 
