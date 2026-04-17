@@ -48,8 +48,9 @@ if [[ ! -d "$ENV_PULSERVER" ]]; then
   "$PYBIN" -m venv --upgrade "$ENV_PULSERVER"
 fi
 
-# Remove any stale nimpyTestLibPython define (its test hook path causes
-# instability with CI runners) and force only the bridge's canonical venv path.
+# Explicitly strip any nimpyTestLibPython define (including inherited NIMFLAGS),
+# because nimpy's test-only libpython hook has shown CI instability/OOM here.
+# Keep only the bridge-specific canonical venv define.
 NIMFLAGS_CLEAN="$(echo "${NIMFLAGS:-}" | sed -E 's@(^| )-d:nimpyTestLibPython=[^ ]+@@g' | xargs)"
 if [[ -n "$NIMFLAGS_CLEAN" ]]; then
   export NIMFLAGS="$NIMFLAGS_CLEAN -d:pythonVenvPath=$ENV_PULSERVER"
