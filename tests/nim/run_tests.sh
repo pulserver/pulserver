@@ -85,7 +85,10 @@ echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
   TEST_PLUGIN="$ROOT_DIR/bridge/tests/test_pulserver_sequence_plugin.py"
   TEST_SEQ_OUT="$BUNDLE_DIR/pulserver_sequence_plugin.seq"
 
-  nim c -d:release -d:pythonVenvPath="$ENV_PULSERVER" -o:"$TEST_HOST_BIN" "$ROOT_DIR/bridge/pypulseq_host.nim"
+  if ! nim c -d:release -d:pythonVenvPath="$ENV_PULSERVER" -o:"$TEST_HOST_BIN" "$ROOT_DIR/bridge/pypulseq_host.nim"; then
+    echo "Failed to compile test host binary: $TEST_HOST_BIN" >&2
+    exit 1
+  fi
 
   if ! VALIDATION_OUT="$("$TEST_HOST_BIN" --script "$TEST_PLUGIN" --validate-only 2>&1)"; then
     echo "Host validate-only execution failed for $TEST_PLUGIN:" >&2
