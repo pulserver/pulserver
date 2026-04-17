@@ -87,19 +87,27 @@ echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
 
   nim c -d:release -d:pythonVenvPath="$ENV_PULSERVER" -o:"$TEST_HOST_BIN" "$ROOT_DIR/bridge/pypulseq_host.nim"
 
-  VALIDATION_OUT="$("$TEST_HOST_BIN" --script "$TEST_PLUGIN" --validate-only)"
+  if ! VALIDATION_OUT="$("$TEST_HOST_BIN" --script "$TEST_PLUGIN" --validate-only 2>&1)"; then
+    echo "Host validate-only execution failed for $TEST_PLUGIN:" >&2
+    echo "$VALIDATION_OUT" >&2
+    exit 1
+  fi
   echo "$VALIDATION_OUT"
   if ! echo "$VALIDATION_OUT" | grep -q '"valid": true'; then
     echo "Expected validate-only output to contain '\"valid\": true' for $TEST_PLUGIN but got: $VALIDATION_OUT" >&2
     exit 1
   fi
 
-  {
+  if ! {
     echo "GENERATE $TEST_SEQ_OUT"
     echo "[NimPulseqGUI Protocol]"
     echo "[NimPulseqGUI Protocol End]"
     echo "QUIT"
-  } | "$TEST_HOST_BIN" --script "$TEST_PLUGIN" --persistent > "$BUNDLE_DIR/persistent_host_test.out"
+  } | "$TEST_HOST_BIN" --script "$TEST_PLUGIN" --persistent > "$BUNDLE_DIR/persistent_host_test.out" 2>&1; then
+    echo "Host persistent execution failed for $TEST_PLUGIN:" >&2
+    cat "$BUNDLE_DIR/persistent_host_test.out" >&2
+    exit 1
+  fi
 
   grep "GENERATED $TEST_SEQ_OUT" "$BUNDLE_DIR/persistent_host_test.out" || {
     echo "Expected GENERATED line not found in $BUNDLE_DIR/persistent_host_test.out" >&2

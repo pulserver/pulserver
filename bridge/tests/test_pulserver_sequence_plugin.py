@@ -40,7 +40,8 @@ _SEQUENCE = DemoPulseqSequence()
 
 def _assert_envpulserver() -> None:
     virtual_env = os.environ.get("VIRTUAL_ENV", "")
-    if Path(virtual_env).name != "EnvPulserver":
+    venv_root = Path(virtual_env)
+    if venv_root.name != "EnvPulserver" or not (venv_root / "pyvenv.cfg").is_file():
         raise RuntimeError(f"Expected EnvPulserver virtual env, got: {virtual_env}")
 
 
