@@ -282,13 +282,25 @@ class UIParam:
 
     @staticmethod
     def user_value(n: int) -> str:
-        """SeqParams user value key: user1_value..user19_value."""
+        """SeqParams user value key: user0_value..user16_value.
+
+        Indices are 0-based.  ``userN_value`` maps to ``opuser(N+3)``
+        (i.e. ``opuser3``..``opuser19``).
+
+        The following opuser slots are reserved by the runtime and are
+        **not** reachable from Python:
+
+        * ``opuser0`` — file-mode seqfile index
+        * ``opuser1`` — physio recording channel bitmask (set via
+          ``UIParam.RECORD_PHYSIO``)
+        * ``opuser2`` — diffusion tensor file index (0 = none)
+        """
         _validate_user_index(n)
         return f"user{n}_value"
 
     @staticmethod
     def user_name(n: int) -> str:
-        """SeqParams/UIControls user-name key: user1_name..user19_name."""
+        """SeqParams/UIControls user-name key: user0_name..user16_name."""
         _validate_user_index(n)
         return f"user{n}_name"
 
@@ -312,8 +324,8 @@ class UIParam:
 
 
 def _validate_user_index(n: int) -> None:
-    if not 1 <= n < 20:
-        raise ValueError("User slot index must be in [1, 19] (user0 reserved for PSD).")
+    if not 0 <= n <= 16:
+        raise ValueError("User slot index must be in [0, 16] (opuser0-2 are reserved; user0..user16 map to opuser3..opuser19).")
 
 
 # ---------------------------------------------------------------------------
