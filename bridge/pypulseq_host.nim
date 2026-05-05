@@ -15,7 +15,8 @@ import bridge_common
 import nimpulseqgui/io  # makeProtocolPreamble (GUI path only)
 import nimpy
 import nimpy/py_lib as nimpy_lib
-import std/[dynlib, os, strutils, parseopt]
+import std/[dynlib, os, strutils, parseopt, times]
+import posix
 
 proc isPyNone*(o: PyObject): bool =
   ## Returns true if the Python object is ``None``.
@@ -322,9 +323,11 @@ proc main() =
   var validateOnly = false
   var listProtocol = false
   var persistentMode = false
+  var idleTimeoutSecs = 0  ## 0 = disabled
   var forwardArgs: seq[string] = @[]  # args to forward to makeSequenceExe
   var expectScriptPath = false
   var expectProtocolString = false
+  var expectIdleTimeout = false
 
   for kind, key, val in getopt():
     case kind
@@ -335,6 +338,9 @@ proc main() =
       elif expectProtocolString:
         inputProtocolString = key
         expectProtocolString = false
+      elif expectIdleTimeout:
+        idleTimeoutSecs = parseInt(key)
+        expectIdleTimeout = false
       else:
         forwardArgs.add(key)
     of cmdLongOption, cmdShortOption:
@@ -351,6 +357,9 @@ proc main() =
         listProtocol = true
       of "persistent":
         persistentMode = true
+      of "idle-timeout":
+        if val.len > 0: idleTimeoutSecs = parseInt(val)
+        else: expectIdleTimeout = true
       of "h", "help":
         printBridgeHelp()
         quit(0)
@@ -367,6 +376,14 @@ proc main() =
     echo "Error: --script is required."
     printBridgeHelp()
     quit(1)
+
+  # Apply env var fallback for idle timeout (used when spawned via bridge API
+  # which does not support extra CLI flags beyond scanner opts).
+  if idleTimeoutSecs == 0:
+    let envTimeout = getEnv("PYPULSEQ_HOST_IDLE_TIMEOUT", "")
+    if envTimeout.len > 0:
+      try: idleTimeoutSecs = parseInt(envTimeout)
+      except ValueError: discard
 
   let pluginScriptPath = scriptPath
 
@@ -424,8 +441,34 @@ proc main() =
       # Each command starts from defaultProt (the plugin's fixed schema).
       # No state is carried between commands — persistence is purely about
       # keeping the Python interpreter warm.
+      #
+      # Idle timeout: if idleTimeoutSecs > 0, exit cleanly after that many
+      # seconds of inactivity (no command received).
+      var lastActivity = epochTime()
+      let stdinFd = cint(0)  # STDIN_FILENO
       while true:
-        let cmd = stdin.readLine().strip()
+        var cmd: string
+        if idleTimeoutSecs > 0:
+          # Poll stdin with a 5-second tick so we can check idle time.
+          var readSet: TFdSet
+          FD_ZERO(readSet)
+          FD_SET(stdinFd, readSet)
+          var tv: Timeval
+          tv.tv_sec = posix.Time(5)
+          tv.tv_usec = 0
+          let ready = posix.select(stdinFd + 1, addr readSet, nil, nil, addr tv)
+          if ready == 0:
+            # Timeout tick — check idle duration
+            let idle = epochTime() - lastActivity
+            if idle >= float(idleTimeoutSecs):
+              break  # exit cleanly
+            continue
+          elif ready < 0:
+            break  # select error
+          cmd = stdin.readLine().strip()
+          lastActivity = epochTime()
+        else:
+          cmd = stdin.readLine().strip()
         if cmd == "QUIT" or cmd == "":
           break
         elif cmd == "LIST_PROTOCOL":
