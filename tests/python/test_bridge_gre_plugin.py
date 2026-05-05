@@ -19,15 +19,7 @@ def _load_plugin_module(plugin_path: Path):
 @pytest.fixture
 def sequence5_plugin_module():
     workspace_root = Path(__file__).resolve().parents[3]
-    plugin_path = (
-        workspace_root
-        / "pulserver-interpreter"
-        / "tree"
-        / "pulserver"
-        / "sequences"
-        / "src"
-        / "sequence5.py"
-    )
+    plugin_path = workspace_root / "pulserver-interpreter" / "tree" / "pulserver" / "sequences" / "src" / "sequence5.py"
     if not plugin_path.is_file():
         pytest.skip(f"sequence5 plugin not found: {plugin_path}")
     return _load_plugin_module(plugin_path)

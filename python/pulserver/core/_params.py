@@ -325,7 +325,9 @@ class UIParam:
 
 def _validate_user_index(n: int) -> None:
     if not 0 <= n <= 16:
-        raise ValueError("User slot index must be in [0, 16] (opuser0-2 are reserved; user0..user16 map to opuser3..opuser19).")
+        raise ValueError(
+            "User slot index must be in [0, 16] (opuser0-2 are reserved; user0..user16 map to opuser3..opuser19)."
+        )
 
 
 # ---------------------------------------------------------------------------
