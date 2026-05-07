@@ -36,13 +36,19 @@ Or pass the file directly to the bridge host for testing::
 
 from __future__ import annotations
 
+import argparse
+import json
+import sys
+
 import numpy as np
+import pypulseq as pp
+
 import pulserver.io as pio
 import pulserver.pulseq as ps
-import pypulseq as pp
+
 from pulserver import (
-    BoolParam,
     PulseqSequence,
+    BoolParam,
     TypeinFloatParam,
     TypeinIntParam,
     UIParam,
@@ -50,6 +56,7 @@ from pulserver import (
     dict_to_protocol,
     protocol_to_dict,
 )
+
 
 RF_TIME_S = 2.00e-3
 RF_APODIZATION = 0.5
@@ -571,3 +578,125 @@ def validate_protocol(opts, protocol):
 
 def make_sequence(opts, protocol, output_path):
     return PLUGIN.make_sequence(opts, protocol, output_path)
+
+
+def makeSeq(opts, protocol, output_path):
+    """Offline alias for compatibility with older helper naming."""
+    return PLUGIN.make_sequence(opts, protocol, output_path)
+
+
+def _set_protocol_value(protocol: dict, key: UIParam, value) -> None:
+    protocol[str(key)]["value"] = value
+
+
+
+
+
+def _build_cli_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Generate a Cartesian GRE .seq offline using the same implementation "
+            "as the nimpulseqgui plugin path."
+        )
+    )
+    parser.add_argument("-o", "--output", default="gre.seq", help="Output .seq file path")
+
+    parser.add_argument("--te-ms", type=float, help="Echo time [ms]")
+    parser.add_argument("--tr-ms", type=float, help="Repetition time [ms]")
+    parser.add_argument("--flip-deg", type=float, help="Flip angle [deg]")
+    parser.add_argument("--fov-mm", type=float, help="Readout FOV [mm]")
+    parser.add_argument("--phase-fov-mm", type=float, help="Phase-encode FOV [mm]")
+    parser.add_argument("--slice-thickness-mm", type=float, help="Slice thickness [mm]")
+    parser.add_argument("--slice-spacing-mm", type=float, help="Slice spacing [mm]")
+    parser.add_argument("--nx", type=int, help="Readout matrix size")
+    parser.add_argument("--ny", type=int, help="Phase matrix size")
+    parser.add_argument("--nslices", type=int, help="Number of slices")
+    parser.add_argument("--bandwidth-hz-px", type=float, help="Readout bandwidth [Hz/px]")
+    parser.add_argument("--ry", type=float, help="Phase undersampling factor")
+    parser.add_argument("--acs-lines", type=float, help="Number of ACS lines (user0)")
+    parser.add_argument(
+        "--swap-phase-freq",
+        action="store_true",
+        help="Swap readout/phase axes",
+    )
+
+    parser.add_argument(
+        "--max-grad-mtm",
+        type=float,
+        help="System max gradient amplitude [mT/m] for offline generation",
+    )
+    parser.add_argument(
+        "--max-slew-tm-s",
+        type=float,
+        help="System max slew [T/m/s] for offline generation",
+    )
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Run protocol validation only (do not write sequence)",
+    )
+
+    return parser
+
+
+def _cli(argv: list[str]) -> int:
+    parser = _build_cli_parser()
+    args = parser.parse_args(argv)
+
+    opts_kwargs = {}
+    if args.max_grad_mtm is not None:
+        opts_kwargs["max_grad"] = args.max_grad_mtm
+        opts_kwargs["grad_unit"] = "mT/m"
+    if args.max_slew_tm_s is not None:
+        opts_kwargs["max_slew"] = args.max_slew_tm_s
+        opts_kwargs["slew_unit"] = "T/m/s"
+    opts = pp.Opts(**opts_kwargs)
+
+    protocol = PLUGIN.get_default_protocol(opts)
+
+    if args.te_ms is not None:
+        _set_protocol_value(protocol, UIParam.TE, args.te_ms)
+    if args.tr_ms is not None:
+        _set_protocol_value(protocol, UIParam.TR, args.tr_ms)
+    if args.flip_deg is not None:
+        _set_protocol_value(protocol, UIParam.FLIP, args.flip_deg)
+    if args.fov_mm is not None:
+        _set_protocol_value(protocol, UIParam.FOV, args.fov_mm)
+    if args.phase_fov_mm is not None:
+        _set_protocol_value(protocol, UIParam.PHASE_FOV, args.phase_fov_mm)
+    if args.slice_thickness_mm is not None:
+        _set_protocol_value(protocol, UIParam.SLICE_THICKNESS, args.slice_thickness_mm)
+    if args.slice_spacing_mm is not None:
+        _set_protocol_value(protocol, UIParam.SLICE_SPACING, args.slice_spacing_mm)
+    if args.nx is not None:
+        _set_protocol_value(protocol, UIParam.NX, args.nx)
+    if args.ny is not None:
+        _set_protocol_value(protocol, UIParam.NY, args.ny)
+    if args.nslices is not None:
+        _set_protocol_value(protocol, UIParam.NSLICES, args.nslices)
+    if args.bandwidth_hz_px is not None:
+        _set_protocol_value(protocol, UIParam.BANDWIDTH, args.bandwidth_hz_px)
+    if args.ry is not None:
+        _set_protocol_value(protocol, UIParam.RY, args.ry)
+    if args.acs_lines is not None:
+        _set_protocol_value(protocol, UIParam.user_value(0), args.acs_lines)
+    if args.swap_phase_freq:
+        _set_protocol_value(protocol, UIParam.SWAP_PHASE_FREQ, True)
+
+    result = PLUGIN.validate_protocol(opts, protocol)
+    if not result.get("valid", False):
+        info = result.get("info", "Protocol invalid")
+        print(f"ERROR: {info}", file=sys.stderr)
+        return 2
+
+    print(result.get("info", "Protocol valid"))
+    if args.validate_only:
+        return 0
+
+    PLUGIN.make_sequence(opts, protocol, args.output)
+    print(f"Wrote sequence: {args.output}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli(sys.argv[1:]))
