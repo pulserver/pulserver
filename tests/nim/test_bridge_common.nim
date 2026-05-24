@@ -6,6 +6,7 @@
 import std/unittest
 import std/strutils
 import ../../bridge/bridge_common
+import ../../bridge/pypulseq_host
 import nimpulseqgui/io  # makeProtocolPreamble for round-trip test
 
 # ── Test helpers ───────────────────────────────────────────────────────────
@@ -46,6 +47,32 @@ suite "ValidationResult":
     check vr.valid == false
     check vr.duration == 0.0
     check vr.info == ""
+
+# ── Headless option parsing ───────────────────────────────────────────────
+
+suite "optsFromForwardArgs":
+  test "parses scanner option flags for persistent mode":
+    let opts = optsFromForwardArgs(@[
+      "--gamma=42576000",
+      "--B0=3",
+      "--maxGrad=491288",
+      "--gradUnit=Hz/m",
+      "--maxSlew=1700186496",
+      "--slewUnit=Hz/m/s",
+      "--rfRasterTime=2e-6",
+      "--gradRasterTime=4e-6",
+      "--adcRasterTime=2e-6",
+      "--blockDurationRaster=4e-6",
+    ])
+
+    check abs(opts.gamma - 42576000.0) < 1e-6
+    check abs(opts.B0 - 3.0) < 1e-12
+    check abs(opts.maxGrad - 491288.0) < 1e-6
+    check abs(opts.maxSlew - 1700186496.0) < 1e-3
+    check abs(opts.rfRasterTime - 2e-6) < 1e-12
+    check abs(opts.gradRasterTime - 4e-6) < 1e-12
+    check abs(opts.adcRasterTime - 2e-6) < 1e-12
+    check abs(opts.blockDurationRaster - 4e-6) < 1e-12
 
 # ── formatValidationJson ──────────────────────────────────────────────────
 
@@ -189,6 +216,7 @@ FOV: 100
 [NimPulseqGUI Protocol End]
 """
     let warnings = readProtocolFromString(preamble, opts, prot, alwaysValid)
+    check warnings.len == 0
     check prot["TE"].floatVal == 9.0
     check prot["FOV"].intVal == 256  # not updated — past [VERSION]
 
@@ -244,6 +272,21 @@ suite "preamble constants":
 # ── Round-trip: makeProtocolPreamble → readProtocolFromString ─────────────
 
 suite "preamble round-trip":
+  test "schema preamble includes GE UI metadata":
+    let prot = makeTestProtocol()
+    prot["TE"].floatVal = 12.3
+    prot["FOV"].intVal = 192
+    prot["FatSat"].boolVal = true
+    prot["Mode"].stringVal = "High"
+    let preamble = makeProtocolSchemaPreamble(prot)
+
+    check protocolPreambleStart in preamble
+    check "TE: float|typein|12.3|1.0|100.0|0.1|ms" in preamble
+    check "FOV: int|typein|192|64|512|1|mm" in preamble
+    check "FatSat: bool|true" in preamble
+    check "Mode: stringlist|2|Fast|Normal|High" in preamble
+    check protocolPreambleEnd in preamble
+
   test "serialize then parse preserves all values":
     let prot = makeTestProtocol()
     prot["TE"].floatVal = 12.3

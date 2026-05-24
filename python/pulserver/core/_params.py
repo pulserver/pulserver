@@ -807,6 +807,8 @@ def dict_to_param(d: dict) -> ProtocolValue:
         d["validate"] = Validate(d["validate"])
     if tag in {"float", "int"} and "mode" in d:
         d["mode"] = InputMode(d["mode"])
+    if tag in {"bool", "stringlist", "description"}:
+        d.pop("unit", None)
     cls = _TYPE_MAP[tag]
     if tag == "float":
         mode = d.get("mode", InputMode.TYPEIN)

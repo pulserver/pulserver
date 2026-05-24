@@ -12,7 +12,6 @@
 ## for the GUI path the bridge wraps it down to ``bool``.
 
 import bridge_common
-import nimpulseqgui/io  # makeProtocolPreamble (GUI path only)
 import nimpy
 import nimpy/py_lib as nimpy_lib
 import std/[dynlib, os, strutils, parseopt, times]
@@ -110,6 +109,123 @@ proc nimOptsToPyOpts*(opts: Opts): PyObject =
     B0 = opts.B0,
     gamma = opts.gamma)
 
+proc parseFloatOption(value: string; optionName: string): float64 =
+  try:
+    result = parseFloat(value)
+  except ValueError:
+    raise newException(ValueError, "Invalid value for --" & optionName & ": " & value)
+
+proc parseIntOption(value: string; optionName: string): int =
+  try:
+    result = parseInt(value)
+  except ValueError:
+    raise newException(ValueError, "Invalid value for --" & optionName & ": " & value)
+
+proc splitLongOption(argument: string): tuple[name: string, value: string, hasValue: bool] =
+  var option = argument
+  if option.startsWith("--"):
+    option = option[2..^1]
+  elif option.startsWith("-"):
+    option = option[1..^1]
+  else:
+    return ("", "", false)
+
+  let parts = option.split("=", maxsplit = 1)
+  if parts.len == 2:
+    return (parts[0], parts[1], true)
+  return (option, "", false)
+
+proc optsFromForwardArgs*(args: seq[string]): Opts =
+  ## Builds scanner options for bridge-owned headless modes from the same
+  ## long options that nimpulseqgui consumes in GUI mode.
+  var maxGrad = -1.0
+  var maxSlew = -1.0
+  var riseTime = -1.0
+  var rfDeadTime = -1.0
+  var rfRingdownTime = -1.0
+  var adcDeadTime = -1.0
+  var adcRasterTime = -1.0
+  var rfRasterTime = -1.0
+  var gradRasterTime = -1.0
+  var blockDurationRaster = -1.0
+  var gamma = -1.0
+  var b0 = -1.0
+  var adcSamplesLimit = -1
+  var adcSamplesDivisor = -1
+  var gradUnit = "Hz/m"
+  var slewUnit = "Hz/m/s"
+
+  var index = 0
+  while index < args.len:
+    let argument = args[index]
+    if not argument.startsWith("-"):
+      inc index
+      continue
+
+    var (optionName, optionValue, hasValue) = splitLongOption(argument)
+    if optionName.len == 0:
+      inc index
+      continue
+    if not hasValue and index + 1 < args.len and not args[index + 1].startsWith("-"):
+      optionValue = args[index + 1]
+      hasValue = true
+      inc index
+
+    case optionName
+    of "maxGrad":
+      if hasValue: maxGrad = parseFloatOption(optionValue, optionName)
+    of "maxSlew":
+      if hasValue: maxSlew = parseFloatOption(optionValue, optionName)
+    of "riseTime":
+      if hasValue: riseTime = parseFloatOption(optionValue, optionName)
+    of "rfDeadTime":
+      if hasValue: rfDeadTime = parseFloatOption(optionValue, optionName)
+    of "rfRingdownTime":
+      if hasValue: rfRingdownTime = parseFloatOption(optionValue, optionName)
+    of "adcDeadTime":
+      if hasValue: adcDeadTime = parseFloatOption(optionValue, optionName)
+    of "adcRasterTime":
+      if hasValue: adcRasterTime = parseFloatOption(optionValue, optionName)
+    of "rfRasterTime":
+      if hasValue: rfRasterTime = parseFloatOption(optionValue, optionName)
+    of "gradRasterTime":
+      if hasValue: gradRasterTime = parseFloatOption(optionValue, optionName)
+    of "blockDurationRaster":
+      if hasValue: blockDurationRaster = parseFloatOption(optionValue, optionName)
+    of "adcSamplesLimit":
+      if hasValue: adcSamplesLimit = parseIntOption(optionValue, optionName)
+    of "adcSamplesDivisor":
+      if hasValue: adcSamplesDivisor = parseIntOption(optionValue, optionName)
+    of "gamma":
+      if hasValue: gamma = parseFloatOption(optionValue, optionName)
+    of "B0":
+      if hasValue: b0 = parseFloatOption(optionValue, optionName)
+    of "gradUnit":
+      if hasValue: gradUnit = optionValue
+    of "slewUnit":
+      if hasValue: slewUnit = optionValue
+    else:
+      discard
+    inc index
+
+  return newOpts(
+    maxGrad = maxGrad,
+    gradUnit = gradUnit,
+    maxSlew = maxSlew,
+    slewUnit = slewUnit,
+    rfRingdownTime = rfRingdownTime,
+    rfDeadTime = rfDeadTime,
+    adcDeadTime = adcDeadTime,
+    adcRasterTime = adcRasterTime,
+    rfRasterTime = rfRasterTime,
+    gradRasterTime = gradRasterTime,
+    blockDurationRaster = blockDurationRaster,
+    riseTime = riseTime,
+    gamma = gamma,
+    B0 = b0,
+    adcSamplesLimit = adcSamplesLimit,
+    adcSamplesDivisor = adcSamplesDivisor)
+
 proc protToPyDict*(prot: MRProtocolRef): PyObject =
   ## Serializes ``MRProtocolRef`` → Python dict of property dicts.
   let builtins = pyBuiltinsModule()
@@ -133,6 +249,31 @@ proc protToPyDict*(prot: MRProtocolRef): PyObject =
     d["unit"]      = prop.unit
     d["validate"]  = (if prop.validateStrategy == pvDoSearch: "search" else: "none")
     result[key]    = d
+
+proc makeProtocolSchemaPreamble*(prot: MRProtocolRef): string =
+  ## Serializes protocol values with schema metadata for the GE bridge.
+  var lines: seq[string] = @[protocolPreambleStart]
+  for key, prop in prot:
+    case prop.pType
+    of ptInt:
+      lines.add(
+        key & ": int|typein|" & $prop.intVal & "|" & $prop.intMin & "|" &
+        $prop.intMax & "|" & $prop.intIncr & "|" & prop.unit)
+    of ptFloat:
+      lines.add(
+        key & ": float|typein|" & $prop.floatVal & "|" & $prop.floatMin & "|" &
+        $prop.floatMax & "|" & $prop.floatIncr & "|" & prop.unit)
+    of ptBool:
+      lines.add(key & ": bool|" & (if prop.boolVal: "true" else: "false"))
+    of ptStringList:
+      var fields = @[key & ": stringlist", $prop.stringList.find(prop.stringVal)]
+      for option in prop.stringList:
+        fields.add(option)
+      lines.add(fields.join("|"))
+    of ptDescription:
+      lines.add(key & ": description|" & prop.description.replace("\n", "\\n"))
+  lines.add(protocolPreambleEnd)
+  result = lines.join("\n")
 
 # ── Marshalling: Python → Nim ──────────────────────────────────────────────
 
@@ -406,10 +547,7 @@ proc main() =
                  inputProtocolString.len > 0
 
   if headless:
-    # Build opts from forwarded flags. We re-use nimpulseqgui's Opts builder
-    # by calling through the same pipeline, but for headless we need the
-    # protocol + opts ourselves. Parse just --manufacturer/--model/--B0 etc.
-    let opts = newOpts()  # TODO: parse forwarded hardware flags for full fidelity
+    let opts = optsFromForwardArgs(forwardArgs)
     let defaultProt = getDefault(opts)
     if not validateBool(opts, defaultProt):
       echo "FATAL ERROR: default protocol is not valid!"
@@ -433,7 +571,7 @@ proc main() =
 
     if listProtocol:
       echo "PROTOCOL"
-      echo makeProtocolPreamble(defaultProt)
+      echo makeProtocolSchemaPreamble(defaultProt)
       quit(0)
 
     if persistentMode:
@@ -473,7 +611,7 @@ proc main() =
           break
         elif cmd == "LIST_PROTOCOL":
           echo "PROTOCOL"
-          echo makeProtocolPreamble(defaultProt)
+          echo makeProtocolSchemaPreamble(defaultProt)
           flushFile(stdout)
         elif cmd == "VALIDATE":
           let preambleStr = readPreambleFromStdin()
