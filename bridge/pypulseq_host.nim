@@ -299,7 +299,18 @@ proc pyModeString(d: PyObject): string =
   if not pyHasKey(d, "mode"):
     return "typein"
   let raw = d["mode"]
-  let s = pyBuiltinsModule().callMethod("str", raw).to(string)
+  let builtins = pyBuiltinsModule()
+  var s = ""
+  try:
+    if builtins.callMethod("hasattr", raw, "value").to(bool):
+      s = builtins.callMethod("str", raw.getAttr("value")).to(string)
+    else:
+      s = builtins.callMethod("str", raw).to(string)
+  except CatchableError:
+    s = builtins.callMethod("str", raw).to(string)
+  s = s.strip().toLowerAscii()
+  if s.startsWith("inputmode."):
+    s = s.split(".", maxsplit = 1)[1]
   if s in ["off", "typein", "dropdown"]:
     return s
   return "typein"
