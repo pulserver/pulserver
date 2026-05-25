@@ -252,6 +252,13 @@ proc protToPyDict*(prot: MRProtocolRef): PyObject =
 
 proc makeProtocolSchemaPreamble*(prot: MRProtocolRef): string =
   ## Serializes protocol values with schema metadata for the GE bridge.
+  ##
+  ## NOTE: ``MRProtocolRef`` cannot represent the ``mode``/``options``
+  ## metadata used by the GE interpreter to render dropdown widgets. The
+  ## headless paths therefore prefer ``makeProtocolSchemaPreambleFromPy``,
+  ## which serializes directly from the original Python dict and preserves
+  ## that metadata. This MRProtocolRef-based emitter is retained as a
+  ## fallback for callers that only have a Nim protocol in hand.
   var lines: seq[string] = @[protocolPreambleStart]
   for key, prop in prot:
     case prop.pType
@@ -272,6 +279,73 @@ proc makeProtocolSchemaPreamble*(prot: MRProtocolRef): string =
       lines.add(fields.join("|"))
     of ptDescription:
       lines.add(key & ": description|" & prop.description.replace("\n", "\\n"))
+  lines.add(protocolPreambleEnd)
+  result = lines.join("\n")
+
+proc pyHasKey(d: PyObject, key: string): bool =
+  ## Returns true if Python dict *d* contains *key*.
+  let builtins = pyBuiltinsModule()
+  return builtins.callMethod("bool", d.callMethod("__contains__", key)).to(bool)
+
+proc pyDictGet(d: PyObject, key: string, default: string): string {.gcsafe.}
+  ## Forward declaration; implementation below in the Python→Nim section.
+
+proc pyModeString(d: PyObject): string =
+  ## Returns the wire-format mode token ("typein"/"dropdown"/"off") for a
+  ## numeric protocol entry. Python ``InputMode`` is a ``StrEnum`` whose
+  ## values match the wire-format tokens exactly; use ``str()`` on the value
+  ## to obtain the canonical token regardless of whether ``asdict`` left an
+  ## enum instance or a plain str.
+  if not pyHasKey(d, "mode"):
+    return "typein"
+  let raw = d["mode"]
+  let s = pyBuiltinsModule().callMethod("str", raw).to(string)
+  if s in ["off", "typein", "dropdown"]:
+    return s
+  return "typein"
+
+proc makeProtocolSchemaPreambleFromPy*(pyDict: PyObject): string =
+  ## Serializes a Python protocol dict (as produced by ``protocol_to_dict``)
+  ## with full schema metadata for the GE bridge, including dropdown
+  ## ``mode``/``options`` for int and float entries.
+  var lines: seq[string] = @[protocolPreambleStart]
+  for key in pyDict:
+    let k = key.to(string)
+    let d = pyDict[key]
+    let ptype = d["type"].to(string)
+    case ptype
+    of "int":
+      let mode = pyModeString(d)
+      var line = k & ": int|" & mode & "|" & $d["value"].to(int) & "|" &
+        $d["min"].to(int) & "|" & $d["max"].to(int) & "|" &
+        $d["incr"].to(int) & "|" & pyDictGet(d, "unit", "")
+      if mode == "dropdown" and pyHasKey(d, "options"):
+        for opt in d["options"].to(seq[int]):
+          line.add("|" & $opt)
+      lines.add(line)
+    of "float":
+      let mode = pyModeString(d)
+      var line = k & ": float|" & mode & "|" & $d["value"].to(float) & "|" &
+        $d["min"].to(float) & "|" & $d["max"].to(float) & "|" &
+        $d["incr"].to(float) & "|" & pyDictGet(d, "unit", "")
+      if mode == "dropdown" and pyHasKey(d, "options"):
+        for opt in d["options"].to(seq[float]):
+          line.add("|" & $opt)
+      lines.add(line)
+    of "bool":
+      lines.add(k & ": bool|" & (if d["value"].to(bool): "true" else: "false"))
+    of "stringlist":
+      let options = d["options"].to(seq[string])
+      let selected = d["value"].to(string)
+      var fields = @[k & ": stringlist", $options.find(selected)]
+      for option in options:
+        fields.add(option)
+      lines.add(fields.join("|"))
+    of "description":
+      let text = pyDictGet(d, "text", "")
+      lines.add(k & ": description|" & text.replace("\n", "\\n"))
+    else:
+      discard
   lines.add(protocolPreambleEnd)
   result = lines.join("\n")
 
@@ -334,6 +408,12 @@ proc wrapGetDefaultProtocol*(plugin: PyPlugin): ProcGetDefaultProtocol =
   return proc(opts: Opts): MRProtocolRef =
     let pyResult = plugin.module.get_default_protocol(nimOptsToPyOpts(opts))
     return pyDictToProt(pyResult)
+
+proc getDefaultProtocolPy*(plugin: PyPlugin, opts: Opts): PyObject =
+  ## Returns the raw Python dict from ``plugin.get_default_protocol`` so that
+  ## headless callers can preserve ``mode``/``options`` metadata when
+  ## emitting the GE bridge preamble.
+  return plugin.module.get_default_protocol(nimOptsToPyOpts(opts))
 
 proc wrapValidateRich*(plugin: PyPlugin): ProcValidateRich =
   ## Wraps ``plugin.validate_protocol(pyOpts, prot_dict) → dict`` as ``ProcValidateRich``.
@@ -548,7 +628,8 @@ proc main() =
 
   if headless:
     let opts = optsFromForwardArgs(forwardArgs)
-    let defaultProt = getDefault(opts)
+    let defaultProtPy = getDefaultProtocolPy(plugin, opts)
+    let defaultProt = pyDictToProt(defaultProtPy)
     if not validateBool(opts, defaultProt):
       echo "FATAL ERROR: default protocol is not valid!"
       quit(1)
@@ -571,7 +652,7 @@ proc main() =
 
     if listProtocol:
       echo "PROTOCOL"
-      echo makeProtocolSchemaPreamble(defaultProt)
+      echo makeProtocolSchemaPreambleFromPy(defaultProtPy)
       quit(0)
 
     if persistentMode:
@@ -611,7 +692,7 @@ proc main() =
           break
         elif cmd == "LIST_PROTOCOL":
           echo "PROTOCOL"
-          echo makeProtocolSchemaPreamble(defaultProt)
+          echo makeProtocolSchemaPreambleFromPy(defaultProtPy)
           flushFile(stdout)
         elif cmd == "VALIDATE":
           let preambleStr = readPreambleFromStdin()

@@ -49,6 +49,8 @@ import pulserver.pulseq as ps
 from pulserver import (
     PulseqSequence,
     BoolParam,
+    DropdownFloatParam,
+    DropdownIntParam,
     TypeinFloatParam,
     TypeinIntParam,
     UIParam,
@@ -76,81 +78,91 @@ class GrePulseqSequence(PulseqSequence):
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
         del opts
         protocol = {
-            UIParam.TE: TypeinFloatParam(
+            UIParam.TE: DropdownFloatParam(
                 value=8.0,
                 min=2.0,
                 max=80.0,
                 incr=0.1,
                 unit="ms",
+                options=[3.0, 5.0, 8.0, 15.0, 30.0],
                 validate=Validate.NONE,
             ),
-            UIParam.TR: TypeinFloatParam(
-                value=20.0,
-                min=5.0,
+            UIParam.TR: DropdownFloatParam(
+                value=250.0,
+                min=110.0,
                 max=2000.0,
                 incr=0.1,
                 unit="ms",
+                options=[150.0, 250.0, 500.0, 1000.0, 2000.0],
                 validate=Validate.NONE,
             ),
-            UIParam.FLIP: TypeinFloatParam(
+            UIParam.FLIP: DropdownFloatParam(
                 value=12.0,
                 min=1.0,
                 max=90.0,
                 incr=1.0,
                 unit="deg",
+                options=[5.0, 12.0, 30.0, 60.0, 90.0],
                 validate=Validate.NONE,
             ),
-            UIParam.FOV: TypeinFloatParam(
+            UIParam.FOV: DropdownFloatParam(
                 value=220.0,
                 min=80.0,
                 max=500.0,
                 incr=1.0,
                 unit="mm",
+                options=[180.0, 220.0, 280.0, 340.0, 500.0],
                 validate=Validate.NONE,
             ),
-            UIParam.PHASE_FOV: TypeinFloatParam(
+            UIParam.PHASE_FOV: DropdownFloatParam(
                 value=220.0,
                 min=80.0,
                 max=500.0,
                 incr=1.0,
                 unit="mm",
+                options=[180.0, 220.0, 280.0, 340.0, 500.0],
                 validate=Validate.NONE,
             ),
-            UIParam.SLICE_THICKNESS: TypeinFloatParam(
+            UIParam.SLICE_THICKNESS: DropdownFloatParam(
                 value=5.0,
                 min=1.0,
                 max=20.0,
                 incr=0.5,
                 unit="mm",
+                options=[1.0, 3.0, 5.0, 8.0, 10.0],
                 validate=Validate.NONE,
             ),
-            UIParam.SLICE_SPACING: TypeinFloatParam(
+            UIParam.SLICE_SPACING: DropdownFloatParam(
                 value=5.0,
                 min=1.0,
                 max=20.0,
                 incr=0.5,
                 unit="mm",
+                options=[1.0, 3.0, 5.0, 8.0, 10.0],
                 validate=Validate.NONE,
             ),
-            UIParam.NX: TypeinIntParam(
+            UIParam.NX: DropdownIntParam(
                 value=64,
                 min=16,
                 max=512,
                 incr=1,
+                options=[64, 128, 192, 256, 384],
                 validate=Validate.NONE,
             ),
-            UIParam.NY: TypeinIntParam(
+            UIParam.NY: DropdownIntParam(
                 value=64,
                 min=8,
                 max=512,
                 incr=1,
+                options=[64, 128, 192, 256, 384],
                 validate=Validate.NONE,
             ),
-            UIParam.NSLICES: TypeinIntParam(
+            UIParam.NSLICES: DropdownIntParam(
                 value=1,
                 min=1,
                 max=128,
                 incr=1,
+                options=[1, 5, 10, 20, 40],
                 validate=Validate.NONE,
             ),
             UIParam.BANDWIDTH: TypeinFloatParam(
