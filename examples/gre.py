@@ -49,6 +49,7 @@ import pulserver.pulseq as ps
 from pulserver import (
     PulseqSequence,
     BoolParam,
+    Description,
     DropdownFloatParam,
     DropdownIntParam,
     TypeinFloatParam,
@@ -182,6 +183,7 @@ class GrePulseqSequence(PulseqSequence):
                 validate=Validate.NONE,
             ),
             UIParam.SWAP_PHASE_FREQ: BoolParam(value=False, validate=Validate.NONE),
+            UIParam.user_name(0): Description(text="ACS lines"),
             UIParam.user_value(0): TypeinFloatParam(
                 value=24.0,
                 min=0.0,

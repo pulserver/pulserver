@@ -729,6 +729,8 @@ def expected_param_kind(key: UIParam | str) -> ParamKind | None:
         return ParamKind.BOOL
     if (key_str.endswith("_min") or key_str.endswith("_max")) and key_str.startswith("user"):
         return ParamKind.FLOAT
+    if key_str.endswith("_name") and key_str.startswith("user"):
+        return ParamKind.DESCRIPTION
     return None
 
 
@@ -809,6 +811,8 @@ def dict_to_param(d: dict) -> ProtocolValue:
         d["mode"] = InputMode(d["mode"])
     if tag in {"bool", "stringlist", "description"}:
         d.pop("unit", None)
+    if tag == "description":
+        d.pop("validate", None)
     cls = _TYPE_MAP[tag]
     if tag == "float":
         mode = d.get("mode", InputMode.TYPEIN)
