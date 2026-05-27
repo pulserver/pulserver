@@ -78,9 +78,16 @@ proc findLibPythonInVenv*(venvHome: string): tuple[libPython, baseLibDir: string
         break
   if pythonBinDir.len == 0:
     return ("", "")
-  # The lib dir is typically <prefix>/lib where prefix = parentDir(bindir).
-  let libDir = parentDir(pythonBinDir) / "lib"
-  if not dirExists(libDir):
+  # The lib dir is <prefix>/lib on most distros, but <prefix>/lib64 on
+  # SUSE/RPM-based systems (x86_64).  Check lib64 first so the scanner's
+  # bundled Python (extracted from SUSE RPMs into usr/lib64/) is found.
+  let prefix = parentDir(pythonBinDir)
+  var libDir = ""
+  for candidate in [prefix / "lib64", prefix / "lib"]:
+    if dirExists(candidate):
+      libDir = candidate
+      break
+  if libDir.len == 0:
     return ("", "")
   # Prefer the most specific versioned .so first (e.g. libpython3.13.so.1.0).
   for v in ["3.13", "3.12", "3.11", "3.10", "3.9", "3.8"]:
