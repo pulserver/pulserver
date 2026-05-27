@@ -214,8 +214,6 @@ class GrePulseqSequence(PulseqSequence):
 
         if te_s <= 0.0 or tr_s <= 0.0:
             return {"valid": False, "duration": None, "info": "TE and TR must be > 0"}
-        if te_s >= tr_s:
-            return {"valid": False, "duration": None, "info": "TE must be < TR"}
         if fov_ro_m <= 0.0 or fov_pe_m <= 0.0 or slice_thickness_m <= 0.0:
             return {"valid": False, "duration": None, "info": "FOV and slice thickness must be > 0"}
         if not (0.0 < flip_deg <= 180.0):
@@ -225,6 +223,8 @@ class GrePulseqSequence(PulseqSequence):
         if bandwidth_hz_px <= 0.0:
             return {"valid": False, "duration": None, "info": "Bandwidth must be > 0"}
 
+        # Check TE feasibility and get the per-slice block duration (nslices=1 so
+        # that TR validity is not conflated with TE validity at this stage).
         timing = _compute_timing(
             opts=opts,
             flip_deg=flip_deg,
@@ -233,6 +233,7 @@ class GrePulseqSequence(PulseqSequence):
             slice_thickness_m=slice_thickness_m,
             nx_ro=nx_ro,
             ny_pe=ny_pe,
+            nslices=1,
             bandwidth_hz_px=bandwidth_hz_px,
             ro_axis=ro_axis,
             pe_axis=pe_axis,
@@ -243,11 +244,24 @@ class GrePulseqSequence(PulseqSequence):
             return {
                 "valid": False,
                 "duration": None,
-                "info": "TE/TR too short for gradients and readout timing",
+                "info": "TE or TR too short for gradients and readout timing",
+            }
+
+        # Check that the requested number of slices fits within TR.
+        min_block_s = timing["min_block_s"]
+        nslices_max = int(tr_s / min_block_s)
+        if nslices > nslices_max:
+            return {
+                "valid": False,
+                "duration": None,
+                "info": (
+                    f"TR {tr_s * 1e3:.1f} ms too short for {nslices} slices "
+                    f"(Treadout = {min_block_s * 1e3:.1f} ms, max {nslices_max} slice(s))"
+                ),
             }
 
         sampled_pe = _sampled_phase_lines(ny_pe, ry, acs_lines)
-        duration_s = tr_s * float(len(sampled_pe)) * float(nslices)
+        duration_s = tr_s * float(len(sampled_pe))
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
@@ -276,6 +290,7 @@ class GrePulseqSequence(PulseqSequence):
             slice_thickness_m=slice_thickness_m,
             nx_ro=nx_ro,
             ny_pe=ny_pe,
+            nslices=nslices,
             bandwidth_hz_px=bandwidth_hz_px,
             ro_axis=ro_axis,
             pe_axis=pe_axis,
@@ -309,32 +324,43 @@ class GrePulseqSequence(PulseqSequence):
         rf_phase_deg = 0.0
         rf_phase_inc_deg = 0.0
 
-        for sl in range(nslices):
-            slice_offset_m = (sl - 0.5 * (nslices - 1)) * slice_step_m
+        # PE-outer / SLC-inner loop order: fftrecon reshapes as [cha, RO, PE, SLC]
+        # assuming slice is the fast (innermost) dimension.  LABELSET SLC and LIN
+        # are required so pulserverlib writes correct slc/lin entries into the
+        # trajectory cache; without them every readout gets slc=0 and multi-slice
+        # reconstruction silently collapses to a single image.
+        for ky in sampled_pe:
+            y_scale = phase_areas[ky] / max_pe_area if max_pe_area > 0.0 else 0.0
+            gy_pre = pp.scale_grad(gy_template, y_scale)
+            gy_reph = pp.scale_grad(gy_template, -y_scale)
+            label_lin = pp.make_label(type="SET", label="LIN", value=ky)
 
-            for ky in sampled_pe:
+            for sl in range(nslices):
+                slice_offset_m = (sl - 0.5 * (nslices - 1)) * slice_step_m
+
                 rf_curr = _copy_event(rf)
                 rf_curr.freq_offset = gz.amplitude * slice_offset_m
                 rf_curr.phase_offset = np.deg2rad(rf_phase_deg)
                 adc_curr = _copy_event(adc)
                 adc_curr.phase_offset = rf_curr.phase_offset
 
-                y_scale = phase_areas[ky] / max_pe_area if max_pe_area > 0.0 else 0.0
-                gy_pre = pp.scale_grad(gy_template, y_scale)
-                gy_reph = pp.scale_grad(gy_template, -y_scale)
+                label_slc = pp.make_label(type="SET", label="SLC", value=sl)
 
-                seq.add_block(rf_curr, gz)
+                seq.add_block(rf_curr, gz, label_slc, label_lin)
                 seq.add_block(gx_pre, gy_pre, gz_reph)
                 if te_delay is not None:
                     seq.add_block(te_delay)
                 seq.add_block(gx, adc_curr)
                 seq.add_block(gx_spoil, gy_reph, gz_spoil)
-                if tr_delay is not None:
-                    seq.add_block(tr_delay)
 
                 # Standard RF spoiling phase progression per TR.
                 rf_phase_deg = (rf_phase_deg + rf_phase_inc_deg) % 360.0
                 rf_phase_inc_deg = (rf_phase_inc_deg + RF_SPOILING_INC_DEG) % 360.0
+
+            # TR delay is appended once after all slices so that the time between
+            # successive excitations of the same slice equals the user-set TR.
+            if tr_delay is not None:
+                seq.add_block(tr_delay)
 
         seq.set_definition("Name", "gre")
         seq.set_definition(
@@ -436,6 +462,7 @@ def _compute_timing(
     slice_thickness_m: float,
     nx_ro: int,
     ny_pe: int,
+    nslices: int,
     bandwidth_hz_px: float,
     ro_axis: str,
     pe_axis: str,
@@ -511,8 +538,8 @@ def _compute_timing(
     if te_delay_s < 0.0:
         te_delay_s = 0.0
 
-    min_tr_s = d_rf + d_pre + te_delay_s + d_ro + d_spoil
-    tr_delay_s = tr_s - min_tr_s
+    min_block_s = d_rf + d_pre + te_delay_s + d_ro + d_spoil
+    tr_delay_s = tr_s - nslices * min_block_s
     if tr_delay_s < -1e-9 and strict:
         return None
     if tr_delay_s < 0.0:
@@ -530,6 +557,7 @@ def _compute_timing(
         "gy_template": gy_template,
         "te_delay_s": te_delay_s,
         "tr_delay_s": tr_delay_s,
+        "min_block_s": min_block_s,
     }
 
 

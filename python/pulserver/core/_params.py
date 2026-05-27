@@ -47,7 +47,13 @@ from __future__ import annotations
 
 import sys
 from dataclasses import asdict, dataclass, field
-from enum import StrEnum
+try:
+    from enum import StrEnum
+except ImportError:  # Python 3.10 scanner/bundled runtime
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        __str__ = str.__str__
 
 
 class Validate(StrEnum):
