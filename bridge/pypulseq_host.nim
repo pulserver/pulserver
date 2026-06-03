@@ -62,20 +62,28 @@ proc findLibPythonInVenv*(venvHome: string): tuple[libPython, baseLibDir: string
   ## Python installation provides, plus the base lib directory.
   ## Returns empty strings if not found.
   ##
-  ## Strategy: parse ``pyvenv.cfg``'s ``home`` key (the bin dir of the base
-  ## Python installation), then search its sibling ``lib/`` directory for the
-  ## highest-versioned ``libpython3.*.so*`` file.
+  ## Strategy: parse ``pyvenv.cfg``'s ``home`` and ``version`` keys.
+  ## Try the venv's exact major.minor first so we don't accidentally pick a
+  ## higher-versioned libpython from a multi-python installation (which would
+  ## mismatch the site-packages under lib/pythonX.Y/).  Fall back to the
+  ## full version list only if the exact match is absent.
   let cfgPath = venvHome / "pyvenv.cfg"
   if not fileExists(cfgPath):
     return ("", "")
   var pythonBinDir = ""
+  var venvMajMin = ""
   for line in lines(cfgPath):
     let stripped = line.strip()
     if stripped.startsWith("home ") or stripped.startsWith("home="):
       let parts = stripped.split('=', maxsplit = 1)
       if parts.len == 2 and parts[0].strip() == "home":
         pythonBinDir = parts[1].strip()
-        break
+    elif stripped.startsWith("version ") or stripped.startsWith("version="):
+      let parts = stripped.split('=', maxsplit = 1)
+      if parts.len == 2 and parts[0].strip() == "version":
+        let dots = parts[1].strip().split('.')
+        if dots.len >= 2:
+          venvMajMin = dots[0] & "." & dots[1]
   if pythonBinDir.len == 0:
     return ("", "")
   # The lib dir is <prefix>/lib on most distros, but <prefix>/lib64 on
@@ -89,8 +97,15 @@ proc findLibPythonInVenv*(venvHome: string): tuple[libPython, baseLibDir: string
       break
   if libDir.len == 0:
     return ("", "")
-  # Prefer the most specific versioned .so first (e.g. libpython3.13.so.1.0).
+  # Pass 1: exact venv version (avoids grabbing a mismatched higher version).
+  if venvMajMin.len > 0:
+    for suffix in [".so.1.0", ".so.1", ".so"]:
+      let candidate = libDir / "libpython" & venvMajMin & suffix
+      if fileExists(candidate):
+        return (candidate, libDir)
+  # Pass 2: fallback — highest available (handles incomplete installations).
   for v in ["3.13", "3.12", "3.11", "3.10", "3.9", "3.8"]:
+    if v == venvMajMin: continue  # already checked in pass 1
     for suffix in [".so.1.0", ".so.1", ".so"]:
       let candidate = libDir / "libpython" & v & suffix
       if fileExists(candidate):
