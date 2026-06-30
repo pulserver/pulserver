@@ -31,7 +31,10 @@ set(MD5_SOURCES     src/vendor/external_md5.c)
 set(KISSFFT_SOURCES src/vendor/external_kiss_fft.c src/vendor/external_kiss_fftr.c)
 
 add_library(pulseqlib STATIC ${PULSEQLIB_SOURCES} ${KISSFFT_SOURCES} ${MD5_SOURCES})
-target_include_directories(pulseqlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(pulseqlib PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
+)
 
 if(PULSEQLIB_BUILD_SEQDESC AND PULSEQLIB_BUILD_CACHE)
     target_compile_definitions(pulseqlib PUBLIC PULSEQLIB_HAVE_SEQDESC)
