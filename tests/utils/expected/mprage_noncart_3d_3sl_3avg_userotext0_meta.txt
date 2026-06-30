@@ -1,0 +1,21 @@
+num_unique_adcs 1
+adc_0_samples 64
+adc_0_dwell_ns 80000
+adc_0_anchor 0
+max_b1_subseq 0
+tr_duration_us 37920
+num_segments 3
+segment_0_num_blocks 2
+segment_1_num_blocks 1
+segment_2_num_blocks 3
+num_canonical_trs 3
+canonical_mode tr
+fmod_build_mode full_collection
+num_averages 3
+canonical_duration_us 37920
+num_freqmod_plan_probes 4
+num_freqmod_plan_entries 6
+num_labels 0
+num_label_scan_rows 90
+num_label_adc_rows 18
+segment_order 0 1 2 2 1
