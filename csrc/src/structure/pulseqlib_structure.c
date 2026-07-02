@@ -1920,7 +1920,8 @@ int pulseqlib__get_scan_table_segments(
                     desc->segment_definitions[unique_idx].trigger_id = bte->digitalout_id;
                 }
             }
-            if (bte->rotation_id != -1)
+            if (bte->rotation_id != -1 && bte->rotation_id < desc->num_rotations
+                && !pulseqlib__is_identity3(desc->rotation_matrices[bte->rotation_id]))
                 desc->segment_definitions[unique_idx].has_rotation[b] = 1;
             if (bte->norot_flag)
                 desc->segment_definitions[unique_idx].norot_flag[b]   = 1;
@@ -2146,7 +2147,8 @@ int pulseqlib__get_scan_table_segments(
                         desc->segment_definitions[seg_id].trigger_id = bte->digitalout_id;
                 }
             }
-            if (bte->rotation_id != -1)
+            if (bte->rotation_id != -1 && bte->rotation_id < desc->num_rotations
+                && !pulseqlib__is_identity3(desc->rotation_matrices[bte->rotation_id]))
                 desc->segment_definitions[seg_id].has_rotation[b] = 1;
             if (bte->norot_flag)
                 desc->segment_definitions[seg_id].norot_flag[b]   = 1;

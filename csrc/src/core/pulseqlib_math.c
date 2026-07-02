@@ -228,6 +228,20 @@ void pulseqlib__quaternion_to_matrix(float* matrix, const float* quat)
 }
 
 /* ------------------------------------------------------------------ */
+/*  Identity check for a 3x3 rotation matrix                          */
+/* ------------------------------------------------------------------ */
+
+int pulseqlib__is_identity3(const float* matrix)
+{
+    static const float I[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+    int i;
+    for (i = 0; i < 9; ++i)
+        if ((float)fabs(matrix[i] - I[i]) > 1e-7f)
+            return 0;
+    return 1;
+}
+
+/* ------------------------------------------------------------------ */
 /*  3x3 rotation: out = R * v  (transpose=0)  or  out = R^T * v (1)  */
 /* ------------------------------------------------------------------ */
 

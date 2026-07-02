@@ -90,20 +90,6 @@ static void matmul_AtB(float *C, const float *A, const float *B)
 }
 
 /* ================================================================== */
-/*  Helper: check if 3x3 matrix is identity                           */
-/* ================================================================== */
-
-static int is_identity3(const float *M)
-{
-    static const float I[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-    int i;
-    for (i = 0; i < 9; ++i)
-        if ((float)fabs(M[i] - I[i]) > 1e-7f)
-            return 0;
-    return 1;
-}
-
-/* ================================================================== */
 /*  Helper: compare two 3x3 matrices with tolerance                   */
 /* ================================================================== */
 
@@ -1296,7 +1282,7 @@ static int build_freq_mod_library(
                 break;
             }
 
-        if (has_norot && fov_rotation && !is_identity3(fov_rotation))
+        if (has_norot && fov_rotation && !pulseqlib__is_identity3(fov_rotation))
         {
             /* Non-identity FOV rotation: compute R_eff for norot blocks */
             int cap = lib->num_rotations + count; /* upper bound */
