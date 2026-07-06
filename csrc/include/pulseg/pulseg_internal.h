@@ -12,6 +12,7 @@
 
 #include "pulseg_config.h"
 #include "pulseg_types.h"
+#include "pulseg_io.h"
 
 /* ================================================================== */
 /*  Internal error codes                                              */
@@ -88,18 +89,15 @@
 /* ================================================================== */
 /*  Constants moved from public header (implementation details)       */
 /* ================================================================== */
-#define PULSEG_RF_USE_UNKNOWN     0
-#define PULSEG_RF_USE_EXCITATION  1
-#define PULSEG_RF_USE_REFOCUSING  2
-#define PULSEG_RF_USE_INVERSION   3
-#define PULSEG_RF_USE_SATURATION  4
+/* PULSEG_RF_USE_* now defined in pulseg_types.h (public; pulseg_seq_event's
+ * doc comment already referenced these as public API, Stage 3 fix). */
 
 #define PULSEG_MAX_RF_SHIM_CHANNELS 64
 
 #define PULSEG_TR_REGION_ALL      (-1)
 
-/* Forward declaration for use in sequence_descriptor */
-typedef struct pulseg__definition pulseg__definition;
+/* pulseg__definition and pulseg_trigger_event (used below by pointer in
+ * pulseg_sequence_descriptor) are defined in pulseg_io.h, included above. */
 
 /* ================================================================== */
 /*  Segment timing anchors (internal)                                 */
@@ -125,29 +123,9 @@ typedef struct pulseg_segment_adc_anchor {
 
 #define PULSEG_SEGMENT_ADC_ANCHOR_INIT {0, 0.0f, 0.0f, 0, 0.0f}
 
-/* ================================================================== */
-/*  Shape (used in descriptor for decompressed waveforms)             */
-/* ================================================================== */
-typedef struct pulseg_shape_arbitrary {
-    int num_uncompressed_samples;
-    int num_samples;
-    float *samples;
-} pulseg_shape_arbitrary;
-
-#define PULSEG_SHAPE_ARBITRARY_INIT {0, 0, NULL}
-
-/* ================================================================== */
-/*  Trigger event (used in descriptor)                                */
-/* ================================================================== */
-typedef struct pulseg_trigger_event {
-    short type;
-    long duration;
-    long delay;
-    int trigger_type;
-    int trigger_channel;
-} pulseg_trigger_event;
-
-#define PULSEG_TRIGGER_EVENT_INIT {0, 0L, 0L, 0, 0}
+/* pulseg_shape_arbitrary is defined in pulseg_types.h (public, leaf type).
+ * pulseg_trigger_event is defined in pulseg_io.h (embedded by value in
+ * pulseg_pulseq_block); PULSEG_TRIGGER_EVENT_INIT lives there too. */
 
 /* ================================================================== */
 /*  RF definitions and table                                          */
@@ -645,30 +623,26 @@ typedef struct pulseg__uniform_grad_waveforms {
 #define M_PI 3.14159265358979323846
 #endif
 
-#define PULSEG__DEFINITION_NAME_LENGTH 32
-#define PULSEG__EXT_NAME_LENGTH        32
-#define PULSEG__LABEL_NAME_LENGTH      32
-#define PULSEG__SEQUENCE_NAME_LENGTH   256
-#define PULSEG__SEQUENCE_FILENAME_LENGTH 256
-#define PULSEG__SOFT_DELAY_HINT_LENGTH 32
-#define PULSEG__MAX_EXTENSIONS_PER_BLOCK 64
-#define PULSEG__MAX_LINE_LENGTH        256
-#define PULSEG__MAX_SCALE_SIZE         16
-#define PULSEG__MAX_RF_SHIM_CHANNELS   64
+/* PULSEG_PULSEQ_*_LENGTH / MAX_* size constants now live in pulseg_io.h
+ * (promoted alongside the raw pulseq model, Stage 3). */
 
 /* Gradient types */
 #define PULSEG__GRAD_TRAP 1
 #define PULSEG__GRAD_ARB  2
 
-/* Extension type IDs */
-#define PULSEG__EXT_LIST      0
-#define PULSEG__EXT_TRIGGER   1
-#define PULSEG__EXT_ROTATION  2
-#define PULSEG__EXT_LABELSET  3
-#define PULSEG__EXT_LABELINC  4
-#define PULSEG__EXT_RF_SHIM   5
-#define PULSEG__EXT_DELAY     6
-#define PULSEG__EXT_UNKNOWN   7
+/* Extension type IDs -- aliases of the public PULSEG_PULSEQ_EXT_* codes
+ * (pulseg_io.h). Single source of truth: any external producer of a
+ * pulseg_pulseq_file (e.g. the ExternalSequence adapter) must use the
+ * public names since these values are load-bearing wire values, not
+ * arbitrary internal choices. */
+#define PULSEG__EXT_LIST      PULSEG_PULSEQ_EXT_LIST
+#define PULSEG__EXT_TRIGGER   PULSEG_PULSEQ_EXT_TRIGGER
+#define PULSEG__EXT_ROTATION  PULSEG_PULSEQ_EXT_ROTATION
+#define PULSEG__EXT_LABELSET  PULSEG_PULSEQ_EXT_LABELSET
+#define PULSEG__EXT_LABELINC  PULSEG_PULSEQ_EXT_LABELINC
+#define PULSEG__EXT_RF_SHIM   PULSEG_PULSEQ_EXT_RF_SHIM
+#define PULSEG__EXT_DELAY     PULSEG_PULSEQ_EXT_DELAY
+#define PULSEG__EXT_UNKNOWN   PULSEG_PULSEQ_EXT_UNKNOWN
 
 /* Trigger types */
 #define PULSEG__TRIGGER_TYPE_OUTPUT 1
@@ -715,130 +689,12 @@ typedef struct pulseg__uniform_grad_waveforms {
 #define PULSEG__OFF  23
 
 /* ================================================================== */
-/*  Internal shape types                                              */
-/* ================================================================== */
-typedef struct pulseg__shape_trap {
-    long rise_time;
-    long flat_time;
-    long fall_time;
-} pulseg__shape_trap;
-
-/* ================================================================== */
-/*  Internal event types                                              */
-/* ================================================================== */
-typedef struct pulseg__rf_event {
-    short type;
-    float amplitude;
-    pulseg_shape_arbitrary mag_shape;
-    pulseg_shape_arbitrary phase_shape;
-    pulseg_shape_arbitrary time_shape;
-    float center;
-    float freq_ppm;
-    float phase_ppm;
-    float freq_offset;
-    float phase_offset;
-    int delay;
-    char use;
-} pulseg__rf_event;
-
-typedef struct pulseg__grad_event {
-    short type;
-    float amplitude;
-    int delay;
-    pulseg__shape_trap trap;
-    pulseg_shape_arbitrary wave_shape;
-    pulseg_shape_arbitrary time_shape;
-    float first;
-    float last;
-} pulseg__grad_event;
-
-typedef struct pulseg__adc_event {
-    short type;
-    int num_samples;
-    int dwell_time;
-    int delay;
-    float freq_ppm;
-    float phase_ppm;
-    float freq_offset;
-    float phase_offset;
-    pulseg_shape_arbitrary phase_modulation_shape;
-} pulseg__adc_event;
-
-typedef struct pulseg__rotation_event {
-    short type;
-    union {
-        float rot_quaternion[4];
-        float rot_matrix[9];
-    } data;
-} pulseg__rotation_event;
-
-typedef struct pulseg__label_event {
-    int slc;
-    int seg;
-    int rep;
-    int avg;
-    int set;
-    int eco;
-    int phs;
-    int lin;
-    int par;
-    int acq;
-} pulseg__label_event;
-
-typedef struct pulseg__flag_event {
-    int trid;
-    int nav;
-    int rev;
-    int sms;
-    int ref;
-    int ima;
-    int noise;
-    int pmc;
-    int norot;
-    int nopos;
-    int noscl;
-    int once;
-} pulseg__flag_event;
-
-typedef struct pulseg__soft_delay_event {
-    short type;
-    int num_id;
-    int offset;
-    int factor;
-    int hint_id;
-} pulseg__soft_delay_event;
-
-typedef struct pulseg__rf_shimming_event {
-    short type;
-    int num_channels;
-    float* amplitudes;
-    float* phases;
-} pulseg__rf_shimming_event;
-
-/* ================================================================== */
 /*  Internal block types                                              */
 /* ================================================================== */
-typedef struct pulseg__raw_block {
-    int block_duration;
-    int rf;
-    int gx;
-    int gy;
-    int gz;
-    int adc;
-    int ext_count;
-    int ext[PULSEG__MAX_EXTENSIONS_PER_BLOCK][2];
-} pulseg__raw_block;
-
-typedef struct pulseg__raw_extension {
-    pulseg__label_event labelset;
-    pulseg__label_event labelinc;
-    pulseg__flag_event flag;
-    int rotation_index;
-    int rf_shim_index;
-    int trigger_index;
-    int soft_delay_index;
-} pulseg__raw_extension;
-
+/* pulseg__extension_block is a parse-time-only intermediate (not stored in
+ * pulseg_pulseq_file / pulseg_pulseq_block); it stays local to pulseg_io.h's
+ * implementation (pulseg_parse.c), declared here since only that file uses
+ * it. Depends on types now defined in pulseg_io.h (included above). */
 typedef struct pulseg__extension_block {
     pulseg__label_event labelset;
     pulseg__label_event labelinc;
@@ -849,69 +705,8 @@ typedef struct pulseg__extension_block {
     pulseg__soft_delay_event soft_delay;
 } pulseg__extension_block;
 
-typedef struct pulseg__seq_block {
-    int duration;
-    pulseg__rf_event rf;
-    pulseg__grad_event gx;
-    pulseg__grad_event gy;
-    pulseg__grad_event gz;
-    pulseg__adc_event adc;
-    pulseg_trigger_event trigger;
-    pulseg__rotation_event rotation;
-    pulseg__flag_event flag;
-    pulseg__label_event labelset;
-    pulseg__label_event labelinc;
-    pulseg__soft_delay_event delay;
-    pulseg__rf_shimming_event rf_shimming;
-} pulseg__seq_block;
-
-/* ================================================================== */
-/*  SeqFile structs (opaque from public API)                          */
-/* ================================================================== */
-typedef struct pulseg__section_offsets {
-    long scan_cursor;
-    long version;
-    long definitions;
-    long blocks;
-    long rf;
-    long grad;
-    long trap;
-    long adc;
-    long extensions;
-    long triggers;
-    long rotations;
-    long labelset;
-    long labelinc;
-    long delays;
-    long rfshim;
-    long shapes;
-    long signature;
-} pulseg__section_offsets;
-
-struct pulseg__definition {
-    char name[PULSEG__DEFINITION_NAME_LENGTH];
-    int value_size;
-    char** value;
-};
-
-typedef struct pulseg__reserved_definitions {
-    float gradient_raster_time;
-    float radiofrequency_raster_time;
-    float adc_raster_time;
-    float block_duration_raster;
-    char name[PULSEG__SEQUENCE_NAME_LENGTH];
-    float fov[3];
-    float matrix[3];
-    float nav_fov[3];
-    float nav_matrix[3];
-    float total_duration;
-    char next_sequence[PULSEG__SEQUENCE_FILENAME_LENGTH];
-    int ignore_fov_shift;
-    int enable_pmc;
-    int ignore_averages;
-    int num_gain_cal_readouts;  /**< calibration readouts for APS2 receive gain (pislquant) */
-} pulseg__reserved_definitions;
-
+/* pulseg__global_label_table: defined but currently unused anywhere in the
+ * codebase; kept as-is (out of scope for this refactor). */
 typedef struct pulseg__global_label_table {
     int slc;
     int seg;
@@ -924,71 +719,6 @@ typedef struct pulseg__global_label_table {
     int par;
     int acq;
 } pulseg__global_label_table;
-
-typedef struct pulseg__rf_shim_entry {
-    int num_channels;
-    float values[2 * PULSEG__MAX_RF_SHIM_CHANNELS];
-} pulseg__rf_shim_entry;
-
-typedef struct pulseg__seq_file {
-    pulseg_opts opts;
-    char* file_path;
-    pulseg__section_offsets offsets;
-    int is_version_parsed;
-    int version_combined;
-    int version_major;
-    int version_minor;
-    int version_revision;
-    int is_definitions_library_parsed;
-    int num_definitions;
-    pulseg__definition* definitions_library;
-    pulseg__reserved_definitions reserved_definitions_library;
-    int is_block_library_parsed;
-    int num_blocks;
-    float (*block_library)[7];
-    int* block_ids;
-    int is_rf_library_parsed;
-    int rf_library_size;
-    float (*rf_library)[10];
-    int* rf_use_tags;            /* per-RF-event use tag (parsed from .seq) */
-    int is_grad_library_parsed;
-    int grad_library_size;
-    float (*grad_library)[7];
-    int is_adc_library_parsed;
-    int adc_library_size;
-    float (*adc_library)[8];
-    int is_extensions_library_parsed;
-    int extensions_library_size;
-    float (*extensions_library)[3];
-    int trigger_library_size;
-    float (*trigger_library)[4];
-    int rotation_library_size;
-    float (*rotation_quaternion_library)[4];
-    float (*rotation_matrix_library)[9];
-    int is_label_defined[22];
-    int labelset_library_size;
-    float (*labelset_library)[2];
-    int labelinc_library_size;
-    float (*labelinc_library)[2];
-    pulseg_label_limit label_limits;
-    int is_delay_defined[8];
-    int soft_delay_library_size;
-    float (*soft_delay_library)[4];
-    int rf_shim_library_size;
-    pulseg__rf_shim_entry* rf_shim_library;
-    int extension_map[8];
-    int extension_lut_size;
-    int* extension_lut;
-    int is_shapes_library_parsed;
-    int shapes_library_size;
-    pulseg_shape_arbitrary* shapes_library;
-} pulseg__seq_file;
-
-typedef struct pulseg__seq_file_collection {
-    int num_sequences;
-    pulseg__seq_file* sequences;
-    char* base_path;
-} pulseg__seq_file_collection;
 
 /* ================================================================== */
 /*  Internal table entry for label/hint lookup                        */
@@ -1035,25 +765,13 @@ float pulseg__get_spectrum_flank(const float* x, const float* re, const float* i
 size_t pulseg__next_pow2(size_t x);
 int   pulseg__calc_convolution_fft(float* output, const float* signal, int signal_len, const float* kernel, int kernel_len);
 
-/* --- pulseg_parse.c --- */
-void  pulseg__seq_file_init(pulseg__seq_file* seq, const pulseg_opts* opts);
-void  pulseg__seq_file_free(pulseg__seq_file* seq);
-void  pulseg__seq_file_collection_free(pulseg__seq_file_collection* coll);
-void  pulseg__seq_block_init(pulseg__seq_block* block);
-void  pulseg__seq_block_free(pulseg__seq_block* block);
-int   pulseg__read_seq(pulseg__seq_file* seq, const char* file_path);
-int   pulseg__read_seq_from_buffer(pulseg__seq_file* seq, FILE* f);
-int   pulseg__read_seq_collection(pulseg__seq_file_collection* coll, const char* first_file_path, const pulseg_opts* opts);
-int   pulseg__get_raw_block_content_ids(const pulseg__seq_file* seq, pulseg__raw_block* block, int block_index, int parse_extensions);
-void  pulseg__get_raw_extension(const pulseg__seq_file* seq, pulseg__raw_extension* re, const pulseg__raw_block* raw);
-void  pulseg__get_block(const pulseg__seq_file* seq, pulseg__seq_block* block, int block_index);
-float pulseg__get_grad_library_max_amplitude(const pulseg__seq_file* seq);
-int   pulseg__decompress_shape(pulseg_shape_arbitrary* result, const pulseg_shape_arbitrary* encoded, float scale);
-int   pulseg__verify_signature(const char* file_path);
+/* pulseg_parse.c's public entry points (pulseg_pulseq_file_read family,
+ * accessors, pulseg_pulseq_decompress_shape, etc.) are declared in the
+ * public header pulseg_io.h, included above. */
 
 /* --- pulseg_core.c --- */
 int   pulseg__deduplicate_int_rows(int* unique_defs, int* event_table, const int* int_rows, int num_rows, int num_cols);
-int   pulseg__get_unique_blocks(pulseg_sequence_descriptor* desc, const pulseg__seq_file* seq);
+int   pulseg__get_unique_blocks(pulseg_sequence_descriptor* desc, const pulseg_pulseq_file* seq);
 
 /* --- pulseg_structure.c --- */
 int   pulseg__get_tr_in_sequence(pulseg_sequence_descriptor* desc, pulseg_diagnostic* diag);
@@ -1061,11 +779,12 @@ int   pulseg__build_scan_table(pulseg_sequence_descriptor* desc, int num_average
 int   pulseg__get_scan_table_segments(pulseg_sequence_descriptor* desc, pulseg_diagnostic* diag, const pulseg_opts* opts);
 int   pulseg__build_freq_mod_flags(pulseg_sequence_descriptor* desc);
 void  pulseg__compute_scan_table_tr_start(pulseg_sequence_descriptor* desc);
-int   pulseg__build_label_table(pulseg_sequence_descriptor* desc, const pulseg__seq_file* seq);
+int   pulseg__build_label_table(pulseg_sequence_descriptor* desc, const pulseg_pulseq_file* seq);
 int   pulseg__calc_segment_timing(pulseg_sequence_descriptor* desc, pulseg_diagnostic* diag);
 
 /* --- pulseg_core.c (continued) --- */
-int   pulseg__get_collection_descriptors(pulseg_collection* desc_coll, pulseg_diagnostic* diag, const pulseg__seq_file_collection* coll, int parse_labels, int num_averages);
+/* pulseg__get_collection_descriptors was promoted+renamed to the public
+ * pulseg_convert_collection() (pulseg_convert.h, Stage 3 Step 2). */
 void  pulseg_sequence_descriptor_free(pulseg_sequence_descriptor* desc);
 void  pulseg_segment_table_result_free(pulseg_segment_table_result* result);
 

@@ -73,7 +73,7 @@ static char *build_full_path(const char *base_path, const char *filename)
 /*  seq_file defaults / init / reset / free                           */
 /* ================================================================== */
 
-static void seq_file_set_defaults(pulseg__seq_file *seq)
+static void seq_file_set_defaults(pulseg_pulseq_file *seq)
 {
     int i;
     if (!seq)
@@ -133,7 +133,7 @@ static void seq_file_set_defaults(pulseg__seq_file *seq)
     INIT_LIBRARY(seq, shapes_library, shapes_library_size, is_shapes_library_parsed);
 }
 
-void pulseg__seq_file_init(pulseg__seq_file *seq, const pulseg_opts *opts)
+void pulseg_pulseq_file_init(pulseg_pulseq_file *seq, const pulseg_opts *opts)
 {
     if (!seq)
         return;
@@ -142,7 +142,7 @@ void pulseg__seq_file_init(pulseg__seq_file *seq, const pulseg_opts *opts)
     seq_file_set_defaults(seq);
 }
 
-static void seq_file_reset(pulseg__seq_file *seq)
+static void seq_file_reset(pulseg_pulseq_file *seq)
 {
     int i, j;
     if (!seq)
@@ -203,7 +203,7 @@ static void seq_file_reset(pulseg__seq_file *seq)
     seq_file_set_defaults(seq);
 }
 
-void pulseg__seq_file_free(pulseg__seq_file *seq)
+void pulseg_pulseq_file_free(pulseg_pulseq_file *seq)
 {
     if (!seq)
         return;
@@ -217,7 +217,7 @@ void pulseg__seq_file_free(pulseg__seq_file *seq)
     PULSEG_FREE(seq);
 }
 
-void pulseg__seq_file_collection_free(pulseg__seq_file_collection *coll)
+void pulseg_pulseq_file_set_free(pulseg_pulseq_file_set *coll)
 {
     int i;
     if (!coll)
@@ -249,7 +249,7 @@ void pulseg__seq_file_collection_free(pulseg__seq_file_collection *coll)
 static int init_standard_library(FILE *f, const long *offsets, int num_sections,
                                  void **target, int *target_count, int n)
 {
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     int max_idx = -1;
     int sec, idx, i;
     char *p;
@@ -297,7 +297,7 @@ static int init_standard_library(FILE *f, const long *offsets, int num_sections,
 static int init_definitions_library(FILE *f, long offset,
                                     pulseg__definition **target, int *target_count)
 {
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     int count = 0;
     char *p;
     char *name_tok;
@@ -339,7 +339,7 @@ static int init_definitions_library(FILE *f, long offset,
 static int init_shapes_library(FILE *f, long offset,
                                pulseg_shape_arbitrary **target, int *target_count)
 {
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     int max_idx = -1;
     int n, i, j, idx = 0;
     char *p;
@@ -451,7 +451,7 @@ static int init_shapes_library(FILE *f, long offset,
 static int init_rf_shim_library(FILE *f, long offset,
                                 pulseg__rf_shim_entry **target, int *target_count)
 {
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     int max_idx = -1;
     char *p;
     int idx, i;
@@ -498,9 +498,9 @@ static int init_rf_shim_library(FILE *f, long offset,
 static int read_standard_library(FILE *f, long offset, void *target, int target_count,
                                  int n, pulseg__scale scale, int flag)
 {
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     int idx, parsed, consumed, col, offset_col;
-    float vals[PULSEG__MAX_SCALE_SIZE];
+    float vals[PULSEG_PULSEQ_MAX_SCALE_SIZE];
     char *scan_ptr;
     char *p;
     float v;
@@ -508,7 +508,7 @@ static int read_standard_library(FILE *f, long offset, void *target, int target_
 
     if (!f)
         return 1;
-    if (scale.size > PULSEG__MAX_SCALE_SIZE)
+    if (scale.size > PULSEG_PULSEQ_MAX_SCALE_SIZE)
         return 1;
     if (fseek(f, offset, SEEK_SET) != 0)
         return 1;
@@ -559,12 +559,12 @@ static int read_standard_library(FILE *f, long offset, void *target, int target_
     return 0;
 }
 
-static void get_section_offsets(pulseg__seq_file *seq, FILE *f)
+static void get_section_offsets(pulseg_pulseq_file *seq, FILE *f)
 {
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     char *p;
     long pos;
-    char ext_name[PULSEG__EXT_NAME_LENGTH];
+    char ext_name[PULSEG_PULSEQ_EXT_NAME_LENGTH];
     int ext_id, ext_enum;
 
     if (fseek(f, 0L, SEEK_SET) != 0)
@@ -651,9 +651,9 @@ static void get_section_offsets(pulseg__seq_file *seq, FILE *f)
     seq->offsets.scan_cursor = ftell(f);
 }
 
-static void read_version(pulseg__seq_file *seq, FILE *f)
+static void read_version(pulseg_pulseq_file *seq, FILE *f)
 {
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     int major = 0, minor = 0, revision = 0;
     char key[32];
     int value;
@@ -697,10 +697,10 @@ static void read_version(pulseg__seq_file *seq, FILE *f)
     seq->is_version_parsed = 1;
 }
 
-static void read_definitions_library(pulseg__seq_file *seq, FILE *f)
+static void read_definitions_library(pulseg_pulseq_file *seq, FILE *f)
 {
     int ret;
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     int def_index = 0;
     char *p;
     char *name_tok;
@@ -743,8 +743,8 @@ static void read_definitions_library(pulseg__seq_file *seq, FILE *f)
         name_tok = strtok(p, " \t\r\n");
         if (!name_tok)
             continue;
-        strncpy(def.name, name_tok, PULSEG__DEFINITION_NAME_LENGTH - 1);
-        def.name[PULSEG__DEFINITION_NAME_LENGTH - 1] = '\0';
+        strncpy(def.name, name_tok, PULSEG_PULSEQ_DEFINITION_NAME_LENGTH - 1);
+        def.name[PULSEG_PULSEQ_DEFINITION_NAME_LENGTH - 1] = '\0';
 
         while ((token = strtok(NULL, " \t\r\n")) != NULL)
         {
@@ -763,7 +763,7 @@ static void read_definitions_library(pulseg__seq_file *seq, FILE *f)
     seq->is_definitions_library_parsed = 1;
 }
 
-static void read_definitions(pulseg__seq_file *seq)
+static void read_definitions(pulseg_pulseq_file *seq)
 {
     int i;
     int nvals;
@@ -880,7 +880,7 @@ static void read_definitions(pulseg__seq_file *seq)
 /*  Section readers                                                   */
 /* ------------------------------------------------------------------ */
 
-static void read_block_library(pulseg__seq_file *seq, FILE *f)
+static void read_block_library(pulseg_pulseq_file *seq, FILE *f)
 {
     int ret;
     float block_vals[7] = {1, 1, 1, 1, 1, 1, 1};
@@ -906,7 +906,7 @@ static void read_block_library(pulseg__seq_file *seq, FILE *f)
     seq->is_block_library_parsed = 1;
 }
 
-static void read_rf_library(pulseg__seq_file *seq, FILE *f)
+static void read_rf_library(pulseg_pulseq_file *seq, FILE *f)
 {
     int ret;
     float rf_vals[10] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
@@ -934,7 +934,7 @@ static void read_rf_library(pulseg__seq_file *seq, FILE *f)
     /* parse trailing RF use tags (e/r/s/i) from the [RF] section */
     if (seq->rf_library_size > 0 && seq->offsets.rf >= 0)
     {
-        char use_line[PULSEG__MAX_LINE_LENGTH];
+        char use_line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
         seq->rf_use_tags = (int *)PULSEG_ALLOC(
             (size_t)seq->rf_library_size * sizeof(int));
         if (seq->rf_use_tags)
@@ -999,7 +999,7 @@ static void read_rf_library(pulseg__seq_file *seq, FILE *f)
     }
 }
 
-static void read_grad_library(pulseg__seq_file *seq, FILE *f)
+static void read_grad_library(pulseg_pulseq_file *seq, FILE *f)
 {
     int ret;
     long offsets[2];
@@ -1049,7 +1049,7 @@ static void read_grad_library(pulseg__seq_file *seq, FILE *f)
     seq->is_grad_library_parsed = 1;
 }
 
-static void read_adc_library(pulseg__seq_file *seq, FILE *f)
+static void read_adc_library(pulseg_pulseq_file *seq, FILE *f)
 {
     int ret;
     static const float adc_vals[8] = {1, 1, 1, 1, 1, 1, 1, 1};
@@ -1075,10 +1075,10 @@ static void read_adc_library(pulseg__seq_file *seq, FILE *f)
     seq->is_adc_library_parsed = 1;
 }
 
-static void read_shapes_library(pulseg__seq_file *seq, FILE *f)
+static void read_shapes_library(pulseg_pulseq_file *seq, FILE *f)
 {
     int ret;
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     int shape_index = 0, sample_index = 0;
     char *p;
     float val;
@@ -1133,11 +1133,11 @@ static void read_shapes_library(pulseg__seq_file *seq, FILE *f)
 static int read_label_library(FILE *f, long offset, void *target, int target_count,
                               int n, int *is_label_defined)
 {
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     char *p;
     int idx, label_code;
     float val;
-    char label[PULSEG__LABEL_NAME_LENGTH];
+    char label[PULSEG_PULSEQ_LABEL_NAME_LENGTH];
     float *arr = (float *)target;
 
     if (!f || offset < 0)
@@ -1172,11 +1172,11 @@ static int read_label_library(FILE *f, long offset, void *target, int target_cou
 static int read_delay_library(FILE *f, long offset, void *target, int target_count,
                               int n, int *is_delay_defined)
 {
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     char *p;
     int idx, hint_code;
     float num_id, offset_val, scale_val;
-    char hint[PULSEG__SOFT_DELAY_HINT_LENGTH];
+    char hint[PULSEG_PULSEQ_SOFT_DELAY_HINT_LENGTH];
     float *arr = (float *)target;
 
     if (!f || offset < 0)
@@ -1213,7 +1213,7 @@ static int read_delay_library(FILE *f, long offset, void *target, int target_cou
 static int read_rf_shim_library(FILE *f, long offset,
                                 pulseg__rf_shim_entry *target, int target_count)
 {
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     char *p;
     int idx, n_ch, i, consumed;
     float val;
@@ -1248,7 +1248,7 @@ static int read_rf_shim_library(FILE *f, long offset,
         while (*p == ' ')
             p++;
 
-        if (n_ch > PULSEG__MAX_RF_SHIM_CHANNELS)
+        if (n_ch > PULSEG_PULSEQ_MAX_RF_SHIM_CHANNELS)
             return 1;
         target[idx - 1].num_channels = n_ch;
         for (i = 0; i < 2 * n_ch; i++)
@@ -1265,7 +1265,7 @@ static int read_rf_shim_library(FILE *f, long offset,
     return 0;
 }
 
-static void read_extensions_library(pulseg__seq_file *seq, FILE *f)
+static void read_extensions_library(pulseg_pulseq_file *seq, FILE *f)
 {
     int ret, n, k;
     float qn;
@@ -1425,7 +1425,7 @@ static void read_extensions_library(pulseg__seq_file *seq, FILE *f)
 /*  Shape decompression (cross-file)                                  */
 /* ================================================================== */
 
-int pulseg__decompress_shape(pulseg_shape_arbitrary *result,
+int pulseg_pulseq_decompress_shape(pulseg_shape_arbitrary *result,
                                 const pulseg_shape_arbitrary *encoded, float scale)
 {
     int i, rep;
@@ -1562,7 +1562,7 @@ void pulseg_opts_init(pulseg_opts *opts,
 /*  seq_block init / free (cross-file)                                */
 /* ================================================================== */
 
-void pulseg__seq_block_init(pulseg__seq_block *block)
+void pulseg_pulseq_block_init(pulseg_pulseq_block *block)
 {
     if (!block)
         return;
@@ -1596,7 +1596,7 @@ void pulseg__seq_block_init(pulseg__seq_block *block)
     memset(&block->labelinc, 0, sizeof(block->labelinc));
 }
 
-void pulseg__seq_block_free(pulseg__seq_block *block)
+void pulseg_pulseq_block_free(pulseg_pulseq_block *block)
 {
     if (!block)
         return;
@@ -1684,7 +1684,7 @@ void pulseg__seq_block_free(pulseg__seq_block *block)
 /*  Read seq from buffer / file (cross-file)                          */
 /* ================================================================== */
 
-int pulseg__read_seq_from_buffer(pulseg__seq_file *seq, FILE *f)
+int pulseg_pulseq_file_read_from_buffer(pulseg_pulseq_file *seq, FILE *f)
 {
     if (!seq || !f)
         return PULSEG_ERR_NULL_POINTER;
@@ -1710,7 +1710,7 @@ int pulseg__read_seq_from_buffer(pulseg__seq_file *seq, FILE *f)
     return PULSEG_SUCCESS;
 }
 
-int pulseg__read_seq(pulseg__seq_file *seq, const char *file_path)
+int pulseg_pulseq_file_read(pulseg_pulseq_file *seq, const char *file_path)
 {
     FILE *f;
     int code;
@@ -1719,7 +1719,7 @@ int pulseg__read_seq(pulseg__seq_file *seq, const char *file_path)
     f = fopen(file_path, "r");
     if (!f)
         return PULSEG_ERR_FILE_NOT_FOUND;
-    code = pulseg__read_seq_from_buffer(seq, f);
+    code = pulseg_pulseq_file_read_from_buffer(seq, f);
     fclose(f);
     return code;
 }
@@ -1734,7 +1734,7 @@ static int count_sequences_in_chain(const char *first_path, const pulseg_opts *o
     int max_count = 1000;
     char *current_path;
     char *base_path;
-    pulseg__seq_file temp;
+    pulseg_pulseq_file temp;
     int result;
 
     base_path = extract_base_path(first_path);
@@ -1750,8 +1750,8 @@ static int count_sequences_in_chain(const char *first_path, const pulseg_opts *o
 
     while (current_path && current_path[0] != '\0' && count < max_count)
     {
-        pulseg__seq_file_init(&temp, opts);
-        result = pulseg__read_seq(&temp, current_path);
+        pulseg_pulseq_file_init(&temp, opts);
+        result = pulseg_pulseq_file_read(&temp, current_path);
         if (PULSEG_FAILED(result))
         {
             seq_file_reset(&temp);
@@ -1781,7 +1781,7 @@ static int count_sequences_in_chain(const char *first_path, const pulseg_opts *o
     return count;
 }
 
-int pulseg__read_seq_collection(pulseg__seq_file_collection *coll,
+int pulseg_pulseq_file_set_read(pulseg_pulseq_file_set *coll,
                                    const char *first_file_path,
                                    const pulseg_opts *opts)
 {
@@ -1804,7 +1804,7 @@ int pulseg__read_seq_collection(pulseg__seq_file_collection *coll,
     if (!coll->base_path)
         return PULSEG_ERR_ALLOC_FAILED;
 
-    coll->sequences = (pulseg__seq_file *)PULSEG_ALLOC(num_seq * sizeof(pulseg__seq_file));
+    coll->sequences = (pulseg_pulseq_file *)PULSEG_ALLOC(num_seq * sizeof(pulseg_pulseq_file));
     if (!coll->sequences)
     {
         PULSEG_FREE(coll->base_path);
@@ -1825,8 +1825,8 @@ int pulseg__read_seq_collection(pulseg__seq_file_collection *coll,
 
     for (i = 0; i < num_seq; ++i)
     {
-        pulseg__seq_file_init(&coll->sequences[i], opts);
-        result = pulseg__read_seq(&coll->sequences[i], current_path);
+        pulseg_pulseq_file_init(&coll->sequences[i], opts);
+        result = pulseg_pulseq_file_read(&coll->sequences[i], current_path);
         if (PULSEG_FAILED(result))
         {
             for (j = 0; j < i; ++j)
@@ -1868,7 +1868,7 @@ int pulseg__read_seq_collection(pulseg__seq_file_collection *coll,
 /*  Raw block / extension parsing (public)                            */
 /* ================================================================== */
 
-int pulseg__get_raw_block_content_ids(const pulseg__seq_file *seq, pulseg__raw_block *block, int block_index, int parse_extensions)
+int pulseg_pulseq_get_raw_block_content_ids(const pulseg_pulseq_file *seq, pulseg_pulseq_raw_block *block, int block_index, int parse_extensions)
 {
     int next_ext_id, ext_count;
     float *ev;
@@ -1907,7 +1907,7 @@ int pulseg__get_raw_block_content_ids(const pulseg__seq_file *seq, pulseg__raw_b
     next_ext_id = (int)ev[6];
     ext_count = 0;
     while (next_ext_id > 0 && next_ext_id <= seq->extensions_library_size &&
-           ext_count < PULSEG__MAX_EXTENSIONS_PER_BLOCK)
+           ext_count < PULSEG_PULSEQ_MAX_EXTENSIONS_PER_BLOCK)
     {
         ext_data = seq->extensions_library[next_ext_id - 1];
         block->ext[ext_count][0] = (int)ext_data[0];
@@ -1919,7 +1919,7 @@ int pulseg__get_raw_block_content_ids(const pulseg__seq_file *seq, pulseg__raw_b
     return 1;
 }
 
-static void raw_extension_init(pulseg__raw_extension *re)
+static void raw_extension_init(pulseg_pulseq_raw_extension *re)
 {
     if (!re)
         return;
@@ -1997,7 +1997,7 @@ static void extension_block_free(pulseg__extension_block *eb)
     eb->rf_shimming.num_channels = 0;
 }
 
-void pulseg__get_raw_extension(const pulseg__seq_file *seq, pulseg__raw_extension *re, const pulseg__raw_block *raw)
+void pulseg_pulseq_get_raw_extension(const pulseg_pulseq_file *seq, pulseg_pulseq_raw_extension *re, const pulseg_pulseq_raw_block *raw)
 {
     int i, type_idx, ref_idx, ext_type, label_value, label_id;
 
@@ -2161,9 +2161,9 @@ void pulseg__get_raw_extension(const pulseg__seq_file *seq, pulseg__raw_extensio
 /*  Extension sub-parsers (static)                                    */
 /* ------------------------------------------------------------------ */
 
-static int parse_rotation_from_raw(const pulseg__seq_file *seq,
+static int parse_rotation_from_raw(const pulseg_pulseq_file *seq,
                                    pulseg__extension_block *eb,
-                                   const pulseg__raw_extension *re)
+                                   const pulseg_pulseq_raw_extension *re)
 {
     int i;
     int ref = re->rotation_index;
@@ -2178,9 +2178,9 @@ static int parse_rotation_from_raw(const pulseg__seq_file *seq,
     return 1;
 }
 
-static int parse_rf_shim_from_raw(const pulseg__seq_file *seq,
+static int parse_rf_shim_from_raw(const pulseg_pulseq_file *seq,
                                   pulseg__extension_block *eb,
-                                  const pulseg__raw_extension *re)
+                                  const pulseg_pulseq_raw_extension *re)
 {
     int ref = re->rf_shim_index;
     int i, n;
@@ -2194,7 +2194,7 @@ static int parse_rf_shim_from_raw(const pulseg__seq_file *seq,
         return 1;
     entry = &seq->rf_shim_library[ref];
     n = entry->num_channels;
-    if (n <= 0 || n > PULSEG__MAX_RF_SHIM_CHANNELS)
+    if (n <= 0 || n > PULSEG_PULSEQ_MAX_RF_SHIM_CHANNELS)
         return 1;
 
     amps = (float *)PULSEG_ALLOC(sizeof(float) * n);
@@ -2219,9 +2219,9 @@ static int parse_rf_shim_from_raw(const pulseg__seq_file *seq,
     return 1;
 }
 
-static int parse_trigger_from_raw(const pulseg__seq_file *seq,
+static int parse_trigger_from_raw(const pulseg_pulseq_file *seq,
                                   pulseg__extension_block *eb,
-                                  const pulseg__raw_extension *re)
+                                  const pulseg_pulseq_raw_extension *re)
 {
     int ref = re->trigger_index;
     if (ref < 0)
@@ -2236,9 +2236,9 @@ static int parse_trigger_from_raw(const pulseg__seq_file *seq,
     return 1;
 }
 
-static int parse_soft_delay_from_raw(const pulseg__seq_file *seq,
+static int parse_soft_delay_from_raw(const pulseg_pulseq_file *seq,
                                      pulseg__extension_block *eb,
-                                     const pulseg__raw_extension *re)
+                                     const pulseg_pulseq_raw_extension *re)
 {
     int ref = re->soft_delay_index;
     if (ref < 0)
@@ -2253,9 +2253,9 @@ static int parse_soft_delay_from_raw(const pulseg__seq_file *seq,
     return 1;
 }
 
-static int parse_extension(const pulseg__seq_file *seq,
+static int parse_extension(const pulseg_pulseq_file *seq,
                            pulseg__extension_block *eb,
-                           const pulseg__raw_extension *re)
+                           const pulseg_pulseq_raw_extension *re)
 {
     if (!eb)
         return 0;
@@ -2289,7 +2289,7 @@ static int parse_extension(const pulseg__seq_file *seq,
 }
 
 static void apply_extension(const pulseg__extension_block *eb,
-                            pulseg__seq_block *block)
+                            pulseg_pulseq_block *block)
 {
     int i, n;
     float *amps;
@@ -2335,7 +2335,7 @@ static void apply_extension(const pulseg__extension_block *eb,
 /*  Parse gradient helper (static, avoids repeating 3x)               */
 /* ================================================================== */
 
-static int parse_grad_event(const pulseg__seq_file *seq,
+static int parse_grad_event(const pulseg_pulseq_file *seq,
                             pulseg__grad_event *g, int raw_idx,
                             float grad_raster_us)
 {
@@ -2368,14 +2368,14 @@ static int parse_grad_event(const pulseg__seq_file *seq,
         idx = (int)fa[4];
         if (idx > 0 && seq->is_shapes_library_parsed && idx <= seq->shapes_library_size)
         {
-            if (!pulseg__decompress_shape(&shape, &seq->shapes_library[idx - 1], 1.0f))
+            if (!pulseg_pulseq_decompress_shape(&shape, &seq->shapes_library[idx - 1], 1.0f))
                 return 0;
             g->wave_shape = shape;
         }
         idx = (int)fa[5];
         if (idx > 0 && seq->is_shapes_library_parsed && idx <= seq->shapes_library_size)
         {
-            if (!pulseg__decompress_shape(&shape, &seq->shapes_library[idx - 1], grad_raster_us))
+            if (!pulseg_pulseq_decompress_shape(&shape, &seq->shapes_library[idx - 1], grad_raster_us))
                 return 0;
             g->time_shape = shape;
         }
@@ -2394,10 +2394,10 @@ static int parse_grad_event(const pulseg__seq_file *seq,
 /*  Parse block without extensions (static)                           */
 /* ================================================================== */
 
-static int parse_block_without_ext(const pulseg__seq_file *seq,
-                                   pulseg__seq_block *block,
-                                   const pulseg__raw_block *raw,
-                                   const pulseg__raw_extension *re)
+static int parse_block_without_ext(const pulseg_pulseq_file *seq,
+                                   pulseg_pulseq_block *block,
+                                   const pulseg_pulseq_raw_block *raw,
+                                   const pulseg_pulseq_raw_extension *re)
 {
     float *fa;
     int idx, i, num_real;
@@ -2434,7 +2434,7 @@ static int parse_block_without_ext(const pulseg__seq_file *seq,
         idx = (int)fa[1];
         if (idx > 0 && seq->is_shapes_library_parsed && idx <= seq->shapes_library_size)
         {
-            if (!pulseg__decompress_shape(&shape, &seq->shapes_library[idx - 1], 1.0f))
+            if (!pulseg_pulseq_decompress_shape(&shape, &seq->shapes_library[idx - 1], 1.0f))
                 goto fail;
             block->rf.mag_shape = shape;
         }
@@ -2449,7 +2449,7 @@ static int parse_block_without_ext(const pulseg__seq_file *seq,
         idx = (int)fa[2];
         if (idx > 0 && seq->is_shapes_library_parsed && idx <= seq->shapes_library_size)
         {
-            if (!pulseg__decompress_shape(&shape, &seq->shapes_library[idx - 1], 1.0f))
+            if (!pulseg_pulseq_decompress_shape(&shape, &seq->shapes_library[idx - 1], 1.0f))
                 goto fail;
             block->rf.phase_shape = shape;
             for (i = 0; i < block->rf.phase_shape.num_samples; i++)
@@ -2491,7 +2491,7 @@ static int parse_block_without_ext(const pulseg__seq_file *seq,
         idx = (int)fa[3];
         if (idx > 0 && seq->is_shapes_library_parsed && idx <= seq->shapes_library_size)
         {
-            if (!pulseg__decompress_shape(&shape, &seq->shapes_library[idx - 1], rf_raster_us))
+            if (!pulseg_pulseq_decompress_shape(&shape, &seq->shapes_library[idx - 1], rf_raster_us))
                 goto fail;
             block->rf.time_shape = shape;
         }
@@ -2533,7 +2533,7 @@ static int parse_block_without_ext(const pulseg__seq_file *seq,
         idx = (int)fa[7];
         if (idx > 0 && seq->is_shapes_library_parsed && idx <= seq->shapes_library_size)
         {
-            if (!pulseg__decompress_shape(&shape, &seq->shapes_library[idx - 1], fa[1] * 1e-3f))
+            if (!pulseg_pulseq_decompress_shape(&shape, &seq->shapes_library[idx - 1], fa[1] * 1e-3f))
                 goto fail;
             block->adc.phase_modulation_shape = shape;
         }
@@ -2570,8 +2570,8 @@ static int parse_block_without_ext(const pulseg__seq_file *seq,
     return 1;
 
 fail:
-    pulseg__seq_block_free(block);
-    pulseg__seq_block_init(block);
+    pulseg_pulseq_block_free(block);
+    pulseg_pulseq_block_init(block);
     return 0;
 }
 
@@ -2579,23 +2579,23 @@ fail:
 /*  get_block (cross-file)                                            */
 /* ================================================================== */
 
-void pulseg__get_block(const pulseg__seq_file *seq,
-                          pulseg__seq_block *block, int block_index)
+void pulseg_pulseq_get_block(const pulseg_pulseq_file *seq,
+                          pulseg_pulseq_block *block, int block_index)
 {
-    pulseg__raw_block raw;
-    pulseg__raw_extension re;
+    pulseg_pulseq_raw_block raw;
+    pulseg_pulseq_raw_extension re;
     pulseg__extension_block eb;
     int has_ext;
 
     if (!seq || !block || block_index < 0 || block_index >= seq->num_blocks)
         return;
 
-    if (!pulseg__get_raw_block_content_ids(seq, &raw, block_index, 1))
+    if (!pulseg_pulseq_get_raw_block_content_ids(seq, &raw, block_index, 1))
         return;
     has_ext = (raw.ext_count > 0) && seq->is_extensions_library_parsed && seq->extension_lut;
 
     if (has_ext)
-        pulseg__get_raw_extension(seq, &re, &raw);
+        pulseg_pulseq_get_raw_extension(seq, &re, &raw);
     else
         raw_extension_init(&re);
 
@@ -2616,7 +2616,7 @@ void pulseg__get_block(const pulseg__seq_file *seq,
 /*  Grad library max amplitude (cross-file)                           */
 /* ================================================================== */
 
-float pulseg__get_grad_library_max_amplitude(const pulseg__seq_file *seq)
+float pulseg_pulseq_get_grad_library_max_amplitude(const pulseg_pulseq_file *seq)
 {
     float max_amp = 0.0f;
     int i;
@@ -2638,11 +2638,11 @@ float pulseg__get_grad_library_max_amplitude(const pulseg__seq_file *seq)
 /*  MD5 signature verification                                        */
 /* ================================================================== */
 
-int pulseg__verify_signature(const char *file_path)
+int pulseg_pulseq_verify_signature(const char *file_path)
 {
     FILE *f;
     long sig_offset, hash_start;
-    char line[PULSEG__MAX_LINE_LENGTH];
+    char line[PULSEG_PULSEQ_MAX_LINE_LENGTH];
     char stored_hash[33];
     unsigned char digest[16];
     struct MD5Context ctx;
@@ -2765,7 +2765,7 @@ int pulseg__verify_signature(const char *file_path)
  * Open a single .seq file and parse ONLY version + definitions.
  * Fills a temporary seq_file just enough to read reserved definitions.
  */
-static int read_definitions_only(pulseg__seq_file *seq, const char *path)
+static int read_definitions_only(pulseg_pulseq_file *seq, const char *path)
 {
     FILE *f;
     if (!seq || !path)
@@ -2797,7 +2797,7 @@ int pulseg_peek_scan_time(
     int max_depth = 1000;
     char *current_path;
     char *base_path;
-    pulseg__seq_file temp;
+    pulseg_pulseq_file temp;
     int result;
     int navg;
 
@@ -2822,7 +2822,7 @@ int pulseg_peek_scan_time(
 
     while (current_path && current_path[0] != '\0' && count < max_depth)
     {
-        pulseg__seq_file_init(&temp, opts);
+        pulseg_pulseq_file_init(&temp, opts);
         result = read_definitions_only(&temp, current_path);
         if (PULSEG_FAILED(result))
         {

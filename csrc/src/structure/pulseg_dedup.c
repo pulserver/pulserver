@@ -125,7 +125,7 @@ int pulseg__deduplicate_int_rows(
 /*  RF dedup helpers                                                  */
 /* ================================================================== */
 
-static void build_rf_def_row(const pulseg__seq_file *seq, int *row, float *params, int rf_idx)
+static void build_rf_def_row(const pulseg_pulseq_file *seq, int *row, float *params, int rf_idx)
 {
     float gamma = seq->opts.gamma_hz_per_t;
     float b0 = seq->opts.b0_t;
@@ -142,7 +142,7 @@ static void build_rf_def_row(const pulseg__seq_file *seq, int *row, float *param
     params[2] = rf[9] + ppm_to_hz * rf[7]; /* phase offset + ppm * phasePPM */
 }
 
-static int deduplicate_rf_library(const pulseg__seq_file *seq, pulseg_rf_definition *rf_defs, pulseg_rf_table_element *rf_table)
+static int deduplicate_rf_library(const pulseg_pulseq_file *seq, pulseg_rf_definition *rf_defs, pulseg_rf_table_element *rf_table)
 {
     int (*int_rows)[RF_DEF_COLS] = NULL;
     float (*params)[RF_PARAMS_COLS] = NULL;
@@ -194,7 +194,7 @@ static int deduplicate_rf_library(const pulseg__seq_file *seq, pulseg_rf_definit
             decomp.num_samples = 0;
             decomp.num_uncompressed_samples = 0;
             decomp.samples = NULL;
-            if (pulseg__decompress_shape(&decomp,
+            if (pulseg_pulseq_decompress_shape(&decomp,
                                             &seq->shapes_library[time_id - 1], 1.0f))
             {
                 nz = 0;
@@ -229,7 +229,7 @@ static int deduplicate_rf_library(const pulseg__seq_file *seq, pulseg_rf_definit
 /*  Grad dedup helpers                                                */
 /* ================================================================== */
 
-static void build_grad_def_row(const pulseg__seq_file *seq, int *row, float *param, int grad_idx)
+static void build_grad_def_row(const pulseg_pulseq_file *seq, int *row, float *param, int grad_idx)
 {
     float *grad = seq->grad_library[grad_idx];
     int grad_type = (int)grad[0];
@@ -264,7 +264,7 @@ static void build_grad_def_row(const pulseg__seq_file *seq, int *row, float *par
     *param = grad[1]; /* amplitude */
 }
 
-static int deduplicate_grad_library(const pulseg__seq_file *seq, pulseg_grad_definition *grad_defs, pulseg_grad_table_element *grad_table)
+static int deduplicate_grad_library(const pulseg_pulseq_file *seq, pulseg_grad_definition *grad_defs, pulseg_grad_table_element *grad_table)
 {
     int (*int_rows)[GRAD_DEF_COLS] = NULL;
     float *params = NULL;
@@ -325,7 +325,7 @@ static int deduplicate_grad_library(const pulseg__seq_file *seq, pulseg_grad_def
 /*  ADC dedup helpers                                                 */
 /* ================================================================== */
 
-static void build_adc_def_row(const pulseg__seq_file *seq, int *row, float *params, int adc_idx)
+static void build_adc_def_row(const pulseg_pulseq_file *seq, int *row, float *params, int adc_idx)
 {
     float gamma = seq->opts.gamma_hz_per_t;
     float b0 = seq->opts.b0_t;
@@ -339,7 +339,7 @@ static void build_adc_def_row(const pulseg__seq_file *seq, int *row, float *para
     params[1] = adc[6] + ppm_to_hz * adc[4]; /* phase offset */
 }
 
-static int deduplicate_adc_library(const pulseg__seq_file *seq, pulseg_adc_definition *adc_defs, pulseg_adc_table_element *adc_table)
+static int deduplicate_adc_library(const pulseg_pulseq_file *seq, pulseg_adc_definition *adc_defs, pulseg_adc_table_element *adc_table)
 {
     int (*int_rows)[ADC_DEF_COLS] = NULL;
     float (*params)[ADC_PARAMS_COLS] = NULL;
@@ -399,7 +399,7 @@ static int deduplicate_adc_library(const pulseg__seq_file *seq, pulseg_adc_defin
 /* ================================================================== */
 
 static int compute_grad_shot_indices(
-    const pulseg__seq_file *seq,
+    const pulseg_pulseq_file *seq,
     pulseg_grad_definition *grad_defs, pulseg_grad_table_element *grad_table,
     int num_unique_grads)
 {
@@ -503,7 +503,7 @@ static void compute_trapezoid_stats(
 /* ================================================================== */
 
 static int compute_grad_stats(
-    const pulseg__seq_file *seq,
+    const pulseg_pulseq_file *seq,
     pulseg_grad_definition *grad_defs, int num_unique,
     const pulseg_grad_table_element *grad_table, int grad_table_size)
 {
@@ -594,7 +594,7 @@ static int compute_grad_stats(
             has_time = 0;
             if (time_id > 0 && time_id <= seq->shapes_library_size)
             {
-                if (!pulseg__decompress_shape(&decomp_time,
+                if (!pulseg_pulseq_decompress_shape(&decomp_time,
                                                  &seq->shapes_library[time_id - 1], grad_raster_us))
                     goto fail;
                 time_us = (float *)PULSEG_ALLOC(decomp_time.num_uncompressed_samples * sizeof(float));
@@ -613,7 +613,7 @@ static int compute_grad_stats(
                 if (shape_id <= 0 || shape_id > seq->shapes_library_size)
                     continue;
 
-                if (!pulseg__decompress_shape(&decomp_wave,
+                if (!pulseg_pulseq_decompress_shape(&decomp_wave,
                                                  &seq->shapes_library[shape_id - 1], 1.0f))
                     goto fail;
                 num_samples = decomp_wave.num_uncompressed_samples;
@@ -724,7 +724,7 @@ static float compute_rf_bandwidth_fft(const float *rf_re, const float *rf_im,
 }
 
 static int compute_rf_stats(
-    const pulseg__seq_file *seq,
+    const pulseg_pulseq_file *seq,
     pulseg_rf_definition *rf_defs, int num_unique,
     const pulseg_rf_table_element *rf_table, int rf_table_size)
 {
@@ -867,7 +867,7 @@ static int compute_rf_stats(
         duration = 0.0f;
 
         /* decompress magnitude */
-        if (!pulseg__decompress_shape(&decomp_mag, &seq->shapes_library[mag_id - 1], 1.0f))
+        if (!pulseg_pulseq_decompress_shape(&decomp_mag, &seq->shapes_library[mag_id - 1], 1.0f))
             goto fail;
         num_samples = decomp_mag.num_uncompressed_samples;
         magnitude = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
@@ -884,7 +884,7 @@ static int compute_rf_stats(
         /* decompress phase (optional) */
         if (phase_id > 0 && phase_id <= seq->shapes_library_size)
         {
-            if (!pulseg__decompress_shape(&decomp_phase, &seq->shapes_library[phase_id - 1], 1.0f))
+            if (!pulseg_pulseq_decompress_shape(&decomp_phase, &seq->shapes_library[phase_id - 1], 1.0f))
                 goto fail;
             phase = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
             if (!phase)
@@ -961,7 +961,7 @@ static int compute_rf_stats(
         /* decompress time (optional) */
         if (time_id > 0 && time_id <= seq->shapes_library_size)
         {
-            if (!pulseg__decompress_shape(&decomp_time, &seq->shapes_library[time_id - 1], rf_raster_us))
+            if (!pulseg_pulseq_decompress_shape(&decomp_time, &seq->shapes_library[time_id - 1], rf_raster_us))
                 goto fail;
             time_us = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
             if (!time_us)
@@ -1300,7 +1300,7 @@ fail:
 /*  Copy auxiliary libraries                                          */
 /* ================================================================== */
 
-static int copy_rotation_library(const pulseg__seq_file *seq, pulseg_sequence_descriptor *desc)
+static int copy_rotation_library(const pulseg_pulseq_file *seq, pulseg_sequence_descriptor *desc)
 {
     int i, num = seq->rotation_library_size;
 
@@ -1319,7 +1319,7 @@ static int copy_rotation_library(const pulseg__seq_file *seq, pulseg_sequence_de
     return PULSEG_SUCCESS;
 }
 
-static int copy_trigger_library(const pulseg__seq_file *seq, pulseg_sequence_descriptor *desc)
+static int copy_trigger_library(const pulseg_pulseq_file *seq, pulseg_sequence_descriptor *desc)
 {
     int i, num = seq->trigger_library_size;
 
@@ -1344,7 +1344,7 @@ static int copy_trigger_library(const pulseg__seq_file *seq, pulseg_sequence_des
     return PULSEG_SUCCESS;
 }
 
-static int copy_rf_shim_library(const pulseg__seq_file *seq, pulseg_sequence_descriptor *desc)
+static int copy_rf_shim_library(const pulseg_pulseq_file *seq, pulseg_sequence_descriptor *desc)
 {
     int i, j, num = seq->rf_shim_library_size;
     const pulseg__rf_shim_entry *entry;
@@ -1379,7 +1379,7 @@ static int copy_rf_shim_library(const pulseg__seq_file *seq, pulseg_sequence_des
     return PULSEG_SUCCESS;
 }
 
-static int copy_shapes_library(const pulseg__seq_file *seq, pulseg_sequence_descriptor *desc)
+static int copy_shapes_library(const pulseg_pulseq_file *seq, pulseg_sequence_descriptor *desc)
 {
     int i, j, num = seq->shapes_library_size;
     int ns;
@@ -1449,7 +1449,7 @@ static int rasters_compatible(float a, float b)
  * Check all four raster pairs (sequence-defined vs system opts).
  * Returns PULSEG_SUCCESS or PULSEG_ERR_RASTER_MISMATCH.
  */
-static int check_raster_times(const pulseg__seq_file *seq)
+static int check_raster_times(const pulseg_pulseq_file *seq)
 {
     const pulseg__reserved_definitions *rd = &seq->reserved_definitions_library;
     const pulseg_opts *opts = &seq->opts;
@@ -1477,7 +1477,7 @@ static int check_raster_times(const pulseg__seq_file *seq)
 /*  get_unique_blocks                                                 */
 /* ================================================================== */
 
-int pulseg__get_unique_blocks(pulseg_sequence_descriptor *desc, const pulseg__seq_file *seq)
+int pulseg__get_unique_blocks(pulseg_sequence_descriptor *desc, const pulseg_pulseq_file *seq)
 {
     int result, num_blocks, num_unique_rf, num_unique_grad, num_unique_adc;
     int n;
@@ -1495,8 +1495,8 @@ int pulseg__get_unique_blocks(pulseg_sequence_descriptor *desc, const pulseg__se
     int *unique_defs = NULL;
     int *event_table = NULL;
 
-    pulseg__raw_block raw;
-    pulseg__raw_extension ext;
+    pulseg_pulseq_raw_block raw;
+    pulseg_pulseq_raw_extension ext;
     int norot_flag, nopos_flag, once_flag, pmc_flag, nav_flag, once_counter;
     int has_prep, has_cooldown, ctrl;
 
@@ -1569,7 +1569,7 @@ int pulseg__get_unique_blocks(pulseg_sequence_descriptor *desc, const pulseg__se
         {
             strncpy(desc->definitions[di].name,
                     seq->definitions_library[di].name,
-                    PULSEG__DEFINITION_NAME_LENGTH);
+                    PULSEG_PULSEQ_DEFINITION_NAME_LENGTH);
             desc->definitions[di].value_size = seq->definitions_library[di].value_size;
             desc->definitions[di].value = NULL;
             if (seq->definitions_library[di].value_size > 0)
@@ -1677,7 +1677,7 @@ int pulseg__get_unique_blocks(pulseg_sequence_descriptor *desc, const pulseg__se
 
     for (n = 0; n < num_blocks; ++n)
     {
-        if (!pulseg__get_raw_block_content_ids(seq, &raw, n, 1))
+        if (!pulseg_pulseq_get_raw_block_content_ids(seq, &raw, n, 1))
         {
             result = PULSEG_ERR_INVALID_ARGUMENT;
             goto fail;
@@ -1701,7 +1701,7 @@ int pulseg__get_unique_blocks(pulseg_sequence_descriptor *desc, const pulseg__se
 
         if (raw.ext_count > 0 && seq->is_extensions_library_parsed && seq->extension_lut)
         {
-            pulseg__get_raw_extension(seq, &ext, &raw);
+            pulseg_pulseq_get_raw_extension(seq, &ext, &raw);
             tmp_blk_tab[n].rotation_id = ext.rotation_index;
             tmp_blk_tab[n].digitalout_id = ext.trigger_index;
             tmp_blk_tab[n].rf_shim_id = ext.rf_shim_index;
@@ -1872,10 +1872,10 @@ int pulseg__get_unique_blocks(pulseg_sequence_descriptor *desc, const pulseg__se
     has_cooldown = 0;
     for (n = 0; n < num_blocks; ++n)
     {
-        pulseg__get_raw_block_content_ids(seq, &raw, n, 1);
+        pulseg_pulseq_get_raw_block_content_ids(seq, &raw, n, 1);
         if (raw.ext_count > 0)
         {
-            pulseg__get_raw_extension(seq, &ext, &raw);
+            pulseg_pulseq_get_raw_extension(seq, &ext, &raw);
             if (ext.flag.once == 1)
                 has_prep = 1;
             else if (ext.flag.once == 2)
@@ -1890,8 +1890,8 @@ int pulseg__get_unique_blocks(pulseg_sequence_descriptor *desc, const pulseg__se
 
     if (has_prep)
     {
-        pulseg__get_raw_block_content_ids(seq, &raw, 0, 1);
-        pulseg__get_raw_extension(seq, &ext, &raw);
+        pulseg_pulseq_get_raw_block_content_ids(seq, &raw, 0, 1);
+        pulseg_pulseq_get_raw_extension(seq, &ext, &raw);
         if (ext.flag.once != 1)
         {
             pulseg_sequence_descriptor_free(desc);
@@ -1901,8 +1901,8 @@ int pulseg__get_unique_blocks(pulseg_sequence_descriptor *desc, const pulseg__se
         desc->num_prep_blocks = 1;
         while (ctrl == 0 && desc->num_prep_blocks < num_blocks)
         {
-            pulseg__get_raw_block_content_ids(seq, &raw, desc->num_prep_blocks, 1);
-            pulseg__get_raw_extension(seq, &ext, &raw);
+            pulseg_pulseq_get_raw_block_content_ids(seq, &raw, desc->num_prep_blocks, 1);
+            pulseg_pulseq_get_raw_extension(seq, &ext, &raw);
             if (ext.flag.once != 0)
                 desc->num_prep_blocks++;
             else
@@ -1915,8 +1915,8 @@ int pulseg__get_unique_blocks(pulseg_sequence_descriptor *desc, const pulseg__se
         desc->num_cooldown_blocks = 0;
         while (ctrl == 0 && desc->num_cooldown_blocks < num_blocks)
         {
-            pulseg__get_raw_block_content_ids(seq, &raw, num_blocks - 1 - desc->num_cooldown_blocks, 1);
-            pulseg__get_raw_extension(seq, &ext, &raw);
+            pulseg_pulseq_get_raw_block_content_ids(seq, &raw, num_blocks - 1 - desc->num_cooldown_blocks, 1);
+            pulseg_pulseq_get_raw_extension(seq, &ext, &raw);
             desc->num_cooldown_blocks++;
             if (ext.flag.once == 2)
                 ctrl = 1;

@@ -12,11 +12,51 @@
 
 #include "pulseg_config.h"
 #include "pulseg_types.h"
+#include "pulseg_io.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
+
+    /* ================================================================== */
+    /*  Raw pulseq model -> collection (Stage 3 Step 2)                    */
+    /* ================================================================== */
+
+    /**
+     * @brief Convert @p n already-parsed pulseq files into a loaded
+     * collection: unique-block dedup, TR/segmentation detection, scan-table
+     * expansion, freq-mod flags, label table, and cross-subsequence
+     * consistency checks.
+     *
+     * This is the "convert" half of the former one-shot @c pulseg_read() /
+     * @c pulseg_read_from_buffers() loaders -- those now compose
+     * @c pulseg_pulseq_file_read() (or @c _from_buffer / @c
+     * pulseg_pulseq_file_set_read()) with this function. Each element of
+     * @p files must already carry its own populated @c opts (set at
+     * pulseg_pulseq_file_init() / read time); there is no separate top-level
+     * opts parameter -- passing one alongside per-file opts would be
+     * ambiguous about which wins, so callers rely on the per-file copy.
+     *
+     * @param[out] coll          Caller-allocated collection to populate
+     *                           (typically freshly heap-allocated and
+     *                           zeroed, as pulseg_read() does).
+     * @param[out] diag          Optional diagnostic (NULL uses a local one).
+     * @param[in]  files         Array of @p n already-parsed pulseq files.
+     * @param[in]  n             Number of entries in @p files (>= 1).
+     * @param[in]  parse_labels  1 to also build the ADC label table.
+     * @param[in]  num_averages  Number of averages (>= 1; see
+     *                           pulseg_read()'s parameter of the same name).
+     * @return Number of subsequences converted on success (== @p n),
+     *         0 on failure (diag->code holds the negative error code).
+     */
+    int pulseg_convert_collection(
+        pulseg_collection *coll,
+        pulseg_diagnostic *diag,
+        const pulseg_pulseq_file *files,
+        int n,
+        int parse_labels,
+        int num_averages);
 
     /* ================================================================== */
     /*  Sequence description (SEQDESC section)                            */

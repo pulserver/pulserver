@@ -49,6 +49,16 @@ int pulseg__label2enum(const char *label)
     return -1;
 }
 
+int pulseg_pulseq_label_id_for_name(const char *name)
+{
+    return pulseg__label2enum(name);
+}
+
+int pulseg_pulseq_hint_id_for_name(const char *name)
+{
+    return pulseg__hint2enum(name);
+}
+
 static const pulseg__table_entry hint_table[] = {
     {"TE", PULSEG__HINT_TE},
     {"TR", PULSEG__HINT_TR},

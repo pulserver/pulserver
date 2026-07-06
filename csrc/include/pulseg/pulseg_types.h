@@ -24,6 +24,16 @@
 #define PULSEG_GRAD_AXIS_Z 2
 
 /* ================================================================== */
+/*  RF use codes (pulseg_seq_event.params[1] for RF rows, and the raw  */
+/*  pulseq RF library's trailing e/r/i/s use tag)                     */
+/* ================================================================== */
+#define PULSEG_RF_USE_UNKNOWN     0
+#define PULSEG_RF_USE_EXCITATION  1
+#define PULSEG_RF_USE_REFOCUSING  2
+#define PULSEG_RF_USE_INVERSION   3
+#define PULSEG_RF_USE_SATURATION  4
+
+/* ================================================================== */
 /*  Error codes                                                       */
 /* ================================================================== */
 
@@ -76,6 +86,20 @@ typedef struct pulseg_diagnostic
 } pulseg_diagnostic;
 
 #define PULSEG_DIAGNOSTIC_INIT {PULSEG_SUCCESS, {'\0'}}
+
+/* ================================================================== */
+/*  Shape (RLE-decompressible waveform; raw pulseq shape library entry
+ *  and decompressed descriptor/waveform storage share this type)     */
+/* ================================================================== */
+
+typedef struct pulseg_shape_arbitrary
+{
+    int num_uncompressed_samples;
+    int num_samples;
+    float *samples;
+} pulseg_shape_arbitrary;
+
+#define PULSEG_SHAPE_ARBITRARY_INIT {0, 0, NULL}
 
 /* ================================================================== */
 /*  RF envelope view (for the vendor RF-stats callback)               */

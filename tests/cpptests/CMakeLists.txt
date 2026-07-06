@@ -70,4 +70,41 @@ target_link_libraries(test_seq_desc_truth PRIVATE GTest::gtest_main)
 include(GoogleTest)
 gtest_discover_tests(test_trajectory_cache_loader)
 gtest_discover_tests(test_seq_desc_truth)
+
+# ------------------------------------------------------------------
+# Pulseq adapter equivalence test (Stage 3, D4): loads a fixture .seq
+# through the ExternalSequence adapter and through pulseg's native C
+# reader, and asserts the resulting collections agree.
+# ------------------------------------------------------------------
+set(PULSEQ_SUBMODULE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../external/pulseq)
+if(EXISTS ${PULSEQ_SUBMODULE_DIR}/src/ExternalSequence.cpp)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../csrc ${CMAKE_CURRENT_BINARY_DIR}/csrc_build)
+
+    add_library(pulseq_upstream STATIC ${PULSEQ_SUBMODULE_DIR}/src/ExternalSequence.cpp)
+    target_include_directories(pulseq_upstream PUBLIC ${PULSEQ_SUBMODULE_DIR}/src)
+
+    set(PULSEQ_ADAPTER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../cxx/pulseq_adapter)
+    add_library(pulseg_pulseq_adapter STATIC
+        ${PULSEQ_ADAPTER_DIR}/pulseq_adapter.cpp
+        ${PULSEQ_ADAPTER_DIR}/collection_ext_seq.cpp)
+    target_include_directories(pulseg_pulseq_adapter PUBLIC
+        ${PULSEQ_ADAPTER_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../cxx/include/pulseg)
+    target_link_libraries(pulseg_pulseq_adapter PUBLIC pulseg pulseq_upstream)
+
+    add_executable(test_pulseq_adapter_equivalence test_pulseq_adapter_equivalence.cpp)
+    target_include_directories(test_pulseq_adapter_equivalence PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../cxx/include/pulseg)
+    target_compile_definitions(test_pulseq_adapter_equivalence PRIVATE
+        PULSEQ_ADAPTER_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../utils/expected")
+    target_link_libraries(test_pulseq_adapter_equivalence PRIVATE
+        pulseg_pulseq_adapter GTest::gtest_main)
+
+    gtest_discover_tests(test_pulseq_adapter_equivalence)
+else()
+    message(WARNING "external/pulseq submodule not initialized -- "
+                     "skipping test_pulseq_adapter_equivalence "
+                     "(run 'git submodule update --init external/pulseq')")
+endif()
+
 enable_testing()

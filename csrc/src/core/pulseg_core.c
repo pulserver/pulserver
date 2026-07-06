@@ -150,6 +150,16 @@ void pulseg_collection_free(
     PULSEG_FREE(c);
 }
 
+pulseg_collection* pulseg_collection_alloc(void)
+{
+    pulseg_collection* c = (pulseg_collection*)PULSEG_ALLOC(sizeof(pulseg_collection));
+    if (!c) return NULL;
+    memset(c, 0, sizeof(*c));
+    c->block_cursor.scan_table_position = -1;
+    c->num_repetitions = 1;
+    return c;
+}
+
 void pulseg_segment_table_result_free(pulseg_segment_table_result* r)
 {
     if (!r) return;
@@ -605,29 +615,30 @@ int pulseg_format_error(
 }
 
 /* ================================================================== */
-/*  get_collection_descriptors                                        */
+/*  pulseg_convert_collection (public convert entry point, Stage 3)    */
 /* ================================================================== */
 
-int pulseg__get_collection_descriptors(
+int pulseg_convert_collection(
     pulseg_collection* coll,
     pulseg_diagnostic* diag,
-    const pulseg__seq_file_collection* raw,
+    const pulseg_pulseq_file* files,
+    int n,
     int parse_labels,
     int num_averages)
 {
-    int i, j, result;
+    int i, j, result, rc;
     int adc_off = 0, seg_off = 0, blk_off = 0;
     pulseg_diagnostic local_diag;
 
     if (!diag) { pulseg_diagnostic_init(&local_diag); diag = &local_diag; }
 
-    if (!raw || !coll) { diag->code = PULSEG_ERR_NULL_POINTER; return 0; }
-    if (raw->num_sequences == 0) { diag->code = PULSEG_ERR_COLLECTION_EMPTY; return 0; }
+    if (!files || !coll) { diag->code = PULSEG_ERR_NULL_POINTER; return 0; }
+    if (n == 0) { diag->code = PULSEG_ERR_COLLECTION_EMPTY; return 0; }
 
     coll->descriptors = (pulseg_sequence_descriptor*)PULSEG_ALLOC(
-        raw->num_sequences * sizeof(pulseg_sequence_descriptor));
+        n * sizeof(pulseg_sequence_descriptor));
     coll->subsequence_info = (pulseg_subsequence_info*)PULSEG_ALLOC(
-        raw->num_sequences * sizeof(pulseg_subsequence_info));
+        n * sizeof(pulseg_subsequence_info));
     if (!coll->descriptors || !coll->subsequence_info) {
         if (coll->descriptors)     PULSEG_FREE(coll->descriptors);
         if (coll->subsequence_info) PULSEG_FREE(coll->subsequence_info);
@@ -637,13 +648,13 @@ int pulseg__get_collection_descriptors(
         return 0;
     }
 
-    coll->num_subsequences    = raw->num_sequences;
+    coll->num_subsequences    = n;
     coll->total_duration_us   = 0.0f;
     coll->total_unique_segments = 0;
     coll->total_unique_adcs   = 0;
     coll->total_blocks        = 0;
 
-    for (i = 0; i < raw->num_sequences; ++i) {
+    for (i = 0; i < n; ++i) {
         pulseg_sequence_descriptor desc = PULSEG_SEQUENCE_DESCRIPTOR_INIT;
 
         coll->subsequence_info[i].sequence_index     = i;
@@ -651,7 +662,7 @@ int pulseg__get_collection_descriptors(
         coll->subsequence_info[i].segment_id_offset  = seg_off;
         coll->subsequence_info[i].block_index_offset = blk_off;
 
-        result = pulseg__get_unique_blocks(&desc, &raw->sequences[i]);
+        result = pulseg__get_unique_blocks(&desc, &files[i]);
         if (PULSEG_FAILED(result)) { diag->code = result; goto fail; }
 
         result = pulseg__get_tr_in_sequence(&desc, diag);
@@ -690,7 +701,7 @@ int pulseg__get_collection_descriptors(
         }
 
         /* Scan-table-only segmentation (prep / main / cooldown) */
-        result = pulseg__get_scan_table_segments(&desc, diag, &raw->sequences[i].opts);
+        result = pulseg__get_scan_table_segments(&desc, diag, &files[i].opts);
         if (PULSEG_FAILED(diag->code)) goto fail;
 
         /* get_scan_table_segments may adjust TR topology (e.g. sparse
@@ -708,7 +719,7 @@ int pulseg__get_collection_descriptors(
         if (PULSEG_FAILED(result)) { diag->code = result; goto fail; }
 
         if (parse_labels) {
-            result = pulseg__build_label_table(&desc, &raw->sequences[i]);
+            result = pulseg__build_label_table(&desc, &files[i]);
             if (PULSEG_FAILED(result)) { diag->code = result; goto fail; }
         }
 
@@ -756,8 +767,14 @@ int pulseg__get_collection_descriptors(
     coll->total_unique_segments = seg_off;
     coll->total_unique_adcs     = adc_off;
     coll->total_blocks          = blk_off;
+
+    /* Cross-subsequence consistency (folded in from the former separate
+     * pulseg_read()/pulseg_read_from_buffers() call, Stage 3 Step 2). */
+    rc = check_consistency(coll, diag);
+    if (PULSEG_FAILED(rc)) { diag->code = rc; i = n; goto fail; }
+
     diag->code = PULSEG_SUCCESS;
-    return raw->num_sequences;
+    return n;
 
 fail:
     for (j = 0; j < i; ++j)
@@ -784,7 +801,7 @@ int pulseg_read(
     int parse_labels,
     int num_averages)
 {
-    pulseg__seq_file_collection raw_coll;
+    pulseg_pulseq_file_set raw_coll;
     pulseg_collection* collection;
     int rc, i;
 
@@ -799,11 +816,8 @@ int pulseg_read(
     pulseg_diagnostic_init(diag);
 
     /* Heap-allocate the opaque collection */
-    collection = (pulseg_collection*)PULSEG_ALLOC(sizeof(pulseg_collection));
+    collection = pulseg_collection_alloc();
     if (!collection) return PULSEG_ERR_ALLOC_FAILED;
-    memset(collection, 0, sizeof(*collection));
-    collection->block_cursor.scan_table_position = -1;
-    collection->num_repetitions = 1;
 
     /* Try cache */
     if (cache_binary && pulseg__try_read_cache(collection, file_path, opts->cache_ext)) {
@@ -817,7 +831,7 @@ int pulseg_read(
     }
 
     /* Full parse */
-    rc = pulseg__read_seq_collection(&raw_coll, file_path, opts);
+    rc = pulseg_pulseq_file_set_read(&raw_coll, file_path, opts);
     if (PULSEG_FAILED(rc)) { diag->code = rc; goto fail; }
 
     /* Optional MD5 signature verification (all files in chain) */
@@ -825,7 +839,7 @@ int pulseg_read(
         for (i = 0; i < raw_coll.num_sequences; ++i) {
             const char* fpath = raw_coll.sequences[i].file_path;
             if (!fpath) continue;
-            rc = pulseg__verify_signature(fpath);
+            rc = pulseg_pulseq_verify_signature(fpath);
             if (PULSEG_FAILED(rc)) {
                 diag->code = rc;
                 pulseg__diag_printf(diag, " subsequence=%d", i);
@@ -834,13 +848,11 @@ int pulseg_read(
         }
     }
 
-    rc = pulseg__get_collection_descriptors(collection, diag, &raw_coll, parse_labels, num_averages);
+    rc = pulseg_convert_collection(collection, diag, raw_coll.sequences,
+                                    raw_coll.num_sequences, parse_labels, num_averages);
     if (PULSEG_FAILED(diag->code)) { rc = diag->code; goto fail; }
 
-    rc = check_consistency(collection, diag);
-    if (PULSEG_FAILED(rc)) { diag->code = rc; goto fail; }
-
-    pulseg__seq_file_collection_free(&raw_coll);
+    pulseg_pulseq_file_set_free(&raw_coll);
 
     /* Write cache (best-effort) */
     if (cache_binary) pulseg__write_cache(collection, file_path, opts);
@@ -849,7 +861,7 @@ int pulseg_read(
     return PULSEG_SUCCESS;
 
 fail:
-    pulseg__seq_file_collection_free(&raw_coll);
+    pulseg_pulseq_file_set_free(&raw_coll);
     PULSEG_FREE(collection);
     return rc;
 }
@@ -868,7 +880,7 @@ int pulseg_read_from_buffers(
     int parse_labels,
     int num_averages)
 {
-    pulseg__seq_file_collection raw_coll;
+    pulseg_pulseq_file_set raw_coll;
     pulseg_collection* collection;
     int rc, i;
 
@@ -884,8 +896,8 @@ int pulseg_read_from_buffers(
     pulseg_diagnostic_init(diag);
 
     /* Build raw collection from in-memory buffers */
-    raw_coll.sequences = (pulseg__seq_file*)PULSEG_ALLOC(
-        num_buffers * sizeof(pulseg__seq_file));
+    raw_coll.sequences = (pulseg_pulseq_file*)PULSEG_ALLOC(
+        num_buffers * sizeof(pulseg_pulseq_file));
     if (!raw_coll.sequences) return PULSEG_ERR_ALLOC_FAILED;
     raw_coll.num_sequences = 0;
     raw_coll.base_path     = NULL;
@@ -912,27 +924,22 @@ int pulseg_read_from_buffers(
         }
         rewind(tmp);
 
-        pulseg__seq_file_init(&raw_coll.sequences[i], opts);
-        rc = pulseg__read_seq_from_buffer(&raw_coll.sequences[i], tmp);
+        pulseg_pulseq_file_init(&raw_coll.sequences[i], opts);
+        rc = pulseg_pulseq_file_read_from_buffer(&raw_coll.sequences[i], tmp);
         fclose(tmp);
         if (PULSEG_FAILED(rc)) { diag->code = rc; goto fail_raw; }
         raw_coll.num_sequences = i + 1;
     }
 
     /* Heap-allocate the opaque collection */
-    collection = (pulseg_collection*)PULSEG_ALLOC(sizeof(pulseg_collection));
+    collection = pulseg_collection_alloc();
     if (!collection) { rc = PULSEG_ERR_ALLOC_FAILED; goto fail_raw; }
-    memset(collection, 0, sizeof(*collection));
-    collection->block_cursor.scan_table_position = -1;
-    collection->num_repetitions = 1;
 
-    rc = pulseg__get_collection_descriptors(collection, diag, &raw_coll, parse_labels, num_averages);
+    rc = pulseg_convert_collection(collection, diag, raw_coll.sequences,
+                                    raw_coll.num_sequences, parse_labels, num_averages);
     if (PULSEG_FAILED(diag->code)) { rc = diag->code; goto fail_coll; }
 
-    rc = check_consistency(collection, diag);
-    if (PULSEG_FAILED(rc)) { diag->code = rc; goto fail_coll; }
-
-    pulseg__seq_file_collection_free(&raw_coll);
+    pulseg_pulseq_file_set_free(&raw_coll);
 
     *out_coll = collection;
     return PULSEG_SUCCESS;
@@ -940,6 +947,6 @@ int pulseg_read_from_buffers(
 fail_coll:
     PULSEG_FREE(collection);
 fail_raw:
-    pulseg__seq_file_collection_free(&raw_coll);
+    pulseg_pulseq_file_set_free(&raw_coll);
     return rc;
 }

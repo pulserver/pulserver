@@ -855,8 +855,8 @@ int pulseg__build_freq_mod_flags(pulseg_sequence_descriptor* desc)
  */
 static void apply_block_labels(
     int* state,
-    const pulseg__seq_file* seq,
-    const pulseg__raw_block* raw)
+    const pulseg_pulseq_file* seq,
+    const pulseg_pulseq_raw_block* raw)
 {
     int i, type_idx, ref_idx, ext_type, label_value, label_id;
 
@@ -975,7 +975,7 @@ static void record_adc_label(
 
 int pulseg__build_label_table(
     pulseg_sequence_descriptor* desc,
-    const pulseg__seq_file* seq)
+    const pulseg_pulseq_file* seq)
 {
     int num_columns, total_adcs, adcs_per_tr;
     int imaging_start, cooldown_start, num_trs;
@@ -983,7 +983,7 @@ int pulseg__build_label_table(
     int state[11];
     int* table;
     int* off_table = NULL;
-    pulseg__raw_block raw;
+    pulseg_pulseq_raw_block raw;
 
     if (!desc || !seq) return PULSEG_ERR_NULL_POINTER;
 
@@ -1034,7 +1034,7 @@ int pulseg__build_label_table(
 
     /* 1. Prep blocks */
     for (b = 0; b < imaging_start; ++b) {
-        pulseg__get_raw_block_content_ids(seq, &raw, b, 1);
+        pulseg_pulseq_get_raw_block_content_ids(seq, &raw, b, 1);
         apply_block_labels(state, seq, &raw);
         if (desc->block_table[b].adc_id >= 0) {
             record_adc_label(&table[entry_idx * num_columns],
@@ -1049,7 +1049,7 @@ int pulseg__build_label_table(
     /* 2. Main blocks x num_trs */
     for (rep = 0; rep < num_trs; ++rep) {
         for (b = imaging_start; b < cooldown_start; ++b) {
-            pulseg__get_raw_block_content_ids(seq, &raw, b, 1);
+            pulseg_pulseq_get_raw_block_content_ids(seq, &raw, b, 1);
             apply_block_labels(state, seq, &raw);
             if (desc->block_table[b].adc_id >= 0) {
                 record_adc_label(&table[entry_idx * num_columns],
@@ -1064,7 +1064,7 @@ int pulseg__build_label_table(
 
     /* 3. Cooldown blocks */
     for (b = cooldown_start; b < desc->pass_len; ++b) {
-        pulseg__get_raw_block_content_ids(seq, &raw, b, 1);
+        pulseg_pulseq_get_raw_block_content_ids(seq, &raw, b, 1);
         apply_block_labels(state, seq, &raw);
         if (desc->block_table[b].adc_id >= 0) {
             record_adc_label(&table[entry_idx * num_columns],

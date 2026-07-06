@@ -1340,12 +1340,12 @@ static int read_definitions_cache(FILE *f, pulseg_sequence_descriptor *d, int do
             int name_len;
             d->definitions[i].value = NULL;
             d->definitions[i].value_size = 0;
-            memset(d->definitions[i].name, 0, PULSEG__DEFINITION_NAME_LENGTH);
+            memset(d->definitions[i].name, 0, PULSEG_PULSEQ_DEFINITION_NAME_LENGTH);
             if (fread(&name_len, sizeof(int), 1, f) != 1)
                 return 0;
             if (do_swap)
                 swap4(&name_len);
-            if (name_len > 0 && name_len < PULSEG__DEFINITION_NAME_LENGTH)
+            if (name_len > 0 && name_len < PULSEG_PULSEQ_DEFINITION_NAME_LENGTH)
             {
                 if (fread(d->definitions[i].name, 1, (size_t)name_len, f) != (size_t)name_len)
                     return 0;

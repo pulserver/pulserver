@@ -106,7 +106,7 @@ static int count_grad_samples_for_block(
     {
         if (gdef->unused_or_time_shape_id > 0 &&
             gdef->unused_or_time_shape_id <= desc->num_shapes &&
-            pulseg__decompress_shape(&decomp_time,
+            pulseg_pulseq_decompress_shape(&decomp_time,
                                         &desc->shapes[gdef->unused_or_time_shape_id - 1],
                                         grad_raster_us))
         {
@@ -696,14 +696,14 @@ static int fill_grad_waveform_for_block(
 
         if (shape_id <= 0 || shape_id > desc->num_shapes)
             return 0;
-        if (!pulseg__decompress_shape(&decomp_wave,
+        if (!pulseg_pulseq_decompress_shape(&decomp_wave,
                                          &desc->shapes[shape_id - 1], 1.0f))
             return 0;
 
         has_time_shape = 0;
         if (time_shape_id > 0 && time_shape_id <= desc->num_shapes)
         {
-            if (pulseg__decompress_shape(&decomp_time,
+            if (pulseg_pulseq_decompress_shape(&decomp_time,
                                             &desc->shapes[time_shape_id - 1], grad_raster_us))
                 has_time_shape = 1;
         }
@@ -1502,7 +1502,7 @@ static int fill_rf_waveform_for_flat_block(
     /* decompress magnitude shape */
     decomp_mag.samples = NULL;
     decomp_mag.num_uncompressed_samples = 0;
-    if (!pulseg__decompress_shape(&decomp_mag,
+    if (!pulseg_pulseq_decompress_shape(&decomp_mag,
                                      &desc->shapes[rdef->mag_shape_id - 1], 1.0f))
         return 0;
     npts = decomp_mag.num_uncompressed_samples / nch;
@@ -1513,7 +1513,7 @@ static int fill_rf_waveform_for_flat_block(
     if (rdef->phase_shape_id > 0 &&
         rdef->phase_shape_id <= desc->num_shapes)
     {
-        pulseg__decompress_shape(&decomp_phase,
+        pulseg_pulseq_decompress_shape(&decomp_phase,
                                     &desc->shapes[rdef->phase_shape_id - 1], (float)PULSEG__TWO_PI);
     }
 
@@ -1524,7 +1524,7 @@ static int fill_rf_waveform_for_flat_block(
     if (rdef->time_shape_id > 0 &&
         rdef->time_shape_id <= desc->num_shapes)
     {
-        if (pulseg__decompress_shape(&decomp_time,
+        if (pulseg_pulseq_decompress_shape(&decomp_time,
                                         &desc->shapes[rdef->time_shape_id - 1], rf_raster_us))
             has_time_shape = 1;
     }

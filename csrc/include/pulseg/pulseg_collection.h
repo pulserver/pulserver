@@ -125,6 +125,19 @@ extern "C"
         pulseg_diagnostic *diag);
     void pulseg_collection_free(pulseg_collection *coll);
 
+    /**
+     * @brief Heap-allocate and zero-initialize an empty collection, ready to
+     * be populated by pulseg_convert_collection() (Stage 3). This is the same
+     * allocation pulseg_read() / pulseg_read_from_buffers() perform
+     * internally; exposed so external producers of pulseg_pulseq_file (e.g.
+     * the ExternalSequence adapter, cxx/pulseq_adapter) that call
+     * pulseg_convert_collection() directly don't need to know
+     * pulseg_collection's (intentionally opaque) internal layout.
+     * @return A freshly allocated collection, or NULL on allocation failure.
+     *         Free with pulseg_collection_free().
+     */
+    pulseg_collection *pulseg_collection_alloc(void);
+
     /* ================================================================== */
     /*  Subsequence getters                                               */
     /* ================================================================== */

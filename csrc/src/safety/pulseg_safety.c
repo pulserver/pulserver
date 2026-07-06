@@ -848,7 +848,7 @@ static int sa_build_axis_events(
                 decomp_wave.num_samples = 0;
                 decomp_wave.num_uncompressed_samples = 0;
 
-                if (pulseg__decompress_shape(&decomp_wave,
+                if (pulseg_pulseq_decompress_shape(&decomp_wave,
                                                 &desc->shapes[shape_id - 1], 1.0f) &&
                     decomp_wave.num_uncompressed_samples > 0)
                 {
@@ -865,7 +865,7 @@ static int sa_build_axis_events(
 
                     if (time_shape_id > 0 && time_shape_id <= desc->num_shapes)
                     {
-                        if (pulseg__decompress_shape(&decomp_time,
+                        if (pulseg_pulseq_decompress_shape(&decomp_time,
                                                         &desc->shapes[time_shape_id - 1], raster) &&
                             decomp_time.num_uncompressed_samples > 0)
                         {

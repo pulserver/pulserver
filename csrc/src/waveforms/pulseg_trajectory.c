@@ -243,7 +243,7 @@ static int decompress_block_arb(
     if (sid < 0 || sid >= desc->num_shapes)
         return 0;
 
-    if (!pulseg__decompress_shape(&decomp, &desc->shapes[sid], 1.0f))
+    if (!pulseg_pulseq_decompress_shape(&decomp, &desc->shapes[sid], 1.0f))
         return -1;
     nsrc = decomp.num_samples;
     xp = (float *)PULSEG_ALLOC((size_t)nsrc * sizeof(float));
@@ -257,7 +257,7 @@ static int decompress_block_arb(
     if (gd->unused_or_time_shape_id > 0 && gd->unused_or_time_shape_id <= desc->num_shapes)
     {
         int ts_idx = gd->unused_or_time_shape_id - 1;
-        if (!pulseg__decompress_shape(&decomp_t,
+        if (!pulseg_pulseq_decompress_shape(&decomp_t,
                                          &desc->shapes[ts_idx],
                                          grad_raster_us))
         {
@@ -310,7 +310,7 @@ fail:
  *
  * Handles both TRAP and ARB gradient types.  For ARB shapes the
  * descriptor stores a *compressed* shape (delta-encoded); we must
- * decompress through pulseg__decompress_shape() rather than reading
+ * decompress through pulseg_pulseq_decompress_shape() rather than reading
  * desc->shapes[].samples[] directly.  We also obey the 1-indexed
  * convention shared with the rest of the library: shot_shape_ids[i]
  * holds (shape_index + 1), with 0 meaning "no shape".
@@ -392,7 +392,7 @@ static int expand_block_axis_grad(
         decomp_t.num_uncompressed_samples = 0;
         decomp_t.samples = NULL;
 
-        if (!pulseg__decompress_shape(&decomp, &desc->shapes[sid], 1.0f))
+        if (!pulseg_pulseq_decompress_shape(&decomp, &desc->shapes[sid], 1.0f))
             return -1;
         nsrc = decomp.num_samples;
 
@@ -407,7 +407,7 @@ static int expand_block_axis_grad(
              * scaled by grad_raster_us (see pulseg_parse.c L1696 and
              * getters.c L2197). */
             int ts_idx = gd->unused_or_time_shape_id - 1;
-            if (!pulseg__decompress_shape(&decomp_t,
+            if (!pulseg_pulseq_decompress_shape(&decomp_t,
                                              &desc->shapes[ts_idx],
                                              grad_raster_us)) {
                 rc = -1; goto arb_done;

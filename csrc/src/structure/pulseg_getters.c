@@ -1348,7 +1348,7 @@ float **pulseg_get_rf_magnitude(const pulseg_collection *coll,
     decompressed.num_uncompressed_samples = 0;
     decompressed.samples = NULL;
 
-    if (!pulseg__decompress_shape(&decompressed, &desc->shapes[shape_idx],
+    if (!pulseg_pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx],
                                      1.0f))
         return NULL;
 
@@ -1425,7 +1425,7 @@ float **pulseg_get_rf_phase(const pulseg_collection *coll,
     decompressed.num_uncompressed_samples = 0;
     decompressed.samples = NULL;
 
-    if (!pulseg__decompress_shape(&decompressed, &desc->shapes[shape_idx], 1.0f))
+    if (!pulseg_pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx], 1.0f))
         return NULL;
 
     flat = decompressed.samples;
@@ -1496,7 +1496,7 @@ float *pulseg_get_rf_time_us(
     decompressed.num_uncompressed_samples = 0;
     decompressed.samples = NULL;
 
-    if (!pulseg__decompress_shape(&decompressed, &desc->shapes[shape_idx],
+    if (!pulseg_pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx],
                                      desc->rf_raster_us))
         return NULL;
 
@@ -1837,7 +1837,7 @@ float **pulseg_get_grad_amplitude(const pulseg_collection *coll,
             decompressed.num_uncompressed_samples = 0;
             decompressed.samples = NULL;
 
-            if (!pulseg__decompress_shape(&decompressed, &desc->shapes[shape_idx],
+            if (!pulseg_pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx],
                                              1.0f))
             {
                 waveforms[shot] = NULL;
@@ -2038,7 +2038,7 @@ float *pulseg_get_grad_time_us(
     decompressed.num_uncompressed_samples = 0;
     decompressed.samples = NULL;
 
-    if (!pulseg__decompress_shape(&decompressed, &desc->shapes[shape_idx],
+    if (!pulseg_pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx],
                                      desc->grad_raster_us))
         return NULL;
 
@@ -2387,7 +2387,7 @@ static int arb_nonzero_in_window(
     decomp.num_samples = 0;
     decomp.num_uncompressed_samples = 0;
     decomp.samples = NULL;
-    if (!pulseg__decompress_shape(&decomp, &desc->shapes[shape_idx], 1.0f))
+    if (!pulseg_pulseq_decompress_shape(&decomp, &desc->shapes[shape_idx], 1.0f))
         return 0;
 
     ns = decomp.num_samples;
@@ -2412,7 +2412,7 @@ static int arb_nonzero_in_window(
             decomp_time.num_samples = 0;
             decomp_time.num_uncompressed_samples = 0;
             decomp_time.samples = NULL;
-            if (pulseg__decompress_shape(&decomp_time,
+            if (pulseg_pulseq_decompress_shape(&decomp_time,
                                             &desc->shapes[ts_idx],
                                             desc->grad_raster_us))
             {

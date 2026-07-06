@@ -250,7 +250,7 @@ static int build_freq_mod_for_block(
                 continue;
             }
 
-            if (!pulseg__decompress_shape(&decomp_wave,
+            if (!pulseg_pulseq_decompress_shape(&decomp_wave,
                                              &desc->shapes[shape_id - 1], 1.0f))
             {
                 for (i = 0; i < fmod->num_samples; ++i)
@@ -264,7 +264,7 @@ static int build_freq_mod_for_block(
             has_time_shape = 0;
             if (time_shape_id > 0 && time_shape_id <= desc->num_shapes)
             {
-                if (pulseg__decompress_shape(&decomp_time,
+                if (pulseg_pulseq_decompress_shape(&decomp_time,
                                                 &desc->shapes[time_shape_id - 1], grad_raster_us))
                     has_time_shape = 1;
             }
