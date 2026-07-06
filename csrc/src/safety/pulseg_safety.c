@@ -154,12 +154,6 @@ static int pulseg__build_pass_expanded_block_order(
 #include "external_kiss_fftr.h"
 
 /* ================================================================== */
-/*  File-scope constants                                               */
-/* ================================================================== */
-#define PNS_KERNEL_DURATION_FACTOR 20.0f
-
-
-/* ================================================================== */
 /*  Acoustic spectra free                                             */
 /* ================================================================== */
 
@@ -2813,43 +2807,6 @@ int pulseg_calc_mech_resonances(const pulseg_collection *coll,
 /*  PNS                                                               */
 /* ================================================================== */
 
-/* FIX: outputs before inputs */
-static int build_pns_kernel(
-    float **kernel, int *kernel_len,
-    float dt_us, const pulseg_pns_params *params)
-{
-    int n, i;
-    float c_s, dt_s, s_min, tau, denom;
-    float *k;
-
-    if (params->chronaxie_us <= 0.0f)
-        return PULSEG_ERR_PNS_INVALID_CHRONAXIE;
-    if (params->rheobase_hz_per_m_per_s <= 0.0f)
-        return PULSEG_ERR_PNS_INVALID_RHEOBASE;
-    if (params->alpha <= 0.0f)
-        return PULSEG_ERR_PNS_INVALID_PARAMS;
-
-    c_s = params->chronaxie_us * 1e-6f;
-    dt_s = dt_us * 1e-6f;
-    s_min = params->rheobase_hz_per_m_per_s / params->alpha;
-
-    n = (int)(PNS_KERNEL_DURATION_FACTOR * c_s / dt_s) + 1;
-    k = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
-    if (!k)
-        return PULSEG_ERR_ALLOC_FAILED;
-
-    for (i = 0; i < n; ++i)
-    {
-        tau = (float)i * dt_s;
-        denom = (c_s + tau) * (c_s + tau);
-        k[i] = (dt_s / s_min) * (c_s / denom);
-    }
-
-    *kernel = k;
-    *kernel_len = n;
-    return PULSEG_SUCCESS;
-}
-
 /* FIX: output before inputs, C89-compliant declarations */
 static void compute_slew_rate(
     float *slew_out,
@@ -2867,66 +2824,27 @@ static void compute_slew_rate(
         slew_out[i] = ((waveform[i + 1] - waveform[i]) * inv_g) / dt_s;
 }
 
-/* Returns 1 if every sample of waveform[0..num_samples) is exactly zero.
- * Used to skip per-axis convolution work (PNS) for an axis that carries
- * no gradient (e.g. Gx/Gy on a slice-select-only readout). */
-static int pulseg__waveform_is_zero(const float *waveform, int num_samples)
+/* Builds one axis's circularly-padded dG/dt: appends `pad` extra samples
+ * (wrapped from the start of the waveform) before differentiating, so the
+ * injected PNS model sees a fully "warmed up" history. Neutral -- `pad`
+ * comes from the model's required_padding() query, not from any
+ * vendor-specific kernel knowledge here. `padded_scratch` must have room
+ * for (num_samples + pad) floats; `dgdt_out` for (num_samples + pad - 1). */
+static void pulseg__build_padded_dgdt(
+    float *dgdt_out,
+    float *padded_scratch,
+    const float *waveform, int num_samples, int pad,
+    float grad_raster_us, float gamma_hz_per_tesla)
 {
-    int i;
+    int i, padded_len;
 
-    if (!waveform)
-        return 1;
+    padded_len = num_samples + pad;
     for (i = 0; i < num_samples; ++i)
-    {
-        if (waveform[i] != 0.0f)
-            return 0;
-    }
-    return 1;
-}
+        padded_scratch[i] = waveform[i];
+    for (i = 0; i < pad; ++i)
+        padded_scratch[num_samples + i] = waveform[i % num_samples];
 
-/* FIX: outputs then in-out then scratch then inputs */
-static int process_pns_axis_circular(
-    float *pns_axis, float *pns_total,
-    float *pns_store,
-    float *padded_waveform, float *slew_rate, float *pns_conv,
-    const float *waveform, int num_samples,
-    const float *kernel, int kernel_len,
-    float grad_raster_us, float gamma_hz_per_tesla,
-    int full_output_len)
-{
-    int i, padded_len, slew_len, rc;
-
-    (void)full_output_len;
-
-    if (num_samples <= 0 || !waveform)
-        return PULSEG_SUCCESS;
-
-    padded_len = num_samples + kernel_len;
-    slew_len = padded_len - 1;
-
-    for (i = 0; i < num_samples; ++i)
-        padded_waveform[i] = waveform[i];
-    for (i = 0; i < kernel_len; ++i)
-        padded_waveform[num_samples + i] = waveform[i % num_samples];
-
-    compute_slew_rate(slew_rate, padded_waveform, padded_len, grad_raster_us, gamma_hz_per_tesla);
-
-    rc = pulseg__calc_convolution_fft(pns_conv, slew_rate, slew_len, kernel, kernel_len);
-    if (PULSEG_FAILED(rc))
-        return rc;
-
-    for (i = 0; i < slew_len; ++i)
-    {
-        pns_axis[i] = pns_conv[i] * 100.0f;
-        pns_total[i] += pns_conv[i] * pns_conv[i];
-    }
-
-    if (pns_store)
-    {
-        for (i = 0; i < slew_len; ++i)
-            pns_store[i] = pns_axis[i];
-    }
-    return PULSEG_SUCCESS;
+    compute_slew_rate(dgdt_out, padded_scratch, padded_len, grad_raster_us, gamma_hz_per_tesla);
 }
 
 static int calc_pns_from_uniform(
@@ -2934,31 +2852,26 @@ static int calc_pns_from_uniform(
     pulseg_diagnostic *diag,
     float gamma_hz_per_tesla,
     const pulseg__uniform_grad_waveforms *waveforms,
-    const pulseg_pns_params *params)
+    const pulseg_pns_model *model)
 {
     pulseg_diagnostic local_diag;
-    int max_samples, padded_len, slew_len, full_output_len;
-    int kernel_len, i;
-    float *kernel;
-    float *padded;
-    float *slew;
-    float *conv;
-    float *axis;
-    float *pns_x;
-    float *pns_y;
-    float *pns_z;
-    float *pns_tot;
+    int max_samples, pad, n;
+    float *padded_scratch;
+    float *dgdt_x;
+    float *dgdt_y;
+    float *dgdt_z;
+    float *out_x;
+    float *out_y;
+    float *out_z;
     int rc;
 
-    kernel = NULL;
-    padded = NULL;
-    slew = NULL;
-    conv = NULL;
-    axis = NULL;
-    pns_x = NULL;
-    pns_y = NULL;
-    pns_z = NULL;
-    pns_tot = NULL;
+    padded_scratch = NULL;
+    dgdt_x = NULL;
+    dgdt_y = NULL;
+    dgdt_z = NULL;
+    out_x = NULL;
+    out_y = NULL;
+    out_z = NULL;
     rc = PULSEG_SUCCESS;
 
     if (!diag)
@@ -2971,23 +2884,9 @@ static int calc_pns_from_uniform(
         pulseg_diagnostic_init(diag);
     }
 
-    if (!waveforms || !params || !result)
+    if (!waveforms || !model || !model->evaluate || !model->required_padding || !result)
     {
         diag->code = PULSEG_ERR_NULL_POINTER;
-        return diag->code;
-    }
-
-    /* Vendor dispatch.  Currently only the GE Healthcare exponential
-     * (chronaxie / rheobase / alpha) model is implemented in this
-     * library.  Other vendors (e.g. Siemens SAFE) require a different
-     * convolution kernel and threshold metric; those branches are
-     * extension points for downstream developers.
-     *
-     * vendor == 0 ("unspecified") is treated as GEHC for backward
-     * compatibility with callers that don't set the field. */
-    if (params->vendor != 0 && params->vendor != PULSEG_VENDOR_GEHC)
-    {
-        diag->code = PULSEG_ERR_NOT_IMPLEMENTED;
         return diag->code;
     }
 
@@ -3000,124 +2899,68 @@ static int calc_pns_from_uniform(
         return diag->code;
     }
 
-    rc = build_pns_kernel(&kernel, &kernel_len, waveforms->raster_us, params);
+    pad = model->required_padding(model->ctx, waveforms->raster_us);
+    if (pad < 0)
+    {
+        diag->code = PULSEG_ERR_PNS_INVALID_PARAMS;
+        return diag->code;
+    }
+    n = max_samples + pad - 1;
+
+    padded_scratch = (float *)PULSEG_ALLOC((size_t)(max_samples + pad) * sizeof(float));
+    dgdt_x = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    dgdt_y = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    dgdt_z = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    out_x = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    out_y = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    out_z = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    if (!padded_scratch || !dgdt_x || !dgdt_y || !dgdt_z || !out_x || !out_y || !out_z)
+    {
+        rc = PULSEG_ERR_ALLOC_FAILED;
+        goto fail;
+    }
+
+    pulseg__build_padded_dgdt(dgdt_x, padded_scratch, waveforms->gx, max_samples, pad,
+                              waveforms->raster_us, gamma_hz_per_tesla);
+    pulseg__build_padded_dgdt(dgdt_y, padded_scratch, waveforms->gy, max_samples, pad,
+                              waveforms->raster_us, gamma_hz_per_tesla);
+    pulseg__build_padded_dgdt(dgdt_z, padded_scratch, waveforms->gz, max_samples, pad,
+                              waveforms->raster_us, gamma_hz_per_tesla);
+
+    rc = model->evaluate(model->ctx, dgdt_x, dgdt_y, dgdt_z, n, waveforms->raster_us,
+                          out_x, out_y, out_z);
     if (PULSEG_FAILED(rc))
     {
         diag->code = rc;
-        return rc;
-    }
-
-    padded_len = max_samples + kernel_len;
-    slew_len = padded_len - 1;
-    full_output_len = slew_len;
-
-    padded = (float *)PULSEG_ALLOC((size_t)padded_len * sizeof(float));
-    slew = (float *)PULSEG_ALLOC((size_t)slew_len * sizeof(float));
-    conv = (float *)PULSEG_ALLOC((size_t)slew_len * sizeof(float));
-    axis = (float *)PULSEG_ALLOC((size_t)full_output_len * sizeof(float));
-    pns_tot = (float *)PULSEG_ALLOC((size_t)full_output_len * sizeof(float));
-    if (!padded || !slew || !conv || !axis || !pns_tot)
-    {
-        rc = PULSEG_ERR_ALLOC_FAILED;
         goto fail;
     }
-    for (i = 0; i < full_output_len; ++i)
-        pns_tot[i] = 0.0f;
 
-    pns_x = (float *)PULSEG_ALLOC((size_t)full_output_len * sizeof(float));
-    pns_y = (float *)PULSEG_ALLOC((size_t)full_output_len * sizeof(float));
-    pns_z = (float *)PULSEG_ALLOC((size_t)full_output_len * sizeof(float));
-    if (!pns_x || !pns_y || !pns_z)
-    {
-        rc = PULSEG_ERR_ALLOC_FAILED;
-        goto fail;
-    }
-    for (i = 0; i < full_output_len; ++i)
-    {
-        pns_x[i] = 0.0f;
-        pns_y[i] = 0.0f;
-        pns_z[i] = 0.0f;
-    }
-
-    /* X -- skip the FFT convolution entirely for a silent axis; pns_x/
-     * pns_tot stay at their zero-initialized value, which is the correct
-     * result for a channel with no gradient. */
-    if (!pulseg__waveform_is_zero(waveforms->gx, waveforms->num_samples))
-    {
-        rc = process_pns_axis_circular(axis, pns_tot,
-                                       pns_x,
-                                       padded, slew, conv,
-                                       waveforms->gx, waveforms->num_samples,
-                                       kernel, kernel_len,
-                                       waveforms->raster_us, gamma_hz_per_tesla,
-                                       full_output_len);
-        if (PULSEG_FAILED(rc))
-            goto fail;
-    }
-
-    /* Y */
-    if (!pulseg__waveform_is_zero(waveforms->gy, waveforms->num_samples))
-    {
-        rc = process_pns_axis_circular(axis, pns_tot,
-                                       pns_y,
-                                       padded, slew, conv,
-                                       waveforms->gy, waveforms->num_samples,
-                                       kernel, kernel_len,
-                                       waveforms->raster_us, gamma_hz_per_tesla,
-                                       full_output_len);
-        if (PULSEG_FAILED(rc))
-            goto fail;
-    }
-
-    /* Z */
-    if (!pulseg__waveform_is_zero(waveforms->gz, waveforms->num_samples))
-    {
-        rc = process_pns_axis_circular(axis, pns_tot,
-                                       pns_z,
-                                       padded, slew, conv,
-                                       waveforms->gz, waveforms->num_samples,
-                                       kernel, kernel_len,
-                                       waveforms->raster_us, gamma_hz_per_tesla,
-                                       full_output_len);
-        if (PULSEG_FAILED(rc))
-            goto fail;
-    }
-
-    for (i = 0; i < full_output_len; ++i)
-    {
-        pns_tot[i] = 100.0f * (float)sqrt((double)pns_tot[i]);
-    }
-
-    result->num_samples = full_output_len;
-    result->slew_x_hz_per_m_per_s = pns_x;
-    pns_x = NULL;
-    result->slew_y_hz_per_m_per_s = pns_y;
-    pns_y = NULL;
-    result->slew_z_hz_per_m_per_s = pns_z;
-    pns_z = NULL;
+    result->num_samples = n;
+    result->slew_x_hz_per_m_per_s = out_x;
+    out_x = NULL;
+    result->slew_y_hz_per_m_per_s = out_y;
+    out_y = NULL;
+    result->slew_z_hz_per_m_per_s = out_z;
+    out_z = NULL;
 
     rc = PULSEG_SUCCESS;
     diag->code = rc;
 
 fail:
-    if (kernel)
-        PULSEG_FREE(kernel);
-    if (padded)
-        PULSEG_FREE(padded);
-    if (slew)
-        PULSEG_FREE(slew);
-    if (conv)
-        PULSEG_FREE(conv);
-    if (axis)
-        PULSEG_FREE(axis);
-    if (pns_tot)
-        PULSEG_FREE(pns_tot);
-    if (pns_x)
-        PULSEG_FREE(pns_x);
-    if (pns_y)
-        PULSEG_FREE(pns_y);
-    if (pns_z)
-        PULSEG_FREE(pns_z);
+    if (padded_scratch)
+        PULSEG_FREE(padded_scratch);
+    if (dgdt_x)
+        PULSEG_FREE(dgdt_x);
+    if (dgdt_y)
+        PULSEG_FREE(dgdt_y);
+    if (dgdt_z)
+        PULSEG_FREE(dgdt_z);
+    if (out_x)
+        PULSEG_FREE(out_x);
+    if (out_y)
+        PULSEG_FREE(out_y);
+    if (out_z)
+        PULSEG_FREE(out_z);
     return rc;
 }
 
@@ -3131,7 +2974,7 @@ int pulseg_calc_pns(const pulseg_collection *coll,
                        int subseq_idx,
                        int canonical_tr_idx,
                        const pulseg_opts *opts,
-                       const pulseg_pns_params *params)
+                       const pulseg_pns_model *model)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *trd;
@@ -3154,7 +2997,7 @@ int pulseg_calc_pns(const pulseg_collection *coll,
     {
         pulseg_diagnostic_init(diag);
     }
-    if (!coll || !result || !params)
+    if (!coll || !result || !model)
     {
         diag->code = PULSEG_ERR_NULL_POINTER;
         return diag->code;
@@ -3213,7 +3056,7 @@ int pulseg_calc_pns(const pulseg_collection *coll,
             PULSEG_FREE(block_order);
         return rc;
     }
-    rc = calc_pns_from_uniform(result, diag, opts->gamma_hz_per_t, &uw, params);
+    rc = calc_pns_from_uniform(result, diag, opts->gamma_hz_per_t, &uw, model);
     pulseg__uniform_grad_waveforms_free(&uw);
     if (block_order)
         PULSEG_FREE(block_order);
@@ -3722,7 +3565,7 @@ int pulseg_check_safety(
     const pulseg_opts *opts,
     int num_forbidden_bands,
     const pulseg_forbidden_band *forbidden_bands,
-    const pulseg_pns_params *pns_params,
+    const pulseg_pns_model *pns_model,
     float pns_threshold_percent)
 {
     int rc, s, u, i;
@@ -3937,12 +3780,12 @@ int pulseg_check_safety(
                 }
             }
 
-            if (pns_params)
+            if (pns_model)
             {
                 memset(&pns_result, 0, sizeof(pns_result));
                 rc = calc_pns_from_uniform(
                     &pns_result, diag, opts->gamma_hz_per_t,
-                    &uw, pns_params);
+                    &uw, pns_model);
                 if (!PULSEG_FAILED(rc) && pns_result.num_samples > 0)
                 {
                     max_pns = 0.0f;
@@ -4000,7 +3843,7 @@ int pulseg_check_safety_from_file(
     const pulseg_opts *opts,
     int num_forbidden_bands,
     const pulseg_forbidden_band *forbidden_bands,
-    const pulseg_pns_params *pns_params,
+    const pulseg_pns_model *pns_model,
     float pns_threshold_percent)
 {
     pulseg_collection *coll = NULL;
@@ -4031,7 +3874,7 @@ int pulseg_check_safety_from_file(
     rc = pulseg_check_safety(
         coll, diag, opts,
         num_forbidden_bands, forbidden_bands,
-        pns_params, pns_threshold_percent);
+        pns_model, pns_threshold_percent);
 
     pulseg_collection_free(coll);
     return rc;

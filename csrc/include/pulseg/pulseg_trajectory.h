@@ -183,11 +183,14 @@ extern "C"
      * header.  Must be called AFTER pulseg_compute_trajectory().
      *
      * @param[in] traj      Computed trajectory.
-     * @param[in] seq_path  Path to the .seq file (cache is .seq → .pge).
+     * @param[in] seq_path  Path to the .seq file (cache extension per D10).
+     * @param[in] cache_ext Cache file extension incl. dot, or NULL for the
+     *                      public default (PULSEG_CACHE_EXT_DEFAULT).
      * @return PULSEG_SUCCESS or negative error code.
      */
     int pulseg_write_trajectory_cache(const pulseg_trajectory *traj,
-                                         const char *seq_path);
+                                         const char *seq_path,
+                                         const char *cache_ext);
 
     /**
      * @brief Compute + merge per-subsequence trajectories and append the
@@ -200,7 +203,7 @@ extern "C"
      * populated at parse (calc_segment_timing); no safety pass is required.
      *
      * @param[in] coll      Loaded collection.
-     * @param[in] seq_path  Path to the .seq file (cache is .seq → .pge).
+     * @param[in] seq_path  Path to the .seq file (cache extension per D10: default .pseg, GE .pge).
      * @return PULSEG_SUCCESS or negative error code.
      */
     int pulseg_write_trajectory_cache_from_collection(

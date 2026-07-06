@@ -5,9 +5,9 @@
 
 ## Overview
 
-The pulseg cache file (`.pge` companion to `.seq`) is a binary serialization of a `pulseg_collection` object. As of cache format **v2.0.0** the payload is split into **per-consumer sections**, so each PSD phase / consumer deserializes only the data it needs. All integer and floating-point fields are stored as 4-byte values; all endianness is determined by the file header marker.
+The pulseg cache file (companion to `.seq`; extension configurable via `pulseg_opts.cache_ext`, D10 -- public default **`.pseg`**, GE keeps **`.pge`**) is a binary serialization of a `pulseg_collection` object. As of cache format **v2.0.0** the payload is split into **per-consumer sections**, so each PSD phase / consumer deserializes only the data it needs. All integer and floating-point fields are stored as 4-byte values; all endianness is determined by the file header marker.
 
-The whole `.pge` is a pure function of the loaded collection (shift- and rotation-independent). It is produced in one shot at load time by `pulseg__write_cache` (see `pulseg_cache.c`), which emits the four base sections (COMMON, ROTATIONS, SHAPES, SCANLOOP) and then appends TRAJECTORY, SEQDESC and FREQMOD.
+The whole cache is a pure function of the loaded collection (shift- and rotation-independent). It is produced in one shot at load time by `pulseg__write_cache` (see `pulseg_cache.c`), which emits the four base sections (COMMON, ROTATIONS, SHAPES, SCANLOOP) and then appends TRAJECTORY, SEQDESC, FREQMOD and the optional VENDOR section.
 
 ---
 
@@ -23,7 +23,7 @@ The cache file begins with a fixed header (28 bytes):
 | 0x0C | Version revision | int32 | 1 | 4 | `PULSEG_CACHE_VERSION_REVISION = 0` |
 | 0x10 | Vendor | int32 | 1 | 4 | `PULSEG_VENDOR` constant; identifies hardware/vendor context |
 | 0x14 | Source seq file size | int32 | 1 | 4 | Byte count of original `.seq` file; used for cache validity check |
-| 0x18 | Number of sections | int32 | 1 | 4 | Count of section entries in the table-of-contents (up to 7) |
+| 0x18 | Number of sections | int32 | 1 | 4 | Count of section entries in the table-of-contents (up to 8; `PULSEG_CACHE_MAX_SECTIONS = 9` reserved slots) |
 
 After the header, the file contains:
 - **Section table** (immediate): `num_sections × 12` bytes (3 int32 per entry)
@@ -61,6 +61,7 @@ Immediately after the 28-byte file header, a TOC of `num_sections` entries follo
 | 5 | FREQMOD | Frequency-modulation **base only** (shift-independent) | scan; **NOT parsed by mrdserver** | Applied PSD-side; data at recon already centered |
 | 6 | TRAJECTORY | Trajectory library (kshots, encoding spaces, table) | trajectory_cache_reader.cpp | Non-Cartesian trajectory data |
 | 7 | SEQDESC | Event lists, RF shapes, shims | trajectory_cache_reader.cpp (optional) | Per-subsequence details; graceful skip if absent |
+| 8 | VENDOR | Opaque length-prefixed vendor blob (D10) | `pulseg_read_vendor_cache_section()` | Written only when `pulseg_opts.vendor_section_write_fn` is set; GE leaves it unused; payload format is entirely vendor-defined |
 
 > **Note (Stage 3, planned):** TRAJECTORY(6) + SEQDESC(7) are slated to merge into a single
 > RECON section (id 6) carrying trajectory + seqdesc + generic [DEFINITIONS] + a rotations copy.
@@ -186,10 +187,7 @@ For each RF definition:
 | flip_angle_deg | float | 1 | 4 | Nominal flip angle (degrees) |
 | act_amplitude_hz | float | 1 | 4 | Actual peak amplitude (Hz) |
 | area | float | 1 | 4 | Integral of B1 magnitude (arbitrary units) |
-| abs_width | float | 1 | 4 | Fractional width with nonzero B1 |
-| eff_width | float | 1 | 4 | Effective rectangular pulse width |
-| duty_cycle | float | 1 | 4 | RF duty cycle within TR |
-| max_pulse_width | float | 1 | 4 | Longest contiguous B1 segment (seconds) |
+| vendor_stat[0..3] | float | 4 | 16 | Vendor-specific envelope stats (D8-A), filled by the optional `pulseg_opts.vendor_rf_stats_fn` callback; 0 when unset. GE fills these as abswidth/effwidth/dtycyc/maxpw (see `src_gelib/pulserver_ge_rf_stats.h` `PULSERVER_GE_RF_*` accessors in pulserver-interpreter) |
 | duration_us | float | 1 | 4 | Total RF duration (microseconds) |
 | isodelay_us | int32 | 1 | 4 | Isodelay from center to echo (microseconds) |
 | bandwidth_hz | float | 1 | 4 | Estimated bandwidth (Hz) |
@@ -527,7 +525,10 @@ averages; the per-average trajectory is tiled `num_averages` times.
 
 ## Other companion files (already produced)
 
-- `<base>.pge`                — pulseg cache binary (v2.0.0 sections 1–7)
+- `<base>.pge`                — pulseg cache binary (v2.0.0 sections 1-8;
+                                `.pge` here reflects the GE-configured
+                                `write_cache_cli` used to produce these
+                                fixtures, D10 -- public default is `.pseg`)
                                 produced by the `write_cache` CLI as a
                                 post-pass to `run_generators.m`. Listed
                                 under each entry's `companion_files` in

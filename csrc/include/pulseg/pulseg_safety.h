@@ -38,7 +38,7 @@ extern "C"
      * @param[in]  opts                   Scanner limits.
      * @param[in]  num_forbidden_bands    Number of acoustic bands.
      * @param[in]  forbidden_bands        Array of forbidden bands.
-     * @param[in]  pns_params             PNS model parameters (NULL to skip PNS).
+     * @param[in]  pns_model              PNS evaluator (NULL to skip PNS).
      * @param[in]  pns_threshold_percent  PNS threshold (100 = 100 %).
      * @return PULSEG_SUCCESS if safe, negative error code on violation.
      */
@@ -48,7 +48,7 @@ extern "C"
         const pulseg_opts *opts,
         int num_forbidden_bands,
         const pulseg_forbidden_band *forbidden_bands,
-        const pulseg_pns_params *pns_params,
+        const pulseg_pns_model *pns_model,
         float pns_threshold_percent);
 
     /**
@@ -68,7 +68,7 @@ extern "C"
      * @param[in]  opts                   Scanner limits and rasters.
      * @param[in]  num_forbidden_bands    Number of acoustic forbidden bands.
      * @param[in]  forbidden_bands        Array of forbidden bands.
-     * @param[in]  pns_params             PNS model parameters
+     * @param[in]  pns_model              PNS evaluator
      *                                    (NULL to skip PNS).
      * @param[in]  pns_threshold_percent  PNS threshold (100 = 100 %).
      * @return PULSEG_SUCCESS if safe, negative error code on load failure
@@ -80,7 +80,7 @@ extern "C"
         const pulseg_opts *opts,
         int num_forbidden_bands,
         const pulseg_forbidden_band *forbidden_bands,
-        const pulseg_pns_params *pns_params,
+        const pulseg_pns_model *pns_model,
         float pns_threshold_percent);
 
     /* ================================================================== */
@@ -170,7 +170,7 @@ extern "C"
      * @param[in]  subseq_idx   Subsequence index.
      * @param[in]  canonical_tr_idx Canonical TR index (0-based, within subsequence).
      * @param[in]  opts         Scanner limits.
-     * @param[in]  params       PNS model parameters.
+     * @param[in]  model        PNS evaluator.
      * @return PULSEG_SUCCESS on success, negative error code on failure.
      */
     int pulseg_calc_pns(const pulseg_collection *coll,
@@ -179,7 +179,7 @@ extern "C"
                            int subseq_idx,
                            int canonical_tr_idx,
                            const pulseg_opts *opts,
-                           const pulseg_pns_params *params);
+                           const pulseg_pns_model *model);
 
     /** @brief Free arrays inside a pulseg_pns_result. */
     void pulseg_pns_result_free(pulseg_pns_result *r);

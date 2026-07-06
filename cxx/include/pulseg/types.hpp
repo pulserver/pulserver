@@ -6,6 +6,7 @@
 #ifndef PULSEG_TYPES_HPP
 #define PULSEG_TYPES_HPP
 
+#include <cmath>
 #include <vector>
 
 #include "pulseg_types.h"
@@ -55,21 +56,80 @@ struct ForbiddenBand {
     }
 };
 
-// ── PNS parameters ──────────────────────────────────────────────────
-
+// ── PNS parameters (generic exponential model) ──────────────────────
+//
+// pulseg no longer bundles a vendor PNS model (see pulseg_pns_model in
+// pulseg_types.h): the functional form differs per vendor (GE's
+// exponential kernel vs. e.g. Siemens SAFE's nonlinear multi-stage
+// filter) and only an evaluator interface, not a sampled kernel, can
+// represent both. PnsParams below is a generic, vendor-neutral
+// convenience implementation of the chronaxie/rheobase/alpha exponential
+// form -- compiled into this header, not into libpulseg -- so wrapper
+// users can still plot/check PNS with explicit parameters of their own
+// choosing. It is NOT the GE-calibrated model used on-scanner (that lives
+// in the private pulserver-interpreter's src_gelib/).
 struct PnsParams {
-    int   vendor                   = 0;
-    float chronaxie_us             = 0.0f;
-    float rheobase_hz_per_m_per_s  = 0.0f;
-    float alpha                    = 1.0f;
+    float chronaxie_us            = 0.0f;
+    float rheobase_hz_per_m_per_s = 0.0f;
+    float alpha                   = 1.0f;
 
-    pulseg_pns_params to_c() const {
-        pulseg_pns_params p;
-        p.vendor                  = vendor;
-        p.chronaxie_us            = chronaxie_us;
-        p.rheobase_hz_per_m_per_s = rheobase_hz_per_m_per_s;
-        p.alpha                   = alpha;
-        return p;
+    /** Build a pulseg_pns_model view onto this instance (borrows *this; keep alive
+     *  for the duration of the calc_pns/check_safety call). Only reads chronaxie/
+     *  rheobase/alpha, so a const instance may safely be adapted. */
+    pulseg_pns_model to_c() const {
+        pulseg_pns_model m;
+        m.ctx = const_cast<PnsParams *>(this);
+        m.required_padding = &PnsParams::required_padding_cb;
+        m.evaluate = &PnsParams::evaluate_cb;
+        return m;
+    }
+
+private:
+    static constexpr float kKernelDurationFactor = 20.0f;
+
+    /* Exponential kernel k[i] = (dt/s_min) * c / (c+tau)^2, i=0..n-1. */
+    std::vector<float> build_kernel(float dt_us) const {
+        float c_s  = chronaxie_us * 1e-6f;
+        float dt_s = dt_us * 1e-6f;
+        float s_min = rheobase_hz_per_m_per_s / alpha;
+        int n = static_cast<int>(kKernelDurationFactor * c_s / dt_s) + 1;
+        std::vector<float> k(static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i) {
+            float tau = static_cast<float>(i) * dt_s;
+            float denom = (c_s + tau) * (c_s + tau);
+            k[static_cast<size_t>(i)] = (dt_s / s_min) * (c_s / denom);
+        }
+        return k;
+    }
+
+    /* Causal FIR application: out[i] = sum_{k=0}^{min(i,klen-1)} kernel[k]*sig[i-k]. */
+    static void convolve_causal(float *out, const float *sig, int n,
+                                 const std::vector<float> &kernel) {
+        int klen = static_cast<int>(kernel.size());
+        for (int i = 0; i < n; ++i) {
+            float acc = 0.0f;
+            int kmax = (i < klen - 1) ? i : (klen - 1);
+            for (int k = 0; k <= kmax; ++k)
+                acc += kernel[static_cast<size_t>(k)] * sig[i - k];
+            out[i] = acc * 100.0f;
+        }
+    }
+
+    static int required_padding_cb(void *ctx, float dt_us) {
+        auto *self = static_cast<PnsParams *>(ctx);
+        return static_cast<int>(self->build_kernel(dt_us).size());
+    }
+
+    static int evaluate_cb(void *ctx,
+                            const float *dgdt_x, const float *dgdt_y, const float *dgdt_z,
+                            int n, float dt_us,
+                            float *out_x, float *out_y, float *out_z) {
+        auto *self = static_cast<PnsParams *>(ctx);
+        std::vector<float> kernel = self->build_kernel(dt_us);
+        convolve_causal(out_x, dgdt_x, n, kernel);
+        convolve_causal(out_y, dgdt_y, n, kernel);
+        convolve_causal(out_z, dgdt_z, n, kernel);
+        return 0; /* PULSEG_SUCCESS */
     }
 };
 
@@ -92,10 +152,9 @@ struct ScanTimeInfo {
 struct RfStats {
     float flip_angle_rad   = 0.0f;
     float area             = 0.0f;
-    float abs_width        = 0.0f;
-    float eff_width        = 0.0f;
-    float duty_cycle       = 0.0f;
-    float max_pulse_width  = 0.0f;
+    /** Vendor-specific envelope stats (D8-A); 0 unless opts.vendor_rf_stats_fn
+     *  was wired before loading. Meaning is vendor-defined. */
+    float vendor_stat[4]   = {0.0f, 0.0f, 0.0f, 0.0f};
     float duration_us      = 0.0f;
     int   isodelay_us      = 0;
     float bandwidth_hz     = 0.0f;
@@ -106,10 +165,10 @@ struct RfStats {
         RfStats s;
         s.flip_angle_rad   = c.flip_angle_rad;
         s.area             = c.area;
-        s.abs_width        = c.abs_width;
-        s.eff_width        = c.eff_width;
-        s.duty_cycle       = c.duty_cycle;
-        s.max_pulse_width  = c.max_pulse_width;
+        s.vendor_stat[0]   = c.vendor_stat[0];
+        s.vendor_stat[1]   = c.vendor_stat[1];
+        s.vendor_stat[2]   = c.vendor_stat[2];
+        s.vendor_stat[3]   = c.vendor_stat[3];
         s.duration_us      = c.duration_us;
         s.isodelay_us      = c.isodelay_us;
         s.bandwidth_hz     = c.bandwidth_hz;

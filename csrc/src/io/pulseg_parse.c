@@ -1525,6 +1525,16 @@ void pulseg_opts_init_full(pulseg_opts *opts,
     opts->peak_log10_threshold = peak_log10_threshold;
     opts->peak_norm_scale = peak_norm_scale;
     opts->peak_eps = peak_eps;
+    opts->peak_prominence = PULSEG_PEAK_PROMINENCE_DEFAULT;
+    opts->vendor_rf_stats_fn = NULL;
+    opts->vendor_rf_stats_ctx = NULL;
+    opts->label_column_map[0] = 0; /* identity default: SLC, PHS, REP; */
+    opts->label_column_map[1] = 1; /* vendor layers override before parsing */
+    opts->label_column_map[2] = 2;
+    strncpy(opts->cache_ext, PULSEG_CACHE_EXT_DEFAULT, sizeof(opts->cache_ext) - 1);
+    opts->cache_ext[sizeof(opts->cache_ext) - 1] = '\0';
+    opts->vendor_section_write_fn = NULL;
+    opts->vendor_section_ctx = NULL;
 }
 
 void pulseg_opts_init(pulseg_opts *opts,

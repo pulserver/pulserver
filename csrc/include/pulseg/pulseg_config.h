@@ -24,15 +24,19 @@
 /* ------------------------------------------------------------------ */
 /*  Vendor identifiers (runtime constants)                            */
 /* ------------------------------------------------------------------ */
+#define PULSEG_VENDOR_UNSPECIFIED   0
 #define PULSEG_VENDOR_SIEMENS        1
 #define PULSEG_VENDOR_GEHC           2
 #define PULSEG_VENDOR_PHILIPS        3
 #define PULSEG_VENDOR_UNITED_IMAGING 4
 #define PULSEG_VENDOR_BRUKER         5
 
-/* Compile-time default (overrideable via -DPULSEG_VENDOR=N) */
+/* Compile-time default (overrideable via -DPULSEG_VENDOR=N). Public
+ * builds are vendor-neutral; vendor layers (e.g. the private
+ * pulserver-interpreter's src_gelib/pulserver_ge_config.h) define
+ * PULSEG_VENDOR=PULSEG_VENDOR_GEHC before including any pulseg header. */
 #ifndef PULSEG_VENDOR
-#define PULSEG_VENDOR PULSEG_VENDOR_GEHC
+#define PULSEG_VENDOR PULSEG_VENDOR_UNSPECIFIED
 #endif
 
 /* ------------------------------------------------------------------ */
@@ -85,23 +89,35 @@
 #endif
 
 /* ------------------------------------------------------------------ */
-/*  Hardware frequency-conversion overrides                           */
+/*  Hardware frequency-conversion overrides (D9)                      */
 /* ------------------------------------------------------------------ */
 
 /*
- * Override PULSEG_FREQ_CONVERSION / PULSEG_WAVEFORM_END before
+ * Override PULSEG_HW_FREQ_CONVERSION / PULSEG_HW_WAVEFORM_END before
  * including this header for vendor-specific DAC parameters, e.g.:
  *
- *   #define PULSEG_FREQ_CONVERSION  VendorFreqRes
- *   #define PULSEG_WAVEFORM_END     VendorWeosBit
+ *   #define PULSEG_HW_FREQ_CONVERSION  VendorFreqRes
+ *   #define PULSEG_HW_WAVEFORM_END     VendorWeosBit
  *   #include "pulseg_config.h"
  */
-#ifndef PULSEG_FREQ_CONVERSION
-#define PULSEG_FREQ_CONVERSION 0.25f
+#ifndef PULSEG_HW_FREQ_CONVERSION
+#define PULSEG_HW_FREQ_CONVERSION 0.25f
 #endif
 
-#ifndef PULSEG_WAVEFORM_END
-#define PULSEG_WAVEFORM_END 0
+#ifndef PULSEG_HW_WAVEFORM_END
+#define PULSEG_HW_WAVEFORM_END 0
+#endif
+
+/* ------------------------------------------------------------------ */
+/*  Binary cache defaults (D10)                                       */
+/* ------------------------------------------------------------------ */
+
+#ifndef PULSEG_CACHE_EXT_MAX
+#define PULSEG_CACHE_EXT_MAX 16
+#endif
+
+#ifndef PULSEG_CACHE_EXT_DEFAULT
+#define PULSEG_CACHE_EXT_DEFAULT ".pseg"
 #endif
 
 #endif /* PULSEG_CONFIG_H */

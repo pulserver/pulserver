@@ -83,19 +83,23 @@ static void sd_swap4_array(void *p, int count)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Path helper: .seq → .pge (same as in trajectory.c)                */
+/*  Path helper: .seq -> cache_ext (D10; same as in trajectory.c)      */
 /* ------------------------------------------------------------------ */
-static char *sd_make_cache_path(const char *seq_path)
+static char *sd_make_cache_path(const char *seq_path, const char *ext)
 {
     size_t len = strlen(seq_path);
+    size_t ext_len;
     char *p;
     if (len < 4 || strcmp(seq_path + len - 4, ".seq") != 0)
         return NULL;
-    p = (char *)PULSEG_ALLOC(len + 1);
+    if (!ext || !ext[0])
+        ext = PULSEG_CACHE_EXT_DEFAULT;
+    ext_len = strlen(ext);
+    p = (char *)PULSEG_ALLOC(len - 4 + ext_len + 1);
     if (!p)
         return NULL;
     memcpy(p, seq_path, len - 4);
-    memcpy(p + len - 4, ".pge", 5);
+    memcpy(p + len - 4, ext, ext_len + 1);
     return p;
 }
 
@@ -231,7 +235,8 @@ int pulseg_write_sequence_description_cache(
     if (!coll || !seq_path)
         return PULSEG_ERR_NULL_POINTER;
 
-    cache_path = sd_make_cache_path(seq_path);
+    cache_path = sd_make_cache_path(seq_path,
+        coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
     if (!cache_path)
         return PULSEG_ERR_ALLOC_FAILED;
 

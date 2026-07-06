@@ -916,31 +916,31 @@ static void apply_block_labels(
  *   Record the current label state into one row of the label table
  *   and update label_limits min/max tracking.
  *
- *   For GEHC: 3 columns = [lin, slc, eco].
- *   label state indices: lin=8, slc=0, eco=6.
+ *   The 3 output columns are driven by label_column_map (D3): each entry
+ *   is a state-array index (0=SLC,1=PHS,2=REP,3=AVG,4=SEG,5=SET,6=ECO,
+ *   7=PAR,8=LIN,9=ACQ). GE's convention is {8,0,6} = [LIN, SLC, ECO].
+ *   Named limits (lin/slc/eco/...) always track every label by its fixed
+ *   state index, independent of which 3 are chosen as table columns.
  */
 static void record_adc_label(
     int* table_row,
     int num_columns,
     const int* state,
+    const int* label_column_map,
     pulseg_label_limits* limits,
     int is_first)
 {
-    /* GEHC column mapping: col0=lin, col1=slc, col2=eco */
-    int lin_val = state[8];
-    int slc_val = state[0];
-    int eco_val = state[6];
+    int col;
 
-    (void)num_columns; /* always 3 for GEHC */
+    (void)num_columns; /* always 3 */
 
-    table_row[0] = lin_val;
-    table_row[1] = slc_val;
-    table_row[2] = eco_val;
+    for (col = 0; col < 3; ++col)
+        table_row[col] = state[label_column_map[col]];
 
     if (is_first) {
-        limits->lin.min = lin_val; limits->lin.max = lin_val;
-        limits->slc.min = slc_val; limits->slc.max = slc_val;
-        limits->eco.min = eco_val; limits->eco.max = eco_val;
+        limits->lin.min = state[8]; limits->lin.max = state[8];
+        limits->slc.min = state[0]; limits->slc.max = state[0];
+        limits->eco.min = state[6]; limits->eco.max = state[6];
         /* Also init the other label limits from state */
         limits->phs.min = state[1]; limits->phs.max = state[1];
         limits->rep.min = state[2]; limits->rep.max = state[2];
@@ -950,12 +950,12 @@ static void record_adc_label(
         limits->par.min = state[7]; limits->par.max = state[7];
         limits->acq.min = state[9]; limits->acq.max = state[9];
     } else {
-        if (lin_val < limits->lin.min) limits->lin.min = lin_val;
-        if (lin_val > limits->lin.max) limits->lin.max = lin_val;
-        if (slc_val < limits->slc.min) limits->slc.min = slc_val;
-        if (slc_val > limits->slc.max) limits->slc.max = slc_val;
-        if (eco_val < limits->eco.min) limits->eco.min = eco_val;
-        if (eco_val > limits->eco.max) limits->eco.max = eco_val;
+        if (state[8] < limits->lin.min) limits->lin.min = state[8];
+        if (state[8] > limits->lin.max) limits->lin.max = state[8];
+        if (state[0] < limits->slc.min) limits->slc.min = state[0];
+        if (state[0] > limits->slc.max) limits->slc.max = state[0];
+        if (state[6] < limits->eco.min) limits->eco.min = state[6];
+        if (state[6] > limits->eco.max) limits->eco.max = state[6];
         if (state[1] < limits->phs.min) limits->phs.min = state[1];
         if (state[1] > limits->phs.max) limits->phs.max = state[1];
         if (state[2] < limits->rep.min) limits->rep.min = state[2];
@@ -986,10 +986,6 @@ int pulseg__build_label_table(
     pulseg__raw_block raw;
 
     if (!desc || !seq) return PULSEG_ERR_NULL_POINTER;
-
-    if (desc->vendor != PULSEG_VENDOR_GEHC) {
-        return PULSEG_ERR_NOT_IMPLEMENTED;
-    }
 
     num_columns = 3; /* GEHC: [lin, slc, eco] */
 
@@ -1042,7 +1038,8 @@ int pulseg__build_label_table(
         apply_block_labels(state, seq, &raw);
         if (desc->block_table[b].adc_id >= 0) {
             record_adc_label(&table[entry_idx * num_columns],
-                             num_columns, state, &desc->label_limits,
+                             num_columns, state, desc->label_column_map,
+                             &desc->label_limits,
                              entry_idx == 0);
             off_table[entry_idx] = state[10];
             ++entry_idx;
@@ -1056,7 +1053,8 @@ int pulseg__build_label_table(
             apply_block_labels(state, seq, &raw);
             if (desc->block_table[b].adc_id >= 0) {
                 record_adc_label(&table[entry_idx * num_columns],
-                                 num_columns, state, &desc->label_limits,
+                                 num_columns, state, desc->label_column_map,
+                                 &desc->label_limits,
                                  entry_idx == 0);
                 off_table[entry_idx] = state[10];
                 ++entry_idx;
@@ -1070,7 +1068,8 @@ int pulseg__build_label_table(
         apply_block_labels(state, seq, &raw);
         if (desc->block_table[b].adc_id >= 0) {
             record_adc_label(&table[entry_idx * num_columns],
-                             num_columns, state, &desc->label_limits,
+                             num_columns, state, desc->label_column_map,
+                             &desc->label_limits,
                              entry_idx == 0);
             off_table[entry_idx] = state[10];
             ++entry_idx;

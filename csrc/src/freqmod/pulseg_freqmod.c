@@ -23,12 +23,12 @@
 #include <string.h>
 
 /* OMEGA DAC conversion: Hz → short DAC units.
- * PULSEG_FREQ_CONVERSION and PULSEG_WAVEFORM_END are defined
+ * PULSEG_HW_FREQ_CONVERSION and PULSEG_HW_WAVEFORM_END are defined
  * in pulseg_config.h (vendor-overridable).  The OMEGA board uses
  * 4× oversampled DAC:
- *   dac_value = freq_hz / (4 * PULSEG_FREQ_CONVERSION)
- * PULSEG_WAVEFORM_END marks the last waveform sample. */
-#define PULSEG_OMEGA_SCALE (1.0f / (4.0f * PULSEG_FREQ_CONVERSION))
+ *   dac_value = freq_hz / (4 * PULSEG_HW_FREQ_CONVERSION)
+ * PULSEG_HW_WAVEFORM_END marks the last waveform sample. */
+#define PULSEG_OMEGA_SCALE (1.0f / (4.0f * PULSEG_HW_FREQ_CONVERSION))
 
 /* Forward declarations (used in error paths). */
 static void freq_mod_library_free(pulseg_freq_mod_library *lib);
@@ -504,10 +504,10 @@ static void convert_plan_to_hw(pulseg_freq_mod_library *lib)
                 v = 32767;
             if (v < -32767)
                 v = -32767;
-            dst[s] = (short)(v & ~PULSEG_WAVEFORM_END);
+            dst[s] = (short)(v & ~PULSEG_HW_WAVEFORM_END);
         }
         if (ns > 0)
-            dst[ns - 1] |= PULSEG_WAVEFORM_END;
+            dst[ns - 1] |= PULSEG_HW_WAVEFORM_END;
         /* zero-pad remainder */
         for (s = ns; s < lib->max_samples; ++s)
             dst[s] = 0;
@@ -2575,10 +2575,10 @@ int pulseg_update_freq_mod_for_tr(
                     v = 32767;
                 if (v < -32767)
                     v = -32767;
-                hw[s] = (short)(v & ~PULSEG_WAVEFORM_END);
+                hw[s] = (short)(v & ~PULSEG_HW_WAVEFORM_END);
             }
             if (ns > 0)
-                hw[ns - 1] |= PULSEG_WAVEFORM_END;
+                hw[ns - 1] |= PULSEG_HW_WAVEFORM_END;
             for (s = ns; s < lib->max_samples; ++s)
                 hw[s] = 0;
         }

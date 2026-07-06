@@ -78,6 +78,27 @@ typedef struct pulseg_diagnostic
 #define PULSEG_DIAGNOSTIC_INIT {PULSEG_SUCCESS, {'\0'}}
 
 /* ================================================================== */
+/*  RF envelope view (for the vendor RF-stats callback)               */
+/* ================================================================== */
+
+/**
+ * @brief Read-only view of a uniform-raster RF envelope, handed to an
+ * optional vendor callback (@c pulseg_opts.vendor_rf_stats_fn) so it can
+ * compute vendor-specific envelope statistics without owning any of the
+ * dedup-time buffers.
+ */
+typedef struct pulseg_rf_view
+{
+    const float *mag;      /**< |B1(t)| envelope, normalised, length n */
+    const float *phase;    /**< phase (rad), length n                  */
+    int n;                 /**< sample count                           */
+    float dt_us;           /**< uniform raster period (us)             */
+    float duration_us;     /**< RF event duration (us)                 */
+    float tr_duration_us;  /**< enclosing TR duration (us); 0 if unknown at
+                                 dedup time                            */
+} pulseg_rf_view;
+
+/* ================================================================== */
 /*  System options                                                    */
 /* ================================================================== */
 
@@ -102,6 +123,37 @@ typedef struct pulseg_opts
     float peak_norm_scale;         /**< resonance detector normalization   */
     float peak_eps;                /**< resonance detector epsilon         */
     float peak_prominence;         /**< resonance detector min prominence  */
+
+    /** Optional vendor RF envelope-stats callback (D8-A). NULL -> the four
+     *  pulseg_rf_stats.vendor_stat[] slots are left at 0. */
+    int (*vendor_rf_stats_fn)(void *ctx, const pulseg_rf_view *rf, float out_stat[4]);
+    void *vendor_rf_stats_ctx;
+
+    /**
+     * @brief Which Pulseq label fills output column 0/1/2 of the 3-column
+     * ADC label table (D3). Values are Pulseq label *state-array* indices:
+     * 0=SLC, 1=PHS, 2=REP, 3=AVG, 4=SEG, 5=SET, 6=ECO, 7=PAR, 8=LIN, 9=ACQ.
+     * Example (GE convention): {8, 0, 6} = [LIN, SLC, ECO]. Public default
+     * is the identity {0, 1, 2} = [SLC, PHS, REP]; vendor layers override
+     * this before parsing (see pulserver_ge_config.h in the private
+     * pulserver-interpreter for the GE values).
+     */
+    int label_column_map[3];
+
+    /** Binary cache file extension, including the dot (D10). Default
+     *  ".pseg"; GE overrides to ".pge" (see pulserver_ge_config.h). Only
+     *  the main pulseg_read()/pulseg__write_cache() path honors this;
+     *  standalone cache utilities (pulseg_load_cache, pulseg_clear_cache,
+     *  etc.) that run before any collection exists always use the public
+     *  default. */
+    char cache_ext[PULSEG_CACHE_EXT_MAX];
+
+    /** Optional opaque vendor cache section (D10). Writer emits a section
+     *  only when set; GE leaves this unused. ctx/buf ownership: the
+     *  callback allocates *out_buf via PULSEG_ALLOC; the cache writer
+     *  frees it after use. */
+    int (*vendor_section_write_fn)(void *ctx, unsigned char **out_buf, int *out_len);
+    void *vendor_section_ctx;
 } pulseg_opts;
 
 #define PULSEG_OPTS_INIT {                          \
@@ -109,7 +161,11 @@ typedef struct pulseg_opts
     PULSEG_PEAK_LOG10_THRESHOLD_DEFAULT,            \
     PULSEG_PEAK_NORM_SCALE_DEFAULT,                 \
     PULSEG_PEAK_EPS_DEFAULT,                        \
-    PULSEG_PEAK_PROMINENCE_DEFAULT}
+    PULSEG_PEAK_PROMINENCE_DEFAULT,                 \
+    NULL, NULL,                                     \
+    {0, 1, 2},                                      \
+    PULSEG_CACHE_EXT_DEFAULT,                       \
+    NULL, NULL}
 
 /* ================================================================== */
 /*  RF statistics                                                     */
@@ -126,10 +182,11 @@ typedef struct pulseg_rf_stats
     float flip_angle_rad;    /**< nominal flip angle (radians)           */
     float act_amplitude_hz;  /**< actual |gamma*B1| amplitude (Hz)       */
     float area;              /**< integral of |B1(t)| dt  (a.u.)        */
-    float abs_width;         /**< fraction of duration with |B1|>0      */
-    float eff_width;         /**< equivalent rectangular pulse fraction */
-    float duty_cycle;        /**< fraction of TR occupied by RF         */
-    float max_pulse_width;   /**< longest contiguous |B1|>0 segment (s) */
+    /** Vendor-specific envelope statistics (D8-A), filled by the optional
+     *  pulseg_opts.vendor_rf_stats_fn callback; all 0 when unset. Meaning
+     *  is vendor-defined -- e.g. GE's abswidth/effwidth/dtycyc/maxpw live
+     *  in src_gelib/pulserver_ge_rf_stats.h as PULSERVER_GE_RF_* accessors. */
+    float vendor_stat[4];
     float duration_us;       /**< total RF event duration (us)          */
     int isodelay_us;         /**< isodelay from center to echo (us)     */
     float bandwidth_hz;      /**< estimated bandwidth (Hz, via FFT)     */
@@ -149,7 +206,7 @@ typedef struct pulseg_rf_stats
 } pulseg_rf_stats;
 
 #define PULSEG_RF_STATS_INIT { \
-    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0.0f, 0.0f, 0, 0, 1, {0.0f}, 0.0f, 0.0f, 0}
+    0.0f, 0.0f, 0.0f, {0.0f}, 0.0f, 0, 0.0f, 0.0f, 0, 0, 1, {0.0f}, 0.0f, 0.0f, 0}
 
 /* ================================================================== */
 /*  TR region selectors (for freq-mod plan)                           */
@@ -423,25 +480,62 @@ typedef struct pulseg_forbidden_band
 #define PULSEG_FORBIDDEN_BAND_INIT {0.0f, 0.0f, 0.0f}
 
 /* ================================================================== */
-/*  PNS parameters (vendor-independent)                               */
+/*  PNS evaluator (vendor-pluggable model)                            */
 /* ================================================================== */
 
 /**
- * @brief PNS model parameters.
+ * @brief Vendor-pluggable PNS model.
  *
- * Set @c vendor to the appropriate PULSEG_VENDOR_* constant.
- * Currently only PULSEG_VENDOR_GEHC is implemented (exponential
- * model with chronaxie / rheobase / alpha).
+ * The public library owns the vendor-neutral half of PNS evaluation
+ * (canonical-TR selection, uniform-raster dG/dt extraction, combined
+ * sqrt(x^2+y^2+z^2), result marshalling). The model half -- the actual
+ * stimulation-threshold functional form (e.g. GE's chronaxie/rheobase/
+ * alpha exponential kernel, or Siemens SAFE's nonlinear multi-stage
+ * filter) -- is injected through this struct. Only an evaluator
+ * interface (not a sampled-kernel API) can represent both forms.
+ *
+ * Calling convention (enforced by pulseg_calc_pns / pulseg_check_safety,
+ * not by the model): before differentiating the uniform-raster gradient
+ * waveforms, the safety core calls @c required_padding(ctx, dt_us) to
+ * learn how many extra circularly-wrapped samples the model needs
+ * appended so its filter sees a fully "warmed up" history (0 if none).
+ * It then calls @c evaluate() once with the resulting dG/dt arrays,
+ * all of length @c n (already including that padding) -- @c evaluate
+ * must return exactly @c n output samples per axis.
  */
-typedef struct pulseg_pns_params
+typedef struct pulseg_pns_model
 {
-    int vendor;                    /**< PULSEG_VENDOR_* constant   */
-    float chronaxie_us;            /**< nerve time constant (us)      */
-    float rheobase_hz_per_m_per_s; /**< threshold slew rate (Hz/m/s)  */
-    float alpha;                   /**< model exponent (dimensionless) */
-} pulseg_pns_params;
+    void *ctx; /**< opaque model state (vendor-owned) */
 
-#define PULSEG_PNS_PARAMS_INIT {0, 0.0f, 0.0f, 1.0f}
+    /**
+     * @brief Report how many extra circular-wrap dG/dt samples this
+     * model needs appended before it is called, for a given raster.
+     * @param ctx    Opaque model state.
+     * @param dt_us  Gradient raster period (us).
+     * @return Number of extra samples (>= 0).
+     */
+    int (*required_padding)(void *ctx, float dt_us);
+
+    /**
+     * @brief Evaluate the model on uniform-raster dG/dt waveforms.
+     * @param ctx     Opaque model state.
+     * @param dgdt_x  Per-axis dG/dt, X (Hz/m/s), length n.
+     * @param dgdt_y  Per-axis dG/dt, Y (Hz/m/s), length n.
+     * @param dgdt_z  Per-axis dG/dt, Z (Hz/m/s), length n.
+     * @param n       Number of samples (same length for all in/out arrays).
+     * @param dt_us   Gradient raster period (us).
+     * @param out_x   Receives per-axis result, X (% of threshold), length n.
+     * @param out_y   Receives per-axis result, Y (% of threshold), length n.
+     * @param out_z   Receives per-axis result, Z (% of threshold), length n.
+     * @return PULSEG_SUCCESS on success, negative error code on failure.
+     */
+    int (*evaluate)(void *ctx,
+                     const float *dgdt_x, const float *dgdt_y, const float *dgdt_z,
+                     int n, float dt_us,
+                     float *out_x, float *out_y, float *out_z);
+} pulseg_pns_model;
+
+#define PULSEG_PNS_MODEL_INIT {NULL, NULL, NULL}
 
 /* ================================================================== */
 /*  PNS result (for plotting)                                         */

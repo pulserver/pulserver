@@ -51,7 +51,10 @@ extern "C"
 #define PULSEG_PARAM_RF_SPOILING 12
 /* Info (read-only) */
 #define PULSEG_PARAM_TA 13
-/* User CV slots. Python user0..user16 map to GE opuser3..opuser19. */
+/* User CV slots. Meaning of the wire-protocol slot -> vendor CV mapping
+ * is vendor-defined; see the private vendor layer for specifics (e.g.
+ * pulserver_ge_protocol.h in pulserver-interpreter for GE's opuser
+ * mapping). */
 #define PULSEG_PARAM_USER1 14
 #define PULSEG_PARAM_USER2 15
 #define PULSEG_PARAM_USER3 16

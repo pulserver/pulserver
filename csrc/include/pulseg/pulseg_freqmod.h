@@ -86,7 +86,7 @@ extern "C"
      * @brief Write all per-subsequence freq-mod data to a single cache file.
      *
      * @param[in]  fmc   Built collection (3-channel data must be resident).
-     * @param[in]  path  Output file path (e.g. "seq.fmod.pge").
+     * @param[in]  path  Output file path (e.g. "seq.fmod.pseg").
      * @return PULSEG_SUCCESS on success.
      */
     int pulseg_freq_mod_collection_write_cache(
@@ -195,7 +195,7 @@ extern "C"
      * shift-independent, is cached), then appends the FREQMOD section.
      *
      * @param[in,out] coll      Loaded collection (coll->freq_mod is populated).
-     * @param[in]     seq_path  Path to the .seq file (cache is .seq → .pge).
+     * @param[in]     seq_path  Path to the .seq file (cache extension per D10: default .pseg, GE .pge).
      * @return PULSEG_SUCCESS or negative error code.
      */
     int pulseg_write_freq_mod_cache_from_collection(

@@ -165,7 +165,7 @@ const char *pulseg_get_error_message(int code)
     case PULSEG_ERR_PNS_INVALID_CHRONAXIE:
         return "Invalid chronaxie value for PNS";
     case PULSEG_ERR_PNS_INVALID_RHEOBASE:
-        return "Invalid rheobase value for PNS (GE model)";
+        return "Invalid rheobase value for PNS";
     case PULSEG_ERR_PNS_NO_WAVEFORM:
         return "No waveform data for PNS analysis";
     case PULSEG_ERR_PNS_FFT_FAILED:

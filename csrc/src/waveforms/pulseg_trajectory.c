@@ -13,7 +13,7 @@
 /* ================================================================== */
 
 /* from pulseg_cache.c (we reuse these via the same pattern) */
-static char *traj_make_cache_path(const char *seq_path);
+static char *traj_make_cache_path(const char *seq_path, const char *ext);
 
 /* ================================================================== */
 /*  Constants                                                         */
@@ -25,22 +25,28 @@ static char *traj_make_cache_path(const char *seq_path);
 /*  Helpers                                                           */
 /* ================================================================== */
 
-static char *traj_make_cache_path(const char *seq_path)
+/* ext: cache file extension including the dot; NULL/empty falls back to
+ * PULSEG_CACHE_EXT_DEFAULT (D10). */
+static char *traj_make_cache_path(const char *seq_path, const char *ext)
 {
-    size_t len;
+    size_t len, ext_len;
     char *out;
     const char *dot;
 
+    if (!ext || !ext[0])
+        ext = PULSEG_CACHE_EXT_DEFAULT;
+    ext_len = strlen(ext);
+
     len = strlen(seq_path);
-    out = (char *)PULSEG_ALLOC(len + 5);
+    out = (char *)PULSEG_ALLOC(len + ext_len + 1);
     if (!out)
         return NULL;
     strcpy(out, seq_path);
     dot = strrchr(out, '.');
     if (dot && (strrchr(out, '/') == NULL || dot > strrchr(out, '/')))
-        strcpy((char *)(out + (dot - out)), ".pge");
+        strcpy((char *)(out + (dot - out)), ext);
     else
-        strcat(out, ".pge");
+        strcat(out, ext);
     return out;
 }
 
@@ -698,6 +704,29 @@ static int compute_block_kspace(
     return PULSEG_SUCCESS;
 }
 
+/* Assigns a 3-column vendor-mapped label-table value (D3) into the named
+ * field it represents. state_idx is a Pulseq label state-array index
+ * (0=SLC,1=PHS,2=REP,3=AVG,4=SEG,5=SET,6=ECO,7=PAR,8=LIN,9=ACQ), taken
+ * from desc->label_column_map -- not hardcoded to GE's [lin,slc,eco]. */
+static void assign_traj_label_by_state_index(
+    pulseg_traj_table_entry *entry, int state_idx, int value)
+{
+    switch (state_idx)
+    {
+        case 0: entry->slc = value; break;
+        case 1: entry->phs = value; break;
+        case 2: entry->rep = value; break;
+        case 3: entry->avg = value; break;
+        case 4: entry->seg = value; break;
+        case 5: entry->set = value; break;
+        case 6: entry->eco = value; break;
+        case 7: entry->par = value; break;
+        case 8: entry->lin = value; break;
+        case 9: entry->acq = value; break;
+        default: break;
+    }
+}
+
 /* ================================================================== */
 /*  Public: compute trajectory                                        */
 /* ================================================================== */
@@ -995,10 +1024,13 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
                 }
                 else if (PULSEG_SUCCEEDED(rc) && label_ncols >= 3)
                 {
-                    /* GEHC mapping fallback: col0=lin, col1=slc, col2=eco */
-                    table[adc_idx].lin = label_buf[0];
-                    table[adc_idx].slc = label_buf[1];
-                    table[adc_idx].eco = label_buf[2];
+                    /* 3-column vendor-mapped label table (D3): column
+                     * meaning comes from desc->label_column_map (GE
+                     * default [lin,slc,eco]), not a hardcoded GEHC order. */
+                    int col;
+                    for (col = 0; col < 3; ++col)
+                        assign_traj_label_by_state_index(
+                            &table[adc_idx], desc->label_column_map[col], label_buf[col]);
                 }
             }
 
@@ -1327,7 +1359,8 @@ static int traj_read4(FILE *f, void *p, int count)
 #define CACHE_SECTION_TRAJECTORY 6
 
 int pulseg_write_trajectory_cache(const pulseg_trajectory *traj,
-                                     const char *seq_path)
+                                     const char *seq_path,
+                                     const char *cache_ext)
 {
     char *cache_path;
     FILE *f;
@@ -1341,7 +1374,7 @@ int pulseg_write_trajectory_cache(const pulseg_trajectory *traj,
     if (!traj || !seq_path)
         return PULSEG_ERR_NULL_POINTER;
 
-    cache_path = traj_make_cache_path(seq_path);
+    cache_path = traj_make_cache_path(seq_path, cache_ext);
     if (!cache_path)
         return PULSEG_ERR_ALLOC_FAILED;
 
@@ -1612,7 +1645,8 @@ int pulseg_write_trajectory_cache_from_collection(
 
     if (have)
     {
-        rc = pulseg_write_trajectory_cache(&acc, seq_path);
+        rc = pulseg_write_trajectory_cache(&acc, seq_path,
+            coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
         pulseg_free_trajectory(&acc);
         return rc;
     }
@@ -1638,7 +1672,7 @@ int pulseg_load_trajectory_cache(pulseg_trajectory *out,
         return PULSEG_ERR_NULL_POINTER;
     memset(out, 0, sizeof(*out));
 
-    cache_path = traj_make_cache_path(seq_path);
+    cache_path = traj_make_cache_path(seq_path, NULL);
     if (!cache_path)
         return PULSEG_ERR_ALLOC_FAILED;
 

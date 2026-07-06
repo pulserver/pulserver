@@ -55,7 +55,7 @@ extern "C"
      * @brief Save a loaded collection to a binary cache file.
      *
      * @param[in]  coll          Collection to save.
-     * @param[in]  path          Output file path (e.g. "my_sequence.pge").
+     * @param[in]  path          Output file path (e.g. "my_sequence.pseg").
      * @param[in]  source_size   Size (in bytes) of the original .seq buffer
      *                            used to load this collection.  Written into
      *                            the cache header for integrity validation on
@@ -116,11 +116,49 @@ extern "C"
      * Must be called after the collection is loaded and all descriptors computed.
      *
      * @param[in] coll      Loaded collection.
-     * @param[in] seq_path  Path to the .seq file (cache is .seq → .pge).
+     * @param[in] seq_path  Path to the .seq file (cache extension per D10: default .pseg, GE .pge).
      * @return PULSEG_SUCCESS or negative error code.
      */
     int pulseg_write_sequence_description_cache(const pulseg_collection *coll,
                                                    const char *seq_path);
+
+    /**
+     * @brief Append an opaque vendor blob as the VENDOR section (D10).
+     *
+     * Invokes @p opts->vendor_section_write_fn(opts->vendor_section_ctx, &buf,
+     * &len) to obtain a caller-allocated (PULSEG_ALLOC'd) buffer, writes it
+     * verbatim as a length-prefixed section, then frees the buffer. A NULL
+     * @c vendor_section_write_fn is not an error -- it simply means no
+     * VENDOR section is written. GE leaves this callback unset.
+     *
+     * @param[in] coll      Loaded collection (must already have a base cache
+     *                       on disk, i.e. called after pulseg__write_cache).
+     * @param[in] seq_path  Path to the .seq file.
+     * @param[in] opts      Options carrying vendor_section_write_fn/ctx.
+     * @return PULSEG_SUCCESS, negative error code, or PULSEG_SUCCESS with no
+     *         section written when the callback is NULL.
+     */
+    int pulseg_write_vendor_cache_section(const pulseg_collection *coll,
+                                             const char *seq_path,
+                                             const pulseg_opts *opts);
+
+    /**
+     * @brief Read back the raw VENDOR section blob (D10), if present.
+     *
+     * @param[in]  seq_path  Path to the .seq file.
+     * @param[in]  cache_ext Cache file extension incl. dot, or NULL for the
+     *                       public default.
+     * @param[out] out_buf   Receives a PULSEG_ALLOC'd copy of the blob
+     *                       (caller frees via PULSEG_FREE); NULL if absent.
+     * @param[out] out_len   Receives the blob length in bytes (0 if absent).
+     * @return PULSEG_SUCCESS if the cache was readable (even with no VENDOR
+     *         section present, in which case *out_buf=NULL, *out_len=0);
+     *         negative error code on I/O failure.
+     */
+    int pulseg_read_vendor_cache_section(const char *seq_path,
+                                            const char *cache_ext,
+                                            unsigned char **out_buf,
+                                            int *out_len);
 
 #ifdef __cplusplus
 }

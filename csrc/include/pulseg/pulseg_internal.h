@@ -456,6 +456,7 @@ typedef struct pulseg_sequence_descriptor {
     int pass_len;           /**< blocks per pass (= num_blocks when single-pass) */
     int num_averages;       /**< number of averages (1 if ignore_averages)       */
     int vendor;             /**< PULSEG_VENDOR_* runtime constant */
+    int label_column_map[3]; /**< copy of pulseg_opts.label_column_map at dedup time (D3) */
 
     float fov[3];           /**< field of view (mm), from [DEFINITIONS] FOV */
     float matrix[3];        /**< matrix size, from [DEFINITIONS] Matrix    */
@@ -547,10 +548,17 @@ typedef struct pulseg_sequence_descriptor {
     float* canonical_kx;
     float* canonical_ky;
     float* canonical_kz;
+
+    /* Copy of pulseg_opts.cache_ext at dedup time (D10). Not part of the
+     * cache payload itself (it only names the cache FILE, not its
+     * contents) -- deliberately placed after all cache-serialized fields
+     * so it needs no swap4_array count bump. */
+    char cache_ext[PULSEG_CACHE_EXT_MAX];
 } pulseg_sequence_descriptor;
 
 #define PULSEG_SEQUENCE_DESCRIPTOR_INIT { \
     0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 1, 0, 1, 0, \
+    {0,1,2}, \
     {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, \
     0, NULL, 0, NULL, \
     0, NULL, 0, NULL, \
@@ -564,7 +572,8 @@ typedef struct pulseg_sequence_descriptor {
     NULL, \
     0, 0, NULL, {{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}}, NULL, \
     0, NULL, \
-    0, 0, 0.0f, NULL, NULL, NULL \
+    0, 0, 0.0f, NULL, NULL, NULL, \
+    PULSEG_CACHE_EXT_DEFAULT \
 }
 
 /* ================================================================== */
@@ -1097,8 +1106,8 @@ int   pulseg__find_unique_shot_passes(
           int** out_pass_group_labels);
 
 /* --- pulseg_cache.c --- */
-int   pulseg__try_read_cache(pulseg_collection* coll, const char* seq_path);
-int   pulseg__write_cache(pulseg_collection* seq_coll, const char* seq_path);
+int   pulseg__try_read_cache(pulseg_collection* coll, const char* seq_path, const char* cache_ext);
+int   pulseg__write_cache(pulseg_collection* seq_coll, const char* seq_path, const pulseg_opts* opts);
 
 /* --- Helper to locate segment/block in collection --- */
 int pulseg__resolve_segment(

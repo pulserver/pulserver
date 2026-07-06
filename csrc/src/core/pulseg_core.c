@@ -806,7 +806,7 @@ int pulseg_read(
     collection->num_repetitions = 1;
 
     /* Try cache */
-    if (cache_binary && pulseg__try_read_cache(collection, file_path)) {
+    if (cache_binary && pulseg__try_read_cache(collection, file_path, opts->cache_ext)) {
         /* Segment timing and TR-start flags are derived, not cached */
         for (i = 0; i < collection->num_subsequences; ++i) {
             pulseg__calc_segment_timing(&collection->descriptors[i], NULL);
@@ -843,7 +843,7 @@ int pulseg_read(
     pulseg__seq_file_collection_free(&raw_coll);
 
     /* Write cache (best-effort) */
-    if (cache_binary) pulseg__write_cache(collection, file_path);
+    if (cache_binary) pulseg__write_cache(collection, file_path, opts);
 
     *out_coll = collection;
     return PULSEG_SUCCESS;

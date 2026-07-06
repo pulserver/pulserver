@@ -33,7 +33,7 @@ extern "C"
      * @param[out] diag             Diagnostic info on failure.
      * @param[in]  file_path        Path to the first .seq file.
      * @param[in]  opts             Scanner limits / rasters.
-     * @param[in]  cache_binary     1 = read/write .pge cache alongside .seq.
+     * @param[in]  cache_binary     1 = read/write binary cache alongside .seq (extension per D10).
      * @param[in]  verify_signature 1 = verify MD5 signature for every .seq
      *                              file in the chain.
      * @param[in]  parse_labels     1 = build ADC label table via dry-run.

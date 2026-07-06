@@ -11,6 +11,56 @@
 #endif
 
 /* ================================================================== */
+/*  Test-local vendor RF-stats callback (exercises pulseg_opts.
+ *  vendor_rf_stats_fn / pulseg_rf_view -- the D8-A hook). Reproduces the
+ *  GE-style abswidth/effwidth/dtycyc/maxpw envelope stats verbatim from
+ *  the on-scanner implementation (src_gelib/pulserver_ge_rf_stats.c) so
+ *  the public ctest ground truth below stays meaningful without the
+ *  public library computing anything vendor-specific itself.          */
+/* ================================================================== */
+
+static int test_ge_rf_stats_cb(void *ctx, const pulseg_rf_view *rf, float out_stat[4])
+{
+    const float DTY_THRESHOLD = 0.2236f;
+    float sum_abs, sum_sq, time_above_threshold, temp_pw, maxpw, rf_abs;
+    int i;
+
+    (void)ctx;
+    sum_abs = 0.0f;
+    sum_sq = 0.0f;
+    time_above_threshold = 0.0f;
+    maxpw = 0.0f;
+    temp_pw = 0.0f;
+    for (i = 0; i < rf->n; ++i)
+    {
+        rf_abs = rf->mag[i];
+        sum_abs += rf_abs;
+        sum_sq += rf_abs * rf_abs;
+        if (rf_abs > DTY_THRESHOLD)
+        {
+            time_above_threshold += 1.0f;
+            temp_pw += 1.0f;
+        }
+        else
+        {
+            if (temp_pw > maxpw)
+                maxpw = temp_pw;
+            temp_pw = 0.0f;
+        }
+    }
+    if (temp_pw > maxpw)
+        maxpw = temp_pw;
+    if (time_above_threshold < maxpw)
+        time_above_threshold = maxpw;
+
+    out_stat[0] = sum_abs / (float)rf->n;
+    out_stat[1] = sum_sq / (float)rf->n;
+    out_stat[2] = time_above_threshold / (float)rf->n;
+    out_stat[3] = maxpw / (float)rf->n;
+    return PULSEG_SUCCESS;
+}
+
+/* ================================================================== */
 /*  Suite A — RF180 block pulse ground truth                          */
 /* ================================================================== */
 
@@ -40,16 +90,18 @@ MU_TEST(test_rf180_block_pulse_stats)
     int rc;
 
     default_opts_init(&opts);
+    opts.vendor_rf_stats_fn = test_ge_rf_stats_cb;
+    opts.vendor_rf_stats_ctx = NULL;
     rc = load_seq(&coll, "00_basic_rfstat.seq", &opts);
     mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
     rc = pulseg_get_rf_stats(coll, &stats, 0, 0);
     mu_assert(PULSEG_SUCCEEDED(rc), "get_rf_stats failed");
 
-    mu_assert_float_near("abs_width",  1.0f,    stats.abs_width,        1e-4f);
-    mu_assert_float_near("eff_width",  1.0f,    stats.eff_width,        1e-4f);
-    mu_assert_float_near("duty_cycle", 1.0f,    stats.duty_cycle,       1e-4f);
-    mu_assert_float_near("max_pw",     1.0f,    stats.max_pulse_width,  1e-4f);
+    mu_assert_float_near("vendor_stat[0] (abs_width)",  1.0f, stats.vendor_stat[0], 1e-4f);
+    mu_assert_float_near("vendor_stat[1] (eff_width)",  1.0f, stats.vendor_stat[1], 1e-4f);
+    mu_assert_float_near("vendor_stat[2] (duty_cycle)", 1.0f, stats.vendor_stat[2], 1e-4f);
+    mu_assert_float_near("vendor_stat[3] (max_pw)",     1.0f, stats.vendor_stat[3], 1e-4f);
 
     mu_assert_float_near("base_amp_hz", 500.0f, stats.base_amplitude_hz, 1.0f);
     mu_assert_float_near("flip_angle",  (float)M_PI, stats.flip_angle_rad, 0.01f);

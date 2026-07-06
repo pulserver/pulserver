@@ -91,6 +91,17 @@ int main(int argc, char **argv)
      * we are not validating the .seq, only producing the cache.
      * vendor = GEHC: only GEHC label-parsing is currently implemented. */
     opts.vendor = PULSEG_VENDOR_GEHC;
+    /* GE label->column convention (D3): col0=LIN, col1=SLC, col2=ECO
+     * (state-array indices 8,0,6). The public default is identity
+     * {0,1,2}; this CLI reproduces GEHC-flavored truth fixtures, so it
+     * sets the GE mapping explicitly rather than relying on the default. */
+    opts.label_column_map[0] = 8;
+    opts.label_column_map[1] = 0;
+    opts.label_column_map[2] = 6;
+    /* Truth fixtures were produced under the historical hardcoded ".pge"
+     * suffix; keep reproducing that exact name (D10 public default is
+     * now ".pseg"). */
+    strcpy(opts.cache_ext, ".pge");
     opts.gamma_hz_per_t = 42577478.0f;
     opts.b0_t = 3.0f;
     opts.max_grad_hz_per_m = 42577478.0f * 1.0f;           /* 1000 mT/m */

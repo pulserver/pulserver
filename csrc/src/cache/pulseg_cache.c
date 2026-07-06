@@ -15,7 +15,12 @@
 #define PULSEG_CACHE_ENDIAN_MARKER 0x01020304
 #define PULSEG_CACHE_VERSION_MAJOR 2
 #define PULSEG_CACHE_VERSION_MINOR 0
-#define PULSEG_CACHE_VERSION_REVISION 0
+/* Bumped for Stage 2 (D3/D8-A/D10): COMMON gained label_column_map[3]
+ * (after vendor), pulseg_rf_stats.vendor_stat[4] replaces the four named
+ * GE fields (same layout, no bump needed for that alone), and a VENDOR
+ * section id was added -- the label_column_map addition changes COMMON's
+ * on-disk layout, so old caches must be rejected, not silently misread. */
+#define PULSEG_CACHE_VERSION_REVISION 1
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; ROTATIONS, SHAPES
@@ -29,15 +34,20 @@
 #define PULSEG_CACHE_SECTION_FREQMOD 5
 #define PULSEG_CACHE_SECTION_TRAJECTORY 6
 #define PULSEG_CACHE_SECTION_SEQDESC 7
+/* Opaque vendor extension section (D10): length-prefixed blob, written
+ * only when pulseg_opts.vendor_section_write_fn is set (GE leaves it
+ * unused). Format: [int byte_len][byte_len raw bytes]. */
+#define PULSEG_CACHE_SECTION_VENDOR 8
 
-/* Total number of defined section IDs (0..7 above). write_cache() reserves
+/* Total number of defined section IDs (0..8 above). write_cache() reserves
  * a section-entry table sized for this many slots up front -- even though
  * it only writes the 5 base sections itself -- so that the later append
  * passes (pulseg_write_trajectory_cache, pulseg_write_freq_mod_cache,
- * the optional SEQDESC writer) can insert their own entries into the same
- * table without growing past its reserved size and overflowing into the
- * COMMON payload that immediately follows it on disk. */
-#define PULSEG_CACHE_MAX_SECTIONS 8
+ * the optional SEQDESC writer, the optional VENDOR writer) can insert
+ * their own entries into the same table without growing past its reserved
+ * size and overflowing into the COMMON payload that immediately follows
+ * it on disk. */
+#define PULSEG_CACHE_MAX_SECTIONS 9
 
 typedef struct pulseg_cache_section_entry
 {
@@ -81,14 +91,20 @@ static int read4(FILE *f, void *p, int count)
 
 /* ------ Path helper ------ */
 
-static char *make_cache_path(const char *seq_path)
+/* ext: cache file extension including the dot (e.g. ".pseg"); NULL or
+ * empty falls back to PULSEG_CACHE_EXT_DEFAULT (D10). */
+static char *make_cache_path(const char *seq_path, const char *ext)
 {
-    size_t len;
+    size_t len, ext_len;
     char *out;
     const char *dot;
 
+    if (!ext || !ext[0])
+        ext = PULSEG_CACHE_EXT_DEFAULT;
+    ext_len = strlen(ext);
+
     len = strlen(seq_path);
-    out = (char *)PULSEG_ALLOC(len + 5); /* worst case: no dot, append ".pge\0" */
+    out = (char *)PULSEG_ALLOC(len + ext_len + 1);
     if (!out)
         return NULL;
 
@@ -97,11 +113,11 @@ static char *make_cache_path(const char *seq_path)
     if (dot && dot > strrchr(out, '/') && dot > strrchr(out, '\\'))
     {
         /* replace extension */
-        strcpy((char *)(out + (dot - out)), ".pge");
+        strcpy((char *)(out + (dot - out)), ext);
     }
     else
     {
-        strcat(out, ".pge");
+        strcat(out, ext);
     }
     return out;
 }
@@ -176,6 +192,8 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
     if (!write4(f, &d->num_passes, 1))
         return 0;
     if (!write4(f, &d->vendor, 1))
+        return 0;
+    if (!write4(f, d->label_column_map, 3))
         return 0;
     if (!write4(f, d->fov, 3))
         return 0;
@@ -267,13 +285,13 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
             return 0;
         if (!write4(f, &d->rf_definitions[i].stats.area, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.abs_width, 1))
+        if (!write4(f, &d->rf_definitions[i].stats.vendor_stat[0], 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.eff_width, 1))
+        if (!write4(f, &d->rf_definitions[i].stats.vendor_stat[1], 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.duty_cycle, 1))
+        if (!write4(f, &d->rf_definitions[i].stats.vendor_stat[2], 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.max_pulse_width, 1))
+        if (!write4(f, &d->rf_definitions[i].stats.vendor_stat[3], 1))
             return 0;
         if (!write4(f, &d->rf_definitions[i].stats.duration_us, 1))
             return 0;
@@ -708,8 +726,10 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         return 0;
     if (!read4(f, &d->vendor, 1))
         return 0;
+    if (!read4(f, d->label_column_map, 3))
+        return 0;
     if (do_swap)
-        swap4_array(&d->num_prep_blocks, 12);
+        swap4_array(&d->num_prep_blocks, 15);
     if (!read4(f, d->fov, 3))
         return 0;
     if (!read4(f, d->matrix, 3))
@@ -796,13 +816,13 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             return 0;
         if (!read4(f, &d->rf_definitions[i].stats.area, 1))
             return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.abs_width, 1))
+        if (!read4(f, &d->rf_definitions[i].stats.vendor_stat[0], 1))
             return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.eff_width, 1))
+        if (!read4(f, &d->rf_definitions[i].stats.vendor_stat[1], 1))
             return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.duty_cycle, 1))
+        if (!read4(f, &d->rf_definitions[i].stats.vendor_stat[2], 1))
             return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.max_pulse_width, 1))
+        if (!read4(f, &d->rf_definitions[i].stats.vendor_stat[3], 1))
             return 0;
         if (!read4(f, &d->rf_definitions[i].stats.duration_us, 1))
             return 0;
@@ -2114,19 +2134,20 @@ static int read_full_cache(const char *cache_path,
 /*  Public wrappers (called from pulseg_core.c)                    */
 /* ================================================================== */
 
-int pulseg__write_cache(pulseg_collection *coll, const char *seq_path)
+int pulseg__write_cache(pulseg_collection *coll, const char *seq_path,
+                            const pulseg_opts *opts)
 {
     char *cache_path;
     long sz;
     int ok;
 
-    if (!coll || !seq_path)
+    if (!coll || !seq_path || !opts)
         return 0;
 
     /* suppress unused-function warning for reserved helper */
     (void)get_seq_file_sizes;
 
-    cache_path = make_cache_path(seq_path);
+    cache_path = make_cache_path(seq_path, opts->cache_ext);
     if (!cache_path)
         return 0;
 
@@ -2143,20 +2164,24 @@ int pulseg__write_cache(pulseg_collection *coll, const char *seq_path)
     if (!ok)
         return 0;
 
-    /* Append the remaining static sections. The whole .pge is a pure function
-     * of the loaded collection (shift/rotation independent), so it is produced
-     * here in one shot at load time. These are best-effort: each consumer
-     * treats its section as optional, so a failure does not invalidate the
-     * base cache and not every sequence has every section. */
+    /* Append the remaining static sections. The whole cache is a pure
+     * function of the loaded collection (shift/rotation independent), so
+     * it is produced here in one shot at load time. These are best-effort:
+     * each consumer treats its section as optional, so a failure does not
+     * invalidate the base cache and not every sequence has every section.
+     * Each callee reads its own cache_ext from coll->descriptors[0]
+     * (set at dedup time from this same opts->cache_ext, D10). */
     (void)pulseg_write_trajectory_cache_from_collection(coll, seq_path);
     (void)pulseg_write_freq_mod_cache_from_collection(coll, seq_path);
     (void)pulseg_write_sequence_description_cache(coll, seq_path);
+    (void)pulseg_write_vendor_cache_section(coll, seq_path, opts);
 
     return ok;
 }
 
 int pulseg__try_read_cache(pulseg_collection *coll,
-                              const char *seq_path)
+                              const char *seq_path,
+                              const char *cache_ext)
 {
     char *cache_path;
     long sz;
@@ -2165,7 +2190,7 @@ int pulseg__try_read_cache(pulseg_collection *coll,
     if (!coll || !seq_path)
         return 0;
 
-    cache_path = make_cache_path(seq_path);
+    cache_path = make_cache_path(seq_path, cache_ext);
     if (!cache_path)
         return 0;
 
@@ -2234,7 +2259,7 @@ static int load_cache_from_seq_path(
         return PULSEG_ERR_ALLOC_FAILED;
     memset(coll, 0, sizeof(*coll));
 
-    cache_path = make_cache_path(seq_path);
+    cache_path = make_cache_path(seq_path, NULL);
     if (!cache_path)
     {
         PULSEG_FREE(coll);
@@ -2316,7 +2341,7 @@ int pulseg_clear_cache(const char *seq_path)
     if (!seq_path)
         return PULSEG_ERR_NULL_POINTER;
 
-    cache_path = make_cache_path(seq_path);
+    cache_path = make_cache_path(seq_path, NULL);
     if (!cache_path)
         return PULSEG_ERR_ALLOC_FAILED;
 
@@ -2329,7 +2354,7 @@ int pulseg_clear_cache(const char *seq_path)
 }
 
 /* ================================================================== */
-/*  Freq-mod unified cache (FREQMOD section of .pge)                  */
+/*  Freq-mod unified cache (FREQMOD section of the binary cache)                  */
 /* ================================================================== */
 
 int pulseg_write_freq_mod_cache(
@@ -2350,7 +2375,8 @@ int pulseg_write_freq_mod_cache(
     if (!coll->freq_mod)
         return PULSEG_ERR_NULL_POINTER;
 
-    cache_path = make_cache_path(seq_path);
+    cache_path = make_cache_path(seq_path,
+        coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
     if (!cache_path)
         return PULSEG_ERR_ALLOC_FAILED;
 
@@ -2480,6 +2506,300 @@ fm_write_fail:
     return PULSEG_ERR_FILE_READ_FAILED;
 }
 
+/* ================================================================== */
+/*  Vendor extension section (D10, opaque, optional)                  */
+/* ================================================================== */
+
+int pulseg_write_vendor_cache_section(const pulseg_collection *coll,
+                                          const char *seq_path,
+                                          const pulseg_opts *opts)
+{
+    char *cache_path;
+    FILE *f;
+    int marker, num_sections;
+    int version_major, version_minor, version_revision, vendor, stored_size;
+    int do_swap;
+    long entries_pos, data_start, data_end, hdr_ns_pos;
+    int i, found_idx;
+    pulseg_cache_section_entry entries[16];
+    unsigned char *blob;
+    int blob_len;
+    int rc;
+
+    if (!coll || !seq_path || !opts)
+        return PULSEG_ERR_NULL_POINTER;
+    if (!opts->vendor_section_write_fn)
+        return PULSEG_SUCCESS; /* nothing to do -- not an error */
+
+    blob = NULL;
+    blob_len = 0;
+    rc = opts->vendor_section_write_fn(opts->vendor_section_ctx, &blob, &blob_len);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    if (!blob || blob_len <= 0)
+    {
+        if (blob)
+            PULSEG_FREE(blob);
+        return PULSEG_SUCCESS; /* callback opted out this time */
+    }
+
+    cache_path = make_cache_path(seq_path,
+        coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
+    if (!cache_path)
+    {
+        PULSEG_FREE(blob);
+        return PULSEG_ERR_ALLOC_FAILED;
+    }
+
+    f = fopen(cache_path, "r+b");
+    if (!f)
+    {
+        PULSEG_FREE(cache_path);
+        PULSEG_FREE(blob);
+        return PULSEG_ERR_FILE_READ_FAILED;
+    }
+
+    if (!read4(f, &marker, 1))
+        goto vs_write_fail;
+    do_swap = 0;
+    if (marker != PULSEG_CACHE_ENDIAN_MARKER)
+    {
+        swap4(&marker);
+        if (marker != PULSEG_CACHE_ENDIAN_MARKER)
+            goto vs_write_fail;
+        do_swap = 1;
+    }
+    if (!read4(f, &version_major, 1))
+        goto vs_write_fail;
+    if (!read4(f, &version_minor, 1))
+        goto vs_write_fail;
+    if (!read4(f, &version_revision, 1))
+        goto vs_write_fail;
+    if (!read4(f, &vendor, 1))
+        goto vs_write_fail;
+    if (!read4(f, &stored_size, 1))
+        goto vs_write_fail;
+    hdr_ns_pos = ftell(f);
+    if (!read4(f, &num_sections, 1))
+        goto vs_write_fail;
+    if (do_swap)
+    {
+        swap4(&version_major);
+        swap4(&version_minor);
+        swap4(&version_revision);
+        swap4(&vendor);
+        swap4(&stored_size);
+        swap4(&num_sections);
+    }
+    if (num_sections <= 0 || num_sections > 15)
+        goto vs_write_fail;
+
+    entries_pos = ftell(f);
+    if (entries_pos < 0)
+        goto vs_write_fail;
+
+    for (i = 0; i < num_sections; ++i)
+    {
+        if (!read4(f, &entries[i].section_id, 1))
+            goto vs_write_fail;
+        if (!read4(f, &entries[i].offset, 1))
+            goto vs_write_fail;
+        if (!read4(f, &entries[i].size, 1))
+            goto vs_write_fail;
+        if (do_swap)
+        {
+            swap4(&entries[i].section_id);
+            swap4(&entries[i].offset);
+            swap4(&entries[i].size);
+        }
+    }
+
+    found_idx = -1;
+    for (i = 0; i < num_sections; ++i)
+    {
+        if (entries[i].section_id == PULSEG_CACHE_SECTION_VENDOR)
+        {
+            found_idx = i;
+            break;
+        }
+    }
+    if (found_idx < 0)
+    {
+        found_idx = num_sections;
+        entries[found_idx].section_id = PULSEG_CACHE_SECTION_VENDOR;
+        num_sections++;
+    }
+
+    fseek(f, 0, SEEK_END);
+    data_start = ftell(f);
+    if (data_start < 0)
+        goto vs_write_fail;
+
+    if (!write4(f, &blob_len, 1))
+        goto vs_write_fail;
+    if (blob_len > 0 && (int)fwrite(blob, 1, (size_t)blob_len, f) != blob_len)
+        goto vs_write_fail;
+
+    data_end = ftell(f);
+    if (data_end < 0)
+        goto vs_write_fail;
+
+    entries[found_idx].offset = (int)data_start;
+    entries[found_idx].size = (int)(data_end - data_start);
+
+    if (fseek(f, hdr_ns_pos, SEEK_SET) != 0)
+        goto vs_write_fail;
+    if (!write4(f, &num_sections, 1))
+        goto vs_write_fail;
+
+    if (fseek(f, entries_pos, SEEK_SET) != 0)
+        goto vs_write_fail;
+    for (i = 0; i < num_sections; ++i)
+    {
+        if (!write4(f, &entries[i].section_id, 1))
+            goto vs_write_fail;
+        if (!write4(f, &entries[i].offset, 1))
+            goto vs_write_fail;
+        if (!write4(f, &entries[i].size, 1))
+            goto vs_write_fail;
+    }
+
+    fclose(f);
+    PULSEG_FREE(cache_path);
+    PULSEG_FREE(blob);
+    return PULSEG_SUCCESS;
+
+vs_write_fail:
+    fclose(f);
+    PULSEG_FREE(cache_path);
+    PULSEG_FREE(blob);
+    return PULSEG_ERR_FILE_READ_FAILED;
+}
+
+int pulseg_read_vendor_cache_section(const char *seq_path,
+                                         const char *cache_ext,
+                                         unsigned char **out_buf,
+                                         int *out_len)
+{
+    char *cache_path;
+    FILE *f;
+    int marker, num_sections;
+    int version_major, version_minor, version_revision, vendor, stored_size;
+    int do_swap, i, found;
+    pulseg_cache_section_entry section;
+    int blob_len;
+    unsigned char *blob;
+
+    if (!seq_path || !out_buf || !out_len)
+        return PULSEG_ERR_NULL_POINTER;
+    *out_buf = NULL;
+    *out_len = 0;
+
+    cache_path = make_cache_path(seq_path, cache_ext);
+    if (!cache_path)
+        return PULSEG_ERR_ALLOC_FAILED;
+
+    f = fopen(cache_path, "rb");
+    if (!f)
+    {
+        PULSEG_FREE(cache_path);
+        return PULSEG_ERR_FILE_READ_FAILED;
+    }
+
+    if (!read4(f, &marker, 1))
+        goto vs_read_fail;
+    do_swap = 0;
+    if (marker != PULSEG_CACHE_ENDIAN_MARKER)
+    {
+        swap4(&marker);
+        if (marker != PULSEG_CACHE_ENDIAN_MARKER)
+            goto vs_read_fail;
+        do_swap = 1;
+    }
+    if (!read4(f, &version_major, 1))
+        goto vs_read_fail;
+    if (!read4(f, &version_minor, 1))
+        goto vs_read_fail;
+    if (!read4(f, &version_revision, 1))
+        goto vs_read_fail;
+    if (!read4(f, &vendor, 1))
+        goto vs_read_fail;
+    if (!read4(f, &stored_size, 1))
+        goto vs_read_fail;
+    if (!read4(f, &num_sections, 1))
+        goto vs_read_fail;
+    if (do_swap)
+        swap4(&num_sections);
+    if (num_sections <= 0 || num_sections > 15)
+        goto vs_read_fail;
+
+    found = 0;
+    section.section_id = -1;
+    section.offset = 0;
+    section.size = 0;
+    for (i = 0; i < num_sections; ++i)
+    {
+        pulseg_cache_section_entry e;
+        if (!read4(f, &e.section_id, 1))
+            goto vs_read_fail;
+        if (!read4(f, &e.offset, 1))
+            goto vs_read_fail;
+        if (!read4(f, &e.size, 1))
+            goto vs_read_fail;
+        if (do_swap)
+        {
+            swap4(&e.section_id);
+            swap4(&e.offset);
+            swap4(&e.size);
+        }
+        if (e.section_id == PULSEG_CACHE_SECTION_VENDOR)
+        {
+            section = e;
+            found = 1;
+        }
+    }
+
+    if (!found)
+    {
+        fclose(f);
+        PULSEG_FREE(cache_path);
+        return PULSEG_SUCCESS; /* no VENDOR section -- not an error */
+    }
+
+    if (fseek(f, section.offset, SEEK_SET) != 0)
+        goto vs_read_fail;
+    if (!read4(f, &blob_len, 1))
+        goto vs_read_fail;
+    if (do_swap)
+        swap4(&blob_len);
+    if (blob_len < 0 || blob_len > section.size)
+        goto vs_read_fail;
+
+    blob = NULL;
+    if (blob_len > 0)
+    {
+        blob = (unsigned char *)PULSEG_ALLOC((size_t)blob_len);
+        if (!blob)
+            goto vs_read_fail;
+        if ((int)fread(blob, 1, (size_t)blob_len, f) != blob_len)
+        {
+            PULSEG_FREE(blob);
+            goto vs_read_fail;
+        }
+    }
+
+    fclose(f);
+    PULSEG_FREE(cache_path);
+    *out_buf = blob;
+    *out_len = blob_len;
+    return PULSEG_SUCCESS;
+
+vs_read_fail:
+    fclose(f);
+    PULSEG_FREE(cache_path);
+    return PULSEG_ERR_FILE_READ_FAILED;
+}
+
 int pulseg_load_freq_mod_cache(
     pulseg_collection *coll,
     const char *seq_path)
@@ -2501,7 +2821,8 @@ int pulseg_load_freq_mod_cache(
         coll->freq_mod = NULL;
     }
 
-    cache_path = make_cache_path(seq_path);
+    cache_path = make_cache_path(seq_path,
+        coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
     if (!cache_path)
         return PULSEG_ERR_ALLOC_FAILED;
 

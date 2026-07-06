@@ -454,7 +454,7 @@ namespace pulseg
 
         PnsResult calc_pns(int ss, int canonical_tr_idx, const PnsParams &params) const
         {
-            pulseg_pns_params cp = params.to_c();
+            pulseg_pns_model cp = params.to_c();
             pulseg_pns_result cr = PULSEG_PNS_RESULT_INIT;
             pulseg_diagnostic diag;
             pulseg_diagnostic_init(&diag);
@@ -485,8 +485,8 @@ namespace pulseg
             for (size_t i = 0; i < bands.size(); ++i)
                 cbands[i] = bands[i].to_c();
 
-            pulseg_pns_params cp;
-            const pulseg_pns_params *cpp = nullptr;
+            pulseg_pns_model cp;
+            const pulseg_pns_model *cpp = nullptr;
             if (pns_params)
             {
                 cp = pns_params->to_c();

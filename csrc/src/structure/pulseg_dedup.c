@@ -746,8 +746,6 @@ static int compute_rf_stats(
     float max_mag, duration, time_center, rf_raster_us;
     pulseg_rf_definition *rd;
 
-    const float DTY_THRESHOLD = 0.2236f;
-
     int nn;
     float dw = 10.0f;
     float cutoff = 0.5f;
@@ -764,7 +762,9 @@ static int compute_rf_stats(
     int fft_ready = 0;
 
     float rf_abs, sum_signed;
-    float sum_abs, sum_sq, time_above_threshold, temp_pw, maxpw;
+    float sum_sq;
+    float *mag_view = NULL;
+    float *phase_view = NULL;
 
     if (!seq || !rf_defs || num_unique <= 0)
         return PULSEG_SUCCESS;
@@ -822,10 +822,10 @@ static int compute_rf_stats(
         rd->stats.flip_angle_rad = 0.0f;
         rd->stats.base_amplitude_hz = 0.0f;
         rd->stats.area = 0.0f;
-        rd->stats.abs_width = 0.0f;
-        rd->stats.eff_width = 0.0f;
-        rd->stats.duty_cycle = 0.0f;
-        rd->stats.max_pulse_width = 0.0f;
+        rd->stats.vendor_stat[0] = 0.0f;
+        rd->stats.vendor_stat[1] = 0.0f;
+        rd->stats.vendor_stat[2] = 0.0f;
+        rd->stats.vendor_stat[3] = 0.0f;
         rd->stats.duration_us = 0.0f;
         rd->stats.isodelay_us = 0;
         rd->stats.bandwidth_hz = 0.0f;
@@ -1089,46 +1089,50 @@ static int compute_rf_stats(
                 rd->stats.flip_angle_rad = (float)(2.0 * 3.14159265358979323846 * (double)rd->stats.base_amplitude_hz * mag_d); /* radians */
             }
         }
-        /* width / power / duty stats still need the uniform grid */
-        sum_abs = 0.0f;
+        /* b1sq power (neutral) still needs the uniform-grid envelope. */
         sum_sq = 0.0f;
-        time_above_threshold = 0.0f;
-        maxpw = 0.0f;
-        temp_pw = 0.0f;
         for (i = 0; i < num_uniform; ++i)
         {
             rf_abs = (float)sqrt(rf_re_uniform[i] * rf_re_uniform[i] +
                                  rf_im_uniform[i] * rf_im_uniform[i]);
-            sum_abs += rf_abs;
             sum_sq += rf_abs * rf_abs;
-            if (rf_abs > DTY_THRESHOLD)
-                time_above_threshold += 1.0f;
-            if (rf_abs > DTY_THRESHOLD)
-            {
-                temp_pw += 1.0f;
-            }
-            else
-            {
-                if (temp_pw > maxpw)
-                    maxpw = temp_pw;
-                temp_pw = 0.0f;
-            }
         }
-        if (temp_pw > maxpw)
-            maxpw = temp_pw;
 
         rd->stats.area = sum_signed;
-        rd->stats.abs_width = sum_abs / num_uniform;
-        rd->stats.eff_width = sum_sq / num_uniform;
-
-        /* dtycyc = fraction of samples above DTY_THRESHOLD / res
-         * maxpw  = longest consecutive run above DTY_THRESHOLD / res */
-        if (time_above_threshold < maxpw)
-            time_above_threshold = maxpw;
-        rd->stats.duty_cycle = time_above_threshold / (float)num_uniform;
-        rd->stats.max_pulse_width = maxpw / (float)num_uniform;
         /* b1sq power: integral |B1_norm(t)|^2 dt (normalised waveform, units: s) */
         rd->stats.total_b1sq_power = sum_sq * rf_raster_us * 1e-6f;
+
+        /* Vendor-specific envelope stats (D8-A): computed by the optional
+         * callback from a read-only view of the uniform-grid envelope;
+         * left at 0 when no callback is wired (PULSEG_VENDOR_UNSPECIFIED
+         * or a vendor that doesn't need them). */
+        if (seq->opts.vendor_rf_stats_fn)
+        {
+            mag_view = (float *)PULSEG_ALLOC(num_uniform * sizeof(float));
+            phase_view = (float *)PULSEG_ALLOC(num_uniform * sizeof(float));
+            if (!mag_view || !phase_view)
+                goto fail;
+            for (i = 0; i < num_uniform; ++i)
+            {
+                mag_view[i] = (float)sqrt(rf_re_uniform[i] * rf_re_uniform[i] +
+                                          rf_im_uniform[i] * rf_im_uniform[i]);
+                phase_view[i] = (float)atan2((double)rf_im_uniform[i], (double)rf_re_uniform[i]);
+            }
+            {
+                pulseg_rf_view view;
+                view.mag = mag_view;
+                view.phase = phase_view;
+                view.n = num_uniform;
+                view.dt_us = rf_raster_us;
+                view.duration_us = duration;
+                view.tr_duration_us = 0.0f; /* not yet known at dedup time */
+                seq->opts.vendor_rf_stats_fn(seq->opts.vendor_rf_stats_ctx, &view, rd->stats.vendor_stat);
+            }
+            PULSEG_FREE(mag_view);
+            mag_view = NULL;
+            PULSEG_FREE(phase_view);
+            phase_view = NULL;
+        }
 
         PULSEG_FREE(time_us_uniform);
         time_us_uniform = NULL;
@@ -1285,6 +1289,10 @@ fail:
         PULSEG_FREE(rf_im_uniform);
     if (time_centered)
         PULSEG_FREE(time_centered);
+    if (mag_view)
+        PULSEG_FREE(mag_view);
+    if (phase_view)
+        PULSEG_FREE(phase_view);
     return PULSEG_ERR_ALLOC_FAILED;
 }
 
@@ -1530,6 +1538,16 @@ int pulseg__get_unique_blocks(pulseg_sequence_descriptor *desc, const pulseg__se
     desc->ignore_averages = seq->reserved_definitions_library.ignore_averages;
     desc->num_gain_cal_readouts = seq->reserved_definitions_library.num_gain_cal_readouts;
     desc->vendor = seq->opts.vendor;
+    desc->label_column_map[0] = seq->opts.label_column_map[0];
+    desc->label_column_map[1] = seq->opts.label_column_map[1];
+    desc->label_column_map[2] = seq->opts.label_column_map[2];
+    {
+        size_t ext_len = strlen(seq->opts.cache_ext);
+        if (ext_len >= sizeof(desc->cache_ext))
+            ext_len = sizeof(desc->cache_ext) - 1;
+        memcpy(desc->cache_ext, seq->opts.cache_ext, ext_len);
+        desc->cache_ext[ext_len] = '\0';
+    }
 
     /* encoding-space definitions */
     memcpy(desc->fov, seq->reserved_definitions_library.fov, sizeof(desc->fov));
@@ -1613,12 +1631,13 @@ int pulseg__get_unique_blocks(pulseg_sequence_descriptor *desc, const pulseg__se
         num_unique_rf = deduplicate_rf_library(seq, tmp_rf_defs, tmp_rf_tab);
         desc->num_unique_rfs = num_unique_rf;
         desc->rf_table_size = seq->rf_library_size;
-        if (seq->opts.vendor == PULSEG_VENDOR_GEHC)
-        {
-            result = compute_rf_stats(seq, tmp_rf_defs, num_unique_rf, tmp_rf_tab, seq->rf_library_size);
-            if (PULSEG_FAILED(result))
-                goto fail;
-        }
+        /* Neutral RF stats (flip angle, amplitudes, area, duration, isodelay,
+         * bandwidth, bands, b1sq, num_samples/instances) are always computed;
+         * the four vendor-specific envelope stats (vendor_stat[4]) are filled
+         * only if the caller wired opts.vendor_rf_stats_fn (D8-A). */
+        result = compute_rf_stats(seq, tmp_rf_defs, num_unique_rf, tmp_rf_tab, seq->rf_library_size);
+        if (PULSEG_FAILED(result))
+            goto fail;
     }
     if (seq->grad_library_size > 0)
     {
