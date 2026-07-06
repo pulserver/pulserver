@@ -29,8 +29,7 @@ cmake.source-dir = "."
 wheel.packages = ["python/pulserver", "python/pge", "python/mrdserver"]
 sdist.include = [
   "csrc/**",
-  "cxxsrc/**",
-  "extensions/**",
+  "cxx/**",
   "python/**",
   "tests/**",
   "README.rst",

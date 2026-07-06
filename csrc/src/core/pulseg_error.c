@@ -1,0 +1,270 @@
+/* pulseg_error.c -- error messages, hints, and lookup tables */
+
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "pulseg_internal.h"
+
+/* ------------------------------------------------------------------ */
+/*  Label / hint lookup tables                                        */
+/* ------------------------------------------------------------------ */
+
+static const pulseg__table_entry label_table[] = {
+    {"SLC", PULSEG__SLC},
+    {"SEG", PULSEG__SEG},
+    {"REP", PULSEG__REP},
+    {"AVG", PULSEG__AVG},
+    {"SET", PULSEG__SET},
+    {"ECO", PULSEG__ECO},
+    {"PHS", PULSEG__PHS},
+    {"LIN", PULSEG__LIN},
+    {"PAR", PULSEG__PAR},
+    {"ACQ", PULSEG__ACQ},
+    {"NAV", PULSEG__NAV},
+    {"REV", PULSEG__REV},
+    {"SMS", PULSEG__SMS},
+    {"REF", PULSEG__REF},
+    {"IMA", PULSEG__IMA},
+    {"NOISE", PULSEG__NOISE},
+    {"PMC", PULSEG__PMC},
+    {"NOROT", PULSEG__NOROT},
+    {"NOPOS", PULSEG__NOPOS},
+    {"NOSCL", PULSEG__NOSCL},
+    {"ONCE", PULSEG__ONCE},
+    {"TRID", PULSEG__TRID},
+    {"OFF", PULSEG__OFF},
+    {NULL, -1}};
+
+int pulseg__label2enum(const char *label)
+{
+    int i;
+    if (!label)
+        return -1;
+    for (i = 0; label_table[i].name != NULL; i++)
+    {
+        if (strcmp(label, label_table[i].name) == 0)
+            return label_table[i].value;
+    }
+    return -1;
+}
+
+static const pulseg__table_entry hint_table[] = {
+    {"TE", PULSEG__HINT_TE},
+    {"TR", PULSEG__HINT_TR},
+    {"TI", PULSEG__HINT_TI},
+    {"ESP", PULSEG__HINT_ESP},
+    {"RECTIME", PULSEG__HINT_RECTIME},
+    {"T2PREP", PULSEG__HINT_T2PREP},
+    {"TE2", PULSEG__HINT_TE2},
+    {NULL, -1}};
+
+int pulseg__hint2enum(const char *hint)
+{
+    int i;
+    if (!hint)
+        return -1;
+    for (i = 0; hint_table[i].name != NULL; i++)
+    {
+        if (strcmp(hint, hint_table[i].name) == 0)
+            return hint_table[i].value;
+    }
+    return -1;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Diagnostic init                                                   */
+/* ------------------------------------------------------------------ */
+void pulseg_diagnostic_init(pulseg_diagnostic *diag)
+{
+    if (!diag)
+        return;
+    diag->code = PULSEG_SUCCESS;
+    diag->message[0] = '\0';
+}
+
+void pulseg__diag_printf(pulseg_diagnostic *diag, const char *fmt, ...)
+{
+    va_list ap;
+    int used;
+    if (!diag)
+        return;
+    /* Find current length so successive calls append */
+    used = (int)strlen(diag->message);
+    if (used >= PULSEG_DIAG_MSG_LEN - 1)
+        return;
+    va_start(ap, fmt);
+    vsprintf(diag->message + used, fmt, ap);
+    va_end(ap);
+    diag->message[PULSEG_DIAG_MSG_LEN - 1] = '\0';
+}
+
+/* ------------------------------------------------------------------ */
+/*  Error messages                                                     */
+/* ------------------------------------------------------------------ */
+const char *pulseg_get_error_message(int code)
+{
+    switch (code)
+    {
+    case PULSEG_SUCCESS:
+        return "Success";
+    case PULSEG_ERR_NULL_POINTER:
+        return "Required pointer argument is NULL";
+    case PULSEG_ERR_INVALID_ARGUMENT:
+        return "Invalid argument value";
+    case PULSEG_ERR_ALLOC_FAILED:
+        return "Memory allocation failed";
+    case PULSEG_ERR_FILE_NOT_FOUND:
+        return "Sequence file not found or could not be opened";
+    case PULSEG_ERR_FILE_READ_FAILED:
+        return "Error reading from sequence file";
+    case PULSEG_ERR_UNSUPPORTED_VERSION:
+        return "Unsupported sequence file version (requires >= 1.5.0)";
+    case PULSEG_ERR_INVALID_PREP_POSITION:
+        return "Invalid preparation block position";
+    case PULSEG_ERR_INVALID_COOLDOWN_POSITION:
+        return "Invalid cooldown block position";
+    case PULSEG_ERR_INVALID_ONCE_FLAGS:
+        return "ONCE flags define non-identical inner-loop repetitions";
+    case PULSEG_ERR_RASTER_MISMATCH:
+        return "System and sequence raster times are not integer multiples";
+    case PULSEG_ERR_SIGNATURE_MISMATCH:
+        return "MD5 signature verification failed";
+    case PULSEG_ERR_SIGNATURE_MISSING:
+        return "Sequence file has no [SIGNATURE] section or stored hash";
+    case PULSEG_ERR_ADC_DEFINITION_CONFLICT:
+        return "Block definition has conflicting ADC definitions across instances";
+    case PULSEG_ERR_INDEX:
+        return "Index out of range";
+    case PULSEG_ERR_TOO_MANY_GRAD_SHOTS:
+        return "Number of waveform shots exceeds maximum allowed";
+    case PULSEG_ERR_TR_NO_BLOCKS:
+        return "Sequence contains no blocks";
+    case PULSEG_ERR_TR_NO_IMAGING_REGION:
+        return "No imaging region found (preparation + cooldown >= total blocks)";
+    case PULSEG_ERR_TR_NO_PERIODIC_PATTERN:
+        return "No periodic TR pattern found in imaging region";
+    case PULSEG_ERR_TR_PATTERN_MISMATCH:
+        return "TR pattern does not repeat consistently across imaging region";
+    case PULSEG_ERR_TR_PREP_TOO_LONG:
+        return "Non-standard preparation section exceeds duration threshold";
+    case PULSEG_ERR_TR_COOLDOWN_TOO_LONG:
+        return "Non-standard cooldown section exceeds duration threshold";
+    case PULSEG_ERR_SEG_NONZERO_START_GRAD:
+        return "TR does not start with zero gradient amplitude";
+    case PULSEG_ERR_SEG_NONZERO_END_GRAD:
+        return "TR does not end with zero gradient amplitude";
+    case PULSEG_ERR_SEG_NO_SEGMENTS_FOUND:
+        return "No segment boundaries could be identified in TR";
+    case PULSEG_ERR_MECH_RESONANCES_NO_WAVEFORM:
+        return "No waveform data for mechanical resonance analysis";
+    case PULSEG_ERR_MECH_RESONANCES_VIOLATION:
+        return "mech-res exceeded";
+    case PULSEG_ERR_PNS_INVALID_PARAMS:
+        return "Invalid PNS parameters";
+    case PULSEG_ERR_PNS_INVALID_CHRONAXIE:
+        return "Invalid chronaxie value for PNS";
+    case PULSEG_ERR_PNS_INVALID_RHEOBASE:
+        return "Invalid rheobase value for PNS (GE model)";
+    case PULSEG_ERR_PNS_NO_WAVEFORM:
+        return "No waveform data for PNS analysis";
+    case PULSEG_ERR_PNS_FFT_FAILED:
+        return "FFT convolution failed during PNS analysis";
+    case PULSEG_ERR_PNS_THRESHOLD_EXCEEDED:
+        return "PNS threshold exceeded";
+    case PULSEG_ERR_MAX_GRAD_EXCEEDED:
+        return "gmax exceeded";
+    case PULSEG_ERR_NOT_IMPLEMENTED:
+        return "Functionality not yet implemented";
+    case PULSEG_ERR_GRAD_DISCONTINUITY:
+        return "gstep exceeded";
+    case PULSEG_ERR_MAX_SLEW_EXCEEDED:
+        return "gslew exceeded";
+    case PULSEG_ERR_CONSISTENCY_SEG_MISMATCH:
+        return "Block definition IDs do not match segment table";
+    case PULSEG_ERR_CONSISTENCY_RF_PERIODIC:
+        return "RF amplitude pattern is not periodic across canonical TRs";
+    case PULSEG_ERR_CONSISTENCY_RF_SHIM_PERIODIC:
+        return "RF shim ID pattern is not periodic across canonical TRs";
+    default:
+        return "Unknown error";
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Error hints                                                       */
+/* ------------------------------------------------------------------ */
+const char *pulseg_get_error_hint(int code)
+{
+    switch (code)
+    {
+    case PULSEG_SUCCESS:
+        return "";
+    case PULSEG_ERR_INVALID_PREP_POSITION:
+        return "Ensure that the preparation section is marked with ONCE labels "
+               "and starts at the first block of the sequence.";
+    case PULSEG_ERR_INVALID_COOLDOWN_POSITION:
+        return "Ensure that the cooldown section is marked with ONCE labels "
+               "and ends at the last block of the sequence.";
+    case PULSEG_ERR_INVALID_ONCE_FLAGS:
+        return "Ensure that ONCE flags define structurally identical inner-loop "
+               "repetitions. All periods delimited by ONCE sections must have the "
+               "same block structure.";
+    case PULSEG_ERR_RASTER_MISMATCH:
+        return "System raster times and sequence-defined raster times must be "
+               "integer multiples of each other for piecewise-constant "
+               "interpolation to produce correct waveforms.";
+    case PULSEG_ERR_SIGNATURE_MISMATCH:
+        return "The .seq file content does not match its stored MD5 hash. "
+               "The file may have been modified after export.";
+    case PULSEG_ERR_SIGNATURE_MISSING:
+        return "The .seq file does not contain a [SIGNATURE] section. "
+               "Re-export the sequence to include a signature.";
+    case PULSEG_ERR_TR_NO_IMAGING_REGION:
+        return "Make sure to use ONCE flags either at beginning (preparation) or end (cooldown) of the sequence.";
+    case PULSEG_ERR_TR_NO_PERIODIC_PATTERN:
+        return "This often occurs when phase-encoding gradients are created inside "
+               "the sequence loop with varying amplitudes. Instead, create gradient "
+               "events ONCE outside the loop and use 'scale' parameter to vary amplitude.";
+    case PULSEG_ERR_SEG_NONZERO_START_GRAD:
+    case PULSEG_ERR_SEG_NONZERO_END_GRAD:
+        return "Each segment must begin and end with gradient amplitudes that can "
+               "ramp to/from zero within one gradient raster.";
+    case PULSEG_ERR_ADC_DEFINITION_CONFLICT:
+        return "Two instances of the same block definition use different ADC events "
+               "(different num_samples, dwell time, or delay). Ensure all instances "
+               "of a given block use the same ADC structure, or omit the ADC entirely.";
+    case PULSEG_ERR_TOO_MANY_GRAD_SHOTS:
+        return "The sequence contains a waveform with more than 16 distinct waveform shapes.";
+    case PULSEG_ERR_TR_PREP_TOO_LONG:
+    case PULSEG_ERR_TR_COOLDOWN_TOO_LONG:
+        return "The preparation or cooldown section differs from the main TR pattern and is too long.";
+    case PULSEG_ERR_MAX_GRAD_EXCEEDED:
+        return "The gradient sum-of-squares amplitude exceeds the system limit. "
+               "See diagnostic message for details.";
+    case PULSEG_ERR_NOT_IMPLEMENTED:
+        return "This functionality is not yet implemented.";
+    case PULSEG_ERR_GRAD_DISCONTINUITY:
+        return "The gradient amplitude step between consecutive blocks exceeds "
+               "the maximum allowed by the slew rate and raster time. "
+               "See diagnostic message for details.";
+    case PULSEG_ERR_MAX_SLEW_EXCEEDED:
+        return "A gradient waveform exceeds the per-axis slew rate limit "
+               "(derated by 1/sqrt(3) for rotation safety). "
+               "See diagnostic message for details.";
+    case PULSEG_ERR_CONSISTENCY_SEG_MISMATCH:
+        return "Segment definitions are inconsistent with block table. "
+               "Try scaling gradients to eps instead of zero to preserve "
+               "gradient continuity across segment boundaries";
+    case PULSEG_ERR_CONSISTENCY_RF_PERIODIC:
+        return "RF amplitudes differ between canonical TR instances that should "
+               "be identical. If variable flip angles across canonical units are intended, "
+               "split volumes into separate subsequences";
+    case PULSEG_ERR_CONSISTENCY_RF_SHIM_PERIODIC:
+        return "RF shim IDs differ between canonical TR instances that should "
+               "be identical. If variable shimming across canonical units is intended, "
+               "split volumes into separate subsequences";
+    default:
+        return "Check sequence design for structural consistency.";
+    }
+}

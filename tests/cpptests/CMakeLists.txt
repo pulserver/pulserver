@@ -27,7 +27,7 @@ FetchContent_MakeAvailable(googletest)
 # Build trajectory_cache_reader as an OBJECT library to reuse here
 # without depending on the full GadgetronClient build.
 # ------------------------------------------------------------------
-set(MRDSERVER_CSRC ${CMAKE_CURRENT_SOURCE_DIR}/../../cxxsrc)
+set(MRDSERVER_CSRC ${CMAKE_CURRENT_SOURCE_DIR}/../../cxx/recon)
 
 add_library(trajectory_cache_reader_obj OBJECT
     ${MRDSERVER_CSRC}/trajectory_cache_reader.cpp)
@@ -58,7 +58,7 @@ target_link_libraries(test_trajectory_cache_loader PRIVATE
 
 # ------------------------------------------------------------------
 # Section 5 (SEQUENCEDESCRIPTION) byte-exact truth test.
-# Validates that the C-side cache writer (pulseqlib_cache_seqdesc.c)
+# Validates that the C-side cache writer (pulseg_cache_seqdesc.c)
 # and the MATLAB TruthBuilder.exportSequenceDescription emit the
 # identical Section 5 wire format.
 # ------------------------------------------------------------------

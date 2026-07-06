@@ -1,6 +1,6 @@
 /*
  * test_helpers.h -- shared includes, macros, and helpers for the
- *                   pulseqlib C test suite.
+ *                   pulseg C test suite.
  */
 #ifndef TEST_HELPERS_H
 #define TEST_HELPERS_H
@@ -16,7 +16,7 @@
 #endif
 
 /* ------------------------------------------------------------------ */
-/*  Standard + minunit + pulseqlib headers                            */
+/*  Standard + minunit + pulseg headers                            */
 /* ------------------------------------------------------------------ */
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,10 +25,10 @@
 
 #include "minunit.h"
 
-#include "pulseqlib_config.h"
-#include "pulseqlib_types.h"
-#include "pulseqlib_internal.h"
-#include "pulseqlib_methods.h"
+#include "pulseg_config.h"
+#include "pulseg_types.h"
+#include "pulseg_internal.h"
+#include "pulseg.h"
 
 /* ------------------------------------------------------------------ */
 /*  Path helpers -- TEST_ROOT_DIR is set by CMakeLists.txt            */
@@ -75,9 +75,9 @@
  *   max_grad    = gamma * 40 mT/m
  *   max_slew    = gamma * 170 T/m/s
  */
-static TEST_MAYBE_UNUSED void default_opts_init(pulseqlib_opts* opts)
+static TEST_MAYBE_UNUSED void default_opts_init(pulseg_opts* opts)
 {
-    pulseqlib_opts_init(opts,
+    pulseg_opts_init(opts,
         GAMMA_HZ_PER_T,
         3.0f,
         GAMMA_HZ_PER_T * 0.040f,       /* 40 mT/m  -> Hz/m  */
@@ -95,9 +95,9 @@ static TEST_MAYBE_UNUSED void default_opts_init(pulseqlib_opts* opts)
  *   max_grad    = gamma * 28 mT/m
  *   max_slew    = gamma * 150 T/m/s
  */
-static TEST_MAYBE_UNUSED void gre_opts_init(pulseqlib_opts* opts)
+static TEST_MAYBE_UNUSED void gre_opts_init(pulseg_opts* opts)
 {
-    pulseqlib_opts_init(opts,
+    pulseg_opts_init(opts,
         GAMMA_HZ_PER_T,
         3.0f,
         GAMMA_HZ_PER_T * 0.028f,       /* 28 mT/m  -> Hz/m  */
@@ -112,19 +112,19 @@ static TEST_MAYBE_UNUSED void gre_opts_init(pulseqlib_opts* opts)
 /**
  * Load a .seq file from TEST_DATA_DIR.
  *
- * Returns the pulseqlib return code.  On success *coll is set; on
+ * Returns the pulseg return code.  On success *coll is set; on
  * failure *coll is NULL.
  */
 static TEST_MAYBE_UNUSED int load_seq(
-    pulseqlib_collection** coll,
+    pulseg_collection** coll,
     const char* filename,
-    const pulseqlib_opts* opts)
+    const pulseg_opts* opts)
 {
-    pulseqlib_diagnostic diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
     char path[512];
 
     (void)snprintf(path, sizeof(path), "%s%s", TEST_DATA_DIR, filename);
-    return pulseqlib_read(coll, &diag, path, opts,
+    return pulseg_read(coll, &diag, path, opts,
                           0,   /* cache_binary     */
                           0,   /* verify_signature */
                           0,   /* parse_labels     */
@@ -137,16 +137,16 @@ static TEST_MAYBE_UNUSED int load_seq(
  * Identical to load_seq but accepts num_averages as a parameter.
  */
 static TEST_MAYBE_UNUSED int load_seq_with_averages(
-    pulseqlib_collection** coll,
+    pulseg_collection** coll,
     const char* filename,
-    const pulseqlib_opts* opts,
+    const pulseg_opts* opts,
     int num_averages)
 {
-    pulseqlib_diagnostic diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
     char path[512];
 
     (void)snprintf(path, sizeof(path), "%s%s", TEST_DATA_DIR, filename);
-    return pulseqlib_read(coll, &diag, path, opts,
+    return pulseg_read(coll, &diag, path, opts,
                           0,   /* cache_binary     */
                           0,   /* verify_signature */
                           0,   /* parse_labels     */
@@ -158,18 +158,18 @@ static TEST_MAYBE_UNUSED int load_seq_with_averages(
  *
  * Identical to load_seq_with_averages(num_averages=1) but passes
  * verify_signature=1, so an MD5 mismatch returns
- * PULSEQLIB_ERR_SIGNATURE_MISMATCH instead of loading successfully.
+ * PULSEG_ERR_SIGNATURE_MISMATCH instead of loading successfully.
  */
 static TEST_MAYBE_UNUSED int load_seq_with_signature_check(
-    pulseqlib_collection** coll,
+    pulseg_collection** coll,
     const char* filename,
-    const pulseqlib_opts* opts)
+    const pulseg_opts* opts)
 {
-    pulseqlib_diagnostic diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
     char path[512];
 
     (void)snprintf(path, sizeof(path), "%s%s", TEST_DATA_DIR, filename);
-    return pulseqlib_read(coll, &diag, path, opts,
+    return pulseg_read(coll, &diag, path, opts,
                           0,   /* cache_binary     */
                           1,   /* verify_signature — enabled */
                           0,   /* parse_labels     */

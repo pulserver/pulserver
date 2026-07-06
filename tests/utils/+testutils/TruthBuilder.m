@@ -1,5 +1,5 @@
 classdef TruthBuilder < handle
-% TRUTHBUILDER  Automate ground-truth export for pulseqlib C-test sequences.
+% TRUTHBUILDER  Automate ground-truth export for pulseg C-test sequences.
 %
 %   The user constructs an mr.Sequence object, then hands it to TruthBuilder.
 %   The builder derives all bookkeeping (peak RF, canonical TR scale, segment
@@ -348,7 +348,7 @@ classdef TruthBuilder < handle
         function discoverTRGroups(obj)
         % DISCOVERTGROUPS  Fingerprint imaging TRs by gradient shape;
         %   group TRs with identical shot-index patterns.
-        %   Mirrors C library's pulseqlib__find_unique_shot_trs().
+        %   Mirrors C library's pulseg__find_unique_shot_trs().
             if obj.multipass_info.enabled
                 np = length(obj.multipass_info.pass_starts);
                 obj.num_canonical_trs = 1;
@@ -608,7 +608,7 @@ classdef TruthBuilder < handle
                 % The canonical TR waveform includes prep (once==1) on the first
                 % average, imaging (once==0) on ALL averages, and cooldown
                 % (once==2) on the last average.  This matches the intended
-                % semantics of pulseqlib_get_tr_gradient_waveforms for
+                % semantics of pulseg_get_tr_gradient_waveforms for
                 % non-degenerate sequences: the gradient waveform over the
                 % full expanded pass that the safety / acoustic / PNS analyses
                 % operate on.  Reuse seg_cseq which already has this expansion.
@@ -2248,8 +2248,8 @@ classdef TruthBuilder < handle
         function exportSequenceDescription(obj, path)
         % EXPORTSEQUENCEDESCRIPTION  Section 5 truth payload (compact format).
         %
-        %   Mirrors the wire format of pulseqlib_write_sequence_description_cache
-        %   (csrc/pulseqlib_cache_seqdesc.c) but writes ONLY the raw section
+        %   Mirrors the wire format of pulseg_write_sequence_description_cache
+        %   (csrc/pulseg_cache_seqdesc.c) but writes ONLY the raw section
         %   payload — no cache file header, no endian marker, no section
         %   table — same convention used by exportSegmentDef et al.
         %
@@ -2643,7 +2643,7 @@ classdef TruthBuilder < handle
         %
         %   Cartesian criterion: base_rot is identity AND the LOGICAL-frame
         %   gradient is constant on every used axis across every ADC window.
-        %   Matches pulseqlib cache behaviour (Cartesian -> no k-samples).
+        %   Matches pulseg cache behaviour (Cartesian -> no k-samples).
             fid = fopen(path, 'wb');
             if fid < 0, error('Failed to open %s', path); end
 
@@ -2785,7 +2785,7 @@ classdef TruthBuilder < handle
                                 % g(t) for the constancy classifier sampled
                                 % analytically (sampleGradAtTimes is exact
                                 % piecewise linear; mirrors the C analytic
-                                % sampler in pulseqlib_trajectory.c).
+                                % sampler in pulseg_trajectory.c).
                                 if isfield(blk, axes_{ax}) && ~isempty(blk.(axes_{ax}))
                                     g_at(ax, :) = testutils.TruthBuilder.sampleGradAtTimes(blk.(axes_{ax}), t_adc);
                                 end
@@ -2967,7 +2967,7 @@ classdef TruthBuilder < handle
 
         function e = gradEnergy(g)
         % GRADENERGY  Gradient energy: integral of amplitude^2 over time.
-        %   Uses the trapezoidal rule, matching pulseqlib__trapz_real_* in C.
+        %   Uses the trapezoidal rule, matching pulseg__trapz_real_* in C.
             if isfield(g, 'amplitude')
                 e = (g.amplitude)^2 / 3 * g.riseTime ...
                   + (g.amplitude)^2 * g.flatTime ...

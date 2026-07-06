@@ -1,5 +1,5 @@
 #!/bin/bash
-# check_c89_compliance.sh -- verify that pulseqlib compiles in strict C89 mode.
+# check_c89_compliance.sh -- verify that pulseg compiles in strict C89 mode.
 #
 # Usage:  bash scripts/check_c89_compliance.sh
 # Returns 0 (PASS) or 1 (FAIL).
@@ -13,7 +13,7 @@ BUILD_DIR="$REPO_ROOT/build/c89_check"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-echo "Checking C89 compliance of pulseqlib..."
+echo "Checking C89 compliance of pulseg..."
 
 # Configure with strict C89 flags injected via CMAKE_C_FLAGS
 cmake -S "$REPO_ROOT/csrc" -B "$BUILD_DIR" \
@@ -23,11 +23,11 @@ cmake -S "$REPO_ROOT/csrc" -B "$BUILD_DIR" \
     > "$BUILD_DIR/cmake_out.log" 2>&1
 
 if cmake --build "$BUILD_DIR" > "$BUILD_DIR/build_out.log" 2>&1; then
-    echo "PASS: pulseqlib compiles cleanly in C89 mode."
+    echo "PASS: pulseg compiles cleanly in C89 mode."
     rm -rf "$BUILD_DIR"
     exit 0
 else
-    echo "FAIL: pulseqlib does not compile in C89 mode."
+    echo "FAIL: pulseg does not compile in C89 mode."
     echo "Build log:"
     cat "$BUILD_DIR/build_out.log"
     rm -rf "$BUILD_DIR"

@@ -404,7 +404,7 @@ def plot(
                 f'tr_instance must be int or str, got {type(tr_instance).__name__}'
             )
         # Will determine num_trs below; store for now
-        from ._extension._pulseqlib_wrapper import _find_tr
+        from ._extension._pulseg_wrapper import _find_tr
 
         tr_info = _find_tr(source._cseq, subsequence_idx=subsequence_idx)
         from ._validate import _total_addressable_trs
@@ -431,7 +431,7 @@ def plot(
     internal_amplitude_mode = _mode_map[amplitude_mode]
 
     # ── Fetch waveforms ──
-    from ._extension._pulseqlib_wrapper import _find_tr
+    from ._extension._pulseg_wrapper import _find_tr
 
     tr_info = _find_tr(source._cseq, subsequence_idx=subsequence_idx)
     num_canonical = tr_info.get('num_canonical_trs', 1)

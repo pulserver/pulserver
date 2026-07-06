@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import numpy as np
 import pypulseq as pp
 
-from ._extension._pulseqlib_wrapper import (
+from ._extension._pulseg_wrapper import (
     _check_consistency,
     _check_safety,
     _get_num_unique_blocks,

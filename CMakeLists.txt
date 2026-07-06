@@ -41,42 +41,42 @@ function(add_pybind_module module_name output_subdir)
     )
 endfunction()
 
-# _pulseqlib_wrapper: pge C extension (needs full pulseqlib + seqdesc + cache)
-set(PULSEQLIB_C_SOURCES
-    "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseqlib_error.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseqlib_math.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/io/pulseqlib_parse.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/structure/pulseqlib_dedup.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/structure/pulseqlib_structure.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseqlib_core.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/cache/pulseqlib_cache.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/waveforms/pulseqlib_waveforms.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/safety/pulseqlib_safety.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/structure/pulseqlib_getters.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/freqmod/pulseqlib_freqmod.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/io/pulseqlib_protocol.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/waveforms/pulseqlib_trajectory.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/structure/pulseqlib_seqdesc.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/cache/pulseqlib_cache_seqdesc.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseqlib_bridge.c"
+# _pulseg_wrapper: pge C extension (needs full pulseg + seqdesc + cache)
+set(PULSEG_C_SOURCES
+    "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_error.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_math.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/io/pulseg_parse.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/structure/pulseg_dedup.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/structure/pulseg_structure.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_core.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/cache/pulseg_cache.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/waveforms/pulseg_waveforms.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/safety/pulseg_safety.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/structure/pulseg_getters.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/freqmod/pulseg_freqmod.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/io/pulseg_protocol.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/waveforms/pulseg_trajectory.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/structure/pulseg_seqdesc.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/cache/pulseg_cache_seqdesc.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_bridge.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/vendor/external_kiss_fft.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/vendor/external_kiss_fftr.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/vendor/external_md5.c"
 )
 
-add_pybind_module(_pulseqlib_wrapper ""
+add_pybind_module(_pulseg_wrapper ""
     SOURCES
-        "${CMAKE_SOURCE_DIR}/python/pge/core/_extension/_pulseqlib_wrapper.cpp"
-        ${PULSEQLIB_C_SOURCES}
+        "${CMAKE_SOURCE_DIR}/python/pge/core/_extension/_pulseg_wrapper.cpp"
+        ${PULSEG_C_SOURCES}
     INCLUDES
-        ${CMAKE_SOURCE_DIR}/csrc/include
+        ${CMAKE_SOURCE_DIR}/csrc/include/pulseg
         ${CMAKE_SOURCE_DIR}/csrc/src/vendor
-        ${CMAKE_SOURCE_DIR}/extensions
+        ${CMAKE_SOURCE_DIR}/cxx/include/pulseg
 )
 
-file(GLOB PULSEQLIB_WRAPPERS
-    "${CMAKE_CURRENT_BINARY_DIR}/python/pge/core/_extension/_pulseqlib_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
-install(FILES ${PULSEQLIB_WRAPPERS}
+file(GLOB PULSEG_WRAPPERS
+    "${CMAKE_CURRENT_BINARY_DIR}/python/pge/core/_extension/_pulseg_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+install(FILES ${PULSEG_WRAPPERS}
     DESTINATION ${CMAKE_SOURCE_DIR}/python/pge/core/_extension)
 
 option(PULSERVER_BUILD_CPP_TESTS "Build lightweight C++ unit tests" OFF)

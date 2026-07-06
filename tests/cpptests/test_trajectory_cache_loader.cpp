@@ -344,7 +344,7 @@ namespace
 
         /* If the ADC counts disagree we cannot align rows 1:1 — log this as a
          * skipped value-comparison rather than a noisy failure. The structural
-         * checks above still ran. (Known issue: pulseqlib cache writer counts
+         * checks above still ran. (Known issue: pulseg cache writer counts
          * deduped block_definitions[].adc_id, which is shared between dummy and
          * real ADC blocks for some sequences; truth filters by scan_table col 10.) */
         if (static_cast<int>(cache.table.size()) != truth.num_adcs)
@@ -357,7 +357,7 @@ namespace
         /* If the cache reports cartesian on every encoding space (ndim==0) but
          * the truth flagged non-cartesian, no rows are comparable. This happens
          * when MATLAB's "constant gradient per ADC" threshold disagrees with
-         * pulseqlib's heuristic — record as skipped rather than fail. */
+         * pulseg's heuristic — record as skipped rather than fail. */
         bool cache_all_cart = true;
         for (const auto &T : trajs)
             if (T.ndim != 0)

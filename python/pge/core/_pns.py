@@ -4,7 +4,7 @@ __all__ = ['pns']
 
 import numpy as np
 
-from ._extension._pulseqlib_wrapper import _calc_pns, _find_tr
+from ._extension._pulseg_wrapper import _calc_pns, _find_tr
 from ._sequence import SequenceCollection
 
 # Matplotlib imported lazily to avoid hard dependency at import time.

@@ -4,8 +4,8 @@
  * Test-only helper for the mrdserver C++ trajectory_cache_loader test
  * (and the analogous TruthBuilder run_generators step).
  *
- * Given a path to a Pulseq .seq file, produces the matching pulseqlib
- * binary cache <base>.pge. pulseqlib_read (cache_binary=1) emits the whole
+ * Given a path to a Pulseq .seq file, produces the matching pulseg
+ * binary cache <base>.pge. pulseg_read (cache_binary=1) emits the whole
  * sectioned cache in one shot at load time: COMMON, ROTATIONS, SHAPES,
  * SCANLOOP, FREQMOD, TRAJECTORY and SEQDESC. No separate trajectory /
  * sequence-description pass is needed here any more.
@@ -15,8 +15,8 @@
  * recipe used by the test-truth toolchain.
  */
 
-#include "pulseqlib_methods.h"
-#include "pulseqlib_types.h"
+#include "pulseg.h"
+#include "pulseg_types.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,7 +25,7 @@
 #define CHECK(rc, diag, label)                                         \
     do                                                                 \
     {                                                                  \
-        if (PULSEQLIB_FAILED(rc))                                      \
+        if (PULSEG_FAILED(rc))                                      \
         {                                                              \
             fprintf(stderr, "[write_cache] %s failed: rc=%d (%s)\n",   \
                     (label), (rc),                                     \
@@ -36,9 +36,9 @@
 
 int main(int argc, char **argv)
 {
-    pulseqlib_collection *coll = NULL;
-    pulseqlib_diagnostic diag = PULSEQLIB_DIAGNOSTIC_INIT;
-    pulseqlib_opts opts = PULSEQLIB_OPTS_INIT;
+    pulseg_collection *coll = NULL;
+    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
+    pulseg_opts opts = PULSEG_OPTS_INIT;
     int rc;
     const char *seq_path;
 
@@ -90,7 +90,7 @@ int main(int argc, char **argv)
      * Limits are intentionally generous so any fixture passes safety;
      * we are not validating the .seq, only producing the cache.
      * vendor = GEHC: only GEHC label-parsing is currently implemented. */
-    opts.vendor = PULSEQLIB_VENDOR_GEHC;
+    opts.vendor = PULSEG_VENDOR_GEHC;
     opts.gamma_hz_per_t = 42577478.0f;
     opts.b0_t = 3.0f;
     opts.max_grad_hz_per_m = 42577478.0f * 1.0f;           /* 1000 mT/m */
@@ -101,21 +101,21 @@ int main(int argc, char **argv)
     opts.block_raster_us = 10.0f;
 
     /* parse_labels=1: the trajectory/seqdesc sections need per-ADC label state.
-     * cache_binary=1: pulseqlib_read writes the full sectioned .pge at load. */
-    rc = pulseqlib_read(&coll, &diag, seq_path, &opts,
+     * cache_binary=1: pulseg_read writes the full sectioned .pge at load. */
+    rc = pulseg_read(&coll, &diag, seq_path, &opts,
                         1,             /* cache_binary     */
                         1,             /* verify_signature */
                         1,             /* parse_labels     */
                         num_averages); /* num_averages     */
-    CHECK(rc, diag, "pulseqlib_read");
+    CHECK(rc, diag, "pulseg_read");
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
     fprintf(stderr, "[write_cache] OK: wrote cache for %s (num_averages=%d)\n",
             seq_path, num_averages);
     return 0;
 
 fail:
     if (coll)
-        pulseqlib_collection_free(coll);
+        pulseg_collection_free(coll);
     return 1;
 }

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generator": "TruthBuilder (pulserverlib/tests/utils/run_generators.m)",
-  "pulseqlib_cache_version": "1.3",
+  "pulseg_cache_version": "1.3",
   "octave_compatible": true,
   "manifest_authored_at": "2026-04-29T17:08:20.941547Z",
   "notes": [

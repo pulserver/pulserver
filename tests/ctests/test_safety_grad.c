@@ -10,8 +10,8 @@
 /*  Shared data-driven helpers                                        */
 /* ================================================================== */
 
-static pulseqlib_opts   s_opts;
-static pulseqlib_diagnostic s_diag;
+static pulseg_opts   s_opts;
+static pulseg_diagnostic s_diag;
 
 /**
  * Load a sequence, run check_safety with the current s_opts,
@@ -19,24 +19,24 @@ static pulseqlib_diagnostic s_diag;
  */
 static void run_safety_check(const char* filename, int expected_code)
 {
-    pulseqlib_collection* coll = NULL;
+    pulseg_collection* coll = NULL;
     int rc;
 
     rc = load_seq(&coll, filename, &s_opts);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
-    pulseqlib_diagnostic_init(&s_diag);
-    rc = pulseqlib_check_safety(coll, &s_diag, &s_opts,
+    pulseg_diagnostic_init(&s_diag);
+    rc = pulseg_check_safety(coll, &s_diag, &s_opts,
                                 0, NULL,   /* no forbidden bands */
                                 NULL, 0.0f /* no PNS */);
 
     if (expected_code > 0) {
-        mu_assert(PULSEQLIB_SUCCEEDED(rc), "expected success but got failure");
+        mu_assert(PULSEG_SUCCEEDED(rc), "expected success but got failure");
     } else {
         mu_assert_int_eq(expected_code, rc);
     }
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 /* ================================================================== */
@@ -50,16 +50,16 @@ static void run_safety_check(const char* filename, int expected_code)
  */
 static int is_grad_continuity_error(int rc)
 {
-    return rc == PULSEQLIB_ERR_SEG_NONZERO_START_GRAD ||
-           rc == PULSEQLIB_ERR_SEG_NONZERO_END_GRAD   ||
-           rc == PULSEQLIB_ERR_GRAD_DISCONTINUITY;
+    return rc == PULSEG_ERR_SEG_NONZERO_START_GRAD ||
+           rc == PULSEG_ERR_SEG_NONZERO_END_GRAD   ||
+           rc == PULSEG_ERR_GRAD_DISCONTINUITY;
 }
 
 /**
  * Load a sequence and check gradient continuity.
  *
  * The library detects gradient continuity violations at two stages:
- *   1. Segmentation (during pulseqlib_read) — catches gradients whose
+ *   1. Segmentation (during pulseg_read) — catches gradients whose
  *      first/last sample at TR boundaries exceeds max_slew * grad_raster.
  *   2. Safety check (check_grad_continuity) — catches inter-block
  *      gradient steps that exceed the same threshold.
@@ -67,7 +67,7 @@ static int is_grad_continuity_error(int rc)
  * For "should-pass" cases the safety check may still fail for
  * non-continuity reasons (e.g. max-slew-rate on trapezoidal ramps that
  * were generated at pypulseq's max_slew); we only verify that
- * PULSEQLIB_ERR_GRAD_DISCONTINUITY is *not* returned.
+ * PULSEG_ERR_GRAD_DISCONTINUITY is *not* returned.
  *
  * @param filename    Basename of .seq in TEST_DATA_DIR.
  * @param should_pass 1 = sequence is gradient-continuous (no grad-class
@@ -75,12 +75,12 @@ static int is_grad_continuity_error(int rc)
  */
 static void run_continuity_check(const char* filename, int should_pass)
 {
-    pulseqlib_collection* coll = NULL;
+    pulseg_collection* coll = NULL;
     int rc;
 
     rc = load_seq(&coll, filename, &s_opts);
 
-    if (PULSEQLIB_FAILED(rc)) {
+    if (PULSEG_FAILED(rc)) {
         if (is_grad_continuity_error(rc)) {
             /* Segmentation caught a gradient boundary issue */
             mu_assert(!should_pass,
@@ -93,21 +93,21 @@ static void run_continuity_check(const char* filename, int should_pass)
     }
 
     /* Load succeeded — run full safety check */
-    pulseqlib_diagnostic_init(&s_diag);
-    rc = pulseqlib_check_safety(coll, &s_diag, &s_opts,
+    pulseg_diagnostic_init(&s_diag);
+    rc = pulseg_check_safety(coll, &s_diag, &s_opts,
                                 0, NULL, NULL, 0.0f);
 
     if (should_pass) {
         /* Sequence is continuous; safety may fail for non-continuity
          * reasons (e.g. slew rate) but must not be GRAD_DISCONTINUITY. */
-        mu_assert(rc != PULSEQLIB_ERR_GRAD_DISCONTINUITY,
+        mu_assert(rc != PULSEG_ERR_GRAD_DISCONTINUITY,
                   "expected no discontinuity but got GRAD_DISCONTINUITY");
     } else {
-        mu_assert(rc == PULSEQLIB_ERR_GRAD_DISCONTINUITY,
+        mu_assert(rc == PULSEG_ERR_GRAD_DISCONTINUITY,
                   "expected GRAD_DISCONTINUITY");
     }
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 /* ================================================================== */
@@ -122,7 +122,7 @@ static void run_continuity_check(const char* filename, int should_pass)
 
 static void grad_limit_opts(float max_grad, float max_slew)
 {
-    pulseqlib_opts_init(&s_opts,
+    pulseg_opts_init(&s_opts,
         GAMMA_HZ_PER_T, 3.0f,
         max_grad, max_slew,
         1.0f, 10.0f, 0.1f, 10.0f);
@@ -132,28 +132,28 @@ MU_TEST(test_grad_amplitude_violation)
 {
     grad_limit_opts(10.0f, 1e10f);
     run_safety_check("01_grad_amplitude_violation.seq",
-                     PULSEQLIB_ERR_MAX_GRAD_EXCEEDED);
+                     PULSEG_ERR_MAX_GRAD_EXCEEDED);
 }
 
 MU_TEST(test_slew_violation)
 {
     grad_limit_opts(1e10f, 100.0f);
     run_safety_check("02_slew_violation.seq",
-                     PULSEQLIB_ERR_MAX_SLEW_EXCEEDED);
+                     PULSEG_ERR_MAX_SLEW_EXCEEDED);
 }
 
 MU_TEST(test_grad_rss_violation)
 {
     grad_limit_opts(10.0f, 1e10f);
     run_safety_check("03_grad_rss_violation.seq",
-                     PULSEQLIB_ERR_MAX_GRAD_EXCEEDED);
+                     PULSEG_ERR_MAX_GRAD_EXCEEDED);
 }
 
 MU_TEST(test_slew_rss_violation)
 {
     grad_limit_opts(1e10f, 100.0f);
     run_safety_check("04_slew_rss_violation.seq",
-                     PULSEQLIB_ERR_MAX_SLEW_EXCEEDED);
+                     PULSEG_ERR_MAX_SLEW_EXCEEDED);
 }
 
 MU_TEST_SUITE(suite_grad_limits)
@@ -285,12 +285,12 @@ MU_TEST_SUITE(suite_grad_continuity)
 /* ================================================================== */
 
 static void assert_canonical_sequence_matches_expected(
-    const pulseqlib_collection* coll,
+    const pulseg_collection* coll,
     int subseq_idx,
     int expect_full_pass)
 {
-    const pulseqlib_sequence_descriptor* desc;
-    const pulseqlib_tr_descriptor* trd;
+    const pulseg_sequence_descriptor* desc;
+    const pulseg_tr_descriptor* trd;
     int n_prep, n_main, n_cool;
     int ncanon, expected, p, i, w;
     int* canon_ids = NULL;
@@ -310,7 +310,7 @@ static void assert_canonical_sequence_matches_expected(
         expected = n_main;
     }
 
-    ncanon = pulseqlib_get_canonical_segment_sequence(coll, subseq_idx, NULL);
+    ncanon = pulseg_get_canonical_segment_sequence(coll, subseq_idx, NULL);
     mu_assert_int_eq(expected, ncanon);
 
     if (ncanon > 0) {
@@ -318,7 +318,7 @@ static void assert_canonical_sequence_matches_expected(
         mu_assert(canon_ids != NULL, "malloc failed for canonical segment ids");
     }
 
-    ncanon = pulseqlib_get_canonical_segment_sequence(coll, subseq_idx, canon_ids);
+    ncanon = pulseg_get_canonical_segment_sequence(coll, subseq_idx, canon_ids);
     mu_assert_int_eq(expected, ncanon);
 
     if (expect_full_pass) {
@@ -344,31 +344,31 @@ static void assert_canonical_sequence_matches_expected(
 
 MU_TEST(test_canonical_segment_sequence_degenerate_main_only)
 {
-    pulseqlib_collection* coll = NULL;
+    pulseg_collection* coll = NULL;
     int rc;
 
     default_opts_init(&s_opts);
     rc = load_seq(&coll, "00_basic_rfstat.seq", &s_opts);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
     assert_canonical_sequence_matches_expected(coll, 0, 0);
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 MU_TEST(test_canonical_segment_sequence_nondegenerate_fullpass)
 {
-    pulseqlib_collection* coll = NULL;
+    pulseg_collection* coll = NULL;
     int rc;
 
     default_opts_init(&s_opts);
     rc = load_seq_with_averages(
         &coll, "05_rfprep_ok_canonical_fullpass.seq", &s_opts, 3);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq_with_averages failed");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq_with_averages failed");
 
     assert_canonical_sequence_matches_expected(coll, 0, 1);
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 MU_TEST_SUITE(suite_grad_canonical_sequence)
@@ -391,27 +391,27 @@ MU_TEST_SUITE(suite_grad_canonical_sequence)
  * expected_code <= 0 means that specific error code is expected.
  */
 static void run_mech_resonances_check(const char* filename, int num_bands,
-                                const pulseqlib_forbidden_band* bands,
+                                const pulseg_forbidden_band* bands,
                                 int expected_code)
 {
-    pulseqlib_collection* coll = NULL;
+    pulseg_collection* coll = NULL;
     int rc;
 
     rc = load_seq(&coll, filename, &s_opts);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for acoustic test");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed for acoustic test");
 
-    pulseqlib_diagnostic_init(&s_diag);
-    rc = pulseqlib_check_safety(coll, &s_diag, &s_opts,
+    pulseg_diagnostic_init(&s_diag);
+    rc = pulseg_check_safety(coll, &s_diag, &s_opts,
                                 num_bands, bands,
                                 NULL, 0.0f /* no PNS */);
 
     if (expected_code > 0) {
-        mu_assert(PULSEQLIB_SUCCEEDED(rc), "expected acoustic safety pass");
+        mu_assert(PULSEG_SUCCEEDED(rc), "expected acoustic safety pass");
     } else {
         mu_assert_int_eq(expected_code, rc);
     }
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 /*
@@ -423,7 +423,7 @@ static void run_mech_resonances_check(const char* filename, int num_bands,
  */
 MU_TEST(test_epi_forbidden_readout_peak)
 {
-    pulseqlib_forbidden_band bands[2];
+    pulseg_forbidden_band bands[2];
 
     /* Band 1: 800–2500 Hz — covers 1/ESP fundamental */
     bands[0].freq_min_hz           = 800.0f;
@@ -436,7 +436,7 @@ MU_TEST(test_epi_forbidden_readout_peak)
     bands[1].max_amplitude_hz_per_m = 0.0f;
 
     run_mech_resonances_check("epi_2d_1sl_1avg.seq", 2, bands,
-                       PULSEQLIB_ERR_MECH_RESONANCES_VIOLATION);
+                       PULSEG_ERR_MECH_RESONANCES_VIOLATION);
 }
 
 static void mech_resonances_setup(void)

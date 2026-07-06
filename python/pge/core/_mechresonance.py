@@ -6,7 +6,7 @@ import warnings
 
 import numpy as np
 
-from ._extension._pulseqlib_wrapper import _calc_mech_resonances, _find_tr
+from ._extension._pulseg_wrapper import _calc_mech_resonances, _find_tr
 from ._helpers import _add_echo_spacing_axis
 from ._sequence import SequenceCollection
 

@@ -23,9 +23,9 @@ for idx = 1:numel(script_order)
     run_generator_script(script_path);
 end
 
-% Post-pass: build pulseqlib cache .pge alongside each *valid* .seq fixture.
+% Post-pass: build pulseg cache .pge alongside each *valid* .seq fixture.
 % Fixtures named *_fail_* or *_corrupted are intentional negative-test inputs
-% (consumed by ctests for safety/IO assertions); pulseqlib_read is expected
+% (consumed by ctests for safety/IO assertions); pulseg_read is expected
 % to reject them, so we skip them here.
 write_cache_for_fixtures(this_dir);
 end
@@ -52,7 +52,7 @@ if exist(cli, 'file') ~= 2
 end
 
 seqs = dir(fullfile(expected_dir, '*.seq'));
-% Explicit skip list: fixtures that pulseqlib_read cannot accept under the
+% Explicit skip list: fixtures that pulseg_read cannot accept under the
 % CLI's default options. Each entry has a justification.
 explicit_skip = { ...
     '05_rfprep_ok_canonical_fullpass.seq' ... % requires NEX=3 (load_seq_with_averages); single-NEX read fails consistency check (rc=-560)

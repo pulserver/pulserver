@@ -1,4 +1,4 @@
-"""Pure-Python reader for pulseqlib binary cache sections and Python dataclasses.
+"""Pure-Python reader for pulseg binary cache sections and Python dataclasses.
 
 Provides:
   * Dataclasses for SequenceDescriptionInfo and TrajectoryInfo.
@@ -30,7 +30,7 @@ import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# ── Constants (mirror pulseqlib C sources) ────────────────────────────
+# ── Constants (mirror pulseg C sources) ────────────────────────────
 
 _CACHE_ENDIAN_MARKER = 0x01020304
 _SECTION_TRAJECTORY = 6
@@ -43,7 +43,7 @@ _SEQ_EVENT_TYPE_ADC = 2
 
 @dataclass
 class SequenceParameters:
-    """Scan-global sequence parameters (mirrors pulseqlib_sequence_parameters)."""
+    """Scan-global sequence parameters (mirrors pulseg_sequence_parameters)."""
 
     min_te_us: float
     min_tr_us: float
@@ -57,7 +57,7 @@ class SequenceParameters:
 class SeqRow:
     """Single pass-block row in the compact sequence description.
 
-    Param layout (mirrors pulseqlib_seq_event):
+    Param layout (mirrors pulseg_seq_event):
 
     RF    — params[0]=rf_def_id, [1]=rf_use, [2]=act_amplitude_hz,
              [3]=phase_offset_rad, [4]=freq_offset_hz, [5]=rf_shim_id

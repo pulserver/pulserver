@@ -16,7 +16,7 @@
 
 /*
  * Ground truth derived from the standard GE 1 ms hard-pulse
- * RF_PULSE struct, converted to SI / pulseqlib conventions:
+ * RF_PULSE struct, converted to SI / pulseg conventions:
  *
  *   abswidth        = 1.0       (normalized)
  *   effwidth        = 1.0       (normalized)
@@ -34,17 +34,17 @@
 
 MU_TEST(test_rf180_block_pulse_stats)
 {
-    pulseqlib_opts opts;
-    pulseqlib_collection* coll = NULL;
-    pulseqlib_rf_stats stats = PULSEQLIB_RF_STATS_INIT;
+    pulseg_opts opts;
+    pulseg_collection* coll = NULL;
+    pulseg_rf_stats stats = PULSEG_RF_STATS_INIT;
     int rc;
 
     default_opts_init(&opts);
     rc = load_seq(&coll, "00_basic_rfstat.seq", &opts);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
-    rc = pulseqlib_get_rf_stats(coll, &stats, 0, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "get_rf_stats failed");
+    rc = pulseg_get_rf_stats(coll, &stats, 0, 0);
+    mu_assert(PULSEG_SUCCEEDED(rc), "get_rf_stats failed");
 
     mu_assert_float_near("abs_width",  1.0f,    stats.abs_width,        1e-4f);
     mu_assert_float_near("eff_width",  1.0f,    stats.eff_width,        1e-4f);
@@ -62,43 +62,43 @@ MU_TEST(test_rf180_block_pulse_stats)
 
     mu_assert_int_eq(2, stats.num_samples);
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 MU_TEST(test_rf_array_basic_canonical_tr)
 {
-    pulseqlib_opts opts;
-    pulseqlib_collection* coll = NULL;
-    pulseqlib_rf_stats* pulses = NULL;
+    pulseg_opts opts;
+    pulseg_collection* coll = NULL;
+    pulseg_rf_stats* pulses = NULL;
     int rc, npulses;
 
     default_opts_init(&opts);
     rc = load_seq(&coll, "00_basic_rfstat.seq", &opts);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
-    npulses = pulseqlib_get_rf_array(coll, &pulses, 0);
+    npulses = pulseg_get_rf_array(coll, &pulses, 0);
     mu_assert_int_eq(1, npulses);
     mu_assert_int_eq(1, pulses[0].num_instances);
     mu_assert_float_near("canonical base_amp_hz",
         500.0f, pulses[0].base_amplitude_hz, 1.0f);
 
     free(pulses);
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 MU_TEST(test_rf_array_nondegenerate_fullpass_expanded)
 {
-    pulseqlib_opts opts;
-    pulseqlib_collection* coll = NULL;
-    pulseqlib_rf_stats* pulses = NULL;
+    pulseg_opts opts;
+    pulseg_collection* coll = NULL;
+    pulseg_rf_stats* pulses = NULL;
     int rc, npulses, i;
 
     default_opts_init(&opts);
     rc = load_seq_with_averages(
         &coll, "05_rfprep_ok_canonical_fullpass.seq", &opts, 3);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq_with_averages failed");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq_with_averages failed");
 
-    npulses = pulseqlib_get_rf_array(coll, &pulses, 0);
+    npulses = pulseg_get_rf_array(coll, &pulses, 0);
     mu_assert_int_eq(8, npulses);
     mu_assert_float_near("prep act_amp_hz",
         125.0f, pulses[0].act_amplitude_hz, 1.0f);
@@ -108,7 +108,7 @@ MU_TEST(test_rf_array_nondegenerate_fullpass_expanded)
         mu_assert_int_eq(1, pulses[i].num_instances);
 
     free(pulses);
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 MU_TEST_SUITE(suite_rf_stats)
@@ -122,7 +122,7 @@ MU_TEST_SUITE(suite_rf_stats)
 /*  Suite B — RF consistency (periodicity) checks                     */
 /* ================================================================== */
 
-static pulseqlib_opts s_rf_opts;
+static pulseg_opts s_rf_opts;
 
 static void rf_consistency_setup(void)
 {
@@ -131,12 +131,12 @@ static void rf_consistency_setup(void)
 
 static void run_consistency_check(const char* filename, int expected_code)
 {
-    pulseqlib_collection* coll = NULL;
-    pulseqlib_diagnostic diag = PULSEQLIB_DIAGNOSTIC_INIT;
+    pulseg_collection* coll = NULL;
+    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
     int rc;
 
     rc = load_seq(&coll, filename, &s_rf_opts);
-    if (PULSEQLIB_FAILED(rc)) {
+    if (PULSEG_FAILED(rc)) {
         /* Load failed — only acceptable if we expected this error */
         if (expected_code > 0)
             mu_fail("load_seq failed unexpectedly");
@@ -144,15 +144,15 @@ static void run_consistency_check(const char* filename, int expected_code)
         return;
     }
 
-    rc = pulseqlib_check_consistency(coll, &diag);
+    rc = pulseg_check_consistency(coll, &diag);
 
     if (expected_code > 0) {
-        mu_assert(PULSEQLIB_SUCCEEDED(rc), "expected consistency pass");
+        mu_assert(PULSEG_SUCCEEDED(rc), "expected consistency pass");
     } else {
         mu_assert_int_eq(expected_code, rc);
     }
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 /* Build a synthetic descriptor in-memory to trigger a structural
@@ -161,10 +161,10 @@ static void run_consistency_check(const char* filename, int expected_code)
  * single-TR fallback is not allowed. */
 static int run_structural_tr_mismatch_probe(void)
 {
-    pulseqlib_sequence_descriptor desc = PULSEQLIB_SEQUENCE_DESCRIPTOR_INIT;
-    pulseqlib_diagnostic diag = PULSEQLIB_DIAGNOSTIC_INIT;
-    pulseqlib_block_definition defs[3];
-    pulseqlib_block_table_element table[6];
+    pulseg_sequence_descriptor desc = PULSEG_SEQUENCE_DESCRIPTOR_INIT;
+    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
+    pulseg_block_definition defs[3];
+    pulseg_block_table_element table[6];
 
     defs[0].id = 0;
     defs[0].duration_us = 3000000;
@@ -207,31 +207,31 @@ static int run_structural_tr_mismatch_probe(void)
     desc.num_prep_blocks = 0;
     desc.num_cooldown_blocks = 0;
 
-    return pulseqlib__get_tr_in_sequence(&desc, &diag);
+    return pulseg__get_tr_in_sequence(&desc, &diag);
 }
 
 MU_TEST(test_rf_periodic_ok)
 {
     run_consistency_check("01_rfamp_ok_mrfingerprinting.seq",
-                          PULSEQLIB_SUCCESS);
+                          PULSEG_SUCCESS);
 }
 
 MU_TEST(test_rf_periodic_fail)
 {
     run_consistency_check("02_rfamp_fail_vfa.seq",
-                          PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC);
+                          PULSEG_ERR_CONSISTENCY_RF_PERIODIC);
 }
 
 MU_TEST(test_rfshim_periodic_ok)
 {
     run_consistency_check("03_rfshim_ok_pnpmrfingerprinting.seq",
-                          PULSEQLIB_SUCCESS);
+                          PULSEG_SUCCESS);
 }
 
 MU_TEST(test_rfshim_periodic_fail)
 {
     run_consistency_check("04_rfshim_fail_gre.seq",
-                          PULSEQLIB_ERR_CONSISTENCY_RF_SHIM_PERIODIC);
+                          PULSEG_ERR_CONSISTENCY_RF_SHIM_PERIODIC);
 }
 
 MU_TEST(test_error_code_partition_structural_vs_rf)
@@ -239,13 +239,13 @@ MU_TEST(test_error_code_partition_structural_vs_rf)
     int rc;
 
     rc = run_structural_tr_mismatch_probe();
-    mu_assert_int_eq(PULSEQLIB_ERR_TR_PATTERN_MISMATCH, rc);
+    mu_assert_int_eq(PULSEG_ERR_TR_PATTERN_MISMATCH, rc);
 
     run_consistency_check("02_rfamp_fail_vfa.seq",
-                          PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC);
+                          PULSEG_ERR_CONSISTENCY_RF_PERIODIC);
 
     run_consistency_check("04_rfshim_fail_gre.seq",
-                          PULSEQLIB_ERR_CONSISTENCY_RF_SHIM_PERIODIC);
+                          PULSEG_ERR_CONSISTENCY_RF_SHIM_PERIODIC);
 }
 
 MU_TEST_SUITE(suite_rf_consistency)
@@ -264,11 +264,11 @@ MU_TEST_SUITE(suite_rf_consistency)
 
 /* test case 06: two-pass sequence where pass-2 uses a different RF
  * amplitude than pass-1.  The canonical full-pass RF consistency check
- * fires when pulseqlib_check_consistency() is called. */
+ * fires when pulseg_check_consistency() is called. */
 MU_TEST(test_rf_multipass_variable_structure)
 {
     run_consistency_check("06_rfprep_fail_multipass_variable.seq",
-                          PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC);
+                          PULSEG_ERR_CONSISTENCY_RF_PERIODIC);
 }
 
 MU_TEST_SUITE(suite_rf_canonical_periodicity)
@@ -287,17 +287,17 @@ MU_TEST_SUITE(suite_rf_canonical_periodicity)
  * quadrature aggregation before compute_rf_stats(). */
 MU_TEST(test_cp_8ch_matches_1ch_180deg)
 {
-    pulseqlib_opts opts;
-    pulseqlib_collection* coll = NULL;
-    pulseqlib_rf_stats stats8 = PULSEQLIB_RF_STATS_INIT;
+    pulseg_opts opts;
+    pulseg_collection* coll = NULL;
+    pulseg_rf_stats stats8 = PULSEG_RF_STATS_INIT;
     int rc;
 
     default_opts_init(&opts);
     rc = load_seq(&coll, "07_rfstat_cp_8ch_180.seq", &opts);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for 8ch CP case");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed for 8ch CP case");
 
-    rc = pulseqlib_get_rf_stats(coll, &stats8, 0, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "get_rf_stats failed for 8ch CP");
+    rc = pulseg_get_rf_stats(coll, &stats8, 0, 0);
+    mu_assert(PULSEG_SUCCEEDED(rc), "get_rf_stats failed for 8ch CP");
 
     /* Under quadrature (RSS) aggregation across 8 channels each at
      * 500/sqrt(8) Hz, the combined base amplitude must match the
@@ -309,7 +309,7 @@ MU_TEST(test_cp_8ch_matches_1ch_180deg)
     mu_assert_float_near("8ch CP duration_us",
         999.0f, stats8.duration_us, 2.0f);
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 MU_TEST_SUITE(suite_rf_cp_8ch)

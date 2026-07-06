@@ -1,13 +1,13 @@
-# Pulseqlib Cache Binary Wire-Format Specification
+# Pulseg Cache Binary Wire-Format Specification
 
 **Version**: 2.0.0  
 **Last Updated**: 2026-06-25
 
 ## Overview
 
-The pulseqlib cache file (`.pge` companion to `.seq`) is a binary serialization of a `pulseqlib_collection` object. As of cache format **v2.0.0** the payload is split into **per-consumer sections**, so each PSD phase / consumer deserializes only the data it needs. All integer and floating-point fields are stored as 4-byte values; all endianness is determined by the file header marker.
+The pulseg cache file (`.pge` companion to `.seq`) is a binary serialization of a `pulseg_collection` object. As of cache format **v2.0.0** the payload is split into **per-consumer sections**, so each PSD phase / consumer deserializes only the data it needs. All integer and floating-point fields are stored as 4-byte values; all endianness is determined by the file header marker.
 
-The whole `.pge` is a pure function of the loaded collection (shift- and rotation-independent). It is produced in one shot at load time by `pulseqlib__write_cache` (see `pulseqlib_cache.c`), which emits the four base sections (COMMON, ROTATIONS, SHAPES, SCANLOOP) and then appends TRAJECTORY, SEQDESC and FREQMOD.
+The whole `.pge` is a pure function of the loaded collection (shift- and rotation-independent). It is produced in one shot at load time by `pulseg__write_cache` (see `pulseg_cache.c`), which emits the four base sections (COMMON, ROTATIONS, SHAPES, SCANLOOP) and then appends TRAJECTORY, SEQDESC and FREQMOD.
 
 ---
 
@@ -18,10 +18,10 @@ The cache file begins with a fixed header (28 bytes):
 | Offset | Field | Type | Count | Size | Description |
 |--------|-------|------|-------|------|-------------|
 | 0x00 | Endian marker | int32 | 1 | 4 | `0x01020304`; if byte-swapped, indicates big-endian file |
-| 0x04 | Version major | int32 | 1 | 4 | `PULSEQLIB_CACHE_VERSION_MAJOR = 2` |
-| 0x08 | Version minor | int32 | 1 | 4 | `PULSEQLIB_CACHE_VERSION_MINOR = 0` |
-| 0x0C | Version revision | int32 | 1 | 4 | `PULSEQLIB_CACHE_VERSION_REVISION = 0` |
-| 0x10 | Vendor | int32 | 1 | 4 | `PULSEQLIB_VENDOR` constant; identifies hardware/vendor context |
+| 0x04 | Version major | int32 | 1 | 4 | `PULSEG_CACHE_VERSION_MAJOR = 2` |
+| 0x08 | Version minor | int32 | 1 | 4 | `PULSEG_CACHE_VERSION_MINOR = 0` |
+| 0x0C | Version revision | int32 | 1 | 4 | `PULSEG_CACHE_VERSION_REVISION = 0` |
+| 0x10 | Vendor | int32 | 1 | 4 | `PULSEG_VENDOR` constant; identifies hardware/vendor context |
 | 0x14 | Source seq file size | int32 | 1 | 4 | Byte count of original `.seq` file; used for cache validity check |
 | 0x18 | Number of sections | int32 | 1 | 4 | Count of section entries in the table-of-contents (up to 7) |
 
@@ -54,7 +54,7 @@ Immediately after the 28-byte file header, a TOC of `num_sections` entries follo
 
 | ID | Name | Purpose | Reader / Consumer | Notes |
 |---|---|---|---|---|
-| 1 | COMMON | Collection header + per-descriptor structure/scaling/defs (RF/grad/ADC defs, segment defs+anchors, segment table, labels, generic [DEFINITIONS]) | pulseqlib_load_geninstructions_cache() (+SHAPES); pulseqlib_load_scanloop_cache() (+ROTATIONS+SCANLOOP); trajectory_cache_reader.cpp | Must be read first; augment sections attach to the descriptors it allocates. Excludes rotations, raw shapes, scan table |
+| 1 | COMMON | Collection header + per-descriptor structure/scaling/defs (RF/grad/ADC defs, segment defs+anchors, segment table, labels, generic [DEFINITIONS]) | pulseg_load_geninstructions_cache() (+SHAPES); pulseg_load_scanloop_cache() (+ROTATIONS+SCANLOOP); trajectory_cache_reader.cpp | Must be read first; augment sections attach to the descriptors it allocates. Excludes rotations, raw shapes, scan table |
 | 2 | ROTATIONS | 3×3 rotation-matrix library (per descriptor) | scan (load_scanloop); trajectory_cache_reader.cpp | Augment section |
 | 3 | SHAPES | RF mag/phase/time + gradient compressed shape sample arrays (per descriptor) | pulsegen (load_geninstructions) | Augment section |
 | 4 | SCANLOOP | scan_table (4×len) + variable_grad_flags (per descriptor) | scan (load_scanloop) | Augment section |
@@ -100,7 +100,7 @@ For each of the `num_subsequences` entries:
 
 ### Per-Subsequence Descriptor
 
-A full `pulseqlib_sequence_descriptor` follows immediately. The layout is:
+A full `pulseg_sequence_descriptor` follows immediately. The layout is:
 
 #### Scalar Fields (44 bytes)
 
@@ -116,7 +116,7 @@ A full `pulseqlib_sequence_descriptor` follows immediately. The layout is:
 | enable_pmc | int32 | 1 | 4 | Boolean flag; parallel motion correction |
 | ignore_averages | int32 | 1 | 4 | Boolean flag; ignore averaging |
 | num_passes | int32 | 1 | 4 | Number of separate passes / phases |
-| vendor | int32 | 1 | 4 | Vendor identifier (e.g., PULSEQLIB_VENDOR_GEHC) |
+| vendor | int32 | 1 | 4 | Vendor identifier (e.g., PULSEG_VENDOR_GEHC) |
 | fov[0..2] | float | 3 | 12 | Field of view (x, y, z) in mm |
 | matrix[0..2] | int32 | 3 | 12 | Matrix dimensions (x, y, z) |
 | nav_fov[0..2] | float | 3 | 12 | Navigator FOV (x, y, z) in mm |
@@ -492,8 +492,8 @@ Readers should:
 
 These `.bin` files sit alongside each `.seq` fixture under `expected/` and
 are produced by `+testutils/TruthBuilder.m` from the official Pulseq
-toolbox. They are the **independent** ground truth that pulseqlib output
-is compared against; they are NOT pulseqlib cache sections.
+toolbox. They are the **independent** ground truth that pulseg output
+is compared against; they are NOT pulseg cache sections.
 
 ## `<base>_trajectory.bin` (Phase A MVP)
 
@@ -512,7 +512,7 @@ if is_cartesian == 0:
 **Cartesian classification**: a sequence is marked Cartesian when
 `base_rot == eye(3)` AND, for every ADC, the gradient is constant across
 the active ADC window on every used axis (i.e. `dk/dt` is constant).
-This matches pulseqlib's cache behaviour, which omits the trajectory
+This matches pulseg's cache behaviour, which omits the trajectory
 section for Cartesian acquisitions.
 
 **Units**: k-space samples are in 1/m (Pulseq toolbox convention),
@@ -527,7 +527,7 @@ averages; the per-average trajectory is tiled `num_averages` times.
 
 ## Other companion files (already produced)
 
-- `<base>.pge`                — pulseqlib cache binary (v2.0.0 sections 1–7)
+- `<base>.pge`                — pulseg cache binary (v2.0.0 sections 1–7)
                                 produced by the `write_cache` CLI as a
                                 post-pass to `run_generators.m`. Listed
                                 under each entry's `companion_files` in

@@ -27,7 +27,7 @@
 
 static int tr_waveform_matches_ref(
     const seg_tr_waveform *ref_wf,
-    const pulseqlib_tr_gradient_waveforms *lib_wf)
+    const pulseg_tr_gradient_waveforms *lib_wf)
 {
     const float wave_rel_tol = 1e-3f;
     const float wave_time_abs_tol = 0.5f;
@@ -154,10 +154,10 @@ static void build_case_path(char *dst, size_t dst_sz, const seq_case *tc, const 
 
 static void run_check_case(const seq_case *tc)
 {
-    pulseqlib_opts opts;
-    pulseqlib_collection *coll = NULL;
-    pulseqlib_collection_info cinfo = PULSEQLIB_COLLECTION_INFO_INIT;
-    pulseqlib_subseq_info sinfo = PULSEQLIB_SUBSEQ_INFO_INIT;
+    pulseg_opts opts;
+    pulseg_collection *coll = NULL;
+    pulseg_collection_info cinfo = PULSEG_COLLECTION_INFO_INIT;
+    pulseg_subseq_info sinfo = PULSEG_SUBSEQ_INFO_INIT;
     seg_meta meta = SEG_META_INIT;
     char meta_path[512];
     int rc, a, ok;
@@ -166,16 +166,16 @@ static void run_check_case(const seq_case *tc)
     /* Load sequence */
     gre_opts_init(&opts);
     rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for GRE test case");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed for GRE test case");
 
     /* Collection must have exactly one subsequence */
-    rc = pulseqlib_get_collection_info(coll, &cinfo);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_collection_info failed");
+    rc = pulseg_get_collection_info(coll, &cinfo);
+    mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_collection_info failed");
     mu_assert_int_eq(1, cinfo.num_subsequences);
 
     /* Get subsequence info */
-    rc = pulseqlib_get_subseq_info(coll, &sinfo, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_subseq_info failed");
+    rc = pulseg_get_subseq_info(coll, &sinfo, 0);
+    mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_subseq_info failed");
 
     /* Parse MATLAB ground truth */
     build_case_path(meta_path, sizeof(meta_path), tc, "_meta.txt");
@@ -186,9 +186,9 @@ static void run_check_case(const seq_case *tc)
     mu_assert_int_eq(meta.num_unique_adcs, sinfo.num_unique_adcs);
     for (a = 0; a < sinfo.num_unique_adcs; ++a)
     {
-        pulseqlib_adc_def ad = PULSEQLIB_ADC_DEF_INIT;
-        rc = pulseqlib_get_adc_def(coll, &ad, a);
-        mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_adc_def failed");
+        pulseg_adc_def ad = PULSEG_ADC_DEF_INIT;
+        rc = pulseg_get_adc_def(coll, &ad, a);
+        mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_adc_def failed");
         if (meta.adc_samples[a] > expected_max_adc_samples)
             expected_max_adc_samples = meta.adc_samples[a];
         mu_assert_int_eq(meta.adc_samples[a], ad.num_samples);
@@ -222,7 +222,7 @@ static void run_check_case(const seq_case *tc)
             tc->name, meta.num_segments, cinfo.num_segments);
     mu_assert_int_eq(meta.num_segments, cinfo.num_segments);
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 MU_TEST(test_check_gre_2d_1sl_1avg) { run_check_case(&kGreCases[0]); }
@@ -309,14 +309,14 @@ MU_TEST_SUITE(suite_sequences_check)
 
 static void run_sequences_uieval_case(const seq_case *tc)
 {
-    pulseqlib_opts opts;
-    pulseqlib_collection *coll = NULL;
-    pulseqlib_collection_info cinfo = PULSEQLIB_COLLECTION_INFO_INIT;
-    pulseqlib_subseq_info sinfo = PULSEQLIB_SUBSEQ_INFO_INIT;
+    pulseg_opts opts;
+    pulseg_collection *coll = NULL;
+    pulseg_collection_info cinfo = PULSEG_COLLECTION_INFO_INIT;
+    pulseg_subseq_info sinfo = PULSEG_SUBSEQ_INFO_INIT;
     seg_meta meta = SEG_META_INIT;
     seg_tr_waveform_set ref_wfs = SEG_TR_WAVEFORM_SET_INIT;
     /* removed unused lib_wf variable */
-    pulseqlib_diagnostic diag;
+    pulseg_diagnostic diag;
     char meta_path[512];
     char tr_path[512];
     int rc, s, i, ok;
@@ -324,15 +324,15 @@ static void run_sequences_uieval_case(const seq_case *tc)
     /* Load sequence */
     gre_opts_init(&opts);
     rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for GRE test case");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed for GRE test case");
 
     /* Collection info */
-    rc = pulseqlib_get_collection_info(coll, &cinfo);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_collection_info failed");
+    rc = pulseg_get_collection_info(coll, &cinfo);
+    mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_collection_info failed");
 
     /* Subseq info */
-    rc = pulseqlib_get_subseq_info(coll, &sinfo, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_subseq_info failed");
+    rc = pulseg_get_subseq_info(coll, &sinfo, 0);
+    mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_subseq_info failed");
 
     /* Parse MATLAB ground truth */
     build_case_path(meta_path, sizeof(meta_path), tc, "_meta.txt");
@@ -345,9 +345,9 @@ static void run_sequences_uieval_case(const seq_case *tc)
     mu_assert_int_eq(meta.num_segments, cinfo.num_segments);
     for (s = 0; s < cinfo.num_segments && s < MAX_SEGMENTS; ++s)
     {
-        pulseqlib_segment_info segi = PULSEQLIB_SEGMENT_INFO_INIT;
-        rc = pulseqlib_get_segment_info(coll, &segi, s);
-        mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_segment_info failed");
+        pulseg_segment_info segi = PULSEG_SEGMENT_INFO_INIT;
+        rc = pulseg_get_segment_info(coll, &segi, s);
+        mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_segment_info failed");
         fprintf(stderr, "[uieval][%s] segment %d num_blocks: meta=%d  lib=%d\n",
                 tc->name, s, meta.segment_num_blocks[s], segi.num_blocks);
         mu_assert_int_eq(meta.segment_num_blocks[s], segi.num_blocks);
@@ -359,8 +359,8 @@ static void run_sequences_uieval_case(const seq_case *tc)
 
     for (int subseq_idx = 0; subseq_idx < num_subseq; ++subseq_idx)
     {
-        rc = pulseqlib_get_subseq_info(coll, &sinfo, subseq_idx);
-        mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_subseq_info failed");
+        rc = pulseg_get_subseq_info(coll, &sinfo, subseq_idx);
+        mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_subseq_info failed");
         mu_assert(sinfo.num_passes > 0, "invalid num_passes from library");
 
         /* Build ground truth path for this subsequence if needed (here assumed single ground truth for all, adjust if needed) */
@@ -371,14 +371,14 @@ static void run_sequences_uieval_case(const seq_case *tc)
 
         for (int tr_idx = 0; tr_idx < ref_wfs.num_trs; ++tr_idx)
         {
-            pulseqlib_tr_gradient_waveforms tr_wf = PULSEQLIB_TR_GRADIENT_WAVEFORMS_INIT;
-            pulseqlib_diagnostic_init(&diag);
-            rc = pulseqlib_get_tr_gradient_waveforms(coll, &tr_wf, &diag, subseq_idx, tr_idx);
-            if (!PULSEQLIB_SUCCEEDED(rc))
+            pulseg_tr_gradient_waveforms tr_wf = PULSEG_TR_GRADIENT_WAVEFORMS_INIT;
+            pulseg_diagnostic_init(&diag);
+            rc = pulseg_get_tr_gradient_waveforms(coll, &tr_wf, &diag, subseq_idx, tr_idx);
+            if (!PULSEG_SUCCEEDED(rc))
             {
-                fprintf(stderr, "[DIAG] pulseqlib_get_tr_gradient_waveforms failed: case=%s subseq=%d tr_idx=%d rc=%d\n", tc->name, subseq_idx, tr_idx, rc);
+                fprintf(stderr, "[DIAG] pulseg_get_tr_gradient_waveforms failed: case=%s subseq=%d tr_idx=%d rc=%d\n", tc->name, subseq_idx, tr_idx, rc);
             }
-            mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_tr_gradient_waveforms failed");
+            mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_tr_gradient_waveforms failed");
 
             int matched = 0;
             for (i = 0; i < ref_wfs.num_trs; ++i)
@@ -394,19 +394,19 @@ static void run_sequences_uieval_case(const seq_case *tc)
                 fprintf(stderr, "[FAIL] Canonical TR %d waveform does not match any reference\n", tr_idx);
             }
             mu_assert(matched, "Canonical TR waveform does not match any reference");
-            pulseqlib_tr_gradient_waveforms_free(&tr_wf);
+            pulseg_tr_gradient_waveforms_free(&tr_wf);
         }
 
         /* Optionally, check that backend does not return extra canonical TRs. */
-        pulseqlib_tr_gradient_waveforms tr_wf_extra = PULSEQLIB_TR_GRADIENT_WAVEFORMS_INIT;
-        pulseqlib_diagnostic_init(&diag);
-        rc = pulseqlib_get_tr_gradient_waveforms(coll, &tr_wf_extra, &diag, subseq_idx, ref_wfs.num_trs);
-        mu_assert(!PULSEQLIB_SUCCEEDED(rc), "Backend returned more canonical TRs than expected");
-        pulseqlib_tr_gradient_waveforms_free(&tr_wf_extra);
+        pulseg_tr_gradient_waveforms tr_wf_extra = PULSEG_TR_GRADIENT_WAVEFORMS_INIT;
+        pulseg_diagnostic_init(&diag);
+        rc = pulseg_get_tr_gradient_waveforms(coll, &tr_wf_extra, &diag, subseq_idx, ref_wfs.num_trs);
+        mu_assert(!PULSEG_SUCCEEDED(rc), "Backend returned more canonical TRs than expected");
+        pulseg_tr_gradient_waveforms_free(&tr_wf_extra);
 
         free_tr_waveform_set(&ref_wfs);
     }
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 MU_TEST(test_sequences_uieval_gre_2d_1sl_1avg) { run_sequences_uieval_case(&kGreCases[0]); }
@@ -512,9 +512,9 @@ MU_TEST_SUITE(suite_sequences_uieval)
 
 static void run_sequences_geninstructions_case(const seq_case *tc)
 {
-    pulseqlib_opts opts;
-    pulseqlib_collection *coll = NULL;
-    pulseqlib_collection_info cinfo = PULSEQLIB_COLLECTION_INFO_INIT;
+    pulseg_opts opts;
+    pulseg_collection *coll = NULL;
+    pulseg_collection_info cinfo = PULSEG_COLLECTION_INFO_INIT;
     static seg_def_file ref; /* static: too large (~8 MB) for stack */
     char seg_path[512];
     int rc, ok;
@@ -523,10 +523,10 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
     /* Load sequence */
     gre_opts_init(&opts);
     rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for GRE test case");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed for GRE test case");
 
-    rc = pulseqlib_get_collection_info(coll, &cinfo);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_collection_info failed");
+    rc = pulseg_get_collection_info(coll, &cinfo);
+    mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_collection_info failed");
 
     /* Load MATLAB ground truth */
     build_case_path(seg_path, sizeof(seg_path), tc, "_segment_def.truth");
@@ -540,9 +540,9 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
 
     for (s = 0; s < ref.num_segments; ++s)
     {
-        pulseqlib_segment_info segi = PULSEQLIB_SEGMENT_INFO_INIT;
-        rc = pulseqlib_get_segment_info(coll, &segi, s);
-        mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_segment_info failed");
+        pulseg_segment_info segi = PULSEG_SEGMENT_INFO_INIT;
+        rc = pulseg_get_segment_info(coll, &segi, s);
+        mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_segment_info failed");
         fprintf(stderr, "[geninstr][%s] segment %d num_blocks: ref=%d  lib=%d\n",
                 tc->name, s, ref.num_blocks[s], segi.num_blocks);
         mu_assert_int_eq(ref.num_blocks[s], segi.num_blocks);
@@ -550,12 +550,12 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
         for (b = 0; b < ref.num_blocks[s]; ++b)
         {
             const seg_block_def *ref_blk = &ref.blocks[s][b];
-            pulseqlib_block_info bi = PULSEQLIB_BLOCK_INFO_INIT;
+            pulseg_block_info bi = PULSEG_BLOCK_INFO_INIT;
             int need_ns = 0;
             int need;
-            rc = pulseqlib_get_block_info(coll, &bi, s, b);
-            mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_block_info failed");
-            need = pulseqlib_block_needs_freq_mod(coll, &need_ns, s, b);
+            rc = pulseg_get_block_info(coll, &bi, s, b);
+            mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_block_info failed");
+            need = pulseg_block_needs_freq_mod(coll, &need_ns, s, b);
 
             /* --- Flags -------------------------------------------- */
             mu_assert_int_eq(ref_blk->has_rf, bi.has_rf);
@@ -577,8 +577,8 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
                           "RF delay mismatch");
                 mu_assert_int_eq(ref_blk->rf_n, bi.rf_num_samples);
 
-                mag = pulseqlib_get_rf_magnitude(coll, &num_channels, &num_samples, s, b);
-                mu_assert(mag != NULL, "pulseqlib_get_rf_magnitude returned NULL");
+                mag = pulseg_get_rf_magnitude(coll, &num_channels, &num_samples, s, b);
+                mu_assert(mag != NULL, "pulseg_get_rf_magnitude returned NULL");
                 mu_assert_int_eq(ref_blk->rf_n, num_samples);
 
                 /* Both library and MATLAB store normalised shapes
@@ -591,8 +591,8 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
 
                 /* Amplitude checks via new getters */
                 {
-                    float init_amp = pulseqlib_get_rf_initial_amplitude_hz(coll, s, b);
-                    float max_amp = pulseqlib_get_rf_max_amplitude_hz(coll, s, b);
+                    float init_amp = pulseg_get_rf_initial_amplitude_hz(coll, s, b);
+                    float max_amp = pulseg_get_rf_max_amplitude_hz(coll, s, b);
                     mu_assert(GENI_AMP_NEAR(ref_blk->rf_amp, init_amp),
                               "RF initial amplitude mismatch");
                     mu_assert(GENI_AMP_NEAR(fabsf(ref_blk->rf_amp), max_amp),
@@ -608,7 +608,7 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
 
                 /* RF timing array check */
                 {
-                    float *lib_rf_time = pulseqlib_get_rf_time_us(coll, s, b);
+                    float *lib_rf_time = pulseg_get_rf_time_us(coll, s, b);
                     if (lib_rf_time != NULL)
                     {
                         /* Non-uniform raster: compare against truth rf_time_s */
@@ -655,20 +655,20 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
                               "grad delay mismatch");
                     mu_assert_int_eq(ref_blk->grad_n[ax], bi.grad_num_samples[ax]);
 
-                    amps = pulseqlib_get_grad_amplitude(coll,
+                    amps = pulseg_get_grad_amplitude(coll,
                                                         &num_shots,
                                                         &num_samples,
                                                         s,
                                                         b,
                                                         ax);
-                    mu_assert(amps != NULL, "pulseqlib_get_grad_amplitude returned NULL");
+                    mu_assert(amps != NULL, "pulseg_get_grad_amplitude returned NULL");
                     mu_assert_int_eq(ref_blk->grad_n[ax], num_samples);
 
                     /* The initial shot is the one from the max-energy
                        segment instance.  Compare that shot's waveform
                        against the MATLAB truth (which was extracted from
                        the same max-energy instance). */
-                    init_shot = pulseqlib_get_grad_initial_shot_id(
+                    init_shot = pulseg_get_grad_initial_shot_id(
                         coll, s, b, ax);
                     mu_assert(init_shot >= 0 && init_shot < num_shots,
                               "initial shot id out of range");
@@ -684,8 +684,8 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
 
                     /* Gradient timing array check */
                     {
-                        float *lib_time_us = pulseqlib_get_grad_time_us(coll, s, b, ax);
-                        mu_assert(lib_time_us != NULL, "pulseqlib_get_grad_time_us returned NULL");
+                        float *lib_time_us = pulseg_get_grad_time_us(coll, s, b, ax);
+                        mu_assert(lib_time_us != NULL, "pulseg_get_grad_time_us returned NULL");
                         for (i = 0; i < ref_blk->grad_n[ax]; ++i)
                         {
                             float ref_us = ref_blk->grad_time_s[ax][i] * 1e6f;
@@ -701,9 +701,9 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
 
                     /* Amplitude checks via new getters */
                     {
-                        float init_amp = pulseqlib_get_grad_initial_amplitude_hz_per_m(
+                        float init_amp = pulseg_get_grad_initial_amplitude_hz_per_m(
                             coll, s, b, ax);
-                        float max_amp = pulseqlib_get_grad_max_amplitude_hz_per_m(
+                        float max_amp = pulseg_get_grad_max_amplitude_hz_per_m(
                             coll, s, b, ax);
                         if (!GENI_AMP_NEAR(ref_blk->grad_amp[ax], init_amp))
                             fprintf(stderr, "[geninstr][%s] seg%d blk%d ax%d init_amp: ref=%.6g  lib=%.6g\n",
@@ -788,13 +788,13 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
             /* --- Anchors ------------------------------------------ */
             if (ref_blk->has_rf)
             {
-                float lib_iso = pulseqlib_get_rf_isocenter_us(coll, s, b);
+                float lib_iso = pulseg_get_rf_isocenter_us(coll, s, b);
                 mu_assert(fabsf(ref_blk->rf_isocenter_us - lib_iso) <= 1.0f,
                           "RF isocenter_us mismatch");
             }
             if (ref_blk->has_adc)
             {
-                float lib_kz = pulseqlib_get_adc_kzero_us(coll, s, b);
+                float lib_kz = pulseg_get_adc_kzero_us(coll, s, b);
                 if (fabsf(ref_blk->adc_kzero_us - lib_kz) > 1.0f)
                     fprintf(stderr, "[geninstr][%s] seg%d blk%d adc_kzero_us: ref=%.4g  lib=%.4g\n",
                             tc->name, s, b, ref_blk->adc_kzero_us, lib_kz);
@@ -893,9 +893,9 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
             for (wb = 0; wb < ref.num_blocks[s]; ++wb)
             {
                 const seg_block_def *wb_blk = &ref.blocks[s][wb];
-                pulseqlib_block_info wbi = PULSEQLIB_BLOCK_INFO_INIT;
-                rc = pulseqlib_get_block_info(coll, &wbi, s, wb);
-                mu_assert(PULSEQLIB_SUCCEEDED(rc), "get_block_info for event walk");
+                pulseg_block_info wbi = PULSEG_BLOCK_INFO_INIT;
+                rc = pulseg_get_block_info(coll, &wbi, s, wb);
+                mu_assert(PULSEG_SUCCEEDED(rc), "get_block_info for event walk");
 
                 if (wb_blk->has_rf)
                 {
@@ -917,10 +917,10 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
                 }
                 if (wb_blk->has_adc && wbi.adc_def_id >= 0)
                 {
-                    pulseqlib_adc_def ad = PULSEQLIB_ADC_DEF_INIT;
+                    pulseg_adc_def ad = PULSEG_ADC_DEF_INIT;
                     int adc_dur;
-                    rc = pulseqlib_get_adc_def(coll, &ad, wbi.adc_def_id);
-                    mu_assert(PULSEQLIB_SUCCEEDED(rc), "get_adc_def for walk");
+                    rc = pulseg_get_adc_def(coll, &ad, wbi.adc_def_id);
+                    mu_assert(PULSEG_SUCCEEDED(rc), "get_adc_def for walk");
                     adc_dur = (int)(ad.num_samples * ad.dwell_ns * 1e-3f);
                     events[n_evt].kind = 1; /* ADC */
                     events[n_evt].start_us = t_walk + wbi.adc_delay_us;
@@ -979,7 +979,7 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
         }
     }
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 MU_TEST(test_sequences_geninstructions_gre_2d_1sl_1avg) { run_sequences_geninstructions_case(&kGreCases[0]); }
@@ -1024,7 +1024,7 @@ MU_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_3avg) { run_sequences_g
 /*  Phase 4: Frequency-modulation definition waveforms                */
 /* ------------------------------------------------------------------ */
 
-static void check_fmod_shift(const pulseqlib_collection *coll,
+static void check_fmod_shift(const pulseg_collection *coll,
                              const seg_meta *meta,
                              const fmod_def_file *ref,
                              const fmod_plan_file *plan,
@@ -1034,13 +1034,13 @@ static void check_fmod_shift(const pulseqlib_collection *coll,
                              const float *fov_rotation,
                              const char *label)
 {
-    pulseqlib_freq_mod_collection *fmc = NULL;
+    pulseg_freq_mod_collection *fmc = NULL;
     int rc;
     int pos;
     int seen_defs[MAX_FMOD_DEFS] = {0};
     int used_plan_count = 0;
     int tr_scope_id = -1;
-    pulseqlib_freq_mod_library *lib;
+    pulseg_freq_mod_library *lib;
     int *used_plan;
     int trkey_count = 0;
     int plan_seen[MAX_FMOD_PLAN_ENTRIES] = {0};
@@ -1055,8 +1055,8 @@ static void check_fmod_shift(const pulseqlib_collection *coll,
         float rotmat[9];
     } trkey_rows[MAX_SCAN_TABLE_ENTRIES];
 
-    rc = pulseqlib_build_freq_mod_collection(&fmc, coll, shift, fov_rotation);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), label);
+    rc = pulseg_build_freq_mod_collection(&fmc, coll, shift, fov_rotation);
+    mu_assert(PULSEG_SUCCEEDED(rc), label);
 
     lib = fmc->libs[0];
     mu_assert(lib != NULL, "freq_mod lib missing for subsequence 0");
@@ -1080,7 +1080,7 @@ static void check_fmod_shift(const pulseqlib_collection *coll,
         if (se->tr_start_flag)
             tr_scope_id++;
 
-        has = pulseqlib_freq_mod_collection_get(fmc,
+        has = pulseg_freq_mod_collection_get(fmc,
                                                 &waveform,
                                                 &ns,
                                                 &phase_rad,
@@ -1302,13 +1302,13 @@ static void check_fmod_shift(const pulseqlib_collection *coll,
 
     free(used_plan);
 
-    pulseqlib_freq_mod_collection_free(fmc);
+    pulseg_freq_mod_collection_free(fmc);
 }
 
 static void run_freq_mod_definitions_case(const seq_case *tc)
 {
-    pulseqlib_opts opts;
-    pulseqlib_collection *coll = NULL;
+    pulseg_opts opts;
+    pulseg_collection *coll = NULL;
     static seg_meta meta = SEG_META_INIT;
     static fmod_def_file ref = FMOD_DEF_FILE_INIT;
     static fmod_plan_file plan = FMOD_PLAN_FILE_INIT;
@@ -1339,7 +1339,7 @@ static void run_freq_mod_definitions_case(const seq_case *tc)
 
     gre_opts_init(&opts);
     rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
     build_case_path(meta_path, sizeof(meta_path), tc, "_meta.txt");
     ok = parse_meta(meta_path, &meta);
@@ -1379,7 +1379,7 @@ static void run_freq_mod_definitions_case(const seq_case *tc)
         }
     }
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 MU_TEST(test_freq_mod_definitions_gre_2d_1sl_1avg) { run_freq_mod_definitions_case(&kGreCases[0]); }
@@ -1494,9 +1494,9 @@ MU_TEST_SUITE(suite_sequences_geninstructions)
 
 static void run_scan_table_case(const seq_case *tc)
 {
-    pulseqlib_opts opts;
-    pulseqlib_collection *coll = NULL;
-    pulseqlib_collection_info cinfo = PULSEQLIB_COLLECTION_INFO_INIT;
+    pulseg_opts opts;
+    pulseg_collection *coll = NULL;
+    pulseg_collection_info cinfo = PULSEG_COLLECTION_INFO_INIT;
     scan_table_file ref = SCAN_TABLE_FILE_INIT;
     seg_meta meta = SEG_META_INIT;
     char scan_path[512];
@@ -1533,10 +1533,10 @@ static void run_scan_table_case(const seq_case *tc)
 
     gre_opts_init(&opts);
     rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
-    rc = pulseqlib_get_collection_info(coll, &cinfo);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "get_collection_info in scan table test");
+    rc = pulseg_get_collection_info(coll, &cinfo);
+    mu_assert(PULSEG_SUCCEEDED(rc), "get_collection_info in scan table test");
 
     build_case_path(scan_path, sizeof(scan_path), tc, "_scan_table.truth");
     ok = parse_scan_table(scan_path, &ref);
@@ -1555,11 +1555,11 @@ static void run_scan_table_case(const seq_case *tc)
 
     {
         int s;
-        pulseqlib_subseq_info si = PULSEQLIB_SUBSEQ_INFO_INIT;
+        pulseg_subseq_info si = PULSEG_SUBSEQ_INFO_INIT;
         for (s = 0; s < cinfo.num_subsequences; ++s)
         {
-            rc = pulseqlib_get_subseq_info(coll, &si, s);
-            mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_subseq_info failed");
+            rc = pulseg_get_subseq_info(coll, &si, s);
+            mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_subseq_info failed");
             subseq_seg_start[s] = si.segment_offset;
         }
         for (s = 0; s < cinfo.num_subsequences; ++s)
@@ -1604,32 +1604,32 @@ static void run_scan_table_case(const seq_case *tc)
     }
 
     /* Walk the scan table via cursor and compare each block instance */
-    pulseqlib_cursor_reset(coll);
+    pulseg_cursor_reset(coll);
     pos = 0;
 
-    while (pulseqlib_cursor_next(coll) == PULSEQLIB_CURSOR_BLOCK)
+    while (pulseg_cursor_next(coll) == PULSEG_CURSOR_BLOCK)
     {
-        pulseqlib_block_instance inst = PULSEQLIB_BLOCK_INSTANCE_INIT;
-        pulseqlib_cursor_info ci = PULSEQLIB_CURSOR_INFO_INIT;
+        pulseg_block_instance inst = PULSEG_BLOCK_INSTANCE_INIT;
+        pulseg_cursor_info ci = PULSEG_CURSOR_INFO_INIT;
         const scan_table_entry *e;
         float tol;
         int i;
 
         mu_assert(pos < ref.num_entries, "more blocks than scan_table entries");
 
-        rc = pulseqlib_get_block_instance(coll, &inst);
-        mu_assert(PULSEQLIB_SUCCEEDED(rc), "get_block_instance failed");
+        rc = pulseg_get_block_instance(coll, &inst);
+        mu_assert(PULSEG_SUCCEEDED(rc), "get_block_instance failed");
 
-        rc = pulseqlib_cursor_get_info(coll, &ci);
-        mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_cursor_get_info failed");
+        rc = pulseg_cursor_get_info(coll, &ci);
+        mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_cursor_get_info failed");
 
         /* ---- Segment validation: pattern-based ---------------------- */
         /* Cross-check nav/trigger at segment starts */
         if (ci.segment_start)
         {
-            pulseqlib_segment_info si = PULSEQLIB_SEGMENT_INFO_INIT;
-            rc = pulseqlib_get_segment_info(coll, &si, ci.segment_id);
-            mu_assert(PULSEQLIB_SUCCEEDED(rc),
+            pulseg_segment_info si = PULSEG_SEGMENT_INFO_INIT;
+            rc = pulseg_get_segment_info(coll, &si, ci.segment_id);
+            mu_assert(PULSEG_SUCCEEDED(rc),
                       "get_segment_info for cursor cross-check");
             mu_assert_int_eq(si.is_nav, ci.is_nav);
             mu_assert_int_eq(si.has_trigger, ci.has_trigger);
@@ -1637,9 +1637,9 @@ static void run_scan_table_case(const seq_case *tc)
 
         if (is_mprage)
         {
-            pulseqlib_segment_info segi = PULSEQLIB_SEGMENT_INFO_INIT;
-            rc = pulseqlib_get_segment_info(coll, &segi, ci.segment_id);
-            mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_segment_info failed");
+            pulseg_segment_info segi = PULSEG_SEGMENT_INFO_INIT;
+            rc = pulseg_get_segment_info(coll, &segi, ci.segment_id);
+            mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_segment_info failed");
 
             if (segi.pure_delay)
             {
@@ -1835,9 +1835,9 @@ static void run_scan_table_case(const seq_case *tc)
         int seg;
         for (seg = 0; seg < cinfo.num_segments && seg < MAX_SEGMENTS; ++seg)
         {
-            pulseqlib_segment_info si = PULSEQLIB_SEGMENT_INFO_INIT;
-            rc = pulseqlib_get_segment_info(coll, &si, seg);
-            if (PULSEQLIB_SUCCEEDED(rc) && seg_trigger_seen[seg])
+            pulseg_segment_info si = PULSEG_SEGMENT_INFO_INIT;
+            rc = pulseg_get_segment_info(coll, &si, seg);
+            if (PULSEG_SUCCEEDED(rc) && seg_trigger_seen[seg])
             {
                 mu_assert(si.has_trigger,
                           "segment_info.has_trigger should be set "
@@ -1857,19 +1857,19 @@ static void run_scan_table_case(const seq_case *tc)
                   "expected scan-loop pure-delay instance duration to differ from canonical segment-def duration");
     }
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 static void run_collection_case(const seq_case *tc)
 {
-    pulseqlib_opts opts;
-    pulseqlib_collection *coll = NULL;
-    pulseqlib_collection_info cinfo = PULSEQLIB_COLLECTION_INFO_INIT;
-    pulseqlib_subseq_info gre_info = PULSEQLIB_SUBSEQ_INFO_INIT;
-    pulseqlib_subseq_info epi_info = PULSEQLIB_SUBSEQ_INFO_INIT;
+    pulseg_opts opts;
+    pulseg_collection *coll = NULL;
+    pulseg_collection_info cinfo = PULSEG_COLLECTION_INFO_INIT;
+    pulseg_subseq_info gre_info = PULSEG_SUBSEQ_INFO_INIT;
+    pulseg_subseq_info epi_info = PULSEG_SUBSEQ_INFO_INIT;
     seg_meta meta = SEG_META_INIT;
     scan_table_file ref = SCAN_TABLE_FILE_INIT;
-    pulseqlib_cursor_info ci = PULSEQLIB_CURSOR_INFO_INIT;
+    pulseg_cursor_info ci = PULSEG_CURSOR_INFO_INIT;
     char scan_path[512];
     char meta_path[512];
     int rc, ok, i;
@@ -1880,16 +1880,16 @@ static void run_collection_case(const seq_case *tc)
 
     gre_opts_init(&opts);
     rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "load_seq failed for collection case");
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed for collection case");
 
-    rc = pulseqlib_get_collection_info(coll, &cinfo);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_collection_info failed for collection case");
+    rc = pulseg_get_collection_info(coll, &cinfo);
+    mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_collection_info failed for collection case");
     mu_assert_int_eq(2, cinfo.num_subsequences);
 
-    rc = pulseqlib_get_subseq_info(coll, &gre_info, 0);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_subseq_info failed for GRE subsequence");
-    rc = pulseqlib_get_subseq_info(coll, &epi_info, 1);
-    mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_get_subseq_info failed for EPI subsequence");
+    rc = pulseg_get_subseq_info(coll, &gre_info, 0);
+    mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_subseq_info failed for GRE subsequence");
+    rc = pulseg_get_subseq_info(coll, &epi_info, 1);
+    mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_subseq_info failed for EPI subsequence");
 
     build_case_path(meta_path, sizeof(meta_path), tc, "_meta.txt");
     ok = parse_meta(meta_path, &meta);
@@ -1901,11 +1901,11 @@ static void run_collection_case(const seq_case *tc)
     mu_assert(epi_info.segment_offset > gre_info.segment_offset,
               "EPI subsequence should have a positive segment offset");
 
-    pulseqlib_cursor_reset(coll);
-    while (pulseqlib_cursor_next(coll) == PULSEQLIB_CURSOR_BLOCK)
+    pulseg_cursor_reset(coll);
+    while (pulseg_cursor_next(coll) == PULSEG_CURSOR_BLOCK)
     {
-        rc = pulseqlib_cursor_get_info(coll, &ci);
-        mu_assert(PULSEQLIB_SUCCEEDED(rc), "pulseqlib_cursor_get_info failed for collection case");
+        rc = pulseg_cursor_get_info(coll, &ci);
+        mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_cursor_get_info failed for collection case");
         mu_assert(ci.subseq_idx >= 0 && ci.subseq_idx < 2,
                   "cursor subsequence index out of range");
         if (prev_subseq == 0 && ci.subseq_idx == 1)
@@ -1929,7 +1929,7 @@ static void run_collection_case(const seq_case *tc)
     mu_assert_float_near("collection duration",
                          expected_total_duration_us, cinfo.total_duration_us, 1.0f);
 
-    pulseqlib_collection_free(coll);
+    pulseg_collection_free(coll);
 }
 
 MU_TEST(test_collection_gre_epi_1avg) { run_collection_case(&kGreEpiCollectionCases[0]); }

@@ -97,7 +97,7 @@ from typing import Literal
 
 import numpy as np
 
-from ._extension._pulseqlib_wrapper import _find_tr, _get_tr_waveforms
+from ._extension._pulseg_wrapper import _find_tr, _get_tr_waveforms
 
 # Import SequenceCollection before any type annotations use it
 from ._sequence import SequenceCollection

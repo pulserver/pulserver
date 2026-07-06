@@ -784,7 +784,7 @@ def validate(
     --------
     SequenceCollection.validate : Wrapper method (preferred).
     """
-    from ._extension._pulseqlib_wrapper import _find_tr
+    from ._extension._pulseg_wrapper import _find_tr
 
     num_subseq = seq.num_sequences
     num_averages = seq.num_averages
@@ -1169,7 +1169,7 @@ def _validation_plot(
 
     # Overlay reference waveforms (pypulseq)
     # pypulseq overlay: extract reference and draw directly on handle.axes
-    from ._extension._pulseqlib_wrapper import _find_tr
+    from ._extension._pulseg_wrapper import _find_tr
 
     tr_info = _find_tr(seq._cseq, subsequence_idx=sequence_idx)
     ref = _pypulseq_reference(

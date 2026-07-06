@@ -141,7 +141,7 @@ seq.write(fullfile(dataDir, '05_rfprep_ok_canonical_fullpass.seq'));
 %% ------------------------------------------------------------------------
 % Invalid sequence: multipass with variable (non-periodic) RF across passes
 %   Two complete prep→main→cooldown passes — different RF amplitude each.
-% Expected error: PULSEQLIB_ERR_CONSISTENCY_RF_PERIODIC (-561)
+% Expected error: PULSEG_ERR_CONSISTENCY_RF_PERIODIC (-561)
 % ------------------------------------------------------------------------
 rf_pass1 = mr.makeBlockPulse(0.30 * pi, 'Duration', 1e-3, 'use', 'excitation');
 rf_pass2 = mr.makeBlockPulse(0.45 * pi, 'Duration', 1e-3, 'use', 'excitation');
@@ -185,7 +185,7 @@ seq.write(fullfile(dataDir, '07_rfstat_cp_8ch_180.seq'));
 %   Copy gre_2d_1sl_1avg.seq, corrupt a numeric data line in the body,
 %   leave [SIGNATURE] section unchanged → MD5 mismatch on verification.
 %   Expected error when loaded with verify_signature=1:
-%     PULSEQLIB_ERR_SIGNATURE_MISMATCH (-54)
+%     PULSEG_ERR_SIGNATURE_MISMATCH (-54)
 % ------------------------------------------------------------------------
 srcFile = fullfile(dataDir, 'gre_2d_1sl_1avg.seq');
 dstFile = fullfile(dataDir, 'gre_2d_1sl_1avg_corrupted.seq');

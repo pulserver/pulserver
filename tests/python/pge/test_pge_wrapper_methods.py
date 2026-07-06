@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from pge import Opts, SequenceCollection
-from pge.core._extension._pulseqlib_wrapper import _calc_mech_resonances
+from pge.core._extension._pulseg_wrapper import _calc_mech_resonances
 from pge.core._plot import plot as _plot_impl
 
 
@@ -316,7 +316,7 @@ def test_validate_plot_autoselects_single_subsequence(simple_gre_seq, capsys):
 def test_validate_plot_autoselects_single_tr_for_selected_subsequence(
     simple_gre_seq, monkeypatch, capsys
 ):
-    from pge.core._extension import _pulseqlib_wrapper as _wrapper_mod
+    from pge.core._extension import _pulseg_wrapper as _wrapper_mod
 
     sc = SequenceCollection(simple_gre_seq)
 

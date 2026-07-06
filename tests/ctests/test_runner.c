@@ -1,6 +1,6 @@
 
 /*
- * test_runner.c -- entry point for the pulseqlib unit test suite.
+ * test_runner.c -- entry point for the pulseg unit test suite.
  *
  * Calls each test_*_main() which runs its own MU_RUN_SUITE / MU_REPORT.
  * A non-zero return from any suite indicates failure.

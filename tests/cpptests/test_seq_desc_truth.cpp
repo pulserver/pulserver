@@ -1,6 +1,6 @@
 // test_seq_desc_truth.cpp
 //
-// Parameterized gtest that, for every pulseqlib cache fixture in
+// Parameterized gtest that, for every pulseg cache fixture in
 // MRDSERVER_FIXTURES_DIR with a matching <stem>_seq_desc.truth truth
 // companion:
 //
@@ -22,7 +22,7 @@
 //     [rows] type (int), timestamp_us (float), params[7] (float x7)
 //       RF params[6] = ss_grad_amp_hz_per_m (0 if no slice-select grad)
 //
-// Tolerant float comparison is used because pulseqlib stores parsed
+// Tolerant float comparison is used because pulseg stores parsed
 // shape/amplitude values in single precision while MATLAB Pulseq
 // integrates in double precision before single-cast on write; the two
 // pipelines therefore agree to within a few ULPs but not byte-for-byte.
@@ -48,12 +48,12 @@ namespace
 
     constexpr int32_t CACHE_ENDIAN_MARKER = 0x01020304;
     constexpr int SECTION_SEQUENCEDESCRIPTION = 7;
-    constexpr int PULSEQLIB_SEQ_EVENT_PARAMS = 7;
+    constexpr int PULSEG_SEQ_EVENT_PARAMS = 7;
 
     /* Tolerances for tolerant float comparison.
      *   relative: 1e-5  (~10 ULP of single precision)
      *   absolute: 1e-3  (matches truth float-print precision)
-     * These accommodate the ULP-level drift caused by pulseqlib carrying
+     * These accommodate the ULP-level drift caused by pulseg carrying
      * shape/amplitude values in single precision while MATLAB Pulseq holds
      * them in double precision until the final single-cast on write. */
     constexpr float SEQDESC_FLOAT_REL_TOL = 1e-5f;
@@ -426,7 +426,7 @@ namespace
 
                 COMPARE_INT(rp + "type");
                 COMPARE_FLOAT(rp + "timestamp_us");
-                for (int p = 0; p < PULSEQLIB_SEQ_EVENT_PARAMS; ++p)
+                for (int p = 0; p < PULSEG_SEQ_EVENT_PARAMS; ++p)
                 {
                     std::ostringstream f;
                     f << rp << "params[" << p << "]";
