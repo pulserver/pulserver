@@ -699,7 +699,7 @@ int pulseg_protocol_find(const pulseg_protocol *p, int param_id)
 }
 
 int pulseg_protocol_get_float(const pulseg_protocol *p,
-                                 int param_id, float *out)
+                                 float *out, int param_id)
 {
     int idx = pulseg_protocol_find(p, param_id);
     if (idx < 0 || p->values[idx].type != PULSEG_PTYPE_FLOAT)
@@ -710,7 +710,7 @@ int pulseg_protocol_get_float(const pulseg_protocol *p,
 }
 
 int pulseg_protocol_get_int(const pulseg_protocol *p,
-                               int param_id, int *out)
+                               int *out, int param_id)
 {
     int idx = pulseg_protocol_find(p, param_id);
     if (idx < 0 || p->values[idx].type != PULSEG_PTYPE_INT)
@@ -721,7 +721,7 @@ int pulseg_protocol_get_int(const pulseg_protocol *p,
 }
 
 int pulseg_protocol_get_bool(const pulseg_protocol *p,
-                                int param_id, int *out)
+                                int *out, int param_id)
 {
     int idx = pulseg_protocol_find(p, param_id);
     if (idx < 0 || p->values[idx].type != PULSEG_PTYPE_BOOL)
@@ -762,7 +762,7 @@ int pulseg_protocol_set_bool(pulseg_protocol *p,
 }
 
 int pulseg_protocol_get_stringlist(const pulseg_protocol *p,
-                                      int param_id, int *idx_out)
+                                      int *idx_out, int param_id)
 {
     int idx = pulseg_protocol_find(p, param_id);
     if (idx < 0 || p->values[idx].type != PULSEG_PTYPE_STRINGLIST)

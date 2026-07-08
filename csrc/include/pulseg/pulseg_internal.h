@@ -775,7 +775,7 @@ int   pulseg__get_unique_blocks(pulseg_sequence_descriptor* desc, const pulseg_p
 
 /* --- pulseg_structure.c --- */
 int   pulseg__get_tr_in_sequence(pulseg_sequence_descriptor* desc, pulseg_diagnostic* diag);
-int   pulseg__build_scan_table(pulseg_sequence_descriptor* desc, int num_averages, pulseg_diagnostic* diag);
+int   pulseg__build_scan_table(pulseg_sequence_descriptor* desc, pulseg_diagnostic* diag, int num_averages);
 int   pulseg__get_scan_table_segments(pulseg_sequence_descriptor* desc, pulseg_diagnostic* diag, const pulseg_opts* opts);
 int   pulseg__build_freq_mod_flags(pulseg_sequence_descriptor* desc);
 void  pulseg__compute_scan_table_tr_start(pulseg_sequence_descriptor* desc);
@@ -830,16 +830,16 @@ int   pulseg__write_cache(pulseg_collection* seq_coll, const char* seq_path, con
 
 /* --- Helper to locate segment/block in collection --- */
 int pulseg__resolve_segment(
+    const pulseg_collection* coll,
     const pulseg_sequence_descriptor** out_desc,
     int* out_local_seg,
-    const pulseg_collection* coll,
     int seg_idx);
 
 int pulseg__resolve_block(
+    const pulseg_collection* coll,
     const pulseg_sequence_descriptor** out_desc,
     const pulseg_tr_segment** out_seg,
     int* out_local_blk,
-    const pulseg_collection* coll,
     int seg_idx, int blk_idx);
 
 #endif /* PULSEG_INTERNAL_H */

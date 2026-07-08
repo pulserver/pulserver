@@ -184,5 +184,6 @@ int test_safety_grad_main(void);
 int test_rf_stats_main(void);
 int test_sequences_main(void);
 int test_io_main(void);
+int test_recon_main(void);
 
 #endif /* TEST_HELPERS_H */

@@ -189,8 +189,8 @@ static int first_repeating_segment_structural(
 
 int pulseg__build_scan_table(
     pulseg_sequence_descriptor* desc,
-    int num_averages,
-    pulseg_diagnostic* diag)
+    pulseg_diagnostic* diag,
+    int num_averages)
 {
     pulseg_diagnostic local_diag;
     int pass, avg, blk, once, count, idx;

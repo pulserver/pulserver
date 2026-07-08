@@ -220,7 +220,7 @@ namespace pulseg
             pulseg_subseq_info si = subseq_info(ss);
             std::vector<int> ids(si.num_prep_segments);
             if (si.num_prep_segments > 0)
-                pulseg_get_prep_segment_table(coll_, ss, ids.data());
+                pulseg_get_prep_segment_table(coll_, ids.data(), ss);
             return ids;
         }
         std::vector<int> main_segment_table(int ss = 0) const
@@ -228,7 +228,7 @@ namespace pulseg
             pulseg_subseq_info si = subseq_info(ss);
             std::vector<int> ids(si.num_main_segments);
             if (si.num_main_segments > 0)
-                pulseg_get_main_segment_table(coll_, ss, ids.data());
+                pulseg_get_main_segment_table(coll_, ids.data(), ss);
             return ids;
         }
         std::vector<int> cooldown_segment_table(int ss = 0) const
@@ -236,7 +236,7 @@ namespace pulseg
             pulseg_subseq_info si = subseq_info(ss);
             std::vector<int> ids(si.num_cooldown_segments);
             if (si.num_cooldown_segments > 0)
-                pulseg_get_cooldown_segment_table(coll_, ss, ids.data());
+                pulseg_get_cooldown_segment_table(coll_, ids.data(), ss);
             return ids;
         }
 
@@ -568,7 +568,7 @@ namespace pulseg
             std::vector<int> ids(si.num_blocks);
             if (si.num_blocks > 0)
             {
-                int rc = pulseg_get_segment_block_def_indices(coll_, seg_idx, ids.data());
+                int rc = pulseg_get_segment_block_def_indices(coll_, ids.data(), seg_idx);
                 if (rc < 0)
                     check(rc);
             }

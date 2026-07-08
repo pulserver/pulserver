@@ -388,16 +388,16 @@ int pulseg_write_sequence_description_cache(
         ret = pulseg_get_sequence_description(&sd, coll, i);
         if (ret != PULSEG_SUCCESS)
         {
-            pulseg_free_sequence_description(&sd);
+            pulseg_sequence_description_free(&sd);
             goto done;
         }
         if (!sd_write_subseq(f, &sd, &coll->descriptors[i]))
         {
-            pulseg_free_sequence_description(&sd);
+            pulseg_sequence_description_free(&sd);
             ret = PULSEG_ERR_FILE_READ_FAILED;
             goto done;
         }
-        pulseg_free_sequence_description(&sd);
+        pulseg_sequence_description_free(&sd);
     }
 
     data_end = ftell(f);

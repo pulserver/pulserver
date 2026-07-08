@@ -1184,7 +1184,7 @@ compute_fail:
     if (out && out->table == table)
         table = NULL;
     PULSEG_FREE(table);
-    pulseg_free_trajectory(out);
+    pulseg_trajectory_free(out);
     return PULSEG_ERR_ALLOC_FAILED;
 }
 
@@ -1192,7 +1192,7 @@ compute_fail:
 /*  Free trajectory                                                   */
 /* ================================================================== */
 
-void pulseg_free_trajectory(pulseg_trajectory *traj)
+void pulseg_trajectory_free(pulseg_trajectory *traj)
 {
     int i;
     if (!traj)
@@ -1623,7 +1623,7 @@ int pulseg_write_trajectory_cache_from_collection(
         if (PULSEG_FAILED(rc))
         {
             if (have)
-                pulseg_free_trajectory(&acc);
+                pulseg_trajectory_free(&acc);
             return rc;
         }
         if (!have)
@@ -1634,10 +1634,10 @@ int pulseg_write_trajectory_cache_from_collection(
         else
         {
             rc = pulseg_merge_trajectory(&acc, &one);
-            pulseg_free_trajectory(&one);
+            pulseg_trajectory_free(&one);
             if (PULSEG_FAILED(rc))
             {
-                pulseg_free_trajectory(&acc);
+                pulseg_trajectory_free(&acc);
                 return rc;
             }
         }
@@ -1647,7 +1647,7 @@ int pulseg_write_trajectory_cache_from_collection(
     {
         rc = pulseg_write_trajectory_cache(&acc, seq_path,
             coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
-        pulseg_free_trajectory(&acc);
+        pulseg_trajectory_free(&acc);
         return rc;
     }
 
@@ -1658,28 +1658,15 @@ int pulseg_write_trajectory_cache_from_collection(
 /*  Load trajectory from cache (TRAJECTORY section)                   */
 /* ================================================================== */
 
-int pulseg_load_trajectory_cache(pulseg_trajectory *out,
-                                    const char *seq_path)
+/* Shared body of pulseg_load_trajectory_cache() / pulseg_load_trajectory_cache_from_path():
+ * parses the TRAJECTORY section from an already-open file handle. Takes
+ * ownership of @p f (closes it on every return path). */
+static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
 {
-    char *cache_path;
-    FILE *f;
     int marker, num_sections;
     int version_major, version_minor, version_revision, vendor, stored_size;
     int do_swap, i, found;
     int section_id, section_offset, section_size;
-
-    if (!out || !seq_path)
-        return PULSEG_ERR_NULL_POINTER;
-    memset(out, 0, sizeof(*out));
-
-    cache_path = traj_make_cache_path(seq_path, NULL);
-    if (!cache_path)
-        return PULSEG_ERR_ALLOC_FAILED;
-
-    f = fopen(cache_path, "rb");
-    PULSEG_FREE(cache_path);
-    if (!f)
-        return PULSEG_ERR_FILE_READ_FAILED;
 
     /* Read header */
     if (!traj_read4(f, &marker, 1))
@@ -1957,6 +1944,44 @@ int pulseg_load_trajectory_cache(pulseg_trajectory *out,
 
 lr_fail:
     fclose(f);
-    pulseg_free_trajectory(out);
+    pulseg_trajectory_free(out);
     return PULSEG_ERR_FILE_READ_FAILED;
+}
+
+int pulseg_load_trajectory_cache(pulseg_trajectory *out,
+                                    const char *seq_path)
+{
+    char *cache_path;
+    FILE *f;
+
+    if (!out || !seq_path)
+        return PULSEG_ERR_NULL_POINTER;
+    memset(out, 0, sizeof(*out));
+
+    cache_path = traj_make_cache_path(seq_path, NULL);
+    if (!cache_path)
+        return PULSEG_ERR_ALLOC_FAILED;
+
+    f = fopen(cache_path, "rb");
+    PULSEG_FREE(cache_path);
+    if (!f)
+        return PULSEG_ERR_FILE_READ_FAILED;
+
+    return traj_load_from_open_file(out, f);
+}
+
+int pulseg_load_trajectory_cache_from_cache_path(pulseg_trajectory *out,
+                                                     const char *cache_path)
+{
+    FILE *f;
+
+    if (!out || !cache_path)
+        return PULSEG_ERR_NULL_POINTER;
+    memset(out, 0, sizeof(*out));
+
+    f = fopen(cache_path, "rb");
+    if (!f)
+        return PULSEG_ERR_FILE_READ_FAILED;
+
+    return traj_load_from_open_file(out, f);
 }

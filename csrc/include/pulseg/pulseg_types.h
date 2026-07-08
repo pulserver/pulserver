@@ -513,9 +513,9 @@ typedef struct pulseg_forbidden_band
  * The public library owns the vendor-neutral half of PNS evaluation
  * (canonical-TR selection, uniform-raster dG/dt extraction, combined
  * sqrt(x^2+y^2+z^2), result marshalling). The model half -- the actual
- * stimulation-threshold functional form (e.g. GE's chronaxie/rheobase/
- * alpha exponential kernel, or Siemens SAFE's nonlinear multi-stage
- * filter) -- is injected through this struct. Only an evaluator
+ * stimulation-threshold functional form (e.g. GE's rheobase-chronaxie
+ * (Irnich/den Boer) `c/(c+tau)^2` kernel, or Siemens SAFE's nonlinear
+ * multi-stage filter) -- is injected through this struct. Only an evaluator
  * interface (not a sampled-kernel API) can represent both forms.
  *
  * Calling convention (enforced by pulseg_calc_pns / pulseg_check_safety,
@@ -568,9 +568,9 @@ typedef struct pulseg_pns_model
 /**
  * @brief Convolved slew-rate waveforms per axis.
  *
- * The wrapper can compute combined PNS = sqrt(x^2+y^2+z^2) and
- * percentage = slew / rheobase.  This avoids duplicating model
- * logic across languages.
+ * The wrapper can compute combined PNS = sqrt(x^2+y^2+z^2) and the
+ * percentage per the injected model's threshold normalization.  This
+ * avoids duplicating model logic across languages.
  */
 typedef struct pulseg_pns_result
 {
@@ -1063,7 +1063,7 @@ typedef struct pulseg_sequence_parameters
 /**
  * @brief Per-subsequence sequence description — compact canonical-TR table.
  *
- * @c rows is heap-allocated; freed by pulseg_free_sequence_description().
+ * @c rows is heap-allocated; freed by pulseg_sequence_description_free().
  * @c num_rows == number of blocks in the full pass (prep + main + cooldown).
  */
 typedef struct pulseg_sequence_description

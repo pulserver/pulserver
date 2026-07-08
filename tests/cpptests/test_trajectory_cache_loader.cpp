@@ -399,24 +399,35 @@ namespace
             const float *cache_row = &T.data[ro * T.ndim * T.num_samples];
             const float *truth_row = truth_a.k.data();
             ++matched;
-            /* The cache stores k anchored at the kzero ADC sample (k=0 at
-             * center_sample); the truth stores absolute k(t).  Subtract the
-             * truth's value at center_sample per-axis so the comparison is
-             * anchor-invariant. */
+            /* Both cache and truth store the SAME absolute base/logical-frame
+             * k(t) (verified byte-for-byte: the pulseg cache slices the same
+             * canonical, unrotated ZERO_VAR trajectory the TruthBuilder
+             * integrates from raw block gradients — rotation is stored as a
+             * separate matrix for downstream livesdk, never baked into the
+             * cache k samples).  To keep the comparison invariant to any
+             * per-side k=0 anchoring convention, subtract EACH side's own
+             * value at center_sample (the kzero index) before diffing.
+             * (Earlier this subtracted only the truth anchor, which injected
+             * a spurious offset == truth[center_sample] on non-cartesian
+             * fixtures and failed every rotated/non-cartesian case.) */
             int kz_idx = cache_e.center_sample;
             if (kz_idx < 0)
                 kz_idx = 0;
             if (kz_idx >= T.num_samples)
                 kz_idx = T.num_samples - 1;
-            float anchor[3] = {0.0f, 0.0f, 0.0f};
-            for (int d = 0; d < std::min(truth.ndim, 3); ++d)
-                anchor[d] = truth_row[kz_idx * truth.ndim + d];
+            float truth_anchor[3] = {0.0f, 0.0f, 0.0f};
+            float cache_anchor[3] = {0.0f, 0.0f, 0.0f};
+            for (int d = 0; d < dim; ++d)
+            {
+                truth_anchor[d] = truth_row[kz_idx * truth.ndim + d];
+                cache_anchor[d] = cache_row[kz_idx * T.ndim + d];
+            }
             for (int s = 0; s < T.num_samples; ++s)
             {
                 for (int d = 0; d < dim; ++d)
                 {
-                    const float cv = cache_row[s * T.ndim + d];
-                    const float tv = truth_row[s * truth.ndim + d] - anchor[d];
+                    const float cv = cache_row[s * T.ndim + d] - cache_anchor[d];
+                    const float tv = truth_row[s * truth.ndim + d] - truth_anchor[d];
                     const double diff = static_cast<double>(cv) - static_cast<double>(tv);
                     max_abs_diff = std::max(max_abs_diff, std::abs(diff));
                     sum_sq_diff += diff * diff;

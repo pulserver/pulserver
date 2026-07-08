@@ -2,7 +2,7 @@
  *
  * Implements:
  *   pulseg_get_sequence_description()
- *   pulseg_free_sequence_description()
+ *   pulseg_sequence_description_free()
  *   pulseg_get_sequence_parameters()
  *
  * Emits a compact per-block row table over the full pass (canonical TR).
@@ -540,10 +540,10 @@ static int seqdesc__adc_role_is_te_bearing(int adc_role)
 }
 
 /* ================================================================== */
-/*  pulseg_free_sequence_description                               */
+/*  pulseg_sequence_description_free                               */
 /* ================================================================== */
 
-void pulseg_free_sequence_description(pulseg_sequence_description *desc)
+void pulseg_sequence_description_free(pulseg_sequence_description *desc)
 {
     if (!desc)
         return;
@@ -724,7 +724,7 @@ cleanup:
     if (adc_roles)
         PULSEG_FREE(adc_roles);
     if (ret != PULSEG_SUCCESS)
-        pulseg_free_sequence_description(out);
+        pulseg_sequence_description_free(out);
 
     return ret;
 }

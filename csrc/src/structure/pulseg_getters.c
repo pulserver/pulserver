@@ -40,9 +40,9 @@
 /* ================================================================== */
 
 int pulseg__resolve_segment(
+    const pulseg_collection *coll,
     const pulseg_sequence_descriptor **out_desc,
     int *out_local_seg,
-    const pulseg_collection *coll,
     int seg_idx)
 {
     int i, num_segs, global_idx;
@@ -68,10 +68,10 @@ int pulseg__resolve_segment(
 }
 
 int pulseg__resolve_block(
+    const pulseg_collection *coll,
     const pulseg_sequence_descriptor **out_desc,
     const pulseg_tr_segment **out_seg,
     int *out_local_blk,
-    const pulseg_collection *coll,
     int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
@@ -79,7 +79,7 @@ int pulseg__resolve_block(
     const pulseg_tr_segment *seg;
 
     desc = NULL;
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return 0;
 
     seg = &desc->segment_definitions[local_seg];
@@ -685,7 +685,7 @@ static int pulseg__get_segment_duration_us(
     const pulseg_tr_segment *seg;
     const pulseg_block_definition *bdef;
 
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     seg = &desc->segment_definitions[local_seg];
@@ -719,7 +719,7 @@ static int pulseg__is_segment_pure_delay(
     const pulseg_tr_segment *seg;
     const pulseg_block_definition *bdef;
 
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     seg = &desc->segment_definitions[local_seg];
@@ -740,7 +740,7 @@ static int pulseg__get_segment_num_blocks(
     const pulseg_sequence_descriptor *desc;
     int local_seg;
 
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     return desc->segment_definitions[local_seg].num_blocks;
@@ -752,7 +752,7 @@ static int pulseg__get_segment_start_block(
     const pulseg_sequence_descriptor *desc;
     int local_seg;
 
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     return desc->segment_definitions[local_seg].start_block;
@@ -787,7 +787,7 @@ static int pulseg__get_num_cooldown_segments(
 }
 
 int pulseg_get_prep_segment_table(
-    const pulseg_collection *coll, int subseq_idx, int *out_ids)
+    const pulseg_collection *coll, int *out_ids, int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int n;
@@ -803,7 +803,7 @@ int pulseg_get_prep_segment_table(
 }
 
 int pulseg_get_main_segment_table(
-    const pulseg_collection *coll, int subseq_idx, int *out_ids)
+    const pulseg_collection *coll, int *out_ids, int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int n;
@@ -819,7 +819,7 @@ int pulseg_get_main_segment_table(
 }
 
 int pulseg_get_cooldown_segment_table(
-    const pulseg_collection *coll, int subseq_idx, int *out_ids)
+    const pulseg_collection *coll, int *out_ids, int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int n;
@@ -835,7 +835,7 @@ int pulseg_get_cooldown_segment_table(
 }
 
 int pulseg_get_canonical_segment_sequence(
-    const pulseg_collection *coll, int subseq_idx, int *out_ids)
+    const pulseg_collection *coll, int *out_ids, int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *trd;
@@ -904,7 +904,7 @@ static int pulseg__get_segment_num_kzero_crossings(
     const pulseg_sequence_descriptor *desc;
     int local_seg;
 
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return 0;
 
     return desc->segment_definitions[local_seg].timing.num_kzero_crossings;
@@ -918,7 +918,7 @@ static int pulseg__get_segment_rf_adc_gap_us(
     const pulseg_segment_timing *tm;
     int r, a;
 
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     tm = &desc->segment_definitions[local_seg].timing;
@@ -954,7 +954,7 @@ static int pulseg__get_segment_adc_adc_gap_us(
     const pulseg_segment_timing *tm;
     int a, r, best;
 
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     tm = &desc->segment_definitions[local_seg].timing;
@@ -1005,7 +1005,7 @@ float pulseg_get_rf_isocenter_us(
     int local_blk, k;
     float start_us = 0.0f;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1.0f;
 
     for (k = 0; k < local_blk; ++k)
@@ -1030,7 +1030,7 @@ float pulseg_get_adc_kzero_us(
     int local_blk, k;
     float start_us = 0.0f;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1.0f;
 
     for (k = 0; k < local_blk; ++k)
@@ -1070,7 +1070,7 @@ static int pulseg__get_block_start_time_us(
     const pulseg_tr_segment *seg;
     int local_blk, k, start_time;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     start_time = 0;
@@ -1089,7 +1089,7 @@ static int pulseg__get_block_duration_us(
     int local_blk;
     const pulseg_block_definition *bdef;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     if (seg->num_blocks == 1 && local_blk == 0)
@@ -1120,7 +1120,7 @@ static int pulseg__block_has_rf(
     int local_blk;
     const pulseg_block_definition *bdef;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -1137,7 +1137,7 @@ static int pulseg__block_rf_has_uniform_raster(
     const pulseg_block_definition *bdef;
     const pulseg_rf_definition *rdef;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -1176,7 +1176,7 @@ static int pulseg__block_rf_is_complex(
     const pulseg_block_definition *bdef;
     const pulseg_rf_definition *rdef;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -1198,7 +1198,7 @@ static int pulseg__get_rf_num_samples(
     const pulseg_rf_definition *rdef;
     const pulseg_shape_arbitrary *shape;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -1255,7 +1255,7 @@ static int pulseg__get_rf_delay_us(
     int local_blk;
     const pulseg_block_definition *bdef;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -1275,7 +1275,7 @@ static int pulseg__get_rf_duration_us(
     const pulseg_block_definition *bdef;
     const pulseg_rf_definition *rdef;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -1298,7 +1298,7 @@ static int pulseg__get_rf_num_channels(
     const pulseg_block_definition *bdef;
     const pulseg_rf_definition *rdef;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -1329,7 +1329,7 @@ float **pulseg_get_rf_magnitude(const pulseg_collection *coll,
     *num_channels = 0;
     *num_samples = 0;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return NULL;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -1406,7 +1406,7 @@ float **pulseg_get_rf_phase(const pulseg_collection *coll,
     *num_channels = 0;
     *num_samples = 0;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return NULL;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -1474,7 +1474,7 @@ float *pulseg_get_rf_time_us(
     pulseg_shape_arbitrary decompressed;
     float *result;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return NULL;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -1534,7 +1534,7 @@ float pulseg_get_rf_initial_amplitude_hz(
     const pulseg_block_definition *bdef;
     const pulseg_rf_definition *rdef;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return 0.0f;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -1565,7 +1565,7 @@ float pulseg_get_rf_max_amplitude_hz(
     const pulseg_block_definition *bdef;
     const pulseg_rf_definition *rdef;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return 0.0f;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -1599,7 +1599,7 @@ static int pulseg__block_has_grad(
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return -1;
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
@@ -1617,7 +1617,7 @@ static int pulseg__block_grad_is_trapezoid(
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return -1;
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
@@ -1644,7 +1644,7 @@ static int pulseg__get_grad_num_samples(
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return -1;
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
@@ -1682,7 +1682,7 @@ static int pulseg__get_grad_num_shots(
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return -1;
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
@@ -1702,7 +1702,7 @@ static int pulseg__get_grad_delay_us(
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return -1;
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
@@ -1744,7 +1744,7 @@ float **pulseg_get_grad_amplitude(const pulseg_collection *coll,
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return NULL;
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return NULL;
 
     /* Resolve through the max-energy block_table entry so that the
@@ -1866,7 +1866,7 @@ float pulseg_get_grad_initial_amplitude_hz_per_m(
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return 1.0f;
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return 1.0f;
 
     bte = resolve_block_table_via_max_energy(desc, seg, local_blk);
@@ -1905,7 +1905,7 @@ int pulseg_get_grad_initial_shot_id(
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return 0;
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return 0;
 
     bte = resolve_block_table_via_max_energy(desc, seg, local_blk);
@@ -1963,7 +1963,7 @@ float *pulseg_get_grad_time_us(
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return NULL;
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return NULL;
 
     /* Resolve through actual max-energy block_table entry (see comment
@@ -2057,7 +2057,7 @@ static int pulseg__block_has_adc(
     const pulseg_tr_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     /* Use OR-reduced flag: true if at least one segment instance has an ADC
@@ -2082,7 +2082,7 @@ static int pulseg__get_adc_delay_us(
     int local_blk, adc_id;
     const pulseg_block_definition *bdef;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -2102,7 +2102,7 @@ static int pulseg__get_adc_library_index(
     int local_blk, adc_id, global_adc_idx, i;
     const pulseg_block_definition *bdef;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
@@ -2133,7 +2133,7 @@ static int pulseg__block_has_digitalout(
     const pulseg_tr_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     return seg->has_digitalout[local_blk];
@@ -2148,7 +2148,7 @@ static int pulseg__get_digitalout_delay_us(
     int local_blk, digitalout_id;
     const pulseg_block_table_element *bte;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     if (!seg->has_digitalout[local_blk])
@@ -2171,7 +2171,7 @@ static int pulseg__get_digitalout_duration_us(
     int local_blk, digitalout_id;
     const pulseg_block_table_element *bte;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     if (!seg->has_digitalout[local_blk])
@@ -2194,7 +2194,7 @@ static int pulseg__get_digitalout_channel(
     int local_blk, digitalout_id;
     const pulseg_block_table_element *bte;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     if (!seg->has_digitalout[local_blk])
@@ -2217,7 +2217,7 @@ static int pulseg__segment_has_trigger(
     const pulseg_sequence_descriptor *desc;
     int local_seg;
 
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return 0;
 
     return (desc->segment_definitions[local_seg].trigger_id >= 0) ? 1 : 0;
@@ -2230,7 +2230,7 @@ static int pulseg__get_segment_trigger_delay_us(
     const pulseg_sequence_descriptor *desc;
     int local_seg, tid;
 
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     tid = desc->segment_definitions[local_seg].trigger_id;
@@ -2247,7 +2247,7 @@ static int pulseg__get_segment_trigger_duration_us(
     const pulseg_sequence_descriptor *desc;
     int local_seg, tid;
 
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     tid = desc->segment_definitions[local_seg].trigger_id;
@@ -2264,7 +2264,7 @@ static int pulseg__get_segment_trigger_type(
     const pulseg_sequence_descriptor *desc;
     int local_seg, tid;
 
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return 0;
 
     tid = desc->segment_definitions[local_seg].trigger_id;
@@ -2283,7 +2283,7 @@ static int pulseg__segment_is_nav(
     const pulseg_sequence_descriptor *desc;
     int local_seg;
 
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return 0;
 
     return desc->segment_definitions[local_seg].is_nav;
@@ -2297,7 +2297,7 @@ static int pulseg__block_has_freq_mod(
     const pulseg_tr_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return 0;
 
     return seg->has_freq_mod[local_blk];
@@ -2311,7 +2311,7 @@ static int pulseg__block_has_rotation(
     const pulseg_tr_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     return seg->has_rotation[local_blk];
@@ -2325,7 +2325,7 @@ static int pulseg__block_has_norot(
     const pulseg_tr_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     return seg->norot_flag[local_blk];
@@ -2339,7 +2339,7 @@ static int pulseg__block_has_nopos(
     const pulseg_tr_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     return seg->nopos_flag[local_blk];
@@ -2513,7 +2513,7 @@ int pulseg_block_needs_freq_mod(const pulseg_collection *coll,
     if (num_samples)
         *num_samples = 0;
 
-    if (!pulseg__resolve_block(&desc, &seg, &local_blk, coll, seg_idx, blk_idx))
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return 0;
 
     nopos = seg->nopos_flag[local_blk];
@@ -3037,9 +3037,9 @@ static pulseg_definition_entry *s_def_view = NULL;
 static int s_def_view_cap = 0;
 
 int pulseg_get_definitions(const pulseg_collection *coll,
-                              int subseq_idx,
                               const pulseg_definition_entry **out,
-                              int *num_entries)
+                              int *num_entries,
+                              int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int i;
@@ -3349,8 +3349,8 @@ int pulseg_get_unique_block_id(
 
 int pulseg_get_segment_block_def_indices(
     const pulseg_collection *coll,
-    int seg_idx,
-    int *out_ids)
+    int *out_ids,
+    int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_segment *seg;
@@ -3358,7 +3358,7 @@ int pulseg_get_segment_block_def_indices(
 
     if (!coll || !out_ids)
         return PULSEG_ERR_NULL_POINTER;
-    if (!pulseg__resolve_segment(&desc, &local_seg, coll, seg_idx))
+    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
         return PULSEG_ERR_INDEX;
 
     seg = &desc->segment_definitions[local_seg];

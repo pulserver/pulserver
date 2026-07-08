@@ -2,9 +2,12 @@
  * @file trajectory_cache_reader.h
  * @brief Standalone reader for pulseg binary cache trajectory data.
  *
- * No dependency on pulserverlib — reads the binary cache format directly.
- * Stage 1.5c/1.5d: the reader is now self-contained across three sections
- * only, and never walks the PSD-internal COMMON/ROTATIONS descriptor:
+ * Stage 4 (vendor-neutral refactor): this is now a thin C++ wrapper over
+ * the C89 reader pulseg_recon_cache_read() (csrc/src/recon/pulseg_recon.c).
+ * The class API below is unchanged from before the C port — existing
+ * VRE/RTP consumers compile and link against it exactly as before. It
+ * still never walks the PSD-internal COMMON/ROTATIONS descriptor, reading
+ * only three sections directly from the cache file:
  *   - Section 0 (DEFINITIONS): per-subsequence generic [DEFINITIONS] kv
  *     (FOV/Matrix/NavFOV/NavMatrix/TR/TE/TI/FlipAngle/... as pulseq strings).
  *   - Section 6 (TRAJECTORY): kshot library, encoding spaces (geometry now
@@ -12,12 +15,18 @@
  *     and a folded-in rotation-matrix library (table[].rotation_id indexes
  *     it directly; no separate ROTATIONS-section read).
  *   - Section 7 (SEQDESC): per-subsequence event lists + a per-subsequence
- *     RF-definition library (bandwidth/bands/b1sq + compressed mag/phase/
- *     time shapes), when present.
+ *     RF-definition library (bandwidth/bands/b1sq + still-compressed
+ *     mag/phase/time shapes).
+ *
+ * TRAJECTORY and SEQDESC are both MANDATORY as of cache format v2.0.0
+ * (master plan D11: every section is written unconditionally) —
+ * read_sequence_cache() throws std::runtime_error if either is missing or
+ * malformed. There is no "optional SEQDESC" tolerance: a cache lacking it
+ * is a fixture/writer bug, not a degrade case.
  *
  * Section 5 (FREQMOD / off-isocenter shift) is intentionally NOT parsed:
  * frequency modulation is applied PSD-side, so data arriving at the
- * recon are already centered. See pulserverlib-tests/SCHEMA.md.
+ * recon are already centered. See tests/utils/SCHEMA.md.
  */
 
 #ifndef TRAJECTORY_CACHE_READER_H

@@ -90,16 +90,16 @@ int pulseg_bridge_list_protocol(pulseg_bridge* b,
  * VALIDATE: send a protocol and check validity.
  *
  * @param b        Open bridge handle.
- * @param proto    Protocol to validate.
  * @param duration If non-NULL, set to reported duration on success.
  * @param info     If non-NULL, info string buffer (caller provides).
  * @param infosz   Size of info buffer.
+ * @param proto    Protocol to validate.
  * @return 1 if valid, 0 if invalid, -1 on comm error.
  */
 int pulseg_bridge_validate(pulseg_bridge* b,
-                               const pulseg_protocol* proto,
                                float* duration,
-                               char* info, int infosz);
+                               char* info, int infosz,
+                               const pulseg_protocol* proto);
 
 /**
  * GENERATE: send a protocol and request a .seq file.

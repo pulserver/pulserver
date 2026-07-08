@@ -2453,11 +2453,11 @@ int pulseg_update_freq_mod(
 
 int pulseg_get_freq_mod(
     const pulseg_collection *coll,
-    int subseq_idx,
-    int scan_table_pos,
     const short **out_hw_waveform,
     int *out_num_samples,
-    float *out_phase_rad)
+    float *out_phase_rad,
+    int subseq_idx,
+    int scan_table_pos)
 {
     if (!coll || !coll->freq_mod)
         return 0;

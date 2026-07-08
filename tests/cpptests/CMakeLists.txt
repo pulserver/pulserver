@@ -24,6 +24,13 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 # ------------------------------------------------------------------
+# Build the pulseg C library once, unconditionally (trajectory_cache_reader
+# now calls into it -- Stage 4 recon-cache-to-C port -- so it is no longer
+# needed only inside the pulseq-adapter block below).
+# ------------------------------------------------------------------
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../csrc ${CMAKE_CURRENT_BINARY_DIR}/csrc_build)
+
+# ------------------------------------------------------------------
 # Build trajectory_cache_reader as an OBJECT library to reuse here
 # without depending on the full GadgetronClient build.
 # ------------------------------------------------------------------
@@ -35,13 +42,12 @@ target_include_directories(trajectory_cache_reader_obj PUBLIC
     ${MRDSERVER_CSRC}
     ${ISMRMRD_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS})
+target_link_libraries(trajectory_cache_reader_obj PUBLIC pulseg ISMRMRD::ISMRMRD)
 
 # ------------------------------------------------------------------
 # Test executable.
 # ------------------------------------------------------------------
-add_executable(test_trajectory_cache_loader
-    test_trajectory_cache_loader.cpp
-    $<TARGET_OBJECTS:trajectory_cache_reader_obj>)
+add_executable(test_trajectory_cache_loader test_trajectory_cache_loader.cpp)
 
 target_include_directories(test_trajectory_cache_loader PRIVATE
     ${MRDSERVER_CSRC}
@@ -50,9 +56,10 @@ target_include_directories(test_trajectory_cache_loader PRIVATE
 
 # Path to the .pge fixtures, baked in at configure time.
 target_compile_definitions(test_trajectory_cache_loader PRIVATE
-    MRDSERVER_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../pulserverlib-tests/expected")
+    MRDSERVER_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../utils/expected")
 
 target_link_libraries(test_trajectory_cache_loader PRIVATE
+    trajectory_cache_reader_obj
     GTest::gtest_main
     ISMRMRD::ISMRMRD)
 
@@ -64,12 +71,25 @@ target_link_libraries(test_trajectory_cache_loader PRIVATE
 # ------------------------------------------------------------------
 add_executable(test_seq_desc_truth test_seq_desc_truth.cpp)
 target_compile_definitions(test_seq_desc_truth PRIVATE
-    MRDSERVER_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../pulserverlib-tests/expected")
+    MRDSERVER_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../utils/expected")
 target_link_libraries(test_seq_desc_truth PRIVATE GTest::gtest_main)
 
 include(GoogleTest)
 gtest_discover_tests(test_trajectory_cache_loader)
 gtest_discover_tests(test_seq_desc_truth)
+
+# ------------------------------------------------------------------
+# Stage 4 (recon-cache-to-C) Step 0: golden-dump CLI tool. Dumps every
+# field trajectory_cache_reader parses from a .pge/.pseg fixture to a
+# deterministic text file; used to capture pre-port golden dumps and,
+# later, to prove the C-ported reader is byte-for-byte equivalent.
+# ------------------------------------------------------------------
+add_executable(dump_recon_cache dump_recon_cache.cpp)
+target_include_directories(dump_recon_cache PRIVATE
+    ${MRDSERVER_CSRC}
+    ${ISMRMRD_INCLUDE_DIRS}
+    ${Boost_INCLUDE_DIRS})
+target_link_libraries(dump_recon_cache PRIVATE trajectory_cache_reader_obj ISMRMRD::ISMRMRD)
 
 # ------------------------------------------------------------------
 # Pulseq adapter equivalence test (Stage 3, D4): loads a fixture .seq
@@ -78,8 +98,7 @@ gtest_discover_tests(test_seq_desc_truth)
 # ------------------------------------------------------------------
 set(PULSEQ_SUBMODULE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../external/pulseq)
 if(EXISTS ${PULSEQ_SUBMODULE_DIR}/src/ExternalSequence.cpp)
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../csrc ${CMAKE_CURRENT_BINARY_DIR}/csrc_build)
-
+    # pulseg (csrc) is already built unconditionally above.
     add_library(pulseq_upstream STATIC ${PULSEQ_SUBMODULE_DIR}/src/ExternalSequence.cpp)
     target_include_directories(pulseq_upstream PUBLIC ${PULSEQ_SUBMODULE_DIR}/src)
 

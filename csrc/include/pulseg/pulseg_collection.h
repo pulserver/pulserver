@@ -292,7 +292,7 @@ extern "C"
      * @return Number of IDs written, or negative error code.
      */
     int pulseg_get_prep_segment_table(const pulseg_collection *coll,
-                                         int subseq_idx, int *out_ids);
+                                         int *out_ids, int subseq_idx);
 
     /**
      * @brief Copy main segment IDs into caller-supplied buffer.
@@ -300,7 +300,7 @@ extern "C"
      * @return Number of IDs written, or negative error code.
      */
     int pulseg_get_main_segment_table(const pulseg_collection *coll,
-                                         int subseq_idx, int *out_ids);
+                                         int *out_ids, int subseq_idx);
 
     /**
      * @brief Copy cooldown segment IDs into caller-supplied buffer.
@@ -308,7 +308,7 @@ extern "C"
      * @return Number of IDs written, or negative error code.
      */
     int pulseg_get_cooldown_segment_table(const pulseg_collection *coll,
-                                             int subseq_idx, int *out_ids);
+                                             int *out_ids, int subseq_idx);
 
     /**
      * @brief Get canonical segment-ID sequence for vendor gradient-heating checks.
@@ -321,12 +321,12 @@ extern "C"
      * Otherwise, @p out_ids must point to a buffer of at least that many ints.
      *
      * @param[in]  coll        Loaded collection.
-     * @param[in]  subseq_idx  Subsequence index.
      * @param[out] out_ids     Output buffer, or NULL for count query.
+     * @param[in]  subseq_idx  Subsequence index.
      * @return Number of IDs (>= 0), or negative error code.
      */
     int pulseg_get_canonical_segment_sequence(const pulseg_collection *coll,
-                                                 int subseq_idx, int *out_ids);
+                                                 int *out_ids, int subseq_idx);
 
     /* ================================================================== */
     /*  RF getters                                                        */
@@ -501,9 +501,9 @@ extern "C"
      * @return PULSEG_SUCCESS on success, negative error code on failure.
      */
     int pulseg_get_definitions(const pulseg_collection *coll,
-                                  int subseq_idx,
                                   const pulseg_definition_entry **out,
-                                  int *num_entries);
+                                  int *num_entries,
+                                  int subseq_idx);
 
     /**
      * @brief Get label values for a specific ADC occurrence.
@@ -632,12 +632,12 @@ extern "C"
      * list (suitable for passing to pulseg_get_unique_block_id).
      *
      * @param[in]  coll      Loaded collection.
-     * @param[in]  seg_idx   Global segment index.
      * @param[out] out_ids   Caller buffer (at least num_blocks ints).
+     * @param[in]  seg_idx   Global segment index.
      * @return Number of IDs written (>= 0), or negative error code.
      */
     int pulseg_get_segment_block_def_indices(const pulseg_collection *coll,
-                                                int seg_idx, int *out_ids);
+                                                int *out_ids, int seg_idx);
 
 #ifdef __cplusplus
 }

@@ -71,24 +71,19 @@ MU_TEST(test_parse)
     rc = pulseg_protocol_parse(&proto, PREAMBLE);
     mu_assert(rc == 5, "expected 5 parsed params");
 
-    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto,
-                                                     PULSEG_PARAM_TE, &fval));
+    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto, &fval, PULSEG_PARAM_TE));
     mu_assert(fabsf(fval - 5.0f) < 1e-6f, "TE value");
 
-    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto,
-                                                     PULSEG_PARAM_TR, &fval));
+    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto, &fval, PULSEG_PARAM_TR));
     mu_assert(fabsf(fval - 500.0f) < 1e-3f, "TR value");
 
-    mu_assert_int_eq(0, pulseg_protocol_get_int(&proto,
-                                                   PULSEG_PARAM_NSLICES, &ival));
+    mu_assert_int_eq(0, pulseg_protocol_get_int(&proto, &ival, PULSEG_PARAM_NSLICES));
     mu_assert_int_eq(10, ival);
 
-    mu_assert_int_eq(0, pulseg_protocol_get_bool(&proto,
-                                                    PULSEG_PARAM_FAT_SAT, &bval));
+    mu_assert_int_eq(0, pulseg_protocol_get_bool(&proto, &bval, PULSEG_PARAM_FAT_SAT));
     mu_assert_int_eq(1, bval);
 
-    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto,
-                                                     PULSEG_PARAM_USER1, &fval));
+    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto, &fval, PULSEG_PARAM_USER1));
     mu_assert(fabsf(fval - 42.5f) < 1e-6f, "user0 value");
 }
 
@@ -110,8 +105,7 @@ MU_TEST(test_parse_commented)
     rc = pulseg_protocol_parse(&proto, PREAMBLE_COMMENTED);
     mu_assert(rc == 1, "expected 1 parsed param");
 
-    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto,
-                                                     PULSEG_PARAM_TE, &fval));
+    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto, &fval, PULSEG_PARAM_TE));
     mu_assert(fabsf(fval - 3.0f) < 1e-6f, "TE from commented preamble");
 }
 
@@ -134,21 +128,17 @@ MU_TEST(test_setters)
     mu_assert_int_eq(0, pulseg_protocol_set_bool(&proto,
                                                     PULSEG_PARAM_SPOILER, 1));
 
-    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto,
-                                                     PULSEG_PARAM_FOV, &fval));
+    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto, &fval, PULSEG_PARAM_FOV));
     mu_assert(fabsf(fval - 240.0f) < 1e-6f, "fov");
 
-    mu_assert_int_eq(0, pulseg_protocol_get_int(&proto,
-                                                   PULSEG_PARAM_MATRIX, &ival));
+    mu_assert_int_eq(0, pulseg_protocol_get_int(&proto, &ival, PULSEG_PARAM_MATRIX));
     mu_assert_int_eq(256, ival);
 
-    mu_assert_int_eq(0, pulseg_protocol_get_bool(&proto,
-                                                    PULSEG_PARAM_SPOILER, &bval));
+    mu_assert_int_eq(0, pulseg_protocol_get_bool(&proto, &bval, PULSEG_PARAM_SPOILER));
     mu_assert_int_eq(1, bval);
 
     /* Type mismatch: getting float from int slot should fail */
-    mu_assert_int_eq(-1, pulseg_protocol_get_float(&proto,
-                                                      PULSEG_PARAM_MATRIX, &fval));
+    mu_assert_int_eq(-1, pulseg_protocol_get_float(&proto, &fval, PULSEG_PARAM_MATRIX));
 }
 
 /* ================================================================== */
@@ -174,12 +164,10 @@ MU_TEST(test_roundtrip)
     rc = pulseg_protocol_parse(&p2, buf);
     mu_assert(rc == 3, "round-trip should parse 3 params");
 
-    mu_assert_int_eq(0, pulseg_protocol_get_float(&p2,
-                                                     PULSEG_PARAM_TE, &fval));
+    mu_assert_int_eq(0, pulseg_protocol_get_float(&p2, &fval, PULSEG_PARAM_TE));
     mu_assert(fabsf(fval - 3.5f) < 1e-3f, "TE round-trip");
 
-    mu_assert_int_eq(0, pulseg_protocol_get_int(&p2,
-                                                   PULSEG_PARAM_NSLICES, &ival));
+    mu_assert_int_eq(0, pulseg_protocol_get_int(&p2, &ival, PULSEG_PARAM_NSLICES));
     mu_assert_int_eq(20, ival);
 }
 
@@ -208,8 +196,7 @@ MU_TEST(test_parse_rich)
     mu_assert(rc == 5, "expected 5 parsed params (rich)");
 
     /* TE: value + schema */
-    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto,
-                                                     PULSEG_PARAM_TE, &fval));
+    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto, &fval, PULSEG_PARAM_TE));
     mu_assert(fabsf(fval - 5.0f) < 1e-6f, "TE value (rich)");
 
     idx = pulseg_protocol_find(&proto, PULSEG_PARAM_TE);
@@ -222,8 +209,7 @@ MU_TEST(test_parse_rich)
     mu_assert_string_eq("ms", pv->unit);
 
     /* TR: value + schema */
-    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto,
-                                                     PULSEG_PARAM_TR, &fval));
+    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto, &fval, PULSEG_PARAM_TR));
     mu_assert(fabsf(fval - 500.0f) < 1e-3f, "TR value (rich)");
 
     idx = pulseg_protocol_find(&proto, PULSEG_PARAM_TR);
@@ -232,8 +218,7 @@ MU_TEST(test_parse_rich)
     mu_assert(fabsf(pv->range_max - 10000.0f) < 1e-1f, "TR max");
 
     /* NSlices: int with schema */
-    mu_assert_int_eq(0, pulseg_protocol_get_int(&proto,
-                                                   PULSEG_PARAM_NSLICES, &ival));
+    mu_assert_int_eq(0, pulseg_protocol_get_int(&proto, &ival, PULSEG_PARAM_NSLICES));
     mu_assert_int_eq(10, ival);
 
     idx = pulseg_protocol_find(&proto, PULSEG_PARAM_NSLICES);
@@ -244,13 +229,11 @@ MU_TEST(test_parse_rich)
     mu_assert_string_eq("slices", pv->unit);
 
     /* FatSat: bool (no range schema, but has_schema=0 since bool has no min/max) */
-    mu_assert_int_eq(0, pulseg_protocol_get_bool(&proto,
-                                                    PULSEG_PARAM_FAT_SAT, &bval));
+    mu_assert_int_eq(0, pulseg_protocol_get_bool(&proto, &bval, PULSEG_PARAM_FAT_SAT));
     mu_assert_int_eq(1, bval);
 
     /* user0_value: float with schema, empty unit */
-    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto,
-                                                     PULSEG_PARAM_USER1, &fval));
+    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto, &fval, PULSEG_PARAM_USER1));
     mu_assert(fabsf(fval - 42.5f) < 1e-6f, "user0 (rich)");
 
     idx = pulseg_protocol_find(&proto, PULSEG_PARAM_USER1);
@@ -288,8 +271,7 @@ MU_TEST(test_parse_mixed)
     mu_assert_int_eq(PULSEG_MODE_TYPEIN, (int)proto.values[idx].mode);
 
     /* TR is simple — no schema, mode defaults to TYPEIN */
-    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto,
-                                                     PULSEG_PARAM_TR, &fval));
+    mu_assert_int_eq(0, pulseg_protocol_get_float(&proto, &fval, PULSEG_PARAM_TR));
     mu_assert(fabsf(fval - 500.0f) < 1e-3f, "TR simple");
     idx = pulseg_protocol_find(&proto, PULSEG_PARAM_TR);
     mu_assert_int_eq(0, proto.values[idx].has_schema);
@@ -298,13 +280,11 @@ MU_TEST(test_parse_mixed)
     /* NSlices has schema */
     idx = pulseg_protocol_find(&proto, PULSEG_PARAM_NSLICES);
     mu_assert_int_eq(1, proto.values[idx].has_schema);
-    mu_assert_int_eq(0, pulseg_protocol_get_int(&proto,
-                                                   PULSEG_PARAM_NSLICES, &ival));
+    mu_assert_int_eq(0, pulseg_protocol_get_int(&proto, &ival, PULSEG_PARAM_NSLICES));
     mu_assert_int_eq(10, ival);
 
     /* FatSat is simple */
-    mu_assert_int_eq(0, pulseg_protocol_get_bool(&proto,
-                                                    PULSEG_PARAM_FAT_SAT, &bval));
+    mu_assert_int_eq(0, pulseg_protocol_get_bool(&proto, &bval, PULSEG_PARAM_FAT_SAT));
     mu_assert_int_eq(1, bval);
     idx = pulseg_protocol_find(&proto, PULSEG_PARAM_FAT_SAT);
     mu_assert_int_eq(0, proto.values[idx].has_schema);

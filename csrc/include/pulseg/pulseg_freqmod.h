@@ -165,11 +165,11 @@ extern "C"
      */
     int pulseg_get_freq_mod(
         const pulseg_collection *coll,
-        int subseq_idx,
-        int scan_table_pos,
         const short **out_hw_waveform,
         int *out_num_samples,
-        float *out_phase_rad);
+        float *out_phase_rad,
+        int subseq_idx,
+        int scan_table_pos);
 
     /**
      * @brief Targeted per-TR freq-mod update (PMC mode).

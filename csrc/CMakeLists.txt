@@ -14,6 +14,7 @@ set(PULSEG_SOURCES
     src/cache/pulseg_cache.c
     src/structure/pulseg_seqdesc.c
     src/cache/pulseg_cache_seqdesc.c
+    src/recon/pulseg_recon.c
 )
 
 set(MD5_SOURCES     src/vendor/external_md5.c)

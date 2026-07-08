@@ -61,7 +61,8 @@ extern "C"
      * `pulseg_collection_free()`.  Performs the same suite of checks as
      * `pulseg_check_safety()` (max gradient amplitude, gradient
      * continuity, max slew rate, structural mechanical-resonance forbidden
-     * bands, and the vendor PNS model selected by `pns_params->vendor`).
+     * bands, and PNS evaluated through the injected `pulseg_pns_model`
+     * argument).
      *
      * @param[out] diag                   Diagnostic on violation / load error.
      * @param[in]  seq_path               Path to a (possibly chained) `.seq` file.

@@ -41,7 +41,7 @@ function(add_pybind_module module_name output_subdir)
     )
 endfunction()
 
-# _pulseg_wrapper: pge C extension (needs full pulseg + seqdesc + cache)
+# _pulseg_wrapper: pulserver.analysis C extension (needs full pulseg + seqdesc + cache)
 set(PULSEG_C_SOURCES
     "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_error.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_math.c"
@@ -66,7 +66,7 @@ set(PULSEG_C_SOURCES
 
 add_pybind_module(_pulseg_wrapper ""
     SOURCES
-        "${CMAKE_SOURCE_DIR}/python/pge/core/_extension/_pulseg_wrapper.cpp"
+        "${CMAKE_SOURCE_DIR}/python/pulserver/_ext/_pulseg_wrapper.cpp"
         ${PULSEG_C_SOURCES}
     INCLUDES
         ${CMAKE_SOURCE_DIR}/csrc/include/pulseg
@@ -75,9 +75,9 @@ add_pybind_module(_pulseg_wrapper ""
 )
 
 file(GLOB PULSEG_WRAPPERS
-    "${CMAKE_CURRENT_BINARY_DIR}/python/pge/core/_extension/_pulseg_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/_ext/_pulseg_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
 install(FILES ${PULSEG_WRAPPERS}
-    DESTINATION ${CMAKE_SOURCE_DIR}/python/pge/core/_extension)
+    DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/_ext)
 
 option(PULSERVER_BUILD_CPP_TESTS "Build lightweight C++ unit tests" OFF)
 if(PULSERVER_BUILD_CPP_TESTS)

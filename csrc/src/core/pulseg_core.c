@@ -671,7 +671,7 @@ int pulseg_convert_collection(
         result = pulseg__compute_variable_grad_flags(&desc);
         if (PULSEG_FAILED(result)) { diag->code = result; goto fail; }
 
-        result = pulseg__build_scan_table(&desc, num_averages, diag);
+        result = pulseg__build_scan_table(&desc, diag, num_averages);
         if (PULSEG_FAILED(diag->code)) goto fail;
 
         /* Non-degenerate pass TR duration:

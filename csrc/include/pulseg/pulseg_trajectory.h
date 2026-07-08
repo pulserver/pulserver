@@ -157,7 +157,7 @@ extern "C"
     /**
      * @brief Free all memory owned by a pulseg_trajectory.
      */
-    void pulseg_free_trajectory(pulseg_trajectory *traj);
+    void pulseg_trajectory_free(pulseg_trajectory *traj);
 
     /**
      * @brief Merge one trajectory into another (append src into dst).
@@ -219,6 +219,20 @@ extern "C"
      */
     int pulseg_load_trajectory_cache(pulseg_trajectory *out,
                                         const char *seq_path);
+
+    /**
+     * @brief Load trajectory from the TRAJECTORY cache section, given the
+     *        cache file path directly (no .seq -> cache-path derivation).
+     *
+     * For standalone recon consumers (e.g. pulseg_recon) that only have
+     * the .pseg/.pge cache file on disk, not the original .seq path.
+     *
+     * @param[out] out         Trajectory output (caller-allocated struct).
+     * @param[in]  cache_path  Path to the .pseg/.pge cache file.
+     * @return PULSEG_SUCCESS or negative error code.
+     */
+    int pulseg_load_trajectory_cache_from_cache_path(pulseg_trajectory *out,
+                                                         const char *cache_path);
 
 #ifdef __cplusplus
 }

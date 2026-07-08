@@ -551,9 +551,9 @@ static int send_protocol(pulseg_bridge *b,
 }
 
 int pulseg_bridge_validate(pulseg_bridge *b,
-                              const pulseg_protocol *proto,
                               float *duration,
-                              char *info, int infosz)
+                              char *info, int infosz,
+                              const pulseg_protocol *proto)
 {
     char resp[PULSEG_BRIDGE_LINE_MAX];
     int rc;

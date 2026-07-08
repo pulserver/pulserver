@@ -19,6 +19,7 @@
 #include "pulseg_safety.h"
 #include "pulseg_trajectory.h"
 #include "pulseg_cache.h"
+#include "pulseg_recon.h"
 #include "pulseg_freqmod.h"
 
 #include "pulseg_protocol.h"

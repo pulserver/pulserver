@@ -2,19 +2,31 @@
  * @file trajectory_cache_reader.cpp
  * @brief Standalone reader for pulseg binary cache.
  *
- * Reads sections from the cache (Stage 1.5c/1.5d -- self-contained, no
- * PSD-internal COMMON/ROTATIONS descriptor walk):
+ * Thin C++ wrapper over the C89 reader pulseg_recon_cache_read()
+ * (csrc/src/recon/pulseg_recon.c, Stage 4 of the vendor-neutral refactor):
+ * read_sequence_cache() calls the C reader and copies its output into the
+ * std:: containers this header's class API has always exposed, so
+ * downstream consumers (pre_compute_trajectories, enrich_ismrmrd_header,
+ * enrich_ismrmrd_acquisition, the SEQDESC waveform factories below) are
+ * unchanged.
+ *
+ * Sections read (see pulseg_recon.h for the authoritative wire-format
+ * contract):
  *   - Section 0 (DEFINITIONS): per-subsequence generic [DEFINITIONS] kv
  *   - Section 6 (TRAJECTORY): kshot library, encoding spaces, table, and a
  *     folded-in rotation-matrix library
  *   - Section 7 (SEQDESC): event lists, per-subsequence RF-def library
- *     (bandwidth/bands/b1sq + compressed shapes) (optional)
+ *     (bandwidth/bands/b1sq + still-compressed shapes)
+ *
+ * TRAJECTORY and SEQDESC are both MANDATORY as of cache format v2.0.0 (D11)
+ * -- a cache missing either is treated as invalid and read_sequence_cache()
+ * throws std::runtime_error. There is no "optional SEQDESC" tolerance
+ * anymore; a cache lacking it is a fixture/writer bug, not a case to
+ * degrade past silently.
  *
  * Section 5 (FREQMOD) is intentionally NOT parsed; off-isocenter shifts are
  * applied PSD-side and data arriving at the recon are already centered.
- * See pulserverlib-tests/SCHEMA.md for the wire format.
- *
- * No dependency on pulserverlib. All integer and float fields are 4 bytes.
+ * See tests/utils/SCHEMA.md for the wire format.
  */
 
 #include "trajectory_cache_reader.h"
@@ -31,114 +43,131 @@
 #include "ismrmrd/version.h"
 #include "ismrmrd/waveform.h"
 
+#include "pulseg.h"
+
 namespace mrdserver
 {
 
     namespace
     {
-        constexpr int32_t CACHE_ENDIAN_MARKER = 0x01020304;
-        constexpr int SECTION_DEFINITIONS = 0;
-        constexpr int SECTION_TRAJECTORY = 6;
-        constexpr int SECTION_SEQUENCEDESCRIPTION = 7;
         constexpr int MAX_BANDS = 8;
 
-        // ---------- byte-swap helpers ----------
+        // ---------- C struct -> C++ struct conversion helpers ----------
 
-        void swap4(void *p)
+        std::map<std::string, std::vector<std::string>> convert_definitions(
+            const pulseg_recon_definitions &d)
         {
-            auto *b = static_cast<uint8_t *>(p);
-            std::swap(b[0], b[3]);
-            std::swap(b[1], b[2]);
-        }
-
-        void swap4_array(void *p, int count)
-        {
-            for (int i = 0; i < count; ++i)
-                swap4(static_cast<uint8_t *>(p) + static_cast<size_t>(i) * 4);
-        }
-
-        // ---------- typed I/O ----------
-
-        bool read4(std::ifstream &f, void *p, int count)
-        {
-            f.read(reinterpret_cast<char *>(p), static_cast<std::streamsize>(count) * 4);
-            return f.good();
-        }
-
-        int read_int(std::ifstream &f, bool do_swap)
-        {
-            int32_t v;
-            if (!read4(f, &v, 1))
-                throw std::runtime_error("unexpected EOF in cache");
-            if (do_swap)
-                swap4(&v);
-            return v;
-        }
-
-        float read_float(std::ifstream &f, bool do_swap)
-        {
-            float v;
-            if (!read4(f, &v, 1))
-                throw std::runtime_error("unexpected EOF in cache");
-            if (do_swap)
-                swap4(&v);
-            return v;
-        }
-
-        /*void skip_ints(std::ifstream &f, int count)
-        {
-            f.seekg(static_cast<std::streamoff>(count) * 4, std::ios::cur);
-            if (!f.good())
-                throw std::runtime_error("unexpected EOF skipping ints");
-        }*/
-
-        // ---------- read the DEFINITIONS section (section 0) ----------
-
-        // Augment-section layout: [num_subsequences][per subseq: num_definitions,
-        // then name/value kv pairs -- see write_definitions() in pulseg_cache.c].
-        // Returns one kv map per subsequence (index == subseq_idx); FOV/Matrix/
-        // NavFOV/NavMatrix are present verbatim as pulseq string entries.
-        std::vector<std::map<std::string, std::vector<std::string>>> read_definitions_section(
-            std::ifstream &f, long section_offset, bool do_swap)
-        {
-            std::vector<std::map<std::string, std::vector<std::string>>> result;
-
-            f.seekg(section_offset, std::ios::beg);
-            if (!f.good())
-                throw std::runtime_error("cannot seek to DEFINITIONS");
-
-            int num_subseq = read_int(f, do_swap);
-            if (num_subseq <= 0)
-                return result;
-            result.resize(static_cast<size_t>(num_subseq));
-
-            for (int s = 0; s < num_subseq; ++s)
+            std::map<std::string, std::vector<std::string>> out;
+            for (int i = 0; i < d.num_definitions; ++i)
             {
-                auto &defs = result[static_cast<size_t>(s)];
-                int num_defs = read_int(f, do_swap);
-                for (int d = 0; d < num_defs; ++d)
-                {
-                    int name_len = read_int(f, do_swap);
-                    std::string name(static_cast<size_t>(name_len), '\0');
-                    f.read(&name[0], name_len);
-                    if (!f.good())
-                        throw std::runtime_error("EOF reading definition name");
-
-                    int value_size = read_int(f, do_swap);
-                    std::vector<std::string> values(static_cast<size_t>(value_size));
-                    for (int v = 0; v < value_size; ++v)
-                    {
-                        int vlen = read_int(f, do_swap);
-                        values[v].resize(static_cast<size_t>(vlen));
-                        f.read(&values[v][0], vlen);
-                        if (!f.good())
-                            throw std::runtime_error("EOF reading definition value");
-                    }
-                    defs[std::move(name)] = std::move(values);
-                }
+                const pulseg__definition &def = d.definitions[i];
+                std::vector<std::string> values;
+                values.reserve(static_cast<size_t>(def.value_size));
+                for (int j = 0; j < def.value_size; ++j)
+                    values.emplace_back(def.value[j] ? def.value[j] : "");
+                out[def.name] = std::move(values);
             }
+            return out;
+        }
 
-            return result;
+        EncodingSpace convert_encoding_space(const pulseg_encoding_space &es)
+        {
+            EncodingSpace out{};
+            out.subseq_idx = es.subseq_idx;
+            out.nav_subseq_offset = es.nav_subseq_offset;
+            out.geometry_tag = es.geometry_tag;
+            auto conv_ll = [](const pulseg_label_limit &ll)
+            { return LabelLimit{ll.min, ll.max}; };
+            out.label_limits.slc = conv_ll(es.label_limits.slc);
+            out.label_limits.phs = conv_ll(es.label_limits.phs);
+            out.label_limits.rep = conv_ll(es.label_limits.rep);
+            out.label_limits.avg = conv_ll(es.label_limits.avg);
+            out.label_limits.seg = conv_ll(es.label_limits.seg);
+            out.label_limits.set = conv_ll(es.label_limits.set);
+            out.label_limits.eco = conv_ll(es.label_limits.eco);
+            out.label_limits.par = conv_ll(es.label_limits.par);
+            out.label_limits.lin = conv_ll(es.label_limits.lin);
+            out.label_limits.acq = conv_ll(es.label_limits.acq);
+            return out;
+        }
+
+        TrajTableEntry convert_table_entry(const pulseg_traj_table_entry &e)
+        {
+            TrajTableEntry out{};
+            out.kx_shot_id = e.kx_shot_id;
+            out.ky_shot_id = e.ky_shot_id;
+            out.kz_shot_id = e.kz_shot_id;
+            out.gx_amplitude = e.gx_amplitude;
+            out.gy_amplitude = e.gy_amplitude;
+            out.gz_amplitude = e.gz_amplitude;
+            out.rotation_id = e.rotation_id;
+            out.slc = e.slc;
+            out.seg = e.seg;
+            out.rep = e.rep;
+            out.avg = e.avg;
+            out.set = e.set;
+            out.eco = e.eco;
+            out.phs = e.phs;
+            out.lin = e.lin;
+            out.par = e.par;
+            out.acq = e.acq;
+            out.flags = static_cast<uint64_t>(e.flags);
+            out.center_sample = e.center_sample;
+            out.sample_time_us = e.sample_time_us;
+            out.encoding_space_ref = e.encoding_space_ref;
+            out.off = e.off;
+            return out;
+        }
+
+        RfShapeSamples convert_rf_shape(const pulseg_recon_rf_shape &s)
+        {
+            RfShapeSamples out;
+            out.num_uncompressed = s.num_uncompressed;
+            if (s.num_samples > 0 && s.samples)
+                out.samples.assign(s.samples, s.samples + s.num_samples);
+            return out;
+        }
+
+        RfDef convert_rf_def(const pulseg_recon_rf_def &d)
+        {
+            RfDef out;
+            out.rf_def_id = d.rf_def_id;
+            out.bandwidth_hz = d.bandwidth_hz;
+            out.num_bands = d.num_bands;
+            for (int b = 0; b < MAX_BANDS; ++b)
+                out.band_freq_offsets_hz[b] = d.band_freq_offsets_hz[b];
+            out.band_bandwidth_hz = d.band_bandwidth_hz;
+            out.total_b1sq_power = d.total_b1sq_power;
+            out.mag = convert_rf_shape(d.mag);
+            out.has_phase = d.has_phase != 0;
+            if (out.has_phase)
+                out.phase = convert_rf_shape(d.phase);
+            out.has_time = d.has_time != 0;
+            if (out.has_time)
+                out.time = convert_rf_shape(d.time);
+            return out;
+        }
+
+        SeqEvent convert_seq_event(const pulseg_seq_event &ev)
+        {
+            SeqEvent out{};
+            out.type = static_cast<SeqEventType>(ev.type);
+            out.timestamp_us = ev.timestamp_us;
+            for (int p = 0; p < 7; ++p)
+                out.params[p] = ev.params[p];
+            return out;
+        }
+
+        RfShapeTuple convert_rf_shape_tuple(const pulseg_recon_rf_shape_tuple &t)
+        {
+            RfShapeTuple out{};
+            out.tuple_id = t.tuple_id;
+            out.rf_def_id = t.rf_def_id;
+            out.rf_shim_id = t.rf_shim_id;
+            out.ss_grad_amp_hz_per_m = t.ss_grad_amp_hz_per_m;
+            out.slice_thickness_mm = t.slice_thickness_mm;
+            out.slice_selective = t.slice_selective;
+            return out;
         }
 
     } // anonymous namespace
@@ -149,351 +178,85 @@ namespace mrdserver
     {
         SequenceCache cache;
 
-        std::ifstream f(cache_path, std::ios::binary);
-        if (!f.is_open())
-            return cache; // empty if file not found
-
-        // Read header
-        int32_t marker;
-        if (!read4(f, &marker, 1))
-            return cache;
-
-        bool do_swap = false;
-        if (marker != CACHE_ENDIAN_MARKER)
+        // Preserve the historical "file not found -> empty cache, no throw"
+        // contract without needing the C API's internal error-code header.
         {
-            swap4(&marker);
-            if (marker != CACHE_ENDIAN_MARKER)
-                throw std::runtime_error("invalid cache file: bad endian marker");
-            do_swap = true;
+            std::ifstream probe(cache_path, std::ios::binary);
+            if (!probe.is_open())
+                return cache;
         }
 
-        int version_major = read_int(f, do_swap);
-        int version_minor = read_int(f, do_swap);
-        int version_revision = read_int(f, do_swap);
-        int vendor = read_int(f, do_swap);
-        int stored_size = read_int(f, do_swap);
-        int num_sections = read_int(f, do_swap);
+        pulseg_recon_cache c_cache;
+        char diag[256];
+        const int status = pulseg_recon_cache_read(&c_cache, cache_path.c_str(), diag, sizeof(diag));
+        if (status != PULSEG_SUCCESS)
+            throw std::runtime_error(std::string("pulseg_recon_cache_read failed: ") + diag);
 
-        (void)version_major;
-        (void)version_minor;
-        (void)version_revision;
-        (void)vendor;
-        (void)stored_size;
-
-        if (num_sections <= 0 || num_sections > 16)
-            throw std::runtime_error("invalid cache: bad num_sections");
-
-        // Read section index
-        struct SectionEntry
+        // Section 0 -- per-subsequence [DEFINITIONS] (absent on legacy
+        // pre-Section-0 caches; num_subsequences == 0 in that case).
+        cache.definitions_by_subseq.reserve(static_cast<size_t>(c_cache.num_subsequences));
+        for (int s = 0; s < c_cache.num_subsequences; ++s)
         {
-            int id, offset, size;
-        };
-        std::vector<SectionEntry> sections(static_cast<size_t>(num_sections));
-        for (int i = 0; i < num_sections; ++i)
-        {
-            sections[i].id = read_int(f, do_swap);
-            sections[i].offset = read_int(f, do_swap);
-            sections[i].size = read_int(f, do_swap);
-        }
-
-        // Find sections 0 (DEFINITIONS), 6 (TRAJECTORY), 7 (SEQDESC)
-        const SectionEntry *definitions_section = nullptr;
-        const SectionEntry *traj_section = nullptr;
-        const SectionEntry *seqdesc_section = nullptr;
-        for (auto &s : sections)
-        {
-            if (s.id == SECTION_DEFINITIONS)
-                definitions_section = &s;
-            if (s.id == SECTION_TRAJECTORY)
-                traj_section = &s;
-            if (s.id == SECTION_SEQUENCEDESCRIPTION)
-                seqdesc_section = &s;
-        }
-
-        if (!traj_section)
-            return cache; // no trajectory data
-
-        // Per-subsequence [DEFINITIONS] kv (FOV/Matrix/NavFOV/NavMatrix/TR/TE/
-        // TI/FlipAngle/... as pulseq strings) -- self-contained, no COMMON walk.
-        if (definitions_section)
-        {
-            cache.definitions_by_subseq = read_definitions_section(
-                f, definitions_section->offset, do_swap);
-            // Also merge-concatenate into the flat map for the scan-global
+            auto defs = convert_definitions(c_cache.definitions_by_subseq[s]);
+            // Merge-concatenate into the flat map for the scan-global
             // TR/TE/TI/FlipAngle reduction in enrich_ismrmrd_header.
-            for (const auto &defs : cache.definitions_by_subseq)
+            for (const auto &kv : defs)
             {
-                for (const auto &kv : defs)
-                {
-                    auto &g = cache.definitions[kv.first];
-                    g.insert(g.end(), kv.second.begin(), kv.second.end());
-                }
+                auto &g = cache.definitions[kv.first];
+                g.insert(g.end(), kv.second.begin(), kv.second.end());
             }
+            cache.definitions_by_subseq.push_back(std::move(defs));
         }
 
-        // Read trajectory section
-        f.seekg(traj_section->offset, std::ios::beg);
-        if (!f.good())
-            throw std::runtime_error("cannot seek to TRAJECTORY section");
-
-        // Kshot library
-        int num_shots = read_int(f, do_swap);
-        cache.kshots.resize(static_cast<size_t>(num_shots));
-        for (int i = 0; i < num_shots; ++i)
+        // Section 6 -- TRAJECTORY (mandatory).
+        const pulseg_trajectory &traj = c_cache.trajectory;
+        cache.kshots.resize(static_cast<size_t>(traj.kshots.num_shots));
+        for (int i = 0; i < traj.kshots.num_shots; ++i)
         {
-            int ns = read_int(f, do_swap);
-            cache.kshots[i].k.resize(static_cast<size_t>(ns));
-            if (ns > 0)
-            {
-                if (!read4(f, cache.kshots[i].k.data(), ns))
-                    throw std::runtime_error("EOF reading kshot data");
-                if (do_swap)
-                    swap4_array(cache.kshots[i].k.data(), ns);
-            }
+            const pulseg_kshot &k = traj.kshots.shots[i];
+            if (k.num_samples > 0 && k.k)
+                cache.kshots[static_cast<size_t>(i)].k.assign(k.k, k.k + k.num_samples);
         }
+        cache.encoding_spaces.reserve(static_cast<size_t>(traj.num_encoding_spaces));
+        for (int i = 0; i < traj.num_encoding_spaces; ++i)
+            cache.encoding_spaces.push_back(convert_encoding_space(traj.encoding_spaces[i]));
+        cache.table.reserve(static_cast<size_t>(traj.num_adc_events));
+        for (int i = 0; i < traj.num_adc_events; ++i)
+            cache.table.push_back(convert_table_entry(traj.table[i]));
+        cache.rotations.resize(static_cast<size_t>(traj.num_rotations));
+        for (int i = 0; i < traj.num_rotations; ++i)
+            std::copy(traj.rotation_matrices[i], traj.rotation_matrices[i] + 9,
+                      cache.rotations[static_cast<size_t>(i)].data());
 
-        // Encoding spaces
-        int num_es = read_int(f, do_swap);
-        cache.encoding_spaces.resize(static_cast<size_t>(num_es));
-        for (int i = 0; i < num_es; ++i)
+        // Section 7 -- SEQDESC (mandatory).
+        cache.seq_params.min_te_us = c_cache.seq_params.min_te_us;
+        cache.seq_params.min_tr_us = c_cache.seq_params.min_tr_us;
+        cache.seq_params.max_tr_us = c_cache.seq_params.max_tr_us;
+        cache.seq_params.max_flip_angle_deg = c_cache.seq_params.max_flip_angle_deg;
+        cache.seq_params.total_scan_time_us = c_cache.seq_params.total_scan_time_us;
+        cache.seq_params.num_subseqs = c_cache.seq_params.num_subseqs;
+
+        cache.seq_descs.reserve(static_cast<size_t>(c_cache.num_seq_descs));
+        for (int ss = 0; ss < c_cache.num_seq_descs; ++ss)
         {
-            auto &es = cache.encoding_spaces[i];
-            es.subseq_idx = read_int(f, do_swap);
-            es.nav_subseq_offset = read_int(f, do_swap);
-            es.geometry_tag = read_int(f, do_swap);
-            // Per-encoding-space label limits (10 × {min,max} = 20 ints)
-            {
-                LabelLimit ll[10];
-                if (!read4(f, ll, 20))
-                    throw std::runtime_error("EOF reading per-ES label_limits");
-                if (do_swap)
-                    swap4_array(ll, 20);
-                es.label_limits.slc = ll[0];
-                es.label_limits.phs = ll[1];
-                es.label_limits.rep = ll[2];
-                es.label_limits.avg = ll[3];
-                es.label_limits.seg = ll[4];
-                es.label_limits.set = ll[5];
-                es.label_limits.eco = ll[6];
-                es.label_limits.par = ll[7];
-                es.label_limits.lin = ll[8];
-                es.label_limits.acq = ll[9];
-            }
+            const pulseg_recon_seq_desc &c_sd = c_cache.seq_descs[ss];
+            SequenceDescription sd;
+            sd.subseq_idx = c_sd.subseq_idx;
+            sd.tr_duration_us = c_sd.tr_duration_us;
+            sd.events.reserve(static_cast<size_t>(c_sd.num_events));
+            for (int e = 0; e < c_sd.num_events; ++e)
+                sd.events.push_back(convert_seq_event(c_sd.events[e]));
+            sd.rf_defs.reserve(static_cast<size_t>(c_sd.num_rf_defs));
+            for (int r = 0; r < c_sd.num_rf_defs; ++r)
+                sd.rf_defs.push_back(convert_rf_def(c_sd.rf_defs[r]));
+            sd.rf_shape_tuples.reserve(static_cast<size_t>(c_sd.num_rf_shape_tuples));
+            for (int t = 0; t < c_sd.num_rf_shape_tuples; ++t)
+                sd.rf_shape_tuples.push_back(convert_rf_shape_tuple(c_sd.rf_shape_tuples[t]));
+            cache.seq_descs.push_back(std::move(sd));
         }
+        cache.has_seq_desc = true;
 
-        // Trajectory table
-        int num_entries = read_int(f, do_swap);
-        cache.table.resize(static_cast<size_t>(num_entries));
-        for (int i = 0; i < num_entries; ++i)
-        {
-            auto &e = cache.table[i];
-            e.kx_shot_id = read_int(f, do_swap);
-            e.ky_shot_id = read_int(f, do_swap);
-            e.kz_shot_id = read_int(f, do_swap);
-            e.gx_amplitude = read_float(f, do_swap);
-            e.gy_amplitude = read_float(f, do_swap);
-            e.gz_amplitude = read_float(f, do_swap);
-            e.rotation_id = read_int(f, do_swap);
-            e.slc = read_int(f, do_swap);
-            e.seg = read_int(f, do_swap);
-            e.rep = read_int(f, do_swap);
-            e.avg = read_int(f, do_swap);
-            e.set = read_int(f, do_swap);
-            e.eco = read_int(f, do_swap);
-            e.phs = read_int(f, do_swap);
-            e.lin = read_int(f, do_swap);
-            e.par = read_int(f, do_swap);
-            e.acq = read_int(f, do_swap);
-            // New fields: flags (2 ints), center_sample, sample_time_us, encoding_space_ref
-            {
-                uint32_t flags_lo = static_cast<uint32_t>(read_int(f, do_swap));
-                uint32_t flags_hi = static_cast<uint32_t>(read_int(f, do_swap));
-                e.flags = (static_cast<uint64_t>(flags_hi) << 32) | static_cast<uint64_t>(flags_lo);
-            }
-            e.center_sample = read_int(f, do_swap);
-            e.sample_time_us = read_float(f, do_swap);
-            e.encoding_space_ref = read_int(f, do_swap);
-            e.off = read_int(f, do_swap);
-        }
-
-        // Stage 1.5c: rotation-matrix library, folded into TRAJECTORY itself
-        // (table[].rotation_id indexes this directly -- no ROTATIONS-section read).
-        {
-            int num_rotations = read_int(f, do_swap);
-            cache.rotations.resize(static_cast<size_t>(num_rotations));
-            for (int r = 0; r < num_rotations; ++r)
-            {
-                if (!read4(f, cache.rotations[static_cast<size_t>(r)].data(), 9))
-                    throw std::runtime_error("EOF reading folded-in rotation library");
-                if (do_swap)
-                    swap4_array(cache.rotations[static_cast<size_t>(r)].data(), 9);
-            }
-        }
-
-        // Read Section 7 (SEQDESC) — sequence description (optional; graceful skip if absent)
-        if (seqdesc_section)
-        {
-            f.seekg(seqdesc_section->offset, std::ios::beg);
-            if (f.good())
-            {
-                try
-                {
-                    // Sequence parameters header
-                    auto &sp = cache.seq_params;
-                    sp.min_te_us = read_float(f, do_swap);
-                    sp.min_tr_us = read_float(f, do_swap);
-                    sp.max_tr_us = read_float(f, do_swap);
-                    sp.max_flip_angle_deg = read_float(f, do_swap);
-                    sp.total_scan_time_us = read_float(f, do_swap);
-                    sp.num_subseqs = read_int(f, do_swap);
-                    read_int(f, do_swap);
-                    read_int(f, do_swap);
-                    read_int(f, do_swap); // reserved
-
-                    cache.seq_descs.resize(static_cast<size_t>(sp.num_subseqs));
-
-                    for (int ss = 0; ss < sp.num_subseqs; ++ss)
-                    {
-                        auto &sd = cache.seq_descs[static_cast<size_t>(ss)];
-                        sd.subseq_idx = read_int(f, do_swap);
-                        sd.tr_duration_us = read_float(f, do_swap);
-
-                        // Events (flat format: type + timestamp_us + params[7])
-                        int num_rows = read_int(f, do_swap);
-                        sd.events.resize(static_cast<size_t>(num_rows));
-                        for (int e2 = 0; e2 < num_rows; ++e2)
-                        {
-                            auto &ev = sd.events[static_cast<size_t>(e2)];
-                            ev.type = static_cast<SeqEventType>(read_int(f, do_swap));
-                            ev.timestamp_us = read_float(f, do_swap);
-                            for (int p = 0; p < 7; ++p)
-                                ev.params[p] = read_float(f, do_swap);
-                        }
-
-                        // Per-subsequence RF-definition library (Stage 1.5b/1.5d):
-                        // num_rf_defs, then per def: rf_def_id, bandwidth_hz,
-                        // num_bands, band_freq_offsets_hz[8], band_bandwidth_hz,
-                        // total_b1sq, mag shape {num_uncompressed,num_samples,
-                        // samples[]}, has_phase[+phase shape], has_time[+time shape].
-                        // See sd_write_rf_def_library() in pulseg_cache_seqdesc.c.
-                        {
-                            auto read_shape = [&](RfShapeSamples &shape)
-                            {
-                                shape.num_uncompressed = read_int(f, do_swap);
-                                int ns = read_int(f, do_swap);
-                                shape.samples.resize(static_cast<size_t>(ns));
-                                if (ns > 0)
-                                {
-                                    if (!read4(f, shape.samples.data(), ns))
-                                        throw std::runtime_error("EOF reading RF shape samples");
-                                    if (do_swap)
-                                        swap4_array(shape.samples.data(), ns);
-                                }
-                            };
-
-                            int num_rf_defs = read_int(f, do_swap);
-                            sd.rf_defs.resize(static_cast<size_t>(num_rf_defs));
-                            for (int rd = 0; rd < num_rf_defs; ++rd)
-                            {
-                                auto &def = sd.rf_defs[static_cast<size_t>(rd)];
-                                def.rf_def_id = read_int(f, do_swap);
-                                def.bandwidth_hz = read_float(f, do_swap);
-                                def.num_bands = read_int(f, do_swap);
-                                for (int b = 0; b < MAX_BANDS; ++b)
-                                    def.band_freq_offsets_hz[b] = read_float(f, do_swap);
-                                def.band_bandwidth_hz = read_float(f, do_swap);
-                                def.total_b1sq_power = read_float(f, do_swap);
-
-                                read_shape(def.mag);
-
-                                def.has_phase = read_int(f, do_swap) != 0;
-                                if (def.has_phase)
-                                    read_shape(def.phase);
-
-                                def.has_time = read_int(f, do_swap) != 0;
-                                if (def.has_time)
-                                    read_shape(def.time);
-                            }
-                        }
-
-                        // Build RF shape tuples by deduplicating
-                        // (rf_def_id, rf_shim_id, ss_grad_amp_hz_per_m) triplets.
-                        // Use a map from (def_id, shim_id, amp_bits) -> RfShapeTuple.
-                        // slice_thickness_mm = bandwidth_hz / ss_grad_amp * 1e3;
-                        // slice_selective    = (slice_thickness_mm < 10.0)
-                        struct RfKey
-                        {
-                            int rf_def_id;
-                            int rf_shim_id;
-                            float ss_grad_amp;
-                            bool operator<(const RfKey &o) const
-                            {
-                                if (rf_def_id != o.rf_def_id)
-                                    return rf_def_id < o.rf_def_id;
-                                if (rf_shim_id != o.rf_shim_id)
-                                    return rf_shim_id < o.rf_shim_id;
-                                return ss_grad_amp < o.ss_grad_amp;
-                            }
-                        };
-                        std::map<RfKey, int> seen;
-                        sd.rf_shape_tuples.clear();
-                        for (const auto &ev : sd.events)
-                        {
-                            if (ev.type != SEQ_EVENT_RF)
-                                continue;
-                            RfKey key{
-                                static_cast<int>(ev.params[0]), // rf_def_id
-                                static_cast<int>(ev.params[5]), // rf_shim_id
-                                ev.params[6]                    // ss_grad_amp
-                            };
-                            if (seen.count(key))
-                                continue;
-                            int tid = static_cast<int>(sd.rf_shape_tuples.size());
-                            seen[key] = tid;
-
-                            RfShapeTuple tup{};
-                            tup.tuple_id = tid;
-                            tup.rf_def_id = key.rf_def_id;
-                            tup.rf_shim_id = key.rf_shim_id;
-                            tup.ss_grad_amp_hz_per_m = key.ss_grad_amp;
-
-                            // Compute slice thickness if possible. bandwidth_hz
-                            // now comes from this subsequence's own RF-def
-                            // library (Stage 1.5d) -- rf_def_id indexes it
-                            // directly (array index == id, see sd_write_rf_def_library).
-                            float bw = 0.0f;
-                            if (key.rf_def_id >= 0 &&
-                                key.rf_def_id < static_cast<int>(sd.rf_defs.size()))
-                            {
-                                bw = sd.rf_defs[static_cast<size_t>(key.rf_def_id)].bandwidth_hz;
-                            }
-
-                            if (key.ss_grad_amp > 0.0f && bw > 0.0f)
-                            {
-                                tup.slice_thickness_mm = (bw / key.ss_grad_amp) * 1000.0f;
-                                tup.slice_selective = (tup.slice_thickness_mm < 10.0f) ? 1 : 0;
-                            }
-                            else
-                            {
-                                tup.slice_thickness_mm = 0.0f;
-                                tup.slice_selective = 0;
-                            }
-
-                            sd.rf_shape_tuples.push_back(std::move(tup));
-                        }
-                    }
-
-                    cache.has_seq_desc = true;
-                }
-                catch (...)
-                {
-                    // Sequence description is optional — degrade gracefully
-                    cache.seq_descs.clear();
-                    cache.has_seq_desc = false;
-                }
-            }
-        }
-
+        pulseg_recon_cache_free(&c_cache);
         return cache;
     }
 

@@ -1,0 +1,47 @@
+DEFINITIONS subseq_count=1
+subseq[0]:
+  AdcRasterTime=2e-06
+  BlockDurationRaster=2e-05
+  FOV=0.22,0.22,0.015
+  GradientRasterTime=2e-05
+  NumPartitions=3
+  PeakRF=25
+  RadiofrequencyRasterTime=2e-06
+  RequiredExtensions=ROTATIONS
+  TR=0.03792
+  TotalDuration=0.11376
+KSHOTS count=3
+shot[0]: n=64 [0.171106011,0.272310972,-1.02324855,-2.31797504,-1.35086274,1.93940115,4.48420811,2.94633579,-2.29469132,-6.54052401,-4.98309326,2.04330969,8.3602457,7.36665249,-1.16281164,-9.82354069,-9.98664761,-0.344874263,10.8215103,12.7203121,2.45319819,-11.2599163,-15.4362984,-5.11139584,11.0626326,17.9989109,8.24574757,-10.1744204,-20.2723751,-11.7613964,8.56329918,22.1253052,15.5449362,-6.22213078,-23.4349995,-19.4674969,3.16960454,24.0916901,23.3884811,0.549679518,-24.0022774,-27.1594524,-4.865592,23.0939903,30.6287365,9.68403053,-21.3170872,-33.6457214,-14.8886833,18.6474953,36.0657692,20.3440571,-15.0881739,-37.7545013,-25.8984699,10.6704159,38.5925636,31.3883648,-5.45360613,-38.47929,-36.6421127,-0.47490263,37.3369064,41.4852524]
+shot[1]: n=64 [0.0552357137,0.85501498,1.24961698,-0.263526797,-2.73532534,-3.23116589,-0.137671947,4.28976345,5.45928001,1.1435647,-5.41316652,-7.81257868,-2.72509289,6.01590919,10.1624823,4.82969952,-6.02703619,-12.3774137,-7.38278961,5.39687157,14.327137,10.2898979,-4.09898186,-15.8870611,-13.4394073,2.13152146,16.9424763,16.7058926,0.482214212,-17.3924828,-19.9538536,-3.69389987,17.1536484,23.0418434,7.43108797,-16.1631374,-25.8268299,-11.5988216,14.3813229,28.1686573,16.0819016,-11.7938137,-29.9346027,-20.7479134,8.41265011,31.0036621,25.4506149,-4.27698469,-31.2707844,-30.0340347,-0.547244549,30.6505642,34.33675,5.96823168,-29.0806103,-38.1965523,-11.8700581,26.5242691,41.4552307,18.1152058,-22.9726753,-43.963253,-24.5475578,18.4463043]
+shot[2]: n=64 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+ENCODING_SPACES count=1
+es[0]: subseq_idx=0 nav_subseq_offset=0 geometry_tag=0 slc=(0,0) phs=(0,0) rep=(0,0) avg=(0,0) seg=(0,0) set=(0,0) eco=(0,0) par=(0,0) lin=(0,0) acq=(0,0)
+TABLE count=6
+row[0]: kx=0 ky=1 kz=2 gx=550994 gy=566952 gz=170455 rot=0 slc=0 seg=0 rep=0 avg=0 set=0 eco=0 phs=0 lin=0 par=0 acq=0 flags=0 center_sample=0 sample_time_us=80 encoding_space_ref=0 off=0
+row[1]: kx=0 ky=1 kz=2 gx=550994 gy=566952 gz=170455 rot=0 slc=0 seg=0 rep=0 avg=0 set=0 eco=0 phs=0 lin=0 par=0 acq=0 flags=0 center_sample=32 sample_time_us=80 encoding_space_ref=0 off=0
+row[2]: kx=2 ky=2 kz=2 gx=550994 gy=566952 gz=-0 rot=0 slc=0 seg=0 rep=0 avg=0 set=0 eco=0 phs=0 lin=0 par=0 acq=0 flags=0 center_sample=32 sample_time_us=80 encoding_space_ref=0 off=0
+row[3]: kx=2 ky=2 kz=2 gx=550994 gy=566952 gz=-0 rot=0 slc=0 seg=0 rep=0 avg=0 set=0 eco=0 phs=0 lin=0 par=0 acq=0 flags=0 center_sample=32 sample_time_us=80 encoding_space_ref=0 off=0
+row[4]: kx=2 ky=2 kz=2 gx=550994 gy=566952 gz=-170455 rot=0 slc=0 seg=0 rep=0 avg=0 set=0 eco=0 phs=0 lin=0 par=0 acq=0 flags=0 center_sample=32 sample_time_us=80 encoding_space_ref=0 off=0
+row[5]: kx=2 ky=2 kz=2 gx=550994 gy=566952 gz=-170455 rot=0 slc=0 seg=0 rep=0 avg=0 set=0 eco=0 phs=0 lin=0 par=0 acq=0 flags=16777216 center_sample=32 sample_time_us=80 encoding_space_ref=0 off=0
+ROTATIONS count=1
+rot[0]: [-0.00917565823,0.060134232,0.998148203,0.988576829,-0.149627447,0.0181019902,0.150438875,0.986912191,-0.0580744743]
+SEQ_PARAMS has_seq_desc=1 min_te_us=1000 min_tr_us=37920 max_tr_us=37920 max_flip_angle_deg=180 total_scan_time_us=113760 num_subseqs=1
+SEQ_DESCS count=1
+seqdesc[0]: subseq_idx=0 tr_duration_us=37920
+  events count=10
+  event[0]: type=1 ts=10000 params=[0,3,25,0,0,-1,0]
+  event[1]: type=0 ts=20000 params=[0,0,0,0,0,0,0]
+  event[2]: type=0 ts=21000 params=[0,0,0,0,0,0,0]
+  event[3]: type=1 ts=22100 params=[1,1,13.8888998,0,0,-1,0]
+  event[4]: type=2 ts=23100 params=[1,0,0,0,0,0,0]
+  event[5]: type=0 ts=28260 params=[0,0,0,0,0,0,0]
+  event[6]: type=1 ts=30260 params=[1,1,13.8888998,1.46607995,0,-1,0]
+  event[7]: type=2 ts=31260 params=[1,1.46607995,0,0,0,0,0]
+  event[8]: type=0 ts=36420 params=[0,0,0,0,0,0,0]
+  event[9]: type=0 ts=37420 params=[0,0,0,0,0,0,0]
+  rf_defs count=2
+  rf_def[0]: id=0 bandwidth_hz=156 num_bands=1 band_freq_offsets_hz=[0,0,0,0,0,0,0,0] band_bandwidth_hz=156 total_b1sq_power=0.020002 mag(nunc=2 n=2 samples=[1,1]) has_phase=1 phase(nunc=2 n=2 samples=[0,0]) has_time=1 time(nunc=2 n=2 samples=[0,10000])
+  rf_def[1]: id=1 bandwidth_hz=1559.99988 num_bands=1 band_freq_offsets_hz=[0,0,0,0,0,0,0,0] band_bandwidth_hz=1559.99988 total_b1sq_power=0.00200200011 mag(nunc=2 n=2 samples=[1,1]) has_phase=1 phase(nunc=2 n=2 samples=[0,0]) has_time=1 time(nunc=2 n=2 samples=[0,1000])
+  rf_shape_tuples count=2
+  tuple[0]: id=0 rf_def_id=0 rf_shim_id=-1 ss_grad_amp_hz_per_m=0 slice_thickness_mm=0 slice_selective=0
+  tuple[1]: id=1 rf_def_id=1 rf_shim_id=-1 ss_grad_amp_hz_per_m=0 slice_thickness_mm=0 slice_selective=0

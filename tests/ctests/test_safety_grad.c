@@ -310,7 +310,7 @@ static void assert_canonical_sequence_matches_expected(
         expected = n_main;
     }
 
-    ncanon = pulseg_get_canonical_segment_sequence(coll, subseq_idx, NULL);
+    ncanon = pulseg_get_canonical_segment_sequence(coll, NULL, subseq_idx);
     mu_assert_int_eq(expected, ncanon);
 
     if (ncanon > 0) {
@@ -318,7 +318,7 @@ static void assert_canonical_sequence_matches_expected(
         mu_assert(canon_ids != NULL, "malloc failed for canonical segment ids");
     }
 
-    ncanon = pulseg_get_canonical_segment_sequence(coll, subseq_idx, canon_ids);
+    ncanon = pulseg_get_canonical_segment_sequence(coll, canon_ids, subseq_idx);
     mu_assert_int_eq(expected, ncanon);
 
     if (expect_full_pass) {

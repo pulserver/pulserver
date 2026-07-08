@@ -293,11 +293,11 @@ extern "C"
     int pulseg_protocol_find(const pulseg_protocol *p, int param_id);
 
     int pulseg_protocol_get_float(const pulseg_protocol *p,
-                                     int param_id, float *out);
+                                     float *out, int param_id);
     int pulseg_protocol_get_int(const pulseg_protocol *p,
-                                   int param_id, int *out);
+                                   int *out, int param_id);
     int pulseg_protocol_get_bool(const pulseg_protocol *p,
-                                    int param_id, int *out);
+                                    int *out, int param_id);
 
     int pulseg_protocol_set_float(pulseg_protocol *p,
                                      int param_id, float value);
@@ -307,7 +307,7 @@ extern "C"
                                     int param_id, int value);
 
     int pulseg_protocol_get_stringlist(const pulseg_protocol *p,
-                                          int param_id, int *idx_out);
+                                          int *idx_out, int param_id);
     int pulseg_protocol_set_stringlist(pulseg_protocol *p,
                                           int param_id, int idx,
                                           const char *options);

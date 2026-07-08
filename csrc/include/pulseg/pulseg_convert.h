@@ -67,7 +67,7 @@ extern "C"
      *
      * Allocates and populates @p out with the event list, RF shape tuples, shim
      * definitions, and composite RF group annotations for @p subseq_idx.
-     * Call pulseg_free_sequence_description() when done.
+     * Call pulseg_sequence_description_free() when done.
      *
      * @param[out] out        Caller-allocated descriptor to fill.
      * @param[in]  coll       Loaded pulseg collection.
@@ -85,7 +85,7 @@ extern "C"
      *
      * @param[in,out] desc  Descriptor whose inner pointers to free.
      */
-    void pulseg_free_sequence_description(pulseg_sequence_description *desc);
+    void pulseg_sequence_description_free(pulseg_sequence_description *desc);
 
     /**
      * @brief Compute scan-global sequence parameters from all loaded subsequences.
