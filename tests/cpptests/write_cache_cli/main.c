@@ -22,6 +22,23 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Vendor RF-stats stub (F10.3): pulseg_dedup now fails closed when a
+ * vendor is declared without a callback wired. This CLI only produces
+ * cache fixtures (opts.vendor comment above: "we are not validating the
+ * .seq"), so a no-op stat is correct here -- it reproduces the vendor_stat
+ * == {0,0,0,0} that this CLI always emitted before F10.3 (no callback was
+ * ever wired), keeping every .pge fixture byte-identical. */
+static int write_cache_stub_rf_stats_cb(void *ctx, const pulseg_rf_view *rf, float out_stat[4])
+{
+    (void)ctx;
+    (void)rf;
+    out_stat[0] = 0.0f;
+    out_stat[1] = 0.0f;
+    out_stat[2] = 0.0f;
+    out_stat[3] = 0.0f;
+    return 0;
+}
+
 #define CHECK(rc, diag, label)                                         \
     do                                                                 \
     {                                                                  \
@@ -91,6 +108,7 @@ int main(int argc, char **argv)
      * we are not validating the .seq, only producing the cache.
      * vendor = GEHC: only GEHC label-parsing is currently implemented. */
     opts.vendor = PULSEG_VENDOR_GEHC;
+    opts.vendor_rf_stats_fn = write_cache_stub_rf_stats_cb;
     /* GE label->column convention (D3): col0=LIN, col1=SLC, col2=ECO
      * (state-array indices 8,0,6). The public default is identity
      * {0,1,2}; this CLI reproduces GEHC-flavored truth fixtures, so it

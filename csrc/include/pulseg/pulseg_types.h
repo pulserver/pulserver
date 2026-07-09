@@ -911,6 +911,26 @@ typedef struct pulseg_rf_shim_def
 #define PULSEG_RF_SHIM_DEF_INIT {0, {0}, {0}}
 
 /* ================================================================== */
+/*  RF event (per-occurrence identity, for pTx SAR accumulation)       */
+/* ================================================================== */
+
+/**
+ * @brief Identity of one RF occurrence in the canonical TR, index-aligned
+ * with pulseg_get_rf_array().
+ *
+ * Returned by pulseg_get_rf_event_array().
+ */
+typedef struct pulseg_rf_event
+{
+    int rf_def_id;      /**< local RF definition index within subsequence */
+    float amplitude_hz; /**< per-event |amplitude| from rf_table (Hz)     */
+    int rf_shim_id;     /**< local shim index, -1 if none                 */
+    int num_channels;   /**< channels in the RF definition waveform (>=1) */
+} pulseg_rf_event;
+
+#define PULSEG_RF_EVENT_INIT {-1, 0.0f, -1, 1}
+
+/* ================================================================== */
 /*  K-space trajectory types                                          */
 /* ================================================================== */
 

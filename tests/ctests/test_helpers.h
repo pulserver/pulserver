@@ -185,5 +185,6 @@ int test_rf_stats_main(void);
 int test_sequences_main(void);
 int test_io_main(void);
 int test_recon_main(void);
+int test_ptx_getters_main(void);
 
 #endif /* TEST_HELPERS_H */

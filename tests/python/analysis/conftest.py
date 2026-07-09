@@ -47,7 +47,8 @@ REPRESENTATIVE_SEQUENCE_FILES = [
 
 @pytest.fixture(scope="session")
 def expected_data_dir() -> Path:
-    return Path(__file__).resolve().parents[1] / "utils" / "expected"
+    # tests/python/analysis/conftest.py -> parents[2] = tests/
+    return Path(__file__).resolve().parents[2] / "utils" / "expected"
 
 
 @pytest.fixture(scope="session")

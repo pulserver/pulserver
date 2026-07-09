@@ -275,6 +275,20 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
  * magnitude — roughly amp_Hz_per_m × h(f) × N_events. */
 #define SA_AMPLITUDE_SAFETY 1.0e6f
 
+/** Minimum upper frequency (Hz) for the structural analysis grid, decoupled
+ * from the forbidden-band range. Both normalizers used by candidate selection
+ * — the relative gate (SA_ANALYTICAL_GATE_FRAC) and the FFT peak-promotion
+ * threshold (SA_FFT_PROMOTION_POWER_FRAC) — are taken over the PEAK spectral
+ * content in [f1, max_freq]. If max_freq is clamped to just above the top
+ * band, a sequence whose dominant gradient spectral feature sits above the
+ * band (e.g. a plain GRE's slice/readout/spoiler edges) gets a deflated
+ * normalizer and spuriously promotes weak in-band content. Analyze at least up
+ * to the validated plotting-path default (grad_spectrum max_frequency = 3000
+ * Hz) so the normalizers see the true dominant peak. This only widens the
+ * NORMALIZATION window; the candidate→forbidden-band comparison stays
+ * band-restricted, so nothing outside a band can ever be flagged. */
+#define SA_MIN_ANALYSIS_FREQ_HZ 3000.0f
+
 /**
  * A gradient event within the canonical TR.
  * Each event is a single waveform (or sub-event from decomposed arbitrary)
@@ -639,8 +653,11 @@ static int sa_compute_fft_response(
         memcpy(uniform_vals, wave_vals, (size_t)n_uniform * sizeof(float));
     }
 
-    /* Step 2: zero-pad to next power of 2 */
-    nfft = (int)pulseg__next_pow2((size_t)n_uniform);
+    /* Step 2: zero-pad to 4x next power of 2 (F7: 1x next_pow2 undershoots a
+     * narrow spectral peak by up to ~36% via rectangular-window half-bin
+     * scalloping when linearly interpolating |F| between bins; 4x drops
+     * interpolation error to ~2%. fidall independently zero-fills 7x.) */
+    nfft = 4 * (int)pulseg__next_pow2((size_t)n_uniform);
     if (nfft < n_uniform)
         nfft = n_uniform;
     nfreq = nfft / 2 + 1;
@@ -1781,9 +1798,13 @@ static int sa_check_structural_violations(
                     if (cur_sq <= prev_sq || cur_sq <= next_sq)
                         continue;
 
-                    /* FFT local max — find nearest TR harmonic index */
+                    /* FFT local max — find nearest TR harmonic index.
+                     * eval_freqs[i] = (i+1)*f1 (harmonic m = index m-1), so
+                     * round-to-nearest-harmonic then shift by -1 (F4: the
+                     * previous (int) truncation mapped a peak exactly on
+                     * harmonic m to index m instead of m-1). */
                     f_peak = spectra->freq_min_hz + (float)fi * spectra->freq_spacing_hz;
-                    m_nearest = (int)(f_peak / tr_f1_byp);
+                    m_nearest = (int)(f_peak / tr_f1_byp + 0.5f) - 1;
                     if (m_nearest >= 0 && m_nearest < n_tr_harmonics)
                         fft_bypass_set_ax[ax][m_nearest] = 1;
                 }
@@ -2388,9 +2409,12 @@ static int calc_mech_resonances_from_uniform(
     spectra->num_freq_bins = 0;
     spectra->num_instances = num_trs;
 
-    /* Full-TR magnitude spectrum (display-only).  Only computed when the
-     * caller requests it via target_spectral_resolution_hz > 0; the
-     * safety-check path passes 0.0f and skips this step entirely. */
+    /* Full-TR magnitude spectrum. Only computed when the caller requests it
+     * via target_spectral_resolution_hz > 0. The plotting path always
+     * requests it; the safety-check path (pulseg_check_safety) requests it
+     * too whenever forbidden bands are configured (band-derived resolution
+     * and max frequency — F1 Option B) and skips it (passes 0.0f) only when
+     * there are no bands to check. */
     compute_full_spectrum = (target_spectral_resolution_hz > 0.0f);
     if (compute_full_spectrum)
     {
@@ -2518,7 +2542,13 @@ static void pulseg__select_canonical_tr_window(
     *start_block = trd->num_prep_blocks + trd->imaging_tr_start;
     *block_count = trd->tr_size;
     *amplitude_mode = PULSEG_AMP_MAX_POS;
-    *num_instances = trd->num_trs;
+    /* F8.2: align with pulseg__select_canonical_tr_window_idx's degenerate
+     * branch (:55), which multiplies by num_averages; display-only
+     * (min-2 clamp + FWHM), does not change the structural/spectral verdict. */
+    {
+        int num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
+        *num_instances = trd->num_trs * num_avgs;
+    }
     *tr_duration_us = trd->tr_duration_us;
 }
 
@@ -2985,7 +3015,6 @@ int pulseg_calc_pns(const pulseg_collection *coll,
     int has_nd_prep, has_nd_cool;
     float tr_duration_us;
 
-    (void)opts;
     memset(&uw, 0, sizeof(uw));
     block_order = NULL;
     if (!diag)
@@ -2997,8 +3026,10 @@ int pulseg_calc_pns(const pulseg_collection *coll,
     {
         pulseg_diagnostic_init(diag);
     }
-    if (!coll || !result || !model)
+    if (!coll || !result || !model || !opts)
     {
+        /* F8.1: opts->gamma_hz_per_t is dereferenced below (calc_pns_from_uniform) with
+         * no prior NULL check -- public API crash on NULL opts. */
         diag->code = PULSEG_ERR_NULL_POINTER;
         return diag->code;
     }
@@ -3585,6 +3616,8 @@ int pulseg_check_safety(
     float tr_duration_us;
     float pns_combined, max_pns;
     float cf_hz, ca_hz_per_m;
+    int fbi;
+    float mr_max_freq_hz, mr_target_res_hz, mr_min_band_width_hz, mr_width;
 
     if (!coll || !opts)
     {
@@ -3621,6 +3654,48 @@ int pulseg_check_safety(
     rc = check_max_slew(coll, diag, opts);
     if (PULSEG_FAILED(rc))
         return rc;
+
+    /* Safety path = plotting path: when forbidden bands are configured, drive
+     * the structural analysis with a real resolution and max frequency instead
+     * of (0,0) (which leaves num_freq_bins == 0 and makes
+     * sa_check_structural_violations() a silent no-op). The analysis window is
+     * DECOUPLED from the band range (SA_MIN_ANALYSIS_FREQ_HZ): candidate
+     * selection normalizes against the peak spectral content over the analyzed
+     * range, so it must span the sequence's true dominant feature — which for
+     * non-EPI sequences (e.g. GRE) sits above the band — or weak in-band
+     * content is spuriously promoted. The candidate→band comparison itself
+     * stays band-restricted, so widening the analysis window never widens what
+     * can be flagged. This matches the validated grad_spectrum defaults
+     * (max_frequency 3000 Hz). */
+    mr_max_freq_hz = 0.0f;
+    mr_target_res_hz = 0.0f;
+    if (num_forbidden_bands > 0)
+    {
+        mr_min_band_width_hz = -1.0f;
+        for (fbi = 0; fbi < num_forbidden_bands; ++fbi)
+        {
+            if (forbidden_bands[fbi].freq_max_hz > mr_max_freq_hz)
+                mr_max_freq_hz = forbidden_bands[fbi].freq_max_hz;
+
+            mr_width = forbidden_bands[fbi].freq_max_hz - forbidden_bands[fbi].freq_min_hz;
+            if (mr_min_band_width_hz < 0.0f || mr_width < mr_min_band_width_hz)
+                mr_min_band_width_hz = mr_width;
+        }
+        mr_max_freq_hz *= 1.2f;
+        /* Decouple normalization range from band range (see
+         * SA_MIN_ANALYSIS_FREQ_HZ): ensure the analyzed spectrum reaches the
+         * validated plotting-path range so the per-axis gate and FFT-promotion
+         * normalizers capture the true dominant peak, not just the near-band
+         * content. */
+        if (mr_max_freq_hz < SA_MIN_ANALYSIS_FREQ_HZ)
+            mr_max_freq_hz = SA_MIN_ANALYSIS_FREQ_HZ;
+
+        mr_target_res_hz = mr_min_band_width_hz / 4.0f;
+        if (mr_target_res_hz < 1.0f)
+            mr_target_res_hz = 1.0f;
+        else if (mr_target_res_hz > 5.0f)
+            mr_target_res_hz = 5.0f;
+    }
 
     /* ---- 4. per-subsequence canonical-TR acoustic + PNS ---- */
     for (s = 0; s < coll->num_subsequences; ++s)
@@ -3704,10 +3779,17 @@ int pulseg_check_safety(
 
             if (num_forbidden_bands > 0)
             {
+                /* SA_ANALYTICAL_GATE_FRAC's and the FFT-promotion denominators
+                 * are the peak over THIS evaluated grid. The grid now spans at
+                 * least SA_MIN_ANALYSIS_FREQ_HZ (>= the top band edge), so the
+                 * dominant coherent/FFT peak is captured even when it sits above
+                 * the forbidden band (non-EPI sequences), keeping the gate
+                 * normalization consistent with the validated grad_spectrum
+                 * path. Covered by test_safety_grad.c Suite D. */
                 memset(&spectra, 0, sizeof(spectra));
                 rc = calc_mech_resonances_from_uniform(
                     &spectra, diag, &uw,
-                    0.0f, 0.0f,
+                    mr_target_res_hz, mr_max_freq_hz,
                     num_instances,
                     tr_duration_us,
                     num_forbidden_bands, forbidden_bands,

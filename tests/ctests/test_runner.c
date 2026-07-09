@@ -17,6 +17,7 @@ int test_rf_stats_main(void);
 int test_sequences_main(void);
 int test_protocol_main(void);
 int test_recon_main(void);
+int test_ptx_getters_main(void);
 
 int main(void)
 {
@@ -36,6 +37,9 @@ int main(void)
 
     printf("\n==== test_recon ====\n");
     failed += test_recon_main();
+
+    printf("\n==== test_ptx_getters ====\n");
+    failed += test_ptx_getters_main();
 
     // printf("\n==== test_io ====\n");
     // failed += test_io_main();

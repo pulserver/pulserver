@@ -237,7 +237,7 @@ def test_check_fails_tight_grad(representative_generated_seq_path, relaxed_check
         block_duration_raster=20e-6,
     )
     sc = SequenceCollection(str(representative_generated_seq_path), system=tight)
-    with pytest.raises(RuntimeError, match="gradient"):
+    with pytest.raises(RuntimeError, match="gmax exceeded"):
         sc.check()
 
 

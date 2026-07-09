@@ -570,6 +570,131 @@ int pulseg_get_rf_array(
 }
 
 /* ================================================================== */
+/*  pulseg_get_rf_event_array --                                      */
+/*    Build an ordered array of RF event identities for a TR region.  */
+/*    Walk logic is index-aligned with pulseg_get_rf_array() above    */
+/*    (same use_scan_table/start/count selection, same clamps, same   */
+/*    skip conditions) -- keep the two walks in sync.                 */
+/* ================================================================== */
+int pulseg_get_rf_event_array(
+    const pulseg_collection *coll,
+    pulseg_rf_event **out_events,
+    int subseq_idx)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_tr_descriptor *trd;
+    const pulseg_block_table_element *bte;
+    const pulseg_rf_definition *rfdef;
+    int start, count, num_instances;
+    int use_scan_table;
+    int num_passes, pass_size;
+    int i, n, num_rf;
+
+    if (!coll || !out_events)
+        return PULSEG_ERR_NULL_POINTER;
+    *out_events = NULL;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+
+    desc = &coll->descriptors[subseq_idx];
+    trd = &desc->tr_descriptor;
+
+    use_scan_table = 0;
+    if ((!trd->degenerate_prep || !trd->degenerate_cooldown) &&
+        (trd->num_prep_blocks > 0 || trd->num_cooldown_blocks > 0))
+    {
+        num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
+        pass_size = (num_passes > 0) ? (desc->scan_table_len / num_passes) : 0;
+
+        start = 0;
+        count = pass_size;
+        num_instances = num_passes;
+        use_scan_table = 1;
+    }
+    else
+    {
+        int num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
+        start = trd->num_prep_blocks + trd->imaging_tr_start;
+        count = trd->tr_size;
+        /* Total TR instances: imaging TRs replicated by NEX,
+         * plus degenerate prep/cooldown TRs (played once each). */
+        num_instances = num_avgs * trd->num_trs + trd->num_prep_trs + trd->num_cooldown_trs;
+        if (num_instances < 0)
+            num_instances = 0;
+    }
+
+    (void)num_instances; /* not part of the event identity */
+
+    /* Clamp to available block range */
+    if (use_scan_table)
+    {
+        if (start + count > desc->scan_table_len)
+            count = desc->scan_table_len - start;
+    }
+    else if (start + count > desc->num_blocks)
+    {
+        count = desc->num_blocks - start;
+    }
+    if (count < 0)
+        count = 0;
+
+    /* Pass 1: count RF-bearing blocks */
+    num_rf = 0;
+    for (i = 0; i < count; ++i)
+    {
+        int blk_idx = use_scan_table
+                          ? desc->scan_table_block_idx[start + i]
+                          : (start + i);
+        bte = &desc->block_table[blk_idx];
+        if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size)
+        {
+            int id = desc->rf_table[bte->rf_id].id;
+            if (id >= 0 && id < desc->num_unique_rfs)
+                num_rf++;
+        }
+    }
+
+    if (num_rf == 0)
+        return 0;
+
+    /* Allocate output array (caller frees with PULSEG_FREE) */
+    *out_events = (pulseg_rf_event *)PULSEG_ALLOC(
+        (size_t)num_rf * sizeof(pulseg_rf_event));
+    if (!*out_events)
+        return PULSEG_ERR_ALLOC_FAILED;
+
+    /* Pass 2: fill entries */
+    n = 0;
+    for (i = 0; i < count; ++i)
+    {
+        int blk_idx = use_scan_table ? desc->scan_table_block_idx[start + i] : (start + i);
+        int rf_def_id;
+        float act_amp;
+
+        bte = &desc->block_table[blk_idx];
+        if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
+            continue;
+
+        rf_def_id = desc->rf_table[bte->rf_id].id;
+        if (rf_def_id < 0 || rf_def_id >= desc->num_unique_rfs)
+            continue;
+
+        rfdef = &desc->rf_definitions[rf_def_id];
+
+        act_amp = desc->rf_table[bte->rf_id].amplitude;
+
+        (*out_events)[n].rf_def_id = rf_def_id;
+        (*out_events)[n].amplitude_hz = (act_amp >= 0.0f) ? act_amp : -act_amp;
+        (*out_events)[n].rf_shim_id = bte->rf_shim_id;
+        (*out_events)[n].num_channels = (rfdef->num_channels > 1) ? rfdef->num_channels : 1;
+
+        n++;
+    }
+
+    return n;
+}
+
+/* ================================================================== */
 /*  ADC collection accessors                                          */
 /* ================================================================== */
 
@@ -1309,115 +1434,33 @@ static int pulseg__get_rf_num_channels(
     return (rdef->num_channels > 1) ? rdef->num_channels : 1;
 }
 
-float **pulseg_get_rf_magnitude(const pulseg_collection *coll,
-                                   int *num_channels,
-                                   int *num_samples,
-                                   int seg_idx,
-                                   int blk_idx)
+#define PULSEG__RF_SHAPE_MAG   0
+#define PULSEG__RF_SHAPE_PHASE 1
+
+/* Shared decompress+split body for magnitude/phase RF waveform getters,
+ * keyed off an already-resolved rf definition. Returns a malloc'd
+ * (PULSEG_ALLOC) array of *num_channels row pointers, each *num_samples
+ * floats, or NULL (shape absent / decompress failure / alloc failure). */
+static float **pulseg__get_rf_def_shape(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_rf_definition *rdef,
+    int which_shape,
+    int *num_channels,
+    int *num_samples)
 {
-    const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
-    int local_blk, shape_idx, nch, npts, ch;
-    const pulseg_block_definition *bdef;
-    const pulseg_rf_definition *rdef;
+    int shape_id, shape_idx, nch, npts, ch;
     pulseg_shape_arbitrary decompressed;
     float *flat;
     float **result;
 
-    if (!num_channels || !num_samples)
-        return NULL;
     *num_channels = 0;
     *num_samples = 0;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    shape_id = (which_shape == PULSEG__RF_SHAPE_MAG) ? rdef->mag_shape_id : rdef->phase_shape_id;
+    if (shape_id <= 0)
         return NULL;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
-    if (bdef->rf_id == -1)
-        return NULL;
-
-    rdef = &desc->rf_definitions[bdef->rf_id];
-    if (rdef->mag_shape_id <= 0)
-        return NULL;
-
-    shape_idx = rdef->mag_shape_id - 1;
-    if (shape_idx < 0 || shape_idx >= desc->num_shapes)
-        return NULL;
-
-    decompressed.num_samples = 0;
-    decompressed.num_uncompressed_samples = 0;
-    decompressed.samples = NULL;
-
-    if (!pulseg_pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx],
-                                     1.0f))
-        return NULL;
-
-    flat = decompressed.samples;
-    nch = (rdef->num_channels > 1) ? rdef->num_channels : 1;
-    npts = decompressed.num_samples / nch;
-
-    /* allocate channel-pointer array */
-    result = (float **)PULSEG_ALLOC((size_t)nch * sizeof(float *));
-    if (!result)
-    {
-        PULSEG_FREE(flat);
-        return NULL;
-    }
-
-    /* split tiled flat array into per-channel rows */
-    for (ch = 0; ch < nch; ++ch)
-    {
-        result[ch] = (float *)PULSEG_ALLOC((size_t)npts * sizeof(float));
-        if (!result[ch])
-        {
-            int k;
-            for (k = 0; k < ch; ++k)
-                PULSEG_FREE(result[k]);
-            PULSEG_FREE(result);
-            PULSEG_FREE(flat);
-            return NULL;
-        }
-        memcpy(result[ch], flat + ch * npts, (size_t)npts * sizeof(float));
-    }
-
-    PULSEG_FREE(flat);
-    *num_channels = nch;
-    *num_samples = npts;
-    return result;
-}
-
-float **pulseg_get_rf_phase(const pulseg_collection *coll,
-                               int *num_channels,
-                               int *num_samples,
-                               int seg_idx,
-                               int blk_idx)
-{
-    const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
-    int local_blk, shape_idx, nch, npts, ch;
-    const pulseg_block_definition *bdef;
-    const pulseg_rf_definition *rdef;
-    pulseg_shape_arbitrary decompressed;
-    float *flat;
-    float **result;
-
-    if (!num_channels || !num_samples)
-        return NULL;
-    *num_channels = 0;
-    *num_samples = 0;
-
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
-        return NULL;
-
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
-    if (bdef->rf_id == -1)
-        return NULL;
-
-    rdef = &desc->rf_definitions[bdef->rf_id];
-    if (rdef->phase_shape_id <= 0)
-        return NULL;
-
-    shape_idx = rdef->phase_shape_id - 1;
+    shape_idx = shape_id - 1;
     if (shape_idx < 0 || shape_idx >= desc->num_shapes)
         return NULL;
 
@@ -1460,6 +1503,62 @@ float **pulseg_get_rf_phase(const pulseg_collection *coll,
     *num_channels = nch;
     *num_samples = npts;
     return result;
+}
+
+float **pulseg_get_rf_magnitude(const pulseg_collection *coll,
+                                   int *num_channels,
+                                   int *num_samples,
+                                   int seg_idx,
+                                   int blk_idx)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_tr_segment *seg;
+    int local_blk;
+    const pulseg_block_definition *bdef;
+    const pulseg_rf_definition *rdef;
+
+    if (!num_channels || !num_samples)
+        return NULL;
+    *num_channels = 0;
+    *num_samples = 0;
+
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+        return NULL;
+
+    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    if (bdef->rf_id == -1)
+        return NULL;
+
+    rdef = &desc->rf_definitions[bdef->rf_id];
+    return pulseg__get_rf_def_shape(desc, rdef, PULSEG__RF_SHAPE_MAG, num_channels, num_samples);
+}
+
+float **pulseg_get_rf_phase(const pulseg_collection *coll,
+                               int *num_channels,
+                               int *num_samples,
+                               int seg_idx,
+                               int blk_idx)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_tr_segment *seg;
+    int local_blk;
+    const pulseg_block_definition *bdef;
+    const pulseg_rf_definition *rdef;
+
+    if (!num_channels || !num_samples)
+        return NULL;
+    *num_channels = 0;
+    *num_samples = 0;
+
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+        return NULL;
+
+    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    if (bdef->rf_id == -1)
+        return NULL;
+
+    rdef = &desc->rf_definitions[bdef->rf_id];
+    return pulseg__get_rf_def_shape(desc, rdef, PULSEG__RF_SHAPE_PHASE, num_channels, num_samples);
 }
 
 float *pulseg_get_rf_time_us(
@@ -1520,6 +1619,125 @@ float *pulseg_get_rf_time_us(
         result = decompressed.samples;
     }
 
+    return result;
+}
+
+/* ================================================================== */
+/*  Definition-keyed RF waveform getters (pTx SAR: keyed by subseq_idx +   */
+/*  rf_def_id, not seg/blk -- one lookup per unique RF definition,        */
+/*  independent of where it is played in the sequence).                   */
+/* ================================================================== */
+
+float **pulseg_get_rf_def_magnitude(const pulseg_collection *coll,
+                                    int *num_channels, int *num_samples,
+                                    int subseq_idx, int rf_def_id)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_rf_definition *rdef;
+
+    if (!num_channels || !num_samples)
+        return NULL;
+    *num_channels = 0;
+    *num_samples = 0;
+
+    if (!coll)
+        return NULL;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return NULL;
+
+    desc = &coll->descriptors[subseq_idx];
+    if (rf_def_id < 0 || rf_def_id >= desc->num_unique_rfs)
+        return NULL;
+
+    rdef = &desc->rf_definitions[rf_def_id];
+    return pulseg__get_rf_def_shape(desc, rdef, PULSEG__RF_SHAPE_MAG, num_channels, num_samples);
+}
+
+float **pulseg_get_rf_def_phase(const pulseg_collection *coll,
+                                int *num_channels, int *num_samples,
+                                int subseq_idx, int rf_def_id)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_rf_definition *rdef;
+
+    if (!num_channels || !num_samples)
+        return NULL;
+    *num_channels = 0;
+    *num_samples = 0;
+
+    if (!coll)
+        return NULL;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return NULL;
+
+    desc = &coll->descriptors[subseq_idx];
+    if (rf_def_id < 0 || rf_def_id >= desc->num_unique_rfs)
+        return NULL;
+
+    rdef = &desc->rf_definitions[rf_def_id];
+    return pulseg__get_rf_def_shape(desc, rdef, PULSEG__RF_SHAPE_PHASE, num_channels, num_samples);
+}
+
+float *pulseg_get_rf_def_time(const pulseg_collection *coll,
+                              int *num_samples,
+                              int subseq_idx, int rf_def_id)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_rf_definition *rdef;
+    int shape_idx, nch, npts;
+    pulseg_shape_arbitrary decompressed;
+    float *result;
+
+    if (!num_samples)
+        return NULL;
+    *num_samples = 0;
+
+    if (!coll)
+        return NULL;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return NULL;
+
+    desc = &coll->descriptors[subseq_idx];
+    if (rf_def_id < 0 || rf_def_id >= desc->num_unique_rfs)
+        return NULL;
+
+    rdef = &desc->rf_definitions[rf_def_id];
+    if (rdef->time_shape_id <= 0)
+        return NULL; /* no time shape -- caller falls back to uniform raster */
+
+    shape_idx = rdef->time_shape_id - 1;
+    if (shape_idx < 0 || shape_idx >= desc->num_shapes)
+        return NULL;
+
+    decompressed.num_samples = 0;
+    decompressed.num_uncompressed_samples = 0;
+    decompressed.samples = NULL;
+
+    if (!pulseg_pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx],
+                                     desc->rf_raster_us))
+        return NULL;
+
+    nch = (rdef->num_channels > 1) ? rdef->num_channels : 1;
+    npts = decompressed.num_samples / nch;
+
+    if (nch > 1)
+    {
+        /* return only first channel's time (all channels share time base) */
+        result = (float *)PULSEG_ALLOC((size_t)npts * sizeof(float));
+        if (!result)
+        {
+            PULSEG_FREE(decompressed.samples);
+            return NULL;
+        }
+        memcpy(result, decompressed.samples, (size_t)npts * sizeof(float));
+        PULSEG_FREE(decompressed.samples);
+    }
+    else
+    {
+        result = decompressed.samples;
+    }
+
+    *num_samples = npts;
     return result;
 }
 

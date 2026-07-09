@@ -381,7 +381,32 @@ MU_TEST_SUITE(suite_grad_canonical_sequence)
 /*  Suite D — Mechanical resonance forbidden-frequency safety tests              */
 /* ================================================================== */
 
-#if 0  /* Temporary: acoustic checks are known stub work-in-progress. */
+/* Re-enabled for mechres Part 1 (F1 Option B): pulseg_check_safety now
+ * drives the structural analysis with a real resolution/max-frequency
+ * whenever forbidden bands are configured, instead of silently no-op'ing
+ * (num_freq_bins==0). See REVIEW_safety_mech_resonance.md F1/F4/F11 and
+ * PLAN_safety_mechres_fixes.md Part 1 step 1.4. */
+
+/*
+ * gre_opts_init's max_grad/max_slew (28 mT/m / 150 T/m/s) are tuned for
+ * the segmentation-generator GRE/bSSFP fixtures and are exceeded by this
+ * EPI readout's slew rate (unrelated to mech-resonance -- pulseg_check_safety
+ * runs check_max_slew() before the per-subsequence mech-resonance loop, so a
+ * tight slew limit here would fail every test in this suite before the
+ * acoustic analysis is ever reached). Use generous grad/slew limits so this
+ * suite exercises only the mech-resonance path, matching the same
+ * "intentionally generous, not validating the .seq" pattern used by
+ * write_cache_cli/main.c for the same reason.
+ */
+static TEST_MAYBE_UNUSED void mech_resonances_opts_init(pulseg_opts* opts)
+{
+    pulseg_opts_init(opts,
+        GAMMA_HZ_PER_T,
+        3.0f,
+        GAMMA_HZ_PER_T * 0.080f,   /* 80 mT/m -> Hz/m */
+        GAMMA_HZ_PER_T * 400.0f,  /* 400 T/m/s -> Hz/m/s */
+        2.0f, 20.0f, 2.0f, 20.0f);
+}
 
 /**
  * Load a sequence, run check_safety with the given forbidden bands,
@@ -439,18 +464,104 @@ MU_TEST(test_epi_forbidden_readout_peak)
                        PULSEG_ERR_MECH_RESONANCES_VIOLATION);
 }
 
+/*
+ * Same sequence/bands as test_epi_forbidden_readout_peak, but with the
+ * band amplitude limit set far above anything the readout train can
+ * produce -> must pass (F1 gate now actually runs the analysis and
+ * correctly clears it, rather than trivially no-op-passing).
+ */
+MU_TEST(test_epi_forbidden_band_amplitude_above_train_passes)
+{
+    pulseg_forbidden_band bands[2];
+
+    bands[0].freq_min_hz           = 800.0f;
+    bands[0].freq_max_hz           = 2500.0f;
+    bands[0].max_amplitude_hz_per_m = 1.0e9f;
+
+    bands[1].freq_min_hz           = 2500.0f;
+    bands[1].freq_max_hz           = 4500.0f;
+    bands[1].max_amplitude_hz_per_m = 1.0e9f;
+
+    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 2, bands, 1 /* pass */);
+}
+
+/*
+ * No forbidden bands configured -> skip path (mr_target_res_hz/
+ * mr_max_freq_hz stay 0,0; num_freq_bins==0; sa_check_structural_violations
+ * returns SUCCESS before building the evaluation grid). Must pass
+ * regardless of what the sequence actually contains.
+ */
+MU_TEST(test_epi_no_bands_skips_mech_resonance_check)
+{
+    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 0, NULL, 1 /* pass */);
+}
+
+/*
+ * F1 Option B assumption check: the structural-analysis grid is
+ * band-bounded (max_freq = 1.2 * max(band edges)), so the EPI readout
+ * train (a much stronger coherent feature at several hundred Hz, well
+ * outside this band) is entirely excluded from the grid -- it cannot
+ * inflate the SA_ANALYTICAL_GATE_FRAC relative-gate denominator (F5) and
+ * so cannot mask a violation at a frequency actually inside a forbidden
+ * band. Band brackets the first TR harmonic (f1 = 1/TR ~= 10.14 Hz for
+ * this fixture's TR=0.09866s) at zero amplitude.
+ */
+MU_TEST(test_epi_inband_feature_not_masked_by_offband_readout_train)
+{
+    pulseg_forbidden_band band;
+
+    band.freq_min_hz            = 8.0f;
+    band.freq_max_hz            = 12.0f;
+    band.max_amplitude_hz_per_m = 0.0f;
+
+    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 1, &band,
+                       PULSEG_ERR_MECH_RESONANCES_VIOLATION);
+}
+
+/*
+ * F4 regression: eval_freqs[i] = (i+1)*f1, so a dense-FFT peak must
+ * bypass the relative-power gate at harmonic index round(f_peak/f1)-1,
+ * not the previous (buggy) floor(f_peak/f1). Splitting
+ * test_epi_forbidden_readout_peak's band 1 ([800,2500] Hz) at its
+ * midpoint into two adjacent sub-bands and requiring BOTH to
+ * independently still detect the violation (each at zero amplitude)
+ * regression-covers the harmonic-boundary off-by-one: under the old
+ * floor() mapping, a peak landing near a sub-band boundary could bypass
+ * the gate for the wrong (adjacent) sub-band, leaving the true one
+ * ungated and silently passing.
+ */
+MU_TEST(test_fft_bypass_harmonic_index_no_boundary_gap)
+{
+    pulseg_forbidden_band band_lo, band_hi;
+
+    band_lo.freq_min_hz            = 800.0f;
+    band_lo.freq_max_hz            = 1650.0f;
+    band_lo.max_amplitude_hz_per_m = 0.0f;
+
+    band_hi.freq_min_hz            = 1650.0f;
+    band_hi.freq_max_hz            = 2500.0f;
+    band_hi.max_amplitude_hz_per_m = 0.0f;
+
+    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 1, &band_lo,
+                       PULSEG_ERR_MECH_RESONANCES_VIOLATION);
+    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 1, &band_hi,
+                       PULSEG_ERR_MECH_RESONANCES_VIOLATION);
+}
+
 static void mech_resonances_setup(void)
 {
-    gre_opts_init(&s_opts);
+    mech_resonances_opts_init(&s_opts);
 }
 
 MU_TEST_SUITE(suite_mech_resonances_safety)
 {
     MU_SUITE_CONFIGURE(mech_resonances_setup, NULL);
     MU_RUN_TEST(test_epi_forbidden_readout_peak);
+    MU_RUN_TEST(test_epi_forbidden_band_amplitude_above_train_passes);
+    MU_RUN_TEST(test_epi_no_bands_skips_mech_resonance_check);
+    MU_RUN_TEST(test_epi_inband_feature_not_masked_by_offband_readout_train);
+    MU_RUN_TEST(test_fft_bypass_harmonic_index_no_boundary_gap);
 }
-
-#endif
 
 /* ================================================================== */
 /*  Entry point                                                       */
@@ -468,6 +579,7 @@ int test_safety_grad_main(void)
     MU_RUN_SUITE(suite_grad_limits);
     MU_RUN_SUITE(suite_grad_continuity);
     MU_RUN_SUITE(suite_grad_canonical_sequence);
+    MU_RUN_SUITE(suite_mech_resonances_safety);
     MU_REPORT();
     return MU_EXIT_CODE;
 }

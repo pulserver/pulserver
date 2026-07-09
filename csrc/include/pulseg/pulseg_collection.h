@@ -378,6 +378,23 @@ extern "C"
                                int subseq_idx);
 
     /**
+     * @brief Build an ordered array of RF event identities for the canonical TR,
+     * index-aligned with pulseg_get_rf_array() (same count, same walk order:
+     * events[i] describes the same occurrence as out_pulses[i]).
+     *
+     * The library allocates @p *out_events via PULSEG_ALLOC(); the caller
+     * must release it with PULSEG_FREE() when done.
+     *
+     * @param[in]  coll        Loaded collection.
+     * @param[out] out_events  Set to a malloc'd array; caller must free().
+     * @param[in]  subseq_idx  Subsequence index.
+     * @return Number of RF entries (>= 0), or negative error code.
+     */
+    int pulseg_get_rf_event_array(const pulseg_collection *coll,
+                                  pulseg_rf_event **out_events,
+                                  int subseq_idx);
+
+    /**
      * @brief Return decompressed RF magnitude waveform (multi-channel).
      *
      * Returns an array of num_channels pointers, each pointing to
@@ -425,6 +442,35 @@ extern "C"
     float pulseg_get_rf_max_amplitude_hz(
         const pulseg_collection *coll,
         int seg_idx, int blk_idx);
+
+    /**
+     * @brief Return decompressed RF magnitude waveform, keyed by RF
+     * definition rather than by (seg, blk) -- one lookup per unique
+     * definition. Same semantics/ownership as pulseg_get_rf_magnitude().
+     * Returns NULL on bad subseq_idx/rf_def_id or absent shape.
+     */
+    float **pulseg_get_rf_def_magnitude(const pulseg_collection *coll,
+                                        int *num_channels, int *num_samples,
+                                        int subseq_idx, int rf_def_id);
+
+    /**
+     * @brief Return decompressed RF phase waveform, keyed by RF definition.
+     * Same semantics/ownership as pulseg_get_rf_phase(). NULL if the
+     * definition has no phase shape (a common phase, not encoded as one).
+     */
+    float **pulseg_get_rf_def_phase(const pulseg_collection *coll,
+                                    int *num_channels, int *num_samples,
+                                    int subseq_idx, int rf_def_id);
+
+    /**
+     * @brief Return RF time-point array (us), keyed by RF definition.
+     * NULL if the definition has no time shape (uniform raster; caller
+     * should fall back to a constant dt = duration_us / num_samples).
+     * Caller must free the returned array with PULSEG_FREE.
+     */
+    float *pulseg_get_rf_def_time(const pulseg_collection *coll,
+                                  int *num_samples,
+                                  int subseq_idx, int rf_def_id);
 
     /* ================================================================== */
     /*  Gradient getters (waveform data only)                             */

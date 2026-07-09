@@ -15,7 +15,8 @@ from pulserver.analysis._cache_sections import build_sequence_description_info
 
 # ── Fixtures ──────────────────────────────────────────────────────────
 
-EXPECTED_DIR = Path(__file__).resolve().parents[1] / "utils" / "expected"
+# tests/python/analysis/test_cache_sections.py -> parents[2] = tests/
+EXPECTED_DIR = Path(__file__).resolve().parents[2] / "utils" / "expected"
 
 CANONICAL_SEQ = "gre_2d_1sl_1avg.seq"
 NONCART_SEQ = "mprage_noncart_3d_1sl_1avg_userotext0.seq"
