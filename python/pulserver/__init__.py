@@ -14,45 +14,17 @@ Notes
 -----
 Use ``pulserver.pulseq`` for sequence/event helpers and ``pulserver.io`` for
 I/O utilities.
+
+The authoring modules (``io``, ``pulseq``, ``core``) require the *optional*
+``pypulseq`` dependency, so they are imported lazily (PEP 562): ``import
+pulserver`` — and hence ``pulserver.recon``, which runs in the scanner recon
+env without ``pypulseq`` — stays import-clean; accessing an authoring name pulls
+it in (raising a clear error if the extra is absent).
 """
 
-from . import (
-    io,  # noqa: F401
-    pulseq,  # noqa: F401
-)
-from .core import (  # noqa: F401
-    BoolKey,
-    BoolParam,
-    Description,
-    DropdownFloatParam,
-    DropdownIntParam,
-    EnumKey,
-    FloatKey,
-    ImagingMode,
-    InputMode,
-    IntKey,
-    ParamKind,
-    PreparationType,
-    Protocol,
-    ProtocolValue,
-    PulseqSequence,
-    SequenceType,
-    StringListParam,
-    TriggerType,
-    TypeinFloatParam,
-    TypeinIntParam,
-    UIParam,
-    Validate,
-    dict_to_param,
-    dict_to_protocol,
-    enum_options,
-    expected_param_kind,
-    make_enum_param,
-    param_to_dict,
-    protocol_to_dict,
-    validate_protocol,
-    validate_protocol_entry,
-)
+from __future__ import annotations
+
+import importlib
 
 __all__ = [
     "pulseq",
@@ -89,3 +61,11 @@ __all__ = [
     "protocol_to_dict",
     "dict_to_protocol",
 ]
+
+
+def __getattr__(name: str):
+    if name in ("io", "pulseq"):
+        return importlib.import_module(f"{__name__}.{name}")
+    if name in __all__:
+        return getattr(importlib.import_module(f"{__name__}.core"), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

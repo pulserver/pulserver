@@ -167,6 +167,39 @@ three tiers:
 A frequency becomes a **candidate** if any axis qualifies through any
 tier.  The candidate list is shared across axes.
 
+### Cross-axis spectral-significance filter
+
+The tiers above gate each axis *relative to that axis's own* peak.  That
+normalization is scale-blind across axes: because the analytical response is
+peak-amplitude-anchored ($A_k\,W_k(f)$ with $W_k(0)=1$, i.e. the true Fourier
+amplitude divided by the event duration), a brief high-amplitude transient —
+e.g. a short bipolar phase-encode blip — rolls off slowly in the analytical
+spectrum and can survive a per-axis tier even though its *true* oscillatory
+power at $f$ is negligible and it cannot excite a mechanical resonance.
+
+A final filter therefore keeps a per-axis candidate only if the gradient
+actually concentrates oscillatory power there, measured against the **global
+cross-axis** peak.  Using the dense FFT magnitude spectrum
+$|\hat g_\text{ax}(f)|$ (the *area*-anchored ground truth, already computed in
+Stage 2), a candidate on axis `ax` at $f_c$ survives iff
+
+$$\max_{|b - b_c| \le 1} |\hat g_\text{ax}(b)| \;\ge\; \texttt{SA\_FFT\_SIGNIFICANCE\_FRAC}\;\cdot\;\max_{\text{ax}',\,b'} |\hat g_{\text{ax}'}(b')|$$
+
+where $b_c$ is the FFT bin nearest $f_c$ (the $\pm 1$-bin maximum guards against
+scalloping) and `SA_FFT_SIGNIFICANCE_FRAC = 0.02` (2 %).  This is **not** FFT
+peak detection — the candidate frequencies still come entirely from the
+structural evaluation grid; the FFT is only *read* at those frequencies as an
+absolute significance weight.
+
+The separation is wide and physical: a short-blip transient ghost carries
+$\sim 10^{-3}\,\%$ of the peak gradient power, whereas a genuine sustained
+readout comb (EPI, FSE, MPRAGE, bSSFP, spiral) deposits tens of percent into a
+sharp spectral peak.  The 2 % floor thus removes incidental phase-encode-blip
+transients while leaving every real resonance untouched.  The tiers remain
+necessary: they carry the coherence discrimination that distinguishes a *single*
+readout transient (which passes) from a *sustained* comb (which is flagged), a
+distinction absolute power alone cannot make.
+
 ## Forbidden-band check and effective gradient amplitude
 
 For each candidate frequency $f_c$, the effective gradient amplitude

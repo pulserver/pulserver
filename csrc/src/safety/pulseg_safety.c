@@ -269,6 +269,33 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
  *  minor spectral features as candidates. */
 #define SA_FFT_PROMOTION_POWER_FRAC 0.15f
 
+/** Cross-axis spectral-significance floor for candidate survival (amplitude,
+ *  fraction of the GLOBAL cross-axis peak dense-FFT amplitude).
+ *
+ *  The analytical structural model is peak-amplitude-anchored: its per-event
+ *  contribution is amp*|F(f)|/|F(0)|, i.e. the true Fourier amplitude divided by
+ *  the event duration.  A brief high-amplitude transient (e.g. a short bipolar
+ *  phase-encode blip) therefore rolls off slowly and survives the per-axis
+ *  relative gate even though its *actual* oscillatory power at f is negligible
+ *  and it cannot excite a mechanical resonance.  The dense FFT (spectrum_full_*)
+ *  is the area-anchored ground truth for how much the gradient really oscillates
+ *  at f.  A structurally-detected candidate survives only if its per-axis FFT
+ *  amplitude at its frequency reaches this fraction of the global cross-axis
+ *  peak.  Measured separation on real sequences is wide: a 32x32 GRE PE-blip
+ *  ghost sits at ~1e-3 % of the peak, whereas EPI/FSE/bSSFP/spiral readout
+ *  resonances are tens of percent — so 0.5 % rejects the transient with a
+ *  ~1e3x margin while leaving every genuine resonance untouched.
+ *
+ *  NB this is NOT FFT peak detection (which is fragile for broad/ringing
+ *  spectra): the candidate frequencies come from the structural set; the FFT is
+ *  read only AT those frequencies as an absolute significance weight.
+ *
+ *  2 % (vs the ~1e-3 % GRE PE-blip ghost and the 16-100 % real readout combs):
+ *  wide margin above every genuine resonance while also dropping borderline
+ *  phase-encode-blip transients (0.3-2 %), consistent with product practice of
+ *  gating on the readout comb and neglecting incidental blips. */
+#define SA_FFT_SIGNIFICANCE_FRAC 0.02f
+
 /** Absolute amplitude safety threshold for single-event Tier 2 (Hz/m).
  * Only applies when an axis has exactly one event (coherence ratio is
  * undefined for N=1).  Value is in the same units as the coherent
@@ -592,7 +619,10 @@ static int sa_detect_sub_period(
  * @param out_mags       Receives allocated normalised magnitude array [nfft/2+1].
  * @param out_num_bins   Receives nfft/2+1.
  * @param out_freq_spacing_hz  Receives 1/(nfft*raster_s).
- * @return 1 on success, 0 on failure (allocation or FFT).
+ * @return 1 on success; 0 on a degenerate/benign input (too few samples, zero
+ *         duration — the caller emits a zero-peak event, never a lossy coarse
+ *         PWL); -1 on OOM (the caller must FAIL CLOSED — silently under-sampling
+ *         a safety spectrum could miss a real resonance).
  */
 static int sa_compute_fft_response(
     const float *wave_vals,
@@ -636,7 +666,7 @@ static int sa_compute_fft_response(
                 PULSEG_FREE(uniform_t);
             if (uniform_vals)
                 PULSEG_FREE(uniform_vals);
-            return 0;
+            return -1; /* OOM — caller must fail closed */
         }
         for (i = 0; i < n_uniform; ++i)
             uniform_t[i] = wave_time_us[0] + (float)i * raster_us;
@@ -649,7 +679,7 @@ static int sa_compute_fft_response(
         n_uniform = num_samp;
         uniform_vals = (float *)PULSEG_ALLOC((size_t)n_uniform * sizeof(float));
         if (!uniform_vals)
-            return 0;
+            return -1; /* OOM — caller must fail closed */
         memcpy(uniform_vals, wave_vals, (size_t)n_uniform * sizeof(float));
     }
 
@@ -729,7 +759,7 @@ fail:
         PULSEG_FREE(mags);
     if (cfg)
         kiss_fftr_free(cfg);
-    return 0;
+    return -1; /* OOM — caller must fail closed */
 }
 
 /* ================================================================== */
@@ -953,33 +983,53 @@ static int sa_build_axis_events(
                         }
                         else
                         {
-                            /* No sub-period: compute per-event FFT response */
-                            if (sa_compute_fft_response(
+                            /* No sub-period: per-event FFT response.
+                             * rc>0 use it; rc==0 (degenerate input) emit a
+                             * zero-peak event (no spectral contribution); rc<0
+                             * (OOM) FAIL CLOSED — never silently under-sample a
+                             * safety spectrum with a lossy coarse PWL. */
+                            {
+                                int fft_rc = sa_compute_fft_response(
                                     wave_samp,
                                     has_time ? time_us : NULL,
                                     num_samp, raster,
                                     &shared_fft_mags,
                                     &shared_fft_nbins,
-                                    &shared_fft_spacing))
-                            {
-                                use_fft = 1;
-                                pwl_nv = 0;
-                            }
-                            else
-                            {
-                                /* FFT failed: fall back to coarse PWL */
-                                nv = SA_MAX_PWL_VERTICES;
-                                if (nv > num_samp)
-                                    nv = num_samp;
-                                pwl_nv = nv;
-                                for (s_idx = 0; s_idx < nv; ++s_idx)
+                                    &shared_fft_spacing);
+                                if (fft_rc > 0)
                                 {
-                                    int si = (nv > 1) ? (s_idx * (num_samp - 1)) / (nv - 1) : 0;
-                                    if (has_time && time_us)
-                                        pwl_t[s_idx] = time_us[si];
-                                    else
-                                        pwl_t[s_idx] = 0.5f * raster + (float)si * raster;
-                                    pwl_v[s_idx] = wave_samp[si];
+                                    use_fft = 1;
+                                    pwl_nv = 0;
+                                }
+                                else
+                                {
+                                    if (fft_rc == 0)
+                                    {
+                                        /* Degenerate: single-bin zero response. */
+                                        shared_fft_mags = (float *)PULSEG_ALLOC(sizeof(float));
+                                        if (shared_fft_mags)
+                                        {
+                                            shared_fft_mags[0] = 0.0f;
+                                            shared_fft_nbins = 1;
+                                            shared_fft_spacing = 1.0f;
+                                            use_fft = 1;
+                                            pwl_nv = 0;
+                                        }
+                                    }
+                                    if (fft_rc < 0 || !shared_fft_mags)
+                                    {
+                                        /* OOM (or the zero-peak alloc failed). */
+                                        if (decomp_time.samples)
+                                            PULSEG_FREE(decomp_time.samples);
+                                        if (decomp_wave.samples)
+                                            PULSEG_FREE(decomp_wave.samples);
+                                        if (shared_fft_mags)
+                                            PULSEG_FREE(shared_fft_mags);
+                                        PULSEG_FREE(unique_ids);
+                                        PULSEG_FREE(ae->events);
+                                        ae->events = NULL;
+                                        return PULSEG_ERR_ALLOC_FAILED;
+                                    }
                                 }
                             }
                         }
@@ -1875,6 +1925,56 @@ static int sa_check_structural_violations(
     {
         if (fft_bypass_set_ax[ax])
             PULSEG_FREE(fft_bypass_set_ax[ax]);
+    }
+
+    /* --- Cross-axis spectral-significance filter ---
+     * Reject any surviving candidate whose per-axis dense-FFT amplitude at its
+     * frequency is below SA_FFT_SIGNIFICANCE_FRAC of the global cross-axis peak
+     * FFT amplitude.  This drops brief-transient ghosts (short bipolar blips)
+     * that the peak-amplitude-anchored analytical model over-promotes, while
+     * leaving genuine (sustained, high-power) readout resonances untouched.
+     * Frequencies are the structural candidates; the FFT is read only AT them
+     * (a ±1-bin max guards against scalloping), so this is not peak detection. */
+    if (has_fft_data)
+    {
+        float global_fft_sq = 0.0f;
+        float sig_floor;
+        const float *spec_sig[3];
+        spec_sig[0] = spectra->spectrum_full_gx;
+        spec_sig[1] = spectra->spectrum_full_gy;
+        spec_sig[2] = spectra->spectrum_full_gz;
+        for (ax = 0; ax < 3; ++ax)
+            if (max_fft_sq[ax] > global_fft_sq)
+                global_fft_sq = max_fft_sq[ax];
+        sig_floor = SA_FFT_SIGNIFICANCE_FRAC * (float)sqrt((double)global_fft_sq);
+        if (sig_floor > 0.0f)
+        {
+            for (i = 0; i < num_freqs; ++i)
+            {
+                int bin = (int)((eval_freqs[i] - spectra->freq_min_hz)
+                                / spectra->freq_spacing_hz + 0.5f);
+                if (bin < 0)
+                    bin = 0;
+                if (bin >= spectra->num_freq_bins)
+                    bin = spectra->num_freq_bins - 1;
+                for (ax = 0; ax < 3; ++ax)
+                {
+                    float amp_ax = 0.0f;
+                    int b;
+                    if (!is_candidate_ax[ax][i])
+                        continue;
+                    for (b = bin - 1; b <= bin + 1; ++b)
+                    {
+                        if (b < 0 || b >= spectra->num_freq_bins)
+                            continue;
+                        if (spec_sig[ax][b] > amp_ax)
+                            amp_ax = spec_sig[ax][b];
+                    }
+                    if (amp_ax < sig_floor)
+                        is_candidate_ax[ax][i] = 0;
+                }
+            }
+        }
     }
 
     /* Count candidates: a frequency is a candidate if any axis qualifies */
