@@ -36,8 +36,9 @@ def process(connection: Any, config: Any, metadata: Any) -> None:
 
     for group in _conditional_groups(
         connection,
-        accept=lambda acq: not acq.is_flag_set(ismrmrd.ACQ_LAST_IN_MEASUREMENT),
-        finish=lambda acq: acq.is_flag_set(ismrmrd.ACQ_LAST_IN_MEASUREMENT),
+        accept=lambda item: isinstance(item, ismrmrd.Acquisition),
+        finish=lambda item: isinstance(item, ismrmrd.Acquisition)
+        and item.is_flag_set(ismrmrd.ACQ_LAST_IN_MEASUREMENT),
     ):
         images = _reconstruct(group, metadata)
         for img_array in images:

@@ -212,6 +212,8 @@ class MrdDicomBuilder:
         pydicom.dataset.validate_file_meta(dicomDset.file_meta)
 
         # ----- Set some mandatory default values -----
+        if "Modality" not in dicomDset:
+            dicomDset.Modality = "MR"
         if "SamplesPerPixel" not in dicomDset:
             dicomDset.SamplesPerPixel = 1
         if "PhotometricInterpretation" not in dicomDset:
@@ -392,12 +394,17 @@ class MrdDicomBuilder:
             dicomDset.StudyInstanceUID = pydicom.uid.generate_uid()
         if "SeriesInstanceUID" not in dicomDset:
             dicomDset.SeriesInstanceUID = pydicom.uid.generate_uid()
-        if "FrameOfReferenceUID" not in dicomDset:
+        # Use the header-provided Frame of Reference UID only if it is a valid
+        # UID; otherwise fall back to a generated one (covers absent, empty, or
+        # malformed values from the MRD header).
+        if not pydicom.uid.UID(dicomDset.get("FrameOfReferenceUID", "")).is_valid:
             dicomDset.FrameOfReferenceUID = pydicom.uid.generate_uid()
 
         self.dicomDset = dicomDset
         self.mrdHead = mrdHead
-        self.instanceNumber = 0
+        # GE image numbers are 1-based; the local image-database broker rejects
+        # a C-STORE with image number 0 (A700 OutOfResources), so start at 1.
+        self.instanceNumber = 1
 
     def __call__(self, mrdImg: ismrmrd.Image) -> DicomWithName:
         """Convert a single ISMRMRD image to DICOM.
@@ -555,8 +562,8 @@ class MrdDicomBuilder:
         windowMin = np.percentile(mrdImg.data, 5)
         windowMax = np.percentile(mrdImg.data, 95)
         windowWidth = windowMax - windowMin
-        dicomDset.WindowWidth = str(windowWidth)
-        dicomDset.WindowCenter = str(0.5 * windowWidth)
+        dicomDset.WindowWidth = f"{windowWidth:.6g}"
+        dicomDset.WindowCenter = f"{0.5 * windowWidth:.6g}"
 
         # ----- Update DICOM header from MRD ImageHeader -----
         vendor = dicomDset.get("Manufacturer", "default")
@@ -662,7 +669,10 @@ class MrdDicomBuilder:
         ).tobytes()  # mrdImg.data is [cha z y x] -- squeeze to [y x] for [row col]
 
         # UID
+        dicomDset.SOPClassUID = pydicom.uid.MRImageStorage
         dicomDset.SOPInstanceUID = pydicom.uid.generate_uid()
+        dicomDset.file_meta.MediaStorageSOPClassUID = dicomDset.SOPClassUID
+        dicomDset.file_meta.MediaStorageSOPInstanceUID = dicomDset.SOPInstanceUID
 
         # Enforce correct value representation
         dicomDset = convert_string_vrs(dicomDset)

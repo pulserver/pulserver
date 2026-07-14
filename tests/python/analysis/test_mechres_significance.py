@@ -1,16 +1,18 @@
-"""Regression tests for the cross-axis spectral-significance candidate filter.
+"""Corpus verdict regression tests for the A_eq mechanical-resonance criterion.
 
-Guards the fix for the on-scanner mechanical-resonance FALSE POSITIVE: a 32x32
-GRE (short bipolar phase-encode blip) was rejected because the peak-amplitude-
-anchored analytical model over-promoted a candidate at ~1361 Hz (a
-zero-tolerance forbidden band) even though the blip's true oscillatory power
-there is ~1e-3 % of the gradient power.  The significance filter
-(SA_FFT_SIGNIFICANCE_FRAC) keeps a candidate only if its dense-FFT amplitude at
-its frequency reaches a fraction of the global cross-axis peak — dropping the
-transient ghost while leaving genuine readout combs (MPRAGE / bSSFP) flagged.
+The A_eq criterion (PLAN_mechres_aeq_FINAL.md) reports, at each TR-harmonic line
+inside a guarded forbidden band, the equivalent-sustained gradient amplitude
+A_eq = (2/T_TR)|S_ax(f_L)|, and flags iff it exceeds the readout-scale floor
+eps = max(vendor_limit, k*G_max) (k=0.08). This inherently rejects the on-scanner
+FALSE POSITIVE (a 32x32 GRE PE-blip: a broadband transient whose sustained
+in-band drive is negligible) without a separate significance heuristic, while
+keeping a genuine sustained readout comb (bSSFP) flagged.
 
-See the ``mechres_plots/`` survey and the ``mechres-zero-threshold-false-positive``
-project note.
+Corpus verdicts (ratified 2026-07-13): gre / gre_32x32 / epi / fse / mprage PASS;
+only bSSFP FAILs. mprage = GRE-family + a dead IR delay, so it drives the bands
+LESS than plain GRE -- the earlier mprage-FAIL was a sharp-comb artifact.
+
+See the ``mechres_plots/`` survey and the ``mechres-aeq-*`` project notes.
 """
 
 from pathlib import Path
@@ -45,21 +47,25 @@ def _sc(name: str, raster: float) -> SequenceCollection:
 
 
 def test_gre32_pe_blip_ghost_passes():
-    """The 32x32 GRE PE-blip transient must NOT trip a zero-tolerance band."""
+    """The 32x32 GRE PE-blip transient must NOT trip a zero-tolerance band:
+    its sustained in-band A_eq is far below the readout-scale floor."""
     sc = _sc("gre_32x32_pe_blip.seq", 4e-6)
     sc.check(forbidden_bands=HRMB_BANDS)  # must not raise
 
 
 @pytest.mark.parametrize("name", ["gre_2d_1sl_1avg.seq", "epi_2d_1sl_1avg.seq",
-                                  "fse_2d_1sl_1avg.seq"])
+                                  "fse_2d_1sl_1avg.seq", "mprage_2d_1sl_1avg.seq"])
 def test_representative_fixtures_pass(name):
-    """These fixtures have no genuine gradient power inside the HRMbUHP bands."""
+    """No sustained readout-scale gradient drive inside the HRMbUHP bands. mprage
+    (GRE-family + IR dead delay) belongs here: it drives the bands less than gre
+    -- the ratified corpus verdict is PASS."""
     _sc(name, 20e-6).check(forbidden_bands=HRMB_BANDS)  # must not raise
 
 
-@pytest.mark.parametrize("name", ["mprage_2d_1sl_1avg.seq", "bssfp_2d_1sl_1avg.seq"])
+@pytest.mark.parametrize("name", ["bssfp_2d_1sl_1avg.seq"])
 def test_real_readout_combs_still_flagged(name):
-    """Genuine sustained readout-comb harmonics in a zero-tolerance band MUST
-    still be caught (true positives preserved by the significance filter)."""
+    """A genuine sustained balanced-readout comb harmonic landing in a
+    zero-tolerance band MUST still be caught (bSSFP is the corpus true positive:
+    A_eq ~= 7.8 mT/m at ~1233 Hz)."""
     with pytest.raises(RuntimeError, match="mech"):
         _sc(name, 20e-6).check(forbidden_bands=HRMB_BANDS)

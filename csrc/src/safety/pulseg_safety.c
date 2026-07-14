@@ -229,91 +229,41 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
 /*  Structural acoustic analysis — data types                         */
 /* ================================================================== */
 
-/** Max vertices in piecewise-linear waveform envelope. */
+/** Max vertices in piecewise-linear (trap / few-vertex arb) waveform envelope. */
 #define SA_MAX_PWL_VERTICES 16
 
-/** Minimum sub-period repetitions for decomposition. */
-#define SA_MIN_SUB_PERIOD_REPS 3
+/* --- Equivalent-sustained-drive (A_eq) mechanical-resonance criterion ---
+ * (PLAN_mechres_aeq_FINAL.md).  Sharp-line model: the sequence drive is the
+ * Fourier series of the canonical (outer) TR, sampled at the TR harmonics
+ * k / T_TR that fall inside a guarded forbidden band.  The per-axis
+ * equivalent-sustained amplitude of a spectral line is
+ *   A_eq(f_L) = (2 / T_TR) * |sum_events amp * transform(f_L)
+ *                              * e^{-j2 pi f_L t_event} * D_reps(f_L)|,
+ * the amplitude of the pure sinusoidal gradient delivering the same sustained
+ * on-resonance drive.  Inner periodicities (echo train, slices) are NOT known
+ * explicitly: they emerge from the coherent sum of the individual event
+ * instances materialised inside the canonical TR (the only period we know). */
 
-/** Autocorrelation peak threshold (normalised 0..1). */
-#define SA_AUTOCORR_THRESHOLD 0.5f
+/** Hardware-anchored readout-scale floor for epsilon, used ONLY when the
+ *  vendor band is literal zero-tolerance: eps = SA_AEQ_K_GMAX * G_max
+ *  (~4 mT/m at G_max = 50 mT/m). Any nonzero vendor limit is trusted as-is,
+ *  even below this floor. The "is-this-a-readout" filter that generalises
+ *  the vendor's single-frequency zero-tolerance to arbitrary sequences:
+ *  eps = 0 is unusable (every GRE has a weak harmonic in any band wider
+ *  than its comb spacing). */
+#define SA_AEQ_K_GMAX 0.08f
 
-/** Coherence ratio threshold for Tier 1 candidate detection. */
-#define SA_COHERENCE_RATIO_THRESHOLD 2.0f
+/** Frequency guard multiplier on the resonance HWHM.  guard = mult * HWHM,
+ *  HWHM = min_band_width / 2 (the narrowest band is the sharpest resonance the
+ *  vendor identified; wide bands are keep-out ranges).  A TR-harmonic line
+ *  counts against a band iff it lies within [f_min - guard, f_max + guard]. */
+#define SA_GUARD_HWHM_MULT 1.0f
 
-/** Absolute amplitude floor for Tier 1 (Hz/m). */
-#define SA_AMPLITUDE_FLOOR 1.0f
-
-/* NOTE: FFT power gate was removed from structural candidate selection.
- * The analytical coherence-ratio and amplitude-floor tiers provide
- * principled stationary-limit criteria.  The dense FFT is computed on the
- * finite expanded waveform, so gating structural candidates against it
- * introduced a spurious dependence on num_averages (longer waveform →
- * narrower FFT lobes → candidates rejected even though the infinite-
- * repetition regime excites the same resonances).
- *
- * Replaced by an analytical power gate: candidates whose cross-axis RSS²
- * of the coherent inner-TR magnitude is below SA_ANALYTICAL_GATE_FRAC of
- * the peak RSS² are rejected.  This is computed entirely from the event
- * model and does not depend on num_averages. */
-
-/** Analytical power gate: reject TR harmonics where the cross-axis
- *  RSS² of |H(f)| is below this fraction of the peak RSS².  Same
- *  concept as the former FFT gate, but derived from the analytical
- *  inner-TR spectrum so it is independent of waveform length. */
-#define SA_ANALYTICAL_GATE_FRAC 0.05f
-
-/** FFT peak promotion: a dense-FFT local maximum must exceed this fraction
- *  of the peak RSS power to be promoted into the evaluation set when it
- *  falls between TR harmonics.  Higher than the gate to avoid adding many
- *  minor spectral features as candidates. */
-#define SA_FFT_PROMOTION_POWER_FRAC 0.15f
-
-/** Cross-axis spectral-significance floor for candidate survival (amplitude,
- *  fraction of the GLOBAL cross-axis peak dense-FFT amplitude).
- *
- *  The analytical structural model is peak-amplitude-anchored: its per-event
- *  contribution is amp*|F(f)|/|F(0)|, i.e. the true Fourier amplitude divided by
- *  the event duration.  A brief high-amplitude transient (e.g. a short bipolar
- *  phase-encode blip) therefore rolls off slowly and survives the per-axis
- *  relative gate even though its *actual* oscillatory power at f is negligible
- *  and it cannot excite a mechanical resonance.  The dense FFT (spectrum_full_*)
- *  is the area-anchored ground truth for how much the gradient really oscillates
- *  at f.  A structurally-detected candidate survives only if its per-axis FFT
- *  amplitude at its frequency reaches this fraction of the global cross-axis
- *  peak.  Measured separation on real sequences is wide: a 32x32 GRE PE-blip
- *  ghost sits at ~1e-3 % of the peak, whereas EPI/FSE/bSSFP/spiral readout
- *  resonances are tens of percent — so 0.5 % rejects the transient with a
- *  ~1e3x margin while leaving every genuine resonance untouched.
- *
- *  NB this is NOT FFT peak detection (which is fragile for broad/ringing
- *  spectra): the candidate frequencies come from the structural set; the FFT is
- *  read only AT those frequencies as an absolute significance weight.
- *
- *  2 % (vs the ~1e-3 % GRE PE-blip ghost and the 16-100 % real readout combs):
- *  wide margin above every genuine resonance while also dropping borderline
- *  phase-encode-blip transients (0.3-2 %), consistent with product practice of
- *  gating on the readout comb and neglecting incidental blips. */
-#define SA_FFT_SIGNIFICANCE_FRAC 0.02f
-
-/** Absolute amplitude safety threshold for single-event Tier 2 (Hz/m).
- * Only applies when an axis has exactly one event (coherence ratio is
- * undefined for N=1).  Value is in the same units as the coherent
- * magnitude — roughly amp_Hz_per_m × h(f) × N_events. */
-#define SA_AMPLITUDE_SAFETY 1.0e6f
-
-/** Minimum upper frequency (Hz) for the structural analysis grid, decoupled
- * from the forbidden-band range. Both normalizers used by candidate selection
- * — the relative gate (SA_ANALYTICAL_GATE_FRAC) and the FFT peak-promotion
- * threshold (SA_FFT_PROMOTION_POWER_FRAC) — are taken over the PEAK spectral
- * content in [f1, max_freq]. If max_freq is clamped to just above the top
- * band, a sequence whose dominant gradient spectral feature sits above the
- * band (e.g. a plain GRE's slice/readout/spoiler edges) gets a deflated
- * normalizer and spuriously promotes weak in-band content. Analyze at least up
- * to the validated plotting-path default (grad_spectrum max_frequency = 3000
- * Hz) so the normalizers see the true dominant peak. This only widens the
- * NORMALIZATION window; the candidate→forbidden-band comparison stays
- * band-restricted, so nothing outside a band can ever be flagged. */
+/** Minimum upper frequency (Hz) for the display/analytical spectrum grid,
+ * decoupled from the forbidden-band range so the plotted A_eq comb reaches the
+ * validated grad_spectrum default (3000 Hz). The A_eq verdict itself only ever
+ * evaluates TR-harmonic lines inside a guarded band, so this bound never widens
+ * what can be flagged; it only sets how far the display grid is computed. */
 #define SA_MIN_ANALYSIS_FREQ_HZ 3000.0f
 
 /**
@@ -332,10 +282,12 @@ typedef struct
     float pwl_values[SA_MAX_PWL_VERTICES];   /**< vertex amplitudes (normalised)     */
     int num_reps;                            /**< repetition count (1=once, N=imaging repeat) */
     float rep_period_us;                     /**< repetition period in us (0 if num_reps==1) */
-    /* FFT-based response model (for many-sample arb without sub-period) */
-    float *fft_magnitudes;     /**< normalised |F[k]|/|F[0]|, k=0..fft_num_bins-1 */
-    int fft_num_bins;          /**< nfft/2+1 frequency bins (0 = not used)        */
-    float fft_freq_spacing_hz; /**< 1 / (nfft * raster_s)                         */
+    /* Raw-sample model (for many-sample arb without sub-period): the true
+     * complex event transform is evaluated by direct demodulation of the
+     * samples at cell centres.  arb_num_samples == 0 -> use the PWL model. */
+    float *arb_samples;   /**< normalised amplitudes at cell centres [arb_num_samples] */
+    float *arb_times_us;  /**< sample times (us from event start) [arb_num_samples]    */
+    int arb_num_samples;  /**< raw sample count (0 = not used, use PWL)                */
 } sa_event;
 
 /** Per-axis event list. */
@@ -362,8 +314,10 @@ static void sa_free_structural_events(sa_structural_events *se)
         {
             for (k = 0; k < se->axes[ax].num_events; ++k)
             {
-                if (se->axes[ax].events[k].fft_magnitudes)
-                    PULSEG_FREE(se->axes[ax].events[k].fft_magnitudes);
+                if (se->axes[ax].events[k].arb_samples)
+                    PULSEG_FREE(se->axes[ax].events[k].arb_samples);
+                if (se->axes[ax].events[k].arb_times_us)
+                    PULSEG_FREE(se->axes[ax].events[k].arb_times_us);
             }
             PULSEG_FREE(se->axes[ax].events);
         }
@@ -468,301 +422,6 @@ static int sa_extract_raw_occurrences(
 }
 
 /* ================================================================== */
-/*  Structural acoustic analysis — sub-period detection               */
-/* ================================================================== */
-
-/**
- * Detect dominant sub-period in an arbitrary waveform via autocorrelation
- * of the rectified signal.  Returns detected period in samples, or 0 if
- * no periodicity found.
- *
- * @param wave      Decompressed waveform samples.
- * @param n         Number of samples.
- * @param out_period  Detected period in samples (0 if none).
- * @param out_reps    Number of complete repetitions.
- * @return 1 if sub-period found, 0 otherwise.
- */
-static int sa_detect_sub_period(
-    const float *wave, int n,
-    int *out_period, int *out_reps)
-{
-    int tau, max_lag, best_tau, reps, k;
-    float mean_val, sum_r0, sum_rt, r_norm, best_r;
-    float *buf;
-
-    *out_period = 0;
-    *out_reps = 0;
-
-    if (n < 6)
-        return 0; /* Too short for periodicity */
-
-    buf = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
-    if (!buf)
-        return 0;
-
-    /* Remove mean (no rectification — preserve sign for bipolar detection) */
-    mean_val = 0.0f;
-    for (k = 0; k < n; ++k)
-        mean_val += wave[k];
-    mean_val /= (float)n;
-    for (k = 0; k < n; ++k)
-        buf[k] = wave[k] - mean_val;
-
-    /* Compute R[0] for normalisation */
-    sum_r0 = 0.0f;
-    for (k = 0; k < n; ++k)
-        sum_r0 += buf[k] * buf[k];
-    if (sum_r0 < 1.0e-20f)
-    {
-        PULSEG_FREE(buf);
-        return 0;
-    }
-
-    /* Search for first significant peak in normalised autocorrelation.
-     * Skip lag 0 (trivially 1.0).  Start from lag 2 to avoid edge effects. */
-    max_lag = n / 2;
-    best_tau = 0;
-    best_r = SA_AUTOCORR_THRESHOLD; /* Minimum acceptable peak height */
-
-    /* First, find the first valley (autocorrelation must dip below threshold
-     * before we accept a peak, to avoid the initial decay region). */
-    {
-        int found_valley = 0;
-        float prev_r = 1.0f;
-        for (tau = 2; tau < max_lag; ++tau)
-        {
-            sum_rt = 0.0f;
-            for (k = 0; k < n - tau; ++k)
-                sum_rt += buf[k] * buf[k + tau];
-            r_norm = sum_rt / sum_r0;
-            if (r_norm < SA_AUTOCORR_THRESHOLD * 0.5f)
-            {
-                found_valley = 1;
-            }
-            if (found_valley && r_norm > best_r &&
-                r_norm > prev_r)
-            {
-                /* Check it's a local max: look one step ahead */
-                float r_next = 0.0f;
-                int tau_next = tau + 1;
-                if (tau_next < max_lag)
-                {
-                    int kk;
-                    for (kk = 0; kk < n - tau_next; ++kk)
-                        r_next += buf[kk] * buf[kk + tau_next];
-                    r_next /= sum_r0;
-                }
-                if (r_norm >= r_next)
-                {
-                    best_tau = tau;
-                    best_r = r_norm;
-                    break; /* First significant peak after valley */
-                }
-            }
-            prev_r = r_norm;
-        }
-    }
-
-    PULSEG_FREE(buf);
-
-    if (best_tau < 2)
-        return 0;
-
-    /* Validate: check that R[2*tau] is also a peak (periodic confirmation) */
-    {
-        float r2;
-        int tau2 = 2 * best_tau;
-        if (tau2 < max_lag)
-        {
-            float *buf2 = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
-            if (buf2)
-            {
-                for (k = 0; k < n; ++k)
-                    buf2[k] = wave[k] - mean_val;
-                sum_rt = 0.0f;
-                for (k = 0; k < n - tau2; ++k)
-                    sum_rt += buf2[k] * buf2[k + tau2];
-                r2 = sum_rt / sum_r0;
-                PULSEG_FREE(buf2);
-                if (r2 < SA_AUTOCORR_THRESHOLD * 0.5f)
-                    return 0; /* Second harmonic too weak — not periodic */
-            }
-        }
-    }
-
-    reps = n / best_tau;
-    if (reps < SA_MIN_SUB_PERIOD_REPS)
-        return 0;
-
-    *out_period = best_tau;
-    *out_reps = reps;
-    return 1;
-}
-
-/* ================================================================== */
-/*  Structural acoustic analysis — FFT-based response model           */
-/* ================================================================== */
-
-/**
- * Compute the normalised FFT magnitude spectrum of a waveform.
- *
- * 1. If wave_time_us is non-NULL (non-uniform sampling), interpolate
- *    onto a uniform grid at the given raster_us spacing.
- * 2. Zero-pad to next power of 2.
- * 3. Compute real FFT via kiss_fftr.
- * 4. Normalise magnitudes by |F[0]| (DC).  If DC ≈ 0, normalise by peak.
- *
- * @param wave_vals      Waveform sample values (normalised shape, not physical amplitude).
- * @param wave_time_us   Per-sample times in µs (may be NULL for uniform raster).
- * @param num_samp       Number of samples.
- * @param raster_us      Gradient raster in µs (used for uniform grid).
- * @param out_mags       Receives allocated normalised magnitude array [nfft/2+1].
- * @param out_num_bins   Receives nfft/2+1.
- * @param out_freq_spacing_hz  Receives 1/(nfft*raster_s).
- * @return 1 on success; 0 on a degenerate/benign input (too few samples, zero
- *         duration — the caller emits a zero-peak event, never a lossy coarse
- *         PWL); -1 on OOM (the caller must FAIL CLOSED — silently under-sampling
- *         a safety spectrum could miss a real resonance).
- */
-static int sa_compute_fft_response(
-    const float *wave_vals,
-    const float *wave_time_us,
-    int num_samp,
-    float raster_us,
-    float **out_mags,
-    int *out_num_bins,
-    float *out_freq_spacing_hz)
-{
-    int nfft, nfreq, i, n_uniform;
-    float *uniform_vals = NULL;
-    float *pad = NULL;
-    kiss_fft_cpx *spectrum = NULL;
-    kiss_fftr_cfg cfg = NULL;
-    float *mags = NULL;
-    float norm_val;
-
-    *out_mags = NULL;
-    *out_num_bins = 0;
-    *out_freq_spacing_hz = 0.0f;
-
-    if (num_samp < 2 || raster_us <= 0.0f)
-        return 0;
-
-    /* Step 1: interpolate to uniform raster if time shape is present */
-    if (wave_time_us)
-    {
-        float duration_us = wave_time_us[num_samp - 1] - wave_time_us[0];
-        float *uniform_t;
-        if (duration_us <= 0.0f)
-            return 0;
-        n_uniform = (int)(duration_us / raster_us) + 1;
-        if (n_uniform < 2)
-            return 0;
-        uniform_t = (float *)PULSEG_ALLOC((size_t)n_uniform * sizeof(float));
-        uniform_vals = (float *)PULSEG_ALLOC((size_t)n_uniform * sizeof(float));
-        if (!uniform_t || !uniform_vals)
-        {
-            if (uniform_t)
-                PULSEG_FREE(uniform_t);
-            if (uniform_vals)
-                PULSEG_FREE(uniform_vals);
-            return -1; /* OOM — caller must fail closed */
-        }
-        for (i = 0; i < n_uniform; ++i)
-            uniform_t[i] = wave_time_us[0] + (float)i * raster_us;
-        pulseg__interp1_linear(uniform_vals, uniform_t, n_uniform,
-                                  wave_time_us, wave_vals, num_samp);
-        PULSEG_FREE(uniform_t);
-    }
-    else
-    {
-        n_uniform = num_samp;
-        uniform_vals = (float *)PULSEG_ALLOC((size_t)n_uniform * sizeof(float));
-        if (!uniform_vals)
-            return -1; /* OOM — caller must fail closed */
-        memcpy(uniform_vals, wave_vals, (size_t)n_uniform * sizeof(float));
-    }
-
-    /* Step 2: zero-pad to 4x next power of 2 (F7: 1x next_pow2 undershoots a
-     * narrow spectral peak by up to ~36% via rectangular-window half-bin
-     * scalloping when linearly interpolating |F| between bins; 4x drops
-     * interpolation error to ~2%. fidall independently zero-fills 7x.) */
-    nfft = 4 * (int)pulseg__next_pow2((size_t)n_uniform);
-    if (nfft < n_uniform)
-        nfft = n_uniform;
-    nfreq = nfft / 2 + 1;
-
-    pad = (float *)PULSEG_ALLOC((size_t)nfft * sizeof(float));
-    spectrum = (kiss_fft_cpx *)PULSEG_ALLOC((size_t)nfreq * sizeof(kiss_fft_cpx));
-    mags = (float *)PULSEG_ALLOC((size_t)nfreq * sizeof(float));
-    if (!pad || !spectrum || !mags)
-        goto fail;
-
-    memcpy(pad, uniform_vals, (size_t)n_uniform * sizeof(float));
-    for (i = n_uniform; i < nfft; ++i)
-        pad[i] = 0.0f;
-
-    /* Step 3: FFT */
-    cfg = kiss_fftr_alloc(nfft, 0, NULL, NULL);
-    if (!cfg)
-        goto fail;
-    kiss_fftr(cfg, pad, spectrum);
-
-    /* Step 4: compute magnitudes and normalise */
-    for (i = 0; i < nfreq; ++i)
-    {
-        float r = spectrum[i].r;
-        float im = spectrum[i].i;
-        mags[i] = (float)sqrt((double)(r * r + im * im));
-    }
-
-    /* Normalise by DC; fall back to peak if DC ≈ 0 */
-    norm_val = mags[0];
-    if (norm_val < 1.0e-20f)
-    {
-        norm_val = 0.0f;
-        for (i = 0; i < nfreq; ++i)
-            if (mags[i] > norm_val)
-                norm_val = mags[i];
-    }
-    if (norm_val > 1.0e-20f)
-    {
-        for (i = 0; i < nfreq; ++i)
-            mags[i] /= norm_val;
-    }
-    else
-    {
-        /* Essentially zero waveform */
-        for (i = 0; i < nfreq; ++i)
-            mags[i] = 1.0f;
-    }
-
-    *out_mags = mags;
-    mags = NULL;
-    *out_num_bins = nfreq;
-    *out_freq_spacing_hz = 1.0e6f / ((float)nfft * raster_us);
-
-    PULSEG_FREE(uniform_vals);
-    PULSEG_FREE(pad);
-    PULSEG_FREE(spectrum);
-    kiss_fftr_free(cfg);
-    return 1;
-
-fail:
-    if (uniform_vals)
-        PULSEG_FREE(uniform_vals);
-    if (pad)
-        PULSEG_FREE(pad);
-    if (spectrum)
-        PULSEG_FREE(spectrum);
-    if (mags)
-        PULSEG_FREE(mags);
-    if (cfg)
-        kiss_fftr_free(cfg);
-    return -1; /* OOM — caller must fail closed */
-}
-
-/* ================================================================== */
 /*  Structural acoustic analysis — build events per axis              */
 /* ================================================================== */
 
@@ -776,11 +435,10 @@ static int sa_compare_int(const void *a, const void *b)
  *
  * For each unique def_id:
  *   - Trapezoid: one event per occurrence, PWL from rise/flat/fall.
- *   - Arbitrary with few samples: one event per occurrence, PWL approximation.
- *   - Arbitrary with many samples + detected sub-period: M sub-events per
- *     occurrence, each with PWL of one period.
- *   - Arbitrary with many samples + no sub-period: one event per occurrence,
- *     PWL approximation of full waveform (keeping first/last + zero crossings).
+ *   - Arbitrary with few samples: one event per occurrence, PWL from vertices.
+ *   - Arbitrary with many samples: one event per occurrence carrying the raw
+ *     samples; the exact complex transform is demodulated directly at each
+ *     in-band line (no template/sub-period assumption).
  */
 static int sa_build_axis_events(
     sa_axis_events *ae,
@@ -824,33 +482,25 @@ static int sa_build_axis_events(
     for (idx = 0; idx < num_unique; ++idx)
     {
         const struct pulseg_grad_definition *gdef;
-        /* Shared PWL template and sub-event decomposition info */
+        /* Shared PWL template (trap / few-vertex arb) */
         int pwl_nv;
         float pwl_t[SA_MAX_PWL_VERTICES];
         float pwl_v[SA_MAX_PWL_VERTICES];
-        int decompose;
-        int sub_reps;
-        int sub_pwl_nv;
-        float sub_pwl_t[SA_MAX_PWL_VERTICES];
-        float sub_pwl_v[SA_MAX_PWL_VERTICES];
-        float sub_period_us;
-        /* Shared FFT template (for many-sample arb without sub-period) */
-        float *shared_fft_mags;
-        int shared_fft_nbins;
-        float shared_fft_spacing;
-        int use_fft;
+        /* Shared raw-sample store (many-sample arb): the exact complex event
+         * transform is demodulated directly from these samples at their
+         * cell-centre times. */
+        float *shared_arb_samples;
+        float *shared_arb_times;
+        int shared_arb_n;
+        int use_arb;
 
         did = unique_ids[idx];
         gdef = NULL;
         pwl_nv = 0;
-        decompose = 0;
-        sub_reps = 0;
-        sub_pwl_nv = 0;
-        sub_period_us = 0.0f;
-        shared_fft_mags = NULL;
-        shared_fft_nbins = 0;
-        shared_fft_spacing = 0.0f;
-        use_fft = 0;
+        shared_arb_samples = NULL;
+        shared_arb_times = NULL;
+        shared_arb_n = 0;
+        use_arb = 0;
 
         /* Find first occurrence of this def to get gdef */
         for (j = 0; j < num_occ; ++j)
@@ -939,100 +589,41 @@ static int sa_build_axis_events(
                     }
                     else
                     {
-                        /* Many-sample arb: try sub-period detection */
-                        int sp, sr;
-                        if (sa_detect_sub_period(wave_samp, num_samp, &sp, &sr))
+                        /* Many-sample arb: keep the raw samples and their
+                         * cell-centre times so the exact complex transform is
+                         * demodulated directly at each (sparse) in-band line.
+                         * This is exact for onset/offset envelopes and multi-
+                         * period structure alike — no template/sub-period
+                         * assumption.  FAIL CLOSED on OOM. */
+                        int m;
+                        shared_arb_samples = (float *)PULSEG_ALLOC((size_t)num_samp * sizeof(float));
+                        shared_arb_times = (float *)PULSEG_ALLOC((size_t)num_samp * sizeof(float));
+                        if (!shared_arb_samples || !shared_arb_times)
                         {
-                            /* Sub-period found: build PWL for one period */
-                            decompose = 1;
-                            sub_reps = sr;
-                            sub_period_us = (has_time && time_us && sp < num_samp)
-                                                ? (time_us[sp] - time_us[0])
-                                                : (float)sp * raster;
-
-                            /* Build PWL for one sub-period */
-                            nv = sp;
-                            if (nv > SA_MAX_PWL_VERTICES)
-                                nv = SA_MAX_PWL_VERTICES;
-                            sub_pwl_nv = nv;
-                            if (nv == sp)
-                            {
-                                /* Use all samples */
-                                for (s_idx = 0; s_idx < nv; ++s_idx)
-                                {
-                                    if (has_time && time_us)
-                                        sub_pwl_t[s_idx] = time_us[s_idx] - time_us[0];
-                                    else
-                                        sub_pwl_t[s_idx] = (float)s_idx * raster;
-                                    sub_pwl_v[s_idx] = wave_samp[s_idx];
-                                }
-                            }
+                            if (shared_arb_samples)
+                                PULSEG_FREE(shared_arb_samples);
+                            if (shared_arb_times)
+                                PULSEG_FREE(shared_arb_times);
+                            if (decomp_time.samples)
+                                PULSEG_FREE(decomp_time.samples);
+                            if (decomp_wave.samples)
+                                PULSEG_FREE(decomp_wave.samples);
+                            PULSEG_FREE(unique_ids);
+                            PULSEG_FREE(ae->events);
+                            ae->events = NULL;
+                            return PULSEG_ERR_ALLOC_FAILED;
+                        }
+                        for (m = 0; m < num_samp; ++m)
+                        {
+                            shared_arb_samples[m] = wave_samp[m];
+                            if (has_time && time_us)
+                                shared_arb_times[m] = time_us[m];
                             else
-                            {
-                                /* Subsample uniformly */
-                                for (s_idx = 0; s_idx < nv; ++s_idx)
-                                {
-                                    int si = (s_idx * (sp - 1)) / (nv - 1);
-                                    if (has_time && time_us)
-                                        sub_pwl_t[s_idx] = time_us[si] - time_us[0];
-                                    else
-                                        sub_pwl_t[s_idx] = (float)si * raster;
-                                    sub_pwl_v[s_idx] = wave_samp[si];
-                                }
-                            }
+                                shared_arb_times[m] = 0.5f * raster + (float)m * raster;
                         }
-                        else
-                        {
-                            /* No sub-period: per-event FFT response.
-                             * rc>0 use it; rc==0 (degenerate input) emit a
-                             * zero-peak event (no spectral contribution); rc<0
-                             * (OOM) FAIL CLOSED — never silently under-sample a
-                             * safety spectrum with a lossy coarse PWL. */
-                            {
-                                int fft_rc = sa_compute_fft_response(
-                                    wave_samp,
-                                    has_time ? time_us : NULL,
-                                    num_samp, raster,
-                                    &shared_fft_mags,
-                                    &shared_fft_nbins,
-                                    &shared_fft_spacing);
-                                if (fft_rc > 0)
-                                {
-                                    use_fft = 1;
-                                    pwl_nv = 0;
-                                }
-                                else
-                                {
-                                    if (fft_rc == 0)
-                                    {
-                                        /* Degenerate: single-bin zero response. */
-                                        shared_fft_mags = (float *)PULSEG_ALLOC(sizeof(float));
-                                        if (shared_fft_mags)
-                                        {
-                                            shared_fft_mags[0] = 0.0f;
-                                            shared_fft_nbins = 1;
-                                            shared_fft_spacing = 1.0f;
-                                            use_fft = 1;
-                                            pwl_nv = 0;
-                                        }
-                                    }
-                                    if (fft_rc < 0 || !shared_fft_mags)
-                                    {
-                                        /* OOM (or the zero-peak alloc failed). */
-                                        if (decomp_time.samples)
-                                            PULSEG_FREE(decomp_time.samples);
-                                        if (decomp_wave.samples)
-                                            PULSEG_FREE(decomp_wave.samples);
-                                        if (shared_fft_mags)
-                                            PULSEG_FREE(shared_fft_mags);
-                                        PULSEG_FREE(unique_ids);
-                                        PULSEG_FREE(ae->events);
-                                        ae->events = NULL;
-                                        return PULSEG_ERR_ALLOC_FAILED;
-                                    }
-                                }
-                            }
-                        }
+                        shared_arb_n = num_samp;
+                        use_arb = 1;
+                        pwl_nv = 0;
                     }
 
                     if (decomp_time.samples)
@@ -1049,48 +640,8 @@ static int sa_build_axis_events(
             if (occ[j].def_id != did)
                 continue;
 
-            if (decompose && sub_reps > 0)
             {
-                /* Decompose into sub-events */
-                int m;
-                for (m = 0; m < sub_reps; ++m)
-                {
-                    if (n_events >= cap)
-                    {
-                        sa_event *tmp;
-                        cap *= 2;
-                        tmp = (sa_event *)PULSEG_ALLOC((size_t)cap * sizeof(sa_event));
-                        if (!tmp)
-                        {
-                            if (shared_fft_mags)
-                                PULSEG_FREE(shared_fft_mags);
-                            PULSEG_FREE(unique_ids);
-                            PULSEG_FREE(ae->events);
-                            ae->events = NULL;
-                            return PULSEG_ERR_ALLOC_FAILED;
-                        }
-                        memcpy(tmp, ae->events, (size_t)n_events * sizeof(sa_event));
-                        PULSEG_FREE(ae->events);
-                        ae->events = tmp;
-                    }
-                    ae->events[n_events].def_id = did;
-                    ae->events[n_events].def_index = occ[j].def_index;
-                    ae->events[n_events].start_time_us = occ[j].start_time_us + (float)m * sub_period_us + (float)gdef->delay;
-                    ae->events[n_events].amplitude = occ[j].amplitude;
-                    ae->events[n_events].pwl_num_vertices = sub_pwl_nv;
-                    memcpy(ae->events[n_events].pwl_times_us, sub_pwl_t,
-                           (size_t)sub_pwl_nv * sizeof(float));
-                    memcpy(ae->events[n_events].pwl_values, sub_pwl_v,
-                           (size_t)sub_pwl_nv * sizeof(float));
-                    ae->events[n_events].fft_magnitudes = NULL;
-                    ae->events[n_events].fft_num_bins = 0;
-                    ae->events[n_events].fft_freq_spacing_hz = 0.0f;
-                    n_events++;
-                }
-            }
-            else
-            {
-                /* Single event */
+                /* Single event (trap / few-vertex arb PWL / many-sample arb) */
                 if (n_events >= cap)
                 {
                     sa_event *tmp;
@@ -1098,8 +649,10 @@ static int sa_build_axis_events(
                     tmp = (sa_event *)PULSEG_ALLOC((size_t)cap * sizeof(sa_event));
                     if (!tmp)
                     {
-                        if (shared_fft_mags)
-                            PULSEG_FREE(shared_fft_mags);
+                        if (shared_arb_samples)
+                            PULSEG_FREE(shared_arb_samples);
+                        if (shared_arb_times)
+                            PULSEG_FREE(shared_arb_times);
                         PULSEG_FREE(unique_ids);
                         PULSEG_FREE(ae->events);
                         ae->events = NULL;
@@ -1113,23 +666,32 @@ static int sa_build_axis_events(
                 ae->events[n_events].def_index = occ[j].def_index;
                 ae->events[n_events].start_time_us = occ[j].start_time_us + (float)gdef->delay;
                 ae->events[n_events].amplitude = occ[j].amplitude;
-                if (use_fft && shared_fft_mags)
+                if (use_arb && shared_arb_samples && shared_arb_times)
                 {
-                    float *fft_copy = (float *)PULSEG_ALLOC(
-                        (size_t)shared_fft_nbins * sizeof(float));
-                    if (!fft_copy)
+                    float *smp_copy = (float *)PULSEG_ALLOC(
+                        (size_t)shared_arb_n * sizeof(float));
+                    float *tim_copy = (float *)PULSEG_ALLOC(
+                        (size_t)shared_arb_n * sizeof(float));
+                    if (!smp_copy || !tim_copy)
                     {
-                        PULSEG_FREE(shared_fft_mags);
+                        if (smp_copy)
+                            PULSEG_FREE(smp_copy);
+                        if (tim_copy)
+                            PULSEG_FREE(tim_copy);
+                        PULSEG_FREE(shared_arb_samples);
+                        PULSEG_FREE(shared_arb_times);
                         PULSEG_FREE(unique_ids);
                         PULSEG_FREE(ae->events);
                         ae->events = NULL;
                         return PULSEG_ERR_ALLOC_FAILED;
                     }
-                    memcpy(fft_copy, shared_fft_mags,
-                           (size_t)shared_fft_nbins * sizeof(float));
-                    ae->events[n_events].fft_magnitudes = fft_copy;
-                    ae->events[n_events].fft_num_bins = shared_fft_nbins;
-                    ae->events[n_events].fft_freq_spacing_hz = shared_fft_spacing;
+                    memcpy(smp_copy, shared_arb_samples,
+                           (size_t)shared_arb_n * sizeof(float));
+                    memcpy(tim_copy, shared_arb_times,
+                           (size_t)shared_arb_n * sizeof(float));
+                    ae->events[n_events].arb_samples = smp_copy;
+                    ae->events[n_events].arb_times_us = tim_copy;
+                    ae->events[n_events].arb_num_samples = shared_arb_n;
                     ae->events[n_events].pwl_num_vertices = 0;
                 }
                 else
@@ -1142,18 +704,23 @@ static int sa_build_axis_events(
                         memcpy(ae->events[n_events].pwl_values, pwl_v,
                                (size_t)pwl_nv * sizeof(float));
                     }
-                    ae->events[n_events].fft_magnitudes = NULL;
-                    ae->events[n_events].fft_num_bins = 0;
-                    ae->events[n_events].fft_freq_spacing_hz = 0.0f;
+                    ae->events[n_events].arb_samples = NULL;
+                    ae->events[n_events].arb_times_us = NULL;
+                    ae->events[n_events].arb_num_samples = 0;
                 }
                 n_events++;
             }
         }
-        /* Free shared FFT template for this def_id */
-        if (shared_fft_mags)
+        /* Free shared raw-sample template for this def_id */
+        if (shared_arb_samples)
         {
-            PULSEG_FREE(shared_fft_mags);
-            shared_fft_mags = NULL;
+            PULSEG_FREE(shared_arb_samples);
+            shared_arb_samples = NULL;
+        }
+        if (shared_arb_times)
+        {
+            PULSEG_FREE(shared_arb_times);
+            shared_arb_times = NULL;
         }
     }
 
@@ -1201,63 +768,75 @@ static int sa_build_structural_events(
 /* ================================================================== */
 
 /**
- * Evaluate |G(f)| / |G(0)| for a piecewise-linear waveform defined by
- * n_vtx vertices (t_us[i], v[i]).  Times are in microseconds.
+ * True complex Fourier transform of a piecewise-linear waveform (trap /
+ * extended-trap / ramp / coarse-PWL) defined by n_vtx vertices
+ * (t_us[i], v[i]); times in microseconds.  Returns the RAW complex integral
+ *   G(f) = integral g(t) e^{-j 2 pi f t} dt   (in [value units] * us),
+ * with NO |G(0)| normalization and NO zero-area fallback: this is the true
+ * complex transform of the base waveform (the A_eq path needs true units, not
+ * a peak-anchored |G(f)|/|G(0)|). The caller scales by 1e-6 to get
+ * [value units] * s and multiplies by the event amplitude to obtain F_k(f).
  *
- * For each linear segment [t_k, t_{k+1}] with values [v_k, v_{k+1}]:
- *   G_k(f) = e^{-j*omega*t_k} * [a*I_0 + b*I_1]
- * where a = v_k, b = (v_{k+1}-v_k)/T_k, omega = 2*pi*f,
- *   I_0 = integral_0^T e^{-j*omega*tau} dtau
- *   I_1 = integral_0^T tau * e^{-j*omega*tau} dtau
- *
- * Returns |G(f)| / |G(0)|.
+ * Per linear segment [t_k, t_{k+1}] with values [v_k, v_{k+1}]:
+ *   G_k(f) = e^{-j omega t_k} [a I_0 + b I_1],  a = v_k, b = (v_{k+1}-v_k)/T_k,
+ *   omega = 2 pi f (rad/us), I_0 = int_0^T e^{-j omega tau} dtau,
+ *   I_1 = int_0^T tau e^{-j omega tau} dtau.
+ * At omega -> 0 the segment reduces to the DC area integral (real).
  */
-static float sa_eval_pwl_response(
-    float f_hz, const float *t_us, const float *v, int n_vtx)
+static void sa_eval_pwl_transform(
+    float f_hz, const float *t_us, const float *v, int n_vtx,
+    float *out_re, float *out_im)
 {
-    double omega, g0, g_re, g_im, mag;
+    double omega, g_re, g_im;
     int k;
-
-    if (n_vtx < 2)
-        return 1.0f;
-
-    g0 = 0.0;
-    for (k = 0; k < n_vtx - 1; ++k)
-    {
-        double dt = (double)(t_us[k + 1] - t_us[k]);
-        g0 += 0.5 * ((double)v[k] + (double)v[k + 1]) * dt;
-    }
-    if (g0 < 1.0e-30 && g0 > -1.0e-30)
-        return 1.0f;
-    g0 = fabs(g0);
-
-    omega = 2.0 * M_PI * (double)f_hz * 1.0e-6;
-    if (omega < 1.0e-12 && omega > -1.0e-12)
-        return 1.0f;
 
     g_re = 0.0;
     g_im = 0.0;
+
+    if (n_vtx < 2)
+    {
+        *out_re = 0.0f;
+        *out_im = 0.0f;
+        return;
+    }
+
+    omega = 2.0 * M_PI * (double)f_hz * 1.0e-6;
+
+    if (omega < 1.0e-12 && omega > -1.0e-12)
+    {
+        /* DC: G(0) = integral g dt = sum of trapezoid areas (real). */
+        for (k = 0; k < n_vtx - 1; ++k)
+        {
+            double dt = (double)(t_us[k + 1] - t_us[k]);
+            g_re += 0.5 * ((double)v[k] + (double)v[k + 1]) * dt;
+        }
+        *out_re = (float)g_re;
+        *out_im = 0.0f;
+        return;
+    }
 
     for (k = 0; k < n_vtx - 1; ++k)
     {
         double tk = (double)t_us[k];
         double Tk = (double)(t_us[k + 1] - t_us[k]);
         double ak = (double)v[k];
-        double bk = ((double)v[k + 1] - ak) / Tk;
-        double wTk = omega * Tk;
-        double cos_wTk = cos(wTk);
-        double sin_wTk = sin(wTk);
-        double cos_ph = cos(omega * tk);
-        double sin_ph = sin(omega * tk);
+        double bk;
+        double wTk, cos_wTk, sin_wTk, cos_ph, sin_ph;
         double c0_re, c0_im, c1_re, c1_im;
         double x_re, x_im, seg_re, seg_im;
 
         if (Tk < 1.0e-12)
             continue;
 
+        bk = ((double)v[k + 1] - ak) / Tk;
+        wTk = omega * Tk;
+        cos_wTk = cos(wTk);
+        sin_wTk = sin(wTk);
+        cos_ph = cos(omega * tk);
+        sin_ph = sin(omega * tk);
+
         c0_re = sin_wTk / omega;
         c0_im = (cos_wTk - 1.0) / omega;
-
         {
             double I0mT_re = c0_re - Tk * cos_wTk;
             double I0mT_im = c0_im + Tk * sin_wTk;
@@ -1268,6 +847,7 @@ static float sa_eval_pwl_response(
         x_re = ak * c0_re + bk * c1_re;
         x_im = ak * c0_im + bk * c1_im;
 
+        /* multiply by e^{-j omega tk} */
         seg_re = x_re * cos_ph + x_im * sin_ph;
         seg_im = x_im * cos_ph - x_re * sin_ph;
 
@@ -1275,178 +855,134 @@ static float sa_eval_pwl_response(
         g_im += seg_im;
     }
 
-    mag = sqrt(g_re * g_re + g_im * g_im);
-    return (float)(mag / g0);
+    *out_re = (float)g_re;
+    *out_im = (float)g_im;
 }
 
 /**
- * Evaluate the waveform response W_k(f) for a single event.
- * Returns real-valued |W(f)| / |W(0)| (normalised).
+ * True complex transform of one event's base waveform at frequency f (no
+ * amplitude scaling, no start-time phase — the caller adds those):
+ *   T(f) = integral shape(tau) e^{-j 2 pi f tau} dtau   ([normalised] * us),
+ * tau measured from the event start.  Arbitrary waveforms use their raw
+ * samples (cell-centre times) directly as PWL vertices — the exact transform
+ * of the sample interpolant, evaluated at the sparse in-band lines only.
  */
-static float sa_eval_event_response(const sa_event *ev, float f_hz)
+static void sa_eval_event_transform(
+    const sa_event *ev, float f_hz, float *out_re, float *out_im)
 {
-    /* FFT-based response: interpolate into stored magnitude spectrum */
-    if (ev->fft_num_bins > 0 && ev->fft_magnitudes)
+    if (ev->arb_num_samples >= 2)
+        sa_eval_pwl_transform(f_hz, ev->arb_times_us, ev->arb_samples,
+                              ev->arb_num_samples, out_re, out_im);
+    else if (ev->pwl_num_vertices >= 2)
+        sa_eval_pwl_transform(f_hz, ev->pwl_times_us, ev->pwl_values,
+                              ev->pwl_num_vertices, out_re, out_im);
+    else
     {
-        float bin_f = f_hz / ev->fft_freq_spacing_hz;
-        int bin_lo = (int)bin_f;
-        float frac;
-        if (bin_lo < 0)
-            return 1.0f;
-        if (bin_lo >= ev->fft_num_bins - 1)
-            return ev->fft_magnitudes[ev->fft_num_bins - 1];
-        frac = bin_f - (float)bin_lo;
-        return ev->fft_magnitudes[bin_lo] * (1.0f - frac) + ev->fft_magnitudes[bin_lo + 1] * frac;
+        *out_re = 0.0f;
+        *out_im = 0.0f;
     }
-    /* PWL-based response */
-    if (ev->pwl_num_vertices >= 2)
-        return sa_eval_pwl_response(f_hz, ev->pwl_times_us, ev->pwl_values,
-                                    ev->pwl_num_vertices);
-    return 1.0f; /* Broadband fallback */
 }
 
 /**
- * Evaluate the complex spectral contribution of one event at frequency f:
- *   a_k(f) = A_k * W_k(f) * e^{-j 2 pi f t_k}
+ * Complex spectral contribution of one event at frequency f, in true units:
+ *   a_k(f) = A_k * T_k(f) * 1e-6 * e^{-j 2 pi f t_k}   (Hz/m * s),
+ * where A_k is the event amplitude (Hz/m), T_k the base-waveform transform
+ * (in [normalised]*us, hence the 1e-6 us->s), and t_k the event start time.
  */
 static void sa_eval_event_spectrum(
     float f_hz, const sa_event *ev,
     float *out_re, float *out_im)
 {
-    float amp, h;
+    float tr_re, tr_im, scale, base_re, base_im;
     double phase, cos_ph, sin_ph;
 
-    amp = ev->amplitude;
-    h = sa_eval_event_response(ev, f_hz);
+    sa_eval_event_transform(ev, f_hz, &tr_re, &tr_im);
+    scale = ev->amplitude * 1.0e-6f;
+    base_re = scale * tr_re;
+    base_im = scale * tr_im;
 
     phase = -2.0 * M_PI * (double)f_hz * (double)ev->start_time_us * 1.0e-6;
     cos_ph = cos(phase);
     sin_ph = sin(phase);
 
-    *out_re = amp * h * (float)cos_ph;
-    *out_im = amp * h * (float)sin_ph;
+    *out_re = (float)((double)base_re * cos_ph - (double)base_im * sin_ph);
+    *out_im = (float)((double)base_re * sin_ph + (double)base_im * cos_ph);
 }
 
 /**
- * Evaluate the inner TR spectrum magnitude for one axis at frequency f:
- *   |H(f)| = |sum_k a_k(f) * D_{N_k}(f)|
- * where D_N is the Dirichlet kernel for events repeated N times with
- * period T:  D_N(f,T) = sum_{n=0}^{N-1} e^{-j 2 pi f n T}.
- *
- * Also returns the incoherent sum sqrt(sum N_k * |a_k|^2) for coherence ratio.
+ * Complex spectral line of one event at frequency f, including the Dirichlet
+ * repetition kernel for events repeated N times with period T:
+ *   line_k(f) = a_k(f) * D_{N_k}(f),
+ *   D_N(f,T)  = sum_{n=0}^{N-1} e^{-j 2 pi f n T}
+ *             = e^{-j(N-1)phi/2} sin(N phi/2)/sin(phi/2),  phi = -2 pi f T.
+ * (N==1 -> D_1 = 1.)
  */
-static void sa_eval_inner_spectrum(
+static void sa_eval_event_line(
+    float f_hz, const sa_event *ev, float *out_re, float *out_im)
+{
+    float d_re, d_im;
+    int N = ev->num_reps;
+    if (N < 1)
+        N = 1;
+
+    sa_eval_event_spectrum(f_hz, ev, &d_re, &d_im);
+
+    if (N > 1 && ev->rep_period_us > 0.0f)
+    {
+        double phi = -2.0 * M_PI * (double)f_hz * (double)ev->rep_period_us * 1.0e-6;
+        double half_phi = phi * 0.5;
+        double sin_half = sin(half_phi);
+        double dk_re, dk_im, new_re, new_im;
+
+        if (fabs(sin_half) < 1.0e-12)
+        {
+            dk_re = (double)N;
+            dk_im = 0.0;
+        }
+        else
+        {
+            double ratio = sin((double)N * half_phi) / sin_half;
+            double center = (double)(N - 1) * half_phi;
+            dk_re = ratio * cos(center);
+            dk_im = ratio * sin(center);
+        }
+
+        new_re = (double)d_re * dk_re - (double)d_im * dk_im;
+        new_im = (double)d_re * dk_im + (double)d_im * dk_re;
+        d_re = (float)new_re;
+        d_im = (float)new_im;
+    }
+
+    *out_re = d_re;
+    *out_im = d_im;
+}
+
+/**
+ * Complex structural drive spectrum of one axis at frequency f:
+ *   S_ax(f) = sum_k line_k(f).
+ * The per-axis equivalent-sustained amplitude of the spectral line at f is
+ *   A_eq(f) = (2 / T_TR) * |S_ax(f)|   (Hz/m),
+ * computed by the caller with the canonical-TR period T_TR.
+ */
+static void sa_eval_axis_spectrum(
     float f_hz,
     const sa_axis_events *ae,
-    float *out_coherent_mag,
-    float *out_incoherent_mag)
+    float *out_re, float *out_im)
 {
     float sum_re, sum_im;
-    float inc_sum;
     int k;
 
     sum_re = 0.0f;
     sum_im = 0.0f;
-    inc_sum = 0.0f;
-
     for (k = 0; k < ae->num_events; ++k)
     {
-        float d_re, d_im, d_mag2;
-        int N = ae->events[k].num_reps;
-        if (N < 1)
-            N = 1;
-
-        sa_eval_event_spectrum(f_hz, &ae->events[k], &d_re, &d_im);
-        d_mag2 = d_re * d_re + d_im * d_im;
-
-        if (N > 1 && ae->events[k].rep_period_us > 0.0f)
-        {
-            /* Dirichlet kernel: D_N = e^{-j(N-1)phi/2} sin(N phi/2)/sin(phi/2) */
-            double phi = -2.0 * M_PI * (double)f_hz * (double)ae->events[k].rep_period_us * 1.0e-6;
-            double half_phi = phi * 0.5;
-            double sin_half = sin(half_phi);
-            double dk_re, dk_im;
-            double new_re, new_im;
-
-            if (fabs(sin_half) < 1.0e-12)
-            {
-                dk_re = (double)N;
-                dk_im = 0.0;
-            }
-            else
-            {
-                double ratio = sin((double)N * half_phi) / sin_half;
-                double center = (double)(N - 1) * half_phi;
-                dk_re = ratio * cos(center);
-                dk_im = ratio * sin(center);
-            }
-
-            new_re = (double)d_re * dk_re - (double)d_im * dk_im;
-            new_im = (double)d_re * dk_im + (double)d_im * dk_re;
-            sum_re += (float)new_re;
-            sum_im += (float)new_im;
-            inc_sum += (float)N * d_mag2;
-        }
-        else
-        {
-            sum_re += d_re;
-            sum_im += d_im;
-            inc_sum += d_mag2;
-        }
+        float d_re, d_im;
+        sa_eval_event_line(f_hz, &ae->events[k], &d_re, &d_im);
+        sum_re += d_re;
+        sum_im += d_im;
     }
-
-    *out_coherent_mag = (float)sqrt((double)(sum_re * sum_re + sum_im * sum_im));
-    *out_incoherent_mag = (float)sqrt((double)inc_sum);
-}
-
-/**
- * Compute spectral-weighted effective gradient amplitude G_eff at frequency f:
- *   G_eff(f) = sum_k |A_k| * |a_k(f)| * |D_{N_k}(f)| / sum_k |a_k(f)| * |D_{N_k}(f)|
- */
-static float sa_eval_geff(
-    float f_hz,
-    const sa_axis_events *ae)
-{
-    float w_sum, w_amp_sum;
-    int k;
-
-    w_sum = 0.0f;
-    w_amp_sum = 0.0f;
-
-    for (k = 0; k < ae->num_events; ++k)
-    {
-        float d_re, d_im, d_mag;
-        float abs_amp;
-        int N = ae->events[k].num_reps;
-        if (N < 1)
-            N = 1;
-
-        sa_eval_event_spectrum(f_hz, &ae->events[k], &d_re, &d_im);
-        d_mag = (float)sqrt((double)(d_re * d_re + d_im * d_im));
-
-        if (N > 1 && ae->events[k].rep_period_us > 0.0f)
-        {
-            double phi = -2.0 * M_PI * (double)f_hz * (double)ae->events[k].rep_period_us * 1.0e-6;
-            double half_phi = phi * 0.5;
-            double sin_half = sin(half_phi);
-            float dk_mag;
-            if (fabs(sin_half) < 1.0e-12)
-                dk_mag = (float)N;
-            else
-                dk_mag = (float)fabs(sin((double)N * half_phi) / sin_half);
-            d_mag *= dk_mag;
-        }
-
-        abs_amp = ae->events[k].amplitude;
-        if (abs_amp < 0.0f)
-            abs_amp = -abs_amp;
-        w_sum += d_mag;
-        w_amp_sum += d_mag * abs_amp;
-    }
-
-    if (w_sum <= 1.0e-20f)
-        return 0.0f;
-    return w_amp_sum / w_sum;
+    *out_re = sum_re;
+    *out_im = sum_im;
 }
 
 /* ================================================================== */
@@ -1454,23 +990,32 @@ static float sa_eval_geff(
 /* ================================================================== */
 
 /**
- * Run full structural acoustic analysis with event-level analytical framework.
+ * A_eq mechanical-resonance verdict (PLAN_mechres_aeq_FINAL.md).
  *
- * For each axis:
- *   1. Extract block-level occurrences from the base pass (not expanded),
- *      decompose arbitrary waveforms via autocorrelation if sub-periodicity
- *      detected.
- *   2. Tag imaging events with repetition count (num_avgs) and period, and
- *      shift cooldown event times to their expanded-pass positions.
- *   3. Build candidate frequency grid (TR harmonics of expanded pass; K is
- *      clamped to min 2 so the Fourier comb works for single-pass sequences).
- *   4. Evaluate inner TR spectrum H(f) at each candidate via coherent sum
- *      of per-event contributions with Dirichlet kernel for repeated events.
- *   5. Analytical power gate + two-tier candidate selection:
- *      - Tier 1: coherence ratio > threshold AND |H| > floor
- *      - Tier 2: |H| > safety threshold
- *   6. For each candidate: compute G_eff(f) and check forbidden bands.
+ *   1. Build the event model of the canonical (outer) TR — every gradient
+ *      instance materialised at its time within the TR (inner periodicities
+ *      such as echo trains / slices are NOT declared; they emerge from the
+ *      coherent sum of the instances).  NEX (num_avgs) repetition is tagged
+ *      as a Dirichlet kernel on the imaging events.
+ *   2. (display) A_eq at every TR harmonic k/T_TR up to freq_max, for plots.
+ *   3. (verdict) For each forbidden band, enumerate the TR-harmonic lines that
+ *      fall inside the guarded range [f_min-guard, f_max+guard], evaluate
+ *      A_eq(f_L) = (2/T_TR)|S_ax(f_L)| per axis, and flag the band iff the
+ *      max-axis A_eq exceeds eps = max(band limit, k*G_max).
+ * The outermost TR is treated as an infinite-rep (Dirac) comb: only its
+ * harmonics carry sustained drive, hence lines live exactly at k/T_TR.
  */
+static float sa_eps_for_band(
+    const pulseg_forbidden_band *band, float g_max_hz_per_m)
+{
+    /* The floor only rescues a literal zero-tolerance band (unusable as a
+     * threshold — see SA_AEQ_K_GMAX comment). Any vendor-specified nonzero
+     * limit is trusted as-is, even if tighter than the floor. */
+    if (band->max_amplitude_hz_per_m <= 0.0f)
+        return SA_AEQ_K_GMAX * g_max_hz_per_m;
+    return band->max_amplitude_hz_per_m;
+}
+
 static int sa_check_structural_violations(
     pulseg_mech_resonances_spectra *spectra,
     const struct pulseg_sequence_descriptor *desc,
@@ -1480,43 +1025,34 @@ static int sa_check_structural_violations(
     const pulseg_forbidden_band *forbidden_bands,
     float peak_log10_threshold, float peak_norm_scale,
     float peak_eps, float peak_prominence,
-    int num_avgs)
+    int num_avgs, float g_max_hz_per_m)
 {
     sa_structural_events se;
-    int result, ax, i, b, ci;
-    int num_freqs, num_candidates;
-    float f_hz, freq_max;
-    float *eval_freqs;
-    float *coherent_mag[3];
-    float *incoherent_mag[3];
-    int *is_candidate_ax[3];
-    float max_fft_sq[3], fft_promo_sq[3];
-    float max_ana_sq[3], ana_gate_sq[3];
-    int has_fft_data;
-    int n_tr_harmonics;
-    int *fft_bypass_set_ax[3];
+    int result, ax, i, b, k, ci;
+    double T_s, f1_hz;
+    float freq_max, guard, min_bw;
+    int m_max;
+
+    /* analytical display grid (TR harmonics; display-only, not the verdict) */
+    int num_ana;
+    float *ana_freqs;
+    float *ana_amps[3];
+    float *ana_phases[3];
+    float *ana_widths;
+
+    /* candidate selection (in-band TR-harmonic lines; the verdict) */
+    int cand_cap, num_cand;
     float *cand_freqs;
     float *cand_amps[3];
     float *cand_grad_amps;
     float *cand_grad_amps_ax[3];
     int *cand_violations;
-    float *ana_peak_freqs;
-    float *ana_peak_amps[3];
-    float *ana_peak_phases[3];
-    float *ana_peak_widths;
     float *surviving_freqs_hz;
 
     /* Component-level export arrays */
-    int max_component_terms;
-    int num_component_terms;
-    float *component_freqs_hz;
-    float *component_amps;
-    float *component_phases_rad;
-    float *component_widths_hz;
-    int *component_axes;
-    int *component_def_ids;
-    int *component_contrib_ids;
-    int *component_run_ids;
+    int max_component_terms, num_component_terms;
+    float *component_freqs_hz, *component_amps, *component_phases_rad, *component_widths_hz;
+    int *component_axes, *component_def_ids, *component_contrib_ids, *component_run_ids;
 
     (void)peak_log10_threshold;
     (void)peak_norm_scale;
@@ -1524,17 +1060,17 @@ static int sa_check_structural_violations(
     (void)peak_prominence;
 
     memset(&se, 0, sizeof(se));
-    eval_freqs = NULL;
-    fft_bypass_set_ax[0] = fft_bypass_set_ax[1] = fft_bypass_set_ax[2] = NULL;
+    num_ana = 0;
+    ana_freqs = NULL;
+    ana_widths = NULL;
+    cand_cap = 0;
+    num_cand = 0;
     cand_freqs = NULL;
-    n_tr_harmonics = 0;
     cand_grad_amps = NULL;
     cand_violations = NULL;
-    ana_peak_freqs = NULL;
-    ana_peak_widths = NULL;
     surviving_freqs_hz = NULL;
-    num_component_terms = 0;
     max_component_terms = 0;
+    num_component_terms = 0;
     component_freqs_hz = NULL;
     component_amps = NULL;
     component_phases_rad = NULL;
@@ -1545,13 +1081,10 @@ static int sa_check_structural_violations(
     component_run_ids = NULL;
     for (ax = 0; ax < 3; ++ax)
     {
-        coherent_mag[ax] = NULL;
-        incoherent_mag[ax] = NULL;
-        is_candidate_ax[ax] = NULL;
+        ana_amps[ax] = NULL;
+        ana_phases[ax] = NULL;
         cand_amps[ax] = NULL;
         cand_grad_amps_ax[ax] = NULL;
-        ana_peak_amps[ax] = NULL;
-        ana_peak_phases[ax] = NULL;
     }
 
     result = sa_build_structural_events(&se, desc, start_block, block_count);
@@ -1628,601 +1161,217 @@ static int sa_check_structural_violations(
         }
     }
 
-    /* Compute evaluation frequency upper bound */
-    if (spectra->num_freq_bins <= 0)
+    /* --- Canonical-TR period & frequency guard --- */
+    if (tr_duration_us <= 0.0f)
     {
         sa_free_structural_events(&se);
         return PULSEG_SUCCESS;
     }
-    freq_max = spectra->freq_min_hz +
-               (float)(spectra->num_freq_bins - 1) * spectra->freq_spacing_hz;
+    T_s = (double)tr_duration_us * 1.0e-6;
+    f1_hz = 1.0 / T_s;
 
-    /* --- Compute per-axis FFT power gate threshold ---
-     * Find peak magnitude per axis of the dense FFT and set per-axis
-     * gates at SA_FFT_PROMOTION_POWER_FRAC of each axis's peak.
-     * Work in squared magnitudes to avoid sqrt in the inner loops. */
-    max_fft_sq[0] = max_fft_sq[1] = max_fft_sq[2] = 0.0f;
-    has_fft_data = (spectra->spectrum_full_gx && spectra->spectrum_full_gy &&
-                    spectra->spectrum_full_gz && spectra->num_freq_bins > 0 &&
-                    spectra->freq_spacing_hz > 0.0f);
-    if (has_fft_data)
+    if (spectra->num_freq_bins > 0)
+        freq_max = spectra->freq_min_hz +
+                   (float)(spectra->num_freq_bins - 1) * spectra->freq_spacing_hz;
+    else
+        freq_max = 0.0f;
+
+    /* guard = HWHM = min_band_width / 2 (narrowest band = sharpest resonance;
+     * wide bands are keep-out ranges scanned at the same guard). */
+    min_bw = -1.0f;
+    for (b = 0; b < num_forbidden_bands; ++b)
     {
-        for (i = 0; i < spectra->num_freq_bins; ++i)
+        float w = forbidden_bands[b].freq_max_hz - forbidden_bands[b].freq_min_hz;
+        if (w > 0.0f && (min_bw < 0.0f || w < min_bw))
+            min_bw = w;
+    }
+    guard = (min_bw > 0.0f) ? (SA_GUARD_HWHM_MULT * min_bw * 0.5f) : 0.0f;
+
+    /* =====================================================================
+     * (A) Analytical display grid — A_eq at each TR harmonic up to freq_max.
+     *     Display-only (never the verdict); skipped when no display grid was
+     *     requested (freq_max == 0, i.e. target_resolution_hz <= 0).
+     * ===================================================================== */
+    m_max = (freq_max > 0.0f) ? (int)((double)freq_max / f1_hz) : 0;
+    if (m_max > 0)
+    {
+        ana_freqs = (float *)PULSEG_ALLOC((size_t)m_max * sizeof(float));
+        ana_widths = (float *)PULSEG_ALLOC((size_t)m_max * sizeof(float));
+        if (!ana_freqs || !ana_widths)
+            goto alloc_fail;
+        for (ax = 0; ax < 3; ++ax)
         {
-            float s[3];
-            s[0] = spectra->spectrum_full_gx[i];
-            s[1] = spectra->spectrum_full_gy[i];
-            s[2] = spectra->spectrum_full_gz[i];
+            ana_amps[ax] = (float *)PULSEG_ALLOC((size_t)m_max * sizeof(float));
+            ana_phases[ax] = (float *)PULSEG_ALLOC((size_t)m_max * sizeof(float));
+            if (!ana_amps[ax] || !ana_phases[ax])
+                goto alloc_fail;
+        }
+        for (i = 0; i < m_max; ++i)
+        {
+            float f_hz = (float)((double)(i + 1) * f1_hz);
+            ana_freqs[i] = f_hz;
+            if (num_instances > 1)
+                ana_widths[i] = 1.2067091288032284f * ((float)f1_hz / (float)num_instances);
+            else
+                ana_widths[i] = (float)f1_hz;
             for (ax = 0; ax < 3; ++ax)
             {
-                float sq = s[ax] * s[ax];
-                if (sq > max_fft_sq[ax])
-                    max_fft_sq[ax] = sq;
-            }
-        }
-    }
-    for (ax = 0; ax < 3; ++ax)
-        fft_promo_sq[ax] = SA_FFT_PROMOTION_POWER_FRAC * max_fft_sq[ax];
-
-    /* --- Build evaluation frequency list ---
-     * TR harmonics form the primary grid.  Additionally, any local maximum
-     * of the dense FFT RSS spectrum that exceeds the gate threshold and
-     * falls between TR harmonics is promoted into the evaluation set.
-     * This catches spectral features (e.g. the bipolar-readout fundamental
-     * in bSSFP) that land between adjacent TR harmonics.
-     *
-     * For non-degenerate sequences the caller passes the full-pass duration
-     * as tr_duration_us and num_instances is the pass count; the Dirichlet
-     * kernel on imaging events naturally produces peaks at the imaging-TR
-     * harmonic spacing within the fine pass-harmonic grid. */
-    if (num_instances < 2)
-        num_instances = 2;
-    {
-        float tr_f1 = 1.0e6f / tr_duration_us;
-        int m_max = (int)(freq_max / tr_f1);
-        int max_eval, m, fi;
-        if (m_max < 1)
-            m_max = 0;
-
-        /* Upper bound on eval_freqs size */
-        max_eval = m_max + (has_fft_data ? spectra->num_freq_bins : 0);
-        if (max_eval < 1)
-        {
-            sa_free_structural_events(&se);
-            return PULSEG_SUCCESS;
-        }
-        eval_freqs = (float *)PULSEG_ALLOC((size_t)max_eval * sizeof(float));
-        if (!eval_freqs)
-            goto alloc_fail;
-
-        /* 1) TR harmonics */
-        num_freqs = 0;
-        for (m = 0; m < m_max; ++m)
-            eval_freqs[num_freqs++] = (float)(m + 1) * tr_f1;
-        n_tr_harmonics = num_freqs;
-
-        /* 2) FFT local maxima between TR harmonics (peak promotion)
-         * Per-axis: promote a frequency if ANY axis has a local max
-         * above its own per-axis threshold. */
-        if (has_fft_data && m_max > 0)
-        {
-            const float *spec_ax[3];
-            spec_ax[0] = spectra->spectrum_full_gx;
-            spec_ax[1] = spectra->spectrum_full_gy;
-            spec_ax[2] = spectra->spectrum_full_gz;
-            for (fi = 1; fi < spectra->num_freq_bins - 1; ++fi)
-            {
-                float f_peak, nearest, dist;
-                int any_local_max = 0;
-                for (ax = 0; ax < 3; ++ax)
+                float sre, sim;
+                if (se.axes[ax].num_events == 0)
                 {
-                    float cur = spec_ax[ax][fi];
-                    float cur_sq = cur * cur;
-                    float prev_sq, next_sq;
-                    if (cur_sq < fft_promo_sq[ax])
-                        continue;
-                    prev_sq = spec_ax[ax][fi - 1] * spec_ax[ax][fi - 1];
-                    next_sq = spec_ax[ax][fi + 1] * spec_ax[ax][fi + 1];
-                    if (cur_sq > prev_sq && cur_sq > next_sq)
-                    {
-                        any_local_max = 1;
-                        break;
-                    }
-                }
-                if (!any_local_max)
-                    continue;
-
-                /* Not near a TR harmonic? (> 25% of harmonic spacing) */
-                f_peak = spectra->freq_min_hz + (float)fi * spectra->freq_spacing_hz;
-                if (f_peak <= 0.0f || f_peak > freq_max)
-                    continue;
-                nearest = (float)floor((double)(f_peak / tr_f1)) * tr_f1;
-                dist = f_peak - nearest;
-                if (dist < 0.0f)
-                    dist = -dist;
-                if (dist <= tr_f1 * 0.25f)
-                    continue;
-
-                eval_freqs[num_freqs++] = f_peak;
-            }
-        }
-
-        if (num_freqs == 0)
-        {
-            PULSEG_FREE(eval_freqs);
-            eval_freqs = NULL;
-            sa_free_structural_events(&se);
-            return PULSEG_SUCCESS;
-        }
-    }
-
-    /* --- Evaluate inner spectrum at each frequency for each axis --- */
-    for (ax = 0; ax < 3; ++ax)
-    {
-        coherent_mag[ax] = (float *)PULSEG_ALLOC((size_t)num_freqs * sizeof(float));
-        incoherent_mag[ax] = (float *)PULSEG_ALLOC((size_t)num_freqs * sizeof(float));
-        if (!coherent_mag[ax] || !incoherent_mag[ax])
-            goto alloc_fail;
-    }
-
-    for (i = 0; i < num_freqs; ++i)
-    {
-        f_hz = eval_freqs[i];
-        for (ax = 0; ax < 3; ++ax)
-        {
-            if (se.axes[ax].num_events == 0)
-            {
-                coherent_mag[ax][i] = 0.0f;
-                incoherent_mag[ax][i] = 0.0f;
-            }
-            else
-            {
-                sa_eval_inner_spectrum(f_hz, &se.axes[ax],
-                                       &coherent_mag[ax][i], &incoherent_mag[ax][i]);
-            }
-        }
-    }
-
-    /* --- Per-axis analytical power gate threshold ---
-     * Compute peak coherent magnitude per axis across all evaluation
-     * frequencies.  Gate at SA_ANALYTICAL_GATE_FRAC of each axis's own
-     * peak to reject harmonics with negligible spectral weight. */
-    max_ana_sq[0] = max_ana_sq[1] = max_ana_sq[2] = 0.0f;
-    for (i = 0; i < num_freqs; ++i)
-    {
-        for (ax = 0; ax < 3; ++ax)
-        {
-            float sq = coherent_mag[ax][i] * coherent_mag[ax][i];
-            if (sq > max_ana_sq[ax])
-                max_ana_sq[ax] = sq;
-        }
-    }
-    for (ax = 0; ax < 3; ++ax)
-        ana_gate_sq[ax] = SA_ANALYTICAL_GATE_FRAC * max_ana_sq[ax];
-
-    /* --- Per-axis candidate selection --- */
-    for (ax = 0; ax < 3; ++ax)
-    {
-        is_candidate_ax[ax] = (int *)PULSEG_ALLOC((size_t)num_freqs * sizeof(int));
-        if (!is_candidate_ax[ax])
-            goto alloc_fail;
-        for (i = 0; i < num_freqs; ++i)
-            is_candidate_ax[ax][i] = 0;
-    }
-
-    /* --- Pre-build per-axis FFT bypass sets ---
-     * For each axis independently, find FFT local maxima above the
-     * per-axis promotion threshold and mark the nearest TR harmonic
-     * for gate bypass on that axis.  This catches high-order harmonics
-     * where the PWL spectral model underestimates the true amplitude. */
-    fft_bypass_set_ax[0] = fft_bypass_set_ax[1] = fft_bypass_set_ax[2] = NULL;
-    if (has_fft_data && n_tr_harmonics > 0)
-    {
-        float tr_f1_byp = eval_freqs[0]; /* first TR harmonic = f1 */
-        const float *spec_bypass[3];
-        spec_bypass[0] = spectra->spectrum_full_gx;
-        spec_bypass[1] = spectra->spectrum_full_gy;
-        spec_bypass[2] = spectra->spectrum_full_gz;
-        for (ax = 0; ax < 3; ++ax)
-        {
-            fft_bypass_set_ax[ax] = (int *)PULSEG_ALLOC(
-                (size_t)num_freqs * sizeof(int));
-            if (fft_bypass_set_ax[ax])
-            {
-                int fi;
-                for (i = 0; i < num_freqs; ++i)
-                    fft_bypass_set_ax[ax][i] = 0;
-                for (fi = 1; fi < spectra->num_freq_bins - 1; ++fi)
-                {
-                    float cur = spec_bypass[ax][fi];
-                    float cur_sq = cur * cur;
-                    float prev_sq, next_sq;
-                    float f_peak;
-                    int m_nearest;
-
-                    if (cur_sq < fft_promo_sq[ax])
-                        continue;
-
-                    prev_sq = spec_bypass[ax][fi - 1] * spec_bypass[ax][fi - 1];
-                    next_sq = spec_bypass[ax][fi + 1] * spec_bypass[ax][fi + 1];
-                    if (cur_sq <= prev_sq || cur_sq <= next_sq)
-                        continue;
-
-                    /* FFT local max — find nearest TR harmonic index.
-                     * eval_freqs[i] = (i+1)*f1 (harmonic m = index m-1), so
-                     * round-to-nearest-harmonic then shift by -1 (F4: the
-                     * previous (int) truncation mapped a peak exactly on
-                     * harmonic m to index m instead of m-1). */
-                    f_peak = spectra->freq_min_hz + (float)fi * spectra->freq_spacing_hz;
-                    m_nearest = (int)(f_peak / tr_f1_byp + 0.5f) - 1;
-                    if (m_nearest >= 0 && m_nearest < n_tr_harmonics)
-                        fft_bypass_set_ax[ax][m_nearest] = 1;
-                }
-            }
-        }
-    }
-
-    for (i = 0; i < num_freqs; ++i)
-    {
-        for (ax = 0; ax < 3; ++ax)
-        {
-            float coh = coherent_mag[ax][i];
-            float inc = incoherent_mag[ax][i];
-            int is_bypassed = (fft_bypass_set_ax[ax] &&
-                               fft_bypass_set_ax[ax][i]);
-
-            /* Per-axis analytical power gate: reject this axis at this
-             * frequency if its coherent magnitude is below the per-axis
-             * gate threshold, unless FFT bypass is active for this axis. */
-            if (coh * coh < ana_gate_sq[ax])
-            {
-                if (!is_bypassed)
-                    continue;
-            }
-
-            if (se.axes[ax].num_events == 0)
-                continue;
-
-            /* Tier 3: FFT-promoted peaks — per-axis if analytical signal
-             * is above the amplitude floor. */
-            if (i >= n_tr_harmonics)
-            {
-                if (coh > SA_AMPLITUDE_FLOOR)
-                    is_candidate_ax[ax][i] = 1;
-                continue;
-            }
-
-            /* FFT-bypassed TR harmonics: the dense FFT already confirms a
-             * real spectral peak at this frequency, so use the relaxed
-             * amplitude-floor check instead of requiring high coherence. */
-            if (is_bypassed)
-            {
-                if (coh > SA_AMPLITUDE_FLOOR)
-                    is_candidate_ax[ax][i] = 1;
-                continue;
-            }
-
-            /* Tier 1: coherence-detected (N_events >= 2) */
-            if (se.axes[ax].num_events >= 2 && inc > 1.0e-20f)
-            {
-                float rho = coh / inc;
-                if (rho > SA_COHERENCE_RATIO_THRESHOLD && coh > SA_AMPLITUDE_FLOOR)
-                {
-                    is_candidate_ax[ax][i] = 1;
+                    ana_amps[ax][i] = 0.0f;
+                    ana_phases[ax][i] = 0.0f;
                     continue;
                 }
-            }
-
-            /* Tier 2: absolute amplitude threshold (single-event axes) */
-            if (se.axes[ax].num_events == 1 && coh > SA_AMPLITUDE_SAFETY)
-            {
-                is_candidate_ax[ax][i] = 1;
+                sa_eval_axis_spectrum(f_hz, &se.axes[ax], &sre, &sim);
+                ana_amps[ax][i] = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)));
+                ana_phases[ax][i] = (float)atan2((double)sim, (double)sre);
             }
         }
+        num_ana = m_max;
     }
 
-    for (ax = 0; ax < 3; ++ax)
+    /* =====================================================================
+     * (B) Candidate selection — TR-harmonic lines inside a guarded band.
+     *     f_L = k / T_TR for integer k in [(f_min-guard)T, (f_max+guard)T];
+     *     A_eq(f_L) = (2/T_TR)|S_ax(f_L)|; violation iff max-axis A_eq > eps.
+     * ===================================================================== */
+    for (b = 0; b < num_forbidden_bands; ++b)
     {
-        if (fft_bypass_set_ax[ax])
-            PULSEG_FREE(fft_bypass_set_ax[ax]);
+        double lo = ((double)forbidden_bands[b].freq_min_hz - (double)guard) * T_s;
+        double hi = ((double)forbidden_bands[b].freq_max_hz + (double)guard) * T_s;
+        int klo = (int)ceil(lo);
+        int khi = (int)floor(hi);
+        if (klo < 1)
+            klo = 1;
+        if (khi >= klo)
+            cand_cap += (khi - klo + 1);
     }
 
-    /* --- Cross-axis spectral-significance filter ---
-     * Reject any surviving candidate whose per-axis dense-FFT amplitude at its
-     * frequency is below SA_FFT_SIGNIFICANCE_FRAC of the global cross-axis peak
-     * FFT amplitude.  This drops brief-transient ghosts (short bipolar blips)
-     * that the peak-amplitude-anchored analytical model over-promotes, while
-     * leaving genuine (sustained, high-power) readout resonances untouched.
-     * Frequencies are the structural candidates; the FFT is read only AT them
-     * (a ±1-bin max guards against scalloping), so this is not peak detection. */
-    if (has_fft_data)
+    if (cand_cap > 0)
     {
-        float global_fft_sq = 0.0f;
-        float sig_floor;
-        const float *spec_sig[3];
-        spec_sig[0] = spectra->spectrum_full_gx;
-        spec_sig[1] = spectra->spectrum_full_gy;
-        spec_sig[2] = spectra->spectrum_full_gz;
-        for (ax = 0; ax < 3; ++ax)
-            if (max_fft_sq[ax] > global_fft_sq)
-                global_fft_sq = max_fft_sq[ax];
-        sig_floor = SA_FFT_SIGNIFICANCE_FRAC * (float)sqrt((double)global_fft_sq);
-        if (sig_floor > 0.0f)
-        {
-            for (i = 0; i < num_freqs; ++i)
-            {
-                int bin = (int)((eval_freqs[i] - spectra->freq_min_hz)
-                                / spectra->freq_spacing_hz + 0.5f);
-                if (bin < 0)
-                    bin = 0;
-                if (bin >= spectra->num_freq_bins)
-                    bin = spectra->num_freq_bins - 1;
-                for (ax = 0; ax < 3; ++ax)
-                {
-                    float amp_ax = 0.0f;
-                    int b;
-                    if (!is_candidate_ax[ax][i])
-                        continue;
-                    for (b = bin - 1; b <= bin + 1; ++b)
-                    {
-                        if (b < 0 || b >= spectra->num_freq_bins)
-                            continue;
-                        if (spec_sig[ax][b] > amp_ax)
-                            amp_ax = spec_sig[ax][b];
-                    }
-                    if (amp_ax < sig_floor)
-                        is_candidate_ax[ax][i] = 0;
-                }
-            }
-        }
-    }
-
-    /* Count candidates: a frequency is a candidate if any axis qualifies */
-    num_candidates = 0;
-    for (i = 0; i < num_freqs; ++i)
-    {
-        int any = 0;
-        for (ax = 0; ax < 3; ++ax)
-            if (is_candidate_ax[ax][i])
-                any = 1;
-        if (any)
-            num_candidates++;
-    }
-
-    /* --- Estimate max component terms for export --- */
-    max_component_terms = 0;
-    for (ax = 0; ax < 3; ++ax)
-        max_component_terms += se.axes[ax].num_events;
-    /* Each event contributes one component term per candidate frequency,
-     * but we export terms only for candidate frequencies.  Upper bound: */
-    if (num_candidates > 0 && max_component_terms > 0)
-        max_component_terms = max_component_terms * num_candidates;
-    if (max_component_terms > 100000)
-        max_component_terms = 100000;
-
-    if (max_component_terms > 0)
-    {
-        component_freqs_hz = (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
-        component_amps = (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
-        component_phases_rad = (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
-        component_widths_hz = (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
-        component_axes = (int *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(int));
-        component_def_ids = (int *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(int));
-        component_contrib_ids = (int *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(int));
-        component_run_ids = (int *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(int));
-        if (!component_freqs_hz || !component_amps || !component_phases_rad ||
-            !component_widths_hz || !component_axes || !component_def_ids ||
-            !component_contrib_ids || !component_run_ids)
-            goto alloc_fail;
-    }
-
-    /* --- Allocate candidate arrays --- */
-    if (num_candidates > 0)
-    {
-        cand_freqs = (float *)PULSEG_ALLOC((size_t)num_candidates * sizeof(float));
-        cand_grad_amps = (float *)PULSEG_ALLOC((size_t)num_candidates * sizeof(float));
-        cand_violations = (int *)PULSEG_ALLOC((size_t)num_candidates * sizeof(int));
-        ana_peak_freqs = (float *)PULSEG_ALLOC((size_t)num_candidates * sizeof(float));
-        ana_peak_widths = (float *)PULSEG_ALLOC((size_t)num_candidates * sizeof(float));
-        surviving_freqs_hz = (float *)PULSEG_ALLOC((size_t)num_candidates * sizeof(float));
-        if (!cand_freqs || !cand_grad_amps || !cand_violations ||
-            !ana_peak_freqs || !ana_peak_widths || !surviving_freqs_hz)
+        cand_freqs = (float *)PULSEG_ALLOC((size_t)cand_cap * sizeof(float));
+        cand_grad_amps = (float *)PULSEG_ALLOC((size_t)cand_cap * sizeof(float));
+        cand_violations = (int *)PULSEG_ALLOC((size_t)cand_cap * sizeof(int));
+        surviving_freqs_hz = (float *)PULSEG_ALLOC((size_t)cand_cap * sizeof(float));
+        if (!cand_freqs || !cand_grad_amps || !cand_violations || !surviving_freqs_hz)
             goto alloc_fail;
         for (ax = 0; ax < 3; ++ax)
         {
-            cand_amps[ax] = (float *)PULSEG_ALLOC((size_t)num_candidates * sizeof(float));
-            cand_grad_amps_ax[ax] = (float *)PULSEG_ALLOC((size_t)num_candidates * sizeof(float));
-            ana_peak_amps[ax] = (float *)PULSEG_ALLOC((size_t)num_candidates * sizeof(float));
-            ana_peak_phases[ax] = (float *)PULSEG_ALLOC((size_t)num_candidates * sizeof(float));
-            if (!cand_amps[ax] || !cand_grad_amps_ax[ax] ||
-                !ana_peak_amps[ax] || !ana_peak_phases[ax])
+            cand_amps[ax] = (float *)PULSEG_ALLOC((size_t)cand_cap * sizeof(float));
+            cand_grad_amps_ax[ax] = (float *)PULSEG_ALLOC((size_t)cand_cap * sizeof(float));
+            if (!cand_amps[ax] || !cand_grad_amps_ax[ax])
                 goto alloc_fail;
         }
 
-        /* --- Fill candidate arrays --- */
-        ci = 0;
-        for (i = 0; i < num_freqs; ++i)
+        /* component-term export sizing (bounded) */
+        for (ax = 0; ax < 3; ++ax)
+            max_component_terms += se.axes[ax].num_events;
+        if (max_component_terms > 0)
+            max_component_terms *= cand_cap;
+        if (max_component_terms > 100000)
+            max_component_terms = 100000;
+        if (max_component_terms > 0)
         {
-            float max_ga;
-            int any_ax = 0;
-            for (ax = 0; ax < 3; ++ax)
-                if (is_candidate_ax[ax][i])
-                    any_ax = 1;
-            if (!any_ax)
-                continue;
-            f_hz = eval_freqs[i];
-            cand_freqs[ci] = f_hz;
-            surviving_freqs_hz[ci] = f_hz;
-            ana_peak_freqs[ci] = f_hz;
+            component_freqs_hz = (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
+            component_amps = (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
+            component_phases_rad = (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
+            component_widths_hz = (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
+            component_axes = (int *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(int));
+            component_def_ids = (int *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(int));
+            component_contrib_ids = (int *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(int));
+            component_run_ids = (int *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(int));
+            if (!component_freqs_hz || !component_amps || !component_phases_rad ||
+                !component_widths_hz || !component_axes || !component_def_ids ||
+                !component_contrib_ids || !component_run_ids)
+                goto alloc_fail;
+        }
 
-            /* FWHM estimate */
-            if (num_instances > 1 && tr_duration_us > 0.0f)
-            {
-                float f_rep = 1.0e6f / tr_duration_us;
-                ana_peak_widths[ci] = 1.2067091288032284f * (f_rep / (float)num_instances);
-            }
+        ci = 0;
+        for (b = 0; b < num_forbidden_bands; ++b)
+        {
+            float eps = sa_eps_for_band(&forbidden_bands[b], g_max_hz_per_m);
+            double lo = ((double)forbidden_bands[b].freq_min_hz - (double)guard) * T_s;
+            double hi = ((double)forbidden_bands[b].freq_max_hz + (double)guard) * T_s;
+            int klo = (int)ceil(lo);
+            int khi = (int)floor(hi);
+            int kk;
+            float fwhm;
+            if (klo < 1)
+                klo = 1;
+            if (num_instances > 1)
+                fwhm = 1.2067091288032284f * ((float)f1_hz / (float)num_instances);
             else
+                fwhm = (float)f1_hz;
+            for (kk = klo; kk <= khi; ++kk)
             {
-                ana_peak_widths[ci] = 1.0f; /* Placeholder for K=1 */
-            }
-
-            /* Per-axis analytical amplitudes and phases */
-            max_ga = 0.0f;
-            for (ax = 0; ax < 3; ++ax)
-            {
-                float coh = coherent_mag[ax][i];
-                cand_amps[ax][ci] = coh;
-                ana_peak_amps[ax][ci] = coh;
-
-                /* Phase: compute from coherent sum (with Dirichlet kernel) */
+                float f_hz = (float)((double)kk * f1_hz);
+                float max_ga = 0.0f;
+                cand_freqs[ci] = f_hz;
+                surviving_freqs_hz[ci] = f_hz;
+                for (ax = 0; ax < 3; ++ax)
                 {
-                    float sum_re = 0.0f, sum_im = 0.0f;
-                    int k;
+                    float sre, sim, aeq;
+                    if (se.axes[ax].num_events == 0)
+                    {
+                        cand_amps[ax][ci] = 0.0f;
+                        cand_grad_amps_ax[ax][ci] = 0.0f;
+                        continue;
+                    }
+                    sa_eval_axis_spectrum(f_hz, &se.axes[ax], &sre, &sim);
+                    aeq = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)));
+                    cand_amps[ax][ci] = aeq;
+                    cand_grad_amps_ax[ax][ci] = aeq;
+                    if (aeq > max_ga)
+                        max_ga = aeq;
+
                     for (k = 0; k < se.axes[ax].num_events; ++k)
                     {
-                        float d_re, d_im;
-                        int N = se.axes[ax].events[k].num_reps;
-                        if (N < 1)
-                            N = 1;
-                        sa_eval_event_spectrum(f_hz, &se.axes[ax].events[k], &d_re, &d_im);
-                        if (N > 1 && se.axes[ax].events[k].rep_period_us > 0.0f)
-                        {
-                            double phi = -2.0 * M_PI * (double)f_hz * (double)se.axes[ax].events[k].rep_period_us * 1.0e-6;
-                            double half_phi = phi * 0.5;
-                            double sin_half = sin(half_phi);
-                            double dk_re, dk_im, new_re, new_im;
-                            if (fabs(sin_half) < 1.0e-12)
-                            {
-                                dk_re = (double)N;
-                                dk_im = 0.0;
-                            }
-                            else
-                            {
-                                double ratio = sin((double)N * half_phi) / sin_half;
-                                double center = (double)(N - 1) * half_phi;
-                                dk_re = ratio * cos(center);
-                                dk_im = ratio * sin(center);
-                            }
-                            new_re = (double)d_re * dk_re - (double)d_im * dk_im;
-                            new_im = (double)d_re * dk_im + (double)d_im * dk_re;
-                            d_re = (float)new_re;
-                            d_im = (float)new_im;
-                        }
-                        sum_re += d_re;
-                        sum_im += d_im;
-                    }
-                    ana_peak_phases[ax][ci] = (float)atan2((double)sum_im, (double)sum_re);
-                }
-
-                /* G_eff per axis — only for qualifying axes */
-                if (se.axes[ax].num_events > 0 && is_candidate_ax[ax][i])
-                {
-                    float ga = sa_eval_geff(f_hz, &se.axes[ax]);
-                    cand_grad_amps_ax[ax][ci] = ga;
-                    if (ga > max_ga)
-                        max_ga = ga;
-                }
-                else
-                {
-                    cand_grad_amps_ax[ax][ci] = 0.0f;
-                }
-            }
-
-            /* Per-axis max G_eff for the combined output field */
-            cand_grad_amps[ci] = max_ga;
-
-            /* Check against forbidden bands — per-axis independently.
-             * A violation occurs if ANY single axis exceeds the band limit. */
-            cand_violations[ci] = 0;
-            for (b = 0; b < num_forbidden_bands; ++b)
-            {
-                if (f_hz >= forbidden_bands[b].freq_min_hz &&
-                    f_hz <= forbidden_bands[b].freq_max_hz)
-                {
-                    for (ax = 0; ax < 3; ++ax)
-                    {
-                        if (cand_grad_amps_ax[ax][ci] > forbidden_bands[b].max_amplitude_hz_per_m)
-                        {
-                            cand_violations[ci] = 1;
+                        float lre, lim;
+                        if (num_component_terms >= max_component_terms)
                             break;
-                        }
+                        sa_eval_event_line(f_hz, &se.axes[ax].events[k], &lre, &lim);
+                        component_freqs_hz[num_component_terms] = f_hz;
+                        component_amps[num_component_terms] =
+                            (float)(2.0 / T_s * sqrt((double)(lre * lre + lim * lim)));
+                        component_phases_rad[num_component_terms] =
+                            (float)atan2((double)lim, (double)lre);
+                        component_widths_hz[num_component_terms] = fwhm;
+                        component_axes[num_component_terms] = ax;
+                        component_def_ids[num_component_terms] = se.axes[ax].events[k].def_id;
+                        component_contrib_ids[num_component_terms] = k;
+                        component_run_ids[num_component_terms] = 0;
+                        num_component_terms++;
                     }
                 }
+                cand_grad_amps[ci] = max_ga;
+                cand_violations[ci] = (max_ga > eps) ? 1 : 0;
+                ci++;
             }
-
-            /* Export component terms for this candidate frequency */
-            for (ax = 0; ax < 3; ++ax)
-            {
-                int k;
-                for (k = 0; k < se.axes[ax].num_events; ++k)
-                {
-                    float d_re, d_im, d_mag;
-                    int N = se.axes[ax].events[k].num_reps;
-                    if (N < 1)
-                        N = 1;
-                    if (num_component_terms >= max_component_terms)
-                        break;
-                    sa_eval_event_spectrum(f_hz, &se.axes[ax].events[k], &d_re, &d_im);
-                    if (N > 1 && se.axes[ax].events[k].rep_period_us > 0.0f)
-                    {
-                        double phi = -2.0 * M_PI * (double)f_hz * (double)se.axes[ax].events[k].rep_period_us * 1.0e-6;
-                        double half_phi = phi * 0.5;
-                        double sin_half = sin(half_phi);
-                        double dk_re, dk_im, new_re, new_im;
-                        if (fabs(sin_half) < 1.0e-12)
-                        {
-                            dk_re = (double)N;
-                            dk_im = 0.0;
-                        }
-                        else
-                        {
-                            double ratio = sin((double)N * half_phi) / sin_half;
-                            double center = (double)(N - 1) * half_phi;
-                            dk_re = ratio * cos(center);
-                            dk_im = ratio * sin(center);
-                        }
-                        new_re = (double)d_re * dk_re - (double)d_im * dk_im;
-                        new_im = (double)d_re * dk_im + (double)d_im * dk_re;
-                        d_re = (float)new_re;
-                        d_im = (float)new_im;
-                    }
-                    d_mag = (float)sqrt((double)(d_re * d_re + d_im * d_im));
-                    component_freqs_hz[num_component_terms] = f_hz;
-                    component_amps[num_component_terms] = d_mag;
-                    component_phases_rad[num_component_terms] = (float)atan2((double)d_im, (double)d_re);
-                    component_widths_hz[num_component_terms] = ana_peak_widths[ci];
-                    component_axes[num_component_terms] = ax;
-                    component_def_ids[num_component_terms] = se.axes[ax].events[k].def_id;
-                    component_contrib_ids[num_component_terms] = k;
-                    component_run_ids[num_component_terms] = 0;
-                    num_component_terms++;
-                }
-            }
-
-            ci++;
         }
+        num_cand = ci;
     }
 
     /* --- Assign to output spectra struct (ownership transfer) --- */
-    spectra->num_analytical_peaks = num_candidates;
-    spectra->analytical_peak_freqs = ana_peak_freqs;
-    ana_peak_freqs = NULL;
-    spectra->analytical_peak_amp_gx = ana_peak_amps[0];
-    ana_peak_amps[0] = NULL;
-    spectra->analytical_peak_amp_gy = ana_peak_amps[1];
-    ana_peak_amps[1] = NULL;
-    spectra->analytical_peak_amp_gz = ana_peak_amps[2];
-    ana_peak_amps[2] = NULL;
-    spectra->analytical_peak_phase_gx = ana_peak_phases[0];
-    ana_peak_phases[0] = NULL;
-    spectra->analytical_peak_phase_gy = ana_peak_phases[1];
-    ana_peak_phases[1] = NULL;
-    spectra->analytical_peak_phase_gz = ana_peak_phases[2];
-    ana_peak_phases[2] = NULL;
-    spectra->analytical_peak_widths_hz = ana_peak_widths;
-    ana_peak_widths = NULL;
+    spectra->num_analytical_peaks = num_ana;
+    spectra->analytical_peak_freqs = ana_freqs;
+    ana_freqs = NULL;
+    spectra->analytical_peak_amp_gx = ana_amps[0];
+    ana_amps[0] = NULL;
+    spectra->analytical_peak_amp_gy = ana_amps[1];
+    ana_amps[1] = NULL;
+    spectra->analytical_peak_amp_gz = ana_amps[2];
+    ana_amps[2] = NULL;
+    spectra->analytical_peak_phase_gx = ana_phases[0];
+    ana_phases[0] = NULL;
+    spectra->analytical_peak_phase_gy = ana_phases[1];
+    ana_phases[1] = NULL;
+    spectra->analytical_peak_phase_gz = ana_phases[2];
+    ana_phases[2] = NULL;
+    spectra->analytical_peak_widths_hz = ana_widths;
+    ana_widths = NULL;
 
-    spectra->num_candidates = num_candidates;
+    spectra->num_candidates = num_cand;
     spectra->candidate_freqs = cand_freqs;
     cand_freqs = NULL;
     spectra->candidate_amps_gx = cand_amps[0];
@@ -2241,6 +1390,7 @@ static int sa_check_structural_violations(
     cand_grad_amps_ax[2] = NULL;
     spectra->candidate_violations = cand_violations;
     cand_violations = NULL;
+
     spectra->num_component_terms = num_component_terms;
     spectra->component_freqs_hz = component_freqs_hz;
     component_freqs_hz = NULL;
@@ -2258,60 +1408,38 @@ static int sa_check_structural_violations(
     component_contrib_ids = NULL;
     spectra->component_run_ids = component_run_ids;
     component_run_ids = NULL;
-    spectra->num_surviving_freqs = num_candidates;
+
+    spectra->num_surviving_freqs = num_cand;
     spectra->surviving_freqs_hz = surviving_freqs_hz;
     surviving_freqs_hz = NULL;
 
-    /* Cleanup */
-    if (eval_freqs)
-        PULSEG_FREE(eval_freqs);
-    for (ax = 0; ax < 3; ++ax)
-    {
-        if (is_candidate_ax[ax])
-            PULSEG_FREE(is_candidate_ax[ax]);
-        if (coherent_mag[ax])
-            PULSEG_FREE(coherent_mag[ax]);
-        if (incoherent_mag[ax])
-            PULSEG_FREE(incoherent_mag[ax]);
-    }
     sa_free_structural_events(&se);
     return PULSEG_SUCCESS;
 
 alloc_fail:
-    for (ax = 0; ax < 3; ++ax)
-    {
-        if (is_candidate_ax[ax])
-            PULSEG_FREE(is_candidate_ax[ax]);
-        if (coherent_mag[ax])
-            PULSEG_FREE(coherent_mag[ax]);
-        if (incoherent_mag[ax])
-            PULSEG_FREE(incoherent_mag[ax]);
-        if (cand_amps[ax])
-            PULSEG_FREE(cand_amps[ax]);
-        if (cand_grad_amps_ax[ax])
-            PULSEG_FREE(cand_grad_amps_ax[ax]);
-        if (ana_peak_amps[ax])
-            PULSEG_FREE(ana_peak_amps[ax]);
-        if (ana_peak_phases[ax])
-            PULSEG_FREE(ana_peak_phases[ax]);
-    }
-    if (ana_peak_freqs)
-        PULSEG_FREE(ana_peak_freqs);
-    if (ana_peak_widths)
-        PULSEG_FREE(ana_peak_widths);
-    if (eval_freqs)
-        PULSEG_FREE(eval_freqs);
-    for (ax = 0; ax < 3; ++ax)
-    {
-        if (fft_bypass_set_ax[ax])
-            PULSEG_FREE(fft_bypass_set_ax[ax]);
-    }
+    if (ana_freqs)
+        PULSEG_FREE(ana_freqs);
+    if (ana_widths)
+        PULSEG_FREE(ana_widths);
     if (cand_freqs)
         PULSEG_FREE(cand_freqs);
     if (cand_grad_amps)
         PULSEG_FREE(cand_grad_amps);
     if (cand_violations)
         PULSEG_FREE(cand_violations);
+    if (surviving_freqs_hz)
+        PULSEG_FREE(surviving_freqs_hz);
+    for (ax = 0; ax < 3; ++ax)
+    {
+        if (ana_amps[ax])
+            PULSEG_FREE(ana_amps[ax]);
+        if (ana_phases[ax])
+            PULSEG_FREE(ana_phases[ax]);
+        if (cand_amps[ax])
+            PULSEG_FREE(cand_amps[ax]);
+        if (cand_grad_amps_ax[ax])
+            PULSEG_FREE(cand_grad_amps_ax[ax]);
+    }
     if (component_freqs_hz)
         PULSEG_FREE(component_freqs_hz);
     if (component_amps)
@@ -2328,8 +1456,6 @@ alloc_fail:
         PULSEG_FREE(component_contrib_ids);
     if (component_run_ids)
         PULSEG_FREE(component_run_ids);
-    if (surviving_freqs_hz)
-        PULSEG_FREE(surviving_freqs_hz);
     sa_free_structural_events(&se);
     return PULSEG_ERR_ALLOC_FAILED;
 }
@@ -2471,7 +1597,8 @@ static int calc_mech_resonances_from_uniform(
     const struct pulseg_sequence_descriptor *desc,
     int start_block,
     int block_count,
-    int num_avgs)
+    int num_avgs,
+    float g_max_hz_per_m)
 {
     pulseg_diagnostic local_diag;
     int max_samples, result;
@@ -2588,7 +1715,7 @@ static int calc_mech_resonances_from_uniform(
             num_forbidden_bands, forbidden_bands,
             peak_log10_threshold, peak_norm_scale,
             peak_eps, peak_prominence,
-            num_avgs);
+            num_avgs, g_max_hz_per_m);
         if (PULSEG_FAILED(result))
         {
             pulseg_mech_resonances_spectra_free(spectra);
@@ -2926,7 +2053,8 @@ int pulseg_calc_mech_resonances(const pulseg_collection *coll,
                                            num_forbidden_bands, forbidden_bands,
                                            peak_log10_threshold, peak_norm_scale, peak_eps,
                                            peak_prominence,
-                                           desc, sa_start_block, sa_block_count, num_avgs);
+                                           desc, sa_start_block, sa_block_count, num_avgs,
+                                           0.0f /* g_max: display path uses band limit only */);
     pulseg__uniform_grad_waveforms_free(&uw);
     if (block_order)
         PULSEG_FREE(block_order);
@@ -3879,13 +3007,11 @@ int pulseg_check_safety(
 
             if (num_forbidden_bands > 0)
             {
-                /* SA_ANALYTICAL_GATE_FRAC's and the FFT-promotion denominators
-                 * are the peak over THIS evaluated grid. The grid now spans at
-                 * least SA_MIN_ANALYSIS_FREQ_HZ (>= the top band edge), so the
-                 * dominant coherent/FFT peak is captured even when it sits above
-                 * the forbidden band (non-EPI sequences), keeping the gate
-                 * normalization consistent with the validated grad_spectrum
-                 * path. Covered by test_safety_grad.c Suite D. */
+                /* Run the A_eq analysis with a real display resolution/max
+                 * frequency (>= SA_MIN_ANALYSIS_FREQ_HZ) so the full-spectrum
+                 * and analytical display arrays are populated; the verdict
+                 * itself comes only from the in-guarded-band TR-harmonic lines.
+                 * Covered by test_safety_grad.c Suite D. */
                 memset(&spectra, 0, sizeof(spectra));
                 rc = calc_mech_resonances_from_uniform(
                     &spectra, diag, &uw,
@@ -3897,7 +3023,8 @@ int pulseg_check_safety(
                     opts->peak_norm_scale,
                     opts->peak_eps,
                     opts->peak_prominence,
-                    desc, sa_start_block, sa_block_count, num_avgs);
+                    desc, sa_start_block, sa_block_count, num_avgs,
+                    opts->max_grad_hz_per_m);
 
                 /* Safety path: fail fast on first violating candidate.
                  * Pattern: for each candidate, scan union of all bands. */
@@ -3909,6 +3036,17 @@ int pulseg_check_safety(
                 {
                     float *cga[3];
                     int axi;
+                    float guard_hz, mbw;
+                    /* Guard mirrors sa_check_structural_violations: HWHM of the
+                     * narrowest positive-width band. */
+                    mbw = -1.0f;
+                    for (b = 0; b < num_forbidden_bands; ++b)
+                    {
+                        float w = forbidden_bands[b].freq_max_hz - forbidden_bands[b].freq_min_hz;
+                        if (w > 0.0f && (mbw < 0.0f || w < mbw))
+                            mbw = w;
+                    }
+                    guard_hz = (mbw > 0.0f) ? (SA_GUARD_HWHM_MULT * mbw * 0.5f) : 0.0f;
                     cga[0] = spectra.candidate_grad_amps_gx;
                     cga[1] = spectra.candidate_grad_amps_gy;
                     cga[2] = spectra.candidate_grad_amps_gz;
@@ -3918,13 +3056,15 @@ int pulseg_check_safety(
 
                         for (b = 0; b < num_forbidden_bands; ++b)
                         {
-                            if (cf_hz < forbidden_bands[b].freq_min_hz ||
-                                cf_hz > forbidden_bands[b].freq_max_hz)
+                            float eps_band =
+                                sa_eps_for_band(&forbidden_bands[b], opts->max_grad_hz_per_m);
+                            if (cf_hz < forbidden_bands[b].freq_min_hz - guard_hz ||
+                                cf_hz > forbidden_bands[b].freq_max_hz + guard_hz)
                                 continue;
                             for (axi = 0; axi < 3; ++axi)
                             {
                                 ca_hz_per_m = cga[axi][ci];
-                                if (ca_hz_per_m > forbidden_bands[b].max_amplitude_hz_per_m)
+                                if (ca_hz_per_m > eps_band)
                                 {
                                     rc = PULSEG_ERR_MECH_RESONANCES_VIOLATION;
                                     if (diag)
@@ -3934,7 +3074,7 @@ int pulseg_check_safety(
                                             diag,
                                             "f=%.2fHz,a=%.2f>%.2fHz/m,ax=%d,ss=%d,tr=%d",
                                             (double)cf_hz, (double)ca_hz_per_m,
-                                            (double)forbidden_bands[b].max_amplitude_hz_per_m,
+                                            (double)eps_band,
                                             axi, s, u);
                                     }
                                     break;

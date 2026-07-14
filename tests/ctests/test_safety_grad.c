@@ -497,16 +497,20 @@ MU_TEST(test_epi_no_bands_skips_mech_resonance_check)
 }
 
 /*
- * F1 Option B assumption check: the structural-analysis grid is
- * band-bounded (max_freq = 1.2 * max(band edges)), so the EPI readout
- * train (a much stronger coherent feature at several hundred Hz, well
- * outside this band) is entirely excluded from the grid -- it cannot
- * inflate the SA_ANALYTICAL_GATE_FRAC relative-gate denominator (F5) and
- * so cannot mask a violation at a frequency actually inside a forbidden
- * band. Band brackets the first TR harmonic (f1 = 1/TR ~= 10.14 Hz for
- * this fixture's TR=0.09866s) at zero amplitude.
+ * No cross-band masking: each forbidden band is evaluated independently on its
+ * own in-band spectral lines, so the strong off-band EPI readout (~760 Hz)
+ * cannot influence a band elsewhere. This band brackets the first TR harmonic
+ * (f1 = 1/TR ~= 10.14 Hz for this fixture's TR=0.09866s).
+ *
+ * A_eq criterion (PLAN_mechres_aeq_FINAL.md, decisions 5-6): the drive at the
+ * TR fundamental is the sequence's slow envelope, ~0.67 mT/m here -- far below
+ * the readout-scale floor eps = k*G_max (k=0.08 -> ~6.4 mT/m at G_max=80 mT/m).
+ * It is NOT a readout-scale sustained line, so it correctly PASSES. (Under the
+ * superseded zero-tolerance-per-harmonic detector this asserted a violation;
+ * eps=0 was ratified as unusable -- every periodic gradient sprinkles weak
+ * harmonics into any band wider than its comb spacing.)
  */
-MU_TEST(test_epi_inband_feature_not_masked_by_offband_readout_train)
+MU_TEST(test_epi_tr_fundamental_below_readout_floor_passes)
 {
     pulseg_forbidden_band band;
 
@@ -514,23 +518,25 @@ MU_TEST(test_epi_inband_feature_not_masked_by_offband_readout_train)
     band.freq_max_hz            = 12.0f;
     band.max_amplitude_hz_per_m = 0.0f;
 
-    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 1, &band,
-                       PULSEG_ERR_MECH_RESONANCES_VIOLATION);
+    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 1, &band, 1 /* pass */);
 }
 
 /*
- * F4 regression: eval_freqs[i] = (i+1)*f1, so a dense-FFT peak must
- * bypass the relative-power gate at harmonic index round(f_peak/f1)-1,
- * not the previous (buggy) floor(f_peak/f1). Splitting
- * test_epi_forbidden_readout_peak's band 1 ([800,2500] Hz) at its
- * midpoint into two adjacent sub-bands and requiring BOTH to
- * independently still detect the violation (each at zero amplitude)
- * regression-covers the harmonic-boundary off-by-one: under the old
- * floor() mapping, a peak landing near a sub-band boundary could bypass
- * the gate for the wrong (adjacent) sub-band, leaving the true one
- * ungated and silently passing.
+ * A_eq guard + eps behaviour on split bands (this fixture's dominant EPI
+ * readout line is ~760 Hz at ~11.4 mT/m; its 3rd harmonic ~2280 Hz is weak,
+ * ~3.7 mT/m). With G_max=80 mT/m the readout floor is eps = k*G_max ~= 6.4 mT/m.
+ *
+ *  - band_lo [800,1650]: the 760 Hz readout line sits 40 Hz below the edge but
+ *    within the frequency guard (HWHM = min_band_width/2 = 425 Hz), so it counts
+ *    at full 11.4 mT/m > eps  -> VIOLATION. (Covers the guard picking up a strong
+ *    line just outside a band edge.)
+ *  - band_hi [1650,2500]: the readout fundamental is out of range; only the weak
+ *    3rd harmonic (~3.7 mT/m) is in-band, below eps -> PASS. (Ratified decision 6:
+ *    weak harmonics in a wide band are not readout-scale lines. This verdict is
+ *    G_max-dependent by design -- a coil with a smaller G_max, hence smaller eps,
+ *    would flag it.)
  */
-MU_TEST(test_fft_bypass_harmonic_index_no_boundary_gap)
+MU_TEST(test_epi_guard_catches_edge_line_weak_harmonic_passes)
 {
     pulseg_forbidden_band band_lo, band_hi;
 
@@ -544,8 +550,7 @@ MU_TEST(test_fft_bypass_harmonic_index_no_boundary_gap)
 
     run_mech_resonances_check("epi_2d_1sl_1avg.seq", 1, &band_lo,
                        PULSEG_ERR_MECH_RESONANCES_VIOLATION);
-    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 1, &band_hi,
-                       PULSEG_ERR_MECH_RESONANCES_VIOLATION);
+    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 1, &band_hi, 1 /* pass */);
 }
 
 static void mech_resonances_setup(void)
@@ -559,8 +564,8 @@ MU_TEST_SUITE(suite_mech_resonances_safety)
     MU_RUN_TEST(test_epi_forbidden_readout_peak);
     MU_RUN_TEST(test_epi_forbidden_band_amplitude_above_train_passes);
     MU_RUN_TEST(test_epi_no_bands_skips_mech_resonance_check);
-    MU_RUN_TEST(test_epi_inband_feature_not_masked_by_offband_readout_train);
-    MU_RUN_TEST(test_fft_bypass_harmonic_index_no_boundary_gap);
+    MU_RUN_TEST(test_epi_tr_fundamental_below_readout_floor_passes);
+    MU_RUN_TEST(test_epi_guard_catches_edge_line_weak_harmonic_passes);
 }
 
 /* ================================================================== */

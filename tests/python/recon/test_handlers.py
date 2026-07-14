@@ -28,6 +28,9 @@ class FakeConnection:
     def write(self, data: bytes) -> None:
         pass  # swallow close message
 
+    def send(self, item) -> None:
+        self.sent.append(item)
+
 
 def _make_acquisitions(
     n_pe: int = 16,
@@ -165,6 +168,79 @@ def test_fftrecon_array2image():
     image = _array2image(data, acqs, metadata)
     assert isinstance(image, ismrmrd.Image)
     assert image.attribute_string  # meta should be non-empty
+
+
+def _make_metadata_kw(n_ro: int = 16, n_pe: int = 8) -> ismrmrd.xsd.ismrmrdHeader:
+    """Keyword-constructed metadata, for ismrmrd/xsdata versions that require
+    the encoding/header fields at construction time (``_make_metadata`` above
+    uses attribute assignment, which this installed version rejects)."""
+    space = ismrmrd.xsd.encodingSpaceType(
+        matrixSize=ismrmrd.xsd.matrixSizeType(x=n_ro, y=n_pe, z=1),
+        fieldOfView_mm=ismrmrd.xsd.fieldOfViewMm(x=256.0, y=256.0, z=5.0),
+    )
+    lim = ismrmrd.xsd.encodingLimitsType(
+        kspace_encoding_step_1=ismrmrd.xsd.limitType(
+            minimum=0, maximum=n_pe - 1, center=n_pe // 2
+        )
+    )
+    enc = ismrmrd.xsd.encodingType(
+        encodedSpace=space,
+        reconSpace=space,
+        encodingLimits=lim,
+        trajectory=ismrmrd.xsd.trajectoryType("cartesian"),
+    )
+    return ismrmrd.xsd.ismrmrdHeader(
+        experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
+            H1resonanceFrequency_Hz=127730000
+        ),
+        encoding=[enc],
+    )
+
+
+def test_fftrecon_process_filters_interleaved_waveforms(monkeypatch):
+    """Regression test: a live connection interleaves ismrmrd.Waveform
+    messages (e.g. sequence-description / physio packets) with the imaging
+    Acquisitions -- exactly as the real VRE client does. Drives the real
+    fftrecon.process(), not a re-simplified copy of its predicates, so a
+    regression to the old ``accept=lambda acq: not acq.is_flag_set(...)``
+    (no isinstance check, drops the LAST_IN_MEASUREMENT-flagged line) fails
+    this test.
+    """
+    from pulserver.recon.handlers import fftrecon
+
+    n_pe, n_ro = 8, 16
+    acqs = _make_acquisitions(n_pe=n_pe, n_ro=n_ro, n_channels=1, n_slices=1)
+
+    waveform = ismrmrd.Waveform()
+    waveform.resize(1033, 1)  # deliberately different shape than acq.data
+
+    # Interleave: one waveform mid-stream, one right after the final
+    # LAST_IN_MEASUREMENT-flagged acquisition (as the VRE client does).
+    stream = acqs[: n_pe // 2] + [waveform] + acqs[n_pe // 2 :] + [waveform]
+    conn = FakeConnection(stream)
+    metadata = _make_metadata_kw(n_ro=n_ro, n_pe=n_pe)
+
+    # Sidestep the (pre-existing, unrelated) DICOM-template gaps in
+    # MrdDicomBuilder -- spy on the real _reconstruct/_array2image instead,
+    # so the real accept/finish predicates inside process() are exercised.
+    seen_group_sizes = []
+    real_reconstruct = fftrecon._reconstruct
+
+    def _spy_reconstruct(group, metadata):
+        seen_group_sizes.append(len(group))
+        assert all(isinstance(item, ismrmrd.Acquisition) for item in group)
+        return real_reconstruct(group, metadata)
+
+    monkeypatch.setattr(fftrecon, "_reconstruct", _spy_reconstruct)
+    monkeypatch.setattr(fftrecon, "_array2image", lambda *a, **k: object())
+    monkeypatch.setattr(
+        fftrecon, "MrdDicomBuilder", lambda metadata: (lambda img: ("dset", img))
+    )
+
+    fftrecon.process(conn, "recon1.py", metadata)  # must not raise
+
+    assert seen_group_sizes == [n_pe]  # all real acquisitions, no waveforms, none dropped
+    assert len(conn.sent) == 1
 
 
 # ---------------------------------------------------------------------------

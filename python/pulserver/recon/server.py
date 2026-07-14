@@ -237,8 +237,13 @@ class Server:
                     savedataGroup="dataset",
                 )
                 connection.saver.create_save_file()
-                if isinstance(metadata_xml, str):
-                    connection.saver.dset.write_xml_header(metadata_xml)
+                if metadata_xml is not None and connection.saver.dset is not None:
+                    try:
+                        connection.saver.dset.write_xml_header(metadata_xml.toXML())
+                    except Exception as exc:
+                        logging.warning(
+                            "Could not write XML header to save file: %s", exc
+                        )
 
             # 5) Resolve and run handler
             module = self._resolve_handler(config)
@@ -313,9 +318,9 @@ class Server:
         try:
             saver.create_save_file()
             # Write the XML header that was already read from the stream
-            if isinstance(metadata_xml, str) and saver.dset is not None:
+            if metadata_xml is not None and saver.dset is not None:
                 try:
-                    saver.dset.write_xml_header(metadata_xml)
+                    saver.dset.write_xml_header(metadata_xml.toXML())
                 except Exception as exc:
                     logging.warning(
                         "Could not write XML header to queued file: %s", exc
