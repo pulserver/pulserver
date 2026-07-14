@@ -212,6 +212,8 @@ class MrdDicomBuilder:
         pydicom.dataset.validate_file_meta(dicomDset.file_meta)
 
         # ----- Set some mandatory default values -----
+        if "Modality" not in dicomDset:
+            dicomDset.Modality = "MR"
         if "SamplesPerPixel" not in dicomDset:
             dicomDset.SamplesPerPixel = 1
         if "PhotometricInterpretation" not in dicomDset:
@@ -663,6 +665,7 @@ class MrdDicomBuilder:
 
         # UID
         dicomDset.SOPInstanceUID = pydicom.uid.generate_uid()
+        dicomDset.file_meta.MediaStorageSOPInstanceUID = dicomDset.SOPInstanceUID
 
         # Enforce correct value representation
         dicomDset = convert_string_vrs(dicomDset)
