@@ -20,7 +20,10 @@
  * GE fields (same layout, no bump needed for that alone), and a VENDOR
  * section id was added -- the label_column_map addition changes COMMON's
  * on-disk layout, so old caches must be rejected, not silently misread. */
-#define PULSEG_CACHE_VERSION_REVISION 1
+/* Bumped again for the interior static/dynamic pure-delay split: each
+ * pulseg_tr_segment gained an is_dynamic_delay[num_blocks] array (written
+ * right after has_adc), changing COMMON's per-segment on-disk layout. */
+#define PULSEG_CACHE_VERSION_REVISION 2
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; ROTATIONS, SHAPES
@@ -512,6 +515,8 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
             if (!write4(f, seg->has_freq_mod, seg->num_blocks))
                 return 0;
             if (!write4(f, seg->has_adc, seg->num_blocks))
+                return 0;
+            if (!write4(f, seg->is_dynamic_delay, seg->num_blocks))
                 return 0;
         }
         if (!write4(f, &seg->trigger_id, 1))
@@ -1112,6 +1117,7 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             seg->nopos_flag = NULL;
             seg->has_freq_mod = NULL;
             seg->has_adc = NULL;
+            seg->is_dynamic_delay = NULL;
             seg->trigger_id = -1;
             seg->is_nav = 0;
             seg->timing.num_rf_anchors = 0;
@@ -1140,9 +1146,10 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                 seg->nopos_flag = (int *)PULSEG_ALLOC((size_t)n * sizeof(int));
                 seg->has_freq_mod = (int *)PULSEG_ALLOC((size_t)n * sizeof(int));
                 seg->has_adc = (int *)PULSEG_ALLOC((size_t)n * sizeof(int));
+                seg->is_dynamic_delay = (int *)PULSEG_ALLOC((size_t)n * sizeof(int));
                 if (!seg->unique_block_indices || !seg->has_digitalout ||
                     !seg->has_rotation || !seg->norot_flag || !seg->nopos_flag ||
-                    !seg->has_freq_mod || !seg->has_adc)
+                    !seg->has_freq_mod || !seg->has_adc || !seg->is_dynamic_delay)
                     return 0;
                 if (!read4(f, seg->unique_block_indices, n))
                     return 0;
@@ -1158,6 +1165,8 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                     return 0;
                 if (!read4(f, seg->has_adc, n))
                     return 0;
+                if (!read4(f, seg->is_dynamic_delay, n))
+                    return 0;
                 if (do_swap)
                 {
                     swap4_array(seg->unique_block_indices, n);
@@ -1167,6 +1176,7 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                     swap4_array(seg->nopos_flag, n);
                     swap4_array(seg->has_freq_mod, n);
                     swap4_array(seg->has_adc, n);
+                    swap4_array(seg->is_dynamic_delay, n);
                 }
             }
             if (!read4(f, &seg->trigger_id, 1))
@@ -2126,8 +2136,14 @@ static int read_full_cache(const char *cache_path,
         read_shapes_payload,
         read_scanloop_payload,
         read_definitions_payload};
-    return read_sections(cache_path, coll, expected_seq_file_size,
-                         enforce_source_size, ids, readers, 5);
+    int ok = read_sections(cache_path, coll, expected_seq_file_size,
+                           enforce_source_size, ids, readers, 5);
+    /* COMMON + SHAPES + SCANLOOP are all present here, so the cross-subsequence
+     * segment dedup remap can be rebuilt deterministically (identical to the
+     * convert-time map). */
+    if (ok)
+        pulseg__build_segment_remap(coll);
+    return ok;
 }
 
 /* ================================================================== */
@@ -2314,23 +2330,37 @@ int pulseg_load_geninstructions_cache(
         read_common_payload,
         read_shapes_payload,
         read_scanloop_payload};
-    return load_cache_from_seq_path(out_coll, seq_path, ids, readers, 3, 0);
+    int rc = load_cache_from_seq_path(out_coll, seq_path, ids, readers, 3, 0);
+    /* COMMON + SHAPES + SCANLOOP present -> rebuild the cross-subsequence
+     * segment dedup remap so the global segment ids the pulsegen loop builds
+     * match those the scan cursor emits. */
+    if (rc == PULSEG_SUCCESS && out_coll && *out_coll)
+        pulseg__build_segment_remap(*out_coll);
+    return rc;
 }
 
-/* Scan: COMMON + ROTATIONS + SCANLOOP (no shapes). */
+/* Scan: COMMON + ROTATIONS + SHAPES + SCANLOOP.  SHAPES is loaded (even though
+ * scan never plays raw waveforms) so pulseg__build_segment_remap() can recompute
+ * the SAME cross-subsequence segment deduplication the pulsegen path computed;
+ * otherwise the cursor's global segment ids would not match the built buffers. */
 int pulseg_load_scanloop_cache(
     pulseg_collection **out_coll,
     const char *seq_path)
 {
-    static const int ids[3] = {
+    static const int ids[4] = {
         PULSEG_CACHE_SECTION_COMMON,
         PULSEG_CACHE_SECTION_ROTATIONS,
+        PULSEG_CACHE_SECTION_SHAPES,
         PULSEG_CACHE_SECTION_SCANLOOP};
-    static const payload_reader_fn readers[3] = {
+    static const payload_reader_fn readers[4] = {
         read_common_payload,
         read_rotations_payload,
+        read_shapes_payload,
         read_scanloop_payload};
-    return load_cache_from_seq_path(out_coll, seq_path, ids, readers, 3, 0);
+    int rc = load_cache_from_seq_path(out_coll, seq_path, ids, readers, 4, 0);
+    if (rc == PULSEG_SUCCESS && out_coll && *out_coll)
+        pulseg__build_segment_remap(*out_coll);
+    return rc;
 }
 
 int pulseg_clear_cache(const char *seq_path)

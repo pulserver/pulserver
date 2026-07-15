@@ -221,6 +221,14 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
         PULSEG_FREE(s->component_run_ids);
     if (s->surviving_freqs_hz)
         PULSEG_FREE(s->surviving_freqs_hz);
+    if (s->envelope_freqs_hz)
+        PULSEG_FREE(s->envelope_freqs_hz);
+    if (s->envelope_amp_gx)
+        PULSEG_FREE(s->envelope_amp_gx);
+    if (s->envelope_amp_gy)
+        PULSEG_FREE(s->envelope_amp_gy);
+    if (s->envelope_amp_gz)
+        PULSEG_FREE(s->envelope_amp_gz);
 
     memset(s, 0, sizeof(*s));
 }
@@ -1025,7 +1033,8 @@ static int sa_check_structural_violations(
     const pulseg_forbidden_band *forbidden_bands,
     float peak_log10_threshold, float peak_norm_scale,
     float peak_eps, float peak_prominence,
-    int num_avgs, float g_max_hz_per_m)
+    int num_avgs, float g_max_hz_per_m,
+    int compute_dense_envelope)
 {
     sa_structural_events se;
     int result, ax, i, b, k, ci;
@@ -1054,6 +1063,12 @@ static int sa_check_structural_violations(
     float *component_freqs_hz, *component_amps, *component_phases_rad, *component_widths_hz;
     int *component_axes, *component_def_ids, *component_contrib_ids, *component_run_ids;
 
+    /* Dense analytic envelope (display-only; plotting API only, see
+     * compute_dense_envelope) */
+    int num_env;
+    float *env_freqs;
+    float *env_amps[3];
+
     (void)peak_log10_threshold;
     (void)peak_norm_scale;
     (void)peak_eps;
@@ -1079,10 +1094,13 @@ static int sa_check_structural_violations(
     component_def_ids = NULL;
     component_contrib_ids = NULL;
     component_run_ids = NULL;
+    num_env = 0;
+    env_freqs = NULL;
     for (ax = 0; ax < 3; ++ax)
     {
         ana_amps[ax] = NULL;
         ana_phases[ax] = NULL;
+        env_amps[ax] = NULL;
         cand_amps[ax] = NULL;
         cand_grad_amps_ax[ax] = NULL;
     }
@@ -1229,6 +1247,47 @@ static int sa_check_structural_violations(
             }
         }
         num_ana = m_max;
+    }
+
+    /* =====================================================================
+     * (A2) Dense analytic envelope — the SAME S_ax(f) transform as (A),
+     *      evaluated on a uniform grid (spectrum_full's freq_min_hz/
+     *      freq_spacing_hz) instead of only at TR harmonics k/T_TR. Display-
+     *      only, and only ever requested by the plotting API
+     *      (pulseg_calc_mech_resonances) -- never by pulseg_check_safety, so
+     *      this never runs on the PSD predownload path. Because (A)'s values
+     *      are this same function sampled at k/T_TR, this array reproduces
+     *      them exactly at those frequencies -- a true matched envelope, not
+     *      an interpolation and not a separately-windowed/normalised FFT.
+     * ===================================================================== */
+    if (compute_dense_envelope && spectra->num_freq_bins > 0)
+    {
+        num_env = spectra->num_freq_bins;
+        env_freqs = (float *)PULSEG_ALLOC((size_t)num_env * sizeof(float));
+        if (!env_freqs)
+            goto alloc_fail;
+        for (ax = 0; ax < 3; ++ax)
+        {
+            env_amps[ax] = (float *)PULSEG_ALLOC((size_t)num_env * sizeof(float));
+            if (!env_amps[ax])
+                goto alloc_fail;
+        }
+        for (i = 0; i < num_env; ++i)
+        {
+            float f_hz = spectra->freq_min_hz + (float)i * spectra->freq_spacing_hz;
+            env_freqs[i] = f_hz;
+            for (ax = 0; ax < 3; ++ax)
+            {
+                float sre, sim;
+                if (se.axes[ax].num_events == 0)
+                {
+                    env_amps[ax][i] = 0.0f;
+                    continue;
+                }
+                sa_eval_axis_spectrum(f_hz, &se.axes[ax], &sre, &sim);
+                env_amps[ax][i] = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)));
+            }
+        }
     }
 
     /* =====================================================================
@@ -1413,6 +1472,16 @@ static int sa_check_structural_violations(
     spectra->surviving_freqs_hz = surviving_freqs_hz;
     surviving_freqs_hz = NULL;
 
+    spectra->num_envelope_bins = num_env;
+    spectra->envelope_freqs_hz = env_freqs;
+    env_freqs = NULL;
+    spectra->envelope_amp_gx = env_amps[0];
+    env_amps[0] = NULL;
+    spectra->envelope_amp_gy = env_amps[1];
+    env_amps[1] = NULL;
+    spectra->envelope_amp_gz = env_amps[2];
+    env_amps[2] = NULL;
+
     sa_free_structural_events(&se);
     return PULSEG_SUCCESS;
 
@@ -1429,6 +1498,8 @@ alloc_fail:
         PULSEG_FREE(cand_violations);
     if (surviving_freqs_hz)
         PULSEG_FREE(surviving_freqs_hz);
+    if (env_freqs)
+        PULSEG_FREE(env_freqs);
     for (ax = 0; ax < 3; ++ax)
     {
         if (ana_amps[ax])
@@ -1439,6 +1510,8 @@ alloc_fail:
             PULSEG_FREE(cand_amps[ax]);
         if (cand_grad_amps_ax[ax])
             PULSEG_FREE(cand_grad_amps_ax[ax]);
+        if (env_amps[ax])
+            PULSEG_FREE(env_amps[ax]);
     }
     if (component_freqs_hz)
         PULSEG_FREE(component_freqs_hz);
@@ -1598,7 +1671,8 @@ static int calc_mech_resonances_from_uniform(
     int start_block,
     int block_count,
     int num_avgs,
-    float g_max_hz_per_m)
+    float g_max_hz_per_m,
+    int compute_dense_envelope)
 {
     pulseg_diagnostic local_diag;
     int max_samples, result;
@@ -1715,7 +1789,7 @@ static int calc_mech_resonances_from_uniform(
             num_forbidden_bands, forbidden_bands,
             peak_log10_threshold, peak_norm_scale,
             peak_eps, peak_prominence,
-            num_avgs, g_max_hz_per_m);
+            num_avgs, g_max_hz_per_m, compute_dense_envelope);
         if (PULSEG_FAILED(result))
         {
             pulseg_mech_resonances_spectra_free(spectra);
@@ -2054,7 +2128,10 @@ int pulseg_calc_mech_resonances(const pulseg_collection *coll,
                                            peak_log10_threshold, peak_norm_scale, peak_eps,
                                            peak_prominence,
                                            desc, sa_start_block, sa_block_count, num_avgs,
-                                           0.0f /* g_max: display path uses band limit only */);
+                                           0.0f /* g_max: display path uses band limit only */,
+                                           (target_resolution_hz > 0.0f) ? 1 : 0
+                                           /* dense envelope: plotting API only, see
+                                            * calc_mech_resonances_from_uniform doc */);
     pulseg__uniform_grad_waveforms_free(&uw);
     if (block_order)
         PULSEG_FREE(block_order);
@@ -3011,7 +3088,11 @@ int pulseg_check_safety(
                  * frequency (>= SA_MIN_ANALYSIS_FREQ_HZ) so the full-spectrum
                  * and analytical display arrays are populated; the verdict
                  * itself comes only from the in-guarded-band TR-harmonic lines.
-                 * Covered by test_safety_grad.c Suite D. */
+                 * Covered by test_safety_grad.c Suite D.
+                 * compute_dense_envelope=0: the dense analytic envelope is a
+                 * plotting-only aid (see pulseg_calc_mech_resonances / the
+                 * python mechres_plots tooling); this is the real PSD
+                 * predownload safety-check path and must never pay for it. */
                 memset(&spectra, 0, sizeof(spectra));
                 rc = calc_mech_resonances_from_uniform(
                     &spectra, diag, &uw,
@@ -3024,7 +3105,8 @@ int pulseg_check_safety(
                     opts->peak_eps,
                     opts->peak_prominence,
                     desc, sa_start_block, sa_block_count, num_avgs,
-                    opts->max_grad_hz_per_m);
+                    opts->max_grad_hz_per_m,
+                    0 /* compute_dense_envelope: never on the PSD path */);
 
                 /* Safety path: fail fast on first violating candidate.
                  * Pattern: for each candidate, scan union of all bands. */

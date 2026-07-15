@@ -50,6 +50,22 @@ int pulseg__resolve_segment(
     if (!coll || seg_idx < 0 || seg_idx >= coll->total_unique_segments)
         return 0;
 
+    /* Deduplicated global segment space: resolve through the representative
+     * (subseq, local) map built by pulseg__build_segment_remap(). */
+    if (coll->seg_repr_subseq && coll->seg_repr_local)
+    {
+        int s = coll->seg_repr_subseq[seg_idx];
+        int l = coll->seg_repr_local[seg_idx];
+        if (s < 0 || s >= coll->num_subsequences)
+            return 0;
+        if (out_desc)
+            *out_desc = &coll->descriptors[s];
+        if (out_local_seg)
+            *out_local_seg = l;
+        return 1;
+    }
+
+    /* Fallback (remap not built): contiguous per-subsequence offset walk. */
     global_idx = 0;
     for (i = 0; i < coll->num_subsequences; ++i)
     {
@@ -2291,6 +2307,27 @@ static int pulseg__block_has_adc(
     }
 }
 
+/* True iff this block position's duration actually differs across at least
+ * two scan-table instances of the segment (see pulseg_structure.c step 11d).
+ * A NULL is_dynamic_delay array (pre-11d sequences / older cache) falls back
+ * to the pre-existing conservative behavior of always treating an adjustable
+ * pure delay as dynamic. */
+static int pulseg__block_is_dynamic_delay(
+    const pulseg_collection *coll,
+    int seg_idx, int blk_idx)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_tr_segment *seg;
+    int local_blk;
+
+    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+        return 0;
+
+    if (seg->is_dynamic_delay)
+        return seg->is_dynamic_delay[local_blk] ? 1 : 0;
+    return 1;
+}
+
 static int pulseg__get_adc_delay_us(
     const pulseg_collection *coll,
     int seg_idx, int blk_idx)
@@ -2874,7 +2911,16 @@ int pulseg_cursor_get_info(
 
     info->subseq_idx = cursor->sequence_index;
     info->scan_pos = pos;
-    info->segment_id = seg_id + coll->subsequence_info[cursor->sequence_index].segment_id_offset;
+    /* Map the subsequence-local segment id to its deduplicated global id.
+     * segment_id_offset is the flat index base into seg_local_to_global. */
+    {
+        int flat = coll->subsequence_info[cursor->sequence_index].segment_id_offset + seg_id;
+        if (coll->seg_local_to_global && seg_id >= 0 &&
+            flat >= 0 && flat < coll->seg_l2g_len)
+            info->segment_id = coll->seg_local_to_global[flat];
+        else
+            info->segment_id = seg_id + coll->subsequence_info[cursor->sequence_index].segment_id_offset;
+    }
     /* segment_start fires at the first block of every segment instance,
      * including consecutive instances of the same segment (e.g. the ny
      * phase-encoding readout lines in MPRAGE within one TR).
@@ -3475,6 +3521,23 @@ int pulseg_get_block_info(const pulseg_collection *coll,
     info->norot_flag = pulseg__block_has_norot(coll, seg_idx, blk_idx);
     info->nopos_flag = pulseg__block_has_nopos(coll, seg_idx, blk_idx);
     info->has_freq_mod = pulseg__block_has_freq_mod(coll, seg_idx, blk_idx);
+
+    /* Pure-delay block: no RF/gradient/ADC waveform AND no digital-output
+     * trigger or rotation -- literally only a duration -- so it CAN be played
+     * as a runtime setperiod wait.  Excluding digitalout/rotation keeps this in
+     * lock-step with the segment-dedup delay-flex criterion (a trigger/rotation
+     * block must NOT be collapsed onto a fixed-duration wait).
+     *
+     * is_variable_delay is only set when the duration ALSO actually differs
+     * across scan-table instances (pulseg__block_is_dynamic_delay).  A pure
+     * delay whose duration is constant in every instance is "static": it
+     * needs no setperiod wait and no interior SSP packet, and is represented
+     * purely by its block position -- exactly like any other fixed block. */
+    info->is_variable_delay =
+        (!info->has_grad[0] && !info->has_grad[1] && !info->has_grad[2] &&
+         !info->has_rf && !info->has_adc &&
+         !info->has_digitalout && !info->has_rotation &&
+         pulseg__block_is_dynamic_delay(coll, seg_idx, blk_idx)) ? 1 : 0;
 
     return PULSEG_SUCCESS;
 }

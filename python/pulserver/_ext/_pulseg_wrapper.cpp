@@ -281,6 +281,12 @@ static py::dict _calc_mech_resonances(
     out["num_surviving_freqs"] = sp.num_surviving_freqs;
     out["surviving_freqs_hz"] = sp.surviving_freqs_hz;
 
+    out["num_envelope_bins"] = sp.num_envelope_bins;
+    out["envelope_freqs_hz"] = sp.envelope_freqs_hz;
+    out["envelope_amp_gx"] = sp.envelope_amp_gx;
+    out["envelope_amp_gy"] = sp.envelope_amp_gy;
+    out["envelope_amp_gz"] = sp.envelope_amp_gz;
+
     return out;
 }
 

@@ -303,6 +303,17 @@ struct MechResonancesSpectra {
 
     int                num_surviving_freqs = 0;
     std::vector<float> surviving_freqs_hz;
+
+    /* -- dense analytic envelope (display-only; plotting API only) --
+     * Same S_ax(f) transform as analytical_peak_*, evaluated on a uniform
+     * grid instead of only at TR harmonics -- see pulseg_types.h. Empty
+     * unless the caller requested a display grid (target_resolution_hz>0);
+     * never populated on the pulseg_check_safety (PSD) path. */
+    int                num_envelope_bins = 0;
+    std::vector<float> envelope_freqs_hz;
+    std::vector<float> envelope_amp_gx;
+    std::vector<float> envelope_amp_gy;
+    std::vector<float> envelope_amp_gz;
 };
 
 // ── PNS result ──────────────────────────────────────────────────────

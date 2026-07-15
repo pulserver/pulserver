@@ -84,6 +84,7 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor* d)
             if (d->segment_definitions[i].nopos_flag)           PULSEG_FREE(d->segment_definitions[i].nopos_flag);
             if (d->segment_definitions[i].has_freq_mod)          PULSEG_FREE(d->segment_definitions[i].has_freq_mod);
             if (d->segment_definitions[i].has_adc)               PULSEG_FREE(d->segment_definitions[i].has_adc);
+            if (d->segment_definitions[i].is_dynamic_delay)      PULSEG_FREE(d->segment_definitions[i].is_dynamic_delay);
             if (d->segment_definitions[i].timing.rf_anchors)    PULSEG_FREE(d->segment_definitions[i].timing.rf_anchors);
             if (d->segment_definitions[i].timing.adc_anchors)   PULSEG_FREE(d->segment_definitions[i].timing.adc_anchors);
             if (d->segment_definitions[i].timing.kzero_crossing_indices) PULSEG_FREE(d->segment_definitions[i].timing.kzero_crossing_indices);
@@ -146,6 +147,7 @@ void pulseg_collection_free(
         PULSEG_FREE(c->descriptors);
     }
     if (c->subsequence_info) PULSEG_FREE(c->subsequence_info);
+    pulseg__free_segment_remap(c);
     /* Free the struct itself (allocated by pulseg_read) */
     PULSEG_FREE(c);
 }
@@ -615,6 +617,341 @@ int pulseg_format_error(
 }
 
 /* ================================================================== */
+/*  Cross-subsequence segment deduplication (footprint minimisation)   */
+/*                                                                     */
+/*  Two segments in DIFFERENT subsequences materialise byte-identical  */
+/*  EPIC instruction memory whenever their normalised waveform shapes, */
+/*  timing and event topology match — per-instance amplitude / phase / */
+/*  rotation are applied at scan time from the REAL subsequence's block */
+/*  instance (pulseg_get_block_instance), never baked into the shared   */
+/*  segment buffer.  So it is safe to give such segments one global id  */
+/*  and build the instruction memory once.  The per-subsequence         */
+/*  descriptors are left untouched, so all safety / trajectory analysis */
+/*  (which runs on descriptors, never on the global segment space) is   */
+/*  unaffected.                                                          */
+/* ================================================================== */
+
+/* Compare two decompressed shapes referenced by 1-based local shape ids
+ * (<= 0 means "no shape").  Returns 1 if both absent or both decompress to
+ * equal sample vectors (within a small tolerance), 0 otherwise. */
+static int seg_shape_equal(
+    const pulseg_sequence_descriptor* da, int sid_a,
+    const pulseg_sequence_descriptor* db, int sid_b)
+{
+    pulseg_shape_arbitrary xa, xb;
+    int i, ok, ha, hb;
+
+    ha = (sid_a > 0 && sid_a <= da->num_shapes);
+    hb = (sid_b > 0 && sid_b <= db->num_shapes);
+    if (ha != hb) return 0;
+    if (!ha)      return 1;   /* both absent */
+
+    xa.samples = NULL; xa.num_samples = 0; xa.num_uncompressed_samples = 0;
+    xb.samples = NULL; xb.num_samples = 0; xb.num_uncompressed_samples = 0;
+
+    if (!pulseg_pulseq_decompress_shape(&xa, &da->shapes[sid_a - 1], 1.0f)) {
+        if (xa.samples) PULSEG_FREE(xa.samples);
+        return 0;
+    }
+    if (!pulseg_pulseq_decompress_shape(&xb, &db->shapes[sid_b - 1], 1.0f)) {
+        PULSEG_FREE(xa.samples);
+        if (xb.samples) PULSEG_FREE(xb.samples);
+        return 0;
+    }
+
+    ok = (xa.num_uncompressed_samples == xb.num_uncompressed_samples);
+    for (i = 0; ok && i < xa.num_uncompressed_samples; ++i) {
+        float d = xa.samples[i] - xb.samples[i];
+        if (d < 0.0f) d = -d;
+        if (d > 1e-6f) ok = 0;
+    }
+    PULSEG_FREE(xa.samples);
+    PULSEG_FREE(xb.samples);
+    return ok;
+}
+
+/* Compare two gradient definitions (by label) for buffer-equal content. */
+static int seg_grad_def_equal(
+    const pulseg_sequence_descriptor* da, int gid_a,
+    const pulseg_sequence_descriptor* db, int gid_b)
+{
+    const pulseg_grad_definition* ga;
+    const pulseg_grad_definition* gb;
+    int s;
+
+    if (gid_a < 0 || gid_a >= da->num_unique_grads) return 0;
+    if (gid_b < 0 || gid_b >= db->num_unique_grads) return 0;
+    ga = &da->grad_definitions[gid_a];
+    gb = &db->grad_definitions[gid_b];
+
+    if (ga->type != gb->type) return 0;
+    if (ga->delay != gb->delay) return 0;
+
+    if (ga->type == 0) {
+        /* trapezoid: corner-point timing only */
+        return (ga->rise_time_or_unused == gb->rise_time_or_unused &&
+                ga->flat_time_or_unused == gb->flat_time_or_unused &&
+                ga->fall_time_or_num_uncompressed_samples ==
+                    gb->fall_time_or_num_uncompressed_samples);
+    }
+
+    /* arbitrary: sample count, time shape, and every shot's shape */
+    if (ga->fall_time_or_num_uncompressed_samples !=
+        gb->fall_time_or_num_uncompressed_samples) return 0;
+    if (ga->num_shots != gb->num_shots) return 0;
+    if (!seg_shape_equal(da, ga->unused_or_time_shape_id,
+                         db, gb->unused_or_time_shape_id)) return 0;
+    for (s = 0; s < ga->num_shots; ++s)
+        if (!seg_shape_equal(da, ga->shot_shape_ids[s],
+                             db, gb->shot_shape_ids[s])) return 0;
+    return 1;
+}
+
+/* Compare two RF definitions (by label) for buffer-equal content. */
+static int seg_rf_def_equal(
+    const pulseg_sequence_descriptor* da, int rid_a,
+    const pulseg_sequence_descriptor* db, int rid_b)
+{
+    const pulseg_rf_definition* ra;
+    const pulseg_rf_definition* rb;
+
+    if (rid_a < 0 || rid_a >= da->num_unique_rfs) return 0;
+    if (rid_b < 0 || rid_b >= db->num_unique_rfs) return 0;
+    ra = &da->rf_definitions[rid_a];
+    rb = &db->rf_definitions[rid_b];
+
+    if (ra->num_channels != rb->num_channels) return 0;
+    if (ra->delay != rb->delay) return 0;
+    return (seg_shape_equal(da, ra->mag_shape_id,   db, rb->mag_shape_id) &&
+            seg_shape_equal(da, ra->phase_shape_id, db, rb->phase_shape_id) &&
+            seg_shape_equal(da, ra->time_shape_id,  db, rb->time_shape_id));
+}
+
+/* Compare two ADC definitions (by label). */
+static int seg_adc_def_equal(
+    const pulseg_sequence_descriptor* da, int aid_a,
+    const pulseg_sequence_descriptor* db, int aid_b)
+{
+    const pulseg_adc_definition* aa;
+    const pulseg_adc_definition* ab;
+
+    if (aid_a < 0 || aid_a >= da->num_unique_adcs) return 0;
+    if (aid_b < 0 || aid_b >= db->num_unique_adcs) return 0;
+    aa = &da->adc_definitions[aid_a];
+    ab = &db->adc_definitions[aid_b];
+    return (aa->num_samples == ab->num_samples &&
+            aa->dwell_time  == ab->dwell_time  &&
+            aa->delay       == ab->delay);
+}
+
+/* Resolve the block DEFINITION that materialises block b of a segment.
+ * Mirrors the getters' max-energy-representative resolution so the compared
+ * content matches the actually-built buffer; falls back to the segment's
+ * first-instance unique_block_indices when no representative is recorded. */
+static const pulseg_block_definition* seg_block_def(
+    const pulseg_sequence_descriptor* desc,
+    const pulseg_tr_segment* seg, int b)
+{
+    if (seg->max_energy_start_block >= 0) {
+        int scan_idx = seg->max_energy_start_block + b;
+        if (scan_idx >= 0 && scan_idx < desc->scan_table_len) {
+            int bt_idx = desc->scan_table_block_idx[scan_idx];
+            if (bt_idx >= 0 && bt_idx < desc->num_blocks)
+                return &desc->block_definitions[desc->block_table[bt_idx].id];
+        }
+    }
+    if (seg->unique_block_indices) {
+        int id = seg->unique_block_indices[b];
+        if (id >= 0 && id < desc->num_unique_blocks)
+            return &desc->block_definitions[id];
+    }
+    return NULL;
+}
+
+/* A block definition is a pure delay when it carries no RF, gradient or ADC
+ * event -- only a duration.  Such a block's duration is runtime-adjustable
+ * (setperiod), so two segments that differ only in a pure-delay block's
+ * duration still materialise the same instruction memory. */
+static int block_def_is_pure_delay(const pulseg_block_definition* b)
+{
+    return (b->rf_id < 0 && b->gx_id < 0 && b->gy_id < 0 &&
+            b->gz_id < 0 && b->adc_id < 0);
+}
+
+/* Segment-level physio-trigger TYPE (or 0 if none), for topology compare. */
+static int seg_trigger_type(
+    const pulseg_sequence_descriptor* desc, const pulseg_tr_segment* seg)
+{
+    if (seg->trigger_id >= 0 && seg->trigger_id < desc->num_triggers)
+        return desc->trigger_events[seg->trigger_id].trigger_type;
+    return 0;
+}
+
+/* Deep content equality of two segments (possibly in different subsequences).
+ * Returns 1 iff their EPIC-materialised instruction memory is identical. */
+static int pulseg__segments_content_equal(
+    const pulseg_collection* coll,
+    int subseq_a, int local_a,
+    int subseq_b, int local_b)
+{
+    const pulseg_sequence_descriptor* da = &coll->descriptors[subseq_a];
+    const pulseg_sequence_descriptor* db = &coll->descriptors[subseq_b];
+    const pulseg_tr_segment* sa;
+    const pulseg_tr_segment* sb;
+    int b;
+
+    if (local_a < 0 || local_a >= da->num_unique_segments) return 0;
+    if (local_b < 0 || local_b >= db->num_unique_segments) return 0;
+    sa = &da->segment_definitions[local_a];
+    sb = &db->segment_definitions[local_b];
+
+    if (sa->num_blocks != sb->num_blocks) return 0;
+    if (sa->is_nav != sb->is_nav) return 0;
+    if (seg_trigger_type(da, sa) != seg_trigger_type(db, sb)) return 0;
+
+    for (b = 0; b < sa->num_blocks; ++b) {
+        const pulseg_block_definition* ba = seg_block_def(da, sa, b);
+        const pulseg_block_definition* bb = seg_block_def(db, sb, b);
+        if (!ba || !bb) return 0;
+
+        /* Block duration must match, EXCEPT a DYNAMIC adjustable pure-delay
+         * block: no RF/grad/ADC AND no digital-output trigger or rotation,
+         * AND its duration actually varies across its own subsequence's
+         * instances, so it is applied per-instance at scan time (setperiod)
+         * and two segments differing only there can share one definition.
+         * This must match pulseg_get_block_info()'s is_variable_delay
+         * exactly -- otherwise a merged block that EPIC does NOT setperiod
+         * would play a fixed (wrong) duration.  A STATIC adjustable delay
+         * (is_dynamic_delay == 0) is never setperiod'd by EPIC, so its baked
+         * duration must still match exactly, same as any other fixed block --
+         * skipping the check for it here would merge two definitions that
+         * silently disagree on duration.  The digitalout/rotation presence
+         * checks below are still enforced (they must be equal), so a
+         * trigger/rotation delay block is never collapsed onto a fixed
+         * wait. */
+        {
+            int a_adj = block_def_is_pure_delay(ba) &&
+                        !sa->has_digitalout[b] && !sa->has_rotation[b] &&
+                        (sa->is_dynamic_delay ? sa->is_dynamic_delay[b] : 1);
+            int b_adj = block_def_is_pure_delay(bb) &&
+                        !sb->has_digitalout[b] && !sb->has_rotation[b] &&
+                        (sb->is_dynamic_delay ? sb->is_dynamic_delay[b] : 1);
+            if (!(a_adj && b_adj)) {
+                if (ba->duration_us != bb->duration_us) return 0;
+            }
+        }
+
+        /* RF */
+        if ((ba->rf_id >= 0) != (bb->rf_id >= 0)) return 0;
+        if (ba->rf_id >= 0 && !seg_rf_def_equal(da, ba->rf_id, db, bb->rf_id))
+            return 0;
+
+        /* Gradients per axis */
+        if ((ba->gx_id >= 0) != (bb->gx_id >= 0)) return 0;
+        if (ba->gx_id >= 0 && !seg_grad_def_equal(da, ba->gx_id, db, bb->gx_id))
+            return 0;
+        if ((ba->gy_id >= 0) != (bb->gy_id >= 0)) return 0;
+        if (ba->gy_id >= 0 && !seg_grad_def_equal(da, ba->gy_id, db, bb->gy_id))
+            return 0;
+        if ((ba->gz_id >= 0) != (bb->gz_id >= 0)) return 0;
+        if (ba->gz_id >= 0 && !seg_grad_def_equal(da, ba->gz_id, db, bb->gz_id))
+            return 0;
+
+        /* ADC */
+        if ((ba->adc_id >= 0) != (bb->adc_id >= 0)) return 0;
+        if (ba->adc_id >= 0 && !seg_adc_def_equal(da, ba->adc_id, db, bb->adc_id))
+            return 0;
+
+        /* Per-block topology flags (OR-reduced across instances). These drive
+         * OMEGA / ISI / TTL / rotation instruction allocation, so they must
+         * match for the shared buffer to be valid.                          */
+        if (sa->has_rotation[b]   != sb->has_rotation[b])   return 0;
+        if (sa->has_digitalout[b] != sb->has_digitalout[b]) return 0;
+        if (sa->has_freq_mod[b]   != sb->has_freq_mod[b])   return 0;
+        if (sa->has_adc[b]        != sb->has_adc[b])        return 0;
+        if (sa->norot_flag[b]     != sb->norot_flag[b])     return 0;
+        if (sa->nopos_flag[b]     != sb->nopos_flag[b])     return 0;
+    }
+    return 1;
+}
+
+void pulseg__free_segment_remap(pulseg_collection* coll)
+{
+    if (!coll) return;
+    if (coll->seg_local_to_global) { PULSEG_FREE(coll->seg_local_to_global); coll->seg_local_to_global = NULL; }
+    if (coll->seg_repr_subseq)     { PULSEG_FREE(coll->seg_repr_subseq);     coll->seg_repr_subseq = NULL; }
+    if (coll->seg_repr_local)      { PULSEG_FREE(coll->seg_repr_local);      coll->seg_repr_local = NULL; }
+    coll->seg_l2g_len = 0;
+}
+
+int pulseg__build_segment_remap(pulseg_collection* coll)
+{
+    int i, local, g, old_total, new_total, off;
+    int* l2g = NULL;
+    int* repr_s = NULL;
+    int* repr_l = NULL;
+
+    if (!coll) return PULSEG_ERR_NULL_POINTER;
+
+    pulseg__free_segment_remap(coll);
+
+    /* Pre-dedup running-sum offsets (also the flat index base for l2g). */
+    old_total = 0;
+    for (i = 0; i < coll->num_subsequences; ++i) {
+        coll->subsequence_info[i].segment_id_offset = old_total;
+        old_total += coll->descriptors[i].num_unique_segments;
+    }
+    if (old_total <= 0) {
+        coll->total_unique_segments = 0;
+        return PULSEG_SUCCESS;
+    }
+
+    l2g    = (int*)PULSEG_ALLOC((size_t)old_total * sizeof(int));
+    repr_s = (int*)PULSEG_ALLOC((size_t)old_total * sizeof(int));
+    repr_l = (int*)PULSEG_ALLOC((size_t)old_total * sizeof(int));
+    if (!l2g || !repr_s || !repr_l) {
+        if (l2g)    PULSEG_FREE(l2g);
+        if (repr_s) PULSEG_FREE(repr_s);
+        if (repr_l) PULSEG_FREE(repr_l);
+        /* Degrade to identity: resolve_segment / cursor fall back on the
+         * offset walk when the remap arrays are NULL.                       */
+        coll->total_unique_segments = old_total;
+        return PULSEG_ERR_ALLOC_FAILED;
+    }
+
+    new_total = 0;
+    off = 0;
+    for (i = 0; i < coll->num_subsequences; ++i) {
+        int nseg = coll->descriptors[i].num_unique_segments;
+        for (local = 0; local < nseg; ++local) {
+            int found = -1;
+            for (g = 0; g < new_total; ++g) {
+                if (pulseg__segments_content_equal(
+                        coll, i, local, repr_s[g], repr_l[g])) {
+                    found = g;
+                    break;
+                }
+            }
+            if (found < 0) {
+                repr_s[new_total] = i;
+                repr_l[new_total] = local;
+                found = new_total;
+                new_total++;
+            }
+            l2g[off + local] = found;
+        }
+        off += nseg;
+    }
+
+    coll->seg_local_to_global = l2g;
+    coll->seg_l2g_len         = old_total;
+    coll->seg_repr_subseq     = repr_s;
+    coll->seg_repr_local      = repr_l;
+    coll->total_unique_segments = new_total;
+    return PULSEG_SUCCESS;
+}
+
+/* ================================================================== */
 /*  pulseg_convert_collection (public convert entry point, Stage 3)    */
 /* ================================================================== */
 
@@ -772,6 +1109,11 @@ int pulseg_convert_collection(
      * pulseg_read()/pulseg_read_from_buffers() call, Stage 3 Step 2). */
     rc = check_consistency(coll, diag);
     if (PULSEG_FAILED(rc)) { diag->code = rc; i = n; goto fail; }
+
+    /* Collapse duplicate segments across subsequences into one global
+     * instruction-memory entry (safety-preserving; see notes above). A
+     * failure here degrades gracefully to the identity map. */
+    pulseg__build_segment_remap(coll);
 
     diag->code = PULSEG_SUCCESS;
     return n;

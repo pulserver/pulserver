@@ -392,6 +392,12 @@ typedef struct pulseg_tr_segment {
     int* has_freq_mod;
     int* has_adc;          /* OR-reduced: 1 if at least one segment instance has an ADC
                               event at this block position, 0 otherwise          */
+    int* is_dynamic_delay; /* OR-reduced: 1 if this block position is an adjustable
+                              pure delay (see is_adjustable_delay_at) AND its duration
+                              actually differs across at least two scan-table instances
+                              of this segment.  0 for a "static" delay -- same duration
+                              in every instance -- which needs no runtime setperiod wait
+                              and is represented purely by block position/offset.       */
     int max_energy_start_block;
     int trigger_id;             /* segment-level physio trigger (INPUT type),
                                    index into trigger_events[], or -1          */
@@ -399,7 +405,7 @@ typedef struct pulseg_tr_segment {
     pulseg_segment_timing timing;
 } pulseg_tr_segment;
 
-#define PULSEG_TR_SEGMENT_INIT {0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, -1, 0, PULSEG_SEGMENT_TIMING_INIT}
+#define PULSEG_TR_SEGMENT_INIT {0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, -1, 0, PULSEG_SEGMENT_TIMING_INIT}
 
 /* ================================================================== */
 /*  Segment table result                                              */
@@ -592,9 +598,26 @@ struct pulseg_collection {
     int total_blocks;
     float total_duration_us;
     struct pulseg_freq_mod_collection* freq_mod;  /* owned, may be NULL */
+
+    /* Cross-subsequence segment deduplication remap (DERIVED state; rebuilt
+     * by pulseg__build_segment_remap() after assembly and after cache load,
+     * never serialized).  Without dedup these are the identity map.
+     *
+     *   seg_local_to_global[ subsequence_info[s].segment_id_offset + local ]
+     *       = global (deduplicated) segment id, in [0, total_unique_segments)
+     *   seg_repr_subseq[g] / seg_repr_local[g]
+     *       = the (subseq, local) whose descriptor materialises global seg g.
+     *
+     * total_unique_segments is the DEDUPLICATED count once the remap is built;
+     * segment_id_offset keeps its pre-dedup running-sum value (the flat index
+     * base into seg_local_to_global).                                        */
+    int* seg_local_to_global;  /* [seg_l2g_len] local->global               */
+    int  seg_l2g_len;          /* == pre-dedup sum of num_unique_segments    */
+    int* seg_repr_subseq;      /* [total_unique_segments] global->repr subseq */
+    int* seg_repr_local;       /* [total_unique_segments] global->repr local  */
 };
 
-#define PULSEG_COLLECTION_INIT {0, 1, PULSEG_BLOCK_CURSOR_INIT, NULL, NULL, 0, 0, 0, 0.0f, NULL}
+#define PULSEG_COLLECTION_INIT {0, 1, PULSEG_BLOCK_CURSOR_INIT, NULL, NULL, 0, 0, 0, 0.0f, NULL, NULL, 0, NULL, NULL}
 
 /* ================================================================== */
 /*  Uniform-raster gradient waveforms (internal, post-interpolation)  */
@@ -841,5 +864,16 @@ int pulseg__resolve_block(
     const pulseg_tr_segment** out_seg,
     int* out_local_blk,
     int seg_idx, int blk_idx);
+
+/* Build (or rebuild) the cross-subsequence segment deduplication remap:
+ * populates coll->seg_local_to_global / seg_repr_subseq / seg_repr_local and
+ * collapses coll->total_unique_segments to the deduplicated count.  Idempotent;
+ * must be called after all descriptors are assembled (post-convert and
+ * post-cache-load).  Returns PULSEG_SUCCESS or an error code (on error the
+ * collection is left with the identity map so it stays usable).            */
+int pulseg__build_segment_remap(pulseg_collection* coll);
+
+/* Free the derived remap arrays (identity-safe; sets them to NULL). */
+void pulseg__free_segment_remap(pulseg_collection* coll);
 
 #endif /* PULSEG_INTERNAL_H */

@@ -1981,6 +1981,105 @@ MU_TEST(test_scan_table_mprage_nav_2d_1sl_3avg) { run_scan_table_case(&kMprageNa
 MU_TEST(test_scan_table_mprage_nav_2d_3sl_1avg) { run_scan_table_case(&kMprageNavCases[2]); }
 MU_TEST(test_scan_table_mprage_nav_2d_3sl_3avg) { run_scan_table_case(&kMprageNavCases[3]); }
 
+/* ================================================================== */
+/*  Suite — interior pure-delay static/dynamic classification         */
+/*                                                                     */
+/*  Fixtures: 99_interior_delay_static.seq / _dynamic.seq, each 3 TRs  */
+/*  of [RF, delay, ADC] + [TR-tail delay].  TR1 == TR2 always (so TR-  */
+/*  period detection finds tr_size=4 blocks from the first repeat     */
+/*  alone); TR3's interior delay (position 1 in the 3-block segment)  */
+/*  matches TR1/TR2 in the static fixture and differs in the dynamic   */
+/*  one.  Confirms: (1) segs_delay_flex_equal still collapses all 3   */
+/*  TR instances into ONE unique [RF,delay,ADC] segment regardless,   */
+/*  and (2) is_variable_delay is 0 for the never-varying delay and 1  */
+/*  only when the duration actually differs across instances.        */
+/* ================================================================== */
+
+static int find_delay_block(
+    const pulseg_collection* coll, int seg_idx, int num_blocks)
+{
+    pulseg_block_info bi = PULSEG_BLOCK_INFO_INIT;
+    int blk, rc;
+
+    for (blk = 0; blk < num_blocks; ++blk) {
+        rc = pulseg_get_block_info(coll, &bi, seg_idx, blk);
+        if (!PULSEG_SUCCEEDED(rc)) continue;
+        if (!bi.has_rf && !bi.has_adc &&
+            !bi.has_grad[0] && !bi.has_grad[1] && !bi.has_grad[2])
+            return blk;
+    }
+    return -1;
+}
+
+static void run_delay_classification_case(
+    const char* seq_file, int expect_variable)
+{
+    pulseg_opts opts;
+    pulseg_collection* coll = NULL;
+    pulseg_segment_info segi = PULSEG_SEGMENT_INFO_INIT;
+    pulseg_block_info bi = PULSEG_BLOCK_INFO_INIT;
+    int rc, target_seg, delay_blk;
+
+    default_opts_init(&opts);
+    rc = load_seq(&coll, seq_file, &opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
+
+    /* Exactly 2 unique segments total: the shared [RF, delay, ADC] segment
+     * and the whole-segment TR-tail delay.  If TR-period detection or the
+     * delay-flex dedup regressed (stopped collapsing the 3 TR instances),
+     * this would fail.
+     *
+     * pulseg_get_segment_info() always returns PULSEG_SUCCESS (it only
+     * NULL-checks coll/info); an out-of-range seg_idx is signaled by the
+     * sub-getters populating sentinel fields (num_blocks == -1), not by
+     * the return code -- so validity is checked via num_blocks > 0. */
+    rc = pulseg_get_segment_info(coll, &segi, 0);
+    mu_assert(PULSEG_SUCCEEDED(rc) && segi.num_blocks > 0, "segment 0 should exist");
+    rc = pulseg_get_segment_info(coll, &segi, 1);
+    mu_assert(PULSEG_SUCCEEDED(rc) && segi.num_blocks > 0, "segment 1 should exist");
+    rc = pulseg_get_segment_info(coll, &segi, 2);
+    mu_assert(PULSEG_SUCCEEDED(rc) && segi.num_blocks <= 0,
+        "expected exactly 2 unique segments (3 TRs should dedup to 1)");
+
+    /* Find the 3-block [RF, delay, ADC] segment among the 2 unique ones. */
+    target_seg = -1;
+    rc = pulseg_get_segment_info(coll, &segi, 0);
+    mu_assert(PULSEG_SUCCEEDED(rc) && segi.num_blocks > 0, "segment 0 should exist");
+    if (segi.num_blocks == 3) {
+        target_seg = 0;
+    } else {
+        rc = pulseg_get_segment_info(coll, &segi, 1);
+        mu_assert(PULSEG_SUCCEEDED(rc) && segi.num_blocks > 0, "segment 1 should exist");
+        mu_assert_int_eq(3, segi.num_blocks);
+        target_seg = 1;
+    }
+
+    delay_blk = find_delay_block(coll, target_seg, segi.num_blocks);
+    mu_assert(delay_blk >= 0, "interior delay block not found");
+
+    rc = pulseg_get_block_info(coll, &bi, target_seg, delay_blk);
+    mu_assert(PULSEG_SUCCEEDED(rc), "get_block_info on delay block failed");
+    mu_assert_int_eq(expect_variable, bi.is_variable_delay);
+
+    pulseg_collection_free(coll);
+}
+
+MU_TEST(test_interior_delay_static)
+{
+    run_delay_classification_case("99_interior_delay_static.seq", 0);
+}
+
+MU_TEST(test_interior_delay_dynamic)
+{
+    run_delay_classification_case("99_interior_delay_dynamic.seq", 1);
+}
+
+MU_TEST_SUITE(suite_sequences_delay_classification)
+{
+    MU_RUN_TEST(test_interior_delay_static);
+    MU_RUN_TEST(test_interior_delay_dynamic);
+}
+
 MU_TEST_SUITE(suite_sequences_scanloop)
 {
     MU_RUN_TEST(test_scan_table_gre_2d_1sl_1avg);
@@ -2033,6 +2132,7 @@ int test_sequences_main(void)
     MU_RUN_SUITE(suite_sequences_geninstructions);
     MU_RUN_SUITE(suite_sequences_collection);
     MU_RUN_SUITE(suite_sequences_scanloop);
+    MU_RUN_SUITE(suite_sequences_delay_classification);
     MU_REPORT();
     return MU_EXIT_CODE;
 }

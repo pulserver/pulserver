@@ -471,6 +471,12 @@ namespace pulseg
             a.num_surviving_freqs = cs.num_surviving_freqs;
             assign_f(a.surviving_freqs_hz, cs.surviving_freqs_hz, cs.num_surviving_freqs);
 
+            a.num_envelope_bins = cs.num_envelope_bins;
+            assign_f(a.envelope_freqs_hz, cs.envelope_freqs_hz, cs.num_envelope_bins);
+            assign_f(a.envelope_amp_gx, cs.envelope_amp_gx, cs.num_envelope_bins);
+            assign_f(a.envelope_amp_gy, cs.envelope_amp_gy, cs.num_envelope_bins);
+            assign_f(a.envelope_amp_gz, cs.envelope_amp_gz, cs.num_envelope_bins);
+
             pulseg_mech_resonances_spectra_free(&cs);
             return a;
         }

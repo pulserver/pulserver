@@ -245,9 +245,14 @@ number of TRs or passes in the sequence, and not on sequence duration.
   enumeration.
 - **Independence from sequence length.** Because the canonical window is analysed analytically,
   and the outer repeat is assumed infinite rather than simulated, a 10 000-TR scan costs the same
-  as a 10-TR scan with the same window structure. The one place a physically-expanded, NEX-materialized
-  waveform is built is for the *display*-only dense-FFT spectrum (`spectrum_full_g{x,y,z}`),
-  computed once by the caller and never used in the verdict.
+  as a 10-TR scan with the same window structure. Two *display*-only arrays exist purely for
+  plotting and are never used in the verdict: a dense-FFT spectrum of the physically-expanded,
+  NEX-materialized waveform (`spectrum_full_g{x,y,z}`), and a dense analytic envelope
+  (`envelope_amp_g{x,y,z}`, see [Visual validation](#visual-validation)) that reuses the same
+  closed-form per-event evaluation as the verdict itself, just on a finer frequency grid. Both are
+  computed only by the plotting API (`pulseg_calc_mech_resonances`) — `pulseg_check_safety`, the
+  path predownload actually runs, always requests `compute_dense_envelope=0` and pays nothing for
+  the envelope.
 
 ## Visual validation
 
@@ -270,13 +275,17 @@ degenerate prep/cooldown flags) read directly from the C structure descriptor:
 
 In both figures: the dark stems are $A_\text{eq}(f)$ at exact TR harmonics (Stage 4) — drawn as
 stems, not a connected line, because under the assumed-infinite outer repeat there is genuinely
-zero content between them. The faint translucent curve underneath is the *other* quantity the same
-C call returns, `spectrum_full_g{x,y,z}` — a dense, single-window FFT of the same canonical window
-with no periodicity assumed at all; it is rescaled to the comb's own peak purely as a shape
-reference (its absolute amplitude is not physically comparable to $A_\text{eq}$ — a single finite
-window necessarily spreads energy across many bins that the idealised infinite repeat concentrates
-into one line). The shaded region is a forbidden band; the dashed line is $\varepsilon$ for that
-band; dots are guarded-band candidate harmonics; a red X marks an actual violation.
+zero content between them. The faint translucent curve underneath is the *matched analytic
+envelope* (`envelope_amp_g{x,y,z}`) — the exact same closed-form $S_\text{ax}(f)$ transform used
+for the stems, evaluated on a dense uniform frequency grid instead of only at $k/T_\text{TR}$.
+Because the stems are this same function sampled at the harmonics, the envelope passes exactly
+through every stem tip with no rescaling and no separate windowing — unlike an independent FFT of
+the materialized waveform, which uses a different window/normalization and would only be
+shape-similar, not on the same absolute scale. This array is display-only and only ever computed
+by the plotting API; see [Computational efficiency](#computational-efficiency) for why
+`pulseg_check_safety` never pays for it. The shaded region is a forbidden band; the dashed line is
+$\varepsilon$ for that band; dots are guarded-band candidate harmonics; a red X marks an actual
+violation.
 
 ## How it works, end to end
 

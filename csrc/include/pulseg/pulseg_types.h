@@ -472,6 +472,21 @@ typedef struct pulseg_mech_resonances_spectra
     /* -- surviving sparse peak positions (positions only) --------- */
     int num_surviving_freqs;   /**< surviving candidate frequency count */
     float *surviving_freqs_hz; /**< [num_surviving_freqs] (Hz) */
+
+    /* -- dense analytic envelope (display-only; plotting API only) ---
+     * The SAME closed-form S_ax(f) transform as analytical_peak_*, evaluated
+     * on a dense uniform grid (spectrum_full's freq_min_hz/freq_spacing_hz)
+     * instead of only at TR harmonics k/T_TR.  Because analytical_peak_* is
+     * literally this function sampled at k/T_TR, this array passes exactly
+     * through every analytical_peak_* point -- a true matched envelope, not
+     * an interpolation and not a separately-windowed/normalised FFT.
+     * Never populated on the pulseg_check_safety (PSD) path -- see
+     * calc_mech_resonances_from_uniform's compute_dense_envelope gate. */
+    int num_envelope_bins;    /**< dense envelope sample count (0 = not computed) */
+    float *envelope_freqs_hz; /**< [num_envelope_bins] (Hz), uniform grid    */
+    float *envelope_amp_gx;   /**< [num_envelope_bins] A_eq(f) = (2/T_TR)|S_gx(f)| (Hz/m) */
+    float *envelope_amp_gy;
+    float *envelope_amp_gz;
 } pulseg_mech_resonances_spectra;
 
 #define PULSEG_MECH_RESONANCES_SPECTRA_INIT {                                                                                                              \
@@ -482,7 +497,8 @@ typedef struct pulseg_mech_resonances_spectra
     0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,       /* num_candidates, candidate_freqs, amps_gx/gy/gz, grad_amps, grad_amps_gx/gy/gz, violations */  \
     0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, /* num_component_terms, component_{freqs,amps,phases,widths,axes,def_ids,contrib_ids,run_ids} */ \
     0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,       /* num_surviving_freqs, surviving_freqs_hz */                                                    \
-    0, NULL}
+    0, NULL,                                                 /* num_envelope_bins, envelope_freqs_hz, amp_gx/gy/gz */                                         \
+    0, NULL, NULL, NULL}
 
 /* ================================================================== */
 /*  Forbidden frequency band (for mechanical resonance check)         */
@@ -866,10 +882,14 @@ typedef struct pulseg_block_info
     int norot_flag;   /**< 1 if no-rotation override         */
     int nopos_flag;   /**< 1 if no-position override         */
     int has_freq_mod; /**< 1 if frequency modulation present */
+    int is_variable_delay; /**< 1 if a pure-delay block (no RF/grad/ADC): its
+                            *   duration is runtime-adjustable via setperiod, so
+                            *   two segments differing only in such a block's
+                            *   duration share one segment definition. */
 } pulseg_block_info;
 
 #define PULSEG_BLOCK_INFO_INIT { \
-    0, 0, {0, 0, 0}, {0, 0, 0}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, 0, -1, -1, -1, -1, 0, 0, 0, -1, -1, 0, -1, -1, -1, 0, 0, 0, 0}
+    0, 0, {0, 0, 0}, {0, 0, 0}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, 0, -1, -1, -1, -1, 0, 0, 0, -1, -1, 0, -1, -1, -1, 0, 0, 0, 0, 0}
 
 /* ================================================================== */
 /*  ADC definition (replaces per-ADC getters)                         */

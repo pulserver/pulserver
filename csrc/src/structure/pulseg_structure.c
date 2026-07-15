@@ -41,11 +41,62 @@
 /*  Tiny helpers                                                      */
 /* ================================================================== */
 
-static int struct_array_equal(const int* a, const int* b, int len)
+/* A block definition is a pure delay when it carries no RF, gradient or ADC
+ * event -- only a duration (matches the parser's block_table duration_us >= 0
+ * marker).  Its duration is runtime-adjustable via setperiod. */
+static int block_def_is_pure_delay_struct(const pulseg_block_definition* b)
 {
-    int i;
-    for (i = 0; i < len; ++i)
-        if (a[i] != b[i]) return 0;
+    return (b->rf_id < 0 && b->gx_id < 0 && b->gy_id < 0 &&
+            b->gz_id < 0 && b->adc_id < 0);
+}
+
+/* True if the block at scan-table position scan_pos is an ADJUSTABLE pure
+ * delay: no RF/grad/ADC (definition) AND no digital-output trigger or
+ * non-identity rotation (table).  Matches pulseg_get_block_info()'s
+ * is_variable_delay so the segment-dedup relaxation and the EPIC setperiod
+ * wait stay in lock-step (a trigger/rotation delay must NOT be collapsed onto
+ * a fixed wait). */
+static int is_adjustable_delay_at(
+    const pulseg_sequence_descriptor* desc,
+    const int* scan_block_idx, int scan_pos)
+{
+    int bt_idx;
+    const pulseg_block_table_element* bt;
+
+    if (scan_pos < 0 || scan_pos >= desc->scan_table_len) return 0;
+    bt_idx = scan_block_idx[scan_pos];
+    if (bt_idx < 0 || bt_idx >= desc->num_blocks) return 0;
+    bt = &desc->block_table[bt_idx];
+    if (!block_def_is_pure_delay_struct(&desc->block_definitions[bt->id]))
+        return 0;
+    if (bt->digitalout_id != -1) return 0;
+    if (bt->rotation_id != -1 &&
+        bt->rotation_id < desc->num_rotations &&
+        !pulseg__is_identity3(desc->rotation_matrices[bt->rotation_id]))
+        return 0;
+    return 1;
+}
+
+/* Compare two expanded segments for dedup equality with pure-delay flex: a
+ * position whose two blocks differ is still "equal" iff BOTH are adjustable
+ * pure delays (played as runtime setperiod waits), so segments differing only
+ * in such a block's duration share one definition.  start_block here is a
+ * scan-table position (step 7 runs before it is remapped to a block index). */
+static int segs_delay_flex_equal(
+    const pulseg_sequence_descriptor* desc,
+    const int* scan_block_idx,
+    const pulseg_tr_segment* sa,
+    const pulseg_tr_segment* sb)
+{
+    int k;
+    if (sa->num_blocks != sb->num_blocks) return 0;
+    for (k = 0; k < sa->num_blocks; ++k) {
+        if (sa->unique_block_indices[k] == sb->unique_block_indices[k]) continue;
+        if (is_adjustable_delay_at(desc, scan_block_idx, sa->start_block + k) &&
+            is_adjustable_delay_at(desc, scan_block_idx, sb->start_block + k))
+            continue;
+        return 0;
+    }
     return 1;
 }
 
@@ -1397,6 +1448,7 @@ int pulseg__get_scan_table_segments(
     int* scan_pat         = NULL;
     int* pattern_seg_id   = NULL;
     float* max_energy     = NULL;
+    int** delay_baseline  = NULL;
     pulseg_tr_segment* raw_segs  = NULL;
     pulseg_tr_segment* exp_segs  = NULL;
     pulseg_tr_segment* uniq_segs = NULL;
@@ -1794,9 +1846,8 @@ int pulseg__get_scan_table_segments(
 
             if (!n_is_pure_delay && !i_is_pure_delay &&
                 exp_segs[n].num_blocks == uniq_segs[i].num_blocks) {
-                if (struct_array_equal(exp_segs[n].unique_block_indices,
-                                uniq_segs[i].unique_block_indices,
-                                exp_segs[n].num_blocks)) {
+                if (segs_delay_flex_equal(desc, desc->scan_table_block_idx,
+                                &exp_segs[n], &uniq_segs[i])) {
                     found = i; break;
                 }
 
@@ -1860,12 +1911,14 @@ int pulseg__get_scan_table_segments(
         desc->segment_definitions[i].nopos_flag   = (int*)PULSEG_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].has_freq_mod = (int*)PULSEG_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].has_adc      = (int*)PULSEG_ALLOC(nb * sizeof(int));
+        desc->segment_definitions[i].is_dynamic_delay = (int*)PULSEG_ALLOC(nb * sizeof(int));
         if (!desc->segment_definitions[i].has_digitalout ||
             !desc->segment_definitions[i].has_rotation ||
             !desc->segment_definitions[i].norot_flag ||
             !desc->segment_definitions[i].nopos_flag ||
             !desc->segment_definitions[i].has_freq_mod ||
-            !desc->segment_definitions[i].has_adc) {
+            !desc->segment_definitions[i].has_adc ||
+            !desc->segment_definitions[i].is_dynamic_delay) {
             diag->code = PULSEG_ERR_ALLOC_FAILED;
             goto scan_seg_fail;
         }
@@ -1876,8 +1929,14 @@ int pulseg__get_scan_table_segments(
             desc->segment_definitions[i].nopos_flag[n]   = 0;
             desc->segment_definitions[i].has_freq_mod[n] = 0;
             desc->segment_definitions[i].has_adc[n]      = 0;
+            desc->segment_definitions[i].is_dynamic_delay[n] = 0;
         }
         desc->segment_definitions[i].trigger_id = -1;
+        /* is_nav is only assigned in the enable_pmc tagging block below; give
+         * it a definite value here so non-PMC sequences don't carry
+         * uninitialised heap data (which breaks cross-subsequence segment
+         * dedup and any other consumer that reads it). */
+        desc->segment_definitions[i].is_nav = 0;
     }
 
     /* ---- 10. Walk expanded segments, populate flags + max energy ---- */
@@ -2111,8 +2170,22 @@ int pulseg__get_scan_table_segments(
             desc->segment_definitions[i].nopos_flag[n]     = 0;
             desc->segment_definitions[i].has_freq_mod[n]   = 0;
             desc->segment_definitions[i].has_adc[n]        = 0;
+            desc->segment_definitions[i].is_dynamic_delay[n] = 0;
         }
         desc->segment_definitions[i].trigger_id = -1;
+    }
+
+    /* Per-(segment, block-position) baseline duration for adjustable pure
+     * delays, used below to detect cross-instance variance.  -2 = not yet
+     * observed; any other value is the first instance's duration_us. */
+    delay_baseline = (int**)PULSEG_ALLOC((size_t)num_unique * sizeof(int*));
+    if (!delay_baseline) { diag->code = PULSEG_ERR_ALLOC_FAILED; goto scan_seg_fail; }
+    for (i = 0; i < num_unique; ++i) delay_baseline[i] = NULL;
+    for (i = 0; i < num_unique; ++i) {
+        nb = desc->segment_definitions[i].num_blocks;
+        delay_baseline[i] = (int*)PULSEG_ALLOC((size_t)nb * sizeof(int));
+        if (!delay_baseline[i]) { diag->code = PULSEG_ERR_ALLOC_FAILED; goto scan_seg_fail; }
+        for (n = 0; n < nb; ++n) delay_baseline[i][n] = -2;
     }
 
     for (n = 0; n < pass_size; /* advance inside */) {
@@ -2167,10 +2240,26 @@ int pulseg__get_scan_table_segments(
             /* has_adc: OR-reduce — true if any instance at this position has ADC */
             if (bte->adc_id >= 0)
                 desc->segment_definitions[seg_id].has_adc[b] = 1;
+
+            /* is_dynamic_delay: OR-reduce — true iff this position is an
+             * adjustable pure delay AND its duration differs from the first
+             * instance observed at this position.  A position whose duration
+             * never varies stays "static": no runtime setperiod wait, no
+             * interior SSP packet -- represented purely by block position. */
+            if (is_adjustable_delay_at(desc, desc->scan_table_block_idx, n + b)) {
+                if (delay_baseline[seg_id][b] == -2)
+                    delay_baseline[seg_id][b] = bte->duration_us;
+                else if (delay_baseline[seg_id][b] != bte->duration_us)
+                    desc->segment_definitions[seg_id].is_dynamic_delay[b] = 1;
+            }
         }
 
         n += nb;
     }
+
+    for (i = 0; i < num_unique; ++i)
+        if (delay_baseline[i]) PULSEG_FREE(delay_baseline[i]);
+    PULSEG_FREE(delay_baseline); delay_baseline = NULL;
 
     /* ---- Cleanup ---- */
     for (n = 0; n < num_exp_alloc; ++n)
@@ -2184,6 +2273,11 @@ int pulseg__get_scan_table_segments(
 scan_seg_fail:
     if (pattern_seg_id) PULSEG_FREE(pattern_seg_id);
     if (max_energy) PULSEG_FREE(max_energy);
+    if (delay_baseline) {
+        for (i = 0; i < num_unique; ++i)
+            if (delay_baseline[i]) PULSEG_FREE(delay_baseline[i]);
+        PULSEG_FREE(delay_baseline);
+    }
     if (uniq_segs) {
         for (i = 0; i < num_unique; ++i)
             if (uniq_segs[i].unique_block_indices)
