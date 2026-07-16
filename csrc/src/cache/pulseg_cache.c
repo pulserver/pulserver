@@ -23,7 +23,10 @@
 /* Bumped again for the interior static/dynamic pure-delay split: each
  * pulseg_tr_segment gained an is_dynamic_delay[num_blocks] array (written
  * right after has_adc), changing COMMON's per-segment on-disk layout. */
-#define PULSEG_CACHE_VERSION_REVISION 2
+/* Bumped again for the safety-group MODULE label: pulseg_block_table_element
+ * gained module_id (written/read right after rf_shim_id), changing the
+ * block-table's per-entry on-disk layout. */
+#define PULSEG_CACHE_VERSION_REVISION 3
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; ROTATIONS, SHAPES
@@ -264,6 +267,8 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
         if (!write4(f, &d->block_table[i].freq_mod_id, 1))
             return 0;
         if (!write4(f, &d->block_table[i].rf_shim_id, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].module_id, 1))
             return 0;
     }
 
@@ -786,10 +791,10 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         return 0;
     for (i = 0; i < d->num_blocks; ++i)
     {
-        if (!read4(f, &d->block_table[i].id, 16))
+        if (!read4(f, &d->block_table[i].id, 17))
             return 0;
         if (do_swap)
-            swap4_array(&d->block_table[i].id, 16);
+            swap4_array(&d->block_table[i].id, 17);
     }
 
     /* RF definitions */

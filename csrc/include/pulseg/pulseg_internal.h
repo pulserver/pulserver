@@ -73,6 +73,7 @@
 /* Collection / safety errors (-500 to -559) */
 #define PULSEG_ERR_COLLECTION_EMPTY           -500
 #define PULSEG_ERR_COLLECTION_CHAIN_BROKEN    -501
+#define PULSEG_ERR_MODULE_STRUCTURAL_MISMATCH -502
 #define PULSEG_ERR_MAX_GRAD_EXCEEDED          -550
 #define PULSEG_ERR_GRAD_DISCONTINUITY         -551
 #define PULSEG_ERR_MAX_SLEW_EXCEEDED          -552
@@ -343,9 +344,10 @@ typedef struct pulseg_block_table_element {
     int nav_flag;
     int freq_mod_id;    /* boolean: >= 0 if block needs freq-mod, -1 otherwise */
     int rf_shim_id;     /* index into rf_shim_definitions, or -1 */
+    int module_id;      /* sticky MODULE label id, 0 = ungrouped (default) */
 } pulseg_block_table_element;
 
-#define PULSEG_BLOCK_TABLE_ELEMENT_INIT {0, 0, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, -1, -1}
+#define PULSEG_BLOCK_TABLE_ELEMENT_INIT {0, 0, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, -1, -1, 0}
 /* NOTE: digitalout_id occupies the former trigger_id position */
 
 /* ================================================================== */
@@ -710,6 +712,7 @@ typedef struct pulseg__uniform_grad_waveforms {
 #define PULSEG__ONCE 21
 #define PULSEG__TRID 22
 #define PULSEG__OFF  23
+#define PULSEG__MODULE 24
 
 /* ================================================================== */
 /*  Internal block types                                              */

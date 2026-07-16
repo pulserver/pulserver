@@ -129,6 +129,10 @@ extern "C"
     typedef struct pulseg__flag_event
     {
         int trid;
+        int module_id;  /* MODULE: sticky int id, not boolean -- same non-flag
+                          * treatment as trid above; both live here only
+                          * because LABELMAP_COUNTER's LABELINC-increment
+                          * semantics don't apply to either. */
         int nav;
         int rev;
         int sms;

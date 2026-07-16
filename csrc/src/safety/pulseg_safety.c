@@ -274,6 +274,20 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
  * what can be flagged; it only sets how far the display grid is computed. */
 #define SA_MIN_ANALYSIS_FREQ_HZ 3000.0f
 
+/** Finite-outer-rep fix (PLAN_safety_mechres_finite_outer_rep.md): fixed
+ *  point budget (per side, i.e. per coarse TR harmonic there are
+ *  2*SA_MECHRES_MAX_DM_SUBDIV/2 extra samples total) for probing the
+ *  outer-repeat (M = num_instances) Dirichlet comb's sidelobes, which live
+ *  near each of the two adjacent exact TR harmonics. M itself is NOT the
+ *  cost driver: this budget is a fixed constant-factor overhead per coarse
+ *  candidate, independent of how large M is (geometric spacing resolves
+ *  the near-lobe region with a fixed point count regardless of M -- see
+ *  the sample-placement comment at the sub-loop itself). Each sample DOES
+ *  require a fresh sa_eval_axis_spectrum call (reusing the coarse point's
+ *  value is a no-op, not a cache hit -- see PLAN doc "Bug 1"), which is
+ *  what the sa_eval_pwl_transform memoization below amortizes. */
+#define SA_MECHRES_MAX_DM_SUBDIV 16
+
 /**
  * A gradient event within the canonical TR.
  * Each event is a single waveform (or sub-event from decomposed arbitrary)
@@ -304,6 +318,64 @@ typedef struct
     int num_events;
     sa_event *events; /**< allocated [num_events] */
 } sa_axis_events;
+
+/**
+ * W_k(f) memoization (PLAN_safety_mechres_finite_outer_rep.md §3): caches
+ * sa_eval_event_transform()'s result -- the base-waveform Fourier response,
+ * a pure function of (definition shape, frequency) -- keyed by def_id, for
+ * the duration of ONE sa_eval_axis_spectrum() call (which is itself already
+ * scoped to a single fixed frequency, so def_id alone is a sufficient key;
+ * no separate frequency field needed). Multiple sa_event occurrences that
+ * share a def_id (the common case: a handful of unique gradient shapes
+ * reused across many materialized occurrences) hit this cache instead of
+ * repeating the O(vertices) sa_eval_pwl_transform integral. NULL disables
+ * caching (used at call sites outside the hot per-candidate-frequency
+ * loop, where memoizing a single lookup isn't worth the bookkeeping).
+ */
+typedef struct
+{
+    int def_id;
+    float re, im;
+} sa_transform_cache_entry;
+
+typedef struct
+{
+    sa_transform_cache_entry *entries;
+    int count;
+    int capacity;
+} sa_transform_cache;
+
+/** Linear scan: def_id counts per axis are small (a handful of unique
+ *  gradient shapes even for a long/complex hyper-TR, per the design doc's
+ *  own cost model), so a hash table would be overhead without benefit. */
+static int sa_transform_cache_lookup(
+    const sa_transform_cache *cache, int def_id, float *out_re, float *out_im)
+{
+    int i;
+    if (!cache)
+        return 0;
+    for (i = 0; i < cache->count; ++i)
+    {
+        if (cache->entries[i].def_id == def_id)
+        {
+            *out_re = cache->entries[i].re;
+            *out_im = cache->entries[i].im;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void sa_transform_cache_insert(
+    sa_transform_cache *cache, int def_id, float re, float im)
+{
+    if (!cache || cache->count >= cache->capacity)
+        return; /* cache disabled or full: caller just recomputes next time */
+    cache->entries[cache->count].def_id = def_id;
+    cache->entries[cache->count].re = re;
+    cache->entries[cache->count].im = im;
+    cache->count++;
+}
 
 /** Structural analysis: event lists for all three axes. */
 typedef struct
@@ -876,8 +948,12 @@ static void sa_eval_pwl_transform(
  * of the sample interpolant, evaluated at the sparse in-band lines only.
  */
 static void sa_eval_event_transform(
-    const sa_event *ev, float f_hz, float *out_re, float *out_im)
+    const sa_event *ev, float f_hz, sa_transform_cache *cache,
+    float *out_re, float *out_im)
 {
+    if (sa_transform_cache_lookup(cache, ev->def_id, out_re, out_im))
+        return;
+
     if (ev->arb_num_samples >= 2)
         sa_eval_pwl_transform(f_hz, ev->arb_times_us, ev->arb_samples,
                               ev->arb_num_samples, out_re, out_im);
@@ -889,6 +965,8 @@ static void sa_eval_event_transform(
         *out_re = 0.0f;
         *out_im = 0.0f;
     }
+
+    sa_transform_cache_insert(cache, ev->def_id, *out_re, *out_im);
 }
 
 /**
@@ -898,13 +976,13 @@ static void sa_eval_event_transform(
  * (in [normalised]*us, hence the 1e-6 us->s), and t_k the event start time.
  */
 static void sa_eval_event_spectrum(
-    float f_hz, const sa_event *ev,
+    float f_hz, const sa_event *ev, sa_transform_cache *cache,
     float *out_re, float *out_im)
 {
     float tr_re, tr_im, scale, base_re, base_im;
     double phase, cos_ph, sin_ph;
 
-    sa_eval_event_transform(ev, f_hz, &tr_re, &tr_im);
+    sa_eval_event_transform(ev, f_hz, cache, &tr_re, &tr_im);
     scale = ev->amplitude * 1.0e-6f;
     base_re = scale * tr_re;
     base_im = scale * tr_im;
@@ -926,14 +1004,15 @@ static void sa_eval_event_spectrum(
  * (N==1 -> D_1 = 1.)
  */
 static void sa_eval_event_line(
-    float f_hz, const sa_event *ev, float *out_re, float *out_im)
+    float f_hz, const sa_event *ev, sa_transform_cache *cache,
+    float *out_re, float *out_im)
 {
     float d_re, d_im;
     int N = ev->num_reps;
     if (N < 1)
         N = 1;
 
-    sa_eval_event_spectrum(f_hz, ev, &d_re, &d_im);
+    sa_eval_event_spectrum(f_hz, ev, cache, &d_re, &d_im);
 
     if (N > 1 && ev->rep_period_us > 0.0f)
     {
@@ -979,16 +1058,45 @@ static void sa_eval_axis_spectrum(
 {
     float sum_re, sum_im;
     int k;
+    sa_transform_cache cache;
+    sa_transform_cache_entry *cache_entries = NULL;
+
+    /* One call = one fixed frequency, so def_id alone is a sufficient
+     * memo key (PLAN_safety_mechres_finite_outer_rep.md §3) -- events
+     * sharing a def_id (the common case: a handful of unique gradient
+     * shapes reused across many materialized occurrences) skip the
+     * O(vertices) sa_eval_pwl_transform integral after the first hit.
+     * Sized to num_events (worst case: every event a distinct def_id);
+     * alloc failure or num_events==0 just disables caching (cache.capacity
+     * stays 0), never a correctness issue -- sa_transform_cache_lookup/
+     * insert are both no-ops against an empty/absent cache. */
+    cache.count = 0;
+    cache.capacity = 0;
+    cache.entries = NULL;
+    if (ae->num_events > 0)
+    {
+        cache_entries = (sa_transform_cache_entry *)PULSEG_ALLOC(
+            (size_t)ae->num_events * sizeof(sa_transform_cache_entry));
+        if (cache_entries)
+        {
+            cache.entries = cache_entries;
+            cache.capacity = ae->num_events;
+        }
+    }
 
     sum_re = 0.0f;
     sum_im = 0.0f;
     for (k = 0; k < ae->num_events; ++k)
     {
         float d_re, d_im;
-        sa_eval_event_line(f_hz, &ae->events[k], &d_re, &d_im);
+        sa_eval_event_line(f_hz, &ae->events[k], &cache, &d_re, &d_im);
         sum_re += d_re;
         sum_im += d_im;
     }
+
+    if (cache_entries)
+        PULSEG_FREE(cache_entries);
+
     *out_re = sum_re;
     *out_im = sum_im;
 }
@@ -1022,6 +1130,47 @@ static float sa_eps_for_band(
     if (band->max_amplitude_hz_per_m <= 0.0f)
         return SA_AEQ_K_GMAX * g_max_hz_per_m;
     return band->max_amplitude_hz_per_m;
+}
+
+/**
+ * Finite-outer-rep Dirichlet ratio (PLAN_safety_mechres_finite_outer_rep.md
+ * §1): |D_M(x)| / M, where D_M(x) = sin(M*pi*x) / sin(pi*x) is the
+ * Dirichlet kernel for M coherent repeats of period T_TR, and
+ * x = f * T_TR (dimensionless: integer x = exact TR harmonics, fractional
+ * x = the sidelobes between them that only exist for finite M).
+ *
+ * This ratio is exactly 1.0 at integer x (main lobes -- the M-independent
+ * regression identity: at exact TR harmonics this fix must reduce to
+ * today's infinite-comb formula) and < 1.0 elsewhere, decaying as M grows
+ * (large-M sidelobes shrink toward the M=infinity/Dirac-comb limit, which
+ * is why large-M scans reproduce today's verdicts).
+ *
+ * The caller must evaluate S_TR(f) FRESH at the fractional x (S_TR is an
+ * oscillating function of f in its own right -- it is NOT bounded by, or
+ * safely approximated from, its value at a nearby exact TR harmonic; an
+ * earlier version of this fix tried reusing the coarse S_TR value scaled
+ * by this ratio, which is a mathematical no-op since the ratio is always
+ * <=1 and can therefore never expose a violation the coarse point didn't
+ * already show -- caught via numeric exploration during implementation).
+ * This ratio only supplies the Dirichlet attenuation factor; cost is kept
+ * independent of M by capping how many fractional points get evaluated
+ * per coarse interval (SA_MECHRES_MAX_DM_SUBDIV), not by skipping the
+ * fresh S_TR evaluation.
+ */
+static double sa_dirichlet_ratio(double x, int M)
+{
+    double s, num;
+    if (M <= 1)
+        return 1.0;
+    s = sin(M_PI * x);
+    /* Removable singularity at integer x (s -> 0): the true limit is 1.0
+     * (D_M(x)->M), not 0/0. 1e-6 is far tighter than any x offset this
+     * function is ever called with (sub-divisions are 1/SA_MECHRES_MAX_DM_SUBDIV
+     * apart at the very finest), so this only triggers at genuine integers. */
+    if (fabs(s) < 1e-6)
+        return 1.0;
+    num = sin((double)M * M_PI * x);
+    return fabs(num / (s * (double)M));
 }
 
 static int sa_check_structural_violations(
@@ -1389,7 +1538,7 @@ static int sa_check_structural_violations(
                         float lre, lim;
                         if (num_component_terms >= max_component_terms)
                             break;
-                        sa_eval_event_line(f_hz, &se.axes[ax].events[k], &lre, &lim);
+                        sa_eval_event_line(f_hz, &se.axes[ax].events[k], NULL, &lre, &lim);
                         component_freqs_hz[num_component_terms] = f_hz;
                         component_amps[num_component_terms] =
                             (float)(2.0 / T_s * sqrt((double)(lre * lre + lim * lim)));
@@ -1403,6 +1552,80 @@ static int sa_check_structural_violations(
                         num_component_terms++;
                     }
                 }
+
+                /* ---- Finite-outer-rep fix (PLAN_safety_mechres_finite_outer_rep.md) ----
+                 * The outer repeat (num_instances = M) is no longer treated as an
+                 * infinite Dirac comb: for M>1, real candidate frequencies exist
+                 * between this coarse TR harmonic (kk/T_TR, exact -- already
+                 * max_ga above, unchanged) and the next one, at fractional
+                 * harmonics (kk + j/subdiv)/T_TR. These are NOT found by scaling
+                 * the coarse point's already-computed amplitude by the Dirichlet
+                 * ratio (a ratio <=1 can never exceed the coarse value it scales,
+                 * which would make this a mathematical no-op -- caught via a
+                 * numeric exploration during implementation, see
+                 * PLAN_safety_mechres_finite_outer_rep.md). S_TR(f) must be
+                 * evaluated FRESH at each fractional frequency (it is an
+                 * oscillating function of f in its own right, not bounded by
+                 * its value at nearby coarse samples) and only THEN attenuated
+                 * by the Dirichlet ratio. Cost stays independent of M because
+                 * the number of coarse candidates (klo..khi) already doesn't
+                 * scale with M, and subdiv is capped at
+                 * SA_MECHRES_MAX_DM_SUBDIV regardless of how large M is --
+                 * this adds a bounded constant-factor number of extra
+                 * sa_eval_axis_spectrum calls per coarse candidate, not a
+                 * per-M-scaling cost. M=1 (e.g. a single-pass hyper-TR) takes
+                 * this branch's early-out and is untouched: no sidelobes exist
+                 * for a single repeat, and the coarse-only max_ga above is
+                 * already the correct/final verdict, matching today's
+                 * exact-harmonic-only behavior. */
+                if (num_instances > 1)
+                {
+                    /* Geometrically-spaced sample points concentrated near
+                     * EACH of the two adjacent main lobes (kk and kk+1),
+                     * where the Dirichlet sidelobes actually live for large
+                     * M (the first and largest sidelobe sits within
+                     * ~1/(2M) of its lobe). Uniform spacing across the
+                     * whole [kk,kk+1] interval was tried first and
+                     * confirmed (via numeric exploration) to completely
+                     * miss the sidelobes once M exceeds the sample count --
+                     * e.g. M=64 with 16 uniform points reproduced the M=1
+                     * (no-sidelobe) result exactly, because every sample
+                     * landed in the far sidelobe region where the
+                     * attenuation is negligible. Geometric spacing needs
+                     * only a fixed point count per side to resolve the
+                     * near-lobe region regardless of how large M is: delta_p
+                     * = (0.5/M) * 2^p starting right next to the lobe and
+                     * doubling outward, clamped to stay inside the
+                     * interval. */
+                    int npts_per_side = SA_MECHRES_MAX_DM_SUBDIV / 2;
+                    int side, p;
+                    for (side = 0; side < 2; ++side)
+                    {
+                        for (p = 0; p < npts_per_side; ++p)
+                        {
+                            double delta = (0.5 / (double)num_instances) * pow(2.0, (double)p);
+                            double x_sub;
+                            float f_sub_hz;
+                            double ratio;
+                            if (delta >= 0.5)
+                                delta = 0.5 - 1e-6;
+                            x_sub = (side == 0) ? ((double)kk + delta) : ((double)(kk + 1) - delta);
+                            f_sub_hz = (float)(x_sub * f1_hz);
+                            ratio = sa_dirichlet_ratio(x_sub, num_instances);
+                            for (ax = 0; ax < 3; ++ax)
+                            {
+                                float sre, sim, aeq_sub;
+                                if (se.axes[ax].num_events == 0)
+                                    continue;
+                                sa_eval_axis_spectrum(f_sub_hz, &se.axes[ax], &sre, &sim);
+                                aeq_sub = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)) * ratio);
+                                if (aeq_sub > max_ga)
+                                    max_ga = aeq_sub;
+                            }
+                        }
+                    }
+                }
+
                 cand_grad_amps[ci] = max_ga;
                 cand_violations[ci] = (max_ga > eps) ? 1 : 0;
                 ci++;

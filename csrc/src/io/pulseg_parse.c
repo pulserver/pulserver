@@ -1579,6 +1579,7 @@ void pulseg_pulseq_block_init(pulseg_pulseq_block *block)
 
     /* Flags default to -1 (undefined) */
     block->flag.trid = -1;
+    block->flag.module_id = -1;
     block->flag.nav = -1;
     block->flag.rev = -1;
     block->flag.sms = -1;
@@ -1926,6 +1927,7 @@ static void raw_extension_init(pulseg_pulseq_raw_extension *re)
     memset(&re->labelset, 0, sizeof(re->labelset));
     memset(&re->labelinc, 0, sizeof(re->labelinc));
     re->flag.trid = -1;
+    re->flag.module_id = -1;
     re->flag.nav = -1;
     re->flag.rev = -1;
     re->flag.sms = -1;
@@ -1950,6 +1952,7 @@ static void extension_block_init(pulseg__extension_block *eb)
     memset(&eb->labelset, 0, sizeof(eb->labelset));
     memset(&eb->labelinc, 0, sizeof(eb->labelinc));
     eb->flag.trid = -1;
+    eb->flag.module_id = -1;
     eb->flag.nav = -1;
     eb->flag.rev = -1;
     eb->flag.sms = -1;
@@ -2091,6 +2094,9 @@ void pulseg_pulseq_get_raw_extension(const pulseg_pulseq_file *seq, pulseg_pulse
                     break;
                 case PULSEG__TRID:
                     re->flag.trid = label_value;
+                    break;
+                case PULSEG__MODULE:
+                    re->flag.module_id = label_value;
                     break;
                 default:
                     break;

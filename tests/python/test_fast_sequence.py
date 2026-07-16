@@ -259,6 +259,38 @@ def test_write_version_revision_bumped_for_custom_extensions_and_labels():
     assert rev_lbl >= 2
 
 
+def test_module_label_registered_and_round_trips():
+    """MODULE (DESIGN_safety_module_labels.md / PLAN_safety_module_labels.md)
+    is a novel pulseq LABELSET name, not in pypulseq's/pulserver's builtin
+    set -- verifies the generic custom-label authoring path (already proven
+    by test_custom_label_registered_on_add_block for an arbitrary name)
+    also works end-to-end for the actual production label name, including
+    the on-disk LABELSET/EXTENSIONS round-trip pulseg_parse.c reads back
+    (see external/pulserver/csrc/src/core/pulseg_error.c label_table[]).
+    """
+    seq = ps.Sequence()
+    lbl = ps.make_label(label="MODULE", type="SET", value=1)
+    seq.add_block(pp.make_delay(1e-3), lbl)
+
+    assert "MODULE" in seq.custom_labels
+    assert seq.custom_labels["MODULE"] > 0
+
+    stream = BytesIO()
+    pio.write(seq, output=stream, check_timing=False)
+    text = stream.getvalue().decode("utf-8")
+    lines = text.splitlines()
+
+    rev_line = next(line for line in lines if line.startswith("revision "))
+    assert int(rev_line.split()[1]) >= 2
+
+    assert "extension LABELSET" in text
+    labelset_idx = next(i for i, line in enumerate(lines) if line.startswith("extension LABELSET"))
+    # Data row immediately follows: "<block_id> <value> MODULE"
+    data_row = lines[labelset_idx + 1].split()
+    assert data_row[1] == "1"
+    assert data_row[2] == "MODULE"
+
+
 def test_soft_delay_is_ignored_in_fast_path():
     seq = ps.Sequence()
     seq.add_block(pp.make_soft_delay(hint="IGNORED_HINT", default_duration=1e-3))

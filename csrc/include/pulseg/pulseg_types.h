@@ -227,10 +227,26 @@ typedef struct pulseg_rf_stats
      *     vendor variants, a sibling struct may be added later and
      *     selected via this field) ---                                 */
     int vendor; /**< PULSEG_VENDOR_* constant (0 = unspecified -> GEHC for back-compat) */
+    /* --- safety-group module label (appended; do not reorder above) --- */
+    int module_id; /**< sticky MODULE label id of the originating block, 0 = ungrouped */
 } pulseg_rf_stats;
 
 #define PULSEG_RF_STATS_INIT { \
-    0.0f, 0.0f, 0.0f, {0.0f}, 0.0f, 0, 0.0f, 0.0f, 0, 0, 1, {0.0f}, 0.0f, 0.0f, 0}
+    0.0f, 0.0f, 0.0f, {0.0f}, 0.0f, 0, 0.0f, 0.0f, 0, 0, 1, {0.0f}, 0.0f, 0.0f, 0, 0}
+
+/**
+ * @brief One entry per distinct MODULE-labeled group in a subsequence,
+ * as identified/verified/deduplicated by pulseg_get_modules() from the
+ * materialized scan table. See pulseg_get_modules() for the identify ->
+ * verify-structural-identity -> dedup algorithm.
+ */
+typedef struct pulseg_module
+{
+    int module_id;                 /**< sticky MODULE label id (>=1)      */
+    int one_instance_duration_us;  /**< duration of the validated reference occurrence */
+    int total_duration_us;         /**< num_instances * one_instance_duration_us */
+    int num_instances;             /**< count of structurally-identical occurrences */
+} pulseg_module;
 
 /* ================================================================== */
 /*  TR region selectors (for freq-mod plan)                           */
@@ -666,6 +682,9 @@ typedef struct pulseg_block_instance
     int adc_flag;        /**< 1 = ADC acquisition active        */
     float adc_freq_hz;   /**< ADC frequency offset (Hz)         */
     float adc_phase_rad; /**< ADC phase offset (rad)            */
+
+    /* Safety-group module label (sticky pulseq MODULE, 0 = ungrouped) */
+    int module_id;
 } pulseg_block_instance;
 
 #define PULSEG_BLOCK_INSTANCE_INIT { \
@@ -691,6 +710,7 @@ typedef struct pulseg_block_instance
     0,                                  \
     0.0f,                               \
     0.0f,                               \
+    0,                                  \
 }
 
 /* ================================================================== */

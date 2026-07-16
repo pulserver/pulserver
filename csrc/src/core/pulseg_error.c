@@ -34,6 +34,7 @@ static const pulseg__table_entry label_table[] = {
     {"ONCE", PULSEG__ONCE},
     {"TRID", PULSEG__TRID},
     {"OFF", PULSEG__OFF},
+    {"MODULE", PULSEG__MODULE},
     {NULL, -1}};
 
 int pulseg__label2enum(const char *label)

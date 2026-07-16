@@ -395,6 +395,36 @@ extern "C"
                                   int subseq_idx);
 
     /**
+     * @brief Identify, structurally-verify, and deduplicate MODULE-labeled
+     * groups within a subsequence's materialized scan table.
+     *
+     * For each distinct non-zero MODULE label id found on
+     * desc->block_table[...].module_id (sticky, set via pulseq LABELSET
+     * MODULE), walks the scan table to find every maximal contiguous
+     * occurrence of that module, verifies every occurrence after the first
+     * is structurally identical to the first (same block definitions in
+     * the same order -- content identity, not amplitude/phase/rotation,
+     * which may legitimately vary per repeat), and returns one deduplicated
+     * pulseg_module entry per module id. Returns PULSEG_ERROR (not a
+     * partial/best-effort result) if any two occurrences of the same
+     * module id are structurally inconsistent.
+     *
+     * Subsequences with no MODULE labels return 0 (not an error) -- callers
+     * should keep their existing whole-subsequence behavior in that case.
+     *
+     * The library allocates @p *out_modules via PULSEG_ALLOC(); the caller
+     * must release it with PULSEG_FREE() when done.
+     *
+     * @param[in]  coll         Loaded collection.
+     * @param[out] out_modules  Set to a malloc'd array; caller must free().
+     * @param[in]  subseq_idx   Subsequence index.
+     * @return Number of distinct modules (>= 0), or negative error code.
+     */
+    int pulseg_get_modules(const pulseg_collection *coll,
+                            pulseg_module **out_modules,
+                            int subseq_idx);
+
+    /**
      * @brief Return decompressed RF magnitude waveform (multi-channel).
      *
      * Returns an array of num_channels pointers, each pointing to

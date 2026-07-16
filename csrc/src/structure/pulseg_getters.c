@@ -579,6 +579,10 @@ int pulseg_get_rf_array(
         /* Set repetition count */
         (*out_pulses)[n].num_instances = num_instances;
 
+        /* Safety-group module label rides on the per-occurrence block-table
+         * entry, never on the deduplicated rfdef->stats hard-copied above. */
+        (*out_pulses)[n].module_id = bte->module_id;
+
         n++;
     }
 
@@ -708,6 +712,214 @@ int pulseg_get_rf_event_array(
     }
 
     return n;
+}
+
+/* ================================================================== */
+/*  MODULE (safety-group) accessors                                   */
+/* ================================================================== */
+
+/* Structural content signature for one scan-table position: identifies a
+ * block by its deduplicated content (duration+rf+gx+gy+gz bundled in the
+ * block-definition id, plus ADC separately since BLOCK_DEF_COLS excludes
+ * it) -- deliberately excludes amplitude/phase/rotation, which may
+ * legitimately vary per repeat/slice. */
+static void pulseg__module_block_signature(
+    const pulseg_sequence_descriptor *desc,
+    int blk_idx,
+    int *out_block_def_id,
+    int *out_adc_def_id)
+{
+    const pulseg_block_table_element *bte = &desc->block_table[blk_idx];
+    *out_block_def_id = bte->id;
+    *out_adc_def_id = (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size)
+                           ? desc->adc_table[bte->adc_id].id
+                           : -1;
+}
+
+int pulseg_get_modules(
+    const pulseg_collection *coll,
+    pulseg_module **out_modules,
+    int subseq_idx)
+{
+    const pulseg_sequence_descriptor *desc;
+    int *run_module_id = NULL;
+    int *run_start = NULL;
+    int *run_len = NULL;
+    int num_runs = 0;
+    int *distinct_ids = NULL;
+    int num_distinct = 0;
+    pulseg_module *mods = NULL;
+    int i, m;
+    int ret = 0;
+
+    if (!coll || !out_modules)
+        return PULSEG_ERR_NULL_POINTER;
+    *out_modules = NULL;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+
+    desc = &coll->descriptors[subseq_idx];
+    if (desc->scan_table_len <= 0 || !desc->scan_table_block_idx || !desc->block_table)
+        return 0;
+
+    /* ---- Pass 1: split the materialized scan table into maximal runs of
+     * consecutive positions sharing the same non-zero module_id. Worst
+     * case one run per position, so this bound is always safe. ---- */
+    run_module_id = (int *)PULSEG_ALLOC((size_t)desc->scan_table_len * sizeof(int));
+    run_start     = (int *)PULSEG_ALLOC((size_t)desc->scan_table_len * sizeof(int));
+    run_len       = (int *)PULSEG_ALLOC((size_t)desc->scan_table_len * sizeof(int));
+    if (!run_module_id || !run_start || !run_len)
+    {
+        ret = PULSEG_ERR_ALLOC_FAILED;
+        goto cleanup;
+    }
+
+    {
+        int prev_mid = 0;
+        for (i = 0; i < desc->scan_table_len; ++i)
+        {
+            int blk = desc->scan_table_block_idx[i];
+            int mid = desc->block_table[blk].module_id;
+            /* A run also breaks at every main-region TR boundary
+             * (scan_table_tr_start[i]==1), not just on a module_id
+             * transition -- otherwise adjacent NEX/pass repeats of the
+             * same main-region module (identical module_id across the
+             * repeat boundary, since MODULE is sticky and the author
+             * never re-SETs it) would silently merge into one giant run
+             * instead of being counted as separate occurrences. */
+            int is_tr_start = desc->scan_table_tr_start && desc->scan_table_tr_start[i];
+            if (mid != 0 && (mid != prev_mid || is_tr_start))
+            {
+                /* New run starts here. */
+                run_module_id[num_runs] = mid;
+                run_start[num_runs] = i;
+                run_len[num_runs] = 0;
+                num_runs++;
+            }
+            if (mid != 0)
+                run_len[num_runs - 1]++;
+            prev_mid = mid;
+        }
+    }
+
+    if (num_runs == 0)
+    {
+        ret = 0;
+        goto cleanup;
+    }
+
+    /* ---- Pass 2: distinct module ids, first-seen order (num_runs is a
+     * safe upper bound). ---- */
+    distinct_ids = (int *)PULSEG_ALLOC((size_t)num_runs * sizeof(int));
+    if (!distinct_ids)
+    {
+        ret = PULSEG_ERR_ALLOC_FAILED;
+        goto cleanup;
+    }
+    for (i = 0; i < num_runs; ++i)
+    {
+        int found = 0;
+        for (m = 0; m < num_distinct; ++m)
+        {
+            if (distinct_ids[m] == run_module_id[i])
+            {
+                found = 1;
+                break;
+            }
+        }
+        if (!found)
+            distinct_ids[num_distinct++] = run_module_id[i];
+    }
+
+    mods = (pulseg_module *)PULSEG_ALLOC((size_t)num_distinct * sizeof(pulseg_module));
+    if (!mods)
+    {
+        ret = PULSEG_ERR_ALLOC_FAILED;
+        goto cleanup;
+    }
+
+    /* ---- Per distinct module id: verify every occurrence after the first
+     * is structurally identical to the first, then dedup. ---- */
+    for (m = 0; m < num_distinct; ++m)
+    {
+        int mid = distinct_ids[m];
+        int ref_run = -1;
+        int ref_len = 0;
+        int one_instance_duration_us = 0;
+        int n_inst = 0;
+        int r;
+
+        for (r = 0; r < num_runs; ++r)
+        {
+            if (run_module_id[r] != mid)
+                continue;
+
+            if (ref_run < 0)
+            {
+                /* First occurrence: this is the reference. */
+                ref_run = r;
+                ref_len = run_len[r];
+                for (i = 0; i < ref_len; ++i)
+                {
+                    int blk = desc->scan_table_block_idx[run_start[r] + i];
+                    one_instance_duration_us += desc->block_definitions[desc->block_table[blk].id].duration_us;
+                }
+            }
+            else
+            {
+                /* Subsequent occurrence: must match the reference exactly
+                 * (length, and per-position content signature + order). */
+                if (run_len[r] != ref_len)
+                {
+                    ret = PULSEG_ERR_MODULE_STRUCTURAL_MISMATCH;
+                    goto cleanup;
+                }
+                for (i = 0; i < ref_len; ++i)
+                {
+                    int ref_blk = desc->scan_table_block_idx[run_start[ref_run] + i];
+                    int cur_blk = desc->scan_table_block_idx[run_start[r] + i];
+                    int ref_def, ref_adc, cur_def, cur_adc;
+
+                    pulseg__module_block_signature(desc, ref_blk, &ref_def, &ref_adc);
+                    pulseg__module_block_signature(desc, cur_blk, &cur_def, &cur_adc);
+
+                    if (ref_def != cur_def || ref_adc != cur_adc)
+                    {
+                        ret = PULSEG_ERR_MODULE_STRUCTURAL_MISMATCH;
+                        goto cleanup;
+                    }
+                }
+            }
+            n_inst++;
+        }
+
+        mods[m].module_id = mid;
+        mods[m].one_instance_duration_us = one_instance_duration_us;
+        mods[m].num_instances = n_inst;
+        {
+            /* n_inst * one_instance_duration_us can overflow a 32-bit int
+             * for large num_trs even when one_instance_duration_us alone
+             * passes the caller's ceiling check -- same defensive clamp
+             * pattern as PulserverImplementationPredownload.e's nettime_us
+             * computation. */
+            double total_d = (double)n_inst * (double)one_instance_duration_us;
+            if (total_d > 2.0e9)
+                total_d = 2.0e9;
+            mods[m].total_duration_us = (int)total_d;
+        }
+    }
+
+    *out_modules = mods;
+    mods = NULL; /* ownership transferred to caller */
+    ret = num_distinct;
+
+cleanup:
+    if (run_module_id) PULSEG_FREE(run_module_id);
+    if (run_start) PULSEG_FREE(run_start);
+    if (run_len) PULSEG_FREE(run_len);
+    if (distinct_ids) PULSEG_FREE(distinct_ids);
+    if (mods) PULSEG_FREE(mods);
+    return ret;
 }
 
 /* ================================================================== */
@@ -3125,6 +3337,9 @@ int pulseg_get_block_instance(
 
     /* RF shimming */
     inst->rf_shim_id = bte->rf_shim_id;
+
+    /* Safety-group module label */
+    inst->module_id = bte->module_id;
 
     /* Variable-amplitude flags (TR-level) */
     {

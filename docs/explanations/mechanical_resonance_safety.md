@@ -109,22 +109,44 @@ closed form would give (a sum of $N$ identical, equally-spaced phasors is algebr
 Dirichlet kernel, whether written as a closed form or accumulated one term at a time). See
 [Relation to Seginer et al.](#relation-to-seginer-et-al-250803220) for a worked comparison.
 
-### Stage 4 — evaluation grid and the infinite-outer-TR assumption
+### Stage 4 — evaluation grid and the finite-outer-rep fix
 
-The outermost repetition of the canonical window (further imaging TRs, or further passes) is
-**assumed to repeat infinitely** — an idealised Dirac comb, not a finite-N sinc train. Concretely,
-$A_\text{eq}$ is evaluated only at the exact harmonic lines
+The outermost repetition of the canonical window (further imaging TRs, or further passes) used to
+be **assumed to repeat infinitely** — an idealised Dirac comb, evaluated only at the exact harmonic
+lines $f = k/T_\text{TR}$. That framing was documented here as a "deliberate, conservative
+simplification," but it is not conservative — it is **non-invariant**: it makes the verdict depend
+on how a sequence happens to be authored, not on the physical drive it represents. Concretely, the
+same physical waveform encoded two ways — $N$ identical blocks materialized inside one canonical
+window ($M{=}1$ outer repeats), or one block repeated $N$ times as the outer TR/pass count
+($M{=}N$) — swept genuinely different frequency grids under the old rule (spacing $1/T_\text{TR}$
+in the first framing, $1/(N\,T_\text{TR})$-equivalent structure hidden inside the second's larger
+$M$), and could disagree on the verdict. See
+[PLAN_safety_mechres_finite_outer_rep.md](../../../../../PLAN_safety_mechres_finite_outer_rep.md)
+for the full derivation and the (real, caught-in-implementation) bugs in getting this right.
 
-$$f = k / T_\text{TR}, \qquad k = 1, 2, \ldots$$
+**Fix**: the outer repeat is now folded via its actual finite count $M$ (`num_instances`) using the
+closed-form Dirichlet ratio
 
-with $T_\text{TR}$ the canonical window's own period (Stage 1). This is a deliberate, conservative
-simplification: since a real scan runs many more repetitions than any single acquisition needs for
-useful diagnostics, treating the outer repeat as finite would only add spurious sidelobes around
-each harmonic — sidelobes that a short/toy sequence could accidentally park inside a forbidden band
-while a longer version of the identical protocol would not. Assuming infinite repetition removes
-that source of false positives entirely: there are no outer sidelobes to evaluate, by construction.
+$$\text{ratio}(f) = \frac{|D_M(x)|}{M}, \qquad x = f\,T_\text{TR}, \qquad
+D_M(x) = \frac{\sin(M\pi x)}{\sin(\pi x)}$$
+
+($\text{ratio}=1$ exactly at integer $x$ — the regression identity: at every exact TR harmonic this
+reduces algebraically to the pre-fix formula, which is why $M$-large scans reproduce the original
+verdicts bit-for-bit). Between consecutive exact harmonics, a small, **fixed** number of additional
+candidate frequencies are checked — geometrically spaced near each of the two adjacent harmonics,
+where the Dirichlet sidelobes actually live for large $M$ (the largest sidelobe sits within
+$\sim 1/(2M)$ of its lobe; naive *uniform* spacing across the whole inter-harmonic interval was
+tried first and found, empirically, to miss every sidelobe once $M$ exceeded the fixed sample
+count). $S_\text{ax}(f)$ is evaluated **fresh** at each of these fractional frequencies, not
+approximated from the nearby exact-harmonic value — an earlier attempt that reused the exact
+-harmonic amplitude and scaled it by $\text{ratio}(f)$ ($\le 1$ always) is a mathematical no-op,
+since a scaled-down value can never expose a candidate the exact harmonic didn't already show. Cost
+stays independent of $M$: the number of exact harmonics in a guarded band never scaled with $M$ to
+begin with, and the extra per-harmonic sample count is now a fixed constant, not one that grows
+with $M$ (see [Computational efficiency](#computational-efficiency)).
+
 This is *only* applied to the outermost repeat — inner repeats (NEX, and any structurally
-materialized echo/slice repetition) get their true finite-N behaviour, per Stage 3.
+materialized echo/slice repetition) get their true finite-N behaviour, per Stage 3, unchanged.
 
 For display purposes only (never the verdict), the same $A_\text{eq}(f)$ is also evaluated on a
 dense TR-harmonic grid up to a configurable maximum frequency — this is what the
@@ -171,10 +193,12 @@ TE and slice factors are never declared as separate closed-form terms: every ech
 instance is materialized as its own event $k$ inside one canonical structural window, and the
 nested combs *emerge* from the coherent sum, because a sum of $N$ identical equally-spaced phasors
 is algebraically identical to the corresponding sine-ratio factor whether one writes the closed
-form or accumulates the sum term by term. Only the truly outermost repetition (Stage 4) is treated
-analytically (as infinite, not as a further finite-N sine-ratio factor) — see
+form or accumulates the sum term by term. The truly outermost repetition (Stage 4) is the one
+exception handled differently: rather than materializing it as more events, its finite count is
+folded analytically via the closed-form Dirichlet ratio — see
+[Stage 4](#stage-4--evaluation-grid-and-the-finite-outer-rep-fix) and
 [Computational efficiency](#computational-efficiency) for why this stays cheap regardless of how
-many events a window materializes.
+many events a window materializes or how large the outer repeat count is.
 
 [`mechres_plots/epi_seginer_reproduction.py`](../../../../../mechres_plots/epi_seginer_reproduction.py)
 reproduces the paper's Fig. 1 (a multi-echo, multi-slice EPI train, echo spacing 0.52 ms, ETL 54,
@@ -233,26 +257,49 @@ analysis iterates over each subsequence independently:
 ## Computational efficiency
 
 The analysis cost depends on the *complexity* of one canonical structural window — not on the
-number of TRs or passes in the sequence, and not on sequence duration.
+number of TRs or passes in the sequence, and not on sequence duration. Three independent factors
+matter (see the finite-outer-rep plan's cost model for the fuller derivation):
 
-- **One-time base-definition work.** Per-definition operations (PWL vertex construction, arb
-  sample extraction) are performed once per unique gradient definition; Pulseq's reusable
-  definitions mean a sequence with hundreds of TRs typically has only a handful of distinct shapes.
+- **$D$ — unique gradient definitions in one window.** Usually small even for a long/complex
+  hyper-TR (a handful of distinct shapes); amortized to $O(1)$ per repeated occurrence by the
+  `sa_transform_cache` memoization below.
+- **$M$ — outer TR/pass repeat count (`num_instances`).** Runtime is independent of $M$: the
+  number of exact-harmonic candidates in a guarded band never scaled with $M$, and the
+  finite-outer-rep fix (Stage 4) adds only a *fixed* number of extra samples per harmonic,
+  regardless of how large $M$ is.
+- **$N$ — materialized instances of one definition within a single window** (Stage 3's coherent
+  -sum length; not $M$). Usually small and cheap (one scale+phase accumulate per instance via the
+  memoized base transform), but unproven at extreme scale (a very long hyper-TR densely packed
+  with repeats of the same shape) — the one open cost risk, distinct from $M$.
+
+Mechanics:
+
+- **One-time base-definition work, now actually cached, not just architecturally amortized.**
+  Per-definition operations (PWL vertex construction, arb sample extraction) are performed once per
+  unique gradient definition at build time; the base-waveform transform $W_k(f)$ itself is cached
+  per `(def_id, frequency)` for the duration of one spectrum evaluation (`sa_transform_cache`,
+  `pulseg_safety.c`) — occurrences sharing a definition hit the cache instead of repeating the
+  $O(\text{vertices})$ integral. (An earlier version of this document claimed this caching already
+  happened; it did not — `sa_eval_pwl_transform` was recomputed from scratch for every occurrence.
+  The finite-outer-rep fix's extra per-harmonic sample points made that gap load-bearing enough to
+  close for real.)
 - **Analytical spectral evaluation.** The window's spectrum is a sum of closed-form phasor
   contributions, not a constructed-and-transformed time-domain waveform. Evaluating $N_f$
-  frequencies over $K$ events costs $O(N_f \cdot K)$.
+  frequencies over $K$ events costs $O(N_f \cdot K)$, with the memoization above collapsing the
+  effective $K$ toward $D$ (unique shapes) rather than total occurrence count for repeated
+  definitions.
 - **NEX is $O(1)$ per event, not $O(N)$**, via the Dirichlet kernel (Stage 3) rather than physical
   enumeration.
-- **Independence from sequence length.** Because the canonical window is analysed analytically,
-  and the outer repeat is assumed infinite rather than simulated, a 10 000-TR scan costs the same
-  as a 10-TR scan with the same window structure. Two *display*-only arrays exist purely for
-  plotting and are never used in the verdict: a dense-FFT spectrum of the physically-expanded,
-  NEX-materialized waveform (`spectrum_full_g{x,y,z}`), and a dense analytic envelope
-  (`envelope_amp_g{x,y,z}`, see [Visual validation](#visual-validation)) that reuses the same
-  closed-form per-event evaluation as the verdict itself, just on a finer frequency grid. Both are
-  computed only by the plotting API (`pulseg_calc_mech_resonances`) — `pulseg_check_safety`, the
-  path predownload actually runs, always requests `compute_dense_envelope=0` and pays nothing for
-  the envelope.
+- **Independence from $M$, not from sequence complexity.** A 10 000-TR scan costs the same as a
+  10-TR scan with the *same window structure* ($D$ and $N$ unchanged) — the finite-outer-rep fix
+  (Stage 4) adds a bounded constant-factor overhead per exact harmonic that does not grow with $M$.
+  Two *display*-only arrays exist purely for plotting and are never used in the verdict: a
+  dense-FFT spectrum of the physically-expanded, NEX-materialized waveform
+  (`spectrum_full_g{x,y,z}`), and a dense analytic envelope (`envelope_amp_g{x,y,z}`, see
+  [Visual validation](#visual-validation)) that reuses the same closed-form per-event evaluation as
+  the verdict itself, just on a finer frequency grid. Both are computed only by the plotting API
+  (`pulseg_calc_mech_resonances`) — `pulseg_check_safety`, the path predownload actually runs,
+  always requests `compute_dense_envelope=0` and pays nothing for the envelope.
 
 ## Visual validation
 
