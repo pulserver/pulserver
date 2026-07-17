@@ -122,12 +122,18 @@ extern "C"
      * @brief Read freq-mod collection data from an already-open FILE.
      *
      * Used by the unified cache loader to read freq-mod from a section.
+     *
+     * @param[in] do_swap  Non-zero when the cache file's endianness (from
+     *                     the unified-cache header marker) differs from the
+     *                     reader's; every 4-byte int/float in the payload is
+     *                     byte-swapped after reading.
      */
     int pulseg_freq_mod_collection_read_cache_f(
         pulseg_freq_mod_collection **out_fmc,
         FILE *f,
         const pulseg_collection *coll,
-        const float *shift_m);
+        const float *shift_m,
+        int do_swap);
 
     /** @brief Free a frequency modulation collection and all owned memory. */
     void pulseg_freq_mod_collection_free(pulseg_freq_mod_collection *fmc);

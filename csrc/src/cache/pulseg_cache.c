@@ -2976,7 +2976,7 @@ int pulseg_load_freq_mod_cache(
 
     {
         int rc = pulseg_freq_mod_collection_read_cache_f(
-            &coll->freq_mod, f, coll, zero_shift);
+            &coll->freq_mod, f, coll, zero_shift, do_swap);
         fclose(f);
         return rc;
     }
