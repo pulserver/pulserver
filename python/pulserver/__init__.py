@@ -29,6 +29,7 @@ import importlib
 __all__ = [
     "pulseq",
     "io",
+    "arbgrad",
     "PulseqSequence",
     "UIParam",
     "Validate",
@@ -64,7 +65,7 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    if name in ("io", "pulseq"):
+    if name in ("io", "pulseq", "arbgrad"):
         return importlib.import_module(f"{__name__}.{name}")
     if name in __all__:
         return getattr(importlib.import_module(f"{__name__}.core"), name)

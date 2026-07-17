@@ -79,6 +79,23 @@ file(GLOB PULSEG_WRAPPERS
 install(FILES ${PULSEG_WRAPPERS}
     DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/_ext)
 
+# _arbgrad_wrapper: pulserver.arbgrad C++ extension (vendored MRArbGrad core;
+# see cxx/arbgrad/vendor/mrarbgrad/NOTICE.md)
+add_pybind_module(_arbgrad_wrapper ""
+    SOURCES
+        "${CMAKE_SOURCE_DIR}/python/pulserver/_ext/_arbgrad_wrapper.cpp"
+        "${CMAKE_SOURCE_DIR}/cxx/arbgrad/vendor/mrarbgrad/mag/Mag.cpp"
+        "${CMAKE_SOURCE_DIR}/cxx/arbgrad/vendor/mrarbgrad/utility/global.cpp"
+        "${CMAKE_SOURCE_DIR}/cxx/arbgrad/vendor/mrarbgrad/utility/v3.cpp"
+    INCLUDES
+        ${CMAKE_SOURCE_DIR}/cxx/arbgrad/vendor/mrarbgrad
+)
+
+file(GLOB ARBGRAD_WRAPPERS
+    "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/_ext/_arbgrad_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+install(FILES ${ARBGRAD_WRAPPERS}
+    DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/_ext)
+
 option(PULSERVER_BUILD_CPP_TESTS "Build lightweight C++ unit tests" OFF)
 if(PULSERVER_BUILD_CPP_TESTS)
     enable_testing()
