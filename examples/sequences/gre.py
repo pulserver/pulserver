@@ -36,8 +36,6 @@ Or pass the file directly to the bridge host for testing::
 
 from __future__ import annotations
 
-import argparse
-import json
 import sys
 
 import numpy as np
@@ -45,6 +43,8 @@ import pypulseq as pp
 
 import pulserver.io as pio
 import pulserver.pulseq as ps
+
+from pulserver.design import cli, encoding, excitation, params, readout, sampling, system
 
 from pulserver import (
     PulseqSequence,
@@ -60,17 +60,6 @@ from pulserver import (
     protocol_to_dict,
 )
 
-
-RF_TIME_S = 2.00e-3
-RF_APODIZATION = 0.5
-RF_TIME_BW_PRODUCT = 4.0
-DEFAULT_BANDWIDTH_HZ_PX = 125_000.0
-MAX_RASTER_SEARCH_STEPS = 50_000
-RF_SPOILING_INC_DEG = 117.0
-MAX_GRAD_DERATE = 0.9
-MAX_SLEW_DERATE = 0.9
-SPOIL_FACTOR_X = 4.0
-SPOIL_FACTOR_Z = 2.0
 
 
 class GrePulseqSequence(PulseqSequence):
@@ -167,7 +156,7 @@ class GrePulseqSequence(PulseqSequence):
                 validate=Validate.NONE,
             ),
             UIParam.BANDWIDTH: TypeinFloatParam(
-                value=DEFAULT_BANDWIDTH_HZ_PX,
+                value=system.DEFAULT_BANDWIDTH_HZ_PX,
                 min=5_000.0,
                 max=500_000.0,
                 incr=100.0,
@@ -198,19 +187,19 @@ class GrePulseqSequence(PulseqSequence):
     def validate_protocol(self, opts: pp.Opts, protocol: dict[str, dict]) -> dict:
         prot = dict_to_protocol(protocol)
 
-        te_s = _param_float(prot, UIParam.TE) * 1e-3
-        tr_s = _param_float(prot, UIParam.TR) * 1e-3
-        flip_deg = _param_float(prot, UIParam.FLIP)
-        fov_ro_m = _param_float(prot, UIParam.FOV) * 1e-3
-        fov_pe_m = _phase_fov_mm_from_protocol(prot) * 1e-3
-        slice_thickness_m = _param_float(prot, UIParam.SLICE_THICKNESS) * 1e-3
-        nx_ro = _param_int(prot, UIParam.NX)
-        ny_pe = _param_int(prot, UIParam.NY)
-        nslices = _param_int(prot, UIParam.NSLICES)
-        bandwidth_hz_px = _param_float_optional(prot, UIParam.BANDWIDTH, DEFAULT_BANDWIDTH_HZ_PX)
-        ry = max(1, int(round(_param_float_optional(prot, UIParam.RY, 1.0))))
-        acs_lines = _acs_lines_from_protocol(prot, ny_pe)
-        ro_axis, pe_axis = _resolve_readout_phase_axes(prot)
+        te_s = params.param_float(prot, UIParam.TE) * 1e-3
+        tr_s = params.param_float(prot, UIParam.TR) * 1e-3
+        flip_deg = params.param_float(prot, UIParam.FLIP)
+        fov_ro_m = params.param_float(prot, UIParam.FOV) * 1e-3
+        fov_pe_m = params.phase_fov_mm_from_protocol(prot) * 1e-3
+        slice_thickness_m = params.param_float(prot, UIParam.SLICE_THICKNESS) * 1e-3
+        nx_ro = params.param_int(prot, UIParam.NX)
+        ny_pe = params.param_int(prot, UIParam.NY)
+        nslices = params.param_int(prot, UIParam.NSLICES)
+        bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, system.DEFAULT_BANDWIDTH_HZ_PX)
+        ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
+        acs_lines = params.acs_lines_from_protocol(prot, ny_pe, 0)
+        ro_axis, pe_axis = params.resolve_readout_phase_axes(prot)
 
         if te_s <= 0.0 or tr_s <= 0.0:
             return {"valid": False, "duration": None, "info": "TE and TR must be > 0"}
@@ -260,27 +249,27 @@ class GrePulseqSequence(PulseqSequence):
                 ),
             }
 
-        sampled_pe = _sampled_phase_lines(ny_pe, ry, acs_lines)
+        sampled_pe = sampling.sampled_lines(ny_pe, ry, acs_lines)
         duration_s = tr_s * float(len(sampled_pe))
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
         prot = dict_to_protocol(protocol)
 
-        te_s = _param_float(prot, UIParam.TE) * 1e-3
-        tr_s = _param_float(prot, UIParam.TR) * 1e-3
-        flip_deg = _param_float(prot, UIParam.FLIP)
-        fov_ro_m = _param_float(prot, UIParam.FOV) * 1e-3
-        fov_pe_m = _phase_fov_mm_from_protocol(prot) * 1e-3
-        slice_thickness_m = _param_float(prot, UIParam.SLICE_THICKNESS) * 1e-3
-        slice_spacing_m = _param_float(prot, UIParam.SLICE_SPACING) * 1e-3
-        nx_ro = _param_int(prot, UIParam.NX)
-        ny_pe = _param_int(prot, UIParam.NY)
-        nslices = _param_int(prot, UIParam.NSLICES)
-        bandwidth_hz_px = _param_float_optional(prot, UIParam.BANDWIDTH, DEFAULT_BANDWIDTH_HZ_PX)
-        ry = max(1, int(round(_param_float_optional(prot, UIParam.RY, 1.0))))
-        acs_lines = _acs_lines_from_protocol(prot, ny_pe)
-        ro_axis, pe_axis = _resolve_readout_phase_axes(prot)
+        te_s = params.param_float(prot, UIParam.TE) * 1e-3
+        tr_s = params.param_float(prot, UIParam.TR) * 1e-3
+        flip_deg = params.param_float(prot, UIParam.FLIP)
+        fov_ro_m = params.param_float(prot, UIParam.FOV) * 1e-3
+        fov_pe_m = params.phase_fov_mm_from_protocol(prot) * 1e-3
+        slice_thickness_m = params.param_float(prot, UIParam.SLICE_THICKNESS) * 1e-3
+        slice_spacing_m = params.param_float(prot, UIParam.SLICE_SPACING) * 1e-3
+        nx_ro = params.param_int(prot, UIParam.NX)
+        ny_pe = params.param_int(prot, UIParam.NY)
+        nslices = params.param_int(prot, UIParam.NSLICES)
+        bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, system.DEFAULT_BANDWIDTH_HZ_PX)
+        ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
+        acs_lines = params.acs_lines_from_protocol(prot, ny_pe, 0)
+        ro_axis, pe_axis = params.resolve_readout_phase_axes(prot)
 
         timing = _compute_timing(
             opts=opts,
@@ -319,7 +308,7 @@ class GrePulseqSequence(PulseqSequence):
         delta_k_pe = 1.0 / fov_pe_m
         phase_areas = (np.arange(ny_pe) - 0.5 * ny_pe) * delta_k_pe
         max_pe_area = float(np.max(np.abs(phase_areas)))
-        sampled_pe = _sampled_phase_lines(ny_pe, ry, acs_lines)
+        sampled_pe = sampling.sampled_lines(ny_pe, ry, acs_lines)
         slice_step_m = slice_spacing_m if nslices > 1 else 0.0
         rf_phase_deg = 0.0
         rf_phase_inc_deg = 0.0
@@ -338,10 +327,10 @@ class GrePulseqSequence(PulseqSequence):
             for sl in range(nslices):
                 slice_offset_m = (sl - 0.5 * (nslices - 1)) * slice_step_m
 
-                rf_curr = _copy_event(rf)
+                rf_curr = system.copy_event(rf)
                 rf_curr.freq_offset = gz.amplitude * slice_offset_m
                 rf_curr.phase_offset = np.deg2rad(rf_phase_deg)
-                adc_curr = _copy_event(adc)
+                adc_curr = system.copy_event(adc)
                 adc_curr.phase_offset = rf_curr.phase_offset
 
                 label_slc = pp.make_label(type="SET", label="SLC", value=sl)
@@ -355,7 +344,7 @@ class GrePulseqSequence(PulseqSequence):
 
                 # Standard RF spoiling phase progression per TR.
                 rf_phase_deg = (rf_phase_deg + rf_phase_inc_deg) % 360.0
-                rf_phase_inc_deg = (rf_phase_inc_deg + RF_SPOILING_INC_DEG) % 360.0
+                rf_phase_inc_deg = (rf_phase_inc_deg + excitation.RF_SPOILING_INC_DEG) % 360.0
 
             # TR delay is appended once after all slices so that the time between
             # successive excitations of the same slice equals the user-set TR.
@@ -375,7 +364,7 @@ class GrePulseqSequence(PulseqSequence):
         seq.set_definition("BandwidthHzPerPx", bandwidth_hz_px)
         seq.set_definition("Ry", ry)
         seq.set_definition("AcsLines", acs_lines)
-        seq.set_definition("RfSpoilingIncDeg", RF_SPOILING_INC_DEG)
+        seq.set_definition("RfSpoilingIncDeg", excitation.RF_SPOILING_INC_DEG)
         seq.set_definition("Nx", nx_ro)
         seq.set_definition("Ny", ny_pe)
         seq.set_definition("NySampled", len(sampled_pe))
@@ -386,72 +375,6 @@ class GrePulseqSequence(PulseqSequence):
             remove_duplicates=False,
             check_timing=False,
         )
-
-
-def _param_float(protocol: dict, key: UIParam) -> float:
-    return float(protocol[str(key)].value)
-
-
-def _param_int(protocol: dict, key: UIParam) -> int:
-    return int(protocol[str(key)].value)
-
-
-def _param_float_optional(protocol: dict, key: UIParam | str, default: float) -> float:
-    name = str(key)
-    if name not in protocol:
-        return default
-    return float(protocol[name].value)
-
-
-def _param_bool_optional(protocol: dict, key: UIParam | str, default: bool) -> bool:
-    name = str(key)
-    if name not in protocol:
-        return default
-    return bool(protocol[name].value)
-
-
-def _phase_fov_mm_from_protocol(protocol: dict) -> float:
-    fov_mm = _param_float(protocol, UIParam.FOV)
-    phase_fov = _param_float_optional(protocol, UIParam.PHASE_FOV, fov_mm)
-    if phase_fov <= 1.5:
-        # Allow fraction-style PhaseFOV if explicitly provided by upstream UI.
-        return max(0.0, phase_fov * fov_mm)
-    return phase_fov
-
-
-def _acs_lines_from_protocol(protocol: dict, ny_pe: int) -> int:
-    raw = _param_float_optional(protocol, UIParam.user_value(0), 0.0)
-    acs = int(round(raw))
-    if acs < 0:
-        return 0
-    return min(acs, ny_pe)
-
-
-def _sampled_phase_lines(ny_pe: int, ry: int, acs_lines: int) -> list[int]:
-    sampled = {i for i in range(ny_pe) if (i % ry) == 0}
-    if acs_lines > 0:
-        center = ny_pe // 2
-        start = max(0, center - acs_lines // 2)
-        stop = min(ny_pe, start + acs_lines)
-        for i in range(start, stop):
-            sampled.add(i)
-    return sorted(sampled)
-
-
-def _resolve_readout_phase_axes(protocol: dict) -> tuple[str, str]:
-    ro_axis = "x"
-    pe_axis = "y"
-
-    if _param_bool_optional(protocol, UIParam.SWAP_PHASE_FREQ, False):
-        ro_axis, pe_axis = "y", "x"
-
-    return ro_axis, pe_axis
-
-
-def _copy_event(event):
-    event_copy = type(event)()
-    event_copy.__dict__.update(event.__dict__)
-    return event_copy
 
 
 def _compute_timing(
@@ -470,53 +393,23 @@ def _compute_timing(
     tr_s: float,
     strict: bool = True,
 ):
-    _apply_system_derates(opts)
+    system.apply_system_derates(opts)
 
-    rf, gz, gz_reph = pp.make_sinc_pulse(
-        flip_angle=np.deg2rad(flip_deg),
-        duration=RF_TIME_S,
-        slice_thickness=slice_thickness_m,
-        apodization=RF_APODIZATION,
-        time_bw_product=RF_TIME_BW_PRODUCT,
-        system=opts,
-        return_gz=True,
-    )
+    rf, gz, gz_reph = excitation.slice_selective(opts, flip_deg, slice_thickness_m)
 
-    delta_k_ro = 1.0 / fov_ro_m
-    readout_area = nx_ro * delta_k_ro
-    dwell_s, flat_time_s = _quantize_readout_timing(
-        nx_ro=nx_ro,
-        target_bw_hz_px=bandwidth_hz_px,
-        grad_raster_s=opts.grad_raster_time,
-        adc_raster_s=opts.adc_raster_time,
-        min_flat_time_s=abs(readout_area) / (0.95 * opts.max_grad),
+    ro_events = readout.unbalanced_line(
+        opts,
+        fov_ro_m,
+        nx_ro,
+        bandwidth_hz_px=bandwidth_hz_px,
+        slice_thickness_m=slice_thickness_m,
+        axis=ro_axis,
     )
-
-    gx_full = pp.make_trapezoid(
-        channel=ro_axis,
-        flat_area=readout_area,
-        flat_time=flat_time_s,
-        system=opts,
-    )
-    gx_parts = pp.split_gradient_at(gx_full, gx_full.rise_time + gx_full.flat_time, system=opts)
-    gx = gx_parts[0]
-    adc = pp.make_adc(
-        num_samples=nx_ro,
-        dwell=dwell_s,
-        delay=gx_full.rise_time,
-        system=opts,
-    )
-
-    gx_pre = pp.make_trapezoid(channel=ro_axis, area=-0.5 * gx_full.area, system=opts)
-    gx_spoil_area = SPOIL_FACTOR_X / slice_thickness_m
-    gx_spoil, _, _ = pp.make_extended_trapezoid_area(
-        area=gx_spoil_area,
-        channel=ro_axis,
-        grad_start=gx_full.amplitude,
-        grad_end=0.0,
-        system=opts,
-    )
-    gz_spoil = pp.make_trapezoid(channel="z", area=SPOIL_FACTOR_Z / slice_thickness_m, system=opts)
+    gx = ro_events["gx"]
+    adc = ro_events["adc"]
+    gx_pre = ro_events["gx_pre"]
+    gx_spoil = ro_events["gx_spoil"]
+    gz_spoil = pp.make_trapezoid(channel="z", area=encoding.SPOIL_FACTOR_Z / slice_thickness_m, system=opts)
     max_pe_area = 0.5 * ny_pe * (1.0 / fov_pe_m)
     gy_template = pp.make_trapezoid(
         channel=pe_axis,
@@ -530,7 +423,7 @@ def _compute_timing(
     d_spoil = pp.calc_duration(gx_spoil, gy_template, gz_spoil)
 
     rf_center_s = pp.calc_rf_center(rf)[0]
-    adc_center_s = adc.delay + 0.5 * gx_full.flat_time
+    adc_center_s = ro_events["adc_center_s"]
     min_te_s = (d_rf - rf_center_s) + d_pre + adc_center_s
     te_delay_s = te_s - min_te_s
     if te_delay_s < -1e-9 and strict:
@@ -561,52 +454,6 @@ def _compute_timing(
     }
 
 
-def _apply_system_derates(opts: pp.Opts) -> None:
-    if not hasattr(opts, "_pulserver_base_max_grad"):
-        opts._pulserver_base_max_grad = float(opts.max_grad)
-    if not hasattr(opts, "_pulserver_base_max_slew"):
-        opts._pulserver_base_max_slew = float(opts.max_slew)
-
-    opts.max_grad = opts._pulserver_base_max_grad * float(MAX_GRAD_DERATE)
-    opts.max_slew = opts._pulserver_base_max_slew * float(MAX_SLEW_DERATE)
-
-
-def _quantize_readout_timing(
-    nx_ro: int,
-    target_bw_hz_px: float,
-    grad_raster_s: float,
-    adc_raster_s: float,
-    min_flat_time_s: float,
-) -> tuple[float, float]:
-    target_dwell = 1.0 / target_bw_hz_px
-    m_target = max(1, int(round(target_dwell / adc_raster_s)))
-
-    m_min = max(m_target, int(np.ceil(min_flat_time_s / (nx_ro * adc_raster_s))))
-
-    best_m = None
-    best_cost = None
-
-    for step in range(MAX_RASTER_SEARCH_STEPS):
-        m = m_min + step
-        flat = nx_ro * m * adc_raster_s
-        ratio = flat / grad_raster_s
-        if abs(ratio - round(ratio)) > 1e-9:
-            continue
-        cost = abs((m * adc_raster_s) - target_dwell)
-        if best_cost is None or cost < best_cost:
-            best_cost = cost
-            best_m = m
-            if cost == 0.0:
-                break
-
-    if best_m is None:
-        best_m = m_min
-
-    dwell = best_m * adc_raster_s
-    flat_time = nx_ro * dwell
-    return dwell, flat_time
-
-
 PLUGIN = GrePulseqSequence()
 
 
@@ -627,118 +474,30 @@ def makeSeq(opts, protocol, output_path):
     return PLUGIN.make_sequence(opts, protocol, output_path)
 
 
-def _set_protocol_value(protocol: dict, key: UIParam, value) -> None:
-    protocol[str(key)]["value"] = value
-
-
-
-
-
-def _build_cli_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Generate a Cartesian GRE .seq offline using the same implementation "
-            "as the nimpulseqgui plugin path."
-        )
-    )
-    parser.add_argument("-o", "--output", default="gre.seq", help="Output .seq file path")
-
-    parser.add_argument("--te-ms", type=float, help="Echo time [ms]")
-    parser.add_argument("--tr-ms", type=float, help="Repetition time [ms]")
-    parser.add_argument("--flip-deg", type=float, help="Flip angle [deg]")
-    parser.add_argument("--fov-mm", type=float, help="Readout FOV [mm]")
-    parser.add_argument("--phase-fov-mm", type=float, help="Phase-encode FOV [mm]")
-    parser.add_argument("--slice-thickness-mm", type=float, help="Slice thickness [mm]")
-    parser.add_argument("--slice-spacing-mm", type=float, help="Slice spacing [mm]")
-    parser.add_argument("--nx", type=int, help="Readout matrix size")
-    parser.add_argument("--ny", type=int, help="Phase matrix size")
-    parser.add_argument("--nslices", type=int, help="Number of slices")
-    parser.add_argument("--bandwidth-hz-px", type=float, help="Readout bandwidth [Hz/px]")
-    parser.add_argument("--ry", type=float, help="Phase undersampling factor")
-    parser.add_argument("--acs-lines", type=float, help="Number of ACS lines (user0)")
-    parser.add_argument(
-        "--swap-phase-freq",
-        action="store_true",
-        help="Swap readout/phase axes",
-    )
-
-    parser.add_argument(
-        "--max-grad-mtm",
-        type=float,
-        help="System max gradient amplitude [mT/m] for offline generation",
-    )
-    parser.add_argument(
-        "--max-slew-tm-s",
-        type=float,
-        help="System max slew [T/m/s] for offline generation",
-    )
-    parser.add_argument(
-        "--validate-only",
-        action="store_true",
-        help="Run protocol validation only (do not write sequence)",
-    )
-
-    return parser
-
-
-def _cli(argv: list[str]) -> int:
-    parser = _build_cli_parser()
-    args = parser.parse_args(argv)
-
-    opts_kwargs = {}
-    if args.max_grad_mtm is not None:
-        opts_kwargs["max_grad"] = args.max_grad_mtm
-        opts_kwargs["grad_unit"] = "mT/m"
-    if args.max_slew_tm_s is not None:
-        opts_kwargs["max_slew"] = args.max_slew_tm_s
-        opts_kwargs["slew_unit"] = "T/m/s"
-    opts = pp.Opts(**opts_kwargs)
-
-    protocol = PLUGIN.get_default_protocol(opts)
-
-    if args.te_ms is not None:
-        _set_protocol_value(protocol, UIParam.TE, args.te_ms)
-    if args.tr_ms is not None:
-        _set_protocol_value(protocol, UIParam.TR, args.tr_ms)
-    if args.flip_deg is not None:
-        _set_protocol_value(protocol, UIParam.FLIP, args.flip_deg)
-    if args.fov_mm is not None:
-        _set_protocol_value(protocol, UIParam.FOV, args.fov_mm)
-    if args.phase_fov_mm is not None:
-        _set_protocol_value(protocol, UIParam.PHASE_FOV, args.phase_fov_mm)
-    if args.slice_thickness_mm is not None:
-        _set_protocol_value(protocol, UIParam.SLICE_THICKNESS, args.slice_thickness_mm)
-    if args.slice_spacing_mm is not None:
-        _set_protocol_value(protocol, UIParam.SLICE_SPACING, args.slice_spacing_mm)
-    if args.nx is not None:
-        _set_protocol_value(protocol, UIParam.NX, args.nx)
-    if args.ny is not None:
-        _set_protocol_value(protocol, UIParam.NY, args.ny)
-    if args.nslices is not None:
-        _set_protocol_value(protocol, UIParam.NSLICES, args.nslices)
-    if args.bandwidth_hz_px is not None:
-        _set_protocol_value(protocol, UIParam.BANDWIDTH, args.bandwidth_hz_px)
-    if args.ry is not None:
-        _set_protocol_value(protocol, UIParam.RY, args.ry)
-    if args.acs_lines is not None:
-        _set_protocol_value(protocol, UIParam.user_value(0), args.acs_lines)
-    if args.swap_phase_freq:
-        _set_protocol_value(protocol, UIParam.SWAP_PHASE_FREQ, True)
-
-    result = PLUGIN.validate_protocol(opts, protocol)
-    if not result.get("valid", False):
-        info = result.get("info", "Protocol invalid")
-        print(f"ERROR: {info}", file=sys.stderr)
-        return 2
-
-    print(result.get("info", "Protocol valid"))
-    if args.validate_only:
-        return 0
-
-    PLUGIN.make_sequence(opts, protocol, args.output)
-    print(f"Wrote sequence: {args.output}")
-    return 0
-
+_ARG_MAP = [
+    ('--te-ms', UIParam.TE, float, 'Echo time [ms]'),
+    ('--tr-ms', UIParam.TR, float, 'Repetition time [ms]'),
+    ('--flip-deg', UIParam.FLIP, float, 'Flip angle [deg]'),
+    ('--fov-mm', UIParam.FOV, float, 'Readout FOV [mm]'),
+    ('--phase-fov-mm', UIParam.PHASE_FOV, float, 'Phase-encode FOV [mm]'),
+    ('--slice-thickness-mm', UIParam.SLICE_THICKNESS, float, 'Slice thickness [mm]'),
+    ('--slice-spacing-mm', UIParam.SLICE_SPACING, float, 'Slice spacing [mm]'),
+    ('--nx', UIParam.NX, int, 'Readout matrix size'),
+    ('--ny', UIParam.NY, int, 'Phase matrix size'),
+    ('--nslices', UIParam.NSLICES, int, 'Number of slices'),
+    ('--bandwidth-hz-px', UIParam.BANDWIDTH, float, 'Readout bandwidth [Hz/px]'),
+    ('--ry', UIParam.RY, float, 'Phase undersampling factor'),
+    ('--acs-lines', UIParam.user_value(0), float, 'Number of ACS lines (user0)'),
+    ('--swap-phase-freq', UIParam.SWAP_PHASE_FREQ, ("const", True), 'Swap readout/phase axes'),
+]
 
 if __name__ == "__main__":
-    raise SystemExit(_cli(sys.argv[1:]))
+    raise SystemExit(
+        cli.run_cli(
+            PLUGIN,
+            sys.argv[1:],
+            arg_map=_ARG_MAP,
+            description='Generate a Cartesian GRE .seq offline using the same implementation as the nimpulseqgui plugin path.',
+            default_output='gre.seq',
+        )
+    )

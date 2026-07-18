@@ -2,7 +2,7 @@
 
 This module implements the three mandatory module-level entry points
 required by the bridge dispatcher (see ``gre_3d.py`` for the non-prepared 3D
-GRE this extends, and ``_gre_common.py``/``_prep_common.py`` for the shared
+GRE this extends, and ``_gre_common.py``/``pulserver.design`` for the shared
 low-level building blocks):
 
 - ``get_default_protocol(opts)``  — return the initial CV/protocol dictionary.
@@ -20,7 +20,7 @@ the inner, per-segment loop (accelerated via ``Ry``):
         non-selective inversion pulse (hard or adiabatic hypsec)
         3-axis non-selective spoiler
         TI delay (measured from the inversion RF center to the temporal
-            center of the following segment — see ``_prep_common.py``)
+            center of the following segment — see ``pulserver.design.preparations``)
         for ky_chunk in chunks(PE1 lines, ETL):       # one shot
             for ky in ky_chunk:
                 single-echo GRE view (RF spoiled, shares readout/echo-train
@@ -46,10 +46,7 @@ file to the ``sequences/src/`` directory and creating a numbered alias::
 
 from __future__ import annotations
 
-import argparse
-import importlib.util
 import sys
-from pathlib import Path
 
 import numpy as np
 import pypulseq as pp
@@ -71,19 +68,9 @@ from pulserver import (
     protocol_to_dict,
 )
 from pulserver.core import SequenceType
+from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
 
 
-def _load_sibling_module(name: str):
-    """Load a same-directory helper module by file path (see gre_multiecho_2d.py)."""
-    module_path = Path(__file__).resolve().parent / f"{name}.py"
-    spec = importlib.util.spec_from_file_location(name, module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-gc = _load_sibling_module("_gre_common")
-pc = _load_sibling_module("_prep_common")
 
 NUM_ECHOES = 1
 FLYBACK = True
@@ -145,7 +132,7 @@ class Mprage3DPulseqSequence(PulseqSequence):
             UIParam.RY: TypeinFloatParam(value=1.0, min=1.0, max=8.0, incr=1.0, unit="", validate=Validate.NONE),
             UIParam.RZ: TypeinFloatParam(value=1.0, min=1.0, max=8.0, incr=1.0, unit="", validate=Validate.NONE),
             UIParam.BANDWIDTH: TypeinFloatParam(
-                value=gc.DEFAULT_BANDWIDTH_HZ_PX, min=5_000.0, max=500_000.0, incr=100.0,
+                value=system.DEFAULT_BANDWIDTH_HZ_PX, min=5_000.0, max=500_000.0, incr=100.0,
                 unit="Hz/px", validate=Validate.NONE,
             ),
             UIParam.SWAP_PHASE_FREQ: BoolParam(value=False, validate=Validate.NONE),
@@ -190,9 +177,9 @@ class Mprage3DPulseqSequence(PulseqSequence):
                 "info": "TE, TR, or TI infeasible for the requested gradients/ETL",
             }
 
-        sampled_pe = gc.sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        sampled_par = gc.sampled_lines(cfg.npar, cfg.rz, 0)
-        n_segments = len(pc.chunk_indices(sampled_pe, cfg.etl))
+        sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, 0)
+        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
+        n_segments = len(sampling.chunk_indices(sampled_pe, cfg.etl))
         shot_s = timing["shot_s"]
         duration_s = shot_s * n_segments * len(sampled_par)
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -216,7 +203,7 @@ class Mprage3DPulseqSequence(PulseqSequence):
 
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
-        trecovery_s_rounded = pc.round_to_raster(cfg.trecovery_s)
+        trecovery_s_rounded = system.round_to_raster(cfg.trecovery_s)
         trecovery_delay = pp.make_delay(trecovery_s_rounded) if trecovery_s_rounded > 0.0 else None
 
         seq = ps.Sequence(opts)
@@ -224,11 +211,11 @@ class Mprage3DPulseqSequence(PulseqSequence):
         delta_k_pe = 1.0 / cfg.fov_pe_m
         phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
         max_pe_area = float(np.max(np.abs(phase_areas)))
-        sampled_pe = gc.sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        segments = pc.chunk_indices(sampled_pe, cfg.etl)
+        sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, 0)
+        segments = sampling.chunk_indices(sampled_pe, cfg.etl)
 
-        par_areas, max_par_area = gc.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-        sampled_par = gc.sampled_lines(cfg.npar, cfg.rz, 0)
+        par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
+        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
 
         for par in sampled_par:
             z_scale = par_areas[par] / max_par_area if max_par_area > 0.0 else 0.0
@@ -237,12 +224,12 @@ class Mprage3DPulseqSequence(PulseqSequence):
 
             for segment in segments:
                 segment_duration_s = len(segment) * cfg.tr_s
-                ti_delay_s = pc.ti_delay_seconds(
+                ti_delay_s = preparations.ti_delay_seconds(
                     cfg.ti_s, rf_inv, spoiler_duration_s, segment_duration_s, strict=False
                 )
                 ti_delay = pp.make_delay(ti_delay_s) if ti_delay_s > 0.0 else None
 
-                seq.add_block(gc.copy_event(rf_inv))
+                seq.add_block(system.copy_event(rf_inv))
                 seq.add_block(gx_inv, gy_inv, gz_inv)
                 if ti_delay is not None:
                     seq.add_block(ti_delay)
@@ -254,11 +241,11 @@ class Mprage3DPulseqSequence(PulseqSequence):
                     y_scale = phase_areas[ky] / max_pe_area if max_pe_area > 0.0 else 0.0
                     gy_pre = pp.scale_grad(gy_template, y_scale)
                     gy_reph = pp.scale_grad(gy_template, -y_scale)
-                    gz_pre_combined, gz_post_combined = gc.combined_z_gradients(
+                    gz_pre_combined, gz_post_combined = encoding.combined_z_gradients(
                         z_scale, gz_pe_template, gz_reph, gz_spoil, opts
                     )
 
-                    rf_curr = gc.copy_event(timing["rf"])
+                    rf_curr = system.copy_event(timing["rf"])
                     rf_curr.phase_offset = np.deg2rad(rf_phase_deg)
 
                     label_lin = pp.make_label(type="SET", label="LIN", value=ky)
@@ -268,7 +255,7 @@ class Mprage3DPulseqSequence(PulseqSequence):
                     if te_delay is not None:
                         seq.add_block(te_delay)
 
-                    gc.add_echo_train_blocks(
+                    readout.add_echo_train_blocks(
                         seq, echo, NUM_ECHOES, FLYBACK, rf_curr.phase_offset, emit_labels=False
                     )
 
@@ -277,7 +264,7 @@ class Mprage3DPulseqSequence(PulseqSequence):
                         seq.add_block(tr_delay)
 
                     rf_phase_deg = (rf_phase_deg + rf_phase_inc_deg) % 360.0
-                    rf_phase_inc_deg = (rf_phase_inc_deg + gc.RF_SPOILING_INC_DEG) % 360.0
+                    rf_phase_inc_deg = (rf_phase_inc_deg + excitation.RF_SPOILING_INC_DEG) % 360.0
 
                 if trecovery_delay is not None:
                     seq.add_block(trecovery_delay)
@@ -297,7 +284,7 @@ class Mprage3DPulseqSequence(PulseqSequence):
         seq.set_definition("BandwidthHzPerPx", cfg.bandwidth_hz_px)
         seq.set_definition("Ry", cfg.ry)
         seq.set_definition("Rz", cfg.rz)
-        seq.set_definition("RfSpoilingIncDeg", gc.RF_SPOILING_INC_DEG)
+        seq.set_definition("RfSpoilingIncDeg", excitation.RF_SPOILING_INC_DEG)
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("Ny", cfg.ny_pe)
         seq.set_definition("NySampled", len(sampled_pe))
@@ -315,33 +302,33 @@ class _Config:
 
 def _read_protocol(prot: dict) -> _Config:
     cfg = _Config()
-    cfg.te_s = gc.param_float(prot, UIParam.TE) * 1e-3
-    cfg.tr_s = gc.param_float(prot, UIParam.TR) * 1e-3
-    cfg.flip_deg = gc.param_float(prot, UIParam.FLIP)
-    cfg.fov_ro_m = gc.param_float(prot, UIParam.FOV) * 1e-3
-    cfg.fov_pe_m = gc.phase_fov_mm_from_protocol(prot) * 1e-3
-    cfg.slab_thickness_m = gc.param_float(prot, UIParam.SLICE_THICKNESS) * 1e-3
-    cfg.slice_spacing_m = gc.param_float(prot, UIParam.SLICE_SPACING) * 1e-3
-    cfg.nx_ro = gc.param_int(prot, UIParam.NX)
-    cfg.ny_pe = gc.param_int(prot, UIParam.NY)
-    cfg.npar = gc.param_int(prot, UIParam.NSLICES)
-    cfg.bandwidth_hz_px = gc.param_float_optional(prot, UIParam.BANDWIDTH, gc.DEFAULT_BANDWIDTH_HZ_PX)
-    cfg.ry = max(1, int(round(gc.param_float_optional(prot, UIParam.RY, 1.0))))
-    cfg.rz = max(1, int(round(gc.param_float_optional(prot, UIParam.RZ, 1.0))))
-    cfg.ro_axis, cfg.pe_axis = gc.resolve_readout_phase_axes(prot)
-    cfg.etl = gc.param_int_optional(prot, UIParam.ETL, cfg.ny_pe)
-    cfg.ti_s = gc.user_float(prot, USER_SLOT_TI, 900.0) * 1e-3
-    cfg.trecovery_s = gc.param_float_optional(prot, UIParam.TRECOVERY, 1200.0) * 1e-3
-    cfg.inv_mode = "adiabatic" if gc.user_float(prot, USER_SLOT_INV_MODE, 1.0) >= 0.5 else "hard"
+    cfg.te_s = params.param_float(prot, UIParam.TE) * 1e-3
+    cfg.tr_s = params.param_float(prot, UIParam.TR) * 1e-3
+    cfg.flip_deg = params.param_float(prot, UIParam.FLIP)
+    cfg.fov_ro_m = params.param_float(prot, UIParam.FOV) * 1e-3
+    cfg.fov_pe_m = params.phase_fov_mm_from_protocol(prot) * 1e-3
+    cfg.slab_thickness_m = params.param_float(prot, UIParam.SLICE_THICKNESS) * 1e-3
+    cfg.slice_spacing_m = params.param_float(prot, UIParam.SLICE_SPACING) * 1e-3
+    cfg.nx_ro = params.param_int(prot, UIParam.NX)
+    cfg.ny_pe = params.param_int(prot, UIParam.NY)
+    cfg.npar = params.param_int(prot, UIParam.NSLICES)
+    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, system.DEFAULT_BANDWIDTH_HZ_PX)
+    cfg.ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
+    cfg.rz = max(1, int(round(params.param_float_optional(prot, UIParam.RZ, 1.0))))
+    cfg.ro_axis, cfg.pe_axis = params.resolve_readout_phase_axes(prot)
+    cfg.etl = params.param_int_optional(prot, UIParam.ETL, cfg.ny_pe)
+    cfg.ti_s = params.user_float(prot, USER_SLOT_TI, 900.0) * 1e-3
+    cfg.trecovery_s = params.param_float_optional(prot, UIParam.TRECOVERY, 1200.0) * 1e-3
+    cfg.inv_mode = "adiabatic" if params.user_float(prot, USER_SLOT_INV_MODE, 1.0) >= 0.5 else "hard"
     return cfg
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    gc.apply_system_derates(opts)
+    system.apply_system_derates(opts)
 
-    rf, gz, gz_reph = gc.build_rf(opts, cfg.flip_deg, cfg.slab_thickness_m)
+    rf, gz, gz_reph = excitation.slice_selective(opts, cfg.flip_deg, cfg.slab_thickness_m)
 
-    echo = gc.compute_readout_and_echo_train(
+    echo = readout.compute_readout_and_echo_train(
         opts=opts,
         ro_axis=cfg.ro_axis,
         nx_ro=cfg.nx_ro,
@@ -356,13 +343,13 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     if echo is None:
         return None
 
-    gz_spoil = pp.make_trapezoid(channel="z", area=gc.SPOIL_FACTOR_Z / cfg.slab_thickness_m, system=opts)
+    gz_spoil = pp.make_trapezoid(channel="z", area=encoding.SPOIL_FACTOR_Z / cfg.slab_thickness_m, system=opts)
     max_pe_area = 0.5 * cfg.ny_pe * (1.0 / cfg.fov_pe_m)
     gy_template = pp.make_trapezoid(channel=cfg.pe_axis, area=max_pe_area, system=opts)
 
-    _, max_par_area = gc.partition_geometry(cfg.npar, cfg.slice_spacing_m)
+    _, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
     gz_pe_template = pp.make_trapezoid(channel="z", area=max_par_area, system=opts) if max_par_area > 0.0 else None
-    gz_pre_worst, gz_post_worst = gc.z_worst_case_trapezoids(gz_reph, gz_spoil, max_par_area, opts)
+    gz_pre_worst, gz_post_worst = encoding.z_worst_case_trapezoids(gz_reph, gz_spoil, max_par_area, opts)
 
     d_rf = pp.calc_duration(rf, gz)
     d_pre = pp.calc_duration(echo["gx_pre"], gy_template, gz_pre_worst)
@@ -383,16 +370,17 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     if tr_delay_s < 0.0:
         tr_delay_s = 0.0
 
-    rf_inv = pc.build_inversion_pulse(opts, cfg.inv_mode)
     voxel_size_m = cfg.fov_pe_m / cfg.ny_pe
-    inv_spoiler = pc.build_inversion_spoiler(opts, voxel_size_m)
-    spoiler_duration_s = pp.calc_duration(*inv_spoiler)
+    inv_module = preparations.inversion(opts, cfg.inv_mode, voxel_size_m)
+    rf_inv = inv_module.rf
+    inv_spoiler = inv_module.spoiler
+    spoiler_duration_s = inv_module.spoiler_duration_s
 
     # Worst-case (largest) segment gates the strict TI feasibility check —
     # every segment except possibly the last is exactly ETL lines long.
     worst_segment_len = max(1, min(cfg.etl, cfg.ny_pe))
     worst_segment_duration_s = worst_segment_len * cfg.tr_s
-    ti_delay_s = pc.ti_delay_seconds(cfg.ti_s, rf_inv, spoiler_duration_s, worst_segment_duration_s, strict=strict)
+    ti_delay_s = preparations.ti_delay_seconds(cfg.ti_s, rf_inv, spoiler_duration_s, worst_segment_duration_s, strict=strict)
     if ti_delay_s is None:
         return None
 
@@ -437,98 +425,34 @@ def makeSeq(opts, protocol, output_path):
     return PLUGIN.make_sequence(opts, protocol, output_path)
 
 
-def _build_cli_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Generate a 3D inversion-prepared (MPRAGE) .seq offline.")
-    parser.add_argument("-o", "--output", default="mprage_3d.seq", help="Output .seq file path")
-    parser.add_argument("--te-ms", type=float)
-    parser.add_argument("--tr-ms", type=float)
-    parser.add_argument("--ti-ms", type=float)
-    parser.add_argument("--trecovery-ms", type=float)
-    parser.add_argument("--etl", type=int)
-    parser.add_argument("--inversion-mode", choices=["hard", "adiabatic"])
-    parser.add_argument("--flip-deg", type=float)
-    parser.add_argument("--fov-mm", type=float)
-    parser.add_argument("--phase-fov-mm", type=float)
-    parser.add_argument("--slab-thickness-mm", type=float, dest="slice_thickness_mm")
-    parser.add_argument("--partition-spacing-mm", type=float, dest="slice_spacing_mm")
-    parser.add_argument("--nx", type=int)
-    parser.add_argument("--ny", type=int)
-    parser.add_argument("--npartitions", type=int, dest="nslices")
-    parser.add_argument("--bandwidth-hz-px", type=float)
-    parser.add_argument("--ry", type=float)
-    parser.add_argument("--rz", type=float)
-    parser.add_argument("--swap-phase-freq", action="store_true")
-    parser.add_argument("--max-grad-mtm", type=float)
-    parser.add_argument("--max-slew-tm-s", type=float)
-    parser.add_argument("--validate-only", action="store_true")
-    return parser
-
-
-def _cli(argv: list[str]) -> int:
-    parser = _build_cli_parser()
-    args = parser.parse_args(argv)
-
-    opts_kwargs = {}
-    if args.max_grad_mtm is not None:
-        opts_kwargs["max_grad"] = args.max_grad_mtm
-        opts_kwargs["grad_unit"] = "mT/m"
-    if args.max_slew_tm_s is not None:
-        opts_kwargs["max_slew"] = args.max_slew_tm_s
-        opts_kwargs["slew_unit"] = "T/m/s"
-    opts = pp.Opts(**opts_kwargs)
-
-    protocol = PLUGIN.get_default_protocol(opts)
-
-    if args.te_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.TE, args.te_ms)
-    if args.tr_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.TR, args.tr_ms)
-    if args.ti_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.user_value(USER_SLOT_TI), args.ti_ms)
-    if args.trecovery_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.TRECOVERY, args.trecovery_ms)
-    if args.etl is not None:
-        gc.set_protocol_value(protocol, UIParam.ETL, args.etl)
-    if args.inversion_mode is not None:
-        gc.set_protocol_value(protocol, UIParam.user_value(USER_SLOT_INV_MODE), 1.0 if args.inversion_mode == "adiabatic" else 0.0)
-    if args.flip_deg is not None:
-        gc.set_protocol_value(protocol, UIParam.FLIP, args.flip_deg)
-    if args.fov_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.FOV, args.fov_mm)
-    if args.phase_fov_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.PHASE_FOV, args.phase_fov_mm)
-    if args.slice_thickness_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.SLICE_THICKNESS, args.slice_thickness_mm)
-    if args.slice_spacing_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.SLICE_SPACING, args.slice_spacing_mm)
-    if args.nx is not None:
-        gc.set_protocol_value(protocol, UIParam.NX, args.nx)
-    if args.ny is not None:
-        gc.set_protocol_value(protocol, UIParam.NY, args.ny)
-    if args.nslices is not None:
-        gc.set_protocol_value(protocol, UIParam.NSLICES, args.nslices)
-    if args.bandwidth_hz_px is not None:
-        gc.set_protocol_value(protocol, UIParam.BANDWIDTH, args.bandwidth_hz_px)
-    if args.ry is not None:
-        gc.set_protocol_value(protocol, UIParam.RY, args.ry)
-    if args.rz is not None:
-        gc.set_protocol_value(protocol, UIParam.RZ, args.rz)
-    if args.swap_phase_freq:
-        gc.set_protocol_value(protocol, UIParam.SWAP_PHASE_FREQ, True)
-
-    result = PLUGIN.validate_protocol(opts, protocol)
-    if not result.get("valid", False):
-        print(f"ERROR: {result.get('info', 'Protocol invalid')}", file=sys.stderr)
-        return 2
-
-    print(result.get("info", "Protocol valid"))
-    if args.validate_only:
-        return 0
-
-    PLUGIN.make_sequence(opts, protocol, args.output)
-    print(f"Wrote sequence: {args.output}")
-    return 0
-
+_ARG_MAP = [
+    ('--te-ms', UIParam.TE, float, ""),
+    ('--tr-ms', UIParam.TR, float, ""),
+    ('--ti-ms', UIParam.user_value(USER_SLOT_TI), float, ""),
+    ('--trecovery-ms', UIParam.TRECOVERY, float, ""),
+    ('--etl', UIParam.ETL, int, ""),
+    ('--inversion-mode', UIParam.user_value(USER_SLOT_INV_MODE), {'hard': 0.0, 'adiabatic': 1.0}, ""),
+    ('--flip-deg', UIParam.FLIP, float, ""),
+    ('--fov-mm', UIParam.FOV, float, ""),
+    ('--phase-fov-mm', UIParam.PHASE_FOV, float, ""),
+    ('--slab-thickness-mm', UIParam.SLICE_THICKNESS, float, ""),
+    ('--partition-spacing-mm', UIParam.SLICE_SPACING, float, ""),
+    ('--nx', UIParam.NX, int, ""),
+    ('--ny', UIParam.NY, int, ""),
+    ('--npartitions', UIParam.NSLICES, int, ""),
+    ('--bandwidth-hz-px', UIParam.BANDWIDTH, float, ""),
+    ('--ry', UIParam.RY, float, ""),
+    ('--rz', UIParam.RZ, float, ""),
+    ('--swap-phase-freq', UIParam.SWAP_PHASE_FREQ, ("const", True), ""),
+]
 
 if __name__ == "__main__":
-    raise SystemExit(_cli(sys.argv[1:]))
+    raise SystemExit(
+        cli.run_cli(
+            PLUGIN,
+            sys.argv[1:],
+            arg_map=_ARG_MAP,
+            description='Generate a 3D inversion-prepared (MPRAGE) .seq offline.',
+            default_output='mprage_3d.seq',
+        )
+    )

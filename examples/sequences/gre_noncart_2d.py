@@ -39,10 +39,7 @@ file to the ``sequences/src/`` directory and creating a numbered alias::
 
 from __future__ import annotations
 
-import argparse
-import importlib.util
 import sys
-from pathlib import Path
 
 import numpy as np
 import pypulseq as pp
@@ -64,19 +61,9 @@ from pulserver import (
 )
 from pulserver import arbgrad
 from pulserver.core import SequenceType
+from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
 
 
-def _load_sibling_module(name: str):
-    """Load a same-directory helper module by file path (see gre_multiecho_2d.py)."""
-    module_path = Path(__file__).resolve().parent / f"{name}.py"
-    spec = importlib.util.spec_from_file_location(name, module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-gc = _load_sibling_module("_gre_common")
-nc = _load_sibling_module("_noncart_common")
 
 USER_SLOT_TRAJECTORY = 0
 USER_SLOT_ORDER_MODE = 1
@@ -199,10 +186,10 @@ class GreNoncart2DPulseqSequence(PulseqSequence):
             for sl in range(cfg.nslices):
                 slice_offset_m = (sl - 0.5 * (cfg.nslices - 1)) * slice_step_m
 
-                rf_curr = gc.copy_event(timing["rf"])
+                rf_curr = system.copy_event(timing["rf"])
                 rf_curr.freq_offset = gz.amplitude * slice_offset_m
                 rf_curr.phase_offset = np.deg2rad(rf_phase_deg)
-                adc_curr = gc.copy_event(adc)
+                adc_curr = system.copy_event(adc)
                 adc_curr.phase_offset = rf_curr.phase_offset
 
                 label_slc = pp.make_label(type="SET", label="SLC", value=sl)
@@ -215,7 +202,7 @@ class GreNoncart2DPulseqSequence(PulseqSequence):
                 seq.add_block(gz_spoil)
 
                 rf_phase_deg = (rf_phase_deg + rf_phase_inc_deg) % 360.0
-                rf_phase_inc_deg = (rf_phase_inc_deg + gc.RF_SPOILING_INC_DEG) % 360.0
+                rf_phase_inc_deg = (rf_phase_inc_deg + excitation.RF_SPOILING_INC_DEG) % 360.0
 
             if tr_delay is not None:
                 seq.add_block(tr_delay)
@@ -228,7 +215,7 @@ class GreNoncart2DPulseqSequence(PulseqSequence):
         seq.set_definition("ImagingMode", "2d")
         seq.set_definition("Trajectory", cfg.trajectory)
         seq.set_definition("ShotOrder", cfg.order_mode)
-        seq.set_definition("RfSpoilingIncDeg", gc.RF_SPOILING_INC_DEG)
+        seq.set_definition("RfSpoilingIncDeg", excitation.RF_SPOILING_INC_DEG)
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("NumShots", cfg.num_shots)
         seq.set_definition("NumSlices", cfg.nslices)
@@ -244,32 +231,32 @@ class _Config:
 
 def _read_protocol(prot: dict) -> _Config:
     cfg = _Config()
-    cfg.te_s = gc.param_float(prot, UIParam.TE) * 1e-3
-    cfg.tr_s = gc.param_float(prot, UIParam.TR) * 1e-3
-    cfg.flip_deg = gc.param_float(prot, UIParam.FLIP)
-    cfg.fov_m = gc.param_float(prot, UIParam.FOV) * 1e-3
-    cfg.slice_thickness_m = gc.param_float(prot, UIParam.SLICE_THICKNESS) * 1e-3
-    cfg.slice_spacing_m = gc.param_float(prot, UIParam.SLICE_SPACING) * 1e-3
-    cfg.nx_ro = gc.param_int(prot, UIParam.NX)
-    cfg.nslices = gc.param_int(prot, UIParam.NSLICES)
-    cfg.num_shots = gc.param_int_optional(prot, UIParam.NUM_SHOTS, 32)
-    cfg.trajectory = nc.trajectory_name(gc.user_float(prot, USER_SLOT_TRAJECTORY, 0.0))
-    cfg.order_mode = nc.order_mode_name(gc.user_float(prot, USER_SLOT_ORDER_MODE, 1.0))
+    cfg.te_s = params.param_float(prot, UIParam.TE) * 1e-3
+    cfg.tr_s = params.param_float(prot, UIParam.TR) * 1e-3
+    cfg.flip_deg = params.param_float(prot, UIParam.FLIP)
+    cfg.fov_m = params.param_float(prot, UIParam.FOV) * 1e-3
+    cfg.slice_thickness_m = params.param_float(prot, UIParam.SLICE_THICKNESS) * 1e-3
+    cfg.slice_spacing_m = params.param_float(prot, UIParam.SLICE_SPACING) * 1e-3
+    cfg.nx_ro = params.param_int(prot, UIParam.NX)
+    cfg.nslices = params.param_int(prot, UIParam.NSLICES)
+    cfg.num_shots = params.param_int_optional(prot, UIParam.NUM_SHOTS, 32)
+    cfg.trajectory = readout.trajectory_name(params.user_float(prot, USER_SLOT_TRAJECTORY, 0.0))
+    cfg.order_mode = readout.order_mode_name(params.user_float(prot, USER_SLOT_ORDER_MODE, 1.0))
     return cfg
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | None = None):
     if n_inner is None:
         n_inner = cfg.nslices
-    gc.apply_system_derates(opts)
+    system.apply_system_derates(opts)
 
-    rf, gz, gz_reph = gc.build_rf(opts, cfg.flip_deg, cfg.slice_thickness_m)
+    rf, gz, gz_reph = excitation.slice_selective(opts, cfg.flip_deg, cfg.slice_thickness_m)
 
-    _, grad_si_xy, _ = nc.build_base_waveform(opts, cfg.trajectory, cfg.fov_m, cfg.nx_ro)
-    gx_ro, gy_ro = nc.build_readout_gradients(opts, grad_si_xy)
-    adc = nc.build_readout_adc(opts, grad_si_xy.shape[0])
+    _, grad_si_xy, _ = readout.build_base_waveform(opts, cfg.trajectory, cfg.fov_m, cfg.nx_ro)
+    gx_ro, gy_ro = readout.build_readout_gradients(opts, grad_si_xy)
+    adc = readout.build_readout_adc(opts, grad_si_xy.shape[0])
 
-    gz_spoil = pp.make_trapezoid(channel="z", area=gc.SPOIL_FACTOR_Z / cfg.slice_thickness_m, system=opts)
+    gz_spoil = pp.make_trapezoid(channel="z", area=encoding.SPOIL_FACTOR_Z / cfg.slice_thickness_m, system=opts)
 
     d_rf = pp.calc_duration(rf, gz)
     d_pre = pp.calc_duration(gz_reph)
@@ -326,77 +313,27 @@ def makeSeq(opts, protocol, output_path):
     return PLUGIN.make_sequence(opts, protocol, output_path)
 
 
-def _build_cli_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Generate a 2D spiral/rosette non-Cartesian GRE .seq offline.")
-    parser.add_argument("-o", "--output", default="gre_noncart_2d.seq", help="Output .seq file path")
-    parser.add_argument("--te-ms", type=float)
-    parser.add_argument("--tr-ms", type=float)
-    parser.add_argument("--flip-deg", type=float)
-    parser.add_argument("--fov-mm", type=float)
-    parser.add_argument("--slice-thickness-mm", type=float)
-    parser.add_argument("--slice-spacing-mm", type=float)
-    parser.add_argument("--nx", type=int)
-    parser.add_argument("--nslices", type=int)
-    parser.add_argument("--num-shots", type=int)
-    parser.add_argument("--trajectory", choices=["spiral", "rosette"])
-    parser.add_argument("--order-mode", choices=["uniform", "golden"])
-    parser.add_argument("--max-grad-mtm", type=float)
-    parser.add_argument("--max-slew-tm-s", type=float)
-    parser.add_argument("--validate-only", action="store_true")
-    return parser
-
-
-def _cli(argv: list[str]) -> int:
-    parser = _build_cli_parser()
-    args = parser.parse_args(argv)
-
-    opts_kwargs = {}
-    if args.max_grad_mtm is not None:
-        opts_kwargs["max_grad"] = args.max_grad_mtm
-        opts_kwargs["grad_unit"] = "mT/m"
-    if args.max_slew_tm_s is not None:
-        opts_kwargs["max_slew"] = args.max_slew_tm_s
-        opts_kwargs["slew_unit"] = "T/m/s"
-    opts = pp.Opts(**opts_kwargs)
-
-    protocol = PLUGIN.get_default_protocol(opts)
-
-    if args.te_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.TE, args.te_ms)
-    if args.tr_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.TR, args.tr_ms)
-    if args.flip_deg is not None:
-        gc.set_protocol_value(protocol, UIParam.FLIP, args.flip_deg)
-    if args.fov_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.FOV, args.fov_mm)
-    if args.slice_thickness_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.SLICE_THICKNESS, args.slice_thickness_mm)
-    if args.slice_spacing_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.SLICE_SPACING, args.slice_spacing_mm)
-    if args.nx is not None:
-        gc.set_protocol_value(protocol, UIParam.NX, args.nx)
-    if args.nslices is not None:
-        gc.set_protocol_value(protocol, UIParam.NSLICES, args.nslices)
-    if args.num_shots is not None:
-        gc.set_protocol_value(protocol, UIParam.NUM_SHOTS, args.num_shots)
-    if args.trajectory is not None:
-        gc.set_protocol_value(protocol, UIParam.user_value(USER_SLOT_TRAJECTORY), 1.0 if args.trajectory == "rosette" else 0.0)
-    if args.order_mode is not None:
-        gc.set_protocol_value(protocol, UIParam.user_value(USER_SLOT_ORDER_MODE), 1.0 if args.order_mode == "golden" else 0.0)
-
-    result = PLUGIN.validate_protocol(opts, protocol)
-    if not result.get("valid", False):
-        print(f"ERROR: {result.get('info', 'Protocol invalid')}", file=sys.stderr)
-        return 2
-
-    print(result.get("info", "Protocol valid"))
-    if args.validate_only:
-        return 0
-
-    PLUGIN.make_sequence(opts, protocol, args.output)
-    print(f"Wrote sequence: {args.output}")
-    return 0
-
+_ARG_MAP = [
+    ('--te-ms', UIParam.TE, float, ""),
+    ('--tr-ms', UIParam.TR, float, ""),
+    ('--flip-deg', UIParam.FLIP, float, ""),
+    ('--fov-mm', UIParam.FOV, float, ""),
+    ('--slice-thickness-mm', UIParam.SLICE_THICKNESS, float, ""),
+    ('--slice-spacing-mm', UIParam.SLICE_SPACING, float, ""),
+    ('--nx', UIParam.NX, int, ""),
+    ('--nslices', UIParam.NSLICES, int, ""),
+    ('--num-shots', UIParam.NUM_SHOTS, int, ""),
+    ('--trajectory', UIParam.user_value(USER_SLOT_TRAJECTORY), {'spiral': 0.0, 'rosette': 1.0}, ""),
+    ('--order-mode', UIParam.user_value(USER_SLOT_ORDER_MODE), {'uniform': 0.0, 'golden': 1.0}, ""),
+]
 
 if __name__ == "__main__":
-    raise SystemExit(_cli(sys.argv[1:]))
+    raise SystemExit(
+        cli.run_cli(
+            PLUGIN,
+            sys.argv[1:],
+            arg_map=_ARG_MAP,
+            description='Generate a 2D spiral/rosette non-Cartesian GRE .seq offline.',
+            default_output='gre_noncart_2d.seq',
+        )
+    )

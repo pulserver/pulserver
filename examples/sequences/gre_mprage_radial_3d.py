@@ -4,7 +4,7 @@ This module implements the three mandatory module-level entry points
 required by the bridge dispatcher (see ``mprage_3d.py`` for the Cartesian
 inversion-prepared GRE this extends, ``gre_radial_3d.py`` for the
 non-prepared stack-of-stars sibling, and ``_gre_common.py`` /
-``_prep_common.py`` / ``_t2prep_common.py`` / ``_mt_common.py`` for the
+``pulserver.design.preparations`` for the
 shared building blocks):
 
 - ``get_default_protocol(opts)``  — return the initial CV/protocol dictionary.
@@ -24,13 +24,13 @@ loop (accelerated via ``Rz``); spokes are the inner, per-segment loop.
 magnetization-prep module:
 
 - ``inversion``: non-selective hard/adiabatic 180 + spoiler + TI delay
-  (``_prep_common.py``, same as ``mprage_3d.py``).
+  (``pulserver.design.preparations``, same as ``mprage_3d.py``).
 - ``t2_prep``: composite 90-tau/2-180-tau/2-(-90) + spoiler
-  (``_t2prep_common.py``) — ``TE_prep`` sets the T2 weighting directly, so
+  (``pulserver.design.preparations``) — ``TE_prep`` sets the T2 weighting directly, so
   (unlike TI) there is no extra post-module centering delay; the segment
   starts right after the spoiler.
 
-An independent, *additive* MT saturation toggle (``_mt_common.py``) can be
+An independent, *additive* MT saturation toggle (``preparations.mt_saturation``) can be
 stacked on top of either prep — real MT-prepared sequences apply the MT
 pulse every TR (steady-state effect), not once per segment, so it is not a
 third ``PreparationType`` option (which would also violate the closed-enum
@@ -56,10 +56,7 @@ file to the ``sequences/src/`` directory and creating a numbered alias::
 
 from __future__ import annotations
 
-import argparse
-import importlib.util
 import sys
-from pathlib import Path
 
 import numpy as np
 import pypulseq as pp
@@ -83,21 +80,9 @@ from pulserver import (
 )
 from pulserver import arbgrad
 from pulserver.core import PreparationType, SequenceType
+from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
 
 
-def _load_sibling_module(name: str):
-    """Load a same-directory helper module by file path (see gre_multiecho_2d.py)."""
-    module_path = Path(__file__).resolve().parent / f"{name}.py"
-    spec = importlib.util.spec_from_file_location(name, module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-gc = _load_sibling_module("_gre_common")
-pc = _load_sibling_module("_prep_common")
-t2p = _load_sibling_module("_t2prep_common")
-mtc = _load_sibling_module("_mt_common")
 
 NUM_ECHOES = 1
 FLYBACK = True
@@ -163,7 +148,7 @@ class GreMprageRadial3DPulseqSequence(PulseqSequence):
             ),
             UIParam.RZ: TypeinFloatParam(value=1.0, min=1.0, max=8.0, incr=1.0, unit="", validate=Validate.NONE),
             UIParam.BANDWIDTH: TypeinFloatParam(
-                value=gc.DEFAULT_BANDWIDTH_HZ_PX, min=5_000.0, max=500_000.0, incr=100.0,
+                value=system.DEFAULT_BANDWIDTH_HZ_PX, min=5_000.0, max=500_000.0, incr=100.0,
                 unit="Hz/px", validate=Validate.NONE,
             ),
             UIParam.SEQUENCE_TYPE: make_enum_param(UIParam.SEQUENCE_TYPE, SequenceType.GRADIENT_ECHO),
@@ -228,8 +213,8 @@ class GreMprageRadial3DPulseqSequence(PulseqSequence):
                 "info": "TE, TR, TI, or TE_prep infeasible for the requested gradients/ETL",
             }
 
-        sampled_par = gc.sampled_lines(cfg.npar, cfg.rz, 0)
-        n_segments = len(pc.chunk_indices(list(range(cfg.num_shots)), cfg.etl))
+        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
+        n_segments = len(sampling.chunk_indices(list(range(cfg.num_shots)), cfg.etl))
         shot_s = timing["shot_s"]
         duration_s = shot_s * n_segments * len(sampled_par)
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -249,15 +234,15 @@ class GreMprageRadial3DPulseqSequence(PulseqSequence):
 
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
-        trecovery_delay = pp.make_delay(pc.round_to_raster(cfg.trecovery_s)) if cfg.trecovery_s > 0.0 else None
+        trecovery_delay = pp.make_delay(system.round_to_raster(cfg.trecovery_s)) if cfg.trecovery_s > 0.0 else None
 
         seq = ps.Sequence(opts)
 
         angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
-        segments = pc.chunk_indices(list(range(cfg.num_shots)), cfg.etl)
+        segments = sampling.chunk_indices(list(range(cfg.num_shots)), cfg.etl)
 
-        par_areas, max_par_area = gc.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-        sampled_par = gc.sampled_lines(cfg.npar, cfg.rz, 0)
+        par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
+        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
 
         for par in sampled_par:
             z_scale = par_areas[par] / max_par_area if max_par_area > 0.0 else 0.0
@@ -276,17 +261,17 @@ class GreMprageRadial3DPulseqSequence(PulseqSequence):
                     rotation = ps.make_rotation(Rotation.from_euler("z", angle))
                     label_lin = pp.make_label(type="SET", label="LIN", value=shot)
 
-                    gz_pre_combined, gz_post_combined = gc.combined_z_gradients(
+                    gz_pre_combined, gz_post_combined = encoding.combined_z_gradients(
                         z_scale, gz_pe_template, gz_reph, gz_spoil, opts
                     )
 
                     if cfg.mt_enable:
-                        seq.add_block(gc.copy_event(timing["rf_mt"]))
+                        seq.add_block(system.copy_event(timing["rf_mt"]))
                         seq.add_block(*timing["mt_spoiler"])
 
-                    rf_curr = gc.copy_event(timing["rf"])
+                    rf_curr = system.copy_event(timing["rf"])
                     rf_curr.phase_offset = np.deg2rad(rf_phase_deg)
-                    adc_curr = gc.copy_event(echo["adc"])
+                    adc_curr = system.copy_event(echo["adc"])
                     adc_curr.phase_offset = rf_curr.phase_offset
 
                     seq.add_block(rf_curr, timing["gz"], label_slc, label_par, label_lin)
@@ -296,7 +281,7 @@ class GreMprageRadial3DPulseqSequence(PulseqSequence):
 
                     # NUM_ECHOES is pinned to 1 (single-echo GRE view), so the
                     # echo train is just one rotated readout block — emitted
-                    # directly (not via gc.add_echo_train_blocks, which has
+                    # directly (not via readout.add_echo_train_blocks, which has
                     # no extension-passing hook for a non-Cartesian rotation).
                     seq.add_block(echo["gx_echo"], adc_curr, rotation)
 
@@ -305,7 +290,7 @@ class GreMprageRadial3DPulseqSequence(PulseqSequence):
                         seq.add_block(tr_delay)
 
                     rf_phase_deg = (rf_phase_deg + rf_phase_inc_deg) % 360.0
-                    rf_phase_inc_deg = (rf_phase_inc_deg + gc.RF_SPOILING_INC_DEG) % 360.0
+                    rf_phase_inc_deg = (rf_phase_inc_deg + excitation.RF_SPOILING_INC_DEG) % 360.0
 
                 if trecovery_delay is not None:
                     seq.add_block(trecovery_delay)
@@ -326,7 +311,7 @@ class GreMprageRadial3DPulseqSequence(PulseqSequence):
         seq.set_definition("SpokeOrder", cfg.order_mode)
         seq.set_definition("BandwidthHzPerPx", cfg.bandwidth_hz_px)
         seq.set_definition("Rz", cfg.rz)
-        seq.set_definition("RfSpoilingIncDeg", gc.RF_SPOILING_INC_DEG)
+        seq.set_definition("RfSpoilingIncDeg", excitation.RF_SPOILING_INC_DEG)
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("NumShots", cfg.num_shots)
         seq.set_definition("NumPartitions", cfg.npar)
@@ -342,23 +327,21 @@ def _emit_prep_module(seq, timing: dict, cfg: "_Config", segment_duration_s: flo
         rf_inv = timing["rf_inv"]
         spoiler = timing["prep_spoiler"]
         spoiler_duration_s = timing["prep_spoiler_duration_s"]
-        ti_delay_s = pc.ti_delay_seconds(cfg.ti_s, rf_inv, spoiler_duration_s, segment_duration_s, strict=False)
-        seq.add_block(gc.copy_event(rf_inv))
+        ti_delay_s = preparations.ti_delay_seconds(cfg.ti_s, rf_inv, spoiler_duration_s, segment_duration_s, strict=False)
+        seq.add_block(system.copy_event(rf_inv))
         seq.add_block(*spoiler)
         if ti_delay_s > 0.0:
             seq.add_block(pp.make_delay(ti_delay_s))
     else:
-        rf90_down, rf180, rf90_up = timing["t2prep_pulses"]
-        spoiler = timing["prep_spoiler"]
-        delay1_s, delay2_s = t2p.t2prep_delays_seconds(cfg.te_prep_s, rf90_down, rf180, rf90_up, strict=False)
-        seq.add_block(gc.copy_event(rf90_down))
-        if delay1_s > 0.0:
-            seq.add_block(pp.make_delay(delay1_s))
-        seq.add_block(gc.copy_event(rf180))
-        if delay2_s > 0.0:
-            seq.add_block(pp.make_delay(delay2_s))
-        seq.add_block(gc.copy_event(rf90_up))
-        seq.add_block(*spoiler)
+        t2prep = timing["t2prep"]
+        seq.add_block(system.copy_event(t2prep.rf90_down))
+        if t2prep.delay1_s > 0.0:
+            seq.add_block(pp.make_delay(t2prep.delay1_s))
+        seq.add_block(system.copy_event(t2prep.rf180))
+        if t2prep.delay2_s > 0.0:
+            seq.add_block(pp.make_delay(t2prep.delay2_s))
+        seq.add_block(system.copy_event(t2prep.rf90_up))
+        seq.add_block(*t2prep.spoiler)
 
 
 class _Config:
@@ -371,36 +354,36 @@ class _Config:
 
 def _read_protocol(prot: dict) -> _Config:
     cfg = _Config()
-    cfg.te_s = gc.param_float(prot, UIParam.TE) * 1e-3
-    cfg.tr_s = gc.param_float(prot, UIParam.TR) * 1e-3
-    cfg.flip_deg = gc.param_float(prot, UIParam.FLIP)
-    cfg.fov_m = gc.param_float(prot, UIParam.FOV) * 1e-3
-    cfg.slab_thickness_m = gc.param_float(prot, UIParam.SLICE_THICKNESS) * 1e-3
-    cfg.slice_spacing_m = gc.param_float(prot, UIParam.SLICE_SPACING) * 1e-3
-    cfg.nx_ro = gc.param_int(prot, UIParam.NX)
-    cfg.npar = gc.param_int(prot, UIParam.NSLICES)
-    cfg.bandwidth_hz_px = gc.param_float_optional(prot, UIParam.BANDWIDTH, gc.DEFAULT_BANDWIDTH_HZ_PX)
-    cfg.rz = max(1, int(round(gc.param_float_optional(prot, UIParam.RZ, 1.0))))
-    cfg.num_shots = gc.param_int_optional(prot, UIParam.NUM_SHOTS, 32)
-    cfg.order_mode = _order_mode_name(gc.user_float(prot, USER_SLOT_ORDER_MODE, 1.0))
-    cfg.etl = gc.param_int_optional(prot, UIParam.ETL, cfg.num_shots)
-    cfg.trecovery_s = gc.param_float_optional(prot, UIParam.TRECOVERY, 1200.0) * 1e-3
+    cfg.te_s = params.param_float(prot, UIParam.TE) * 1e-3
+    cfg.tr_s = params.param_float(prot, UIParam.TR) * 1e-3
+    cfg.flip_deg = params.param_float(prot, UIParam.FLIP)
+    cfg.fov_m = params.param_float(prot, UIParam.FOV) * 1e-3
+    cfg.slab_thickness_m = params.param_float(prot, UIParam.SLICE_THICKNESS) * 1e-3
+    cfg.slice_spacing_m = params.param_float(prot, UIParam.SLICE_SPACING) * 1e-3
+    cfg.nx_ro = params.param_int(prot, UIParam.NX)
+    cfg.npar = params.param_int(prot, UIParam.NSLICES)
+    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, system.DEFAULT_BANDWIDTH_HZ_PX)
+    cfg.rz = max(1, int(round(params.param_float_optional(prot, UIParam.RZ, 1.0))))
+    cfg.num_shots = params.param_int_optional(prot, UIParam.NUM_SHOTS, 32)
+    cfg.order_mode = _order_mode_name(params.user_float(prot, USER_SLOT_ORDER_MODE, 1.0))
+    cfg.etl = params.param_int_optional(prot, UIParam.ETL, cfg.num_shots)
+    cfg.trecovery_s = params.param_float_optional(prot, UIParam.TRECOVERY, 1200.0) * 1e-3
     prep_value = prot[str(UIParam.PREPARATION_TYPE)].value
     cfg.prep_type = PreparationType(prep_value)
-    cfg.ti_s = gc.user_float(prot, USER_SLOT_TI, 900.0) * 1e-3
-    cfg.inv_mode = "adiabatic" if gc.user_float(prot, USER_SLOT_INV_MODE, 1.0) >= 0.5 else "hard"
-    cfg.te_prep_s = gc.user_float(prot, USER_SLOT_TE_PREP, 50.0) * 1e-3
-    cfg.refocus_mode = "adiabatic" if gc.user_float(prot, USER_SLOT_REFOCUS_MODE, 0.0) >= 0.5 else "hard"
-    cfg.mt_enable = gc.user_float(prot, USER_SLOT_MT_ENABLE, 0.0) >= 0.5
+    cfg.ti_s = params.user_float(prot, USER_SLOT_TI, 900.0) * 1e-3
+    cfg.inv_mode = "adiabatic" if params.user_float(prot, USER_SLOT_INV_MODE, 1.0) >= 0.5 else "hard"
+    cfg.te_prep_s = params.user_float(prot, USER_SLOT_TE_PREP, 50.0) * 1e-3
+    cfg.refocus_mode = "adiabatic" if params.user_float(prot, USER_SLOT_REFOCUS_MODE, 0.0) >= 0.5 else "hard"
+    cfg.mt_enable = params.user_float(prot, USER_SLOT_MT_ENABLE, 0.0) >= 0.5
     return cfg
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    gc.apply_system_derates(opts)
+    system.apply_system_derates(opts)
 
-    rf, gz, gz_reph = gc.build_rf(opts, cfg.flip_deg, cfg.slab_thickness_m)
+    rf, gz, gz_reph = excitation.slice_selective(opts, cfg.flip_deg, cfg.slab_thickness_m)
 
-    echo = gc.compute_readout_and_echo_train(
+    echo = readout.compute_readout_and_echo_train(
         opts=opts,
         ro_axis=RO_AXIS,
         nx_ro=cfg.nx_ro,
@@ -415,10 +398,10 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     if echo is None:
         return None
 
-    gz_spoil = pp.make_trapezoid(channel="z", area=gc.SPOIL_FACTOR_Z / cfg.slab_thickness_m, system=opts)
-    _, max_par_area = gc.partition_geometry(cfg.npar, cfg.slice_spacing_m)
+    gz_spoil = pp.make_trapezoid(channel="z", area=encoding.SPOIL_FACTOR_Z / cfg.slab_thickness_m, system=opts)
+    _, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
     gz_pe_template = pp.make_trapezoid(channel="z", area=max_par_area, system=opts) if max_par_area > 0.0 else None
-    gz_pre_worst, gz_post_worst = gc.z_worst_case_trapezoids(gz_reph, gz_spoil, max_par_area, opts)
+    gz_pre_worst, gz_post_worst = encoding.z_worst_case_trapezoids(gz_reph, gz_spoil, max_par_area, opts)
 
     d_rf = pp.calc_duration(rf, gz)
     d_pre = pp.calc_duration(echo["gx_pre"], gz_pre_worst)
@@ -434,9 +417,10 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
 
     per_view_s = d_rf + d_pre + te_delay_s + echo["echo_train_span_s"] + d_post
     if cfg.mt_enable:
-        rf_mt = mtc.build_mt_pulse(opts)
-        mt_spoiler = mtc.build_mt_spoiler(opts, cfg.fov_m / cfg.nx_ro)
-        per_view_s += pp.calc_duration(rf_mt) + pp.calc_duration(*mt_spoiler)
+        mt_module = preparations.mt_saturation(opts, voxel_size_m=cfg.fov_m / cfg.nx_ro)
+        rf_mt = mt_module.rf
+        mt_spoiler = mt_module.spoiler
+        per_view_s += mt_module.duration_s
     else:
         rf_mt = None
         mt_spoiler = None
@@ -453,29 +437,24 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     worst_segment_duration_s = worst_segment_len * cfg.tr_s
 
     if cfg.prep_type == PreparationType.INVERSION:
-        rf_inv = pc.build_inversion_pulse(opts, cfg.inv_mode)
-        prep_spoiler = pc.build_inversion_spoiler(opts, voxel_size_m)
-        prep_spoiler_duration_s = pp.calc_duration(*prep_spoiler)
-        ti_delay_s = pc.ti_delay_seconds(
-            cfg.ti_s, rf_inv, prep_spoiler_duration_s, worst_segment_duration_s, strict=strict
-        )
+        inv_module = preparations.inversion(opts, cfg.inv_mode, voxel_size_m)
+        rf_inv = inv_module.rf
+        prep_spoiler = inv_module.spoiler
+        prep_spoiler_duration_s = inv_module.spoiler_duration_s
+        ti_delay_s = inv_module.ti_delay_s(cfg.ti_s, worst_segment_duration_s, strict)
         if ti_delay_s is None:
             return None
-        prep_duration_s = pp.calc_duration(rf_inv) + prep_spoiler_duration_s + ti_delay_s
-        t2prep_pulses = None
+        prep_duration_s = inv_module.rf_duration_s + prep_spoiler_duration_s + ti_delay_s
+        t2prep = None
     else:
-        t2prep_pulses = t2p.build_t2prep_pulses(opts, cfg.refocus_mode)
-        rf90_down, rf180, rf90_up = t2prep_pulses
-        delays = t2p.t2prep_delays_seconds(cfg.te_prep_s, rf90_down, rf180, rf90_up, strict=strict)
-        if delays is None:
-            return None
-        delay1_s, delay2_s = delays
-        prep_spoiler = t2p.build_t2prep_spoiler(opts, voxel_size_m)
-        prep_spoiler_duration_s = pp.calc_duration(*prep_spoiler)
-        prep_duration_s = (
-            pp.calc_duration(rf90_down) + delay1_s + pp.calc_duration(rf180) + delay2_s
-            + pp.calc_duration(rf90_up) + prep_spoiler_duration_s
+        t2prep = preparations.t2_prep(
+            opts, cfg.te_prep_s, refocus_mode=cfg.refocus_mode, voxel_size_m=voxel_size_m, strict=strict
         )
+        if t2prep is None:
+            return None
+        prep_spoiler = t2prep.spoiler
+        prep_spoiler_duration_s = pp.calc_duration(*t2prep.spoiler)
+        prep_duration_s = t2prep.duration_s
         rf_inv = None
 
     shot_s = prep_duration_s + worst_segment_duration_s + cfg.trecovery_s
@@ -491,7 +470,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
         "tr_delay_s": tr_delay_s,
         "min_block_s": min_block_s,
         "rf_inv": rf_inv,
-        "t2prep_pulses": t2prep_pulses,
+        "t2prep": t2prep,
         "prep_spoiler": prep_spoiler,
         "prep_spoiler_duration_s": prep_spoiler_duration_s,
         "rf_mt": rf_mt,
@@ -520,104 +499,36 @@ def makeSeq(opts, protocol, output_path):
     return PLUGIN.make_sequence(opts, protocol, output_path)
 
 
-def _build_cli_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Generate a 3D stack-of-stars prepared GRE .seq offline.")
-    parser.add_argument("-o", "--output", default="gre_mprage_radial_3d.seq", help="Output .seq file path")
-    parser.add_argument("--te-ms", type=float)
-    parser.add_argument("--tr-ms", type=float)
-    parser.add_argument("--trecovery-ms", type=float)
-    parser.add_argument("--etl", type=int)
-    parser.add_argument("--prep-type", choices=["inversion", "t2_prep"])
-    parser.add_argument("--ti-ms", type=float)
-    parser.add_argument("--inversion-mode", choices=["hard", "adiabatic"])
-    parser.add_argument("--te-prep-ms", type=float)
-    parser.add_argument("--refocus-mode", choices=["hard", "adiabatic"])
-    parser.add_argument("--mt", action="store_true")
-    parser.add_argument("--flip-deg", type=float)
-    parser.add_argument("--fov-mm", type=float)
-    parser.add_argument("--slab-thickness-mm", type=float, dest="slice_thickness_mm")
-    parser.add_argument("--partition-spacing-mm", type=float, dest="slice_spacing_mm")
-    parser.add_argument("--nx", type=int)
-    parser.add_argument("--npartitions", type=int, dest="nslices")
-    parser.add_argument("--num-shots", type=int)
-    parser.add_argument("--bandwidth-hz-px", type=float)
-    parser.add_argument("--rz", type=float)
-    parser.add_argument("--order-mode", choices=["uniform", "golden"])
-    parser.add_argument("--max-grad-mtm", type=float)
-    parser.add_argument("--max-slew-tm-s", type=float)
-    parser.add_argument("--validate-only", action="store_true")
-    return parser
-
-
-def _cli(argv: list[str]) -> int:
-    parser = _build_cli_parser()
-    args = parser.parse_args(argv)
-
-    opts_kwargs = {}
-    if args.max_grad_mtm is not None:
-        opts_kwargs["max_grad"] = args.max_grad_mtm
-        opts_kwargs["grad_unit"] = "mT/m"
-    if args.max_slew_tm_s is not None:
-        opts_kwargs["max_slew"] = args.max_slew_tm_s
-        opts_kwargs["slew_unit"] = "T/m/s"
-    opts = pp.Opts(**opts_kwargs)
-
-    protocol = PLUGIN.get_default_protocol(opts)
-
-    if args.te_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.TE, args.te_ms)
-    if args.tr_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.TR, args.tr_ms)
-    if args.trecovery_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.TRECOVERY, args.trecovery_ms)
-    if args.etl is not None:
-        gc.set_protocol_value(protocol, UIParam.ETL, args.etl)
-    if args.prep_type is not None:
-        gc.set_protocol_value(protocol, UIParam.PREPARATION_TYPE, args.prep_type)
-    if args.ti_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.user_value(USER_SLOT_TI), args.ti_ms)
-    if args.inversion_mode is not None:
-        gc.set_protocol_value(protocol, UIParam.user_value(USER_SLOT_INV_MODE), 1.0 if args.inversion_mode == "adiabatic" else 0.0)
-    if args.te_prep_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.user_value(USER_SLOT_TE_PREP), args.te_prep_ms)
-    if args.refocus_mode is not None:
-        gc.set_protocol_value(protocol, UIParam.user_value(USER_SLOT_REFOCUS_MODE), 1.0 if args.refocus_mode == "adiabatic" else 0.0)
-    if args.mt:
-        gc.set_protocol_value(protocol, UIParam.user_value(USER_SLOT_MT_ENABLE), 1.0)
-    if args.flip_deg is not None:
-        gc.set_protocol_value(protocol, UIParam.FLIP, args.flip_deg)
-    if args.fov_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.FOV, args.fov_mm)
-    if args.slice_thickness_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.SLICE_THICKNESS, args.slice_thickness_mm)
-    if args.slice_spacing_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.SLICE_SPACING, args.slice_spacing_mm)
-    if args.nx is not None:
-        gc.set_protocol_value(protocol, UIParam.NX, args.nx)
-    if args.nslices is not None:
-        gc.set_protocol_value(protocol, UIParam.NSLICES, args.nslices)
-    if args.num_shots is not None:
-        gc.set_protocol_value(protocol, UIParam.NUM_SHOTS, args.num_shots)
-    if args.bandwidth_hz_px is not None:
-        gc.set_protocol_value(protocol, UIParam.BANDWIDTH, args.bandwidth_hz_px)
-    if args.rz is not None:
-        gc.set_protocol_value(protocol, UIParam.RZ, args.rz)
-    if args.order_mode is not None:
-        gc.set_protocol_value(protocol, UIParam.user_value(USER_SLOT_ORDER_MODE), 1.0 if args.order_mode == "golden" else 0.0)
-
-    result = PLUGIN.validate_protocol(opts, protocol)
-    if not result.get("valid", False):
-        print(f"ERROR: {result.get('info', 'Protocol invalid')}", file=sys.stderr)
-        return 2
-
-    print(result.get("info", "Protocol valid"))
-    if args.validate_only:
-        return 0
-
-    PLUGIN.make_sequence(opts, protocol, args.output)
-    print(f"Wrote sequence: {args.output}")
-    return 0
-
+_ARG_MAP = [
+    ('--te-ms', UIParam.TE, float, ""),
+    ('--tr-ms', UIParam.TR, float, ""),
+    ('--trecovery-ms', UIParam.TRECOVERY, float, ""),
+    ('--etl', UIParam.ETL, int, ""),
+    ('--prep-type', UIParam.PREPARATION_TYPE, {'inversion': 'inversion', 't2_prep': 't2_prep'}, ""),
+    ('--ti-ms', UIParam.user_value(USER_SLOT_TI), float, ""),
+    ('--inversion-mode', UIParam.user_value(USER_SLOT_INV_MODE), {'hard': 0.0, 'adiabatic': 1.0}, ""),
+    ('--te-prep-ms', UIParam.user_value(USER_SLOT_TE_PREP), float, ""),
+    ('--refocus-mode', UIParam.user_value(USER_SLOT_REFOCUS_MODE), {'hard': 0.0, 'adiabatic': 1.0}, ""),
+    ('--mt', UIParam.user_value(USER_SLOT_MT_ENABLE), ("const", 1.0), ""),
+    ('--flip-deg', UIParam.FLIP, float, ""),
+    ('--fov-mm', UIParam.FOV, float, ""),
+    ('--slab-thickness-mm', UIParam.SLICE_THICKNESS, float, ""),
+    ('--partition-spacing-mm', UIParam.SLICE_SPACING, float, ""),
+    ('--nx', UIParam.NX, int, ""),
+    ('--npartitions', UIParam.NSLICES, int, ""),
+    ('--num-shots', UIParam.NUM_SHOTS, int, ""),
+    ('--bandwidth-hz-px', UIParam.BANDWIDTH, float, ""),
+    ('--rz', UIParam.RZ, float, ""),
+    ('--order-mode', UIParam.user_value(USER_SLOT_ORDER_MODE), {'uniform': 0.0, 'golden': 1.0}, ""),
+]
 
 if __name__ == "__main__":
-    raise SystemExit(_cli(sys.argv[1:]))
+    raise SystemExit(
+        cli.run_cli(
+            PLUGIN,
+            sys.argv[1:],
+            arg_map=_ARG_MAP,
+            description='Generate a 3D stack-of-stars prepared GRE .seq offline.',
+            default_output='gre_mprage_radial_3d.seq',
+        )
+    )

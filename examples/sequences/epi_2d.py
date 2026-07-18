@@ -3,7 +3,7 @@
 This module implements the three mandatory module-level entry points
 required by the bridge dispatcher (see ``gre.py`` for the Cartesian GRE
 family this parallels, and ``_gre_common.py`` / ``_epi_common.py`` /
-``_prep_common.py`` / ``_diffusion_common.py`` for the shared building
+``pulserver.design`` / ``_diffusion_common.py`` for the shared building
 blocks):
 
 - ``get_default_protocol(opts)``  — return the initial CV/protocol dictionary.
@@ -47,10 +47,7 @@ file to the ``sequences/src/`` directory and creating a numbered alias::
 
 from __future__ import annotations
 
-import argparse
-import importlib.util
 import sys
-from pathlib import Path
 
 import numpy as np
 import pypulseq as pp
@@ -71,21 +68,9 @@ from pulserver import (
     protocol_to_dict,
 )
 from pulserver.core import SequenceType
+from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
 
 
-def _load_sibling_module(name: str):
-    """Load a same-directory helper module by file path (see gre_multiecho_2d.py)."""
-    module_path = Path(__file__).resolve().parent / f"{name}.py"
-    spec = importlib.util.spec_from_file_location(name, module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-gc = _load_sibling_module("_gre_common")
-ec = _load_sibling_module("_epi_common")
-pc = _load_sibling_module("_prep_common")
-dc = _load_sibling_module("_diffusion_common")
 
 RF_REFOCUS_TIME_S = 3.0e-3
 RF_REFOCUS_APODIZATION = 0.5
@@ -217,11 +202,11 @@ class Epi2DPulseqSequence(PulseqSequence):
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
         shot_starts = list(range(0, cfg.ny_pe, cfg.etl))
         n_directions = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
-        directions = dc.diffusion_directions(cfg.n_directions) if cfg.b_value_s_mm2 > 0.0 else [None]
+        directions = preparations.diffusion_directions(cfg.n_directions) if cfg.b_value_s_mm2 > 0.0 else [None]
 
         for direction in directions[:n_directions]:
             diff_grad = (
-                dc.build_diffusion_gradients(opts, direction, timing["delta_s"], timing["grad_t_per_m"])
+                preparations.build_diffusion_gradients(opts, direction, timing["delta_s"], timing["grad_t_per_m"])
                 if direction is not None
                 else []
             )
@@ -232,9 +217,9 @@ class Epi2DPulseqSequence(PulseqSequence):
                 for shot_idx, ky_start in enumerate(shot_starts):
                     n_lines = min(cfg.etl, cfg.ny_pe - ky_start)
 
-                    rf90 = gc.copy_event(timing["rf90"])
+                    rf90 = system.copy_event(timing["rf90"])
                     rf90.freq_offset = gz90.amplitude * slice_offset_m
-                    rf180 = gc.copy_event(timing["rf180"])
+                    rf180 = system.copy_event(timing["rf180"])
                     rf180.freq_offset = timing["gz180"].amplitude * slice_offset_m
 
                     seq.add_block(rf90, gz90)
@@ -255,7 +240,7 @@ class Epi2DPulseqSequence(PulseqSequence):
                     gy_pre = pp.scale_grad(gy_pre_template, y_start_scale)
                     seq.add_block(gx_pre, gy_pre)
 
-                    ec.add_epi_train_blocks(
+                    readout.add_epi_train_blocks(
                         seq, gx_pos, gx_neg, gy_blip, adc, n_lines,
                         start_polarity_positive=True, emit_lin_labels=True, lin_start=ky_start,
                     )
@@ -298,28 +283,28 @@ class _Config:
 
 def _read_protocol(prot: dict) -> _Config:
     cfg = _Config()
-    cfg.te_s = gc.param_float(prot, UIParam.TE) * 1e-3
-    cfg.tr_s = gc.param_float(prot, UIParam.TR) * 1e-3
-    cfg.flip_deg = gc.param_float(prot, UIParam.FLIP)
-    cfg.fov_ro_m = gc.param_float(prot, UIParam.FOV) * 1e-3
-    cfg.fov_pe_m = gc.phase_fov_mm_from_protocol(prot) * 1e-3
-    cfg.slice_thickness_m = gc.param_float(prot, UIParam.SLICE_THICKNESS) * 1e-3
-    cfg.slice_spacing_m = gc.param_float(prot, UIParam.SLICE_SPACING) * 1e-3
-    cfg.nx_ro = gc.param_int(prot, UIParam.NX)
-    cfg.ny_pe = gc.param_int(prot, UIParam.NY)
-    cfg.nslices = gc.param_int(prot, UIParam.NSLICES)
-    cfg.etl = gc.param_int_optional(prot, UIParam.ETL, cfg.ny_pe)
-    cfg.bandwidth_hz_px = gc.param_float_optional(prot, UIParam.BANDWIDTH, 250_000.0)
-    cfg.ramp_sample = gc.user_float(prot, USER_SLOT_RAMP_SAMPLE, 0.0) >= 0.5
-    cfg.b_value_s_mm2 = gc.param_float_optional(prot, UIParam.DIFFUSION_BVALUES, 0.0)
-    cfg.n_directions = gc.param_int_optional(prot, UIParam.DIFFUSION_DIRECTIONS, 3)
+    cfg.te_s = params.param_float(prot, UIParam.TE) * 1e-3
+    cfg.tr_s = params.param_float(prot, UIParam.TR) * 1e-3
+    cfg.flip_deg = params.param_float(prot, UIParam.FLIP)
+    cfg.fov_ro_m = params.param_float(prot, UIParam.FOV) * 1e-3
+    cfg.fov_pe_m = params.phase_fov_mm_from_protocol(prot) * 1e-3
+    cfg.slice_thickness_m = params.param_float(prot, UIParam.SLICE_THICKNESS) * 1e-3
+    cfg.slice_spacing_m = params.param_float(prot, UIParam.SLICE_SPACING) * 1e-3
+    cfg.nx_ro = params.param_int(prot, UIParam.NX)
+    cfg.ny_pe = params.param_int(prot, UIParam.NY)
+    cfg.nslices = params.param_int(prot, UIParam.NSLICES)
+    cfg.etl = params.param_int_optional(prot, UIParam.ETL, cfg.ny_pe)
+    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, 250_000.0)
+    cfg.ramp_sample = params.user_float(prot, USER_SLOT_RAMP_SAMPLE, 0.0) >= 0.5
+    cfg.b_value_s_mm2 = params.param_float_optional(prot, UIParam.DIFFUSION_BVALUES, 0.0)
+    cfg.n_directions = params.param_int_optional(prot, UIParam.DIFFUSION_DIRECTIONS, 3)
     return cfg
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    gc.apply_system_derates(opts)
+    system.apply_system_derates(opts)
 
-    rf90, gz90, gz_reph = gc.build_rf(opts, cfg.flip_deg, cfg.slice_thickness_m)
+    rf90, gz90, gz_reph = excitation.slice_selective(opts, cfg.flip_deg, cfg.slice_thickness_m)
     rf180, gz180, _ = pp.make_sinc_pulse(
         flip_angle=np.pi,
         duration=RF_REFOCUS_TIME_S,
@@ -331,21 +316,21 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
         return_gz=True,
     )
 
-    gx_pos, gx_neg, adc = ec.build_epi_readout(
+    gx_pos, gx_neg, adc = readout.build_epi_readout(
         opts, "x", cfg.nx_ro, cfg.fov_ro_m, cfg.bandwidth_hz_px, cfg.ramp_sample
     )
-    gy_blip = ec.build_pe_blip(opts, "y", cfg.fov_pe_m)
+    gy_blip = readout.build_pe_blip(opts, "y", cfg.fov_pe_m)
 
     gx_pre = pp.make_trapezoid(channel="x", area=-0.5 * gx_pos.area, system=opts)
     max_pe_area = 0.5 * cfg.ny_pe * (1.0 / cfg.fov_pe_m)
     gy_pre_template = pp.make_trapezoid(channel="y", area=max_pe_area, system=opts)
 
     voxel_size_m = cfg.fov_ro_m / cfg.nx_ro
-    crusher_before = pc.build_inversion_spoiler(opts, voxel_size_m)
-    crusher_after = pc.build_inversion_spoiler(opts, voxel_size_m)
+    crusher_before = encoding.spoiler_3axis(opts, voxel_size_m)
+    crusher_after = encoding.spoiler_3axis(opts, voxel_size_m)
 
-    delta_s, separation_s = dc.diffusion_timing(cfg.te_s)
-    grad_t_per_m = dc.required_gradient_t_per_m(cfg.b_value_s_mm2, delta_s, separation_s, opts.gamma)
+    delta_s, separation_s = preparations.diffusion_timing(cfg.te_s)
+    grad_t_per_m = preparations.required_gradient_t_per_m(cfg.b_value_s_mm2, delta_s, separation_s, opts.gamma)
     max_grad_t_per_m = opts.max_grad / opts.gamma
     if grad_t_per_m > max_grad_t_per_m:
         if strict:
@@ -371,7 +356,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     pre180_fixed_s = d_gz_reph_s + d_crusher_before_s + diff_grad_duration_s
     post180_fixed_s = d_crusher_after_s + diff_grad_duration_s + d_prephasers_s + adc_center_s
 
-    delays = ec.pre_post_180_delays(
+    delays = readout.pre_post_180_delays(
         cfg.te_s / 2.0, d90_s, c90_s, d180_s, c180_s, pre180_fixed_s, post180_fixed_s, strict
     )
     if delays is None:
@@ -436,92 +421,32 @@ def makeSeq(opts, protocol, output_path):
     return PLUGIN.make_sequence(opts, protocol, output_path)
 
 
-def _build_cli_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Generate a 2D spin-echo EPI .seq offline.")
-    parser.add_argument("-o", "--output", default="epi_2d.seq", help="Output .seq file path")
-    parser.add_argument("--te-ms", type=float)
-    parser.add_argument("--tr-ms", type=float)
-    parser.add_argument("--flip-deg", type=float)
-    parser.add_argument("--fov-mm", type=float)
-    parser.add_argument("--phase-fov-mm", type=float)
-    parser.add_argument("--slice-thickness-mm", type=float)
-    parser.add_argument("--slice-spacing-mm", type=float)
-    parser.add_argument("--nx", type=int)
-    parser.add_argument("--ny", type=int)
-    parser.add_argument("--nslices", type=int)
-    parser.add_argument("--etl", type=int)
-    parser.add_argument("--bandwidth-hz-px", type=float)
-    parser.add_argument("--ramp-sample", action="store_true")
-    parser.add_argument("--bvalue", type=float)
-    parser.add_argument("--directions", type=int)
-    parser.add_argument("--swap-phase-freq", action="store_true")
-    parser.add_argument("--max-grad-mtm", type=float)
-    parser.add_argument("--max-slew-tm-s", type=float)
-    parser.add_argument("--validate-only", action="store_true")
-    return parser
-
-
-def _cli(argv: list[str]) -> int:
-    parser = _build_cli_parser()
-    args = parser.parse_args(argv)
-
-    opts_kwargs = {}
-    if args.max_grad_mtm is not None:
-        opts_kwargs["max_grad"] = args.max_grad_mtm
-        opts_kwargs["grad_unit"] = "mT/m"
-    if args.max_slew_tm_s is not None:
-        opts_kwargs["max_slew"] = args.max_slew_tm_s
-        opts_kwargs["slew_unit"] = "T/m/s"
-    opts = pp.Opts(**opts_kwargs)
-
-    protocol = PLUGIN.get_default_protocol(opts)
-
-    if args.te_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.TE, args.te_ms)
-    if args.tr_ms is not None:
-        gc.set_protocol_value(protocol, UIParam.TR, args.tr_ms)
-    if args.flip_deg is not None:
-        gc.set_protocol_value(protocol, UIParam.FLIP, args.flip_deg)
-    if args.fov_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.FOV, args.fov_mm)
-    if args.phase_fov_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.PHASE_FOV, args.phase_fov_mm)
-    if args.slice_thickness_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.SLICE_THICKNESS, args.slice_thickness_mm)
-    if args.slice_spacing_mm is not None:
-        gc.set_protocol_value(protocol, UIParam.SLICE_SPACING, args.slice_spacing_mm)
-    if args.nx is not None:
-        gc.set_protocol_value(protocol, UIParam.NX, args.nx)
-    if args.ny is not None:
-        gc.set_protocol_value(protocol, UIParam.NY, args.ny)
-    if args.nslices is not None:
-        gc.set_protocol_value(protocol, UIParam.NSLICES, args.nslices)
-    if args.etl is not None:
-        gc.set_protocol_value(protocol, UIParam.ETL, args.etl)
-    if args.bandwidth_hz_px is not None:
-        gc.set_protocol_value(protocol, UIParam.BANDWIDTH, args.bandwidth_hz_px)
-    if args.ramp_sample:
-        gc.set_protocol_value(protocol, UIParam.user_value(USER_SLOT_RAMP_SAMPLE), 1.0)
-    if args.bvalue is not None:
-        gc.set_protocol_value(protocol, UIParam.DIFFUSION_BVALUES, args.bvalue)
-    if args.directions is not None:
-        gc.set_protocol_value(protocol, UIParam.DIFFUSION_DIRECTIONS, args.directions)
-    if args.swap_phase_freq:
-        gc.set_protocol_value(protocol, UIParam.SWAP_PHASE_FREQ, True)
-
-    result = PLUGIN.validate_protocol(opts, protocol)
-    if not result.get("valid", False):
-        print(f"ERROR: {result.get('info', 'Protocol invalid')}", file=sys.stderr)
-        return 2
-
-    print(result.get("info", "Protocol valid"))
-    if args.validate_only:
-        return 0
-
-    PLUGIN.make_sequence(opts, protocol, args.output)
-    print(f"Wrote sequence: {args.output}")
-    return 0
-
+_ARG_MAP = [
+    ('--te-ms', UIParam.TE, float, ""),
+    ('--tr-ms', UIParam.TR, float, ""),
+    ('--flip-deg', UIParam.FLIP, float, ""),
+    ('--fov-mm', UIParam.FOV, float, ""),
+    ('--phase-fov-mm', UIParam.PHASE_FOV, float, ""),
+    ('--slice-thickness-mm', UIParam.SLICE_THICKNESS, float, ""),
+    ('--slice-spacing-mm', UIParam.SLICE_SPACING, float, ""),
+    ('--nx', UIParam.NX, int, ""),
+    ('--ny', UIParam.NY, int, ""),
+    ('--nslices', UIParam.NSLICES, int, ""),
+    ('--etl', UIParam.ETL, int, ""),
+    ('--bandwidth-hz-px', UIParam.BANDWIDTH, float, ""),
+    ('--ramp-sample', UIParam.user_value(USER_SLOT_RAMP_SAMPLE), ("const", 1.0), ""),
+    ('--bvalue', UIParam.DIFFUSION_BVALUES, float, ""),
+    ('--directions', UIParam.DIFFUSION_DIRECTIONS, int, ""),
+    ('--swap-phase-freq', UIParam.SWAP_PHASE_FREQ, ("const", True), ""),
+]
 
 if __name__ == "__main__":
-    raise SystemExit(_cli(sys.argv[1:]))
+    raise SystemExit(
+        cli.run_cli(
+            PLUGIN,
+            sys.argv[1:],
+            arg_map=_ARG_MAP,
+            description='Generate a 2D spin-echo EPI .seq offline.',
+            default_output='epi_2d.seq',
+        )
+    )
