@@ -129,3 +129,52 @@ def test_wave_gradients_rejects_bad_args() -> None:
         readout.wave_gradients(opts, 1e-3, 1e-4, 1e-4, n_cycles=0)
     with pytest.raises(ValueError):
         readout.wave_gradients(opts, 1e-3, 1e-4, 1e-4, axes=())
+
+
+# ----------------------------------------------------------------------
+# FSE/CPMG train: z-axis crusher parity regression (fse.py).
+#
+# rf_dead_time != rf_ringdown_time (the realistic case, see
+# pulserver.analysis._opts.Opts's 72us/56us defaults) puts the refocusing
+# RF's true center off-midpoint within the fused GS4 lobe. calculate_kspace()
+# flips the running z-moment sign at that exact instant, so if the lead-in
+# crusher (before the first 180) isn't seeded to match, even- and odd-indexed
+# echoes settle on two different residual z baselines: harmless drift for
+# the plain crusher (MultiEchoSE/Fse2D), a real per-echo kz error once Fse3D
+# folds the partition encode onto the same axis (GS5 += kz, GS7 -= kz).
+_ASYM_RF_TIMING = dict(rf_dead_time=100e-6, rf_ringdown_time=30e-6)
+
+
+def test_multiecho_z_crusher_has_no_echo_parity_residual() -> None:
+    opts = pp.Opts(**OPTS_KW, **_ASYM_RF_TIMING)
+    rf, gz = readout.build_refocusing_pulse(opts, thickness_m=0.16)
+    etl = 6
+    train = readout.MultiEchoSE(opts, fov_x_m=0.22, nx=128, etl=etl, refoc_rf=rf, refoc_gz=gz)
+
+    seq = pp.Sequence(opts)
+    train(seq=seq)
+    k_traj_adc = seq.calculate_kspace()[0]
+
+    kz_echoes = [k_traj_adc[2, e * train.n_samples + train.echo_sample] for e in range(etl)]
+    assert np.ptp(kz_echoes) < 1e-6, f"z-crusher residual differs across echoes (parity bug): {kz_echoes}"
+
+
+def test_fse3d_kz_offset_is_uniform_across_echo_parity() -> None:
+    opts = pp.Opts(**OPTS_KW, **_ASYM_RF_TIMING)
+    rf, gz = readout.build_refocusing_pulse(opts, thickness_m=0.16)
+    etl, nz = 4, 8
+    train = readout.Fse3D(opts, fov=(0.22, 0.22, 0.16), matrix=(128, 128, nz), etl=etl, refoc_rf=rf, refoc_gz=gz)
+
+    par_idx = np.arange(etl) % nz
+    lin_idx = np.full(etl, nz // 2)
+    seq = pp.Sequence(opts)
+    train(seq=seq, lin_idx=lin_idx, par_idx=par_idx)
+    k_traj_adc = seq.calculate_kspace()[0]
+
+    kz_echoes = np.array([k_traj_adc[2, e * train.n_samples + train.echo_sample] for e in range(etl)])
+    expected = train._par.areas[par_idx]
+    residual = kz_echoes - expected
+    # Same (small) offset on every echo -- not the alternating even/odd split
+    # of the pre-fix bug, where odd echoes matched exactly and even echoes
+    # were off by a fixed, nonzero amount.
+    assert np.ptp(residual) < 1e-6, f"kz offset differs across echo parity (cross-echo bug): {residual}"
