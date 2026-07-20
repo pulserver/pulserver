@@ -13,6 +13,7 @@ from .fse import (
     build_refocusing_pulse,
     build_z_crusher,
 )
+from .line import DEFAULT_SPOIL_FACTOR, Line2D, Line3D
 
 __all__ = [
     "MultiEchoSE",
@@ -27,4 +28,7 @@ __all__ = [
     "Epi3D",
     "Epi2DFlyback",
     "Epi3DFlyback",
+    "Line2D",
+    "Line3D",
+    "DEFAULT_SPOIL_FACTOR",
 ]
