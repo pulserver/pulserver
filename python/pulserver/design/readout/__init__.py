@@ -1,7 +1,8 @@
-"""FSE / spin-echo readout trains."""
+"""FSE / spin-echo and EPI readout trains."""
 
 from __future__ import annotations
 
+from .epi import Epi2D, Epi2DFlyback, Epi3D, Epi3DFlyback
 from .fse import (
     CPMG_PHASE_OFFSET_RAD,
     DEFAULT_REFOCUS_FLIP_DEG,
@@ -22,4 +23,8 @@ __all__ = [
     "build_z_crusher",
     "CPMG_PHASE_OFFSET_RAD",
     "DEFAULT_REFOCUS_FLIP_DEG",
+    "Epi2D",
+    "Epi3D",
+    "Epi2DFlyback",
+    "Epi3DFlyback",
 ]
