@@ -51,26 +51,38 @@ external slice thickness -- this train has no notion of "slice" vs "slab"
 * ``"none"`` -- fully balanced: the rewind exactly cancels every axis's
   prewind, net zero gradient moment per shot (true bSSFP / balanced
   condition).
-* ``"post"`` (default) -- the rewind block, instead of returning the readout
-  axis exactly to zero, overshoots by ``spoil_factor * k_width`` (SSFP-FID /
-  spoiled-GRE / FISP / GRASS: the extra dephasing happens *after* the read).
-* ``"pre"`` -- the *prewind* block overshoots by the same amount instead, and
-  the rewind returns only the natural (unshifted) trajectory to zero (SSFP-
-  Echo / PSIF / CE-FAST: the extra dephasing happens *before* the read).
+* ``"post"`` (default) -- after the last echo, an extra ``spoil_factor *
+  k_width`` of area is tacked directly onto wherever the (unmodified) natural
+  echo excursion ends -- SSFP-FID / spoiled-GRE / FISP / GRASS: the extra
+  dephasing happens *after* the read, and only affects the *next* shot's
+  starting magnetization, not this one's own acquired data.
+* ``"pre"`` -- the mirror construction, before echo 0 instead: SSFP-Echo /
+  PSIF / CE-FAST. Matching ``"post"`` exactly (gre.py's own convention), the
+  bridge's own area is ``spoil_factor * k_width`` alone, independent of the
+  prewind's normal target -- *not* "the normal prewind target plus spoil",
+  which would force the bridge to swing through/past zero to hit a
+  large-magnitude, wrong-signed area (a real bug caught during development).
+  Unlike ``"post"``, this necessarily shifts the k-window this shot's own
+  echo(es) sample by a fixed, shot-independent amount (``spoil_factor *
+  k_width`` doesn't depend on ``pe_idx``) -- a benign linear phase ramp on
+  reconstruction (Fourier shift theorem), not an aliasing/positioning error,
+  since it is identical every shot.
 
-``"pre"`` and ``"post"`` leave the shot's net readout-axis gradient moment at
-the same nonzero value (``-spoil_factor * k_width``) -- they differ only in
-*when*, relative to the echo(es), that dephasing occurs. The phase-encode/
-partition axes are always fully rewound regardless of ``spoil_position``.
+The phase-encode/partition axes are always fully rewound regardless of
+``spoil_position`` -- only the readout axis is affected by spoiling.
 
 Whenever ``spoil_position != "none"``, the spoiled prewind/rewind is a
 *bridged* trapezoid -- the same construction as ``gre.py``'s
 ``unbalanced_line``: the adjoining echo (echo 0 for ``"pre"``, the last echo
 for ``"post"``) is split (:func:`pypulseq.split_gradient_at`) to drop the
 ramp it no longer needs, and the spoiler is reshaped
-(:func:`pypulseq.make_extended_trapezoid`) to hand off directly at the
+(:func:`pypulseq.make_extended_trapezoid_area`) to hand off directly at the
 readout's own plateau amplitude -- never returning to, and re-ramping from,
-zero in between. A plain (0 -> area -> 0) trapezoid is used only for the
+zero in between. The spoiler's sign always matches the plateau amplitude it
+hands off to/from, so the resulting shape is a monotonic ``(0,
+spoil_plateau, readout_plateau)``-style staircase (rise to an elevated
+plateau, then settle to the echo's own amplitude) rather than a reversal
+through zero. A plain (0 -> area -> 0) trapezoid is used only for the
 unspoiled side (both sides, when ``spoil_position == "none"``).
 
 Partial Fourier (``pf``)
@@ -303,15 +315,18 @@ class _LineTrain:
 
         # --- prewind: plain rewind-to-echo0, or bridged w/ pre-spoil ------
         if self._spoil_position == "pre":
+            # Mirrors the post-spoil bridge exactly (gre.py convention): the
+            # bridge's own area is spoil_delta alone, signed to match
+            # grad_end so the shape is a clean (0, spoil_plateau,
+            # readout_plateau) staircase -- rising to an elevated plateau
+            # then settling to the echo's own amplitude, never reversing
+            # through zero. Any resulting k-space offset relative to the
+            # unspoiled prewind position is a fixed, TR-independent constant
+            # (spoil_delta doesn't vary with pe_idx) -- a benign linear phase
+            # ramp on reconstruction, not a positioning error.
             pre_grad_end = _echo_amp(positive0)
-            # Unlike the post-spoil bridge (below), this bridge is the *only*
-            # thing positioning echo 0's k-window -- there is no separate
-            # plain prewind to fold the spoil into, so its target area is the
-            # natural prewind position (_flat_k_start) plus spoil_delta
-            # pushed *further in the same direction the prewind is already
-            # heading* (sign of _flat_k_start itself), not toward zero.
-            pre_sign = -1.0 if positive0 else 1.0
-            pre_bridge_area = _flat_k_start(positive0) + pre_sign * spoil_delta
+            pre_sign = 1.0 if positive0 else -1.0
+            pre_bridge_area = pre_sign * spoil_delta
             self._gx_pre = _bridge(system, ro_axis, pre_bridge_area, 0.0, pre_grad_end)
             t_pre_gx = pp.calc_duration(self._gx_pre)
 

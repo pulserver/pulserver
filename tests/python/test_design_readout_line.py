@@ -43,27 +43,47 @@ def test_balanced_single_echo_returns_to_zero() -> None:
     assert np.allclose(k_full[:, -1], 0.0, atol=1e-6)
 
 
-@pytest.mark.parametrize("position", ["pre", "post"])
-def test_unbalanced_single_echo_leaves_target_spoil_moment(position: str) -> None:
+def test_unbalanced_post_single_echo_leaves_target_spoil_moment() -> None:
+    """gre.py convention: the post-spoiler's own area is spoil_delta alone,
+    tacked onto wherever the (unmodified) natural echo excursion ends."""
     opts = _opts()
-    train = readout.Line2D(opts, (0.22, 0.22), (64, 64), num_echoes=1, spoil_position=position, spoil_factor=1.0)
+    train = readout.Line2D(opts, (0.22, 0.22), (64, 64), num_echoes=1, spoil_position="post", spoil_factor=1.0)
     seq = pp.Sequence(opts)
     train(seq, pe_idx=10)
     _, k_full, *_ = seq.calculate_kspace()
-    expected_x = -train._ro.k_width  # spoil_factor=1.0 * k_width
+    expected_x = train._ro.n_post * train._ro.delta_k + train._spoil_factor * train._ro.k_width
     assert k_full[0, -1] == pytest.approx(expected_x, rel=1e-6)
     assert k_full[1, -1] == pytest.approx(0.0, abs=1e-6)  # PE always fully rewound
 
 
-def test_pre_and_post_spoil_leave_the_same_net_moment() -> None:
+def test_unbalanced_pre_single_echo_leaves_target_spoil_moment() -> None:
+    """Mirrors the post case: the pre-spoiler's own area is spoil_delta alone
+    (signed to match the echo's plateau, giving a clean rise-then-settle
+    staircase); the trailing rewind is the plain, spoil-independent formula,
+    so the net moment left over is spoil_delta plus the prewind's own
+    (unspoiled) magnitude -- see module docstring."""
     opts = _opts()
-    seq_pre = pp.Sequence(opts)
-    readout.Line2D(opts, (0.22, 0.22), (64, 64), spoil_position="pre", spoil_factor=0.7)(seq_pre, pe_idx=4)
-    seq_post = pp.Sequence(opts)
-    readout.Line2D(opts, (0.22, 0.22), (64, 64), spoil_position="post", spoil_factor=0.7)(seq_post, pe_idx=4)
-    _, k_pre, *_ = seq_pre.calculate_kspace()
-    _, k_post, *_ = seq_post.calculate_kspace()
-    assert k_pre[0, -1] == pytest.approx(k_post[0, -1], rel=1e-6)
+    train = readout.Line2D(opts, (0.22, 0.22), (64, 64), num_echoes=1, spoil_position="pre", spoil_factor=1.0)
+    seq = pp.Sequence(opts)
+    train(seq, pe_idx=10)
+    _, k_full, *_ = seq.calculate_kspace()
+    expected_x = train._ro.n_pre * train._ro.delta_k + train._spoil_factor * train._ro.k_width
+    assert k_full[0, -1] == pytest.approx(expected_x, rel=1e-6)
+    assert k_full[1, -1] == pytest.approx(0.0, abs=1e-6)  # PE always fully rewound
+
+
+def test_pre_spoil_bridge_is_a_monotonic_staircase_no_reversal() -> None:
+    """(0, spoil_plateau, readout_plateau) -- never dips through/past zero to
+    reach the target area, unlike a naive combined position+spoil target."""
+    opts = _opts()
+    train = readout.Line2D(opts, (0.22, 0.22), (64, 64), num_echoes=1, spoil_position="pre", spoil_factor=1.0)
+    seq = pp.Sequence(opts)
+    train(seq, pe_idx=10)
+    gx = seq.get_block(1).gx
+    assert gx.type == "grad"
+    assert np.all(gx.waveform >= 0.0)  # monotonic-ish staircase, same sign throughout
+    assert gx.waveform[0] == pytest.approx(0.0)
+    assert gx.waveform[-1] == pytest.approx(train._ro.gx.amplitude)
 
 
 def test_rejects_bad_spoil_position() -> None:
@@ -194,7 +214,8 @@ def test_line3d_balances_pe_and_par_regardless_of_x_spoil() -> None:
     seq = pp.Sequence(opts)
     train(seq, pe_idx=3, par_idx=2)
     _, k_full, *_ = seq.calculate_kspace()
-    assert k_full[0, -1] == pytest.approx(-train._spoil_factor * train._ro.k_width, rel=1e-6)
+    expected_x = train._ro.n_post * train._ro.delta_k + train._spoil_factor * train._ro.k_width
+    assert k_full[0, -1] == pytest.approx(expected_x, rel=1e-6)
     assert k_full[1, -1] == pytest.approx(0.0, abs=1e-6)
     assert k_full[2, -1] == pytest.approx(0.0, abs=1e-6)
 
