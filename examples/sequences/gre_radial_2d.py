@@ -16,10 +16,10 @@ trapezoid on the logical X axis (prephased to -kmax, read through the
 center to +kmax) is designed ONCE via ``_gre_common``'s standard
 single-echo readout/echo-train builder (``ro_axis`` pinned to ``"x"``), then
 replayed for every spoke with a per-shot in-plane rotation (pulseq
-``ROTATIONS`` extension, ``pulserver.pulseq.make_rotation`` — no separate
-gradient waveform per spoke, no ``pulserver.arbgrad`` solver needed, per the
+``ROTATIONS`` extension, ``pulserver.pypulseq.make_rotation`` — no separate
+gradient waveform per spoke, no ``pulserver.pypulseq.arbgrad`` solver needed, per the
 project's design rule that plain spokes don't need slew-limited waveform
-design). Spoke angles come from ``pulserver.arbgrad.shot_angles`` (uniform
+design). Spoke angles come from ``pulserver.pypulseq.arbgrad.shot_angles`` (uniform
 or golden-angle ordering) — reused here purely as an angle utility, no
 arbgrad *waveform* design is involved for radial.
 
@@ -41,30 +41,29 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pypulseq as pp
-from scipy.spatial.transform import Rotation
-
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
-    BoolParam,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
+    Sequence,
+    SequenceType,
     TypeinFloatParam,
     UIParam,
     Validate,
     dict_to_protocol,
     make_enum_param,
+    params,
     protocol_to_dict,
+    run_cli,
 )
-from pulserver import arbgrad
-from pulserver.core import SequenceType
-from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
-
-
+from pulserver.pypulseq import _gradients as encoding
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _system as system
+from pulserver.pypulseq import arbgrad
+from pulserver.pypulseq._rf import _excitation_helpers as excitation
+from scipy.spatial.transform import Rotation
 
 NUM_ECHOES = 1
 FLYBACK = True
@@ -77,7 +76,7 @@ def _order_mode_name(code: float) -> str:
     return "golden" if code >= 0.5 else "uniform"
 
 
-class GreRadial2DPulseqSequence(PulseqSequence):
+class GreRadial2DPulseqSequence(Sequence):
     """Generate a 2D full-echo radial (stack-of-stars-free, single-slice) GRE."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -180,7 +179,7 @@ class GreRadial2DPulseqSequence(PulseqSequence):
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
-        seq = ps.Sequence(opts)
+        seq = pp.Sequence(opts)
 
         angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
@@ -188,7 +187,7 @@ class GreRadial2DPulseqSequence(PulseqSequence):
         rf_phase_inc_deg = 0.0
 
         for spoke, angle in enumerate(angles):
-            rotation = ps.make_rotation(Rotation.from_euler("z", float(angle)))
+            rotation = pp.make_rotation(Rotation.from_euler("z", float(angle)))
             label_lin = pp.make_label(type="SET", label="LIN", value=spoke)
 
             for sl in range(cfg.nslices):
@@ -345,7 +344,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

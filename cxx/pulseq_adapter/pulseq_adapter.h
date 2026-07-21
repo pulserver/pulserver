@@ -1,10 +1,10 @@
 /**
  * @file pulseq_adapter.h
  * @brief Adapt a standard-toolkit `ExternalSequence` (pulseq/pulseq,
- * `external/pulseq` submodule) onto a `pulseg_pulseq_file` raw model, so it
+ * `external/pulseq` submodule) onto a `pulseq_file` raw model, so it
  * can be handed to `pulseg_convert_collection()` -- the same conversion path
  * used for files loaded through pulseg's own C reader
- * (`pulseg_pulseq_file_read()`).
+ * (`pulseq_read()`).
  *
  * Rationale (Stage 3 of the vendor-neutral refactor): pulseg ships its own
  * from-scratch Pulseq `.seq` parser (csrc/src/io/pulseg_parse.c) because it
@@ -38,7 +38,7 @@
  *    RF events with `time_shape` absent (implicit uniform raster at
  *    `opts.rf_raster_us` / the file's own `RadiofrequencyRasterTime`).
  *    Sequences that rely on a genuinely non-uniform RF raster must go
- *    through pulseg's native reader (`pulseg_pulseq_file_read()`).
+ *    through pulseg's native reader (`pulseq_read()`).
  *    NOTE: non-uniform *gradient* rasters ("extended trapezoids", Pulseq's
  *    `mr.makeExtendedTrapezoid`) are NOT in this situation -- ExternalSequence
  *    keeps their genuine (time, amplitude) sample pairs available via
@@ -68,26 +68,27 @@ class ExternalSequence; // external/pulseq/src/ExternalSequence.h
 
 namespace pulseg
 {
-    namespace adapter
-    {
+namespace adapter
+{
 
-        /**
-         * @brief Build a pulseg_pulseq_file from an already-loaded
+/**
+         * @brief Build a pulseq_file from an already-loaded
          * ExternalSequence.
          *
          * @p out is allocated by this function (via PULSEG_ALLOC, matching
-         * pulseg_pulseq_file_free()'s expectation that the struct itself --
+         * pulseq_file_free()'s expectation that the struct itself --
          * not just its inner arrays -- was heap-allocated; a stack or
-         * `new`-allocated pulseg_pulseq_file must NOT be passed to
-         * pulseg_pulseq_file_free()). On success the caller owns `*out` and
-         * must free it with pulseg_pulseq_file_free(). On failure `*out` is
+         * `new`-allocated pulseq_file must NOT be passed to
+         * pulseq_file_free()). On success the caller owns `*out` and
+         * must free it with pulseq_file_free(). On failure `*out` is
          * set to NULL (nothing to free).
          *
          * @param[in]  seq      An ExternalSequence that has already had
          *                      load() / load_from_buffer() called successfully.
-         * @param[in]  opts     Library options (raster times, gamma, etc.);
-         *                      copied into out->opts exactly as
-         *                      pulseg_pulseq_file_init() would.
+         * @param[in]  opts     Library options (raster times, gamma, etc.).
+         *                      Only its rasters reach the raw file, as the
+         *                      fallback for ones the source omits; the rest
+         *                      belongs to pulseg_convert_collection().
          * @param[out] out      Receives a freshly heap-allocated file.
          * @param[out] err_msg  Optional; on failure, set to a human-readable
          *                      reason.
@@ -100,14 +101,14 @@ namespace pulseg
          *                      via load_from_buffer() with no backing file).
          * @return true on success, false on failure.
          */
-        bool from_external_sequence(
-            ExternalSequence &seq,
-            const pulseg_opts &opts,
-            pulseg_pulseq_file **out,
-            std::string *err_msg,
-            const char *source_path = nullptr);
+bool from_external_sequence(
+    ExternalSequence &seq,
+    const pulseg_opts &opts,
+    pulseq_file **out,
+    std::string *err_msg,
+    const char *source_path = nullptr);
 
-    } // namespace adapter
+} // namespace adapter
 } // namespace pulseg
 
 #endif // PULSEG_PULSEQ_ADAPTER_H

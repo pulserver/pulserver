@@ -1,31 +1,36 @@
-# `pulserver.design` — sequence-building blocks
+# `pulserver` — sequence-building blocks
 
-`pulserver.design` collects the reusable building blocks shared by the
+`pulserver` collects the reusable building blocks shared by the
 example sequence plugins under [`examples/sequences/`](../../examples/sequences/).
 It replaces the old per-family `_*_common.py` helpers (loaded via a
-`spec_from_file_location` hack) with an installed, importable subpackage: a
-plugin now writes `from pulserver.design import readout, sampling, ...`
+`spec_from_file_location` hack) with an installed, importable package: a
+plugin imports module factories and sampling helpers directly from `pulserver`
 even when the plugin file itself is exec-loaded standalone by the bridge or
 tests.
 
 Requires the optional `pypulseq` dependency (same tier as
-`pulserver.pulseq` / `pulserver.io`).
+`pulserver.pypulseq` / `pulserver.io`).
 
-## Modules
+## Public surface
 
-| Module | Contents |
+| API group | Contents |
 | --- | --- |
-| `pulserver.design.system` | System-limit derates, readout-timing quantization, raster rounding, `copy_event` (`copy.deepcopy`). |
-| `pulserver.design.params` | Protocol-dict getters/setters, phase-FOV and ACS resolution, readout/phase axis resolution. |
-| `pulserver.design.excitation` | Slice-selective sinc, non-selective hard, and adiabatic (hypsec) excitation builders. |
-| `pulserver.design.preparations` | Inversion, MT-saturation, T2-prep (with `final_tip="up"/"down"` T1/T2-hybrid switch), and Stejskal–Tanner diffusion modules. |
-| `pulserver.design.encoding` | Phase-encode gradients, single-axis crushers, 3-axis spoilers, 3D partition (Z) combination. |
-| `pulserver.design.readout` | Cartesian line / echo-train (with optional wave-CAIPI `wave=True` sinusoids), the bridged `unbalanced_line` split-gradient readout, EPI train, FSE/CPMG refocusing train (incl. gradient surgery), non-Cartesian spiral (`forward`/`reversed`/`in_out`/`out_in` variants)/rosette, and ZTE half-echo readouts. |
-| `pulserver.design.sampling` | Undersampling masks (uniform, random, Poisson-disc, CAIPIRINHA), golden/uniform angle generators, and echo-train / segment view orderings. |
-| `pulserver.design.pulses` | Fat saturation (with `NOPOS`/`NOROT` FOV-transform exemption labels) and the Bloch–Siegert B1-mapping Fermi pulse. |
-| `pulserver.design.cli` | `run_cli(plugin, argv, arg_map=...)` — the declarative offline CLI shared by every plugin. |
+| `pulserver.params` | Protocol-dict getters/setters, phase-FOV and ACS resolution, readout/phase axis resolution. |
+| `pulserver.make_*_pulse` | RF excitation and magnetization-preparation module factories. |
+| `pulserver.make_*_readout` | Cartesian, EPI, FSE/CPMG, non-Cartesian, and ZTE readout module factories. |
+| `pulserver.make_crusher`, `make_spoiler`, `make_phase_encoding`, `make_phase_blip` | Gradient factories. |
+| `pulserver.make_*_schedule` | RF phase, phase-cycling, and refocusing-flip schedules. |
+| [Flat sampling helpers](sampling.md) | Structured mask/tilt support and acquisition ordering for Cartesian, EPI, radial/spherical non-Cartesian, slice, and SMS sampling. |
+| `pulserver.run_cli` | Declarative offline CLI shared by every plugin. |
 
-## View orderings (`pulserver.design.sampling`)
+The corresponding implementation packages under `pulserver.pypulseq` use
+leading underscores and are not public import locations.
+
+## View orderings
+
+The public package now separates sampled support from acquisition order with
+`SamplingPattern`. See the [sampling reference](sampling.md) for absolute FSE
+trains, relative EPI shifts, non-Cartesian tilts, and slice/SMS grouping.
 
 The echo-train / segment view-ordering helpers apply to any acquisition
 with an outer loop and an inner echo train or MPRAGE segment — 2D/3D FSE and
@@ -49,25 +54,14 @@ linear / radial / adaptive schemes; Tamir et al., *T2 Shuffling*, Magn Reson
 Med 2017;77:180–195 ([`refcode/nihms804984.pdf`](../../../../refcode/)) for
 random shuffling.
 
-## Advanced excitation (`pulserver.design.excitation`)
+## Advanced excitation
 
-Beyond the slice-selective/hard/adiabatic builders, `frequency_selective`
-builds spectrally selective (optionally multiband) Gaussian pulses, and
-`multiband` applies SMS phase modulation to any slice-selective base pulse
-with `quadratic` (Grissom), `wong`, `malik`, or `none` phase schemes (ported
-from `refcode/sigpy`, `sigpy.mri.rf.multiband`). Spectral-spatial (SPSP) and
-2D/3D volume-selective pulse design are **not** included: the reference
-implementations (`refcode/Spectral-Spatial-RF-Pulse-Design`) are LP-based
-FIR/SLR design toolboxes whose port requires genuine pulse-design judgment
-(plan decision point D1) and is deferred.
+Beyond the slice-selective, hard, and adiabatic builders,
+`make_frequency_selective_pulse` creates spectrally selective pulses and the
+spatial factories accept existing or generated multidimensional trajectories.
+All return the common `pulserver.Module` protocol.
 
 ## API documentation rendering
 
-Every public function carries a NumPy-style docstring with `Parameters`,
-`Returns`, an `Examples` doctest, and a Sphinx `.. plot::` directive
-(`:include-source: false`) that renders an illustrative figure. This repo's
-`docs/` tree is currently Markdown-only (no Sphinx `conf.py`), so those
-`.. plot::` blocks are not rendered by any wired-up build yet. When a Sphinx
-site is added, enable `matplotlib.sphinxext.plot_directive` in its
-`extensions` and add an `automodule` page per submodule to render them; the
-docstrings are already written for that.
+The Sphinx API reference is configured in `docs/conf.py`; build it with
+`sphinx-build -E -W -b html docs docs/_build/html`.

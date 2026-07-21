@@ -26,18 +26,19 @@ namespace py = pybind11;
 
 class _PulseqCollection
 {
-public:
-    _PulseqCollection(const py::list &seq_bytes_list,
-                      float gamma,
-                      float B0,
-                      float max_grad,
-                      float max_slew,
-                      float rf_raster_time,
-                      float grad_raster_time,
-                      float adc_raster_time,
-                      float block_duration_raster,
-                      bool parse_labels,
-                      int num_averages)
+  public:
+    _PulseqCollection(
+        const py::list &seq_bytes_list,
+        float gamma,
+        float B0,
+        float max_grad,
+        float max_slew,
+        float rf_raster_time,
+        float grad_raster_time,
+        float adc_raster_time,
+        float block_duration_raster,
+        bool parse_labels,
+        int num_averages)
     {
         pulseg::Opts opts;
         opts.gamma_hz_per_t = gamma;
@@ -60,25 +61,29 @@ public:
             buf_sizes[i] = static_cast<int>(buffers[i].size());
         }
 
-        coll_ = std::unique_ptr<pulseg::Collection>(
-            new pulseg::Collection(
-                buf_ptrs.data(), buf_sizes.data(), n,
-                opts, parse_labels, num_averages));
+        coll_ = std::unique_ptr<pulseg::Collection>(new pulseg::Collection(
+            buf_ptrs.data(),
+            buf_sizes.data(),
+            n,
+            opts,
+            parse_labels,
+            num_averages));
         source_size_ = (n > 0) ? buf_sizes[0] : 0;
     }
 
     /** Load from a .seq file path, using the .pge cache when present. */
-    _PulseqCollection(const std::string &file_path,
-                      float gamma,
-                      float B0,
-                      float max_grad,
-                      float max_slew,
-                      float rf_raster_time,
-                      float grad_raster_time,
-                      float adc_raster_time,
-                      float block_duration_raster,
-                      bool parse_labels,
-                      int num_averages)
+    _PulseqCollection(
+        const std::string &file_path,
+        float gamma,
+        float B0,
+        float max_grad,
+        float max_slew,
+        float rf_raster_time,
+        float grad_raster_time,
+        float adc_raster_time,
+        float block_duration_raster,
+        bool parse_labels,
+        int num_averages)
     {
         pulseg::Opts opts;
         opts.gamma_hz_per_t = gamma;
@@ -90,20 +95,30 @@ public:
         opts.adc_raster_us = adc_raster_time * 1e6f;
         opts.block_raster_us = block_duration_raster * 1e6f;
 
-        coll_ = std::unique_ptr<pulseg::Collection>(
-            new pulseg::Collection(
-                file_path.c_str(), opts,
-                /*cache_binary=*/true,
-                /*verify_signature=*/false,
-                parse_labels, num_averages));
+        coll_ = std::unique_ptr<pulseg::Collection>(new pulseg::Collection(
+            file_path.c_str(),
+            opts,
+            /*cache_binary=*/true,
+            /*verify_signature=*/false,
+            parse_labels,
+            num_averages));
         source_size_ = 0;
     }
 
-    pulseg::Collection &coll() { return *coll_; }
-    const pulseg::Collection &coll() const { return *coll_; }
-    int source_size() const { return source_size_; }
+    pulseg::Collection &coll()
+    {
+        return *coll_;
+    }
+    const pulseg::Collection &coll() const
+    {
+        return *coll_;
+    }
+    int source_size() const
+    {
+        return source_size_;
+    }
 
-private:
+  private:
     std::unique_ptr<pulseg::Collection> coll_;
     int source_size_ = 0;
 };
@@ -139,7 +154,10 @@ static py::dict _get_tr_waveforms(
     int num_averages)
 {
     auto wf = pc.coll().get_tr_waveforms(
-        subsequence_idx, amplitude_mode, tr_index, collapse_delays,
+        subsequence_idx,
+        amplitude_mode,
+        tr_index,
+        collapse_delays,
         num_averages);
     py::dict out;
 
@@ -377,7 +395,8 @@ static py::dict _get_report(_PulseqCollection &pc)
         sd["num_cooldown_blocks"] = si.num_cooldown_blocks;
         sd["tr_duration_us"] = si.tr_duration_us;
         sd["num_passes"] = si.num_passes;
-        sd["num_unique_segments"] = si.num_prep_segments + si.num_main_segments + si.num_cooldown_segments;
+        sd["num_unique_segments"] =
+            si.num_prep_segments + si.num_main_segments + si.num_cooldown_segments;
         sd["segment_offset"] = si.segment_offset;
 
         /* Unique segments in this subsequence */
@@ -419,6 +438,43 @@ static int _get_unique_block_id(_PulseqCollection &pc, int seq_idx, int blk_def_
 
 // ─── Sequence description / parameters ─────────────────────────────
 
+// ─── Per-instance resolved view (PulSeg SegmentInstance, spec 3.3) ──
+
+static py::dict _get_block_instance(_PulseqCollection &pc, int subseq_idx, int exec_stream_pos)
+{
+    pulseg_block_instance bi = PULSEG_BLOCK_INSTANCE_INIT;
+    int rc = pulseg_get_block_instance_at(pc.coll().handle(), &bi, subseq_idx, exec_stream_pos);
+    if (rc != PULSEG_SUCCESS)
+    {
+        throw std::runtime_error("pulseg_get_block_instance_at failed: " + std::to_string(rc));
+    }
+
+    py::list rotmat;
+    for (int i = 0; i < 9; ++i)
+        rotmat.append(bi.rotmat[i]);
+
+    py::dict result;
+    result["duration_us"] = bi.duration_us;
+    result["rf_amp_hz"] = bi.rf_amp_hz;
+    result["rf_freq_hz"] = bi.rf_freq_hz;
+    result["rf_phase_rad"] = bi.rf_phase_rad;
+    result["rf_shim_id"] = bi.rf_shim_id;
+    result["gx_amp_hz_per_m"] = bi.gx_amp_hz_per_m;
+    result["gy_amp_hz_per_m"] = bi.gy_amp_hz_per_m;
+    result["gz_amp_hz_per_m"] = bi.gz_amp_hz_per_m;
+    result["gx_shot_idx"] = bi.gx_shot_idx;
+    result["gy_shot_idx"] = bi.gy_shot_idx;
+    result["gz_shot_idx"] = bi.gz_shot_idx;
+    result["rotmat"] = rotmat;
+    result["norot_flag"] = bi.norot_flag;
+    result["nopos_flag"] = bi.nopos_flag;
+    result["adc_flag"] = bi.adc_flag;
+    result["adc_freq_hz"] = bi.adc_freq_hz;
+    result["adc_phase_rad"] = bi.adc_phase_rad;
+    result["module_id"] = bi.module_id;
+    return result;
+}
+
 static py::dict _get_sequence_parameters(_PulseqCollection &pc)
 {
     pulseg_sequence_parameters sp;
@@ -426,8 +482,7 @@ static py::dict _get_sequence_parameters(_PulseqCollection &pc)
     int rc = pulseg_get_sequence_parameters(&sp, pc.coll().handle());
     if (rc != PULSEG_SUCCESS)
     {
-        throw std::runtime_error(
-            "pulseg_get_sequence_parameters failed: " + std::to_string(rc));
+        throw std::runtime_error("pulseg_get_sequence_parameters failed: " + std::to_string(rc));
     }
     py::dict result;
     result["min_te_us"] = sp.min_te_us;
@@ -447,8 +502,7 @@ static py::dict _get_sequence_description(_PulseqCollection &pc, int subseq_idx)
     if (rc != PULSEG_SUCCESS)
     {
         pulseg_sequence_description_free(&sd);
-        throw std::runtime_error(
-            "pulseg_get_sequence_description failed: " + std::to_string(rc));
+        throw std::runtime_error("pulseg_get_sequence_description failed: " + std::to_string(rc));
     }
 
     py::dict result;
@@ -479,8 +533,7 @@ static py::dict _get_sequence_description(_PulseqCollection &pc, int subseq_idx)
         const pulseg_collection *coll_ptr = pc.coll().handle();
         if (subseq_idx >= 0 && subseq_idx < coll_ptr->num_subsequences)
         {
-            const pulseg_sequence_descriptor *desc =
-                &coll_ptr->descriptors[subseq_idx];
+            const pulseg_sequence_descriptor *desc = &coll_ptr->descriptors[subseq_idx];
 
             // Compute global segment offset for this subsequence
             int seg_offset = 0;
@@ -492,13 +545,12 @@ static py::dict _get_sequence_description(_PulseqCollection &pc, int subseq_idx)
             std::vector<int> rf_blk(desc->num_unique_rfs, -1);
             for (int si = 0; si < desc->segment_table.num_unique_segments; ++si)
             {
-                const pulseg_tr_segment *seg = &desc->segment_definitions[si];
+                const pulseg_virtual_segment *seg = &desc->segment_definitions[si];
                 for (int bi = 0; bi < seg->num_blocks; ++bi)
                 {
                     int bdef_idx = seg->unique_block_indices[bi];
-                    int rf_id = desc->block_definitions[bdef_idx].rf_id;
-                    if (rf_id >= 0 && rf_id < desc->num_unique_rfs &&
-                        rf_seg[rf_id] < 0)
+                    int rf_id = desc->base_blocks[bdef_idx].rf_id;
+                    if (rf_id >= 0 && rf_id < desc->num_unique_rfs && rf_seg[rf_id] < 0)
                     {
                         rf_seg[rf_id] = seg_offset + si;
                         rf_blk[rf_id] = bi;
@@ -513,24 +565,22 @@ static py::dict _get_sequence_description(_PulseqCollection &pc, int subseq_idx)
                     continue; // RF definition exists but not used in any segment block
 
                 pulseg_rf_stats stats;
-                int rc2 = pulseg_get_rf_stats(
-                    coll_ptr, &stats, subseq_idx, rf_id);
+                int rc2 = pulseg_get_rf_stats(coll_ptr, &stats, subseq_idx, rf_id);
                 if (rc2 != PULSEG_SUCCESS)
                     continue;
 
                 // Magnitude waveform
                 int nch = 0, npts = 0;
-                float **mag_arr = pulseg_get_rf_magnitude(
-                    coll_ptr, &nch, &npts, rf_seg[rf_id], rf_blk[rf_id]);
+                float **mag_arr =
+                    pulseg_get_rf_magnitude(coll_ptr, &nch, &npts, rf_seg[rf_id], rf_blk[rf_id]);
 
                 // Phase waveform
                 int nch_ph = 0, npts_ph = 0;
-                float **phase_arr = pulseg_get_rf_phase(
-                    coll_ptr, &nch_ph, &npts_ph, rf_seg[rf_id], rf_blk[rf_id]);
+                float **phase_arr =
+                    pulseg_get_rf_phase(coll_ptr, &nch_ph, &npts_ph, rf_seg[rf_id], rf_blk[rf_id]);
 
                 // Time axis
-                float *time_arr = pulseg_get_rf_time_us(
-                    coll_ptr, rf_seg[rf_id], rf_blk[rf_id]);
+                float *time_arr = pulseg_get_rf_time_us(coll_ptr, rf_seg[rf_id], rf_blk[rf_id]);
 
                 // Flatten magnitude: [ch0_s0, ch0_s1, ..., ch1_s0, ...]
                 std::vector<float> mag_flat, phase_flat, time_flat;
@@ -540,8 +590,7 @@ static py::dict _get_sequence_description(_PulseqCollection &pc, int subseq_idx)
                     {
                         if (npts > 0)
                         {
-                            mag_flat.insert(mag_flat.end(),
-                                            mag_arr[c], mag_arr[c] + npts);
+                            mag_flat.insert(mag_flat.end(), mag_arr[c], mag_arr[c] + npts);
                         }
                         PULSEG_FREE(mag_arr[c]);
                     }
@@ -553,8 +602,10 @@ static py::dict _get_sequence_description(_PulseqCollection &pc, int subseq_idx)
                     {
                         if (npts_ph > 0)
                         {
-                            phase_flat.insert(phase_flat.end(),
-                                              phase_arr[c], phase_arr[c] + npts_ph);
+                            phase_flat.insert(
+                                phase_flat.end(),
+                                phase_arr[c],
+                                phase_arr[c] + npts_ph);
                         }
                         PULSEG_FREE(phase_arr[c]);
                     }
@@ -601,92 +652,119 @@ static py::dict _get_sequence_description(_PulseqCollection &pc, int subseq_idx)
 PYBIND11_MODULE(_pulseg_wrapper, m)
 {
     py::class_<_PulseqCollection>(m, "_PulseqCollection")
-        .def(py::init<py::list, float, float, float, float,
-                      float, float, float, float, bool, int>(),
-             py::arg("seq_bytes_list"),
-             py::arg("gamma"),
-             py::arg("B0"),
-             py::arg("max_grad"),
-             py::arg("max_slew"),
-             py::arg("rf_raster_time"),
-             py::arg("grad_raster_time"),
-             py::arg("adc_raster_time"),
-             py::arg("block_duration_raster"),
-             py::arg("parse_labels") = true,
-             py::arg("num_averages") = 1)
-        .def(py::init<std::string, float, float, float, float,
-                      float, float, float, float, bool, int>(),
-             py::arg("file_path"),
-             py::arg("gamma"),
-             py::arg("B0"),
-             py::arg("max_grad"),
-             py::arg("max_slew"),
-             py::arg("rf_raster_time"),
-             py::arg("grad_raster_time"),
-             py::arg("adc_raster_time"),
-             py::arg("block_duration_raster"),
-             py::arg("parse_labels") = true,
-             py::arg("num_averages") = 1);
+        .def(
+            py::init<py::list, float, float, float, float, float, float, float, float, bool, int>(),
+            py::arg("seq_bytes_list"),
+            py::arg("gamma"),
+            py::arg("B0"),
+            py::arg("max_grad"),
+            py::arg("max_slew"),
+            py::arg("rf_raster_time"),
+            py::arg("grad_raster_time"),
+            py::arg("adc_raster_time"),
+            py::arg("block_duration_raster"),
+            py::arg("parse_labels") = true,
+            py::arg("num_averages") = 1)
+        .def(
+            py::init<
+                std::string,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                bool,
+                int>(),
+            py::arg("file_path"),
+            py::arg("gamma"),
+            py::arg("B0"),
+            py::arg("max_grad"),
+            py::arg("max_slew"),
+            py::arg("rf_raster_time"),
+            py::arg("grad_raster_time"),
+            py::arg("adc_raster_time"),
+            py::arg("block_duration_raster"),
+            py::arg("parse_labels") = true,
+            py::arg("num_averages") = 1);
 
-    m.def("_find_tr", &_find_tr,
-          py::arg("collection"),
-          py::arg("subsequence_idx") = 0);
+    m.def("_find_tr", &_find_tr, py::arg("collection"), py::arg("subsequence_idx") = 0);
 
-    m.def("_get_tr_waveforms", &_get_tr_waveforms,
-          py::arg("collection"),
-          py::arg("subsequence_idx") = 0,
-          py::arg("amplitude_mode") = 0,
-          py::arg("tr_index") = 0,
-          py::arg("collapse_delays") = false,
-          py::arg("num_averages") = 0);
+    m.def(
+        "_get_tr_waveforms",
+        &_get_tr_waveforms,
+        py::arg("collection"),
+        py::arg("subsequence_idx") = 0,
+        py::arg("amplitude_mode") = 0,
+        py::arg("tr_index") = 0,
+        py::arg("collapse_delays") = false,
+        py::arg("num_averages") = 0);
 
-    m.def("_calc_mech_resonances", &_calc_mech_resonances,
-          py::arg("collection"),
-          py::arg("subsequence_idx") = 0,
-          py::arg("canonical_tr_idx") = 0,
-          py::arg("target_resolution_hz"),
-          py::arg("max_freq_hz"),
-          py::arg("forbidden_bands") = py::list(),
-          py::arg("peak_log10_threshold") = py::none(),
-          py::arg("peak_norm_scale") = py::none(),
-          py::arg("peak_eps") = py::none(),
-          py::arg("peak_prominence") = py::none());
+    m.def(
+        "_calc_mech_resonances",
+        &_calc_mech_resonances,
+        py::arg("collection"),
+        py::arg("subsequence_idx") = 0,
+        py::arg("canonical_tr_idx") = 0,
+        py::arg("target_resolution_hz"),
+        py::arg("max_freq_hz"),
+        py::arg("forbidden_bands") = py::list(),
+        py::arg("peak_log10_threshold") = py::none(),
+        py::arg("peak_norm_scale") = py::none(),
+        py::arg("peak_eps") = py::none(),
+        py::arg("peak_prominence") = py::none());
 
-    m.def("_calc_pns", &_calc_pns,
-          py::arg("collection"),
-          py::arg("subsequence_idx") = 0,
-          py::arg("canonical_tr_idx") = 0,
-          py::arg("chronaxie_us"),
-          py::arg("rheobase"),
-          py::arg("alpha"));
+    m.def(
+        "_calc_pns",
+        &_calc_pns,
+        py::arg("collection"),
+        py::arg("subsequence_idx") = 0,
+        py::arg("canonical_tr_idx") = 0,
+        py::arg("chronaxie_us"),
+        py::arg("rheobase"),
+        py::arg("alpha"));
 
-    m.def("_check_consistency", &_check_consistency,
-          py::arg("collection"));
+    m.def("_check_consistency", &_check_consistency, py::arg("collection"));
 
-    m.def("_check_safety", &_check_safety,
-          py::arg("collection"),
-          py::arg("forbidden_bands") = py::list(),
-          py::arg("stim_threshold") = 0.0f,
-          py::arg("decay_constant_us") = 0.0f,
-          py::arg("pns_threshold_percent") = 100.0f,
-          py::arg("skip_pns") = true);
+    m.def(
+        "_check_safety",
+        &_check_safety,
+        py::arg("collection"),
+        py::arg("forbidden_bands") = py::list(),
+        py::arg("stim_threshold") = 0.0f,
+        py::arg("decay_constant_us") = 0.0f,
+        py::arg("pns_threshold_percent") = 100.0f,
+        py::arg("skip_pns") = true);
 
-    m.def("_get_report", &_get_report,
-          py::arg("collection"));
+    m.def("_get_report", &_get_report, py::arg("collection"));
 
-    m.def("_get_num_unique_blocks", &_get_num_unique_blocks,
-          py::arg("collection"),
-          py::arg("seq_idx"));
+    m.def(
+        "_get_num_unique_blocks",
+        &_get_num_unique_blocks,
+        py::arg("collection"),
+        py::arg("seq_idx"));
 
-    m.def("_get_unique_block_id", &_get_unique_block_id,
-          py::arg("collection"),
-          py::arg("seq_idx"),
-          py::arg("blk_def_idx"));
+    m.def(
+        "_get_unique_block_id",
+        &_get_unique_block_id,
+        py::arg("collection"),
+        py::arg("seq_idx"),
+        py::arg("blk_def_idx"));
 
-    m.def("_get_sequence_parameters", &_get_sequence_parameters,
-          py::arg("collection"));
+    m.def(
+        "_get_block_instance",
+        &_get_block_instance,
+        py::arg("collection"),
+        py::arg("subseq_idx"),
+        py::arg("exec_stream_pos"));
 
-    m.def("_get_sequence_description", &_get_sequence_description,
-          py::arg("collection"),
-          py::arg("subseq_idx") = 0);
+    m.def("_get_sequence_parameters", &_get_sequence_parameters, py::arg("collection"));
+
+    m.def(
+        "_get_sequence_description",
+        &_get_sequence_description,
+        py::arg("collection"),
+        py::arg("subseq_idx") = 0);
 }

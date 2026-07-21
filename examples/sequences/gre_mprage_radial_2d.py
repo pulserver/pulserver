@@ -4,8 +4,8 @@ This module implements the three mandatory module-level entry points
 required by the bridge dispatcher (see ``mprage_2d.py`` for the Cartesian
 inversion-prepared GRE this extends, ``gre_radial_2d.py`` for the
 non-prepared radial sibling, ``gre_mprage_radial_3d.py`` for the 3D
-counterpart this mirrors, and ``_gre_common.py`` / ``pulserver.design`` /
-``pulserver.design.preparations`` for the shared building blocks):
+counterpart this mirrors, and ``_gre_common.py`` / ``pulserver`` /
+``pulserver.preparations`` for the shared building blocks):
 
 - ``get_default_protocol(opts)``  — return the initial CV/protocol dictionary.
 - ``validate_protocol(opts, protocol)``  — validate the current protocol and
@@ -40,30 +40,32 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pypulseq as pp
-from scipy.spatial.transform import Rotation
-
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
-    BoolParam,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
+    PreparationType,
+    Sequence,
+    SequenceType,
     TypeinFloatParam,
     UIParam,
     Validate,
     dict_to_protocol,
     make_enum_param,
+    params,
     protocol_to_dict,
+    run_cli,
 )
-from pulserver import arbgrad
-from pulserver.core import PreparationType, SequenceType
-from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
-
-
+from pulserver.pypulseq import _gradients as encoding
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _sampling as sampling
+from pulserver.pypulseq import _system as system
+from pulserver.pypulseq import arbgrad
+from pulserver.pypulseq._rf import _excitation_helpers as excitation
+from pulserver.pypulseq._rf import _preparation_helpers as preparations
+from scipy.spatial.transform import Rotation
 
 NUM_ECHOES = 1
 FLYBACK = True
@@ -81,7 +83,7 @@ def _order_mode_name(code: float) -> str:
     return "golden" if code >= 0.5 else "uniform"
 
 
-class GreMprageRadial2DPulseqSequence(PulseqSequence):
+class GreMprageRadial2DPulseqSequence(Sequence):
     """Generate a 2D radial inversion/T2-prepared GRE, +/- MT sat."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -215,7 +217,7 @@ class GreMprageRadial2DPulseqSequence(PulseqSequence):
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
         trecovery_delay = pp.make_delay(system.round_to_raster(cfg.trecovery_s)) if cfg.trecovery_s > 0.0 else None
 
-        seq = ps.Sequence(opts)
+        seq = pp.Sequence(opts)
 
         angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
         segments = sampling.chunk_indices(list(range(cfg.num_shots)), cfg.etl)
@@ -234,7 +236,7 @@ class GreMprageRadial2DPulseqSequence(PulseqSequence):
 
                 for shot in segment:
                     angle = float(angles[shot])
-                    rotation = ps.make_rotation(Rotation.from_euler("z", angle))
+                    rotation = pp.make_rotation(Rotation.from_euler("z", angle))
                     label_lin = pp.make_label(type="SET", label="LIN", value=shot)
 
                     if cfg.mt_enable:
@@ -287,7 +289,7 @@ class GreMprageRadial2DPulseqSequence(PulseqSequence):
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
-def _emit_prep_module(seq, timing: dict, cfg: "_Config", segment_duration_s: float) -> None:
+def _emit_prep_module(seq, timing: dict, cfg: _Config, segment_duration_s: float) -> None:
     """Emit the (inversion or T2-prep) magnetization-prep blocks for one
     segment — see ``gre_mprage_radial_3d.py`` for the full rationale."""
     if cfg.prep_type == PreparationType.INVERSION:
@@ -485,7 +487,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

@@ -3,7 +3,7 @@
 This module implements the three mandatory module-level entry points
 required by the bridge dispatcher (see ``gre_3d.py`` for the Cartesian 3D
 GRE this parallels, ``epi_2d.py`` for the 2D EPI this mirrors, and
-``_gre_common.py`` / ``_epi_common.py`` / ``pulserver.design`` /
+``_gre_common.py`` / ``_epi_common.py`` / ``pulserver`` /
 ``_diffusion_common.py`` for the shared building blocks):
 
 - ``get_default_protocol(opts)``  — return the initial CV/protocol dictionary.
@@ -39,26 +39,28 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pypulseq as pp
-
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
     DropdownFloatParam,
     DropdownIntParam,
+    Sequence,
+    SequenceType,
     TypeinFloatParam,
     UIParam,
     Validate,
     dict_to_protocol,
     make_enum_param,
+    params,
     protocol_to_dict,
+    run_cli,
 )
-from pulserver.core import SequenceType
-from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
-
-
+from pulserver.pypulseq import _gradients as encoding
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _sampling as sampling
+from pulserver.pypulseq import _system as system
+from pulserver.pypulseq._rf import _excitation_helpers as excitation
+from pulserver.pypulseq._rf import _preparation_helpers as preparations
 
 RF_REFOCUS_TIME_S = 3.0e-3
 RF_REFOCUS_APODIZATION = 0.5
@@ -67,7 +69,7 @@ RF_REFOCUS_TIME_BW_PRODUCT = 4.0
 USER_SLOT_RAMP_SAMPLE = 0
 
 
-class Epi3DPulseqSequence(PulseqSequence):
+class Epi3DPulseqSequence(Sequence):
     """Generate a 3D single-/multi-shot spin-echo EPI sequence."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -188,7 +190,7 @@ class Epi3DPulseqSequence(PulseqSequence):
         tau2_delay = pp.make_delay(tau2_s) if tau2_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
-        seq = ps.Sequence(opts)
+        seq = pp.Sequence(opts)
 
         shot_starts = list(range(0, cfg.ny_pe, cfg.etl))
         par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
@@ -270,7 +272,7 @@ class Epi3DPulseqSequence(PulseqSequence):
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
-def _n_shots(cfg: "_Config") -> int:
+def _n_shots(cfg: _Config) -> int:
     return len(range(0, cfg.ny_pe, cfg.etl))
 
 
@@ -332,8 +334,8 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     gz_spoil = pp.make_trapezoid(channel="z", area=encoding.SPOIL_FACTOR_Z / cfg.slab_thickness_m, system=opts)
 
     voxel_size_m = cfg.fov_ro_m / cfg.nx_ro
-    crusher_before = encoding.spoiler_3axis(opts, voxel_size_m)
-    crusher_after = encoding.spoiler_3axis(opts, voxel_size_m)
+    crusher_before = encoding.make_spoiler(opts, voxel_size_m)
+    crusher_after = encoding.make_spoiler(opts, voxel_size_m)
 
     delta_s, separation_s = preparations.diffusion_timing(cfg.te_s)
     grad_t_per_m = preparations.required_gradient_t_per_m(cfg.b_value_s_mm2, delta_s, separation_s, opts.gamma)
@@ -458,7 +460,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

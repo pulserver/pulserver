@@ -1,4 +1,4 @@
-"""Unit tests for pulserver.design.encoding."""
+"""Unit tests for pulserver gradient helpers."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design import encoding
+from pulserver.pypulseq import _gradients as encoding
 
 
 def test_phase_encode_gradient_defaults() -> None:
     opts = pp.Opts()
-    template, areas = encoding.phase_encode_gradient(opts, "y", 0.22, 64)
+    template, areas = encoding.make_phase_encoding(opts, "y", 0.22, 64)
     delta_k = 1.0 / 0.22
     assert len(areas) == 64
     assert areas[0] == pytest.approx(-32 * delta_k)
@@ -22,8 +22,8 @@ def test_phase_encode_gradient_defaults() -> None:
 
 def test_phase_encode_gradient_partial_fourier_shrinks_template() -> None:
     opts = pp.Opts()
-    full, _ = encoding.phase_encode_gradient(opts, "y", 0.22, 64)
-    pf, areas = encoding.phase_encode_gradient(opts, "y", 0.22, 64, pf=0.75)
+    full, _ = encoding.make_phase_encoding(opts, "y", 0.22, 64)
+    pf, areas = encoding.make_phase_encoding(opts, "y", 0.22, 64, partial_fourier=0.75)
     assert abs(pf.area) < abs(full.area)
     assert len(areas) == 64
 
@@ -31,31 +31,31 @@ def test_phase_encode_gradient_partial_fourier_shrinks_template() -> None:
 def test_phase_encode_gradient_rejects_bad_args() -> None:
     opts = pp.Opts()
     with pytest.raises(ValueError):
-        encoding.phase_encode_gradient(opts, "y", 0.22, 64, pf=0.0)
+        encoding.make_phase_encoding(opts, "y", 0.22, 64, partial_fourier=0.0)
     with pytest.raises(ValueError):
-        encoding.phase_encode_gradient(opts, "y", 0.22, 64, accel=0.5)
+        encoding.make_phase_encoding(opts, "y", 0.22, 64, acceleration=0.5)
 
 
 def test_crusher_by_cycles_matches_explicit_area() -> None:
     opts = pp.Opts()
-    by_cycles = encoding.crusher(opts, "z", cycles=4.0, voxel_size_m=5e-3)
-    by_area = encoding.crusher(opts, "z", area=4.0 / 5e-3)
+    by_cycles = encoding.make_crusher(opts, "z", dephasing_cycles=4.0, voxel_size=5e-3)
+    by_area = encoding.make_crusher(opts, "z", area=4.0 / 5e-3)
     assert by_cycles.area == pytest.approx(by_area.area)
 
 
 def test_crusher_rejects_ambiguous_spec() -> None:
     opts = pp.Opts()
     with pytest.raises(ValueError):
-        encoding.crusher(opts, "z")
+        encoding.make_crusher(opts, "z")
     with pytest.raises(ValueError):
-        encoding.crusher(opts, "z", cycles=4.0, area=100.0, voxel_size_m=5e-3)
+        encoding.make_crusher(opts, "z", dephasing_cycles=4.0, area=100.0, voxel_size=5e-3)
     with pytest.raises(ValueError):
-        encoding.crusher(opts, "z", cycles=4.0)
+        encoding.make_crusher(opts, "z", dephasing_cycles=4.0)
 
 
 def test_spoiler_3axis_areas() -> None:
     opts = pp.Opts()
-    gx, gy, gz = encoding.spoiler_3axis(opts, 3e-3)
+    gx, gy, gz = encoding.make_spoiler(opts, 3e-3)
     for g in (gx, gy, gz):
         assert g.area == pytest.approx(4.0 / 3e-3)
     assert (gx.channel, gy.channel, gz.channel) == ("x", "y", "z")

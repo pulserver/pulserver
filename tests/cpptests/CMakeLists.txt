@@ -42,7 +42,7 @@ target_include_directories(trajectory_cache_reader_obj PUBLIC
     ${MRDSERVER_CSRC}
     ${ISMRMRD_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS})
-target_link_libraries(trajectory_cache_reader_obj PUBLIC pulseg ISMRMRD::ISMRMRD)
+target_link_libraries(trajectory_cache_reader_obj PUBLIC pulseg_recon ISMRMRD::ISMRMRD)
 
 # ------------------------------------------------------------------
 # Test executable.

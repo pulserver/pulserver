@@ -11,24 +11,22 @@ shared building blocks):
 - ``make_sequence(opts, protocol, output_path)``  — synthesise the sequence
   and write it to *output_path* using :func:`pulserver.io.write`.
 
-ZTE structure: for every spoke, the readout gradient ramps up to its
-(system-max, derated) plateau FIRST; only once it's stable does the short
-non-selective hard pulse fire, followed by the minimum RF/ADC dead-time gap,
-then a half-echo (0 -> kmax) readout — see ``_zte_common.py`` for exactly
-what this means and why a few samples nearest k-space center are
-unavoidably missing (the ZTE "gap", reported not filled). Spokes are
-rotated only in-plane (about the physical Z axis, pulseq ``ROTATIONS``
-extension) — a deliberate simplification of "true" (inherently 3D) ZTE for
-this "2D" family member, matching the project's 2D/3D naming convention
-elsewhere in the zoo (see ``zte_3d.py`` for genuine 3D-spoke ZTE). There is
-no slice-select gradient at all — the excitation is non-selective, so
-there's no separate "slice" concept and no slice loop.
+ZTE structure: for every spoke, the readout gradient ramps up to its constant
+plateau FIRST; only once it's stable does the short non-selective hard pulse
+fire, followed by the minimum RF/ADC dead-time gap, then a half-echo
+(0 -> kmax) readout. A few samples nearest k-space center are unavoidably
+missing (the ZTE "gap", reported but not filled). The complete ordered
+in-plane direction list is handed to :func:`pulserver.make_zte_readout`,
+which slews directly between consecutive directions and returns to zero only
+after the segment. This remains a deliberate 2D direction-set simplification
+of inherently 3D ZTE (see ``zte_3d.py``). There is no slice-select gradient:
+the excitation is non-selective, so there is no separate slice loop.
 
 ``NumShots`` (``IntKey.NUM_SHOTS``, native GE) is the number of spokes. The
 spoke-ordering mode has no native GE counterpart, so it's an ``opuser``
 custom variable, same as ``gre_radial_2d.py``. There is no ``TE`` or
 ``bandwidth`` control: TE is fixed by hardware dead times (not user-set),
-and the gradient always runs at system max (fastest possible ZTE readout).
+and the excitation/readout bandwidth is fixed by this example.
 
 Usage
 -----
@@ -43,28 +41,28 @@ from __future__ import annotations
 
 import sys
 
-import pypulseq as pp
-from scipy.spatial.transform import Rotation
-
+import numpy as np
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
+    Sequence,
+    SequenceType,
     UIParam,
     Validate,
     dict_to_protocol,
     make_enum_param,
+    params,
     protocol_to_dict,
+    run_cli,
 )
-from pulserver import arbgrad
-from pulserver.core import SequenceType
-from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _rf as rf
+from pulserver.pypulseq import _sampling as sampling
 
-
+ZTE_RF_DURATION_S = 20e-6
 
 USER_SLOT_ORDER_MODE = 0
 
@@ -73,7 +71,7 @@ def _order_mode_name(code: float) -> str:
     return "golden" if code >= 0.5 else "uniform"
 
 
-class Zte2DPulseqSequence(PulseqSequence):
+class Zte2DPulseqSequence(Sequence):
     """Generate a 2D (in-plane-spoke) ZTE sequence."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -124,7 +122,7 @@ class Zte2DPulseqSequence(PulseqSequence):
         if timing is None:
             return {"valid": False, "duration": None, "info": "TR too short for the ZTE readout"}
 
-        duration_s = cfg.tr_s * float(cfg.num_shots)
+        duration_s = timing["readout"].duration
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
@@ -133,23 +131,9 @@ class Zte2DPulseqSequence(PulseqSequence):
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
 
-        gx = timing["gx"]
-        adc = timing["adc"]
-        tr_delay_s = timing["tr_delay_s"]
-        tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
-
-        seq = ps.Sequence(opts)
-
-        angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
-
-        for spoke, angle in enumerate(angles):
-            rotation = ps.make_rotation(Rotation.from_euler("z", float(angle)))
-            rf = system.copy_event(timing["rf"])
-            label_lin = pp.make_label(type="SET", label="LIN", value=spoke)
-
-            seq.add_block(gx, rf, adc, label_lin, rotation)
-            if tr_delay is not None:
-                seq.add_block(tr_delay)
+        zte = timing["readout"]
+        seq = pp.Sequence(opts)
+        zte(seq=seq, lin_idx=np.arange(cfg.num_shots))
 
         seq.set_definition("Name", "zte_2d")
         seq.set_definition("FOV", [cfg.fov_m, cfg.fov_m, cfg.fov_m])
@@ -159,6 +143,7 @@ class Zte2DPulseqSequence(PulseqSequence):
         seq.set_definition("Trajectory", "zte")
         seq.set_definition("SpokeOrder", cfg.order_mode)
         seq.set_definition("Gap", timing["gap_s"])
+        seq.set_definition("MissingSamples", zte.num_missing_samples)
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("NumShots", cfg.num_shots)
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
@@ -180,31 +165,35 @@ def _read_protocol(prot: dict) -> _Config:
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    system.apply_system_derates(opts)
-
-    rf = readout.build_hard_pulse(opts, cfg.flip_deg)
-    ro_events = readout.build_half_echo_readout(opts, "x", cfg.nx_ro, cfg.fov_m)
-    if ro_events is None:
-        return None
-    gx, adc, gap_s = ro_events
-    # RF must fire only once the readout gradient has ramped to plateau —
-    # the defining ZTE ordering (gradient-then-pulse), not the reverse.
-    rf.delay = gx.rise_time
-
-    min_block_s = pp.calc_duration(gx, rf, adc)
-    tr_delay_s = cfg.tr_s - min_block_s
-    if tr_delay_s < -1e-9 and strict:
-        return None
-    if tr_delay_s < 0.0:
-        tr_delay_s = 0.0
+    angles = (
+        sampling.golden_angles(cfg.num_shots)
+        if cfg.order_mode == "golden"
+        else sampling.uniform_angles(cfg.num_shots)
+    )
+    excitation = rf.make_hard_pulse(
+        np.deg2rad(cfg.flip_deg),
+        duration=ZTE_RF_DURATION_S,
+        system=opts,
+        use="excitation",
+    )
+    try:
+        module = readout.Zte(
+            opts,
+            cfg.fov_m,
+            cfg.nx_ro,
+            angles,
+            excitation.rf,
+            tr_s=cfg.tr_s,
+        )
+    except ValueError as error:
+        if strict and "tr_s=" in str(error):
+            return None
+        raise
 
     return {
-        "rf": rf,
-        "gx": gx,
-        "adc": adc,
-        "gap_s": gap_s,
-        "tr_delay_s": tr_delay_s,
-        "min_block_s": min_block_s,
+        "readout": module,
+        "gap_s": module.gap_s,
+        "min_block_s": module.duration,
     }
 
 
@@ -239,7 +228,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

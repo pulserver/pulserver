@@ -1,4 +1,4 @@
-"""Unit tests for pulserver.design.readout builders (Phase 7/11 additions)."""
+"""Unit tests for pulserver private readout builders (Phase 7/11 additions)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design import readout
+from pulserver.pypulseq import _readout as readout
 
 OPTS_KW = dict(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 

@@ -1,4 +1,4 @@
-"""Unit tests for pulserver.design.pulses."""
+"""Unit tests for pulserver.pulses."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design import pulses
+from pulserver.pypulseq._rf import _auxiliary_helpers as pulses
 
 
 def test_fat_shift_hz() -> None:
@@ -30,7 +30,7 @@ def test_fat_saturation_module() -> None:
 
 def test_fat_saturation_block_roundtrip(tmp_path) -> None:
     import pulserver.io as pio
-    import pulserver.pulseq as ps
+    import pulserver.pypulseq as ps
 
     opts = pp.Opts()
     fs = pulses.fat_saturation(opts, freq_offset_hz=-441.0, voxel_size_m=3e-3)

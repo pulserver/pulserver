@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from pulserver.core import PulseqSequence
+from pulserver import PulseqSequence
 
 
 class _EmptySequence(PulseqSequence):

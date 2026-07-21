@@ -1,4 +1,4 @@
-"""Unit tests for pulserver.design.excitation (incl. Phase-10 additions)."""
+"""Unit tests for pulserver.excitation (incl. Phase-10 additions)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design import excitation
+from pulserver.pypulseq._rf import _excitation_helpers as excitation
 
 
 def _flip_deg_from_integral(rf) -> float:

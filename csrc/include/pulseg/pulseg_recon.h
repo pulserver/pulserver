@@ -3,11 +3,9 @@
  * @brief Standalone ANSI-C reader for the recon-relevant sections of a
  *        pulseg binary cache (.pseg/.pge).
  *
- * Stage 4 of the vendor-neutral refactor: C89 port of the former
- * cxx/recon/trajectory_cache_reader.cpp byte-parsing logic. Reads directly
- * from the cache file -- no loaded pulseg_collection required -- so it is
- * usable by any recon consumer (C, or the thin cxx/recon C++ wrapper) that
- * only has the cache file on disk:
+ * Reads straight from the cache file -- no loaded pulseg_collection
+ * required -- so it is usable by any recon consumer (C, or the thin
+ * cxx/recon C++ wrapper) that only has the cache file on disk:
  *   - Section 0 (DEFINITIONS): per-subsequence generic [DEFINITIONS] kv
  *     (FOV/Matrix/NavFOV/NavMatrix/TR/TE/TI/FlipAngle/... as pulseq
  *     strings). Absent if the cache predates this section (tolerated).
@@ -22,7 +20,7 @@
  *     slice-selectivity classification.
  *
  * TRAJECTORY and SEQDESC are both MANDATORY as of cache format v2.0.0
- * (master plan D11: all cache sections are written unconditionally by
+ * (all cache sections are written unconditionally by
  * pulseg__write_cache()) -- a missing or malformed section is a hard read
  * error via the return code, never a silent degrade. Do not add tolerance
  * for an absent SEQDESC; a cache lacking it is a fixture/writer bug.
@@ -57,7 +55,7 @@ extern "C"
     typedef struct pulseg_recon_definitions
     {
         int num_definitions;
-        pulseg__definition *definitions; /* NULL if num_definitions == 0 */
+        pulseq_definition *definitions; /* NULL if num_definitions == 0 */
     } pulseg_recon_definitions;
 
     /* ================================================================== */
@@ -159,10 +157,11 @@ extern "C"
      *         (missing file, bad header, or a missing/truncated mandatory
      *         section).
      */
-    int pulseg_recon_cache_read(pulseg_recon_cache *out,
-                                 const char *cache_path,
-                                 char *diag,
-                                 int diag_size);
+    int pulseg_recon_cache_read(
+        pulseg_recon_cache *out,
+        const char *cache_path,
+        char *diag,
+        int diag_size);
 
     /** @brief Free all memory owned by a pulseg_recon_cache. Safe to call
      * on a zero-initialised or partially-populated struct. */
@@ -179,7 +178,7 @@ extern "C"
      *         if subseq_idx is out of range or no definition named @p name
      *         exists for it.
      */
-    const pulseg__definition *pulseg_recon_find_definition(
+    const pulseq_definition *pulseg_recon_find_definition(
         const pulseg_recon_cache *cache,
         int subseq_idx,
         const char *name);

@@ -24,7 +24,7 @@ target_include_directories(pulseg_recon_reader PUBLIC
 # Public: pulseg (C library, provides csrc/include/pulseg/*.h transitively
 # incl. pulseg_recon.h) and ismrmrd (trajectory_cache_reader.h's class API
 # returns ISMRMRD:: types).
-target_link_libraries(pulseg_recon_reader PUBLIC pulseg ismrmrd)
+target_link_libraries(pulseg_recon_reader PUBLIC pulseg_recon ismrmrd)
 
 install(TARGETS pulseg_recon_reader EXPORT mrdserverTargets
     ARCHIVE DESTINATION lib)

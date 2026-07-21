@@ -1,4 +1,11 @@
-/* pulseg_error.c -- error messages, hints, and lookup tables */
+/**
+ * @file pulseg_error.c
+ * @brief Error-code messages, fix hints, and diagnostic formatting.
+ *
+ * pulseg_format_error() is what a consumer surfaces to the user: the message
+ * for the code, the hint for how to fix it, and whatever context the failing
+ * pass wrote into the diagnostic.
+ */
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -6,86 +13,9 @@
 
 #include "pulseg_internal.h"
 
-/* ------------------------------------------------------------------ */
-/*  Label / hint lookup tables                                        */
-/* ------------------------------------------------------------------ */
-
-static const pulseg__table_entry label_table[] = {
-    {"SLC", PULSEG__SLC},
-    {"SEG", PULSEG__SEG},
-    {"REP", PULSEG__REP},
-    {"AVG", PULSEG__AVG},
-    {"SET", PULSEG__SET},
-    {"ECO", PULSEG__ECO},
-    {"PHS", PULSEG__PHS},
-    {"LIN", PULSEG__LIN},
-    {"PAR", PULSEG__PAR},
-    {"ACQ", PULSEG__ACQ},
-    {"NAV", PULSEG__NAV},
-    {"REV", PULSEG__REV},
-    {"SMS", PULSEG__SMS},
-    {"REF", PULSEG__REF},
-    {"IMA", PULSEG__IMA},
-    {"NOISE", PULSEG__NOISE},
-    {"PMC", PULSEG__PMC},
-    {"NOROT", PULSEG__NOROT},
-    {"NOPOS", PULSEG__NOPOS},
-    {"NOSCL", PULSEG__NOSCL},
-    {"ONCE", PULSEG__ONCE},
-    {"TRID", PULSEG__TRID},
-    {"OFF", PULSEG__OFF},
-    {"MODULE", PULSEG__MODULE},
-    {NULL, -1}};
-
-int pulseg__label2enum(const char *label)
-{
-    int i;
-    if (!label)
-        return -1;
-    for (i = 0; label_table[i].name != NULL; i++)
-    {
-        if (strcmp(label, label_table[i].name) == 0)
-            return label_table[i].value;
-    }
-    return -1;
-}
-
-int pulseg_pulseq_label_id_for_name(const char *name)
-{
-    return pulseg__label2enum(name);
-}
-
-int pulseg_pulseq_hint_id_for_name(const char *name)
-{
-    return pulseg__hint2enum(name);
-}
-
-static const pulseg__table_entry hint_table[] = {
-    {"TE", PULSEG__HINT_TE},
-    {"TR", PULSEG__HINT_TR},
-    {"TI", PULSEG__HINT_TI},
-    {"ESP", PULSEG__HINT_ESP},
-    {"RECTIME", PULSEG__HINT_RECTIME},
-    {"T2PREP", PULSEG__HINT_T2PREP},
-    {"TE2", PULSEG__HINT_TE2},
-    {NULL, -1}};
-
-int pulseg__hint2enum(const char *hint)
-{
-    int i;
-    if (!hint)
-        return -1;
-    for (i = 0; hint_table[i].name != NULL; i++)
-    {
-        if (strcmp(hint, hint_table[i].name) == 0)
-            return hint_table[i].value;
-    }
-    return -1;
-}
-
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Diagnostic init                                                   */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 void pulseg_diagnostic_init(pulseg_diagnostic *diag)
 {
     if (!diag)
@@ -110,9 +40,9 @@ void pulseg__diag_printf(pulseg_diagnostic *diag, const char *fmt, ...)
     diag->message[PULSEG_DIAG_MSG_LEN - 1] = '\0';
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Error messages                                                     */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 const char *pulseg_get_error_message(int code)
 {
     switch (code)
@@ -202,9 +132,9 @@ const char *pulseg_get_error_message(int code)
     }
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Error hints                                                       */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 const char *pulseg_get_error_hint(int code)
 {
     switch (code)
@@ -232,7 +162,8 @@ const char *pulseg_get_error_hint(int code)
         return "The .seq file does not contain a [SIGNATURE] section. "
                "Re-export the sequence to include a signature.";
     case PULSEG_ERR_TR_NO_IMAGING_REGION:
-        return "Make sure to use ONCE flags either at beginning (preparation) or end (cooldown) of the sequence.";
+        return "Make sure to use ONCE flags either at beginning (preparation) or end (cooldown) of "
+               "the sequence.";
     case PULSEG_ERR_TR_NO_PERIODIC_PATTERN:
         return "This often occurs when phase-encoding gradients are created inside "
                "the sequence loop with varying amplitudes. Instead, create gradient "
@@ -249,7 +180,8 @@ const char *pulseg_get_error_hint(int code)
         return "The sequence contains a waveform with more than 16 distinct waveform shapes.";
     case PULSEG_ERR_TR_PREP_TOO_LONG:
     case PULSEG_ERR_TR_COOLDOWN_TOO_LONG:
-        return "The preparation or cooldown section differs from the main TR pattern and is too long.";
+        return "The preparation or cooldown section differs from the main TR pattern and is too "
+               "long.";
     case PULSEG_ERR_MAX_GRAD_EXCEEDED:
         return "The gradient sum-of-squares amplitude exceeds the system limit. "
                "See diagnostic message for details.";

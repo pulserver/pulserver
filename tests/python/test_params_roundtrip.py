@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pulserver
 import pytest
-from pulserver.core import (
+from pulserver import (
     BoolKey,
     BoolParam,
     DropdownFloatParam,

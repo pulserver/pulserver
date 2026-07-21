@@ -2,7 +2,7 @@
 
 This module implements the three mandatory module-level entry points
 required by the bridge dispatcher (see ``gre_multiecho_2d.py`` for the
-non-prepared 2D GRE this extends, and ``_gre_common.py``/``pulserver.design``
+non-prepared 2D GRE this extends, and ``_gre_common.py``/``pulserver``
 for the shared low-level building blocks):
 
 - ``get_default_protocol(opts)``  — return the initial CV/protocol dictionary.
@@ -20,7 +20,7 @@ loop (accelerated via ``Ry``):
         non-selective inversion pulse (hard or adiabatic hypsec)
         3-axis non-selective spoiler
         TI delay (measured from the inversion RF center to the temporal
-            center of the following segment — see ``pulserver.design.preparations``)
+            center of the following segment — see ``pulserver.preparations``)
         for ky_chunk in chunks(PE lines, ETL):         # one shot
             for ky in ky_chunk:
                 single-echo GRE view (slice-selective sinc excitation with
@@ -57,28 +57,30 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pypulseq as pp
-
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
     BoolParam,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
+    Sequence,
+    SequenceType,
     TypeinFloatParam,
     UIParam,
     Validate,
     dict_to_protocol,
     make_enum_param,
+    params,
     protocol_to_dict,
+    run_cli,
 )
-from pulserver.core import SequenceType
-from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
-
-
+from pulserver.pypulseq import _gradients as encoding
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _sampling as sampling
+from pulserver.pypulseq import _system as system
+from pulserver.pypulseq._rf import _excitation_helpers as excitation
+from pulserver.pypulseq._rf import _preparation_helpers as preparations
 
 NUM_ECHOES = 1
 FLYBACK = True
@@ -87,7 +89,7 @@ USER_SLOT_TI = 0
 USER_SLOT_INV_MODE = 1
 
 
-class Mprage2DPulseqSequence(PulseqSequence):
+class Mprage2DPulseqSequence(Sequence):
     """Generate a 2D inversion-prepared (MPRAGE) Cartesian GRE sequence."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -211,7 +213,7 @@ class Mprage2DPulseqSequence(PulseqSequence):
         trecovery_s_rounded = system.round_to_raster(cfg.trecovery_s)
         trecovery_delay = pp.make_delay(trecovery_s_rounded) if trecovery_s_rounded > 0.0 else None
 
-        seq = ps.Sequence(opts)
+        seq = pp.Sequence(opts)
 
         delta_k_pe = 1.0 / cfg.fov_pe_m
         phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
@@ -442,7 +444,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

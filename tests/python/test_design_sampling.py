@@ -1,11 +1,10 @@
-"""Unit tests for pulserver.design.sampling view-ordering helpers."""
+"""Unit tests for pulserver private sampling view-ordering helpers."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
-
-from pulserver.design import sampling
+from pulserver.pypulseq import _sampling as sampling
 
 
 def _coords_grid(n: int) -> np.ndarray:

@@ -21,15 +21,15 @@
 
 #include <stdlib.h>
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Vendor identifiers (runtime constants)                            */
-/* ------------------------------------------------------------------ */
-#define PULSEG_VENDOR_UNSPECIFIED   0
-#define PULSEG_VENDOR_SIEMENS        1
-#define PULSEG_VENDOR_GEHC           2
-#define PULSEG_VENDOR_PHILIPS        3
+/* ================================================================== */
+#define PULSEG_VENDOR_UNSPECIFIED 0
+#define PULSEG_VENDOR_SIEMENS 1
+#define PULSEG_VENDOR_GEHC 2
+#define PULSEG_VENDOR_PHILIPS 3
 #define PULSEG_VENDOR_UNITED_IMAGING 4
-#define PULSEG_VENDOR_BRUKER         5
+#define PULSEG_VENDOR_BRUKER 5
 
 /* Compile-time default (overrideable via -DPULSEG_VENDOR=N). Public
  * builds are vendor-neutral; vendor layers (e.g. the private
@@ -39,9 +39,9 @@
 #define PULSEG_VENDOR PULSEG_VENDOR_UNSPECIFIED
 #endif
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Acoustic peak-detection defaults                                  */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 #ifndef PULSEG_PEAK_LOG10_THRESHOLD_DEFAULT
 #define PULSEG_PEAK_LOG10_THRESHOLD_DEFAULT 2.25f
@@ -59,18 +59,18 @@
 #define PULSEG_PEAK_PROMINENCE_DEFAULT 0.0f
 #endif
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Structural mechanical resonance analysis defaults                  */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 /** Minimum waveform samples before sub-period detection is applied. */
 #ifndef PULSEG_MIN_ARBITRARY_SAMPLES
 #define PULSEG_MIN_ARBITRARY_SAMPLES 10
 #endif
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Allocator overrides                                               */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 /*
  * Override PULSEG_ALLOC / PULSEG_FREE *before* including this
@@ -88,9 +88,9 @@
 #define PULSEG_FREE(ptr) free(ptr)
 #endif
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Hardware frequency-conversion overrides (D9)                      */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 /*
  * Override PULSEG_HW_FREQ_CONVERSION / PULSEG_HW_WAVEFORM_END before
@@ -108,9 +108,9 @@
 #define PULSEG_HW_WAVEFORM_END 0
 #endif
 
-/* ------------------------------------------------------------------ */
-/*  Binary cache defaults (D10)                                       */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/*  Binary cache defaults                                       */
+/* ================================================================== */
 
 #ifndef PULSEG_CACHE_EXT_MAX
 #define PULSEG_CACHE_EXT_MAX 16

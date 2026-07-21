@@ -1,31 +1,16 @@
-/* pulseg_accessors.c -- collection-level accessor functions
+/**
+ * @file pulseg_getters.c
+ * @brief Read-only accessors over a loaded collection.
  *
- * Public functions:
- *   pulseg_get_max_adc_samples    pulseg_get_adc_dwell_ns
- *   pulseg_get_adc_num_samples    pulseg_get_num_segments
- *   pulseg_is_segment_pure_delay  pulseg_get_segment_num_blocks
- *   pulseg_get_block_start_time_us   pulseg_get_block_duration_us
- *   pulseg_block_has_rf           pulseg_block_rf_has_uniform_raster
- *   pulseg_block_rf_is_complex    pulseg_get_rf_num_samples
- *   pulseg_get_rf_num_channels    pulseg_get_rf_delay_us
- *   pulseg_get_rf_magnitude       pulseg_get_rf_phase
- *   pulseg_get_rf_time_us
- *   pulseg_block_has_grad         pulseg_block_grad_is_trapezoid
- *   pulseg_get_grad_num_samples   pulseg_get_grad_num_shots
- *   pulseg_get_grad_delay_us         pulseg_get_grad_amplitude
- *   pulseg_get_grad_initial_amplitude_hz_per_m
- *   pulseg_get_grad_initial_shot_id
- *   pulseg_get_grad_time_us
- *   pulseg_block_has_adc          pulseg_get_adc_delay_us
- *   pulseg_get_adc_library_index
- *   pulseg_block_has_digitalout   pulseg_get_digitalout_delay_us
- *   pulseg_segment_has_trigger    pulseg_get_segment_trigger_delay_us
- *   pulseg_segment_is_nav
- *   pulseg_block_has_rotation
- *   pulseg_block_has_norot        pulseg_block_has_nopos
+ * Every getter here is a projection of the internal descriptor tables onto
+ * the public value types (pulseg_segment_info, pulseg_block_info, the
+ * waveform accessors, ...), so consumers never see pulseg_internal.h.
  *
- * Internal (pulseg__) functions:
- *   pulseg__resolve_segment       pulseg__resolve_block
+ * All of them take (seg_idx, blk_idx) in COLLECTION coordinates -- segment
+ * indices are global across chained subsequences -- and go through
+ * resolve_segment() / resolve_block(), which map those onto the owning
+ * descriptor plus subsequence-local indices. A getter that bypasses those
+ * two helpers is a bug.
  */
 
 #include <math.h>
@@ -39,7 +24,7 @@
 /*  Resolve helpers                                                   */
 /* ================================================================== */
 
-int pulseg__resolve_segment(
+static int resolve_segment(
     const pulseg_collection *coll,
     const pulseg_sequence_descriptor **out_desc,
     int *out_local_seg,
@@ -83,19 +68,20 @@ int pulseg__resolve_segment(
     return 0;
 }
 
-int pulseg__resolve_block(
+static int resolve_block(
     const pulseg_collection *coll,
     const pulseg_sequence_descriptor **out_desc,
-    const pulseg_tr_segment **out_seg,
+    const pulseg_virtual_segment **out_seg,
     int *out_local_blk,
-    int seg_idx, int blk_idx)
+    int seg_idx,
+    int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
 
     desc = NULL;
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return 0;
 
     seg = &desc->segment_definitions[local_seg];
@@ -115,7 +101,7 @@ int pulseg__resolve_block(
 /*  Axis helper                                                       */
 /* ================================================================== */
 
-static int get_grad_id_by_axis(const pulseg_block_definition *bdef, int axis)
+static int get_grad_id_by_axis(const pulseg_base_block *bdef, int axis)
 {
     switch (axis)
     {
@@ -130,88 +116,54 @@ static int get_grad_id_by_axis(const pulseg_block_definition *bdef, int axis)
     }
 }
 
-static int get_grad_event_id_by_axis(const pulseg_block_table_element *bte, int axis)
-{
-    switch (axis)
-    {
-    case PULSEG_GRAD_AXIS_X:
-        return bte->gx_id;
-    case PULSEG_GRAD_AXIS_Y:
-        return bte->gy_id;
-    case PULSEG_GRAD_AXIS_Z:
-        return bte->gz_id;
-    default:
-        return -1;
-    }
-}
-
-static const pulseg_block_table_element *resolve_block_table_via_max_energy(
+/* The per-(segment, block-position) record frozen at parse time from the
+ * segment's representative (max-energy) scan instance -- see
+ * pulseg_structure.c step 11e.  NULL when the descriptor predates the record
+ * (no representative resolvable); callers then use the same fallbacks the
+ * pre-computation resolution used when no instance was found. */
+static const pulseg_block_initial_state *resolve_initial_state(
     const pulseg_sequence_descriptor *desc,
-    const pulseg_tr_segment *seg,
+    const pulseg_virtual_segment *seg,
     int local_blk)
 {
-    int scan_idx, block_table_idx;
-
-    if (!desc || !seg)
+    if (!desc || !seg || !seg->initial_states)
         return NULL;
-    if (seg->max_energy_start_block < 0)
+    if (local_blk < 0 || local_blk >= seg->num_blocks)
         return NULL;
 
-    scan_idx = seg->max_energy_start_block + local_blk;
-    if (scan_idx < 0 || scan_idx >= desc->scan_table_len)
-        return NULL;
-
-    block_table_idx = desc->scan_table_block_idx[scan_idx];
-    if (block_table_idx < 0 || block_table_idx >= desc->num_blocks)
-        return NULL;
-
-    return &desc->block_table[block_table_idx];
+    return &seg->initial_states[local_blk];
 }
 
 static int resolve_grad_def_via_max_energy_instance(
     const pulseg_sequence_descriptor *desc,
-    const pulseg_tr_segment *seg,
-    int local_blk, int axis)
+    const pulseg_virtual_segment *seg,
+    int local_blk,
+    int axis)
 {
-    const pulseg_block_table_element *bte;
-    int grad_event_id;
-    int grad_def_id;
+    const pulseg_block_initial_state *st;
 
-    if (!desc || !seg)
-        return -1;
-    if (local_blk < 0 || local_blk >= seg->num_blocks)
+    if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return -1;
 
-    bte = resolve_block_table_via_max_energy(desc, seg, local_blk);
-    if (!bte)
+    st = resolve_initial_state(desc, seg, local_blk);
+    if (!st)
         return -1;
 
-    grad_event_id = get_grad_event_id_by_axis(bte, axis);
-    if (grad_event_id < 0 || grad_event_id >= desc->grad_table_size)
-        return -1;
-
-    grad_def_id = desc->grad_table[grad_event_id].id;
-    if (grad_def_id < 0 || grad_def_id >= desc->num_unique_grads)
-        return -1;
-
-    return grad_def_id;
+    return st->grad_def_id[axis];
 }
 
 /* ================================================================== */
 /*  Subsequence accessors (internal helpers for batch getters)         */
 /* ================================================================== */
 
-static int pulseg__get_num_subsequences(
-    const pulseg_collection *coll)
+static int get_num_subsequences(const pulseg_collection *coll)
 {
     if (!coll)
         return 0;
     return coll->num_subsequences;
 }
 
-static float pulseg__get_tr_duration_us(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static float get_tr_duration_us(const pulseg_collection *coll, int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *tr;
@@ -224,99 +176,77 @@ static float pulseg__get_tr_duration_us(
     return tr->tr_duration_us;
 }
 
-static int pulseg__get_num_trs(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static int get_num_trs(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].tr_descriptor.num_trs;
 }
 
-static int pulseg__get_tr_size(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static int get_tr_size(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].tr_descriptor.tr_size;
 }
 
-static int pulseg__get_num_prep_blocks(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static int get_num_prep_blocks(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].tr_descriptor.num_prep_blocks;
 }
 
-static int pulseg__get_num_cooldown_blocks(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static int get_num_cooldown_blocks(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].tr_descriptor.num_cooldown_blocks;
 }
 
-static int pulseg__get_degenerate_prep(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static int get_degenerate_prep(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].tr_descriptor.degenerate_prep;
 }
 
-static int pulseg__get_degenerate_cooldown(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static int get_degenerate_cooldown(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].tr_descriptor.degenerate_cooldown;
 }
 
-static int pulseg__get_num_prep_trs(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static int get_num_prep_trs(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].tr_descriptor.num_prep_trs;
 }
 
-static int pulseg__get_num_cooldown_trs(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static int get_num_cooldown_trs(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].tr_descriptor.num_cooldown_trs;
 }
 
-static int pulseg__get_num_unique_adcs(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static int get_num_unique_adcs(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].num_unique_adcs;
 }
 
-static int pulseg__is_pmc_enabled(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static int is_pmc_enabled(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].enable_pmc;
 }
 
-static int pulseg__get_subseq_segment_offset(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static int get_subseq_segment_offset(const pulseg_collection *coll, int subseq_idx)
 {
     int i, offset = 0;
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
@@ -326,22 +256,19 @@ static int pulseg__get_subseq_segment_offset(
     return offset;
 }
 
-static float pulseg__get_total_duration_us(
-    const pulseg_collection *coll)
+static float get_total_duration_us(const pulseg_collection *coll)
 {
     if (!coll)
         return 0.0f;
     return coll->total_duration_us;
 }
 
-int pulseg_get_scan_time(const pulseg_collection *coll,
-                            pulseg_scan_time_info *info,
-                            int num_reps)
+int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *info, int num_reps)
 {
     int i, n, bt_idx;
     const pulseg_sequence_descriptor *desc;
     const pulseg_block_table_element *bte;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     int prev_seg, cur_seg;
 
     if (!coll || !info)
@@ -361,19 +288,18 @@ int pulseg_get_scan_time(const pulseg_collection *coll,
         desc = &coll->descriptors[i];
         prev_seg = -1;
 
-        for (n = 0; n < desc->scan_table_len; ++n)
+        for (n = 0; n < desc->exec_stream_len; ++n)
         {
-            bt_idx = desc->scan_table_block_idx[n];
+            bt_idx = desc->exec_stream_block_idx[n];
             bte = &desc->block_table[bt_idx];
-            bdef = &desc->block_definitions[bte->id];
+            bdef = &desc->base_blocks[bte->id];
 
             /* Duration: pure delay uses instance value, normal uses definition */
-            info->total_duration_us += (bte->duration_us >= 0)
-                                           ? (float)bte->duration_us
-                                           : (float)bdef->duration_us;
+            info->total_duration_us +=
+                (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
 
             /* Count segment boundaries (transitions) */
-            cur_seg = desc->scan_table_seg_id[n];
+            cur_seg = desc->exec_stream_seg_id[n];
             if (cur_seg >= 0 && cur_seg != prev_seg)
                 info->total_segment_boundaries += 1;
             prev_seg = cur_seg;
@@ -387,9 +313,7 @@ int pulseg_get_scan_time(const pulseg_collection *coll,
 /*  RF accessors                                                      */
 /* ================================================================== */
 
-static int pulseg__get_num_unique_rf(
-    const pulseg_collection *coll,
-    int subseq_idx)
+static int get_num_unique_rf(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
@@ -399,7 +323,8 @@ static int pulseg__get_num_unique_rf(
 int pulseg_get_rf_stats(
     const pulseg_collection *coll,
     pulseg_rf_stats *stats,
-    int subseq_idx, int rf_idx)
+    int subseq_idx,
+    int rf_idx)
 {
     const pulseg_sequence_descriptor *desc;
 
@@ -423,10 +348,7 @@ int pulseg_get_rf_stats(
  *   out_rf_ids must point to a pre-allocated array of tr_size ints.
  *   Returns tr_size on success, negative error code on failure.
  */
-int pulseg_get_tr_rf_ids(
-    const pulseg_collection *coll,
-    int *out_rf_ids,
-    int subseq_idx)
+int pulseg_get_tr_rf_ids(const pulseg_collection *coll, int *out_rf_ids, int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *trd;
@@ -462,17 +384,14 @@ int pulseg_get_tr_rf_ids(
 /*    amplitude from the rf_table and the repetition count for        */
 /*    that region.  The library allocates; caller must free().        */
 /* ================================================================== */
-int pulseg_get_rf_array(
-    const pulseg_collection *coll,
-    pulseg_rf_stats **out_pulses,
-    int subseq_idx)
+int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pulses, int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *trd;
     const pulseg_block_table_element *bte;
     const pulseg_rf_definition *rfdef;
     int start, count, num_instances;
-    int use_scan_table;
+    int use_exec_stream;
     int num_passes, pass_size;
     int i, n, num_rf;
 
@@ -485,17 +404,17 @@ int pulseg_get_rf_array(
     desc = &coll->descriptors[subseq_idx];
     trd = &desc->tr_descriptor;
 
-    use_scan_table = 0;
+    use_exec_stream = 0;
     if ((!trd->degenerate_prep || !trd->degenerate_cooldown) &&
         (trd->num_prep_blocks > 0 || trd->num_cooldown_blocks > 0))
     {
         num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
-        pass_size = (num_passes > 0) ? (desc->scan_table_len / num_passes) : 0;
+        pass_size = (num_passes > 0) ? (desc->exec_stream_len / num_passes) : 0;
 
         start = 0;
         count = pass_size;
         num_instances = num_passes;
-        use_scan_table = 1;
+        use_exec_stream = 1;
     }
     else
     {
@@ -510,10 +429,10 @@ int pulseg_get_rf_array(
     }
 
     /* Clamp to available block range */
-    if (use_scan_table)
+    if (use_exec_stream)
     {
-        if (start + count > desc->scan_table_len)
-            count = desc->scan_table_len - start;
+        if (start + count > desc->exec_stream_len)
+            count = desc->exec_stream_len - start;
     }
     else if (start + count > desc->num_blocks)
     {
@@ -526,9 +445,7 @@ int pulseg_get_rf_array(
     num_rf = 0;
     for (i = 0; i < count; ++i)
     {
-        int blk_idx = use_scan_table
-                          ? desc->scan_table_block_idx[start + i]
-                          : (start + i);
+        int blk_idx = use_exec_stream ? desc->exec_stream_block_idx[start + i] : (start + i);
         bte = &desc->block_table[blk_idx];
         if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size)
         {
@@ -542,8 +459,7 @@ int pulseg_get_rf_array(
         return 0;
 
     /* Allocate output array (caller frees with PULSEG_FREE) */
-    *out_pulses = (pulseg_rf_stats *)PULSEG_ALLOC(
-        (size_t)num_rf * sizeof(pulseg_rf_stats));
+    *out_pulses = (pulseg_rf_stats *)PULSEG_ALLOC((size_t)num_rf * sizeof(pulseg_rf_stats));
     if (!*out_pulses)
         return PULSEG_ERR_ALLOC_FAILED;
 
@@ -551,7 +467,7 @@ int pulseg_get_rf_array(
     n = 0;
     for (i = 0; i < count; ++i)
     {
-        int blk_idx = use_scan_table ? desc->scan_table_block_idx[start + i] : (start + i);
+        int blk_idx = use_exec_stream ? desc->exec_stream_block_idx[start + i] : (start + i);
         int rf_def_id;
         float act_amp;
 
@@ -593,7 +509,7 @@ int pulseg_get_rf_array(
 /*  pulseg_get_rf_event_array --                                      */
 /*    Build an ordered array of RF event identities for a TR region.  */
 /*    Walk logic is index-aligned with pulseg_get_rf_array() above    */
-/*    (same use_scan_table/start/count selection, same clamps, same   */
+/*    (same use_exec_stream/start/count selection, same clamps, same   */
 /*    skip conditions) -- keep the two walks in sync.                 */
 /* ================================================================== */
 int pulseg_get_rf_event_array(
@@ -606,7 +522,7 @@ int pulseg_get_rf_event_array(
     const pulseg_block_table_element *bte;
     const pulseg_rf_definition *rfdef;
     int start, count, num_instances;
-    int use_scan_table;
+    int use_exec_stream;
     int num_passes, pass_size;
     int i, n, num_rf;
 
@@ -619,17 +535,17 @@ int pulseg_get_rf_event_array(
     desc = &coll->descriptors[subseq_idx];
     trd = &desc->tr_descriptor;
 
-    use_scan_table = 0;
+    use_exec_stream = 0;
     if ((!trd->degenerate_prep || !trd->degenerate_cooldown) &&
         (trd->num_prep_blocks > 0 || trd->num_cooldown_blocks > 0))
     {
         num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
-        pass_size = (num_passes > 0) ? (desc->scan_table_len / num_passes) : 0;
+        pass_size = (num_passes > 0) ? (desc->exec_stream_len / num_passes) : 0;
 
         start = 0;
         count = pass_size;
         num_instances = num_passes;
-        use_scan_table = 1;
+        use_exec_stream = 1;
     }
     else
     {
@@ -646,10 +562,10 @@ int pulseg_get_rf_event_array(
     (void)num_instances; /* not part of the event identity */
 
     /* Clamp to available block range */
-    if (use_scan_table)
+    if (use_exec_stream)
     {
-        if (start + count > desc->scan_table_len)
-            count = desc->scan_table_len - start;
+        if (start + count > desc->exec_stream_len)
+            count = desc->exec_stream_len - start;
     }
     else if (start + count > desc->num_blocks)
     {
@@ -662,9 +578,7 @@ int pulseg_get_rf_event_array(
     num_rf = 0;
     for (i = 0; i < count; ++i)
     {
-        int blk_idx = use_scan_table
-                          ? desc->scan_table_block_idx[start + i]
-                          : (start + i);
+        int blk_idx = use_exec_stream ? desc->exec_stream_block_idx[start + i] : (start + i);
         bte = &desc->block_table[blk_idx];
         if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size)
         {
@@ -678,8 +592,7 @@ int pulseg_get_rf_event_array(
         return 0;
 
     /* Allocate output array (caller frees with PULSEG_FREE) */
-    *out_events = (pulseg_rf_event *)PULSEG_ALLOC(
-        (size_t)num_rf * sizeof(pulseg_rf_event));
+    *out_events = (pulseg_rf_event *)PULSEG_ALLOC((size_t)num_rf * sizeof(pulseg_rf_event));
     if (!*out_events)
         return PULSEG_ERR_ALLOC_FAILED;
 
@@ -687,7 +600,7 @@ int pulseg_get_rf_event_array(
     n = 0;
     for (i = 0; i < count; ++i)
     {
-        int blk_idx = use_scan_table ? desc->scan_table_block_idx[start + i] : (start + i);
+        int blk_idx = use_exec_stream ? desc->exec_stream_block_idx[start + i] : (start + i);
         int rf_def_id;
         float act_amp;
 
@@ -723,23 +636,20 @@ int pulseg_get_rf_event_array(
  * block-definition id, plus ADC separately since BLOCK_DEF_COLS excludes
  * it) -- deliberately excludes amplitude/phase/rotation, which may
  * legitimately vary per repeat/slice. */
-static void pulseg__module_block_signature(
+static void module_block_signature(
     const pulseg_sequence_descriptor *desc,
-    int blk_idx,
     int *out_block_def_id,
-    int *out_adc_def_id)
+    int *out_adc_def_id,
+    int blk_idx)
 {
     const pulseg_block_table_element *bte = &desc->block_table[blk_idx];
     *out_block_def_id = bte->id;
     *out_adc_def_id = (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size)
-                           ? desc->adc_table[bte->adc_id].id
-                           : -1;
+        ? desc->adc_table[bte->adc_id].id
+        : -1;
 }
 
-int pulseg_get_modules(
-    const pulseg_collection *coll,
-    pulseg_module **out_modules,
-    int subseq_idx)
+int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_modules, int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int *run_module_id = NULL;
@@ -759,15 +669,15 @@ int pulseg_get_modules(
         return PULSEG_ERR_INVALID_ARGUMENT;
 
     desc = &coll->descriptors[subseq_idx];
-    if (desc->scan_table_len <= 0 || !desc->scan_table_block_idx || !desc->block_table)
+    if (desc->exec_stream_len <= 0 || !desc->exec_stream_block_idx || !desc->block_table)
         return 0;
 
     /* ---- Pass 1: split the materialized scan table into maximal runs of
      * consecutive positions sharing the same non-zero module_id. Worst
      * case one run per position, so this bound is always safe. ---- */
-    run_module_id = (int *)PULSEG_ALLOC((size_t)desc->scan_table_len * sizeof(int));
-    run_start     = (int *)PULSEG_ALLOC((size_t)desc->scan_table_len * sizeof(int));
-    run_len       = (int *)PULSEG_ALLOC((size_t)desc->scan_table_len * sizeof(int));
+    run_module_id = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
+    run_start = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
+    run_len = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
     if (!run_module_id || !run_start || !run_len)
     {
         ret = PULSEG_ERR_ALLOC_FAILED;
@@ -776,18 +686,18 @@ int pulseg_get_modules(
 
     {
         int prev_mid = 0;
-        for (i = 0; i < desc->scan_table_len; ++i)
+        for (i = 0; i < desc->exec_stream_len; ++i)
         {
-            int blk = desc->scan_table_block_idx[i];
+            int blk = desc->exec_stream_block_idx[i];
             int mid = desc->block_table[blk].module_id;
             /* A run also breaks at every main-region TR boundary
-             * (scan_table_tr_start[i]==1), not just on a module_id
+             * (exec_stream_tr_start[i]==1), not just on a module_id
              * transition -- otherwise adjacent NEX/pass repeats of the
              * same main-region module (identical module_id across the
              * repeat boundary, since MODULE is sticky and the author
              * never re-SETs it) would silently merge into one giant run
              * instead of being counted as separate occurrences. */
-            int is_tr_start = desc->scan_table_tr_start && desc->scan_table_tr_start[i];
+            int is_tr_start = desc->exec_stream_tr_start && desc->exec_stream_tr_start[i];
             if (mid != 0 && (mid != prev_mid || is_tr_start))
             {
                 /* New run starts here. */
@@ -861,8 +771,9 @@ int pulseg_get_modules(
                 ref_len = run_len[r];
                 for (i = 0; i < ref_len; ++i)
                 {
-                    int blk = desc->scan_table_block_idx[run_start[r] + i];
-                    one_instance_duration_us += desc->block_definitions[desc->block_table[blk].id].duration_us;
+                    int blk = desc->exec_stream_block_idx[run_start[r] + i];
+                    one_instance_duration_us +=
+                        desc->base_blocks[desc->block_table[blk].id].duration_us;
                 }
             }
             else
@@ -876,12 +787,12 @@ int pulseg_get_modules(
                 }
                 for (i = 0; i < ref_len; ++i)
                 {
-                    int ref_blk = desc->scan_table_block_idx[run_start[ref_run] + i];
-                    int cur_blk = desc->scan_table_block_idx[run_start[r] + i];
+                    int ref_blk = desc->exec_stream_block_idx[run_start[ref_run] + i];
+                    int cur_blk = desc->exec_stream_block_idx[run_start[r] + i];
                     int ref_def, ref_adc, cur_def, cur_adc;
 
-                    pulseg__module_block_signature(desc, ref_blk, &ref_def, &ref_adc);
-                    pulseg__module_block_signature(desc, cur_blk, &cur_def, &cur_adc);
+                    module_block_signature(desc, &ref_def, &ref_adc, ref_blk);
+                    module_block_signature(desc, &cur_def, &cur_adc, cur_blk);
 
                     if (ref_def != cur_def || ref_adc != cur_adc)
                     {
@@ -914,11 +825,16 @@ int pulseg_get_modules(
     ret = num_distinct;
 
 cleanup:
-    if (run_module_id) PULSEG_FREE(run_module_id);
-    if (run_start) PULSEG_FREE(run_start);
-    if (run_len) PULSEG_FREE(run_len);
-    if (distinct_ids) PULSEG_FREE(distinct_ids);
-    if (mods) PULSEG_FREE(mods);
+    if (run_module_id)
+        PULSEG_FREE(run_module_id);
+    if (run_start)
+        PULSEG_FREE(run_start);
+    if (run_len)
+        PULSEG_FREE(run_len);
+    if (distinct_ids)
+        PULSEG_FREE(distinct_ids);
+    if (mods)
+        PULSEG_FREE(mods);
     return ret;
 }
 
@@ -926,36 +842,14 @@ cleanup:
 /*  ADC collection accessors                                          */
 /* ================================================================== */
 
-static int pulseg__get_total_readouts(
-    const pulseg_collection *coll)
+static int get_total_readouts(const pulseg_collection *coll)
 {
-    int i, n, total;
-
     if (!coll)
         return 0;
-
-    total = 0;
-    for (i = 0; i < coll->num_subsequences; ++i)
-    {
-        const pulseg_sequence_descriptor *desc = &coll->descriptors[i];
-        if (!desc->scan_table_block_idx || desc->scan_table_len <= 0)
-            continue;
-
-        for (n = 0; n < desc->scan_table_len; ++n)
-        {
-            int bt_idx = desc->scan_table_block_idx[n];
-            if (bt_idx >= 0 && bt_idx < desc->num_blocks &&
-                desc->block_table[bt_idx].adc_id >= 0)
-            {
-                total++;
-            }
-        }
-    }
-    return total;
+    return coll->total_readouts;
 }
 
-static int pulseg__get_max_adc_samples(
-    const pulseg_collection *coll)
+static int get_max_adc_samples(const pulseg_collection *coll)
 {
     int i, j, max_samples;
 
@@ -974,8 +868,7 @@ static int pulseg__get_max_adc_samples(
     return max_samples;
 }
 
-static int pulseg__get_adc_dwell_ns(
-    const pulseg_collection *coll, int adc_idx)
+static int get_adc_dwell_ns(const pulseg_collection *coll, int adc_idx)
 {
     int i, global_idx, num_adcs, local;
 
@@ -996,8 +889,7 @@ static int pulseg__get_adc_dwell_ns(
     return 0;
 }
 
-static int pulseg__get_adc_num_samples(
-    const pulseg_collection *coll, int adc_idx)
+static int get_adc_num_samples(const pulseg_collection *coll, int adc_idx)
 {
     int i, global_idx, num_adcs, local;
 
@@ -1022,23 +914,21 @@ static int pulseg__get_adc_num_samples(
 /*  Segment accessors (internal helpers for batch getters)             */
 /* ================================================================== */
 
-static int pulseg__get_num_segments(
-    const pulseg_collection *coll)
+static int get_num_segments(const pulseg_collection *coll)
 {
     if (!coll)
         return 0;
     return coll->total_unique_segments;
 }
 
-static int pulseg__get_segment_duration_us(
-    const pulseg_collection *coll, int seg_idx)
+static int get_segment_duration_us(const pulseg_collection *coll, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg, k, total;
-    const pulseg_tr_segment *seg;
-    const pulseg_block_definition *bdef;
+    const pulseg_virtual_segment *seg;
+    const pulseg_base_block *bdef;
 
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     seg = &desc->segment_definitions[local_seg];
@@ -1047,9 +937,9 @@ static int pulseg__get_segment_duration_us(
      * scan-loop instances still expose per-instance delay from block table. */
     if (seg->num_blocks == 1)
     {
-        bdef = &desc->block_definitions[seg->unique_block_indices[0]];
-        if (bdef->rf_id == -1 && bdef->gx_id == -1 && bdef->gy_id == -1 &&
-            bdef->gz_id == -1 && bdef->adc_id == -1)
+        bdef = &desc->base_blocks[seg->unique_block_indices[0]];
+        if (bdef->rf_id == -1 && bdef->gx_id == -1 && bdef->gy_id == -1 && bdef->gz_id == -1 &&
+            bdef->adc_id == -1)
         {
             if (desc->block_raster_us > 0.0f)
                 return (int)(desc->block_raster_us);
@@ -1059,53 +949,49 @@ static int pulseg__get_segment_duration_us(
 
     total = 0;
     for (k = 0; k < seg->num_blocks; ++k)
-        total += desc->block_definitions[seg->unique_block_indices[k]].duration_us;
+        total += desc->base_blocks[seg->unique_block_indices[k]].duration_us;
 
     return total;
 }
 
-static int pulseg__is_segment_pure_delay(
-    const pulseg_collection *coll, int seg_idx)
+static int is_segment_pure_delay(const pulseg_collection *coll, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg;
-    const pulseg_tr_segment *seg;
-    const pulseg_block_definition *bdef;
+    const pulseg_virtual_segment *seg;
+    const pulseg_base_block *bdef;
 
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     seg = &desc->segment_definitions[local_seg];
     if (seg->num_blocks == 1)
     {
-        bdef = &desc->block_definitions[seg->unique_block_indices[0]];
-        if (bdef->rf_id == -1 && bdef->gx_id == -1 &&
-            bdef->gy_id == -1 && bdef->gz_id == -1 &&
+        bdef = &desc->base_blocks[seg->unique_block_indices[0]];
+        if (bdef->rf_id == -1 && bdef->gx_id == -1 && bdef->gy_id == -1 && bdef->gz_id == -1 &&
             bdef->adc_id == -1 && !seg->has_digitalout[0])
             return 1;
     }
     return 0;
 }
 
-static int pulseg__get_segment_num_blocks(
-    const pulseg_collection *coll, int seg_idx)
+static int get_segment_num_blocks(const pulseg_collection *coll, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg;
 
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     return desc->segment_definitions[local_seg].num_blocks;
 }
 
-static int pulseg__get_segment_start_block(
-    const pulseg_collection *coll, int seg_idx)
+static int get_segment_start_block(const pulseg_collection *coll, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg;
 
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     return desc->segment_definitions[local_seg].start_block;
@@ -1115,32 +1001,28 @@ static int pulseg__get_segment_start_block(
 /*  Segment table queries                                             */
 /* ================================================================== */
 
-static int pulseg__get_num_prep_segments(
-    const pulseg_collection *coll, int subseq_idx)
+static int get_num_prep_segments(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].segment_table.num_prep_segments;
 }
 
-static int pulseg__get_num_main_segments(
-    const pulseg_collection *coll, int subseq_idx)
+static int get_num_main_segments(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].segment_table.num_main_segments;
 }
 
-static int pulseg__get_num_cooldown_segments(
-    const pulseg_collection *coll, int subseq_idx)
+static int get_num_cooldown_segments(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return 0;
     return coll->descriptors[subseq_idx].segment_table.num_cooldown_segments;
 }
 
-int pulseg_get_prep_segment_table(
-    const pulseg_collection *coll, int *out_ids, int subseq_idx)
+int pulseg_get_prep_segment_table(const pulseg_collection *coll, int *out_ids, int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int n;
@@ -1155,8 +1037,7 @@ int pulseg_get_prep_segment_table(
     return n;
 }
 
-int pulseg_get_main_segment_table(
-    const pulseg_collection *coll, int *out_ids, int subseq_idx)
+int pulseg_get_main_segment_table(const pulseg_collection *coll, int *out_ids, int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int n;
@@ -1171,8 +1052,7 @@ int pulseg_get_main_segment_table(
     return n;
 }
 
-int pulseg_get_cooldown_segment_table(
-    const pulseg_collection *coll, int *out_ids, int subseq_idx)
+int pulseg_get_cooldown_segment_table(const pulseg_collection *coll, int *out_ids, int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int n;
@@ -1188,7 +1068,9 @@ int pulseg_get_cooldown_segment_table(
 }
 
 int pulseg_get_canonical_segment_sequence(
-    const pulseg_collection *coll, int *out_ids, int subseq_idx)
+    const pulseg_collection *coll,
+    int *out_ids,
+    int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *trd;
@@ -1251,27 +1133,14 @@ int pulseg_get_canonical_segment_sequence(
 /*  Segment timing queries                                            */
 /* ================================================================== */
 
-static int pulseg__get_segment_num_kzero_crossings(
-    const pulseg_collection *coll, int seg_idx)
-{
-    const pulseg_sequence_descriptor *desc;
-    int local_seg;
-
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
-        return 0;
-
-    return desc->segment_definitions[local_seg].timing.num_kzero_crossings;
-}
-
-static int pulseg__get_segment_rf_adc_gap_us(
-    const pulseg_collection *coll, int seg_idx)
+static int get_segment_rf_adc_gap_us(const pulseg_collection *coll, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg;
     const pulseg_segment_timing *tm;
     int r, a;
 
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     tm = &desc->segment_definitions[local_seg].timing;
@@ -1299,15 +1168,14 @@ static int pulseg__get_segment_rf_adc_gap_us(
     }
 }
 
-static int pulseg__get_segment_adc_adc_gap_us(
-    const pulseg_collection *coll, int seg_idx)
+static int get_segment_adc_adc_gap_us(const pulseg_collection *coll, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg;
     const pulseg_segment_timing *tm;
     int a, r, best;
 
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     tm = &desc->segment_definitions[local_seg].timing;
@@ -1343,28 +1211,26 @@ static int pulseg__get_segment_adc_adc_gap_us(
     return best;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Per-block RF isocenter and ADC k-zero from segment timing anchors */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
-float pulseg_get_rf_isocenter_us(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+float pulseg_get_rf_isocenter_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
-    const pulseg_block_definition *bdef;
+    const pulseg_virtual_segment *seg;
+    const pulseg_base_block *bdef;
     const pulseg_rf_definition *rdef;
     int local_blk, k;
     float start_us = 0.0f;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1.0f;
 
     for (k = 0; k < local_blk; ++k)
-        start_us += (float)desc->block_definitions[seg->unique_block_indices[k]].duration_us;
+        start_us += (float)desc->base_blocks[seg->unique_block_indices[k]].duration_us;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     if (bdef->rf_id < 0 || bdef->rf_id >= desc->num_unique_rfs)
         return -1.0f;
 
@@ -1372,24 +1238,22 @@ float pulseg_get_rf_isocenter_us(
     return start_us + (float)rdef->delay + (float)rdef->stats.isodelay_us;
 }
 
-float pulseg_get_adc_kzero_us(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+float pulseg_get_adc_kzero_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
-    const pulseg_block_definition *bdef;
+    const pulseg_virtual_segment *seg;
+    const pulseg_base_block *bdef;
     const pulseg_adc_definition *adef;
     int local_blk, k;
     float start_us = 0.0f;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1.0f;
 
     for (k = 0; k < local_blk; ++k)
-        start_us += (float)desc->block_definitions[seg->unique_block_indices[k]].duration_us;
+        start_us += (float)desc->base_blocks[seg->unique_block_indices[k]].duration_us;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     if (bdef->adc_id < 0 || bdef->adc_id >= desc->num_unique_adcs)
         return -1.0f;
 
@@ -1408,48 +1272,44 @@ float pulseg_get_adc_kzero_us(
     /* Fallback: midpoint (Cartesian convention). */
     adef = &desc->adc_definitions[bdef->adc_id];
     return start_us + (float)adef->delay +
-           (float)(adef->num_samples / 2) * (float)adef->dwell_time * 1e-3f;
+        (float)(adef->num_samples / 2) * (float)adef->dwell_time * 1e-3f;
 }
 
 /* ================================================================== */
 /*  Block-level queries (internal helpers for batch getter)            */
 /* ================================================================== */
 
-static int pulseg__get_block_start_time_us(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int get_block_start_time_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, k, start_time;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     start_time = 0;
     for (k = 0; k < local_blk; ++k)
-        start_time += desc->block_definitions[seg->unique_block_indices[k]].duration_us;
+        start_time += desc->base_blocks[seg->unique_block_indices[k]].duration_us;
 
     return start_time;
 }
 
-static int pulseg__get_block_duration_us(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int get_block_duration_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     if (seg->num_blocks == 1 && local_blk == 0)
     {
-        bdef = &desc->block_definitions[seg->unique_block_indices[0]];
-        if (bdef->rf_id == -1 && bdef->gx_id == -1 && bdef->gy_id == -1 &&
-            bdef->gz_id == -1 && bdef->adc_id == -1)
+        bdef = &desc->base_blocks[seg->unique_block_indices[0]];
+        if (bdef->rf_id == -1 && bdef->gx_id == -1 && bdef->gy_id == -1 && bdef->gz_id == -1 &&
+            bdef->adc_id == -1)
         {
             if (desc->block_raster_us > 0.0f)
                 return (int)(desc->block_raster_us);
@@ -1457,43 +1317,39 @@ static int pulseg__get_block_duration_us(
         }
     }
 
-    return desc->block_definitions[seg->unique_block_indices[local_blk]].duration_us;
+    return desc->base_blocks[seg->unique_block_indices[local_blk]].duration_us;
 }
 
 /* ================================================================== */
 /*  RF queries (internal helpers + public waveform getters)            */
 /* ================================================================== */
 
-static int pulseg__block_has_rf(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int block_has_rf(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     return (bdef->rf_id != -1) ? 1 : 0;
 }
 
-static int pulseg__block_rf_has_uniform_raster(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int block_rf_has_uniform_raster(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     const pulseg_rf_definition *rdef;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     if (bdef->rf_id == -1)
         return -1;
 
@@ -1501,7 +1357,7 @@ static int pulseg__block_rf_has_uniform_raster(
     return (rdef->time_shape_id == 0) ? 1 : 0;
 }
 
-static float *pulseg__alloc_uniform_time_us(int num_samples, float raster_us)
+static float *alloc_uniform_time_us(int num_samples, float raster_us)
 {
     float *t;
     int i;
@@ -1519,20 +1375,18 @@ static float *pulseg__alloc_uniform_time_us(int num_samples, float raster_us)
     return t;
 }
 
-static int pulseg__block_rf_is_complex(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int block_rf_is_complex(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     const pulseg_rf_definition *rdef;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     if (bdef->rf_id == -1)
         return -1;
 
@@ -1540,21 +1394,19 @@ static int pulseg__block_rf_is_complex(
     return (rdef->phase_shape_id != 0) ? 1 : 0;
 }
 
-static int pulseg__get_rf_num_samples(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int get_rf_num_samples(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, shape_idx, total, nch;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     const pulseg_rf_definition *rdef;
-    const pulseg_shape_arbitrary *shape;
+    const pulseq_shape *shape;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     if (bdef->rf_id == -1)
         return -1;
 
@@ -1599,39 +1451,35 @@ static int pulseg__get_rf_num_samples(
     return total / nch;
 }
 
-static int pulseg__get_rf_delay_us(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int get_rf_delay_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     if (bdef->rf_id == -1)
         return -1;
 
     return desc->rf_definitions[bdef->rf_id].delay;
 }
 
-static int pulseg__get_rf_duration_us(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int get_rf_duration_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     const pulseg_rf_definition *rdef;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     if (bdef->rf_id == -1)
         return -1;
 
@@ -1641,20 +1489,18 @@ static int pulseg__get_rf_duration_us(
     return (int)(rdef->stats.duration_us);
 }
 
-static int pulseg__get_rf_num_channels(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int get_rf_num_channels(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     const pulseg_rf_definition *rdef;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     if (bdef->rf_id == -1)
         return -1;
 
@@ -1662,22 +1508,22 @@ static int pulseg__get_rf_num_channels(
     return (rdef->num_channels > 1) ? rdef->num_channels : 1;
 }
 
-#define PULSEG__RF_SHAPE_MAG   0
+#define PULSEG__RF_SHAPE_MAG 0
 #define PULSEG__RF_SHAPE_PHASE 1
 
 /* Shared decompress+split body for magnitude/phase RF waveform getters,
  * keyed off an already-resolved rf definition. Returns a malloc'd
  * (PULSEG_ALLOC) array of *num_channels row pointers, each *num_samples
  * floats, or NULL (shape absent / decompress failure / alloc failure). */
-static float **pulseg__get_rf_def_shape(
+static float **get_rf_def_shape(
     const pulseg_sequence_descriptor *desc,
-    const pulseg_rf_definition *rdef,
-    int which_shape,
     int *num_channels,
-    int *num_samples)
+    int *num_samples,
+    const pulseg_rf_definition *rdef,
+    int which_shape)
 {
     int shape_id, shape_idx, nch, npts, ch;
-    pulseg_shape_arbitrary decompressed;
+    pulseq_shape decompressed;
     float *flat;
     float **result;
 
@@ -1696,7 +1542,7 @@ static float **pulseg__get_rf_def_shape(
     decompressed.num_uncompressed_samples = 0;
     decompressed.samples = NULL;
 
-    if (!pulseg_pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx], 1.0f))
+    if (!pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx], 1.0f))
         return NULL;
 
     flat = decompressed.samples;
@@ -1733,86 +1579,86 @@ static float **pulseg__get_rf_def_shape(
     return result;
 }
 
-float **pulseg_get_rf_magnitude(const pulseg_collection *coll,
-                                   int *num_channels,
-                                   int *num_samples,
-                                   int seg_idx,
-                                   int blk_idx)
-{
-    const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
-    int local_blk;
-    const pulseg_block_definition *bdef;
-    const pulseg_rf_definition *rdef;
-
-    if (!num_channels || !num_samples)
-        return NULL;
-    *num_channels = 0;
-    *num_samples = 0;
-
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
-        return NULL;
-
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
-    if (bdef->rf_id == -1)
-        return NULL;
-
-    rdef = &desc->rf_definitions[bdef->rf_id];
-    return pulseg__get_rf_def_shape(desc, rdef, PULSEG__RF_SHAPE_MAG, num_channels, num_samples);
-}
-
-float **pulseg_get_rf_phase(const pulseg_collection *coll,
-                               int *num_channels,
-                               int *num_samples,
-                               int seg_idx,
-                               int blk_idx)
-{
-    const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
-    int local_blk;
-    const pulseg_block_definition *bdef;
-    const pulseg_rf_definition *rdef;
-
-    if (!num_channels || !num_samples)
-        return NULL;
-    *num_channels = 0;
-    *num_samples = 0;
-
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
-        return NULL;
-
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
-    if (bdef->rf_id == -1)
-        return NULL;
-
-    rdef = &desc->rf_definitions[bdef->rf_id];
-    return pulseg__get_rf_def_shape(desc, rdef, PULSEG__RF_SHAPE_PHASE, num_channels, num_samples);
-}
-
-float *pulseg_get_rf_time_us(
+float **pulseg_get_rf_magnitude(
     const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+    int *num_channels,
+    int *num_samples,
+    int seg_idx,
+    int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
-    int local_blk, shape_idx, nch, npts;
-    const pulseg_block_definition *bdef;
+    const pulseg_virtual_segment *seg;
+    int local_blk;
+    const pulseg_base_block *bdef;
     const pulseg_rf_definition *rdef;
-    pulseg_shape_arbitrary decompressed;
+
+    if (!num_channels || !num_samples)
+        return NULL;
+    *num_channels = 0;
+    *num_samples = 0;
+
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+        return NULL;
+
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
+    if (bdef->rf_id == -1)
+        return NULL;
+
+    rdef = &desc->rf_definitions[bdef->rf_id];
+    return get_rf_def_shape(desc, num_channels, num_samples, rdef, PULSEG__RF_SHAPE_MAG);
+}
+
+float **pulseg_get_rf_phase(
+    const pulseg_collection *coll,
+    int *num_channels,
+    int *num_samples,
+    int seg_idx,
+    int blk_idx)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_virtual_segment *seg;
+    int local_blk;
+    const pulseg_base_block *bdef;
+    const pulseg_rf_definition *rdef;
+
+    if (!num_channels || !num_samples)
+        return NULL;
+    *num_channels = 0;
+    *num_samples = 0;
+
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+        return NULL;
+
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
+    if (bdef->rf_id == -1)
+        return NULL;
+
+    rdef = &desc->rf_definitions[bdef->rf_id];
+    return get_rf_def_shape(desc, num_channels, num_samples, rdef, PULSEG__RF_SHAPE_PHASE);
+}
+
+float *pulseg_get_rf_time_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_virtual_segment *seg;
+    int local_blk, shape_idx, nch, npts;
+    const pulseg_base_block *bdef;
+    const pulseg_rf_definition *rdef;
+    pulseq_shape decompressed;
     float *result;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return NULL;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     if (bdef->rf_id == -1)
         return NULL;
 
     rdef = &desc->rf_definitions[bdef->rf_id];
     if (rdef->time_shape_id <= 0)
     {
-        npts = pulseg__get_rf_num_samples(coll, seg_idx, blk_idx);
-        return pulseg__alloc_uniform_time_us(npts, desc->rf_raster_us);
+        npts = get_rf_num_samples(coll, seg_idx, blk_idx);
+        return alloc_uniform_time_us(npts, desc->rf_raster_us);
     }
 
     shape_idx = rdef->time_shape_id - 1;
@@ -1823,8 +1669,7 @@ float *pulseg_get_rf_time_us(
     decompressed.num_uncompressed_samples = 0;
     decompressed.samples = NULL;
 
-    if (!pulseg_pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx],
-                                     desc->rf_raster_us))
+    if (!pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx], desc->rf_raster_us))
         return NULL;
 
     nch = (rdef->num_channels > 1) ? rdef->num_channels : 1;
@@ -1856,9 +1701,12 @@ float *pulseg_get_rf_time_us(
 /*  independent of where it is played in the sequence).                   */
 /* ================================================================== */
 
-float **pulseg_get_rf_def_magnitude(const pulseg_collection *coll,
-                                    int *num_channels, int *num_samples,
-                                    int subseq_idx, int rf_def_id)
+float **pulseg_get_rf_def_magnitude(
+    const pulseg_collection *coll,
+    int *num_channels,
+    int *num_samples,
+    int subseq_idx,
+    int rf_def_id)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_rf_definition *rdef;
@@ -1878,12 +1726,15 @@ float **pulseg_get_rf_def_magnitude(const pulseg_collection *coll,
         return NULL;
 
     rdef = &desc->rf_definitions[rf_def_id];
-    return pulseg__get_rf_def_shape(desc, rdef, PULSEG__RF_SHAPE_MAG, num_channels, num_samples);
+    return get_rf_def_shape(desc, num_channels, num_samples, rdef, PULSEG__RF_SHAPE_MAG);
 }
 
-float **pulseg_get_rf_def_phase(const pulseg_collection *coll,
-                                int *num_channels, int *num_samples,
-                                int subseq_idx, int rf_def_id)
+float **pulseg_get_rf_def_phase(
+    const pulseg_collection *coll,
+    int *num_channels,
+    int *num_samples,
+    int subseq_idx,
+    int rf_def_id)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_rf_definition *rdef;
@@ -1903,17 +1754,19 @@ float **pulseg_get_rf_def_phase(const pulseg_collection *coll,
         return NULL;
 
     rdef = &desc->rf_definitions[rf_def_id];
-    return pulseg__get_rf_def_shape(desc, rdef, PULSEG__RF_SHAPE_PHASE, num_channels, num_samples);
+    return get_rf_def_shape(desc, num_channels, num_samples, rdef, PULSEG__RF_SHAPE_PHASE);
 }
 
-float *pulseg_get_rf_def_time(const pulseg_collection *coll,
-                              int *num_samples,
-                              int subseq_idx, int rf_def_id)
+float *pulseg_get_rf_def_time(
+    const pulseg_collection *coll,
+    int *num_samples,
+    int subseq_idx,
+    int rf_def_id)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_rf_definition *rdef;
     int shape_idx, nch, npts;
-    pulseg_shape_arbitrary decompressed;
+    pulseq_shape decompressed;
     float *result;
 
     if (!num_samples)
@@ -1941,8 +1794,7 @@ float *pulseg_get_rf_def_time(const pulseg_collection *coll,
     decompressed.num_uncompressed_samples = 0;
     decompressed.samples = NULL;
 
-    if (!pulseg_pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx],
-                                     desc->rf_raster_us))
+    if (!pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx], desc->rf_raster_us))
         return NULL;
 
     nch = (rdef->num_channels > 1) ? rdef->num_channels : 1;
@@ -1969,101 +1821,66 @@ float *pulseg_get_rf_def_time(const pulseg_collection *coll,
     return result;
 }
 
-float pulseg_get_rf_initial_amplitude_hz(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+float pulseg_get_rf_initial_amplitude_hz(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
-    int local_blk, rf_event_id;
-    const pulseg_block_table_element *bte;
-    const pulseg_block_definition *bdef;
-    const pulseg_rf_definition *rdef;
+    const pulseg_virtual_segment *seg;
+    int local_blk;
+    const pulseg_block_initial_state *st;
+    const pulseg_base_block *bdef;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return 0.0f;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     if (bdef->rf_id == -1)
         return 0.0f;
 
-    rdef = &desc->rf_definitions[bdef->rf_id];
+    st = resolve_initial_state(desc, seg, local_blk);
+    if (!st)
+        return desc->rf_definitions[bdef->rf_id].stats.base_amplitude_hz;
 
-    bte = resolve_block_table_via_max_energy(desc, seg, local_blk);
-    if (!bte)
-        return rdef->stats.base_amplitude_hz;
-
-    rf_event_id = bte->rf_id;
-    if (rf_event_id >= 0 && rf_event_id < desc->rf_table_size)
-        return desc->rf_table[rf_event_id].amplitude;
-
-    return rdef->stats.base_amplitude_hz;
+    return st->rf_amplitude_hz;
 }
 
-float pulseg_get_rf_max_amplitude_hz(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+float pulseg_get_rf_max_amplitude_hz(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
-    const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
-    int local_blk, rf_event_id;
-    const pulseg_block_table_element *bte;
-    const pulseg_block_definition *bdef;
-    const pulseg_rf_definition *rdef;
-
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
-        return 0.0f;
-
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
-    if (bdef->rf_id == -1)
-        return 0.0f;
-
-    rdef = &desc->rf_definitions[bdef->rf_id];
-
-    bte = resolve_block_table_via_max_energy(desc, seg, local_blk);
-    if (!bte)
-        return (float)fabs(rdef->stats.base_amplitude_hz);
-
-    rf_event_id = bte->rf_id;
-    if (rf_event_id >= 0 && rf_event_id < desc->rf_table_size)
-        return (float)fabs(desc->rf_table[rf_event_id].amplitude);
-
-    return (float)fabs(rdef->stats.base_amplitude_hz);
+    return (float)fabs(pulseg_get_rf_initial_amplitude_hz(coll, seg_idx, blk_idx));
 }
 
 /* ================================================================== */
 /*  Gradient queries (internal helpers + public waveform getters)      */
 /* ================================================================== */
 
-static int pulseg__block_has_grad(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx, int axis)
+static int block_has_grad(const pulseg_collection *coll, int seg_idx, int blk_idx, int axis)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, grad_id;
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return -1;
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
     return (grad_id != -1) ? 1 : 0;
 }
 
-static int pulseg__block_grad_is_trapezoid(
+static int block_grad_is_trapezoid(
     const pulseg_collection *coll,
-    int seg_idx, int blk_idx, int axis)
+    int seg_idx,
+    int blk_idx,
+    int axis)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, grad_id;
     const pulseg_grad_definition *gdef;
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return -1;
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
@@ -2078,19 +1895,17 @@ static int pulseg__block_grad_is_trapezoid(
     return 0;
 }
 
-static int pulseg__get_grad_num_samples(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx, int axis)
+static int get_grad_num_samples(const pulseg_collection *coll, int seg_idx, int blk_idx, int axis)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, grad_id, shape_idx;
     const pulseg_grad_definition *gdef;
-    const pulseg_shape_arbitrary *shape;
+    const pulseq_shape *shape;
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return -1;
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
@@ -2118,17 +1933,15 @@ static int pulseg__get_grad_num_samples(
     return -1;
 }
 
-static int pulseg__get_grad_num_shots(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx, int axis)
+static int get_grad_num_shots(const pulseg_collection *coll, int seg_idx, int blk_idx, int axis)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, grad_id;
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return -1;
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
@@ -2138,17 +1951,15 @@ static int pulseg__get_grad_num_shots(
     return desc->grad_definitions[grad_id].num_shots;
 }
 
-static int pulseg__get_grad_delay_us(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx, int axis)
+static int get_grad_delay_us(const pulseg_collection *coll, int seg_idx, int blk_idx, int axis)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, grad_id;
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return -1;
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
@@ -2158,24 +1969,23 @@ static int pulseg__get_grad_delay_us(
     return desc->grad_definitions[grad_id].delay;
 }
 
-float **pulseg_get_grad_amplitude(const pulseg_collection *coll,
-                                     int *num_shots,
-                                     int *num_samples,
-                                     int seg_idx,
-                                     int blk_idx,
-                                     int axis)
+float **pulseg_get_grad_amplitude(
+    const pulseg_collection *coll,
+    int *num_shots,
+    int *num_samples,
+    int seg_idx,
+    int blk_idx,
+    int axis)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, grad_id, shot, k, shape_idx;
-    int raw_grad_id;
-    const pulseg_block_table_element *bte;
     const pulseg_grad_definition *gdef;
     float **waveforms;
     float *trap_waveform;
     int samples_per_shot;
     int flat_time;
-    pulseg_shape_arbitrary decompressed;
+    pulseq_shape decompressed;
 
     if (!num_shots || !num_samples)
     {
@@ -2190,36 +2000,18 @@ float **pulseg_get_grad_amplitude(const pulseg_collection *coll,
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return NULL;
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return NULL;
 
-    /* Resolve through the max-energy block_table entry so that the
-     * grad_definition (and thus the set of shot waveforms) matches the
-     * actual physical block at the representative instance.  This is
-     * necessary when different segment instances have gradients with
-     * different time_shape_ids, which places them in separate
-     * grad_definitions despite occupying the same segment position. */
-    bte = resolve_block_table_via_max_energy(desc, seg, local_blk);
-    if (!bte)
+    /* Resolve through the frozen representative (max-energy) instance record
+     * so that the grad_definition (and thus the set of shot waveforms)
+     * matches the actual physical block at that instance.  This is necessary
+     * when different segment instances have gradients with different
+     * time_shape_ids, which places them in separate grad_definitions despite
+     * occupying the same segment position. */
+    grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
+    if (grad_id < 0)
         return NULL;
-    switch (axis)
-    {
-    case PULSEG_GRAD_AXIS_X:
-        raw_grad_id = bte->gx_id;
-        break;
-    case PULSEG_GRAD_AXIS_Y:
-        raw_grad_id = bte->gy_id;
-        break;
-    case PULSEG_GRAD_AXIS_Z:
-        raw_grad_id = bte->gz_id;
-        break;
-    default:
-        raw_grad_id = -1;
-        break;
-    }
-    if (raw_grad_id < 0 || raw_grad_id >= desc->grad_table_size)
-        return NULL;
-    grad_id = desc->grad_table[raw_grad_id].id;
     gdef = &desc->grad_definitions[grad_id];
 
     waveforms = (float **)PULSEG_ALLOC(gdef->num_shots * sizeof(float *));
@@ -2283,8 +2075,7 @@ float **pulseg_get_grad_amplitude(const pulseg_collection *coll,
             decompressed.num_uncompressed_samples = 0;
             decompressed.samples = NULL;
 
-            if (!pulseg_pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx],
-                                             1.0f))
+            if (!pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx], 1.0f))
             {
                 waveforms[shot] = NULL;
                 continue;
@@ -2296,145 +2087,90 @@ float **pulseg_get_grad_amplitude(const pulseg_collection *coll,
         }
     }
 
-    (void)raw_grad_id; /* initial shot reported via pulseg_get_grad_initial_shot_id */
-
     return waveforms;
 }
 
 float pulseg_get_grad_initial_amplitude_hz_per_m(
     const pulseg_collection *coll,
-    int seg_idx, int blk_idx, int axis)
+    int seg_idx,
+    int blk_idx,
+    int axis)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
-    int local_blk, grad_event_id;
-    const pulseg_block_table_element *bte;
+    const pulseg_virtual_segment *seg;
+    int local_blk;
+    const pulseg_block_initial_state *st;
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return 1.0f;
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return 1.0f;
 
-    bte = resolve_block_table_via_max_energy(desc, seg, local_blk);
-    if (!bte)
+    st = resolve_initial_state(desc, seg, local_blk);
+    if (!st)
         return 1.0f;
 
-    switch (axis)
-    {
-    case PULSEG_GRAD_AXIS_X:
-        grad_event_id = bte->gx_id;
-        break;
-    case PULSEG_GRAD_AXIS_Y:
-        grad_event_id = bte->gy_id;
-        break;
-    case PULSEG_GRAD_AXIS_Z:
-        grad_event_id = bte->gz_id;
-        break;
-    default:
-        return 1.0f;
-    }
-
-    if (grad_event_id < 0 || grad_event_id >= desc->grad_table_size)
-        return 1.0f;
-
-    return desc->grad_table[grad_event_id].amplitude;
+    return st->grad_amplitude_hz_per_m[axis];
 }
 
 int pulseg_get_grad_initial_shot_id(
     const pulseg_collection *coll,
-    int seg_idx, int blk_idx, int axis)
+    int seg_idx,
+    int blk_idx,
+    int axis)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
-    int local_blk, grad_event_id;
-    const pulseg_block_table_element *bte;
+    const pulseg_virtual_segment *seg;
+    int local_blk;
+    const pulseg_block_initial_state *st;
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return 0;
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return 0;
 
-    bte = resolve_block_table_via_max_energy(desc, seg, local_blk);
-    if (!bte)
+    st = resolve_initial_state(desc, seg, local_blk);
+    if (!st)
         return 0;
 
-    switch (axis)
-    {
-    case PULSEG_GRAD_AXIS_X:
-        grad_event_id = bte->gx_id;
-        break;
-    case PULSEG_GRAD_AXIS_Y:
-        grad_event_id = bte->gy_id;
-        break;
-    case PULSEG_GRAD_AXIS_Z:
-        grad_event_id = bte->gz_id;
-        break;
-    default:
-        return 0;
-    }
-
-    if (grad_event_id < 0 || grad_event_id >= desc->grad_table_size)
-        return 0;
-
-    return desc->grad_table[grad_event_id].shot_index;
+    return st->grad_shot_index[axis];
 }
 
 float pulseg_get_grad_max_amplitude_hz_per_m(
     const pulseg_collection *coll,
-    int seg_idx, int blk_idx, int axis)
+    int seg_idx,
+    int blk_idx,
+    int axis)
 {
     float init_amp;
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return 0.0f;
-    init_amp = pulseg_get_grad_initial_amplitude_hz_per_m(
-        coll, seg_idx, blk_idx, axis);
+    init_amp = pulseg_get_grad_initial_amplitude_hz_per_m(coll, seg_idx, blk_idx, axis);
     return (init_amp >= 0.0f) ? init_amp : -init_amp;
 }
 
-float *pulseg_get_grad_time_us(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx, int axis)
+float *pulseg_get_grad_time_us(const pulseg_collection *coll, int seg_idx, int blk_idx, int axis)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, grad_id, shape_idx;
-    int raw_grad_id;
-    const pulseg_block_table_element *bte;
     const pulseg_grad_definition *gdef;
     float *time_waveform;
     float accum;
     int rise_time, flat_time, fall_time, ns;
-    pulseg_shape_arbitrary decompressed;
+    pulseq_shape decompressed;
 
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return NULL;
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return NULL;
 
-    /* Resolve through actual max-energy block_table entry (see comment
+    /* Resolve through the frozen representative-instance record (see comment
      * in pulseg_get_grad_amplitude for rationale). */
-    bte = resolve_block_table_via_max_energy(desc, seg, local_blk);
-    if (!bte)
+    grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
+    if (grad_id < 0)
         return NULL;
-    switch (axis)
-    {
-    case PULSEG_GRAD_AXIS_X:
-        raw_grad_id = bte->gx_id;
-        break;
-    case PULSEG_GRAD_AXIS_Y:
-        raw_grad_id = bte->gy_id;
-        break;
-    case PULSEG_GRAD_AXIS_Z:
-        raw_grad_id = bte->gz_id;
-        break;
-    default:
-        raw_grad_id = -1;
-        break;
-    }
-    if (raw_grad_id < 0 || raw_grad_id >= desc->grad_table_size)
-        return NULL;
-    grad_id = desc->grad_table[raw_grad_id].id;
     gdef = &desc->grad_definitions[grad_id];
 
     if (gdef->type == 0)
@@ -2472,8 +2208,8 @@ float *pulseg_get_grad_time_us(
     /* arbitrary: decompress time shape */
     if (gdef->unused_or_time_shape_id <= 0)
     {
-        ns = pulseg__get_grad_num_samples(coll, seg_idx, blk_idx, axis);
-        return pulseg__alloc_uniform_time_us(ns, desc->grad_raster_us);
+        ns = get_grad_num_samples(coll, seg_idx, blk_idx, axis);
+        return alloc_uniform_time_us(ns, desc->grad_raster_us);
     }
 
     shape_idx = gdef->unused_or_time_shape_id - 1;
@@ -2484,8 +2220,7 @@ float *pulseg_get_grad_time_us(
     decompressed.num_uncompressed_samples = 0;
     decompressed.samples = NULL;
 
-    if (!pulseg_pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx],
-                                     desc->grad_raster_us))
+    if (!pulseq_decompress_shape(&decompressed, &desc->shapes[shape_idx], desc->grad_raster_us))
         return NULL;
 
     return decompressed.samples;
@@ -2495,15 +2230,13 @@ float *pulseg_get_grad_time_us(
 /*  ADC block queries (internal helpers)                               */
 /* ================================================================== */
 
-static int pulseg__block_has_adc(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int block_has_adc(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     /* Use OR-reduced flag: true if at least one segment instance has an ADC
@@ -2513,8 +2246,7 @@ static int pulseg__block_has_adc(
 
     /* Fallback to canonical block definition (pre-11d sequences / cache) */
     {
-        const pulseg_block_definition *bdef =
-            &desc->block_definitions[seg->unique_block_indices[local_blk]];
+        const pulseg_base_block *bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
         return (bdef->adc_id != -1) ? 1 : 0;
     }
 }
@@ -2524,15 +2256,13 @@ static int pulseg__block_has_adc(
  * A NULL is_dynamic_delay array (pre-11d sequences / older cache) falls back
  * to the pre-existing conservative behavior of always treating an adjustable
  * pure delay as dynamic. */
-static int pulseg__block_is_dynamic_delay(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int block_is_dynamic_delay(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return 0;
 
     if (seg->is_dynamic_delay)
@@ -2540,19 +2270,17 @@ static int pulseg__block_is_dynamic_delay(
     return 1;
 }
 
-static int pulseg__get_adc_delay_us(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int get_adc_delay_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, adc_id;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     adc_id = bdef->adc_id;
     if (adc_id < 0 || adc_id >= desc->num_unique_adcs)
         return -1;
@@ -2560,19 +2288,17 @@ static int pulseg__get_adc_delay_us(
     return desc->adc_definitions[adc_id].delay;
 }
 
-static int pulseg__get_adc_library_index(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int get_adc_library_index(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, adc_id, global_adc_idx, i;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     adc_id = bdef->adc_id;
     if (adc_id < 0 || adc_id >= desc->num_unique_adcs)
         return -1;
@@ -2592,83 +2318,81 @@ static int pulseg__get_adc_library_index(
 /*  Digital output / trigger / flag queries (internal helpers)         */
 /* ================================================================== */
 
-static int pulseg__block_has_digitalout(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int block_has_digitalout(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     return seg->has_digitalout[local_blk];
 }
 
-static int pulseg__get_digitalout_delay_us(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int get_digitalout_delay_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, digitalout_id;
-    const pulseg_block_table_element *bte;
+    const pulseg_block_initial_state *st;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     if (!seg->has_digitalout[local_blk])
         return -1;
 
-    bte = &desc->block_table[seg->start_block + local_blk];
-    digitalout_id = bte->digitalout_id;
+    st = resolve_initial_state(desc, seg, local_blk);
+    if (!st)
+        return -1;
+    digitalout_id = st->digitalout_id;
     if (digitalout_id == -1 || digitalout_id >= desc->num_triggers)
         return -1;
 
     return (int)desc->trigger_events[digitalout_id].delay;
 }
 
-static int pulseg__get_digitalout_duration_us(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int get_digitalout_duration_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, digitalout_id;
-    const pulseg_block_table_element *bte;
+    const pulseg_block_initial_state *st;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     if (!seg->has_digitalout[local_blk])
         return -1;
 
-    bte = &desc->block_table[seg->start_block + local_blk];
-    digitalout_id = bte->digitalout_id;
+    st = resolve_initial_state(desc, seg, local_blk);
+    if (!st)
+        return -1;
+    digitalout_id = st->digitalout_id;
     if (digitalout_id == -1 || digitalout_id >= desc->num_triggers)
         return -1;
 
     return (int)desc->trigger_events[digitalout_id].duration;
 }
 
-static int pulseg__get_digitalout_channel(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int get_digitalout_channel(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk, digitalout_id;
-    const pulseg_block_table_element *bte;
+    const pulseg_block_initial_state *st;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     if (!seg->has_digitalout[local_blk])
         return -1;
 
-    bte = &desc->block_table[seg->start_block + local_blk];
-    digitalout_id = bte->digitalout_id;
+    st = resolve_initial_state(desc, seg, local_blk);
+    if (!st)
+        return -1;
+    digitalout_id = st->digitalout_id;
     if (digitalout_id == -1 || digitalout_id >= desc->num_triggers)
         return -1;
 
@@ -2677,27 +2401,23 @@ static int pulseg__get_digitalout_channel(
 
 /* ---- Segment-level physio trigger queries ------------------------ */
 
-static int pulseg__segment_has_trigger(
-    const pulseg_collection *coll,
-    int seg_idx)
+static int segment_has_trigger(const pulseg_collection *coll, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg;
 
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return 0;
 
     return (desc->segment_definitions[local_seg].trigger_id >= 0) ? 1 : 0;
 }
 
-static int pulseg__get_segment_trigger_delay_us(
-    const pulseg_collection *coll,
-    int seg_idx)
+static int get_segment_trigger_delay_us(const pulseg_collection *coll, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg, tid;
 
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     tid = desc->segment_definitions[local_seg].trigger_id;
@@ -2707,14 +2427,12 @@ static int pulseg__get_segment_trigger_delay_us(
     return (int)desc->trigger_events[tid].delay;
 }
 
-static int pulseg__get_segment_trigger_duration_us(
-    const pulseg_collection *coll,
-    int seg_idx)
+static int get_segment_trigger_duration_us(const pulseg_collection *coll, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg, tid;
 
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
     tid = desc->segment_definitions[local_seg].trigger_id;
@@ -2724,14 +2442,12 @@ static int pulseg__get_segment_trigger_duration_us(
     return (int)desc->trigger_events[tid].duration;
 }
 
-static int pulseg__get_segment_trigger_type(
-    const pulseg_collection *coll,
-    int seg_idx)
+static int get_segment_trigger_type(const pulseg_collection *coll, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg, tid;
 
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return 0;
 
     tid = desc->segment_definitions[local_seg].trigger_id;
@@ -2743,89 +2459,76 @@ static int pulseg__get_segment_trigger_type(
 
 /* ---- Navigator flag query ---------------------------------------- */
 
-static int pulseg__segment_is_nav(
-    const pulseg_collection *coll,
-    int seg_idx)
+static int segment_is_nav(const pulseg_collection *coll, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg;
 
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return 0;
 
     return desc->segment_definitions[local_seg].is_nav;
 }
 
-static int pulseg__block_has_freq_mod(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int block_has_freq_mod(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return 0;
 
     return seg->has_freq_mod[local_blk];
 }
 
-static int pulseg__block_has_rotation(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int block_has_rotation(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     return seg->has_rotation[local_blk];
 }
 
-static int pulseg__block_has_norot(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int block_has_norot(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     return seg->norot_flag[local_blk];
 }
 
-static int pulseg__block_has_nopos(
-    const pulseg_collection *coll,
-    int seg_idx, int blk_idx)
+static int block_has_nopos(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
 
     return seg->nopos_flag[local_blk];
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  pulseg_block_needs_freq_mod — precise overlap + nopos check    */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 /*
  * Check whether a trapezoid gradient's flat region overlaps [win_start, win_end].
  * All times in us, relative to block start.
  */
-static int trap_overlaps_window(
-    const pulseg_grad_definition *gdef,
-    float win_start, float win_end)
+static int trap_overlaps_window(const pulseg_grad_definition *gdef, float win_start, float win_end)
 {
-    float flat_start = (float)gdef->delay +
-                       (float)gdef->rise_time_or_unused;
+    float flat_start = (float)gdef->delay + (float)gdef->rise_time_or_unused;
     float flat_end = flat_start + (float)gdef->flat_time_or_unused;
     return (flat_start < win_end) && (flat_end > win_start);
 }
@@ -2837,12 +2540,13 @@ static int trap_overlaps_window(
 static int arb_nonzero_in_window(
     const pulseg_sequence_descriptor *desc,
     const pulseg_grad_definition *gdef,
-    float win_start, float win_end)
+    float win_start,
+    float win_end)
 {
     int shape_idx, i, ns;
     float raster, local_start, local_end;
     int idx_lo, idx_hi;
-    pulseg_shape_arbitrary decomp;
+    pulseq_shape decomp;
 
     if (gdef->num_shots < 1 || gdef->shot_shape_ids[0] <= 0)
         return 0;
@@ -2854,7 +2558,7 @@ static int arb_nonzero_in_window(
     decomp.num_samples = 0;
     decomp.num_uncompressed_samples = 0;
     decomp.samples = NULL;
-    if (!pulseg_pulseq_decompress_shape(&decomp, &desc->shapes[shape_idx], 1.0f))
+    if (!pulseq_decompress_shape(&decomp, &desc->shapes[shape_idx], 1.0f))
         return 0;
 
     ns = decomp.num_samples;
@@ -2875,13 +2579,11 @@ static int arb_nonzero_in_window(
         int ts_idx = gdef->unused_or_time_shape_id - 1;
         if (ts_idx >= 0 && ts_idx < desc->num_shapes)
         {
-            pulseg_shape_arbitrary decomp_time;
+            pulseq_shape decomp_time;
             decomp_time.num_samples = 0;
             decomp_time.num_uncompressed_samples = 0;
             decomp_time.samples = NULL;
-            if (pulseg_pulseq_decompress_shape(&decomp_time,
-                                            &desc->shapes[ts_idx],
-                                            desc->grad_raster_us))
+            if (pulseq_decompress_shape(&decomp_time, &desc->shapes[ts_idx], desc->grad_raster_us))
             {
                 int found = 0;
                 int tns = decomp_time.num_samples;
@@ -2889,9 +2591,8 @@ static int arb_nonzero_in_window(
                 {
                     float t_start = (float)gdef->delay + decomp_time.samples[i];
                     /* Each sample holds until the next sample (or is the last) */
-                    float t_end = (i + 1 < tns)
-                                      ? ((float)gdef->delay + decomp_time.samples[i + 1])
-                                      : t_start + desc->grad_raster_us;
+                    float t_end = (i + 1 < tns) ? ((float)gdef->delay + decomp_time.samples[i + 1])
+                                                : t_start + desc->grad_raster_us;
                     /* Interval [t_start, t_end) overlaps (win_start, win_end] */
                     if (t_end > win_start && t_start <= win_end && decomp.samples[i] != 0.0f)
                     {
@@ -2937,8 +2638,9 @@ static int arb_nonzero_in_window(
  */
 static int any_grad_overlaps_window(
     const pulseg_sequence_descriptor *desc,
-    const pulseg_block_definition *bdef,
-    float win_start, float win_end)
+    const pulseg_base_block *bdef,
+    float win_start,
+    float win_end)
 {
     int axis, grad_id;
 
@@ -2951,43 +2653,42 @@ static int any_grad_overlaps_window(
         if (desc->grad_definitions[grad_id].type == 0)
         {
             /* trapezoid */
-            if (trap_overlaps_window(&desc->grad_definitions[grad_id],
-                                     win_start, win_end))
+            if (trap_overlaps_window(&desc->grad_definitions[grad_id], win_start, win_end))
                 return 1;
         }
         else
         {
             /* arbitrary */
-            if (arb_nonzero_in_window(desc, &desc->grad_definitions[grad_id],
-                                      win_start, win_end))
+            if (arb_nonzero_in_window(desc, &desc->grad_definitions[grad_id], win_start, win_end))
                 return 1;
         }
     }
     return 0;
 }
 
-int pulseg_block_needs_freq_mod(const pulseg_collection *coll,
-                                   int *num_samples,
-                                   int seg_idx,
-                                   int blk_idx)
+int pulseg_block_needs_freq_mod(
+    const pulseg_collection *coll,
+    int *num_samples,
+    int seg_idx,
+    int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_blk;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     int has_rf, has_adc, nopos;
 
     if (num_samples)
         *num_samples = 0;
 
-    if (!pulseg__resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return 0;
 
     nopos = seg->nopos_flag[local_blk];
     if (nopos)
         return 0;
 
-    bdef = &desc->block_definitions[seg->unique_block_indices[local_blk]];
+    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
     has_rf = (bdef->rf_id >= 0);
     /* Use OR-reduced has_adc: true if any instance at this position has ADC */
     has_adc = (seg->has_adc && seg->has_adc[local_blk]) ? 1 : (bdef->adc_id >= 0);
@@ -3004,8 +2705,7 @@ int pulseg_block_needs_freq_mod(const pulseg_collection *coll,
         if (any_grad_overlaps_window(desc, bdef, rf_start, rf_end))
         {
             if (num_samples)
-                *num_samples = (int)((float)bdef->duration_us /
-                                     desc->rf_raster_us);
+                *num_samples = (int)((float)bdef->duration_us / desc->rf_raster_us);
             return 1;
         }
     }
@@ -3015,15 +2715,12 @@ int pulseg_block_needs_freq_mod(const pulseg_collection *coll,
     {
         const pulseg_adc_definition *adef = &desc->adc_definitions[bdef->adc_id];
         float adc_start = (float)adef->delay;
-        float adc_end = adc_start +
-                        (float)adef->num_samples *
-                            (float)adef->dwell_time * 1e-3f;
+        float adc_end = adc_start + (float)adef->num_samples * (float)adef->dwell_time * 1e-3f;
 
         if (any_grad_overlaps_window(desc, bdef, adc_start, adc_end))
         {
             if (num_samples)
-                *num_samples = (int)((float)bdef->duration_us /
-                                     desc->adc_raster_us);
+                *num_samples = (int)((float)bdef->duration_us / desc->adc_raster_us);
             return 1;
         }
     }
@@ -3043,13 +2740,13 @@ int pulseg_cursor_next(pulseg_collection *coll)
         return PULSEG_CURSOR_DONE;
 
     desc = &coll->descriptors[cursor->sequence_index];
-    next_pos = cursor->scan_table_position + 1;
+    next_pos = cursor->exec_stream_position + 1;
 
     /* Past end of scan table: advance to next subsequence */
-    if (next_pos >= desc->scan_table_len)
+    if (next_pos >= desc->exec_stream_len)
     {
         cursor->sequence_index += 1;
-        cursor->scan_table_position = 0;
+        cursor->exec_stream_position = 0;
         cursor->from_last_reset = 0;
         if (cursor->sequence_index >= coll->num_subsequences)
             return PULSEG_CURSOR_DONE;
@@ -3057,7 +2754,7 @@ int pulseg_cursor_next(pulseg_collection *coll)
     }
 
     /* Normal advance */
-    cursor->scan_table_position = next_pos;
+    cursor->exec_stream_position = next_pos;
     cursor->from_last_reset += 1;
     return PULSEG_CURSOR_BLOCK;
 }
@@ -3069,7 +2766,7 @@ void pulseg_cursor_rewind(pulseg_collection *coll)
     cursor = &coll->block_cursor;
 
     /* Go back by the number of blocks advanced since the last mark */
-    cursor->scan_table_position -= cursor->from_last_reset;
+    cursor->exec_stream_position -= cursor->from_last_reset;
     cursor->from_last_reset = 0;
 }
 
@@ -3087,7 +2784,7 @@ void pulseg_cursor_reset(pulseg_collection *coll)
      * reuse s_sc_coll because the SIM framework does not call psdcleanup
      * between entry points). */
     coll->block_cursor.sequence_index = 0;
-    coll->block_cursor.scan_table_position = -1; /* -1 = before first block */
+    coll->block_cursor.exec_stream_position = -1; /* -1 = before first block */
     coll->block_cursor.from_last_reset = 0;
 }
 
@@ -3098,9 +2795,7 @@ void pulseg_cursor_mark(pulseg_collection *coll)
     coll->block_cursor.from_last_reset = 0;
 }
 
-int pulseg_cursor_get_info(
-    const pulseg_collection *coll,
-    pulseg_cursor_info *info)
+int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *info)
 {
     const pulseg_block_cursor *cursor;
     const pulseg_sequence_descriptor *desc;
@@ -3110,16 +2805,15 @@ int pulseg_cursor_get_info(
         return PULSEG_ERR_NULL_POINTER;
 
     cursor = &coll->block_cursor;
-    if (cursor->sequence_index < 0 ||
-        cursor->sequence_index >= coll->num_subsequences)
+    if (cursor->sequence_index < 0 || cursor->sequence_index >= coll->num_subsequences)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
     desc = &coll->descriptors[cursor->sequence_index];
-    pos = cursor->scan_table_position;
-    if (pos < 0 || pos >= desc->scan_table_len)
+    pos = cursor->exec_stream_position;
+    if (pos < 0 || pos >= desc->exec_stream_len)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
-    seg_id = desc->scan_table_seg_id[pos];
+    seg_id = desc->exec_stream_seg_id[pos];
 
     info->subseq_idx = cursor->sequence_index;
     info->scan_pos = pos;
@@ -3127,11 +2821,11 @@ int pulseg_cursor_get_info(
      * segment_id_offset is the flat index base into seg_local_to_global. */
     {
         int flat = coll->subsequence_info[cursor->sequence_index].segment_id_offset + seg_id;
-        if (coll->seg_local_to_global && seg_id >= 0 &&
-            flat >= 0 && flat < coll->seg_l2g_len)
+        if (coll->seg_local_to_global && seg_id >= 0 && flat >= 0 && flat < coll->seg_l2g_len)
             info->segment_id = coll->seg_local_to_global[flat];
         else
-            info->segment_id = seg_id + coll->subsequence_info[cursor->sequence_index].segment_id_offset;
+            info->segment_id =
+                seg_id + coll->subsequence_info[cursor->sequence_index].segment_id_offset;
     }
     /* segment_start fires at the first block of every segment instance,
      * including consecutive instances of the same segment (e.g. the ny
@@ -3141,7 +2835,7 @@ int pulseg_cursor_get_info(
      * (detected by counting back to the start of the same-seg_id run). */
     {
         int new_inst;
-        if (pos == 0 || desc->scan_table_seg_id[pos] != desc->scan_table_seg_id[pos - 1])
+        if (pos == 0 || desc->exec_stream_seg_id[pos] != desc->exec_stream_seg_id[pos - 1])
         {
             new_inst = 1;
         }
@@ -3151,7 +2845,7 @@ int pulseg_cursor_get_info(
             int run_start = pos;
             if (nb <= 0)
                 nb = 1;
-            while (run_start > 0 && desc->scan_table_seg_id[run_start - 1] == seg_id)
+            while (run_start > 0 && desc->exec_stream_seg_id[run_start - 1] == seg_id)
                 run_start--;
             new_inst = (((pos - run_start) % nb) == 0) ? 1 : 0;
         }
@@ -3163,8 +2857,8 @@ int pulseg_cursor_get_info(
     }
     {
         int last_inst;
-        if (pos == desc->scan_table_len - 1 ||
-            desc->scan_table_seg_id[pos] != desc->scan_table_seg_id[pos + 1])
+        if (pos == desc->exec_stream_len - 1 ||
+            desc->exec_stream_seg_id[pos] != desc->exec_stream_seg_id[pos + 1])
         {
             last_inst = 1;
         }
@@ -3174,7 +2868,7 @@ int pulseg_cursor_get_info(
             int run_start = pos;
             if (nb <= 0)
                 nb = 1;
-            while (run_start > 0 && desc->scan_table_seg_id[run_start - 1] == seg_id)
+            while (run_start > 0 && desc->exec_stream_seg_id[run_start - 1] == seg_id)
                 run_start--;
             last_inst = ((((pos - run_start) + 1) % nb) == 0) ? 1 : 0;
         }
@@ -3184,9 +2878,7 @@ int pulseg_cursor_get_info(
         }
         info->segment_end = last_inst;
     }
-    info->tr_start = desc->scan_table_tr_start
-                         ? desc->scan_table_tr_start[pos]
-                         : 0;
+    info->tr_start = desc->exec_stream_tr_start ? desc->exec_stream_tr_start[pos] : 0;
     info->pmc = desc->enable_pmc;
 
     /* Segment properties via local segment index */
@@ -3207,39 +2899,31 @@ int pulseg_cursor_get_info(
     return PULSEG_SUCCESS;
 }
 
-int pulseg_get_block_instance(
-    const pulseg_collection *coll,
-    pulseg_block_instance *inst)
+/* Shared resolver behind pulseg_get_block_instance (cursor) and
+ * pulseg_get_block_instance_at (random access).  Fills the per-instance
+ * resolved view (PulSeg SegmentInstance, spec 3.3) for one execution-stream
+ * position: it reads the existing tables, it does not store anything. */
+static int resolve_block_instance(
+    const pulseg_sequence_descriptor *desc,
+    pulseg_block_instance *inst,
+    int exec_stream_position)
 {
-    const pulseg_block_cursor *cursor;
-    const pulseg_sequence_descriptor *desc;
     const pulseg_block_table_element *bte;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     int idx, i;
 
-    if (!coll || !inst)
-        return PULSEG_ERR_NULL_POINTER;
-
-    cursor = &coll->block_cursor;
-    if (cursor->sequence_index >= coll->num_subsequences)
+    if (exec_stream_position < 0 || exec_stream_position >= desc->exec_stream_len)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
-    desc = &coll->descriptors[cursor->sequence_index];
-    if (cursor->scan_table_position < 0 ||
-        cursor->scan_table_position >= desc->scan_table_len)
-        return PULSEG_ERR_INVALID_ARGUMENT;
-
-    idx = desc->scan_table_block_idx[cursor->scan_table_position];
+    idx = desc->exec_stream_block_idx[exec_stream_position];
     if (idx < 0 || idx >= desc->num_blocks)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
     bte = &desc->block_table[idx];
-    bdef = &desc->block_definitions[bte->id];
+    bdef = &desc->base_blocks[bte->id];
 
     /* Duration: pure delay uses instance value, normal block uses definition */
-    inst->duration_us = (bte->duration_us >= 0)
-                            ? bte->duration_us
-                            : bdef->duration_us;
+    inst->duration_us = (bte->duration_us >= 0) ? bte->duration_us : bdef->duration_us;
 
     /* RF */
     if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size)
@@ -3347,7 +3031,7 @@ int pulseg_get_block_instance(
         int vg_pos;
         if (vg_tr_size > 0 && desc->variable_grad_flags)
         {
-            vg_pos = cursor->scan_table_position % vg_tr_size;
+            vg_pos = exec_stream_position % vg_tr_size;
             inst->gx_variable = desc->variable_grad_flags[vg_pos * 3 + 0];
             inst->gy_variable = desc->variable_grad_flags[vg_pos * 3 + 1];
             inst->gz_variable = desc->variable_grad_flags[vg_pos * 3 + 2];
@@ -3363,6 +3047,37 @@ int pulseg_get_block_instance(
     return PULSEG_SUCCESS;
 }
 
+int pulseg_get_block_instance(const pulseg_collection *coll, pulseg_block_instance *inst)
+{
+    const pulseg_block_cursor *cursor;
+
+    if (!coll || !inst)
+        return PULSEG_ERR_NULL_POINTER;
+
+    cursor = &coll->block_cursor;
+    if (cursor->sequence_index >= coll->num_subsequences)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+
+    return resolve_block_instance(
+        &coll->descriptors[cursor->sequence_index],
+        inst,
+        cursor->exec_stream_position);
+}
+
+int pulseg_get_block_instance_at(
+    const pulseg_collection *coll,
+    pulseg_block_instance *inst,
+    int subseq_idx,
+    int exec_stream_position)
+{
+    if (!coll || !inst)
+        return PULSEG_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+
+    return resolve_block_instance(&coll->descriptors[subseq_idx], inst, exec_stream_position);
+}
+
 /* ================================================================== */
 /*  Frequency modulation plan                                         */
 /* ================================================================== */
@@ -3370,8 +3085,10 @@ int pulseg_get_block_instance(
 /* --- helper: block range for a TR region --- */
 static int get_block_range(
     const pulseg_sequence_descriptor *desc,
-    int tr_type, int tr_index,
-    int *out_start, int *out_count)
+    int *out_start,
+    int *out_count,
+    int tr_type,
+    int tr_index)
 {
     const pulseg_tr_descriptor *tr = &desc->tr_descriptor;
 
@@ -3403,7 +3120,8 @@ static int get_block_range(
 /* --- helper: count RF+ADC events in a block range --- */
 static int count_fm_events_range(
     const pulseg_sequence_descriptor *desc,
-    int blk_start, int blk_count)
+    int blk_start,
+    int blk_count)
 {
     int n, count;
     count = 0;
@@ -3415,22 +3133,18 @@ static int count_fm_events_range(
     return count;
 }
 
-int pulseg_get_freq_mod_count(
-    const pulseg_collection *coll)
+int pulseg_get_freq_mod_count(const pulseg_collection *coll)
 {
     int i, total;
     if (!coll)
         return 0;
     total = 0;
     for (i = 0; i < coll->num_subsequences; ++i)
-        total += count_fm_events_range(&coll->descriptors[i],
-                                       0, coll->descriptors[i].num_blocks);
+        total += count_fm_events_range(&coll->descriptors[i], 0, coll->descriptors[i].num_blocks);
     return total;
 }
 
-int pulseg_get_freq_mod_count_tr(
-    const pulseg_collection *coll,
-    int tr_type, int tr_index)
+int pulseg_get_freq_mod_count_tr(const pulseg_collection *coll, int tr_type, int tr_index)
 {
     int blk_start, blk_count;
     const pulseg_sequence_descriptor *desc;
@@ -3438,7 +3152,7 @@ int pulseg_get_freq_mod_count_tr(
     if (!coll || coll->num_subsequences < 1)
         return 0;
     desc = &coll->descriptors[0];
-    if (!get_block_range(desc, tr_type, tr_index, &blk_start, &blk_count))
+    if (!get_block_range(desc, &blk_start, &blk_count, tr_type, tr_index))
         return 0;
     return count_fm_events_range(desc, blk_start, blk_count);
 }
@@ -3447,9 +3161,10 @@ int pulseg_get_freq_mod_count_tr(
 /*  Label getters                                                     */
 /* ================================================================== */
 
-int pulseg_get_label_limits(const pulseg_collection *coll,
-                               pulseg_label_limits *limits,
-                               int subseq_idx)
+int pulseg_get_label_limits(
+    const pulseg_collection *coll,
+    pulseg_label_limits *limits,
+    int subseq_idx)
 {
     if (!coll || !limits)
         return PULSEG_ERR_NULL_POINTER;
@@ -3459,8 +3174,7 @@ int pulseg_get_label_limits(const pulseg_collection *coll,
     return PULSEG_SUCCESS;
 }
 
-static int pulseg__get_num_adc_occurrences(const pulseg_collection *coll,
-                                              int subseq_idx)
+static int get_num_adc_occurrences(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll)
         return 0;
@@ -3469,8 +3183,7 @@ static int pulseg__get_num_adc_occurrences(const pulseg_collection *coll,
     return coll->descriptors[subseq_idx].label_num_entries;
 }
 
-static int pulseg__get_num_label_columns(const pulseg_collection *coll,
-                                            int subseq_idx)
+static int get_num_label_columns(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll)
         return 0;
@@ -3479,10 +3192,11 @@ static int pulseg__get_num_label_columns(const pulseg_collection *coll,
     return coll->descriptors[subseq_idx].label_num_columns;
 }
 
-int pulseg_get_adc_label(const pulseg_collection *coll,
-                            int *out_values,
-                            int subseq_idx,
-                            int occurrence_idx)
+int pulseg_get_adc_label(
+    const pulseg_collection *coll,
+    int *out_values,
+    int subseq_idx,
+    int occurrence_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int ncols, row_start, c;
@@ -3507,109 +3221,48 @@ int pulseg_get_adc_label(const pulseg_collection *coll,
 }
 
 /* ================================================================== */
-/*  Definition getters                                                */
-/* ================================================================== */
-
-/* Static scratch space for the read-only view returned to callers.
- * Thread-safety note: not thread-safe; matches existing patterns. */
-static pulseg_definition_entry *s_def_view = NULL;
-static int s_def_view_cap = 0;
-
-int pulseg_get_definitions(const pulseg_collection *coll,
-                              const pulseg_definition_entry **out,
-                              int *num_entries,
-                              int subseq_idx)
-{
-    const pulseg_sequence_descriptor *desc;
-    int i;
-
-    if (!coll || !out || !num_entries)
-        return PULSEG_ERR_NULL_POINTER;
-    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return PULSEG_ERR_INVALID_ARGUMENT;
-
-    desc = &coll->descriptors[subseq_idx];
-    *num_entries = desc->num_definitions;
-
-    if (desc->num_definitions == 0)
-    {
-        *out = NULL;
-        return PULSEG_SUCCESS;
-    }
-
-    /* Re-allocate scratch if needed */
-    if (desc->num_definitions > s_def_view_cap)
-    {
-        if (s_def_view)
-            PULSEG_FREE(s_def_view);
-        s_def_view = (pulseg_definition_entry *)PULSEG_ALLOC(
-            (size_t)desc->num_definitions * sizeof(pulseg_definition_entry));
-        if (!s_def_view)
-        {
-            s_def_view_cap = 0;
-            return PULSEG_ERR_ALLOC_FAILED;
-        }
-        s_def_view_cap = desc->num_definitions;
-    }
-
-    for (i = 0; i < desc->num_definitions; ++i)
-    {
-        s_def_view[i].name = desc->definitions[i].name;
-        s_def_view[i].num_values = desc->definitions[i].value_size;
-        s_def_view[i].values = (const char *const *)desc->definitions[i].value;
-    }
-
-    *out = s_def_view;
-    return PULSEG_SUCCESS;
-}
-
-/* ================================================================== */
 /*  Batch getters (public API)                                        */
 /* ================================================================== */
 
-int pulseg_get_collection_info(
-    const pulseg_collection *coll,
-    pulseg_collection_info *info)
+int pulseg_get_collection_info(const pulseg_collection *coll, pulseg_collection_info *info)
 {
     if (!coll || !info)
         return PULSEG_ERR_NULL_POINTER;
 
-    info->num_subsequences = pulseg__get_num_subsequences(coll);
-    info->num_segments = pulseg__get_num_segments(coll);
-    info->max_adc_samples = pulseg__get_max_adc_samples(coll);
-    info->total_readouts = pulseg__get_total_readouts(coll);
-    info->total_duration_us = pulseg__get_total_duration_us(coll);
+    info->num_subsequences = get_num_subsequences(coll);
+    info->num_segments = get_num_segments(coll);
+    info->max_adc_samples = get_max_adc_samples(coll);
+    info->total_readouts = get_total_readouts(coll);
+    info->total_duration_us = get_total_duration_us(coll);
 
     return PULSEG_SUCCESS;
 }
 
-int pulseg_get_subseq_info(const pulseg_collection *coll,
-                              pulseg_subseq_info *info,
-                              int subseq_idx)
+int pulseg_get_subseq_info(const pulseg_collection *coll, pulseg_subseq_info *info, int subseq_idx)
 {
     if (!coll || !info)
         return PULSEG_ERR_NULL_POINTER;
     if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
-    info->tr_duration_us = pulseg__get_tr_duration_us(coll, subseq_idx);
-    info->num_trs = pulseg__get_num_trs(coll, subseq_idx);
-    info->tr_size = pulseg__get_tr_size(coll, subseq_idx);
-    info->num_prep_blocks = pulseg__get_num_prep_blocks(coll, subseq_idx);
-    info->num_cooldown_blocks = pulseg__get_num_cooldown_blocks(coll, subseq_idx);
-    info->num_prep_trs = pulseg__get_num_prep_trs(coll, subseq_idx);
-    info->num_cooldown_trs = pulseg__get_num_cooldown_trs(coll, subseq_idx);
-    info->degenerate_prep = pulseg__get_degenerate_prep(coll, subseq_idx);
-    info->degenerate_cooldown = pulseg__get_degenerate_cooldown(coll, subseq_idx);
-    info->num_unique_adcs = pulseg__get_num_unique_adcs(coll, subseq_idx);
-    info->num_unique_rf = pulseg__get_num_unique_rf(coll, subseq_idx);
-    info->pmc_enabled = pulseg__is_pmc_enabled(coll, subseq_idx);
-    info->segment_offset = pulseg__get_subseq_segment_offset(coll, subseq_idx);
-    info->num_prep_segments = pulseg__get_num_prep_segments(coll, subseq_idx);
-    info->num_main_segments = pulseg__get_num_main_segments(coll, subseq_idx);
-    info->num_cooldown_segments = pulseg__get_num_cooldown_segments(coll, subseq_idx);
-    info->num_adc_occurrences = pulseg__get_num_adc_occurrences(coll, subseq_idx);
-    info->num_label_columns = pulseg__get_num_label_columns(coll, subseq_idx);
+    info->tr_duration_us = get_tr_duration_us(coll, subseq_idx);
+    info->num_trs = get_num_trs(coll, subseq_idx);
+    info->tr_size = get_tr_size(coll, subseq_idx);
+    info->num_prep_blocks = get_num_prep_blocks(coll, subseq_idx);
+    info->num_cooldown_blocks = get_num_cooldown_blocks(coll, subseq_idx);
+    info->num_prep_trs = get_num_prep_trs(coll, subseq_idx);
+    info->num_cooldown_trs = get_num_cooldown_trs(coll, subseq_idx);
+    info->degenerate_prep = get_degenerate_prep(coll, subseq_idx);
+    info->degenerate_cooldown = get_degenerate_cooldown(coll, subseq_idx);
+    info->num_unique_adcs = get_num_unique_adcs(coll, subseq_idx);
+    info->num_unique_rf = get_num_unique_rf(coll, subseq_idx);
+    info->pmc_enabled = is_pmc_enabled(coll, subseq_idx);
+    info->segment_offset = get_subseq_segment_offset(coll, subseq_idx);
+    info->num_prep_segments = get_num_prep_segments(coll, subseq_idx);
+    info->num_main_segments = get_num_main_segments(coll, subseq_idx);
+    info->num_cooldown_segments = get_num_cooldown_segments(coll, subseq_idx);
+    info->num_adc_occurrences = get_num_adc_occurrences(coll, subseq_idx);
+    info->num_label_columns = get_num_label_columns(coll, subseq_idx);
     info->num_passes = coll->descriptors[subseq_idx].num_passes;
     info->num_averages = coll->descriptors[subseq_idx].num_averages;
     info->num_gain_cal_readouts = coll->descriptors[subseq_idx].num_gain_cal_readouts;
@@ -3641,31 +3294,27 @@ int pulseg_get_subseq_info(const pulseg_collection *coll,
     return PULSEG_SUCCESS;
 }
 
-int pulseg_get_segment_info(const pulseg_collection *coll,
-                               pulseg_segment_info *info,
-                               int seg_idx)
+int pulseg_get_segment_info(const pulseg_collection *coll, pulseg_segment_info *info, int seg_idx)
 {
     if (!coll || !info)
         return PULSEG_ERR_NULL_POINTER;
 
-    info->duration_us = pulseg__get_segment_duration_us(coll, seg_idx);
-    info->num_blocks = pulseg__get_segment_num_blocks(coll, seg_idx);
-    info->start_block = pulseg__get_segment_start_block(coll, seg_idx);
-    info->pure_delay = pulseg__is_segment_pure_delay(coll, seg_idx);
-    info->has_trigger = pulseg__segment_has_trigger(coll, seg_idx);
-    info->trigger_type = pulseg__get_segment_trigger_type(coll, seg_idx);
-    info->trigger_delay_us = pulseg__get_segment_trigger_delay_us(coll, seg_idx);
-    info->trigger_duration_us = pulseg__get_segment_trigger_duration_us(coll, seg_idx);
-    info->is_nav = pulseg__segment_is_nav(coll, seg_idx);
-    info->num_kzero_crossings = pulseg__get_segment_num_kzero_crossings(coll, seg_idx);
-    info->rf_adc_gap_us = pulseg__get_segment_rf_adc_gap_us(coll, seg_idx);
-    info->adc_adc_gap_us = pulseg__get_segment_adc_adc_gap_us(coll, seg_idx);
+    info->duration_us = get_segment_duration_us(coll, seg_idx);
+    info->num_blocks = get_segment_num_blocks(coll, seg_idx);
+    info->start_block = get_segment_start_block(coll, seg_idx);
+    info->pure_delay = is_segment_pure_delay(coll, seg_idx);
+    info->has_trigger = segment_has_trigger(coll, seg_idx);
+    info->trigger_type = get_segment_trigger_type(coll, seg_idx);
+    info->trigger_delay_us = get_segment_trigger_delay_us(coll, seg_idx);
+    info->trigger_duration_us = get_segment_trigger_duration_us(coll, seg_idx);
+    info->is_nav = segment_is_nav(coll, seg_idx);
+    info->rf_adc_gap_us = get_segment_rf_adc_gap_us(coll, seg_idx);
+    info->adc_adc_gap_us = get_segment_adc_adc_gap_us(coll, seg_idx);
 
     return PULSEG_SUCCESS;
 }
 
-int pulseg_segment_has_grad(const pulseg_collection *coll,
-                               int seg_idx)
+int pulseg_segment_has_grad(const pulseg_collection *coll, int seg_idx)
 {
     pulseg_segment_info si = PULSEG_SEGMENT_INFO_INIT;
     pulseg_block_info bi = PULSEG_BLOCK_INFO_INIT;
@@ -3688,54 +3337,63 @@ int pulseg_segment_has_grad(const pulseg_collection *coll,
     return 0;
 }
 
-int pulseg_get_block_info(const pulseg_collection *coll,
-                             pulseg_block_info *info,
-                             int seg_idx,
-                             int blk_idx)
+int pulseg_get_block_info(
+    const pulseg_collection *coll,
+    pulseg_block_info *info,
+    int seg_idx,
+    int blk_idx)
 {
     int axis;
 
     if (!coll || !info)
         return PULSEG_ERR_NULL_POINTER;
 
-    info->duration_us = pulseg__get_block_duration_us(coll, seg_idx, blk_idx);
-    info->start_time_us = pulseg__get_block_start_time_us(coll, seg_idx, blk_idx);
+    info->duration_us = get_block_duration_us(coll, seg_idx, blk_idx);
+    info->start_time_us = get_block_start_time_us(coll, seg_idx, blk_idx);
 
     /* Gradient (per axis) */
     for (axis = 0; axis < 3; ++axis)
     {
-        info->has_grad[axis] = pulseg__block_has_grad(coll, seg_idx, blk_idx, axis);
-        info->grad_is_trapezoid[axis] = info->has_grad[axis] ? pulseg__block_grad_is_trapezoid(coll, seg_idx, blk_idx, axis) : 0;
-        info->grad_delay_us[axis] = info->has_grad[axis] ? pulseg__get_grad_delay_us(coll, seg_idx, blk_idx, axis) : -1;
-        info->grad_num_shots[axis] = info->has_grad[axis] ? pulseg__get_grad_num_shots(coll, seg_idx, blk_idx, axis) : -1;
-        info->grad_num_samples[axis] = info->has_grad[axis] ? pulseg__get_grad_num_samples(coll, seg_idx, blk_idx, axis) : -1;
+        info->has_grad[axis] = block_has_grad(coll, seg_idx, blk_idx, axis);
+        info->grad_is_trapezoid[axis] =
+            info->has_grad[axis] ? block_grad_is_trapezoid(coll, seg_idx, blk_idx, axis) : 0;
+        info->grad_delay_us[axis] =
+            info->has_grad[axis] ? get_grad_delay_us(coll, seg_idx, blk_idx, axis) : -1;
+        info->grad_num_shots[axis] =
+            info->has_grad[axis] ? get_grad_num_shots(coll, seg_idx, blk_idx, axis) : -1;
+        info->grad_num_samples[axis] =
+            info->has_grad[axis] ? get_grad_num_samples(coll, seg_idx, blk_idx, axis) : -1;
     }
 
     /* RF */
-    info->has_rf = pulseg__block_has_rf(coll, seg_idx, blk_idx);
-    info->rf_delay_us = info->has_rf ? pulseg__get_rf_delay_us(coll, seg_idx, blk_idx) : -1;
-    info->rf_num_channels = info->has_rf ? pulseg__get_rf_num_channels(coll, seg_idx, blk_idx) : -1;
-    info->rf_num_samples = info->has_rf ? pulseg__get_rf_num_samples(coll, seg_idx, blk_idx) : -1;
-    info->rf_duration_us = info->has_rf ? pulseg__get_rf_duration_us(coll, seg_idx, blk_idx) : -1;
-    info->rf_is_complex = info->has_rf ? pulseg__block_rf_is_complex(coll, seg_idx, blk_idx) : 0;
-    info->rf_uniform_raster = info->has_rf ? pulseg__block_rf_has_uniform_raster(coll, seg_idx, blk_idx) : 0;
+    info->has_rf = block_has_rf(coll, seg_idx, blk_idx);
+    info->rf_delay_us = info->has_rf ? get_rf_delay_us(coll, seg_idx, blk_idx) : -1;
+    info->rf_num_channels = info->has_rf ? get_rf_num_channels(coll, seg_idx, blk_idx) : -1;
+    info->rf_num_samples = info->has_rf ? get_rf_num_samples(coll, seg_idx, blk_idx) : -1;
+    info->rf_duration_us = info->has_rf ? get_rf_duration_us(coll, seg_idx, blk_idx) : -1;
+    info->rf_is_complex = info->has_rf ? block_rf_is_complex(coll, seg_idx, blk_idx) : 0;
+    info->rf_uniform_raster =
+        info->has_rf ? block_rf_has_uniform_raster(coll, seg_idx, blk_idx) : 0;
 
     /* ADC */
-    info->has_adc = pulseg__block_has_adc(coll, seg_idx, blk_idx);
-    info->adc_delay_us = info->has_adc ? pulseg__get_adc_delay_us(coll, seg_idx, blk_idx) : -1;
-    info->adc_def_id = info->has_adc ? pulseg__get_adc_library_index(coll, seg_idx, blk_idx) : -1;
+    info->has_adc = block_has_adc(coll, seg_idx, blk_idx);
+    info->adc_delay_us = info->has_adc ? get_adc_delay_us(coll, seg_idx, blk_idx) : -1;
+    info->adc_def_id = info->has_adc ? get_adc_library_index(coll, seg_idx, blk_idx) : -1;
 
     /* Digital output */
-    info->has_digitalout = pulseg__block_has_digitalout(coll, seg_idx, blk_idx);
-    info->digitalout_delay_us = info->has_digitalout ? pulseg__get_digitalout_delay_us(coll, seg_idx, blk_idx) : -1;
-    info->digitalout_duration_us = info->has_digitalout ? pulseg__get_digitalout_duration_us(coll, seg_idx, blk_idx) : -1;
-    info->digitalout_channel = info->has_digitalout ? pulseg__get_digitalout_channel(coll, seg_idx, blk_idx) : -1;
+    info->has_digitalout = block_has_digitalout(coll, seg_idx, blk_idx);
+    info->digitalout_delay_us =
+        info->has_digitalout ? get_digitalout_delay_us(coll, seg_idx, blk_idx) : -1;
+    info->digitalout_duration_us =
+        info->has_digitalout ? get_digitalout_duration_us(coll, seg_idx, blk_idx) : -1;
+    info->digitalout_channel =
+        info->has_digitalout ? get_digitalout_channel(coll, seg_idx, blk_idx) : -1;
 
     /* Flags */
-    info->has_rotation = pulseg__block_has_rotation(coll, seg_idx, blk_idx);
-    info->norot_flag = pulseg__block_has_norot(coll, seg_idx, blk_idx);
-    info->nopos_flag = pulseg__block_has_nopos(coll, seg_idx, blk_idx);
-    info->has_freq_mod = pulseg__block_has_freq_mod(coll, seg_idx, blk_idx);
+    info->has_rotation = block_has_rotation(coll, seg_idx, blk_idx);
+    info->norot_flag = block_has_norot(coll, seg_idx, blk_idx);
+    info->nopos_flag = block_has_nopos(coll, seg_idx, blk_idx);
+    info->has_freq_mod = block_has_freq_mod(coll, seg_idx, blk_idx);
 
     /* Pure-delay block: no RF/gradient/ADC waveform AND no digital-output
      * trigger or rotation -- literally only a duration -- so it CAN be played
@@ -3744,36 +3402,36 @@ int pulseg_get_block_info(const pulseg_collection *coll,
      * block must NOT be collapsed onto a fixed-duration wait).
      *
      * is_variable_delay is only set when the duration ALSO actually differs
-     * across scan-table instances (pulseg__block_is_dynamic_delay).  A pure
+     * across scan-table instances (block_is_dynamic_delay).  A pure
      * delay whose duration is constant in every instance is "static": it
      * needs no setperiod wait and no interior SSP packet, and is represented
      * purely by its block position -- exactly like any other fixed block. */
     info->is_variable_delay =
-        (!info->has_grad[0] && !info->has_grad[1] && !info->has_grad[2] &&
-         !info->has_rf && !info->has_adc &&
-         !info->has_digitalout && !info->has_rotation &&
-         pulseg__block_is_dynamic_delay(coll, seg_idx, blk_idx)) ? 1 : 0;
+        (!info->has_grad[0] && !info->has_grad[1] && !info->has_grad[2] && !info->has_rf &&
+         !info->has_adc && !info->has_digitalout && !info->has_rotation &&
+         block_is_dynamic_delay(coll, seg_idx, blk_idx))
+        ? 1
+        : 0;
 
     return PULSEG_SUCCESS;
 }
 
-int pulseg_get_adc_def(const pulseg_collection *coll,
-                          pulseg_adc_def *def,
-                          int adc_idx)
+int pulseg_get_adc_def(const pulseg_collection *coll, pulseg_adc_def *def, int adc_idx)
 {
     if (!coll || !def)
         return PULSEG_ERR_NULL_POINTER;
 
-    def->dwell_ns = pulseg__get_adc_dwell_ns(coll, adc_idx);
-    def->num_samples = pulseg__get_adc_num_samples(coll, adc_idx);
+    def->dwell_ns = get_adc_dwell_ns(coll, adc_idx);
+    def->num_samples = get_adc_num_samples(coll, adc_idx);
 
     return PULSEG_SUCCESS;
 }
 
-int pulseg_get_rf_shim_def(const pulseg_collection *coll,
-                              pulseg_rf_shim_def *def,
-                              int subseq_idx,
-                              int shim_idx)
+int pulseg_get_rf_shim_def(
+    const pulseg_collection *coll,
+    pulseg_rf_shim_def *def,
+    int subseq_idx,
+    int shim_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int i;
@@ -3801,8 +3459,7 @@ int pulseg_get_rf_shim_def(const pulseg_collection *coll,
     return PULSEG_SUCCESS;
 }
 
-int pulseg_get_num_rf_shims(const pulseg_collection *coll,
-                               int subseq_idx)
+int pulseg_get_num_rf_shims(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll)
         return PULSEG_ERR_NULL_POINTER;
@@ -3815,9 +3472,7 @@ int pulseg_get_num_rf_shims(const pulseg_collection *coll,
 /*  Unique-block and segment-block getters                            */
 /* ================================================================== */
 
-int pulseg_get_num_unique_blocks(
-    const pulseg_collection *coll,
-    int subseq_idx)
+int pulseg_get_num_unique_blocks(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll)
         return PULSEG_ERR_NULL_POINTER;
@@ -3826,10 +3481,7 @@ int pulseg_get_num_unique_blocks(
     return coll->descriptors[subseq_idx].num_unique_blocks;
 }
 
-int pulseg_get_unique_block_id(
-    const pulseg_collection *coll,
-    int subseq_idx,
-    int blk_def_idx)
+int pulseg_get_unique_block_id(const pulseg_collection *coll, int subseq_idx, int blk_def_idx)
 {
     const pulseg_sequence_descriptor *desc;
     if (!coll)
@@ -3839,22 +3491,19 @@ int pulseg_get_unique_block_id(
     desc = &coll->descriptors[subseq_idx];
     if (blk_def_idx < 0 || blk_def_idx >= desc->num_unique_blocks)
         return PULSEG_ERR_INDEX;
-    /* block_definitions[].id is the 1-based .seq block index */
-    return desc->block_definitions[blk_def_idx].id;
+    /* base_blocks[].id is the 1-based .seq block index */
+    return desc->base_blocks[blk_def_idx].id;
 }
 
-int pulseg_get_segment_block_def_indices(
-    const pulseg_collection *coll,
-    int *out_ids,
-    int seg_idx)
+int pulseg_get_segment_block_def_indices(const pulseg_collection *coll, int *out_ids, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_segment *seg;
+    const pulseg_virtual_segment *seg;
     int local_seg, i;
 
     if (!coll || !out_ids)
         return PULSEG_ERR_NULL_POINTER;
-    if (!pulseg__resolve_segment(coll, &desc, &local_seg, seg_idx))
+    if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return PULSEG_ERR_INDEX;
 
     seg = &desc->segment_definitions[local_seg];

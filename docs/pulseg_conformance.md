@@ -48,13 +48,18 @@ instantiation.
 
 ## 2. Concept mapping
 
+Where the spec's term and Pulserver's identifier are now the *same word*,
+the identifier is given in code font. That is deliberate: the vocabulary was
+aligned to the spec (`docs/rename_map_v3.md` §3) so that reading the source
+and reading the specification do not require a translation table.
+
 | PulSeg concept (spec §) | Pulserver counterpart | Notes |
 |---|---|---|
-| **BaseBlock** (§3.1) — a normalized Pulseq block, `id ≥ 2` | Unique, deduplicated block definition (normalized RF / gradient / ADC events) | Pulserver dedups identical normalized blocks; the dedup key is exactly PulSeg's "same normalized base-block structure". |
+| **BaseBlock** (§3.1) — a normalized Pulseq block, `id ≥ 2` | `pulseg_base_block` — unique, deduplicated block definition (normalized RF / gradient / ADC events) | Pulserver dedups identical normalized blocks; the dedup key is exactly PulSeg's "same normalized base-block structure". |
 | **Reserved delay blocks** `id 0`/`1` (§3.1) | Pure-delay blocks, constant vs variable duration | Variable-duration delays are the TE/TR-fill blocks (bounded by Pulserver's min/max-TR machinery). |
-| **VirtualSegment** (§3.2) | **Pulserver Segment** | A `TRID`-keyed, reusable, ordered list of base blocks mapped to a contiguous region of sequencer instruction memory. See §3. |
-| **SegmentInstance** (§3.3) | Per-instance resolved block parameters | RF amplitude/phase/frequency, signed per-axis gradient scaling, rotation, ADC offsets, block durations, shot index. |
-| **Execution stream** (§3.4) | Ordered traversal of segment instances (the cursor) | A multi-subsequence collection is the concatenation of execution streams; subsequence boundaries are carried as non-normative metadata. |
+| **VirtualSegment** (§3.2) | `pulseg_virtual_segment` — the Pulserver Segment | A `TRID`-keyed, reusable, ordered list of base blocks mapped to a contiguous region of sequencer instruction memory. See §3. |
+| **SegmentInstance** (§3.3) | `pulseg_block_instance` — per-instance resolved block parameters | RF amplitude/phase/frequency, signed per-axis gradient scaling, rotation, ADC offsets, block durations, shot index. Stored in the block/RF/gradient/ADC tables and read as a view by `pulseg_get_block_instance{,_at}()`; the *storage* keeps the name `block_table` (see `docs/rename_map_v3.md` §3.1). |
+| **Execution stream** (§3.4) | `exec_stream*` — ordered traversal of segment instances (the cursor) | A multi-subsequence collection is the concatenation of execution streams; subsequence boundaries are carried as non-normative metadata. |
 | **`TRID` boundary annotation** (§4.2) | `TRID` segment labels (inherited from the pge2 convention) | Identical mechanism: first block of each instance carries `TRID`; repeats share structure. |
 
 ---
@@ -193,7 +198,7 @@ compliant readers ignore unknown fields.
 | Reserved delay IDs `0`/`1` (constant/variable) | ✔ (pure-delay blocks; variable = TE/TR fill) |
 | Virtual segment = `TRID`-keyed reusable unit | ✔ (Pulserver Segment) |
 | Periodicity NOT assumed by the IR | ✔ (TR is a separate, optional overlay) |
-| Segment instances with per-event scale/phase/freq/duration | ✔ |
+| Segment instances with per-event scale/phase/freq/duration | ✔ (`pulseg_get_block_instance_at()` projects one directly) |
 | Signed gradient scaling + rotation | ✔ |
 | Scalar RF/ADC frequency offsets | ✔ |
 | Multishot shot variants + `gradient_shot_index` | ✔ (independent shapes); scale/rotation families collapsed to single shot |

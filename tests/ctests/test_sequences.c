@@ -33,9 +33,7 @@ static int tr_waveform_matches_ref(
     const float wave_time_abs_tol = 0.5f;
     int i, n;
 
-    n = ref_wf->num_samples < lib_wf->gx.num_samples
-            ? ref_wf->num_samples
-            : lib_wf->gx.num_samples;
+    n = ref_wf->num_samples < lib_wf->gx.num_samples ? ref_wf->num_samples : lib_wf->gx.num_samples;
 
     if (abs(ref_wf->num_samples - lib_wf->gx.num_samples) > 1)
         return 0;
@@ -68,8 +66,7 @@ static int tr_waveform_matches_ref(
         if (tol_gz < 1.0f)
             tol_gz = 1.0f;
 
-        if (fabsf(ref_gx - lib_gx) > tol_gx ||
-            fabsf(ref_gy - lib_gy) > tol_gy ||
+        if (fabsf(ref_gx - lib_gx) > tol_gx || fabsf(ref_gy - lib_gy) > tol_gy ||
             fabsf(ref_gz - lib_gz) > tol_gz)
             return 0;
     }
@@ -114,21 +111,57 @@ static const seq_case kFseCases[] = {
 };
 
 static const seq_case kMprageNoncartCases[] = {
-    {"mprage_noncart_3d_1sl_1avg_userotext0", "mprage_noncart_3d_1sl_1avg_userotext0.seq", "mprage_noncart_3d_1sl_1avg_userotext0", 1},
-    {"mprage_noncart_3d_1sl_3avg_userotext0", "mprage_noncart_3d_1sl_3avg_userotext0.seq", "mprage_noncart_3d_1sl_3avg_userotext0", 3},
-    {"mprage_noncart_3d_3sl_1avg_userotext0", "mprage_noncart_3d_3sl_1avg_userotext0.seq", "mprage_noncart_3d_3sl_1avg_userotext0", 1},
-    {"mprage_noncart_3d_3sl_3avg_userotext0", "mprage_noncart_3d_3sl_3avg_userotext0.seq", "mprage_noncart_3d_3sl_3avg_userotext0", 3},
-    {"mprage_noncart_3d_1sl_1avg_userotext1", "mprage_noncart_3d_1sl_1avg_userotext1.seq", "mprage_noncart_3d_1sl_1avg_userotext1", 1},
-    {"mprage_noncart_3d_1sl_3avg_userotext1", "mprage_noncart_3d_1sl_3avg_userotext1.seq", "mprage_noncart_3d_1sl_3avg_userotext1", 3},
-    {"mprage_noncart_3d_3sl_1avg_userotext1", "mprage_noncart_3d_3sl_1avg_userotext1.seq", "mprage_noncart_3d_3sl_1avg_userotext1", 1},
-    {"mprage_noncart_3d_3sl_3avg_userotext1", "mprage_noncart_3d_3sl_3avg_userotext1.seq", "mprage_noncart_3d_3sl_3avg_userotext1", 3},
+    {"mprage_noncart_3d_1sl_1avg_userotext0",
+     "mprage_noncart_3d_1sl_1avg_userotext0.seq",
+     "mprage_noncart_3d_1sl_1avg_userotext0",
+     1},
+    {"mprage_noncart_3d_1sl_3avg_userotext0",
+     "mprage_noncart_3d_1sl_3avg_userotext0.seq",
+     "mprage_noncart_3d_1sl_3avg_userotext0",
+     3},
+    {"mprage_noncart_3d_3sl_1avg_userotext0",
+     "mprage_noncart_3d_3sl_1avg_userotext0.seq",
+     "mprage_noncart_3d_3sl_1avg_userotext0",
+     1},
+    {"mprage_noncart_3d_3sl_3avg_userotext0",
+     "mprage_noncart_3d_3sl_3avg_userotext0.seq",
+     "mprage_noncart_3d_3sl_3avg_userotext0",
+     3},
+    {"mprage_noncart_3d_1sl_1avg_userotext1",
+     "mprage_noncart_3d_1sl_1avg_userotext1.seq",
+     "mprage_noncart_3d_1sl_1avg_userotext1",
+     1},
+    {"mprage_noncart_3d_1sl_3avg_userotext1",
+     "mprage_noncart_3d_1sl_3avg_userotext1.seq",
+     "mprage_noncart_3d_1sl_3avg_userotext1",
+     3},
+    {"mprage_noncart_3d_3sl_1avg_userotext1",
+     "mprage_noncart_3d_3sl_1avg_userotext1.seq",
+     "mprage_noncart_3d_3sl_1avg_userotext1",
+     1},
+    {"mprage_noncart_3d_3sl_3avg_userotext1",
+     "mprage_noncart_3d_3sl_3avg_userotext1.seq",
+     "mprage_noncart_3d_3sl_3avg_userotext1",
+     3},
 };
 
 static const seq_case kQalasNoncartCases[] = {
-    {"qalas_noncart_3d_1sl_1avg_userotext1", "qalas_noncart_3d_1sl_1avg_userotext1.seq", "qalas_noncart_3d_1sl_1avg_userotext1", 1},
-    {"qalas_noncart_3d_1sl_3avg_userotext1", "qalas_noncart_3d_1sl_3avg_userotext1.seq", "qalas_noncart_3d_1sl_3avg_userotext1", 3},
-    {"qalas_noncart_3d_3sl_1avg_userotext1", "qalas_noncart_3d_3sl_1avg_userotext1.seq", "qalas_noncart_3d_3sl_1avg_userotext1", 1},
-    {"qalas_noncart_3d_3sl_3avg_userotext1", "qalas_noncart_3d_3sl_3avg_userotext1.seq", "qalas_noncart_3d_3sl_3avg_userotext1", 3},
+    {"qalas_noncart_3d_1sl_1avg_userotext1",
+     "qalas_noncart_3d_1sl_1avg_userotext1.seq",
+     "qalas_noncart_3d_1sl_1avg_userotext1",
+     1},
+    {"qalas_noncart_3d_1sl_3avg_userotext1",
+     "qalas_noncart_3d_1sl_3avg_userotext1.seq",
+     "qalas_noncart_3d_1sl_3avg_userotext1",
+     3},
+    {"qalas_noncart_3d_3sl_1avg_userotext1",
+     "qalas_noncart_3d_3sl_1avg_userotext1.seq",
+     "qalas_noncart_3d_3sl_1avg_userotext1",
+     1},
+    {"qalas_noncart_3d_3sl_3avg_userotext1",
+     "qalas_noncart_3d_3sl_3avg_userotext1.seq",
+     "qalas_noncart_3d_3sl_3avg_userotext1",
+     3},
 };
 
 static const seq_case kMprageNavCases[] = {
@@ -139,8 +172,14 @@ static const seq_case kMprageNavCases[] = {
 };
 
 static const seq_case kGreEpiCollectionCases[] = {
-    {"gre_epi_collection_2d_1sl_1avg", "gre_epi_collection_2d_1sl_1avg.seq", "gre_epi_collection_2d_1sl_1avg", 1},
-    {"gre_epi_collection_2d_1sl_3avg", "gre_epi_collection_2d_1sl_3avg.seq", "gre_epi_collection_2d_1sl_3avg", 3},
+    {"gre_epi_collection_2d_1sl_1avg",
+     "gre_epi_collection_2d_1sl_1avg.seq",
+     "gre_epi_collection_2d_1sl_1avg",
+     1},
+    {"gre_epi_collection_2d_1sl_3avg",
+     "gre_epi_collection_2d_1sl_3avg.seq",
+     "gre_epi_collection_2d_1sl_3avg",
+     3},
 };
 
 static void build_case_path(char *dst, size_t dst_sz, const seq_case *tc, const char *suffix)
@@ -202,66 +241,167 @@ static void run_check_case(const seq_case *tc)
     mu_assert_int_eq(0, meta.max_b1_subseq);
 
     /* 3. Nominal TR */
-    fprintf(stderr,
-            "[check][%s] tr=%.3f meta_tr=%d num_trs=%d tr_size=%d prep_blk=%d cool_blk=%d deg_prep=%d deg_cool=%d num_passes=%d\n",
-            tc->name,
-            sinfo.tr_duration_us,
-            meta.tr_duration_us,
-            sinfo.num_trs,
-            sinfo.tr_size,
-            sinfo.num_prep_blocks,
-            sinfo.num_cooldown_blocks,
-            sinfo.degenerate_prep,
-            sinfo.degenerate_cooldown,
-            sinfo.num_passes);
-    mu_assert_float_near("TR duration",
-                         (float)meta.tr_duration_us, sinfo.tr_duration_us, 1.0f);
+    fprintf(
+        stderr,
+        "[check][%s] tr=%.3f meta_tr=%d num_trs=%d tr_size=%d prep_blk=%d cool_blk=%d deg_prep=%d "
+        "deg_cool=%d num_passes=%d\n",
+        tc->name,
+        sinfo.tr_duration_us,
+        meta.tr_duration_us,
+        sinfo.num_trs,
+        sinfo.tr_size,
+        sinfo.num_prep_blocks,
+        sinfo.num_cooldown_blocks,
+        sinfo.degenerate_prep,
+        sinfo.degenerate_cooldown,
+        sinfo.num_passes);
+    mu_assert_float_near("TR duration", (float)meta.tr_duration_us, sinfo.tr_duration_us, 1.0f);
 
     /* 4. Num segments — verify segment count matches truth */
-    fprintf(stderr, "[check][%s] num_segments: meta=%d  lib=%d\n",
-            tc->name, meta.num_segments, cinfo.num_segments);
+    fprintf(
+        stderr,
+        "[check][%s] num_segments: meta=%d  lib=%d\n",
+        tc->name,
+        meta.num_segments,
+        cinfo.num_segments);
     mu_assert_int_eq(meta.num_segments, cinfo.num_segments);
 
     pulseg_collection_free(coll);
 }
 
-MU_TEST(test_check_gre_2d_1sl_1avg) { run_check_case(&kGreCases[0]); }
-MU_TEST(test_check_gre_2d_1sl_3avg) { run_check_case(&kGreCases[1]); }
-MU_TEST(test_check_gre_2d_3sl_1avg) { run_check_case(&kGreCases[2]); }
-MU_TEST(test_check_gre_2d_3sl_3avg) { run_check_case(&kGreCases[3]); }
+MU_TEST(test_check_gre_2d_1sl_1avg)
+{
+    run_check_case(&kGreCases[0]);
+}
+MU_TEST(test_check_gre_2d_1sl_3avg)
+{
+    run_check_case(&kGreCases[1]);
+}
+MU_TEST(test_check_gre_2d_3sl_1avg)
+{
+    run_check_case(&kGreCases[2]);
+}
+MU_TEST(test_check_gre_2d_3sl_3avg)
+{
+    run_check_case(&kGreCases[3]);
+}
 
-MU_TEST(test_check_mprage_2d_1sl_1avg) { run_check_case(&kMprageCases[0]); }
-MU_TEST(test_check_mprage_2d_1sl_3avg) { run_check_case(&kMprageCases[1]); }
-MU_TEST(test_check_mprage_2d_3sl_1avg) { run_check_case(&kMprageCases[2]); }
-MU_TEST(test_check_mprage_2d_3sl_3avg) { run_check_case(&kMprageCases[3]); }
-MU_TEST(test_check_mprage_nc_1sl_1avg) { run_check_case(&kMprageNoncartCases[0]); }
-MU_TEST(test_check_mprage_nc_1sl_3avg_userotext0) { run_check_case(&kMprageNoncartCases[1]); }
-MU_TEST(test_check_mprage_nc_3sl_1avg_userotext0) { run_check_case(&kMprageNoncartCases[2]); }
-MU_TEST(test_check_mprage_nc_3sl_3avg_userotext0) { run_check_case(&kMprageNoncartCases[3]); }
-MU_TEST(test_check_mprage_nc_1sl_1avg_userotext1) { run_check_case(&kMprageNoncartCases[4]); }
-MU_TEST(test_check_mprage_nc_1sl_3avg_userotext1) { run_check_case(&kMprageNoncartCases[5]); }
-MU_TEST(test_check_mprage_nc_3sl_1avg_userotext1) { run_check_case(&kMprageNoncartCases[6]); }
-MU_TEST(test_check_mprage_nc_3sl_3avg_userotext1) { run_check_case(&kMprageNoncartCases[7]); }
+MU_TEST(test_check_mprage_2d_1sl_1avg)
+{
+    run_check_case(&kMprageCases[0]);
+}
+MU_TEST(test_check_mprage_2d_1sl_3avg)
+{
+    run_check_case(&kMprageCases[1]);
+}
+MU_TEST(test_check_mprage_2d_3sl_1avg)
+{
+    run_check_case(&kMprageCases[2]);
+}
+MU_TEST(test_check_mprage_2d_3sl_3avg)
+{
+    run_check_case(&kMprageCases[3]);
+}
+MU_TEST(test_check_mprage_nc_1sl_1avg)
+{
+    run_check_case(&kMprageNoncartCases[0]);
+}
+MU_TEST(test_check_mprage_nc_1sl_3avg_userotext0)
+{
+    run_check_case(&kMprageNoncartCases[1]);
+}
+MU_TEST(test_check_mprage_nc_3sl_1avg_userotext0)
+{
+    run_check_case(&kMprageNoncartCases[2]);
+}
+MU_TEST(test_check_mprage_nc_3sl_3avg_userotext0)
+{
+    run_check_case(&kMprageNoncartCases[3]);
+}
+MU_TEST(test_check_mprage_nc_1sl_1avg_userotext1)
+{
+    run_check_case(&kMprageNoncartCases[4]);
+}
+MU_TEST(test_check_mprage_nc_1sl_3avg_userotext1)
+{
+    run_check_case(&kMprageNoncartCases[5]);
+}
+MU_TEST(test_check_mprage_nc_3sl_1avg_userotext1)
+{
+    run_check_case(&kMprageNoncartCases[6]);
+}
+MU_TEST(test_check_mprage_nc_3sl_3avg_userotext1)
+{
+    run_check_case(&kMprageNoncartCases[7]);
+}
 
-MU_TEST(test_check_bssfp_2d_1sl_1avg) { run_check_case(&kBssfpCases[0]); }
-MU_TEST(test_check_bssfp_2d_1sl_3avg) { run_check_case(&kBssfpCases[1]); }
-MU_TEST(test_check_bssfp_2d_3sl_1avg) { run_check_case(&kBssfpCases[2]); }
-MU_TEST(test_check_bssfp_2d_3sl_3avg) { run_check_case(&kBssfpCases[3]); }
+MU_TEST(test_check_bssfp_2d_1sl_1avg)
+{
+    run_check_case(&kBssfpCases[0]);
+}
+MU_TEST(test_check_bssfp_2d_1sl_3avg)
+{
+    run_check_case(&kBssfpCases[1]);
+}
+MU_TEST(test_check_bssfp_2d_3sl_1avg)
+{
+    run_check_case(&kBssfpCases[2]);
+}
+MU_TEST(test_check_bssfp_2d_3sl_3avg)
+{
+    run_check_case(&kBssfpCases[3]);
+}
 
-MU_TEST(test_check_fse_2d_1sl_1avg) { run_check_case(&kFseCases[0]); }
-MU_TEST(test_check_fse_2d_1sl_3avg) { run_check_case(&kFseCases[1]); }
-MU_TEST(test_check_fse_2d_3sl_1avg) { run_check_case(&kFseCases[2]); }
-MU_TEST(test_check_fse_2d_3sl_3avg) { run_check_case(&kFseCases[3]); }
+MU_TEST(test_check_fse_2d_1sl_1avg)
+{
+    run_check_case(&kFseCases[0]);
+}
+MU_TEST(test_check_fse_2d_1sl_3avg)
+{
+    run_check_case(&kFseCases[1]);
+}
+MU_TEST(test_check_fse_2d_3sl_1avg)
+{
+    run_check_case(&kFseCases[2]);
+}
+MU_TEST(test_check_fse_2d_3sl_3avg)
+{
+    run_check_case(&kFseCases[3]);
+}
 
-MU_TEST(test_check_qalas_nc_3d_1sl_1avg_userotext1) { run_check_case(&kQalasNoncartCases[0]); }
-MU_TEST(test_check_qalas_nc_3d_1sl_3avg_userotext1) { run_check_case(&kQalasNoncartCases[1]); }
-MU_TEST(test_check_qalas_nc_3d_3sl_1avg_userotext1) { run_check_case(&kQalasNoncartCases[2]); }
-MU_TEST(test_check_qalas_nc_3d_3sl_3avg_userotext1) { run_check_case(&kQalasNoncartCases[3]); }
+MU_TEST(test_check_qalas_nc_3d_1sl_1avg_userotext1)
+{
+    run_check_case(&kQalasNoncartCases[0]);
+}
+MU_TEST(test_check_qalas_nc_3d_1sl_3avg_userotext1)
+{
+    run_check_case(&kQalasNoncartCases[1]);
+}
+MU_TEST(test_check_qalas_nc_3d_3sl_1avg_userotext1)
+{
+    run_check_case(&kQalasNoncartCases[2]);
+}
+MU_TEST(test_check_qalas_nc_3d_3sl_3avg_userotext1)
+{
+    run_check_case(&kQalasNoncartCases[3]);
+}
 
-MU_TEST(test_check_mprage_nav_2d_1sl_1avg) { run_check_case(&kMprageNavCases[0]); }
-MU_TEST(test_check_mprage_nav_2d_1sl_3avg) { run_check_case(&kMprageNavCases[1]); }
-MU_TEST(test_check_mprage_nav_2d_3sl_1avg) { run_check_case(&kMprageNavCases[2]); }
-MU_TEST(test_check_mprage_nav_2d_3sl_3avg) { run_check_case(&kMprageNavCases[3]); }
+MU_TEST(test_check_mprage_nav_2d_1sl_1avg)
+{
+    run_check_case(&kMprageNavCases[0]);
+}
+MU_TEST(test_check_mprage_nav_2d_1sl_3avg)
+{
+    run_check_case(&kMprageNavCases[1]);
+}
+MU_TEST(test_check_mprage_nav_2d_3sl_1avg)
+{
+    run_check_case(&kMprageNavCases[2]);
+}
+MU_TEST(test_check_mprage_nav_2d_3sl_3avg)
+{
+    run_check_case(&kMprageNavCases[3]);
+}
 
 MU_TEST_SUITE(suite_sequences_check)
 {
@@ -340,16 +480,25 @@ static void run_sequences_uieval_case(const seq_case *tc)
     mu_assert(ok, "failed to parse case _meta.txt");
 
     /* 4. Segment structure */
-    fprintf(stderr, "[uieval][%s] num_segments: meta=%d  lib=%d\n",
-            tc->name, meta.num_segments, cinfo.num_segments);
+    fprintf(
+        stderr,
+        "[uieval][%s] num_segments: meta=%d  lib=%d\n",
+        tc->name,
+        meta.num_segments,
+        cinfo.num_segments);
     mu_assert_int_eq(meta.num_segments, cinfo.num_segments);
     for (s = 0; s < cinfo.num_segments && s < MAX_SEGMENTS; ++s)
     {
         pulseg_segment_info segi = PULSEG_SEGMENT_INFO_INIT;
         rc = pulseg_get_segment_info(coll, &segi, s);
         mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_segment_info failed");
-        fprintf(stderr, "[uieval][%s] segment %d num_blocks: meta=%d  lib=%d\n",
-                tc->name, s, meta.segment_num_blocks[s], segi.num_blocks);
+        fprintf(
+            stderr,
+            "[uieval][%s] segment %d num_blocks: meta=%d  lib=%d\n",
+            tc->name,
+            s,
+            meta.segment_num_blocks[s],
+            segi.num_blocks);
         mu_assert_int_eq(meta.segment_num_blocks[s], segi.num_blocks);
     }
 
@@ -376,7 +525,14 @@ static void run_sequences_uieval_case(const seq_case *tc)
             rc = pulseg_get_tr_gradient_waveforms(coll, &tr_wf, &diag, subseq_idx, tr_idx);
             if (!PULSEG_SUCCEEDED(rc))
             {
-                fprintf(stderr, "[DIAG] pulseg_get_tr_gradient_waveforms failed: case=%s subseq=%d tr_idx=%d rc=%d\n", tc->name, subseq_idx, tr_idx, rc);
+                fprintf(
+                    stderr,
+                    "[DIAG] pulseg_get_tr_gradient_waveforms failed: case=%s subseq=%d tr_idx=%d "
+                    "rc=%d\n",
+                    tc->name,
+                    subseq_idx,
+                    tr_idx,
+                    rc);
             }
             mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_tr_gradient_waveforms failed");
 
@@ -391,7 +547,10 @@ static void run_sequences_uieval_case(const seq_case *tc)
             }
             if (!matched)
             {
-                fprintf(stderr, "[FAIL] Canonical TR %d waveform does not match any reference\n", tr_idx);
+                fprintf(
+                    stderr,
+                    "[FAIL] Canonical TR %d waveform does not match any reference\n",
+                    tr_idx);
             }
             mu_assert(matched, "Canonical TR waveform does not match any reference");
             pulseg_tr_gradient_waveforms_free(&tr_wf);
@@ -400,7 +559,12 @@ static void run_sequences_uieval_case(const seq_case *tc)
         /* Optionally, check that backend does not return extra canonical TRs. */
         pulseg_tr_gradient_waveforms tr_wf_extra = PULSEG_TR_GRADIENT_WAVEFORMS_INIT;
         pulseg_diagnostic_init(&diag);
-        rc = pulseg_get_tr_gradient_waveforms(coll, &tr_wf_extra, &diag, subseq_idx, ref_wfs.num_trs);
+        rc = pulseg_get_tr_gradient_waveforms(
+            coll,
+            &tr_wf_extra,
+            &diag,
+            subseq_idx,
+            ref_wfs.num_trs);
         mu_assert(!PULSEG_SUCCEEDED(rc), "Backend returned more canonical TRs than expected");
         pulseg_tr_gradient_waveforms_free(&tr_wf_extra);
 
@@ -409,43 +573,139 @@ static void run_sequences_uieval_case(const seq_case *tc)
     pulseg_collection_free(coll);
 }
 
-MU_TEST(test_sequences_uieval_gre_2d_1sl_1avg) { run_sequences_uieval_case(&kGreCases[0]); }
-MU_TEST(test_sequences_uieval_gre_2d_1sl_3avg) { run_sequences_uieval_case(&kGreCases[1]); }
-MU_TEST(test_sequences_uieval_gre_2d_3sl_1avg) { run_sequences_uieval_case(&kGreCases[2]); }
-MU_TEST(test_sequences_uieval_gre_2d_3sl_3avg) { run_sequences_uieval_case(&kGreCases[3]); }
+MU_TEST(test_sequences_uieval_gre_2d_1sl_1avg)
+{
+    run_sequences_uieval_case(&kGreCases[0]);
+}
+MU_TEST(test_sequences_uieval_gre_2d_1sl_3avg)
+{
+    run_sequences_uieval_case(&kGreCases[1]);
+}
+MU_TEST(test_sequences_uieval_gre_2d_3sl_1avg)
+{
+    run_sequences_uieval_case(&kGreCases[2]);
+}
+MU_TEST(test_sequences_uieval_gre_2d_3sl_3avg)
+{
+    run_sequences_uieval_case(&kGreCases[3]);
+}
 
-MU_TEST(test_sequences_uieval_mprage_2d_1sl_1avg) { run_sequences_uieval_case(&kMprageCases[0]); }
-MU_TEST(test_sequences_uieval_mprage_2d_1sl_3avg) { run_sequences_uieval_case(&kMprageCases[1]); }
-MU_TEST(test_sequences_uieval_mprage_2d_3sl_1avg) { run_sequences_uieval_case(&kMprageCases[2]); }
-MU_TEST(test_sequences_uieval_mprage_2d_3sl_3avg) { run_sequences_uieval_case(&kMprageCases[3]); }
-MU_TEST(test_sequences_uieval_mprage_nc_1sl_1avg) { run_sequences_uieval_case(&kMprageNoncartCases[0]); }
-MU_TEST(test_sequences_uieval_mprage_nc_1sl_3avg_userotext0) { run_sequences_uieval_case(&kMprageNoncartCases[1]); }
-MU_TEST(test_sequences_uieval_mprage_nc_3sl_1avg_userotext0) { run_sequences_uieval_case(&kMprageNoncartCases[2]); }
-MU_TEST(test_sequences_uieval_mprage_nc_3sl_3avg_userotext0) { run_sequences_uieval_case(&kMprageNoncartCases[3]); }
-MU_TEST(test_sequences_uieval_mprage_nc_1sl_1avg_userotext1) { run_sequences_uieval_case(&kMprageNoncartCases[4]); }
-MU_TEST(test_sequences_uieval_mprage_nc_1sl_3avg_userotext1) { run_sequences_uieval_case(&kMprageNoncartCases[5]); }
-MU_TEST(test_sequences_uieval_mprage_nc_3sl_1avg_userotext1) { run_sequences_uieval_case(&kMprageNoncartCases[6]); }
-MU_TEST(test_sequences_uieval_mprage_nc_3sl_3avg_userotext1) { run_sequences_uieval_case(&kMprageNoncartCases[7]); }
+MU_TEST(test_sequences_uieval_mprage_2d_1sl_1avg)
+{
+    run_sequences_uieval_case(&kMprageCases[0]);
+}
+MU_TEST(test_sequences_uieval_mprage_2d_1sl_3avg)
+{
+    run_sequences_uieval_case(&kMprageCases[1]);
+}
+MU_TEST(test_sequences_uieval_mprage_2d_3sl_1avg)
+{
+    run_sequences_uieval_case(&kMprageCases[2]);
+}
+MU_TEST(test_sequences_uieval_mprage_2d_3sl_3avg)
+{
+    run_sequences_uieval_case(&kMprageCases[3]);
+}
+MU_TEST(test_sequences_uieval_mprage_nc_1sl_1avg)
+{
+    run_sequences_uieval_case(&kMprageNoncartCases[0]);
+}
+MU_TEST(test_sequences_uieval_mprage_nc_1sl_3avg_userotext0)
+{
+    run_sequences_uieval_case(&kMprageNoncartCases[1]);
+}
+MU_TEST(test_sequences_uieval_mprage_nc_3sl_1avg_userotext0)
+{
+    run_sequences_uieval_case(&kMprageNoncartCases[2]);
+}
+MU_TEST(test_sequences_uieval_mprage_nc_3sl_3avg_userotext0)
+{
+    run_sequences_uieval_case(&kMprageNoncartCases[3]);
+}
+MU_TEST(test_sequences_uieval_mprage_nc_1sl_1avg_userotext1)
+{
+    run_sequences_uieval_case(&kMprageNoncartCases[4]);
+}
+MU_TEST(test_sequences_uieval_mprage_nc_1sl_3avg_userotext1)
+{
+    run_sequences_uieval_case(&kMprageNoncartCases[5]);
+}
+MU_TEST(test_sequences_uieval_mprage_nc_3sl_1avg_userotext1)
+{
+    run_sequences_uieval_case(&kMprageNoncartCases[6]);
+}
+MU_TEST(test_sequences_uieval_mprage_nc_3sl_3avg_userotext1)
+{
+    run_sequences_uieval_case(&kMprageNoncartCases[7]);
+}
 
-MU_TEST(test_sequences_uieval_bssfp_2d_1sl_1avg) { run_sequences_uieval_case(&kBssfpCases[0]); }
-MU_TEST(test_sequences_uieval_bssfp_2d_1sl_3avg) { run_sequences_uieval_case(&kBssfpCases[1]); }
-MU_TEST(test_sequences_uieval_bssfp_2d_3sl_1avg) { run_sequences_uieval_case(&kBssfpCases[2]); }
-MU_TEST(test_sequences_uieval_bssfp_2d_3sl_3avg) { run_sequences_uieval_case(&kBssfpCases[3]); }
+MU_TEST(test_sequences_uieval_bssfp_2d_1sl_1avg)
+{
+    run_sequences_uieval_case(&kBssfpCases[0]);
+}
+MU_TEST(test_sequences_uieval_bssfp_2d_1sl_3avg)
+{
+    run_sequences_uieval_case(&kBssfpCases[1]);
+}
+MU_TEST(test_sequences_uieval_bssfp_2d_3sl_1avg)
+{
+    run_sequences_uieval_case(&kBssfpCases[2]);
+}
+MU_TEST(test_sequences_uieval_bssfp_2d_3sl_3avg)
+{
+    run_sequences_uieval_case(&kBssfpCases[3]);
+}
 
-MU_TEST(test_sequences_uieval_fse_2d_1sl_1avg) { run_sequences_uieval_case(&kFseCases[0]); }
-MU_TEST(test_sequences_uieval_fse_2d_1sl_3avg) { run_sequences_uieval_case(&kFseCases[1]); }
-MU_TEST(test_sequences_uieval_fse_2d_3sl_1avg) { run_sequences_uieval_case(&kFseCases[2]); }
-MU_TEST(test_sequences_uieval_fse_2d_3sl_3avg) { run_sequences_uieval_case(&kFseCases[3]); }
+MU_TEST(test_sequences_uieval_fse_2d_1sl_1avg)
+{
+    run_sequences_uieval_case(&kFseCases[0]);
+}
+MU_TEST(test_sequences_uieval_fse_2d_1sl_3avg)
+{
+    run_sequences_uieval_case(&kFseCases[1]);
+}
+MU_TEST(test_sequences_uieval_fse_2d_3sl_1avg)
+{
+    run_sequences_uieval_case(&kFseCases[2]);
+}
+MU_TEST(test_sequences_uieval_fse_2d_3sl_3avg)
+{
+    run_sequences_uieval_case(&kFseCases[3]);
+}
 
-MU_TEST(test_sequences_uieval_qalas_nc_3d_1sl_1avg_userotext1) { run_sequences_uieval_case(&kQalasNoncartCases[0]); }
-MU_TEST(test_sequences_uieval_qalas_nc_3d_1sl_3avg_userotext1) { run_sequences_uieval_case(&kQalasNoncartCases[1]); }
-MU_TEST(test_sequences_uieval_qalas_nc_3d_3sl_1avg_userotext1) { run_sequences_uieval_case(&kQalasNoncartCases[2]); }
-MU_TEST(test_sequences_uieval_qalas_nc_3d_3sl_3avg_userotext1) { run_sequences_uieval_case(&kQalasNoncartCases[3]); }
+MU_TEST(test_sequences_uieval_qalas_nc_3d_1sl_1avg_userotext1)
+{
+    run_sequences_uieval_case(&kQalasNoncartCases[0]);
+}
+MU_TEST(test_sequences_uieval_qalas_nc_3d_1sl_3avg_userotext1)
+{
+    run_sequences_uieval_case(&kQalasNoncartCases[1]);
+}
+MU_TEST(test_sequences_uieval_qalas_nc_3d_3sl_1avg_userotext1)
+{
+    run_sequences_uieval_case(&kQalasNoncartCases[2]);
+}
+MU_TEST(test_sequences_uieval_qalas_nc_3d_3sl_3avg_userotext1)
+{
+    run_sequences_uieval_case(&kQalasNoncartCases[3]);
+}
 
-MU_TEST(test_sequences_uieval_mprage_nav_2d_1sl_1avg) { run_sequences_uieval_case(&kMprageNavCases[0]); }
-MU_TEST(test_sequences_uieval_mprage_nav_2d_1sl_3avg) { run_sequences_uieval_case(&kMprageNavCases[1]); }
-MU_TEST(test_sequences_uieval_mprage_nav_2d_3sl_1avg) { run_sequences_uieval_case(&kMprageNavCases[2]); }
-MU_TEST(test_sequences_uieval_mprage_nav_2d_3sl_3avg) { run_sequences_uieval_case(&kMprageNavCases[3]); }
+MU_TEST(test_sequences_uieval_mprage_nav_2d_1sl_1avg)
+{
+    run_sequences_uieval_case(&kMprageNavCases[0]);
+}
+MU_TEST(test_sequences_uieval_mprage_nav_2d_1sl_3avg)
+{
+    run_sequences_uieval_case(&kMprageNavCases[1]);
+}
+MU_TEST(test_sequences_uieval_mprage_nav_2d_3sl_1avg)
+{
+    run_sequences_uieval_case(&kMprageNavCases[2]);
+}
+MU_TEST(test_sequences_uieval_mprage_nav_2d_3sl_3avg)
+{
+    run_sequences_uieval_case(&kMprageNavCases[3]);
+}
 
 MU_TEST_SUITE(suite_sequences_uieval)
 {
@@ -534,8 +794,12 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
     mu_assert(ok, "failed to parse case _segment_def.truth");
 
     /* Number of segments must match */
-    fprintf(stderr, "[geninstr][%s] num_segments: ref=%d  lib=%d\n",
-            tc->name, ref.num_segments, cinfo.num_segments);
+    fprintf(
+        stderr,
+        "[geninstr][%s] num_segments: ref=%d  lib=%d\n",
+        tc->name,
+        ref.num_segments,
+        cinfo.num_segments);
     mu_assert_int_eq(ref.num_segments, cinfo.num_segments);
 
     for (s = 0; s < ref.num_segments; ++s)
@@ -543,8 +807,13 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
         pulseg_segment_info segi = PULSEG_SEGMENT_INFO_INIT;
         rc = pulseg_get_segment_info(coll, &segi, s);
         mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_segment_info failed");
-        fprintf(stderr, "[geninstr][%s] segment %d num_blocks: ref=%d  lib=%d\n",
-                tc->name, s, ref.num_blocks[s], segi.num_blocks);
+        fprintf(
+            stderr,
+            "[geninstr][%s] segment %d num_blocks: ref=%d  lib=%d\n",
+            tc->name,
+            s,
+            ref.num_blocks[s],
+            segi.num_blocks);
         mu_assert_int_eq(ref.num_blocks[s], segi.num_blocks);
 
         for (b = 0; b < ref.num_blocks[s]; ++b)
@@ -573,8 +842,10 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
                 float **mag;
                 int i;
 
-                mu_assert(fabsf(ref_blk->rf_delay - (float)bi.rf_delay_us * 1e-6f) <= GENI_DELAY_ABS_TOL * 1e-6f,
-                          "RF delay mismatch");
+                mu_assert(
+                    fabsf(ref_blk->rf_delay - (float)bi.rf_delay_us * 1e-6f) <=
+                        GENI_DELAY_ABS_TOL * 1e-6f,
+                    "RF delay mismatch");
                 mu_assert_int_eq(ref_blk->rf_n, bi.rf_num_samples);
 
                 mag = pulseg_get_rf_magnitude(coll, &num_channels, &num_samples, s, b);
@@ -585,18 +856,21 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
                    (peak ≈ 1.0).  Compare directly. */
                 for (i = 0; i < num_samples; ++i)
                 {
-                    mu_assert(GENI_AMP_NEAR(ref_blk->rf_rho[i], mag[0][i]),
-                              "RF magnitude shape mismatch");
+                    mu_assert(
+                        GENI_AMP_NEAR(ref_blk->rf_rho[i], mag[0][i]),
+                        "RF magnitude shape mismatch");
                 }
 
                 /* Amplitude checks via new getters */
                 {
                     float init_amp = pulseg_get_rf_initial_amplitude_hz(coll, s, b);
                     float max_amp = pulseg_get_rf_max_amplitude_hz(coll, s, b);
-                    mu_assert(GENI_AMP_NEAR(ref_blk->rf_amp, init_amp),
-                              "RF initial amplitude mismatch");
-                    mu_assert(GENI_AMP_NEAR(fabsf(ref_blk->rf_amp), max_amp),
-                              "RF max amplitude mismatch");
+                    mu_assert(
+                        GENI_AMP_NEAR(ref_blk->rf_amp, init_amp),
+                        "RF initial amplitude mismatch");
+                    mu_assert(
+                        GENI_AMP_NEAR(fabsf(ref_blk->rf_amp), max_amp),
+                        "RF max amplitude mismatch");
                 }
 
                 {
@@ -617,10 +891,19 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
                             float ref_us = ref_blk->rf_time_s[i] * 1e6f;
                             float lib_us = lib_rf_time[i];
                             if (fabsf(ref_us - lib_us) > 0.5f)
-                                fprintf(stderr, "[geninstr][%s] seg%d blk%d rf_time@%d: ref=%.6f us  lib=%.6f us\n",
-                                        tc->name, s, b, i, ref_us, lib_us);
-                            mu_assert(fabsf(ref_us - lib_us) <= 0.5f,
-                                      "RF time array mismatch (>0.5 us)");
+                                fprintf(
+                                    stderr,
+                                    "[geninstr][%s] seg%d blk%d rf_time@%d: ref=%.6f us  lib=%.6f "
+                                    "us\n",
+                                    tc->name,
+                                    s,
+                                    b,
+                                    i,
+                                    ref_us,
+                                    lib_us);
+                            mu_assert(
+                                fabsf(ref_us - lib_us) <= 0.5f,
+                                "RF time array mismatch (>0.5 us)");
                         }
                         free(lib_rf_time);
                     }
@@ -632,10 +915,19 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
                             float ref_us = ref_blk->rf_time_s[i] * 1e6f;
                             float expected_us = (float)i * ref_blk->rf_raster_us;
                             if (fabsf(ref_us - expected_us) > 0.5f)
-                                fprintf(stderr, "[geninstr][%s] seg%d blk%d rf_time@%d: ref=%.6f us  expected=%.6f us (uniform)\n",
-                                        tc->name, s, b, i, ref_us, expected_us);
-                            mu_assert(fabsf(ref_us - expected_us) <= 0.5f,
-                                      "RF time array does not match uniform raster");
+                                fprintf(
+                                    stderr,
+                                    "[geninstr][%s] seg%d blk%d rf_time@%d: ref=%.6f us  "
+                                    "expected=%.6f us (uniform)\n",
+                                    tc->name,
+                                    s,
+                                    b,
+                                    i,
+                                    ref_us,
+                                    expected_us);
+                            mu_assert(
+                                fabsf(ref_us - expected_us) <= 0.5f,
+                                "RF time array does not match uniform raster");
                         }
                     }
                 }
@@ -651,16 +943,13 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
                     int i;
                     int init_shot;
 
-                    mu_assert(fabsf(ref_blk->grad_delay[ax] - (float)bi.grad_delay_us[ax] * 1e-6f) <= GENI_DELAY_ABS_TOL * 1e-6f,
-                              "grad delay mismatch");
+                    mu_assert(
+                        fabsf(ref_blk->grad_delay[ax] - (float)bi.grad_delay_us[ax] * 1e-6f) <=
+                            GENI_DELAY_ABS_TOL * 1e-6f,
+                        "grad delay mismatch");
                     mu_assert_int_eq(ref_blk->grad_n[ax], bi.grad_num_samples[ax]);
 
-                    amps = pulseg_get_grad_amplitude(coll,
-                                                        &num_shots,
-                                                        &num_samples,
-                                                        s,
-                                                        b,
-                                                        ax);
+                    amps = pulseg_get_grad_amplitude(coll, &num_shots, &num_samples, s, b, ax);
                     mu_assert(amps != NULL, "pulseg_get_grad_amplitude returned NULL");
                     mu_assert_int_eq(ref_blk->grad_n[ax], num_samples);
 
@@ -668,18 +957,28 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
                        segment instance.  Compare that shot's waveform
                        against the MATLAB truth (which was extracted from
                        the same max-energy instance). */
-                    init_shot = pulseg_get_grad_initial_shot_id(
-                        coll, s, b, ax);
-                    mu_assert(init_shot >= 0 && init_shot < num_shots,
-                              "initial shot id out of range");
+                    init_shot = pulseg_get_grad_initial_shot_id(coll, s, b, ax);
+                    mu_assert(
+                        init_shot >= 0 && init_shot < num_shots,
+                        "initial shot id out of range");
                     for (i = 0; i < num_samples; ++i)
                     {
                         if (!GENI_AMP_NEAR(ref_blk->grad_wave[ax][i], amps[init_shot][i]))
-                            fprintf(stderr, "[geninstr][%s] seg%d blk%d ax%d wave@%d: ref=%.4g  lib=%.4g (shot=%d)\n",
-                                    tc->name, s, b, ax, i,
-                                    ref_blk->grad_wave[ax][i], amps[init_shot][i], init_shot);
-                        mu_assert(GENI_AMP_NEAR(ref_blk->grad_wave[ax][i], amps[init_shot][i]),
-                                  "grad waveform shape mismatch");
+                            fprintf(
+                                stderr,
+                                "[geninstr][%s] seg%d blk%d ax%d wave@%d: ref=%.4g  lib=%.4g "
+                                "(shot=%d)\n",
+                                tc->name,
+                                s,
+                                b,
+                                ax,
+                                i,
+                                ref_blk->grad_wave[ax][i],
+                                amps[init_shot][i],
+                                init_shot);
+                        mu_assert(
+                            GENI_AMP_NEAR(ref_blk->grad_wave[ax][i], amps[init_shot][i]),
+                            "grad waveform shape mismatch");
                     }
 
                     /* Gradient timing array check */
@@ -691,30 +990,54 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
                             float ref_us = ref_blk->grad_time_s[ax][i] * 1e6f;
                             float lib_us = lib_time_us[i];
                             if (fabsf(ref_us - lib_us) > 0.5f)
-                                fprintf(stderr, "[geninstr][%s] seg%d blk%d ax%d time@%d: ref=%.6f us  lib=%.6f us\n",
-                                        tc->name, s, b, ax, i, ref_us, lib_us);
-                            mu_assert(fabsf(ref_us - lib_us) <= 0.5f,
-                                      "grad time array mismatch (>0.5 us)");
+                                fprintf(
+                                    stderr,
+                                    "[geninstr][%s] seg%d blk%d ax%d time@%d: ref=%.6f us  "
+                                    "lib=%.6f us\n",
+                                    tc->name,
+                                    s,
+                                    b,
+                                    ax,
+                                    i,
+                                    ref_us,
+                                    lib_us);
+                            mu_assert(
+                                fabsf(ref_us - lib_us) <= 0.5f,
+                                "grad time array mismatch (>0.5 us)");
                         }
                         free(lib_time_us);
                     }
 
                     /* Amplitude checks via new getters */
                     {
-                        float init_amp = pulseg_get_grad_initial_amplitude_hz_per_m(
-                            coll, s, b, ax);
-                        float max_amp = pulseg_get_grad_max_amplitude_hz_per_m(
-                            coll, s, b, ax);
+                        float init_amp = pulseg_get_grad_initial_amplitude_hz_per_m(coll, s, b, ax);
+                        float max_amp = pulseg_get_grad_max_amplitude_hz_per_m(coll, s, b, ax);
                         if (!GENI_AMP_NEAR(ref_blk->grad_amp[ax], init_amp))
-                            fprintf(stderr, "[geninstr][%s] seg%d blk%d ax%d init_amp: ref=%.6g  lib=%.6g\n",
-                                    tc->name, s, b, ax, ref_blk->grad_amp[ax], init_amp);
-                        mu_assert(GENI_AMP_NEAR(ref_blk->grad_amp[ax], init_amp),
-                                  "grad initial amplitude mismatch");
+                            fprintf(
+                                stderr,
+                                "[geninstr][%s] seg%d blk%d ax%d init_amp: ref=%.6g  lib=%.6g\n",
+                                tc->name,
+                                s,
+                                b,
+                                ax,
+                                ref_blk->grad_amp[ax],
+                                init_amp);
+                        mu_assert(
+                            GENI_AMP_NEAR(ref_blk->grad_amp[ax], init_amp),
+                            "grad initial amplitude mismatch");
                         if (!GENI_AMP_NEAR(fabsf(ref_blk->grad_amp[ax]), max_amp))
-                            fprintf(stderr, "[geninstr][%s] seg%d blk%d ax%d max_amp: ref=%.6g  lib=%.6g\n",
-                                    tc->name, s, b, ax, fabsf(ref_blk->grad_amp[ax]), max_amp);
-                        mu_assert(GENI_AMP_NEAR(fabsf(ref_blk->grad_amp[ax]), max_amp),
-                                  "grad max amplitude mismatch");
+                            fprintf(
+                                stderr,
+                                "[geninstr][%s] seg%d blk%d ax%d max_amp: ref=%.6g  lib=%.6g\n",
+                                tc->name,
+                                s,
+                                b,
+                                ax,
+                                fabsf(ref_blk->grad_amp[ax]),
+                                max_amp);
+                        mu_assert(
+                            GENI_AMP_NEAR(fabsf(ref_blk->grad_amp[ax]), max_amp),
+                            "grad max amplitude mismatch");
                     }
 
                     {
@@ -729,24 +1052,32 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
             /* --- ADC ---------------------------------------------- */
             if (ref_blk->has_adc)
             {
-                mu_assert(fabsf(ref_blk->adc_delay - (float)bi.adc_delay_us * 1e-6f) <= GENI_DELAY_ABS_TOL * 1e-6f,
-                          "ADC delay mismatch");
+                mu_assert(
+                    fabsf(ref_blk->adc_delay - (float)bi.adc_delay_us * 1e-6f) <=
+                        GENI_DELAY_ABS_TOL * 1e-6f,
+                    "ADC delay mismatch");
                 mu_assert_int_eq(ref_blk->adc_def_id, bi.adc_def_id);
             }
 
             /* --- Digital output ------------------------------------ */
             if (ref_blk->has_digital_out)
             {
-                mu_assert(fabsf(ref_blk->digital_out_delay - (float)bi.digitalout_delay_us * 1e-6f) <= GENI_DELAY_ABS_TOL * 1e-6f,
-                          "digital-out delay mismatch");
-                mu_assert(fabsf(ref_blk->digital_out_duration - (float)bi.digitalout_duration_us * 1e-6f) <= GENI_DELAY_ABS_TOL * 1e-6f,
-                          "digital-out duration mismatch");
+                mu_assert(
+                    fabsf(ref_blk->digital_out_delay - (float)bi.digitalout_delay_us * 1e-6f) <=
+                        GENI_DELAY_ABS_TOL * 1e-6f,
+                    "digital-out delay mismatch");
+                mu_assert(
+                    fabsf(
+                        ref_blk->digital_out_duration - (float)bi.digitalout_duration_us * 1e-6f) <=
+                        GENI_DELAY_ABS_TOL * 1e-6f,
+                    "digital-out duration mismatch");
             }
 
             /* --- Freq-mod ----------------------------------------- */
             if (ref_blk->has_freq_mod)
             {
-                int raster_us = 2; /* vendor raster, matches MATLAB sys.rfRasterTime/adcRasterTime */
+                int raster_us =
+                    2; /* vendor raster, matches MATLAB sys.rfRasterTime/adcRasterTime */
                 int lib_num_samples = bi.duration_us / raster_us;
                 mu_assert_int_eq(ref_blk->freq_mod_num_samples, lib_num_samples);
             }
@@ -756,10 +1087,8 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
              * canonicalized to one block raster at geninstruction time.
              * Pure-delay blocks embedded in multi-block standard segments
              * carry their actual fixed duration set by the sequence. */
-            if (!ref_blk->has_rf &&
-                !ref_blk->has_grad[0] && !ref_blk->has_grad[1] && !ref_blk->has_grad[2] &&
-                !ref_blk->has_adc &&
-                ref.num_blocks[s] == 1)
+            if (!ref_blk->has_rf && !ref_blk->has_grad[0] && !ref_blk->has_grad[1] &&
+                !ref_blk->has_grad[2] && !ref_blk->has_adc && ref.num_blocks[s] == 1)
             {
                 int expected_delay_us = (int)(opts.block_raster_us + 0.5f);
                 mu_assert_int_eq(expected_delay_us, bi.duration_us);
@@ -777,8 +1106,9 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
             /* --- Freq-mod definition ID consistency --------------- */
             if (ref_blk->has_freq_mod)
             {
-                mu_assert(ref_blk->freq_mod_def_id >= 0,
-                          "freq_mod_def_id should be >= 0 when has_freq_mod");
+                mu_assert(
+                    ref_blk->freq_mod_def_id >= 0,
+                    "freq_mod_def_id should be >= 0 when has_freq_mod");
             }
             else
             {
@@ -789,17 +1119,23 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
             if (ref_blk->has_rf)
             {
                 float lib_iso = pulseg_get_rf_isocenter_us(coll, s, b);
-                mu_assert(fabsf(ref_blk->rf_isocenter_us - lib_iso) <= 1.0f,
-                          "RF isocenter_us mismatch");
+                mu_assert(
+                    fabsf(ref_blk->rf_isocenter_us - lib_iso) <= 1.0f,
+                    "RF isocenter_us mismatch");
             }
             if (ref_blk->has_adc)
             {
                 float lib_kz = pulseg_get_adc_kzero_us(coll, s, b);
                 if (fabsf(ref_blk->adc_kzero_us - lib_kz) > 1.0f)
-                    fprintf(stderr, "[geninstr][%s] seg%d blk%d adc_kzero_us: ref=%.4g  lib=%.4g\n",
-                            tc->name, s, b, ref_blk->adc_kzero_us, lib_kz);
-                mu_assert(fabsf(ref_blk->adc_kzero_us - lib_kz) <= 1.0f,
-                          "ADC kzero_us mismatch");
+                    fprintf(
+                        stderr,
+                        "[geninstr][%s] seg%d blk%d adc_kzero_us: ref=%.4g  lib=%.4g\n",
+                        tc->name,
+                        s,
+                        b,
+                        ref_blk->adc_kzero_us,
+                        lib_kz);
+                mu_assert(fabsf(ref_blk->adc_kzero_us - lib_kz) <= 1.0f, "ADC kzero_us mismatch");
             }
         }
 
@@ -842,8 +1178,7 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
             for (sb = 0; sb < seg_block_count; ++sb)
             {
                 const seg_block_def *sblk = &ref.blocks[s][sb];
-                if (sblk->has_rf || sblk->has_grad[0] ||
-                    sblk->has_grad[1] || sblk->has_grad[2])
+                if (sblk->has_rf || sblk->has_grad[0] || sblk->has_grad[1] || sblk->has_grad[2])
                 {
                     seg_has_active_block = 1;
                     break;
@@ -853,22 +1188,22 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
             /* pure_delay: 1 block, no RF, no grads (may have ADC trigger) */
             if (seg_block_count == 1 && !seg_has_active_block)
             {
-                mu_assert(segi.pure_delay,
-                          "segment with 1 empty block should be pure_delay");
+                mu_assert(segi.pure_delay, "segment with 1 empty block should be pure_delay");
             }
             else
             {
-                mu_assert(!segi.pure_delay,
-                          "segment with active blocks should not be pure_delay");
+                mu_assert(!segi.pure_delay, "segment with active blocks should not be pure_delay");
             }
 
             /* has_trigger: when set, delay and duration must be valid */
             if (segi.has_trigger)
             {
-                mu_assert(segi.trigger_delay_us >= 0,
-                          "trigger_delay_us should be >= 0 when has_trigger");
-                mu_assert(segi.trigger_duration_us >= 0,
-                          "trigger_duration_us should be >= 0 when has_trigger");
+                mu_assert(
+                    segi.trigger_delay_us >= 0,
+                    "trigger_delay_us should be >= 0 when has_trigger");
+                mu_assert(
+                    segi.trigger_duration_us >= 0,
+                    "trigger_duration_us should be >= 0 when has_trigger");
             }
             else
             {
@@ -982,57 +1317,154 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
     pulseg_collection_free(coll);
 }
 
-MU_TEST(test_sequences_geninstructions_gre_2d_1sl_1avg) { run_sequences_geninstructions_case(&kGreCases[0]); }
-MU_TEST(test_sequences_geninstructions_gre_2d_1sl_3avg) { run_sequences_geninstructions_case(&kGreCases[1]); }
-MU_TEST(test_sequences_geninstructions_gre_2d_3sl_1avg) { run_sequences_geninstructions_case(&kGreCases[2]); }
-MU_TEST(test_sequences_geninstructions_gre_2d_3sl_3avg) { run_sequences_geninstructions_case(&kGreCases[3]); }
+MU_TEST(test_sequences_geninstructions_gre_2d_1sl_1avg)
+{
+    run_sequences_geninstructions_case(&kGreCases[0]);
+}
+MU_TEST(test_sequences_geninstructions_gre_2d_1sl_3avg)
+{
+    run_sequences_geninstructions_case(&kGreCases[1]);
+}
+MU_TEST(test_sequences_geninstructions_gre_2d_3sl_1avg)
+{
+    run_sequences_geninstructions_case(&kGreCases[2]);
+}
+MU_TEST(test_sequences_geninstructions_gre_2d_3sl_3avg)
+{
+    run_sequences_geninstructions_case(&kGreCases[3]);
+}
 
-MU_TEST(test_sequences_geninstructions_mprage_2d_1sl_1avg) { run_sequences_geninstructions_case(&kMprageCases[0]); }
-MU_TEST(test_sequences_geninstructions_mprage_2d_1sl_3avg) { run_sequences_geninstructions_case(&kMprageCases[1]); }
-MU_TEST(test_sequences_geninstructions_mprage_2d_3sl_1avg) { run_sequences_geninstructions_case(&kMprageCases[2]); }
-MU_TEST(test_sequences_geninstructions_mprage_2d_3sl_3avg) { run_sequences_geninstructions_case(&kMprageCases[3]); }
-MU_TEST(test_sequences_geninstructions_mprage_nc_1sl_1avg) { run_sequences_geninstructions_case(&kMprageNoncartCases[0]); }
-MU_TEST(test_sequences_geninstructions_mprage_nc_1sl_3avg_userotext0) { run_sequences_geninstructions_case(&kMprageNoncartCases[1]); }
-MU_TEST(test_sequences_geninstructions_mprage_nc_3sl_1avg_userotext0) { run_sequences_geninstructions_case(&kMprageNoncartCases[2]); }
-MU_TEST(test_sequences_geninstructions_mprage_nc_3sl_3avg_userotext0) { run_sequences_geninstructions_case(&kMprageNoncartCases[3]); }
-MU_TEST(test_sequences_geninstructions_mprage_nc_1sl_1avg_userotext1) { run_sequences_geninstructions_case(&kMprageNoncartCases[4]); }
-MU_TEST(test_sequences_geninstructions_mprage_nc_1sl_3avg_userotext1) { run_sequences_geninstructions_case(&kMprageNoncartCases[5]); }
-MU_TEST(test_sequences_geninstructions_mprage_nc_3sl_1avg_userotext1) { run_sequences_geninstructions_case(&kMprageNoncartCases[6]); }
-MU_TEST(test_sequences_geninstructions_mprage_nc_3sl_3avg_userotext1) { run_sequences_geninstructions_case(&kMprageNoncartCases[7]); }
+MU_TEST(test_sequences_geninstructions_mprage_2d_1sl_1avg)
+{
+    run_sequences_geninstructions_case(&kMprageCases[0]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_2d_1sl_3avg)
+{
+    run_sequences_geninstructions_case(&kMprageCases[1]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_2d_3sl_1avg)
+{
+    run_sequences_geninstructions_case(&kMprageCases[2]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_2d_3sl_3avg)
+{
+    run_sequences_geninstructions_case(&kMprageCases[3]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_nc_1sl_1avg)
+{
+    run_sequences_geninstructions_case(&kMprageNoncartCases[0]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_nc_1sl_3avg_userotext0)
+{
+    run_sequences_geninstructions_case(&kMprageNoncartCases[1]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_nc_3sl_1avg_userotext0)
+{
+    run_sequences_geninstructions_case(&kMprageNoncartCases[2]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_nc_3sl_3avg_userotext0)
+{
+    run_sequences_geninstructions_case(&kMprageNoncartCases[3]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_nc_1sl_1avg_userotext1)
+{
+    run_sequences_geninstructions_case(&kMprageNoncartCases[4]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_nc_1sl_3avg_userotext1)
+{
+    run_sequences_geninstructions_case(&kMprageNoncartCases[5]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_nc_3sl_1avg_userotext1)
+{
+    run_sequences_geninstructions_case(&kMprageNoncartCases[6]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_nc_3sl_3avg_userotext1)
+{
+    run_sequences_geninstructions_case(&kMprageNoncartCases[7]);
+}
 
-MU_TEST(test_sequences_geninstructions_bssfp_2d_1sl_1avg) { run_sequences_geninstructions_case(&kBssfpCases[0]); }
-MU_TEST(test_sequences_geninstructions_bssfp_2d_1sl_3avg) { run_sequences_geninstructions_case(&kBssfpCases[1]); }
-MU_TEST(test_sequences_geninstructions_bssfp_2d_3sl_1avg) { run_sequences_geninstructions_case(&kBssfpCases[2]); }
-MU_TEST(test_sequences_geninstructions_bssfp_2d_3sl_3avg) { run_sequences_geninstructions_case(&kBssfpCases[3]); }
+MU_TEST(test_sequences_geninstructions_bssfp_2d_1sl_1avg)
+{
+    run_sequences_geninstructions_case(&kBssfpCases[0]);
+}
+MU_TEST(test_sequences_geninstructions_bssfp_2d_1sl_3avg)
+{
+    run_sequences_geninstructions_case(&kBssfpCases[1]);
+}
+MU_TEST(test_sequences_geninstructions_bssfp_2d_3sl_1avg)
+{
+    run_sequences_geninstructions_case(&kBssfpCases[2]);
+}
+MU_TEST(test_sequences_geninstructions_bssfp_2d_3sl_3avg)
+{
+    run_sequences_geninstructions_case(&kBssfpCases[3]);
+}
 
-MU_TEST(test_sequences_geninstructions_fse_2d_1sl_1avg) { run_sequences_geninstructions_case(&kFseCases[0]); }
-MU_TEST(test_sequences_geninstructions_fse_2d_1sl_3avg) { run_sequences_geninstructions_case(&kFseCases[1]); }
-MU_TEST(test_sequences_geninstructions_fse_2d_3sl_1avg) { run_sequences_geninstructions_case(&kFseCases[2]); }
-MU_TEST(test_sequences_geninstructions_fse_2d_3sl_3avg) { run_sequences_geninstructions_case(&kFseCases[3]); }
+MU_TEST(test_sequences_geninstructions_fse_2d_1sl_1avg)
+{
+    run_sequences_geninstructions_case(&kFseCases[0]);
+}
+MU_TEST(test_sequences_geninstructions_fse_2d_1sl_3avg)
+{
+    run_sequences_geninstructions_case(&kFseCases[1]);
+}
+MU_TEST(test_sequences_geninstructions_fse_2d_3sl_1avg)
+{
+    run_sequences_geninstructions_case(&kFseCases[2]);
+}
+MU_TEST(test_sequences_geninstructions_fse_2d_3sl_3avg)
+{
+    run_sequences_geninstructions_case(&kFseCases[3]);
+}
 
-MU_TEST(test_sequences_geninstructions_qalas_nc_3d_1sl_1avg_userotext1) { run_sequences_geninstructions_case(&kQalasNoncartCases[0]); }
-MU_TEST(test_sequences_geninstructions_qalas_nc_3d_1sl_3avg_userotext1) { run_sequences_geninstructions_case(&kQalasNoncartCases[1]); }
-MU_TEST(test_sequences_geninstructions_qalas_nc_3d_3sl_1avg_userotext1) { run_sequences_geninstructions_case(&kQalasNoncartCases[2]); }
-MU_TEST(test_sequences_geninstructions_qalas_nc_3d_3sl_3avg_userotext1) { run_sequences_geninstructions_case(&kQalasNoncartCases[3]); }
+MU_TEST(test_sequences_geninstructions_qalas_nc_3d_1sl_1avg_userotext1)
+{
+    run_sequences_geninstructions_case(&kQalasNoncartCases[0]);
+}
+MU_TEST(test_sequences_geninstructions_qalas_nc_3d_1sl_3avg_userotext1)
+{
+    run_sequences_geninstructions_case(&kQalasNoncartCases[1]);
+}
+MU_TEST(test_sequences_geninstructions_qalas_nc_3d_3sl_1avg_userotext1)
+{
+    run_sequences_geninstructions_case(&kQalasNoncartCases[2]);
+}
+MU_TEST(test_sequences_geninstructions_qalas_nc_3d_3sl_3avg_userotext1)
+{
+    run_sequences_geninstructions_case(&kQalasNoncartCases[3]);
+}
 
-MU_TEST(test_sequences_geninstructions_mprage_nav_2d_1sl_1avg) { run_sequences_geninstructions_case(&kMprageNavCases[0]); }
-MU_TEST(test_sequences_geninstructions_mprage_nav_2d_1sl_3avg) { run_sequences_geninstructions_case(&kMprageNavCases[1]); }
-MU_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_1avg) { run_sequences_geninstructions_case(&kMprageNavCases[2]); }
-MU_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_3avg) { run_sequences_geninstructions_case(&kMprageNavCases[3]); }
+MU_TEST(test_sequences_geninstructions_mprage_nav_2d_1sl_1avg)
+{
+    run_sequences_geninstructions_case(&kMprageNavCases[0]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_nav_2d_1sl_3avg)
+{
+    run_sequences_geninstructions_case(&kMprageNavCases[1]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_1avg)
+{
+    run_sequences_geninstructions_case(&kMprageNavCases[2]);
+}
+MU_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_3avg)
+{
+    run_sequences_geninstructions_case(&kMprageNavCases[3]);
+}
 
 /* ------------------------------------------------------------------ */
 /*  Phase 4: Frequency-modulation definition waveforms                */
 /* ------------------------------------------------------------------ */
 
-static void check_fmod_shift(const pulseg_collection *coll,
-                             const seg_meta *meta,
-                             const fmod_def_file *ref,
-                             const fmod_plan_file *plan,
-                             const scan_table_file *scan,
-                             const float *shift,
-                             int probe_idx,
-                             const float *fov_rotation,
-                             const char *label)
+static void check_fmod_shift(
+    const pulseg_collection *coll,
+    const seg_meta *meta,
+    const fmod_def_file *ref,
+    const fmod_plan_file *plan,
+    const exec_stream_file *scan,
+    const float *shift,
+    int probe_idx,
+    const float *fov_rotation,
+    const char *label)
 {
     pulseg_freq_mod_collection *fmc = NULL;
     int rc;
@@ -1060,18 +1492,19 @@ static void check_fmod_shift(const pulseg_collection *coll,
 
     lib = fmc->libs[0];
     mu_assert(lib != NULL, "freq_mod lib missing for subsequence 0");
-    mu_assert_int_eq(scan->num_entries, lib->scan_table_len);
+    mu_assert_int_eq(scan->num_entries, lib->exec_stream_len);
     if (plan && plan->num_plans >= 0)
         mu_assert(lib->num_plan_instances >= 0, "invalid lib num_plan_instances");
     if (meta && meta->fmod_build_mode_tr_scoped)
-        mu_assert(lib->num_plan_instances >= ref->num_defs,
-                  "tr_scoped mode should not collapse below def count");
+        mu_assert(
+            lib->num_plan_instances >= ref->num_defs,
+            "tr_scoped mode should not collapse below def count");
     used_plan = (int *)calloc((size_t)lib->num_plan_instances, sizeof(int));
     mu_assert(used_plan != NULL, "alloc failed for used_plan flags");
 
     for (pos = 0; pos < scan->num_entries; ++pos)
     {
-        const scan_table_entry *se = &scan->entries[pos];
+        const exec_stream_entry *se = &scan->entries[pos];
         const short *waveform = NULL;
         int ns = 0, s;
         float phase_rad = 0.0f;
@@ -1080,12 +1513,7 @@ static void check_fmod_shift(const pulseg_collection *coll,
         if (se->tr_start_flag)
             tr_scope_id++;
 
-        has = pulseg_freq_mod_collection_get(fmc,
-                                                &waveform,
-                                                &ns,
-                                                &phase_rad,
-                                                0,
-                                                pos);
+        has = pulseg_freq_mod_collection_get(fmc, &waveform, &ns, &phase_rad, 0, pos);
 
         if (se->freq_mod_id <= 0)
         {
@@ -1099,14 +1527,16 @@ static void check_fmod_shift(const pulseg_collection *coll,
             int plan_idx = lib->scan_to_plan[pos];
             int ref_plan_idx = (plan && pos < plan->scan_len) ? plan->scan_to_plan[pos] : -1;
 
-            mu_assert(def_idx >= 0 && def_idx < ref->num_defs,
-                      "invalid expected freq_mod_id in scan table");
+            mu_assert(
+                def_idx >= 0 && def_idx < ref->num_defs,
+                "invalid expected freq_mod_id in scan table");
             fd = &ref->defs[def_idx];
 
             mu_assert(has, "missing freq_mod at expected scan position");
 
-            mu_assert(plan_idx >= 0 && plan_idx < lib->num_plan_instances,
-                      "invalid scan_to_plan mapping");
+            mu_assert(
+                plan_idx >= 0 && plan_idx < lib->num_plan_instances,
+                "invalid scan_to_plan mapping");
             if (!used_plan[plan_idx])
             {
                 used_plan[plan_idx] = 1;
@@ -1138,11 +1568,13 @@ static void check_fmod_shift(const pulseg_collection *coll,
                  * short values ≈ round(expected_hz).  Allow ±1 for rounding. */
                 for (s = 0; s < ns; ++s)
                 {
-                    float expected = fd->waveform_gx[s] * u[0] + fd->waveform_gy[s] * u[1] + fd->waveform_gz[s] * u[2];
+                    float expected = fd->waveform_gx[s] * u[0] + fd->waveform_gy[s] * u[1] +
+                        fd->waveform_gz[s] * u[2];
                     int expected_hw = (int)(expected + 0.5f);
                     int actual_hw = (int)waveform[s];
-                    mu_assert(abs(actual_hw - expected_hw) <= 1,
-                              "freq_mod waveform sample mismatch");
+                    mu_assert(
+                        abs(actual_hw - expected_hw) <= 1,
+                        "freq_mod waveform sample mismatch");
                 }
             }
 
@@ -1152,8 +1584,9 @@ static void check_fmod_shift(const pulseg_collection *coll,
                 float proj_phase;
                 float proj_tol;
                 float alpha;
-                mu_assert(ref_plan_idx >= 0 && ref_plan_idx < plan->num_plans,
-                          "invalid supplemental plan index");
+                mu_assert(
+                    ref_plan_idx >= 0 && ref_plan_idx < plan->num_plans,
+                    "invalid supplemental plan index");
                 pe = &plan->plans[ref_plan_idx];
                 mu_assert_int_eq(se->freq_mod_id, pe->def_id);
 
@@ -1174,8 +1607,9 @@ static void check_fmod_shift(const pulseg_collection *coll,
                     float pexp = pe->waveforms[probe_idx][s] * alpha;
                     int pexp_hw = (int)(pexp + 0.5f);
                     int act_hw = (int)waveform[s];
-                    mu_assert(abs(act_hw - pexp_hw) <= 1,
-                              "supplemental projected waveform mismatch");
+                    mu_assert(
+                        abs(act_hw - pexp_hw) <= 1,
+                        "supplemental projected waveform mismatch");
                 }
 
                 proj_phase = pe->phase_total[probe_idx] * alpha;
@@ -1185,28 +1619,44 @@ static void check_fmod_shift(const pulseg_collection *coll,
                 if ((float)fabs(phase_rad - proj_phase) > proj_tol)
                 {
                     float lib_phase_base = (plan_idx >= 0 && plan_idx < lib->num_plan_instances)
-                                               ? lib->plan_phase[plan_idx]
-                                               : 0.0f;
-                    float lib_phase_extra = (pos >= 0 && pos < lib->scan_table_len && lib->scan_phase_extra)
-                                                ? lib->scan_phase_extra[pos]
-                                                : 0.0f;
-                    float iax = (pos >= 0 && pos < lib->scan_table_len && lib->scan_inactive_area_3ch)
-                                    ? lib->scan_inactive_area_3ch[pos * 3 + 0]
-                                    : 0.0f;
-                    float iay = (pos >= 0 && pos < lib->scan_table_len && lib->scan_inactive_area_3ch)
-                                    ? lib->scan_inactive_area_3ch[pos * 3 + 1]
-                                    : 0.0f;
-                    float iaz = (pos >= 0 && pos < lib->scan_table_len && lib->scan_inactive_area_3ch)
-                                    ? lib->scan_inactive_area_3ch[pos * 3 + 2]
-                                    : 0.0f;
-                    fprintf(stderr,
-                            "[fmod_phase_dbg][%s] pos=%d def=%d plan=%d lib=(tot=%g base=%g extra=%g) truth=%g ia=[%g %g %g] alpha=%g\n",
-                            label, pos, se->freq_mod_id, plan_idx,
-                            (double)phase_rad, (double)lib_phase_base, (double)lib_phase_extra,
-                            (double)proj_phase, (double)iax, (double)iay, (double)iaz, (double)alpha);
+                        ? lib->plan_phase[plan_idx]
+                        : 0.0f;
+                    float lib_phase_extra =
+                        (pos >= 0 && pos < lib->exec_stream_len && lib->scan_phase_extra)
+                        ? lib->scan_phase_extra[pos]
+                        : 0.0f;
+                    float iax =
+                        (pos >= 0 && pos < lib->exec_stream_len && lib->scan_inactive_area_3ch)
+                        ? lib->scan_inactive_area_3ch[pos * 3 + 0]
+                        : 0.0f;
+                    float iay =
+                        (pos >= 0 && pos < lib->exec_stream_len && lib->scan_inactive_area_3ch)
+                        ? lib->scan_inactive_area_3ch[pos * 3 + 1]
+                        : 0.0f;
+                    float iaz =
+                        (pos >= 0 && pos < lib->exec_stream_len && lib->scan_inactive_area_3ch)
+                        ? lib->scan_inactive_area_3ch[pos * 3 + 2]
+                        : 0.0f;
+                    fprintf(
+                        stderr,
+                        "[fmod_phase_dbg][%s] pos=%d def=%d plan=%d lib=(tot=%g base=%g extra=%g) "
+                        "truth=%g ia=[%g %g %g] alpha=%g\n",
+                        label,
+                        pos,
+                        se->freq_mod_id,
+                        plan_idx,
+                        (double)phase_rad,
+                        (double)lib_phase_base,
+                        (double)lib_phase_extra,
+                        (double)proj_phase,
+                        (double)iax,
+                        (double)iay,
+                        (double)iaz,
+                        (double)alpha);
                 }
-                mu_assert((float)fabs(phase_rad - proj_phase) <= proj_tol,
-                          "supplemental projected phase mismatch");
+                mu_assert(
+                    (float)fabs(phase_rad - proj_phase) <= proj_tol,
+                    "supplemental projected phase mismatch");
             }
 
             /* Plan-key consistency checks (all modes):
@@ -1296,8 +1746,9 @@ static void check_fmod_shift(const pulseg_collection *coll,
         /* Each ground-truth def maps to one or more plan instances
          * (e.g. nav orientations share a def but have different
          * gradient amplitudes, creating separate plan instances). */
-        mu_assert(used_plan_count >= ref->num_defs,
-                  "fewer plan instances than expected freq_mod defs");
+        mu_assert(
+            used_plan_count >= ref->num_defs,
+            "fewer plan instances than expected freq_mod defs");
     }
 
     free(used_plan);
@@ -1312,7 +1763,7 @@ static void run_freq_mod_definitions_case(const seq_case *tc)
     static seg_meta meta = SEG_META_INIT;
     static fmod_def_file ref = FMOD_DEF_FILE_INIT;
     static fmod_plan_file plan = FMOD_PLAN_FILE_INIT;
-    static scan_table_file scan = SCAN_TABLE_FILE_INIT;
+    static exec_stream_file scan = SCAN_TABLE_FILE_INIT;
     char meta_path[512];
     char fmod_path[512];
     char fmod_plan_path[512];
@@ -1357,9 +1808,9 @@ static void run_freq_mod_definitions_case(const seq_case *tc)
 
     /* Parse scan table to get total position span for robust freq-mod search. */
     build_case_path(scan_path, sizeof(scan_path), tc, "_scan_table.truth");
-    ok = parse_scan_table(scan_path, &scan);
+    ok = parse_exec_stream(scan_path, &scan);
     mu_assert(ok, "failed to parse scan_table.truth for freqmod positions");
-    mu_assert(scan.num_entries > 0, "scan_table has no entries for freqmod search");
+    mu_assert(scan.num_entries > 0, "exec_stream has no entries for freqmod search");
 
     /* For each shift, test all rotations — results must be identical
      * because this sequence has no rotation events / norot blocks. */
@@ -1368,57 +1819,146 @@ static void run_freq_mod_definitions_case(const seq_case *tc)
         int r;
         for (r = 0; r < 4; ++r)
         {
-            check_fmod_shift(coll, &meta,
-                             &ref,
-                             &plan,
-                             &scan,
-                             shifts[t],
-                             t,
-                             rotations[r],
-                             tc->name);
+            check_fmod_shift(coll, &meta, &ref, &plan, &scan, shifts[t], t, rotations[r], tc->name);
         }
     }
 
     pulseg_collection_free(coll);
 }
 
-MU_TEST(test_freq_mod_definitions_gre_2d_1sl_1avg) { run_freq_mod_definitions_case(&kGreCases[0]); }
-MU_TEST(test_freq_mod_definitions_gre_2d_1sl_3avg) { run_freq_mod_definitions_case(&kGreCases[1]); }
-MU_TEST(test_freq_mod_definitions_gre_2d_3sl_1avg) { run_freq_mod_definitions_case(&kGreCases[2]); }
-MU_TEST(test_freq_mod_definitions_gre_2d_3sl_3avg) { run_freq_mod_definitions_case(&kGreCases[3]); }
+MU_TEST(test_freq_mod_definitions_gre_2d_1sl_1avg)
+{
+    run_freq_mod_definitions_case(&kGreCases[0]);
+}
+MU_TEST(test_freq_mod_definitions_gre_2d_1sl_3avg)
+{
+    run_freq_mod_definitions_case(&kGreCases[1]);
+}
+MU_TEST(test_freq_mod_definitions_gre_2d_3sl_1avg)
+{
+    run_freq_mod_definitions_case(&kGreCases[2]);
+}
+MU_TEST(test_freq_mod_definitions_gre_2d_3sl_3avg)
+{
+    run_freq_mod_definitions_case(&kGreCases[3]);
+}
 
-MU_TEST(test_freq_mod_definitions_mprage_2d_1sl_1avg) { run_freq_mod_definitions_case(&kMprageCases[0]); }
-MU_TEST(test_freq_mod_definitions_mprage_2d_1sl_3avg) { run_freq_mod_definitions_case(&kMprageCases[1]); }
-MU_TEST(test_freq_mod_definitions_mprage_2d_3sl_1avg) { run_freq_mod_definitions_case(&kMprageCases[2]); }
-MU_TEST(test_freq_mod_definitions_mprage_2d_3sl_3avg) { run_freq_mod_definitions_case(&kMprageCases[3]); }
-MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_1avg) { run_freq_mod_definitions_case(&kMprageNoncartCases[0]); }
-MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_3avg_userotext0) { run_freq_mod_definitions_case(&kMprageNoncartCases[1]); }
-MU_TEST(test_freq_mod_definitions_mprage_nc_3sl_1avg_userotext0) { run_freq_mod_definitions_case(&kMprageNoncartCases[2]); }
-MU_TEST(test_freq_mod_definitions_mprage_nc_3sl_3avg_userotext0) { run_freq_mod_definitions_case(&kMprageNoncartCases[3]); }
-MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_1avg_userotext1) { run_freq_mod_definitions_case(&kMprageNoncartCases[4]); }
-MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_3avg_userotext1) { run_freq_mod_definitions_case(&kMprageNoncartCases[5]); }
-MU_TEST(test_freq_mod_definitions_mprage_nc_3sl_1avg_userotext1) { run_freq_mod_definitions_case(&kMprageNoncartCases[6]); }
-MU_TEST(test_freq_mod_definitions_mprage_nc_3sl_3avg_userotext1) { run_freq_mod_definitions_case(&kMprageNoncartCases[7]); }
+MU_TEST(test_freq_mod_definitions_mprage_2d_1sl_1avg)
+{
+    run_freq_mod_definitions_case(&kMprageCases[0]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_2d_1sl_3avg)
+{
+    run_freq_mod_definitions_case(&kMprageCases[1]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_2d_3sl_1avg)
+{
+    run_freq_mod_definitions_case(&kMprageCases[2]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_2d_3sl_3avg)
+{
+    run_freq_mod_definitions_case(&kMprageCases[3]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_1avg)
+{
+    run_freq_mod_definitions_case(&kMprageNoncartCases[0]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_3avg_userotext0)
+{
+    run_freq_mod_definitions_case(&kMprageNoncartCases[1]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_nc_3sl_1avg_userotext0)
+{
+    run_freq_mod_definitions_case(&kMprageNoncartCases[2]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_nc_3sl_3avg_userotext0)
+{
+    run_freq_mod_definitions_case(&kMprageNoncartCases[3]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_1avg_userotext1)
+{
+    run_freq_mod_definitions_case(&kMprageNoncartCases[4]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_3avg_userotext1)
+{
+    run_freq_mod_definitions_case(&kMprageNoncartCases[5]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_nc_3sl_1avg_userotext1)
+{
+    run_freq_mod_definitions_case(&kMprageNoncartCases[6]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_nc_3sl_3avg_userotext1)
+{
+    run_freq_mod_definitions_case(&kMprageNoncartCases[7]);
+}
 
-MU_TEST(test_freq_mod_definitions_bssfp_2d_1sl_1avg) { run_freq_mod_definitions_case(&kBssfpCases[0]); }
-MU_TEST(test_freq_mod_definitions_bssfp_2d_1sl_3avg) { run_freq_mod_definitions_case(&kBssfpCases[1]); }
-MU_TEST(test_freq_mod_definitions_bssfp_2d_3sl_1avg) { run_freq_mod_definitions_case(&kBssfpCases[2]); }
-MU_TEST(test_freq_mod_definitions_bssfp_2d_3sl_3avg) { run_freq_mod_definitions_case(&kBssfpCases[3]); }
+MU_TEST(test_freq_mod_definitions_bssfp_2d_1sl_1avg)
+{
+    run_freq_mod_definitions_case(&kBssfpCases[0]);
+}
+MU_TEST(test_freq_mod_definitions_bssfp_2d_1sl_3avg)
+{
+    run_freq_mod_definitions_case(&kBssfpCases[1]);
+}
+MU_TEST(test_freq_mod_definitions_bssfp_2d_3sl_1avg)
+{
+    run_freq_mod_definitions_case(&kBssfpCases[2]);
+}
+MU_TEST(test_freq_mod_definitions_bssfp_2d_3sl_3avg)
+{
+    run_freq_mod_definitions_case(&kBssfpCases[3]);
+}
 
-MU_TEST(test_freq_mod_definitions_fse_2d_1sl_1avg) { run_freq_mod_definitions_case(&kFseCases[0]); }
-MU_TEST(test_freq_mod_definitions_fse_2d_1sl_3avg) { run_freq_mod_definitions_case(&kFseCases[1]); }
-MU_TEST(test_freq_mod_definitions_fse_2d_3sl_1avg) { run_freq_mod_definitions_case(&kFseCases[2]); }
-MU_TEST(test_freq_mod_definitions_fse_2d_3sl_3avg) { run_freq_mod_definitions_case(&kFseCases[3]); }
+MU_TEST(test_freq_mod_definitions_fse_2d_1sl_1avg)
+{
+    run_freq_mod_definitions_case(&kFseCases[0]);
+}
+MU_TEST(test_freq_mod_definitions_fse_2d_1sl_3avg)
+{
+    run_freq_mod_definitions_case(&kFseCases[1]);
+}
+MU_TEST(test_freq_mod_definitions_fse_2d_3sl_1avg)
+{
+    run_freq_mod_definitions_case(&kFseCases[2]);
+}
+MU_TEST(test_freq_mod_definitions_fse_2d_3sl_3avg)
+{
+    run_freq_mod_definitions_case(&kFseCases[3]);
+}
 
-MU_TEST(test_freq_mod_definitions_qalas_nc_3d_1sl_1avg_userotext1) { run_freq_mod_definitions_case(&kQalasNoncartCases[0]); }
-MU_TEST(test_freq_mod_definitions_qalas_nc_3d_1sl_3avg_userotext1) { run_freq_mod_definitions_case(&kQalasNoncartCases[1]); }
-MU_TEST(test_freq_mod_definitions_qalas_nc_3d_3sl_1avg_userotext1) { run_freq_mod_definitions_case(&kQalasNoncartCases[2]); }
-MU_TEST(test_freq_mod_definitions_qalas_nc_3d_3sl_3avg_userotext1) { run_freq_mod_definitions_case(&kQalasNoncartCases[3]); }
+MU_TEST(test_freq_mod_definitions_qalas_nc_3d_1sl_1avg_userotext1)
+{
+    run_freq_mod_definitions_case(&kQalasNoncartCases[0]);
+}
+MU_TEST(test_freq_mod_definitions_qalas_nc_3d_1sl_3avg_userotext1)
+{
+    run_freq_mod_definitions_case(&kQalasNoncartCases[1]);
+}
+MU_TEST(test_freq_mod_definitions_qalas_nc_3d_3sl_1avg_userotext1)
+{
+    run_freq_mod_definitions_case(&kQalasNoncartCases[2]);
+}
+MU_TEST(test_freq_mod_definitions_qalas_nc_3d_3sl_3avg_userotext1)
+{
+    run_freq_mod_definitions_case(&kQalasNoncartCases[3]);
+}
 
-MU_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_1avg) { run_freq_mod_definitions_case(&kMprageNavCases[0]); }
-MU_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_3avg) { run_freq_mod_definitions_case(&kMprageNavCases[1]); }
-MU_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_1avg) { run_freq_mod_definitions_case(&kMprageNavCases[2]); }
-MU_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_3avg) { run_freq_mod_definitions_case(&kMprageNavCases[3]); }
+MU_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_1avg)
+{
+    run_freq_mod_definitions_case(&kMprageNavCases[0]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_3avg)
+{
+    run_freq_mod_definitions_case(&kMprageNavCases[1]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_1avg)
+{
+    run_freq_mod_definitions_case(&kMprageNavCases[2]);
+}
+MU_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_3avg)
+{
+    run_freq_mod_definitions_case(&kMprageNavCases[3]);
+}
 
 MU_TEST_SUITE(suite_sequences_geninstructions)
 {
@@ -1492,12 +2032,12 @@ MU_TEST_SUITE(suite_sequences_geninstructions)
 /*  Phase 5: Scan table — block instance validation                   */
 /* ------------------------------------------------------------------ */
 
-static void run_scan_table_case(const seq_case *tc)
+static void run_exec_stream_case(const seq_case *tc)
 {
     pulseg_opts opts;
     pulseg_collection *coll = NULL;
     pulseg_collection_info cinfo = PULSEG_COLLECTION_INFO_INIT;
-    scan_table_file ref = SCAN_TABLE_FILE_INIT;
+    exec_stream_file ref = SCAN_TABLE_FILE_INIT;
     seg_meta meta = SEG_META_INIT;
     char scan_path[512];
     char meta_path[512];
@@ -1526,10 +2066,8 @@ static void run_scan_table_case(const seq_case *tc)
     memset(pattern_pos, 0, sizeof(pattern_pos));
     memset(subseq_seg_start, 0, sizeof(subseq_seg_start));
     memset(subseq_seg_end, 0, sizeof(subseq_seg_end));
-    is_mprage = (strncmp(tc->name, "mprage_", 7) == 0 &&
-                 strncmp(tc->name, "mprage_nav_", 11) != 0)
-                    ? 1
-                    : 0;
+    is_mprage =
+        (strncmp(tc->name, "mprage_", 7) == 0 && strncmp(tc->name, "mprage_nav_", 11) != 0) ? 1 : 0;
 
     gre_opts_init(&opts);
     rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
@@ -1539,9 +2077,9 @@ static void run_scan_table_case(const seq_case *tc)
     mu_assert(PULSEG_SUCCEEDED(rc), "get_collection_info in scan table test");
 
     build_case_path(scan_path, sizeof(scan_path), tc, "_scan_table.truth");
-    ok = parse_scan_table(scan_path, &ref);
+    ok = parse_exec_stream(scan_path, &ref);
     mu_assert(ok, "failed to parse scan_table.truth");
-    mu_assert(ref.num_entries > 0, "scan_table has no entries");
+    mu_assert(ref.num_entries > 0, "exec_stream has no entries");
 
     /* Parse meta to get segment_order for validation */
     build_case_path(meta_path, sizeof(meta_path), tc, "_meta.txt");
@@ -1550,8 +2088,9 @@ static void run_scan_table_case(const seq_case *tc)
     mu_assert(meta.num_segment_order_entries > 0, "meta has no segment_order entries");
     mu_assert_int_eq(meta.num_segments, cinfo.num_segments);
 
-    mu_assert(cinfo.num_subsequences > 0 && cinfo.num_subsequences <= 16,
-              "unsupported number of subsequences for scan-table pattern validation");
+    mu_assert(
+        cinfo.num_subsequences > 0 && cinfo.num_subsequences <= 16,
+        "unsupported number of subsequences for scan-table pattern validation");
 
     {
         int s;
@@ -1568,8 +2107,9 @@ static void run_scan_table_case(const seq_case *tc)
                 subseq_seg_end[s] = subseq_seg_start[s + 1];
             else
                 subseq_seg_end[s] = meta.num_segments;
-            mu_assert(subseq_seg_end[s] > subseq_seg_start[s],
-                      "invalid subsequence segment-id range");
+            mu_assert(
+                subseq_seg_end[s] > subseq_seg_start[s],
+                "invalid subsequence segment-id range");
         }
     }
 
@@ -1589,12 +2129,14 @@ static void run_scan_table_case(const seq_case *tc)
                 if (seg < subseq_seg_start[s] || seg >= subseq_seg_end[s])
                     continue;
                 nblk = meta.segment_num_blocks[seg];
-                mu_assert(seg >= 0 && seg < meta.num_segments,
-                          "segment_order references invalid segment");
+                mu_assert(
+                    seg >= 0 && seg < meta.num_segments,
+                    "segment_order references invalid segment");
                 for (bi = 0; bi < nblk; ++bi)
                 {
-                    mu_assert(pattern_len[s] < MAX_SCAN_TABLE_ENTRIES,
-                              "segment pattern exceeds max entries");
+                    mu_assert(
+                        pattern_len[s] < MAX_SCAN_TABLE_ENTRIES,
+                        "segment pattern exceeds max entries");
                     pattern_seg_id[s][pattern_len[s]] = seg;
                     pattern_len[s]++;
                 }
@@ -1611,11 +2153,11 @@ static void run_scan_table_case(const seq_case *tc)
     {
         pulseg_block_instance inst = PULSEG_BLOCK_INSTANCE_INIT;
         pulseg_cursor_info ci = PULSEG_CURSOR_INFO_INIT;
-        const scan_table_entry *e;
+        const exec_stream_entry *e;
         float tol;
         int i;
 
-        mu_assert(pos < ref.num_entries, "more blocks than scan_table entries");
+        mu_assert(pos < ref.num_entries, "more blocks than exec_stream entries");
 
         rc = pulseg_get_block_instance(coll, &inst);
         mu_assert(PULSEG_SUCCEEDED(rc), "get_block_instance failed");
@@ -1629,8 +2171,7 @@ static void run_scan_table_case(const seq_case *tc)
         {
             pulseg_segment_info si = PULSEG_SEGMENT_INFO_INIT;
             rc = pulseg_get_segment_info(coll, &si, ci.segment_id);
-            mu_assert(PULSEG_SUCCEEDED(rc),
-                      "get_segment_info for cursor cross-check");
+            mu_assert(PULSEG_SUCCEEDED(rc), "get_segment_info for cursor cross-check");
             mu_assert_int_eq(si.is_nav, ci.is_nav);
             mu_assert_int_eq(si.has_trigger, ci.has_trigger);
         }
@@ -1669,7 +2210,9 @@ static void run_scan_table_case(const seq_case *tc)
                         break;
                     }
                 }
-                if (!found && pure_inst_unique < (int)(sizeof(pure_inst_durations) / sizeof(pure_inst_durations[0])))
+                if (!found &&
+                    pure_inst_unique <
+                        (int)(sizeof(pure_inst_durations) / sizeof(pure_inst_durations[0])))
                 {
                     pure_inst_durations[pure_inst_unique++] = inst.duration_us;
                 }
@@ -1688,19 +2231,31 @@ static void run_scan_table_case(const seq_case *tc)
             char seg_msg[256];
             char wseg_msg[256];
 
-            snprintf(seg_msg, sizeof(seg_msg),
-                     "[%s] segment_id mismatch at pos %d: cursor=%d, fixture=%d, expected=%d",
-                     tc->name, pos, ci.segment_id, e->segment_id, expected_seg);
+            snprintf(
+                seg_msg,
+                sizeof(seg_msg),
+                "[%s] segment_id mismatch at pos %d: cursor=%d, fixture=%d, expected=%d",
+                tc->name,
+                pos,
+                ci.segment_id,
+                e->segment_id,
+                expected_seg);
             mu_assert(ci.segment_id == expected_seg, seg_msg);
             mu_assert(e->segment_id == expected_seg, seg_msg);
 
-            snprintf(wseg_msg, sizeof(wseg_msg),
-                     "[%s] within_segment_idx out of range at pos %d: fixture=%d, segment=%d, nblk=%d",
-                     tc->name, pos, e->within_segment_idx, expected_seg,
-                     meta.segment_num_blocks[expected_seg]);
-            mu_assert(e->within_segment_idx >= 0 &&
-                          e->within_segment_idx < meta.segment_num_blocks[expected_seg],
-                      wseg_msg);
+            snprintf(
+                wseg_msg,
+                sizeof(wseg_msg),
+                "[%s] within_segment_idx out of range at pos %d: fixture=%d, segment=%d, nblk=%d",
+                tc->name,
+                pos,
+                e->within_segment_idx,
+                expected_seg,
+                meta.segment_num_blocks[expected_seg]);
+            mu_assert(
+                e->within_segment_idx >= 0 &&
+                    e->within_segment_idx < meta.segment_num_blocks[expected_seg],
+                wseg_msg);
 
             pattern_pos[sidx]++;
         }
@@ -1710,57 +2265,76 @@ static void run_scan_table_case(const seq_case *tc)
         if (tol < 1e-6f)
             tol = 1e-6f;
         if ((float)fabs(inst.rf_amp_hz - e->rf_amp_hz) > tol)
-            fprintf(stderr, "[scantable][%s] rf_amp @pos%d: ref=%.6g  lib=%.6g\n",
-                    tc->name, pos, e->rf_amp_hz, inst.rf_amp_hz);
-        mu_assert((float)fabs(inst.rf_amp_hz - e->rf_amp_hz) <= tol,
-                  "rf_amp_hz mismatch");
+            fprintf(
+                stderr,
+                "[scantable][%s] rf_amp @pos%d: ref=%.6g  lib=%.6g\n",
+                tc->name,
+                pos,
+                e->rf_amp_hz,
+                inst.rf_amp_hz);
+        mu_assert((float)fabs(inst.rf_amp_hz - e->rf_amp_hz) <= tol, "rf_amp_hz mismatch");
 
         /* RF phase */
         tol = (float)fabs(e->rf_phase_rad) * 1e-4f;
         if (tol < 1e-8f)
             tol = 1e-8f;
         if ((float)fabs(inst.rf_phase_rad - e->rf_phase_rad) > tol)
-            fprintf(stderr, "[scantable][%s] rf_phase @pos%d: ref=%.9g  lib=%.9g\n",
-                    tc->name, pos, e->rf_phase_rad, inst.rf_phase_rad);
-        mu_assert((float)fabs(inst.rf_phase_rad - e->rf_phase_rad) <= tol,
-                  "rf_phase_rad mismatch");
+            fprintf(
+                stderr,
+                "[scantable][%s] rf_phase @pos%d: ref=%.9g  lib=%.9g\n",
+                tc->name,
+                pos,
+                e->rf_phase_rad,
+                inst.rf_phase_rad);
+        mu_assert((float)fabs(inst.rf_phase_rad - e->rf_phase_rad) <= tol, "rf_phase_rad mismatch");
 
         /* RF freq */
         tol = (float)fabs(e->rf_freq_hz) * 1e-4f;
         if (tol < 1e-6f)
             tol = 1e-6f;
-        mu_assert((float)fabs(inst.rf_freq_hz - e->rf_freq_hz) <= tol,
-                  "rf_freq_hz mismatch");
+        mu_assert((float)fabs(inst.rf_freq_hz - e->rf_freq_hz) <= tol, "rf_freq_hz mismatch");
 
         /* GX amplitude */
         tol = (float)fabs(e->gx_amp_hz_per_m) * 1e-4f;
         if (tol < 1e-6f)
             tol = 1e-6f;
         if ((float)fabs(inst.gx_amp_hz_per_m - e->gx_amp_hz_per_m) > tol)
-            fprintf(stderr, "[scantable][%s] gx_amp @pos%d: ref=%.6g  lib=%.6g\n",
-                    tc->name, pos, e->gx_amp_hz_per_m, inst.gx_amp_hz_per_m);
-        mu_assert((float)fabs(inst.gx_amp_hz_per_m - e->gx_amp_hz_per_m) <= tol,
-                  "gx_amp mismatch");
+            fprintf(
+                stderr,
+                "[scantable][%s] gx_amp @pos%d: ref=%.6g  lib=%.6g\n",
+                tc->name,
+                pos,
+                e->gx_amp_hz_per_m,
+                inst.gx_amp_hz_per_m);
+        mu_assert((float)fabs(inst.gx_amp_hz_per_m - e->gx_amp_hz_per_m) <= tol, "gx_amp mismatch");
 
         /* GY amplitude */
         tol = (float)fabs(e->gy_amp_hz_per_m) * 1e-4f;
         if (tol < 1e-6f)
             tol = 1e-6f;
         if ((float)fabs(inst.gy_amp_hz_per_m - e->gy_amp_hz_per_m) > tol)
-            fprintf(stderr, "[scantable][%s] gy_amp @pos%d: ref=%.6g  lib=%.6g\n",
-                    tc->name, pos, e->gy_amp_hz_per_m, inst.gy_amp_hz_per_m);
-        mu_assert((float)fabs(inst.gy_amp_hz_per_m - e->gy_amp_hz_per_m) <= tol,
-                  "gy_amp mismatch");
+            fprintf(
+                stderr,
+                "[scantable][%s] gy_amp @pos%d: ref=%.6g  lib=%.6g\n",
+                tc->name,
+                pos,
+                e->gy_amp_hz_per_m,
+                inst.gy_amp_hz_per_m);
+        mu_assert((float)fabs(inst.gy_amp_hz_per_m - e->gy_amp_hz_per_m) <= tol, "gy_amp mismatch");
 
         /* GZ amplitude */
         tol = (float)fabs(e->gz_amp_hz_per_m) * 1e-4f;
         if (tol < 1e-6f)
             tol = 1e-6f;
         if ((float)fabs(inst.gz_amp_hz_per_m - e->gz_amp_hz_per_m) > tol)
-            fprintf(stderr, "[scantable][%s] gz_amp @pos%d: ref=%.6g  lib=%.6g\n",
-                    tc->name, pos, e->gz_amp_hz_per_m, inst.gz_amp_hz_per_m);
-        mu_assert((float)fabs(inst.gz_amp_hz_per_m - e->gz_amp_hz_per_m) <= tol,
-                  "gz_amp mismatch");
+            fprintf(
+                stderr,
+                "[scantable][%s] gz_amp @pos%d: ref=%.6g  lib=%.6g\n",
+                tc->name,
+                pos,
+                e->gz_amp_hz_per_m,
+                inst.gz_amp_hz_per_m);
+        mu_assert((float)fabs(inst.gz_amp_hz_per_m - e->gz_amp_hz_per_m) <= tol, "gz_amp mismatch");
 
         /* ADC flag */
         mu_assert_int_eq(e->adc_flag, inst.adc_flag);
@@ -1769,15 +2343,15 @@ static void run_scan_table_case(const seq_case *tc)
         tol = (float)fabs(e->adc_phase_rad) * 1e-4f;
         if (tol < 1e-8f)
             tol = 1e-8f;
-        mu_assert((float)fabs(inst.adc_phase_rad - e->adc_phase_rad) <= tol,
-                  "adc_phase_rad mismatch");
+        mu_assert(
+            (float)fabs(inst.adc_phase_rad - e->adc_phase_rad) <= tol,
+            "adc_phase_rad mismatch");
 
         /* ADC freq */
         tol = (float)fabs(e->adc_freq_hz) * 1e-4f;
         if (tol < 1e-6f)
             tol = 1e-6f;
-        mu_assert((float)fabs(inst.adc_freq_hz - e->adc_freq_hz) <= tol,
-                  "adc_freq_hz mismatch");
+        mu_assert((float)fabs(inst.adc_freq_hz - e->adc_freq_hz) <= tol, "adc_freq_hz mismatch");
 
         /* Digital output flag */
         mu_assert_int_eq(e->digitalout_flag, inst.digitalout_flag);
@@ -1786,23 +2360,26 @@ static void run_scan_table_case(const seq_case *tc)
          * for pure-delay segments the library uses the per-instance
          * block table entry, not the canonical segment definition. */
         if (e->block_dur_us > 0 && inst.duration_us != e->block_dur_us)
-            fprintf(stderr, "[scantable][%s] block_dur @pos%d: ref=%d  lib=%d\n",
-                    tc->name, pos, e->block_dur_us, inst.duration_us);
+            fprintf(
+                stderr,
+                "[scantable][%s] block_dur @pos%d: ref=%d  lib=%d\n",
+                tc->name,
+                pos,
+                e->block_dur_us,
+                inst.duration_us);
         if (e->block_dur_us > 0)
             mu_assert_int_eq(e->block_dur_us, inst.duration_us);
 
         /* Rotation matrix */
         for (i = 0; i < 9; ++i)
         {
-            mu_assert((float)fabs(inst.rotmat[i] - e->rotmat[i]) < 1e-5f,
-                      "rotmat mismatch");
+            mu_assert((float)fabs(inst.rotmat[i] - e->rotmat[i]) < 1e-5f, "rotmat mismatch");
         }
 
         /* ---- Trigger flag (per-block truth vs segment-level cursor) */
         if (e->trigger_flag)
         {
-            mu_assert(ci.has_trigger,
-                      "cursor has_trigger should be set when truth trigger_flag=1");
+            mu_assert(ci.has_trigger, "cursor has_trigger should be set when truth trigger_flag=1");
             if (ci.segment_id >= 0 && ci.segment_id < MAX_SEGMENTS)
                 seg_trigger_seen[ci.segment_id] = 1;
         }
@@ -1839,22 +2416,31 @@ static void run_scan_table_case(const seq_case *tc)
             rc = pulseg_get_segment_info(coll, &si, seg);
             if (PULSEG_SUCCEEDED(rc) && seg_trigger_seen[seg])
             {
-                mu_assert(si.has_trigger,
-                          "segment_info.has_trigger should be set "
-                          "when scan table has trigger_flag");
+                mu_assert(
+                    si.has_trigger,
+                    "segment_info.has_trigger should be set "
+                    "when scan table has trigger_flag");
             }
         }
     }
 
     if (is_mprage)
     {
-        fprintf(stderr, "[scantable][%s] pure_seg_id=%d  pure_inst_unique=%d  saw_noncanonical=%d\n",
-                tc->name, pure_seg_id, pure_inst_unique, saw_noncanonical_instance);
+        fprintf(
+            stderr,
+            "[scantable][%s] pure_seg_id=%d  pure_inst_unique=%d  saw_noncanonical=%d\n",
+            tc->name,
+            pure_seg_id,
+            pure_inst_unique,
+            saw_noncanonical_instance);
         mu_assert(pure_seg_id >= 0, "expected a pure-delay segment in MPRAGE scan loop");
-        mu_assert(pure_inst_unique >= 2,
-                  "expected multiple pure-delay instance durations (e.g. TI and TR delays)");
-        mu_assert(saw_noncanonical_instance,
-                  "expected scan-loop pure-delay instance duration to differ from canonical segment-def duration");
+        mu_assert(
+            pure_inst_unique >= 2,
+            "expected multiple pure-delay instance durations (e.g. TI and TR delays)");
+        mu_assert(
+            saw_noncanonical_instance,
+            "expected scan-loop pure-delay instance duration to differ from canonical segment-def "
+            "duration");
     }
 
     pulseg_collection_free(coll);
@@ -1868,7 +2454,7 @@ static void run_collection_case(const seq_case *tc)
     pulseg_subseq_info gre_info = PULSEG_SUBSEQ_INFO_INIT;
     pulseg_subseq_info epi_info = PULSEG_SUBSEQ_INFO_INIT;
     seg_meta meta = SEG_META_INIT;
-    scan_table_file ref = SCAN_TABLE_FILE_INIT;
+    exec_stream_file ref = SCAN_TABLE_FILE_INIT;
     pulseg_cursor_info ci = PULSEG_CURSOR_INFO_INIT;
     char scan_path[512];
     char meta_path[512];
@@ -1898,20 +2484,21 @@ static void run_collection_case(const seq_case *tc)
     mu_assert_int_eq(meta.num_segments, cinfo.num_segments);
     mu_assert_int_eq(meta.num_unique_adcs, gre_info.num_unique_adcs + epi_info.num_unique_adcs);
     mu_assert_int_eq(0, gre_info.segment_offset);
-    mu_assert(epi_info.segment_offset > gre_info.segment_offset,
-              "EPI subsequence should have a positive segment offset");
+    mu_assert(
+        epi_info.segment_offset > gre_info.segment_offset,
+        "EPI subsequence should have a positive segment offset");
 
     pulseg_cursor_reset(coll);
     while (pulseg_cursor_next(coll) == PULSEG_CURSOR_BLOCK)
     {
         rc = pulseg_cursor_get_info(coll, &ci);
         mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_cursor_get_info failed for collection case");
-        mu_assert(ci.subseq_idx >= 0 && ci.subseq_idx < 2,
-                  "cursor subsequence index out of range");
+        mu_assert(ci.subseq_idx >= 0 && ci.subseq_idx < 2, "cursor subsequence index out of range");
         if (prev_subseq == 0 && ci.subseq_idx == 1)
             saw_transition = 1;
-        mu_assert(prev_subseq <= ci.subseq_idx,
-                  "cursor subsequence index should be monotonic across collection");
+        mu_assert(
+            prev_subseq <= ci.subseq_idx,
+            "cursor subsequence index should be monotonic across collection");
         prev_subseq = ci.subseq_idx;
         ++num_blocks;
     }
@@ -1921,19 +2508,28 @@ static void run_collection_case(const seq_case *tc)
     /* Duration: sum of block_dur_us from scan table fixture vs
      * cinfo.total_duration_us (now computed via scan-table walk). */
     build_case_path(scan_path, sizeof(scan_path), tc, "_scan_table.truth");
-    ok = parse_scan_table(scan_path, &ref);
+    ok = parse_exec_stream(scan_path, &ref);
     mu_assert(ok, "failed to parse scan_table.truth for duration check");
     expected_total_duration_us = 0.0f;
     for (i = 0; i < ref.num_entries; ++i)
         expected_total_duration_us += (float)ref.entries[i].block_dur_us;
-    mu_assert_float_near("collection duration",
-                         expected_total_duration_us, cinfo.total_duration_us, 1.0f);
+    mu_assert_float_near(
+        "collection duration",
+        expected_total_duration_us,
+        cinfo.total_duration_us,
+        1.0f);
 
     pulseg_collection_free(coll);
 }
 
-MU_TEST(test_collection_gre_epi_1avg) { run_collection_case(&kGreEpiCollectionCases[0]); }
-MU_TEST(test_collection_gre_epi_3avg) { run_collection_case(&kGreEpiCollectionCases[1]); }
+MU_TEST(test_collection_gre_epi_1avg)
+{
+    run_collection_case(&kGreEpiCollectionCases[0]);
+}
+MU_TEST(test_collection_gre_epi_3avg)
+{
+    run_collection_case(&kGreEpiCollectionCases[1]);
+}
 
 MU_TEST_SUITE(suite_sequences_collection)
 {
@@ -1941,45 +2537,147 @@ MU_TEST_SUITE(suite_sequences_collection)
     MU_RUN_TEST(test_collection_gre_epi_3avg);
 }
 
-MU_TEST(test_scan_table_gre_2d_1sl_1avg) { run_scan_table_case(&kGreCases[0]); }
-MU_TEST(test_scan_table_gre_2d_1sl_3avg) { run_scan_table_case(&kGreCases[1]); }
-MU_TEST(test_scan_table_gre_2d_3sl_1avg) { run_scan_table_case(&kGreCases[2]); }
-MU_TEST(test_scan_table_gre_2d_3sl_3avg) { run_scan_table_case(&kGreCases[3]); }
-MU_TEST(test_scan_table_gre_epi_collection_1avg) { run_scan_table_case(&kGreEpiCollectionCases[0]); }
-MU_TEST(test_scan_table_gre_epi_collection_3avg) { run_scan_table_case(&kGreEpiCollectionCases[1]); }
+MU_TEST(test_exec_stream_gre_2d_1sl_1avg)
+{
+    run_exec_stream_case(&kGreCases[0]);
+}
+MU_TEST(test_exec_stream_gre_2d_1sl_3avg)
+{
+    run_exec_stream_case(&kGreCases[1]);
+}
+MU_TEST(test_exec_stream_gre_2d_3sl_1avg)
+{
+    run_exec_stream_case(&kGreCases[2]);
+}
+MU_TEST(test_exec_stream_gre_2d_3sl_3avg)
+{
+    run_exec_stream_case(&kGreCases[3]);
+}
+MU_TEST(test_exec_stream_gre_epi_collection_1avg)
+{
+    run_exec_stream_case(&kGreEpiCollectionCases[0]);
+}
+MU_TEST(test_exec_stream_gre_epi_collection_3avg)
+{
+    run_exec_stream_case(&kGreEpiCollectionCases[1]);
+}
 
-MU_TEST(test_scan_table_mprage_2d_1sl_1avg) { run_scan_table_case(&kMprageCases[0]); }
-MU_TEST(test_scan_table_mprage_2d_1sl_3avg) { run_scan_table_case(&kMprageCases[1]); }
-MU_TEST(test_scan_table_mprage_2d_3sl_1avg) { run_scan_table_case(&kMprageCases[2]); }
-MU_TEST(test_scan_table_mprage_2d_3sl_3avg) { run_scan_table_case(&kMprageCases[3]); }
-MU_TEST(test_scan_table_mprage_nc_1sl_1avg) { run_scan_table_case(&kMprageNoncartCases[0]); }
-MU_TEST(test_scan_table_mprage_nc_1sl_3avg_userotext0) { run_scan_table_case(&kMprageNoncartCases[1]); }
-MU_TEST(test_scan_table_mprage_nc_3sl_1avg_userotext0) { run_scan_table_case(&kMprageNoncartCases[2]); }
-MU_TEST(test_scan_table_mprage_nc_3sl_3avg_userotext0) { run_scan_table_case(&kMprageNoncartCases[3]); }
-MU_TEST(test_scan_table_mprage_nc_1sl_1avg_userotext1) { run_scan_table_case(&kMprageNoncartCases[4]); }
-MU_TEST(test_scan_table_mprage_nc_1sl_3avg_userotext1) { run_scan_table_case(&kMprageNoncartCases[5]); }
-MU_TEST(test_scan_table_mprage_nc_3sl_1avg_userotext1) { run_scan_table_case(&kMprageNoncartCases[6]); }
-MU_TEST(test_scan_table_mprage_nc_3sl_3avg_userotext1) { run_scan_table_case(&kMprageNoncartCases[7]); }
+MU_TEST(test_exec_stream_mprage_2d_1sl_1avg)
+{
+    run_exec_stream_case(&kMprageCases[0]);
+}
+MU_TEST(test_exec_stream_mprage_2d_1sl_3avg)
+{
+    run_exec_stream_case(&kMprageCases[1]);
+}
+MU_TEST(test_exec_stream_mprage_2d_3sl_1avg)
+{
+    run_exec_stream_case(&kMprageCases[2]);
+}
+MU_TEST(test_exec_stream_mprage_2d_3sl_3avg)
+{
+    run_exec_stream_case(&kMprageCases[3]);
+}
+MU_TEST(test_exec_stream_mprage_nc_1sl_1avg)
+{
+    run_exec_stream_case(&kMprageNoncartCases[0]);
+}
+MU_TEST(test_exec_stream_mprage_nc_1sl_3avg_userotext0)
+{
+    run_exec_stream_case(&kMprageNoncartCases[1]);
+}
+MU_TEST(test_exec_stream_mprage_nc_3sl_1avg_userotext0)
+{
+    run_exec_stream_case(&kMprageNoncartCases[2]);
+}
+MU_TEST(test_exec_stream_mprage_nc_3sl_3avg_userotext0)
+{
+    run_exec_stream_case(&kMprageNoncartCases[3]);
+}
+MU_TEST(test_exec_stream_mprage_nc_1sl_1avg_userotext1)
+{
+    run_exec_stream_case(&kMprageNoncartCases[4]);
+}
+MU_TEST(test_exec_stream_mprage_nc_1sl_3avg_userotext1)
+{
+    run_exec_stream_case(&kMprageNoncartCases[5]);
+}
+MU_TEST(test_exec_stream_mprage_nc_3sl_1avg_userotext1)
+{
+    run_exec_stream_case(&kMprageNoncartCases[6]);
+}
+MU_TEST(test_exec_stream_mprage_nc_3sl_3avg_userotext1)
+{
+    run_exec_stream_case(&kMprageNoncartCases[7]);
+}
 
-MU_TEST(test_scan_table_bssfp_2d_1sl_1avg) { run_scan_table_case(&kBssfpCases[0]); }
-MU_TEST(test_scan_table_bssfp_2d_1sl_3avg) { run_scan_table_case(&kBssfpCases[1]); }
-MU_TEST(test_scan_table_bssfp_2d_3sl_1avg) { run_scan_table_case(&kBssfpCases[2]); }
-MU_TEST(test_scan_table_bssfp_2d_3sl_3avg) { run_scan_table_case(&kBssfpCases[3]); }
+MU_TEST(test_exec_stream_bssfp_2d_1sl_1avg)
+{
+    run_exec_stream_case(&kBssfpCases[0]);
+}
+MU_TEST(test_exec_stream_bssfp_2d_1sl_3avg)
+{
+    run_exec_stream_case(&kBssfpCases[1]);
+}
+MU_TEST(test_exec_stream_bssfp_2d_3sl_1avg)
+{
+    run_exec_stream_case(&kBssfpCases[2]);
+}
+MU_TEST(test_exec_stream_bssfp_2d_3sl_3avg)
+{
+    run_exec_stream_case(&kBssfpCases[3]);
+}
 
-MU_TEST(test_scan_table_fse_2d_1sl_1avg) { run_scan_table_case(&kFseCases[0]); }
-MU_TEST(test_scan_table_fse_2d_1sl_3avg) { run_scan_table_case(&kFseCases[1]); }
-MU_TEST(test_scan_table_fse_2d_3sl_1avg) { run_scan_table_case(&kFseCases[2]); }
-MU_TEST(test_scan_table_fse_2d_3sl_3avg) { run_scan_table_case(&kFseCases[3]); }
+MU_TEST(test_exec_stream_fse_2d_1sl_1avg)
+{
+    run_exec_stream_case(&kFseCases[0]);
+}
+MU_TEST(test_exec_stream_fse_2d_1sl_3avg)
+{
+    run_exec_stream_case(&kFseCases[1]);
+}
+MU_TEST(test_exec_stream_fse_2d_3sl_1avg)
+{
+    run_exec_stream_case(&kFseCases[2]);
+}
+MU_TEST(test_exec_stream_fse_2d_3sl_3avg)
+{
+    run_exec_stream_case(&kFseCases[3]);
+}
 
-MU_TEST(test_scan_table_qalas_nc_3d_1sl_1avg_userotext1) { run_scan_table_case(&kQalasNoncartCases[0]); }
-MU_TEST(test_scan_table_qalas_nc_3d_1sl_3avg_userotext1) { run_scan_table_case(&kQalasNoncartCases[1]); }
-MU_TEST(test_scan_table_qalas_nc_3d_3sl_1avg_userotext1) { run_scan_table_case(&kQalasNoncartCases[2]); }
-MU_TEST(test_scan_table_qalas_nc_3d_3sl_3avg_userotext1) { run_scan_table_case(&kQalasNoncartCases[3]); }
+MU_TEST(test_exec_stream_qalas_nc_3d_1sl_1avg_userotext1)
+{
+    run_exec_stream_case(&kQalasNoncartCases[0]);
+}
+MU_TEST(test_exec_stream_qalas_nc_3d_1sl_3avg_userotext1)
+{
+    run_exec_stream_case(&kQalasNoncartCases[1]);
+}
+MU_TEST(test_exec_stream_qalas_nc_3d_3sl_1avg_userotext1)
+{
+    run_exec_stream_case(&kQalasNoncartCases[2]);
+}
+MU_TEST(test_exec_stream_qalas_nc_3d_3sl_3avg_userotext1)
+{
+    run_exec_stream_case(&kQalasNoncartCases[3]);
+}
 
-MU_TEST(test_scan_table_mprage_nav_2d_1sl_1avg) { run_scan_table_case(&kMprageNavCases[0]); }
-MU_TEST(test_scan_table_mprage_nav_2d_1sl_3avg) { run_scan_table_case(&kMprageNavCases[1]); }
-MU_TEST(test_scan_table_mprage_nav_2d_3sl_1avg) { run_scan_table_case(&kMprageNavCases[2]); }
-MU_TEST(test_scan_table_mprage_nav_2d_3sl_3avg) { run_scan_table_case(&kMprageNavCases[3]); }
+MU_TEST(test_exec_stream_mprage_nav_2d_1sl_1avg)
+{
+    run_exec_stream_case(&kMprageNavCases[0]);
+}
+MU_TEST(test_exec_stream_mprage_nav_2d_1sl_3avg)
+{
+    run_exec_stream_case(&kMprageNavCases[1]);
+}
+MU_TEST(test_exec_stream_mprage_nav_2d_3sl_1avg)
+{
+    run_exec_stream_case(&kMprageNavCases[2]);
+}
+MU_TEST(test_exec_stream_mprage_nav_2d_3sl_3avg)
+{
+    run_exec_stream_case(&kMprageNavCases[3]);
+}
 
 /* ================================================================== */
 /*  Suite — interior pure-delay static/dynamic classification         */
@@ -1995,27 +2693,26 @@ MU_TEST(test_scan_table_mprage_nav_2d_3sl_3avg) { run_scan_table_case(&kMprageNa
 /*  only when the duration actually differs across instances.        */
 /* ================================================================== */
 
-static int find_delay_block(
-    const pulseg_collection* coll, int seg_idx, int num_blocks)
+static int find_delay_block(const pulseg_collection *coll, int seg_idx, int num_blocks)
 {
     pulseg_block_info bi = PULSEG_BLOCK_INFO_INIT;
     int blk, rc;
 
-    for (blk = 0; blk < num_blocks; ++blk) {
+    for (blk = 0; blk < num_blocks; ++blk)
+    {
         rc = pulseg_get_block_info(coll, &bi, seg_idx, blk);
-        if (!PULSEG_SUCCEEDED(rc)) continue;
-        if (!bi.has_rf && !bi.has_adc &&
-            !bi.has_grad[0] && !bi.has_grad[1] && !bi.has_grad[2])
+        if (!PULSEG_SUCCEEDED(rc))
+            continue;
+        if (!bi.has_rf && !bi.has_adc && !bi.has_grad[0] && !bi.has_grad[1] && !bi.has_grad[2])
             return blk;
     }
     return -1;
 }
 
-static void run_delay_classification_case(
-    const char* seq_file, int expect_variable)
+static void run_delay_classification_case(const char *seq_file, int expect_variable)
 {
     pulseg_opts opts;
-    pulseg_collection* coll = NULL;
+    pulseg_collection *coll = NULL;
     pulseg_segment_info segi = PULSEG_SEGMENT_INFO_INIT;
     pulseg_block_info bi = PULSEG_BLOCK_INFO_INIT;
     int rc, target_seg, delay_blk;
@@ -2038,16 +2735,20 @@ static void run_delay_classification_case(
     rc = pulseg_get_segment_info(coll, &segi, 1);
     mu_assert(PULSEG_SUCCEEDED(rc) && segi.num_blocks > 0, "segment 1 should exist");
     rc = pulseg_get_segment_info(coll, &segi, 2);
-    mu_assert(PULSEG_SUCCEEDED(rc) && segi.num_blocks <= 0,
+    mu_assert(
+        PULSEG_SUCCEEDED(rc) && segi.num_blocks <= 0,
         "expected exactly 2 unique segments (3 TRs should dedup to 1)");
 
     /* Find the 3-block [RF, delay, ADC] segment among the 2 unique ones. */
     target_seg = -1;
     rc = pulseg_get_segment_info(coll, &segi, 0);
     mu_assert(PULSEG_SUCCEEDED(rc) && segi.num_blocks > 0, "segment 0 should exist");
-    if (segi.num_blocks == 3) {
+    if (segi.num_blocks == 3)
+    {
         target_seg = 0;
-    } else {
+    }
+    else
+    {
         rc = pulseg_get_segment_info(coll, &segi, 1);
         mu_assert(PULSEG_SUCCEEDED(rc) && segi.num_blocks > 0, "segment 1 should exist");
         mu_assert_int_eq(3, segi.num_blocks);
@@ -2082,40 +2783,40 @@ MU_TEST_SUITE(suite_sequences_delay_classification)
 
 MU_TEST_SUITE(suite_sequences_scanloop)
 {
-    MU_RUN_TEST(test_scan_table_gre_2d_1sl_1avg);
-    MU_RUN_TEST(test_scan_table_gre_2d_1sl_3avg);
-    MU_RUN_TEST(test_scan_table_gre_2d_3sl_1avg);
-    MU_RUN_TEST(test_scan_table_gre_2d_3sl_3avg);
-    MU_RUN_TEST(test_scan_table_gre_epi_collection_1avg);
-    MU_RUN_TEST(test_scan_table_gre_epi_collection_3avg);
-    MU_RUN_TEST(test_scan_table_mprage_2d_1sl_1avg);
-    MU_RUN_TEST(test_scan_table_mprage_2d_1sl_3avg);
-    MU_RUN_TEST(test_scan_table_mprage_2d_3sl_1avg);
-    MU_RUN_TEST(test_scan_table_mprage_2d_3sl_3avg);
-    MU_RUN_TEST(test_scan_table_mprage_nc_1sl_1avg);
-    MU_RUN_TEST(test_scan_table_mprage_nc_1sl_3avg_userotext0);
-    MU_RUN_TEST(test_scan_table_mprage_nc_3sl_1avg_userotext0);
-    MU_RUN_TEST(test_scan_table_mprage_nc_3sl_3avg_userotext0);
-    MU_RUN_TEST(test_scan_table_mprage_nc_1sl_1avg_userotext1);
-    MU_RUN_TEST(test_scan_table_mprage_nc_1sl_3avg_userotext1);
-    MU_RUN_TEST(test_scan_table_mprage_nc_3sl_1avg_userotext1);
-    MU_RUN_TEST(test_scan_table_mprage_nc_3sl_3avg_userotext1);
-    MU_RUN_TEST(test_scan_table_bssfp_2d_1sl_1avg);
-    MU_RUN_TEST(test_scan_table_bssfp_2d_1sl_3avg);
-    MU_RUN_TEST(test_scan_table_bssfp_2d_3sl_1avg);
-    MU_RUN_TEST(test_scan_table_bssfp_2d_3sl_3avg);
-    MU_RUN_TEST(test_scan_table_fse_2d_1sl_1avg);
-    MU_RUN_TEST(test_scan_table_fse_2d_1sl_3avg);
-    MU_RUN_TEST(test_scan_table_fse_2d_3sl_1avg);
-    MU_RUN_TEST(test_scan_table_fse_2d_3sl_3avg);
-    MU_RUN_TEST(test_scan_table_qalas_nc_3d_1sl_1avg_userotext1);
-    MU_RUN_TEST(test_scan_table_qalas_nc_3d_1sl_3avg_userotext1);
-    MU_RUN_TEST(test_scan_table_qalas_nc_3d_3sl_1avg_userotext1);
-    MU_RUN_TEST(test_scan_table_qalas_nc_3d_3sl_3avg_userotext1);
-    MU_RUN_TEST(test_scan_table_mprage_nav_2d_1sl_1avg);
-    MU_RUN_TEST(test_scan_table_mprage_nav_2d_1sl_3avg);
-    MU_RUN_TEST(test_scan_table_mprage_nav_2d_3sl_1avg);
-    MU_RUN_TEST(test_scan_table_mprage_nav_2d_3sl_3avg);
+    MU_RUN_TEST(test_exec_stream_gre_2d_1sl_1avg);
+    MU_RUN_TEST(test_exec_stream_gre_2d_1sl_3avg);
+    MU_RUN_TEST(test_exec_stream_gre_2d_3sl_1avg);
+    MU_RUN_TEST(test_exec_stream_gre_2d_3sl_3avg);
+    MU_RUN_TEST(test_exec_stream_gre_epi_collection_1avg);
+    MU_RUN_TEST(test_exec_stream_gre_epi_collection_3avg);
+    MU_RUN_TEST(test_exec_stream_mprage_2d_1sl_1avg);
+    MU_RUN_TEST(test_exec_stream_mprage_2d_1sl_3avg);
+    MU_RUN_TEST(test_exec_stream_mprage_2d_3sl_1avg);
+    MU_RUN_TEST(test_exec_stream_mprage_2d_3sl_3avg);
+    MU_RUN_TEST(test_exec_stream_mprage_nc_1sl_1avg);
+    MU_RUN_TEST(test_exec_stream_mprage_nc_1sl_3avg_userotext0);
+    MU_RUN_TEST(test_exec_stream_mprage_nc_3sl_1avg_userotext0);
+    MU_RUN_TEST(test_exec_stream_mprage_nc_3sl_3avg_userotext0);
+    MU_RUN_TEST(test_exec_stream_mprage_nc_1sl_1avg_userotext1);
+    MU_RUN_TEST(test_exec_stream_mprage_nc_1sl_3avg_userotext1);
+    MU_RUN_TEST(test_exec_stream_mprage_nc_3sl_1avg_userotext1);
+    MU_RUN_TEST(test_exec_stream_mprage_nc_3sl_3avg_userotext1);
+    MU_RUN_TEST(test_exec_stream_bssfp_2d_1sl_1avg);
+    MU_RUN_TEST(test_exec_stream_bssfp_2d_1sl_3avg);
+    MU_RUN_TEST(test_exec_stream_bssfp_2d_3sl_1avg);
+    MU_RUN_TEST(test_exec_stream_bssfp_2d_3sl_3avg);
+    MU_RUN_TEST(test_exec_stream_fse_2d_1sl_1avg);
+    MU_RUN_TEST(test_exec_stream_fse_2d_1sl_3avg);
+    MU_RUN_TEST(test_exec_stream_fse_2d_3sl_1avg);
+    MU_RUN_TEST(test_exec_stream_fse_2d_3sl_3avg);
+    MU_RUN_TEST(test_exec_stream_qalas_nc_3d_1sl_1avg_userotext1);
+    MU_RUN_TEST(test_exec_stream_qalas_nc_3d_1sl_3avg_userotext1);
+    MU_RUN_TEST(test_exec_stream_qalas_nc_3d_3sl_1avg_userotext1);
+    MU_RUN_TEST(test_exec_stream_qalas_nc_3d_3sl_3avg_userotext1);
+    MU_RUN_TEST(test_exec_stream_mprage_nav_2d_1sl_1avg);
+    MU_RUN_TEST(test_exec_stream_mprage_nav_2d_1sl_3avg);
+    MU_RUN_TEST(test_exec_stream_mprage_nav_2d_3sl_1avg);
+    MU_RUN_TEST(test_exec_stream_mprage_nav_2d_3sl_3avg);
 }
 
 int test_sequences_main(void)

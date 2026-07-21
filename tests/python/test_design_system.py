@@ -1,4 +1,4 @@
-"""Unit tests for pulserver.design.system."""
+"""Unit tests for pulserver private system."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design import system
+from pulserver.pypulseq import _system as system
 
 
 @pytest.mark.parametrize(

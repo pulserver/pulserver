@@ -1,10 +1,16 @@
 /**
  * @file pulseg_safety.h
- * @brief RF/gradient safety checks, mechanical-resonance spectra, and PNS.
+ * @brief Vendor-neutral gradient safety: amplitude, slew, continuity,
+ *        acoustic resonance and PNS.
  *
- * Split out of the former pulseg_methods.h (Stage 1 layout normalization).
- * All functions use the pulseg_ prefix and are declared extern "C" when
- * compiled with a C++ compiler.
+ * pulseg_check_safety() is the single gate a vendor integration must pass a
+ * collection through before playing it. The PNS model is injected by the
+ * caller (pulseg_pns_model), so no vendor-proprietary nerve-stimulation
+ * formula lives in this library.
+ *
+ * RF safety is deliberately absent: SAR limits are vendor-proprietary.
+ * Consumers read the per-pulse summary via pulseg_get_rf_stats() and apply
+ * their own scanner limits.
  */
 
 #ifndef PULSEG_SAFETY_H
@@ -45,39 +51,6 @@ extern "C"
     int pulseg_check_safety(
         pulseg_collection *coll,
         pulseg_diagnostic *diag,
-        const pulseg_opts *opts,
-        int num_forbidden_bands,
-        const pulseg_forbidden_band *forbidden_bands,
-        const pulseg_pns_model *pns_model,
-        float pns_threshold_percent);
-
-    /**
-     * @brief Vendor-neutral one-shot safety check from a `.seq` file path.
-     *
-     * Convenience facade for third-party vendors that do not want to manage
-     * a `pulseg_collection` lifetime: internally calls
-     * `pulseg_read()` (no cache, no signature verification, no label
-     * parsing), then `pulseg_check_safety()`, then
-     * `pulseg_collection_free()`.  Performs the same suite of checks as
-     * `pulseg_check_safety()` (max gradient amplitude, gradient
-     * continuity, max slew rate, structural mechanical-resonance forbidden
-     * bands, and PNS evaluated through the injected `pulseg_pns_model`
-     * argument).
-     *
-     * @param[out] diag                   Diagnostic on violation / load error.
-     * @param[in]  seq_path               Path to a (possibly chained) `.seq` file.
-     * @param[in]  opts                   Scanner limits and rasters.
-     * @param[in]  num_forbidden_bands    Number of acoustic forbidden bands.
-     * @param[in]  forbidden_bands        Array of forbidden bands.
-     * @param[in]  pns_model              PNS evaluator
-     *                                    (NULL to skip PNS).
-     * @param[in]  pns_threshold_percent  PNS threshold (100 = 100 %).
-     * @return PULSEG_SUCCESS if safe, negative error code on load failure
-     *         or safety violation.
-     */
-    int pulseg_check_safety_from_file(
-        pulseg_diagnostic *diag,
-        const char *seq_path,
         const pulseg_opts *opts,
         int num_forbidden_bands,
         const pulseg_forbidden_band *forbidden_bands,
@@ -125,16 +98,17 @@ extern "C"
      * @param[in]  forbidden_bands          Array of forbidden bands.
      * @return PULSEG_SUCCESS on success, negative error code on failure.
      */
-    int pulseg_calc_mech_resonances(const pulseg_collection *coll,
-                                       pulseg_mech_resonances_spectra *spectra,
-                                       pulseg_diagnostic *diag,
-                                       int subseq_idx,
-                                       int canonical_tr_idx,
-                                       const pulseg_opts *opts,
-                                       float target_resolution_hz,
-                                       float max_freq_hz,
-                                       int num_forbidden_bands,
-                                       const pulseg_forbidden_band *forbidden_bands);
+    int pulseg_calc_mech_resonances(
+        const pulseg_collection *coll,
+        pulseg_mech_resonances_spectra *spectra,
+        pulseg_diagnostic *diag,
+        int subseq_idx,
+        int canonical_tr_idx,
+        const pulseg_opts *opts,
+        float target_resolution_hz,
+        float max_freq_hz,
+        int num_forbidden_bands,
+        const pulseg_forbidden_band *forbidden_bands);
 
     /** @brief Free arrays inside a pulseg_mech_resonances_spectra. */
     void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s);
@@ -174,13 +148,14 @@ extern "C"
      * @param[in]  model        PNS evaluator.
      * @return PULSEG_SUCCESS on success, negative error code on failure.
      */
-    int pulseg_calc_pns(const pulseg_collection *coll,
-                           pulseg_pns_result *result,
-                           pulseg_diagnostic *diag,
-                           int subseq_idx,
-                           int canonical_tr_idx,
-                           const pulseg_opts *opts,
-                           const pulseg_pns_model *model);
+    int pulseg_calc_pns(
+        const pulseg_collection *coll,
+        pulseg_pns_result *result,
+        pulseg_diagnostic *diag,
+        int subseq_idx,
+        int canonical_tr_idx,
+        const pulseg_opts *opts,
+        const pulseg_pns_model *model);
 
     /** @brief Free arrays inside a pulseg_pns_result. */
     void pulseg_pns_result_free(pulseg_pns_result *r);

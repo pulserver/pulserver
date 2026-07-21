@@ -1,7 +1,7 @@
 /* pulseg_cache_seqdesc.c -- SEQDESC (section 7) cache writer for sequence description
  *
  * Implements:
- *   pulseg_write_sequence_description_cache()
+ *   pulseg__save_seqdesc_cache_section()
  *
  * SEQDESC (section 7) serialization format (all values are 4 bytes, little-endian
  * by default — same convention as all other cache sections):
@@ -49,9 +49,9 @@
 #include "pulseg_internal.h"
 #include "pulseg.h"
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  I/O helpers (duplicated from pulseg_trajectory.c pattern)       */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 static int sd_write4(FILE *f, const void *p, int count)
 {
@@ -82,9 +82,9 @@ static void sd_swap4_array(void *p, int count)
         sd_swap4((unsigned char *)p + (size_t)i * 4);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Path helper: .seq -> cache_ext (D10; same as in trajectory.c)      */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/*  Path helper: .seq -> cache_ext (same helper as in trajectory.c)      */
+/* ================================================================== */
 static char *sd_make_cache_path(const char *seq_path, const char *ext)
 {
     size_t len = strlen(seq_path);
@@ -103,13 +103,13 @@ static char *sd_make_cache_path(const char *seq_path, const char *ext)
     return p;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Write one (still-compressed) RF shape triplet, copied verbatim     */
 /*  from desc->shapes[shape_id - 1]. shape_id == 0 means absent.       */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 static int sd_write_rf_shape(FILE *f, const pulseg_sequence_descriptor *desc, int shape_id)
 {
-    const pulseg_shape_arbitrary *shape;
+    const pulseq_shape *shape;
     int n;
 
     if (shape_id <= 0 || shape_id > desc->num_shapes)
@@ -131,10 +131,10 @@ static int sd_write_rf_shape(FILE *f, const pulseg_sequence_descriptor *desc, in
     return 1;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Write the per-subsequence RF-def library (rf_def_id == array       */
 /*  index, matching rows[].params[0] for RF rows).                     */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 static int sd_write_rf_def_library(FILE *f, const pulseg_sequence_descriptor *desc)
 {
     int i;
@@ -179,11 +179,13 @@ static int sd_write_rf_def_library(FILE *f, const pulseg_sequence_descriptor *de
     return 1;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Write one subsequence's sequence description block                 */
-/* ------------------------------------------------------------------ */
-static int sd_write_subseq(FILE *f, const pulseg_sequence_description *sd,
-                            const pulseg_sequence_descriptor *desc)
+/* ================================================================== */
+static int sd_write_subseq(
+    FILE *f,
+    const pulseg_sequence_description *sd,
+    const pulseg_sequence_descriptor *desc)
 {
     int i;
 
@@ -210,15 +212,13 @@ static int sd_write_subseq(FILE *f, const pulseg_sequence_description *sd,
 }
 
 /* ================================================================== */
-/*  pulseg_write_sequence_description_cache                        */
+/*  pulseg__save_seqdesc_cache_section                        */
 /* ================================================================== */
 
 #define SD_CACHE_ENDIAN_MARKER 0x01020304
 #define SD_CACHE_SECTION_SEQDESC 7
 
-int pulseg_write_sequence_description_cache(
-    const pulseg_collection *coll,
-    const char *seq_path)
+int pulseg__save_seqdesc_cache_section(const pulseg_collection *coll, const char *seq_path)
 {
     char *cache_path = NULL;
     FILE *f = NULL;
@@ -235,7 +235,8 @@ int pulseg_write_sequence_description_cache(
     if (!coll || !seq_path)
         return PULSEG_ERR_NULL_POINTER;
 
-    cache_path = sd_make_cache_path(seq_path,
+    cache_path = sd_make_cache_path(
+        seq_path,
         coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
     if (!cache_path)
         return PULSEG_ERR_ALLOC_FAILED;
@@ -369,12 +370,9 @@ int pulseg_write_sequence_description_cache(
     if (ret != PULSEG_SUCCESS)
         goto done;
 
-    if (!sd_write4(f, &sp.min_te_us, 1) ||
-        !sd_write4(f, &sp.min_tr_us, 1) ||
-        !sd_write4(f, &sp.max_tr_us, 1) ||
-        !sd_write4(f, &sp.max_flip_angle_deg, 1) ||
-        !sd_write4(f, &sp.total_scan_time_us, 1) ||
-        !sd_write4(f, &sp.num_subseqs, 1) ||
+    if (!sd_write4(f, &sp.min_te_us, 1) || !sd_write4(f, &sp.min_tr_us, 1) ||
+        !sd_write4(f, &sp.max_tr_us, 1) || !sd_write4(f, &sp.max_flip_angle_deg, 1) ||
+        !sd_write4(f, &sp.total_scan_time_us, 1) || !sd_write4(f, &sp.num_subseqs, 1) ||
         !sd_write4(f, sp.reserved, 3))
     {
         ret = PULSEG_ERR_FILE_READ_FAILED;

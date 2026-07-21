@@ -58,12 +58,12 @@ static void seqdesc__select_canonical_window(
  */
 static int seqdesc__build_adc_anchors_from_canonical(
     const pulseg_collection *coll,
+    float **out_kzero,
+    int **out_roles,
     const pulseg_sequence_descriptor *desc,
     int subseq_idx,
     int block_start,
-    int n_walk,
-    float **out_kzero,
-    int **out_roles)
+    int n_walk)
 {
     pulseg__uniform_grad_waveforms uw = PULSEG__UNIFORM_GRAD_WAVEFORMS_INIT;
     pulseg_diagnostic diag;
@@ -92,10 +92,16 @@ static int seqdesc__build_adc_anchors_from_canonical(
     /* Step 1: Get anchor-independent uniform-raster gradient waveforms.
      * ZERO_VAR zeros variable-amplitude gradients (PE), keeping the
      * readout / slice gradients that determine the k-space trajectory shape. */
-    rc = pulseg__get_gradient_waveforms_range(desc, &uw, &diag,
-                                                 block_start, n_walk,
-                                                 PULSEG_AMP_ZERO_VAR,
-                                                 NULL, 0, NULL);
+    rc = pulseg__get_gradient_waveforms_range(
+        desc,
+        &uw,
+        &diag,
+        block_start,
+        n_walk,
+        PULSEG_AMP_ZERO_VAR,
+        NULL,
+        0,
+        NULL);
     if (rc != PULSEG_SUCCESS)
         return rc;
 
@@ -125,10 +131,9 @@ static int seqdesc__build_adc_anchors_from_canonical(
         kzero_us[i] = -1.0f;
         roles[i] = -1;
         /* Use bte->adc_id >= 0 as the presence test (matches block_table_element
-         * semantics); block_definitions[bte->id].adc_id used for definition lookup. */
+         * semantics); base_blocks[bte->id].adc_id used for definition lookup. */
         if (bte->adc_id >= 0)
-            roles[i] = bte->nav_flag ? PULSEG_ADC_ROLE_NON_ACQUIRED
-                                     : PULSEG_ADC_ROLE_SINGLE;
+            roles[i] = bte->nav_flag ? PULSEG_ADC_ROLE_NON_ACQUIRED : PULSEG_ADC_ROLE_SINGLE;
     }
 
     /* Step 3: Walk blocks to collect RF event sample indices.
@@ -196,7 +201,8 @@ static int seqdesc__build_adc_anchors_from_canonical(
                     int iso_sample;
                     float iso_us;
                     rdef = &desc->rf_definitions[rf_def_id];
-                    iso_us = blk_start_us + (float)rdef->delay + (float)rdef->stats.duration_us - (float)rdef->stats.isodelay_us;
+                    iso_us = blk_start_us + (float)rdef->delay + (float)rdef->stats.duration_us -
+                        (float)rdef->stats.isodelay_us;
                     iso_sample = (int)(iso_us / dt);
                     if (iso_sample < 0)
                         iso_sample = 0;
@@ -211,7 +217,8 @@ static int seqdesc__build_adc_anchors_from_canonical(
             }
 
             {
-                int blk_dur = (bte->duration_us >= 0) ? bte->duration_us : desc->block_definitions[bte->id].duration_us;
+                int blk_dur = (bte->duration_us >= 0) ? bte->duration_us
+                                                      : desc->base_blocks[bte->id].duration_us;
                 blk_start_us += (float)blk_dur;
             }
         }
@@ -262,9 +269,7 @@ static int seqdesc__build_adc_anchors_from_canonical(
                 ref_cursor++;
             }
 
-            krss_vals[j] = (float)sqrt((double)kx * kx +
-                                       (double)ky * ky +
-                                       (double)kz * kz);
+            krss_vals[j] = (float)sqrt((double)kx * kx + (double)ky * ky + (double)kz * kz);
         }
     }
 
@@ -274,7 +279,7 @@ static int seqdesc__build_adc_anchors_from_canonical(
     /* Step 5: For each ADC block, find min-krss sample in ADC window.
      * ADC onset = block_start_us + adef->delay  (delay in us).
      * ADC duration = num_samples * dwell_time * 1e-3  (dwell in ns -> us).
-     * Use block_definitions[bte->id].adc_id for the definition lookup (same as
+     * Use base_blocks[bte->id].adc_id for the definition lookup (same as
      * safety.c) — the bte->adc_id is a collection-relative adc_table index and
      * adc_table[].id may exceed num_unique_adcs in multi-subseq collections. */
     {
@@ -288,14 +293,13 @@ static int seqdesc__build_adc_anchors_from_canonical(
             {
                 int bdef_id = bte->id;
                 int adc_def_id = (bdef_id >= 0 && bdef_id < desc->num_unique_blocks)
-                                     ? desc->block_definitions[bdef_id].adc_id
-                                     : -1;
+                    ? desc->base_blocks[bdef_id].adc_id
+                    : -1;
                 if (adc_def_id >= 0 && adc_def_id < desc->num_unique_adcs)
                 {
                     const pulseg_adc_definition *adef = &desc->adc_definitions[adc_def_id];
                     float adc_onset = blk_start_us + (float)adef->delay;
-                    float adc_dur = (float)adef->num_samples *
-                                    (float)adef->dwell_time * 1.0e-3f;
+                    float adc_dur = (float)adef->num_samples * (float)adef->dwell_time * 1.0e-3f;
                     float adc_end = adc_onset + adc_dur;
                     int rs = (int)(adc_onset / dt);
                     int re = (int)(adc_end / dt);
@@ -322,9 +326,8 @@ static int seqdesc__build_adc_anchors_from_canonical(
             }
 
             {
-                int blk_dur = (bte->duration_us >= 0)
-                                  ? bte->duration_us
-                                  : desc->block_definitions[bte->id].duration_us;
+                int blk_dur = (bte->duration_us >= 0) ? bte->duration_us
+                                                      : desc->base_blocks[bte->id].duration_us;
                 blk_start_us += (float)blk_dur;
             }
         }
@@ -386,8 +389,8 @@ static int seqdesc__build_adc_anchors_from_canonical(
                         if (raster_idx >= n_samples)
                             raster_idx = n_samples - 1;
                         roles[i] = (krss_vals[raster_idx] <= threshold)
-                                       ? PULSEG_ADC_ROLE_ECHO_CENTER
-                                       : PULSEG_ADC_ROLE_NON_CENTER;
+                            ? PULSEG_ADC_ROLE_ECHO_CENTER
+                            : PULSEG_ADC_ROLE_NON_CENTER;
                     }
                 }
             }
@@ -403,8 +406,8 @@ static int seqdesc__build_adc_anchors_from_canonical(
                         if (raster_idx >= n_samples)
                             raster_idx = n_samples - 1;
                         roles[i] = (krss_vals[raster_idx] <= threshold)
-                                       ? PULSEG_ADC_ROLE_SINGLE
-                                       : PULSEG_ADC_ROLE_NON_CENTER;
+                            ? PULSEG_ADC_ROLE_SINGLE
+                            : PULSEG_ADC_ROLE_NON_CENTER;
                     }
                 }
             }
@@ -459,8 +462,8 @@ static int seqdesc__build_adc_anchors_from_canonical(
                                 n_tied++;
                         }
                     }
-                    role_for_center = (n_tied == 1) ? PULSEG_ADC_ROLE_ECHO_CENTER
-                                                    : PULSEG_ADC_ROLE_SINGLE;
+                    role_for_center =
+                        (n_tied == 1) ? PULSEG_ADC_ROLE_ECHO_CENTER : PULSEG_ADC_ROLE_SINGLE;
                     for (i = 0; i < n_walk; ++i)
                     {
                         if (roles[i] > PULSEG_ADC_ROLE_NON_ACQUIRED && kzero_us[i] >= 0.0f)
@@ -471,8 +474,8 @@ static int seqdesc__build_adc_anchors_from_canonical(
                             if (raster_idx >= n_samples)
                                 raster_idx = n_samples - 1;
                             roles[i] = (krss_vals[raster_idx] == krss_vals[closest_raster])
-                                           ? role_for_center
-                                           : PULSEG_ADC_ROLE_NON_CENTER;
+                                ? role_for_center
+                                : PULSEG_ADC_ROLE_NON_CENTER;
                         }
                     }
                 }
@@ -524,9 +527,8 @@ static float *seqdesc__build_block_start_us(
         if (blk >= 0 && blk < desc->num_blocks)
         {
             const pulseg_block_table_element *bte = &desc->block_table[blk];
-            int dur = (bte->duration_us >= 0)
-                          ? bte->duration_us
-                          : desc->block_definitions[bte->id].duration_us;
+            int dur =
+                (bte->duration_us >= 0) ? bte->duration_us : desc->base_blocks[bte->id].duration_us;
             acc += (float)dur;
         }
     }
@@ -535,8 +537,7 @@ static float *seqdesc__build_block_start_us(
 
 static int seqdesc__adc_role_is_te_bearing(int adc_role)
 {
-    return adc_role == PULSEG_ADC_ROLE_SINGLE ||
-           adc_role == PULSEG_ADC_ROLE_ECHO_CENTER;
+    return adc_role == PULSEG_ADC_ROLE_SINGLE || adc_role == PULSEG_ADC_ROLE_ECHO_CENTER;
 }
 
 /* ================================================================== */
@@ -597,15 +598,21 @@ int pulseg_get_sequence_description(
     }
 
     /* Step 2: ADC k=0 times + roles from canonical-pass waveforms */
-    ret = seqdesc__build_adc_anchors_from_canonical(coll, desc, subseq_idx, start_block, n_walk, &adc_kzero, &adc_roles);
+    ret = seqdesc__build_adc_anchors_from_canonical(
+        coll,
+        &adc_kzero,
+        &adc_roles,
+        desc,
+        subseq_idx,
+        start_block,
+        n_walk);
     if (ret != PULSEG_SUCCESS)
     {
         goto cleanup;
     }
 
     /* Step 3: allocate compact row table */
-    out->rows = (pulseg_seq_event *)PULSEG_ALLOC(
-        (size_t)n_walk * sizeof(pulseg_seq_event));
+    out->rows = (pulseg_seq_event *)PULSEG_ALLOC((size_t)n_walk * sizeof(pulseg_seq_event));
     if (!out->rows)
     {
         ret = PULSEG_ERR_ALLOC_FAILED;
@@ -637,7 +644,8 @@ int pulseg_get_sequence_description(
             rfdef = &desc->rf_definitions[rf_def_id];
 
             /* RF isocenter time = block_start + delay + duration - isodelay */
-            row->timestamp_us = blk_start[i] + (float)rfdef->delay + rfdef->stats.duration_us - (float)rfdef->stats.isodelay_us;
+            row->timestamp_us = blk_start[i] + (float)rfdef->delay + rfdef->stats.duration_us -
+                (float)rfdef->stats.isodelay_us;
             row->type = PULSEG_SEQ_EVENT_RF;
             row->params[0] = (float)rf_def_id;
             row->params[1] = (float)rfe->rf_use;
@@ -654,20 +662,20 @@ int pulseg_get_sequence_description(
                 int n_active = 0;
                 int ss_gt_id = -1; /* grad_table index of the SS gradient */
 
-#define _CHECK_GRAD(bt_grad_id)                                           \
-    do                                                                    \
-    {                                                                     \
-        int _gt = (bt_grad_id);                                           \
-        if (_gt >= 0 && _gt < desc->grad_table_size)                      \
-        {                                                                 \
-            int _gd = desc->grad_table[_gt].id;                           \
-            if (_gd >= 0 && _gd < desc->num_unique_grads &&               \
-                desc->grad_definitions[_gd].type == PULSEG__GRAD_TRAP) \
-            {                                                             \
-                n_active++;                                               \
-                ss_gt_id = _gt;                                           \
-            }                                                             \
-        }                                                                 \
+#define _CHECK_GRAD(bt_grad_id) \
+    do \
+    { \
+        int _gt = (bt_grad_id); \
+        if (_gt >= 0 && _gt < desc->grad_table_size) \
+        { \
+            int _gd = desc->grad_table[_gt].id; \
+            if (_gd >= 0 && _gd < desc->num_unique_grads && \
+                desc->grad_definitions[_gd].type == PULSEQ_GRAD_TRAP) \
+            { \
+                n_active++; \
+                ss_gt_id = _gt; \
+            } \
+        } \
     } while (0)
 
                 _CHECK_GRAD(bte->gx_id);
@@ -733,9 +741,7 @@ cleanup:
 /*  pulseg_get_sequence_parameters                                 */
 /* ================================================================== */
 
-int pulseg_get_sequence_parameters(
-    pulseg_sequence_parameters *out,
-    const pulseg_collection *coll)
+int pulseg_get_sequence_parameters(pulseg_sequence_parameters *out, const pulseg_collection *coll)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *trd;
@@ -769,7 +775,14 @@ int pulseg_get_sequence_parameters(
         if (!blk_start)
             return PULSEG_ERR_ALLOC_FAILED;
 
-        rc = seqdesc__build_adc_anchors_from_canonical(coll, desc, ss, start_block, n_walk_p, &adc_kzero, &adc_roles);
+        rc = seqdesc__build_adc_anchors_from_canonical(
+            coll,
+            &adc_kzero,
+            &adc_roles,
+            desc,
+            ss,
+            start_block,
+            n_walk_p);
         if (rc != PULSEG_SUCCESS)
         {
             PULSEG_FREE(blk_start);
@@ -780,9 +793,8 @@ int pulseg_get_sequence_parameters(
         for (ip = 0; ip < n_walk_p; ++ip)
         {
             const pulseg_block_table_element *bte = &desc->block_table[start_block + ip];
-            int dur = (bte->duration_us >= 0)
-                          ? bte->duration_us
-                          : desc->block_definitions[bte->id].duration_us;
+            int dur =
+                (bte->duration_us >= 0) ? bte->duration_us : desc->base_blocks[bte->id].duration_us;
             pass_dur_us += (float)dur;
         }
 
@@ -813,7 +825,8 @@ int pulseg_get_sequence_parameters(
                         double ratio_d = 1.0;
                         if (rf_use == PULSEG_RF_USE_EXCITATION)
                         {
-                            rf_isocenter_us = blk_start[ip] + (float)rd->delay + rd->stats.duration_us - (float)rd->stats.isodelay_us;
+                            rf_isocenter_us = blk_start[ip] + (float)rd->delay +
+                                rd->stats.duration_us - (float)rd->stats.isodelay_us;
                             last_exc_isocenter_us = rf_isocenter_us;
                         }
 
@@ -825,7 +838,8 @@ int pulseg_get_sequence_parameters(
                             ratio_d = amp / (double)rd->stats.base_amplitude_hz;
                         }
                         {
-                            double fa_d = (double)rd->stats.flip_angle_rad * ratio_d * (180.0 / 3.14159265358979323846);
+                            double fa_d = (double)rd->stats.flip_angle_rad * ratio_d *
+                                (180.0 / 3.14159265358979323846);
                             float fa = (float)fa_d;
                             if (fa > fa_max)
                                 fa_max = fa;

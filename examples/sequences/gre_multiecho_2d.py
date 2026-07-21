@@ -46,35 +46,36 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pypulseq as pp
-
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
     BoolParam,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
+    Sequence,
+    SequenceType,
     TypeinFloatParam,
     UIParam,
     Validate,
     dict_to_protocol,
     make_enum_param,
+    params,
     protocol_to_dict,
+    run_cli,
 )
-from pulserver.core import SequenceType
-from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
-
-
+from pulserver.pypulseq import _gradients as encoding
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _sampling as sampling
+from pulserver.pypulseq import _system as system
+from pulserver.pypulseq._rf import _excitation_helpers as excitation
 
 USER_SLOT_ECHO_SPACING = 0
 USER_SLOT_FLYBACK = 1
 USER_SLOT_ACS = 2
 
 
-class GreMultiEcho2DPulseqSequence(PulseqSequence):
+class GreMultiEcho2DPulseqSequence(Sequence):
     """Generate a 2D multi-echo Cartesian GRE sequence using pypulseq."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -201,7 +202,7 @@ class GreMultiEcho2DPulseqSequence(PulseqSequence):
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
-        seq = ps.Sequence(opts)
+        seq = pp.Sequence(opts)
 
         delta_k_pe = 1.0 / cfg.fov_pe_m
         phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
@@ -407,7 +408,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

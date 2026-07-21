@@ -1,10 +1,16 @@
 /**
  * @file pulseg_convert.h
- * @brief Sequence-description (SEQDESC) derivation entry points.
+ * @brief Raw pulseq files -> pulseg collection, and the derived sequence
+ *        description.
  *
- * Split out of the former pulseg_methods.h (Stage 1 layout normalization).
- * All functions use the pulseg_ prefix and are declared extern "C" when
- * compiled with a C++ compiler.
+ * pulseg_convert_collection() is the seam between the two modules: it takes
+ * already-parsed pulseq_file structures and produces the deduplicated,
+ * segmented pulseg intermediate representation. pulseg_read() composes it
+ * with the pulseq reader for callers that just want a file path.
+ *
+ * The sequence description is the human/metadata view of a loaded
+ * collection -- the event list, RF shape tuples and shim definitions that
+ * the recon side and the analysis tooling consume.
  */
 
 #ifndef PULSEG_CONVERT_H
@@ -20,7 +26,7 @@ extern "C"
 #endif
 
     /* ================================================================== */
-    /*  Raw pulseq model -> collection (Stage 3 Step 2)                    */
+    /*  Raw pulseq model -> collection                    */
     /* ================================================================== */
 
     /**
@@ -31,10 +37,10 @@ extern "C"
      *
      * This is the "convert" half of the former one-shot @c pulseg_read() /
      * @c pulseg_read_from_buffers() loaders -- those now compose
-     * @c pulseg_pulseq_file_read() (or @c _from_buffer / @c
-     * pulseg_pulseq_file_set_read()) with this function. Each element of
+     * @c pulseq_read() (or @c _from_buffer / @c
+     * pulseq_file_set_read()) with this function. Each element of
      * @p files must already carry its own populated @c opts (set at
-     * pulseg_pulseq_file_init() / read time); there is no separate top-level
+     * pulseq_file_init() / read time); there is no separate top-level
      * opts parameter -- passing one alongside per-file opts would be
      * ambiguous about which wins, so callers rely on the per-file copy.
      *
@@ -44,6 +50,7 @@ extern "C"
      * @param[out] diag          Optional diagnostic (NULL uses a local one).
      * @param[in]  files         Array of @p n already-parsed pulseq files.
      * @param[in]  n             Number of entries in @p files (>= 1).
+     * @param[in]  opts          Scanner limits, rasters and vendor hooks.
      * @param[in]  parse_labels  1 to also build the ADC label table.
      * @param[in]  num_averages  Number of averages (>= 1; see
      *                           pulseg_read()'s parameter of the same name).
@@ -53,8 +60,9 @@ extern "C"
     int pulseg_convert_collection(
         pulseg_collection *coll,
         pulseg_diagnostic *diag,
-        const pulseg_pulseq_file *files,
+        const pulseq_file *files,
         int n,
+        const pulseg_opts *opts,
         int parse_labels,
         int num_averages);
 
@@ -74,9 +82,10 @@ extern "C"
      * @param[in]  subseq_idx Subsequence index.
      * @return PULSEG_SUCCESS or negative error code.
      */
-    int pulseg_get_sequence_description(pulseg_sequence_description *out,
-                                           const pulseg_collection *coll,
-                                           int subseq_idx);
+    int pulseg_get_sequence_description(
+        pulseg_sequence_description *out,
+        const pulseg_collection *coll,
+        int subseq_idx);
 
     /**
      * @brief Free all heap allocations inside a pulseg_sequence_description.
@@ -94,8 +103,9 @@ extern "C"
      * @param[in]  coll  Loaded pulseg collection.
      * @return PULSEG_SUCCESS or negative error code.
      */
-    int pulseg_get_sequence_parameters(pulseg_sequence_parameters *out,
-                                          const pulseg_collection *coll);
+    int pulseg_get_sequence_parameters(
+        pulseg_sequence_parameters *out,
+        const pulseg_collection *coll);
 
 #ifdef __cplusplus
 }

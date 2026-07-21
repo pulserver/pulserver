@@ -13,9 +13,9 @@ building blocks):
   and write it to *output_path* using :func:`pulserver.io.write`.
 
 A single slew/gradient-limited base waveform (spiral or rosette, chosen via
-an ``opuser`` toggle) is designed once via ``pulserver.arbgrad`` and
+an ``opuser`` toggle) is designed once via ``pulserver.pypulseq.arbgrad`` and
 replayed per shot with a per-shot in-plane rotation (pulseq ``ROTATIONS``
-extension, ``pulserver.pulseq.make_rotation``) — the C++ solver never loops
+extension, ``pulserver.pypulseq.make_rotation``) — the C++ solver never loops
 over shots itself, per the project's arbgrad design rule. The trajectory
 starts at k-space center (``k0`` ≈ 0) and returns to zero gradient at the
 end, so no separate prephaser/rewinder is needed — only the slice-select
@@ -42,34 +42,34 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pypulseq as pp
-from scipy.spatial.transform import Rotation
-
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
+    Sequence,
+    SequenceType,
     UIParam,
     Validate,
     dict_to_protocol,
     make_enum_param,
+    params,
     protocol_to_dict,
+    run_cli,
 )
-from pulserver import arbgrad
-from pulserver.core import SequenceType
-from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
-
-
+from pulserver.pypulseq import _gradients as encoding
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _system as system
+from pulserver.pypulseq import arbgrad
+from pulserver.pypulseq._rf import _excitation_helpers as excitation
+from scipy.spatial.transform import Rotation
 
 USER_SLOT_TRAJECTORY = 0
 USER_SLOT_ORDER_MODE = 1
 
 
-class GreNoncart2DPulseqSequence(PulseqSequence):
+class GreNoncart2DPulseqSequence(Sequence):
     """Generate a 2D spiral/rosette non-Cartesian GRE."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -172,7 +172,7 @@ class GreNoncart2DPulseqSequence(PulseqSequence):
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
-        seq = ps.Sequence(opts)
+        seq = pp.Sequence(opts)
 
         angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
@@ -180,7 +180,7 @@ class GreNoncart2DPulseqSequence(PulseqSequence):
         rf_phase_inc_deg = 0.0
 
         for shot, angle in enumerate(angles):
-            rotation = ps.make_rotation(Rotation.from_euler("z", float(angle)))
+            rotation = pp.make_rotation(Rotation.from_euler("z", float(angle)))
             label_lin = pp.make_label(type="SET", label="LIN", value=shot)
 
             for sl in range(cfg.nslices):
@@ -329,7 +329,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

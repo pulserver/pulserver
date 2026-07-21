@@ -23,12 +23,12 @@ extern "C"
 {
 #endif
 
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
     /*  Parameter IDs  (mirror Python UIParam enum + User1..19)           */
     /*                                                                    */
     /*  Expressed as #define + typedef rather than C enum for              */
     /*  compatibility with older EPIC compilers that reject C enums.      */
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
 
     typedef int pulseg_param_id;
 
@@ -144,9 +144,9 @@ extern "C"
 #define PULSEG_PARAM_USER19_NAME 90
 #define PULSEG_PARAM_COUNT 91 /* sentinel */
 
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
     /*  Parameter types                                                   */
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
 
     typedef int pulseg_param_type;
 
@@ -156,9 +156,9 @@ extern "C"
 #define PULSEG_PTYPE_STRINGLIST 3
 #define PULSEG_PTYPE_DESCRIPTION 4
 
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
     /*  Input mode (mirrors Python InputMode enum)                        */
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
 
     typedef int pulseg_input_mode;
 
@@ -166,9 +166,9 @@ extern "C"
 #define PULSEG_MODE_TYPEIN 1   /* type-in field */
 #define PULSEG_MODE_DROPDOWN 2 /* type-in + dropdown options */
 
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
     /*  Parameter table entry (wire name -> id + type)                    */
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
 
     typedef struct pulseg_param_entry
     {
@@ -177,14 +177,15 @@ extern "C"
         pulseg_param_type type;
     } pulseg_param_entry;
 
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
     /*  Protocol value (tagged union)                                     */
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
 
 #define PULSEG_PROTOCOL_DESC_MAX 128
 #define PULSEG_PROTOCOL_SLIST_MAX 256
 #define PULSEG_MAX_DROPDOWN_OPTIONS 5
 
+    /** @brief One protocol parameter: tagged value plus its UI schema. */
     typedef struct pulseg_protocol_value
     {
         pulseg_param_type type;
@@ -206,14 +207,15 @@ extern "C"
         char unit[32];    /* unit string (e.g. "ms", "mm", "deg") */
         /* Input mode + dropdown options */
         pulseg_input_mode mode;                     /* off / typein / dropdown */
-        int num_options;                               /* 0..5 dropdown option count */
+        int num_options;                            /* 0..5 dropdown option count */
         float options[PULSEG_MAX_DROPDOWN_OPTIONS]; /* dropdown values */
     } pulseg_protocol_value;
 
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
     /*  Protocol container (fixed-size, stack-allocatable)                */
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
 
+    /** @brief A whole protocol: parallel key/value arrays, stack-allocatable. */
     typedef struct pulseg_protocol
     {
         int count; /* number of populated entries */
@@ -221,96 +223,121 @@ extern "C"
         pulseg_protocol_value values[PULSEG_PARAM_COUNT];
     } pulseg_protocol;
 
-/* Zero-initializer */
-#define PULSEG_PROTOCOL_INIT                                \
-    {                                                          \
-        0, {0},                                                \
-        {                                                      \
-            {                                                  \
-                0, {0}, "", 0, 0.0f, 0.0f, 0.0f, "", 0, 0, {0} \
-            }                                                  \
-        }                                                      \
-    }
+    /* Zero-initializer */
+    /* clang-format off */
+    /* clang-format on */
 
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
     /*  Lookup functions                                                  */
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
 
     /**
-     * Find a parameter ID by its wire name (case-sensitive).
-     * @return parameter ID (>= 0) or -1 if not found.
+     * @brief Find a parameter id by its wire name (case-sensitive).
+     * @return Parameter id (>= 0), or -1 if the name is unknown.
      */
     int pulseg_param_find(const char *wire_name);
 
     /**
-     * Get the wire name for a parameter ID.
-     * @return wire name string or NULL if id is out of range.
+     * @brief Wire name for a parameter id.
+     * @return Static string, or NULL if @p param_id is out of range.
      */
     const char *pulseg_param_wire_name(int param_id);
 
     /**
-     * Get the expected type for a parameter ID.
-     * @return type enum value, or -1 if id is out of range.
+     * @brief Declared type of a parameter id.
+     * @return A PULSEG_PTYPE_* value, or -1 if @p param_id is out of range.
      */
     int pulseg_param_get_type(int param_id);
 
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
     /*  Parse / serialize                                                 */
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
 
     /**
-     * Parse a NimPulseqGUI preamble string into a protocol struct.
-     * Supports both simple ("key: value") and rich schema format
-     * ("key: type|value|min|max|incr|unit").  Unknown keys are silently
-     * skipped.  Rich-format lines populate has_schema / range_* / unit.
+     * @brief Parse a NimPulseqGUI preamble into a protocol.
      *
-     * @param out      Output protocol (caller allocates, will be zeroed).
-     * @param preamble Null-terminated preamble string including delimiters.
-     * @return Number of successfully parsed parameters, or -1 on error.
+     * Accepts both the simple form ("key: value") and the rich schema form
+     * ("key: type|value|min|max|incr|unit"); rich lines additionally populate
+     * has_schema, range_* and unit. Unknown keys are skipped silently.
+     *
+     * @param[out] out       Caller-allocated protocol; zeroed on entry.
+     * @param[in]  preamble  NUL-terminated preamble text, delimiters included.
+     * @return Number of parameters parsed, or -1 on error.
      */
     int pulseg_protocol_parse(pulseg_protocol *out, const char *preamble);
 
     /**
-     * Serialize a protocol struct to simple value-only preamble.
-     * Used for VALIDATE / GENERATE commands (only values, no schema).
+     * @brief Serialize a protocol as a value-only preamble (no schema).
      *
-     * @param p    Protocol to serialize.
-     * @param buf  Output buffer.
-     * @param bufsz Size of output buffer.
-     * @return Number of bytes written (excluding NUL), or -1 if buffer too small.
+     * This is the form the VALIDATE and GENERATE bridge commands send.
+     *
+     * @param[in]  p      Protocol to serialize.
+     * @param[out] buf    Destination buffer.
+     * @param[in]  bufsz  Capacity of @p buf in bytes.
+     * @return Bytes written excluding the NUL, or -1 if @p buf is too small.
      */
-    int pulseg_protocol_serialize(const pulseg_protocol *p,
-                                     char *buf, int bufsz);
+    int pulseg_protocol_serialize(const pulseg_protocol *p, char *buf, int bufsz);
 
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
     /*  Typed getters / setters                                           */
-    /* ------------------------------------------------------------------ */
+    /* ================================================================== */
 
     /**
-     * Find the index of a param_id within the protocol's populated entries.
-     * @return index (>= 0) or -1 if not present.
+     * @brief Locate a parameter id among the protocol's populated entries.
+     * @return Index into p->keys / p->values (>= 0), or -1 if absent.
      */
     int pulseg_protocol_find(const pulseg_protocol *p, int param_id);
 
-    int pulseg_protocol_get_float(const pulseg_protocol *p,
-                                     float *out, int param_id);
-    int pulseg_protocol_get_int(const pulseg_protocol *p,
-                                   int *out, int param_id);
-    int pulseg_protocol_get_bool(const pulseg_protocol *p,
-                                    int *out, int param_id);
+    /**
+     * @brief Read a parameter's value, type-checked against its declared type.
+     *
+     * @param[in]  p         Protocol to read from.
+     * @param[out] out       Receives the value; untouched on failure.
+     * @param[in]  param_id  PULSEG_PARAM_* id.
+     * @return PULSEG_SUCCESS, or a negative code if @p param_id is absent or
+     *         holds a different type.
+     */
+    int pulseg_protocol_get_float(const pulseg_protocol *p, float *out, int param_id);
+    /** @copydoc pulseg_protocol_get_float */
+    int pulseg_protocol_get_int(const pulseg_protocol *p, int *out, int param_id);
+    /** @copydoc pulseg_protocol_get_float */
+    int pulseg_protocol_get_bool(const pulseg_protocol *p, int *out, int param_id);
 
-    int pulseg_protocol_set_float(pulseg_protocol *p,
-                                     int param_id, float value);
-    int pulseg_protocol_set_int(pulseg_protocol *p,
-                                   int param_id, int value);
-    int pulseg_protocol_set_bool(pulseg_protocol *p,
-                                    int param_id, int value);
+    /**
+     * @brief Set a parameter's value, appending the entry if not yet present.
+     *
+     * @param[in,out] p         Protocol to modify.
+     * @param[in]     param_id  PULSEG_PARAM_* id.
+     * @param[in]     value     New value.
+     * @return PULSEG_SUCCESS, or a negative code if the protocol is full or
+     *         @p param_id declares a different type.
+     */
+    int pulseg_protocol_set_float(pulseg_protocol *p, int param_id, float value);
+    /** @copydoc pulseg_protocol_set_float */
+    int pulseg_protocol_set_int(pulseg_protocol *p, int param_id, int value);
+    /** @copydoc pulseg_protocol_set_float */
+    int pulseg_protocol_set_bool(pulseg_protocol *p, int param_id, int value);
 
-    int pulseg_protocol_get_stringlist(const pulseg_protocol *p,
-                                          int *idx_out, int param_id);
-    int pulseg_protocol_set_stringlist(pulseg_protocol *p,
-                                          int param_id, int idx,
-                                          const char *options);
+    /**
+     * @brief Read the selected index of a stringlist (dropdown) parameter.
+     * @see pulseg_protocol_get_float for the return contract.
+     */
+    int pulseg_protocol_get_stringlist(const pulseg_protocol *p, int *idx_out, int param_id);
+
+    /**
+     * @brief Set a stringlist parameter's selected index and its option list.
+     *
+     * @param[in,out] p         Protocol to modify.
+     * @param[in]     param_id  PULSEG_PARAM_* id.
+     * @param[in]     idx       Selected option index.
+     * @param[in]     options   Pipe-delimited option string, e.g. "off|low|high".
+     * @return PULSEG_SUCCESS or a negative error code.
+     */
+    int pulseg_protocol_set_stringlist(
+        pulseg_protocol *p,
+        int param_id,
+        int idx,
+        const char *options);
 
 #ifdef __cplusplus
 }

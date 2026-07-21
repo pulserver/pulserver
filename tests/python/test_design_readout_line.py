@@ -1,4 +1,4 @@
-"""Unit tests for pulserver.design.readout.line (Line2D/Line3D)."""
+"""Unit tests for pulserver private readout.line (Line2D/Line3D)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design import readout
+from pulserver.pypulseq import _readout as readout
 
 OPTS_KW = dict(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 
@@ -182,13 +182,13 @@ def test_single_echo_has_no_eco_label() -> None:
     assert _labels(seq, "ECO") == []
 
 
-def test_train_never_emits_lin_or_par_labels() -> None:
+def test_train_sets_absolute_lin_and_par_labels_on_first_adc() -> None:
     opts = _opts()
     train = readout.Line3D(opts, (0.22, 0.22, 0.16), (64, 64, 16), num_echoes=2)
     seq = pp.Sequence(opts)
     train(seq, pe_idx=3, par_idx=2)
-    assert _labels(seq, "LIN") == []
-    assert _labels(seq, "PAR") == []
+    assert [(kind, value) for _, kind, value in _labels(seq, "LIN")] == [("labelset", 3)]
+    assert [(kind, value) for _, kind, value in _labels(seq, "PAR")] == [("labelset", 2)]
 
 
 def test_esp_s_pads_between_echoes() -> None:

@@ -15,8 +15,8 @@
 MU_TEST(test_module_two_groups_one_pass)
 {
     pulseg_opts opts;
-    pulseg_collection* coll = NULL;
-    pulseg_module* mods = NULL;
+    pulseg_collection *coll = NULL;
+    pulseg_module *mods = NULL;
     int rc, nmods;
 
     default_opts_init(&opts);
@@ -46,8 +46,8 @@ MU_TEST(test_module_two_groups_one_pass)
 MU_TEST(test_module_none_returns_zero)
 {
     pulseg_opts opts;
-    pulseg_collection* coll = NULL;
-    pulseg_module* mods = NULL;
+    pulseg_collection *coll = NULL;
+    pulseg_module *mods = NULL;
     int rc, nmods;
 
     default_opts_init(&opts);
@@ -63,15 +63,15 @@ MU_TEST(test_module_none_returns_zero)
 
 /* One MODULE spanning the entire (single-block) TR, loaded with
  * num_averages=3: NEX/pass repeats of the SAME module_id across a TR
- * boundary must split into separate occurrences (scan_table_tr_start),
+ * boundary must split into separate occurrences (exec_stream_tr_start),
  * not merge into one giant run. Without that fix this would report
  * num_instances=1, one_instance_duration_us=300 instead of
  * num_instances=3, one_instance_duration_us=100. */
 MU_TEST(test_module_nex_repeat_splits_on_tr_boundary)
 {
     pulseg_opts opts;
-    pulseg_collection* coll = NULL;
-    pulseg_module* mods = NULL;
+    pulseg_collection *coll = NULL;
+    pulseg_module *mods = NULL;
     int rc, nmods;
 
     default_opts_init(&opts);
@@ -97,8 +97,8 @@ MU_TEST(test_module_nex_repeat_splits_on_tr_boundary)
 MU_TEST(test_module_structural_mismatch_hard_fails)
 {
     pulseg_opts opts;
-    pulseg_collection* coll = NULL;
-    pulseg_module* mods = NULL;
+    pulseg_collection *coll = NULL;
+    pulseg_module *mods = NULL;
     int rc, nmods;
 
     default_opts_init(&opts);
@@ -120,8 +120,8 @@ MU_TEST(test_module_structural_mismatch_hard_fails)
 MU_TEST(test_rf_array_module_id_defaults_zero)
 {
     pulseg_opts opts;
-    pulseg_collection* coll = NULL;
-    pulseg_rf_stats* stats = NULL;
+    pulseg_collection *coll = NULL;
+    pulseg_rf_stats *stats = NULL;
     int rc, nstats, i;
 
     default_opts_init(&opts);

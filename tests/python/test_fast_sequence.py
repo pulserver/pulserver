@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import pulserver.io as pio
-import pulserver.pulseq as ps
+import pulserver.pypulseq as ps
 import pypulseq as pp
 import pytest
 

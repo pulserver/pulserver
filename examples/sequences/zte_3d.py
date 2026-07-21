@@ -12,18 +12,17 @@ blocks):
   and write it to *output_path* using :func:`pulserver.io.write`.
 
 Same gradient-before-pulse half-echo readout as ``zte_2d.py`` (see that
-file's and ``_zte_common.py``'s docstrings for the full rationale and the
-"gap" caveat), but with GENUINELY 3D spoke directions: unlike every other
+file's docstring for the full rationale and the "gap" caveat), but with
+GENUINELY 3D spoke directions: unlike every other
 non-Cartesian file in the zoo (which rotates a 2D in-plane trajectory about
 the physical Z axis and, for 3D, stacks that with a separate Cartesian
 partition encode — ``gre_radial_3d.py``, ``gre_noncart_3d.py``), true ZTE
 has no separate slice/partition dimension to stack: the whole non-selective
 FOV is covered by spokes pointing anywhere on the sphere. Directions come
-from ``pulserver.arbgrad.generate_fibonacci_sphere`` (near-uniform 3D
-coverage); each spoke's rotation is computed via
-``scipy.spatial.transform.Rotation.align_vectors``, mapping the logical
-+x readout direction onto that spoke's target unit vector (a general 3D
-rotation, not just a Z-axis one).
+from ``pulserver.pypulseq.arbgrad.generate_fibonacci_sphere`` (near-uniform 3D
+coverage). The full ordered direction list is passed to
+:func:`pulserver.make_zte_readout`, which keeps the gradient live and
+slews directly between consecutive sphere points.
 
 ``NumShots`` (native GE) is the number of 3D spokes.
 
@@ -41,32 +40,28 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pypulseq as pp
-from scipy.spatial.transform import Rotation
-
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
     DropdownFloatParam,
     DropdownIntParam,
+    Sequence,
+    SequenceType,
     UIParam,
     Validate,
     dict_to_protocol,
     make_enum_param,
+    params,
     protocol_to_dict,
+    run_cli,
 )
-from pulserver import arbgrad
-from pulserver.core import SequenceType
-from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _rf as rf
+from pulserver.pypulseq import arbgrad
 
+ZTE_RF_DURATION_S = 20e-6
 
-
-REFERENCE_DIRECTION = np.array([1.0, 0.0, 0.0])
-
-
-class Zte3DPulseqSequence(PulseqSequence):
+class Zte3DPulseqSequence(Sequence):
     """Generate a 3D (genuinely spherical-spoke) ZTE sequence."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -114,7 +109,7 @@ class Zte3DPulseqSequence(PulseqSequence):
         if timing is None:
             return {"valid": False, "duration": None, "info": "TR too short for the ZTE readout"}
 
-        duration_s = cfg.tr_s * float(cfg.num_shots)
+        duration_s = timing["readout"].duration
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
@@ -123,25 +118,9 @@ class Zte3DPulseqSequence(PulseqSequence):
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
 
-        gx = timing["gx"]
-        adc = timing["adc"]
-        tr_delay_s = timing["tr_delay_s"]
-        tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
-
-        seq = ps.Sequence(opts)
-
-        directions = arbgrad.generate_fibonacci_sphere(cfg.num_shots)
-
-        for spoke in range(cfg.num_shots):
-            target = directions[spoke]
-            rot, _ = Rotation.align_vectors([target], [REFERENCE_DIRECTION])
-            rotation = ps.make_rotation(rot)
-            rf = system.copy_event(timing["rf"])
-            label_lin = pp.make_label(type="SET", label="LIN", value=spoke)
-
-            seq.add_block(gx, rf, adc, label_lin, rotation)
-            if tr_delay is not None:
-                seq.add_block(tr_delay)
+        zte = timing["readout"]
+        seq = pp.Sequence(opts)
+        zte(seq=seq, lin_idx=np.arange(cfg.num_shots))
 
         seq.set_definition("Name", "zte_3d")
         seq.set_definition("FOV", [cfg.fov_m, cfg.fov_m, cfg.fov_m])
@@ -150,6 +129,7 @@ class Zte3DPulseqSequence(PulseqSequence):
         seq.set_definition("ImagingMode", "3d")
         seq.set_definition("Trajectory", "zte")
         seq.set_definition("Gap", timing["gap_s"])
+        seq.set_definition("MissingSamples", zte.num_missing_samples)
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("NumShots", cfg.num_shots)
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
@@ -170,29 +150,31 @@ def _read_protocol(prot: dict) -> _Config:
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    system.apply_system_derates(opts)
-
-    rf = readout.build_hard_pulse(opts, cfg.flip_deg)
-    ro_events = readout.build_half_echo_readout(opts, "x", cfg.nx_ro, cfg.fov_m)
-    if ro_events is None:
-        return None
-    gx, adc, gap_s = ro_events
-    rf.delay = gx.rise_time
-
-    min_block_s = pp.calc_duration(gx, rf, adc)
-    tr_delay_s = cfg.tr_s - min_block_s
-    if tr_delay_s < -1e-9 and strict:
-        return None
-    if tr_delay_s < 0.0:
-        tr_delay_s = 0.0
+    directions = arbgrad.generate_fibonacci_sphere(cfg.num_shots)
+    excitation = rf.make_hard_pulse(
+        np.deg2rad(cfg.flip_deg),
+        duration=ZTE_RF_DURATION_S,
+        system=opts,
+        use="excitation",
+    )
+    try:
+        module = readout.Zte(
+            opts,
+            cfg.fov_m,
+            cfg.nx_ro,
+            directions,
+            excitation.rf,
+            tr_s=cfg.tr_s,
+        )
+    except ValueError as error:
+        if strict and "tr_s=" in str(error):
+            return None
+        raise
 
     return {
-        "rf": rf,
-        "gx": gx,
-        "adc": adc,
-        "gap_s": gap_s,
-        "tr_delay_s": tr_delay_s,
-        "min_block_s": min_block_s,
+        "readout": module,
+        "gap_s": module.gap_s,
+        "min_block_s": module.duration,
     }
 
 
@@ -226,7 +208,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

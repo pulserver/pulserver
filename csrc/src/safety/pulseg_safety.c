@@ -1,15 +1,42 @@
+/**
+ * @file pulseg_safety.c
+ * @brief Gradient safety gate: amplitude, slew, continuity, acoustic
+ *        resonance and PNS.
+ *
+ * pulseg_check_safety() runs the whole suite and returns on the first
+ * violation. The acoustic analysis is structural rather than simulated: it
+ * derives the canonical TR's gradient spectrum analytically and evaluates
+ * A_eq at guarded in-band harmonics -- see
+ * docs/explanations/mechanical_resonance_safety.md for the model.
+ *
+ * PNS is delegated to a caller-supplied pulseg_pns_model, so no vendor
+ * nerve-stimulation formula lives here. RF/SAR safety is deliberately out of
+ * scope (vendor-proprietary).
+ */
+
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "pulseg_internal.h"
+#include "pulseg.h"
+
+#include "external_kiss_fft.h"
+#include "external_kiss_fftr.h"
+
+/* ================================================================== */
+/*  Canonical-TR window selection                                     */
+/* ================================================================== */
 
 /* Helper: select the canonical TR window for a given canonical_tr_idx */
-static void pulseg__select_canonical_tr_window_idx(
+static void select_canonical_tr_window_idx(
     const struct pulseg_sequence_descriptor *desc,
-    int canonical_tr_idx,
     int *start_block,
     int *block_count,
     int *amplitude_mode,
     int *num_instances,
-    float *tr_duration_us)
+    float *tr_duration_us,
+    int canonical_tr_idx)
 {
     const struct pulseg_tr_descriptor *trd = &desc->tr_descriptor;
     int has_nd_prep = (trd->num_prep_blocks > 0 && !trd->degenerate_prep);
@@ -33,13 +60,12 @@ static void pulseg__select_canonical_tr_window_idx(
             {
                 int idx;
                 const struct pulseg_block_table_element *bte;
-                const struct pulseg_block_definition *bdef;
+                const struct pulseg_base_block *bdef;
                 idx = *start_block + n;
                 bte = &desc->block_table[idx];
-                bdef = &desc->block_definitions[bte->id];
-                *tr_duration_us += (bte->duration_us >= 0)
-                                       ? (float)bte->duration_us
-                                       : (float)bdef->duration_us;
+                bdef = &desc->base_blocks[bte->id];
+                *tr_duration_us +=
+                    (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
             }
         }
         return;
@@ -49,7 +75,8 @@ static void pulseg__select_canonical_tr_window_idx(
      * No pass expansion occurs, so averages must be accounted for here. */
     {
         int num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
-        *start_block = trd->num_prep_blocks + trd->imaging_tr_start + canonical_tr_idx * trd->tr_size;
+        *start_block =
+            trd->num_prep_blocks + trd->imaging_tr_start + canonical_tr_idx * trd->tr_size;
         *block_count = trd->tr_size;
         *amplitude_mode = PULSEG_AMP_MAX_POS;
         *num_instances = trd->num_trs * num_avgs;
@@ -57,12 +84,12 @@ static void pulseg__select_canonical_tr_window_idx(
     }
 }
 
-static int pulseg__build_pass_expanded_block_order(
+static int build_pass_expanded_block_order(
     const struct pulseg_sequence_descriptor *desc,
-    int pass_base,
     int **out_block_order,
     int *out_block_count,
-    float *out_duration_us)
+    float *out_duration_us,
+    int pass_base)
 {
     const struct pulseg_tr_descriptor *trd;
     int prep_blk, img_len, cool_blk, num_avgs, exp_count;
@@ -108,7 +135,7 @@ static int pulseg__build_pass_expanded_block_order(
         {
             int blk_idx;
             const struct pulseg_block_table_element *bte;
-            const struct pulseg_block_definition *bdef;
+            const struct pulseg_base_block *bdef;
 
             blk_idx = block_order[pos_i];
             if (blk_idx < 0 || blk_idx >= desc->num_blocks)
@@ -117,10 +144,9 @@ static int pulseg__build_pass_expanded_block_order(
                 return PULSEG_ERR_INVALID_ARGUMENT;
             }
             bte = &desc->block_table[blk_idx];
-            bdef = &desc->block_definitions[bte->id];
-            *out_duration_us += (bte->duration_us >= 0)
-                                    ? (float)bte->duration_us
-                                    : (float)bdef->duration_us;
+            bdef = &desc->base_blocks[bte->id];
+            *out_duration_us +=
+                (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
         }
     }
 
@@ -128,30 +154,6 @@ static int pulseg__build_pass_expanded_block_order(
     *out_block_count = exp_count;
     return PULSEG_SUCCESS;
 }
-
-/* pulseg_safety.c -- safety checks, mechanical resonance analysis, PNS
- *
- * Public functions:
- *   pulseg_check_safety
- *   pulseg_calc_mech_resonances   / _free
- *   pulseg_calc_pns               / _free
- *
- * Internal:
- *   check_max_grad / check_grad_continuity / check_max_slew
- *
- * (pulseg__calc_segment_timing -- parse-time timing derivation -- now
- *  lives in pulseg_structure.c.)
- */
-
-#include <math.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "pulseg_internal.h"
-#include "pulseg.h"
-
-#include "external_kiss_fft.h"
-#include "external_kiss_fftr.h"
 
 /* ================================================================== */
 /*  Acoustic spectra free                                             */
@@ -241,7 +243,7 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
 #define SA_MAX_PWL_VERTICES 16
 
 /* --- Equivalent-sustained-drive (A_eq) mechanical-resonance criterion ---
- * (PLAN_mechres_aeq_FINAL.md).  Sharp-line model: the sequence drive is the
+ * (docs/explanations/mechanical_resonance_safety.md).  Sharp-line model: the sequence drive is the
  * Fourier series of the canonical (outer) TR, sampled at the TR harmonics
  * k / T_TR that fall inside a guarded forbidden band.  The per-axis
  * equivalent-sustained amplitude of a spectral line is
@@ -274,7 +276,7 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
  * what can be flagged; it only sets how far the display grid is computed. */
 #define SA_MIN_ANALYSIS_FREQ_HZ 3000.0f
 
-/** Finite-outer-rep fix (PLAN_safety_mechres_finite_outer_rep.md): fixed
+/** Finite-outer-rep fix (docs/explanations/mechanical_resonance_safety.md, "Stage 4"): fixed
  *  point budget (per side, i.e. per coarse TR harmonic there are
  *  2*SA_MECHRES_MAX_DM_SUBDIV/2 extra samples total) for probing the
  *  outer-repeat (M = num_instances) Dirichlet comb's sidelobes, which live
@@ -307,9 +309,9 @@ typedef struct
     /* Raw-sample model (for many-sample arb without sub-period): the true
      * complex event transform is evaluated by direct demodulation of the
      * samples at cell centres.  arb_num_samples == 0 -> use the PWL model. */
-    float *arb_samples;   /**< normalised amplitudes at cell centres [arb_num_samples] */
-    float *arb_times_us;  /**< sample times (us from event start) [arb_num_samples]    */
-    int arb_num_samples;  /**< raw sample count (0 = not used, use PWL)                */
+    float *arb_samples;  /**< normalised amplitudes at cell centres [arb_num_samples] */
+    float *arb_times_us; /**< sample times (us from event start) [arb_num_samples]    */
+    int arb_num_samples; /**< raw sample count (0 = not used, use PWL)                */
 } sa_event;
 
 /** Per-axis event list. */
@@ -320,7 +322,7 @@ typedef struct
 } sa_axis_events;
 
 /**
- * W_k(f) memoization (PLAN_safety_mechres_finite_outer_rep.md §3): caches
+ * W_k(f) memoization (docs/explanations/mechanical_resonance_safety.md, "Stage 4"): caches
  * sa_eval_event_transform()'s result -- the base-waveform Fourier response,
  * a pure function of (definition shape, frequency) -- keyed by def_id, for
  * the duration of ONE sa_eval_axis_spectrum() call (which is itself already
@@ -349,7 +351,10 @@ typedef struct
  *  gradient shapes even for a long/complex hyper-TR, per the design doc's
  *  own cost model), so a hash table would be overhead without benefit. */
 static int sa_transform_cache_lookup(
-    const sa_transform_cache *cache, int def_id, float *out_re, float *out_im)
+    const sa_transform_cache *cache,
+    float *out_re,
+    float *out_im,
+    int def_id)
 {
     int i;
     if (!cache)
@@ -366,8 +371,7 @@ static int sa_transform_cache_lookup(
     return 0;
 }
 
-static void sa_transform_cache_insert(
-    sa_transform_cache *cache, int def_id, float re, float im)
+static void sa_transform_cache_insert(sa_transform_cache *cache, int def_id, float re, float im)
 {
     if (!cache || cache->count >= cache->capacity)
         return; /* cache disabled or full: caller just recomputes next time */
@@ -429,7 +433,9 @@ typedef struct
 static int sa_extract_raw_occurrences(
     sa_raw_occurrence **out_occ,
     const struct pulseg_sequence_descriptor *desc,
-    int start_block, int block_count, int axis)
+    int start_block,
+    int block_count,
+    int axis)
 {
     int i, n, cap;
     float time_us;
@@ -444,10 +450,8 @@ static int sa_extract_raw_occurrences(
 
     for (i = 0; i < block_count; ++i)
     {
-        const struct pulseg_block_table_element *bte =
-            &desc->block_table[start_block + i];
-        const struct pulseg_block_definition *bdef =
-            &desc->block_definitions[bte->id];
+        const struct pulseg_block_table_element *bte = &desc->block_table[start_block + i];
+        const struct pulseg_base_block *bdef = &desc->base_blocks[bte->id];
         int grad_table_idx;
         float blk_dur;
 
@@ -469,8 +473,7 @@ static int sa_extract_raw_occurrences(
 
         if (grad_table_idx >= 0)
         {
-            const struct pulseg_grad_table_element *gte =
-                &desc->grad_table[grad_table_idx];
+            const struct pulseg_grad_table_element *gte = &desc->grad_table[grad_table_idx];
             if (n >= cap)
             {
                 sa_raw_occurrence *tmp;
@@ -492,8 +495,7 @@ static int sa_extract_raw_occurrences(
             ++n;
         }
 
-        blk_dur = (bte->duration_us >= 0) ? (float)bte->duration_us
-                                          : (float)bdef->duration_us;
+        blk_dur = (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
         time_us += blk_dur;
     }
 
@@ -522,7 +524,8 @@ static int sa_compare_int(const void *a, const void *b)
  */
 static int sa_build_axis_events(
     sa_axis_events *ae,
-    const sa_raw_occurrence *occ, int num_occ,
+    const sa_raw_occurrence *occ,
+    int num_occ,
     const struct pulseg_sequence_descriptor *desc)
 {
     int i, j, n_events, cap, did, idx, s_idx, nv;
@@ -620,20 +623,19 @@ static int sa_build_axis_events(
 
             if (shape_id > 0 && shape_id <= desc->num_shapes)
             {
-                pulseg_shape_arbitrary decomp_wave;
+                pulseq_shape decomp_wave;
                 decomp_wave.samples = NULL;
                 decomp_wave.num_samples = 0;
                 decomp_wave.num_uncompressed_samples = 0;
 
-                if (pulseg_pulseq_decompress_shape(&decomp_wave,
-                                                &desc->shapes[shape_id - 1], 1.0f) &&
+                if (pulseq_decompress_shape(&decomp_wave, &desc->shapes[shape_id - 1], 1.0f) &&
                     decomp_wave.num_uncompressed_samples > 0)
                 {
                     int num_samp = decomp_wave.num_uncompressed_samples;
                     float *wave_samp = decomp_wave.samples;
 
                     /* Decompress time shape if present */
-                    pulseg_shape_arbitrary decomp_time;
+                    pulseq_shape decomp_time;
                     float *time_us = NULL;
                     int has_time = 0;
                     decomp_time.samples = NULL;
@@ -642,8 +644,10 @@ static int sa_build_axis_events(
 
                     if (time_shape_id > 0 && time_shape_id <= desc->num_shapes)
                     {
-                        if (pulseg_pulseq_decompress_shape(&decomp_time,
-                                                        &desc->shapes[time_shape_id - 1], raster) &&
+                        if (pulseq_decompress_shape(
+                                &decomp_time,
+                                &desc->shapes[time_shape_id - 1],
+                                raster) &&
                             decomp_time.num_uncompressed_samples > 0)
                         {
                             has_time = 1;
@@ -676,7 +680,8 @@ static int sa_build_axis_events(
                          * period structure alike — no template/sub-period
                          * assumption.  FAIL CLOSED on OOM. */
                         int m;
-                        shared_arb_samples = (float *)PULSEG_ALLOC((size_t)num_samp * sizeof(float));
+                        shared_arb_samples =
+                            (float *)PULSEG_ALLOC((size_t)num_samp * sizeof(float));
                         shared_arb_times = (float *)PULSEG_ALLOC((size_t)num_samp * sizeof(float));
                         if (!shared_arb_samples || !shared_arb_times)
                         {
@@ -748,10 +753,8 @@ static int sa_build_axis_events(
                 ae->events[n_events].amplitude = occ[j].amplitude;
                 if (use_arb && shared_arb_samples && shared_arb_times)
                 {
-                    float *smp_copy = (float *)PULSEG_ALLOC(
-                        (size_t)shared_arb_n * sizeof(float));
-                    float *tim_copy = (float *)PULSEG_ALLOC(
-                        (size_t)shared_arb_n * sizeof(float));
+                    float *smp_copy = (float *)PULSEG_ALLOC((size_t)shared_arb_n * sizeof(float));
+                    float *tim_copy = (float *)PULSEG_ALLOC((size_t)shared_arb_n * sizeof(float));
                     if (!smp_copy || !tim_copy)
                     {
                         if (smp_copy)
@@ -765,10 +768,8 @@ static int sa_build_axis_events(
                         ae->events = NULL;
                         return PULSEG_ERR_ALLOC_FAILED;
                     }
-                    memcpy(smp_copy, shared_arb_samples,
-                           (size_t)shared_arb_n * sizeof(float));
-                    memcpy(tim_copy, shared_arb_times,
-                           (size_t)shared_arb_n * sizeof(float));
+                    memcpy(smp_copy, shared_arb_samples, (size_t)shared_arb_n * sizeof(float));
+                    memcpy(tim_copy, shared_arb_times, (size_t)shared_arb_n * sizeof(float));
                     ae->events[n_events].arb_samples = smp_copy;
                     ae->events[n_events].arb_times_us = tim_copy;
                     ae->events[n_events].arb_num_samples = shared_arb_n;
@@ -779,10 +780,14 @@ static int sa_build_axis_events(
                     ae->events[n_events].pwl_num_vertices = pwl_nv;
                     if (pwl_nv > 0)
                     {
-                        memcpy(ae->events[n_events].pwl_times_us, pwl_t,
-                               (size_t)pwl_nv * sizeof(float));
-                        memcpy(ae->events[n_events].pwl_values, pwl_v,
-                               (size_t)pwl_nv * sizeof(float));
+                        memcpy(
+                            ae->events[n_events].pwl_times_us,
+                            pwl_t,
+                            (size_t)pwl_nv * sizeof(float));
+                        memcpy(
+                            ae->events[n_events].pwl_values,
+                            pwl_v,
+                            (size_t)pwl_nv * sizeof(float));
                     }
                     ae->events[n_events].arb_samples = NULL;
                     ae->events[n_events].arb_times_us = NULL;
@@ -815,7 +820,8 @@ static int sa_build_axis_events(
 static int sa_build_structural_events(
     sa_structural_events *se,
     const struct pulseg_sequence_descriptor *desc,
-    int start_block, int block_count)
+    int start_block,
+    int block_count)
 {
     int ax, result;
     sa_raw_occurrence *occ;
@@ -864,8 +870,12 @@ static int sa_build_structural_events(
  * At omega -> 0 the segment reduces to the DC area integral (real).
  */
 static void sa_eval_pwl_transform(
-    float f_hz, const float *t_us, const float *v, int n_vtx,
-    float *out_re, float *out_im)
+    float *out_re,
+    float *out_im,
+    float f_hz,
+    const float *t_us,
+    const float *v,
+    int n_vtx)
 {
     double omega, g_re, g_im;
     int k;
@@ -948,18 +958,31 @@ static void sa_eval_pwl_transform(
  * of the sample interpolant, evaluated at the sparse in-band lines only.
  */
 static void sa_eval_event_transform(
-    const sa_event *ev, float f_hz, sa_transform_cache *cache,
-    float *out_re, float *out_im)
+    const sa_event *ev,
+    float *out_re,
+    float *out_im,
+    float f_hz,
+    sa_transform_cache *cache)
 {
-    if (sa_transform_cache_lookup(cache, ev->def_id, out_re, out_im))
+    if (sa_transform_cache_lookup(cache, out_re, out_im, ev->def_id))
         return;
 
     if (ev->arb_num_samples >= 2)
-        sa_eval_pwl_transform(f_hz, ev->arb_times_us, ev->arb_samples,
-                              ev->arb_num_samples, out_re, out_im);
+        sa_eval_pwl_transform(
+            out_re,
+            out_im,
+            f_hz,
+            ev->arb_times_us,
+            ev->arb_samples,
+            ev->arb_num_samples);
     else if (ev->pwl_num_vertices >= 2)
-        sa_eval_pwl_transform(f_hz, ev->pwl_times_us, ev->pwl_values,
-                              ev->pwl_num_vertices, out_re, out_im);
+        sa_eval_pwl_transform(
+            out_re,
+            out_im,
+            f_hz,
+            ev->pwl_times_us,
+            ev->pwl_values,
+            ev->pwl_num_vertices);
     else
     {
         *out_re = 0.0f;
@@ -976,13 +999,16 @@ static void sa_eval_event_transform(
  * (in [normalised]*us, hence the 1e-6 us->s), and t_k the event start time.
  */
 static void sa_eval_event_spectrum(
-    float f_hz, const sa_event *ev, sa_transform_cache *cache,
-    float *out_re, float *out_im)
+    const sa_event *ev,
+    float *out_re,
+    float *out_im,
+    float f_hz,
+    sa_transform_cache *cache)
 {
     float tr_re, tr_im, scale, base_re, base_im;
     double phase, cos_ph, sin_ph;
 
-    sa_eval_event_transform(ev, f_hz, cache, &tr_re, &tr_im);
+    sa_eval_event_transform(ev, &tr_re, &tr_im, f_hz, cache);
     scale = ev->amplitude * 1.0e-6f;
     base_re = scale * tr_re;
     base_im = scale * tr_im;
@@ -1004,15 +1030,18 @@ static void sa_eval_event_spectrum(
  * (N==1 -> D_1 = 1.)
  */
 static void sa_eval_event_line(
-    float f_hz, const sa_event *ev, sa_transform_cache *cache,
-    float *out_re, float *out_im)
+    const sa_event *ev,
+    float *out_re,
+    float *out_im,
+    float f_hz,
+    sa_transform_cache *cache)
 {
     float d_re, d_im;
     int N = ev->num_reps;
     if (N < 1)
         N = 1;
 
-    sa_eval_event_spectrum(f_hz, ev, cache, &d_re, &d_im);
+    sa_eval_event_spectrum(ev, &d_re, &d_im, f_hz, cache);
 
     if (N > 1 && ev->rep_period_us > 0.0f)
     {
@@ -1052,9 +1081,10 @@ static void sa_eval_event_line(
  * computed by the caller with the canonical-TR period T_TR.
  */
 static void sa_eval_axis_spectrum(
-    float f_hz,
     const sa_axis_events *ae,
-    float *out_re, float *out_im)
+    float *out_re,
+    float *out_im,
+    float f_hz)
 {
     float sum_re, sum_im;
     int k;
@@ -1062,7 +1092,7 @@ static void sa_eval_axis_spectrum(
     sa_transform_cache_entry *cache_entries = NULL;
 
     /* One call = one fixed frequency, so def_id alone is a sufficient
-     * memo key (PLAN_safety_mechres_finite_outer_rep.md §3) -- events
+     * memo key (docs/explanations/mechanical_resonance_safety.md, "Stage 4") -- events
      * sharing a def_id (the common case: a handful of unique gradient
      * shapes reused across many materialized occurrences) skip the
      * O(vertices) sa_eval_pwl_transform integral after the first hit.
@@ -1089,7 +1119,7 @@ static void sa_eval_axis_spectrum(
     for (k = 0; k < ae->num_events; ++k)
     {
         float d_re, d_im;
-        sa_eval_event_line(f_hz, &ae->events[k], &cache, &d_re, &d_im);
+        sa_eval_event_line(&ae->events[k], &d_re, &d_im, f_hz, &cache);
         sum_re += d_re;
         sum_im += d_im;
     }
@@ -1106,7 +1136,7 @@ static void sa_eval_axis_spectrum(
 /* ================================================================== */
 
 /**
- * A_eq mechanical-resonance verdict (PLAN_mechres_aeq_FINAL.md).
+ * A_eq mechanical-resonance verdict (docs/explanations/mechanical_resonance_safety.md).
  *
  *   1. Build the event model of the canonical (outer) TR — every gradient
  *      instance materialised at its time within the TR (inner periodicities
@@ -1121,8 +1151,7 @@ static void sa_eval_axis_spectrum(
  * The outermost TR is treated as an infinite-rep (Dirac) comb: only its
  * harmonics carry sustained drive, hence lines live exactly at k/T_TR.
  */
-static float sa_eps_for_band(
-    const pulseg_forbidden_band *band, float g_max_hz_per_m)
+static float sa_eps_for_band(const pulseg_forbidden_band *band, float g_max_hz_per_m)
 {
     /* The floor only rescues a literal zero-tolerance band (unusable as a
      * threshold — see SA_AEQ_K_GMAX comment). Any vendor-specified nonzero
@@ -1133,7 +1162,7 @@ static float sa_eps_for_band(
 }
 
 /**
- * Finite-outer-rep Dirichlet ratio (PLAN_safety_mechres_finite_outer_rep.md
+ * Finite-outer-rep Dirichlet ratio (docs/explanations/mechanical_resonance_safety.md
  * §1): |D_M(x)| / M, where D_M(x) = sin(M*pi*x) / sin(pi*x) is the
  * Dirichlet kernel for M coherent repeats of period T_TR, and
  * x = f * T_TR (dimensionless: integer x = exact TR harmonics, fractional
@@ -1176,13 +1205,18 @@ static double sa_dirichlet_ratio(double x, int M)
 static int sa_check_structural_violations(
     pulseg_mech_resonances_spectra *spectra,
     const struct pulseg_sequence_descriptor *desc,
-    int start_block, int block_count,
-    int num_instances, float tr_duration_us,
+    int start_block,
+    int block_count,
+    int num_instances,
+    float tr_duration_us,
     int num_forbidden_bands,
     const pulseg_forbidden_band *forbidden_bands,
-    float peak_log10_threshold, float peak_norm_scale,
-    float peak_eps, float peak_prominence,
-    int num_avgs, float g_max_hz_per_m,
+    float peak_log10_threshold,
+    float peak_norm_scale,
+    float peak_eps,
+    float peak_prominence,
+    int num_avgs,
+    float g_max_hz_per_m,
     int compute_dense_envelope)
 {
     sa_structural_events se;
@@ -1278,15 +1312,17 @@ static int sa_check_structural_violations(
         {
             int idx = start_block + bi;
             const struct pulseg_block_table_element *bte = &desc->block_table[idx];
-            const struct pulseg_block_definition *bdef = &desc->block_definitions[bte->id];
-            prep_dur_us += (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
+            const struct pulseg_base_block *bdef = &desc->base_blocks[bte->id];
+            prep_dur_us +=
+                (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
         }
         for (bi = 0; bi < img_len; ++bi)
         {
             int idx = start_block + prep_blk + bi;
             const struct pulseg_block_table_element *bte = &desc->block_table[idx];
-            const struct pulseg_block_definition *bdef = &desc->block_definitions[bte->id];
-            img_dur_us += (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
+            const struct pulseg_base_block *bdef = &desc->base_blocks[bte->id];
+            img_dur_us +=
+                (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
         }
         img_end_us = prep_dur_us + img_dur_us;
 
@@ -1338,8 +1374,8 @@ static int sa_check_structural_violations(
     f1_hz = 1.0 / T_s;
 
     if (spectra->num_freq_bins > 0)
-        freq_max = spectra->freq_min_hz +
-                   (float)(spectra->num_freq_bins - 1) * spectra->freq_spacing_hz;
+        freq_max =
+            spectra->freq_min_hz + (float)(spectra->num_freq_bins - 1) * spectra->freq_spacing_hz;
     else
         freq_max = 0.0f;
 
@@ -1390,7 +1426,7 @@ static int sa_check_structural_violations(
                     ana_phases[ax][i] = 0.0f;
                     continue;
                 }
-                sa_eval_axis_spectrum(f_hz, &se.axes[ax], &sre, &sim);
+                sa_eval_axis_spectrum(&se.axes[ax], &sre, &sim, f_hz);
                 ana_amps[ax][i] = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)));
                 ana_phases[ax][i] = (float)atan2((double)sim, (double)sre);
             }
@@ -1433,7 +1469,7 @@ static int sa_check_structural_violations(
                     env_amps[ax][i] = 0.0f;
                     continue;
                 }
-                sa_eval_axis_spectrum(f_hz, &se.axes[ax], &sre, &sim);
+                sa_eval_axis_spectrum(&se.axes[ax], &sre, &sim, f_hz);
                 env_amps[ax][i] = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)));
             }
         }
@@ -1483,8 +1519,10 @@ static int sa_check_structural_violations(
         {
             component_freqs_hz = (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
             component_amps = (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
-            component_phases_rad = (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
-            component_widths_hz = (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
+            component_phases_rad =
+                (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
+            component_widths_hz =
+                (float *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(float));
             component_axes = (int *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(int));
             component_def_ids = (int *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(int));
             component_contrib_ids = (int *)PULSEG_ALLOC((size_t)max_component_terms * sizeof(int));
@@ -1526,7 +1564,7 @@ static int sa_check_structural_violations(
                         cand_grad_amps_ax[ax][ci] = 0.0f;
                         continue;
                     }
-                    sa_eval_axis_spectrum(f_hz, &se.axes[ax], &sre, &sim);
+                    sa_eval_axis_spectrum(&se.axes[ax], &sre, &sim, f_hz);
                     aeq = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)));
                     cand_amps[ax][ci] = aeq;
                     cand_grad_amps_ax[ax][ci] = aeq;
@@ -1538,7 +1576,7 @@ static int sa_check_structural_violations(
                         float lre, lim;
                         if (num_component_terms >= max_component_terms)
                             break;
-                        sa_eval_event_line(f_hz, &se.axes[ax].events[k], NULL, &lre, &lim);
+                        sa_eval_event_line(&se.axes[ax].events[k], &lre, &lim, f_hz, NULL);
                         component_freqs_hz[num_component_terms] = f_hz;
                         component_amps[num_component_terms] =
                             (float)(2.0 / T_s * sqrt((double)(lre * lre + lim * lim)));
@@ -1553,7 +1591,7 @@ static int sa_check_structural_violations(
                     }
                 }
 
-                /* ---- Finite-outer-rep fix (PLAN_safety_mechres_finite_outer_rep.md) ----
+                /* ---- Finite-outer-rep fix (docs/explanations/mechanical_resonance_safety.md, "Stage 4") ----
                  * The outer repeat (num_instances = M) is no longer treated as an
                  * infinite Dirac comb: for M>1, real candidate frequencies exist
                  * between this coarse TR harmonic (kk/T_TR, exact -- already
@@ -1563,7 +1601,7 @@ static int sa_check_structural_violations(
                  * ratio (a ratio <=1 can never exceed the coarse value it scales,
                  * which would make this a mathematical no-op -- caught via a
                  * numeric exploration during implementation, see
-                 * PLAN_safety_mechres_finite_outer_rep.md). S_TR(f) must be
+                 * docs/explanations/mechanical_resonance_safety.md). S_TR(f) must be
                  * evaluated FRESH at each fractional frequency (it is an
                  * oscillating function of f in its own right, not bounded by
                  * its value at nearby coarse samples) and only THEN attenuated
@@ -1617,8 +1655,9 @@ static int sa_check_structural_violations(
                                 float sre, sim, aeq_sub;
                                 if (se.axes[ax].num_events == 0)
                                     continue;
-                                sa_eval_axis_spectrum(f_sub_hz, &se.axes[ax], &sre, &sim);
-                                aeq_sub = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)) * ratio);
+                                sa_eval_axis_spectrum(&se.axes[ax], &sre, &sim, f_sub_hz);
+                                aeq_sub =
+                                    (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)) * ratio);
                                 if (aeq_sub > max_ga)
                                     max_ga = aeq_sub;
                             }
@@ -1767,8 +1806,10 @@ static int compute_sequence_spectrum(
     float *full_spectrum,
     int *out_num_freq_bins_full,
     float *out_freq_res_full,
-    const float *waveform, int num_samples,
-    float grad_raster_us, float target_spectral_res_hz,
+    const float *waveform,
+    int num_samples,
+    float grad_raster_us,
+    float target_spectral_res_hz,
     float max_frequency)
 {
     int nfft, nfreq, output_bins_full, max_idx;
@@ -1851,8 +1892,8 @@ static int compute_sequence_spectrum(
     if (full_spectrum)
     {
         for (i = 0; i < output_bins_full; ++i)
-            full_spectrum[i] = (float)sqrt((double)(fft_out[i].r * fft_out[i].r +
-                                                    fft_out[i].i * fft_out[i].i));
+            full_spectrum[i] =
+                (float)sqrt((double)(fft_out[i].r * fft_out[i].r + fft_out[i].i * fft_out[i].i));
     }
 
     if (out_num_freq_bins_full)
@@ -1943,11 +1984,15 @@ static int calc_mech_resonances_from_uniform(
     if (compute_full_spectrum)
     {
         /* First pass: determine output bin count + frequency resolution. */
-        result = compute_sequence_spectrum(NULL,
-                                           &num_freq_bins_full, &freq_res_full,
-                                           waveforms->gx, waveforms->num_samples,
-                                           waveforms->raster_us, target_spectral_resolution_hz,
-                                           max_frequency_hz);
+        result = compute_sequence_spectrum(
+            NULL,
+            &num_freq_bins_full,
+            &freq_res_full,
+            waveforms->gx,
+            waveforms->num_samples,
+            waveforms->raster_us,
+            target_spectral_resolution_hz,
+            max_frequency_hz);
         if (PULSEG_FAILED(result))
         {
             pulseg_mech_resonances_spectra_free(spectra);
@@ -1958,9 +2003,12 @@ static int calc_mech_resonances_from_uniform(
         spectra->freq_spacing_hz = freq_res_full;
         spectra->num_freq_bins = num_freq_bins_full;
 
-        spectra->spectrum_full_gx = (float *)PULSEG_ALLOC((size_t)num_freq_bins_full * sizeof(float));
-        spectra->spectrum_full_gy = (float *)PULSEG_ALLOC((size_t)num_freq_bins_full * sizeof(float));
-        spectra->spectrum_full_gz = (float *)PULSEG_ALLOC((size_t)num_freq_bins_full * sizeof(float));
+        spectra->spectrum_full_gx =
+            (float *)PULSEG_ALLOC((size_t)num_freq_bins_full * sizeof(float));
+        spectra->spectrum_full_gy =
+            (float *)PULSEG_ALLOC((size_t)num_freq_bins_full * sizeof(float));
+        spectra->spectrum_full_gz =
+            (float *)PULSEG_ALLOC((size_t)num_freq_bins_full * sizeof(float));
         if (!spectra->spectrum_full_gx || !spectra->spectrum_full_gy || !spectra->spectrum_full_gz)
         {
             pulseg_mech_resonances_spectra_free(spectra);
@@ -1969,9 +2017,13 @@ static int calc_mech_resonances_from_uniform(
         }
 
         result = compute_sequence_spectrum(
-            spectra->spectrum_full_gx, NULL, NULL,
-            waveforms->gx, waveforms->num_samples,
-            waveforms->raster_us, target_spectral_resolution_hz,
+            spectra->spectrum_full_gx,
+            NULL,
+            NULL,
+            waveforms->gx,
+            waveforms->num_samples,
+            waveforms->raster_us,
+            target_spectral_resolution_hz,
             max_frequency_hz);
         if (PULSEG_FAILED(result))
         {
@@ -1980,9 +2032,13 @@ static int calc_mech_resonances_from_uniform(
             return result;
         }
         result = compute_sequence_spectrum(
-            spectra->spectrum_full_gy, NULL, NULL,
-            waveforms->gy, waveforms->num_samples,
-            waveforms->raster_us, target_spectral_resolution_hz,
+            spectra->spectrum_full_gy,
+            NULL,
+            NULL,
+            waveforms->gy,
+            waveforms->num_samples,
+            waveforms->raster_us,
+            target_spectral_resolution_hz,
             max_frequency_hz);
         if (PULSEG_FAILED(result))
         {
@@ -1991,9 +2047,13 @@ static int calc_mech_resonances_from_uniform(
             return result;
         }
         result = compute_sequence_spectrum(
-            spectra->spectrum_full_gz, NULL, NULL,
-            waveforms->gz, waveforms->num_samples,
-            waveforms->raster_us, target_spectral_resolution_hz,
+            spectra->spectrum_full_gz,
+            NULL,
+            NULL,
+            waveforms->gz,
+            waveforms->num_samples,
+            waveforms->raster_us,
+            target_spectral_resolution_hz,
             max_frequency_hz);
         if (PULSEG_FAILED(result))
         {
@@ -2007,12 +2067,21 @@ static int calc_mech_resonances_from_uniform(
     if (desc && block_count > 0)
     {
         result = sa_check_structural_violations(
-            spectra, desc, start_block, block_count,
-            num_trs, tr_duration_us,
-            num_forbidden_bands, forbidden_bands,
-            peak_log10_threshold, peak_norm_scale,
-            peak_eps, peak_prominence,
-            num_avgs, g_max_hz_per_m, compute_dense_envelope);
+            spectra,
+            desc,
+            start_block,
+            block_count,
+            num_trs,
+            tr_duration_us,
+            num_forbidden_bands,
+            forbidden_bands,
+            peak_log10_threshold,
+            peak_norm_scale,
+            peak_eps,
+            peak_prominence,
+            num_avgs,
+            g_max_hz_per_m,
+            compute_dense_envelope);
         if (PULSEG_FAILED(result))
         {
             pulseg_mech_resonances_spectra_free(spectra);
@@ -2029,7 +2098,7 @@ static int calc_mech_resonances_from_uniform(
  * Canonical geometry is always extracted with AMP_MAX_POS.
  * Non-degenerate prep/cooldown: full-pass canonical TR (pass-expanded).
  * Degenerate prep/cooldown: imaging TR canonical window (no pass expansion). */
-static void pulseg__select_canonical_tr_window(
+static void select_canonical_tr_window(
     const pulseg_sequence_descriptor *desc,
     int *start_block,
     int *block_count,
@@ -2055,10 +2124,9 @@ static void pulseg__select_canonical_tr_window(
         for (n = 0; n < desc->pass_len; ++n)
         {
             const pulseg_block_table_element *bte = &desc->block_table[n];
-            const pulseg_block_definition *bdef = &desc->block_definitions[bte->id];
-            *tr_duration_us += (bte->duration_us >= 0)
-                                   ? (float)bte->duration_us
-                                   : (float)bdef->duration_us;
+            const pulseg_base_block *bdef = &desc->base_blocks[bte->id];
+            *tr_duration_us +=
+                (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
         }
         return;
     }
@@ -2066,7 +2134,7 @@ static void pulseg__select_canonical_tr_window(
     *start_block = trd->num_prep_blocks + trd->imaging_tr_start;
     *block_count = trd->tr_size;
     *amplitude_mode = PULSEG_AMP_MAX_POS;
-    /* F8.2: align with pulseg__select_canonical_tr_window_idx's degenerate
+    /* F8.2: align with select_canonical_tr_window_idx's degenerate
      * branch (:55), which multiplies by num_averages; display-only
      * (min-2 clamp + FWHM), does not change the structural/spectral verdict. */
     {
@@ -2098,8 +2166,8 @@ int pulseg__find_unique_shot_passes(
     *out_pass_group_labels = NULL;
 
     num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
-    pass_size = (num_passes > 0) ? (desc->scan_table_len / num_passes) : 0;
-    if (num_passes <= 0 || pass_size <= 0 || !desc->scan_table_block_idx)
+    pass_size = (num_passes > 0) ? (desc->exec_stream_len / num_passes) : 0;
+    if (num_passes <= 0 || pass_size <= 0 || !desc->exec_stream_block_idx)
         return 0;
 
     num_cols = pass_size * 3;
@@ -2123,14 +2191,14 @@ int pulseg__find_unique_shot_passes(
         for (pos = 0; pos < pass_size; ++pos)
         {
             bt_pos = p * pass_size + pos;
-            if (bt_pos < 0 || bt_pos >= desc->scan_table_len)
+            if (bt_pos < 0 || bt_pos >= desc->exec_stream_len)
             {
                 rows[p * num_cols + col++] = -1;
                 rows[p * num_cols + col++] = -1;
                 rows[p * num_cols + col++] = -1;
                 continue;
             }
-            block_idx = desc->scan_table_block_idx[bt_pos];
+            block_idx = desc->exec_stream_block_idx[bt_pos];
             if (block_idx < 0 || block_idx >= desc->num_blocks)
             {
                 rows[p * num_cols + col++] = -1;
@@ -2230,16 +2298,17 @@ int pulseg__find_unique_shot_passes(
 /*  Acoustic spectra (public wrapper)                                 */
 /* ================================================================== */
 
-int pulseg_calc_mech_resonances(const pulseg_collection *coll,
-                                   pulseg_mech_resonances_spectra *spectra,
-                                   pulseg_diagnostic *diag,
-                                   int subseq_idx,
-                                   int canonical_tr_idx,
-                                   const pulseg_opts *opts,
-                                   float target_resolution_hz,
-                                   float max_freq_hz,
-                                   int num_forbidden_bands,
-                                   const pulseg_forbidden_band *forbidden_bands)
+int pulseg_calc_mech_resonances(
+    const pulseg_collection *coll,
+    pulseg_mech_resonances_spectra *spectra,
+    pulseg_diagnostic *diag,
+    int subseq_idx,
+    int canonical_tr_idx,
+    const pulseg_opts *opts,
+    float target_resolution_hz,
+    float max_freq_hz,
+    int num_forbidden_bands,
+    const pulseg_forbidden_band *forbidden_bands)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *trd;
@@ -2298,14 +2367,14 @@ int pulseg_calc_mech_resonances(const pulseg_collection *coll,
         return diag->code;
     }
     /* Use a new helper to select the correct window for the canonical_tr_idx */
-    pulseg__select_canonical_tr_window_idx(
+    select_canonical_tr_window_idx(
         desc,
-        canonical_tr_idx,
         &start_block,
         &block_count,
         &amplitude_mode,
         &num_instances,
-        &tr_duration_us);
+        &tr_duration_us,
+        canonical_tr_idx);
 
     sa_start_block = start_block;
     sa_block_count = block_count;
@@ -2316,12 +2385,12 @@ int pulseg_calc_mech_resonances(const pulseg_collection *coll,
     if (has_nd_prep || has_nd_cool)
     {
         num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
-        rc = pulseg__build_pass_expanded_block_order(
+        rc = build_pass_expanded_block_order(
             desc,
-            start_block,
             &block_order,
             &block_count,
-            &tr_duration_us);
+            &tr_duration_us,
+            start_block);
         if (PULSEG_FAILED(rc))
         {
             diag->code = rc;
@@ -2330,13 +2399,16 @@ int pulseg_calc_mech_resonances(const pulseg_collection *coll,
         start_block = 0;
     }
 
-    rc = pulseg__get_gradient_waveforms_range(desc, &uw, diag,
-                                                 start_block,
-                                                 block_count,
-                                                 amplitude_mode,
-                                                 NULL,
-                                                 0,
-                                                 block_order);
+    rc = pulseg__get_gradient_waveforms_range(
+        desc,
+        &uw,
+        diag,
+        start_block,
+        block_count,
+        amplitude_mode,
+        NULL,
+        0,
+        block_order);
     if (PULSEG_FAILED(rc))
     {
         if (block_order)
@@ -2368,8 +2440,10 @@ int pulseg_calc_mech_resonances(const pulseg_collection *coll,
 /* FIX: output before inputs, C89-compliant declarations */
 static void compute_slew_rate(
     float *slew_out,
-    const float *waveform, int num_samples,
-    float dt_us, float gamma_hz_per_tesla)
+    const float *waveform,
+    int num_samples,
+    float dt_us,
+    float gamma_hz_per_tesla)
 {
     int i;
     float dt_s;
@@ -2388,11 +2462,14 @@ static void compute_slew_rate(
  * comes from the model's required_padding() query, not from any
  * vendor-specific kernel knowledge here. `padded_scratch` must have room
  * for (num_samples + pad) floats; `dgdt_out` for (num_samples + pad - 1). */
-static void pulseg__build_padded_dgdt(
+static void build_padded_dgdt(
     float *dgdt_out,
     float *padded_scratch,
-    const float *waveform, int num_samples, int pad,
-    float grad_raster_us, float gamma_hz_per_tesla)
+    const float *waveform,
+    int num_samples,
+    int pad,
+    float grad_raster_us,
+    float gamma_hz_per_tesla)
 {
     int i, padded_len;
 
@@ -2478,15 +2555,41 @@ static int calc_pns_from_uniform(
         goto fail;
     }
 
-    pulseg__build_padded_dgdt(dgdt_x, padded_scratch, waveforms->gx, max_samples, pad,
-                              waveforms->raster_us, gamma_hz_per_tesla);
-    pulseg__build_padded_dgdt(dgdt_y, padded_scratch, waveforms->gy, max_samples, pad,
-                              waveforms->raster_us, gamma_hz_per_tesla);
-    pulseg__build_padded_dgdt(dgdt_z, padded_scratch, waveforms->gz, max_samples, pad,
-                              waveforms->raster_us, gamma_hz_per_tesla);
+    build_padded_dgdt(
+        dgdt_x,
+        padded_scratch,
+        waveforms->gx,
+        max_samples,
+        pad,
+        waveforms->raster_us,
+        gamma_hz_per_tesla);
+    build_padded_dgdt(
+        dgdt_y,
+        padded_scratch,
+        waveforms->gy,
+        max_samples,
+        pad,
+        waveforms->raster_us,
+        gamma_hz_per_tesla);
+    build_padded_dgdt(
+        dgdt_z,
+        padded_scratch,
+        waveforms->gz,
+        max_samples,
+        pad,
+        waveforms->raster_us,
+        gamma_hz_per_tesla);
 
-    rc = model->evaluate(model->ctx, dgdt_x, dgdt_y, dgdt_z, n, waveforms->raster_us,
-                          out_x, out_y, out_z);
+    rc = model->evaluate(
+        model->ctx,
+        dgdt_x,
+        dgdt_y,
+        dgdt_z,
+        n,
+        waveforms->raster_us,
+        out_x,
+        out_y,
+        out_z);
     if (PULSEG_FAILED(rc))
     {
         diag->code = rc;
@@ -2526,13 +2629,14 @@ fail:
 /*  PNS (public wrapper)                                              */
 /* ================================================================== */
 
-int pulseg_calc_pns(const pulseg_collection *coll,
-                       pulseg_pns_result *result,
-                       pulseg_diagnostic *diag,
-                       int subseq_idx,
-                       int canonical_tr_idx,
-                       const pulseg_opts *opts,
-                       const pulseg_pns_model *model)
+int pulseg_calc_pns(
+    const pulseg_collection *coll,
+    pulseg_pns_result *result,
+    pulseg_diagnostic *diag,
+    int subseq_idx,
+    int canonical_tr_idx,
+    const pulseg_opts *opts,
+    const pulseg_pns_model *model)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *trd;
@@ -2573,14 +2677,14 @@ int pulseg_calc_pns(const pulseg_collection *coll,
         diag->code = PULSEG_ERR_INVALID_ARGUMENT;
         return diag->code;
     }
-    pulseg__select_canonical_tr_window_idx(
+    select_canonical_tr_window_idx(
         desc,
-        canonical_tr_idx,
         &start_block,
         &block_count,
         &amplitude_mode,
         &num_instances,
-        &tr_duration_us);
+        &tr_duration_us,
+        canonical_tr_idx);
     (void)num_instances;
     (void)tr_duration_us;
 
@@ -2588,12 +2692,7 @@ int pulseg_calc_pns(const pulseg_collection *coll,
     has_nd_cool = (trd->num_cooldown_blocks > 0 && !trd->degenerate_cooldown);
     if (has_nd_prep || has_nd_cool)
     {
-        rc = pulseg__build_pass_expanded_block_order(
-            desc,
-            start_block,
-            &block_order,
-            &block_count,
-            NULL);
+        rc = build_pass_expanded_block_order(desc, &block_order, &block_count, NULL, start_block);
         if (PULSEG_FAILED(rc))
         {
             diag->code = rc;
@@ -2602,13 +2701,16 @@ int pulseg_calc_pns(const pulseg_collection *coll,
         start_block = 0;
     }
 
-    rc = pulseg__get_gradient_waveforms_range(desc, &uw, diag,
-                                                 start_block,
-                                                 block_count,
-                                                 amplitude_mode,
-                                                 NULL,
-                                                 0,
-                                                 block_order);
+    rc = pulseg__get_gradient_waveforms_range(
+        desc,
+        &uw,
+        diag,
+        start_block,
+        block_count,
+        amplitude_mode,
+        NULL,
+        0,
+        block_order);
     if (PULSEG_FAILED(rc))
     {
         if (block_order)
@@ -2652,7 +2754,7 @@ void pulseg_pns_result_free(pulseg_pns_result *r)
 /*  Collection-level safety check                                     */
 /* ================================================================== */
 
-int check_max_grad(
+static int check_max_grad(
     const pulseg_collection *coll,
     pulseg_diagnostic *diag,
     const pulseg_opts *opts)
@@ -2727,14 +2829,15 @@ int check_max_grad(
         hz_per_mt = opts->gamma_hz_per_t * 0.001f;
         if (diag)
         {
-            float physical_limit_hz_per_m =
-                (float)sqrt(3.0) * opts->max_grad_hz_per_m;
+            float physical_limit_hz_per_m = (float)sqrt(3.0) * opts->max_grad_hz_per_m;
             diag->code = PULSEG_ERR_MAX_GRAD_EXCEEDED;
-            pulseg__diag_printf(diag,
-                                   "amp=%.2fmT/m>%.2fmT/m,s=%d,b=%d",
-                                   (double)((float)sqrt((double)gsos_max) / hz_per_mt),
-                                   (double)(physical_limit_hz_per_m / hz_per_mt),
-                                   worst_subseq, worst_block);
+            pulseg__diag_printf(
+                diag,
+                "amp=%.2fmT/m>%.2fmT/m,s=%d,b=%d",
+                (double)((float)sqrt((double)gsos_max) / hz_per_mt),
+                (double)(physical_limit_hz_per_m / hz_per_mt),
+                worst_subseq,
+                worst_block);
         }
         return PULSEG_ERR_MAX_GRAD_EXCEEDED;
     }
@@ -2746,7 +2849,7 @@ int check_max_grad(
 /*  Gradient continuity check (cursor dry-run over n repetitions)     */
 /* ================================================================== */
 
-int check_grad_continuity(
+static int check_grad_continuity(
     pulseg_collection *coll,
     pulseg_diagnostic *diag,
     const pulseg_opts *opts)
@@ -2754,7 +2857,7 @@ int check_grad_continuity(
     pulseg_block_cursor saved_cursor;
     const pulseg_sequence_descriptor *desc;
     const pulseg_block_table_element *bte;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     const pulseg_grad_definition *gdef;
     const pulseg_grad_table_element *gte;
     int n, raw_id, rot_id, status, cur_seq;
@@ -2779,7 +2882,7 @@ int check_grad_continuity(
     /* save cursor state */
     saved_cursor = coll->block_cursor;
     coll->block_cursor.sequence_index = 0;
-    coll->block_cursor.scan_table_position = 0;
+    coll->block_cursor.exec_stream_position = 0;
     coll->block_cursor.from_last_reset = 0;
 
     prev_phys[0] = 0.0f;
@@ -2809,9 +2912,12 @@ int check_grad_continuity(
                     if (diag)
                     {
                         diag->code = PULSEG_ERR_GRAD_DISCONTINUITY;
-                        pulseg__diag_printf(diag,
-                                               "step=%.2fmT/m>%.2fmT/m,a=%d,bnd=1",
-                                               (double)(step / hz_per_mt), (double)(max_allowed / hz_per_mt), n);
+                        pulseg__diag_printf(
+                            diag,
+                            "step=%.2fmT/m>%.2fmT/m,a=%d,bnd=1",
+                            (double)(step / hz_per_mt),
+                            (double)(max_allowed / hz_per_mt),
+                            n);
                     }
                     coll->block_cursor = saved_cursor;
                     return PULSEG_ERR_GRAD_DISCONTINUITY;
@@ -2830,10 +2936,10 @@ int check_grad_continuity(
 
         /* read current block */
         {
-            int bt_idx = desc->scan_table_block_idx[coll->block_cursor.scan_table_position];
+            int bt_idx = desc->exec_stream_block_idx[coll->block_cursor.exec_stream_position];
             bte = &desc->block_table[bt_idx];
         }
-        bdef = &desc->block_definitions[bte->id];
+        bdef = &desc->base_blocks[bte->id];
 
         /* grad table: amplitude + shot_index */
         grad_def_ids[0] = bdef->gx_id;
@@ -2924,10 +3030,13 @@ int check_grad_continuity(
                 if (diag)
                 {
                     diag->code = PULSEG_ERR_GRAD_DISCONTINUITY;
-                    pulseg__diag_printf(diag,
-                                           "step=%.2fmT/m>%.2fmT/m,a=%d,p=%d",
-                                           (double)(step / hz_per_mt), (double)(max_allowed / hz_per_mt),
-                                           n, coll->block_cursor.scan_table_position);
+                    pulseg__diag_printf(
+                        diag,
+                        "step=%.2fmT/m>%.2fmT/m,a=%d,p=%d",
+                        (double)(step / hz_per_mt),
+                        (double)(max_allowed / hz_per_mt),
+                        n,
+                        coll->block_cursor.exec_stream_position);
                 }
                 coll->block_cursor = saved_cursor;
                 return PULSEG_ERR_GRAD_DISCONTINUITY;
@@ -2954,9 +3063,12 @@ int check_grad_continuity(
             if (diag)
             {
                 diag->code = PULSEG_ERR_GRAD_DISCONTINUITY;
-                pulseg__diag_printf(diag,
-                                       "step=%.2fmT/m>%.2fmT/m,a=%d,tail=1",
-                                       (double)(step / hz_per_mt), (double)(max_allowed / hz_per_mt), n);
+                pulseg__diag_printf(
+                    diag,
+                    "step=%.2fmT/m>%.2fmT/m,a=%d,tail=1",
+                    (double)(step / hz_per_mt),
+                    (double)(max_allowed / hz_per_mt),
+                    n);
             }
             coll->block_cursor = saved_cursor;
             return PULSEG_ERR_GRAD_DISCONTINUITY;
@@ -2971,7 +3083,7 @@ int check_grad_continuity(
 /*  Max slew rate check (per unique block definition)                 */
 /* ================================================================== */
 
-int check_max_slew(
+static int check_max_slew(
     const pulseg_collection *coll,
     pulseg_diagnostic *diag,
     const pulseg_opts *opts)
@@ -3047,7 +3159,8 @@ int check_max_slew(
                     axis_slew[n] = gdef->slew_rate[shot_idx] * amp;
             }
 
-            slew_sq = axis_slew[0] * axis_slew[0] + axis_slew[1] * axis_slew[1] + axis_slew[2] * axis_slew[2];
+            slew_sq = axis_slew[0] * axis_slew[0] + axis_slew[1] * axis_slew[1] +
+                axis_slew[2] * axis_slew[2];
             if (slew_sq > slew_sq_max)
             {
                 slew_sq_max = slew_sq;
@@ -3063,11 +3176,13 @@ int check_max_slew(
         {
             float physical_limit = (float)sqrt(3.0) * opts->max_slew_hz_per_m_per_s;
             diag->code = PULSEG_ERR_MAX_SLEW_EXCEEDED;
-            pulseg__diag_printf(diag,
-                                   "slew_rss=%.2f>%.2fHz/m/s,s=%d,b=%d",
-                                   (double)sqrt((double)slew_sq_max),
-                                   (double)physical_limit,
-                                   worst_subseq, worst_block);
+            pulseg__diag_printf(
+                diag,
+                "slew_rss=%.2f>%.2fHz/m/s,s=%d,b=%d",
+                (double)sqrt((double)slew_sq_max),
+                (double)physical_limit,
+                worst_subseq,
+                worst_block);
         }
         return PULSEG_ERR_MAX_SLEW_EXCEEDED;
     }
@@ -3083,7 +3198,7 @@ int check_max_slew(
  * amplitude, 0 if every gradient channel is silent throughout (e.g. an
  * RF-only or pure-delay sequence). Mirrors the block_table walk in
  * check_max_grad() but stops at the first nonzero sample. */
-static int pulseg__collection_has_gradient(const pulseg_collection *coll)
+static int collection_has_gradient(const pulseg_collection *coll)
 {
     int s, b, raw_id;
     const pulseg_sequence_descriptor *desc;
@@ -3165,7 +3280,7 @@ int pulseg_check_safety(
      * PNS entirely rather than running them over a silent waveform that
      * may span the full sequence duration (RF/SAR safety is evaluated
      * separately and is unaffected by this skip). */
-    if (!pulseg__collection_has_gradient(coll))
+    if (!collection_has_gradient(coll))
         return PULSEG_SUCCESS;
 
     /* ---- 1. max gradient amplitude ---- */
@@ -3233,7 +3348,7 @@ int pulseg_check_safety(
         unique_tr_indices = NULL;
         tr_group_labels = NULL;
 
-        pulseg__select_canonical_tr_window(
+        select_canonical_tr_window(
             desc,
             &start_block,
             &block_count,
@@ -3250,12 +3365,12 @@ int pulseg_check_safety(
         if (has_nd_prep || has_nd_cool)
         {
             num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
-            rc = pulseg__build_pass_expanded_block_order(
+            rc = build_pass_expanded_block_order(
                 desc,
-                start_block,
                 &block_order,
                 &block_count,
-                &tr_duration_us);
+                &tr_duration_us,
+                start_block);
             if (PULSEG_FAILED(rc))
             {
                 if (unique_tr_indices)
@@ -3275,13 +3390,13 @@ int pulseg_check_safety(
         if ((trd->num_prep_blocks > 0 && !trd->degenerate_prep) ||
             (trd->num_cooldown_blocks > 0 && !trd->degenerate_cooldown))
         {
-            num_unique_trs = pulseg__find_unique_shot_passes(
-                desc, &unique_tr_indices, &tr_group_labels);
+            num_unique_trs =
+                pulseg__find_unique_shot_passes(desc, &unique_tr_indices, &tr_group_labels);
         }
         else
         {
-            num_unique_trs = pulseg__find_unique_shot_trs(
-                desc, &unique_tr_indices, &tr_group_labels);
+            num_unique_trs =
+                pulseg__find_unique_shot_trs(desc, &unique_tr_indices, &tr_group_labels);
         }
         if (num_unique_trs <= 0)
             num_unique_trs = 1;
@@ -3289,11 +3404,16 @@ int pulseg_check_safety(
         for (u = 0; u < num_unique_trs; ++u)
         {
             memset(&uw, 0, sizeof(uw));
-            rc = pulseg__get_gradient_waveforms_range(desc, &uw, diag,
-                                                         start_block,
-                                                         block_count,
-                                                         PULSEG_AMP_MAX_POS,
-                                                         tr_group_labels, u, block_order);
+            rc = pulseg__get_gradient_waveforms_range(
+                desc,
+                &uw,
+                diag,
+                start_block,
+                block_count,
+                PULSEG_AMP_MAX_POS,
+                tr_group_labels,
+                u,
+                block_order);
             if (PULSEG_FAILED(rc))
             {
                 if (unique_tr_indices)
@@ -3318,25 +3438,30 @@ int pulseg_check_safety(
                  * predownload safety-check path and must never pay for it. */
                 memset(&spectra, 0, sizeof(spectra));
                 rc = calc_mech_resonances_from_uniform(
-                    &spectra, diag, &uw,
-                    mr_target_res_hz, mr_max_freq_hz,
+                    &spectra,
+                    diag,
+                    &uw,
+                    mr_target_res_hz,
+                    mr_max_freq_hz,
                     num_instances,
                     tr_duration_us,
-                    num_forbidden_bands, forbidden_bands,
+                    num_forbidden_bands,
+                    forbidden_bands,
                     opts->peak_log10_threshold,
                     opts->peak_norm_scale,
                     opts->peak_eps,
                     opts->peak_prominence,
-                    desc, sa_start_block, sa_block_count, num_avgs,
+                    desc,
+                    sa_start_block,
+                    sa_block_count,
+                    num_avgs,
                     opts->max_grad_hz_per_m,
                     0 /* compute_dense_envelope: never on the PSD path */);
 
                 /* Safety path: fail fast on first violating candidate.
                  * Pattern: for each candidate, scan union of all bands. */
-                if (!PULSEG_FAILED(rc) && spectra.num_candidates > 0 &&
-                    spectra.candidate_freqs &&
-                    spectra.candidate_grad_amps_gx &&
-                    spectra.candidate_grad_amps_gy &&
+                if (!PULSEG_FAILED(rc) && spectra.num_candidates > 0 && spectra.candidate_freqs &&
+                    spectra.candidate_grad_amps_gx && spectra.candidate_grad_amps_gy &&
                     spectra.candidate_grad_amps_gz)
                 {
                     float *cga[3];
@@ -3378,9 +3503,12 @@ int pulseg_check_safety(
                                         pulseg__diag_printf(
                                             diag,
                                             "f=%.2fHz,a=%.2f>%.2fHz/m,ax=%d,ss=%d,tr=%d",
-                                            (double)cf_hz, (double)ca_hz_per_m,
+                                            (double)cf_hz,
+                                            (double)ca_hz_per_m,
                                             (double)eps_band,
-                                            axi, s, u);
+                                            axi,
+                                            s,
+                                            u);
                                     }
                                     break;
                                 }
@@ -3410,9 +3538,7 @@ int pulseg_check_safety(
             if (pns_model)
             {
                 memset(&pns_result, 0, sizeof(pns_result));
-                rc = calc_pns_from_uniform(
-                    &pns_result, diag, opts->gamma_hz_per_t,
-                    &uw, pns_model);
+                rc = calc_pns_from_uniform(&pns_result, diag, opts->gamma_hz_per_t, &uw, pns_model);
                 if (!PULSEG_FAILED(rc) && pns_result.num_samples > 0)
                 {
                     max_pns = 0.0f;
@@ -3420,11 +3546,14 @@ int pulseg_check_safety(
                     {
                         pns_combined = 0.0f;
                         if (pns_result.slew_x_hz_per_m_per_s)
-                            pns_combined += pns_result.slew_x_hz_per_m_per_s[i] * pns_result.slew_x_hz_per_m_per_s[i];
+                            pns_combined += pns_result.slew_x_hz_per_m_per_s[i] *
+                                pns_result.slew_x_hz_per_m_per_s[i];
                         if (pns_result.slew_y_hz_per_m_per_s)
-                            pns_combined += pns_result.slew_y_hz_per_m_per_s[i] * pns_result.slew_y_hz_per_m_per_s[i];
+                            pns_combined += pns_result.slew_y_hz_per_m_per_s[i] *
+                                pns_result.slew_y_hz_per_m_per_s[i];
                         if (pns_result.slew_z_hz_per_m_per_s)
-                            pns_combined += pns_result.slew_z_hz_per_m_per_s[i] * pns_result.slew_z_hz_per_m_per_s[i];
+                            pns_combined += pns_result.slew_z_hz_per_m_per_s[i] *
+                                pns_result.slew_z_hz_per_m_per_s[i];
                         pns_combined = (float)sqrt((double)pns_combined);
                         if (pns_combined > max_pns)
                             max_pns = pns_combined;
@@ -3458,51 +3587,4 @@ int pulseg_check_safety(
     }
 
     return PULSEG_SUCCESS;
-}
-
-/* ================================================================== */
-/*  Vendor-neutral safety entrypoint (load + check + free)            */
-/* ================================================================== */
-
-int pulseg_check_safety_from_file(
-    pulseg_diagnostic *diag,
-    const char *seq_path,
-    const pulseg_opts *opts,
-    int num_forbidden_bands,
-    const pulseg_forbidden_band *forbidden_bands,
-    const pulseg_pns_model *pns_model,
-    float pns_threshold_percent)
-{
-    pulseg_collection *coll = NULL;
-    int rc;
-
-    if (diag)
-        pulseg_diagnostic_init(diag);
-    if (!seq_path || !opts)
-    {
-        if (diag)
-            diag->code = PULSEG_ERR_NULL_POINTER;
-        return PULSEG_ERR_NULL_POINTER;
-    }
-
-    rc = pulseg_read(
-        &coll, diag, seq_path, opts,
-        /*cache_binary*/ 0,
-        /*verify_signature*/ 0,
-        /*parse_labels*/ 0,
-        /*num_averages*/ 1);
-    if (PULSEG_FAILED(rc))
-    {
-        if (coll)
-            pulseg_collection_free(coll);
-        return rc;
-    }
-
-    rc = pulseg_check_safety(
-        coll, diag, opts,
-        num_forbidden_bands, forbidden_bands,
-        pns_model, pns_threshold_percent);
-
-    pulseg_collection_free(coll);
-    return rc;
 }

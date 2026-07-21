@@ -13,9 +13,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Static parameter table                                            */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 static const pulseg_param_entry g_param_table[] = {
     /* Timing */
@@ -125,9 +125,9 @@ static const pulseg_param_entry g_param_table[] = {
 
 #define PARAM_TABLE_SIZE (sizeof(g_param_table) / sizeof(g_param_table[0]))
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Lookup functions                                                  */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 int pulseg_param_find(const char *wire_name)
 {
@@ -174,13 +174,12 @@ int pulseg_param_get_type(int param_id)
     return -1;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Protocol helpers                                                  */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 /** Add or update a value in the protocol for the given param_id. */
-static int protocol_set(pulseg_protocol *p, int param_id,
-                        const pulseg_protocol_value *val)
+static int protocol_set(pulseg_protocol *p, int param_id, const pulseg_protocol_value *val)
 {
     int i;
     /* Check if already present */
@@ -201,9 +200,9 @@ static int protocol_set(pulseg_protocol *p, int param_id,
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Parse                                                             */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 /** Trim leading whitespace in place, return pointer to first non-space. */
 static const char *skip_ws(const char *s)
@@ -217,8 +216,8 @@ static const char *skip_ws(const char *s)
 static void trim_trailing(char *s)
 {
     int len = (int)strlen(s);
-    while (len > 0 && (s[len - 1] == ' ' || s[len - 1] == '\t' ||
-                       s[len - 1] == '\n' || s[len - 1] == '\r'))
+    while (len > 0 &&
+           (s[len - 1] == ' ' || s[len - 1] == '\t' || s[len - 1] == '\n' || s[len - 1] == '\r'))
     {
         s[--len] = '\0';
     }
@@ -256,8 +255,7 @@ static int next_pipe_field(const char **pp, char *dst, int dstsz)
 
 /** Try to parse "type|value|..." rich format.  Returns 1 if rich format
  *  was detected and parsed, 0 if this is a simple value line. */
-static int try_parse_rich(const char *valstr,
-                          pulseg_protocol_value *pv)
+static int try_parse_rich(pulseg_protocol_value *pv, const char *valstr)
 {
     /* Rich format always starts with a type tag followed by '|' */
     const char *bar = strchr(valstr, '|');
@@ -552,7 +550,7 @@ int pulseg_protocol_parse(pulseg_protocol *out, const char *preamble)
                 memset(&pv, 0, sizeof(pv));
 
                 /* Try rich "type|value|min|max|incr|unit" format first */
-                if (try_parse_rich(valstr, &pv))
+                if (try_parse_rich(&pv, valstr))
                 {
                     /* Rich format parsed — type came from wire, not table */
                 }
@@ -608,9 +606,9 @@ int pulseg_protocol_parse(pulseg_protocol *out, const char *preamble)
     return parsed;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Serialize                                                         */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 /** Append to buffer; return new offset or -1 on overflow. */
 static int ser_append(char *buf, int bufsz, int n, const char *s)
@@ -623,8 +621,7 @@ static int ser_append(char *buf, int bufsz, int n, const char *s)
     return n + len;
 }
 
-int pulseg_protocol_serialize(const pulseg_protocol *p,
-                                 char *buf, int bufsz)
+int pulseg_protocol_serialize(const pulseg_protocol *p, char *buf, int bufsz)
 {
     int n = 0;
     int i;
@@ -652,8 +649,7 @@ int pulseg_protocol_serialize(const pulseg_protocol *p,
             sprintf(tmp, "%s: %d\n", wn, p->values[i].v.i);
             break;
         case PULSEG_PTYPE_BOOL:
-            sprintf(tmp, "%s: %s\n", wn,
-                    p->values[i].v.b ? "true" : "false");
+            sprintf(tmp, "%s: %s\n", wn, p->values[i].v.b ? "true" : "false");
             break;
         case PULSEG_PTYPE_STRINGLIST:
             sprintf(tmp, "%s: %d\n", wn, p->values[i].v.stringlist_idx);
@@ -681,9 +677,9 @@ int pulseg_protocol_serialize(const pulseg_protocol *p,
     return n;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Typed getters / setters                                           */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 int pulseg_protocol_find(const pulseg_protocol *p, int param_id)
 {
@@ -698,8 +694,7 @@ int pulseg_protocol_find(const pulseg_protocol *p, int param_id)
     return -1;
 }
 
-int pulseg_protocol_get_float(const pulseg_protocol *p,
-                                 float *out, int param_id)
+int pulseg_protocol_get_float(const pulseg_protocol *p, float *out, int param_id)
 {
     int idx = pulseg_protocol_find(p, param_id);
     if (idx < 0 || p->values[idx].type != PULSEG_PTYPE_FLOAT)
@@ -709,8 +704,7 @@ int pulseg_protocol_get_float(const pulseg_protocol *p,
     return 0;
 }
 
-int pulseg_protocol_get_int(const pulseg_protocol *p,
-                               int *out, int param_id)
+int pulseg_protocol_get_int(const pulseg_protocol *p, int *out, int param_id)
 {
     int idx = pulseg_protocol_find(p, param_id);
     if (idx < 0 || p->values[idx].type != PULSEG_PTYPE_INT)
@@ -720,8 +714,7 @@ int pulseg_protocol_get_int(const pulseg_protocol *p,
     return 0;
 }
 
-int pulseg_protocol_get_bool(const pulseg_protocol *p,
-                                int *out, int param_id)
+int pulseg_protocol_get_bool(const pulseg_protocol *p, int *out, int param_id)
 {
     int idx = pulseg_protocol_find(p, param_id);
     if (idx < 0 || p->values[idx].type != PULSEG_PTYPE_BOOL)
@@ -731,8 +724,7 @@ int pulseg_protocol_get_bool(const pulseg_protocol *p,
     return 0;
 }
 
-int pulseg_protocol_set_float(pulseg_protocol *p,
-                                 int param_id, float value)
+int pulseg_protocol_set_float(pulseg_protocol *p, int param_id, float value)
 {
     pulseg_protocol_value pv;
     memset(&pv, 0, sizeof(pv));
@@ -741,8 +733,7 @@ int pulseg_protocol_set_float(pulseg_protocol *p,
     return protocol_set(p, param_id, &pv);
 }
 
-int pulseg_protocol_set_int(pulseg_protocol *p,
-                               int param_id, int value)
+int pulseg_protocol_set_int(pulseg_protocol *p, int param_id, int value)
 {
     pulseg_protocol_value pv;
     memset(&pv, 0, sizeof(pv));
@@ -751,8 +742,7 @@ int pulseg_protocol_set_int(pulseg_protocol *p,
     return protocol_set(p, param_id, &pv);
 }
 
-int pulseg_protocol_set_bool(pulseg_protocol *p,
-                                int param_id, int value)
+int pulseg_protocol_set_bool(pulseg_protocol *p, int param_id, int value)
 {
     pulseg_protocol_value pv;
     memset(&pv, 0, sizeof(pv));
@@ -761,8 +751,7 @@ int pulseg_protocol_set_bool(pulseg_protocol *p,
     return protocol_set(p, param_id, &pv);
 }
 
-int pulseg_protocol_get_stringlist(const pulseg_protocol *p,
-                                      int *idx_out, int param_id)
+int pulseg_protocol_get_stringlist(const pulseg_protocol *p, int *idx_out, int param_id)
 {
     int idx = pulseg_protocol_find(p, param_id);
     if (idx < 0 || p->values[idx].type != PULSEG_PTYPE_STRINGLIST)
@@ -772,9 +761,11 @@ int pulseg_protocol_get_stringlist(const pulseg_protocol *p,
     return 0;
 }
 
-int pulseg_protocol_set_stringlist(pulseg_protocol *p,
-                                      int param_id, int sel_idx,
-                                      const char *options)
+int pulseg_protocol_set_stringlist(
+    pulseg_protocol *p,
+    int param_id,
+    int sel_idx,
+    const char *options)
 {
     pulseg_protocol_value pv;
     memset(&pv, 0, sizeof(pv));
@@ -782,8 +773,7 @@ int pulseg_protocol_set_stringlist(pulseg_protocol *p,
     pv.v.stringlist_idx = sel_idx;
     if (options)
     {
-        strncpy(pv.stringlist_options, options,
-                sizeof(pv.stringlist_options) - 1);
+        strncpy(pv.stringlist_options, options, sizeof(pv.stringlist_options) - 1);
     }
     return protocol_set(p, param_id, &pv);
 }

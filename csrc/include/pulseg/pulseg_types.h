@@ -14,7 +14,10 @@
 #ifndef PULSEG_TYPES_H
 #define PULSEG_TYPES_H
 
+#include "pulseq_types.h"
+
 #include "pulseg_config.h"
+#include "pulseg_errors.h"
 
 /* ================================================================== */
 /*  Gradient axes                                                     */
@@ -24,14 +27,15 @@
 #define PULSEG_GRAD_AXIS_Z 2
 
 /* ================================================================== */
-/*  RF use codes (pulseg_seq_event.params[1] for RF rows, and the raw  */
-/*  pulseq RF library's trailing e/r/i/s use tag)                     */
+/*  RF use codes (pulseg_seq_event.params[1] for RF rows).            */
+/*  Aliases of the raw Pulseq RF library's trailing e/r/i/s use tag,  */
+/*  which the pulseq module owns.                                     */
 /* ================================================================== */
-#define PULSEG_RF_USE_UNKNOWN     0
-#define PULSEG_RF_USE_EXCITATION  1
-#define PULSEG_RF_USE_REFOCUSING  2
-#define PULSEG_RF_USE_INVERSION   3
-#define PULSEG_RF_USE_SATURATION  4
+#define PULSEG_RF_USE_UNKNOWN PULSEQ_RF_USE_UNKNOWN
+#define PULSEG_RF_USE_EXCITATION PULSEQ_RF_USE_EXCITATION
+#define PULSEG_RF_USE_REFOCUSING PULSEQ_RF_USE_REFOCUSING
+#define PULSEG_RF_USE_INVERSION PULSEQ_RF_USE_INVERSION
+#define PULSEG_RF_USE_SATURATION PULSEQ_RF_USE_SATURATION
 
 /* ================================================================== */
 /*  Error codes                                                       */
@@ -85,21 +89,20 @@ typedef struct pulseg_diagnostic
     char message[PULSEG_DIAG_MSG_LEN];
 } pulseg_diagnostic;
 
-#define PULSEG_DIAGNOSTIC_INIT {PULSEG_SUCCESS, {'\0'}}
+/* clang-format off */
+#define PULSEG_DIAGNOSTIC_INIT {PULSEG_SUCCESS, { '\0' }}
+/* clang-format on */
 
 /* ================================================================== */
-/*  Shape (RLE-decompressible waveform; raw pulseq shape library entry
- *  and decompressed descriptor/waveform storage share this type)     */
+/*  Shape (RLE-decompressible waveform)                               */
+/*                                                                    */
+/*  Owned by the pulseq module (pulseq_types.h) -- the IR keeps Pulseq */
+/*  RLE shapes as its waveform store, so the raw shape library entry   */
+/*  and the descriptor's shape storage are deliberately the same type. */
+/*  pulseg_shape_arbitrary remains available as a compatibility alias. */
 /* ================================================================== */
 
-typedef struct pulseg_shape_arbitrary
-{
-    int num_uncompressed_samples;
-    int num_samples;
-    float *samples;
-} pulseg_shape_arbitrary;
-
-#define PULSEG_SHAPE_ARBITRARY_INIT {0, 0, NULL}
+typedef pulseq_shape pulseg_shape_arbitrary;
 
 /* ================================================================== */
 /*  RF envelope view (for the vendor RF-stats callback)               */
@@ -113,12 +116,12 @@ typedef struct pulseg_shape_arbitrary
  */
 typedef struct pulseg_rf_view
 {
-    const float *mag;      /**< |B1(t)| envelope, normalised, length n */
-    const float *phase;    /**< phase (rad), length n                  */
-    int n;                 /**< sample count                           */
-    float dt_us;           /**< uniform raster period (us)             */
-    float duration_us;     /**< RF event duration (us)                 */
-    float tr_duration_us;  /**< enclosing TR duration (us); 0 if unknown at
+    const float *mag;     /**< |B1(t)| envelope, normalised, length n */
+    const float *phase;   /**< phase (rad), length n                  */
+    int n;                /**< sample count                           */
+    float dt_us;          /**< uniform raster period (us)             */
+    float duration_us;    /**< RF event duration (us)                 */
+    float tr_duration_us; /**< enclosing TR duration (us); 0 if unknown at
                                  dedup time                            */
 } pulseg_rf_view;
 
@@ -148,14 +151,14 @@ typedef struct pulseg_opts
     float peak_eps;                /**< resonance detector epsilon         */
     float peak_prominence;         /**< resonance detector min prominence  */
 
-    /** Optional vendor RF envelope-stats callback (D8-A). NULL -> the four
+    /** Optional vendor RF envelope-stats callback. NULL -> the four
      *  pulseg_rf_stats.vendor_stat[] slots are left at 0. */
     int (*vendor_rf_stats_fn)(void *ctx, const pulseg_rf_view *rf, float out_stat[4]);
     void *vendor_rf_stats_ctx;
 
     /**
      * @brief Which Pulseq label fills output column 0/1/2 of the 3-column
-     * ADC label table (D3). Values are Pulseq label *state-array* indices:
+     * ADC label table. Values are Pulseq label *state-array* indices:
      * 0=SLC, 1=PHS, 2=REP, 3=AVG, 4=SEG, 5=SET, 6=ECO, 7=PAR, 8=LIN, 9=ACQ.
      * Example (GE convention): {8, 0, 6} = [LIN, SLC, ECO]. Public default
      * is the identity {0, 1, 2} = [SLC, PHS, REP]; vendor layers override
@@ -164,7 +167,7 @@ typedef struct pulseg_opts
      */
     int label_column_map[3];
 
-    /** Binary cache file extension, including the dot (D10). Default
+    /** Binary cache file extension, including the dot. Default
      *  ".pseg"; GE overrides to ".pge" (see pulserver_ge_config.h). Only
      *  the main pulseg_read()/pulseg__write_cache() path honors this;
      *  standalone cache utilities (pulseg_load_cache, pulseg_clear_cache,
@@ -172,7 +175,7 @@ typedef struct pulseg_opts
      *  default. */
     char cache_ext[PULSEG_CACHE_EXT_MAX];
 
-    /** Optional opaque vendor cache section (D10). Writer emits a section
+    /** Optional opaque vendor cache section. Writer emits a section
      *  only when set; GE leaves this unused. ctx/buf ownership: the
      *  callback allocates *out_buf via PULSEG_ALLOC; the cache writer
      *  frees it after use. */
@@ -180,16 +183,15 @@ typedef struct pulseg_opts
     void *vendor_section_ctx;
 } pulseg_opts;
 
-#define PULSEG_OPTS_INIT {                          \
+/* clang-format off */
+#define PULSEG_OPTS_INIT \
+    { \
     0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, \
-    PULSEG_PEAK_LOG10_THRESHOLD_DEFAULT,            \
-    PULSEG_PEAK_NORM_SCALE_DEFAULT,                 \
-    PULSEG_PEAK_EPS_DEFAULT,                        \
-    PULSEG_PEAK_PROMINENCE_DEFAULT,                 \
-    NULL, NULL,                                     \
-    {0, 1, 2},                                      \
-    PULSEG_CACHE_EXT_DEFAULT,                       \
-    NULL, NULL}
+    PULSEG_PEAK_LOG10_THRESHOLD_DEFAULT, PULSEG_PEAK_NORM_SCALE_DEFAULT, \
+    PULSEG_PEAK_EPS_DEFAULT, PULSEG_PEAK_PROMINENCE_DEFAULT, NULL, NULL, {0, 1, 2}, \
+    PULSEG_CACHE_EXT_DEFAULT, NULL, NULL \
+    }
+/* clang-format on */
 
 /* ================================================================== */
 /*  RF statistics                                                     */
@@ -203,10 +205,10 @@ typedef struct pulseg_opts
  */
 typedef struct pulseg_rf_stats
 {
-    float flip_angle_rad;    /**< nominal flip angle (radians)           */
-    float act_amplitude_hz;  /**< actual |gamma*B1| amplitude (Hz)       */
-    float area;              /**< integral of |B1(t)| dt  (a.u.)        */
-    /** Vendor-specific envelope statistics (D8-A), filled by the optional
+    float flip_angle_rad;   /**< nominal flip angle (radians)           */
+    float act_amplitude_hz; /**< actual |gamma*B1| amplitude (Hz)       */
+    float area;             /**< integral of |B1(t)| dt  (a.u.)        */
+    /** Vendor-specific envelope statistics, filled by the optional
      *  pulseg_opts.vendor_rf_stats_fn callback; all 0 when unset. Meaning
      *  is vendor-defined -- e.g. GE's abswidth/effwidth/dtycyc/maxpw live
      *  in src_gelib/pulserver_ge_rf_stats.h as PULSERVER_GE_RF_* accessors. */
@@ -218,10 +220,11 @@ typedef struct pulseg_rf_stats
     int num_samples;         /**< waveform sample count                 */
     int num_instances;       /**< repetition count for this RF pulse    */
     /* --- multiband / power fields (appended; do not reorder above) --- */
-    int num_bands;                                   /**< number of simultaneous frequency bands (>=1) */
-    float band_freq_offsets_hz[PULSEG_MAX_BANDS]; /**< per-band center offsets relative to carrier (Hz) */
-    float band_bandwidth_hz;                         /**< per-band bandwidth (Hz) */
-    float total_b1sq_power;                          /**< integral |B1(t)|^2 dt normalised (a.u.) */
+    int num_bands; /**< number of simultaneous frequency bands (>=1) */
+    float band_freq_offsets_hz
+        [PULSEG_MAX_BANDS];  /**< per-band center offsets relative to carrier (Hz) */
+    float band_bandwidth_hz; /**< per-band bandwidth (Hz) */
+    float total_b1sq_power;  /**< integral |B1(t)|^2 dt normalised (a.u.) */
     /* --- vendor tag (appended; identifies the meaning of the
      *     vendor-specific interpretation of the fields above; for new
      *     vendor variants, a sibling struct may be added later and
@@ -231,8 +234,12 @@ typedef struct pulseg_rf_stats
     int module_id; /**< sticky MODULE label id of the originating block, 0 = ungrouped */
 } pulseg_rf_stats;
 
-#define PULSEG_RF_STATS_INIT { \
-    0.0f, 0.0f, 0.0f, {0.0f}, 0.0f, 0, 0.0f, 0.0f, 0, 0, 1, {0.0f}, 0.0f, 0.0f, 0, 0}
+/* clang-format off */
+#define PULSEG_RF_STATS_INIT \
+    { \
+    0.0f, 0.0f, 0.0f, {0.0f}, 0.0f, 0, 0.0f, 0.0f, 0, 0, 1, {0.0f}, 0.0f, 0.0f, 0, 0 \
+    }
+/* clang-format on */
 
 /**
  * @brief One entry per distinct MODULE-labeled group in a subsequence,
@@ -242,10 +249,10 @@ typedef struct pulseg_rf_stats
  */
 typedef struct pulseg_module
 {
-    int module_id;                 /**< sticky MODULE label id (>=1)      */
-    int one_instance_duration_us;  /**< duration of the validated reference occurrence */
-    int total_duration_us;         /**< num_instances * one_instance_duration_us */
-    int num_instances;             /**< count of structurally-identical occurrences */
+    int module_id;                /**< sticky MODULE label id (>=1)      */
+    int one_instance_duration_us; /**< duration of the validated reference occurrence */
+    int total_duration_us;        /**< num_instances * one_instance_duration_us */
+    int num_instances;            /**< count of structurally-identical occurrences */
 } pulseg_module;
 
 /* ================================================================== */
@@ -304,7 +311,9 @@ typedef struct pulseg_grad_axis_waveform
     int *seg_label;            /**< segment index for each sample  */
 } pulseg_grad_axis_waveform;
 
+/* clang-format off */
 #define PULSEG_GRAD_AXIS_WAVEFORM_INIT {0, NULL, NULL, NULL}
+/* clang-format on */
 
 /**
  * @brief Per-TR gradient waveforms for all three axes.
@@ -319,10 +328,13 @@ typedef struct pulseg_tr_gradient_waveforms
     pulseg_grad_axis_waveform gz;
 } pulseg_tr_gradient_waveforms;
 
-#define PULSEG_TR_GRADIENT_WAVEFORMS_INIT { \
-    PULSEG_GRAD_AXIS_WAVEFORM_INIT,         \
-    PULSEG_GRAD_AXIS_WAVEFORM_INIT,         \
-    PULSEG_GRAD_AXIS_WAVEFORM_INIT}
+/* clang-format off */
+#define PULSEG_TR_GRADIENT_WAVEFORMS_INIT \
+    { \
+    PULSEG_GRAD_AXIS_WAVEFORM_INIT, PULSEG_GRAD_AXIS_WAVEFORM_INIT, \
+    PULSEG_GRAD_AXIS_WAVEFORM_INIT \
+    }
+/* clang-format on */
 
 /* ================================================================== */
 /*  Native-timing TR waveforms (for plotting)                        */
@@ -347,7 +359,9 @@ typedef struct pulseg_channel_waveform
     float *amplitude; /**< [num_samples] */
 } pulseg_channel_waveform;
 
+/* clang-format off */
 #define PULSEG_CHANNEL_WAVEFORM_INIT {0, NULL, NULL}
+/* clang-format on */
 
 /**
  * @brief ADC event descriptor within a TR.
@@ -361,8 +375,6 @@ typedef struct pulseg_adc_event
     float phase_offset_rad; /**< per-instance phase offset (rad)   */
 } pulseg_adc_event;
 
-#define PULSEG_ADC_EVENT_INIT {0.0f, 0.0f, 0, 0.0f, 0.0f}
-
 /**
  * @brief Per-block metadata within a TR.
  */
@@ -374,8 +386,6 @@ typedef struct pulseg_tr_block_descriptor
     float rf_isocenter_us; /**< RF isocenter time within TR (us), or -1.0 */
     float adc_kzero_us;    /**< ADC k=0 time within TR (us), or -1.0 */
 } pulseg_tr_block_descriptor;
-
-#define PULSEG_TR_BLOCK_DESCRIPTOR_INIT {0.0f, 0.0f, -1, -1.0f, -1.0f}
 
 /**
  * @brief Complete native-timing TR waveforms for plotting.
@@ -398,7 +408,7 @@ typedef struct pulseg_tr_waveforms
      * (num_rf_channels > 1), rf_mag.amplitude and rf_phase.amplitude
      * are channel-major flat arrays: ch0[0..npts-1], ch1[0..npts-1], ...
      * rf_mag.num_samples == num_rf_channels * npts_per_channel.       */
-    int num_rf_channels;                 /**< 1 for single-Tx, nch for pTx */
+    int num_rf_channels;              /**< 1 for single-Tx, nch for pTx */
     pulseg_channel_waveform rf_mag;   /**< amplitude in Hz           */
     pulseg_channel_waveform rf_phase; /**< amplitude in rad          */
 
@@ -413,15 +423,6 @@ typedef struct pulseg_tr_waveforms
     /* Total duration */
     float total_duration_us;
 } pulseg_tr_waveforms;
-
-#define PULSEG_TR_WAVEFORMS_INIT { \
-    PULSEG_CHANNEL_WAVEFORM_INIT,  \
-    PULSEG_CHANNEL_WAVEFORM_INIT,  \
-    PULSEG_CHANNEL_WAVEFORM_INIT,  \
-    1,                                \
-    PULSEG_CHANNEL_WAVEFORM_INIT,  \
-    PULSEG_CHANNEL_WAVEFORM_INIT,  \
-    0, NULL, 0, NULL, 0.0f}
 
 /* ================================================================== */
 /*  Mechanical resonances spectra (for plotting)                      */
@@ -505,16 +506,21 @@ typedef struct pulseg_mech_resonances_spectra
     float *envelope_amp_gz;
 } pulseg_mech_resonances_spectra;
 
-#define PULSEG_MECH_RESONANCES_SPECTRA_INIT {                                                                                                              \
-    /* freq_min_hz, freq_spacing_hz, num_freq_bins */                                                                                                         \
-    0.0f, 0.0f, 0,                                           /* spectrum_full_gx/gy/gz */                                                                     \
-    NULL, NULL, NULL,                                        /* num_instances */                                                                              \
-    0,                                                       /* num_analytical_peaks, analytical_peak_freqs, amp_gx/gy/gz, phase_gx/gy/gz, widths */          \
-    0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,       /* num_candidates, candidate_freqs, amps_gx/gy/gz, grad_amps, grad_amps_gx/gy/gz, violations */  \
-    0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, /* num_component_terms, component_{freqs,amps,phases,widths,axes,def_ids,contrib_ids,run_ids} */ \
-    0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,       /* num_surviving_freqs, surviving_freqs_hz */                                                    \
-    0, NULL,                                                 /* num_envelope_bins, envelope_freqs_hz, amp_gx/gy/gz */                                         \
-    0, NULL, NULL, NULL}
+/* clang-format off */
+#define PULSEG_MECH_RESONANCES_SPECTRA_INIT \
+    { \
+    /* freq_min_hz, freq_spacing_hz, num_freq_bins */ 0.0f, 0.0f, 0, /* \
+    spectrum_full_gx/gy/gz */ NULL, NULL, NULL, /* num_instances */ 0, /* \
+    num_analytical_peaks, analytical_peak_freqs, amp_gx/gy/gz, phase_gx/gy/gz, widths */ \
+    0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, /* num_candidates, \
+    candidate_freqs, amps_gx/gy/gz, grad_amps, grad_amps_gx/gy/gz, violations */ 0, \
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, /* num_component_terms, \
+    component_{freqs,amps,phases,widths,axes,def_ids,contrib_ids,run_ids} */ 0, NULL, \
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, /* num_surviving_freqs, surviving_freqs_hz \
+    */ 0, NULL, /* num_envelope_bins, envelope_freqs_hz, amp_gx/gy/gz */ 0, NULL, NULL, \
+    NULL \
+    }
+/* clang-format on */
 
 /* ================================================================== */
 /*  Forbidden frequency band (for mechanical resonance check)         */
@@ -532,8 +538,6 @@ typedef struct pulseg_forbidden_band
     float freq_max_hz;            /**< upper band edge (Hz)          */
     float max_amplitude_hz_per_m; /**< max spectral amplitude (Hz/m) */
 } pulseg_forbidden_band;
-
-#define PULSEG_FORBIDDEN_BAND_INIT {0.0f, 0.0f, 0.0f}
 
 /* ================================================================== */
 /*  PNS evaluator (vendor-pluggable model)                            */
@@ -585,13 +589,21 @@ typedef struct pulseg_pns_model
      * @param out_z   Receives per-axis result, Z (% of threshold), length n.
      * @return PULSEG_SUCCESS on success, negative error code on failure.
      */
-    int (*evaluate)(void *ctx,
-                     const float *dgdt_x, const float *dgdt_y, const float *dgdt_z,
-                     int n, float dt_us,
-                     float *out_x, float *out_y, float *out_z);
+    int (*evaluate)(
+        void *ctx,
+        const float *dgdt_x,
+        const float *dgdt_y,
+        const float *dgdt_z,
+        int n,
+        float dt_us,
+        float *out_x,
+        float *out_y,
+        float *out_z);
 } pulseg_pns_model;
 
+/* clang-format off */
 #define PULSEG_PNS_MODEL_INIT {NULL, NULL, NULL}
+/* clang-format on */
 
 /* ================================================================== */
 /*  PNS result (for plotting)                                         */
@@ -612,30 +624,31 @@ typedef struct pulseg_pns_result
     float *slew_z_hz_per_m_per_s; /**< convolved dG/dt on Z (Hz/m/s) */
 } pulseg_pns_result;
 
+/* clang-format off */
 #define PULSEG_PNS_RESULT_INIT {0, NULL, NULL, NULL}
+/* clang-format on */
 
 /* ================================================================== */
 /*  Label limits                                                      */
+/*  pulseq_label_limit (the per-label min/max pair) is owned by the    */
+/*  pulseq module; pulseg groups one per Pulseq label below.           */
 /* ================================================================== */
 
-typedef struct pulseg_label_limit
-{
-    int min;
-    int max;
-} pulseg_label_limit;
+typedef pulseq_label_limit pulseg_label_limit;
 
+/** @brief Observed [min, max] of every Pulseq counter label in a subsequence. */
 typedef struct pulseg_label_limits
 {
-    pulseg_label_limit slc;
-    pulseg_label_limit phs;
-    pulseg_label_limit rep;
-    pulseg_label_limit avg;
-    pulseg_label_limit seg;
-    pulseg_label_limit set;
-    pulseg_label_limit eco;
-    pulseg_label_limit par;
-    pulseg_label_limit lin;
-    pulseg_label_limit acq;
+    pulseq_label_limit slc;
+    pulseq_label_limit phs;
+    pulseq_label_limit rep;
+    pulseq_label_limit avg;
+    pulseq_label_limit seg;
+    pulseq_label_limit set;
+    pulseq_label_limit eco;
+    pulseq_label_limit par;
+    pulseq_label_limit lin;
+    pulseq_label_limit acq;
 } pulseg_label_limits;
 
 /* ================================================================== */
@@ -687,31 +700,13 @@ typedef struct pulseg_block_instance
     int module_id;
 } pulseg_block_instance;
 
-#define PULSEG_BLOCK_INSTANCE_INIT { \
-    0,                                  \
-    0.0f,                               \
-    0.0f,                               \
-    0.0f,                               \
-    -1,                                 \
-    0.0f,                               \
-    0.0f,                               \
-    0.0f,                               \
-    0,                                  \
-    0,                                  \
-    0,                                  \
-    0,                                  \
-    0,                                  \
-    0,                                  \
-    {1, 0, 0, 0, 1, 0, 0, 0, 1},        \
-    0,                                  \
-    0,                                  \
-    0,                                  \
-    -1,                                 \
-    0,                                  \
-    0.0f,                               \
-    0.0f,                               \
-    0,                                  \
-}
+/* clang-format off */
+#define PULSEG_BLOCK_INSTANCE_INIT \
+    { \
+    0, 0.0f, 0.0f, 0.0f, -1, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, {1, 0, 0, 0, 1, 0, 0, \
+    0, 1}, 0, 0, 0, -1, 0, 0.0f, 0.0f, 0 \
+    }
+/* clang-format on */
 
 /* ================================================================== */
 /*  Cursor info                                                       */
@@ -736,7 +731,9 @@ typedef struct pulseg_cursor_info
     int pmc;           /**< 1 if current subsequence has PMC enabled      */
 } pulseg_cursor_info;
 
+/* clang-format off */
 #define PULSEG_CURSOR_INFO_INIT {0, 0, -1, 0, 0, 0, 0, 0, 0}
+/* clang-format on */
 
 /* ================================================================== */
 /*  Scan-time query result                                            */
@@ -762,7 +759,9 @@ typedef struct pulseg_scan_time_info
     int total_segment_boundaries; /**< total segment boundary count  */
 } pulseg_scan_time_info;
 
+/* clang-format off */
 #define PULSEG_SCAN_TIME_INFO_INIT {0.0f, 0}
+/* clang-format on */
 
 /* ================================================================== */
 /*  Collection info (replaces individual collection-level getters)    */
@@ -782,7 +781,9 @@ typedef struct pulseg_collection_info
     float total_duration_us; /**< total sequence duration (us)        */
 } pulseg_collection_info;
 
+/* clang-format off */
 #define PULSEG_COLLECTION_INFO_INIT {0, 0, 0, 0, 0.0f}
+/* clang-format on */
 
 /* ================================================================== */
 /*  Subsequence info (replaces per-subsequence getters)               */
@@ -819,8 +820,12 @@ typedef struct pulseg_subseq_info
     int num_gain_cal_readouts; /**< calibration readouts for APS2 gain cal (pislquant) */
 } pulseg_subseq_info;
 
-#define PULSEG_SUBSEQ_INFO_INIT { \
-    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0}
+/* clang-format off */
+#define PULSEG_SUBSEQ_INFO_INIT \
+    { \
+    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0 \
+    }
+/* clang-format on */
 
 /* ================================================================== */
 /*  Segment info (replaces per-segment getters)                       */
@@ -842,13 +847,13 @@ typedef struct pulseg_segment_info
     int trigger_delay_us;    /**< trigger delay (us), -1 if none      */
     int trigger_duration_us; /**< trigger duration (us), -1 if none   */
     int is_nav;              /**< 1 if navigator segment              */
-    int num_kzero_crossings; /**< k-space zero-crossings              */
     int rf_adc_gap_us;       /**< RF->ADC gap (us), -1 if no pair     */
     int adc_adc_gap_us;      /**< min ADC->ADC gap (us), -1 if < 2    */
 } pulseg_segment_info;
 
-#define PULSEG_SEGMENT_INFO_INIT { \
-    0, 0, 0, 0, 0, 0, -1, -1, 0, 0, -1, -1}
+/* clang-format off */
+#define PULSEG_SEGMENT_INFO_INIT {0, 0, 0, 0, 0, 0, -1, -1, 0, -1, -1}
+/* clang-format on */
 
 /** Trigger type constants (public, matching internal definitions). */
 #define PULSEG_TRIGGER_TYPE_OUTPUT 1 /**< TTL / digital output */
@@ -898,18 +903,23 @@ typedef struct pulseg_block_info
     int digitalout_channel;     /**< trigger channel, -1 if absent     */
 
     /* Flags */
-    int has_rotation; /**< 1 if rotation event present       */
-    int norot_flag;   /**< 1 if no-rotation override         */
-    int nopos_flag;   /**< 1 if no-position override         */
-    int has_freq_mod; /**< 1 if frequency modulation present */
+    int has_rotation;      /**< 1 if rotation event present       */
+    int norot_flag;        /**< 1 if no-rotation override         */
+    int nopos_flag;        /**< 1 if no-position override         */
+    int has_freq_mod;      /**< 1 if frequency modulation present */
     int is_variable_delay; /**< 1 if a pure-delay block (no RF/grad/ADC): its
                             *   duration is runtime-adjustable via setperiod, so
                             *   two segments differing only in such a block's
                             *   duration share one segment definition. */
 } pulseg_block_info;
 
-#define PULSEG_BLOCK_INFO_INIT { \
-    0, 0, {0, 0, 0}, {0, 0, 0}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, 0, -1, -1, -1, -1, 0, 0, 0, -1, -1, 0, -1, -1, -1, 0, 0, 0, 0, 0}
+/* clang-format off */
+#define PULSEG_BLOCK_INFO_INIT \
+    { \
+    0, 0, {0, 0, 0}, {0, 0, 0}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, 0, -1, -1, -1, \
+    -1, 0, 0, 0, -1, -1, 0, -1, -1, -1, 0, 0, 0, 0, 0 \
+    }
+/* clang-format on */
 
 /* ================================================================== */
 /*  ADC definition (replaces per-ADC getters)                         */
@@ -926,7 +936,9 @@ typedef struct pulseg_adc_def
     int num_samples; /**< sample count                        */
 } pulseg_adc_def;
 
+/* clang-format off */
 #define PULSEG_ADC_DEF_INIT {0, 0}
+/* clang-format on */
 
 /* ================================================================== */
 /*  RF shim definition (parallel-transmit channel weights)            */
@@ -943,12 +955,14 @@ typedef struct pulseg_adc_def
  */
 typedef struct pulseg_rf_shim_def
 {
-    int num_channels;                                 /**< Tx channel count       */
+    int num_channels;                              /**< Tx channel count       */
     float magnitudes[PULSEG_MAX_RF_SHIM_CHANNELS]; /**< per-ch magnitude [0,1] */
     float phases[PULSEG_MAX_RF_SHIM_CHANNELS];     /**< per-ch phase (rad)     */
 } pulseg_rf_shim_def;
 
-#define PULSEG_RF_SHIM_DEF_INIT {0, {0}, {0}}
+/* clang-format off */
+#define PULSEG_RF_SHIM_DEF_INIT {0, {0}, { 0 }}
+/* clang-format on */
 
 /* ================================================================== */
 /*  RF event (per-occurrence identity, for pTx SAR accumulation)       */
@@ -967,8 +981,6 @@ typedef struct pulseg_rf_event
     int rf_shim_id;     /**< local shim index, -1 if none                 */
     int num_channels;   /**< channels in the RF definition waveform (>=1) */
 } pulseg_rf_event;
-
-#define PULSEG_RF_EVENT_INIT {-1, 0.0f, -1, 1}
 
 /* ================================================================== */
 /*  K-space trajectory types                                          */
@@ -1008,16 +1020,16 @@ typedef struct pulseg_traj_table_entry
 
 /** @brief Per-subsequence encoding-space descriptor.
  *
- * Stage 1.5c: fov/matrix/nav_fov/nav_matrix dropped -- geometry is sourced
+ * fov/matrix/nav_fov/nav_matrix dropped -- geometry is sourced
  * from the DEFINITIONS section (id 0) by subseq_idx, not duplicated here.
  * geometry_tag distinguishes the primary encoding space from a navigator
  * one sharing the same subsequence (DEFINITIONS' NavFOV/NavMatrix kv apply
  * when geometry_tag == 1). */
 typedef struct pulseg_encoding_space
 {
-    int subseq_idx;                      /**< owning subsequence index              */
-    int nav_subseq_offset;               /**< navigator subseq offset, 0 if none    */
-    int geometry_tag;                    /**< 0 = primary, 1 = navigator            */
+    int subseq_idx;                   /**< owning subsequence index              */
+    int nav_subseq_offset;            /**< navigator subseq offset, 0 if none    */
+    int geometry_tag;                 /**< 0 = primary, 1 = navigator            */
     pulseg_label_limits label_limits; /**< per-encoding-space label limits */
 } pulseg_encoding_space;
 
@@ -1029,7 +1041,7 @@ typedef struct pulseg_trajectory
     pulseg_encoding_space *encoding_spaces;
     int num_adc_events;
     pulseg_traj_table_entry *table;
-    /* Stage 1.5c: rotation-matrix library folded into TRAJECTORY itself
+    /* rotation-matrix library folded into TRAJECTORY itself
      * (copied from the owning descriptor's rotation_matrices[]) so the
      * recon reader is self-contained and never reads the PSD-internal
      * ROTATIONS section. table[].rotation_id indexes this array;
@@ -1103,8 +1115,6 @@ typedef struct pulseg_seq_event
     float timestamp_us; /**< anchor time (us, pass-relative)        */
     float params[PULSEG_SEQ_EVENT_PARAMS];
 } pulseg_seq_event;
-
-#define PULSEG_SEQ_EVENT_INIT {PULSEG_SEQ_EVENT_OTHER, 0.0f, {0.0f}}
 
 /**
  * @brief Scan-global sequence parameters, aggregated across all subsequences.

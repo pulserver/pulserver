@@ -2,7 +2,7 @@
  * @file test_pulseq_adapter_equivalence.cpp
  * @brief Stage 3 Step 3.4: load a fixture .seq through the ExternalSequence
  * adapter (cxx/pulseq_adapter) and through pulseg's native C reader
- * (pulseg_pulseq_file_read), and assert the resulting collections agree:
+ * (pulseq_read), and assert the resulting collections agree:
  * block count, segment table, and gradient/RF waveform samples.
  */
 
@@ -22,24 +22,24 @@
 namespace
 {
 
-    pulseg::Opts make_opts()
-    {
-        pulseg::Opts o;
-        o.gamma_hz_per_t = 42577478.0f;
-        o.b0_t = 3.0f;
-        o.max_grad_hz_per_m = 42577478.0f * 0.040f;
-        o.max_slew_hz_per_m_per_s = 42577478.0f * 170.0f;
-        o.rf_raster_us = 2.0f;
-        o.grad_raster_us = 20.0f;
-        o.adc_raster_us = 2.0f;
-        o.block_raster_us = 20.0f;
-        return o;
-    }
+pulseg::Opts make_opts()
+{
+    pulseg::Opts o;
+    o.gamma_hz_per_t = 42577478.0f;
+    o.b0_t = 3.0f;
+    o.max_grad_hz_per_m = 42577478.0f * 0.040f;
+    o.max_slew_hz_per_m_per_s = 42577478.0f * 170.0f;
+    o.rf_raster_us = 2.0f;
+    o.grad_raster_us = 20.0f;
+    o.adc_raster_us = 2.0f;
+    o.block_raster_us = 20.0f;
+    return o;
+}
 
-    std::string fixture_path(const char *name)
-    {
-        return std::string(PULSEQ_ADAPTER_FIXTURES_DIR) + "/" + name;
-    }
+std::string fixture_path(const char *name)
+{
+    return std::string(PULSEQ_ADAPTER_FIXTURES_DIR) + "/" + name;
+}
 
 } // namespace
 
@@ -52,8 +52,13 @@ TEST(PulseqAdapterEquivalence, FseFixtureMatchesNativeReader)
     ASSERT_TRUE(ext.load(path)) << "ExternalSequence failed to load fixture";
 
     pulseg::Collection adapted(ext, opts, /*parse_labels=*/true, /*num_averages=*/1, path.c_str());
-    pulseg::Collection native(path.c_str(), opts, /*cache_binary=*/false, /*verify_signature=*/false,
-                               /*parse_labels=*/true, /*num_averages=*/1);
+    pulseg::Collection native(
+        path.c_str(),
+        opts,
+        /*cache_binary=*/false,
+        /*verify_signature=*/false,
+        /*parse_labels=*/true,
+        /*num_averages=*/1);
 
     // --- Collection-level info ---
     auto ci_a = adapted.collection_info();
@@ -106,9 +111,11 @@ TEST(PulseqAdapterEquivalence, FseFixtureMatchesNativeReader)
     for (size_t i = 0; i < tr_a.gz.amplitude.size(); ++i)
         EXPECT_NEAR(tr_a.gz.amplitude[i], tr_n.gz.amplitude[i], 1e-1) << "gz[" << i << "]";
     for (size_t i = 0; i < tr_a.rf_mag.amplitude.size(); ++i)
-        EXPECT_NEAR(tr_a.rf_mag.amplitude[i], tr_n.rf_mag.amplitude[i], 1e-1) << "rf_mag[" << i << "]";
+        EXPECT_NEAR(tr_a.rf_mag.amplitude[i], tr_n.rf_mag.amplitude[i], 1e-1)
+            << "rf_mag[" << i << "]";
     for (size_t i = 0; i < tr_a.rf_phase.amplitude.size(); ++i)
-        EXPECT_NEAR(tr_a.rf_phase.amplitude[i], tr_n.rf_phase.amplitude[i], 1e-3) << "rf_phase[" << i << "]";
+        EXPECT_NEAR(tr_a.rf_phase.amplitude[i], tr_n.rf_phase.amplitude[i], 1e-3)
+            << "rf_phase[" << i << "]";
 
     EXPECT_NEAR(tr_a.total_duration_us, tr_n.total_duration_us, 1e-2);
 }

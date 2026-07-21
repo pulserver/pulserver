@@ -4,7 +4,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
-from pulserver.core import Protocol, TypeinFloatParam, UIParam
+from pulserver import Protocol, TypeinFloatParam, UIParam
 
 
 @pytest.fixture

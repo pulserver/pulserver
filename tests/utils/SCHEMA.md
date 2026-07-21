@@ -1,13 +1,13 @@
 # Pulseg Cache Binary Wire-Format Specification
 
 **Version**: 2.0.0  
-**Last Updated**: 2026-06-25
+**Last Updated**: 2026-07-21
 
 ## Overview
 
 The pulseg cache file (companion to `.seq`; extension configurable via `pulseg_opts.cache_ext`, D10 -- public default **`.pseg`**, GE keeps **`.pge`**) is a binary serialization of a `pulseg_collection` object. As of cache format **v2.0.0** the payload is split into **per-consumer sections**, so each PSD phase / consumer deserializes only the data it needs. All integer and floating-point fields are stored as 4-byte values; all endianness is determined by the file header marker.
 
-The whole cache is a pure function of the loaded collection (shift- and rotation-independent). It is produced in one shot at load time by `pulseg__write_cache` (see `pulseg_cache.c`), which emits the four base sections (COMMON, ROTATIONS, SHAPES, SCANLOOP) and then appends TRAJECTORY, SEQDESC, FREQMOD and the optional VENDOR section.
+The whole cache is a pure function of the loaded collection (shift- and rotation-independent). It is produced in one shot at load time by `pulseg__write_cache` (see `pulseg_cache.c`), which emits the five base sections (COMMON, INSTANCES, ROTATIONS, SHAPES, SCANLOOP) and then appends TRAJECTORY, SEQDESC, FREQMOD and the optional VENDOR section.
 
 ---
 
@@ -20,10 +20,10 @@ The cache file begins with a fixed header (28 bytes):
 | 0x00 | Endian marker | int32 | 1 | 4 | `0x01020304`; if byte-swapped, indicates big-endian file |
 | 0x04 | Version major | int32 | 1 | 4 | `PULSEG_CACHE_VERSION_MAJOR = 2` |
 | 0x08 | Version minor | int32 | 1 | 4 | `PULSEG_CACHE_VERSION_MINOR = 0` |
-| 0x0C | Version revision | int32 | 1 | 4 | `PULSEG_CACHE_VERSION_REVISION = 0` |
+| 0x0C | Version revision | int32 | 1 | 4 | `PULSEG_CACHE_VERSION_REVISION = 4` |
 | 0x10 | Vendor | int32 | 1 | 4 | `PULSEG_VENDOR` constant; identifies hardware/vendor context |
 | 0x14 | Source seq file size | int32 | 1 | 4 | Byte count of original `.seq` file; used for cache validity check |
-| 0x18 | Number of sections | int32 | 1 | 4 | Count of section entries in the table-of-contents (up to 8; `PULSEG_CACHE_MAX_SECTIONS = 9` reserved slots) |
+| 0x18 | Number of sections | int32 | 1 | 4 | Count of section entries in the table-of-contents (up to 9; `PULSEG_CACHE_MAX_SECTIONS = 10` reserved slots) |
 
 After the header, the file contains:
 - **Section table** (immediate): `num_sections × 12` bytes (3 int32 per entry)
@@ -37,6 +37,11 @@ intra-version fallback. Stale caches are regenerated, not partially parsed.
 - **v1.x**: legacy monolithic layout (CHECK/GENINSTRUCTIONS/SCANLOOP byte-identical payloads).
   No longer produced or read.
 - **v2.0.0** (current): per-consumer section split; adds the `version_revision` header word.
+  - rev 4: the per-instance event tables (block/RF/gradient/ADC tables and the label
+    table) moved out of COMMON into the new **INSTANCES** section; the collection header
+    gained `total_readouts`; each segment definition gained per-block-position
+    **initial-state records**. This is what lets the pulsegen load drop both INSTANCES
+    and SCANLOOP -- the two sections whose size scales with the scan length.
 
 ---
 
@@ -54,18 +59,18 @@ Immediately after the 28-byte file header, a TOC of `num_sections` entries follo
 
 | ID | Name | Purpose | Reader / Consumer | Notes |
 |---|---|---|---|---|
-| 1 | COMMON | Collection header + per-descriptor structure/scaling/defs (RF/grad/ADC defs, segment defs+anchors, segment table, labels, generic [DEFINITIONS]) | pulseg_load_geninstructions_cache() (+SHAPES); pulseg_load_scanloop_cache() (+ROTATIONS+SCANLOOP); trajectory_cache_reader.cpp | Must be read first; augment sections attach to the descriptors it allocates. Excludes rotations, raw shapes, scan table |
+| 1 | COMMON | Collection header + per-descriptor **definition-scale** state only: scalars/rasters, base blocks, RF/grad/ADC/shim/trigger definition libraries, TR descriptor, segment defs (+timing anchors +per-position initial states), segment table | pulseg_load_geninstructions_cache() (+SHAPES); pulseg_load_scanloop_cache() (+INSTANCES+ROTATIONS+SCANLOOP) | Must be read first; augment sections attach to the descriptors it allocates. Excludes rotations, raw shapes, the per-instance tables and the execution stream |
+| 9 | INSTANCES | Per-instance event tables: block table, RF/gradient/ADC tables, label table + label limits (per descriptor) | scan (load_scanloop) | Augment section. Size scales with the scan length; **not** loaded by pulsegen |
 | 2 | ROTATIONS | 3×3 rotation-matrix library (per descriptor) | scan (load_scanloop); trajectory_cache_reader.cpp | Augment section |
 | 3 | SHAPES | RF mag/phase/time + gradient compressed shape sample arrays (per descriptor) | pulsegen (load_geninstructions) | Augment section |
-| 4 | SCANLOOP | scan_table (4×len) + variable_grad_flags (per descriptor) | scan (load_scanloop) | Augment section |
+| 4 | SCANLOOP | exec_stream (4×len) + variable_grad_flags (per descriptor) | scan (load_scanloop) | Augment section |
 | 5 | FREQMOD | Frequency-modulation **base only** (shift-independent) | scan; **NOT parsed by mrdserver** | Applied PSD-side; data at recon already centered |
 | 6 | TRAJECTORY | Trajectory library (kshots, encoding spaces, table) | trajectory_cache_reader.cpp | Non-Cartesian trajectory data |
 | 7 | SEQDESC | Event lists, RF shapes, shims | trajectory_cache_reader.cpp (optional) | Per-subsequence details; graceful skip if absent |
 | 8 | VENDOR | Opaque length-prefixed vendor blob (D10) | `pulseg_read_vendor_cache_section()` | Written only when `pulseg_opts.vendor_section_write_fn` is set; GE leaves it unused; payload format is entirely vendor-defined |
 
-> **Note (Stage 3, planned):** TRAJECTORY(6) + SEQDESC(7) are slated to merge into a single
-> RECON section (id 6) carrying trajectory + seqdesc + generic [DEFINITIONS] + a rotations copy.
-> Not yet implemented.
+> **Note:** the TRAJECTORY(6) + SEQDESC(7) merge into a single RECON section was ABANDONED --
+> the two stay separate, each self-contained for the recon reader.
 
 ---
 
@@ -73,7 +78,7 @@ Immediately after the 28-byte file header, a TOC of `num_sections` entries follo
 
 The **COMMON** section carries a **collection-level header** followed by **per-subsequence
 descriptors** (the field-by-field layout below, minus the rotations, raw shapes and scan-table
-blocks). The **augment sections** (ROTATIONS, SHAPES, SCANLOOP) carry no collection scalars: they
+blocks). The **augment sections** (INSTANCES, ROTATIONS, SHAPES, SCANLOOP, DEFINITIONS) carry no collection scalars: they
 write a single `num_subsequences` token (validated against COMMON on read) followed by one
 per-descriptor region each. Fields are written via `fwrite()` in the following order:
 
@@ -86,6 +91,7 @@ per-descriptor region each. Fields are written via `fwrite()` in the following o
 | total_unique_segments | int32 | 1 | 4 | Total distinct segments across all subsequences |
 | total_unique_adcs | int32 | 1 | 4 | Total distinct ADC definitions |
 | total_blocks | int32 | 1 | 4 | Total block count |
+| total_readouts | int32 | 1 | 4 | ADC-bearing execution-stream positions, frozen at assembly |
 | total_duration_us | int32 | 1 | 4 | Entire sequence duration (microseconds) |
 
 ### Per-Subsequence Header (COMMON section)
@@ -141,7 +147,7 @@ For each block definition (7 int32 per entry):
 | gz_id | int32 | 1 | 4 |
 | adc_id | int32 | 1 | 4 |
 
-#### Block Table
+#### Block Table — INSTANCES section (id 9)
 
 | Prefix | Type | Count | Bytes | Description |
 |--------|------|-------|-------|---|
@@ -199,7 +205,7 @@ For each RF definition:
 | total_b1sq_power | float | 1 | 4 | Integral of \|B1(t)\|² (arbitrary units) |
 | vendor | int32 | 1 | 4 | Vendor ID for interpretation of above fields |
 
-#### RF Table
+#### RF Table — INSTANCES section (id 9)
 
 | Prefix | Type | Count | Bytes | Description |
 |--------|------|-------|-------|---|
@@ -241,7 +247,7 @@ For each gradient definition:
 | first_value[0..15] | float | 16 | 64 | Initial amplitude value per shot |
 | last_value[0..15] | float | 16 | 64 | Final amplitude value per shot |
 
-#### Gradient Table
+#### Gradient Table — INSTANCES section (id 9)
 
 | Prefix | Type | Count | Bytes | Description |
 |--------|------|-------|-------|---|
@@ -270,7 +276,7 @@ For each ADC definition (4 int32 per entry):
 | dwell_time | float | 1 | 4 |
 | delay | float | 1 | 4 |
 
-#### ADC Table
+#### ADC Table — INSTANCES section (id 9)
 
 | Prefix | Type | Count | Bytes | Description |
 |--------|------|-------|-------|---|
@@ -386,8 +392,32 @@ For each segment definition:
 | has_rotation[0..N_b-1] | int32 | N_b | 4×N_b | Rotation flags per block |
 | norot_flag[0..N_b-1] | int32 | N_b | 4×N_b | No-rotation flags per block |
 | nopos_flag[0..N_b-1] | int32 | N_b | 4×N_b | No-position flags per block |
+| has_freq_mod[0..N_b-1] | int32 | N_b | 4×N_b | Freq-mod flags per block |
+| has_adc[0..N_b-1] | int32 | N_b | 4×N_b | OR-reduced ADC presence per block |
+| is_dynamic_delay[0..N_b-1] | int32 | N_b | 4×N_b | Pure delay whose duration varies across instances |
+| initial_states[0..N_b-1] | struct | N_b | 48×N_b | Per-position initial event state, 12 words each (see below) |
 | trigger_id | int32 | 1 | 4 | Associated trigger ID |
 | is_nav | int32 | 1 | 4 | Boolean: navigator segment |
+| timing.num_rf_anchors | int32 | 1 | 4 | RF anchor count (N_r) |
+| timing.rf_anchors[0..N_r-1] | struct | N_r | 24×N_r | Packed 6-word RF anchors (if N_r > 0) |
+| timing.num_adc_anchors | int32 | 1 | 4 | ADC anchor count (N_a) |
+| timing.adc_anchors[0..N_a-1] | struct | N_a | 20×N_a | Packed 5-word ADC anchors (if N_a > 0) |
+
+Each `initial_states` record is the segment's representative (max-energy) scan instance,
+resolved once at parse time so consumers that materialise segment memory never need the
+INSTANCES or SCANLOOP sections (12 int32/float words, packed):
+
+| Field | Type | Count | Bytes | Description |
+|-------|------|-------|-------|---|
+| base_block_id | int32 | 1 | 4 | Block-definition index at the representative instance, -1 if none |
+| digitalout_id | int32 | 1 | 4 | trigger_events index at this position, -1 = none |
+| grad_def_id[0..2] | int32 | 3 | 12 | Gradient-definition index per axis, -1 = no gradient |
+| grad_shot_index[0..2] | int32 | 3 | 12 | Shot index per axis |
+| rf_amplitude_hz | float | 1 | 4 | RF amplitude (Hz); the definition's base amplitude when no instance resolved |
+| grad_amplitude_hz_per_m[0..2] | float | 3 | 12 | Gradient amplitude per axis (Hz/m); 1.0 when unresolved |
+
+> `timing.num_kzero_crossings` and its index array are deliberately NOT serialized — no
+> consumer reads them back; kzero timing reaches the PSD through the ADC anchors.
 
 #### Segment Table
 
@@ -401,7 +431,7 @@ For each segment definition:
 | num_cooldown_segments | int32 | 1 | 4 | Cooldown segment count (N_c) |
 | cooldown_segment_table[0..N_c-1] | int32 | N_c | 4×N_c | Cooldown segment indices (if N_c > 0) |
 
-#### Label Table & Limits
+#### Label Table & Limits — INSTANCES section (id 9)
 
 | Field | Type | Count | Bytes | Description |
 |-------|------|-------|-------|---|
@@ -428,16 +458,16 @@ For each definition:
 #### Scan Table — SCANLOOP section (id 4)
 
 > Emitted in the standalone **SCANLOOP** augment section, **not** in COMMON. The section is a
-> `num_subsequences` token followed by one of these per-descriptor regions (scan_table plus the
+> `num_subsequences` token followed by one of these per-descriptor regions (exec_stream plus the
 > `variable_grad_flags`).
 
 | Field | Type | Count | Bytes | Description |
 |-------|------|-------|-------|---|
-| scan_table_len | int32 | 1 | 4 | Number of scan table entries |
-| scan_table_block_idx[...] | int32 | scan_table_len | 4×len | Block indices (if len > 0) |
-| scan_table_tr_id[...] | int32 | scan_table_len | 4×len | TR IDs (if len > 0) |
-| scan_table_seg_id[...] | int32 | scan_table_len | 4×len | Segment IDs (if len > 0) |
-| scan_table_avg_id[...] | int32 | scan_table_len | 4×len | Average IDs (if len > 0) |
+| exec_stream_len | int32 | 1 | 4 | Number of execution-stream entries |
+| exec_stream_block_idx[...] | int32 | exec_stream_len | 4×len | Block indices (if len > 0) |
+| exec_stream_tr_id[...] | int32 | exec_stream_len | 4×len | TR IDs (if len > 0) |
+| exec_stream_seg_id[...] | int32 | exec_stream_len | 4×len | Segment IDs (if len > 0) |
+| exec_stream_avg_id[...] | int32 | exec_stream_len | 4×len | Average IDs (if len > 0) |
 
 ---
 
@@ -479,7 +509,7 @@ Readers should:
 2. Validate version_major, version_minor AND version_revision all match expectations
    (the writer's reader hard-fails on any mismatch; there is no intra-version fallback)
 3. Skip unknown sections gracefully
-4. Read COMMON (id 1) before any augment section (ROTATIONS/SHAPES/SCANLOOP), which attach to the
+4. Read COMMON (id 1) before any augment section (INSTANCES/ROTATIONS/SHAPES/SCANLOOP/DEFINITIONS), which attach to the
    descriptors COMMON allocates
 5. Treat sequence descriptions (Section 7) as optional; degrade gracefully if absent
 

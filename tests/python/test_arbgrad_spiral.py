@@ -5,9 +5,7 @@ import math
 import numpy as np
 import pypulseq as pp
 import pytest
-
-from pulserver import arbgrad
-from pulserver.pulseq import Sequence, make_rotation
+from pulserver.pypulseq import Sequence, arbgrad, make_rotation
 
 try:
     from scipy.spatial.transform import Rotation
@@ -119,7 +117,7 @@ def test_shot_angles_rejects_unknown_mode():
 @pytest.mark.skipif(Rotation is None, reason="scipy is required to build rotation quaternions")
 def test_base_waveform_consumable_by_fast_sequence_with_rotation():
     """Round-trip smoke test: rotate the base waveform per shot_angles and feed
-    it through pulserver.pulseq.Sequence (the fast builder every zoo sequence
+    it through pulserver.pypulseq.Sequence (the fast builder every zoo sequence
     must use), confirming the arbgrad output is directly consumable end-to-end.
     """
     opts = pp.Opts()

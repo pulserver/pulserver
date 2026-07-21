@@ -1,16 +1,12 @@
-/* pulseg_waveforms.c -- gradient, RF, ADC waveform extraction
+/**
+ * @file pulseg_waveforms.c
+ * @brief Flattening one TR onto a uniform raster.
  *
- * Extracts native-timing and uniform-raster gradient waveforms,
- * RF magnitude/phase, and ADC events from the block playback table.
- *
- * Public functions:
- *   pulseg_get_tr_gradient_waveforms / _free
- *   pulseg_get_tr_waveforms          / _free
- *
- * Internal (called by pulseg_safety.c):
- *   pulseg__uniform_grad_waveforms_free
- *   pulseg__get_gradient_waveforms_range
- *   pulseg__find_unique_shot_trs
+ * Consumers that need a waveform rather than a block list -- safety analysis,
+ * trajectory integration, wrapper-side plotting -- go through here. The
+ * amplitude mode selects which TR is being asked about: the safety worst case
+ * (PULSEG_AMP_MAX_POS), the structural skeleton with variable gradients
+ * zeroed (PULSEG_AMP_ZERO_VAR), or one concrete TR (PULSEG_AMP_ACTUAL).
  */
 
 #include <math.h>
@@ -20,6 +16,7 @@
 #include "pulseg_internal.h"
 #include "pulseg.h"
 
+/* ================================================================== */
 /*  Gradient waveform free                                            */
 /* ================================================================== */
 
@@ -78,7 +75,7 @@ static int count_grad_samples_for_block(
     int num_samples;
     float delay_us, rise_us, flat_us, fall_us, duration_us;
     float grad_raster_us;
-    pulseg_shape_arbitrary decomp_time;
+    pulseq_shape decomp_time;
 
     if (!gdef)
         return 2;
@@ -106,17 +103,17 @@ static int count_grad_samples_for_block(
     {
         if (gdef->unused_or_time_shape_id > 0 &&
             gdef->unused_or_time_shape_id <= desc->num_shapes &&
-            pulseg_pulseq_decompress_shape(&decomp_time,
-                                        &desc->shapes[gdef->unused_or_time_shape_id - 1],
-                                        grad_raster_us))
+            pulseq_decompress_shape(
+                &decomp_time,
+                &desc->shapes[gdef->unused_or_time_shape_id - 1],
+                grad_raster_us))
         {
-            duration_us = delay_us +
-                          decomp_time.samples[decomp_time.num_uncompressed_samples - 1];
+            duration_us = delay_us + decomp_time.samples[decomp_time.num_uncompressed_samples - 1];
         }
         else
         {
-            duration_us = delay_us + 0.5f * grad_raster_us +
-                          grad_raster_us * (float)(num_samples - 1);
+            duration_us =
+                delay_us + 0.5f * grad_raster_us + grad_raster_us * (float)(num_samples - 1);
         }
         if (decomp_time.samples)
             PULSEG_FREE(decomp_time.samples);
@@ -142,10 +139,13 @@ static int count_grad_samples_for_block(
  */
 static int compute_position_max_amplitudes_filtered(
     const pulseg_sequence_descriptor *desc,
+    float *pos_max_gx,
+    float *pos_max_gy,
+    float *pos_max_gz,
     int block_start,
     int block_count,
-    float *pos_max_gx, float *pos_max_gy, float *pos_max_gz,
-    const int *tr_group_labels, int target_group)
+    const int *tr_group_labels,
+    int target_group)
 {
     const pulseg_tr_descriptor *tr;
     int tr_start, tr_size, num_trs;
@@ -159,9 +159,10 @@ static int compute_position_max_amplitudes_filtered(
     tr = &desc->tr_descriptor;
     tr_size = tr->tr_size;
     num_trs = tr->num_trs;
-    use_full_pass_layout = !(block_start == (tr->num_prep_blocks + tr->imaging_tr_start) && block_count == tr_size);
+    use_full_pass_layout =
+        !(block_start == (tr->num_prep_blocks + tr->imaging_tr_start) && block_count == tr_size);
     num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
-    pass_size = (num_passes > 0) ? (desc->scan_table_len / num_passes) : 0;
+    pass_size = (num_passes > 0) ? (desc->exec_stream_len / num_passes) : 0;
 
     for (n = 0; n < block_count * PULSEG_MAX_GRAD_SHOTS; ++n)
     {
@@ -170,21 +171,20 @@ static int compute_position_max_amplitudes_filtered(
         pos_max_gz[n] = 0.0f;
     }
 
-    if (use_full_pass_layout && pass_size > 0 && desc->scan_table_block_idx)
+    if (use_full_pass_layout && pass_size > 0 && desc->exec_stream_block_idx)
     {
         for (pass_idx = 0; pass_idx < num_passes; ++pass_idx)
         {
-            if (tr_group_labels &&
-                tr_group_labels[pass_idx] != target_group)
+            if (tr_group_labels && tr_group_labels[pass_idx] != target_group)
                 continue;
 
             for (pos = 0; pos < block_count; ++pos)
             {
                 st_pos = pass_idx * pass_size + block_start + pos;
-                if (st_pos < 0 || st_pos >= desc->scan_table_len)
+                if (st_pos < 0 || st_pos >= desc->exec_stream_len)
                     continue;
 
-                block_idx = desc->scan_table_block_idx[st_pos];
+                block_idx = desc->exec_stream_block_idx[st_pos];
                 if (block_idx < 0 || block_idx >= desc->num_blocks)
                     continue;
                 bte = &desc->block_table[block_idx];
@@ -340,7 +340,7 @@ int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc)
         desc->variable_grad_flags = NULL;
     }
 
-    if (tr_size <= 0 || desc->scan_table_len <= 0)
+    if (tr_size <= 0 || desc->exec_stream_len <= 0)
         return PULSEG_SUCCESS;
 
     n = tr_size * 3;
@@ -380,20 +380,20 @@ int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc)
             psv[pos] = 0;
         }
 
-        /* Walk the scan table.  scan_table_tr_start[si] == 1 marks the first
+        /* Walk the scan table.  exec_stream_tr_start[si] == 1 marks the first
          * block of a new TR; we use this to reset the within-TR position.
          * This uses the full expanded scan table rather than the deduplicated
          * block table, so that per-TR gradient amplitude variation (e.g. phase
          * encoding steps) is correctly detected even after deduplication. */
         tr_pos = 0;
-        for (si = 0; si < desc->scan_table_len; ++si)
+        for (si = 0; si < desc->exec_stream_len; ++si)
         {
             /* Reset position counter at the start of each new TR */
-            if (desc->scan_table_tr_start && desc->scan_table_tr_start[si])
+            if (desc->exec_stream_tr_start && desc->exec_stream_tr_start[si])
                 tr_pos = 0;
 
             {
-                int bt_idx = desc->scan_table_block_idx[si];
+                int bt_idx = desc->exec_stream_block_idx[si];
                 if (tr_pos < tr_size && bt_idx >= 0 && bt_idx < desc->num_blocks)
                 {
                     int axis;
@@ -548,8 +548,8 @@ int pulseg__find_unique_shot_trs(
     }
 
     /* Deduplicate */
-    num_unique = pulseg__deduplicate_int_rows(
-        unique_defs, event_table, int_rows, num_trs, num_cols);
+    num_unique =
+        pulseg__deduplicate_int_rows(unique_defs, event_table, int_rows, num_trs, num_cols);
 
     PULSEG_FREE(int_rows);
 
@@ -585,7 +585,9 @@ int pulseg__find_unique_shot_trs(
 
 static int fill_grad_waveform_for_block(
     const pulseg_sequence_descriptor *desc,
-    float *time, float *waveform, int start_idx,
+    float *time,
+    float *waveform,
+    int start_idx,
     const pulseg_grad_definition *gdef,
     const pulseg_grad_table_element *gte,
     float t0,
@@ -598,7 +600,7 @@ static int fill_grad_waveform_for_block(
     int shape_id, time_shape_id, shot_idx, num_samples;
     float rise_us, flat_us, fall_us;
     float grad_raster_us, block_end_us;
-    pulseg_shape_arbitrary decomp_wave, decomp_time;
+    pulseq_shape decomp_wave, decomp_time;
     int has_time_shape;
 
     idx = start_idx;
@@ -696,15 +698,16 @@ static int fill_grad_waveform_for_block(
 
         if (shape_id <= 0 || shape_id > desc->num_shapes)
             return 0;
-        if (!pulseg_pulseq_decompress_shape(&decomp_wave,
-                                         &desc->shapes[shape_id - 1], 1.0f))
+        if (!pulseq_decompress_shape(&decomp_wave, &desc->shapes[shape_id - 1], 1.0f))
             return 0;
 
         has_time_shape = 0;
         if (time_shape_id > 0 && time_shape_id <= desc->num_shapes)
         {
-            if (pulseg_pulseq_decompress_shape(&decomp_time,
-                                            &desc->shapes[time_shape_id - 1], grad_raster_us))
+            if (pulseq_decompress_shape(
+                    &decomp_time,
+                    &desc->shapes[time_shape_id - 1],
+                    grad_raster_us))
                 has_time_shape = 1;
         }
 
@@ -723,8 +726,7 @@ static int fill_grad_waveform_for_block(
         {
             for (i = 0; i < num_samples; ++i)
             {
-                t_sample = t0 + delay_us + 0.5f * grad_raster_us +
-                           (float)i * grad_raster_us;
+                t_sample = t0 + delay_us + 0.5f * grad_raster_us + (float)i * grad_raster_us;
                 time[idx] = t_sample;
                 waveform[idx] = sign * max_amp * decomp_wave.samples[i];
                 last_written = t_sample;
@@ -756,7 +758,9 @@ static int fill_grad_waveform_for_block(
 /* ================================================================== */
 
 static int interpolate_to_uniform(
-    float **time, float **waveform, int *num_samples,
+    float **time,
+    float **waveform,
+    int *num_samples,
     float target_raster_us)
 {
     float *t_in;
@@ -837,7 +841,7 @@ int pulseg__get_gradient_waveforms_range(
     int result;
     float t0, block_dur_us, target_raster_us;
     int block_def_id;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     const pulseg_block_table_element *bte;
     int gx_raw, gy_raw, gz_raw;
     const pulseg_grad_definition *gx_def;
@@ -891,8 +895,7 @@ int pulseg__get_gradient_waveforms_range(
         diag->code = PULSEG_ERR_TR_NO_BLOCKS;
         return diag->code;
     }
-    if (!block_order &&
-        (block_start < 0 || block_start + block_count > desc->num_blocks))
+    if (!block_order && (block_start < 0 || block_start + block_count > desc->num_blocks))
     {
         diag->code = PULSEG_ERR_INVALID_ARGUMENT;
         return diag->code;
@@ -910,15 +913,14 @@ int pulseg__get_gradient_waveforms_range(
     }
 
     /* position-max amplitudes (only for worst-case main-TR mode) */
-    if (amplitude_mode == PULSEG_AMP_MAX_POS ||
-        amplitude_mode == PULSEG_AMP_ZERO_VAR)
+    if (amplitude_mode == PULSEG_AMP_MAX_POS || amplitude_mode == PULSEG_AMP_ZERO_VAR)
     {
-        pos_max_gx = (float *)PULSEG_ALLOC(
-            (size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
-        pos_max_gy = (float *)PULSEG_ALLOC(
-            (size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
-        pos_max_gz = (float *)PULSEG_ALLOC(
-            (size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
+        pos_max_gx =
+            (float *)PULSEG_ALLOC((size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
+        pos_max_gy =
+            (float *)PULSEG_ALLOC((size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
+        pos_max_gz =
+            (float *)PULSEG_ALLOC((size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
         if (!pos_max_gx || !pos_max_gy || !pos_max_gz)
         {
             if (pos_max_gx)
@@ -930,14 +932,18 @@ int pulseg__get_gradient_waveforms_range(
             diag->code = PULSEG_ERR_ALLOC_FAILED;
             return diag->code;
         }
-        compute_position_max_amplitudes_filtered(desc,
-                                                 block_start, block_count,
-                                                 pos_max_gx, pos_max_gy, pos_max_gz,
-                                                 tr_group_labels, target_group);
+        compute_position_max_amplitudes_filtered(
+            desc,
+            pos_max_gx,
+            pos_max_gy,
+            pos_max_gz,
+            block_start,
+            block_count,
+            tr_group_labels,
+            target_group);
 
         /* ZERO_VAR: zero out positions whose gradients vary across TRs */
-        if (amplitude_mode == PULSEG_AMP_ZERO_VAR &&
-            desc->variable_grad_flags)
+        if (amplitude_mode == PULSEG_AMP_ZERO_VAR && desc->variable_grad_flags)
         {
             int vp;
             for (vp = 0; vp < block_count && vp < desc->tr_descriptor.tr_size; ++vp)
@@ -964,28 +970,27 @@ int pulseg__get_gradient_waveforms_range(
         block_idx = block_order ? block_order[n] : block_start + n;
         bte = &desc->block_table[block_idx];
         block_def_id = bte->id;
-        bdef = &desc->block_definitions[block_def_id];
-        block_dur_us = (bte->duration_us >= 0) ? (float)bte->duration_us
-                                               : (float)bdef->duration_us;
+        bdef = &desc->base_blocks[block_def_id];
+        block_dur_us = (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
 
         gx_raw = bte->gx_id;
         gy_raw = bte->gy_id;
         gz_raw = bte->gz_id;
-        gx_def = (gx_raw >= 0 && gx_raw < desc->grad_table_size &&
-                  desc->grad_table[gx_raw].id >= 0 &&
-                  desc->grad_table[gx_raw].id < desc->num_unique_grads)
-                     ? &desc->grad_definitions[desc->grad_table[gx_raw].id]
-                     : NULL;
-        gy_def = (gy_raw >= 0 && gy_raw < desc->grad_table_size &&
-                  desc->grad_table[gy_raw].id >= 0 &&
-                  desc->grad_table[gy_raw].id < desc->num_unique_grads)
-                     ? &desc->grad_definitions[desc->grad_table[gy_raw].id]
-                     : NULL;
-        gz_def = (gz_raw >= 0 && gz_raw < desc->grad_table_size &&
-                  desc->grad_table[gz_raw].id >= 0 &&
-                  desc->grad_table[gz_raw].id < desc->num_unique_grads)
-                     ? &desc->grad_definitions[desc->grad_table[gz_raw].id]
-                     : NULL;
+        gx_def =
+            (gx_raw >= 0 && gx_raw < desc->grad_table_size && desc->grad_table[gx_raw].id >= 0 &&
+             desc->grad_table[gx_raw].id < desc->num_unique_grads)
+            ? &desc->grad_definitions[desc->grad_table[gx_raw].id]
+            : NULL;
+        gy_def =
+            (gy_raw >= 0 && gy_raw < desc->grad_table_size && desc->grad_table[gy_raw].id >= 0 &&
+             desc->grad_table[gy_raw].id < desc->num_unique_grads)
+            ? &desc->grad_definitions[desc->grad_table[gy_raw].id]
+            : NULL;
+        gz_def =
+            (gz_raw >= 0 && gz_raw < desc->grad_table_size && desc->grad_table[gz_raw].id >= 0 &&
+             desc->grad_table[gz_raw].id < desc->num_unique_grads)
+            ? &desc->grad_definitions[desc->grad_table[gz_raw].id]
+            : NULL;
 
         total_gx += count_grad_samples_for_block(desc, gx_def, block_dur_us);
         total_gy += count_grad_samples_for_block(desc, gy_def, block_dur_us);
@@ -999,9 +1004,7 @@ int pulseg__get_gradient_waveforms_range(
     wf_gy = (float *)PULSEG_ALLOC((size_t)total_gy * sizeof(float));
     time_gz = (float *)PULSEG_ALLOC((size_t)total_gz * sizeof(float));
     wf_gz = (float *)PULSEG_ALLOC((size_t)total_gz * sizeof(float));
-    if (!time_gx || !wf_gx ||
-        !time_gy || !wf_gy ||
-        !time_gz || !wf_gz)
+    if (!time_gx || !wf_gx || !time_gy || !wf_gy || !time_gz || !wf_gz)
     {
         if (pos_max_gx)
             PULSEG_FREE(pos_max_gx);
@@ -1035,49 +1038,59 @@ int pulseg__get_gradient_waveforms_range(
         block_idx = block_order ? block_order[n] : block_start + n;
         bte = &desc->block_table[block_idx];
         block_def_id = bte->id;
-        bdef = &desc->block_definitions[block_def_id];
-        block_dur_us = (bte->duration_us >= 0) ? (float)bte->duration_us
-                                               : (float)bdef->duration_us;
+        bdef = &desc->base_blocks[block_def_id];
+        block_dur_us = (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
 
         gx_raw = bte->gx_id;
         gy_raw = bte->gy_id;
         gz_raw = bte->gz_id;
 
-        gx_tab = (gx_raw >= 0 && gx_raw < desc->grad_table_size)
-                     ? &desc->grad_table[gx_raw]
-                     : NULL;
-        gy_tab = (gy_raw >= 0 && gy_raw < desc->grad_table_size)
-                     ? &desc->grad_table[gy_raw]
-                     : NULL;
-        gz_tab = (gz_raw >= 0 && gz_raw < desc->grad_table_size)
-                     ? &desc->grad_table[gz_raw]
-                     : NULL;
+        gx_tab = (gx_raw >= 0 && gx_raw < desc->grad_table_size) ? &desc->grad_table[gx_raw] : NULL;
+        gy_tab = (gy_raw >= 0 && gy_raw < desc->grad_table_size) ? &desc->grad_table[gy_raw] : NULL;
+        gz_tab = (gz_raw >= 0 && gz_raw < desc->grad_table_size) ? &desc->grad_table[gz_raw] : NULL;
 
         gx_def = (gx_tab && gx_tab->id >= 0 && gx_tab->id < desc->num_unique_grads)
-                     ? &desc->grad_definitions[gx_tab->id]
-                     : NULL;
+            ? &desc->grad_definitions[gx_tab->id]
+            : NULL;
         gy_def = (gy_tab && gy_tab->id >= 0 && gy_tab->id < desc->num_unique_grads)
-                     ? &desc->grad_definitions[gy_tab->id]
-                     : NULL;
+            ? &desc->grad_definitions[gy_tab->id]
+            : NULL;
         gz_def = (gz_tab && gz_tab->id >= 0 && gz_tab->id < desc->num_unique_grads)
-                     ? &desc->grad_definitions[gz_tab->id]
-                     : NULL;
+            ? &desc->grad_definitions[gz_tab->id]
+            : NULL;
 
-        if (amplitude_mode == PULSEG_AMP_MAX_POS ||
-            amplitude_mode == PULSEG_AMP_ZERO_VAR)
+        if (amplitude_mode == PULSEG_AMP_MAX_POS || amplitude_mode == PULSEG_AMP_ZERO_VAR)
         {
-            idx_gx += fill_grad_waveform_for_block(desc,
-                                                   time_gx, wf_gx, idx_gx,
-                                                   gx_def, gx_tab, t0,
-                                                   &pos_max_gx[n * PULSEG_MAX_GRAD_SHOTS], block_dur_us);
-            idx_gy += fill_grad_waveform_for_block(desc,
-                                                   time_gy, wf_gy, idx_gy,
-                                                   gy_def, gy_tab, t0,
-                                                   &pos_max_gy[n * PULSEG_MAX_GRAD_SHOTS], block_dur_us);
-            idx_gz += fill_grad_waveform_for_block(desc,
-                                                   time_gz, wf_gz, idx_gz,
-                                                   gz_def, gz_tab, t0,
-                                                   &pos_max_gz[n * PULSEG_MAX_GRAD_SHOTS], block_dur_us);
+            idx_gx += fill_grad_waveform_for_block(
+                desc,
+                time_gx,
+                wf_gx,
+                idx_gx,
+                gx_def,
+                gx_tab,
+                t0,
+                &pos_max_gx[n * PULSEG_MAX_GRAD_SHOTS],
+                block_dur_us);
+            idx_gy += fill_grad_waveform_for_block(
+                desc,
+                time_gy,
+                wf_gy,
+                idx_gy,
+                gy_def,
+                gy_tab,
+                t0,
+                &pos_max_gy[n * PULSEG_MAX_GRAD_SHOTS],
+                block_dur_us);
+            idx_gz += fill_grad_waveform_for_block(
+                desc,
+                time_gz,
+                wf_gz,
+                idx_gz,
+                gz_def,
+                gz_tab,
+                t0,
+                &pos_max_gz[n * PULSEG_MAX_GRAD_SHOTS],
+                block_dur_us);
         }
         else
         {
@@ -1091,9 +1104,16 @@ int pulseg__get_gradient_waveforms_range(
                     actual_amp[k] = gx_tab->amplitude;
                 }
             }
-            idx_gx += fill_grad_waveform_for_block(desc,
-                                                   time_gx, wf_gx, idx_gx,
-                                                   gx_def, gx_tab, t0, actual_amp, block_dur_us);
+            idx_gx += fill_grad_waveform_for_block(
+                desc,
+                time_gx,
+                wf_gx,
+                idx_gx,
+                gx_def,
+                gx_tab,
+                t0,
+                actual_amp,
+                block_dur_us);
 
             for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
                 actual_amp[k] = 0.0f;
@@ -1105,9 +1125,16 @@ int pulseg__get_gradient_waveforms_range(
                     actual_amp[k] = gy_tab->amplitude;
                 }
             }
-            idx_gy += fill_grad_waveform_for_block(desc,
-                                                   time_gy, wf_gy, idx_gy,
-                                                   gy_def, gy_tab, t0, actual_amp, block_dur_us);
+            idx_gy += fill_grad_waveform_for_block(
+                desc,
+                time_gy,
+                wf_gy,
+                idx_gy,
+                gy_def,
+                gy_tab,
+                t0,
+                actual_amp,
+                block_dur_us);
 
             for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
                 actual_amp[k] = 0.0f;
@@ -1119,9 +1146,16 @@ int pulseg__get_gradient_waveforms_range(
                     actual_amp[k] = gz_tab->amplitude;
                 }
             }
-            idx_gz += fill_grad_waveform_for_block(desc,
-                                                   time_gz, wf_gz, idx_gz,
-                                                   gz_def, gz_tab, t0, actual_amp, block_dur_us);
+            idx_gz += fill_grad_waveform_for_block(
+                desc,
+                time_gz,
+                wf_gz,
+                idx_gz,
+                gz_def,
+                gz_tab,
+                t0,
+                actual_amp,
+                block_dur_us);
         }
 
         t0 += block_dur_us;
@@ -1141,9 +1175,7 @@ int pulseg__get_gradient_waveforms_range(
     /* interpolate each axis to uniform raster (half gradient raster) */
     target_raster_us = 0.5f * desc->grad_raster_us;
 
-    result = interpolate_to_uniform(
-        &time_gx, &wf_gx,
-        &num_gx, target_raster_us);
+    result = interpolate_to_uniform(&time_gx, &wf_gx, &num_gx, target_raster_us);
     if (PULSEG_FAILED(result))
     {
         if (time_gx)
@@ -1161,9 +1193,7 @@ int pulseg__get_gradient_waveforms_range(
         diag->code = result;
         return result;
     }
-    result = interpolate_to_uniform(
-        &time_gy, &wf_gy,
-        &num_gy, target_raster_us);
+    result = interpolate_to_uniform(&time_gy, &wf_gy, &num_gy, target_raster_us);
     if (PULSEG_FAILED(result))
     {
         if (time_gx)
@@ -1181,9 +1211,7 @@ int pulseg__get_gradient_waveforms_range(
         diag->code = result;
         return result;
     }
-    result = interpolate_to_uniform(
-        &time_gz, &wf_gz,
-        &num_gz, target_raster_us);
+    result = interpolate_to_uniform(&time_gz, &wf_gz, &num_gz, target_raster_us);
     if (PULSEG_FAILED(result))
     {
         if (time_gx)
@@ -1220,11 +1248,12 @@ int pulseg__get_gradient_waveforms_range(
 /*  get_tr_gradient_waveforms                                         */
 /* ================================================================== */
 
-int pulseg_get_tr_gradient_waveforms(const pulseg_collection *coll,
-                                        pulseg_tr_gradient_waveforms *waveforms,
-                                        pulseg_diagnostic *diag,
-                                        int subseq_idx,
-                                        int canonical_tr_idx)
+int pulseg_get_tr_gradient_waveforms(
+    const pulseg_collection *coll,
+    pulseg_tr_gradient_waveforms *waveforms,
+    pulseg_diagnostic *diag,
+    int subseq_idx,
+    int canonical_tr_idx)
 {
     const pulseg_sequence_descriptor *desc;
     pulseg__uniform_grad_waveforms uw;
@@ -1252,18 +1281,16 @@ int pulseg_get_tr_gradient_waveforms(const pulseg_collection *coll,
 
     desc = &coll->descriptors[subseq_idx];
 
-    has_nd_prep = (desc->tr_descriptor.num_prep_blocks > 0 &&
-                   !desc->tr_descriptor.degenerate_prep);
-    has_nd_cool = (desc->tr_descriptor.num_cooldown_blocks > 0 &&
-                   !desc->tr_descriptor.degenerate_cooldown);
+    has_nd_prep = (desc->tr_descriptor.num_prep_blocks > 0 && !desc->tr_descriptor.degenerate_prep);
+    has_nd_cool =
+        (desc->tr_descriptor.num_cooldown_blocks > 0 && !desc->tr_descriptor.degenerate_cooldown);
 
     if (has_nd_prep || has_nd_cool)
     {
         /* Non-degenerate (e.g. MPRAGE): one canonical TR per unique pass
          * pattern.  Use find_unique_shot_passes to discover how many
          * distinct passes exist and pick the representative for this index. */
-        num_unique = pulseg__find_unique_shot_passes(
-            desc, &unique_indices, &group_labels);
+        num_unique = pulseg__find_unique_shot_passes(desc, &unique_indices, &group_labels);
         if (num_unique <= 0)
         {
             num_unique = 1;
@@ -1325,8 +1352,7 @@ int pulseg_get_tr_gradient_waveforms(const pulseg_collection *coll,
     {
         /* Degenerate (e.g. GRE): one canonical TR per unique shot pattern
          * within the imaging region. */
-        num_unique = pulseg__find_unique_shot_trs(
-            desc, &unique_indices, &group_labels);
+        num_unique = pulseg__find_unique_shot_trs(desc, &unique_indices, &group_labels);
         if (num_unique <= 0)
         {
             num_unique = 1;
@@ -1349,13 +1375,21 @@ int pulseg_get_tr_gradient_waveforms(const pulseg_collection *coll,
             PULSEG_FREE(unique_indices);
             PULSEG_FREE(group_labels);
         }
-        start_block = desc->tr_descriptor.num_prep_blocks + desc->tr_descriptor.imaging_tr_start + rep_idx * desc->tr_descriptor.tr_size;
+        start_block = desc->tr_descriptor.num_prep_blocks + desc->tr_descriptor.imaging_tr_start +
+            rep_idx * desc->tr_descriptor.tr_size;
         block_count = desc->tr_descriptor.tr_size;
     }
 
-    rc = pulseg__get_gradient_waveforms_range(desc, &uw, diag,
-                                                 start_block, block_count,
-                                                 PULSEG_AMP_ACTUAL, NULL, 0, block_order);
+    rc = pulseg__get_gradient_waveforms_range(
+        desc,
+        &uw,
+        diag,
+        start_block,
+        block_count,
+        PULSEG_AMP_ACTUAL,
+        NULL,
+        0,
+        block_order);
     if (PULSEG_FAILED(rc))
     {
         if (block_order)
@@ -1434,18 +1468,16 @@ int pulseg_get_tr_gradient_waveforms(const pulseg_collection *coll,
  * Count RF samples for a single block (flat block index).
  * Returns 0 if block has no RF.
  */
-static int count_rf_samples_for_flat_block(
-    const pulseg_sequence_descriptor *desc,
-    int block_idx)
+static int count_rf_samples_for_flat_block(const pulseg_sequence_descriptor *desc, int block_idx)
 {
     const pulseg_block_table_element *bte;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     const pulseg_rf_definition *rdef;
-    const pulseg_shape_arbitrary *shape;
+    const pulseq_shape *shape;
     int shape_idx, nch;
 
     bte = &desc->block_table[block_idx];
-    bdef = &desc->block_definitions[bte->id];
+    bdef = &desc->base_blocks[bte->id];
     if (bdef->rf_id < 0)
         return 0;
     rdef = &desc->rf_definitions[bdef->rf_id];
@@ -1467,22 +1499,25 @@ static int count_rf_samples_for_flat_block(
  */
 static int fill_rf_waveform_for_flat_block(
     const pulseg_sequence_descriptor *desc,
+    float *time_mag,
+    float *mag,
+    float *phase,
+    int *out_nch,
     int block_idx,
-    float *time_mag, float *mag, float *phase,
-    int start_idx, float t0,
-    int *out_nch)
+    int start_idx,
+    float t0)
 {
     const pulseg_block_table_element *bte;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     const pulseg_rf_definition *rdef;
     const pulseg_rf_table_element *rtab;
-    pulseg_shape_arbitrary decomp_mag, decomp_phase, decomp_time;
+    pulseq_shape decomp_mag, decomp_phase, decomp_time;
     float rf_raster_us, delay_us, amp;
     int nch, npts, i, idx, c, src_i;
     int has_time_shape;
 
     bte = &desc->block_table[block_idx];
-    bdef = &desc->block_definitions[bte->id];
+    bdef = &desc->base_blocks[bte->id];
     if (bdef->rf_id < 0)
         return 0;
     rdef = &desc->rf_definitions[bdef->rf_id];
@@ -1502,30 +1537,31 @@ static int fill_rf_waveform_for_flat_block(
     /* decompress magnitude shape */
     decomp_mag.samples = NULL;
     decomp_mag.num_uncompressed_samples = 0;
-    if (!pulseg_pulseq_decompress_shape(&decomp_mag,
-                                     &desc->shapes[rdef->mag_shape_id - 1], 1.0f))
+    if (!pulseq_decompress_shape(&decomp_mag, &desc->shapes[rdef->mag_shape_id - 1], 1.0f))
         return 0;
     npts = decomp_mag.num_uncompressed_samples / nch;
 
     /* decompress phase shape */
     decomp_phase.samples = NULL;
     decomp_phase.num_uncompressed_samples = 0;
-    if (rdef->phase_shape_id > 0 &&
-        rdef->phase_shape_id <= desc->num_shapes)
+    if (rdef->phase_shape_id > 0 && rdef->phase_shape_id <= desc->num_shapes)
     {
-        pulseg_pulseq_decompress_shape(&decomp_phase,
-                                    &desc->shapes[rdef->phase_shape_id - 1], (float)PULSEG__TWO_PI);
+        pulseq_decompress_shape(
+            &decomp_phase,
+            &desc->shapes[rdef->phase_shape_id - 1],
+            (float)PULSEG__TWO_PI);
     }
 
     /* decompress time shape */
     decomp_time.samples = NULL;
     decomp_time.num_uncompressed_samples = 0;
     has_time_shape = 0;
-    if (rdef->time_shape_id > 0 &&
-        rdef->time_shape_id <= desc->num_shapes)
+    if (rdef->time_shape_id > 0 && rdef->time_shape_id <= desc->num_shapes)
     {
-        if (pulseg_pulseq_decompress_shape(&decomp_time,
-                                        &desc->shapes[rdef->time_shape_id - 1], rf_raster_us))
+        if (pulseq_decompress_shape(
+                &decomp_time,
+                &desc->shapes[rdef->time_shape_id - 1],
+                rf_raster_us))
             has_time_shape = 1;
     }
 
@@ -1542,8 +1578,7 @@ static int fill_rf_waveform_for_flat_block(
             first_t_local = decomp_time.samples[0];
         else
             first_t_local = 0.5f * rf_raster_us;
-        if (has_time_shape && npts > 0 &&
-            (npts - 1) < decomp_time.num_uncompressed_samples)
+        if (has_time_shape && npts > 0 && (npts - 1) < decomp_time.num_uncompressed_samples)
             last_t_local = decomp_time.samples[npts - 1];
         else
             last_t_local = 0.5f * rf_raster_us + (float)(npts - 1) * rf_raster_us;
@@ -1568,8 +1603,8 @@ static int fill_rf_waveform_for_flat_block(
             time_mag[idx] = t0 + delay_us + t_local;
             mag[idx] = amp * decomp_mag.samples[src_i]; /* Hz */
             phase[idx] = (decomp_phase.samples && src_i < decomp_phase.num_uncompressed_samples)
-                             ? decomp_phase.samples[src_i] + rtab->phase_offset + freq_term
-                             : rtab->phase_offset + freq_term; /* rad */
+                ? decomp_phase.samples[src_i] + rtab->phase_offset + freq_term
+                : rtab->phase_offset + freq_term; /* rad */
             idx++;
         }
 
@@ -1596,7 +1631,7 @@ static int fill_rf_waveform_for_flat_block(
  * Returns segment index (into segment_definitions), or -1.
  */
 static int find_segment_for_block_pos(
-    const pulseg_tr_segment *segments,
+    const pulseg_virtual_segment *segments,
     int num_segments,
     int pos_in_tr)
 {
@@ -1611,14 +1646,15 @@ static int find_segment_for_block_pos(
 }
 
 /* ---- public: get_tr_waveforms ---- */
-int pulseg_get_tr_waveforms(const pulseg_collection *coll,
-                               pulseg_tr_waveforms *out,
-                               pulseg_diagnostic *diag,
-                               int subseq_idx,
-                               int amplitude_mode,
-                               int tr_index,
-                               int collapse_delays,
-                               int num_averages)
+int pulseg_get_tr_waveforms(
+    const pulseg_collection *coll,
+    pulseg_tr_waveforms *out,
+    pulseg_diagnostic *diag,
+    int subseq_idx,
+    int amplitude_mode,
+    int tr_index,
+    int collapse_delays,
+    int num_averages)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *tr;
@@ -1631,7 +1667,7 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
     int idx_gx, idx_gy, idx_gz, idx_rf, idx_adc, rf_nch, this_nch;
     float t0, block_dur_us;
     const pulseg_block_table_element *bte;
-    const pulseg_block_definition *bdef;
+    const pulseg_base_block *bdef;
     const pulseg_grad_definition *gx_def;
     const pulseg_grad_definition *gy_def;
     const pulseg_grad_definition *gz_def;
@@ -1719,8 +1755,7 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
                 int cool_blk = tr->num_cooldown_blocks;
                 int exp_count = prep_blk + num_avgs * img_len + cool_blk;
                 int avg_i;
-                block_order = (int *)PULSEG_ALLOC(
-                    (size_t)exp_count * sizeof(int));
+                block_order = (int *)PULSEG_ALLOC((size_t)exp_count * sizeof(int));
                 if (!block_order)
                     goto alloc_fail;
                 n = 0;
@@ -1766,7 +1801,8 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
             }
             else
             {
-                canonical_idx = tr->num_prep_trs + tr->num_trs + (tr_index - tr->num_prep_trs - num_avgs * tr->num_trs);
+                canonical_idx = tr->num_prep_trs + tr->num_trs +
+                    (tr_index - tr->num_prep_trs - num_avgs * tr->num_trs);
             }
             tr_block_start = canonical_idx * tr->tr_size;
             block_start = tr_block_start;
@@ -1788,17 +1824,16 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
          */
         if (has_nd_prep || has_nd_cool)
         {
-            num_canonical = pulseg__find_unique_shot_passes(
-                desc, &can_unique_indices, &can_group_labels);
+            num_canonical =
+                pulseg__find_unique_shot_passes(desc, &can_unique_indices, &can_group_labels);
         }
         else
         {
-            num_canonical = pulseg__find_unique_shot_trs(
-                desc, &can_unique_indices, &can_group_labels);
+            num_canonical =
+                pulseg__find_unique_shot_trs(desc, &can_unique_indices, &can_group_labels);
         }
 
-        if (num_canonical > 0 && tr_index >= 0 && tr_index < num_canonical &&
-            can_unique_indices)
+        if (num_canonical > 0 && tr_index >= 0 && tr_index < num_canonical && can_unique_indices)
         {
             rep_idx = can_unique_indices[tr_index];
         }
@@ -1818,8 +1853,7 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
                 int cool_blk_c = tr->num_cooldown_blocks;
                 int exp_count_c = prep_blk_c + num_avgs_c * img_len_c + cool_blk_c;
                 int avg_i_c;
-                block_order = (int *)PULSEG_ALLOC(
-                    (size_t)exp_count_c * sizeof(int));
+                block_order = (int *)PULSEG_ALLOC((size_t)exp_count_c * sizeof(int));
                 if (!block_order)
                 {
                     if (can_group_labels)
@@ -1843,8 +1877,7 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
             }
             else
             {
-                block_order = (int *)PULSEG_ALLOC(
-                    (size_t)desc->pass_len * sizeof(int));
+                block_order = (int *)PULSEG_ALLOC((size_t)desc->pass_len * sizeof(int));
                 if (!block_order)
                 {
                     if (can_group_labels)
@@ -1868,8 +1901,7 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
 
             if (rep_idx > 0)
             {
-                block_order = (int *)PULSEG_ALLOC(
-                    (size_t)tr->tr_size * sizeof(int));
+                block_order = (int *)PULSEG_ALLOC((size_t)tr->tr_size * sizeof(int));
                 if (!block_order)
                 {
                     if (can_group_labels)
@@ -1889,27 +1921,25 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
             PULSEG_FREE(can_unique_indices);
     }
 
-    if (!block_order &&
-        (block_start < 0 || block_start + block_count > desc->num_blocks))
+    if (!block_order && (block_start < 0 || block_start + block_count > desc->num_blocks))
     {
         diag->code = PULSEG_ERR_INVALID_ARGUMENT;
         return diag->code;
     }
 
     /* ---- precompute position-max if needed ---- */
-    if (amplitude_mode == PULSEG_AMP_MAX_POS ||
-        amplitude_mode == PULSEG_AMP_ZERO_VAR)
+    if (amplitude_mode == PULSEG_AMP_MAX_POS || amplitude_mode == PULSEG_AMP_ZERO_VAR)
     {
         int *can_group_labels = NULL;
         int *can_unique_indices = NULL;
         int num_canonical = 0;
 
-        pos_max_gx = (float *)PULSEG_ALLOC(
-            (size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
-        pos_max_gy = (float *)PULSEG_ALLOC(
-            (size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
-        pos_max_gz = (float *)PULSEG_ALLOC(
-            (size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
+        pos_max_gx =
+            (float *)PULSEG_ALLOC((size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
+        pos_max_gy =
+            (float *)PULSEG_ALLOC((size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
+        pos_max_gz =
+            (float *)PULSEG_ALLOC((size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
         if (!pos_max_gx || !pos_max_gy || !pos_max_gz)
             goto alloc_fail;
 
@@ -1918,28 +1948,39 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
         {
             if (has_nd_prep || has_nd_cool)
             {
-                num_canonical = pulseg__find_unique_shot_passes(
-                    desc, &can_unique_indices, &can_group_labels);
+                num_canonical =
+                    pulseg__find_unique_shot_passes(desc, &can_unique_indices, &can_group_labels);
             }
             else
             {
-                num_canonical = pulseg__find_unique_shot_trs(
-                    desc, &can_unique_indices, &can_group_labels);
+                num_canonical =
+                    pulseg__find_unique_shot_trs(desc, &can_unique_indices, &can_group_labels);
             }
         }
 
         if (num_canonical > 1 && tr_index >= 0 && tr_index < num_canonical)
         {
-            compute_position_max_amplitudes_filtered(desc,
-                                                     block_start, block_count,
-                                                     pos_max_gx, pos_max_gy, pos_max_gz,
-                                                     can_group_labels, tr_index);
+            compute_position_max_amplitudes_filtered(
+                desc,
+                pos_max_gx,
+                pos_max_gy,
+                pos_max_gz,
+                block_start,
+                block_count,
+                can_group_labels,
+                tr_index);
         }
         else
         {
-            compute_position_max_amplitudes_filtered(desc,
-                                                     block_start, block_count,
-                                                     pos_max_gx, pos_max_gy, pos_max_gz, NULL, 0);
+            compute_position_max_amplitudes_filtered(
+                desc,
+                pos_max_gx,
+                pos_max_gy,
+                pos_max_gz,
+                block_start,
+                block_count,
+                NULL,
+                0);
         }
 
         if (can_group_labels)
@@ -1951,16 +1992,11 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
          * For non-degenerate passes, iterate over ALL imaging positions
          * in the (possibly average-expanded) canonical layout and map
          * each back to its TR-relative position for the flag lookup. */
-        if (amplitude_mode == PULSEG_AMP_ZERO_VAR &&
-            desc->variable_grad_flags)
+        if (amplitude_mode == PULSEG_AMP_ZERO_VAR && desc->variable_grad_flags)
         {
             int vp, local_pos, abs_pos;
-            int zv_prep = (has_nd_prep || has_nd_cool)
-                              ? tr->num_prep_blocks
-                              : 0;
-            int zv_cool = (has_nd_prep || has_nd_cool)
-                              ? tr->num_cooldown_blocks
-                              : 0;
+            int zv_prep = (has_nd_prep || has_nd_cool) ? tr->num_prep_blocks : 0;
+            int zv_cool = (has_nd_prep || has_nd_cool) ? tr->num_cooldown_blocks : 0;
             int zv_img = block_count - zv_prep - zv_cool;
             for (vp = 0; vp < zv_img; ++vp)
             {
@@ -1989,28 +2025,27 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
     {
         block_idx = block_order ? block_order[n] : block_start + n;
         bte = &desc->block_table[block_idx];
-        bdef = &desc->block_definitions[bte->id];
-        block_dur_us = (bte->duration_us >= 0) ? (float)bte->duration_us
-                                               : (float)bdef->duration_us;
+        bdef = &desc->base_blocks[bte->id];
+        block_dur_us = (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
 
         gx_raw = bte->gx_id;
         gy_raw = bte->gy_id;
         gz_raw = bte->gz_id;
-        gx_def = (gx_raw >= 0 && gx_raw < desc->grad_table_size &&
-                  desc->grad_table[gx_raw].id >= 0 &&
-                  desc->grad_table[gx_raw].id < desc->num_unique_grads)
-                     ? &desc->grad_definitions[desc->grad_table[gx_raw].id]
-                     : NULL;
-        gy_def = (gy_raw >= 0 && gy_raw < desc->grad_table_size &&
-                  desc->grad_table[gy_raw].id >= 0 &&
-                  desc->grad_table[gy_raw].id < desc->num_unique_grads)
-                     ? &desc->grad_definitions[desc->grad_table[gy_raw].id]
-                     : NULL;
-        gz_def = (gz_raw >= 0 && gz_raw < desc->grad_table_size &&
-                  desc->grad_table[gz_raw].id >= 0 &&
-                  desc->grad_table[gz_raw].id < desc->num_unique_grads)
-                     ? &desc->grad_definitions[desc->grad_table[gz_raw].id]
-                     : NULL;
+        gx_def =
+            (gx_raw >= 0 && gx_raw < desc->grad_table_size && desc->grad_table[gx_raw].id >= 0 &&
+             desc->grad_table[gx_raw].id < desc->num_unique_grads)
+            ? &desc->grad_definitions[desc->grad_table[gx_raw].id]
+            : NULL;
+        gy_def =
+            (gy_raw >= 0 && gy_raw < desc->grad_table_size && desc->grad_table[gy_raw].id >= 0 &&
+             desc->grad_table[gy_raw].id < desc->num_unique_grads)
+            ? &desc->grad_definitions[desc->grad_table[gy_raw].id]
+            : NULL;
+        gz_def =
+            (gz_raw >= 0 && gz_raw < desc->grad_table_size && desc->grad_table[gz_raw].id >= 0 &&
+             desc->grad_table[gz_raw].id < desc->num_unique_grads)
+            ? &desc->grad_definitions[desc->grad_table[gz_raw].id]
+            : NULL;
 
         total_gx += count_grad_samples_for_block(desc, gx_def, block_dur_us);
         total_gy += count_grad_samples_for_block(desc, gy_def, block_dur_us);
@@ -2046,42 +2081,39 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
     }
     if (total_adc > 0)
     {
-        out->adc_events = (pulseg_adc_event *)PULSEG_ALLOC(
-            (size_t)total_adc * sizeof(pulseg_adc_event));
+        out->adc_events =
+            (pulseg_adc_event *)PULSEG_ALLOC((size_t)total_adc * sizeof(pulseg_adc_event));
     }
     out->blocks = (pulseg_tr_block_descriptor *)PULSEG_ALLOC(
         (size_t)block_count * sizeof(pulseg_tr_block_descriptor));
 
     /* check allocations (simplified: check critical ones) */
-    if (!out->gx.time_us || !out->gx.amplitude ||
-        !out->gy.time_us || !out->gy.amplitude ||
-        !out->gz.time_us || !out->gz.amplitude ||
-        !out->blocks ||
-        (total_rf > 0 && (!out->rf_mag.time_us || !out->rf_mag.amplitude ||
-                          !out->rf_phase.time_us || !out->rf_phase.amplitude)) ||
+    if (!out->gx.time_us || !out->gx.amplitude || !out->gy.time_us || !out->gy.amplitude ||
+        !out->gz.time_us || !out->gz.amplitude || !out->blocks ||
+        (total_rf > 0 &&
+         (!out->rf_mag.time_us || !out->rf_mag.amplitude || !out->rf_phase.time_us ||
+          !out->rf_phase.amplitude)) ||
         (total_adc > 0 && !out->adc_events))
         goto alloc_fail;
 
     /* ---- scan_blk_in_occ: 0-based position within current segment occurrence ----
-     * scan_table_seg_id is populated for ALL block positions (including 2nd, 3rd, …
+     * exec_stream_seg_id is populated for ALL block positions (including 2nd, 3rd, …
      * occurrences of the same unique segment), unlike segment_definitions[s].start_block
      * which only records the first occurrence.  We iterate the scan table once to
      * compute the intra-occurrence offset for every scan-table position, resetting
      * the counter whenever the segment changes OR we've filled num_blocks slots. */
-    if (desc->scan_table_seg_id && desc->scan_table_len > 0)
+    if (desc->exec_stream_seg_id && desc->exec_stream_len > 0)
     {
         int occ_pos = 0, prev_seg = -1, si;
-        scan_blk_in_occ = (int *)PULSEG_ALLOC(
-            (size_t)desc->scan_table_len * sizeof(int));
+        scan_blk_in_occ = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
         if (!scan_blk_in_occ)
             goto alloc_fail;
-        for (si = 0; si < desc->scan_table_len; ++si)
+        for (si = 0; si < desc->exec_stream_len; ++si)
         {
-            int curr_seg = desc->scan_table_seg_id[si];
-            int seg_nblk = (curr_seg >= 0 &&
-                            curr_seg < desc->segment_table.num_unique_segments)
-                               ? desc->segment_definitions[curr_seg].num_blocks
-                               : 1;
+            int curr_seg = desc->exec_stream_seg_id[si];
+            int seg_nblk = (curr_seg >= 0 && curr_seg < desc->segment_table.num_unique_segments)
+                ? desc->segment_definitions[curr_seg].num_blocks
+                : 1;
             if (curr_seg != prev_seg || occ_pos >= seg_nblk)
                 occ_pos = 0;
             scan_blk_in_occ[si] = occ_pos++;
@@ -2105,18 +2137,15 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
     {
         block_idx = block_order ? block_order[n] : block_start + n;
         bte = &desc->block_table[block_idx];
-        bdef = &desc->block_definitions[bte->id];
-        block_dur_us = (bte->duration_us >= 0) ? (float)bte->duration_us
-                                               : (float)bdef->duration_us;
+        bdef = &desc->base_blocks[bte->id];
+        block_dur_us = (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
 
         /* Pure-delay clamping: if collapse_delays is set and this block
          * has no RF, no gradients, and no ADC, force its display duration
          * to exactly 5000 µs (5 ms) — both expand short delays and shrink
          * long ones so every delay is visible at a uniform width. */
-        if (collapse_delays &&
-            bdef->rf_id < 0 &&
-            bte->gx_id < 0 && bte->gy_id < 0 && bte->gz_id < 0 &&
-            bdef->adc_id < 0)
+        if (collapse_delays && bdef->rf_id < 0 && bte->gx_id < 0 && bte->gy_id < 0 &&
+            bte->gz_id < 0 && bdef->adc_id < 0)
         {
             block_dur_us = 5000.0f; /* 5 ms display duration */
         }
@@ -2125,7 +2154,7 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
         out->blocks[n].start_us = t0;
         out->blocks[n].duration_us = block_dur_us;
 
-        /* Segment assignment: use scan_table_seg_id at the correct scan-table
+        /* Segment assignment: use exec_stream_seg_id at the correct scan-table
          * position.  For degenerate / single-pass paths block_idx equals the
          * scan-table position (identity mapping, avg=0).  For average-expanded
          * non-degenerate passes pass_scan_start is set to the first scan-table
@@ -2135,9 +2164,8 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
         {
             int seg_id = -1;
             int scan_pos = (pass_scan_start >= 0) ? (pass_scan_start + n) : block_idx;
-            if (desc->scan_table_seg_id &&
-                scan_pos >= 0 && scan_pos < desc->scan_table_len)
-                seg_id = desc->scan_table_seg_id[scan_pos];
+            if (desc->exec_stream_seg_id && scan_pos >= 0 && scan_pos < desc->exec_stream_len)
+                seg_id = desc->exec_stream_seg_id[scan_pos];
             else
                 seg_id = find_segment_for_block_pos(
                     desc->segment_definitions,
@@ -2150,8 +2178,7 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
         out->blocks[n].rf_isocenter_us = -1.0f;
         if (bdef->rf_id >= 0 && bdef->rf_id < desc->num_unique_rfs)
         {
-            const pulseg_rf_definition *rdef =
-                &desc->rf_definitions[bdef->rf_id];
+            const pulseg_rf_definition *rdef = &desc->rf_definitions[bdef->rf_id];
             out->blocks[n].rf_isocenter_us =
                 t0 + (float)rdef->delay + (float)rdef->stats.isodelay_us;
         }
@@ -2186,13 +2213,10 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
                 int seg_i = out->blocks[n].segment_idx;
                 int found_anchor = 0;
                 /* Try precomputed segment adc_anchors first. */
-                if (seg_i >= 0 &&
-                    seg_i < desc->segment_table.num_unique_segments)
+                if (seg_i >= 0 && seg_i < desc->segment_table.num_unique_segments)
                 {
-                    const pulseg_tr_segment *seg =
-                        &desc->segment_definitions[seg_i];
-                    if (seg->timing.adc_anchors &&
-                        seg->timing.num_adc_anchors > 0)
+                    const pulseg_virtual_segment *seg = &desc->segment_definitions[seg_i];
+                    if (seg->timing.adc_anchors && seg->timing.num_adc_anchors > 0)
                     {
                         /* blk_in_seg: position of this block within the current
                          * segment occurrence.  Use scan_blk_in_occ indexed at
@@ -2201,14 +2225,11 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
                          * block_idx; for average-expanded non-degenerate passes
                          * scan_pos = pass_scan_start + n correctly tracks the
                          * position within the expanded occurrence. */
-                        int scan_pos2 = (pass_scan_start >= 0)
-                                            ? (pass_scan_start + n)
-                                            : block_idx;
-                        int blk_in_seg = (scan_blk_in_occ &&
-                                          scan_pos2 >= 0 &&
-                                          scan_pos2 < desc->scan_table_len)
-                                             ? scan_blk_in_occ[scan_pos2]
-                                             : (n - seg->start_block);
+                        int scan_pos2 = (pass_scan_start >= 0) ? (pass_scan_start + n) : block_idx;
+                        int blk_in_seg =
+                            (scan_blk_in_occ && scan_pos2 >= 0 && scan_pos2 < desc->exec_stream_len)
+                            ? scan_blk_in_occ[scan_pos2]
+                            : (n - seg->start_block);
                         int ai;
                         /* Compute segment start in TR-relative time. */
                         float seg_start_tr = t0;
@@ -2216,7 +2237,9 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
                             int bi;
                             for (bi = 0; bi < blk_in_seg; ++bi)
                             {
-                                seg_start_tr -= (float)desc->block_definitions[seg->unique_block_indices[bi]].duration_us;
+                                seg_start_tr -=
+                                    (float)desc->base_blocks[seg->unique_block_indices[bi]]
+                                        .duration_us;
                             }
                         }
                         for (ai = 0; ai < seg->timing.num_adc_anchors; ++ai)
@@ -2238,8 +2261,7 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
                     if (diag)
                     {
                         diag->code = PULSEG_ERR_INVALID_ARGUMENT;
-                        sprintf(diag->message,
-                                "ADC anchor not found for block %d", n);
+                        sprintf(diag->message, "ADC anchor not found for block %d", n);
                     }
                     return PULSEG_ERR_INVALID_ARGUMENT;
                 }
@@ -2250,40 +2272,52 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
         gx_raw = bte->gx_id;
         gy_raw = bte->gy_id;
         gz_raw = bte->gz_id;
-        gx_tab = (gx_raw >= 0 && gx_raw < desc->grad_table_size)
-                     ? &desc->grad_table[gx_raw]
-                     : NULL;
-        gy_tab = (gy_raw >= 0 && gy_raw < desc->grad_table_size)
-                     ? &desc->grad_table[gy_raw]
-                     : NULL;
-        gz_tab = (gz_raw >= 0 && gz_raw < desc->grad_table_size)
-                     ? &desc->grad_table[gz_raw]
-                     : NULL;
+        gx_tab = (gx_raw >= 0 && gx_raw < desc->grad_table_size) ? &desc->grad_table[gx_raw] : NULL;
+        gy_tab = (gy_raw >= 0 && gy_raw < desc->grad_table_size) ? &desc->grad_table[gy_raw] : NULL;
+        gz_tab = (gz_raw >= 0 && gz_raw < desc->grad_table_size) ? &desc->grad_table[gz_raw] : NULL;
 
         gx_def = (gx_tab && gx_tab->id >= 0 && gx_tab->id < desc->num_unique_grads)
-                     ? &desc->grad_definitions[gx_tab->id]
-                     : NULL;
+            ? &desc->grad_definitions[gx_tab->id]
+            : NULL;
         gy_def = (gy_tab && gy_tab->id >= 0 && gy_tab->id < desc->num_unique_grads)
-                     ? &desc->grad_definitions[gy_tab->id]
-                     : NULL;
+            ? &desc->grad_definitions[gy_tab->id]
+            : NULL;
         gz_def = (gz_tab && gz_tab->id >= 0 && gz_tab->id < desc->num_unique_grads)
-                     ? &desc->grad_definitions[gz_tab->id]
-                     : NULL;
+            ? &desc->grad_definitions[gz_tab->id]
+            : NULL;
 
         if (pos_max_gx)
         {
-            idx_gx += fill_grad_waveform_for_block(desc,
-                                                   out->gx.time_us, out->gx.amplitude, idx_gx,
-                                                   gx_def, gx_tab, t0,
-                                                   &pos_max_gx[n * PULSEG_MAX_GRAD_SHOTS], block_dur_us);
-            idx_gy += fill_grad_waveform_for_block(desc,
-                                                   out->gy.time_us, out->gy.amplitude, idx_gy,
-                                                   gy_def, gy_tab, t0,
-                                                   &pos_max_gy[n * PULSEG_MAX_GRAD_SHOTS], block_dur_us);
-            idx_gz += fill_grad_waveform_for_block(desc,
-                                                   out->gz.time_us, out->gz.amplitude, idx_gz,
-                                                   gz_def, gz_tab, t0,
-                                                   &pos_max_gz[n * PULSEG_MAX_GRAD_SHOTS], block_dur_us);
+            idx_gx += fill_grad_waveform_for_block(
+                desc,
+                out->gx.time_us,
+                out->gx.amplitude,
+                idx_gx,
+                gx_def,
+                gx_tab,
+                t0,
+                &pos_max_gx[n * PULSEG_MAX_GRAD_SHOTS],
+                block_dur_us);
+            idx_gy += fill_grad_waveform_for_block(
+                desc,
+                out->gy.time_us,
+                out->gy.amplitude,
+                idx_gy,
+                gy_def,
+                gy_tab,
+                t0,
+                &pos_max_gy[n * PULSEG_MAX_GRAD_SHOTS],
+                block_dur_us);
+            idx_gz += fill_grad_waveform_for_block(
+                desc,
+                out->gz.time_us,
+                out->gz.amplitude,
+                idx_gz,
+                gz_def,
+                gz_tab,
+                t0,
+                &pos_max_gz[n * PULSEG_MAX_GRAD_SHOTS],
+                block_dur_us);
         }
         else
         {
@@ -2298,7 +2332,16 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
                     actual_amp[k] = gx_tab->amplitude;
                 }
             }
-            idx_gx += fill_grad_waveform_for_block(desc, out->gx.time_us, out->gx.amplitude, idx_gx, gx_def, gx_tab, t0, actual_amp, block_dur_us);
+            idx_gx += fill_grad_waveform_for_block(
+                desc,
+                out->gx.time_us,
+                out->gx.amplitude,
+                idx_gx,
+                gx_def,
+                gx_tab,
+                t0,
+                actual_amp,
+                block_dur_us);
 
             for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
                 actual_amp[k] = 0.0f;
@@ -2310,7 +2353,16 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
                     actual_amp[k] = gy_tab->amplitude;
                 }
             }
-            idx_gy += fill_grad_waveform_for_block(desc, out->gy.time_us, out->gy.amplitude, idx_gy, gy_def, gy_tab, t0, actual_amp, block_dur_us);
+            idx_gy += fill_grad_waveform_for_block(
+                desc,
+                out->gy.time_us,
+                out->gy.amplitude,
+                idx_gy,
+                gy_def,
+                gy_tab,
+                t0,
+                actual_amp,
+                block_dur_us);
 
             for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
                 actual_amp[k] = 0.0f;
@@ -2322,14 +2374,29 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
                     actual_amp[k] = gz_tab->amplitude;
                 }
             }
-            idx_gz += fill_grad_waveform_for_block(desc, out->gz.time_us, out->gz.amplitude, idx_gz, gz_def, gz_tab, t0, actual_amp, block_dur_us);
+            idx_gz += fill_grad_waveform_for_block(
+                desc,
+                out->gz.time_us,
+                out->gz.amplitude,
+                idx_gz,
+                gz_def,
+                gz_tab,
+                t0,
+                actual_amp,
+                block_dur_us);
         }
 
         /* ---- RF ---- */
         this_nch = 1;
-        idx_rf += fill_rf_waveform_for_flat_block(desc, block_idx,
-                                                  out->rf_mag.time_us, out->rf_mag.amplitude,
-                                                  out->rf_phase.amplitude, idx_rf, t0, &this_nch);
+        idx_rf += fill_rf_waveform_for_flat_block(
+            desc,
+            out->rf_mag.time_us,
+            out->rf_mag.amplitude,
+            out->rf_phase.amplitude,
+            &this_nch,
+            block_idx,
+            idx_rf,
+            t0);
         if (this_nch > rf_nch)
             rf_nch = this_nch;
 
@@ -2389,25 +2456,22 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
         int num_gx = idx_gx, num_gy = idx_gy, num_gz = idx_gz;
         target_raster_us = 0.5f * desc->grad_raster_us;
 
-        interp_result = interpolate_to_uniform(
-            &out->gx.time_us, &out->gx.amplitude,
-            &num_gx, target_raster_us);
+        interp_result =
+            interpolate_to_uniform(&out->gx.time_us, &out->gx.amplitude, &num_gx, target_raster_us);
         if (PULSEG_FAILED(interp_result))
         {
             diag->code = interp_result;
             return interp_result;
         }
-        interp_result = interpolate_to_uniform(
-            &out->gy.time_us, &out->gy.amplitude,
-            &num_gy, target_raster_us);
+        interp_result =
+            interpolate_to_uniform(&out->gy.time_us, &out->gy.amplitude, &num_gy, target_raster_us);
         if (PULSEG_FAILED(interp_result))
         {
             diag->code = interp_result;
             return interp_result;
         }
-        interp_result = interpolate_to_uniform(
-            &out->gz.time_us, &out->gz.amplitude,
-            &num_gz, target_raster_us);
+        interp_result =
+            interpolate_to_uniform(&out->gz.time_us, &out->gz.amplitude, &num_gz, target_raster_us);
         if (PULSEG_FAILED(interp_result))
         {
             diag->code = interp_result;
@@ -2440,8 +2504,7 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
             blk_n++;
             blk_end = out->blocks[blk_n].start_us + out->blocks[blk_n].duration_us;
         }
-        bte = &desc->block_table[block_order ? block_order[blk_n]
-                                             : block_start + blk_n];
+        bte = &desc->block_table[block_order ? block_order[blk_n] : block_start + blk_n];
         rot_id = bte->rotation_id;
         if (rot_id < 0 || rot_id >= desc->num_rotations)
             continue;
@@ -2460,8 +2523,7 @@ int pulseg_get_tr_waveforms(const pulseg_collection *coll,
     /* rf_phase shares time_us with rf_mag */
     if (total_rf > 0)
     {
-        memcpy(out->rf_phase.time_us, out->rf_mag.time_us,
-               (size_t)idx_rf * sizeof(float));
+        memcpy(out->rf_phase.time_us, out->rf_mag.time_us, (size_t)idx_rf * sizeof(float));
     }
 
     out->gx.num_samples = idx_gx;

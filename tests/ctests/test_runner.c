@@ -19,6 +19,8 @@ int test_protocol_main(void);
 int test_recon_main(void);
 int test_ptx_getters_main(void);
 int test_module_labels_main(void);
+int test_block_instance_main(void);
+int test_pulsegen_cache_main(void);
 
 int main(void)
 {
@@ -44,6 +46,12 @@ int main(void)
 
     printf("\n==== test_module_labels ====\n");
     failed += test_module_labels_main();
+
+    printf("\n==== test_block_instance ====\n");
+    failed += test_block_instance_main();
+
+    printf("\n==== test_pulsegen_cache ====\n");
+    failed += test_pulsegen_cache_main();
 
     // printf("\n==== test_io ====\n");
     // failed += test_io_main();

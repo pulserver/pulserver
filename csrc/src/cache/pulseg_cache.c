@@ -1,4 +1,18 @@
-/* pulseg_cache.c -- binary cache for descriptor collections */
+/**
+ * @file pulseg_cache.c
+ * @brief The binary sequence cache: section index, writer, and loaders.
+ *
+ * One file beside the .seq holds every derived structure, split into
+ * independently-loadable sections so a consumer pays only for what it reads:
+ * the pulse-generation pass takes COMMON+SHAPES, the scan loop additionally
+ * takes INSTANCES, ROTATIONS and SCANLOOP, and recon reads DEFINITIONS,
+ * TRAJECTORY and SEQDESC through pulseg_recon.c.
+ *
+ * All integer and float fields are 4 bytes. Endianness is recorded in the
+ * header, and a reader on the opposite endianness byte-swaps on the way in --
+ * the GE target processor is big-endian while the host that writes the cache
+ * is not.
+ */
 
 #include <string.h>
 #include <stdlib.h>
@@ -15,23 +29,28 @@
 #define PULSEG_CACHE_ENDIAN_MARKER 0x01020304
 #define PULSEG_CACHE_VERSION_MAJOR 2
 #define PULSEG_CACHE_VERSION_MINOR 0
-/* Bumped for Stage 2 (D3/D8-A/D10): COMMON gained label_column_map[3]
+/* Bumped when COMMON gained label_column_map[3]
  * (after vendor), pulseg_rf_stats.vendor_stat[4] replaces the four named
  * GE fields (same layout, no bump needed for that alone), and a VENDOR
  * section id was added -- the label_column_map addition changes COMMON's
  * on-disk layout, so old caches must be rejected, not silently misread. */
 /* Bumped again for the interior static/dynamic pure-delay split: each
- * pulseg_tr_segment gained an is_dynamic_delay[num_blocks] array (written
+ * pulseg_virtual_segment gained an is_dynamic_delay[num_blocks] array (written
  * right after has_adc), changing COMMON's per-segment on-disk layout. */
 /* Bumped again for the safety-group MODULE label: pulseg_block_table_element
  * gained module_id (written/read right after rf_shim_id), changing the
  * block-table's per-entry on-disk layout. */
-#define PULSEG_CACHE_VERSION_REVISION 3
+/* Bumped again for the per-instance/definition split: the O(scan-length)
+ * event tables (block/rf/grad/adc tables and the label table) moved out of
+ * COMMON into the new INSTANCES section, COMMON's collection scalars gained
+ * total_readouts, and each segment definition gained its frozen per-position
+ * initial-state records. */
+#define PULSEG_CACHE_VERSION_REVISION 4
 
 /* Per-consumer sections. Each carries its own distinct payload.
- * COMMON establishes the collection + descriptor framing; ROTATIONS, SHAPES
- * and SCANLOOP augment the descriptors already allocated by COMMON, so COMMON
- * must always be read first. */
+ * COMMON establishes the collection + descriptor framing; DEFINITIONS,
+ * ROTATIONS, SHAPES, SCANLOOP and INSTANCES augment the descriptors already
+ * allocated by COMMON, so COMMON must always be read first. */
 #define PULSEG_CACHE_SECTION_DEFINITIONS 0
 #define PULSEG_CACHE_SECTION_COMMON 1
 #define PULSEG_CACHE_SECTION_ROTATIONS 2
@@ -40,20 +59,26 @@
 #define PULSEG_CACHE_SECTION_FREQMOD 5
 #define PULSEG_CACHE_SECTION_TRAJECTORY 6
 #define PULSEG_CACHE_SECTION_SEQDESC 7
-/* Opaque vendor extension section (D10): length-prefixed blob, written
+/* Opaque vendor extension section: length-prefixed blob, written
  * only when pulseg_opts.vendor_section_write_fn is set (GE leaves it
  * unused). Format: [int byte_len][byte_len raw bytes]. */
 #define PULSEG_CACHE_SECTION_VENDOR 8
+/* Per-instance event tables: block_table, rf/grad/adc tables and the label
+ * table -- everything whose size scales with the scan length rather than
+ * with the number of unique definitions. Loaded by the scan path only; the
+ * pulsegen path resolves per-position state from the segment definitions'
+ * frozen initial-state records instead. */
+#define PULSEG_CACHE_SECTION_INSTANCES 9
 
-/* Total number of defined section IDs (0..8 above). write_cache() reserves
+/* Total number of defined section IDs (0..9 above). write_cache() reserves
  * a section-entry table sized for this many slots up front -- even though
- * it only writes the 5 base sections itself -- so that the later append
- * passes (pulseg_write_trajectory_cache, pulseg_write_freq_mod_cache,
+ * it only writes the 6 base sections itself -- so that the later append
+ * passes (pulseg_write_trajectory_cache, pulseg__save_freq_mod_section,
  * the optional SEQDESC writer, the optional VENDOR writer) can insert
  * their own entries into the same table without growing past its reserved
  * size and overflowing into the COMMON payload that immediately follows
  * it on disk. */
-#define PULSEG_CACHE_MAX_SECTIONS 9
+#define PULSEG_CACHE_MAX_SECTIONS 10
 
 typedef struct pulseg_cache_section_entry
 {
@@ -98,7 +123,7 @@ static int read4(FILE *f, void *p, int count)
 /* ------ Path helper ------ */
 
 /* ext: cache file extension including the dot (e.g. ".pseg"); NULL or
- * empty falls back to PULSEG_CACHE_EXT_DEFAULT (D10). */
+ * empty falls back to PULSEG_CACHE_EXT_DEFAULT. */
 static char *make_cache_path(const char *seq_path, const char *ext)
 {
     size_t len, ext_len;
@@ -143,31 +168,13 @@ static long get_file_size(const char *path)
     return sz;
 }
 
-/* ------ Get seq file sizes for all files in chain ------ */
-
-static int get_seq_file_sizes(const char *first_file_path,
-                              const pulseg_opts *opts,
-                              int *out_sizes, int max_files)
-{
-    long sz;
-
-    (void)opts;
-    (void)max_files;
-
-    sz = get_file_size(first_file_path);
-    if (sz < 0)
-        return 0;
-    out_sizes[0] = (int)sz;
-
-    /* For single-file or when we don't have the chain yet,
-     * return 1.  The full chain sizes are stored at write time. */
-    return 1;
-}
-
 /* ------ Serialize the COMMON region of a descriptor ------ */
-/* Everything EXCEPT raw shape sample arrays, rotation matrices, scan_table
- * and variable_grad_flags (those live in the SHAPES/ROTATIONS/SCANLOOP
- * sections). Field order is otherwise identical to the legacy descriptor. */
+/* The definition-scale state only: scalars, base blocks, the RF/gradient/ADC/
+ * shim/trigger definition libraries, the TR descriptor and the segment
+ * definitions (including their frozen per-position initial-state records).
+ * Everything whose size scales with the scan length lives in INSTANCES; raw
+ * shape samples, rotation matrices, exec_stream and variable_grad_flags live
+ * in SHAPES/ROTATIONS/SCANLOOP. */
 
 static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
 {
@@ -215,60 +222,19 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
         return 0;
     for (i = 0; i < d->num_unique_blocks; ++i)
     {
-        if (!write4(f, &d->block_definitions[i].id, 1))
+        if (!write4(f, &d->base_blocks[i].id, 1))
             return 0;
-        if (!write4(f, &d->block_definitions[i].duration_us, 1))
+        if (!write4(f, &d->base_blocks[i].duration_us, 1))
             return 0;
-        if (!write4(f, &d->block_definitions[i].rf_id, 1))
+        if (!write4(f, &d->base_blocks[i].rf_id, 1))
             return 0;
-        if (!write4(f, &d->block_definitions[i].gx_id, 1))
+        if (!write4(f, &d->base_blocks[i].gx_id, 1))
             return 0;
-        if (!write4(f, &d->block_definitions[i].gy_id, 1))
+        if (!write4(f, &d->base_blocks[i].gy_id, 1))
             return 0;
-        if (!write4(f, &d->block_definitions[i].gz_id, 1))
+        if (!write4(f, &d->base_blocks[i].gz_id, 1))
             return 0;
-        if (!write4(f, &d->block_definitions[i].adc_id, 1))
-            return 0;
-    }
-
-    /* block table */
-    if (!write4(f, &d->num_blocks, 1))
-        return 0;
-    for (i = 0; i < d->num_blocks; ++i)
-    {
-        if (!write4(f, &d->block_table[i].id, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].duration_us, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].rf_id, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].gx_id, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].gy_id, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].gz_id, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].adc_id, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].digitalout_id, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].rotation_id, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].once_flag, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].norot_flag, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].nopos_flag, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].pmc_flag, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].nav_flag, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].freq_mod_id, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].rf_shim_id, 1))
-            return 0;
-        if (!write4(f, &d->block_table[i].module_id, 1))
+        if (!write4(f, &d->base_blocks[i].adc_id, 1))
             return 0;
     }
 
@@ -325,23 +291,6 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
             return 0;
     }
 
-    /* RF table */
-    if (!write4(f, &d->rf_table_size, 1))
-        return 0;
-    for (i = 0; i < d->rf_table_size; ++i)
-    {
-        if (!write4(f, &d->rf_table[i].id, 1))
-            return 0;
-        if (!write4(f, &d->rf_table[i].amplitude, 1))
-            return 0;
-        if (!write4(f, &d->rf_table[i].freq_offset, 1))
-            return 0;
-        if (!write4(f, &d->rf_table[i].phase_offset, 1))
-            return 0;
-        if (!write4(f, &d->rf_table[i].rf_use, 1))
-            return 0;
-    }
-
     /* gradient definitions */
     if (!write4(f, &d->num_unique_grads, 1))
         return 0;
@@ -380,19 +329,6 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
             return 0;
     }
 
-    /* gradient table */
-    if (!write4(f, &d->grad_table_size, 1))
-        return 0;
-    for (i = 0; i < d->grad_table_size; ++i)
-    {
-        if (!write4(f, &d->grad_table[i].id, 1))
-            return 0;
-        if (!write4(f, &d->grad_table[i].shot_index, 1))
-            return 0;
-        if (!write4(f, &d->grad_table[i].amplitude, 1))
-            return 0;
-    }
-
     /* ADC definitions */
     if (!write4(f, &d->num_unique_adcs, 1))
         return 0;
@@ -405,19 +341,6 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
         if (!write4(f, &d->adc_definitions[i].dwell_time, 1))
             return 0;
         if (!write4(f, &d->adc_definitions[i].delay, 1))
-            return 0;
-    }
-
-    /* ADC table */
-    if (!write4(f, &d->adc_table_size, 1))
-        return 0;
-    for (i = 0; i < d->adc_table_size; ++i)
-    {
-        if (!write4(f, &d->adc_table[i].id, 1))
-            return 0;
-        if (!write4(f, &d->adc_table[i].freq_offset, 1))
-            return 0;
-        if (!write4(f, &d->adc_table[i].phase_offset, 1))
             return 0;
     }
 
@@ -498,7 +421,7 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
         return 0;
     for (i = 0; i < d->num_unique_segments; ++i)
     {
-        const pulseg_tr_segment *seg = &d->segment_definitions[i];
+        const pulseg_virtual_segment *seg = &d->segment_definitions[i];
         if (!write4(f, &seg->start_block, 1))
             return 0;
         if (!write4(f, &seg->num_blocks, 1))
@@ -523,6 +446,12 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
                 return 0;
             if (!write4(f, seg->is_dynamic_delay, seg->num_blocks))
                 return 0;
+            /* Frozen per-position initial event state (structure step 11e):
+             * what the representative scan instance resolves to, so the
+             * pulsegen path never needs the INSTANCES section. All fields are
+             * 4-byte, so the records serialize as a packed word array. */
+            if (!write4(f, seg->initial_states, seg->num_blocks * PULSEG_BLOCK_INITIAL_STATE_WORDS))
+                return 0;
         }
         if (!write4(f, &seg->trigger_id, 1))
             return 0;
@@ -539,18 +468,20 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
             return 0;
         if (seg->timing.num_rf_anchors > 0)
         {
-            if (!write4(f, seg->timing.rf_anchors,
-                        seg->timing.num_rf_anchors *
-                            (int)(sizeof(pulseg_segment_rf_anchor) / 4)))
+            if (!write4(
+                    f,
+                    seg->timing.rf_anchors,
+                    seg->timing.num_rf_anchors * (int)(sizeof(pulseg_segment_rf_anchor) / 4)))
                 return 0;
         }
         if (!write4(f, &seg->timing.num_adc_anchors, 1))
             return 0;
         if (seg->timing.num_adc_anchors > 0)
         {
-            if (!write4(f, seg->timing.adc_anchors,
-                        seg->timing.num_adc_anchors *
-                            (int)(sizeof(pulseg_segment_adc_anchor) / 4)))
+            if (!write4(
+                    f,
+                    seg->timing.adc_anchors,
+                    seg->timing.num_adc_anchors * (int)(sizeof(pulseg_segment_adc_anchor) / 4)))
                 return 0;
         }
     }
@@ -571,24 +502,17 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
     if (!write4(f, &d->segment_table.num_cooldown_segments, 1))
         return 0;
     if (d->segment_table.num_cooldown_segments > 0)
-        if (!write4(f, d->segment_table.cooldown_segment_table, d->segment_table.num_cooldown_segments))
+        if (!write4(
+                f,
+                d->segment_table.cooldown_segment_table,
+                d->segment_table.num_cooldown_segments))
             return 0;
-
-    /* label table */
-    fwrite(&d->label_num_columns, sizeof(int), 1, f);
-    fwrite(&d->label_num_entries, sizeof(int), 1, f);
-    if (d->label_num_entries > 0 && d->label_table)
-    {
-        fwrite(d->label_table, sizeof(int),
-               (size_t)d->label_num_entries * (size_t)d->label_num_columns, f);
-    }
-    fwrite(&d->label_limits, sizeof(pulseg_label_limits), 1, f);
 
     /* generic [DEFINITIONS] kv: emitted in the DEFINITIONS section
      * (write_definitions). COMMON keeps only the structured fov/matrix scalars
      * above for PSD-internal use. */
 
-    /* scan_table + variable_grad_flags: emitted in the SCANLOOP section
+    /* exec_stream + variable_grad_flags: emitted in the SCANLOOP section
      * (write_scanloop) */
 
     return 1;
@@ -666,30 +590,140 @@ static int write_shapes(FILE *f, const pulseg_sequence_descriptor *d)
     return 1;
 }
 
+/* ------ Serialize the INSTANCES region of a descriptor ------ */
+/* The per-instance event tables -- everything sized by the scan length
+ * rather than by the number of unique definitions. Only the scan path
+ * loads this; pulsegen resolves per-position state from the segment
+ * definitions' initial-state records in COMMON. */
+
+static int write_instances(FILE *f, const pulseg_sequence_descriptor *d)
+{
+    int i;
+
+    /* block table */
+    if (!write4(f, &d->num_blocks, 1))
+        return 0;
+    for (i = 0; i < d->num_blocks; ++i)
+    {
+        if (!write4(f, &d->block_table[i].id, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].duration_us, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].rf_id, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].gx_id, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].gy_id, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].gz_id, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].adc_id, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].digitalout_id, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].rotation_id, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].once_flag, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].norot_flag, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].nopos_flag, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].pmc_flag, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].nav_flag, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].freq_mod_id, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].rf_shim_id, 1))
+            return 0;
+        if (!write4(f, &d->block_table[i].module_id, 1))
+            return 0;
+    }
+
+    /* RF table */
+    if (!write4(f, &d->rf_table_size, 1))
+        return 0;
+    for (i = 0; i < d->rf_table_size; ++i)
+    {
+        if (!write4(f, &d->rf_table[i].id, 1))
+            return 0;
+        if (!write4(f, &d->rf_table[i].amplitude, 1))
+            return 0;
+        if (!write4(f, &d->rf_table[i].freq_offset, 1))
+            return 0;
+        if (!write4(f, &d->rf_table[i].phase_offset, 1))
+            return 0;
+        if (!write4(f, &d->rf_table[i].rf_use, 1))
+            return 0;
+    }
+
+    /* gradient table */
+    if (!write4(f, &d->grad_table_size, 1))
+        return 0;
+    for (i = 0; i < d->grad_table_size; ++i)
+    {
+        if (!write4(f, &d->grad_table[i].id, 1))
+            return 0;
+        if (!write4(f, &d->grad_table[i].shot_index, 1))
+            return 0;
+        if (!write4(f, &d->grad_table[i].amplitude, 1))
+            return 0;
+    }
+
+    /* ADC table */
+    if (!write4(f, &d->adc_table_size, 1))
+        return 0;
+    for (i = 0; i < d->adc_table_size; ++i)
+    {
+        if (!write4(f, &d->adc_table[i].id, 1))
+            return 0;
+        if (!write4(f, &d->adc_table[i].freq_offset, 1))
+            return 0;
+        if (!write4(f, &d->adc_table[i].phase_offset, 1))
+            return 0;
+    }
+
+    /* label table */
+    fwrite(&d->label_num_columns, sizeof(int), 1, f);
+    fwrite(&d->label_num_entries, sizeof(int), 1, f);
+    if (d->label_num_entries > 0 && d->label_table)
+    {
+        fwrite(
+            d->label_table,
+            sizeof(int),
+            (size_t)d->label_num_entries * (size_t)d->label_num_columns,
+            f);
+    }
+    fwrite(&d->label_limits, sizeof(pulseg_label_limits), 1, f);
+
+    return 1;
+}
+
 /* ------ Serialize the SCANLOOP region of a descriptor ------ */
 
 static int write_scanloop(FILE *f, const pulseg_sequence_descriptor *d)
 {
     /* scan table */
-    if (!write4(f, &d->scan_table_len, 1))
+    if (!write4(f, &d->exec_stream_len, 1))
         return 0;
-    if (d->scan_table_len > 0)
+    if (d->exec_stream_len > 0)
     {
-        if (!write4(f, d->scan_table_block_idx, d->scan_table_len))
+        if (!write4(f, d->exec_stream_block_idx, d->exec_stream_len))
             return 0;
-        if (!write4(f, d->scan_table_tr_id, d->scan_table_len))
+        if (!write4(f, d->exec_stream_tr_id, d->exec_stream_len))
             return 0;
-        if (!write4(f, d->scan_table_seg_id, d->scan_table_len))
+        if (!write4(f, d->exec_stream_seg_id, d->exec_stream_len))
             return 0;
-        if (!write4(f, d->scan_table_avg_id, d->scan_table_len))
+        if (!write4(f, d->exec_stream_avg_id, d->exec_stream_len))
             return 0;
     }
 
     /* variable grad flags */
     {
         int vgf_len = (d->variable_grad_flags && d->tr_descriptor.tr_size > 0)
-                          ? d->tr_descriptor.tr_size * 3
-                          : 0;
+            ? d->tr_descriptor.tr_size * 3
+            : 0;
         if (!write4(f, &vgf_len, 1))
             return 0;
         if (vgf_len > 0)
@@ -756,45 +790,28 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         return 0;
     if (do_swap)
         swap4(&d->num_unique_blocks);
-    d->block_definitions = (pulseg_block_definition *)PULSEG_ALLOC(
-        (size_t)d->num_unique_blocks * sizeof(pulseg_block_definition));
-    if (!d->block_definitions)
+    d->base_blocks =
+        (pulseg_base_block *)PULSEG_ALLOC((size_t)d->num_unique_blocks * sizeof(pulseg_base_block));
+    if (!d->base_blocks)
         return 0;
     for (i = 0; i < d->num_unique_blocks; ++i)
     {
-        if (!read4(f, &d->block_definitions[i].id, 1))
+        if (!read4(f, &d->base_blocks[i].id, 1))
             return 0;
-        if (!read4(f, &d->block_definitions[i].duration_us, 1))
+        if (!read4(f, &d->base_blocks[i].duration_us, 1))
             return 0;
-        if (!read4(f, &d->block_definitions[i].rf_id, 1))
+        if (!read4(f, &d->base_blocks[i].rf_id, 1))
             return 0;
-        if (!read4(f, &d->block_definitions[i].gx_id, 1))
+        if (!read4(f, &d->base_blocks[i].gx_id, 1))
             return 0;
-        if (!read4(f, &d->block_definitions[i].gy_id, 1))
+        if (!read4(f, &d->base_blocks[i].gy_id, 1))
             return 0;
-        if (!read4(f, &d->block_definitions[i].gz_id, 1))
+        if (!read4(f, &d->base_blocks[i].gz_id, 1))
             return 0;
-        if (!read4(f, &d->block_definitions[i].adc_id, 1))
-            return 0;
-        if (do_swap)
-            swap4_array(&d->block_definitions[i].id, 7);
-    }
-
-    /* block table */
-    if (!read4(f, &d->num_blocks, 1))
-        return 0;
-    if (do_swap)
-        swap4(&d->num_blocks);
-    d->block_table = (pulseg_block_table_element *)PULSEG_ALLOC(
-        (size_t)d->num_blocks * sizeof(pulseg_block_table_element));
-    if (!d->block_table)
-        return 0;
-    for (i = 0; i < d->num_blocks; ++i)
-    {
-        if (!read4(f, &d->block_table[i].id, 17))
+        if (!read4(f, &d->base_blocks[i].adc_id, 1))
             return 0;
         if (do_swap)
-            swap4_array(&d->block_table[i].id, 17);
+            swap4_array(&d->base_blocks[i].id, 7);
     }
 
     /* RF definitions */
@@ -856,34 +873,12 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         if (!read4(f, &d->rf_definitions[i].stats.total_b1sq_power, 1))
             return 0;
         if (do_swap)
-            swap4_array(&d->rf_definitions[i].stats.num_bands,
-                        1 + PULSEG_MAX_BANDS + 2);
+            swap4_array(&d->rf_definitions[i].stats.num_bands, 1 + PULSEG_MAX_BANDS + 2);
         /* v1.3: vendor tag */
         if (!read4(f, &d->rf_definitions[i].stats.vendor, 1))
             return 0;
         if (do_swap)
             swap4(&d->rf_definitions[i].stats.vendor);
-    }
-
-    /* RF table */
-    if (!read4(f, &d->rf_table_size, 1))
-        return 0;
-    if (do_swap)
-        swap4(&d->rf_table_size);
-    d->rf_table = (pulseg_rf_table_element *)PULSEG_ALLOC(
-        (size_t)d->rf_table_size * sizeof(pulseg_rf_table_element));
-    if (!d->rf_table)
-        return 0;
-    for (i = 0; i < d->rf_table_size; ++i)
-    {
-        if (!read4(f, &d->rf_table[i].id, 4))
-            return 0;
-        if (do_swap)
-            swap4_array(&d->rf_table[i].id, 4);
-        if (!read4(f, &d->rf_table[i].rf_use, 1))
-            return 0;
-        if (do_swap)
-            swap4(&d->rf_table[i].rf_use);
     }
 
     /* gradient definitions */
@@ -937,23 +932,6 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             swap4_array(gd->shot_shape_ids, 7 * PULSEG_MAX_GRAD_SHOTS);
     }
 
-    /* gradient table */
-    if (!read4(f, &d->grad_table_size, 1))
-        return 0;
-    if (do_swap)
-        swap4(&d->grad_table_size);
-    d->grad_table = (pulseg_grad_table_element *)PULSEG_ALLOC(
-        (size_t)d->grad_table_size * sizeof(pulseg_grad_table_element));
-    if (!d->grad_table)
-        return 0;
-    for (i = 0; i < d->grad_table_size; ++i)
-    {
-        if (!read4(f, &d->grad_table[i].id, 3))
-            return 0;
-        if (do_swap)
-            swap4_array(&d->grad_table[i].id, 3);
-    }
-
     /* ADC definitions */
     if (!read4(f, &d->num_unique_adcs, 1))
         return 0;
@@ -969,23 +947,6 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             return 0;
         if (do_swap)
             swap4_array(&d->adc_definitions[i].id, 4);
-    }
-
-    /* ADC table */
-    if (!read4(f, &d->adc_table_size, 1))
-        return 0;
-    if (do_swap)
-        swap4(&d->adc_table_size);
-    d->adc_table = (pulseg_adc_table_element *)PULSEG_ALLOC(
-        (size_t)d->adc_table_size * sizeof(pulseg_adc_table_element));
-    if (!d->adc_table)
-        return 0;
-    for (i = 0; i < d->adc_table_size; ++i)
-    {
-        if (!read4(f, &d->adc_table[i].id, 3))
-            return 0;
-        if (do_swap)
-            swap4_array(&d->adc_table[i].id, 3);
     }
 
     /* freq_mod definitions (legacy: read and skip if count > 0) */
@@ -1045,8 +1006,8 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         swap4(&d->num_triggers);
     if (d->num_triggers > 0)
     {
-        d->trigger_events = (pulseg_trigger_event *)PULSEG_ALLOC(
-            (size_t)d->num_triggers * sizeof(pulseg_trigger_event));
+        d->trigger_events = (pulseq_trigger_event *)PULSEG_ALLOC(
+            (size_t)d->num_triggers * sizeof(pulseq_trigger_event));
         if (!d->trigger_events)
             return 0;
         for (i = 0; i < d->num_triggers; ++i)
@@ -1108,13 +1069,13 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         swap4(&d->num_unique_segments);
     if (d->num_unique_segments > 0)
     {
-        d->segment_definitions = (pulseg_tr_segment *)PULSEG_ALLOC(
-            (size_t)d->num_unique_segments * sizeof(pulseg_tr_segment));
+        d->segment_definitions = (pulseg_virtual_segment *)PULSEG_ALLOC(
+            (size_t)d->num_unique_segments * sizeof(pulseg_virtual_segment));
         if (!d->segment_definitions)
             return 0;
         for (i = 0; i < d->num_unique_segments; ++i)
         {
-            pulseg_tr_segment *seg = &d->segment_definitions[i];
+            pulseg_virtual_segment *seg = &d->segment_definitions[i];
             seg->unique_block_indices = NULL;
             seg->has_digitalout = NULL;
             seg->has_rotation = NULL;
@@ -1129,8 +1090,6 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             seg->timing.rf_anchors = NULL;
             seg->timing.num_adc_anchors = 0;
             seg->timing.adc_anchors = NULL;
-            seg->timing.num_kzero_crossings = 0;
-            seg->timing.kzero_crossing_indices = NULL;
 
             if (!read4(f, &seg->start_block, 1))
                 return 0;
@@ -1152,9 +1111,11 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                 seg->has_freq_mod = (int *)PULSEG_ALLOC((size_t)n * sizeof(int));
                 seg->has_adc = (int *)PULSEG_ALLOC((size_t)n * sizeof(int));
                 seg->is_dynamic_delay = (int *)PULSEG_ALLOC((size_t)n * sizeof(int));
-                if (!seg->unique_block_indices || !seg->has_digitalout ||
-                    !seg->has_rotation || !seg->norot_flag || !seg->nopos_flag ||
-                    !seg->has_freq_mod || !seg->has_adc || !seg->is_dynamic_delay)
+                seg->initial_states = (pulseg_block_initial_state *)PULSEG_ALLOC(
+                    (size_t)n * sizeof(pulseg_block_initial_state));
+                if (!seg->unique_block_indices || !seg->has_digitalout || !seg->has_rotation ||
+                    !seg->norot_flag || !seg->nopos_flag || !seg->has_freq_mod || !seg->has_adc ||
+                    !seg->is_dynamic_delay || !seg->initial_states)
                     return 0;
                 if (!read4(f, seg->unique_block_indices, n))
                     return 0;
@@ -1172,6 +1133,8 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                     return 0;
                 if (!read4(f, seg->is_dynamic_delay, n))
                     return 0;
+                if (!read4(f, seg->initial_states, n * PULSEG_BLOCK_INITIAL_STATE_WORDS))
+                    return 0;
                 if (do_swap)
                 {
                     swap4_array(seg->unique_block_indices, n);
@@ -1182,6 +1145,7 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                     swap4_array(seg->has_freq_mod, n);
                     swap4_array(seg->has_adc, n);
                     swap4_array(seg->is_dynamic_delay, n);
+                    swap4_array(seg->initial_states, n * PULSEG_BLOCK_INITIAL_STATE_WORDS);
                 }
             }
             if (!read4(f, &seg->trigger_id, 1))
@@ -1201,11 +1165,9 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                 swap4(&seg->timing.num_rf_anchors);
             if (seg->timing.num_rf_anchors > 0)
             {
-                int nw = seg->timing.num_rf_anchors *
-                         (int)(sizeof(pulseg_segment_rf_anchor) / 4);
-                seg->timing.rf_anchors = (pulseg_segment_rf_anchor *)
-                    PULSEG_ALLOC((size_t)seg->timing.num_rf_anchors *
-                                    sizeof(pulseg_segment_rf_anchor));
+                int nw = seg->timing.num_rf_anchors * (int)(sizeof(pulseg_segment_rf_anchor) / 4);
+                seg->timing.rf_anchors = (pulseg_segment_rf_anchor *)PULSEG_ALLOC(
+                    (size_t)seg->timing.num_rf_anchors * sizeof(pulseg_segment_rf_anchor));
                 if (!seg->timing.rf_anchors)
                     return 0;
                 if (!read4(f, seg->timing.rf_anchors, nw))
@@ -1219,11 +1181,9 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                 swap4(&seg->timing.num_adc_anchors);
             if (seg->timing.num_adc_anchors > 0)
             {
-                int nw = seg->timing.num_adc_anchors *
-                         (int)(sizeof(pulseg_segment_adc_anchor) / 4);
-                seg->timing.adc_anchors = (pulseg_segment_adc_anchor *)
-                    PULSEG_ALLOC((size_t)seg->timing.num_adc_anchors *
-                                    sizeof(pulseg_segment_adc_anchor));
+                int nw = seg->timing.num_adc_anchors * (int)(sizeof(pulseg_segment_adc_anchor) / 4);
+                seg->timing.adc_anchors = (pulseg_segment_adc_anchor *)PULSEG_ALLOC(
+                    (size_t)seg->timing.num_adc_anchors * sizeof(pulseg_segment_adc_anchor));
                 if (!seg->timing.adc_anchors)
                     return 0;
                 if (!read4(f, seg->timing.adc_anchors, nw))
@@ -1243,8 +1203,8 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         swap4_array(&d->segment_table.num_unique_segments, 2);
     if (d->segment_table.num_prep_segments > 0)
     {
-        d->segment_table.prep_segment_table = (int *)PULSEG_ALLOC(
-            (size_t)d->segment_table.num_prep_segments * sizeof(int));
+        d->segment_table.prep_segment_table =
+            (int *)PULSEG_ALLOC((size_t)d->segment_table.num_prep_segments * sizeof(int));
         if (!d->segment_table.prep_segment_table)
             return 0;
         if (!read4(f, d->segment_table.prep_segment_table, d->segment_table.num_prep_segments))
@@ -1258,8 +1218,8 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         swap4(&d->segment_table.num_main_segments);
     if (d->segment_table.num_main_segments > 0)
     {
-        d->segment_table.main_segment_table = (int *)PULSEG_ALLOC(
-            (size_t)d->segment_table.num_main_segments * sizeof(int));
+        d->segment_table.main_segment_table =
+            (int *)PULSEG_ALLOC((size_t)d->segment_table.num_main_segments * sizeof(int));
         if (!d->segment_table.main_segment_table)
             return 0;
         if (!read4(f, d->segment_table.main_segment_table, d->segment_table.num_main_segments))
@@ -1273,14 +1233,110 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         swap4(&d->segment_table.num_cooldown_segments);
     if (d->segment_table.num_cooldown_segments > 0)
     {
-        d->segment_table.cooldown_segment_table = (int *)PULSEG_ALLOC(
-            (size_t)d->segment_table.num_cooldown_segments * sizeof(int));
+        d->segment_table.cooldown_segment_table =
+            (int *)PULSEG_ALLOC((size_t)d->segment_table.num_cooldown_segments * sizeof(int));
         if (!d->segment_table.cooldown_segment_table)
             return 0;
-        if (!read4(f, d->segment_table.cooldown_segment_table, d->segment_table.num_cooldown_segments))
+        if (!read4(
+                f,
+                d->segment_table.cooldown_segment_table,
+                d->segment_table.num_cooldown_segments))
             return 0;
         if (do_swap)
-            swap4_array(d->segment_table.cooldown_segment_table, d->segment_table.num_cooldown_segments);
+            swap4_array(
+                d->segment_table.cooldown_segment_table,
+                d->segment_table.num_cooldown_segments);
+    }
+
+    /* generic [DEFINITIONS] kv: read from the DEFINITIONS section
+     * (read_definitions). Initialised empty here; COMMON no longer carries them. */
+    d->num_definitions = 0;
+    d->definitions = NULL;
+
+    /* exec_stream + variable_grad_flags: read from the SCANLOOP section
+     * (read_scanloop) */
+
+    return 1;
+}
+
+/* ------ Deserialize the INSTANCES region into an existing descriptor ------ */
+/* Mirrors write_instances. COMMON must have been read first (it allocates
+ * and zeroes the descriptor); the scan path is the only PSD consumer. */
+
+static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
+{
+    int i;
+
+    /* block table */
+    if (!read4(f, &d->num_blocks, 1))
+        return 0;
+    if (do_swap)
+        swap4(&d->num_blocks);
+    d->block_table = (pulseg_block_table_element *)PULSEG_ALLOC(
+        (size_t)d->num_blocks * sizeof(pulseg_block_table_element));
+    if (!d->block_table)
+        return 0;
+    for (i = 0; i < d->num_blocks; ++i)
+    {
+        if (!read4(f, &d->block_table[i].id, 17))
+            return 0;
+        if (do_swap)
+            swap4_array(&d->block_table[i].id, 17);
+    }
+
+    /* RF table */
+    if (!read4(f, &d->rf_table_size, 1))
+        return 0;
+    if (do_swap)
+        swap4(&d->rf_table_size);
+    d->rf_table = (pulseg_rf_table_element *)PULSEG_ALLOC(
+        (size_t)d->rf_table_size * sizeof(pulseg_rf_table_element));
+    if (!d->rf_table)
+        return 0;
+    for (i = 0; i < d->rf_table_size; ++i)
+    {
+        if (!read4(f, &d->rf_table[i].id, 4))
+            return 0;
+        if (do_swap)
+            swap4_array(&d->rf_table[i].id, 4);
+        if (!read4(f, &d->rf_table[i].rf_use, 1))
+            return 0;
+        if (do_swap)
+            swap4(&d->rf_table[i].rf_use);
+    }
+
+    /* gradient table */
+    if (!read4(f, &d->grad_table_size, 1))
+        return 0;
+    if (do_swap)
+        swap4(&d->grad_table_size);
+    d->grad_table = (pulseg_grad_table_element *)PULSEG_ALLOC(
+        (size_t)d->grad_table_size * sizeof(pulseg_grad_table_element));
+    if (!d->grad_table)
+        return 0;
+    for (i = 0; i < d->grad_table_size; ++i)
+    {
+        if (!read4(f, &d->grad_table[i].id, 3))
+            return 0;
+        if (do_swap)
+            swap4_array(&d->grad_table[i].id, 3);
+    }
+
+    /* ADC table */
+    if (!read4(f, &d->adc_table_size, 1))
+        return 0;
+    if (do_swap)
+        swap4(&d->adc_table_size);
+    d->adc_table = (pulseg_adc_table_element *)PULSEG_ALLOC(
+        (size_t)d->adc_table_size * sizeof(pulseg_adc_table_element));
+    if (!d->adc_table)
+        return 0;
+    for (i = 0; i < d->adc_table_size; ++i)
+    {
+        if (!read4(f, &d->adc_table[i].id, 3))
+            return 0;
+        if (do_swap)
+            swap4_array(&d->adc_table[i].id, 3);
     }
 
     /* label table.
@@ -1302,12 +1358,14 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             (size_t)d->label_num_entries * (size_t)d->label_num_columns * sizeof(int));
         if (!d->label_table)
             return 0;
-        if (fread(d->label_table, sizeof(int),
-                  (size_t)d->label_num_entries * (size_t)d->label_num_columns, f) != (size_t)d->label_num_entries * (size_t)d->label_num_columns)
+        if (fread(
+                d->label_table,
+                sizeof(int),
+                (size_t)d->label_num_entries * (size_t)d->label_num_columns,
+                f) != (size_t)d->label_num_entries * (size_t)d->label_num_columns)
             return 0;
         if (do_swap)
-            swap4_array(d->label_table,
-                        d->label_num_entries * d->label_num_columns);
+            swap4_array(d->label_table, d->label_num_entries * d->label_num_columns);
     }
     else
     {
@@ -1317,14 +1375,6 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         return 0;
     if (do_swap)
         swap4_array(&d->label_limits, (int)(sizeof(pulseg_label_limits) / 4));
-
-    /* generic [DEFINITIONS] kv: read from the DEFINITIONS section
-     * (read_definitions). Initialised empty here; COMMON no longer carries them. */
-    d->num_definitions = 0;
-    d->definitions = NULL;
-
-    /* scan_table + variable_grad_flags: read from the SCANLOOP section
-     * (read_scanloop) */
 
     return 1;
 }
@@ -1346,8 +1396,8 @@ static int read_definitions_cache(FILE *f, pulseg_sequence_descriptor *d, int do
         swap4(&d->num_definitions);
     if (d->num_definitions > 0)
     {
-        d->definitions = (pulseg__definition *)PULSEG_ALLOC(
-            (size_t)d->num_definitions * sizeof(pulseg__definition));
+        d->definitions = (pulseq_definition *)PULSEG_ALLOC(
+            (size_t)d->num_definitions * sizeof(pulseq_definition));
         if (!d->definitions)
             return 0;
         for (i = 0; i < d->num_definitions; ++i)
@@ -1355,12 +1405,12 @@ static int read_definitions_cache(FILE *f, pulseg_sequence_descriptor *d, int do
             int name_len;
             d->definitions[i].value = NULL;
             d->definitions[i].value_size = 0;
-            memset(d->definitions[i].name, 0, PULSEG_PULSEQ_DEFINITION_NAME_LENGTH);
+            memset(d->definitions[i].name, 0, PULSEQ_DEFINITION_NAME_LENGTH);
             if (fread(&name_len, sizeof(int), 1, f) != 1)
                 return 0;
             if (do_swap)
                 swap4(&name_len);
-            if (name_len > 0 && name_len < PULSEG_PULSEQ_DEFINITION_NAME_LENGTH)
+            if (name_len > 0 && name_len < PULSEQ_DEFINITION_NAME_LENGTH)
             {
                 if (fread(d->definitions[i].name, 1, (size_t)name_len, f) != (size_t)name_len)
                     return 0;
@@ -1373,8 +1423,8 @@ static int read_definitions_cache(FILE *f, pulseg_sequence_descriptor *d, int do
             if (d->definitions[i].value_size > 0)
             {
                 int j;
-                d->definitions[i].value = (char **)PULSEG_ALLOC(
-                    (size_t)d->definitions[i].value_size * sizeof(char *));
+                d->definitions[i].value =
+                    (char **)PULSEG_ALLOC((size_t)d->definitions[i].value_size * sizeof(char *));
                 if (!d->definitions[i].value)
                     return 0;
                 for (j = 0; j < d->definitions[i].value_size; ++j)
@@ -1414,8 +1464,8 @@ static int read_rotations(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         swap4(&d->num_rotations);
     if (d->num_rotations > 0)
     {
-        d->rotation_matrices = (float (*)[9])PULSEG_ALLOC(
-            (size_t)d->num_rotations * 9 * sizeof(float));
+        d->rotation_matrices =
+            (float(*)[9])PULSEG_ALLOC((size_t)d->num_rotations * 9 * sizeof(float));
         if (!d->rotation_matrices)
             return 0;
         for (i = 0; i < d->num_rotations; ++i)
@@ -1442,8 +1492,7 @@ static int read_shapes(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         swap4(&d->num_shapes);
     if (d->num_shapes > 0)
     {
-        d->shapes = (pulseg_shape_arbitrary *)PULSEG_ALLOC(
-            (size_t)d->num_shapes * sizeof(pulseg_shape_arbitrary));
+        d->shapes = (pulseq_shape *)PULSEG_ALLOC((size_t)d->num_shapes * sizeof(pulseq_shape));
         if (!d->shapes)
             return 0;
         for (i = 0; i < d->num_shapes; ++i)
@@ -1477,40 +1526,45 @@ static int read_shapes(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
 static int read_scanloop(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
 {
     /* scan table */
-    if (fread(&d->scan_table_len, sizeof(int), 1, f) != 1)
+    if (fread(&d->exec_stream_len, sizeof(int), 1, f) != 1)
         return 0;
     if (do_swap)
-        swap4(&d->scan_table_len);
-    if (d->scan_table_len > 0)
+        swap4(&d->exec_stream_len);
+    if (d->exec_stream_len > 0)
     {
-        d->scan_table_block_idx = (int *)PULSEG_ALLOC((size_t)d->scan_table_len * sizeof(int));
-        d->scan_table_tr_id = (int *)PULSEG_ALLOC((size_t)d->scan_table_len * sizeof(int));
-        d->scan_table_seg_id = (int *)PULSEG_ALLOC((size_t)d->scan_table_len * sizeof(int));
-        d->scan_table_avg_id = (int *)PULSEG_ALLOC((size_t)d->scan_table_len * sizeof(int));
-        if (!d->scan_table_block_idx || !d->scan_table_tr_id || !d->scan_table_seg_id || !d->scan_table_avg_id)
+        d->exec_stream_block_idx = (int *)PULSEG_ALLOC((size_t)d->exec_stream_len * sizeof(int));
+        d->exec_stream_tr_id = (int *)PULSEG_ALLOC((size_t)d->exec_stream_len * sizeof(int));
+        d->exec_stream_seg_id = (int *)PULSEG_ALLOC((size_t)d->exec_stream_len * sizeof(int));
+        d->exec_stream_avg_id = (int *)PULSEG_ALLOC((size_t)d->exec_stream_len * sizeof(int));
+        if (!d->exec_stream_block_idx || !d->exec_stream_tr_id || !d->exec_stream_seg_id ||
+            !d->exec_stream_avg_id)
             return 0;
-        if (fread(d->scan_table_block_idx, sizeof(int), (size_t)d->scan_table_len, f) != (size_t)d->scan_table_len)
+        if (fread(d->exec_stream_block_idx, sizeof(int), (size_t)d->exec_stream_len, f) !=
+            (size_t)d->exec_stream_len)
             return 0;
-        if (fread(d->scan_table_tr_id, sizeof(int), (size_t)d->scan_table_len, f) != (size_t)d->scan_table_len)
+        if (fread(d->exec_stream_tr_id, sizeof(int), (size_t)d->exec_stream_len, f) !=
+            (size_t)d->exec_stream_len)
             return 0;
-        if (fread(d->scan_table_seg_id, sizeof(int), (size_t)d->scan_table_len, f) != (size_t)d->scan_table_len)
+        if (fread(d->exec_stream_seg_id, sizeof(int), (size_t)d->exec_stream_len, f) !=
+            (size_t)d->exec_stream_len)
             return 0;
-        if (fread(d->scan_table_avg_id, sizeof(int), (size_t)d->scan_table_len, f) != (size_t)d->scan_table_len)
+        if (fread(d->exec_stream_avg_id, sizeof(int), (size_t)d->exec_stream_len, f) !=
+            (size_t)d->exec_stream_len)
             return 0;
         if (do_swap)
         {
-            swap4_array(d->scan_table_block_idx, d->scan_table_len);
-            swap4_array(d->scan_table_tr_id, d->scan_table_len);
-            swap4_array(d->scan_table_seg_id, d->scan_table_len);
-            swap4_array(d->scan_table_avg_id, d->scan_table_len);
+            swap4_array(d->exec_stream_block_idx, d->exec_stream_len);
+            swap4_array(d->exec_stream_tr_id, d->exec_stream_len);
+            swap4_array(d->exec_stream_seg_id, d->exec_stream_len);
+            swap4_array(d->exec_stream_avg_id, d->exec_stream_len);
         }
     }
     else
     {
-        d->scan_table_block_idx = NULL;
-        d->scan_table_tr_id = NULL;
-        d->scan_table_seg_id = NULL;
-        d->scan_table_avg_id = NULL;
+        d->exec_stream_block_idx = NULL;
+        d->exec_stream_tr_id = NULL;
+        d->exec_stream_seg_id = NULL;
+        d->exec_stream_avg_id = NULL;
     }
 
     /* variable grad flags */
@@ -1541,8 +1595,7 @@ static int read_scanloop(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
 
 /* ------ Write collection payload (header handled by caller) ------ */
 
-static int write_common_payload(FILE *f,
-                                const pulseg_collection *coll)
+static int write_common_payload(FILE *f, const pulseg_collection *coll)
 {
     int i;
 
@@ -1564,6 +1617,10 @@ static int write_common_payload(FILE *f,
         return 0;
     }
     if (!write4(f, &coll->total_blocks, 1))
+    {
+        return 0;
+    }
+    if (!write4(f, &coll->total_readouts, 1))
     {
         return 0;
     }
@@ -1612,9 +1669,7 @@ static int write_common_payload(FILE *f,
 
 typedef int (*desc_writer_fn)(FILE *, const pulseg_sequence_descriptor *);
 
-static int write_augment_payload(FILE *f,
-                                 const pulseg_collection *coll,
-                                 desc_writer_fn wfn)
+static int write_augment_payload(FILE *f, const pulseg_collection *coll, desc_writer_fn wfn)
 {
     int i;
 
@@ -1647,28 +1702,33 @@ static int write_scanloop_payload(FILE *f, const pulseg_collection *coll)
     return write_augment_payload(f, coll, write_scanloop);
 }
 
+static int write_instances_payload(FILE *f, const pulseg_collection *coll)
+{
+    return write_augment_payload(f, coll, write_instances);
+}
+
 /* ------ Write full collection to sectioned cache ------ */
 
 typedef int (*payload_writer_fn)(FILE *, const pulseg_collection *);
 
-static int write_cache(const char *cache_path,
-                       const pulseg_collection *coll,
-                       int seq_file_size)
+static int write_cache(const char *cache_path, const pulseg_collection *coll, int seq_file_size)
 {
     FILE *f;
     int marker, vendor;
     int version_major, version_minor, version_revision;
     int num_sections, i;
     long entries_pos, end_pos;
-    pulseg_cache_section_entry entries[5];
-    static const int section_ids[5] = {
+    pulseg_cache_section_entry entries[6];
+    static const int section_ids[6] = {
         PULSEG_CACHE_SECTION_COMMON,
+        PULSEG_CACHE_SECTION_INSTANCES,
         PULSEG_CACHE_SECTION_ROTATIONS,
         PULSEG_CACHE_SECTION_SHAPES,
         PULSEG_CACHE_SECTION_SCANLOOP,
         PULSEG_CACHE_SECTION_DEFINITIONS};
-    static const payload_writer_fn writers[5] = {
+    static const payload_writer_fn writers[6] = {
         write_common_payload,
+        write_instances_payload,
         write_rotations_payload,
         write_shapes_payload,
         write_scanloop_payload,
@@ -1683,7 +1743,7 @@ static int write_cache(const char *cache_path,
     version_major = PULSEG_CACHE_VERSION_MAJOR;
     version_minor = PULSEG_CACHE_VERSION_MINOR;
     version_revision = PULSEG_CACHE_VERSION_REVISION;
-    num_sections = 5;
+    num_sections = 6;
 
     if (!write4(f, &marker, 1))
     {
@@ -1729,7 +1789,7 @@ static int write_cache(const char *cache_path,
     }
 
     /* Reserve slots for the maximum possible section count, not just the
-     * num_sections (5) written by this function -- the trajectory/freqmod/
+     * num_sections (6) written by this function -- the trajectory/freqmod/
      * seqdesc append passes insert their own entries into this same table
      * afterward and must not overflow into the COMMON payload that follows
      * it (see PULSEG_CACHE_MAX_SECTIONS). */
@@ -1812,9 +1872,7 @@ static int write_cache(const char *cache_path,
 
 /* ------ Read collection payload from sectioned cache ------ */
 
-static int read_common_payload(FILE *f,
-                               pulseg_collection *coll,
-                               int do_swap)
+static int read_common_payload(FILE *f, pulseg_collection *coll, int do_swap)
 {
     int i;
 
@@ -1839,6 +1897,10 @@ static int read_common_payload(FILE *f,
     {
         return 0;
     }
+    if (!read4(f, &coll->total_readouts, 1))
+    {
+        return 0;
+    }
     if (!read4(f, &coll->total_duration_us, 1))
     {
         return 0;
@@ -1850,6 +1912,7 @@ static int read_common_payload(FILE *f,
         swap4(&coll->total_unique_segments);
         swap4(&coll->total_unique_adcs);
         swap4(&coll->total_blocks);
+        swap4(&coll->total_readouts);
         swap4(&coll->total_duration_us);
     }
 
@@ -1900,7 +1963,7 @@ static int read_common_payload(FILE *f,
 
     /* init cursor */
     memset(&coll->block_cursor, 0, sizeof(coll->block_cursor));
-    coll->block_cursor.scan_table_position = -1;
+    coll->block_cursor.exec_stream_position = -1;
 
     return 1;
 }
@@ -1912,8 +1975,7 @@ static int read_common_payload(FILE *f,
 
 typedef int (*desc_reader_fn)(FILE *, pulseg_sequence_descriptor *, int);
 
-static int read_augment_payload(FILE *f, pulseg_collection *coll,
-                                int do_swap, desc_reader_fn rfn)
+static int read_augment_payload(FILE *f, pulseg_collection *coll, int do_swap, desc_reader_fn rfn)
 {
     int i, ns;
 
@@ -1952,6 +2014,11 @@ static int read_scanloop_payload(FILE *f, pulseg_collection *coll, int do_swap)
     return read_augment_payload(f, coll, do_swap, read_scanloop);
 }
 
+static int read_instances_payload(FILE *f, pulseg_collection *coll, int do_swap)
+{
+    return read_augment_payload(f, coll, do_swap, read_instances);
+}
+
 /* ------ Read a set of sections from a sectioned cache ------ */
 /* readers[k] is invoked for the section section_ids[k], in the order given,
  * after seeking to that section's payload. COMMON must be listed first when
@@ -1959,13 +2026,14 @@ static int read_scanloop_payload(FILE *f, pulseg_collection *coll, int do_swap)
 
 typedef int (*payload_reader_fn)(FILE *, pulseg_collection *, int);
 
-static int read_sections(const char *cache_path,
-                         pulseg_collection *coll,
-                         int expected_seq_file_size,
-                         int enforce_source_size,
-                         const int *section_ids,
-                         const payload_reader_fn *readers,
-                         int n_req)
+static int read_sections(
+    const char *cache_path,
+    pulseg_collection *coll,
+    int expected_seq_file_size,
+    int enforce_source_size,
+    const int *section_ids,
+    const payload_reader_fn *readers,
+    int n_req)
 {
     FILE *f;
     int marker, vendor, stored_size, num_sections;
@@ -2122,28 +2190,37 @@ static int read_sections(const char *cache_path,
     return 1;
 }
 
-/* ------ Read the full descriptor (all four PSD-internal sections) ------ */
+/* ------ Read the full descriptor (all PSD-internal sections) ------ */
 
-static int read_full_cache(const char *cache_path,
-                           pulseg_collection *coll,
-                           int expected_seq_file_size,
-                           int enforce_source_size)
+static int read_full_cache(
+    const char *cache_path,
+    pulseg_collection *coll,
+    int expected_seq_file_size,
+    int enforce_source_size)
 {
-    static const int ids[5] = {
+    static const int ids[6] = {
         PULSEG_CACHE_SECTION_COMMON,
+        PULSEG_CACHE_SECTION_INSTANCES,
         PULSEG_CACHE_SECTION_ROTATIONS,
         PULSEG_CACHE_SECTION_SHAPES,
         PULSEG_CACHE_SECTION_SCANLOOP,
         PULSEG_CACHE_SECTION_DEFINITIONS};
-    static const payload_reader_fn readers[5] = {
+    static const payload_reader_fn readers[6] = {
         read_common_payload,
+        read_instances_payload,
         read_rotations_payload,
         read_shapes_payload,
         read_scanloop_payload,
         read_definitions_payload};
-    int ok = read_sections(cache_path, coll, expected_seq_file_size,
-                           enforce_source_size, ids, readers, 5);
-    /* COMMON + SHAPES + SCANLOOP are all present here, so the cross-subsequence
+    int ok = read_sections(
+        cache_path,
+        coll,
+        expected_seq_file_size,
+        enforce_source_size,
+        ids,
+        readers,
+        6);
+    /* Every PSD-internal section is present here, so the cross-subsequence
      * segment dedup remap can be rebuilt deterministically (identical to the
      * convert-time map). */
     if (ok)
@@ -2155,8 +2232,7 @@ static int read_full_cache(const char *cache_path,
 /*  Public wrappers (called from pulseg_core.c)                    */
 /* ================================================================== */
 
-int pulseg__write_cache(pulseg_collection *coll, const char *seq_path,
-                            const pulseg_opts *opts)
+int pulseg__write_cache(pulseg_collection *coll, const char *seq_path, const pulseg_opts *opts)
 {
     char *cache_path;
     long sz;
@@ -2164,9 +2240,6 @@ int pulseg__write_cache(pulseg_collection *coll, const char *seq_path,
 
     if (!coll || !seq_path || !opts)
         return 0;
-
-    /* suppress unused-function warning for reserved helper */
-    (void)get_seq_file_sizes;
 
     cache_path = make_cache_path(seq_path, opts->cache_ext);
     if (!cache_path)
@@ -2191,18 +2264,16 @@ int pulseg__write_cache(pulseg_collection *coll, const char *seq_path,
      * each consumer treats its section as optional, so a failure does not
      * invalidate the base cache and not every sequence has every section.
      * Each callee reads its own cache_ext from coll->descriptors[0]
-     * (set at dedup time from this same opts->cache_ext, D10). */
-    (void)pulseg_write_trajectory_cache_from_collection(coll, seq_path);
-    (void)pulseg_write_freq_mod_cache_from_collection(coll, seq_path);
-    (void)pulseg_write_sequence_description_cache(coll, seq_path);
+     * (set at dedup time from this same opts->cache_ext). */
+    (void)pulseg__save_trajectory_cache_section(coll, seq_path);
+    (void)pulseg__save_freq_mod_cache_section(coll, seq_path);
+    (void)pulseg__save_seqdesc_cache_section(coll, seq_path);
     (void)pulseg_write_vendor_cache_section(coll, seq_path, opts);
 
     return ok;
 }
 
-int pulseg__try_read_cache(pulseg_collection *coll,
-                              const char *seq_path,
-                              const char *cache_ext)
+int pulseg__try_read_cache(pulseg_collection *coll, const char *seq_path, const char *cache_ext)
 {
     char *cache_path;
     long sz;
@@ -2231,30 +2302,23 @@ int pulseg__try_read_cache(pulseg_collection *coll,
 /*  Public API: explicit-path cache save / load                       */
 /* ================================================================== */
 
-int pulseg_save_cache(const pulseg_collection *coll,
-                         const char *path,
-                         int source_size)
+int pulseg_save_cache(const pulseg_collection *coll, const char *path, int source_size)
 {
     if (!coll || !path)
         return PULSEG_ERR_NULL_POINTER;
     if (source_size <= 0)
         return PULSEG_ERR_INVALID_ARGUMENT;
-    return write_cache(path, coll, source_size)
-               ? PULSEG_SUCCESS
-               : PULSEG_ERR_FILE_READ_FAILED;
+    return write_cache(path, coll, source_size) ? PULSEG_SUCCESS : PULSEG_ERR_FILE_READ_FAILED;
 }
 
-int pulseg_load_cache(pulseg_collection *coll,
-                         const char *path,
-                         int source_size)
+int pulseg_load_cache(pulseg_collection *coll, const char *path, int source_size)
 {
     if (!coll || !path)
         return PULSEG_ERR_NULL_POINTER;
     if (source_size <= 0)
         return PULSEG_ERR_INVALID_ARGUMENT;
-    return read_full_cache(path, coll, source_size, 1)
-               ? PULSEG_SUCCESS
-               : PULSEG_ERR_FILE_READ_FAILED;
+    return read_full_cache(path, coll, source_size, 1) ? PULSEG_SUCCESS
+                                                       : PULSEG_ERR_FILE_READ_FAILED;
 }
 
 static int load_cache_from_seq_path(
@@ -2295,13 +2359,14 @@ static int load_cache_from_seq_path(
         return PULSEG_ERR_FILE_NOT_FOUND;
     }
 
-    ok = read_sections(cache_path,
-                       coll,
-                       source_size < 0 ? 0 : (int)source_size,
-                       enforce_source_size,
-                       section_ids,
-                       readers,
-                       n_req);
+    ok = read_sections(
+        cache_path,
+        coll,
+        source_size < 0 ? 0 : (int)source_size,
+        enforce_source_size,
+        section_ids,
+        readers,
+        n_req);
     PULSEG_FREE(cache_path);
     if (!ok)
     {
@@ -2313,56 +2378,46 @@ static int load_cache_from_seq_path(
     return PULSEG_SUCCESS;
 }
 
-/* Pulsegen: COMMON + SHAPES + SCANLOOP (no rotations). SCANLOOP is required for
- * the max-energy scan-instance gradient resolution (see body). */
-int pulseg_load_geninstructions_cache(
-    pulseg_collection **out_coll,
-    const char *seq_path)
+/* Pulsegen: COMMON + SHAPES. Neither INSTANCES nor SCANLOOP is loaded — this
+ * pass builds one hardware image per segment DEFINITION, and every per-position
+ * quantity it needs (the representative instance's block definition, RF
+ * amplitude, gradient definition/shot/amplitude, digital-output event) is
+ * frozen into the segment definitions' initial-state records at parse time
+ * (pulseg_structure.c step 11e). SHAPES is required both for the waveforms
+ * themselves and for pulseg__build_segment_remap()'s content comparison. */
+int pulseg_load_geninstructions_cache(pulseg_collection **out_coll, const char *seq_path)
 {
-    /* SCANLOOP is required in addition to COMMON+SHAPES: the host pulsegen
-     * modeling pass resolves each block's gradients through the max-energy
-     * scan instance (resolve_block_table_via_max_energy), which dereferences
-     * desc->scan_table[]. That table lives in the SCANLOOP section; without it
-     * scan_table_len==0, the resolver returns NULL, has_grad becomes 0/0/0 for
-     * every axis, and pulsegen builds grad tables inconsistent with the actual
-     * waveforms — corrupting the AllocNode pool and crashing pg_cleanup on the
-     * next pulsegen pass. (Regression from the per-section cache split.) */
-    static const int ids[3] = {
-        PULSEG_CACHE_SECTION_COMMON,
-        PULSEG_CACHE_SECTION_SHAPES,
-        PULSEG_CACHE_SECTION_SCANLOOP};
-    static const payload_reader_fn readers[3] = {
-        read_common_payload,
-        read_shapes_payload,
-        read_scanloop_payload};
-    int rc = load_cache_from_seq_path(out_coll, seq_path, ids, readers, 3, 0);
-    /* COMMON + SHAPES + SCANLOOP present -> rebuild the cross-subsequence
-     * segment dedup remap so the global segment ids the pulsegen loop builds
-     * match those the scan cursor emits. */
+    static const int ids[2] = {PULSEG_CACHE_SECTION_COMMON, PULSEG_CACHE_SECTION_SHAPES};
+    static const payload_reader_fn readers[2] = {read_common_payload, read_shapes_payload};
+    int rc = load_cache_from_seq_path(out_coll, seq_path, ids, readers, 2, 0);
+    /* Rebuild the cross-subsequence segment dedup remap so the global segment
+     * ids the pulsegen loop builds match those the scan cursor emits. */
     if (rc == PULSEG_SUCCESS && out_coll && *out_coll)
         pulseg__build_segment_remap(*out_coll);
     return rc;
 }
 
-/* Scan: COMMON + ROTATIONS + SHAPES + SCANLOOP.  SHAPES is loaded (even though
- * scan never plays raw waveforms) so pulseg__build_segment_remap() can recompute
- * the SAME cross-subsequence segment deduplication the pulsegen path computed;
- * otherwise the cursor's global segment ids would not match the built buffers. */
-int pulseg_load_scanloop_cache(
-    pulseg_collection **out_coll,
-    const char *seq_path)
+/* Scan: COMMON + INSTANCES + ROTATIONS + SHAPES + SCANLOOP.  INSTANCES and
+ * SCANLOOP carry the per-instance event tables the cursor replays; SHAPES is
+ * loaded (even though scan never plays raw waveforms) so
+ * pulseg__build_segment_remap() recomputes the SAME cross-subsequence segment
+ * deduplication the pulsegen path computed — otherwise the cursor's global
+ * segment ids would not match the built buffers. */
+int pulseg_load_scanloop_cache(pulseg_collection **out_coll, const char *seq_path)
 {
-    static const int ids[4] = {
+    static const int ids[5] = {
         PULSEG_CACHE_SECTION_COMMON,
+        PULSEG_CACHE_SECTION_INSTANCES,
         PULSEG_CACHE_SECTION_ROTATIONS,
         PULSEG_CACHE_SECTION_SHAPES,
         PULSEG_CACHE_SECTION_SCANLOOP};
-    static const payload_reader_fn readers[4] = {
+    static const payload_reader_fn readers[5] = {
         read_common_payload,
+        read_instances_payload,
         read_rotations_payload,
         read_shapes_payload,
         read_scanloop_payload};
-    int rc = load_cache_from_seq_path(out_coll, seq_path, ids, readers, 4, 0);
+    int rc = load_cache_from_seq_path(out_coll, seq_path, ids, readers, 5, 0);
     if (rc == PULSEG_SUCCESS && out_coll && *out_coll)
         pulseg__build_segment_remap(*out_coll);
     return rc;
@@ -2392,9 +2447,7 @@ int pulseg_clear_cache(const char *seq_path)
 /*  Freq-mod unified cache (FREQMOD section of the binary cache)                  */
 /* ================================================================== */
 
-int pulseg_write_freq_mod_cache(
-    const pulseg_collection *coll,
-    const char *seq_path)
+int pulseg__save_freq_mod_section(const pulseg_collection *coll, const char *seq_path)
 {
     char *cache_path;
     FILE *f;
@@ -2410,7 +2463,8 @@ int pulseg_write_freq_mod_cache(
     if (!coll->freq_mod)
         return PULSEG_ERR_NULL_POINTER;
 
-    cache_path = make_cache_path(seq_path,
+    cache_path = make_cache_path(
+        seq_path,
         coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
     if (!cache_path)
         return PULSEG_ERR_ALLOC_FAILED;
@@ -2502,7 +2556,7 @@ int pulseg_write_freq_mod_cache(
     if (data_start < 0)
         goto fm_write_fail;
 
-    if (pulseg_freq_mod_collection_write_cache_f(coll->freq_mod, f) != PULSEG_SUCCESS)
+    if (pulseg__freq_mod_collection_write_f(coll->freq_mod, f) != PULSEG_SUCCESS)
         goto fm_write_fail;
 
     data_end = ftell(f);
@@ -2542,12 +2596,13 @@ fm_write_fail:
 }
 
 /* ================================================================== */
-/*  Vendor extension section (D10, opaque, optional)                  */
+/*  Vendor extension section (opaque, optional)                  */
 /* ================================================================== */
 
-int pulseg_write_vendor_cache_section(const pulseg_collection *coll,
-                                          const char *seq_path,
-                                          const pulseg_opts *opts)
+int pulseg_write_vendor_cache_section(
+    const pulseg_collection *coll,
+    const char *seq_path,
+    const pulseg_opts *opts)
 {
     char *cache_path;
     FILE *f;
@@ -2578,7 +2633,8 @@ int pulseg_write_vendor_cache_section(const pulseg_collection *coll,
         return PULSEG_SUCCESS; /* callback opted out this time */
     }
 
-    cache_path = make_cache_path(seq_path,
+    cache_path = make_cache_path(
+        seq_path,
         coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
     if (!cache_path)
     {
@@ -2711,10 +2767,11 @@ vs_write_fail:
     return PULSEG_ERR_FILE_READ_FAILED;
 }
 
-int pulseg_read_vendor_cache_section(const char *seq_path,
-                                         const char *cache_ext,
-                                         unsigned char **out_buf,
-                                         int *out_len)
+int pulseg_read_vendor_cache_section(
+    const char *seq_path,
+    const char *cache_ext,
+    unsigned char **out_buf,
+    int *out_len)
 {
     char *cache_path;
     FILE *f;
@@ -2835,9 +2892,7 @@ vs_read_fail:
     return PULSEG_ERR_FILE_READ_FAILED;
 }
 
-int pulseg_load_freq_mod_cache(
-    pulseg_collection *coll,
-    const char *seq_path)
+int pulseg_load_freq_mod_cache(pulseg_collection *coll, const char *seq_path)
 {
     char *cache_path;
     FILE *f;
@@ -2856,7 +2911,8 @@ int pulseg_load_freq_mod_cache(
         coll->freq_mod = NULL;
     }
 
-    cache_path = make_cache_path(seq_path,
+    cache_path = make_cache_path(
+        seq_path,
         coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
     if (!cache_path)
         return PULSEG_ERR_ALLOC_FAILED;
@@ -2975,8 +3031,7 @@ int pulseg_load_freq_mod_cache(
     }
 
     {
-        int rc = pulseg_freq_mod_collection_read_cache_f(
-            &coll->freq_mod, f, coll, zero_shift, do_swap);
+        int rc = pulseg__freq_mod_collection_read_f(&coll->freq_mod, f, coll, zero_shift, do_swap);
         fclose(f);
         return rc;
     }

@@ -1,10 +1,13 @@
-/* pulseg_recon.c -- standalone recon-cache reader (Section 0/6/7)
+/**
+ * @file pulseg_recon.c
+ * @brief Standalone reader for the recon-relevant cache sections.
  *
- * C89 port of the former cxx/recon/trajectory_cache_reader.cpp byte-parsing
- * logic (see pulseg_recon.h for the section-by-section contract). Section 6
- * (TRAJECTORY) is NOT re-parsed here -- it delegates to the existing public
- * pulseg_load_trajectory_cache() (pulseg_trajectory.c) to avoid duplicating
- * that byte-parsing.
+ * Reads DEFINITIONS, TRAJECTORY and SEQDESC straight from the cache file with
+ * no loaded collection, for consumers that only have the .pseg/.pge on disk.
+ * TRAJECTORY is not re-parsed here: it delegates to
+ * pulseg_load_trajectory_cache() so the byte layout has exactly one reader.
+ *
+ * See pulseg_recon.h for the section-by-section contract.
  */
 
 #include <stdio.h>
@@ -12,18 +15,17 @@
 #include <string.h>
 
 #include "pulseg_recon.h"
-#include "pulseg_internal.h"
 
 #define PGR_CACHE_ENDIAN_MARKER 0x01020304
 #define PGR_SECTION_DEFINITIONS 0
 #define PGR_SECTION_TRAJECTORY 6
 #define PGR_SECTION_SEQDESC 7
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Byte-swap / typed I/O helpers (mirrors pulseg_trajectory.c /       */
 /*  pulseg_cache_seqdesc.c -- duplicated locally per module convention */
 /*  since these helpers are file-static everywhere else too).          */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 static int pgr_read4(FILE *f, void *p, int count)
 {
@@ -61,9 +63,9 @@ static void pgr_set_diag(char *diag, int diag_size, const char *msg)
     diag[n] = '\0';
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Section table-of-contents                                          */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 typedef struct pgr_section
 {
@@ -76,11 +78,14 @@ typedef struct pgr_section
  * and the section table, locating sections 0/6/7 in a single pass.
  * Leaves the file position undefined on return (callers always seek
  * explicitly before reading section payloads). */
-static int pgr_read_header_and_toc(FILE *f, int *do_swap_out,
-                                    pgr_section *definitions_section,
-                                    pgr_section *traj_section,
-                                    pgr_section *seqdesc_section,
-                                    char *diag, int diag_size)
+static int pgr_read_header_and_toc(
+    FILE *f,
+    int *do_swap_out,
+    pgr_section *definitions_section,
+    pgr_section *traj_section,
+    pgr_section *seqdesc_section,
+    char *diag,
+    int diag_size)
 {
     int marker;
     int version_major, version_minor, version_revision, vendor, stored_size;
@@ -107,12 +112,9 @@ static int pgr_read_header_and_toc(FILE *f, int *do_swap_out,
         do_swap = 1;
     }
 
-    if (!pgr_read4(f, &version_major, 1) ||
-        !pgr_read4(f, &version_minor, 1) ||
-        !pgr_read4(f, &version_revision, 1) ||
-        !pgr_read4(f, &vendor, 1) ||
-        !pgr_read4(f, &stored_size, 1) ||
-        !pgr_read4(f, &num_sections, 1))
+    if (!pgr_read4(f, &version_major, 1) || !pgr_read4(f, &version_minor, 1) ||
+        !pgr_read4(f, &version_revision, 1) || !pgr_read4(f, &vendor, 1) ||
+        !pgr_read4(f, &stored_size, 1) || !pgr_read4(f, &num_sections, 1))
     {
         pgr_set_diag(diag, diag_size, "unexpected EOF reading cache header");
         return 0;
@@ -167,16 +169,19 @@ static int pgr_read_header_and_toc(FILE *f, int *do_swap_out,
     return 1;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Section 0 (DEFINITIONS) -- per-subsequence generic [DEFINITIONS] kv */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 /* Mirrors read_definitions_cache() in pulseg_cache.c, but standalone: the
  * subsequence count is read from the file itself rather than taken from a
  * pre-loaded pulseg_collection. */
-static int pgr_read_one_definitions_block(FILE *f, int do_swap,
-                                           pulseg_recon_definitions *out,
-                                           char *diag, int diag_size)
+static int pgr_read_one_definitions_block(
+    pulseg_recon_definitions *out,
+    FILE *f,
+    int do_swap,
+    char *diag,
+    int diag_size)
 {
     int i;
 
@@ -196,19 +201,19 @@ static int pgr_read_one_definitions_block(FILE *f, int do_swap,
         return 1;
     }
 
-    out->definitions = (pulseg__definition *)PULSEG_ALLOC(
-        (size_t)out->num_definitions * sizeof(pulseg__definition));
+    out->definitions =
+        (pulseq_definition *)PULSEG_ALLOC((size_t)out->num_definitions * sizeof(pulseq_definition));
     if (!out->definitions)
     {
         pgr_set_diag(diag, diag_size, "allocation failed for DEFINITIONS entries");
         return 0;
     }
-    memset(out->definitions, 0, (size_t)out->num_definitions * sizeof(pulseg__definition));
+    memset(out->definitions, 0, (size_t)out->num_definitions * sizeof(pulseq_definition));
 
     for (i = 0; i < out->num_definitions; ++i)
     {
         int name_len, j;
-        pulseg__definition *def = &out->definitions[i];
+        pulseq_definition *def = &out->definitions[i];
 
         if (!pgr_read4(f, &name_len, 1))
         {
@@ -217,7 +222,7 @@ static int pgr_read_one_definitions_block(FILE *f, int do_swap,
         }
         if (do_swap)
             pgr_swap4(&name_len);
-        if (name_len > 0 && name_len < PULSEG_PULSEQ_DEFINITION_NAME_LENGTH)
+        if (name_len > 0 && name_len < PULSEQ_DEFINITION_NAME_LENGTH)
         {
             if (fread(def->name, 1, (size_t)name_len, f) != (size_t)name_len)
             {
@@ -268,7 +273,10 @@ static int pgr_read_one_definitions_block(FILE *f, int do_swap,
                     def->value[j] = (char *)PULSEG_ALLOC((size_t)(vlen + 1));
                     if (!def->value[j])
                     {
-                        pgr_set_diag(diag, diag_size, "allocation failed for DEFINITIONS value string");
+                        pgr_set_diag(
+                            diag,
+                            diag_size,
+                            "allocation failed for DEFINITIONS value string");
                         return 0;
                     }
                     if (fread(def->value[j], 1, (size_t)vlen, f) != (size_t)vlen)
@@ -285,9 +293,13 @@ static int pgr_read_one_definitions_block(FILE *f, int do_swap,
     return 1;
 }
 
-static int pgr_read_definitions_section(FILE *f, int do_swap, long section_offset,
-                                         pulseg_recon_cache *out,
-                                         char *diag, int diag_size)
+static int pgr_read_definitions_section(
+    pulseg_recon_cache *out,
+    FILE *f,
+    int do_swap,
+    long section_offset,
+    char *diag,
+    int diag_size)
 {
     int num_subseq, s;
 
@@ -322,20 +334,28 @@ static int pgr_read_definitions_section(FILE *f, int do_swap, long section_offse
 
     for (s = 0; s < num_subseq; ++s)
     {
-        if (!pgr_read_one_definitions_block(f, do_swap, &out->definitions_by_subseq[s],
-                                             diag, diag_size))
+        if (!pgr_read_one_definitions_block(
+                &out->definitions_by_subseq[s],
+                f,
+                do_swap,
+                diag,
+                diag_size))
             return 0;
     }
 
     return 1;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Section 7 (SEQDESC)                                                */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
-static int pgr_read_rf_shape(FILE *f, int do_swap, pulseg_recon_rf_shape *shape,
-                              char *diag, int diag_size)
+static int pgr_read_rf_shape(
+    pulseg_recon_rf_shape *shape,
+    FILE *f,
+    int do_swap,
+    char *diag,
+    int diag_size)
 {
     shape->num_uncompressed = 0;
     shape->num_samples = 0;
@@ -370,8 +390,12 @@ static int pgr_read_rf_shape(FILE *f, int do_swap, pulseg_recon_rf_shape *shape,
     return 1;
 }
 
-static int pgr_read_rf_def_library(FILE *f, int do_swap, pulseg_recon_seq_desc *sd,
-                                    char *diag, int diag_size)
+static int pgr_read_rf_def_library(
+    pulseg_recon_seq_desc *sd,
+    FILE *f,
+    int do_swap,
+    char *diag,
+    int diag_size)
 {
     int num_rf_defs, rd;
 
@@ -387,7 +411,8 @@ static int pgr_read_rf_def_library(FILE *f, int do_swap, pulseg_recon_seq_desc *
     if (num_rf_defs <= 0)
         return 1;
 
-    sd->rf_defs = (pulseg_recon_rf_def *)PULSEG_ALLOC((size_t)num_rf_defs * sizeof(pulseg_recon_rf_def));
+    sd->rf_defs =
+        (pulseg_recon_rf_def *)PULSEG_ALLOC((size_t)num_rf_defs * sizeof(pulseg_recon_rf_def));
     if (!sd->rf_defs)
     {
         pgr_set_diag(diag, diag_size, "allocation failed for RF-def library");
@@ -401,8 +426,7 @@ static int pgr_read_rf_def_library(FILE *f, int do_swap, pulseg_recon_seq_desc *
         pulseg_recon_rf_def *def = &sd->rf_defs[rd];
         int has_phase, has_time;
 
-        if (!pgr_read4(f, &def->rf_def_id, 1) ||
-            !pgr_read4(f, &def->bandwidth_hz, 1) ||
+        if (!pgr_read4(f, &def->rf_def_id, 1) || !pgr_read4(f, &def->bandwidth_hz, 1) ||
             !pgr_read4(f, &def->num_bands, 1))
         {
             pgr_set_diag(diag, diag_size, "EOF reading RF-def header");
@@ -413,8 +437,7 @@ static int pgr_read_rf_def_library(FILE *f, int do_swap, pulseg_recon_seq_desc *
             pgr_set_diag(diag, diag_size, "EOF reading RF-def band_freq_offsets_hz");
             return 0;
         }
-        if (!pgr_read4(f, &def->band_bandwidth_hz, 1) ||
-            !pgr_read4(f, &def->total_b1sq_power, 1))
+        if (!pgr_read4(f, &def->band_bandwidth_hz, 1) || !pgr_read4(f, &def->total_b1sq_power, 1))
         {
             pgr_set_diag(diag, diag_size, "EOF reading RF-def band/b1sq fields");
             return 0;
@@ -429,7 +452,7 @@ static int pgr_read_rf_def_library(FILE *f, int do_swap, pulseg_recon_seq_desc *
             pgr_swap4(&def->total_b1sq_power);
         }
 
-        if (!pgr_read_rf_shape(f, do_swap, &def->mag, diag, diag_size))
+        if (!pgr_read_rf_shape(&def->mag, f, do_swap, diag, diag_size))
             return 0;
 
         if (!pgr_read4(f, &has_phase, 1))
@@ -440,7 +463,7 @@ static int pgr_read_rf_def_library(FILE *f, int do_swap, pulseg_recon_seq_desc *
         if (do_swap)
             pgr_swap4(&has_phase);
         def->has_phase = has_phase != 0;
-        if (def->has_phase && !pgr_read_rf_shape(f, do_swap, &def->phase, diag, diag_size))
+        if (def->has_phase && !pgr_read_rf_shape(&def->phase, f, do_swap, diag, diag_size))
             return 0;
 
         if (!pgr_read4(f, &has_time, 1))
@@ -451,7 +474,7 @@ static int pgr_read_rf_def_library(FILE *f, int do_swap, pulseg_recon_seq_desc *
         if (do_swap)
             pgr_swap4(&has_time);
         def->has_time = has_time != 0;
-        if (def->has_time && !pgr_read_rf_shape(f, do_swap, &def->time, diag, diag_size))
+        if (def->has_time && !pgr_read_rf_shape(&def->time, f, do_swap, diag, diag_size))
             return 0;
     }
 
@@ -498,8 +521,7 @@ static int pgr_build_rf_shape_tuples(pulseg_recon_seq_desc *sd, char *diag, int 
         found = 0;
         for (k = 0; k < n_tuples; ++k)
         {
-            if (tuples[k].rf_def_id == rf_def_id &&
-                tuples[k].rf_shim_id == rf_shim_id &&
+            if (tuples[k].rf_def_id == rf_def_id && tuples[k].rf_shim_id == rf_shim_id &&
                 tuples[k].ss_grad_amp_hz_per_m == ss_grad_amp)
             {
                 found = 1;
@@ -522,7 +544,8 @@ static int pgr_build_rf_shape_tuples(pulseg_recon_seq_desc *sd, char *diag, int 
         if (ss_grad_amp > 0.0f && bw > 0.0f)
         {
             tuples[n_tuples].slice_thickness_mm = (bw / ss_grad_amp) * 1000.0f;
-            tuples[n_tuples].slice_selective = (tuples[n_tuples].slice_thickness_mm < 10.0f) ? 1 : 0;
+            tuples[n_tuples].slice_selective =
+                (tuples[n_tuples].slice_thickness_mm < 10.0f) ? 1 : 0;
         }
         else
         {
@@ -538,8 +561,12 @@ static int pgr_build_rf_shape_tuples(pulseg_recon_seq_desc *sd, char *diag, int 
     return 1;
 }
 
-static int pgr_read_one_seqdesc_subseq(FILE *f, int do_swap, pulseg_recon_seq_desc *sd,
-                                        char *diag, int diag_size)
+static int pgr_read_one_seqdesc_subseq(
+    pulseg_recon_seq_desc *sd,
+    FILE *f,
+    int do_swap,
+    char *diag,
+    int diag_size)
 {
     int num_rows, r;
 
@@ -592,15 +619,19 @@ static int pgr_read_one_seqdesc_subseq(FILE *f, int do_swap, pulseg_recon_seq_de
         }
     }
 
-    if (!pgr_read_rf_def_library(f, do_swap, sd, diag, diag_size))
+    if (!pgr_read_rf_def_library(sd, f, do_swap, diag, diag_size))
         return 0;
 
     return pgr_build_rf_shape_tuples(sd, diag, diag_size);
 }
 
-static int pgr_read_seqdesc_section(FILE *f, int do_swap, long section_offset,
-                                     pulseg_recon_cache *out,
-                                     char *diag, int diag_size)
+static int pgr_read_seqdesc_section(
+    pulseg_recon_cache *out,
+    FILE *f,
+    int do_swap,
+    long section_offset,
+    char *diag,
+    int diag_size)
 {
     pulseg_sequence_parameters *sp = &out->seq_params;
     int ss;
@@ -613,12 +644,9 @@ static int pgr_read_seqdesc_section(FILE *f, int do_swap, long section_offset,
         return 0;
     }
 
-    if (!pgr_read4(f, &sp->min_te_us, 1) ||
-        !pgr_read4(f, &sp->min_tr_us, 1) ||
-        !pgr_read4(f, &sp->max_tr_us, 1) ||
-        !pgr_read4(f, &sp->max_flip_angle_deg, 1) ||
-        !pgr_read4(f, &sp->total_scan_time_us, 1) ||
-        !pgr_read4(f, &sp->num_subseqs, 1) ||
+    if (!pgr_read4(f, &sp->min_te_us, 1) || !pgr_read4(f, &sp->min_tr_us, 1) ||
+        !pgr_read4(f, &sp->max_tr_us, 1) || !pgr_read4(f, &sp->max_flip_angle_deg, 1) ||
+        !pgr_read4(f, &sp->total_scan_time_us, 1) || !pgr_read4(f, &sp->num_subseqs, 1) ||
         !pgr_read4(f, sp->reserved, 3))
     {
         pgr_set_diag(diag, diag_size, "EOF reading SEQDESC header");
@@ -652,7 +680,7 @@ static int pgr_read_seqdesc_section(FILE *f, int do_swap, long section_offset,
 
     for (ss = 0; ss < sp->num_subseqs; ++ss)
     {
-        if (!pgr_read_one_seqdesc_subseq(f, do_swap, &out->seq_descs[ss], diag, diag_size))
+        if (!pgr_read_one_seqdesc_subseq(&out->seq_descs[ss], f, do_swap, diag, diag_size))
             return 0;
     }
 
@@ -663,10 +691,11 @@ static int pgr_read_seqdesc_section(FILE *f, int do_swap, long section_offset,
 /*  Public API                                                        */
 /* ================================================================== */
 
-int pulseg_recon_cache_read(pulseg_recon_cache *out,
-                             const char *cache_path,
-                             char *diag,
-                             int diag_size)
+int pulseg_recon_cache_read(
+    pulseg_recon_cache *out,
+    const char *cache_path,
+    char *diag,
+    int diag_size)
 {
     FILE *f;
     int do_swap;
@@ -690,15 +719,21 @@ int pulseg_recon_cache_read(pulseg_recon_cache *out,
         return PULSEG_ERR_FILE_NOT_FOUND;
     }
 
-    if (!pgr_read_header_and_toc(f, &do_swap, &definitions_section, &traj_section,
-                                  &seqdesc_section, diag, diag_size))
+    if (!pgr_read_header_and_toc(
+            f,
+            &do_swap,
+            &definitions_section,
+            &traj_section,
+            &seqdesc_section,
+            diag,
+            diag_size))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
 
     /* TRAJECTORY (section 6) and SEQDESC (section 7) are both mandatory as
-     * of cache v2.0.0 (D11) -- a missing section is a hard error, never a
+     * of cache v2.0.0 -- a missing section is a hard error, never a
      * silent degrade. DEFINITIONS (section 0) predates some legacy caches
      * and is tolerated absent. */
     if (traj_section.id < 0)
@@ -716,8 +751,13 @@ int pulseg_recon_cache_read(pulseg_recon_cache *out,
 
     if (definitions_section.id >= 0)
     {
-        if (!pgr_read_definitions_section(f, do_swap, definitions_section.offset,
-                                           out, diag, diag_size))
+        if (!pgr_read_definitions_section(
+                out,
+                f,
+                do_swap,
+                definitions_section.offset,
+                diag,
+                diag_size))
         {
             fclose(f);
             pulseg_recon_cache_free(out);
@@ -725,7 +765,7 @@ int pulseg_recon_cache_read(pulseg_recon_cache *out,
         }
     }
 
-    if (!pgr_read_seqdesc_section(f, do_swap, seqdesc_section.offset, out, diag, diag_size))
+    if (!pgr_read_seqdesc_section(out, f, do_swap, seqdesc_section.offset, diag, diag_size))
     {
         fclose(f);
         pulseg_recon_cache_free(out);
@@ -735,10 +775,10 @@ int pulseg_recon_cache_read(pulseg_recon_cache *out,
     /* Delegate TRAJECTORY parsing to the existing public reader -- do not
      * duplicate that byte-parsing here. It reopens the file itself. */
     fclose(f);
-    traj_status = pulseg_load_trajectory_cache_from_cache_path(&out->trajectory, cache_path);
+    traj_status = pulseg_load_trajectory_cache(&out->trajectory, cache_path);
     if (traj_status != PULSEG_SUCCESS)
     {
-        pgr_set_diag(diag, diag_size, "pulseg_load_trajectory_cache_from_cache_path failed on TRAJECTORY section");
+        pgr_set_diag(diag, diag_size, "pulseg_load_trajectory_cache failed on TRAJECTORY section");
         pulseg_recon_cache_free(out);
         return traj_status;
     }
@@ -761,7 +801,7 @@ void pulseg_recon_cache_free(pulseg_recon_cache *cache)
             int i;
             for (i = 0; i < d->num_definitions; ++i)
             {
-                pulseg__definition *def = &d->definitions[i];
+                pulseq_definition *def = &d->definitions[i];
                 int j;
                 if (def->value)
                 {
@@ -804,7 +844,7 @@ void pulseg_recon_cache_free(pulseg_recon_cache *cache)
     cache->num_seq_descs = 0;
 }
 
-const pulseg__definition *pulseg_recon_find_definition(
+const pulseq_definition *pulseg_recon_find_definition(
     const pulseg_recon_cache *cache,
     int subseq_idx,
     const char *name)

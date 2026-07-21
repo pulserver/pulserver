@@ -4,7 +4,7 @@ This module implements the three mandatory module-level entry points
 required by the bridge dispatcher (see ``mprage_3d.py`` for the Cartesian
 inversion-prepared GRE this extends, ``gre_radial_3d.py`` for the
 non-prepared stack-of-stars sibling, and ``_gre_common.py`` /
-``pulserver.design.preparations`` for the
+``pulserver.preparations`` for the
 shared building blocks):
 
 - ``get_default_protocol(opts)``  — return the initial CV/protocol dictionary.
@@ -24,9 +24,9 @@ loop (accelerated via ``Rz``); spokes are the inner, per-segment loop.
 magnetization-prep module:
 
 - ``inversion``: non-selective hard/adiabatic 180 + spoiler + TI delay
-  (``pulserver.design.preparations``, same as ``mprage_3d.py``).
+  (``pulserver.preparations``, same as ``mprage_3d.py``).
 - ``t2_prep``: composite 90-tau/2-180-tau/2-(-90) + spoiler
-  (``pulserver.design.preparations``) — ``TE_prep`` sets the T2 weighting directly, so
+  (``pulserver.preparations``) — ``TE_prep`` sets the T2 weighting directly, so
   (unlike TI) there is no extra post-module centering delay; the segment
   starts right after the spoiler.
 
@@ -40,7 +40,7 @@ rule: GE's real UI has no generic "prep type = MT" slot).
 reused from the MPRAGE family. TI, ``TE_prep``, the inversion/refocus-mode
 toggles, and the MT enable/params all lack a native GE counterpart, so they
 are ``opuser`` custom variables. Trajectory is plain full-echo radial
-(rotated spokes, ``pulserver.pulseq.make_rotation`` — no ``pulserver.arbgrad``
+(rotated spokes, ``pulserver.pypulseq.make_rotation`` — no ``pulserver.pypulseq.arbgrad``
 waveform solver needed) — see ``gre_noncart_3d.py`` for the arbgrad-backed
 spiral/rosette sibling; swapping the readout builder there for this file's
 prep/segment scheduling is a mechanical follow-up, not implemented here.
@@ -59,30 +59,32 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pypulseq as pp
-from scipy.spatial.transform import Rotation
-
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
-    BoolParam,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
+    PreparationType,
+    Sequence,
+    SequenceType,
     TypeinFloatParam,
     UIParam,
     Validate,
     dict_to_protocol,
     make_enum_param,
+    params,
     protocol_to_dict,
+    run_cli,
 )
-from pulserver import arbgrad
-from pulserver.core import PreparationType, SequenceType
-from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
-
-
+from pulserver.pypulseq import _gradients as encoding
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _sampling as sampling
+from pulserver.pypulseq import _system as system
+from pulserver.pypulseq import arbgrad
+from pulserver.pypulseq._rf import _excitation_helpers as excitation
+from pulserver.pypulseq._rf import _preparation_helpers as preparations
+from scipy.spatial.transform import Rotation
 
 NUM_ECHOES = 1
 FLYBACK = True
@@ -100,7 +102,7 @@ def _order_mode_name(code: float) -> str:
     return "golden" if code >= 0.5 else "uniform"
 
 
-class GreMprageRadial3DPulseqSequence(PulseqSequence):
+class GreMprageRadial3DPulseqSequence(Sequence):
     """Generate a 3D stack-of-stars inversion/T2-prepared GRE, +/- MT sat."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -236,7 +238,7 @@ class GreMprageRadial3DPulseqSequence(PulseqSequence):
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
         trecovery_delay = pp.make_delay(system.round_to_raster(cfg.trecovery_s)) if cfg.trecovery_s > 0.0 else None
 
-        seq = ps.Sequence(opts)
+        seq = pp.Sequence(opts)
 
         angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
         segments = sampling.chunk_indices(list(range(cfg.num_shots)), cfg.etl)
@@ -258,7 +260,7 @@ class GreMprageRadial3DPulseqSequence(PulseqSequence):
 
                 for shot in segment:
                     angle = float(angles[shot])
-                    rotation = ps.make_rotation(Rotation.from_euler("z", angle))
+                    rotation = pp.make_rotation(Rotation.from_euler("z", angle))
                     label_lin = pp.make_label(type="SET", label="LIN", value=shot)
 
                     gz_pre_combined, gz_post_combined = encoding.combined_z_gradients(
@@ -318,7 +320,7 @@ class GreMprageRadial3DPulseqSequence(PulseqSequence):
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
-def _emit_prep_module(seq, timing: dict, cfg: "_Config", segment_duration_s: float) -> None:
+def _emit_prep_module(seq, timing: dict, cfg: _Config, segment_duration_s: float) -> None:
     """Emit the (inversion or T2-prep) magnetization-prep blocks for one
     segment. TI feasibility was already checked in ``_compute_timing``; here
     we only recompute the (non-strict, clipped) delay for the actual
@@ -524,7 +526,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

@@ -1,4 +1,15 @@
-/* pulseg_trajectory.c -- k-space trajectory computation and caching */
+/**
+ * @file pulseg_trajectory.c
+ * @brief K-space trajectory derivation and the TRAJECTORY cache section.
+ *
+ * Integrates the canonical gradient waveforms into k-space, slices out the
+ * ADC-sampled window around each readout's k-zero anchor, and deduplicates
+ * the result into a library of unique per-axis shots plus a per-ADC table of
+ * shot ids, amplitudes, rotations and labels.
+ *
+ * Recon reads this back from the cache file alone -- it never has the .seq --
+ * so the section is self-contained, rotation library included.
+ */
 
 #include <string.h>
 #include <stdlib.h>
@@ -26,7 +37,7 @@ static char *traj_make_cache_path(const char *seq_path, const char *ext);
 /* ================================================================== */
 
 /* ext: cache file extension including the dot; NULL/empty falls back to
- * PULSEG_CACHE_EXT_DEFAULT (D10). */
+ * PULSEG_CACHE_EXT_DEFAULT. */
 static char *traj_make_cache_path(const char *seq_path, const char *ext)
 {
     size_t len, ext_len;
@@ -50,42 +61,6 @@ static char *traj_make_cache_path(const char *seq_path, const char *ext)
     return out;
 }
 
-/* NOTE: intentionally disabled legacy helpers that are no longer used. */
-#if 0
-static void linear_resample(const float* src, int src_n, float src_dt,
-                            float* dst, int dst_n, float dst_dt)
-{
-    int i;
-    for (i = 0; i < dst_n; ++i) {
-        float t = (float)i * dst_dt;
-        float fi = t / src_dt;
-        int lo = (int)fi;
-        float frac;
-        if (lo < 0) lo = 0;
-        if (lo >= src_n - 1) {
-            dst[i] = src[src_n - 1];
-            continue;
-        }
-        frac = fi - (float)lo;
-        dst[i] = src[lo] * (1.0f - frac) + src[lo + 1] * frac;
-    }
-}
-
-static int is_trivial_shot(const float* k, int n)
-{
-    int i;
-    float first;
-    if (n <= 0) return 1;
-    first = k[0];
-    for (i = 1; i < n; ++i) {
-        float d = k[i] - first;
-        if (d > TRAJ_DEDUP_TOL || d < -TRAJ_DEDUP_TOL)
-            return 0;
-    }
-    return 1;
-}
-#endif
-
 /* Compare two k-space shot shapes; returns 1 if identical within tolerance. */
 static int shots_equal(const float *a, const float *b, int n)
 {
@@ -101,8 +76,7 @@ static int shots_equal(const float *a, const float *b, int n)
 
 /* Add a shot to the library if not already present.
  * Returns the shot index, or -1 on allocation failure. */
-static int kshot_library_add(pulseg_kshot_library *lib,
-                             const float *k, int n)
+static int kshot_library_add(pulseg_kshot_library *lib, const float *k, int n)
 {
     int i;
     pulseg_kshot *shot;
@@ -110,8 +84,7 @@ static int kshot_library_add(pulseg_kshot_library *lib,
     /* Check for duplicate */
     for (i = 0; i < lib->num_shots; ++i)
     {
-        if (lib->shots[i].num_samples == n &&
-            shots_equal(lib->shots[i].k, k, n))
+        if (lib->shots[i].num_samples == n && shots_equal(lib->shots[i].k, k, n))
             return i;
     }
 
@@ -119,7 +92,8 @@ static int kshot_library_add(pulseg_kshot_library *lib,
     {
         pulseg_kshot *new_shots;
         new_shots = (pulseg_kshot *)realloc(
-            lib->shots, (size_t)(lib->num_shots + 1) * sizeof(pulseg_kshot));
+            lib->shots,
+            (size_t)(lib->num_shots + 1) * sizeof(pulseg_kshot));
         if (!new_shots)
             return -1;
         lib->shots = new_shots;
@@ -149,7 +123,9 @@ static int kshot_library_add(pulseg_kshot_library *lib,
 static float sample_grad_axis_at(
     const pulseg_sequence_descriptor *desc,
     int grad_event_id,
-    const float *arb_xp, const float *arb_fp, int arb_n, /* may be NULL */
+    const float *arb_xp,
+    const float *arb_fp,
+    int arb_n, /* may be NULL */
     float t_us)
 {
     const pulseg_grad_definition *gd;
@@ -209,16 +185,18 @@ static float sample_grad_axis_at(
  * 0 if the axis is TRAP or idle (buffers untouched); -1 on error.
  *
  * Time grid is in microseconds relative to block start (delay-shifted),
- * matching what sample_grad_axis_at and expand_block_axis_grad expect. */
+ * matching what sample_grad_axis_at expects. */
 static int decompress_block_arb(
     const pulseg_sequence_descriptor *desc,
+    float **out_xp,
+    float **out_fp,
+    int *out_n,
     int grad_event_id,
-    float grad_raster_us,
-    float **out_xp, float **out_fp, int *out_n)
+    float grad_raster_us)
 {
     const pulseg_grad_definition *gd;
-    pulseg_shape_arbitrary decomp = {0, 0, NULL};
-    pulseg_shape_arbitrary decomp_t = {0, 0, NULL};
+    pulseq_shape decomp = {0, 0, NULL};
+    pulseq_shape decomp_t = {0, 0, NULL};
     float amp;
     int shot_idx, sid_one_based, sid;
     float *xp = NULL, *fp = NULL;
@@ -243,7 +221,7 @@ static int decompress_block_arb(
     if (sid < 0 || sid >= desc->num_shapes)
         return 0;
 
-    if (!pulseg_pulseq_decompress_shape(&decomp, &desc->shapes[sid], 1.0f))
+    if (!pulseq_decompress_shape(&decomp, &desc->shapes[sid], 1.0f))
         return -1;
     nsrc = decomp.num_samples;
     xp = (float *)PULSEG_ALLOC((size_t)nsrc * sizeof(float));
@@ -257,9 +235,7 @@ static int decompress_block_arb(
     if (gd->unused_or_time_shape_id > 0 && gd->unused_or_time_shape_id <= desc->num_shapes)
     {
         int ts_idx = gd->unused_or_time_shape_id - 1;
-        if (!pulseg_pulseq_decompress_shape(&decomp_t,
-                                         &desc->shapes[ts_idx],
-                                         grad_raster_us))
+        if (!pulseq_decompress_shape(&decomp_t, &desc->shapes[ts_idx], grad_raster_us))
         {
             rc = -1;
             goto fail;
@@ -305,152 +281,6 @@ fail:
 /*  Compute trajectory for a single block (block-level k-space)       */
 /* ================================================================== */
 
-/* Expand one block's gradient on the uniform raster used by the
- * trajectory integrator.  Writes n_grad samples (Hz/m) into out_g.
- *
- * Handles both TRAP and ARB gradient types.  For ARB shapes the
- * descriptor stores a *compressed* shape (delta-encoded); we must
- * decompress through pulseg_pulseq_decompress_shape() rather than reading
- * desc->shapes[].samples[] directly.  We also obey the 1-indexed
- * convention shared with the rest of the library: shot_shape_ids[i]
- * holds (shape_index + 1), with 0 meaning "no shape".
- *
- * Returns 0 on success; on failure leaves out_g zero-filled. */
-#if 0
-static int expand_block_axis_grad(
-    const pulseg_sequence_descriptor* desc,
-    int grad_event_id,
-    int n_grad,
-    float grad_raster_us,
-    float* out_g)
-{
-    const pulseg_grad_definition* gd;
-    float amp;
-    int shot_idx;
-    int delay_samp;
-    int i;
-
-    for (i = 0; i < n_grad; ++i) out_g[i] = 0.0f;
-
-    if (grad_event_id < 0 || grad_event_id >= desc->grad_table_size)
-        return 0; /* axis idle for this block */
-
-    amp      = desc->grad_table[grad_event_id].amplitude;
-    shot_idx = desc->grad_table[grad_event_id].shot_index;
-    gd       = &desc->grad_definitions[desc->grad_table[grad_event_id].id];
-    delay_samp = (int)((float)gd->delay / grad_raster_us);
-
-    if (gd->type == 0) {
-        /* TRAP (raw seq encoding 0; not the PULSEG__GRAD_TRAP=1 macro
-         * used by the parse-time representation). */
-        int rise = (int)((float)gd->rise_time_or_unused / grad_raster_us);
-        int flat = (int)((float)gd->flat_time_or_unused / grad_raster_us);
-        int fall = (int)((float)gd->fall_time_or_num_uncompressed_samples / grad_raster_us);
-        for (i = 0; i < n_grad; ++i) {
-            int s = i - delay_samp;
-            float v;
-            if (s < 0)                      v = 0.0f;
-            else if (s < rise)              v = amp * ((float)(s + 1) / (float)rise);
-            else if (s < rise + flat)       v = amp;
-            else if (s < rise + flat + fall) v = amp * (1.0f - (float)(s - rise - flat + 1) / (float)fall);
-            else                             v = 0.0f;
-            out_g[i] = v;
-        }
-        return 0;
-    }
-
-    /* ARB: shot_shape_ids[] is 1-indexed; samples are compressed.
-     * If unused_or_time_shape_id > 0 the gradient has a non-uniform time
-     * grid; sample times come from the decompressed time shape (in us)
-     * relative to gd->delay.  Otherwise the time grid is uniform with
-     * step grad_raster_us starting at gd->delay.
-     *
-     * Sampling onto our integration raster is done via
-     * pulseg__interp1_linear (same helper used elsewhere in the lib),
-     * with explicit zero-fill outside the active gradient window — the
-     * stock interp clamps to endpoints, but the truth integrator
-     * (TruthBuilder.sampleGradAtTimes) zeros outside, so we match. */
-    if (shot_idx < 0 || shot_idx >= PULSEG_MAX_GRAD_SHOTS) return 0;
-    {
-        int sid_one_based = gd->shot_shape_ids[shot_idx];
-        int sid;
-        pulseg_shape_arbitrary decomp;
-        pulseg_shape_arbitrary decomp_t;
-        float *xp = NULL, *fp = NULL, *t_out = NULL;
-        int nsrc;
-        float t_lo_us, t_hi_us;
-        int rc = 0;
-
-        if (sid_one_based <= 0) return 0;
-        sid = sid_one_based - 1;
-        if (sid < 0 || sid >= desc->num_shapes) return 0;
-
-        decomp.num_samples = 0;
-        decomp.num_uncompressed_samples = 0;
-        decomp.samples = NULL;
-        decomp_t.num_samples = 0;
-        decomp_t.num_uncompressed_samples = 0;
-        decomp_t.samples = NULL;
-
-        if (!pulseg_pulseq_decompress_shape(&decomp, &desc->shapes[sid], 1.0f))
-            return -1;
-        nsrc = decomp.num_samples;
-
-        xp    = (float*)PULSEG_ALLOC((size_t)nsrc   * sizeof(float));
-        fp    = (float*)PULSEG_ALLOC((size_t)nsrc   * sizeof(float));
-        t_out = (float*)PULSEG_ALLOC((size_t)n_grad * sizeof(float));
-        if (!xp || !fp || !t_out) { rc = -1; goto arb_done; }
-
-        if (gd->unused_or_time_shape_id > 0
-            && gd->unused_or_time_shape_id <= desc->num_shapes) {
-            /* time-shaped: tt samples are stored in seconds-equivalent
-             * scaled by grad_raster_us (see pulseg_parse.c L1696 and
-             * getters.c L2197). */
-            int ts_idx = gd->unused_or_time_shape_id - 1;
-            if (!pulseg_pulseq_decompress_shape(&decomp_t,
-                                             &desc->shapes[ts_idx],
-                                             grad_raster_us)) {
-                rc = -1; goto arb_done;
-            }
-            for (i = 0; i < nsrc && i < decomp_t.num_samples; ++i)
-                xp[i] = (float)gd->delay + decomp_t.samples[i];
-            /* if time shape shorter than amp shape, fall back to uniform
-             * for the trailing samples — keeps interp1 monotonic. */
-            for (; i < nsrc; ++i)
-                xp[i] = (float)gd->delay + ((float)i + 0.5f) * grad_raster_us;
-        } else {
-            /* Uniform ARB: pulseq stores samples at raster centres
-             * (tt = ((1:N) - 0.5) * raster). */
-            for (i = 0; i < nsrc; ++i)
-                xp[i] = (float)gd->delay + ((float)i + 0.5f) * grad_raster_us;
-        }
-
-        for (i = 0; i < nsrc; ++i) fp[i] = amp * decomp.samples[i];
-
-        for (i = 0; i < n_grad; ++i) t_out[i] = (float)i * grad_raster_us;
-
-        pulseg__interp1_linear(out_g, t_out, n_grad, xp, fp, nsrc);
-
-        /* Zero outside the active gradient window (interp1 clamps to
-         * endpoints; truth uses linear-with-zero extrapolation). */
-        t_lo_us = xp[0];
-        t_hi_us = xp[nsrc - 1];
-        for (i = 0; i < n_grad; ++i) {
-            if (t_out[i] < t_lo_us || t_out[i] > t_hi_us)
-                out_g[i] = 0.0f;
-        }
-
-    arb_done:
-        if (xp) PULSEG_FREE(xp);
-        if (fp) PULSEG_FREE(fp);
-        if (t_out) PULSEG_FREE(t_out);
-        if (decomp.samples) PULSEG_FREE(decomp.samples);
-        if (decomp_t.samples) PULSEG_FREE(decomp_t.samples);
-        return rc;
-    }
-}
-#endif
-
 /*
  * For a single block with an ADC event:
  * 1. Get gradient waveforms at block level (uniform raster)
@@ -466,16 +296,17 @@ static int expand_block_axis_grad(
  * TR window, on the same raster the canonical k-space arrays were built
  * on (pulseg__calc_segment_timing, pulseg_structure.c). */
 static float traj_block_time_offset_in_tr_us(
-    const pulseg_sequence_descriptor *desc, int num_prep, int block_table_idx)
+    const pulseg_sequence_descriptor *desc,
+    int num_prep,
+    int block_table_idx)
 {
     float t = 0.0f;
     int i;
     for (i = num_prep; i < block_table_idx; ++i)
     {
         const pulseg_block_table_element *b = &desc->block_table[i];
-        t += (b->duration_us >= 0)
-                 ? (float)b->duration_us
-                 : (float)desc->block_definitions[b->id].duration_us;
+        t += (b->duration_us >= 0) ? (float)b->duration_us
+                                   : (float)desc->base_blocks[b->id].duration_us;
     }
     return t;
 }
@@ -486,17 +317,21 @@ static float traj_block_time_offset_in_tr_us(
  * array (pulseg__calc_segment_timing); per-line/per-shot offsets are
  * applied recon-side from the table's gradient-amplitude metadata. */
 static void traj_slice_canonical_axis(
-    const float *canonical_k, int n_samples, float dt_us,
-    float block_time_offset_us, int adc_delay_us, float adc_dwell_us,
-    int adc_num_samples, float *out_k)
+    float *out_k,
+    int adc_num_samples,
+    const float *canonical_k,
+    int n_samples,
+    float dt_us,
+    float block_time_offset_us,
+    int adc_delay_us,
+    float adc_dwell_us)
 {
     int i, lo, hi;
     float t_us, fi, frac;
 
     for (i = 0; i < adc_num_samples; ++i)
     {
-        t_us = block_time_offset_us + (float)adc_delay_us +
-               ((float)i + 0.5f) * adc_dwell_us;
+        t_us = block_time_offset_us + (float)adc_delay_us + ((float)i + 0.5f) * adc_dwell_us;
         fi = t_us / dt_us;
         if (fi <= 0.0f)
         {
@@ -517,14 +352,18 @@ static void traj_slice_canonical_axis(
 
 static int compute_block_kspace(
     const pulseg_sequence_descriptor *desc,
-    int block_table_idx,
-    int kzero_index,
-    float *out_kx, float *out_ky, float *out_kz, /* [adc_num_samples] */
+    float *out_kx,
+    float *out_ky,
+    float *out_kz, /* [adc_num_samples] */
     int *out_num_samples,
     /* g(t) constant during ADC window?  Used by caller as the
      * cartesian-shot classifier (truth uses the same criterion).
      * Pass NULL pointers if not needed. */
-    int *out_gx_const, int *out_gy_const, int *out_gz_const,
+    int *out_gx_const,
+    int *out_gy_const,
+    int *out_gz_const,
+    int block_table_idx,
+    int kzero_index,
     pulseg_diagnostic *diag)
 {
     const pulseg_block_table_element *bte;
@@ -541,13 +380,12 @@ static int compute_block_kspace(
     bte = &desc->block_table[block_table_idx];
     /* block_table[].adc_id holds the RAW seq ADC index (per-instance);
      * the deduped index into desc->adc_definitions[] lives in
-     * block_definitions[bte->id].adc_id. */
-    adc_def_idx = desc->block_definitions[bte->id].adc_id;
+     * base_blocks[bte->id].adc_id. */
+    adc_def_idx = desc->base_blocks[bte->id].adc_id;
     if (adc_def_idx < 0 || adc_def_idx >= desc->num_unique_adcs)
     {
         if (diag)
-            sprintf(diag->message,
-                    "Block %d has no ADC event", block_table_idx);
+            sprintf(diag->message, "Block %d has no ADC event", block_table_idx);
         return PULSEG_ERR_INVALID_ARGUMENT;
     }
 
@@ -572,9 +410,9 @@ static int compute_block_kspace(
         float *bp_z = NULL, *fpz = NULL;
         int nz = 0;
 
-        int rx = decompress_block_arb(desc, bte->gx_id, grad_raster_us, &bp_x, &fpx, &nx);
-        int ry = decompress_block_arb(desc, bte->gy_id, grad_raster_us, &bp_y, &fpy, &ny);
-        int rz = decompress_block_arb(desc, bte->gz_id, grad_raster_us, &bp_z, &fpz, &nz);
+        int rx = decompress_block_arb(desc, &bp_x, &fpx, &nx, bte->gx_id, grad_raster_us);
+        int ry = decompress_block_arb(desc, &bp_y, &fpy, &ny, bte->gy_id, grad_raster_us);
+        int rz = decompress_block_arb(desc, &bp_z, &fpz, &nz, bte->gz_id, grad_raster_us);
         (void)rx;
         (void)ry;
         (void)rz;
@@ -621,7 +459,7 @@ static int compute_block_kspace(
             gxc = (xs < 1e-9f) ? 1 : ((xmax - xmin) / xs < 1e-3f);
             gyc = (ys < 1e-9f) ? 1 : ((ymax - ymin) / ys < 1e-3f);
             gzc = (zs < 1e-9f) ? 1 : ((zmax - zmin) / zs < 1e-3f);
-            /* Stage 1.5c point 4 (radial classifier): when this block has a
+            /* Radial classifier: when this block has a
              * rotation, never collapse an active axis to cartesian (-1) --
              * the rotated frame needs the real shot. Inactive (absent)
              * axes stay cartesian regardless (g(t) is identically zero). */
@@ -636,8 +474,17 @@ static int compute_block_kspace(
             }
             if (getenv("PULSEG_TRAJ_DEBUG"))
             {
-                fprintf(stderr, "  cls blk=%d xmin=%.1f xmax=%.1f xs=%.1f gxc=%d  ymin=%.1f ymax=%.1f gyc=%d\n",
-                        block_table_idx, xmin, xmax, xs, gxc, ymin, ymax, gyc);
+                fprintf(
+                    stderr,
+                    "  cls blk=%d xmin=%.1f xmax=%.1f xs=%.1f gxc=%d  ymin=%.1f ymax=%.1f gyc=%d\n",
+                    block_table_idx,
+                    xmin,
+                    xmax,
+                    xs,
+                    gxc,
+                    ymin,
+                    ymax,
+                    gyc);
             }
             if (out_gx_const)
                 *out_gx_const = gxc;
@@ -663,7 +510,7 @@ static int compute_block_kspace(
 
     /* ---- k VALUE computation: slice the retained full-TR canonical
      * (ZERO_VAR) array instead of re-integrating this block's actual
-     * gradient waveform (Stage 1.5c). NO re-centering -- k=0 is already
+     * gradient waveform. NO re-centering -- k=0 is already
      * physically set by the excitation reset baked into the canonical
      * array by pulseg__calc_segment_timing. ----
      * Only valid for blocks inside the main TR window (num_prep ..
@@ -679,15 +526,33 @@ static int compute_block_kspace(
         float block_time_offset_us =
             traj_block_time_offset_in_tr_us(desc, num_prep, block_table_idx);
 
-        traj_slice_canonical_axis(desc->canonical_kx, desc->canonical_kspace_num_samples,
-                                  desc->canonical_kspace_dt_us, block_time_offset_us,
-                                  adc_delay_us, adc_dwell_us, adc_num_samples, out_kx);
-        traj_slice_canonical_axis(desc->canonical_ky, desc->canonical_kspace_num_samples,
-                                  desc->canonical_kspace_dt_us, block_time_offset_us,
-                                  adc_delay_us, adc_dwell_us, adc_num_samples, out_ky);
-        traj_slice_canonical_axis(desc->canonical_kz, desc->canonical_kspace_num_samples,
-                                  desc->canonical_kspace_dt_us, block_time_offset_us,
-                                  adc_delay_us, adc_dwell_us, adc_num_samples, out_kz);
+        traj_slice_canonical_axis(
+            out_kx,
+            adc_num_samples,
+            desc->canonical_kx,
+            desc->canonical_kspace_num_samples,
+            desc->canonical_kspace_dt_us,
+            block_time_offset_us,
+            adc_delay_us,
+            adc_dwell_us);
+        traj_slice_canonical_axis(
+            out_ky,
+            adc_num_samples,
+            desc->canonical_ky,
+            desc->canonical_kspace_num_samples,
+            desc->canonical_kspace_dt_us,
+            block_time_offset_us,
+            adc_delay_us,
+            adc_dwell_us);
+        traj_slice_canonical_axis(
+            out_kz,
+            adc_num_samples,
+            desc->canonical_kz,
+            desc->canonical_kspace_num_samples,
+            desc->canonical_kspace_dt_us,
+            block_time_offset_us,
+            adc_delay_us,
+            adc_dwell_us);
     }
     else
     {
@@ -709,21 +574,44 @@ static int compute_block_kspace(
  * (0=SLC,1=PHS,2=REP,3=AVG,4=SEG,5=SET,6=ECO,7=PAR,8=LIN,9=ACQ), taken
  * from desc->label_column_map -- not hardcoded to GE's [lin,slc,eco]. */
 static void assign_traj_label_by_state_index(
-    pulseg_traj_table_entry *entry, int state_idx, int value)
+    pulseg_traj_table_entry *entry,
+    int state_idx,
+    int value)
 {
     switch (state_idx)
     {
-        case 0: entry->slc = value; break;
-        case 1: entry->phs = value; break;
-        case 2: entry->rep = value; break;
-        case 3: entry->avg = value; break;
-        case 4: entry->seg = value; break;
-        case 5: entry->set = value; break;
-        case 6: entry->eco = value; break;
-        case 7: entry->par = value; break;
-        case 8: entry->lin = value; break;
-        case 9: entry->acq = value; break;
-        default: break;
+    case 0:
+        entry->slc = value;
+        break;
+    case 1:
+        entry->phs = value;
+        break;
+    case 2:
+        entry->rep = value;
+        break;
+    case 3:
+        entry->avg = value;
+        break;
+    case 4:
+        entry->seg = value;
+        break;
+    case 5:
+        entry->set = value;
+        break;
+    case 6:
+        entry->eco = value;
+        break;
+    case 7:
+        entry->par = value;
+        break;
+    case 8:
+        entry->lin = value;
+        break;
+    case 9:
+        entry->acq = value;
+        break;
+    default:
+        break;
     }
 }
 
@@ -731,10 +619,11 @@ static void assign_traj_label_by_state_index(
 /*  Public: compute trajectory                                        */
 /* ================================================================== */
 
-int pulseg_compute_trajectory(const pulseg_collection *coll,
-                                 pulseg_trajectory *out,
-                                 pulseg_diagnostic *diag,
-                                 int subseq_idx)
+static int pulseg_compute_trajectory(
+    const pulseg_collection *coll,
+    pulseg_trajectory *out,
+    pulseg_diagnostic *diag,
+    int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int n, b;
@@ -769,14 +658,14 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
     /* Count ADC events from scan table.
      * Gate by the PER-INSTANCE block_table[b].adc_id (-1 for dummy ADC
      * placeholders such as mr.makeDelay used to skip acquisition).
-     * block_definitions[].adc_id is the deduped adc_def index and is
+     * base_blocks[].adc_id is the deduped adc_def index and is
      * shared between dummy and real instances when block dedup ignores
      * the ADC slot, so it over-counts here. The deduped index is still
      * used downstream for the adc_definitions[] lookup. */
     num_adc_events = 0;
-    for (n = 0; n < desc->scan_table_len; ++n)
+    for (n = 0; n < desc->exec_stream_len; ++n)
     {
-        b = desc->scan_table_block_idx[n];
+        b = desc->exec_stream_block_idx[n];
         if (desc->block_table[b].adc_id >= 0)
             ++num_adc_events;
     }
@@ -846,18 +735,18 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
      * recompute. */
     {
         adc_idx = 0;
-        for (n = 0; n < desc->scan_table_len; ++n)
+        for (n = 0; n < desc->exec_stream_len; ++n)
         {
             const pulseg_block_table_element *bte;
             int adc_def_idx, adc_nsamples, kzero;
             int kx_id, ky_id, kz_id;
 
-            b = desc->scan_table_block_idx[n];
+            b = desc->exec_stream_block_idx[n];
             bte = &desc->block_table[b];
 
             if (bte->adc_id < 0)
                 continue;
-            adc_def_idx = desc->block_definitions[bte->id].adc_id;
+            adc_def_idx = desc->base_blocks[bte->id].adc_id;
             if (adc_def_idx < 0)
                 continue;
 
@@ -868,16 +757,15 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
              * ADC anchor with matching block offset. */
             kzero = adc_nsamples / 2; /* default: center */
             {
-                int seg_idx = desc->scan_table_seg_id[n];
+                int seg_idx = desc->exec_stream_seg_id[n];
                 if (seg_idx >= 0 && seg_idx < desc->num_unique_segments)
                 {
-                    const pulseg_tr_segment *seg_def = &desc->segment_definitions[seg_idx];
+                    const pulseg_virtual_segment *seg_def = &desc->segment_definitions[seg_idx];
                     const pulseg_segment_timing *tim = &seg_def->timing;
                     int a;
                     for (a = 0; a < tim->num_adc_anchors; ++a)
                     {
-                        if (tim->adc_anchors[a].block_offset ==
-                            (b - seg_def->start_block))
+                        if (tim->adc_anchors[a].block_offset == (b - seg_def->start_block))
                         {
                             kzero = tim->adc_anchors[a].kzero_index;
                             break;
@@ -887,14 +775,15 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
             }
 
             /* Memo lookup keyed by block_table index + kzero.
-             * (Not bte->id: block_definitions are deduped on the
+             * (Not bte->id: base_blocks are deduped on the
              * underlying gradient definition ids — shape only — so two
              * scans with different per-slice rotations or amplitudes
              * share bte->id but produce different physical waveforms.
              * Block-table indices are unique per scan-table row;
              * cross-block content equivalence is recovered by
              * kshot_library_add which dedups identical k arrays.) */
-            if (cached_kx_id && b >= 0 && b < desc->num_blocks && cached_kx_id[b] != -2 && cached_kzero[b] == kzero)
+            if (cached_kx_id && b >= 0 && b < desc->num_blocks && cached_kx_id[b] != -2 &&
+                cached_kzero[b] == kzero)
             {
                 kx_id = cached_kx_id[b];
                 ky_id = cached_ky_id[b];
@@ -903,11 +792,18 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
             else
             {
                 int gx_const = 0, gy_const = 0, gz_const = 0;
-                rc = compute_block_kspace(desc, b, kzero,
-                                          kx_buf, ky_buf, kz_buf,
-                                          &adc_nsamples,
-                                          &gx_const, &gy_const, &gz_const,
-                                          diag);
+                rc = compute_block_kspace(
+                    desc,
+                    kx_buf,
+                    ky_buf,
+                    kz_buf,
+                    &adc_nsamples,
+                    &gx_const,
+                    &gy_const,
+                    &gz_const,
+                    b,
+                    kzero,
+                    diag);
                 if (PULSEG_FAILED(rc))
                     goto compute_fail;
 
@@ -963,31 +859,31 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
 
             /* Gradient amplitudes */
             table[adc_idx].gx_amplitude = (bte->gx_id >= 0 && bte->gx_id < desc->grad_table_size)
-                                              ? desc->grad_table[bte->gx_id].amplitude
-                                              : 0.0f;
+                ? desc->grad_table[bte->gx_id].amplitude
+                : 0.0f;
             table[adc_idx].gy_amplitude = (bte->gy_id >= 0 && bte->gy_id < desc->grad_table_size)
-                                              ? desc->grad_table[bte->gy_id].amplitude
-                                              : 0.0f;
+                ? desc->grad_table[bte->gy_id].amplitude
+                : 0.0f;
             table[adc_idx].gz_amplitude = (bte->gz_id >= 0 && bte->gz_id < desc->grad_table_size)
-                                              ? desc->grad_table[bte->gz_id].amplitude
-                                              : 0.0f;
+                ? desc->grad_table[bte->gz_id].amplitude
+                : 0.0f;
 
             /* Rotation */
             table[adc_idx].rotation_id = bte->rotation_id;
 
             /* Metadata: center_sample, sample_time */
             table[adc_idx].center_sample = kzero;
-            table[adc_idx].sample_time_us = (float)desc->adc_definitions[adc_def_idx].dwell_time * 1e-3f;
+            table[adc_idx].sample_time_us =
+                (float)desc->adc_definitions[adc_def_idx].dwell_time * 1e-3f;
             table[adc_idx].flags = 0;
             table[adc_idx].off = (desc->off_table && adc_idx < desc->label_num_entries)
-                                     ? (desc->off_table[adc_idx] ? 1 : 0)
-                                     : 0;
+                ? (desc->off_table[adc_idx] ? 1 : 0)
+                : 0;
 
             /* Labels from label table */
             if (label_buf && adc_idx < desc->label_num_entries)
             {
-                rc = pulseg_get_adc_label(coll, label_buf,
-                                             subseq_idx, adc_idx);
+                rc = pulseg_get_adc_label(coll, label_buf, subseq_idx, adc_idx);
                 if (PULSEG_SUCCEEDED(rc) && label_ncols >= 10)
                 {
                     /* Full Pulseq label mapping: col order matches label_table columns */
@@ -1004,8 +900,8 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
 
                     /* Override rep with the actual average (NEX) loop index from
                      * the scan table; the seqfile label table cannot know NEX. */
-                    if (desc->scan_table_avg_id)
-                        table[adc_idx].rep = desc->scan_table_avg_id[n];
+                    if (desc->exec_stream_avg_id)
+                        table[adc_idx].rep = desc->exec_stream_avg_id[n];
 
                     /* Map Pulseq boolean flags to ISMRMRD flag bits
                      * Column indices (0-based) match PULSEG__* macros - 1.
@@ -1018,7 +914,8 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
                     if (label_ncols > 13 && label_buf[13])   /* REF  col14 */
                         table[adc_idx].flags |= (1UL << 19); /* ACQ_IS_PARALLEL_CALIBRATION (20) */
                     if (label_ncols > 14 && label_buf[14])   /* IMA  col15 */
-                        table[adc_idx].flags |= (1UL << 20); /* ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING (21) */
+                        table[adc_idx].flags |=
+                            (1UL << 20); /* ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING (21) */
                     if (label_ncols > 15 && label_buf[15])   /* NOISE col16 */
                         table[adc_idx].flags |= (1UL << 18); /* ACQ_IS_NOISE_MEASUREMENT (19) */
                 }
@@ -1030,7 +927,9 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
                     int col;
                     for (col = 0; col < 3; ++col)
                         assign_traj_label_by_state_index(
-                            &table[adc_idx], desc->label_column_map[col], label_buf[col]);
+                            &table[adc_idx],
+                            desc->label_column_map[col],
+                            label_buf[col]);
                 }
             }
 
@@ -1039,8 +938,7 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
                 table[adc_idx].flags |= (1UL << 22); /* ACQ_IS_NAVIGATION_DATA */
 
             /* Encoding space ref: local index 0 = normal, 1 = navigator */
-            table[adc_idx].encoding_space_ref =
-                (table[adc_idx].flags & (1UL << 22)) ? 1 : 0;
+            table[adc_idx].encoding_space_ref = (table[adc_idx].flags & (1UL << 22)) ? 1 : 0;
 
             ++adc_idx;
         }
@@ -1078,12 +976,11 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
             (size_t)num_es_local * sizeof(pulseg_encoding_space));
         if (!out->encoding_spaces)
             goto compute_fail;
-        memset(out->encoding_spaces, 0,
-               (size_t)num_es_local * sizeof(pulseg_encoding_space));
+        memset(out->encoding_spaces, 0, (size_t)num_es_local * sizeof(pulseg_encoding_space));
 
         /* ES 0: normal scans. Geometry (fov/matrix) is no longer embedded
          * here -- the recon reads it from DEFINITIONS(0) by subseq_idx
-         * (Stage 1.5c; see pulseg_encoding_space doc comment). */
+         *. */
         out->encoding_spaces[0].subseq_idx = subseq_idx;
         out->encoding_spaces[0].nav_subseq_offset = has_nav ? 1 : 0;
         out->encoding_spaces[0].geometry_tag = 0;
@@ -1122,9 +1019,9 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
                 }
                 else
                 {
-#define LLUP(fld)                       \
-    do                                  \
-    {                                   \
+#define LLUP(fld) \
+    do \
+    { \
         if (table[i].fld < ll->fld.min) \
             ll->fld.min = table[i].fld; \
         if (table[i].fld > ll->fld.max) \
@@ -1146,18 +1043,20 @@ int pulseg_compute_trajectory(const pulseg_collection *coll,
         }
     }
 
-    /* Stage 1.5c: copy this subsequence's rotation-matrix library onto the
+    /* copy this subsequence's rotation-matrix library onto the
      * trajectory itself (table[].rotation_id already indexes it directly --
      * no offsetting needed here; pulseg_merge_trajectory offsets it when
      * appending a second subsequence's trajectory). */
     if (desc->num_rotations > 0 && desc->rotation_matrices)
     {
-        out->rotation_matrices = (float (*)[9])PULSEG_ALLOC(
-            (size_t)desc->num_rotations * sizeof(float[9]));
+        out->rotation_matrices =
+            (float(*)[9])PULSEG_ALLOC((size_t)desc->num_rotations * sizeof(float[9]));
         if (!out->rotation_matrices)
             goto compute_fail;
-        memcpy(out->rotation_matrices, desc->rotation_matrices,
-               (size_t)desc->num_rotations * sizeof(float[9]));
+        memcpy(
+            out->rotation_matrices,
+            desc->rotation_matrices,
+            (size_t)desc->num_rotations * sizeof(float[9]));
         out->num_rotations = desc->num_rotations;
     }
 
@@ -1224,8 +1123,7 @@ void pulseg_trajectory_free(pulseg_trajectory *traj)
 /*  Merge trajectory (append src into dst)                            */
 /* ================================================================== */
 
-int pulseg_merge_trajectory(pulseg_trajectory *dst,
-                               const pulseg_trajectory *src)
+static int pulseg_merge_trajectory(pulseg_trajectory *dst, const pulseg_trajectory *src)
 {
     int kshot_offset, es_offset, rotation_offset, i;
 
@@ -1240,12 +1138,14 @@ int pulseg_merge_trajectory(pulseg_trajectory *dst,
     if (src->num_rotations > 0)
     {
         int new_count = rotation_offset + src->num_rotations;
-        float (*new_rot)[9] = (float (*)[9])realloc(
-            dst->rotation_matrices, (size_t)new_count * sizeof(float[9]));
+        float(*new_rot)[9] =
+            (float(*)[9])realloc(dst->rotation_matrices, (size_t)new_count * sizeof(float[9]));
         if (!new_rot)
             return PULSEG_ERR_ALLOC_FAILED;
-        memcpy(new_rot[rotation_offset], src->rotation_matrices,
-               (size_t)src->num_rotations * sizeof(float[9]));
+        memcpy(
+            new_rot[rotation_offset],
+            src->rotation_matrices,
+            (size_t)src->num_rotations * sizeof(float[9]));
         dst->rotation_matrices = new_rot;
         dst->num_rotations = new_count;
     }
@@ -1254,8 +1154,8 @@ int pulseg_merge_trajectory(pulseg_trajectory *dst,
     if (src->kshots.num_shots > 0)
     {
         int new_count = kshot_offset + src->kshots.num_shots;
-        pulseg_kshot *new_shots = (pulseg_kshot *)realloc(
-            dst->kshots.shots, (size_t)new_count * sizeof(pulseg_kshot));
+        pulseg_kshot *new_shots =
+            (pulseg_kshot *)realloc(dst->kshots.shots, (size_t)new_count * sizeof(pulseg_kshot));
         if (!new_shots)
             return PULSEG_ERR_ALLOC_FAILED;
         dst->kshots.shots = new_shots;
@@ -1277,12 +1177,15 @@ int pulseg_merge_trajectory(pulseg_trajectory *dst,
     {
         int new_count = es_offset + src->num_encoding_spaces;
         pulseg_encoding_space *new_es = (pulseg_encoding_space *)realloc(
-            dst->encoding_spaces, (size_t)new_count * sizeof(pulseg_encoding_space));
+            dst->encoding_spaces,
+            (size_t)new_count * sizeof(pulseg_encoding_space));
         if (!new_es)
             return PULSEG_ERR_ALLOC_FAILED;
         dst->encoding_spaces = new_es;
-        memcpy(&dst->encoding_spaces[es_offset], src->encoding_spaces,
-               (size_t)src->num_encoding_spaces * sizeof(pulseg_encoding_space));
+        memcpy(
+            &dst->encoding_spaces[es_offset],
+            src->encoding_spaces,
+            (size_t)src->num_encoding_spaces * sizeof(pulseg_encoding_space));
         dst->num_encoding_spaces = new_count;
     }
 
@@ -1292,12 +1195,15 @@ int pulseg_merge_trajectory(pulseg_trajectory *dst,
         int old_count = dst->num_adc_events;
         int new_count = old_count + src->num_adc_events;
         pulseg_traj_table_entry *new_table = (pulseg_traj_table_entry *)realloc(
-            dst->table, (size_t)new_count * sizeof(pulseg_traj_table_entry));
+            dst->table,
+            (size_t)new_count * sizeof(pulseg_traj_table_entry));
         if (!new_table)
             return PULSEG_ERR_ALLOC_FAILED;
         dst->table = new_table;
-        memcpy(&dst->table[old_count], src->table,
-               (size_t)src->num_adc_events * sizeof(pulseg_traj_table_entry));
+        memcpy(
+            &dst->table[old_count],
+            src->table,
+            (size_t)src->num_adc_events * sizeof(pulseg_traj_table_entry));
 
         for (i = 0; i < src->num_adc_events; ++i)
         {
@@ -1358,9 +1264,10 @@ static int traj_read4(FILE *f, void *p, int count)
 #define CACHE_ENDIAN_MARKER 0x01020304
 #define CACHE_SECTION_TRAJECTORY 6
 
-int pulseg_write_trajectory_cache(const pulseg_trajectory *traj,
-                                     const char *seq_path,
-                                     const char *cache_ext)
+static int pulseg_write_trajectory_cache(
+    const pulseg_trajectory *traj,
+    const char *seq_path,
+    const char *cache_ext)
 {
     char *cache_path;
     FILE *f;
@@ -1466,8 +1373,7 @@ int pulseg_write_trajectory_cache(const pulseg_trajectory *traj,
             goto tw_fail;
         if (traj->kshots.shots[i].num_samples > 0)
         {
-            if (!traj_write4(f, traj->kshots.shots[i].k,
-                             traj->kshots.shots[i].num_samples))
+            if (!traj_write4(f, traj->kshots.shots[i].k, traj->kshots.shots[i].num_samples))
                 goto tw_fail;
         }
     }
@@ -1555,7 +1461,7 @@ int pulseg_write_trajectory_cache(const pulseg_trajectory *traj,
             goto tw_fail;
     }
 
-    /* Stage 1.5c: rotation-matrix library, folded in so the recon reader
+    /* rotation-matrix library, folded in so the recon reader
      * is self-contained (no separate ROTATIONS-section read). */
     if (!traj_write4(f, &traj->num_rotations, 1))
         goto tw_fail;
@@ -1601,9 +1507,7 @@ tw_fail:
 /*  Compute + merge + append trajectory for a whole collection        */
 /* ================================================================== */
 
-int pulseg_write_trajectory_cache_from_collection(
-    const pulseg_collection *coll,
-    const char *seq_path)
+int pulseg__save_trajectory_cache_section(const pulseg_collection *coll, const char *seq_path)
 {
     pulseg_trajectory acc, one;
     pulseg_diagnostic diag;
@@ -1645,7 +1549,9 @@ int pulseg_write_trajectory_cache_from_collection(
 
     if (have)
     {
-        rc = pulseg_write_trajectory_cache(&acc, seq_path,
+        rc = pulseg_write_trajectory_cache(
+            &acc,
+            seq_path,
             coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
         pulseg_trajectory_free(&acc);
         return rc;
@@ -1658,7 +1564,7 @@ int pulseg_write_trajectory_cache_from_collection(
 /*  Load trajectory from cache (TRAJECTORY section)                   */
 /* ================================================================== */
 
-/* Shared body of pulseg_load_trajectory_cache() / pulseg_load_trajectory_cache_from_path():
+/* Shared body of pulseg_load_trajectory_cache():
  * parses the TRAJECTORY section from an already-open file handle. Takes
  * ownership of @p f (closes it on every return path). */
 static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
@@ -1780,8 +1686,8 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
 
     if (out->kshots.num_shots > 0)
     {
-        out->kshots.shots = (pulseg_kshot *)PULSEG_ALLOC(
-            (size_t)out->kshots.num_shots * sizeof(pulseg_kshot));
+        out->kshots.shots =
+            (pulseg_kshot *)PULSEG_ALLOC((size_t)out->kshots.num_shots * sizeof(pulseg_kshot));
         if (!out->kshots.shots)
             goto lr_fail;
         memset(out->kshots.shots, 0, (size_t)out->kshots.num_shots * sizeof(pulseg_kshot));
@@ -1795,16 +1701,14 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
 
             if (out->kshots.shots[i].num_samples > 0)
             {
-                out->kshots.shots[i].k = (float *)PULSEG_ALLOC(
-                    (size_t)out->kshots.shots[i].num_samples * sizeof(float));
+                out->kshots.shots[i].k =
+                    (float *)PULSEG_ALLOC((size_t)out->kshots.shots[i].num_samples * sizeof(float));
                 if (!out->kshots.shots[i].k)
                     goto lr_fail;
-                if (!traj_read4(f, out->kshots.shots[i].k,
-                                out->kshots.shots[i].num_samples))
+                if (!traj_read4(f, out->kshots.shots[i].k, out->kshots.shots[i].num_samples))
                     goto lr_fail;
                 if (do_swap)
-                    traj_swap4_array(out->kshots.shots[i].k,
-                                     out->kshots.shots[i].num_samples);
+                    traj_swap4_array(out->kshots.shots[i].k, out->kshots.shots[i].num_samples);
             }
         }
     }
@@ -1922,15 +1826,15 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
         }
     }
 
-    /* Stage 1.5c: folded-in rotation-matrix library. */
+    /* folded-in rotation-matrix library. */
     if (!traj_read4(f, &out->num_rotations, 1))
         goto lr_fail;
     if (do_swap)
         traj_swap4(&out->num_rotations);
     if (out->num_rotations > 0)
     {
-        out->rotation_matrices = (float (*)[9])PULSEG_ALLOC(
-            (size_t)out->num_rotations * sizeof(float[9]));
+        out->rotation_matrices =
+            (float(*)[9])PULSEG_ALLOC((size_t)out->num_rotations * sizeof(float[9]));
         if (!out->rotation_matrices)
             goto lr_fail;
         if (!traj_read4(f, out->rotation_matrices, out->num_rotations * 9))
@@ -1948,30 +1852,7 @@ lr_fail:
     return PULSEG_ERR_FILE_READ_FAILED;
 }
 
-int pulseg_load_trajectory_cache(pulseg_trajectory *out,
-                                    const char *seq_path)
-{
-    char *cache_path;
-    FILE *f;
-
-    if (!out || !seq_path)
-        return PULSEG_ERR_NULL_POINTER;
-    memset(out, 0, sizeof(*out));
-
-    cache_path = traj_make_cache_path(seq_path, NULL);
-    if (!cache_path)
-        return PULSEG_ERR_ALLOC_FAILED;
-
-    f = fopen(cache_path, "rb");
-    PULSEG_FREE(cache_path);
-    if (!f)
-        return PULSEG_ERR_FILE_READ_FAILED;
-
-    return traj_load_from_open_file(out, f);
-}
-
-int pulseg_load_trajectory_cache_from_cache_path(pulseg_trajectory *out,
-                                                     const char *cache_path)
+int pulseg_load_trajectory_cache(pulseg_trajectory *out, const char *cache_path)
 {
     FILE *f;
 

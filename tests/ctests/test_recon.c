@@ -28,10 +28,10 @@ MU_TEST(test_recon_read_mprage)
     pulseg_recon_cache cache;
     char diag[256];
     int rc;
-    const pulseg__definition *def;
+    const pulseq_definition *def;
 
-    rc = pulseg_recon_cache_read(&cache, TEST_DATA_DIR "mprage_2d_1sl_1avg.pge",
-                                  diag, sizeof(diag));
+    rc =
+        pulseg_recon_cache_read(&cache, TEST_DATA_DIR "mprage_2d_1sl_1avg.pge", diag, sizeof(diag));
     mu_assert_int_eq(PULSEG_SUCCESS, rc);
 
     /* Section 0 (DEFINITIONS) */
@@ -39,12 +39,14 @@ MU_TEST(test_recon_read_mprage)
     def = pulseg_recon_find_definition(&cache, 0, "TR");
     mu_assert(def != NULL, "TR definition should be present");
     mu_assert(def->value_size >= 1, "TR should have at least one value");
-    mu_assert(pulseg_recon_find_definition(&cache, 0, "NoSuchKey") == NULL,
-               "unknown key should return NULL");
-    mu_assert(pulseg_recon_find_definition(&cache, 5, "TR") == NULL,
-               "out-of-range subseq_idx should return NULL");
+    mu_assert(
+        pulseg_recon_find_definition(&cache, 0, "NoSuchKey") == NULL,
+        "unknown key should return NULL");
+    mu_assert(
+        pulseg_recon_find_definition(&cache, 5, "TR") == NULL,
+        "out-of-range subseq_idx should return NULL");
 
-    /* Section 6 (TRAJECTORY) -- delegated to pulseg_load_trajectory_cache_from_cache_path */
+    /* Section 6 (TRAJECTORY) -- delegated to pulseg_load_trajectory_cache */
     mu_assert_int_eq(0, cache.trajectory.kshots.num_shots);
     mu_assert_int_eq(1, cache.trajectory.num_encoding_spaces);
     mu_assert_int_eq(8, cache.trajectory.num_adc_events);
@@ -80,14 +82,16 @@ MU_TEST(test_recon_missing_trajectory_is_hard_error)
      * C++ reader and was deliberately removed. */
     memset(&cache, 0, sizeof(cache));
     diag[0] = '\0';
-    rc = pulseg_recon_cache_read(&cache, TEST_DATA_DIR "03_grad_rss_violation.pge",
-                                  diag, sizeof(diag));
+    rc = pulseg_recon_cache_read(
+        &cache,
+        TEST_DATA_DIR "03_grad_rss_violation.pge",
+        diag,
+        sizeof(diag));
     mu_assert(rc != PULSEG_SUCCESS, "missing TRAJECTORY must fail, not degrade");
     mu_assert(diag[0] != '\0', "diag message should be set on failure");
 
     /* Nonexistent file: distinct error, still a failure. */
-    rc = pulseg_recon_cache_read(&cache, TEST_DATA_DIR "does_not_exist.pge",
-                                  diag, sizeof(diag));
+    rc = pulseg_recon_cache_read(&cache, TEST_DATA_DIR "does_not_exist.pge", diag, sizeof(diag));
     mu_assert(rc != PULSEG_SUCCESS, "nonexistent file must fail");
 }
 

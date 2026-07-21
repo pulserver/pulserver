@@ -14,8 +14,8 @@ gradient-combination helpers reused here unmodified):
 
 Stack-of-stars: the same in-plane full-echo radial spoke (logical X axis,
 designed once via ``_gre_common``) is rotated per shot about the physical Z
-axis (``ROTATIONS`` extension, ``pulserver.pulseq.make_rotation`` — no
-``pulserver.arbgrad`` waveform solver needed for straight spokes) while the
+axis (``ROTATIONS`` extension, ``pulserver.pypulseq.make_rotation`` — no
+``pulserver.pypulseq.arbgrad`` waveform solver needed for straight spokes) while the
 partition (kz) dimension is phase-encoded with a conventional Z-channel
 trapezoid, exactly as in ``gre_3d.py``. A rotation purely about Z leaves the
 Z gradient channel untouched, so the two compose in the same block without
@@ -41,29 +41,30 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pypulseq as pp
-from scipy.spatial.transform import Rotation
-
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
+    Sequence,
+    SequenceType,
     TypeinFloatParam,
     UIParam,
     Validate,
     dict_to_protocol,
     make_enum_param,
+    params,
     protocol_to_dict,
+    run_cli,
 )
-from pulserver import arbgrad
-from pulserver.core import SequenceType
-from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
-
-
+from pulserver.pypulseq import _gradients as encoding
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _sampling as sampling
+from pulserver.pypulseq import _system as system
+from pulserver.pypulseq import arbgrad
+from pulserver.pypulseq._rf import _excitation_helpers as excitation
+from scipy.spatial.transform import Rotation
 
 NUM_ECHOES = 1
 FLYBACK = True
@@ -76,7 +77,7 @@ def _order_mode_name(code: float) -> str:
     return "golden" if code >= 0.5 else "uniform"
 
 
-class GreRadial3DPulseqSequence(PulseqSequence):
+class GreRadial3DPulseqSequence(Sequence):
     """Generate a 3D stack-of-stars (radial in-plane, Cartesian partition) GRE."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -181,7 +182,7 @@ class GreRadial3DPulseqSequence(PulseqSequence):
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
-        seq = ps.Sequence(opts)
+        seq = pp.Sequence(opts)
 
         angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
         par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
@@ -191,7 +192,7 @@ class GreRadial3DPulseqSequence(PulseqSequence):
         rf_phase_inc_deg = 0.0
 
         for spoke, angle in enumerate(angles):
-            rotation = ps.make_rotation(Rotation.from_euler("z", float(angle)))
+            rotation = pp.make_rotation(Rotation.from_euler("z", float(angle)))
             label_lin = pp.make_label(type="SET", label="LIN", value=spoke)
 
             for par in sampled_par:
@@ -359,7 +360,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

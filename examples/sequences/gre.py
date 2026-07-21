@@ -39,30 +39,30 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pypulseq as pp
-
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
-from pulserver.design import cli, encoding, excitation, params, readout, sampling, system
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
     BoolParam,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
+    Sequence,
     TypeinFloatParam,
-    TypeinIntParam,
     UIParam,
     Validate,
     dict_to_protocol,
+    params,
     protocol_to_dict,
+    run_cli,
 )
+from pulserver.pypulseq import _gradients as encoding
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _sampling as sampling
+from pulserver.pypulseq import _system as system
+from pulserver.pypulseq._rf import _excitation_helpers as excitation
 
 
-
-class GrePulseqSequence(PulseqSequence):
+class GrePulseqSequence(Sequence):
     """Generate a true Cartesian 2D GRE sequence using pypulseq."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -303,7 +303,7 @@ class GrePulseqSequence(PulseqSequence):
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
-        seq = ps.Sequence(opts)
+        seq = pp.Sequence(opts)
 
         delta_k_pe = 1.0 / fov_pe_m
         phase_areas = (np.arange(ny_pe) - 0.5 * ny_pe) * delta_k_pe
@@ -493,7 +493,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

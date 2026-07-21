@@ -39,35 +39,36 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pypulseq as pp
-from scipy.spatial.transform import Rotation
-
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
+    Sequence,
+    SequenceType,
     TypeinFloatParam,
     UIParam,
     Validate,
     dict_to_protocol,
     make_enum_param,
+    params,
     protocol_to_dict,
+    run_cli,
 )
-from pulserver import arbgrad
-from pulserver.core import SequenceType
-from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
-
-
+from pulserver.pypulseq import _gradients as encoding
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _sampling as sampling
+from pulserver.pypulseq import _system as system
+from pulserver.pypulseq import arbgrad
+from pulserver.pypulseq._rf import _excitation_helpers as excitation
+from scipy.spatial.transform import Rotation
 
 USER_SLOT_TRAJECTORY = 0
 USER_SLOT_ORDER_MODE = 1
 
 
-class GreNoncart3DPulseqSequence(PulseqSequence):
+class GreNoncart3DPulseqSequence(Sequence):
     """Generate a 3D stack-of-spirals/rosettes non-Cartesian GRE."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -171,7 +172,7 @@ class GreNoncart3DPulseqSequence(PulseqSequence):
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
-        seq = ps.Sequence(opts)
+        seq = pp.Sequence(opts)
 
         angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
         par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
@@ -181,7 +182,7 @@ class GreNoncart3DPulseqSequence(PulseqSequence):
         rf_phase_inc_deg = 0.0
 
         for shot, angle in enumerate(angles):
-            rotation = ps.make_rotation(Rotation.from_euler("z", float(angle)))
+            rotation = pp.make_rotation(Rotation.from_euler("z", float(angle)))
             label_lin = pp.make_label(type="SET", label="LIN", value=shot)
 
             for par in sampled_par:
@@ -340,7 +341,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

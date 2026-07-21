@@ -1,6 +1,6 @@
-# pulserverlib Public C API Reference
+# pulseg Public C API Reference
 
-This document describes the public surface of the pulserverlib C library
+This document describes the public surface of the pulseg C library
 that vendor integrations and downstream consumers may rely on, the
 optional / opt-in modules controlled by build flags, and the documented
 extension points for vendor-specific behaviour.
@@ -13,10 +13,17 @@ The accompanying explanatory documents live under
 The complete public API is contained in the headers under
 [`csrc/include/pulseg/`](../../csrc/include/pulseg/). Application code
 should include the umbrella header, `pulseg.h`, which pulls in all of
-the below:
+the below.
+
+A consumer that only needs to read raw Pulseq `.seq` files, with no IR
+and no vendor concepts, can depend on
+[`csrc/include/pulseq/`](../../csrc/include/pulseq/) alone: it is a
+standalone module that includes zero pulseg headers, and pulseg depends
+on it and never the reverse.
 
 | Header | Purpose |
 | --- | --- |
+| `pulseg_errors.h` | `PULSEG_ERR_*` return codes and the `PULSEG_SUCCEEDED`/`PULSEG_FAILED` predicates |
 | `pulseg_config.h` | Vendor-id constants (`PULSEG_VENDOR_*`), allocator macros, build-time toggles |
 | `pulseg_types.h` | Public structs and `*_INIT` initialisers (collection, opts, rf_stats, pns_params, mech-resonance spectra, …) |
 | `pulseg_protocol.h` | UI / parameter protocol IDs (mirrors `python/UIParam`) |
@@ -29,9 +36,21 @@ the below:
 | `pulseg_freqmod.h` | Frequency-modulation collection build/update/cache |
 | `pulseg_bridge.h` | Minimal C++ bridge for `_pulseg_wrapper.cpp` |
 
-`pulseg_internal.h` is **not** part of the public API. It contains
-build-internal macros, in-progress structs, and helpers that may change
-without notice.
+The split is structural, not a convention: everything under
+`csrc/include/` is public and everything under `csrc/src/` is private.
+The private header `csrc/src/pulseg_internal.h` (internal structs,
+cross-file `pulseg__` helpers) is reachable only by a target that opts
+into `csrc/src` as an include directory, which the library itself, the C
+tests and the in-tree vendor plug-in `src_gelib/` do. Its contents may
+change without notice.
+
+Symbol prefixes encode the same three tiers:
+
+| Prefix | Meaning |
+| --- | --- |
+| `pulseg_` / `pulseq_` | public, declared under `csrc/include/` |
+| `pulseg__` (double underscore) | private, shared across `.c` files, declared in `pulseg_internal.h` |
+| unprefixed lowercase | file-static, never leaves its `.c` file |
 
 ## 2. Build
 
@@ -39,12 +58,13 @@ All modules are compiled unconditionally (see
 [`csrc/CMakeLists.txt`](../../csrc/CMakeLists.txt)) — there are no
 opt-out build flags. `pulseg_cache.c` (binary cache I/O for sequence
 descriptors and trajectories) and `pulseg_seqdesc.c` /
-`pulseg_cache_seqdesc.c` (sequence-descriptor metadata used by pge /
-Python) are always part of the `pulseg` static library.
+`pulseg_cache_seqdesc.c` (sequence-descriptor metadata used by the
+analysis and recon layers) are always part of the `pulseg` static
+library.
 
 ## 3. Recommended workflow for vendor integrations
 
-A third-party vendor wrapping pulserverlib (e.g. inside a Pulseq
+A third-party vendor wrapping pulseg (e.g. inside a Pulseq
 ExternalSequence-style interpreter) does not need any vendor-specific
 entrypoints. The standard path is:
 
@@ -75,34 +95,6 @@ The cache (`pulseg_cache.c`) is purely an acceleration aid — pass
 `cache_binary=0` if the integration is one-shot and the on-disk
 artefact is unwanted.
 
-### 3a. Iterator-based safety entrypoint (no collection required)
-
-Vendors that don't want to manage a `pulseg_collection*` lifetime
-can use the one-shot facade `pulseg_check_safety_from_file()`. It
-takes a `.seq` file path and the same `opts` / forbidden-bands /
-`pns_params` triple as `pulseg_check_safety()`, and internally:
-
-1. calls `pulseg_read()` (no cache, no signature verification, no
-   label parsing);
-2. runs `pulseg_check_safety()` with the caller-supplied limits;
-3. frees the collection before returning.
-
-```c
-pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
-int rc = pulseg_check_safety_from_file(
-    &diag, "scan.seq", &opts,
-    num_forbidden_bands, forbidden_bands,
-    &pns_params, pns_threshold_percent);
-```
-
-The performed checks are exactly those of `pulseg_check_safety()`:
-gradient continuity, max gradient amplitude, max slew rate, structural
-mechanical-resonance forbidden bands, and PNS thresholding under the
-vendor model selected by `pns_params.vendor`.
-
-A worked example ships under
-[`examples/cexamples/safety_with_external_sequence.c`](../../examples/cexamples/safety_with_external_sequence.c).
-
 For wrapper-side plotting (i.e. when a UI needs the sample-level
 waveforms / spectra rather than just a pass/fail verdict), use the
 collection-based getters:
@@ -120,80 +112,82 @@ The structural-candidate numerics returned by
 
 ## 4. Extension points
 
-Two areas are designed to be extended for non-GE vendors *without*
-breaking existing GE callers:
+Three seams let a vendor add proprietary behaviour without touching the
+core: the PNS model, the RF-statistics hook, and the opaque VENDOR cache
+section (`pulseg_opts.vendor_section_write_fn` /
+`pulseg_read_vendor_cache_section()`).
 
-### 4a. PNS model dispatch
+### 4a. PNS model injection
 
-`pulseg_pns_params` carries an `int vendor` field. The GE Healthcare
-exponential model (chronaxie / rheobase / alpha) is the only model
-implemented in this library today. `calc_pns_from_uniform()` dispatches
-on the `vendor` field:
+PNS is not implemented in this library. `pulseg_check_safety()` takes a
+`const pulseg_pns_model *`, a two-function-pointer interface the caller
+supplies:
 
-| `vendor` value | Behaviour |
-| --- | --- |
-| `0` (unspecified) | Treated as GEHC (back-compat for callers that don't set the field) |
-| `PULSEG_VENDOR_GEHC` | Existing exponential PNS calculation |
-| Any other value | Returns `PULSEG_ERR_NOT_IMPLEMENTED` |
+```c
+typedef struct pulseg_pns_model
+{
+    void *ctx;
+    int (*required_padding)(void *ctx, float dt_us);
+    int (*evaluate)(void *ctx,
+                    const float *dgdt_x, const float *dgdt_y, const float *dgdt_z,
+                    int n, float dt_us,
+                    float *out_x, float *out_y, float *out_z);
+} pulseg_pns_model;
+```
 
-To add a new model (e.g. Siemens SAFE), add a new branch in
-`calc_pns_from_uniform()` in `pulseg_safety.c` that selects an
-alternative kernel / threshold metric. The output struct
-(`pulseg_pns_result`) stays vendor-neutral (per-axis slew arrays).
-If a future model requires additional parameters that don't fit the
-existing struct, a sibling parameter struct can be added and selected
-via the same `vendor` tag.
+The core extracts uniform-raster dG/dt for the canonical TR, asks
+`required_padding()` how many circularly-wrapped samples the model needs
+to warm its filter, then calls `evaluate()` once per canonical TR with
+arrays of that padded length. `evaluate()` returns per-axis values as a
+percentage of the model's own threshold; the core compares them against
+`pns_threshold_percent`. Passing `NULL` skips PNS entirely.
 
-### 4b. RF-statistics dispatch
+The GE Irnich rheobase-chronaxie model lives outside this library, in
+[`src_gelib/pulserver_ge_pns.c`](../../../../src_gelib/pulserver_ge_pns.c) —
+that file is the worked example for adding another vendor's model.
 
-`pulseg_rf_stats` also carries an `int vendor` field. The current
-fields (`abs_width`, `eff_width`, `duty_cycle`, `max_pulse_width`,
-`bandwidth_hz`, `base_amplitude_hz`, `total_b1sq_power`, …) match the
-GE Healthcare safety check inputs (concept analogous to sigpy's
-`ge_rf_params`). The concept of an RF-pulse safety summary
-generalises to other vendors (Siemens REFGRAD/MINSLICE/MAXSLICE,
-Philips `am_c_*`), but the field semantics differ.
+### 4b. RF-statistics hook
 
-Today `compute_rf_stats()` in `pulseg_dedup.c` is invoked only when
-`seq->opts.vendor == PULSEG_VENDOR_GEHC`; the resulting struct is
-stamped with `stats.vendor = seq->opts.vendor`. For non-GE vendors the
-struct is left at `PULSEG_RF_STATS_INIT` (vendor=0, all fields zero).
+Flip angle, peak `|gamma*B1|`, `|B1|` integral and bandwidth are
+vendor-neutral and always computed. Anything beyond that is not:
+`pulseg_opts.vendor_rf_stats_fn` is an optional callback invoked at dedup
+time with a read-only `pulseg_rf_view` of the pulse envelope, filling the
+four opaque slots in `pulseg_rf_stats.vendor_stat[]`.
 
-To add vendor-specific RF-stat computation:
+```c
+int (*vendor_rf_stats_fn)(void *ctx, const pulseg_rf_view *rf, float out_stat[4]);
+```
 
-1. Provide a sibling `compute_rf_stats_<vendor>()` populating the same
-   `pulseg_rf_stats` struct (re-using physically meaningful fields)
-   *or* a parallel struct selected via the `vendor` tag.
-2. Dispatch on `seq->opts.vendor` in
-   [`pulseg_dedup.c`](../../csrc/pulseg_dedup.c).
-3. Downstream consumers (pge, PSD safety check) read `stats.vendor`
-   to decide which interpretation applies — no recompilation of
-   pulserverlib core needed for read-side consumers, since the struct
-   shape is shared.
+Leave it `NULL` and the slots stay zero; the core never interprets them.
+The GE implementation (abs width, effective width, duty cycle, max pulse
+width) is in
+[`src_gelib/pulserver_ge_rf_stats.c`](../../../../src_gelib/pulserver_ge_rf_stats.c).
 
-The cache binary format stamps the version (`PULSEG_CACHE_VERSION`)
-including the vendor field, so cache files are regenerated on upgrade.
+The cache stamps its format version (`PULSEG_CACHE_VERSION_MAJOR` /
+`_MINOR`), so cache files are regenerated rather than misread on upgrade.
 
 ## 5. Compatibility invariant
 
 Modifications to the C library must keep the following three consumers
 byte / behaviour-identical:
 
-- the pge Python wrapper (`python/pge`);
-- the PSD amalgamation (`pulserver-interpreter/psd/pulserverlib_common.c`);
-- the C++ mrdserver (`mrdserver/csrc/`), which only reads cache files
-  via `trajectory_cache_reader`.
+- the Python wrapper (`python/pulserver`);
+- the PSD amalgamation (`pulserver-interpreter/src_psd/pulserver_amalg.c`,
+  fed by the `src_psd/pulseglib-src/` symlink farm);
+- the C++ recon reader (`cxx/recon/trajectory_cache_reader.{h,cpp}`),
+  which only reads cache files.
 
 Verify by running, in order:
 
 ```bash
-# 1. pge
-cd pulserverlib && conda run -n octave2 pip install -e . -q
-conda run -n octave2 python -m pytest tests/python/ -q
+# 1. C unit tests + C89 conformance
+bash scripts/check_c89_compliance.sh
+bash scripts/build_and_run_ctests.sh
 
-# 2. ctests
-cd pulserverlib/tests/ctests/build && cmake --build . -j && ./bin/run_tests
+# 2. C++ tests (incl. the .pge truth fixtures) and Python
+bash scripts/build_and_run_cpp_tests.sh
+python -m pytest tests/python -q
 
-# 3. PSD
-cd pulserver-interpreter && bash scripts/build_psd.sh --ese=MR30.1_R04 --clean
+# 3. PSD + full release build
+cd ../.. && bash scripts/build.sh --pre-release && bash scripts/run_tests.sh
 ```

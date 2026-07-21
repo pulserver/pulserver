@@ -43,9 +43,11 @@ endfunction()
 
 # _pulseg_wrapper: pulserver.analysis C extension (needs full pulseg + seqdesc + cache)
 set(PULSEG_C_SOURCES
+    "${CMAKE_SOURCE_DIR}/csrc/src/pulseq/pulseq_parse.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/pulseq/pulseq_names.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_error.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_math.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/io/pulseg_parse.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/io/pulseg_opts.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/structure/pulseg_dedup.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/structure/pulseg_structure.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_core.c"
@@ -69,7 +71,11 @@ add_pybind_module(_pulseg_wrapper ""
         "${CMAKE_SOURCE_DIR}/python/pulserver/_ext/_pulseg_wrapper.cpp"
         ${PULSEG_C_SOURCES}
     INCLUDES
+        ${CMAKE_SOURCE_DIR}/csrc/include
         ${CMAKE_SOURCE_DIR}/csrc/include/pulseg
+        ${CMAKE_SOURCE_DIR}/csrc/include/pulseq
+        ${CMAKE_SOURCE_DIR}/csrc/src
+        ${CMAKE_SOURCE_DIR}/csrc/src/pulseq
         ${CMAKE_SOURCE_DIR}/csrc/src/vendor
         ${CMAKE_SOURCE_DIR}/cxx/include/pulseg
 )
@@ -94,6 +100,17 @@ add_pybind_module(_arbgrad_wrapper ""
 file(GLOB ARBGRAD_WRAPPERS
     "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/_ext/_arbgrad_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
 install(FILES ${ARBGRAD_WRAPPERS}
+    DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/_ext)
+
+# _sampling_wrapper: deterministic variable-density sampling kernels.
+add_pybind_module(_sampling_wrapper ""
+    SOURCES
+        "${CMAKE_SOURCE_DIR}/python/pulserver/_ext/_sampling_wrapper.cpp"
+)
+
+file(GLOB SAMPLING_WRAPPERS
+    "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/_ext/_sampling_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+install(FILES ${SAMPLING_WRAPPERS}
     DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/_ext)
 
 option(PULSERVER_BUILD_CPP_TESTS "Build lightweight C++ unit tests" OFF)

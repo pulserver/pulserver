@@ -23,10 +23,14 @@ set_target_properties(run_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Link the test executable with the libraries under test
-target_link_libraries(run_tests PRIVATE pulseg m)
+target_link_libraries(run_tests PRIVATE pulseg_recon pulseg pulseq m)
 
-# Public API headers live in csrc/
-target_include_directories(run_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/include/pulseg)
+# Public API headers live in csrc/include; csrc/src is added because the C
+# tests deliberately exercise internals declared in pulseg_internal.h.
+target_include_directories(run_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/include/pulseg
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/src)
 
 # Expose POSIX timers for minunit.h (clockid_t, clock_gettime, etc.)
 target_compile_definitions(run_tests PRIVATE _POSIX_C_SOURCE=200112L)

@@ -41,35 +41,36 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pypulseq as pp
-
 import pulserver.io as pio
-import pulserver.pulseq as ps
-
+import pulserver.pypulseq as pp
 from pulserver import (
-    PulseqSequence,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
+    Sequence,
+    SequenceType,
     TypeinFloatParam,
     UIParam,
     Validate,
     dict_to_protocol,
     make_enum_param,
+    params,
     protocol_to_dict,
+    run_cli,
 )
-from pulserver.core import SequenceType
-from pulserver.design import cli, encoding, excitation, params, preparations, readout, sampling, system
-
-
-
+from pulserver.pypulseq import _gradients as encoding
+from pulserver.pypulseq import _readout as readout
+from pulserver.pypulseq import _sampling as sampling
+from pulserver.pypulseq import _system as system
+from pulserver.pypulseq._rf import _excitation_helpers as excitation
+from pulserver.pypulseq._rf import _preparation_helpers as preparations
 
 # See fse_2d.py: refocusing scheme (TRAPS on/off) carried as an opuser
 # custom variable; the refocusing flip ANGLE reuses UIParam.FLIP directly.
 USER_SLOT_REFOCUS_SCHEME = 0
 
 
-class Fse3DPulseqSequence(PulseqSequence):
+class Fse3DPulseqSequence(Sequence):
     """Generate a 3D turbo/fast spin-echo (CPMG) sequence."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -176,7 +177,7 @@ class Fse3DPulseqSequence(PulseqSequence):
         prot = dict_to_protocol(protocol)
         cfg = _read_protocol(prot)
 
-        seq = ps.Sequence(opts)
+        seq = pp.Sequence(opts)
         if cfg.b_value_s_mm2 > 0.0:
             n_shots, n_directions = _build_legacy(seq, opts, cfg)
         else:
@@ -203,7 +204,7 @@ class Fse3DPulseqSequence(PulseqSequence):
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
-def _n_shots(cfg: "_Config") -> int:
+def _n_shots(cfg: _Config) -> int:
     sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, 0)
     return len(range(0, len(sampled_pe), cfg.etl))
 
@@ -646,7 +647,7 @@ _ARG_MAP = [
 
 if __name__ == "__main__":
     raise SystemExit(
-        cli.run_cli(
+        run_cli(
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,

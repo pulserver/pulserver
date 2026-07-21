@@ -39,9 +39,9 @@ extern int kill(pid_t, int);
 #include <sys/select.h>
 #include <sys/time.h>
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Read timeout defaults (overridable via env)                       */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 #ifndef PULSEG_BRIDGE_READ_TIMEOUT_DEFAULT_SEC
 #define PULSEG_BRIDGE_READ_TIMEOUT_DEFAULT_SEC 60
 #endif
@@ -90,9 +90,9 @@ static int bridge_env_timeout(const char *name, int default_sec)
     return v;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Internal I/O helpers                                               */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 /** Write a string to fd. Returns 0 on success, -1 on error. */
 static int write_str(int fd, const char *s)
@@ -198,8 +198,9 @@ static int read_line_to(int fd, char *buf, int bufsz, int timeout_sec)
 /* Back-compat wrapper using default timeout. */
 static int read_line(int fd, char *buf, int bufsz)
 {
-    int t = bridge_env_timeout("PULSERVER_BRIDGE_READ_TIMEOUT_SEC",
-                               PULSEG_BRIDGE_READ_TIMEOUT_DEFAULT_SEC);
+    int t = bridge_env_timeout(
+        "PULSERVER_BRIDGE_READ_TIMEOUT_SEC",
+        PULSEG_BRIDGE_READ_TIMEOUT_DEFAULT_SEC);
     return read_line_to(fd, buf, bufsz, t);
 }
 
@@ -243,13 +244,12 @@ static int read_preamble_block(int fd, char *buf, int bufsz)
     return total;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Lifecycle                                                         */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 /* Private helper: fork + exec with caller-provided argv. */
-static int bridge_do_open(pulseg_bridge *b, const char *exe_path,
-                          const char **argv)
+static int bridge_do_open(pulseg_bridge *b, const char *exe_path, const char **argv)
 {
     int to_child[2];
     int from_child[2];
@@ -296,13 +296,10 @@ static int bridge_do_open(pulseg_bridge *b, const char *exe_path,
          * fallback /tmp. */
         log_dir = getenv("PULSERVER_BASE_DIR");
         if (log_dir && log_dir[0])
-            snprintf(stderr_path, sizeof(stderr_path),
-                     "%s/log/pypulseq_host.stderr.log", log_dir);
+            snprintf(stderr_path, sizeof(stderr_path), "%s/log/pypulseq_host.stderr.log", log_dir);
         else
-            snprintf(stderr_path, sizeof(stderr_path),
-                     "/tmp/pypulseq_host.stderr.log");
-        stderr_fd = open(stderr_path,
-                         O_WRONLY | O_CREAT | O_APPEND, 0644);
+            snprintf(stderr_path, sizeof(stderr_path), "/tmp/pypulseq_host.stderr.log");
+        stderr_fd = open(stderr_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
         if (stderr_fd >= 0)
         {
             dup2(stderr_fd, STDERR_FILENO);
@@ -343,15 +340,10 @@ static int bridge_do_open(pulseg_bridge *b, const char *exe_path,
     return 0;
 }
 
-int pulseg_bridge_open(pulseg_bridge *b,
-                          const char *exe_path,
-                          const char *script_path)
+/* Spawn with no scanner limits on the command line. */
+static int bridge_open_bare(pulseg_bridge *b, const char *exe_path, const char *script_path)
 {
     const char *argv[6];
-
-    if (!b || !exe_path || !script_path)
-        return -1;
-    memset(b, 0, sizeof(*b));
 
     argv[0] = exe_path;
     argv[1] = "--persistent";
@@ -362,10 +354,11 @@ int pulseg_bridge_open(pulseg_bridge *b,
     return bridge_do_open(b, exe_path, argv);
 }
 
-int pulseg_bridge_open_with_opts(pulseg_bridge *b,
-                                    const char *exe_path,
-                                    const char *script_path,
-                                    const pulseg_opts *opts)
+int pulseg_bridge_open_with_opts(
+    pulseg_bridge *b,
+    const char *exe_path,
+    const char *script_path,
+    const pulseg_opts *opts)
 {
     /* All declarations at top (C89) */
     const char *argv[24];
@@ -386,8 +379,8 @@ int pulseg_bridge_open_with_opts(pulseg_bridge *b,
 
     if (!opts)
     {
-        /* No limits available: fall back to plain open */
-        return pulseg_bridge_open(b, exe_path, script_path);
+        /* No limits available: fall back to a bare spawn */
+        return bridge_open_bare(b, exe_path, script_path);
     }
 
     n = 0;
@@ -414,33 +407,31 @@ int pulseg_bridge_open_with_opts(pulseg_bridge *b,
     }
     if (opts->max_slew_hz_per_m_per_s > 0.0f)
     {
-        sprintf(buf_maxslew, "--maxSlew=%.8g",
-                (double)opts->max_slew_hz_per_m_per_s);
+        sprintf(buf_maxslew, "--maxSlew=%.8g", (double)opts->max_slew_hz_per_m_per_s);
         argv[n++] = buf_maxslew;
         argv[n++] = "--slewUnit=Hz/m/s";
     }
     if (opts->rf_raster_us > 0.0f)
     {
-        sprintf(buf_rfraster, "--rfRasterTime=%.8g",
-                (double)(opts->rf_raster_us * 1.0e-6f));
+        sprintf(buf_rfraster, "--rfRasterTime=%.8g", (double)(opts->rf_raster_us * 1.0e-6f));
         argv[n++] = buf_rfraster;
     }
     if (opts->grad_raster_us > 0.0f)
     {
-        sprintf(buf_gradraster, "--gradRasterTime=%.8g",
-                (double)(opts->grad_raster_us * 1.0e-6f));
+        sprintf(buf_gradraster, "--gradRasterTime=%.8g", (double)(opts->grad_raster_us * 1.0e-6f));
         argv[n++] = buf_gradraster;
     }
     if (opts->adc_raster_us > 0.0f)
     {
-        sprintf(buf_adcraster, "--adcRasterTime=%.8g",
-                (double)(opts->adc_raster_us * 1.0e-6f));
+        sprintf(buf_adcraster, "--adcRasterTime=%.8g", (double)(opts->adc_raster_us * 1.0e-6f));
         argv[n++] = buf_adcraster;
     }
     if (opts->block_raster_us > 0.0f)
     {
-        sprintf(buf_blockraster, "--blockDurationRaster=%.8g",
-                (double)(opts->block_raster_us * 1.0e-6f));
+        sprintf(
+            buf_blockraster,
+            "--blockDurationRaster=%.8g",
+            (double)(opts->block_raster_us * 1.0e-6f));
         argv[n++] = buf_blockraster;
     }
     argv[n] = (const char *)NULL;
@@ -484,22 +475,11 @@ void pulseg_bridge_close(pulseg_bridge *b)
     b->pid = 0;
 }
 
-int pulseg_bridge_alive(const pulseg_bridge *b)
-{
-    int status;
-    if (!b || b->pid <= 0)
-        return 0;
-    if (waitpid((pid_t)b->pid, &status, WNOHANG) == 0)
-        return 1;
-    return 0;
-}
-
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /*  Commands                                                          */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
-int pulseg_bridge_list_protocol(pulseg_bridge *b,
-                                   pulseg_protocol *out)
+int pulseg_bridge_list_protocol(pulseg_bridge *b, pulseg_protocol *out)
 {
     char preamble[4096];
     int len;
@@ -520,8 +500,9 @@ int pulseg_bridge_list_protocol(pulseg_bridge *b,
     rc = read_line(b->from_child, resp_line, (int)sizeof(resp_line));
     if (rc < 0)
     {
-        bridge_log("[BRIDGE] <LIST_PROTOCOL %s\n",
-                   rc == PULSEG_BRIDGE_RC_TIMEOUT ? "TIMEOUT" : "EOF/ERROR");
+        bridge_log(
+            "[BRIDGE] <LIST_PROTOCOL %s\n",
+            rc == PULSEG_BRIDGE_RC_TIMEOUT ? "TIMEOUT" : "EOF/ERROR");
         return -1;
     }
     bridge_log("[BRIDGE] <%s\n", resp_line);
@@ -540,8 +521,7 @@ int pulseg_bridge_list_protocol(pulseg_bridge *b,
 }
 
 /** Send the serialized protocol (preamble) to the child. */
-static int send_protocol(pulseg_bridge *b,
-                         const pulseg_protocol *proto)
+static int send_protocol(pulseg_bridge *b, const pulseg_protocol *proto)
 {
     char buf[4096];
     int n = pulseg_protocol_serialize(proto, buf, (int)sizeof(buf));
@@ -550,10 +530,12 @@ static int send_protocol(pulseg_bridge *b,
     return write_str(b->to_child, buf);
 }
 
-int pulseg_bridge_validate(pulseg_bridge *b,
-                              float *duration,
-                              char *info, int infosz,
-                              const pulseg_protocol *proto)
+int pulseg_bridge_validate(
+    pulseg_bridge *b,
+    float *duration,
+    char *info,
+    int infosz,
+    const pulseg_protocol *proto)
 {
     char resp[PULSEG_BRIDGE_LINE_MAX];
     int rc;
@@ -577,8 +559,9 @@ int pulseg_bridge_validate(pulseg_bridge *b,
     rc = read_line(b->from_child, resp, (int)sizeof(resp));
     if (rc < 0)
     {
-        bridge_log("[BRIDGE] <VALIDATE %s\n",
-                   rc == PULSEG_BRIDGE_RC_TIMEOUT ? "TIMEOUT" : "EOF/ERROR");
+        bridge_log(
+            "[BRIDGE] <VALIDATE %s\n",
+            rc == PULSEG_BRIDGE_RC_TIMEOUT ? "TIMEOUT" : "EOF/ERROR");
         return -1;
     }
     bridge_log("[BRIDGE] <%s\n", resp);
@@ -617,9 +600,7 @@ int pulseg_bridge_validate(pulseg_bridge *b,
     return -1; /* unexpected response */
 }
 
-int pulseg_bridge_generate(pulseg_bridge *b,
-                              const pulseg_protocol *proto,
-                              const char *output_path)
+int pulseg_bridge_generate(pulseg_bridge *b, const pulseg_protocol *proto, const char *output_path)
 {
     char cmd[1024];
     char resp[PULSEG_BRIDGE_LINE_MAX];
@@ -648,14 +629,16 @@ int pulseg_bridge_generate(pulseg_bridge *b,
 
     /* Response: "GENERATED <path>" or "ERROR <msg>".
      * Sequence generation can be slow — use a longer timeout. */
-    gen_timeout = bridge_env_timeout("PULSERVER_BRIDGE_GENERATE_TIMEOUT_SEC",
-                                     PULSEG_BRIDGE_READ_TIMEOUT_GENERATE_SEC);
+    gen_timeout = bridge_env_timeout(
+        "PULSERVER_BRIDGE_GENERATE_TIMEOUT_SEC",
+        PULSEG_BRIDGE_READ_TIMEOUT_GENERATE_SEC);
     rc = read_line_to(b->from_child, resp, (int)sizeof(resp), gen_timeout);
     if (rc < 0)
     {
-        bridge_log("[BRIDGE] <GENERATE %s (timeout=%ds)\n",
-                   rc == PULSEG_BRIDGE_RC_TIMEOUT ? "TIMEOUT" : "EOF/ERROR",
-                   gen_timeout);
+        bridge_log(
+            "[BRIDGE] <GENERATE %s (timeout=%ds)\n",
+            rc == PULSEG_BRIDGE_RC_TIMEOUT ? "TIMEOUT" : "EOF/ERROR",
+            gen_timeout);
         return -1;
     }
     bridge_log("[BRIDGE] <%s\n", resp);

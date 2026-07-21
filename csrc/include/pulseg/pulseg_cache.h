@@ -1,10 +1,15 @@
 /**
  * @file pulseg_cache.h
- * @brief Binary (.pge) cache read/write.
+ * @brief Binary sequence cache: whole-file save/load plus per-section loads.
  *
- * Split out of the former pulseg_methods.h (Stage 1 layout normalization).
- * All functions use the pulseg_ prefix and are declared extern "C" when
- * compiled with a C++ compiler.
+ * The cache sits beside the .seq file and holds everything derived from it
+ * that is expensive to recompute (dedup tables, segmentation, trajectory,
+ * freq-mod, sequence description). Its extension is vendor-selectable via
+ * pulseg_opts.cache_ext -- .pseg by default, .pge on GE.
+ *
+ * pulseg_save_cache() writes every section; the per-section loaders exist so
+ * a consumer can pay only for what it needs (the pulse-generation pass reads
+ * COMMON+SHAPES, the scan loop additionally reads INSTANCES and SCANLOOP).
  */
 
 #ifndef PULSEG_CACHE_H
@@ -26,23 +31,22 @@ extern "C"
     /**
      * @brief Load the pulsegen-stage cache for a sequence path.
      *
-     * Reads the COMMON + SHAPES sections of the cache file derived from
-     * @p seq_path. This stage does not enforce source-size matching.
+     * Reads the COMMON + SHAPES sections only -- neither the per-instance
+     * event tables (INSTANCES) nor the execution stream (SCANLOOP), which
+     * scale with the scan length. Everything this stage resolves per
+     * (segment, block position) is frozen into the segment definitions at
+     * parse time. This stage does not enforce source-size matching.
      */
-    int pulseg_load_geninstructions_cache(
-        pulseg_collection **out_coll,
-        const char *seq_path);
+    int pulseg_load_geninstructions_cache(pulseg_collection **out_coll, const char *seq_path);
 
     /**
      * @brief Load the scan-stage cache for a sequence path.
      *
-     * Reads the COMMON + ROTATIONS + SCANLOOP sections of the cache file
-     * derived from @p seq_path. This stage does not enforce source-size
-     * matching.
+     * Reads the COMMON + INSTANCES + ROTATIONS + SHAPES + SCANLOOP sections
+     * of the cache file derived from @p seq_path. This stage does not enforce
+     * source-size matching.
      */
-    int pulseg_load_scanloop_cache(
-        pulseg_collection **out_coll,
-        const char *seq_path);
+    int pulseg_load_scanloop_cache(pulseg_collection **out_coll, const char *seq_path);
 
     /**
      * @brief Delete the cache file associated with a sequence path.
@@ -62,10 +66,7 @@ extern "C"
      *                            reload.
      * @return PULSEG_SUCCESS on success, negative on failure.
      */
-    int pulseg_save_cache(
-        const pulseg_collection *coll,
-        const char *path,
-        int source_size);
+    int pulseg_save_cache(const pulseg_collection *coll, const char *path, int source_size);
 
     /**
      * @brief Load a collection from a binary cache file.
@@ -81,10 +82,7 @@ extern "C"
      *                            cache header (guards against stale caches).
      * @return PULSEG_SUCCESS on success, negative on failure.
      */
-    int pulseg_load_cache(
-        pulseg_collection *coll,
-        const char *path,
-        int source_size);
+    int pulseg_load_cache(pulseg_collection *coll, const char *path, int source_size);
 
     /* ================================================================== */
     /*  Freq-mod unified cache (embedded in collection cache)             */
@@ -96,34 +94,10 @@ extern "C"
      * On success, populates coll->freq_mod.  Returns an error code if the
      * freq-mod section is absent or empty.
      */
-    int pulseg_load_freq_mod_cache(
-        pulseg_collection *coll,
-        const char *seq_path);
+    int pulseg_load_freq_mod_cache(pulseg_collection *coll, const char *seq_path);
 
     /**
-     * @brief Append freq-mod data to an existing collection cache.
-     *
-     * Opens the cache file for the given .seq path, writes freq-mod data
-     * at the end, and updates the FREQMOD section index entry.
-     */
-    int pulseg_write_freq_mod_cache(
-        const pulseg_collection *coll,
-        const char *seq_path);
-
-    /**
-     * @brief Append the sequence description as the SEQDESC section to the binary cache.
-     *
-     * Must be called after the collection is loaded and all descriptors computed.
-     *
-     * @param[in] coll      Loaded collection.
-     * @param[in] seq_path  Path to the .seq file (cache extension per D10: default .pseg, GE .pge).
-     * @return PULSEG_SUCCESS or negative error code.
-     */
-    int pulseg_write_sequence_description_cache(const pulseg_collection *coll,
-                                                   const char *seq_path);
-
-    /**
-     * @brief Append an opaque vendor blob as the VENDOR section (D10).
+     * @brief Append an opaque vendor blob as the VENDOR section.
      *
      * Invokes @p opts->vendor_section_write_fn(opts->vendor_section_ctx, &buf,
      * &len) to obtain a caller-allocated (PULSEG_ALLOC'd) buffer, writes it
@@ -138,12 +112,13 @@ extern "C"
      * @return PULSEG_SUCCESS, negative error code, or PULSEG_SUCCESS with no
      *         section written when the callback is NULL.
      */
-    int pulseg_write_vendor_cache_section(const pulseg_collection *coll,
-                                             const char *seq_path,
-                                             const pulseg_opts *opts);
+    int pulseg_write_vendor_cache_section(
+        const pulseg_collection *coll,
+        const char *seq_path,
+        const pulseg_opts *opts);
 
     /**
-     * @brief Read back the raw VENDOR section blob (D10), if present.
+     * @brief Read back the raw VENDOR section blob, if present.
      *
      * @param[in]  seq_path  Path to the .seq file.
      * @param[in]  cache_ext Cache file extension incl. dot, or NULL for the
@@ -155,10 +130,11 @@ extern "C"
      *         section present, in which case *out_buf=NULL, *out_len=0);
      *         negative error code on I/O failure.
      */
-    int pulseg_read_vendor_cache_section(const char *seq_path,
-                                            const char *cache_ext,
-                                            unsigned char **out_buf,
-                                            int *out_len);
+    int pulseg_read_vendor_cache_section(
+        const char *seq_path,
+        const char *cache_ext,
+        unsigned char **out_buf,
+        int *out_len);
 
 #ifdef __cplusplus
 }

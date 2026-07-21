@@ -10,7 +10,7 @@ from warnings import warn
 import numpy as np
 from pypulseq.supported_labels_rf_use import get_supported_rf_uses
 
-from pulserver.pulseq.sequence import _RF_USE_CODE_TO_CHAR
+from pulserver.pypulseq._sequence import _RF_USE_CODE_TO_CHAR
 
 
 def write(
