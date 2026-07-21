@@ -146,7 +146,7 @@ class Gre3DPulseqSequence(Sequence):
                 ),
             }
 
-        sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, 0)
+        sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
         duration_s = cfg.tr_s * float(len(sampled_pe))
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
@@ -172,10 +172,10 @@ class Gre3DPulseqSequence(Sequence):
         delta_k_pe = 1.0 / cfg.fov_pe_m
         phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
         max_pe_area = float(np.max(np.abs(phase_areas)))
-        sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, 0)
+        sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
 
         par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
+        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
 
         rf_phase_deg = 0.0
         rf_phase_inc_deg = 0.0

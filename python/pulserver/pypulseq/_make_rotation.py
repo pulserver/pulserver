@@ -42,12 +42,12 @@ def make_rotation(rot_quaternion: Any) -> SimpleNamespace:
 
     Rotate a radial base spoke over a golden-angle plan::
 
-        for angle in pp.radial_2d(377, scheme="golden").support[:, 0]:
+        for angle in pp.make_radial_sampling(377, scheme="golden").support[:, 0]:
             readout(seq, rotation=Rotation.from_euler("z", angle))
 
     See Also
     --------
-    directions_to_rotations : 3D directions to rotation matrices.
+    pulserver.SamplingPattern.to_rotations : plan directions to rotation matrices.
     """
     event = SimpleNamespace()
     event.type = "rot3D"

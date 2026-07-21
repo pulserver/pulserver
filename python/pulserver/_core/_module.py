@@ -7,10 +7,10 @@ from collections.abc import Iterator, Sequence
 from typing import Any, TypeVar, overload
 
 Block = tuple[Any, ...]
-_ModuleT = TypeVar("_ModuleT", bound="Module")
+_ModuleT = TypeVar("_ModuleT", bound="SequenceModule")
 
 
-class Module(Sequence[Block], ABC):
+class SequenceModule(Sequence[Block], ABC):
     """Base class for a reusable, stateful sequence fragment.
 
     Every ``make_*`` factory in :mod:`pulserver.pypulseq` returns one of these:
@@ -23,8 +23,9 @@ class Module(Sequence[Block], ABC):
     A module *is* an immutable sequence of Pulseq blocks for its current state:
     ``len(module)`` is the block count, ``module[i]`` one block tuple, and
     iteration yields them in order. ``add_to(seq)`` appends them; ``get()``
-    returns them as a standalone sequence. Concrete modules also accept
-    ``module(seq, **state)`` as shorthand for set-then-append.
+    returns them as a standalone sequence and ``plot()`` draws it. Concrete
+    modules also accept ``module(seq, **state)`` as shorthand for
+    set-then-append.
 
     Subclass this only to implement a *new* reusable RF, preparation, encoding
     or readout module — the shipped factories cover the standard families.
@@ -34,21 +35,14 @@ class Module(Sequence[Block], ABC):
     system : pypulseq.Opts
         System limits the module was designed against.
 
-    Attributes
-    ----------
-    blocks : tuple of tuple
-        Immutable block snapshot for the current state.
-    num_blocks : int
-        Number of blocks in that snapshot.
-
     Examples
     --------
     >>> import numpy as np
     >>> import pulserver.pypulseq as pp
     >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-    >>> from pulserver import Module
+    >>> from pulserver import SequenceModule
     >>> readout = pp.make_line_readout(system, (0.22, 0.22), (128, 128))
-    >>> isinstance(readout, Module)
+    >>> isinstance(readout, SequenceModule)
     True
     >>> readout.set_state(lin_idx=0).num_blocks
     3
@@ -109,6 +103,54 @@ class Module(Sequence[Block], ABC):
         from pulserver.pypulseq import Sequence as PulseqSequence
 
         return self.add_to(PulseqSequence(self.system))
+
+    def plot(self, **kwargs):
+        """Plot this module alone, as a one-module sequence diagram.
+
+        Replays the current block snapshot into a plain upstream
+        :class:`pypulseq.Sequence.Sequence` — Pulserver's own ``Sequence`` is a
+        write-only fast builder and cannot be read back — and hands it to
+        :meth:`~pypulseq.Sequence.Sequence.plot`, so the RF, gradient and ADC
+        axes are drawn exactly as they would be played.
+
+        Call ``set_state`` first to inspect a particular shot. The state a
+        factory leaves the module in is the full-amplitude one — the largest
+        phase-encode step, the largest blip — which is the worst case for
+        gradient and slew inspection.
+
+        Parameters
+        ----------
+        **kwargs
+            Forwarded to :meth:`~pypulseq.Sequence.Sequence.plot`
+            (``time_range``, ``time_disp``, ``show_blocks``, ``stacked``,
+            ...). ``stacked=True`` and ``plot_now=False`` are the defaults
+            here, giving one self-contained figure.
+
+        Returns
+        -------
+        pypulseq.plot.SeqPlot
+            The plot handle returned by PyPulseq.
+
+        Examples
+        --------
+        Inspect the ky = 0 shot of a Cartesian readout::
+
+            readout = pp.make_line_readout(system, (0.22, 0.22), (128, 128))
+            readout.set_state(lin_idx=0).plot()
+        """
+        import pypulseq
+
+        kwargs = {"stacked": True, "plot_now": False, "time_disp": "ms", **kwargs}
+        try:
+            self._current_blocks()
+        except RuntimeError:
+            # Never set: index 0 is the most negative phase-encode step, so
+            # the default state is already the full-amplitude one.
+            self.set_state()
+        sequence = pypulseq.Sequence(system=self.system)
+        for block in self:
+            sequence.add_block(*block)
+        return sequence.plot(**kwargs)
 
     def _add_or_get(self, sequence):
         return self.get() if sequence is None else self.add_to(sequence)

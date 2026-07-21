@@ -162,7 +162,7 @@ class GreRadial3DPulseqSequence(Sequence):
                 ),
             }
 
-        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
+        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
         duration_s = cfg.tr_s * float(cfg.num_shots)
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
@@ -186,7 +186,7 @@ class GreRadial3DPulseqSequence(Sequence):
 
         angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
         par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
+        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
 
         rf_phase_deg = 0.0
         rf_phase_inc_deg = 0.0
@@ -265,7 +265,7 @@ def _read_protocol(prot: dict) -> _Config:
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | None = None):
     if n_inner is None:
-        n_inner = len(sampling.sampled_lines(cfg.npar, cfg.rz, 0))
+        n_inner = len(sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0))
     system.apply_system_derates(opts)
 
     rf, gz, gz_reph = excitation.slice_selective(opts, cfg.flip_deg, cfg.slab_thickness_m)

@@ -161,7 +161,7 @@ class Epi3DPulseqSequence(Sequence):
             }
 
         n_shots = _n_shots(cfg)
-        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
+        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
         n_dirs = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
         duration_s = cfg.tr_s * float(n_shots) * float(len(sampled_par)) * float(n_dirs)
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -194,7 +194,7 @@ class Epi3DPulseqSequence(Sequence):
 
         shot_starts = list(range(0, cfg.ny_pe, cfg.etl))
         par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
+        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
         n_directions = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
         directions = preparations.diffusion_directions(cfg.n_directions) if cfg.b_value_s_mm2 > 0.0 else [None]
 
@@ -381,7 +381,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     train_span_s = n_lines_first_shot * line_period_s + max(0, n_lines_first_shot - 1) * pp.calc_duration(gy_blip)
     d_post_s = pp.calc_duration(gz_spoil)
 
-    n_inner = len(sampling.sampled_lines(cfg.npar, cfg.rz, 0)) if strict is False else 1
+    n_inner = len(sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)) if strict is False else 1
 
     min_block_s = (
         d90_s + d_gz_reph_s + d_crusher_before_s + diff_grad_duration_s + tau1_s

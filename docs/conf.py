@@ -11,6 +11,10 @@ sys.meta_path[:] = [
     if "editable" not in type(finder).__module__
 ]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
+# ``_figures`` holds the Bloch simulator and plotting helpers the ``.. plot::``
+# directives embedded in docstrings import.  It is documentation-only and is
+# deliberately not part of the shipped package.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 project = "pulserver"
 copyright = "2026, INFN-MRI"
@@ -45,6 +49,18 @@ html_theme_options = {
 # but only render their figures.  This keeps usage examples concise.
 plot_include_source = False
 plot_html_show_source_link = False
+plot_formats = [("png", 110)]
+# Sequence diagrams come from PyPulseq's own plotter, which does not take a
+# figure size; give every generated figure room and let the layout engine keep
+# the stacked axes legible.  Helpers that set an explicit ``figsize`` win.
+plot_apply_rcparams = True
+plot_rcparams = {
+    "figure.figsize": (8.5, 6.0),
+    "figure.autolayout": True,
+    "font.size": 9,
+    "axes.titlesize": 9,
+    "legend.fontsize": 8,
+}
 
 source_suffix = {
     ".md": "markdown",
@@ -58,18 +74,14 @@ exclude_patterns = ["_build", "README.md"]
 suppress_warnings = ["myst.xref_missing"]
 
 
-# Two objects re-exported from upstream PyPulseq have no docstring summary:
-# ``SigpyPulseOpts`` has no docstring at all, and ``get_supported_labels``
-# opens directly on a NumPy section header.  Either way ``autosummary`` finds
-# no first line and renders a blank cell on the API landing page.  Supply the
-# missing summary at build time; ``autosummary`` reads ``__doc__`` directly, so
-# an ``autodoc-process-docstring`` handler would not reach it.  Nothing is
-# written back to the upstream package - this lives only in the docs process.
+# ``get_supported_labels`` is re-exported from upstream PyPulseq and opens
+# directly on a NumPy section header, so ``autosummary`` finds no first line
+# and renders a blank cell on the API landing page.  Supply the missing summary
+# at build time; ``autosummary`` reads ``__doc__`` directly, so an
+# ``autodoc-process-docstring`` handler would not reach it.  Nothing is written
+# back to the upstream package - this lives only in the docs process.
 def _patch_upstream_summaries() -> None:
     import pulserver.pypulseq as pp
-
-    if not (pp.SigpyPulseOpts.__doc__ or "").strip():
-        pp.SigpyPulseOpts.__doc__ = "Filter and profile options for a SigPy-designed SLR pulse."
 
     existing = pp.get_supported_labels.__doc__ or ""
     if existing.lstrip().startswith("Returns"):

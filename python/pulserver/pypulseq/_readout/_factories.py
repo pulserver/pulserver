@@ -20,7 +20,16 @@ from collections.abc import Sequence
 from .epi import Epi2D, Epi2DFlyback, Epi3D, Epi3DFlyback
 from .fse import Fse2D, Fse3D
 from .line import Line2D, Line3D
-from .noncartesian import NonCartesian2D, NonCartesian3D, Radial, Rosette, Spiral
+from .noncartesian import (
+    Arbitrary,
+    NonCartesian2D,
+    NonCartesian3D,
+    Projection,
+    Radial,
+    Rosette,
+    Spiral,
+    StackOfTrajectories,
+)
 from .zte import Zte
 
 
@@ -87,6 +96,16 @@ def make_line_readout(system, fov, matrix, num_echoes: int = 1, **kwargs):
         for ky in range(128):
             readout(seq, pe_idx=ky, rf_phase_rad=phases[ky])
 
+    The module's blocks, as they are played:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_line_readout(system, (0.22, 0.22), (128, 128)).plot()
+
     See Also
     --------
     make_epi_readout : the same encoding acquired in one shot.
@@ -109,8 +128,8 @@ def make_epi_readout(system, fov, matrix, num_shots, sampling_mask, *, flyback: 
 
     ``sampling_mask`` is the sequence of within-shot phase-encode indices the
     train visits, in train order; its length *is* the echo train length. Take
-    it from a sampling plan (:func:`from_relative_shifts`,
-    :func:`skipped_caipi`) rather than constructing it by hand.
+    it from a sampling plan (:meth:`~pulserver.SamplingPattern.from_relative_shifts`,
+    :func:`make_skipped_caipi_sampling`) rather than constructing it by hand.
 
     ``flyback=False`` (default) alternates readout polarity with no gap, so
     every gradient lobe is sampled; ``flyback=True`` keeps one polarity and
@@ -159,14 +178,24 @@ def make_epi_readout(system, fov, matrix, num_shots, sampling_mask, *, flyback: 
 
     Drive a segmented blipped-CAIPI plan::
 
-        plan = pp.skipped_caipi((64, 16), acceleration=(2, 2), caipi_shift=1, segments=2)
+        plan = pp.make_skipped_caipi_sampling((64, 16), acceleration=(2, 2), caipi_shift=1, segments=2)
         readout = pp.make_epi_readout(system, fov, matrix, plan.n_shots, plan.relative(0)[:, 0])
         for shot in range(plan.n_shots):
             readout(seq, pe_start=int(plan[shot][0, 0]))
 
+    A short train, so the alternating readout lobes and the blips between them stay legible:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_epi_readout(system, (0.22, 0.22), (32, 8), 1, np.arange(8)).plot()
+
     See Also
     --------
-    from_relative_shifts, skipped_caipi : build ``sampling_mask``.
+    make_skipped_caipi_sampling : build ``sampling_mask``.
     """
     dimensions = _dimensions(matrix)
     classes = {(2, False): Epi2D, (2, True): Epi2DFlyback, (3, False): Epi3D, (3, True): Epi3DFlyback}
@@ -183,7 +212,7 @@ def make_fse_readout(system, fov, matrix, echo_train_length, refocusing, **kwarg
     Refocusing pulses replace EPI's gradient reversals, so the train decays
     with T2 rather than T2* and is immune to off-resonance distortion. The
     price is RF power and a T2-weighted point spread function -- which is why
-    the echo ordering (:func:`fse_radial_order` and friends) matters as much
+    the echo ordering (:func:`make_fse_radial_order` and friends) matters as much
     as the train itself.
 
     ``refocusing`` is the refocusing pulse *module*, normally from
@@ -201,7 +230,7 @@ def make_fse_readout(system, fov, matrix, echo_train_length, refocusing, **kwarg
         ``(nx, ny)`` or ``(nx, ny, nz)``; its length selects 2D or 3D.
     echo_train_length : int
         Refocusing pulses -- and encoded lines -- per shot.
-    refocusing : Module or tuple
+    refocusing : SequenceModule or tuple
         Slice-selective refocusing module, or an ``(rf, gradient)`` pair.
     **kwargs
         Forwarded to ``Fse2D``/``Fse3D``: ``bandwidth_hz_px``, ``oversamp``,
@@ -235,11 +264,22 @@ def make_fse_readout(system, fov, matrix, echo_train_length, refocusing, **kwarg
     Combine a variable flip schedule with a centre-out echo ordering::
 
         flips = pp.make_traps_schedule(16, np.deg2rad(120))
-        shots = pp.fse_radial_order(coords, 16)
+        shots = pp.make_fse_radial_order(coords, 16)
+
+    Four echoes of the CPMG train, with their crushers and phase encodes:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       refocusing = pp.make_refocusing_pulse(slice_thickness=5e-3, system=system)
+       pp.make_fse_readout(system, (0.22, 0.22), (128, 128), 4, refocusing).plot()
 
     See Also
     --------
-    make_refocusing_pulse, make_traps_schedule, fse_radial_order
+    make_refocusing_pulse, make_traps_schedule, make_fse_radial_order
     """
     try:
         rf = refocusing.rf
@@ -256,17 +296,145 @@ def make_fse_readout(system, fov, matrix, echo_train_length, refocusing, **kwarg
         return Fse3D(system, fov, matrix, echo_train_length, rf, gradient, **kwargs)
     raise ValueError("FSE matrix must have two or three dimensions")
 
+_TRAIN_KEYS = ("num_echoes", "rotation_label", "slice_rephasing")
+_STACK_KEYS = (*_TRAIN_KEYS, "phase_axis", "phase_label")
+
+
+def _split_kwargs(kwargs, train_keys=_TRAIN_KEYS):
+    """Separate base-waveform design kwargs from acquisition-train kwargs."""
+    train = {key: kwargs.pop(key) for key in list(kwargs) if key in train_keys}
+    return kwargs, train
+
+
+def make_noncartesian_2d_readout(system, trajectory, matrix, **kwargs):
+    """Create a 2D readout from a k-space path you designed yourself.
+
+    The escape hatch from the named families: give it the *shape* of any
+    planar trajectory and it solves a slew- and amplitude-feasible gradient
+    for it (:func:`traj2grad`), bridges the prewinder and rewinder, and wraps
+    the result as one shot. Use it when the path is not a rotated copy of a
+    radial, spiral or rosette base waveform.
+
+    Parameters
+    ----------
+    system : pypulseq.Opts
+        System limits.
+    trajectory : array_like
+        K-space path of shape ``(n, 2)`` in cycles/m. Only its geometry is
+        used, not its sample spacing.
+    matrix : int
+        Nominal image matrix, which sets the ADC sample count.
+    **kwargs
+        Base-waveform keywords (``bandwidth_hz_px``, ``oversamp``, ``axes``,
+        ``solver_oversampling``, ``derate``) and train keywords
+        (``num_echoes``, ``rotation_label``, ``slice_rephasing``).
+
+    Returns
+    -------
+    NonCartesian2D
+        Readout module wrapping the designed waveform.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    >>> theta = np.linspace(0, 6 * np.pi, 512)
+    >>> path = np.stack([np.linspace(0, 250, 512) * np.cos(theta),
+    ...                  np.linspace(0, 250, 512) * np.sin(theta)], axis=-1)
+    >>> readout = pp.make_noncartesian_2d_readout(system, path, 128)
+    >>> bool(readout.duration > 0)
+    True
+
+    An analytic path, and the gradient waveform designed for it:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       theta = np.linspace(0, 6 * np.pi, 512)
+       radius = np.linspace(0, 250.0, 512)
+       path = np.stack([radius * np.cos(theta), radius * np.sin(theta)], axis=-1)
+       pp.make_noncartesian_2d_readout(system, path, 128).plot()
+
+    See Also
+    --------
+    make_noncartesian_3d_readout : the volumetric counterpart.
+    traj2grad : the underlying path-to-gradient solver.
+    """
+    design, train = _split_kwargs(kwargs)
+    return NonCartesian2D(Arbitrary(system, trajectory, matrix=matrix, **design), **train)
+
+
+def make_noncartesian_3d_readout(system, trajectory, matrix, **kwargs):
+    """Create a 3D readout from a k-space path you designed yourself.
+
+    The volumetric counterpart of :func:`make_noncartesian_2d_readout`: the
+    supplied path already visits all three axes, so the shot is *not* a
+    rotated copy of a planar base waveform. Per-shot orientation, if any, is
+    still applied as a rotation.
+
+    Parameters
+    ----------
+    system : pypulseq.Opts
+        System limits.
+    trajectory : array_like
+        K-space path of shape ``(n, 3)`` in cycles/m.
+    matrix : int
+        Nominal image matrix, which sets the ADC sample count.
+    **kwargs
+        Base-waveform and train keywords, as for
+        :func:`make_noncartesian_2d_readout`.
+
+    Returns
+    -------
+    NonCartesian3D
+        Readout module wrapping the designed waveform.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    >>> t = np.linspace(0, 1, 512)
+    >>> path = np.stack([200 * t * np.cos(20 * t), 200 * t * np.sin(20 * t), 200 * t], axis=-1)
+    >>> readout = pp.make_noncartesian_3d_readout(system, path, 64)
+    >>> bool(readout.duration > 0)
+    True
+
+    A conical path that visits all three axes within one shot:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       t = np.linspace(0, 1, 512)
+       path = np.stack([200 * t * np.cos(20 * t), 200 * t * np.sin(20 * t), 200 * t], axis=-1)
+       pp.make_noncartesian_3d_readout(system, path, 64).plot()
+
+    See Also
+    --------
+    make_noncartesian_2d_readout : the planar counterpart.
+    """
+    design, train = _split_kwargs(kwargs)
+    return NonCartesian3D(Arbitrary(system, trajectory, matrix=matrix, **design), **train)
+
 
 def make_radial_readout(system, fov, matrix, **kwargs):
     """Create a 2D radial readout: one centre-crossing spoke per shot.
 
     Every spoke passes through the k-space centre, so motion and
     undersampling artefacts spread as streaks instead of coherent ghosts, and
-    the centre is oversampled for free -- the reason radial is preferred for
+    the centre is oversampled for free — the reason radial is preferred for
     free-breathing and self-navigated work.
 
     One base spoke is designed here; the per-shot angle is applied as a
-    rotation, so pair it with :func:`radial_2d` or :func:`golden_angles`.
+    rotation, so pair it with :func:`make_radial_sampling` or
+    :func:`calc_golden_angles`.
 
     Parameters
     ----------
@@ -277,9 +445,9 @@ def make_radial_readout(system, fov, matrix, **kwargs):
     matrix : int
         Nominal image matrix.
     **kwargs
-        Forwarded to the underlying ``Radial`` gradient and
-        ``NonCartesian2D`` train (``bandwidth_hz_px``, ``oversamp``,
-        ``num_echoes``, ``rotation_label``, ``derate``, ...).
+        Base-waveform keywords (``bandwidth_hz_px``, ``oversamp``,
+        ``ro_axis``, ``derate``) and train keywords (``num_echoes``,
+        ``rotation_label``, ``slice_rephasing``).
 
     Returns
     -------
@@ -296,16 +464,303 @@ def make_radial_readout(system, fov, matrix, **kwargs):
 
     Play a golden-angle acquisition::
 
-        pattern = pp.radial_2d(1000, scheme="golden")
-        for angle in pattern.support[:, 0]:
-            readout(seq, rotation=Rotation.from_euler("z", angle))
+        pattern = pp.make_radial_sampling(1000, scheme="golden")
+        for rotation in pattern.to_rotations():
+            readout(seq, rotation=rotation)
+
+    The module's blocks, as they are played:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_radial_readout(system, 0.22, 128).plot()
 
     See Also
     --------
-    radial_2d, golden_angles : spoke angle plans.
+    make_radial_projection_readout : the same spoke steered over the sphere.
+    make_radial_stack_readout : the same spoke with Cartesian kz encoding.
     make_zte_readout : the zero-echo-time radial variant.
     """
-    return NonCartesian2D(Radial(system, fov, matrix, **kwargs))
+    design, train = _split_kwargs(kwargs)
+    return NonCartesian2D(Radial(system, fov, matrix, **design), **train)
+
+
+def make_radial_projection_readout(system, fov, matrix, **kwargs):
+    """Create a 3D radial (kooshball) readout: one spoke per direction.
+
+    The same centre-crossing spoke as :func:`make_radial_readout`, but steered
+    over the whole sphere rather than one plane, so every shot is a
+    projection through the volume. Isotropic resolution comes from the
+    direction set alone — pair it with
+    :func:`make_golden_means_3d_sampling` or
+    :func:`make_spiral_phyllotaxis_sampling` and
+    :meth:`~pulserver.SamplingPattern.to_rotations`.
+
+    Parameters
+    ----------
+    system : pypulseq.Opts
+        System limits.
+    fov : float
+        Isotropic encoded field of view (m).
+    matrix : int
+        Nominal image matrix.
+    **kwargs
+        As for :func:`make_radial_readout`.
+
+    Returns
+    -------
+    Projection
+        Readout module wrapping the base spoke.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    >>> readout = pp.make_radial_projection_readout(system, 0.22, 128)
+    >>> bool(readout.duration > 0)
+    True
+
+    Cover the sphere with golden-means directions::
+
+        pattern = pp.make_golden_means_3d_sampling(2000)
+        for rotation in pattern.to_rotations():
+            readout(seq, rotation=rotation)
+
+    The module's blocks, as they are played:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_radial_projection_readout(system, 0.22, 128).plot()
+
+    See Also
+    --------
+    make_radial_readout, make_radial_stack_readout
+    """
+    design, train = _split_kwargs(kwargs)
+    return Projection(Radial(system, fov, matrix, **design), **train)
+
+
+def make_radial_stack_readout(system, fov, matrix, fov_z, nz, **kwargs):
+    """Create a stack-of-stars readout: rotated spokes, Cartesian kz.
+
+    Radial in-plane, Cartesian through-plane. The hybrid keeps radial's
+    motion robustness and centre oversampling where they matter — in the
+    imaging plane — while leaving kz conventionally encoded, so partial
+    Fourier, parallel imaging and slab selection all behave as in a Cartesian
+    3D acquisition.
+
+    Parameters
+    ----------
+    system : pypulseq.Opts
+        System limits.
+    fov : float
+        In-plane encoded field of view (m).
+    matrix : int
+        In-plane nominal image matrix.
+    fov_z : float
+        Through-plane field of view (m).
+    nz : int
+        Number of partitions.
+    **kwargs
+        As for :func:`make_radial_readout`, plus ``phase_axis`` and
+        ``phase_label`` for the partition-encoding gradient.
+
+    Returns
+    -------
+    StackOfTrajectories
+        Readout module; ``set_state(lin_idx=..., par_idx=...)`` selects the
+        spoke and the partition.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    >>> readout = pp.make_radial_stack_readout(system, 0.22, 128, 0.12, 32)
+    >>> readout.nz
+    32
+
+    The extra partition-encoding lobe on z is what distinguishes this from the planar readout:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_radial_stack_readout(system, 0.22, 128, 0.12, 32).plot()
+
+    See Also
+    --------
+    make_radial_readout, make_radial_projection_readout
+    """
+    design, train = _split_kwargs(kwargs, _STACK_KEYS)
+    return StackOfTrajectories(Radial(system, fov, matrix, **design), fov_z, nz, **train)
+
+
+def make_rosette_readout(system, fov, matrix, **kwargs):
+    """Create a 2D rosette readout: one petal set per shot.
+
+    A rosette petal repeatedly crosses the k-space centre during a single
+    readout, so the centre is sampled at many closely spaced times. That makes
+    the trajectory self-navigating and lets a reconstruction resolve spectral
+    or T2* information from one shot — the reason it is used for
+    spectroscopic and quantitative imaging.
+
+    Parameters
+    ----------
+    system : pypulseq.Opts
+        System limits.
+    fov : float
+        Encoded field of view (m).
+    matrix : int
+        Nominal image matrix.
+    **kwargs
+        Base-waveform keywords (``petals``, ``angular_frequency_ratio``,
+        ``echo_spacing_s``, ``bandwidth_hz_px``, ``oversamp``, ``axes``,
+        ``derate``) and train keywords (``num_echoes``, ``rotation_label``,
+        ``slice_rephasing``).
+
+    Returns
+    -------
+    NonCartesian2D
+        Readout module wrapping the base petal set.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    >>> readout = pp.make_rosette_readout(system, 0.22, 128)
+    >>> bool(readout.duration > 0)
+    True
+
+    The module's blocks, as they are played:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_rosette_readout(system, 0.22, 128).plot()
+
+    See Also
+    --------
+    make_rosette_projection_readout, make_rosette_stack_readout
+    make_spiral_readout : single-pass alternative with faster coverage.
+    """
+    design, train = _split_kwargs(kwargs)
+    return NonCartesian2D(Rosette(system, fov, matrix, **design), **train)
+
+
+def make_rosette_projection_readout(system, fov, matrix, **kwargs):
+    """Create a 3D rosette readout: one petal set per sphere direction.
+
+    The planar petal set of :func:`make_rosette_readout` steered over the
+    sphere, so each shot both crosses the k-space centre many times *and*
+    contributes a different projection — dense centre sampling for
+    self-navigation without spending shots on it.
+
+    Parameters
+    ----------
+    system : pypulseq.Opts
+        System limits.
+    fov : float
+        Isotropic encoded field of view (m).
+    matrix : int
+        Nominal image matrix.
+    **kwargs
+        As for :func:`make_rosette_readout`.
+
+    Returns
+    -------
+    Projection
+        Readout module wrapping the base petal set.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    >>> readout = pp.make_rosette_projection_readout(system, 0.22, 128)
+    >>> bool(readout.duration > 0)
+    True
+
+    The module's blocks, as they are played:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_rosette_projection_readout(system, 0.22, 128).plot()
+
+    See Also
+    --------
+    make_rosette_readout, make_rosette_stack_readout
+    """
+    design, train = _split_kwargs(kwargs)
+    return Projection(Rosette(system, fov, matrix, **design), **train)
+
+
+def make_rosette_stack_readout(system, fov, matrix, fov_z, nz, **kwargs):
+    """Create a stack-of-rosettes readout: rotated petals, Cartesian kz.
+
+    In-plane rosette encoding with conventional partition encoding along kz —
+    the volumetric form used when the spectral/T2* information a rosette
+    provides is wanted per slice rather than per projection.
+
+    Parameters
+    ----------
+    system : pypulseq.Opts
+        System limits.
+    fov : float
+        In-plane encoded field of view (m).
+    matrix : int
+        In-plane nominal image matrix.
+    fov_z : float
+        Through-plane field of view (m).
+    nz : int
+        Number of partitions.
+    **kwargs
+        As for :func:`make_rosette_readout`, plus ``phase_axis`` and
+        ``phase_label``.
+
+    Returns
+    -------
+    StackOfTrajectories
+        Readout module.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    >>> readout = pp.make_rosette_stack_readout(system, 0.22, 128, 0.12, 16)
+    >>> readout.nz
+    16
+
+    The module's blocks, as they are played:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_rosette_stack_readout(system, 0.22, 128, 0.12, 16).plot()
+
+    See Also
+    --------
+    make_rosette_readout, make_rosette_projection_readout
+    """
+    design, train = _split_kwargs(kwargs, _STACK_KEYS)
+    return StackOfTrajectories(Rosette(system, fov, matrix, **design), fov_z, nz, **train)
 
 
 def make_spiral_readout(system, fov, matrix, design_interleaves, **kwargs):
@@ -313,13 +768,13 @@ def make_spiral_readout(system, fov, matrix, design_interleaves, **kwargs):
 
     A spiral covers a disc of k-space in a single, gradient-efficient sweep,
     so far fewer shots are needed than for Cartesian or radial sampling at the
-    same resolution -- at the cost of sensitivity to off-resonance blurring
+    same resolution — at the cost of sensitivity to off-resonance blurring
     over the long readout.
 
     ``design_interleaves`` sets how many interleaves the full disc is split
     into and therefore the length of one readout. The base interleaf is
-    designed by :func:`pulserver.pypulseq.arbgrad.spiral` at the system's slew
-    and gradient limits; per-shot angles are applied as rotations.
+    designed at the system's slew and gradient limits; per-shot angles are
+    applied as rotations.
 
     Parameters
     ----------
@@ -332,8 +787,10 @@ def make_spiral_readout(system, fov, matrix, design_interleaves, **kwargs):
     design_interleaves : int
         Number of interleaves the disc is split into.
     **kwargs
-        Forwarded to the underlying ``Spiral`` gradient and
-        ``NonCartesian2D`` train.
+        Base-waveform keywords (``density``, ``variable_density_power``,
+        ``transition_radius``, ``variant``, ``bandwidth_hz_px``, ``oversamp``,
+        ``axes``, ``derate``) and train keywords (``num_echoes``,
+        ``rotation_label``, ``slice_rephasing``).
 
     Returns
     -------
@@ -348,93 +805,132 @@ def make_spiral_readout(system, fov, matrix, design_interleaves, **kwargs):
     >>> bool(readout.duration > 0)
     True
 
+    The module's blocks, as they are played:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_spiral_readout(system, 0.22, 128, 16).plot()
+
     See Also
     --------
-    pulserver.pypulseq.arbgrad : the underlying waveform design.
+    make_spiral_projection_readout, make_spiral_stack_readout
     make_rosette_readout : centre-crossing alternative for spectral encoding.
     """
-    return NonCartesian2D(Spiral(system, fov, matrix, design_interleaves, **kwargs))
+    design, train = _split_kwargs(kwargs)
+    return NonCartesian2D(Spiral(system, fov, matrix, design_interleaves, **design), **train)
 
 
-def make_rosette_readout(system, fov, matrix, **kwargs):
-    """Create a 2D rosette readout: one petal per shot.
+def make_spiral_projection_readout(system, fov, matrix, design_interleaves, **kwargs):
+    """Create a 3D spiral-projection readout: one interleaf per direction.
 
-    A rosette petal repeatedly crosses the k-space centre during a single
-    readout, so the centre is sampled at many closely spaced times. That makes
-    the trajectory self-navigating and lets a reconstruction resolve spectral
-    or T2* information from one shot -- the reason it is used for
-    spectroscopic and quantitative imaging.
+    The planar spiral interleaf of :func:`make_spiral_readout` steered over
+    the sphere, so a whole disc of k-space is covered per shot and the shot
+    count for an isotropic volume drops by roughly the interleaf's coverage
+    factor compared with radial projections.
 
     Parameters
     ----------
     system : pypulseq.Opts
         System limits.
     fov : float
-        Encoded field of view (m).
+        Isotropic encoded field of view (m).
     matrix : int
         Nominal image matrix.
+    design_interleaves : int
+        Number of interleaves the disc is split into.
     **kwargs
-        Forwarded to the underlying ``Rosette`` gradient and
-        ``NonCartesian2D`` train.
+        As for :func:`make_spiral_readout`.
 
     Returns
     -------
-    NonCartesian2D
-        Readout module wrapping the base petal.
+    Projection
+        Readout module wrapping the base interleaf.
 
     Examples
     --------
     >>> import pulserver.pypulseq as pp
     >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-    >>> readout = pp.make_rosette_readout(system, 0.22, 128)
+    >>> readout = pp.make_spiral_projection_readout(system, 0.22, 128, 16)
     >>> bool(readout.duration > 0)
     True
 
+    The module's blocks, as they are played:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_spiral_projection_readout(system, 0.22, 128, 16).plot()
+
     See Also
     --------
-    make_spiral_readout : single-pass alternative with faster coverage.
+    make_spiral_readout, make_spiral_stack_readout
     """
-    return NonCartesian2D(Rosette(system, fov, matrix, **kwargs))
+    design, train = _split_kwargs(kwargs)
+    return Projection(Spiral(system, fov, matrix, design_interleaves, **design), **train)
 
 
-def make_noncartesian_3d_readout(readout, **kwargs):
-    """Promote a natively 3D non-Cartesian gradient into a readout module.
+def make_spiral_stack_readout(system, fov, matrix, design_interleaves, fov_z, nz, **kwargs):
+    """Create a stack-of-spirals readout: rotated interleaves, Cartesian kz.
 
-    The 2D factories bundle waveform design and train construction. For
-    genuinely 3D trajectories -- kooshball radial, stack-of-spiral, a
-    caller-designed path -- the waveform is built separately (typically via
-    :mod:`pulserver.pypulseq.arbgrad`) and wrapped here, so the design stays
-    under the caller's control.
-
-    Per-shot orientation is applied as a rotation; get the matrices from
-    :func:`directions_to_rotations`.
+    The workhorse volumetric spiral: efficient in-plane coverage with
+    conventional partition encoding, so slab selection, partial Fourier and
+    parallel imaging along kz behave exactly as in a Cartesian 3D acquisition.
 
     Parameters
     ----------
-    readout : NonCartesianGradient
-        Base 3D gradient waveform object.
+    system : pypulseq.Opts
+        System limits.
+    fov : float
+        In-plane encoded field of view (m).
+    matrix : int
+        In-plane nominal image matrix.
+    design_interleaves : int
+        Number of interleaves the disc is split into.
+    fov_z : float
+        Through-plane field of view (m).
+    nz : int
+        Number of partitions.
     **kwargs
-        Forwarded to ``NonCartesian3D`` (``num_echoes``, ``rotation_label``).
+        As for :func:`make_spiral_readout`, plus ``phase_axis`` and
+        ``phase_label``.
 
     Returns
     -------
-    NonCartesian3D
-        Readout module wrapping the base waveform.
+    StackOfTrajectories
+        Readout module; ``set_state(lin_idx=..., par_idx=...)`` selects the
+        interleaf and the partition.
 
     Examples
     --------
-    Rotate a 3D base waveform over a golden-means direction set::
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    >>> readout = pp.make_spiral_stack_readout(system, 0.22, 128, 16, 0.12, 32)
+    >>> readout.nz
+    32
 
-        readout = pp.make_noncartesian_3d_readout(base_gradient)
-        pattern = pp.golden_means_3d(2000)
-        for rotation in pp.directions_to_rotations(pattern.support):
-            readout(seq, rotation=rotation)
+    The module's blocks, as they are played:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_spiral_stack_readout(system, 0.22, 128, 16, 0.12, 32).plot()
 
     See Also
     --------
-    golden_means_3d, spiral_phyllotaxis, directions_to_rotations
+    make_spiral_readout, make_spiral_projection_readout
     """
-    return NonCartesian3D(readout, **kwargs)
+    design, train = _split_kwargs(kwargs, _STACK_KEYS)
+    return StackOfTrajectories(Spiral(system, fov, matrix, design_interleaves, **design), fov_z, nz, **train)
 
 
 def make_zte_readout(system, fov, matrix, view_order, excitation, **kwargs):
@@ -449,7 +945,7 @@ def make_zte_readout(system, fov, matrix, view_order, excitation, **kwargs):
     Because the gradient never returns to zero, the whole ordered view set is
     one module: ``view_order`` is the segment, and consecutive directions must
     be close enough for the slew limit to bridge them. Orderings such as
-    :func:`spiral_phyllotaxis` are chosen precisely for that.
+    :func:`make_spiral_phyllotaxis_sampling` are chosen precisely for that.
 
     ``excitation`` is a non-selective pulse module (or bare RF event) -- a
     selective pulse is meaningless here, since the gradient is already
@@ -466,7 +962,7 @@ def make_zte_readout(system, fov, matrix, view_order, excitation, **kwargs):
     view_order : array_like
         Ordered in-plane angles (rad), or ``(N, 2)`` / ``(N, 3)`` spoke
         directions; normalised internally.
-    excitation : Module or SimpleNamespace
+    excitation : SequenceModule or SimpleNamespace
         Non-selective RF module, or the RF event itself.
     **kwargs
         Forwarded to ``Zte``: ``bandwidth_hz_px``, ``oversamp``,
@@ -485,14 +981,25 @@ def make_zte_readout(system, fov, matrix, view_order, excitation, **kwargs):
     >>> import pulserver.pypulseq as pp
     >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
     >>> excitation = pp.make_hard_pulse(np.deg2rad(3), duration=8e-6, system=system)
-    >>> readout = pp.make_zte_readout(system, 0.22, 128, pp.uniform_angles(64), excitation)
+    >>> readout = pp.make_zte_readout(system, 0.22, 128, pp.calc_uniform_angles(64), excitation)
     >>> readout.num_views
     64
+
+    The gradient is stepped, never ramped to zero, between views:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = pp.make_hard_pulse(np.deg2rad(3), duration=8e-6, system=system)
+       pp.make_zte_readout(system, 0.22, 64, pp.calc_uniform_angles(8), excitation).plot()
 
     See Also
     --------
     make_radial_readout : the conventional-TE radial counterpart.
-    spiral_phyllotaxis : slew-friendly 3D view ordering.
+    make_spiral_phyllotaxis_sampling : slew-friendly 3D view ordering.
     """
     rf = getattr(excitation, "rf", excitation)
     return Zte(system, fov, matrix, view_order, rf, **kwargs)

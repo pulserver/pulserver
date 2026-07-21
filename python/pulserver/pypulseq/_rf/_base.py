@@ -8,7 +8,7 @@ from typing import TypeVar
 
 import numpy as np
 
-from ..._core._module import Block, Module
+from ..._core._module import Block, SequenceModule
 from .._rotation import normalize_rotation
 from .._system import copy_event
 
@@ -25,7 +25,7 @@ class RfState:
     rotation: object | None = None
 
 
-class RfModule(Module):
+class RfModule(SequenceModule):
     """Stateful RF module exposed as an immutable sequence of Pulseq blocks.
 
     Factory-time events are retained as templates. ``set_state`` invalidates

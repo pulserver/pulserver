@@ -3,28 +3,27 @@
 from . import cartesian, epi, noncartesian, ordering, slices
 from ._pattern import SamplingPattern
 from .cartesian import (
-    caipirinha_mask,
-    fse_linear_order,
-    fse_radial_adaptive_order,
-    fse_radial_order,
-    fse_shuffling_order,
-    poisson_disc_mask,
-    random_mask,
-    sampled_lines,
+    calc_sampled_lines,
+    make_caipirinha_sampling,
+    make_fse_linear_order,
+    make_fse_radial_adaptive_order,
+    make_fse_radial_order,
+    make_fse_shuffling_order,
+    make_poisson_disc_sampling,
+    make_random_sampling,
 )
-from .epi import from_relative_shifts, skipped_caipi
+from .epi import make_skipped_caipi_sampling
 from .noncartesian import (
-    directions_to_rotations,
-    golden_angles,
-    golden_means_3d,
-    radial_2d,
-    spiral_phyllotaxis,
-    uniform_angles,
+    calc_golden_angles,
+    calc_raga_angles,
+    calc_tiny_golden_angles,
+    calc_uniform_angles,
+    make_golden_means_3d_sampling,
+    make_radial_sampling,
+    make_spiral_phyllotaxis_sampling,
 )
-from .ordering import chunk_indices, linear_order, outer_inner_order, outer_product
-from .slices import SliceGroup, slice_groups
-
-from_mask = cartesian.from_mask
+from .ordering import calc_chunk_indices, make_linear_order, make_outer_inner_order, make_outer_product
+from .slices import SliceGroup, make_slice_groups
 
 __all__ = [
     "SamplingPattern",
@@ -34,26 +33,25 @@ __all__ = [
     "noncartesian",
     "ordering",
     "slices",
-    "chunk_indices",
-    "linear_order",
-    "outer_inner_order",
-    "outer_product",
-    "sampled_lines",
-    "fse_linear_order",
-    "fse_radial_order",
-    "fse_radial_adaptive_order",
-    "fse_shuffling_order",
-    "random_mask",
-    "caipirinha_mask",
-    "poisson_disc_mask",
-    "from_mask",
-    "from_relative_shifts",
-    "skipped_caipi",
-    "radial_2d",
-    "golden_angles",
-    "uniform_angles",
-    "golden_means_3d",
-    "spiral_phyllotaxis",
-    "directions_to_rotations",
-    "slice_groups",
+    "calc_chunk_indices",
+    "calc_golden_angles",
+    "calc_raga_angles",
+    "calc_sampled_lines",
+    "calc_tiny_golden_angles",
+    "calc_uniform_angles",
+    "make_caipirinha_sampling",
+    "make_fse_linear_order",
+    "make_fse_radial_adaptive_order",
+    "make_fse_radial_order",
+    "make_fse_shuffling_order",
+    "make_golden_means_3d_sampling",
+    "make_linear_order",
+    "make_outer_inner_order",
+    "make_outer_product",
+    "make_poisson_disc_sampling",
+    "make_radial_sampling",
+    "make_random_sampling",
+    "make_skipped_caipi_sampling",
+    "make_slice_groups",
+    "make_spiral_phyllotaxis_sampling",
 ]

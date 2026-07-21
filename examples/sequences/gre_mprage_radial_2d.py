@@ -195,7 +195,7 @@ class GreMprageRadial2DPulseqSequence(Sequence):
                 "info": "TE, TR, TI, or TE_prep infeasible for the requested gradients/ETL",
             }
 
-        n_segments = len(sampling.chunk_indices(list(range(cfg.num_shots)), cfg.etl))
+        n_segments = len(sampling.calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl))
         shot_s = timing["shot_s"]
         duration_s = shot_s * n_segments * cfg.nslices
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -220,7 +220,7 @@ class GreMprageRadial2DPulseqSequence(Sequence):
         seq = pp.Sequence(opts)
 
         angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
-        segments = sampling.chunk_indices(list(range(cfg.num_shots)), cfg.etl)
+        segments = sampling.calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl)
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
 
         for sl in range(cfg.nslices):

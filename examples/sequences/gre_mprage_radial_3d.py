@@ -215,8 +215,8 @@ class GreMprageRadial3DPulseqSequence(Sequence):
                 "info": "TE, TR, TI, or TE_prep infeasible for the requested gradients/ETL",
             }
 
-        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
-        n_segments = len(sampling.chunk_indices(list(range(cfg.num_shots)), cfg.etl))
+        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+        n_segments = len(sampling.calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl))
         shot_s = timing["shot_s"]
         duration_s = shot_s * n_segments * len(sampled_par)
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -241,10 +241,10 @@ class GreMprageRadial3DPulseqSequence(Sequence):
         seq = pp.Sequence(opts)
 
         angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
-        segments = sampling.chunk_indices(list(range(cfg.num_shots)), cfg.etl)
+        segments = sampling.calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl)
 
         par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
+        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
 
         for par in sampled_par:
             z_scale = par_areas[par] / max_par_area if max_par_area > 0.0 else 0.0

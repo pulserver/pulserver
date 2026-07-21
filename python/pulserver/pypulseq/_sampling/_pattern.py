@@ -29,6 +29,11 @@ class SamplingPattern(Sequence[np.ndarray]):
     coordinates, already in acquisition order — so a sequence loop reads as
     ``for shot in pattern:``.
 
+    Three alternate constructors build one without listing coordinates by
+    hand: :meth:`from_mask` from a Cartesian sampling mask,
+    :meth:`from_relative_shifts` from per-shot starts plus blip increments,
+    and the ``make_*_sampling`` factories for analytic plans.
+
     Parameters
     ----------
     support : array_like
@@ -40,19 +45,10 @@ class SamplingPattern(Sequence[np.ndarray]):
         Cartesian boolean mask, when the support came from one. Its nonzero
         count must equal ``len(support)``.
 
-    Attributes
-    ----------
-    n_shots : int
-        Number of shots — same as ``len(pattern)``.
-    n_samples : int
-        Total sampled points across all shots (counting repeats).
-    inner_lengths : tuple of int
-        Train length of each shot.
-
     Examples
     --------
-    >>> from pulserver.pypulseq import radial_2d
-    >>> pattern = radial_2d(8, segment_length=4)
+    >>> from pulserver.pypulseq import make_radial_sampling
+    >>> pattern = make_radial_sampling(8, segment_length=4)
     >>> pattern.n_shots, pattern.inner_lengths
     (2, (4, 4))
     >>> pattern[0].shape
@@ -60,8 +56,8 @@ class SamplingPattern(Sequence[np.ndarray]):
 
     Relative steps for a blipped train, instead of absolute coordinates:
 
-    >>> from pulserver.pypulseq import from_relative_shifts
-    >>> plan = from_relative_shifts([[0, 0]], [[0, 0], [2, 1]], shape=(8, 4))
+    >>> from pulserver import SamplingPattern
+    >>> plan = SamplingPattern.from_relative_shifts([[0, 0]], [[0, 0], [2, 1]], shape=(8, 4))
     >>> plan.relative(0)
     array([[0, 0],
            [2, 1]])
@@ -107,6 +103,198 @@ class SamplingPattern(Sequence[np.ndarray]):
         object.__setattr__(self, "support", support)
         object.__setattr__(self, "order", tuple(normalized))
         object.__setattr__(self, "mask", mask)
+
+    @classmethod
+    def from_mask(
+        cls,
+        mask,
+        *,
+        train_length: int = 1,
+        ordering: str = "linear",
+        seed: int = 0,
+        n_sections: int = 3,
+    ) -> SamplingPattern:
+        """Build a plan from a Cartesian mask by ordering its sampled lines.
+
+        The bridge from *which* lines are sampled (a boolean mask) to *when*
+        they are acquired (echo trains). Every sampled location is covered
+        exactly once — the result is verified before returning — and the
+        originating mask is retained on the pattern for the reconstruction.
+
+        Use ``train_length=1`` for GRE and other acquisitions without an inner
+        train; the result is then one shot per sampled line.
+
+        Parameters
+        ----------
+        mask : array_like of bool
+            1D ``(ny,)`` or 2D ``(ny, nz)`` sampling mask.
+        train_length : int, optional
+            Echo-train / segment length (default 1).
+        ordering : {'linear', 'radial', 'radial_adaptive', 'shuffling'}, optional
+            Echo-train ordering applied to the sampled locations.
+        seed : int, optional
+            Seed for ``ordering='shuffling'``.
+        n_sections : int, optional
+            Radial section count for ``ordering='radial_adaptive'``.
+
+        Returns
+        -------
+        SamplingPattern
+            ``support`` of sampled ``(ky[, kz])`` indices, one order entry per
+            shot, and the originating ``mask``.
+
+        Raises
+        ------
+        RuntimeError
+            If the chosen ordering does not cover the mask exactly once.
+
+        Examples
+        --------
+        >>> import pulserver.pypulseq as pp
+        >>> from pulserver import SamplingPattern
+        >>> mask = pp.make_caipirinha_sampling((32, 8), 2, 2, delta=1)
+        >>> plan = SamplingPattern.from_mask(mask, train_length=8, ordering="radial")
+        >>> plan.n_samples == int(mask.sum())
+        True
+        >>> plan.inner_lengths
+        (8, 8, 8, 8, 8, 8, 8, 8)
+
+        Which shot acquires each sampled line, and at which echo of its train:
+
+        .. plot::
+           :include-source: false
+
+           import pulserver.pypulseq as pp
+           from pulserver import SamplingPattern
+           from _figures import pattern_figure
+           mask = pp.make_poisson_disc_sampling((48, 48), 4.0, calib=(10, 10), seed=0)
+           pattern_figure(SamplingPattern.from_mask(mask, train_length=16, ordering="radial"),
+                          title="Poisson-disc R=4, radial train of 16")
+
+        See Also
+        --------
+        pulserver.pypulseq.make_random_sampling : mask generators.
+        pulserver.pypulseq.make_fse_radial_order : the underlying orderings.
+        """
+        from .cartesian import build_from_mask
+
+        return build_from_mask(
+            mask,
+            train_length=train_length,
+            ordering=ordering,
+            seed=seed,
+            n_sections=n_sections,
+        )
+
+    @classmethod
+    def from_relative_shifts(cls, starts, shifts, *, shape) -> SamplingPattern:
+        """Build a plan from per-shot start points and blip increments.
+
+        The natural description of any blipped train: a shot starts somewhere
+        in (ky, kz) and each subsequent echo is reached by a *relative* step.
+        Both views the sequence needs come out of the result —
+        ``pattern[shot]`` gives the absolute coordinates to label,
+        ``pattern.increments(shot)`` the blip areas to play.
+
+        ``shifts`` may be one shared list of increments, or one list per shot
+        when trains differ (EPTI, zigzag).
+
+        Parameters
+        ----------
+        starts : array_like
+            Shape ``(n_shots, D)`` integer start coordinates.
+        shifts : array_like
+            Shape ``(inner, D)`` shared by all shots, or
+            ``(n_shots, inner, D)``. Entry 0 is normally all-zero so the first
+            echo sits on ``starts``.
+        shape : tuple of int
+            Cartesian grid extent; every coordinate must fall inside it.
+
+        Returns
+        -------
+        SamplingPattern
+            Deduplicated ``support`` of absolute coordinates, one order entry
+            per shot, plus the implied Cartesian ``mask``.
+
+        Examples
+        --------
+        >>> from pulserver import SamplingPattern
+        >>> plan = SamplingPattern.from_relative_shifts(
+        ...     starts=[[0, 0], [1, 0]],
+        ...     shifts=[[0, 0], [2, 1], [4, 2]],
+        ...     shape=(8, 4),
+        ... )
+        >>> plan[0]
+        array([[0, 0],
+               [2, 1],
+               [4, 2]])
+        >>> plan.increments(0)
+        array([[2, 1],
+               [2, 1]])
+
+        See Also
+        --------
+        pulserver.pypulseq.make_skipped_caipi_sampling : segmented blipped-CAIPI
+            plan built on this representation.
+        """
+        from .epi import build_from_relative_shifts
+
+        return build_from_relative_shifts(starts, shifts, shape=shape)
+
+    def to_rotations(self, *, reference=(1.0, 0.0, 0.0)) -> np.ndarray:
+        """Convert this pattern's support into per-shot rotation matrices.
+
+        The bridge from a non-Cartesian plan to the sequence: the readout
+        designs **one** base waveform along ``reference``, and each entry of
+        ``support`` replays it under the matrix returned here. A one-column
+        support is read as in-plane spoke angles (rotation about ``z``); a
+        three-column support as unit directions, each mapped by the shortest
+        rotation taking ``reference`` onto it (Rodrigues). Antipodal
+        directions get a well-defined 180-degree rotation rather than a
+        singular matrix.
+
+        Feed the result to :func:`pulserver.pypulseq.make_rotation`, or pass a
+        row to a readout module's ``rotation=`` argument.
+
+        Parameters
+        ----------
+        reference : array_like, optional
+            Direction the base waveform was designed along (default ``+x``).
+            Ignored for angle-valued support.
+
+        Returns
+        -------
+        numpy.ndarray
+            Shape ``(len(support), 3, 3)`` rotation matrices.
+
+        Raises
+        ------
+        ValueError
+            If ``support`` has neither one nor three columns.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> import pulserver.pypulseq as pp
+        >>> rotations = pp.make_golden_means_3d_sampling(4).to_rotations()
+        >>> rotations.shape
+        (4, 3, 3)
+        >>> angles = pp.make_radial_sampling(4).to_rotations()
+        >>> np.round(angles[1] @ np.array([1.0, 0.0, 0.0]), 6)
+        array([0.707107, 0.707107, 0.      ])
+
+        Rotate a 3D radial base waveform shot by shot::
+
+            for rotation in pp.make_golden_means_3d_sampling(1000).to_rotations():
+                readout(seq, rotation=rotation)
+        """
+        from .noncartesian import angles_to_rotations, directions_to_rotations
+
+        if self.support.shape[1] == 1:
+            return angles_to_rotations(self.support[:, 0])
+        if self.support.shape[1] == 3:
+            return directions_to_rotations(self.support, reference=reference)
+        raise ValueError("to_rotations needs a support of spoke angles (1 column) or directions (3 columns)")
 
     @property
     def n_shots(self) -> int:

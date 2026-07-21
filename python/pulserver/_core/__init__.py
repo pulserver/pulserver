@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from ._base import PulseqSequence
 from ._cli import run_cli
-from ._module import Module
+from ._module import SequenceModule
 from ._params import (
     BoolKey,
     BoolParam,
@@ -52,7 +52,7 @@ Sequence = PulseqSequence
 __all__ = [
     "PulseqSequence",
     "Sequence",
-    "Module",
+    "SequenceModule",
     "run_cli",
     "UIParam",
     "Validate",

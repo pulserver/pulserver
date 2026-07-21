@@ -249,7 +249,7 @@ class GrePulseqSequence(Sequence):
                 ),
             }
 
-        sampled_pe = sampling.sampled_lines(ny_pe, ry, acs_lines)
+        sampled_pe = sampling.calc_sampled_lines(ny_pe, ry, acs_lines)
         duration_s = tr_s * float(len(sampled_pe))
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
@@ -308,7 +308,7 @@ class GrePulseqSequence(Sequence):
         delta_k_pe = 1.0 / fov_pe_m
         phase_areas = (np.arange(ny_pe) - 0.5 * ny_pe) * delta_k_pe
         max_pe_area = float(np.max(np.abs(phase_areas)))
-        sampled_pe = sampling.sampled_lines(ny_pe, ry, acs_lines)
+        sampled_pe = sampling.calc_sampled_lines(ny_pe, ry, acs_lines)
         slice_step_m = slice_spacing_m if nslices > 1 else 0.0
         rf_phase_deg = 0.0
         rf_phase_inc_deg = 0.0

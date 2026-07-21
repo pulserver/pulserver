@@ -41,7 +41,7 @@ def random_order(n: int, seed: int = 0) -> np.ndarray:
     return np.random.default_rng(seed).permutation(_count(n))
 
 
-def outer_product(**dimensions) -> tuple[dict[str, object], ...]:
+def make_outer_product(**dimensions) -> tuple[dict[str, object], ...]:
     """Enumerate every combination of the named outer loop dimensions.
 
     The loop nest a plugin writes by hand — frames, slice groups, averages —
@@ -61,8 +61,8 @@ def outer_product(**dimensions) -> tuple[dict[str, object], ...]:
 
     Examples
     --------
-    >>> from pulserver.pypulseq import outer_product
-    >>> combinations = outer_product(frame=range(2), slice_index=range(3))
+    >>> from pulserver.pypulseq import make_outer_product
+    >>> combinations = make_outer_product(frame=range(2), slice_index=range(3))
     >>> len(combinations)
     6
     >>> combinations[0]
@@ -72,7 +72,7 @@ def outer_product(**dimensions) -> tuple[dict[str, object], ...]:
 
     Drive a sequence loop directly with it::
 
-        for outer in outer_product(frame=range(20), group=slice_groups(8, 3e-3)):
+        for outer in make_outer_product(frame=range(20), group=make_slice_groups(8, 3e-3)):
             readout(seq, **outer)
     """
     names = tuple(dimensions)
@@ -80,7 +80,7 @@ def outer_product(**dimensions) -> tuple[dict[str, object], ...]:
     return tuple(dict(zip(names, combination, strict=True)) for combination in product(*values))
 
 
-def chunk_indices(indices: list[int], size: int) -> list[list[int]]:
+def calc_chunk_indices(indices: list[int], size: int) -> list[list[int]]:
     """Split a flat index list into consecutive chunks of at most ``size``.
 
     The generic shot/echo-train splitter: ``indices`` is the acquisition order
@@ -101,20 +101,20 @@ def chunk_indices(indices: list[int], size: int) -> list[list[int]]:
 
     Examples
     --------
-    >>> from pulserver.pypulseq import chunk_indices
-    >>> chunk_indices([0, 1, 2, 3, 4], 2)
+    >>> from pulserver.pypulseq import calc_chunk_indices
+    >>> calc_chunk_indices([0, 1, 2, 3, 4], 2)
     [[0, 1], [2, 3], [4]]
     """
     size = max(1, int(size))
     return [indices[i : i + size] for i in range(0, len(indices), size)]
 
 
-def linear_order(n: int, etl: int) -> list[list[int]]:
+def make_linear_order(n: int, etl: int) -> list[list[int]]:
     """Split ``n`` sequential views into echo trains of length ``etl``.
 
     The simplest FSE/segmented ordering: views are acquired in increasing
     index order and cut into consecutive trains. Equivalent to
-    ``chunk_indices(range(n), etl)``.
+    ``calc_chunk_indices(range(n), etl)``.
 
     Parameters
     ----------
@@ -130,18 +130,18 @@ def linear_order(n: int, etl: int) -> list[list[int]]:
 
     Examples
     --------
-    >>> from pulserver.pypulseq import linear_order
-    >>> linear_order(6, 3)
+    >>> from pulserver.pypulseq import make_linear_order
+    >>> make_linear_order(6, 3)
     [[0, 1, 2], [3, 4, 5]]
 
     See Also
     --------
-    fse_linear_order : same idea over a 2D (ky, kz) point set.
+    make_fse_linear_order : same idea over a 2D (ky, kz) point set.
     """
-    return chunk_indices(list(range(n)), etl)
+    return calc_chunk_indices(list(range(n)), etl)
 
 
-def outer_inner_order(outer_indices: list[int], inner_len: int) -> list[list[tuple[int, int]]]:
+def make_outer_inner_order(outer_indices: list[int], inner_len: int) -> list[list[tuple[int, int]]]:
     """Pair every outer index with the full inner range, as one shot each.
 
     Used when the inner loop is played out in full within one shot — an MPRAGE
@@ -162,8 +162,8 @@ def outer_inner_order(outer_indices: list[int], inner_len: int) -> list[list[tup
 
     Examples
     --------
-    >>> from pulserver.pypulseq import outer_inner_order
-    >>> outer_inner_order([5, 6], 2)
+    >>> from pulserver.pypulseq import make_outer_inner_order
+    >>> make_outer_inner_order([5, 6], 2)
     [[(5, 0), (5, 1)], [(6, 0), (6, 1)]]
     """
     return [[(outer, inner) for inner in range(inner_len)] for outer in outer_indices]

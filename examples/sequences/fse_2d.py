@@ -227,7 +227,7 @@ class Fse2DPulseqSequence(Sequence):
 
 
 def _n_shots(cfg: _Config) -> int:
-    sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, 0)
+    sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
     return len(range(0, len(sampled_pe), cfg.etl))
 
 
@@ -392,7 +392,7 @@ def _build_legacy(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
     delta_k_pe = 1.0 / cfg.fov_pe_m
     phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
     max_pe_area = float(np.max(np.abs(phase_areas)))
-    sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, 0)
+    sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
     shot_starts = list(range(0, len(sampled_pe), cfg.etl))
 
     refocus_flip_schedule = readout.build_refocus_flip_schedule(cfg.etl, cfg.refocus_flip_deg, cfg.refocus_variable)
@@ -570,7 +570,7 @@ def _build_surgery(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
     delta_k_pe = 1.0 / cfg.fov_pe_m
     phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
     max_pe_area = float(np.max(np.abs(phase_areas)))
-    sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, 0)
+    sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
     shot_starts = list(range(0, len(sampled_pe), cfg.etl))
 
     refocus_flip_schedule = readout.build_refocus_flip_schedule(cfg.etl, cfg.refocus_flip_deg, cfg.refocus_variable)

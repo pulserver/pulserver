@@ -52,11 +52,6 @@ class Sequence(pp.Sequence):
     use_block_cache : bool, optional
         Kept for upstream compatibility; off by default.
 
-    Attributes
-    ----------
-    custom_labels : dict
-        User-defined labels seen so far, mapped to their extension IDs.
-
     Examples
     --------
     >>> import pulserver.pypulseq as pp

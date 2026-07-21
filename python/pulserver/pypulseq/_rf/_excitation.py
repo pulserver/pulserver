@@ -69,20 +69,17 @@ def make_hard_pulse(flip_angle: float, *, system: pp.Opts | None = None, **kwarg
 
         pulse(seq, phase_offset_rad=np.pi)
 
+    A non-selective pulse has no profile to show but its envelope:
+
     .. plot::
        :include-source: false
 
        import numpy as np
-       import matplotlib.pyplot as plt
        import pulserver.pypulseq as pp
-
-       pulse = pp.make_hard_pulse(np.deg2rad(90), duration=0.5e-3)
-       rf = pulse.rf
-       plt.figure(figsize=(6, 3))
-       plt.plot(rf.t * 1e3, np.abs(rf.signal))
-       plt.xlabel("t [ms]"); plt.ylabel("|B1| [Hz]")
-       plt.title("make_hard_pulse(90 deg, 0.5 ms)")
-       plt.tight_layout()
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_figure(pp.make_hard_pulse(np.deg2rad(90), duration=5e-4, system=system),
+                 "none", title="make_hard_pulse(90 deg, 0.5 ms)")
 
     See Also
     --------
@@ -133,20 +130,17 @@ def make_adiabatic_pulse(
     >>> pulse.rf.signal.shape
     (1024,)
 
+    Above the adiabatic threshold the inversion is flat across a wide off-resonance band, and stays flat as B1 changes:
+
     .. plot::
        :include-source: false
 
        import numpy as np
-       import matplotlib.pyplot as plt
        import pulserver.pypulseq as pp
-
-       rf = pp.make_adiabatic_pulse("hypsec", duration=10.24e-3, dwell=10e-6).rf
-       fig, (a, b) = plt.subplots(2, 1, figsize=(6, 4.5), sharex=True)
-       a.plot(rf.t * 1e3, np.abs(rf.signal))
-       a.set_ylabel("|B1| [Hz]"); a.set_title("hyperbolic secant, 10.24 ms")
-       b.plot(rf.t * 1e3, np.unwrap(np.angle(rf.signal)))
-       b.set_xlabel("t [ms]"); b.set_ylabel("phase [rad]")
-       fig.tight_layout()
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_figure(pp.make_adiabatic_pulse("hypsec", system=system),
+                 "frequency", title="adiabatic hyperbolic secant", extent=2000)
 
     See Also
     --------
@@ -160,7 +154,7 @@ def make_adiabatic_pulse(
     return RfPulse(system, result)
 
 
-def make_sigpy_pulse(
+def make_slr_pulse(
     flip_angle: float,
     *,
     duration: float = DEFAULT_DURATION,
@@ -196,7 +190,8 @@ def make_sigpy_pulse(
     (90-degree excitation), ``"se"`` (spin-echo refocusing), ``"inv"``
     (inversion), ``"sat"`` (saturation), or ``"st"`` (small-tip). Using the
     wrong one gives a visibly degraded profile at large flip angles.
-    ``make_slr_pulse`` is the same function under its design-language name.
+    ``make_sigpy_pulse`` remains as an alias for the pypulseq factory this
+    replaces; new code should use this name.
 
     Parameters
     ----------
@@ -261,27 +256,18 @@ def make_sigpy_pulse(
     >>> pulse.rf.signal.shape
     (2000,)
 
+    The pulse, and the profile a Bloch simulation of it produces:
+
     .. plot::
        :include-source: false
 
        import numpy as np
-       import matplotlib.pyplot as plt
        import pulserver.pypulseq as pp
-
-       fig, (a, b) = plt.subplots(1, 2, figsize=(9, 3.4))
-       for tbw in (2.0, 4.0, 8.0):
-           rf = pp.make_slr_pulse(np.deg2rad(90), duration=2e-3,
-                                  time_bw_product=tbw, pulse_type="ex").rf
-           a.plot(rf.t * 1e3, np.real(rf.signal), label=f"TBW={tbw:g}")
-           n = 4096
-           profile = np.abs(np.fft.fftshift(np.fft.fft(rf.signal, n)))
-           freq = np.fft.fftshift(np.fft.fftfreq(n, rf.t[1] - rf.t[0]))
-           b.plot(freq, profile / profile.max(), label=f"TBW={tbw:g}")
-       a.set_xlabel("t [ms]"); a.set_ylabel("B1 [Hz]"); a.legend(fontsize=8)
-       a.set_title("envelope")
-       b.set_xlim(-6000, 6000); b.set_xlabel("frequency [Hz]")
-       b.set_ylabel("normalized profile"); b.set_title("small-tip profile")
-       fig.tight_layout()
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_figure(pp.make_slr_pulse(np.deg2rad(90), slice_thickness=5e-3,
+                                   return_gz=True, system=system),
+                 "slice", title="SLR 90 deg, 5 mm, TBW 4")
 
     See Also
     --------
@@ -335,9 +321,8 @@ def make_sigpy_pulse(
     gz_reph = pp.make_trapezoid(channel="z", area=rephase_area, system=system)
     return RfPulse(system, rf, (gz,), (gz_reph,))
 
-
-# The user-facing SLR name is intentionally the same implementation object.
-make_slr_pulse = make_sigpy_pulse
+# Back-compatible name for pypulseq's former SigPy-backed factory.
+make_sigpy_pulse = make_slr_pulse
 
 
 def make_frequency_selective_pulse(
@@ -405,26 +390,17 @@ def make_frequency_selective_pulse(
     >>> pulse.rf.freq_offset
     -440.0
 
+    With no gradient the same envelope selects a band of off-resonance instead of a band of space:
+
     .. plot::
        :include-source: false
 
        import numpy as np
-       import matplotlib.pyplot as plt
        import pulserver.pypulseq as pp
-
-       rf = pp.make_frequency_selective_pulse(
-           np.deg2rad(90), bandwidth=250.0, freq_offset=-440.0).rf
-       n = 8192
-       dt = rf.t[1] - rf.t[0]
-       profile = np.abs(np.fft.fftshift(np.fft.fft(rf.signal, n)))
-       freq = np.fft.fftshift(np.fft.fftfreq(n, dt)) + rf.freq_offset
-       plt.figure(figsize=(6, 3))
-       plt.plot(freq, profile / profile.max())
-       plt.axvline(0.0, color="0.7", lw=1, label="water")
-       plt.xlim(-1200, 600); plt.xlabel("frequency [Hz]")
-       plt.ylabel("normalized profile")
-       plt.title("250 Hz band at -440 Hz (fat, 3 T)")
-       plt.legend(fontsize=8); plt.tight_layout()
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_figure(pp.make_frequency_selective_pulse(np.deg2rad(90), 500.0, system=system),
+                 "frequency", title="frequency-selective 90 deg, 500 Hz", extent=1200)
 
     See Also
     --------
@@ -508,32 +484,25 @@ def make_slice_selective_pulse(
 
         pulse(seq, freq_offset_hz=pulse.gradients[0].amplitude * position_m)
 
+    Time-bandwidth product sets the sharpness of the slice edges — the same nominal thickness, three different profiles:
+
     .. plot::
        :include-source: false
 
        import numpy as np
-       import matplotlib.pyplot as plt
        import pulserver.pypulseq as pp
-
-       pulse = pp.make_slice_selective_pulse(np.deg2rad(30), 5e-3)
-       rf, gz, gzr = pulse.rf, pulse.gradients[0], pulse.rephasers[0]
-       fig, (a, b) = plt.subplots(2, 1, figsize=(6, 4.2), sharex=True)
-       a.plot((rf.delay + rf.t) * 1e3, np.real(rf.signal))
-       a.set_ylabel("B1 [Hz]"); a.set_title("slice-selective excitation")
-       t_gz = np.array([0, gz.rise_time, gz.rise_time + gz.flat_time,
-                        gz.rise_time + gz.flat_time + gz.fall_time])
-       b.plot(t_gz * 1e3, [0, gz.amplitude, gz.amplitude, 0], label="Gz select")
-       t0 = t_gz[-1]
-       t_gr = t0 + np.array([0, gzr.rise_time, gzr.rise_time + gzr.flat_time,
-                             gzr.rise_time + gzr.flat_time + gzr.fall_time])
-       b.plot(t_gr * 1e3, [0, gzr.amplitude, gzr.amplitude, 0], label="Gz rephase")
-       b.set_xlabel("t [ms]"); b.set_ylabel("G [Hz/m]"); b.legend(fontsize=8)
-       fig.tight_layout()
+       from _figures import rf_comparison
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_comparison(
+           [(f"TBW = {tbw:g}", pp.make_slice_selective_pulse(
+               np.deg2rad(90), 5e-3, time_bw_product=tbw, system=system))
+            for tbw in (2.0, 4.0, 8.0)],
+           "slice", extent=0.012, title="make_slice_selective_pulse(90 deg, 5 mm)")
 
     See Also
     --------
     make_slr_pulse : the underlying pulse design.
-    slice_groups : plan the slice loop and its frequency offsets.
+    make_slice_groups : plan the slice loop and its frequency offsets.
     """
     return make_slr_pulse(
         flip_angle,
@@ -601,6 +570,18 @@ def make_refocusing_pulse(
 
         readout = pp.make_fse_readout(system, fov, matrix, 32, refocusing)
         flips = pp.make_traps_schedule(32, np.deg2rad(120))
+
+    A refocusing pulse is judged by how completely it inverts across the slice, not by its excitation profile:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_figure(pp.make_refocusing_pulse(slice_thickness=5e-3, system=system),
+                 "slice", title="refocusing 180 deg, 5 mm")
 
     See Also
     --------
@@ -671,22 +652,20 @@ def make_inversion_pulse(
     >>> selective.gradients[0].channel
     'z'
 
+    Adiabatic and conventional inversion, over the same slice:
+
     .. plot::
        :include-source: false
 
        import numpy as np
-       import matplotlib.pyplot as plt
        import pulserver.pypulseq as pp
-
-       fig, axes = plt.subplots(1, 2, figsize=(9, 3.2))
-       for ax, adiabatic in zip(axes, (True, False)):
-           rf = pp.make_inversion_pulse(adiabatic=adiabatic).rf
-           ax.plot(rf.t * 1e3, np.abs(rf.signal), label="|B1|")
-           ax.plot(rf.t * 1e3, np.real(rf.signal), lw=0.7, label="Re B1")
-           ax.set_xlabel("t [ms]"); ax.set_ylabel("B1 [Hz]")
-           ax.set_title("adiabatic (hypsec)" if adiabatic else "SLR inv")
-           ax.legend(fontsize=8)
-       fig.tight_layout()
+       from _figures import rf_comparison
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_comparison(
+           [("adiabatic", pp.make_inversion_pulse(slice_thickness=5e-3, system=system)),
+            ("SLR", pp.make_inversion_pulse(adiabatic=False, slice_thickness=5e-3,
+                                            system=system))],
+           "slice", extent=0.015, title="make_inversion_pulse")
 
     See Also
     --------

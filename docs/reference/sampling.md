@@ -14,10 +14,11 @@ Outer-loop labels such as slice group and frame remain with the sequence loop.
 
 ```python
 import numpy as np
-from pulserver.pypulseq import from_mask, random_mask
+from pulserver import SamplingPattern
+from pulserver.pypulseq import make_random_sampling
 
-mask = random_mask((128, 64), 4, calib=(16, 8), seed=0)
-fse = from_mask(mask, train_length=16, ordering="radial")
+mask = make_random_sampling((128, 64), 4, calib=(16, 8), seed=0)
+fse = SamplingPattern.from_mask(mask, train_length=16, ordering="radial")
 
 # Absolute (LIN, PAR) coordinates for echo train 3.
 coordinates = fse[3]
@@ -30,9 +31,9 @@ not require Numba.
 ## EPI and other relative-shift trains
 
 ```python
-from pulserver.pypulseq import from_relative_shifts
+from pulserver import SamplingPattern
 
-plan = from_relative_shifts(
+plan = SamplingPattern.from_relative_shifts(
     starts=[[8, 2], [9, 2]],
     shifts=[[[0, 0], [2, 1], [4, 2]],
             [[0, 0], [2, -1], [4, -2]]],
@@ -45,24 +46,28 @@ consecutive_blips = plan.increments(0)
 ```
 
 Configure an EPI readout with `relative_gradient_positions`, then pass
-`absolute_labels` to `set_state(labels=...)`. `skipped_caipi` constructs the
-segmented blipped-CAIPI lattice. `from_relative_shifts` is also the extension
+`absolute_labels` to `set_state(labels=...)`. `make_skipped_caipi_sampling` constructs the
+segmented blipped-CAIPI lattice. `SamplingPattern.from_relative_shifts` is also the extension
 point for reconstruction-specific EPTI and zigzag schedules; the package does
 not embed a reconstruction optimizer.
 
 ## Non-Cartesian tilts and segmentation
 
 ```python
-from pulserver.pypulseq import directions_to_rotations, golden_means_3d, radial_2d, spiral_phyllotaxis
+from pulserver.pypulseq import (
+    make_golden_means_3d_sampling,
+    make_radial_sampling,
+    make_spiral_phyllotaxis_sampling,
+)
 
-radial = radial_2d(1000, scheme="tiny_golden", tiny_index=2)
-raga = radial_2d(
+radial = make_radial_sampling(1000, scheme="tiny_golden", tiny_index=2)
+raga = make_radial_sampling(
     1000, scheme="raga", tiny_index=1, approximation_order=13
 )
-sphere = golden_means_3d(2000, segment_length=32)
-phyllotaxis = spiral_phyllotaxis(2584, 34)
+sphere = make_golden_means_3d_sampling(2000, segment_length=32)
+phyllotaxis = make_spiral_phyllotaxis_sampling(2584, 34)
 
-rotations = directions_to_rotations(sphere[0])
+rotations = sphere.to_rotations()
 ```
 
 The order tuple is the convenient continuous-gradient segment boundary. RAGA
@@ -72,18 +77,18 @@ temporal index order.
 ## Slice order, SMS, and dynamic outer dimensions
 
 ```python
-from pulserver.pypulseq import outer_product, slice_groups
+from pulserver.pypulseq import make_outer_product, make_slice_groups
 
-groups = slice_groups(
+groups = make_slice_groups(
     48, spacing_m=3e-3, order="interleaved", sms_factor=3
 )
 offsets_hz = groups[0].frequency_offsets_hz(gradient_hz_per_m=42_000)
 
-outer = outer_product(frame=range(20), slice_group=groups)
+outer = make_outer_product(frame=range(20), slice_group=groups)
 ```
 
 Each SMS `SliceGroup` retains its logical group index, physical slice indices,
-positions, and per-band frequency offsets. The first `outer_product` dimension
+positions, and per-band frequency offsets. The first `make_outer_product` dimension
 changes slowest and the last changes fastest.
 
 ## References

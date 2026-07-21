@@ -26,6 +26,7 @@ Requires the optional `pypulseq` dependency (same tier as
 | `pulserver.pypulseq.make_*_schedule` | RF phase, phase-cycling, and refocusing-flip schedules. |
 | [Flat sampling helpers](sampling.md) | Structured mask/tilt support and acquisition ordering for Cartesian, EPI, radial/spherical non-Cartesian, slice, and SMS sampling. |
 | `pulserver.run_cli` | Declarative offline CLI shared by every plugin. |
+| `pulserver.SequenceModule`, `pulserver.SamplingPattern`, `pulserver.SliceGroup` | The abstract types those factories return. |
 
 The corresponding implementation modules under `pulserver.pypulseq` use
 leading underscores and are not public import locations.
@@ -42,13 +43,13 @@ segmented GRE alike. They take phase-encode locations in the (ky, kz) plane
 and return a list of shots (each an ordered list of view indices; the
 echo/segment index is the position within the shot):
 
-- `linear_order`, `outer_inner_order` — the sequential nested-loop orderings
+- `make_linear_order`, `make_outer_inner_order` — the sequential nested-loop orderings
   used by the current FSE/MPRAGE plugins.
-- `fse_linear_order` — raster (kz-major) linear reordering.
-- `fse_radial_order` — center-out radial (wedge) reordering.
-- `fse_radial_adaptive_order` — adaptive radial reordering with per-shot
+- `make_fse_linear_order` — raster (kz-major) linear reordering.
+- `make_fse_radial_order` — center-out radial (wedge) reordering.
+- `make_fse_radial_adaptive_order` — adaptive radial reordering with per-shot
   parameter support.
-- `fse_shuffling_order` — randomly shuffled (T2-Shuffling) reordering with
+- `make_fse_shuffling_order` — randomly shuffled (T2-Shuffling) reordering with
   spatial clustering to limit gradient switching.
 
 References: Buonincontri et al., *Doubling the repetition time without paying
@@ -63,7 +64,7 @@ random shuffling.
 Beyond the slice-selective, hard, and adiabatic builders,
 `make_frequency_selective_pulse` creates spectrally selective pulses and the
 spatial factories accept existing or generated multidimensional trajectories.
-All return the common `pulserver.Module` protocol.
+All return the common `pulserver.SequenceModule` protocol.
 
 ## API documentation rendering
 

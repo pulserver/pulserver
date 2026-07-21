@@ -8,7 +8,7 @@ from abc import abstractmethod
 from collections.abc import Iterable
 from typing import Any, TypeVar
 
-from ..._core._module import Block, Module
+from ..._core._module import Block, SequenceModule
 from .._rotation import normalize_rotation
 
 _State = TypeVar("_State")
@@ -27,7 +27,7 @@ class _BlockCollector:
             self.blocks.append(block)
 
 
-class Readout(Module):
+class Readout(SequenceModule):
     """A stateful readout exposed as an immutable sequence of Pulseq blocks.
 
     Concrete readouts replace their complete dynamic state through

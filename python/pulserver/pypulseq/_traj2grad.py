@@ -77,14 +77,12 @@ def traj2grad(
        import numpy as np
        import matplotlib.pyplot as plt
        import pulserver.pypulseq as pp
-
        theta = np.linspace(0, 8 * np.pi, 2000)
        radius = np.linspace(0, 250.0, 2000)
        traj = np.stack([radius * np.cos(theta), radius * np.sin(theta)], axis=-1)
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
        g = pp.traj2grad(traj, system)
        t = np.arange(len(g)) * system.grad_raster_time * 1e3
-
        fig, (a, b) = plt.subplots(1, 2, figsize=(9, 3.6))
        a.plot(traj[:, 0], traj[:, 1], lw=1)
        a.set_aspect("equal"); a.set_xlabel("kx [1/m]"); a.set_ylabel("ky [1/m]")
@@ -96,7 +94,7 @@ def traj2grad(
 
     See Also
     --------
-    pulserver.pypulseq.arbgrad : analytic spiral/rosette base waveforms.
+    make_spiral_readout, make_rosette_readout : ready-made analytic base waveforms.
     make_arbitrary_grad : wrap one axis of the result as a Pulseq event.
     """
     return arbgrad.traj2grad(

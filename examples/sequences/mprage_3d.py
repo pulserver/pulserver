@@ -179,9 +179,9 @@ class Mprage3DPulseqSequence(Sequence):
                 "info": "TE, TR, or TI infeasible for the requested gradients/ETL",
             }
 
-        sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
-        n_segments = len(sampling.chunk_indices(sampled_pe, cfg.etl))
+        sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
+        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+        n_segments = len(sampling.calc_chunk_indices(sampled_pe, cfg.etl))
         shot_s = timing["shot_s"]
         duration_s = shot_s * n_segments * len(sampled_par)
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -213,11 +213,11 @@ class Mprage3DPulseqSequence(Sequence):
         delta_k_pe = 1.0 / cfg.fov_pe_m
         phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
         max_pe_area = float(np.max(np.abs(phase_areas)))
-        sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        segments = sampling.chunk_indices(sampled_pe, cfg.etl)
+        sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
+        segments = sampling.calc_chunk_indices(sampled_pe, cfg.etl)
 
         par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-        sampled_par = sampling.sampled_lines(cfg.npar, cfg.rz, 0)
+        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
 
         for par in sampled_par:
             z_scale = par_areas[par] / max_par_area if max_par_area > 0.0 else 0.0

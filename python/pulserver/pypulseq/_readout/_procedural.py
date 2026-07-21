@@ -684,19 +684,6 @@ def unbalanced_line(
     ...     pp.Opts(), 0.22, 64, bandwidth_hz_px=125000.0, slice_thickness_m=5e-3)
     >>> ro["adc"].num_samples
     64
-
-    .. plot::
-       :include-source: false
-
-       import numpy as np
-       import pypulseq as pp
-       from pulserver.pypulseq import _readout as readout
-       import matplotlib.pyplot as plt
-       ro = readout.unbalanced_line(pp.Opts(), 0.22, 64,
-                                    bandwidth_hz_px=125000.0, slice_thickness_m=5e-3)
-       g = ro["gx_spoil"]
-       plt.plot(g.tt * 1e3, g.waveform)
-       plt.xlabel("t [ms]"); plt.ylabel("G [Hz/m]")
     """
     delta_k_ro = 1.0 / fov_m
     readout_area = nx * delta_k_ro
@@ -797,19 +784,6 @@ def spiral(opts: pp.Opts, fov_m: float, n_pix: int, *, variant: str = "forward")
     >>> ro = readout.spiral(opts, 0.22, 64, variant="in_out")
     >>> ro["n_samples"] > 0
     True
-
-    .. plot::
-       :include-source: false
-
-       import numpy as np
-       import pypulseq as pp
-       from pulserver.pypulseq import _readout as readout
-       import matplotlib.pyplot as plt
-       opts = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-       ro = readout.spiral(opts, 0.22, 64, variant="in_out")
-       k = np.cumsum(np.stack([ro["gx"].waveform, ro["gy"].waveform], 1), 0)
-       plt.plot(k[:, 0], k[:, 1]); plt.axis("equal")
-       plt.xlabel("kx (a.u.)"); plt.ylabel("ky (a.u.)")
     """
     k0, grad_si_xy, n_shots = build_base_waveform(opts, TRAJECTORY_SPIRAL, fov_m, n_pix)
     waveform = _spiral_variant_waveform(opts, grad_si_xy, variant)
@@ -919,23 +893,6 @@ def wave_gradients(
     ...                                axes=("y", "z"))
     >>> len(waves)
     2
-
-    .. plot::
-       :include-source: false
-
-       import numpy as np
-       import pypulseq as pp
-       from pulserver.pypulseq import _readout as readout
-       import matplotlib.pyplot as plt
-       opts = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-       ro = readout.line(opts, 0.22, 64, bandwidth_hz_px=125000.0)
-       gx = ro["gx_echo"]
-       gy, gz = readout.wave_gradients(opts, gx.flat_time, gx.rise_time, gx.fall_time,
-                                       axes=("y", "z"))
-       t = np.arange(gy.waveform.size) * opts.grad_raster_time * 1e3
-       plt.plot(t, gy.waveform, label="sine")
-       plt.plot(t, gz.waveform, label="cosine")
-       plt.legend(); plt.xlabel("t [ms]"); plt.ylabel("G [Hz/m]")
     """
     if n_cycles < 1:
         raise ValueError("n_cycles must be >= 1")

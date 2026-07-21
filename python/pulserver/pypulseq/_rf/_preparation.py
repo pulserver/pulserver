@@ -103,6 +103,18 @@ def make_fat_saturation_pulse(
         fatsat(seq)
         excitation(seq)
 
+    Saturation is confined to the fat resonance and leaves water untouched:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_figure(pp.make_fat_saturation_pulse(b0=3.0, voxel_size=1e-3, system=system),
+                 "frequency", title="fat saturation at 3 T", extent=800)
+
     See Also
     --------
     make_frequency_selective_pulse : the underlying spectral pulse.
@@ -190,6 +202,18 @@ def make_mt_pulse(
         for scale in (1.0, 0.0):
             mt(seq, amplitude_scale=scale)
 
+    The saturation band sits far off resonance, where only the bound pool absorbs:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_figure(pp.make_mt_pulse(voxel_size=1e-3, system=system),
+                 "frequency", title="MT saturation, -1500 Hz offset", extent=3000)
+
     See Also
     --------
     make_ihmt_pulse : dual-offset variant isolating the inhomogeneous pool.
@@ -275,6 +299,16 @@ def make_ihmt_pulse(
     (5, 4)
     >>> ihmt.rf_positive.freq_offset, ihmt.rf_negative.freq_offset
     (7000.0, -7000.0)
+
+    The module's blocks, as they are played:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_ihmt_pulse(voxel_size=1e-3, system=system).plot()
 
     See Also
     --------
@@ -364,19 +398,17 @@ def make_bloch_siegert_pulse(
             pp.make_bloch_siegert_pulse(freq_offset=offset)(seq)
             readout(seq)
 
+    The off-resonant pulse that imprints the B1-dependent phase shift:
+
     .. plot::
        :include-source: false
 
        import numpy as np
-       import matplotlib.pyplot as plt
        import pulserver.pypulseq as pp
-
-       rf = pp.make_bloch_siegert_pulse().rf
-       plt.figure(figsize=(6, 3))
-       plt.plot(rf.t * 1e3, np.abs(rf.signal))
-       plt.xlabel("t [ms]"); plt.ylabel("|B1| [Hz]")
-       plt.title("Fermi envelope (8 ms, 80% flat)")
-       plt.tight_layout()
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_figure(pp.make_bloch_siegert_pulse(system=system),
+                 "none", title="Bloch-Siegert pulse, +4 kHz")
 
     References
     ----------
@@ -545,6 +577,16 @@ def make_t2prep_pulse(
         for te in (0.0, 30e-3, 60e-3, 90e-3):
             pp.make_t2prep_pulse(te, voxel_size=2e-3)(seq)
             readout_train(seq)
+
+    The module's blocks, as they are played:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_t2prep_pulse(50e-3, voxel_size=1e-3, system=system).plot()
 
     See Also
     --------
@@ -744,7 +786,7 @@ def make_diffusion_prep(
     it rather than by redesigning:
 
     - **direction** — attach a rotation extension to the gradient blocks
-      (:func:`directions_to_rotations`, then ``set_state(rotation=...)``);
+      (:meth:`~pulserver.SamplingPattern.to_rotations`, then ``set_state(rotation=...)``);
     - **b-value** — :meth:`DiffusionPrepPulse.gradient_for_b_value`, or
       ``set_state(b_value=...)``, which scales the gradient by
       ``sqrt(b / b_design)``.
@@ -793,13 +835,23 @@ def make_diffusion_prep(
 
     Sweep directions and b-values from the single design::
 
-        directions = pp.golden_means_3d(6).support
-        for rotation in pp.directions_to_rotations(directions):
+        directions = pp.make_golden_means_3d_sampling(6).support
+        for rotation in pp.SamplingPattern(directions, (range(len(directions)),)).to_rotations():
             prep(seq, b_value=250.0, rotation=rotation)
+
+    The module's blocks, as they are played:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       pp.make_diffusion_prep(1000.0, voxel_size=2e-3, system=system).plot()
 
     See Also
     --------
-    directions_to_rotations : diffusion-direction rotation matrices.
+    pulserver.SamplingPattern.to_rotations : diffusion-direction rotation matrices.
     """
     system = pp.Opts.default if system is None else system
     if b_value <= 0 or gradient_duration <= 0 or gradient_separation <= gradient_duration:

@@ -186,8 +186,8 @@ class Mprage2DPulseqSequence(Sequence):
                 "info": "TE, TR, or TI infeasible for the requested gradients/ETL",
             }
 
-        sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        n_segments = len(sampling.chunk_indices(sampled_pe, cfg.etl))
+        sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
+        n_segments = len(sampling.calc_chunk_indices(sampled_pe, cfg.etl))
         shot_s = timing["shot_s"]
         duration_s = shot_s * n_segments * cfg.nslices
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -218,8 +218,8 @@ class Mprage2DPulseqSequence(Sequence):
         delta_k_pe = 1.0 / cfg.fov_pe_m
         phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
         max_pe_area = float(np.max(np.abs(phase_areas)))
-        sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        segments = sampling.chunk_indices(sampled_pe, cfg.etl)
+        sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
+        segments = sampling.calc_chunk_indices(sampled_pe, cfg.etl)
 
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
 

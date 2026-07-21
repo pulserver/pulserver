@@ -9,7 +9,7 @@ import pulserver
 import pulserver.pypulseq as pp
 import pypulseq as upstream
 import pytest
-from pulserver import Module
+from pulserver import SequenceModule
 from pulserver.pypulseq import (
     SamplingPattern,
     calc_adc_timing,
@@ -22,7 +22,7 @@ from pulserver.pypulseq import (
     make_rf_spoiling_schedule,
     make_spoiler,
     make_traps_schedule,
-    radial_2d,
+    make_radial_sampling,
 )
 
 
@@ -38,17 +38,41 @@ def test_enhanced_pypulseq_contains_complete_upstream_namespace() -> None:
 def test_root_exports_plugin_contract_without_core_imports() -> None:
     assert pulserver.Sequence is pulserver.PulseqSequence
     assert callable(pulserver.run_cli)
-    assert callable(pulserver.set_protocol_value)
-    assert isinstance(radial_2d(4), SamplingPattern)
+    assert callable(pulserver.validate_protocol)
+    assert isinstance(make_radial_sampling(4), SamplingPattern)
+
+
+def test_root_exports_the_abstract_authoring_types() -> None:
+    assert pulserver.SamplingPattern is SamplingPattern
+    assert pulserver.SequenceModule is SequenceModule
+    assert {"SamplingPattern", "SliceGroup", "SequenceModule"} <= set(pulserver.__all__)
+    assert {"SamplingPattern", "SliceGroup"}.isdisjoint(pp.__all__)
 
 
 def test_root_namespace_excludes_waveform_authoring_helpers() -> None:
-    leaked = {"make_hard_pulse", "make_crusher", "make_line_readout", "radial_2d", "SamplingPattern"}
+    leaked = {"make_hard_pulse", "make_crusher", "make_line_readout", "make_radial_sampling"}
     assert leaked.isdisjoint(pulserver.__all__)
     for name in leaked:
         with pytest.raises(AttributeError):
             getattr(pulserver, name)
         assert hasattr(pp, name)
+
+
+def test_protocol_helpers_kept_out_of_the_public_contract() -> None:
+    internal = {
+        "param_to_dict",
+        "dict_to_param",
+        "set_protocol_value",
+        "validate_protocol_entry",
+        "expected_param_kind",
+        "enum_options",
+    }
+    assert internal.isdisjoint(pulserver.__all__)
+
+
+def test_arbgrad_is_not_part_of_the_public_surface() -> None:
+    assert "arbgrad" not in pp.__all__
+    assert callable(pp.traj2grad)
 
 
 def test_implementation_namespaces_are_private() -> None:
@@ -65,9 +89,9 @@ def test_rf_and_readout_factories_return_only_common_module_protocol() -> None:
     pulse = make_hard_pulse(np.deg2rad(10), duration=1e-3, system=system)
     readout = make_line_readout(system, (0.22, 0.22), (32, 32), spoil_position="none")
 
-    assert isinstance(pulse, Module)
-    assert isinstance(readout, Module)
-    assert isinstance(readout.set_state(lin_idx=4), Module)
+    assert isinstance(pulse, SequenceModule)
+    assert isinstance(readout, SequenceModule)
+    assert isinstance(readout.set_state(lin_idx=4), SequenceModule)
 
 
 def test_gradient_helpers_use_physical_units_and_axes() -> None:

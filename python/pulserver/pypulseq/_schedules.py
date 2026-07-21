@@ -61,7 +61,6 @@ def make_rf_spoiling_schedule(
        import numpy as np
        import matplotlib.pyplot as plt
        from pulserver.pypulseq import make_rf_spoiling_schedule
-
        plt.figure(figsize=(6, 3))
        plt.plot(np.rad2deg(make_rf_spoiling_schedule(64)), marker="o", ms=3, lw=0.7)
        plt.xlabel("repetition"); plt.ylabel("RF phase [deg]")
@@ -180,7 +179,6 @@ def make_traps_schedule(
        import numpy as np
        import matplotlib.pyplot as plt
        from pulserver.pypulseq import make_traps_schedule
-
        plt.figure(figsize=(6, 3))
        for target in (60, 90, 120):
            flips = make_traps_schedule(32, np.deg2rad(target))

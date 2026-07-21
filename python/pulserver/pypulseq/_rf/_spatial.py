@@ -122,7 +122,7 @@ def make_spatially_selective_pulse(
 
     The trajectory is deliberately a parameter, not something this function
     designs: EPI paths come from pypulseq, spiral paths from
-    :mod:`pulserver.pypulseq.arbgrad`, and anything else from the caller.
+    :func:`traj2grad`, and anything else from the caller.
 
     Excitation k-space is the moment *remaining* after each sample, so a
     trajectory ending at the k-space origin is self-refocused
@@ -170,6 +170,21 @@ def make_spatially_selective_pulse(
     ... )
     >>> pulse.kspace.shape[1]
     2
+
+    The excited region in the plane the gradient traverses:
+
+    The RF envelope, the excitation k-space path it is played along, and the resulting in-plane profile:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_figure(pp.make_spiral_selective_pulse(np.deg2rad(30), 0.24, 24,
+                                                selective_size=0.05, system=system),
+                 "xy", title="small-tip 2D selective, 30 deg", extent=0.12)
 
     See Also
     --------
@@ -235,7 +250,7 @@ def make_spiral_selective_pulse(
     The usual 2D-selective choice: a spiral covers excitation k-space in a
     single, gradient-efficient shot, and ends at the origin so the pulse is
     self-refocused. The trajectory is designed at the system's slew and
-    gradient limits by :func:`pulserver.pypulseq.arbgrad.spiral`; the RF
+    gradient limits by the vendored spiral designer; the RF
     envelope then comes from :func:`make_spatially_selective_pulse`.
 
     Parameters
@@ -270,24 +285,18 @@ def make_spiral_selective_pulse(
     >>> len(pulse.gradients)
     2
 
+    A spiral excitation k-space path localises in both in-plane axes at once:
+
     .. plot::
        :include-source: false
 
        import numpy as np
-       import matplotlib.pyplot as plt
        import pulserver.pypulseq as pp
-
-       pulse = pp.make_spiral_selective_pulse(
-           np.deg2rad(30), fov=0.256, matrix=32, selective_size=0.04)
-       rf, k = pulse.rf, pulse.kspace
-       fig, (a, b) = plt.subplots(1, 2, figsize=(9, 3.6))
-       a.plot(k[:, 0], k[:, 1], lw=1)
-       a.set_xlabel("kx [1/m]"); a.set_ylabel("ky [1/m]")
-       a.set_aspect("equal"); a.set_title("excitation k-space")
-       b.plot(rf.t * 1e3, np.abs(rf.signal))
-       b.set_xlabel("t [ms]"); b.set_ylabel("|B1| [Hz]")
-       b.set_title("RF envelope")
-       fig.tight_layout()
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_figure(pp.make_spiral_selective_pulse(np.deg2rad(30), 0.24, 24,
+                                                selective_size=0.05, system=system),
+                 "xy", title="spiral selective, 30 deg, 50 mm spot", extent=0.12)
 
     See Also
     --------
@@ -364,6 +373,33 @@ def make_2d_selective_pulse(
     ... )
     >>> pulse.kspace.shape[1]
     2
+
+    The EPI excitation path gives a rectangular in-plane profile:
+
+    With ``gradient`` supplied the pulse follows the caller's excitation path instead of the designed spiral — here an EPI raster, whose blips resolve y while the fast axis stays unselective:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       amplitude, ramp, flat, n_lines = 5e-3, 8, 48, 9
+       lobe = np.concatenate([np.linspace(0, 1, ramp), np.ones(flat), np.linspace(1, 0, ramp)])
+       blip = np.concatenate([np.linspace(0, 1, 4), np.linspace(1, 0, 4)]) * amplitude * 0.6
+       gx, gy = [], []
+       for line in range(n_lines):
+           gx.append(lobe * amplitude * (1 if line % 2 == 0 else -1))
+           gy.append(np.zeros(len(lobe)))
+           if line < n_lines - 1:
+               gx.append(np.zeros(len(blip)))
+               gy.append(blip)
+       raster = np.stack([np.concatenate(gx), np.concatenate(gy)], axis=-1)
+       rf_figure(pp.make_2d_selective_pulse(np.deg2rad(30), (0.24, 0.24), (24, 24),
+                                            gradient=raster, selective_size=0.05,
+                                            system=system),
+                 "xy", title="2D selective on an EPI raster, 30 deg", extent=0.12)
 
     See Also
     --------
@@ -527,23 +563,18 @@ def make_spsp_pulse(
     >>> len(pulse.gradients), len(pulse.rephasers)
     (1, 1)
 
+    Selective in space *and* in frequency — the whole point of the design. Fat, several hundred Hz away, falls in a null:
+
     .. plot::
        :include-source: false
 
        import numpy as np
-       import matplotlib.pyplot as plt
        import pulserver.pypulseq as pp
-
-       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s")
-       pulse = pp.make_spsp_pulse(np.deg2rad(30), 10e-3, 300.0,
-                                  n_subpulses=12, system=system)
-       rf, gz = pulse.rf, pulse.gradients[0]
-       fig, (a, b) = plt.subplots(2, 1, figsize=(7, 4.4), sharex=True)
-       a.plot(rf.t * 1e3, np.real(rf.signal))
-       a.set_ylabel("B1 [Hz]"); a.set_title("SPSP: 12 subpulses")
-       b.plot(np.asarray(gz.tt) * 1e3, np.asarray(gz.waveform))
-       b.set_xlabel("t [ms]"); b.set_ylabel("Gz [Hz/m]")
-       fig.tight_layout()
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_figure(pp.make_spsp_pulse(np.deg2rad(90), 1e-2, 250.0, system=system),
+                 "zf", title="spectral-spatial 90 deg, 10 mm, 250 Hz",
+                 extent=0.025, span=700)
 
     See Also
     --------

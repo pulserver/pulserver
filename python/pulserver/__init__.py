@@ -1,12 +1,12 @@
 """Pulserver package root.
 
 This namespace holds the *plugin contract* only: the base classes a sequence
-plugin subclasses, the typed protocol parameters its UI is built from, the
-helpers that serialise and validate a protocol, and the offline CLI entry
-point.
+plugin subclasses, the abstract types those classes exchange, the typed
+protocol parameters its UI is built from, the helpers that serialise and
+validate a protocol, and the offline CLI entry point.
 
 Everything used to *build waveforms* — RF pulse factories, gradient
-factories, readout modules, sampling patterns and phase schedules — lives in
+factories, readout modules, sampling plans and phase schedules — lives in
 :mod:`pulserver.pypulseq` and is deliberately **not** re-exported here, so
 that the two roles stay visibly separate::
 
@@ -26,7 +26,8 @@ The authoring modules (``io`` and ``pypulseq``) require the *optional*
 ``pypulseq`` dependency, so they are imported lazily (PEP 562): ``import
 pulserver`` — and hence ``pulserver.recon``, which runs in the scanner recon
 env without ``pypulseq`` — stays import-clean; accessing an authoring name pulls
-it in (raising a clear error if the extra is absent).
+it in (raising a clear error if the extra is absent). ``SamplingPattern`` and
+``SliceGroup`` are authoring types and load the same way.
 """
 
 from __future__ import annotations
@@ -39,7 +40,9 @@ __all__ = [
     "params",
     "Sequence",
     "PulseqSequence",
-    "Module",
+    "SequenceModule",
+    "SamplingPattern",
+    "SliceGroup",
     "run_cli",
     "UIParam",
     "Validate",
@@ -62,21 +65,16 @@ __all__ = [
     "Description",
     "Protocol",
     "ProtocolValue",
-    "expected_param_kind",
-    "enum_options",
     "make_enum_param",
-    "validate_protocol_entry",
     "validate_protocol",
-    "param_to_dict",
-    "dict_to_param",
     "protocol_to_dict",
     "dict_to_protocol",
-    "set_protocol_value",
 ]
 
 
 _CORE_MODULES = {"params"}
-_CORE_FUNCTIONS = {"make_enum_param"}
+#: Authoring data types defined under ``pypulseq`` but named by the contract.
+_AUTHORING_TYPES = {"SamplingPattern", "SliceGroup"}
 
 
 def __getattr__(name: str):
@@ -84,8 +82,9 @@ def __getattr__(name: str):
         return importlib.import_module(f"{__name__}.{name}")
     if name in _CORE_MODULES:
         return importlib.import_module(f"{__name__}._core._protocol")
-    if name in _CORE_FUNCTIONS:
+    if name in _AUTHORING_TYPES:
+        return getattr(importlib.import_module(f"{__name__}.pypulseq"), name)
+    try:
         return getattr(importlib.import_module(f"{__name__}._core"), name)
-    if name in __all__:
-        return getattr(importlib.import_module(f"{__name__}._core"), name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    except AttributeError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None

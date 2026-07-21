@@ -103,16 +103,6 @@ def fat_saturation(
     ...     pp.Opts(), freq_offset_hz=pulses.fat_shift_hz(3.0), voxel_size_m=3e-3)
     >>> [lab.label for lab in fs.labels]
     ['NOPOS', 'NOROT']
-
-    .. plot::
-       :include-source: false
-
-       import pypulseq as pp
-       from pulserver.pypulseq._rf import _auxiliary_helpers as pulses
-       import matplotlib.pyplot as plt
-       fs = pulses.fat_saturation(pp.Opts(), freq_offset_hz=-441.0, voxel_size_m=3e-3)
-       plt.plot(fs.rf.t * 1e3, abs(fs.rf.signal))
-       plt.xlabel("t [ms]"); plt.ylabel("|B1| [Hz]")
     """
     bandwidth_hz = abs(freq_offset_hz)
     rf = pp.make_gauss_pulse(
@@ -197,16 +187,6 @@ def bloch_siegert(
     >>> bs = pulses.bloch_siegert(pp.Opts())
     >>> bs.kbs_rad > 0
     True
-
-    .. plot::
-       :include-source: false
-
-       import pypulseq as pp
-       from pulserver.pypulseq._rf import _auxiliary_helpers as pulses
-       import matplotlib.pyplot as plt
-       bs = pulses.bloch_siegert(pp.Opts())
-       plt.plot(bs.rf.t * 1e3, abs(bs.rf.signal))
-       plt.xlabel("t [ms]"); plt.ylabel("|B1| [Hz]")
     """
     if freq_offset_hz == 0.0:
         raise ValueError("freq_offset_hz must be non-zero (off-resonant pulse)")

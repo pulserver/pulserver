@@ -24,7 +24,7 @@ def _generalized_fibonacci(order, index):
     return current
 
 
-def radial_2d(
+def make_radial_sampling(
     n_spokes,
     *,
     scheme="linear",
@@ -77,11 +77,11 @@ def radial_2d(
     Examples
     --------
     >>> import numpy as np
-    >>> from pulserver.pypulseq import radial_2d
-    >>> uniform = radial_2d(8)
+    >>> from pulserver.pypulseq import make_radial_sampling
+    >>> uniform = make_radial_sampling(8)
     >>> np.rad2deg(uniform.support[:, 0]).round(1)
     array([  0. ,  22.5,  45. ,  67.5,  90. , 112.5, 135. , 157.5])
-    >>> golden = radial_2d(400, scheme="golden", segment_length=100)
+    >>> golden = make_radial_sampling(400, scheme="golden", segment_length=100)
     >>> golden.n_shots
     4
 
@@ -90,13 +90,12 @@ def radial_2d(
 
        import numpy as np
        import matplotlib.pyplot as plt
-       from pulserver.pypulseq import radial_2d
-
+       from pulserver.pypulseq import make_radial_sampling
        fig, axes = plt.subplots(1, 2, figsize=(8, 4), subplot_kw={"polar": True})
        for ax, scheme in zip(axes, ("linear", "golden")):
-           angles = radial_2d(21, scheme=scheme).support[:, 0]
+           angles = make_radial_sampling(21, scheme=scheme).support[:, 0]
            for i, a in enumerate(angles):
-               ax.plot([a, a + np.pi], [1, 1], color=plt.cm.viridis(i / 20))
+               ax.plot([a, a], [-1, 1], color=plt.cm.viridis(i / 20))
            ax.set_yticks([]); ax.set_title(f"{scheme}, 21 spokes")
        fig.tight_layout()
 
@@ -106,7 +105,7 @@ def radial_2d(
 
     See Also
     --------
-    directions_to_rotations : turn 3D directions into block rotations.
+    pulserver.SamplingPattern.to_rotations : turn the support into block rotations.
     """
     n_spokes, segment_length = int(n_spokes), int(segment_length)
     period = float(period)
@@ -143,14 +142,27 @@ def radial_2d(
     return SamplingPattern(support, _segments(chronological, segment_length))
 
 
-def golden_angles(n: int) -> np.ndarray:
-    """Return ``n`` full-circle golden-angle spoke angles, in radians.
+def _accumulated(n: int, step: float) -> np.ndarray:
+    n = int(n)
+    if n < 0:
+        raise ValueError("n must be nonnegative")
+    return np.mod(np.arange(n, dtype=float) * float(step), 2.0 * np.pi)
 
-    A flat angle array rather than a :class:`SamplingPattern`, in the
-    full-circle (``2 * pi``) convention used by
-    :mod:`pulserver.pypulseq.arbgrad` — pair it directly with a base waveform
-    and :func:`pulserver.pypulseq.make_rotation`. Use :func:`radial_2d` when
-    the angular period or the segmentation matters.
+
+def calc_golden_angles(n: int) -> np.ndarray:
+    """Return ``n`` golden-angle spoke rotations, in radians.
+
+    Consecutive spokes advance by the MRI golden angle ``pi / phi`` (111.246
+    degrees), so any contiguous temporal window of spokes stays
+    near-uniformly distributed over the circle — the property that makes
+    golden-angle radial the default for retrospectively binned and
+    free-breathing acquisitions.
+
+    A flat angle array rather than a :class:`~pulserver.SamplingPattern`, in
+    the full-circle (``2 * pi``) convention: pair it directly with a base
+    waveform and :func:`pulserver.pypulseq.make_rotation`. Use
+    :func:`make_radial_sampling` when the angular period or the segmentation
+    matters.
 
     Parameters
     ----------
@@ -160,31 +172,158 @@ def golden_angles(n: int) -> np.ndarray:
     Returns
     -------
     numpy.ndarray
-        Angles (rad), length ``n``, accumulated monotonically modulo ``2 pi``.
+        Angles (rad), length ``n``, accumulated modulo ``2 pi``.
 
     Examples
     --------
     >>> import numpy as np
-    >>> from pulserver.pypulseq import golden_angles
-    >>> np.rad2deg(golden_angles(4)).round(2)
+    >>> import pulserver.pypulseq as pp
+    >>> np.rad2deg(pp.calc_golden_angles(4)).round(2)
     array([  0.  , 111.25, 222.49, 333.74])
+
+    Where each increment puts the first 34 spokes — golden angle spreads them in any window, tiny golden angle does the same in smaller steps, RAGA snaps them to a fixed equidistant support:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import matplotlib.pyplot as plt
+       import pulserver.pypulseq as pp
+       schemes = [
+           ("uniform", pp.calc_uniform_angles(34)),
+           ("golden", pp.calc_golden_angles(34)),
+           ("tiny golden, N=4", pp.calc_tiny_golden_angles(34, index=4)),
+           ("RAGA", pp.calc_raga_angles(34, approximation_order=9)),
+       ]
+       fig, axes = plt.subplots(1, 4, figsize=(11, 3.1), subplot_kw={"polar": True})
+       for ax, (name, angles) in zip(axes, schemes):
+           for order, angle in enumerate(angles):
+               ax.plot([angle, angle + np.pi], [1, 1], lw=1,
+                       color=plt.cm.viridis(order / (len(angles) - 1)))
+           ax.set_yticks([])
+           ax.set_title(name, fontsize=8)
+       fig.tight_layout()
+
+    References
+    ----------
+    Winkelmann et al., golden-ratio profile order, DOI ``10.1109/TMI.2006.885337``.
 
     See Also
     --------
-    radial_2d : full spoke plan with period, scheme, and segmentation control.
+    calc_tiny_golden_angles : smaller increments with the same uniformity.
+    calc_raga_angles : rational, exactly repeatable approximation.
+    make_radial_sampling : full spoke plan with period and segmentation control.
     """
-    # Legacy API uses the full-circle, monotonically accumulated arbgrad
-    # convention.  ``radial_2d`` remains the explicit half/full-period API.
-    from .cartesian import golden_angles as _legacy_golden_angles
-
-    return _legacy_golden_angles(n)
+    return _accumulated(n, np.pi / _PHI)
 
 
-def uniform_angles(n: int) -> np.ndarray:
-    """Return ``n`` equally spaced full-circle spoke angles, in radians.
+def calc_raga_angles(n: int, *, tiny_index: int = 1, approximation_order: int = 13) -> np.ndarray:
+    """Return ``n`` RAGA (rational approximate golden-angle) spoke rotations.
 
-    The uniform counterpart of :func:`golden_angles`, in the same flat-array,
-    full-circle convention.
+    RAGA replaces the irrational golden increment with the nearest Fibonacci
+    ratio, so the angular *support* is finite and exactly equidistant while
+    the temporal index order stays golden-like. Every bin of a binned
+    reconstruction therefore draws from the same fixed angle set, which is
+    what makes RAGA reproducible bin to bin where plain golden angle is not.
+
+    The support holds ``fib(approximation_order, tiny_index)`` distinct
+    angles; ``n`` may exceed that, in which case angles repeat.
+
+    Parameters
+    ----------
+    n : int
+        Number of angles.
+    tiny_index : int, optional
+        Tiny-golden index the rational approximation is built from.
+    approximation_order : int, optional
+        Fibonacci order; sets the size of the angular support.
+
+    Returns
+    -------
+    numpy.ndarray
+        Angles (rad), length ``n``, drawn from a finite equidistant support.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> angles = pp.calc_raga_angles(1000, approximation_order=8)
+    >>> len(np.unique(angles.round(9)))
+    21
+
+    References
+    ----------
+    Scholand et al., RAGA sampling, DOI ``10.1002/mrm.30254``.
+
+    See Also
+    --------
+    calc_golden_angles : the irrational increment RAGA approximates.
+    """
+    pattern = make_radial_sampling(
+        n,
+        scheme="raga",
+        period=2.0 * np.pi,
+        tiny_index=tiny_index,
+        approximation_order=approximation_order,
+    )
+    return pattern.flatten()[:, 0]
+
+
+def calc_tiny_golden_angles(n: int, *, index: int = 2) -> np.ndarray:
+    """Return ``n`` tiny-golden-angle spoke rotations, in radians.
+
+    The increment ``pi / (phi + index - 1)`` shrinks with ``index`` while
+    keeping the golden distribution: ``index=1`` reproduces
+    :func:`calc_golden_angles`, higher indices step less far between
+    consecutive spokes. Smaller steps mean smaller eddy-current and
+    steady-state disruption per view, which is why tiny golden angles are
+    preferred for bSSFP and other steady-state radial acquisitions.
+
+    Parameters
+    ----------
+    n : int
+        Number of angles.
+    index : int, optional
+        Tiny-golden index ``N >= 1`` (default 2).
+
+    Returns
+    -------
+    numpy.ndarray
+        Angles (rad), length ``n``, accumulated modulo ``2 pi``.
+
+    Raises
+    ------
+    ValueError
+        If ``index`` is smaller than 1.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> np.rad2deg(pp.calc_tiny_golden_angles(3, index=2)).round(2)
+    array([  0.  ,  68.75, 137.51])
+
+    References
+    ----------
+    Wundrak et al., tiny golden angles, DOI ``10.1002/mrm.25831``.
+
+    See Also
+    --------
+    calc_golden_angles : the ``index=1`` case.
+    """
+    index = int(index)
+    if index < 1:
+        raise ValueError("index must be >= 1")
+    return _accumulated(n, np.pi / (_PHI + index - 1))
+
+
+def calc_uniform_angles(n: int) -> np.ndarray:
+    """Return ``n`` equally spaced full-circle spoke rotations, in radians.
+
+    The uniform counterpart of :func:`calc_golden_angles`, in the same
+    flat-array, full-circle convention. Optimal coverage for a *fixed*,
+    known-in-advance spoke count — and only then, since any partial window of
+    the acquisition leaves an angular gap.
 
     Parameters
     ----------
@@ -199,13 +338,18 @@ def uniform_angles(n: int) -> np.ndarray:
     Examples
     --------
     >>> import numpy as np
-    >>> from pulserver.pypulseq import uniform_angles
-    >>> np.rad2deg(uniform_angles(4))
+    >>> import pulserver.pypulseq as pp
+    >>> np.rad2deg(pp.calc_uniform_angles(4))
     array([  0.,  90., 180., 270.])
-    """
-    from .cartesian import uniform_angles as _legacy_uniform_angles
 
-    return _legacy_uniform_angles(n)
+    See Also
+    --------
+    calc_golden_angles : uniform in any temporal window instead.
+    """
+    n = int(n)
+    if n < 0:
+        raise ValueError("n must be nonnegative")
+    return _accumulated(n, 0.0 if n == 0 else 2.0 * np.pi / n)
 
 
 def _directions(z, azimuth):
@@ -213,7 +357,7 @@ def _directions(z, azimuth):
     return np.column_stack((radius * np.cos(azimuth), radius * np.sin(azimuth), z))
 
 
-def golden_means_3d(n_spokes, *, segment_length=1):
+def make_golden_means_3d_sampling(n_spokes, *, segment_length=1):
     """Generate 3D centre-out spoke directions from the 2D golden means.
 
     Extends the golden-angle idea to the sphere: polar and azimuthal indices
@@ -236,8 +380,8 @@ def golden_means_3d(n_spokes, *, segment_length=1):
 
     Examples
     --------
-    >>> from pulserver.pypulseq import golden_means_3d
-    >>> pattern = golden_means_3d(6, segment_length=3)
+    >>> from pulserver.pypulseq import make_golden_means_3d_sampling
+    >>> pattern = make_golden_means_3d_sampling(6, segment_length=3)
     >>> pattern.support.shape, pattern.n_shots
     ((6, 3), 2)
 
@@ -245,14 +389,13 @@ def golden_means_3d(n_spokes, *, segment_length=1):
        :include-source: false
 
        import matplotlib.pyplot as plt
-       from pulserver.pypulseq import golden_means_3d
-
-       d = golden_means_3d(300).support
+       from pulserver.pypulseq import make_golden_means_3d_sampling
+       d = make_golden_means_3d_sampling(300).support
        fig = plt.figure(figsize=(5, 5))
        ax = fig.add_subplot(projection="3d")
        ax.scatter(d[:, 0], d[:, 1], d[:, 2], s=6)
        ax.set_box_aspect((1, 1, 1))
-       ax.set_title("golden_means_3d(300)")
+       ax.set_title("make_golden_means_3d_sampling(300)")
 
     References
     ----------
@@ -261,8 +404,8 @@ def golden_means_3d(n_spokes, *, segment_length=1):
 
     See Also
     --------
-    spiral_phyllotaxis : interleaved alternative with smooth intra-shot paths.
-    directions_to_rotations : convert the directions to block rotations.
+    make_spiral_phyllotaxis_sampling : interleaved alternative with smooth intra-shot paths.
+    pulserver.SamplingPattern.to_rotations : convert the support to block rotations.
     """
     n_spokes, segment_length = int(n_spokes), int(segment_length)
     if n_spokes < 0 or segment_length <= 0:
@@ -280,7 +423,7 @@ def _is_fibonacci(value):
     )
 
 
-def spiral_phyllotaxis(n_spokes, n_interleaves, *, require_fibonacci=True):
+def make_spiral_phyllotaxis_sampling(n_spokes, n_interleaves, *, require_fibonacci=True):
     """Generate 3D spoke directions on a spiral phyllotaxis, interleaved.
 
     Directions follow a single pole-to-pole spiral (the sunflower-seed
@@ -309,8 +452,8 @@ def spiral_phyllotaxis(n_spokes, n_interleaves, *, require_fibonacci=True):
 
     Examples
     --------
-    >>> from pulserver.pypulseq import spiral_phyllotaxis
-    >>> pattern = spiral_phyllotaxis(8, 2)
+    >>> from pulserver.pypulseq import make_spiral_phyllotaxis_sampling
+    >>> pattern = make_spiral_phyllotaxis_sampling(8, 2)
     >>> pattern.n_shots, pattern.order[0]
     (2, array([0, 2, 4, 6]))
 
@@ -318,16 +461,15 @@ def spiral_phyllotaxis(n_spokes, n_interleaves, *, require_fibonacci=True):
        :include-source: false
 
        import matplotlib.pyplot as plt
-       from pulserver.pypulseq import spiral_phyllotaxis
-
-       pattern = spiral_phyllotaxis(377, 13)
+       from pulserver.pypulseq import make_spiral_phyllotaxis_sampling
+       pattern = make_spiral_phyllotaxis_sampling(377, 13)
        fig = plt.figure(figsize=(5, 5))
        ax = fig.add_subplot(projection="3d")
        for shot in range(3):
            d = pattern[shot]
            ax.plot(d[:, 0], d[:, 1], d[:, 2], marker="o", ms=3, lw=0.6)
        ax.set_box_aspect((1, 1, 1))
-       ax.set_title("spiral_phyllotaxis(377, 13): first 3 shots")
+       ax.set_title("make_spiral_phyllotaxis_sampling(377, 13): first 3 shots")
 
     References
     ----------
@@ -335,7 +477,7 @@ def spiral_phyllotaxis(n_spokes, n_interleaves, *, require_fibonacci=True):
 
     See Also
     --------
-    golden_means_3d : uniform in any window, at the cost of shot smoothness.
+    make_golden_means_3d_sampling : uniform in any window, at the cost of shot smoothness.
     """
     n_spokes, n_interleaves = int(n_spokes), int(n_interleaves)
     if n_spokes <= 0 or n_interleaves <= 0 or n_spokes % n_interleaves:
@@ -349,47 +491,23 @@ def spiral_phyllotaxis(n_spokes, n_interleaves, *, require_fibonacci=True):
     return SamplingPattern(support, order)
 
 
+def angles_to_rotations(angles):
+    """Return one rotation about ``z`` per in-plane spoke angle (radians)."""
+    angles = np.asarray(angles, dtype=float).reshape(-1)
+    if not np.all(np.isfinite(angles)):
+        raise ValueError("angles must be finite")
+    cosine, sine = np.cos(angles), np.sin(angles)
+    result = np.zeros((len(angles), 3, 3), dtype=float)
+    result[:, 0, 0] = cosine
+    result[:, 0, 1] = -sine
+    result[:, 1, 0] = sine
+    result[:, 1, 1] = cosine
+    result[:, 2, 2] = 1.0
+    return result
+
+
 def directions_to_rotations(directions, *, reference=(1.0, 0.0, 0.0)):
-    """Convert spoke directions into minimal-angle rotation matrices.
-
-    The bridge between a sampling plan and the sequence: a non-Cartesian
-    readout designs **one** base waveform along ``reference``, and each shot
-    replays it under the matrix returned here. Each rotation is the shortest
-    one taking ``reference`` onto that direction (Rodrigues); antipodal
-    directions get a well-defined 180-degree rotation rather than a singular
-    matrix.
-
-    Feed the result to :func:`pulserver.pypulseq.make_rotation`, or pass it to
-    a readout module's ``rotation=`` argument.
-
-    Parameters
-    ----------
-    directions : array_like
-        Shape ``(3,)`` or ``(N, 3)``; need not be normalised.
-    reference : array_like, optional
-        Direction the base waveform was designed along (default ``+x``).
-
-    Returns
-    -------
-    numpy.ndarray
-        Shape ``(N, 3, 3)`` rotation matrices, one per direction.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from pulserver.pypulseq import directions_to_rotations, golden_means_3d
-    >>> rotations = directions_to_rotations([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-    >>> rotations.shape
-    (2, 3, 3)
-    >>> rotations[1] @ np.array([1.0, 0.0, 0.0])
-    array([0., 1., 0.])
-
-    Rotate a 3D radial base waveform shot by shot::
-
-        pattern = golden_means_3d(1000)
-        for rotation in directions_to_rotations(pattern.support):
-            readout(seq, rotation=rotation)
-    """
+    """Return the minimal-angle rotation taking ``reference`` onto each direction."""
     directions = np.asarray(directions, dtype=float)
     if directions.ndim == 1:
         directions = directions[None, :]

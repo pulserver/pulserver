@@ -96,7 +96,7 @@ def test_zte_dead_time_omits_integer_center_samples_without_rescaling_the_grid()
 
 def test_zte_accepts_planar_disk_order_and_rotates_the_complete_disk():
     system = _system()
-    angles = sampling.uniform_angles(6)
+    angles = sampling.calc_uniform_angles(6)
     module = readout.Zte(system, (0.22,) * 3, (32,) * 3, angles, _hard(system).rf, tr_s=2e-3)
     rotation = Rotation.from_euler("x", 90.0, degrees=True)
     module.set_state(lin_idx=10, rotation=rotation)
@@ -134,6 +134,6 @@ def test_zte_validates_isotropy_view_order_and_state_schedules():
     with pytest.raises(ValueError, match="view_order"):
         readout.Zte(system, 0.22, 64, np.empty((0, 3)), excitation.rf)
 
-    module = readout.Zte(system, 0.22, 64, sampling.uniform_angles(4), excitation.rf)
+    module = readout.Zte(system, 0.22, 64, sampling.calc_uniform_angles(4), excitation.rf)
     with pytest.raises(ValueError, match="length 4"):
         module.set_state(rf_phase_rad=[0.0, 0.1])

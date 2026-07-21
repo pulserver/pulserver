@@ -137,16 +137,6 @@ def inversion(
     >>> inv = preparations.inversion(pp.Opts(), "adiabatic", voxel_size_m=3e-3)
     >>> inv.ti_delay_s(0.9, segment_duration_s=0.1, strict=True) is not None
     True
-
-    .. plot::
-       :include-source: false
-
-       import pypulseq as pp
-       from pulserver.pypulseq._rf import _preparation_helpers as preparations
-       import matplotlib.pyplot as plt
-       inv = preparations.inversion(pp.Opts(), "adiabatic", voxel_size_m=3e-3)
-       plt.plot(inv.rf.t * 1e3, abs(inv.rf.signal))
-       plt.xlabel("t [ms]"); plt.ylabel("|B1| [Hz]")
     """
     if mode == "adiabatic":
         rf = excitation.adiabatic_inversion(opts, duration_s=INVERSION_ADIABATIC_DURATION_S)
@@ -214,16 +204,6 @@ def mt_saturation(
     >>> mt = preparations.mt_saturation(pp.Opts(), voxel_size_m=3e-3)
     >>> mt.duration_s > 0
     True
-
-    .. plot::
-       :include-source: false
-
-       import pypulseq as pp
-       from pulserver.pypulseq._rf import _preparation_helpers as preparations
-       import matplotlib.pyplot as plt
-       mt = preparations.mt_saturation(pp.Opts(), voxel_size_m=3e-3)
-       plt.plot(mt.rf.t * 1e3, abs(mt.rf.signal))
-       plt.xlabel("t [ms]"); plt.ylabel("|B1| [Hz]")
     """
     rf = pp.make_gauss_pulse(
         flip_angle=np.deg2rad(flip_deg),
@@ -301,20 +281,6 @@ def t2_prep(
     >>> prep = preparations.t2_prep(pp.Opts(), 50e-3, voxel_size_m=3e-3)
     >>> prep.delay1_s > 0 and prep.delay2_s > 0
     True
-
-    .. plot::
-       :include-source: false
-
-       import numpy as np
-       import pypulseq as pp
-       from pulserver.pypulseq._rf import _preparation_helpers as preparations
-       import matplotlib.pyplot as plt
-       prep = preparations.t2_prep(pp.Opts(), 50e-3, voxel_size_m=3e-3)
-       for rf, t0 in ((prep.rf90_down, 0.0),
-                      (prep.rf180, prep.delay1_s),
-                      (prep.rf90_up, prep.delay1_s + prep.delay2_s)):
-           plt.plot((rf.t + t0) * 1e3, abs(rf.signal))
-       plt.xlabel("t [ms]"); plt.ylabel("|B1| [Hz]")
     """
     if final_tip not in ("up", "down"):
         raise ValueError(f"Unknown final_tip '{final_tip}' (expected 'up' or 'down')")

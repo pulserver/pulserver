@@ -60,15 +60,6 @@ def slice_selective(
     >>> from pulserver.pypulseq._rf import _excitation_helpers as excitation
     >>> opts = pp.Opts()
     >>> rf, gz, gz_reph = excitation.slice_selective(opts, flip_deg=90, thickness_m=5e-3)
-
-    .. plot::
-       :include-source: false
-
-       import pypulseq as pp
-       from pulserver.pypulseq._rf import _excitation_helpers as excitation
-       import matplotlib.pyplot as plt
-       rf, gz, gz_reph = excitation.slice_selective(pp.Opts(), flip_deg=90, thickness_m=5e-3)
-       plt.plot(rf.t * 1e3, abs(rf.signal)); plt.xlabel("t [ms]"); plt.ylabel("|B1| [Hz]")
     """
     return pp.make_sinc_pulse(
         flip_angle=np.deg2rad(flip_deg),
@@ -114,15 +105,6 @@ def nonselective(
     >>> import pypulseq as pp
     >>> from pulserver.pypulseq._rf import _excitation_helpers as excitation
     >>> rf = excitation.nonselective(pp.Opts(), flip_deg=180, use="inversion")
-
-    .. plot::
-       :include-source: false
-
-       import pypulseq as pp
-       from pulserver.pypulseq._rf import _excitation_helpers as excitation
-       import matplotlib.pyplot as plt
-       rf = excitation.nonselective(pp.Opts(), flip_deg=180, use="inversion")
-       plt.plot(rf.t * 1e3, abs(rf.signal)); plt.xlabel("t [ms]"); plt.ylabel("|B1| [Hz]")
     """
     return pp.make_block_pulse(
         flip_angle=np.deg2rad(flip_deg),
@@ -159,15 +141,6 @@ def adiabatic_inversion(
     >>> import pypulseq as pp
     >>> from pulserver.pypulseq._rf import _excitation_helpers as excitation
     >>> rf = excitation.adiabatic_inversion(pp.Opts())
-
-    .. plot::
-       :include-source: false
-
-       import pypulseq as pp
-       from pulserver.pypulseq._rf import _excitation_helpers as excitation
-       import matplotlib.pyplot as plt
-       rf = excitation.adiabatic_inversion(pp.Opts())
-       plt.plot(rf.t * 1e3, abs(rf.signal)); plt.xlabel("t [ms]"); plt.ylabel("|B1| [Hz]")
     """
     return pp.make_adiabatic_pulse(
         pulse_type="hypsec",
@@ -288,19 +261,6 @@ def multiband(base_rf, n_bands: int, band_separation: float, *, phase_scheme: st
     >>> rf_mb = excitation.multiband(rf, n_bands=3, band_separation=12.0)
     >>> rf_mb.signal.shape == rf.signal.shape
     True
-
-    .. plot::
-       :include-source: false
-
-       import numpy as np
-       import pypulseq as pp
-       from pulserver.pypulseq._rf import _excitation_helpers as excitation
-       import matplotlib.pyplot as plt
-       rf, gz, _ = excitation.slice_selective(pp.Opts(), 90, 5e-3)
-       rf_mb = excitation.multiband(rf, n_bands=3, band_separation=12.0)
-       n = rf_mb.signal.size
-       profile = np.abs(np.fft.fftshift(np.fft.fft(rf_mb.signal, 8 * n)))
-       plt.plot(profile); plt.xlabel("position (a.u.)"); plt.ylabel("|profile|")
     """
     import copy as _copy
 
@@ -375,15 +335,6 @@ def frequency_selective(
     >>> rf = excitation.frequency_selective(pp.Opts(), 90, 200.0)
     >>> rf.freq_offset
     0.0
-
-    .. plot::
-       :include-source: false
-
-       import pypulseq as pp
-       from pulserver.pypulseq._rf import _excitation_helpers as excitation
-       import matplotlib.pyplot as plt
-       rf = excitation.frequency_selective(pp.Opts(), 90, 200.0)
-       plt.plot(rf.t * 1e3, abs(rf.signal)); plt.xlabel("t [ms]"); plt.ylabel("|B1| [Hz]")
     """
     if bandwidth_hz <= 0.0:
         raise ValueError("bandwidth_hz must be > 0")

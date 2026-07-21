@@ -166,9 +166,9 @@ def _read_protocol(prot: dict) -> _Config:
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     angles = (
-        sampling.golden_angles(cfg.num_shots)
+        sampling.calc_golden_angles(cfg.num_shots)
         if cfg.order_mode == "golden"
-        else sampling.uniform_angles(cfg.num_shots)
+        else sampling.calc_uniform_angles(cfg.num_shots)
     )
     excitation = rf.make_hard_pulse(
         np.deg2rad(cfg.flip_deg),

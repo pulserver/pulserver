@@ -182,7 +182,7 @@ class GreMultiEcho2DPulseqSequence(Sequence):
                 ),
             }
 
-        sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, cfg.acs_lines)
+        sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, cfg.acs_lines)
         duration_s = cfg.tr_s * float(len(sampled_pe))
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
@@ -207,7 +207,7 @@ class GreMultiEcho2DPulseqSequence(Sequence):
         delta_k_pe = 1.0 / cfg.fov_pe_m
         phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
         max_pe_area = float(np.max(np.abs(phase_areas)))
-        sampled_pe = sampling.sampled_lines(cfg.ny_pe, cfg.ry, cfg.acs_lines)
+        sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, cfg.acs_lines)
 
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
         rf_phase_deg = 0.0
