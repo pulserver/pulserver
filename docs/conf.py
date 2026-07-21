@@ -56,3 +56,26 @@ exclude_patterns = ["_build", "README.md"]
 # files and headings outside this Sphinx project.  MyST cannot resolve those
 # as documentation targets, but they remain valid repository links.
 suppress_warnings = ["myst.xref_missing"]
+
+
+# Two objects re-exported from upstream PyPulseq have no docstring summary:
+# ``SigpyPulseOpts`` has no docstring at all, and ``get_supported_labels``
+# opens directly on a NumPy section header.  Either way ``autosummary`` finds
+# no first line and renders a blank cell on the API landing page.  Supply the
+# missing summary at build time; ``autosummary`` reads ``__doc__`` directly, so
+# an ``autodoc-process-docstring`` handler would not reach it.  Nothing is
+# written back to the upstream package - this lives only in the docs process.
+def _patch_upstream_summaries() -> None:
+    import pulserver.pypulseq as pp
+
+    if not (pp.SigpyPulseOpts.__doc__ or "").strip():
+        pp.SigpyPulseOpts.__doc__ = "Filter and profile options for a SigPy-designed SLR pulse."
+
+    existing = pp.get_supported_labels.__doc__ or ""
+    if existing.lstrip().startswith("Returns"):
+        pp.get_supported_labels.__doc__ = (
+            "Return the built-in Pulseq label names, in file order.\n" + existing
+        )
+
+
+_patch_upstream_summaries()

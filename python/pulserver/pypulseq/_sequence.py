@@ -28,11 +28,53 @@ _RF_USE_CODE_TO_CHAR = {v: k for k, v in _RF_USE_CHAR_TO_CODE.items()}
 
 
 class Sequence(pp.Sequence):
-    """Sequential-only Sequence variant with reduced per-block overhead.
+    """Sequence container tuned for append-only generation, with extensions.
 
-    Intended for production generation where events are always appended in order.
-    Per-block deduplication and gradient continuity checks are skipped entirely;
-    each call to add_block() performs direct library insertion.
+    A drop-in subclass of :class:`pypulseq.Sequence` for the case a plugin
+    actually has: blocks are emitted strictly in order and never revisited. On
+    that assumption the per-block deduplication and gradient-continuity checks
+    are skipped and each ``add_block`` becomes a direct library insertion —
+    which is what keeps generation tractable for sequences with hundreds of
+    thousands of blocks. Deduplication still happens, once, at ``write``.
+
+    It also accepts the extension events upstream does not: user-defined
+    labels (:func:`make_label`), block rotations (:func:`make_rotation`), and
+    pTx shim vectors (:func:`make_rf_shim`).
+
+    Because blocks are never re-checked, this class assumes you append in
+    order. Use :class:`pypulseq.Sequence` if you need to modify blocks after
+    adding them.
+
+    Parameters
+    ----------
+    system : pypulseq.Opts, optional
+        System limits recorded in the ``.seq`` header.
+    use_block_cache : bool, optional
+        Kept for upstream compatibility; off by default.
+
+    Attributes
+    ----------
+    custom_labels : dict
+        User-defined labels seen so far, mapped to their extension IDs.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence(pp.Opts())
+    >>> seq.add_block(pp.make_delay(1e-3), pp.make_label("LIN", "SET", 0))
+    >>> len(seq.block_events)
+    1
+
+    Append modules rather than events, and write at the end::
+
+        for ky in range(ny):
+            excitation(seq)
+            readout(seq, pe_idx=ky)
+        seq.write(output_path)
+
+    See Also
+    --------
+    make_label, make_rotation, make_rf_shim : the supported extension events.
     """
 
     def __init__(

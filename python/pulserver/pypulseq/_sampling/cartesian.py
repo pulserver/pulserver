@@ -45,8 +45,8 @@ def chunk_indices(indices: list[int], size: int) -> list[list[int]]:
 
     Examples
     --------
-    >>> import pulserver
-    >>> pulserver.chunk_indices([0, 1, 2, 3, 4], 2)
+    >>> import pulserver.pypulseq as pp
+    >>> pp.chunk_indices([0, 1, 2, 3, 4], 2)
     [[0, 1], [2, 3], [4]]
     """
     size = max(1, int(size))
@@ -75,8 +75,8 @@ def sampled_lines(n: int, r: int, acs_lines: int) -> list[int]:
 
     Examples
     --------
-    >>> import pulserver
-    >>> pulserver.sampled_lines(8, 2, 0)
+    >>> import pulserver.pypulseq as pp
+    >>> pp.sampled_lines(8, 2, 0)
     [0, 2, 4, 6]
     """
     sampled = {i for i in range(n) if (i % r) == 0}
@@ -110,8 +110,8 @@ def linear_order(n: int, etl: int) -> list[list[int]]:
 
     Examples
     --------
-    >>> import pulserver
-    >>> pulserver.linear_order(5, 2)
+    >>> import pulserver.pypulseq as pp
+    >>> pp.linear_order(5, 2)
     [[0, 1], [2, 3], [4]]
     """
     return chunk_indices(list(range(n)), etl)
@@ -139,8 +139,8 @@ def outer_inner_order(outer_indices: list[int], inner_len: int) -> list[list[tup
 
     Examples
     --------
-    >>> import pulserver
-    >>> pulserver.outer_inner_order([0, 1], 2)
+    >>> import pulserver.pypulseq as pp
+    >>> pp.outer_inner_order([0, 1], 2)
     [[(0, 0), (0, 1)], [(1, 0), (1, 1)]]
     """
     return [[(outer, inner) for inner in range(inner_len)] for outer in outer_indices]
@@ -183,8 +183,8 @@ def fse_linear_order(coords, etl: int) -> list[list[int]]:
 
     Examples
     --------
-    >>> import pulserver
-    >>> shots = pulserver.fse_linear_order([[0, 0], [1, 0], [0, 1], [1, 1]], 2)
+    >>> import pulserver.pypulseq as pp
+    >>> shots = pp.fse_linear_order([[0, 0], [1, 0], [0, 1], [1, 1]], 2)
     >>> sorted(i for shot in shots for i in shot)
     [0, 1, 2, 3]
     """
@@ -217,12 +217,47 @@ def fse_radial_order(coords, etl: int) -> list[list[int]]:
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver
+    >>> import pulserver.pypulseq as pp
     >>> ky, kz = np.meshgrid(np.arange(-2, 3), np.arange(-2, 3))
     >>> coords = np.column_stack([ky.ravel(), kz.ravel()])
-    >>> shots = pulserver.fse_radial_order(coords, 5)
+    >>> shots = pp.fse_radial_order(coords, 5)
     >>> all(len(s) <= 5 for s in shots)
     True
+
+    Echo index (colour) across (ky, kz) for the four echo-train orderings —
+    what determines the T2 weighting of each region of k-space:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import matplotlib.pyplot as plt
+       import pulserver.pypulseq as pp
+
+       ky, kz = np.meshgrid(np.arange(-16, 16), np.arange(-16, 16))
+       coords = np.column_stack([ky.ravel(), kz.ravel()])
+       etl = 32
+       orderings = [
+           ("fse_linear_order", pp.fse_linear_order(coords, etl)),
+           ("fse_radial_order", pp.fse_radial_order(coords, etl)),
+           ("fse_radial_adaptive_order", pp.fse_radial_adaptive_order(coords, etl)),
+           ("fse_shuffling_order", pp.fse_shuffling_order(coords, etl, seed=0)),
+       ]
+       fig, axes = plt.subplots(1, 4, figsize=(12, 3.4), sharey=True)
+       for ax, (title, shots) in zip(axes, orderings):
+           echo = np.zeros(len(coords))
+           for shot in shots:
+               for e, idx in enumerate(shot):
+                   echo[idx] = e
+           im = ax.scatter(coords[:, 0], coords[:, 1], c=echo, s=6, cmap="viridis")
+           ax.set_title(title, fontsize=8)
+           ax.set_xlabel("ky"); ax.set_aspect("equal")
+       axes[0].set_ylabel("kz")
+       fig.colorbar(im, ax=axes, label="echo index", shrink=0.8)
+
+    See Also
+    --------
+    fse_linear_order, fse_radial_adaptive_order, fse_shuffling_order
     """
     pts = _as_coords(coords)
     n = len(pts)
@@ -271,12 +306,21 @@ def fse_radial_adaptive_order(coords, etl: int, *, n_sections: int = 3) -> list[
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver
+    >>> import pulserver.pypulseq as pp
     >>> ky, kz = np.meshgrid(np.arange(-3, 4), np.arange(-3, 4))
     >>> coords = np.column_stack([ky.ravel(), kz.ravel()])
-    >>> shots = pulserver.fse_radial_adaptive_order(coords, 7, n_sections=3)
-    >>> all(len(s) <= 7 for s in shots)
+    >>> shots = pp.fse_radial_adaptive_order(coords, 7, n_sections=3)
+    >>> len(shots)
+    7
+    >>> sum(len(shot) for shot in shots) == len(coords)
     True
+
+    Train lengths vary by a view or two: sections are dealt round-robin across
+    shots, so a section whose size is not a multiple of the shot count leaves
+    some trains one view longer.
+
+    >>> sorted({len(shot) for shot in shots})
+    [6, 7, 9]
     """
     pts = _as_coords(coords)
     n = len(pts)
@@ -336,11 +380,11 @@ def fse_shuffling_order(coords, etl: int, *, seed: int | None = None, cluster: b
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver
+    >>> import pulserver.pypulseq as pp
     >>> ky, kz = np.meshgrid(np.arange(8), np.arange(8))
     >>> coords = np.column_stack([ky.ravel(), kz.ravel()])
-    >>> a = pulserver.fse_shuffling_order(coords, 8, seed=0)
-    >>> b = pulserver.fse_shuffling_order(coords, 8, seed=0)
+    >>> a = pp.fse_shuffling_order(coords, 8, seed=0)
+    >>> b = pp.fse_shuffling_order(coords, 8, seed=0)
     >>> a == b
     True
     """
@@ -393,10 +437,34 @@ def random_mask(
 
     Examples
     --------
-    >>> import pulserver
-    >>> mask = pulserver.random_mask((32, 32), 4.0, calib=(8, 8), seed=0)
+    >>> import pulserver.pypulseq as pp
+    >>> mask = pp.random_mask((32, 32), 4.0, calib=(8, 8), seed=0)
     >>> mask.shape
     (32, 32)
+
+    .. plot::
+       :include-source: false
+
+       import matplotlib.pyplot as plt
+       import pulserver.pypulseq as pp
+
+       fig, axes = plt.subplots(1, 3, figsize=(9, 3.2))
+       masks = [
+           ("random, R=4", pp.random_mask((64, 64), 4.0, calib=(12, 12), seed=0)),
+           ("poisson-disc, R=4", pp.poisson_disc_mask((64, 64), 4.0, calib=(12, 12), seed=1)),
+           ("CAIPI 2x2, delta=1", pp.caipirinha_mask((64, 64), 2, 2, delta=1)),
+       ]
+       for ax, (title, mask) in zip(axes, masks):
+           ax.imshow(mask.T, cmap="gray", origin="lower", interpolation="nearest")
+           ax.set_title(title, fontsize=9)
+           ax.set_xlabel("ky"); ax.set_ylabel("kz")
+       fig.tight_layout()
+
+    See Also
+    --------
+    poisson_disc_mask : incoherent but locally uniform alternative.
+    caipirinha_mask : deterministic lattice for parallel imaging.
+    from_mask : turn a mask into shots.
     """
     if accel <= 1:
         raise ValueError(f"accel must be greater than 1, got {accel}")
@@ -448,10 +516,32 @@ def caipirinha_mask(
 
     Examples
     --------
-    >>> import pulserver
-    >>> mask = pulserver.caipirinha_mask((8, 8), 2, 2, delta=1)
+    >>> import pulserver.pypulseq as pp
+    >>> mask = pp.caipirinha_mask((8, 8), 2, 2, delta=1)
     >>> int(mask.sum())
     16
+
+    .. plot::
+       :include-source: false
+
+       import matplotlib.pyplot as plt
+       import pulserver.pypulseq as pp
+
+       fig, axes = plt.subplots(1, 3, figsize=(9, 3.2))
+       for ax, delta in zip(axes, (0, 1, 2)):
+           ax.imshow(pp.caipirinha_mask((32, 16), 2, 3, delta=delta).T,
+                     cmap="gray", origin="lower", interpolation="nearest")
+           ax.set_title(f"ry=2, rz=3, delta={delta}", fontsize=9)
+           ax.set_xlabel("ky"); ax.set_ylabel("kz")
+       fig.tight_layout()
+
+    References
+    ----------
+    Breuer et al., CAIPIRINHA, DOI ``10.1002/mrm.20787``.
+
+    See Also
+    --------
+    skipped_caipi : segmented EPI plan covering this lattice.
     """
     if ry < 1 or rz < 1:
         raise ValueError("ry and rz must be >= 1")
@@ -470,7 +560,55 @@ def from_mask(
     seed: int = 0,
     n_sections: int = 3,
 ) -> SamplingPattern:
-    """Build absolute Cartesian trains while retaining mask/order separately."""
+    """Turn a Cartesian mask into ordered shots of absolute (ky, kz) indices.
+
+    The bridge from *which* lines are sampled (a boolean mask) to *when* they
+    are acquired (echo trains). Every sampled location is covered exactly once
+    — the result is verified before returning — and the originating mask is
+    retained on the pattern for the reconstruction.
+
+    Use ``train_length=1`` for GRE and other acquisitions without an inner
+    train; the result is then one shot per sampled line.
+
+    Parameters
+    ----------
+    mask : array_like of bool
+        1D ``(ny,)`` or 2D ``(ny, nz)`` sampling mask.
+    train_length : int, optional
+        Echo-train / segment length (default 1).
+    ordering : {'linear', 'radial', 'radial_adaptive', 'shuffling'}, optional
+        Echo-train ordering applied to the sampled locations.
+    seed : int, optional
+        Seed for ``ordering='shuffling'``.
+    n_sections : int, optional
+        Radial section count for ``ordering='radial_adaptive'``.
+
+    Returns
+    -------
+    SamplingPattern
+        ``support`` of sampled ``(ky[, kz])`` indices, one order entry per
+        shot, and the originating ``mask``.
+
+    Raises
+    ------
+    RuntimeError
+        If the chosen ordering does not cover the mask exactly once.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> mask = pp.caipirinha_mask((32, 8), 2, 2, delta=1)
+    >>> plan = pp.from_mask(mask, train_length=8, ordering="radial")
+    >>> plan.n_samples == int(mask.sum())
+    True
+    >>> plan.inner_lengths
+    (8, 8, 8, 8, 8, 8, 8, 8)
+
+    See Also
+    --------
+    random_mask, caipirinha_mask, poisson_disc_mask : mask generators.
+    fse_radial_order : the underlying orderings.
+    """
     mask = np.asarray(mask, dtype=bool)
     if mask.ndim not in (1, 2):
         raise ValueError("mask must be one- or two-dimensional")
@@ -539,10 +677,28 @@ def poisson_disc_mask(
 
     Examples
     --------
-    >>> import pulserver
-    >>> mask = pulserver.poisson_disc_mask((48, 48), 4.0, calib=(8, 8), seed=1)
+    >>> import pulserver.pypulseq as pp
+    >>> mask = pp.poisson_disc_mask((48, 48), 4.0, calib=(8, 8), seed=1)
     >>> mask.shape
     (48, 48)
+
+    .. plot::
+       :include-source: false
+
+       import matplotlib.pyplot as plt
+       import pulserver.pypulseq as pp
+
+       fig, axes = plt.subplots(1, 3, figsize=(9, 3.2))
+       for ax, accel in zip(axes, (2.0, 4.0, 8.0)):
+           ax.imshow(pp.poisson_disc_mask((64, 64), accel, calib=(12, 12), seed=1).T,
+                     cmap="gray", origin="lower", interpolation="nearest")
+           ax.set_title(f"R={accel:g}", fontsize=9)
+           ax.set_xlabel("ky"); ax.set_ylabel("kz")
+       fig.tight_layout()
+
+    References
+    ----------
+    SigPy ``sigpy.mri.samp.poisson`` (BSD 3-Clause); Bridson, SIGGRAPH 2007.
     """
     if accel <= 1:
         raise ValueError(f"accel must be greater than 1, got {accel}")
@@ -570,8 +726,8 @@ def golden_angles(n: int) -> np.ndarray:
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver
-    >>> angles = pulserver.golden_angles(4)
+    >>> import pulserver.pypulseq as pp
+    >>> angles = pp.golden_angles(4)
     >>> round(float(np.rad2deg(angles[1] - angles[0])), 3)
     111.246
     """
@@ -598,8 +754,8 @@ def uniform_angles(n: int) -> np.ndarray:
 
     Examples
     --------
-    >>> import pulserver
-    >>> len(pulserver.uniform_angles(8))
+    >>> import pulserver.pypulseq as pp
+    >>> len(pp.uniform_angles(8))
     8
     """
     from .. import _arbgrad as arbgrad

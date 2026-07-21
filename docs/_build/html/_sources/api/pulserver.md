@@ -1,10 +1,26 @@
 # `pulserver`
 
-`pulserver` contains plugin contracts, protocol types, and convenient
-re-exports for sequence authoring. Authoring helpers are also available in the
-more focused {doc}`pulserver.pypulseq <pypulseq>` namespace.
+The root namespace is the **plugin contract**: the base class a sequence
+plugin subclasses, the typed parameters its scanner UI is built from, the
+helpers that serialise and validate a protocol, and the offline CLI.
 
-## Types
+It deliberately exports *no* waveform-authoring helpers. RF pulses, gradients,
+readout modules, sampling patterns and phase schedules live in
+{doc}`pulserver.pypulseq <pypulseq>` and are importable only from there, so a
+plugin's two halves stay visibly separate:
+
+```python
+import pulserver.pypulseq as pp           # waveforms and events
+from pulserver import Sequence, UIParam   # plugin contract
+```
+
+## Plugin contracts
+
+The two base classes a plugin builds on, plus the entry point that turns one
+into a command-line tool. `Sequence` (alias `PulseqSequence`) declares the
+default protocol and synthesises the `.seq` file; `Module` is a reusable,
+stateful fragment — an RF pulse or a readout train — that is re-parameterised
+and appended shot after shot.
 
 ```{eval-rst}
 .. autosummary::
@@ -14,6 +30,40 @@ more focused {doc}`pulserver.pypulseq <pypulseq>` namespace.
    pulserver.Sequence
    pulserver.PulseqSequence
    pulserver.Module
+   pulserver.run_cli
+```
+
+## Protocol parameter types
+
+One class per scanner UI control. Each carries the value, its display unit,
+and the bounds the interpreter enforces, so a single object drives both the UI
+and the offline default protocol.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/pulserver
+   :nosignatures:
+
+   pulserver.TypeinFloatParam
+   pulserver.DropdownFloatParam
+   pulserver.TypeinIntParam
+   pulserver.DropdownIntParam
+   pulserver.BoolParam
+   pulserver.StringListParam
+   pulserver.Description
+```
+
+## Protocol keys and enumerations
+
+`UIParam` is the canonical key namespace every protocol is written against.
+The `*Key` groups record which value type each key expects; the remaining
+enumerations are the fixed option sets behind dropdown controls.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/pulserver
+   :nosignatures:
+
    pulserver.UIParam
    pulserver.Validate
    pulserver.ParamKind
@@ -26,19 +76,15 @@ more focused {doc}`pulserver.pypulseq <pypulseq>` namespace.
    pulserver.ImagingMode
    pulserver.PreparationType
    pulserver.TriggerType
-   pulserver.TypeinFloatParam
-   pulserver.DropdownFloatParam
-   pulserver.TypeinIntParam
-   pulserver.DropdownIntParam
-   pulserver.BoolParam
-   pulserver.StringListParam
-   pulserver.Description
 ```
 
 `Protocol` and `ProtocolValue` are the mapping and value type aliases used by
-the protocol helpers below.
+the helpers below.
 
 ## Protocol handling
+
+Validation, and round-tripping between the typed parameter objects above and
+the plain-dictionary form exchanged with the interpreter and the offline CLI.
 
 ```{eval-rst}
 .. autosummary::
@@ -55,90 +101,18 @@ the protocol helpers below.
    pulserver.protocol_to_dict
    pulserver.dict_to_protocol
    pulserver.set_protocol_value
-   pulserver.run_cli
 ```
 
-## RF pulses and preparation
+## Protocol accessors
+
+`pulserver.params` reads and writes protocol values by canonical key and
+resolves derived quantities — phase FOV, ACS size, readout/phase axes — that
+plugins would otherwise each recompute.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/pulserver
    :nosignatures:
 
-   pulserver.make_hard_pulse
-   pulserver.make_adiabatic_pulse
-   pulserver.make_sigpy_pulse
-   pulserver.make_slr_pulse
-   pulserver.make_frequency_selective_pulse
-   pulserver.make_slice_selective_pulse
-   pulserver.make_spsp_pulse
-   pulserver.make_spatially_selective_pulse
-   pulserver.make_spiral_selective_pulse
-   pulserver.make_2d_selective_pulse
-   pulserver.make_3d_selective_pulse
-   pulserver.make_inversion_pulse
-   pulserver.make_refocusing_pulse
-   pulserver.make_mt_pulse
-   pulserver.make_ihmt_pulse
-   pulserver.make_bloch_siegert_pulse
-   pulserver.make_t2prep_pulse
-   pulserver.make_t1t2_prep_pulse
-   pulserver.make_diffusion_prep
-   pulserver.make_fat_saturation_pulse
-```
-
-## Encoding, gradients, and timing
-
-```{eval-rst}
-.. autosummary::
-   :toctree: generated/pulserver
-   :nosignatures:
-
-   pulserver.make_line_readout
-   pulserver.make_epi_readout
-   pulserver.make_fse_readout
-   pulserver.make_radial_readout
-   pulserver.make_spiral_readout
-   pulserver.make_rosette_readout
-   pulserver.make_noncartesian_3d_readout
-   pulserver.make_zte_readout
-   pulserver.make_crusher
-   pulserver.make_phase_encoding
-   pulserver.make_phase_blip
-   pulserver.make_spoiler
-   pulserver.calc_adc_timing
-```
-
-## Sampling and schedules
-
-```{eval-rst}
-.. autosummary::
-   :toctree: generated/pulserver
-   :nosignatures:
-
-   pulserver.chunk_indices
-   pulserver.linear_order
-   pulserver.outer_inner_order
-   pulserver.outer_product
-   pulserver.sampled_lines
-   pulserver.fse_linear_order
-   pulserver.fse_radial_order
-   pulserver.fse_radial_adaptive_order
-   pulserver.fse_shuffling_order
-   pulserver.random_mask
-   pulserver.caipirinha_mask
-   pulserver.poisson_disc_mask
-   pulserver.from_mask
-   pulserver.from_relative_shifts
-   pulserver.skipped_caipi
-   pulserver.radial_2d
-   pulserver.golden_angles
-   pulserver.uniform_angles
-   pulserver.golden_means_3d
-   pulserver.spiral_phyllotaxis
-   pulserver.directions_to_rotations
-   pulserver.slice_groups
-   pulserver.make_rf_spoiling_schedule
-   pulserver.make_phase_cycling_schedule
-   pulserver.make_traps_schedule
+   pulserver.params
 ```

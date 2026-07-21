@@ -43,6 +43,53 @@ def _from_shots(shots, shape):
 
 
 def from_relative_shifts(starts, shifts, *, shape) -> SamplingPattern:
+    """Build a sampling plan from per-shot start points and blip increments.
+
+    The natural description of any blipped train: a shot starts somewhere in
+    (ky, kz) and each subsequent echo is reached by a *relative* step. Both
+    views the sequence needs come out of the result — ``pattern[shot]`` gives
+    the absolute coordinates to label, ``pattern.increments(shot)`` the blip
+    areas to play.
+
+    ``shifts`` may be one shared list of increments, or one list per shot when
+    trains differ (EPTI, zigzag).
+
+    Parameters
+    ----------
+    starts : array_like
+        Shape ``(n_shots, D)`` integer start coordinates.
+    shifts : array_like
+        Shape ``(inner, D)`` shared by all shots, or ``(n_shots, inner, D)``.
+        Entry 0 is normally all-zero so the first echo sits on ``starts``.
+    shape : tuple of int
+        Cartesian grid extent; every resulting coordinate must fall inside it.
+
+    Returns
+    -------
+    SamplingPattern
+        Deduplicated ``support`` of absolute coordinates, one order entry per
+        shot, plus the implied Cartesian ``mask``.
+
+    Examples
+    --------
+    >>> from pulserver.pypulseq import from_relative_shifts
+    >>> plan = from_relative_shifts(
+    ...     starts=[[0, 0], [1, 0]],
+    ...     shifts=[[0, 0], [2, 1], [4, 2]],
+    ...     shape=(8, 4),
+    ... )
+    >>> plan[0]
+    array([[0, 0],
+           [2, 1],
+           [4, 2]])
+    >>> plan.increments(0)
+    array([[2, 1],
+           [2, 1]])
+
+    See Also
+    --------
+    skipped_caipi : segmented blipped-CAIPI plan built on this representation.
+    """
     starts = _integers(starts, "starts")
     shifts = _integers(shifts, "shifts")
     if starts.ndim != 2:
@@ -97,6 +144,75 @@ def interleaved(shape, *, acceleration=1, num_shots=1, axis=0, reverse_alternate
 
 
 def skipped_caipi(shape, *, acceleration, caipi_shift, segments):
+    """Build a segmented skipped-CAIPI 3D-EPI sampling plan.
+
+    Combines in-plane and through-plane acceleration with a CAIPI shift that
+    advances ``caipi_shift`` partitions per acquired line, and splits the
+    result into ``segments`` interleaved shots so the echo train (and hence T2*
+    blurring and distortion) shortens without changing the sampled lattice.
+
+    The construction is verified against
+    :func:`~pulserver.pypulseq.caipirinha_mask` before returning: the shots
+    cover that lattice exactly, once each.
+
+    Parameters
+    ----------
+    shape : tuple of int
+        ``(ny, nz)`` phase-encode and partition matrix. ``ny`` must be
+        divisible by ``segments * ry`` and ``nz`` by ``rz``.
+    acceleration : tuple of int
+        ``(ry, rz)`` in-plane and through-plane acceleration.
+    caipi_shift : int
+        Partition shift applied per acquired phase-encode line.
+    segments : int
+        Number of interleaved shots the train is split into.
+
+    Returns
+    -------
+    SamplingPattern
+        Absolute ``(ky, kz)`` coordinates per shot, plus the Cartesian
+        ``mask``.
+
+    Raises
+    ------
+    RuntimeError
+        If the generated shots do not exactly tile the equivalent CAIPI mask.
+
+    Examples
+    --------
+    >>> from pulserver.pypulseq import skipped_caipi
+    >>> plan = skipped_caipi((32, 8), acceleration=(2, 2), caipi_shift=1, segments=2)
+    >>> plan.n_shots, plan.n_samples
+    (8, 64)
+    >>> plan[0]
+    array([[ 0,  0],
+           [ 4,  2],
+           [ 8,  4],
+           [12,  6],
+           [16,  0],
+           [20,  2],
+           [24,  4],
+           [28,  6]])
+
+    .. plot::
+       :include-source: false
+
+       import matplotlib.pyplot as plt
+       from pulserver.pypulseq import skipped_caipi
+
+       plan = skipped_caipi((32, 8), acceleration=(2, 2), caipi_shift=1, segments=2)
+       fig, ax = plt.subplots(figsize=(6, 2.6))
+       for shot in range(plan.n_shots):
+           c = plan[shot]
+           ax.plot(c[:, 0], c[:, 1], marker="o", ms=4, lw=0.8)
+       ax.set_xlabel("ky"); ax.set_ylabel("kz")
+       ax.set_title("skipped-CAIPI (32, 8), R=(2, 2), shift 1, 2 segments")
+       fig.tight_layout()
+
+    References
+    ----------
+    Stirnberg et al., segmented skipped-CAIPI, DOI ``10.1002/mrm.28486``.
+    """
     ny, nz = (int(v) for v in shape)
     ry, rz = (int(v) for v in acceleration)
     segments = int(segments)

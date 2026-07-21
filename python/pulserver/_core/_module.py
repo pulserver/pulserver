@@ -13,10 +13,53 @@ _ModuleT = TypeVar("_ModuleT", bound="Module")
 class Module(Sequence[Block], ABC):
     """Base class for a reusable, stateful sequence fragment.
 
-    Modules expose their current state as an immutable sequence of Pulseq
-    blocks. Concrete module classes are returned by the public ``make_*``
-    factories. Subclass this type only to implement a new reusable RF,
-    preparation, encoding, or readout module.
+    Every ``make_*`` factory in :mod:`pulserver.pypulseq` returns one of these:
+    an excitation with its gradients, a preparation with its delays and
+    spoiler, a whole readout shot. Waveforms are designed **once**, at
+    construction; per-shot variation (phase-encode index, RF phase, slice
+    frequency, rotation) is applied through ``set_state`` and re-rendered
+    lazily, so a loop over thousands of shots costs no redesign.
+
+    A module *is* an immutable sequence of Pulseq blocks for its current state:
+    ``len(module)`` is the block count, ``module[i]`` one block tuple, and
+    iteration yields them in order. ``add_to(seq)`` appends them; ``get()``
+    returns them as a standalone sequence. Concrete modules also accept
+    ``module(seq, **state)`` as shorthand for set-then-append.
+
+    Subclass this only to implement a *new* reusable RF, preparation, encoding
+    or readout module — the shipped factories cover the standard families.
+
+    Parameters
+    ----------
+    system : pypulseq.Opts
+        System limits the module was designed against.
+
+    Attributes
+    ----------
+    blocks : tuple of tuple
+        Immutable block snapshot for the current state.
+    num_blocks : int
+        Number of blocks in that snapshot.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    >>> from pulserver import Module
+    >>> readout = pp.make_line_readout(system, (0.22, 0.22), (128, 128))
+    >>> isinstance(readout, Module)
+    True
+    >>> readout.set_state(lin_idx=0).num_blocks
+    3
+
+    Design once, re-index per shot::
+
+        excitation = pp.make_slice_selective_pulse(np.deg2rad(15), 5e-3, system=system)
+        readout = pp.make_line_readout(system, fov, matrix)
+        for ky in range(matrix[1]):
+            excitation(seq, phase_offset_rad=phases[ky])
+            readout(seq, pe_idx=ky, rf_phase_rad=phases[ky])
     """
 
     def __init__(self, system: Any) -> None:

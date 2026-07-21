@@ -14,7 +14,7 @@ Outer-loop labels such as slice group and frame remain with the sequence loop.
 
 ```python
 import numpy as np
-from pulserver import from_mask, random_mask
+from pulserver.pypulseq import from_mask, random_mask
 
 mask = random_mask((128, 64), 4, calib=(16, 8), seed=0)
 fse = from_mask(mask, train_length=16, ordering="radial")
@@ -30,7 +30,7 @@ not require Numba.
 ## EPI and other relative-shift trains
 
 ```python
-from pulserver import from_relative_shifts
+from pulserver.pypulseq import from_relative_shifts
 
 plan = from_relative_shifts(
     starts=[[8, 2], [9, 2]],
@@ -53,7 +53,7 @@ not embed a reconstruction optimizer.
 ## Non-Cartesian tilts and segmentation
 
 ```python
-from pulserver import directions_to_rotations, golden_means_3d, radial_2d, spiral_phyllotaxis
+from pulserver.pypulseq import directions_to_rotations, golden_means_3d, radial_2d, spiral_phyllotaxis
 
 radial = radial_2d(1000, scheme="tiny_golden", tiny_index=2)
 raga = radial_2d(
@@ -72,7 +72,7 @@ temporal index order.
 ## Slice order, SMS, and dynamic outer dimensions
 
 ```python
-from pulserver import outer_product, slice_groups
+from pulserver.pypulseq import outer_product, slice_groups
 
 groups = slice_groups(
     48, spacing_m=3e-3, order="interleaved", sms_factor=3

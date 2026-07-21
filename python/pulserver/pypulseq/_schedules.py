@@ -14,7 +14,64 @@ def make_rf_spoiling_schedule(
     initial_phase: float = 0.0,
     initial_increment: float = 0.0,
 ) -> np.ndarray:
-    """Return the standard quadratic RF-spoiling phase schedule in radians."""
+    """Return the quadratic RF-spoiling phase schedule, in radians.
+
+    RF spoiling destroys residual transverse magnetization by advancing the
+    excitation phase quadratically: the increment itself grows by
+    ``increment`` every TR, so the phase never repeats over any short cycle
+    and coherences average away. 117 degrees is the standard choice for
+    spoiled GRE.
+
+    Set the same value as the excitation ``phase_offset`` **and** the ADC
+    ``phase_offset`` of each TR, so the receiver demodulates in step.
+
+    Parameters
+    ----------
+    length : int
+        Number of repetitions.
+    increment : float, optional
+        Quadratic phase increment (rad); 117 degrees by default.
+    initial_phase : float, optional
+        Phase of the first repetition (rad).
+    initial_increment : float, optional
+        Linear increment at the first repetition (rad).
+
+    Returns
+    -------
+    numpy.ndarray
+        Phases (rad) in ``[0, 2 pi)``, length ``length``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pulserver.pypulseq import make_rf_spoiling_schedule
+    >>> np.rad2deg(make_rf_spoiling_schedule(4)).round(1)
+    array([  0.,   0., 117., 351.])
+
+    Apply it per TR::
+
+        phases = make_rf_spoiling_schedule(n_reps)
+        for rep in range(n_reps):
+            excitation(seq, phase_offset_rad=phases[rep])
+            readout(seq, rf_phase_rad=phases[rep])
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import matplotlib.pyplot as plt
+       from pulserver.pypulseq import make_rf_spoiling_schedule
+
+       plt.figure(figsize=(6, 3))
+       plt.plot(np.rad2deg(make_rf_spoiling_schedule(64)), marker="o", ms=3, lw=0.7)
+       plt.xlabel("repetition"); plt.ylabel("RF phase [deg]")
+       plt.title("quadratic RF spoiling, 117 deg increment")
+       plt.tight_layout()
+
+    See Also
+    --------
+    make_phase_cycling_schedule : the balanced-SSFP alternative.
+    """
     if length < 0:
         raise ValueError("length must be >= 0")
     phases = np.empty(length, dtype=float)
@@ -31,7 +88,39 @@ def make_phase_cycling_schedule(
     length: int,
     phases: Sequence[float] = (0.0, np.pi),
 ) -> np.ndarray:
-    """Repeat an arbitrary phase cycle to ``length`` entries, in radians."""
+    """Tile a fixed phase cycle to ``length`` entries, in radians.
+
+    Unlike RF spoiling, phase *cycling* deliberately repeats: the excitation
+    phase steps through a short, fixed pattern so that the steady state is
+    preserved and its off-resonance response is shifted in a controlled way.
+    The default ``(0, pi)`` alternation is standard bSSFP; longer cycles
+    (``0, pi/2, pi, 3pi/2``) are used to move or average the banding pattern.
+
+    Parameters
+    ----------
+    length : int
+        Number of repetitions to fill.
+    phases : sequence of float, optional
+        The cycle to repeat (rad); ``(0, pi)`` by default.
+
+    Returns
+    -------
+    numpy.ndarray
+        Phases (rad) in ``[0, 2 pi)``, length ``length``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pulserver.pypulseq import make_phase_cycling_schedule
+    >>> np.rad2deg(make_phase_cycling_schedule(5))
+    array([  0., 180.,   0., 180.,   0.])
+    >>> np.rad2deg(make_phase_cycling_schedule(4, (0.0, np.pi / 2)))
+    array([ 0., 90.,  0., 90.])
+
+    See Also
+    --------
+    make_rf_spoiling_schedule : for spoiled, non-steady-state sequences.
+    """
     if length < 0:
         raise ValueError("length must be >= 0")
     cycle = np.asarray(phases, dtype=float)
@@ -46,7 +135,68 @@ def make_traps_schedule(
     *,
     variable: bool = True,
 ) -> np.ndarray:
-    """Return an Alsop-style TRAPS refocusing schedule in radians."""
+    """Return a TRAPS variable refocusing flip-angle schedule, in radians.
+
+    A long FSE train played at a constant 180 degrees both exceeds SAR limits
+    and decays fast. TRAPS instead starts high and sweeps down to a low target
+    flip angle, driving the magnetization into a pseudo-steady state whose
+    signal decays far more slowly — so a much longer echo train stays usable.
+
+    ``variable=False`` returns a constant ``target_flip_angle`` train, which is
+    the useful comparison baseline.
+
+    Parameters
+    ----------
+    length : int
+        Echo train length (>= 1).
+    target_flip_angle : float
+        Asymptotic refocusing flip angle (rad), positive.
+    variable : bool, optional
+        Sweep down to the target (default) instead of holding it constant.
+
+    Returns
+    -------
+    numpy.ndarray
+        Refocusing flip angles (rad), length ``length``, monotonically
+        decreasing towards ``target_flip_angle``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pulserver.pypulseq import make_traps_schedule
+    >>> flips = make_traps_schedule(8, np.deg2rad(120))
+    >>> np.rad2deg(flips)[[0, -1]].round(1)
+    array([153. , 120.2])
+
+    Feed it to an FSE train as a per-echo envelope scale::
+
+        flips = make_traps_schedule(etl, np.deg2rad(120))
+        readout = pp.make_fse_readout(system, fov, matrix, etl, refocusing,
+                                      refoc_flip_scale=flips / np.pi)
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import matplotlib.pyplot as plt
+       from pulserver.pypulseq import make_traps_schedule
+
+       plt.figure(figsize=(6, 3))
+       for target in (60, 90, 120):
+           flips = make_traps_schedule(32, np.deg2rad(target))
+           plt.plot(np.rad2deg(flips), marker="o", ms=3, label=f"target {target} deg")
+       plt.xlabel("echo"); plt.ylabel("refocusing flip [deg]")
+       plt.title("TRAPS schedules, ETL 32"); plt.legend(fontsize=8)
+       plt.tight_layout()
+
+    References
+    ----------
+    Alsop, TRAPS / variable-flip refocusing, DOI ``10.1002/mrm.1910370422``.
+
+    See Also
+    --------
+    make_fse_readout : consumes the schedule per echo.
+    """
     if length < 1:
         raise ValueError("length must be >= 1")
     if not np.isfinite(target_flip_angle) or target_flip_angle <= 0:

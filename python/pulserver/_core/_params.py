@@ -79,12 +79,23 @@ class Validate(StrEnum):
 
 
 class InputMode(StrEnum):
-    """GE interpreter input mode for a numeric parameter.
+    """How a numeric parameter is presented in the GE interpreter UI.
+
+    Set implicitly by the parameter class you choose — ``Typein*``,
+    ``Dropdown*`` or ``Off*`` — rather than passed by hand.
 
     Notes
     -----
     ``OFF`` maps to ``num_entries=0``, ``TYPEIN`` to ``1``, and ``DROPDOWN``
     to ``1 + len(options)``.
+
+    Examples
+    --------
+    >>> from pulserver import DropdownIntParam, InputMode, TypeinIntParam
+    >>> TypeinIntParam(value=1).mode is InputMode.TYPEIN
+    True
+    >>> DropdownIntParam(value=128, options=[64, 128]).num_entries
+    3
     """
 
     OFF = "off"
@@ -93,21 +104,46 @@ class InputMode(StrEnum):
 
 
 class SequenceType(StrEnum):
-    """Pulse sequence family shown in the UI."""
+    """Pulse sequence family shown in the UI.
+
+    Examples
+    --------
+    >>> from pulserver import SequenceType, UIParam, make_enum_param
+    >>> make_enum_param(UIParam.SEQUENCE_TYPE, SequenceType.GRADIENT_ECHO).value
+    'gradient_echo'
+    """
 
     SPIN_ECHO = "spin_echo"
     GRADIENT_ECHO = "gradient_echo"
 
 
 class ImagingMode(StrEnum):
-    """Acquisition dimensionality shown in the UI."""
+    """Acquisition dimensionality shown in the UI.
+
+    Examples
+    --------
+    >>> from pulserver import ImagingMode
+    >>> str(ImagingMode.THREE_D)
+    '3d'
+    """
 
     TWO_D = "2d"
     THREE_D = "3d"
 
 
 class PreparationType(StrEnum):
-    """Preparation pulse family shown in the UI."""
+    """Preparation pulse family shown in the UI.
+
+    Selects which magnetization-preparation module a plugin plays before the
+    imaging train — see :func:`pulserver.pypulseq.make_inversion_pulse` and
+    :func:`pulserver.pypulseq.make_t2prep_pulse`.
+
+    Examples
+    --------
+    >>> from pulserver import PreparationType
+    >>> str(PreparationType.T2_PREP)
+    't2_prep'
+    """
 
     INVERSION = "inversion"
     T2_PREP = "t2_prep"
@@ -116,10 +152,25 @@ class PreparationType(StrEnum):
 class TriggerType(StrEnum):
     """Trigger source selection shown in the UI.
 
+    The member *values* are the pypulseq trigger channel names, so a selected
+    option can be handed straight to
+    :func:`pulserver.pypulseq.make_trigger`.
+
     Notes
     -----
     ``physio1`` and ``physio2`` match the pypulseq trigger channel names used
     when creating trigger events.
+
+    Examples
+    --------
+    >>> from pulserver import TriggerType, UIParam, make_enum_param
+    >>> make_enum_param(UIParam.TRIGGER_TYPE, TriggerType.ECG).value
+    'physio2'
+
+    Gate the sequence on the selected channel::
+
+        if channel != TriggerType.NONE:
+            seq.add_block(pp.make_trigger(channel, duration=1e-3))
     """
 
     NONE = "none"
@@ -128,7 +179,18 @@ class TriggerType(StrEnum):
 
 
 class ParamKind(StrEnum):
-    """Expected protocol value kind for a key."""
+    """Value kind a canonical protocol key expects.
+
+    Returned by :func:`expected_param_kind` and used by
+    :func:`validate_protocol` to reject a control of the wrong type before it
+    ever reaches the scanner.
+
+    Examples
+    --------
+    >>> from pulserver import ParamKind, UIParam, expected_param_kind
+    >>> expected_param_kind(UIParam.TR) is ParamKind.FLOAT
+    True
+    """
 
     FLOAT = "float"
     INT = "int"
@@ -142,7 +204,19 @@ MAX_INFERRED_DROPDOWN_OPTIONS = 4
 
 
 class FloatKey(StrEnum):
-    """Canonical keys whose values are expected to be float-like params."""
+    """Canonical keys whose values must be float parameters.
+
+    One of four key groups (see also :class:`IntKey`, :class:`BoolKey`,
+    :class:`EnumKey`) that together define which value type each canonical key
+    accepts. Reach them through :class:`UIParam`; the groups exist so
+    validation can classify a key without a lookup table.
+
+    Examples
+    --------
+    >>> from pulserver import FloatKey, UIParam
+    >>> UIParam.TR is FloatKey.TR
+    True
+    """
 
     SAT_X_LOC1 = "sat_x_loc1"
     SAT_X_LOC2 = "sat_x_loc2"
@@ -182,7 +256,14 @@ class FloatKey(StrEnum):
 
 
 class IntKey(StrEnum):
-    """Canonical keys whose values are expected to be int-like params."""
+    """Canonical keys whose values must be integer parameters.
+
+    Examples
+    --------
+    >>> from pulserver import IntKey, ParamKind, expected_param_kind
+    >>> expected_param_kind(IntKey.NUM_ECHOES) is ParamKind.INT
+    True
+    """
 
     SAT_X = "sat_x"
     SAT_Y = "sat_y"
@@ -200,7 +281,14 @@ class IntKey(StrEnum):
 
 
 class BoolKey(StrEnum):
-    """Canonical keys whose values are expected to be boolean params."""
+    """Canonical keys whose values must be boolean parameters.
+
+    Examples
+    --------
+    >>> from pulserver import BoolKey, ParamKind, expected_param_kind
+    >>> expected_param_kind(BoolKey.RECORD_PHYSIO) is ParamKind.BOOL
+    True
+    """
 
     SWAP_PHASE_FREQ = "swap_phase_freq"
     ENABLE_SATURATION_UI = "enable_saturation_ui"
@@ -208,7 +296,17 @@ class BoolKey(StrEnum):
 
 
 class EnumKey(StrEnum):
-    """Canonical keys whose values are expected to be enum/string-list params."""
+    """Canonical keys whose values must be string-list (enum) parameters.
+
+    Build their values with :func:`make_enum_param` rather than by hand, so
+    the selected string and its dropdown index stay consistent.
+
+    Examples
+    --------
+    >>> from pulserver import EnumKey, enum_options
+    >>> enum_options(EnumKey.IMAGING_MODE)
+    ['2d', '3d']
+    """
 
     SEQUENCE_TYPE = "sequence_type"
     IMAGING_MODE = "imaging_mode"
@@ -451,7 +549,20 @@ class TypeinFloatParam(FloatParam):
 
 @dataclass
 class DropdownFloatParam(FloatParam):
-    """Float parameter displayed as a GE type-in plus dropdown control."""
+    """Float parameter offering preset values plus free type-in.
+
+    Use this instead of :class:`TypeinFloatParam` when a handful of values
+    cover almost every scan — the presets appear in the dropdown, while the
+    field stays typeable for anything else.
+
+    Examples
+    --------
+    >>> from pulserver import DropdownFloatParam
+    >>> te = DropdownFloatParam(value=8.0, min=2.0, max=80.0, unit="ms",
+    ...                         options=[4.0, 8.0, 16.0])
+    >>> te.num_entries
+    4
+    """
 
     mode: InputMode = InputMode.DROPDOWN
 
@@ -529,7 +640,18 @@ class IntParam:
 
 @dataclass
 class TypeinIntParam(IntParam):
-    """Int parameter displayed as a GE type-in control."""
+    """Integer parameter displayed as a GE type-in control.
+
+    The default integer control: a free numeric field bounded by ``min`` and
+    ``max`` — matrix size, echo train length, number of averages.
+
+    Examples
+    --------
+    >>> from pulserver import TypeinIntParam
+    >>> etl = TypeinIntParam(value=16, min=1, max=64)
+    >>> etl.num_entries
+    1
+    """
 
     mode: InputMode = InputMode.TYPEIN
     options: list[int] = field(default_factory=list)
@@ -537,7 +659,16 @@ class TypeinIntParam(IntParam):
 
 @dataclass
 class DropdownIntParam(IntParam):
-    """Int parameter displayed as a GE type-in plus dropdown control."""
+    """Integer parameter offering preset values plus free type-in.
+
+    Examples
+    --------
+    >>> from pulserver import DropdownIntParam
+    >>> matrix = DropdownIntParam(value=128, min=32, max=512,
+    ...                           options=[64, 128, 256])
+    >>> matrix.num_entries
+    4
+    """
 
     mode: InputMode = InputMode.DROPDOWN
 
@@ -623,7 +754,18 @@ class StringListParam:
 
 @dataclass
 class Description:
-    """Read-only description or section header row."""
+    """Read-only text row: a section header or an explanatory note.
+
+    Carries no value and is never read back by the sequence — it exists only
+    to group and annotate the controls around it in the scanner UI.
+
+    Examples
+    --------
+    >>> from pulserver import Description
+    >>> header = Description(text="Diffusion preparation")
+    >>> header.type
+    'description'
+    """
 
     text: str
     type: str = "description"
@@ -726,6 +868,19 @@ def expected_param_kind(key: UIParam | str) -> ParamKind | None:
     -------
     ParamKind or None
         Expected kind for known keys, otherwise ``None``.
+
+    Examples
+    --------
+    >>> from pulserver import ParamKind, UIParam, expected_param_kind
+    >>> expected_param_kind(UIParam.TR)
+    <ParamKind.FLOAT: 'float'>
+    >>> expected_param_kind("not_a_key") is None
+    True
+
+    ``userN_*`` slots are classified by suffix rather than by name:
+
+    >>> expected_param_kind("user3_value")
+    <ParamKind.FLOAT: 'float'>
     """
     key_str = str(key)
     if key_str in _PARAM_KINDS:
@@ -742,12 +897,36 @@ def expected_param_kind(key: UIParam | str) -> ParamKind | None:
 
 
 def validate_protocol_entry(key: ProtocolKey, value: ProtocolValue) -> None:
-    """Validate that a key/value pair matches the expected protocol value type.
+    """Check that one protocol entry uses the value type its key requires.
+
+    Unknown keys pass silently: a plugin may carry its own entries alongside
+    the canonical ones, and only the canonical keys have a declared type.
+
+    Parameters
+    ----------
+    key : ProtocolKey
+        Canonical key or plugin-specific string.
+    value : ProtocolValue
+        Parameter object to check against it.
 
     Raises
     ------
     TypeError
-        If the provided value object is incompatible with the key.
+        If the value object is incompatible with the key.
+
+    Examples
+    --------
+    >>> from pulserver import TypeinFloatParam, TypeinIntParam, UIParam
+    >>> from pulserver import validate_protocol_entry
+    >>> validate_protocol_entry(UIParam.TR, TypeinFloatParam(value=500.0, unit="ms"))
+    >>> validate_protocol_entry(UIParam.TR, TypeinIntParam(value=500))
+    Traceback (most recent call last):
+        ...
+    TypeError: Key 'tr' expects float parameter type (FloatParam), got TypeinIntParam.
+
+    See Also
+    --------
+    validate_protocol : the whole-mapping form.
     """
     expected = expected_param_kind(key)
     if expected is None:
@@ -761,12 +940,29 @@ def validate_protocol_entry(key: ProtocolKey, value: ProtocolValue) -> None:
 
 
 def validate_protocol(protocol: Protocol) -> None:
-    """Validate all key/value pairs in a protocol mapping.
+    """Check every entry of a protocol against its key's declared type.
+
+    Called automatically by :func:`protocol_to_dict`, so a mistyped control
+    fails at serialisation rather than on the scanner.
 
     Parameters
     ----------
     protocol : Protocol
         Protocol mapping to validate.
+
+    Raises
+    ------
+    TypeError
+        On the first entry whose value type does not match its key.
+
+    Examples
+    --------
+    >>> from pulserver import TypeinFloatParam, UIParam, validate_protocol
+    >>> validate_protocol({UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")})
+
+    See Also
+    --------
+    validate_protocol_entry : the single-entry form.
     """
     for key, value in protocol.items():
         validate_protocol_entry(key, value)
@@ -804,12 +1000,64 @@ def make_enum_param(key: UIParam | str, value: StrEnum | str) -> StringListParam
 
 
 def param_to_dict(p: ProtocolValue) -> dict:
-    """Convert a protocol value object to a plain dictionary."""
+    """Convert one protocol parameter object to a plain dictionary.
+
+    The wire format at the Nim/Python bridge boundary; the ``type`` field it
+    carries is what lets :func:`dict_to_param` rebuild the right class.
+
+    Parameters
+    ----------
+    p : ProtocolValue
+        Parameter object.
+
+    Returns
+    -------
+    dict
+        Plain, JSON-serialisable representation.
+
+    Examples
+    --------
+    >>> from pulserver import TypeinFloatParam, param_to_dict
+    >>> entry = param_to_dict(TypeinFloatParam(value=500.0, unit="ms"))
+    >>> entry["type"], entry["value"], entry["unit"]
+    ('float', 500.0, 'ms')
+
+    See Also
+    --------
+    dict_to_param : the inverse.
+    """
     return asdict(p)
 
 
 def dict_to_param(d: dict) -> ProtocolValue:
-    """Reconstruct a protocol value object from a plain dictionary."""
+    """Rebuild a typed protocol parameter from its dictionary form.
+
+    The concrete class is recovered from ``type`` *and* ``mode`` together, so
+    a float entry comes back as :class:`TypeinFloatParam`,
+    :class:`DropdownFloatParam` or ``OffFloatParam`` — the same object the
+    plugin originally declared.
+
+    Parameters
+    ----------
+    d : dict
+        Dictionary produced by :func:`param_to_dict`.
+
+    Returns
+    -------
+    ProtocolValue
+        Reconstructed parameter object.
+
+    Examples
+    --------
+    >>> from pulserver import TypeinFloatParam, dict_to_param, param_to_dict
+    >>> original = TypeinFloatParam(value=500.0, unit="ms")
+    >>> dict_to_param(param_to_dict(original)) == original
+    True
+
+    See Also
+    --------
+    param_to_dict : the inverse.
+    """
     d = dict(d)  # shallow copy to avoid mutating caller's dict
     tag = d.pop("type")
     if "validate" in d:
@@ -841,24 +1089,107 @@ def dict_to_param(d: dict) -> ProtocolValue:
 
 
 def protocol_to_dict(protocol: Protocol) -> dict[str, dict]:
-    """Serialize an entire protocol to nested plain dictionaries.
+    """Serialize a whole protocol to nested plain dictionaries.
 
-    Notes
-    -----
-    The protocol is validated before serialization, so incompatible key/value
-    pairs fail fast.
+    Keys are stringified and values converted with :func:`param_to_dict`. The
+    protocol is validated first, so an incompatible key/value pair fails here
+    rather than downstream.
+
+    Parameters
+    ----------
+    protocol : Protocol
+        Typed protocol mapping.
+
+    Returns
+    -------
+    dict
+        Mapping of key string to plain parameter dictionary.
+
+    Raises
+    ------
+    TypeError
+        If any entry fails :func:`validate_protocol`.
+
+    Examples
+    --------
+    >>> from pulserver import TypeinFloatParam, UIParam, protocol_to_dict
+    >>> serialized = protocol_to_dict({UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")})
+    >>> sorted(serialized)
+    ['TR']
+    >>> serialized["TR"]["value"]
+    500.0
+
+    See Also
+    --------
+    dict_to_protocol : the inverse.
     """
     validate_protocol(protocol)
     return {str(k): param_to_dict(v) for k, v in protocol.items()}
 
 
 def dict_to_protocol(d: dict[str, dict]) -> Protocol:
-    """Deserialize nested plain dictionaries back to a typed protocol."""
+    """Deserialize nested plain dictionaries back into a typed protocol.
+
+    Parameters
+    ----------
+    d : dict
+        Mapping of key string to plain parameter dictionary.
+
+    Returns
+    -------
+    Protocol
+        Mapping of the same keys to reconstructed parameter objects.
+
+    Examples
+    --------
+    >>> from pulserver import TypeinFloatParam, UIParam
+    >>> from pulserver import dict_to_protocol, protocol_to_dict
+    >>> original = {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
+    >>> dict_to_protocol(protocol_to_dict(original))["TR"].value
+    500.0
+
+    See Also
+    --------
+    protocol_to_dict : the inverse.
+    """
     return {k: dict_to_param(v) for k, v in d.items()}
 
 
 def set_protocol_value(protocol: dict, key: UIParam | str, value) -> None:
-    """Set a serialized protocol value and synchronize dropdown indices."""
+    """Set a value in a *serialized* protocol, keeping dropdowns consistent.
+
+    Operates on the plain-dictionary form (post
+    :func:`protocol_to_dict`), in place. For a string-list entry it also
+    updates ``index`` to match the new selection — writing ``value`` alone
+    would leave the UI pointing at the previous option.
+
+    Parameters
+    ----------
+    protocol : dict
+        Serialized protocol, modified in place.
+    key : UIParam or str
+        Canonical key to set.
+    value : Any
+        New value; for a string-list entry it must be one of its ``options``.
+
+    Raises
+    ------
+    KeyError
+        If ``key`` is not present in the protocol.
+    ValueError
+        If a string-list value is not among that entry's options.
+
+    Examples
+    --------
+    >>> from pulserver import TriggerType, UIParam
+    >>> from pulserver import make_enum_param, protocol_to_dict, set_protocol_value
+    >>> serialized = protocol_to_dict(
+    ...     {UIParam.TRIGGER_TYPE: make_enum_param(UIParam.TRIGGER_TYPE, TriggerType.NONE)}
+    ... )
+    >>> set_protocol_value(serialized, UIParam.TRIGGER_TYPE, "physio2")
+    >>> serialized["trigger_type"]["value"], serialized["trigger_type"]["index"]
+    ('physio2', 2)
+    """
     entry = protocol[str(key)]
     entry["value"] = value
     if entry.get("type") == "stringlist":

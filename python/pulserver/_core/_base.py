@@ -24,10 +24,45 @@ from ._params import Protocol
 class PulseqSequence(ABC):
     """Base class that every pulserver sequence plugin must satisfy.
 
-    Notes
-    -----
-    Subclass this and implement the three abstract methods. The Python bridge
-    discovers the subclass automatically.
+    A plugin is one file declaring three things: the protocol it exposes to
+    the scanner UI, whether a given protocol is feasible, and how to turn that
+    protocol into a ``.seq`` file. Implement the three abstract methods below
+    and the bridge discovers the subclass automatically — no registration, no
+    entry point.
+
+    The split matters at runtime: ``validate_protocol`` runs on every UI
+    interaction and must stay fast and side-effect free, while
+    ``make_sequence`` runs once, at download, and is where the waveforms are
+    actually built.
+
+    ``pulserver.Sequence`` is an alias for this class.
+
+    Examples
+    --------
+    A complete, minimal plugin:
+
+    >>> import pulserver.pypulseq as pp
+    >>> from pulserver import PulseqSequence, TypeinFloatParam, UIParam, params
+    >>> class DemoSequence(PulseqSequence):
+    ...     def get_default_protocol(self, opts):
+    ...         return {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
+    ...     def validate_protocol(self, opts, protocol):
+    ...         tr_ms = params.param_float(protocol, UIParam.TR)
+    ...         return {"valid": tr_ms >= 10.0, "duration": None, "info": None}
+    ...     def make_sequence(self, opts, protocol, output_path):
+    ...         seq = pp.Sequence(opts)
+    ...         seq.add_block(pp.make_delay(1e-3))
+    ...         seq.write(output_path)
+    >>> plugin = DemoSequence()
+    >>> plugin.get_default_protocol(pp.Opts())[UIParam.TR].value
+    500.0
+
+    Expose it as an offline CLI with :func:`pulserver.run_cli`.
+
+    See Also
+    --------
+    pulserver.run_cli : offline command-line entry point for a plugin.
+    pulserver.params : read and write protocol values by canonical key.
     """
 
     @abstractmethod

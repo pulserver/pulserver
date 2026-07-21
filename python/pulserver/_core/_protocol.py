@@ -1,4 +1,36 @@
-"""Protocol-dictionary getters/setters and axis resolution for plugins."""
+"""Read and write protocol values, and resolve the quantities derived from them.
+
+Reached as ``pulserver.params``. Pulling a number out of a protocol means
+indexing by key, unwrapping the parameter object and coercing its value —
+repeated at every use site and easy to get subtly wrong. These accessors do it
+once, by canonical key, with the type the key declares, and the ``*_optional``
+forms fall back to a default when a key is absent.
+
+The module also resolves the quantities a plugin would otherwise recompute
+from several entries at a time: the phase field of view, the ACS block size,
+and which physical gradient axes the readout and phase encode map onto after
+``swap_phase_freq``.
+
+Examples
+--------
+>>> from pulserver import TypeinFloatParam, UIParam, params
+>>> protocol = {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
+>>> params.param_float(protocol, UIParam.TR)
+500.0
+>>> params.param_float_optional(protocol, UIParam.TE, 8.0)
+8.0
+
+Use it inside a plugin's two protocol-reading methods::
+
+    def make_sequence(self, opts, protocol, output_path):
+        tr_s = params.param_float(protocol, UIParam.TR) * 1e-3
+        ro_axis, pe_axis = params.resolve_readout_phase_axes(protocol)
+
+See Also
+--------
+pulserver.protocol_to_dict : produce the serialized form these read.
+pulserver.set_protocol_value : write a value back, dropdowns included.
+"""
 
 from __future__ import annotations
 

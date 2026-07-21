@@ -50,7 +50,64 @@ def make_fat_saturation_pulse(
     spoil_cycles: float = 4.0,
     system: pp.Opts | None = None,
 ) -> FatSaturationPulse:
-    """Create an SLR fat-saturation pulse with NOPOS/NOROT scope labels."""
+    """Create a fat-saturation module: spectral pulse plus 3-axis spoiler.
+
+    Saturates the fat resonance and immediately dephases it, so the imaging
+    excitation that follows sees only water. The flip angle exceeds 90 degrees
+    (110 by default) to leave fat slightly past the transverse plane, which is
+    more robust to B1 shortfall than an exact 90.
+
+    The two blocks are bracketed by ``NOPOS``/``NOROT`` labels: the module is
+    frequency-selective, not spatially selective, so it must be excluded from
+    the imaging FOV position and rotation transform.
+
+    Give either ``freq_offset`` directly or ``b0``, from which the -3.45 ppm
+    fat shift is computed.
+
+    Parameters
+    ----------
+    freq_offset : float or None, optional
+        Fat offset relative to water (Hz). Mutually exclusive with ``b0``.
+    b0 : float or None, optional
+        Main field (T), used to derive the fat offset.
+    flip_angle : float, optional
+        Saturation flip angle (rad); 110 degrees by default.
+    bandwidth : float, optional
+        Spectral passband (Hz).
+    time_bw_product : float, optional
+        Time-bandwidth product.
+    voxel_size : float
+        Reference length (m) the spoiler dephases across.
+    spoil_cycles : float, optional
+        Dephasing cycles per ``voxel_size``.
+    system : pypulseq.Opts, optional
+        System limits.
+
+    Returns
+    -------
+    FatSaturationPulse
+        Two-block module: ``(rf, labels on)`` then ``(spoiler, labels off)``;
+        total length in ``.duration``.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> fatsat = pp.make_fat_saturation_pulse(b0=3.0, voxel_size=2e-3)
+    >>> len(fatsat)
+    2
+    >>> round(fatsat.duration * 1e3, 2)
+    9.42
+
+    Play it once per TR, before the excitation::
+
+        fatsat(seq)
+        excitation(seq)
+
+    See Also
+    --------
+    make_frequency_selective_pulse : the underlying spectral pulse.
+    make_spsp_pulse : spectral-spatial alternative that needs no spoiler.
+    """
     system = pp.Opts.default if system is None else system
     if freq_offset is None:
         if b0 is None:
@@ -93,7 +150,50 @@ def make_mt_pulse(
     spoil_cycles: float = 4.0,
     system: pp.Opts | None = None,
 ) -> MTPulse:
-    """Create a conventional off-resonant Gaussian MT saturation pulse."""
+    """Create a magnetization-transfer saturation module.
+
+    A long, high-flip Gaussian pulse placed far off resonance saturates the
+    broad macromolecular pool without directly exciting free water; the
+    saturation then transfers to water, reducing its signal in proportion to
+    the local MT effect. A spoiler follows to remove any residual transverse
+    magnetization.
+
+    Parameters
+    ----------
+    flip_angle : float, optional
+        Saturation flip angle (rad); 500 degrees by default.
+    freq_offset : float, optional
+        Off-resonance offset (Hz); must be non-zero.
+    duration : float, optional
+        Pulse duration (s).
+    voxel_size : float
+        Reference length (m) the spoiler dephases across.
+    spoil_cycles : float, optional
+        Dephasing cycles per ``voxel_size``.
+    system : pypulseq.Opts, optional
+        System limits.
+
+    Returns
+    -------
+    MTPulse
+        Two-block module: RF, then spoiler; total length in ``.duration``.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> mt = pp.make_mt_pulse(voxel_size=2e-3)
+    >>> len(mt)
+    2
+
+    Acquire an MT-on / MT-off pair by amplitude-gating the same module::
+
+        for scale in (1.0, 0.0):
+            mt(seq, amplitude_scale=scale)
+
+    See Also
+    --------
+    make_ihmt_pulse : dual-offset variant isolating the inhomogeneous pool.
+    """
     system = pp.Opts.default if system is None else system
     if freq_offset == 0:
         raise ValueError("freq_offset must be non-zero for MT")
@@ -135,7 +235,51 @@ def make_ihmt_pulse(
     spoil_cycles: float = 4.0,
     system: pp.Opts | None = None,
 ) -> IhMTPulse:
-    """Create an alternating dual-offset inhomogeneous-MT pulse train."""
+    """Create an inhomogeneous-MT pulse train alternating +/- offset.
+
+    Inhomogeneous MT isolates the dipolar-order contribution by comparing
+    saturation at a *single* offset with saturation alternating between ``+f``
+    and ``-f``. This factory builds the alternating (dual-offset) arm: one
+    Gaussian per repetition, sign-flipped each time, then a single spoiler.
+    Pair it with :func:`make_mt_pulse` at the same offset and total power for
+    the single-offset arm.
+
+    Parameters
+    ----------
+    flip_angle : float, optional
+        Per-pulse flip angle (rad); 250 degrees by default.
+    freq_offset : float, optional
+        Offset magnitude (Hz); must be positive — both signs are generated.
+    duration : float, optional
+        Duration of each pulse in the train (s).
+    repetitions : int, optional
+        Number of pulses in the train (>= 2).
+    voxel_size : float
+        Reference length (m) the spoiler dephases across.
+    spoil_cycles : float, optional
+        Dephasing cycles per ``voxel_size``.
+    system : pypulseq.Opts, optional
+        System limits.
+
+    Returns
+    -------
+    IhMTPulse
+        Module of ``repetitions`` RF blocks followed by the spoiler; total
+        length in ``.duration``.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> ihmt = pp.make_ihmt_pulse(voxel_size=2e-3, repetitions=4)
+    >>> len(ihmt), ihmt.repetitions
+    (5, 4)
+    >>> ihmt.rf_positive.freq_offset, ihmt.rf_negative.freq_offset
+    (7000.0, -7000.0)
+
+    See Also
+    --------
+    make_mt_pulse : the single-offset reference arm.
+    """
     system = pp.Opts.default if system is None else system
     if freq_offset <= 0:
         raise ValueError("freq_offset must be > 0; both signs are generated")
@@ -173,7 +317,71 @@ def make_bloch_siegert_pulse(
     dwell: float = 10e-6,
     system: pp.Opts | None = None,
 ) -> BlochSiegertPulse:
-    """Create an off-resonant Fermi pulse and its Bloch-Siegert constants."""
+    """Create a Bloch-Siegert B1-mapping pulse and its calibration constants.
+
+    A strong off-resonant Fermi pulse shifts the water resonance by an amount
+    proportional to ``|B1|^2``; acquiring two images with ``+f`` and ``-f``
+    turns that shift into a phase difference, and hence a B1 map. The pulse
+    itself deposits the shift — the readout is an ordinary one.
+
+    The returned module carries the calibration constants the reconstruction
+    needs: ``kbs`` (rad per unit squared Pulseq amplitude) and
+    ``kbs_per_gauss2`` (rad/G^2, the conventional reporting unit).
+
+    Parameters
+    ----------
+    freq_offset : float, optional
+        Off-resonance offset (Hz); must be non-zero. Flip its sign for the
+        second acquisition of the pair.
+    duration : float, optional
+        Pulse duration (s).
+    peak_b1 : float, optional
+        Peak amplitude in Pulseq units (Hz).
+    flat_fraction : float, optional
+        Fraction of the duration held at ``peak_b1``, in ``(0, 1)``.
+    transition_fraction : float, optional
+        Fermi transition width as a fraction of the duration.
+    dwell : float, optional
+        RF raster (s).
+    system : pypulseq.Opts, optional
+        System limits.
+
+    Returns
+    -------
+    BlochSiegertPulse
+        Single-block module exposing ``.kbs`` and ``.kbs_per_gauss2``.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> pulse = pp.make_bloch_siegert_pulse(freq_offset=4000.0)
+    >>> round(pulse.kbs_per_gauss2, 1)
+    86.6
+
+    Acquire the sign-reversed pair::
+
+        for offset in (4000.0, -4000.0):
+            pp.make_bloch_siegert_pulse(freq_offset=offset)(seq)
+            readout(seq)
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import matplotlib.pyplot as plt
+       import pulserver.pypulseq as pp
+
+       rf = pp.make_bloch_siegert_pulse().rf
+       plt.figure(figsize=(6, 3))
+       plt.plot(rf.t * 1e3, np.abs(rf.signal))
+       plt.xlabel("t [ms]"); plt.ylabel("|B1| [Hz]")
+       plt.title("Fermi envelope (8 ms, 80% flat)")
+       plt.tight_layout()
+
+    References
+    ----------
+    Sacolick et al., Bloch-Siegert B1 mapping, DOI ``10.1002/mrm.22357``.
+    """
     system = pp.Opts.default if system is None else system
     if freq_offset == 0:
         raise ValueError("freq_offset must be non-zero")
@@ -275,7 +483,73 @@ def make_t2prep_pulse(
     dwell: float = 10e-6,
     system: pp.Opts | None = None,
 ) -> T2PrepPulse:
-    """Create T2-prep, or hybrid T1/T2-prep with ``final_tip='down'``."""
+    """Create a T2 preparation module (90 - 180 - 90 with a terminating spoiler).
+
+    Magnetization is tipped into the transverse plane, allowed to decay for
+    ``echo_time``, and restored to the longitudinal axis — so the *stored*
+    magnetization carries T2 weighting into whatever readout follows,
+    independent of that readout's own TE. Inter-pulse delays are solved from
+    the actual pulse centres and rounded to the gradient raster.
+
+    ``final_tip='up'`` (default) restores to ``+z``: pure T2 preparation.
+    ``'down'`` restores to ``-z``, which additionally starts a T1 recovery and
+    gives the hybrid T1/T2 weighting exposed as
+    :func:`make_t1t2_prep_pulse`.
+
+    Adiabatic half-passages and an adiabatic 180 are used by default, for
+    B1 robustness; ``adiabatic=False`` swaps in short hard/SLR pulses.
+
+    Parameters
+    ----------
+    echo_time : float
+        Preparation echo time (s), from the first pulse centre to the last.
+    adiabatic : bool, optional
+        Use adiabatic half-passages and refocusing (default True).
+    final_tip : {'up', 'down'}, optional
+        Restore to ``+z`` or ``-z``.
+    voxel_size : float
+        Reference length (m) the spoiler dephases across.
+    spoil_cycles : float, optional
+        Dephasing cycles per ``voxel_size``.
+    half_passage_duration : float, optional
+        Duration of each adiabatic half-passage (s).
+    refocusing_duration : float, optional
+        Duration of the adiabatic refocusing pulse (s).
+    dwell : float, optional
+        RF raster (s).
+    system : pypulseq.Opts, optional
+        System limits.
+
+    Returns
+    -------
+    T2PrepPulse
+        Module holding the three pulses, their delays, and the spoiler; total
+        length in ``.duration``.
+
+    Raises
+    ------
+    ValueError
+        If ``echo_time`` is too short for the requested pulses.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> prep = pp.make_t2prep_pulse(50e-3, voxel_size=2e-3)
+    >>> prep.final_tip
+    'up'
+    >>> round(prep.duration * 1e3, 1)
+    59.4
+
+    Sweep the preparation TE to fit T2::
+
+        for te in (0.0, 30e-3, 60e-3, 90e-3):
+            pp.make_t2prep_pulse(te, voxel_size=2e-3)(seq)
+            readout_train(seq)
+
+    See Also
+    --------
+    make_t1t2_prep_pulse : the ``final_tip='down'`` hybrid.
+    """
     system = pp.Opts.default if system is None else system
     if final_tip not in ("up", "down"):
         raise ValueError("final_tip must be 'up' or 'down'")
@@ -311,7 +585,38 @@ def make_t2prep_pulse(
 
 
 def make_t1t2_prep_pulse(echo_time: float, **kwargs) -> T2PrepPulse:
-    """Create hybrid T1/T2 preparation by storing the final magnetization on -z."""
+    """Create hybrid T1/T2 preparation, storing the magnetization on -z.
+
+    :func:`make_t2prep_pulse` with ``final_tip='down'``. Restoring to ``-z``
+    rather than ``+z`` means the stored magnetization both carries the T2
+    weighting accrued during ``echo_time`` *and* recovers through the null
+    afterwards, so a single module yields joint T1/T2 contrast — no separate
+    inversion pulse is needed.
+
+    Parameters
+    ----------
+    echo_time : float
+        Preparation echo time (s).
+    **kwargs
+        Forwarded to :func:`make_t2prep_pulse` (``voxel_size`` is required).
+
+    Returns
+    -------
+    T2PrepPulse
+        Module with ``final_tip == 'down'``.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> prep = pp.make_t1t2_prep_pulse(50e-3, voxel_size=2e-3)
+    >>> prep.final_tip
+    'down'
+
+    See Also
+    --------
+    make_t2prep_pulse : the general form.
+    make_inversion_pulse : pure T1 preparation.
+    """
     kwargs["final_tip"] = "down"
     return make_t2prep_pulse(echo_time, **kwargs)
 
@@ -430,12 +735,71 @@ def make_diffusion_prep(
     spoil_cycles: float = 4.0,
     system: pp.Opts | None = None,
 ) -> DiffusionPrepPulse:
-    """Create a canonical z-axis diffusion preparation at its full b-value.
+    """Create a diffusion preparation along z, at its full design b-value.
 
-    Attach a rotation extension to the gradient blocks to select a direction,
-    and use :meth:`DiffusionPrepPulse.gradient_for_b_value` for lower
-    b-values. NOPOS/NOROT isolate it from the global imaging FOV transform;
-    NOROT does not suppress an explicit block rotation extension.
+    A stimulated-echo-style preparation (90 - G - 180 - G - 90) that stores
+    diffusion-weighted magnetization on the longitudinal axis, so any readout
+    can follow. Exactly **one** canonical module is designed, along z and at
+    the requested ``b_value``; directions and lower b-values are obtained from
+    it rather than by redesigning:
+
+    - **direction** — attach a rotation extension to the gradient blocks
+      (:func:`directions_to_rotations`, then ``set_state(rotation=...)``);
+    - **b-value** — :meth:`DiffusionPrepPulse.gradient_for_b_value`, or
+      ``set_state(b_value=...)``, which scales the gradient by
+      ``sqrt(b / b_design)``.
+
+    The b-value is computed from the actual rasterized trapezoids and the sign
+    reversal the 180 imposes, not from an idealized formula, and the request
+    is rejected if the system cannot reach it. NOPOS/NOROT keep the module out
+    of the imaging FOV transform; NOROT does *not* suppress an explicit block
+    rotation extension, which is what makes per-direction rotation work.
+
+    Parameters
+    ----------
+    b_value : float
+        Design (maximum) b-value, s/mm^2.
+    gradient_duration : float, optional
+        Duration of each diffusion lobe (s).
+    gradient_separation : float, optional
+        Onset-to-onset lobe separation (s); must exceed
+        ``gradient_duration``.
+    voxel_size : float
+        Reference length (m) the terminating spoiler dephases across.
+    spoil_cycles : float, optional
+        Dephasing cycles per ``voxel_size``.
+    system : pypulseq.Opts, optional
+        System limits.
+
+    Returns
+    -------
+    DiffusionPrepPulse
+        Module with ``.gradient``, ``.b_value``, and total ``.duration``.
+
+    Raises
+    ------
+    ValueError
+        If the requested b-value exceeds what the system can reach with the
+        given timing (the achievable maximum is reported in the message).
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> prep = pp.make_diffusion_prep(500.0, voxel_size=2e-3)
+    >>> prep.b_value
+    500.0
+    >>> prep.gradient_scale(125.0)
+    0.5
+
+    Sweep directions and b-values from the single design::
+
+        directions = pp.golden_means_3d(6).support
+        for rotation in pp.directions_to_rotations(directions):
+            prep(seq, b_value=250.0, rotation=rotation)
+
+    See Also
+    --------
+    directions_to_rotations : diffusion-direction rotation matrices.
     """
     system = pp.Opts.default if system is None else system
     if b_value <= 0 or gradient_duration <= 0 or gradient_separation <= gradient_duration:

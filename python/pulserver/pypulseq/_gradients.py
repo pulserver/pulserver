@@ -41,7 +41,7 @@ def make_spoiler(
     Examples
     --------
     >>> import pypulseq as pp
-    >>> from pulserver import make_spoiler
+    >>> from pulserver.pypulseq import make_spoiler
     >>> gx, gy, gz = make_spoiler(pp.Opts(), voxel_size=3e-3)
 
     .. plot::
@@ -49,7 +49,7 @@ def make_spoiler(
 
        import numpy as np
        import pypulseq as pp
-       from pulserver import make_spoiler
+       from pulserver.pypulseq import make_spoiler
        import matplotlib.pyplot as plt
        gx, gy, gz = make_spoiler(pp.Opts(), voxel_size=3e-3)
        t = np.array([0, gx.rise_time, gx.rise_time + gx.flat_time,
@@ -115,7 +115,7 @@ def make_phase_encoding(
     Examples
     --------
     >>> import pypulseq as pp
-    >>> from pulserver import make_phase_encoding
+    >>> from pulserver.pypulseq import make_phase_encoding
     >>> template, areas = make_phase_encoding(pp.Opts(), "y", 0.22, 64)
     >>> len(areas)
     64
@@ -124,7 +124,7 @@ def make_phase_encoding(
        :include-source: false
 
        import pypulseq as pp
-       from pulserver import make_phase_encoding
+       from pulserver.pypulseq import make_phase_encoding
        import matplotlib.pyplot as plt
        template, areas = make_phase_encoding(pp.Opts(), "y", 0.22, 64)
        plt.stem(range(64), areas)
@@ -176,7 +176,7 @@ def make_crusher(
     Examples
     --------
     >>> import pypulseq as pp
-    >>> from pulserver import make_crusher
+    >>> from pulserver.pypulseq import make_crusher
     >>> gz = make_crusher(pp.Opts(), "z", dephasing_cycles=4.0, voxel_size=5e-3)
     >>> gz_explicit = make_crusher(pp.Opts(), "z", area=800.0)
 
@@ -184,7 +184,7 @@ def make_crusher(
        :include-source: false
 
        import pypulseq as pp
-       from pulserver import make_crusher
+       from pulserver.pypulseq import make_crusher
        import matplotlib.pyplot as plt
        g = make_crusher(pp.Opts(), "z", dephasing_cycles=4.0, voxel_size=5e-3)
        t = [0, g.rise_time, g.rise_time + g.flat_time,
@@ -211,7 +211,49 @@ def make_phase_blip(
     steps: float = 1.0,
     duration: float | None = None,
 ):
-    """Create a phase blip spanning ``steps`` Cartesian k-space cells."""
+    """Create a phase blip spanning ``steps`` Cartesian k-space cells.
+
+    The short gradient played between echoes of a train to advance the phase
+    encode. Stated in *cells* rather than area: one cell is ``1 / fov``, so a
+    blip of ``steps=1`` moves one line and ``steps=R`` implements an
+    acceleration of ``R`` without any further arithmetic. Negative ``steps``
+    blip backwards.
+
+    Parameters
+    ----------
+    system : pypulseq.Opts
+        System limits.
+    axis : str
+        Gradient channel (``"x"``, ``"y"``, or ``"z"``).
+    fov : float
+        Field of view along ``axis`` (m); one k-space cell is ``1 / fov``.
+    steps : float, optional
+        Cells to traverse; non-zero, may be negative.
+    duration : float or None, optional
+        Force a blip duration (s); ``None`` uses the shortest feasible.
+
+    Returns
+    -------
+    SimpleNamespace
+        Blip trapezoid with area ``steps / fov``.
+
+    Examples
+    --------
+    >>> import pypulseq as pp_up
+    >>> from pulserver.pypulseq import make_phase_blip
+    >>> blip = make_phase_blip(pp_up.Opts(), "y", 0.24, steps=2)
+    >>> round(blip.area, 3)
+    8.333
+
+    Blip by the increments a sampling plan prescribes::
+
+        for step in plan.increments(shot)[:, 0]:
+            seq.add_block(make_phase_blip(system, "y", fov, steps=step))
+
+    See Also
+    --------
+    make_phase_encoding : the full-area encode used once per shot.
+    """
     if fov <= 0:
         raise ValueError("fov must be > 0")
     if steps == 0:
@@ -244,8 +286,8 @@ def partition_geometry(npar: int, slice_spacing_m: float):
 
     Examples
     --------
-    >>> from pulserver import make_phase_encoding
-    >>> areas, max_area = encoding.partition_geometry(8, 1e-3)
+    >>> from pulserver.pypulseq._gradients import partition_geometry
+    >>> areas, max_area = partition_geometry(8, 1e-3)
     >>> len(areas)
     8
     """
@@ -284,11 +326,11 @@ def z_worst_case_trapezoids(gz_reph, gz_spoil, max_par_area: float, opts: pp.Opt
     Examples
     --------
     >>> import pypulseq as pp
-    >>> from pulserver import make_phase_encoding
+    >>> from pulserver.pypulseq._gradients import z_worst_case_trapezoids
     >>> opts = pp.Opts()
     >>> gz_reph = pp.make_trapezoid(channel="z", area=-200.0, system=opts)
     >>> gz_spoil = pp.make_trapezoid(channel="z", area=400.0, system=opts)
-    >>> pre, post = encoding.z_worst_case_trapezoids(gz_reph, gz_spoil, 100.0, opts)
+    >>> pre, post = z_worst_case_trapezoids(gz_reph, gz_spoil, 100.0, opts)
     """
     gz_pre_worst = pp.make_trapezoid(channel="z", area=abs(gz_reph.area) + max_par_area, system=opts)
     gz_post_worst = pp.make_trapezoid(channel="z", area=max_par_area + abs(gz_spoil.area), system=opts)
@@ -323,12 +365,12 @@ def combined_z_gradients(z_scale: float, gz_pe_template, gz_reph, gz_spoil, opts
     Examples
     --------
     >>> import pypulseq as pp
-    >>> from pulserver import make_phase_encoding
+    >>> from pulserver.pypulseq._gradients import combined_z_gradients
     >>> opts = pp.Opts()
     >>> gz_reph = pp.make_trapezoid(channel="z", area=-200.0, system=opts)
     >>> gz_spoil = pp.make_trapezoid(channel="z", area=400.0, system=opts)
     >>> gz_pe = pp.make_trapezoid(channel="z", area=100.0, system=opts)
-    >>> pre, post = encoding.combined_z_gradients(0.5, gz_pe, gz_reph, gz_spoil, opts)
+    >>> pre, post = combined_z_gradients(0.5, gz_pe, gz_reph, gz_spoil, opts)
     """
     gz_pe_scaled = pp.scale_grad(gz_pe_template, z_scale)
     gz_pre_combined = pp.make_trapezoid(channel="z", area=gz_reph.area + gz_pe_scaled.area, system=opts)

@@ -9,8 +9,8 @@ import pulserver
 import pulserver.pypulseq as pp
 import pypulseq as upstream
 import pytest
-from pulserver import (
-    Module,
+from pulserver import Module
+from pulserver.pypulseq import (
     SamplingPattern,
     calc_adc_timing,
     make_crusher,
@@ -40,6 +40,15 @@ def test_root_exports_plugin_contract_without_core_imports() -> None:
     assert callable(pulserver.run_cli)
     assert callable(pulserver.set_protocol_value)
     assert isinstance(radial_2d(4), SamplingPattern)
+
+
+def test_root_namespace_excludes_waveform_authoring_helpers() -> None:
+    leaked = {"make_hard_pulse", "make_crusher", "make_line_readout", "radial_2d", "SamplingPattern"}
+    assert leaked.isdisjoint(pulserver.__all__)
+    for name in leaked:
+        with pytest.raises(AttributeError):
+            getattr(pulserver, name)
+        assert hasattr(pp, name)
 
 
 def test_implementation_namespaces_are_private() -> None:

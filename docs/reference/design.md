@@ -1,12 +1,16 @@
 # `pulserver` — sequence-building blocks
 
-`pulserver` collects the reusable building blocks shared by the
+`pulserver.pypulseq` collects the reusable building blocks shared by the
 example sequence plugins under [`examples/sequences/`](../../examples/sequences/).
 It replaces the old per-family `_*_common.py` helpers (loaded via a
 `spec_from_file_location` hack) with an installed, importable package: a
-plugin imports module factories and sampling helpers directly from `pulserver`
-even when the plugin file itself is exec-loaded standalone by the bridge or
-tests.
+plugin imports module factories and sampling helpers directly from
+`pulserver.pypulseq` even when the plugin file itself is exec-loaded
+standalone by the bridge or tests.
+
+Waveform-authoring helpers are **only** importable from `pulserver.pypulseq`.
+The `pulserver` root namespace carries the plugin contract (base classes,
+typed protocol parameters, protocol serialisation, `run_cli`) and nothing else.
 
 Requires the optional `pypulseq` dependency (same tier as
 `pulserver.pypulseq` / `pulserver.io`).
@@ -16,14 +20,14 @@ Requires the optional `pypulseq` dependency (same tier as
 | API group | Contents |
 | --- | --- |
 | `pulserver.params` | Protocol-dict getters/setters, phase-FOV and ACS resolution, readout/phase axis resolution. |
-| `pulserver.make_*_pulse` | RF excitation and magnetization-preparation module factories. |
-| `pulserver.make_*_readout` | Cartesian, EPI, FSE/CPMG, non-Cartesian, and ZTE readout module factories. |
-| `pulserver.make_crusher`, `make_spoiler`, `make_phase_encoding`, `make_phase_blip` | Gradient factories. |
-| `pulserver.make_*_schedule` | RF phase, phase-cycling, and refocusing-flip schedules. |
+| `pulserver.pypulseq.make_*_pulse` | RF excitation and magnetization-preparation module factories. |
+| `pulserver.pypulseq.make_*_readout` | Cartesian, EPI, FSE/CPMG, non-Cartesian, and ZTE readout module factories. |
+| `pulserver.pypulseq.make_crusher`, `make_spoiler`, `make_phase_encoding`, `make_phase_blip` | Gradient factories. |
+| `pulserver.pypulseq.make_*_schedule` | RF phase, phase-cycling, and refocusing-flip schedules. |
 | [Flat sampling helpers](sampling.md) | Structured mask/tilt support and acquisition ordering for Cartesian, EPI, radial/spherical non-Cartesian, slice, and SMS sampling. |
 | `pulserver.run_cli` | Declarative offline CLI shared by every plugin. |
 
-The corresponding implementation packages under `pulserver.pypulseq` use
+The corresponding implementation modules under `pulserver.pypulseq` use
 leading underscores and are not public import locations.
 
 ## View orderings
