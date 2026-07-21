@@ -31,3 +31,4 @@ build_test/
 .nim-test-bundle-installer.sh
 bridge/pypulseq_host
 bridge/matlab_host
+docs/api/generated/
