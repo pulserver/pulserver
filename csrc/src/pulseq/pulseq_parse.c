@@ -234,7 +234,6 @@ void pulseq_file_free(pulseq_file *seq)
         seq->file_path = NULL;
     }
     memset(&seq->design_raster, 0, sizeof(seq->design_raster));
-    PULSEQ_FREE(seq);
 }
 
 void pulseq_file_set_free(pulseq_file_set *coll)
