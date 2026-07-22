@@ -77,6 +77,7 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
+from pulserver.pypulseq._sampling import calc_chunk_indices
 from scipy.spatial.transform import Rotation
 
 encoding = readout = sampling = system = arbgrad = excitation = preparations = pp
@@ -211,7 +212,7 @@ class GreMprageRadial3DPulseqSequence(Sequence):
             }
 
         sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
-        n_segments = len(pp.calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl))
+        n_segments = len(calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl))
         shot_s = timing["shot_s"]
         duration_s = shot_s * n_segments * len(sampled_par)
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -237,7 +238,7 @@ class GreMprageRadial3DPulseqSequence(Sequence):
         seq = pp.Sequence(opts)
 
         angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
-        segments = sampling.calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl)
+        segments = calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl)
 
         par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
         sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
@@ -542,7 +543,7 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
 def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None:
     timing = _compute_public(opts, cfg, strict=False)
     seq = pp.Sequence(opts)
-    segments = pp.calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl)
+    segments = calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl)
     rotations = pp.make_radial_tilt(cfg.num_shots, scheme=cfg.order_mode).to_rotations()
     sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
     phases = pp.make_rf_spoiling_schedule(cfg.num_shots * len(sampled_par))

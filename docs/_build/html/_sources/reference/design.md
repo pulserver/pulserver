@@ -43,7 +43,6 @@ segmented GRE alike. They take phase-encode locations in the (ky, kz) plane
 and return a list of shots (each an ordered list of view indices; the
 echo/segment index is the position within the shot):
 
-- `calc_chunk_indices`, `make_outer_inner_order` — generic nested-loop helpers.
 - `make_linear_order` — raster (kz-major) linear reordering.
 - `make_radial_order` — center-out radial (wedge) reordering.
 - `make_radial_adaptive_order` — adaptive radial reordering with per-shot

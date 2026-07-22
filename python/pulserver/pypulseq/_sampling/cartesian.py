@@ -135,6 +135,47 @@ def make_centric_order(coords, train_length: int) -> list[list[int]]:
     locations are sorted by distance from the encoded k-space centre before
     being split into segments.  Unlike :func:`make_radial_order`, it does not
     form angular wedges whose individual trains each start near the centre.
+
+    Parameters
+    ----------
+    coords : array_like
+        Phase-encode locations, shape ``(N,)`` or ``(N, 2)``.
+    train_length : int
+        Echo-train or segment length; the number of shots is
+        ``ceil(N / train_length)``.
+
+    Returns
+    -------
+    list of list of int
+        Shots of view indices, in a single global center-out order.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> ky, kz = np.meshgrid(np.arange(-2, 3), np.arange(-2, 3))
+    >>> coords = np.column_stack([ky.ravel(), kz.ravel()])
+    >>> shots = pp.make_centric_order(coords, 5)
+    >>> all(len(s) <= 5 for s in shots)
+    True
+
+    Echo index (colour) is global distance-from-centre rank, so the earliest
+    echoes of *every* shot cluster near the centre rather than each shot
+    starting its own center-out sweep (contrast :func:`make_radial_order`):
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       from _figures import order_figure
+       ky, kz = np.meshgrid(np.arange(-16, 16), np.arange(-16, 16))
+       coords = np.column_stack([ky.ravel(), kz.ravel()])
+       order_figure([("centric", pp.make_centric_order(coords, 32))], coords)
+
+    See Also
+    --------
+    make_radial_order, make_linear_order, make_radial_adaptive_order
     """
     pts = _as_coords(coords)
     if not len(pts):

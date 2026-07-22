@@ -67,6 +67,7 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
+from pulserver.pypulseq._sampling import calc_chunk_indices
 
 encoding = readout = sampling = system = excitation = preparations = pp
 
@@ -189,7 +190,7 @@ class Mprage3DPulseqSequence(Sequence):
 
         sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
         sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
-        n_segments = len(pp.calc_chunk_indices(sampled_pe, cfg.etl))
+        n_segments = len(calc_chunk_indices(sampled_pe, cfg.etl))
         shot_s = timing["shot_s"]
         duration_s = shot_s * n_segments * len(sampled_par)
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -223,7 +224,7 @@ class Mprage3DPulseqSequence(Sequence):
         phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
         max_pe_area = float(np.max(np.abs(phase_areas)))
         sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        segments = sampling.calc_chunk_indices(sampled_pe, cfg.etl)
+        segments = calc_chunk_indices(sampled_pe, cfg.etl)
 
         par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
         sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)

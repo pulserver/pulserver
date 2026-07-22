@@ -75,6 +75,28 @@ def make_multiband(
     The offset list always contains 0 Hz. For an even number of bands the
     otherwise-unpaired band is placed on the positive-frequency side.
 
+    Parameters
+    ----------
+    pulse : RfPulse or pypulseq RF event
+        Base pulse to modulate into bands.
+    num_bands : int
+        Number of frequency bands, including the on-resonance band.
+    band_offset : float
+        Frequency spacing between adjacent bands (Hz).
+    sideband_power : float or sequence of float, optional
+        Power of each off-resonance band relative to the on-resonance band
+        (a scalar applies to every off-resonance band); the modulation uses
+        its square root.
+    phases : {'quadratic'} or sequence of float, optional
+        Per-band phase (rad). ``'quadratic'`` is the MATLAB reference
+        multiband phase schedule; ``None`` leaves every band in phase.
+
+    Returns
+    -------
+    RfPulse
+        Modulated pulse, with ``.band_offsets`` (Hz) and ``.band_weights``
+        (complex, one per band) recording the applied schedule.
+
     Examples
     --------
     Convert any user-designed RF module and append the resulting blocks::
@@ -135,6 +157,28 @@ def make_multiband_frequency_selective_pulse(
     **kwargs,
 ) -> RfPulse:
     """Design an SLR spectral pulse and replicate it into multiple bands.
+
+    Parameters
+    ----------
+    flip_angle : float
+        Nominal flip angle (rad), applied to the on-resonance band.
+    bandwidth : float
+        Per-band frequency-selective bandwidth (Hz).
+    num_bands : int
+        Number of frequency bands, including the on-resonance band.
+    band_offset : float
+        Frequency spacing between adjacent bands (Hz).
+    sideband_power : float or sequence of float, optional
+        Power of each off-resonance band relative to the on-resonance band.
+    phases : {'quadratic'} or sequence of float, optional
+        Per-band phase (rad); see :func:`make_multiband`.
+    **kwargs
+        Forwarded to :func:`~pulserver.pypulseq.make_frequency_selective_pulse`.
+
+    Returns
+    -------
+    RfPulse
+        Multiband frequency-selective pulse; see :func:`make_multiband`.
 
     Examples
     --------
@@ -235,6 +279,32 @@ def make_pins(
     nominal position; set it true for the alternative SMS convention.
     ``center_offset`` translates the complete comb and is useful for cycling
     through SMS slice groups while retaining the same band separation.
+
+    Parameters
+    ----------
+    pulse : RfPulse or pypulseq RF event
+        Slice-selective base pulse, carrying its one z selection gradient.
+    num_slices : int
+        Number of slices in the comb.
+    slice_offset : float
+        Center-to-center spacing between comb slices (m); sets the PINS
+        gradient blip area (``1 / slice_offset``).
+    slice_thickness : float
+        Thickness of the base pulse's slice, used to size the subpulse train.
+    include_center : bool, optional
+        If True, the comb is centered on the nominal slice position; if
+        False (default), it is shifted by half a spacing to avoid it.
+    center_offset : float or None, optional
+        Additional translation of the whole comb (m), for cycling through
+        interleaved SMS groups.
+    max_rf : float or None, optional
+        Peak subpulse amplitude; defaults to the base pulse's peak.
+
+    Returns
+    -------
+    RfPulse
+        PINS pulse train, with ``.slice_positions`` (m), ``.slice_offset``
+        and ``.slice_thickness`` recording the comb geometry.
 
     Examples
     --------
@@ -341,6 +411,29 @@ def make_pins_slice_selective_pulse(
 
     ``center_offset`` translates the complete slice comb in metres, allowing
     several calls to cover interleaved SMS groups.
+
+    Parameters
+    ----------
+    flip_angle : float
+        Nominal flip angle (rad).
+    slice_thickness : float
+        Thickness of each slice in the comb (m).
+    num_slices : int
+        Number of slices in the comb.
+    slice_offset : float
+        Center-to-center spacing between comb slices (m).
+    include_center : bool, optional
+        If True, center the comb on the nominal slice position; if False
+        (default), shift it by half a spacing to avoid it.
+    center_offset : float or None, optional
+        Additional translation of the whole comb (m).
+    **kwargs
+        Forwarded to :func:`~pulserver.pypulseq.make_slice_selective_pulse`.
+
+    Returns
+    -------
+    RfPulse
+        PINS pulse train; see :func:`make_pins`.
 
     Examples
     --------

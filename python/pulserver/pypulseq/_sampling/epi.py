@@ -148,19 +148,21 @@ def make_skipped_caipi_order(shape, *, acceleration, caipi_shift, segments):
            [24,  4],
            [28,  6]])
 
+    Sampled locations are the white cells of the CAIPI lattice; the leading
+    shot is drawn in colour and the remaining interleaves behind it, each
+    sample joined by the parabolic arc its blip actually traverses.  Left is
+    ``(32, 8)`` at ``R=(2, 2)`` with shift 1; right is ``(32, 16)`` at
+    ``R=(1, 8)`` with shift 2, whose larger ``Rz`` gives the deeper zigzag:
+
     .. plot::
        :include-source: false
 
-       import matplotlib.pyplot as plt
        from pulserver.pypulseq import make_skipped_caipi_order
-       plan = make_skipped_caipi_order((32, 8), acceleration=(2, 2), caipi_shift=1, segments=2)
-       fig, ax = plt.subplots(figsize=(6, 2.6))
-       for shot in range(plan.n_shots):
-           c = plan[shot]
-           ax.plot(c[:, 0], c[:, 1], marker="o", ms=4, lw=0.8)
-       ax.set_xlabel("ky"); ax.set_ylabel("kz")
-       ax.set_title("skipped-CAIPI (32, 8), R=(2, 2), shift 1, 2 segments")
-       fig.tight_layout()
+       from _figures import epi_sampling_figure
+       epi_sampling_figure([
+           make_skipped_caipi_order((32, 8), acceleration=(2, 2), caipi_shift=1, segments=2),
+           make_skipped_caipi_order((32, 16), acceleration=(1, 8), caipi_shift=2, segments=2),
+       ])
 
     References
     ----------

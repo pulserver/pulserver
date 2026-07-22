@@ -335,6 +335,42 @@ def make_cartesian_sampling(
     Three-dimensional plans span ``(ky, kz)`` directly and therefore reject a
     slice table.
 
+    Parameters
+    ----------
+    matrix : tuple of int
+        Full image matrix ``(nx, ny)`` for 2D or ``(nx, ny, nz)`` for 3D.
+    acceleration : int or tuple of int, optional
+        Undersampling factor per encoded axis.
+    calibration : int or tuple of int, optional
+        Fully sampled centered calibration width per encoded axis.
+    train_length : int, optional
+        Echo-train or segment length; ``1`` gives GRE.
+    ordering : {'linear', 'centric', 'radial', 'radial_adaptive', 'shuffling'}, optional
+        Echo-train view order; see :func:`build_from_mask`.
+    mask : {'uniform', 'caipi', 'random', 'poisson'}, optional
+        Undersampling pattern; ``'caipi'``, ``'random'`` and ``'poisson'``
+        require a 3D matrix.
+    frames : int, optional
+        Number of dynamic volumes; repeats the same shots without altering
+        them.
+    num_slices : int or None, optional
+        Number of slices, 2D only; omit for a 3D (slab-encoded) plan.
+    slice_spacing_m : float or None, optional
+        Center-to-center slice spacing (m); required when ``num_slices > 1``.
+    slice_order : str, optional
+        Slice traversal order; see :func:`make_slice_sampling`.
+    sms_factor : int, optional
+        Simultaneous-multislice acceleration, 2D only.
+    seed : int, optional
+        Random seed for ``mask='random'`` and ``ordering='shuffling'``.
+    caipi_shift : int, optional
+        CAIPI shift used only when ``mask='caipi'``.
+
+    Returns
+    -------
+    AcquisitionPlan
+        Plan of kind ``"cartesian"``.
+
     Examples
     --------
     ``train_length=1`` gives a 2D GRE schedule; FSE uses an ETL and MPRAGE
@@ -425,9 +461,39 @@ def make_epi_sampling(
 
     ``segments`` is the number of interleaves along ky.  A 2D plan samples
     every ``Ry``-th line and distributes those lines across the segments.  A
-    3D plan uses the skipped-CAIPI traversal for ``(Ry, Rz)`` and
-    ``caipi_shift``.  ``frames`` turns either structural plan into a dynamic
-    or fMRI plan without changing the within-shot traversal.
+    3D plan uses the skipped-CAIPI traversal (Stirnberg & Stöcker, MRM 2020,
+    DOI ``10.1002/mrm.28486``) for ``(Ry, Rz)`` and ``caipi_shift``.
+    ``frames`` turns either structural plan into a dynamic or fMRI plan
+    without changing the within-shot traversal — ``plan.sampling`` describes
+    one frame's shots; ``frames`` only repeats them across ``plan.entries``.
+
+    Parameters
+    ----------
+    matrix : tuple of int
+        Full image matrix ``(nx, ny)`` for 2D or ``(nx, ny, nz)`` for 3D.
+    acceleration : int or tuple of int, optional
+        ``Ry`` for a 2D plan; ``(Ry, Rz)`` for a 3D plan.
+    segments : int, optional
+        Number of interleaves the ky traversal is split into.
+    caipi_shift : int, optional
+        Partition shift per acquired line, 3D only (see
+        :func:`make_skipped_caipi_order`).
+    frames : int, optional
+        Number of structural/dynamic volumes; repeats the same shots without
+        altering them.
+    num_slices : int or None, optional
+        Number of slices, 2D only; omit for a 3D (slab-encoded) plan.
+    slice_spacing_m : float or None, optional
+        Center-to-center slice spacing (m); required when ``num_slices > 1``.
+    slice_order : str, optional
+        Slice traversal order; see :func:`make_slice_sampling`.
+    sms_factor : int, optional
+        Simultaneous-multislice acceleration, 2D only.
+
+    Returns
+    -------
+    AcquisitionPlan
+        Plan of kind ``"epi"``.
 
     Examples
     --------
@@ -439,23 +505,20 @@ def make_epi_sampling(
         structural = make_epi_sampling((96, 96, 32), acceleration=(2, 2),
                                        caipi_shift=1, segments=2)
 
+    Each interleave is a path through the shared lattice.  Left is a 2D plan
+    at ``Ry=2`` with 2 segments — it has no kz to grid against, so its
+    segments are drawn one per row; right is the 3D skipped-CAIPI traversal
+    at ``R=(1, 8)`` with shift 2 and 2 segments:
+
     .. plot::
        :include-source: false
 
-       import matplotlib.pyplot as plt
        import pulserver.pypulseq as pp
-       plans = [
-           ("2D fMRI: 3 frames", pp.make_epi_sampling((64, 32), acceleration=2, segments=2, frames=3)),
-           ("3D skipped-CAIPI", pp.make_epi_sampling((64, 32, 16), acceleration=(2, 2), caipi_shift=1, segments=2)),
-       ]
-       fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1), squeeze=False)
-       for axis, (title, plan) in zip(axes[0], plans, strict=True):
-           for shot in range(plan.sampling.n_shots):
-               c = plan.sampling[shot]
-               y = c[:, 1] if c.shape[1] == 2 else c[:, 0] * 0
-               axis.plot(c[:, 0], y, marker="o", ms=3, lw=.7)
-           axis.set(title=title, xlabel="ky", ylabel="kz")
-       fig.tight_layout()
+       from _figures import epi_sampling_figure
+       epi_sampling_figure([
+           pp.make_epi_sampling((64, 32), acceleration=2, segments=2),
+           pp.make_epi_sampling((64, 32, 16), acceleration=(1, 8), caipi_shift=2, segments=2),
+       ])
     """
     matrix = _matrix(matrix)
     segments, frames = int(segments), int(frames)
@@ -536,6 +599,42 @@ def make_noncartesian_2d_sampling(
     frame.  The result applies equally to radial, spiral, and rosette base
     readouts because it plans rotations rather than waveform shape.
 
+    Parameters
+    ----------
+    matrix : tuple of int
+        2D image matrix ``(nx, ny)``.
+    views_per_frame : int or None, optional
+        Number of rotated views per frame; defaults to the Nyquist-matched
+        view count for ``matrix``.
+    frames : int, optional
+        Number of structural/dynamic volumes.
+    num_slices : int or None, optional
+        Number of slices; omit to skip the slice/SMS loop.
+    slice_spacing_m : float or None, optional
+        Center-to-center slice spacing (m); required when ``num_slices > 1``.
+    slice_order : str, optional
+        Slice traversal order; see :func:`make_slice_sampling`.
+    sms_factor : int, optional
+        Simultaneous-multislice acceleration.
+    scheme : str, optional
+        Angular tilt scheme; forwarded to :func:`make_radial_tilt`.
+    period : float, optional
+        Angular period (rad); forwarded to :func:`make_radial_tilt`.
+    tiny_index : int, optional
+        Tiny-golden-angle index; forwarded to :func:`make_radial_tilt`.
+    approximation_order : int, optional
+        Golden-angle rational-approximation order; forwarded to
+        :func:`make_radial_tilt`.
+    continuous : bool, optional
+        If True (default), the angular chronology advances across slices and
+        frames; if False, the same angular set replays at every one.
+
+    Returns
+    -------
+    AcquisitionPlan
+        Plan of kind ``"noncartesian_2d"``; each entry's ``coordinates`` is
+        its rotation angle (rad).
+
     Examples
     --------
     ``continuous=True`` (default) advances a dynamic radial, spiral, or
@@ -614,6 +713,44 @@ def make_noncartesian_stack_sampling(
     With ``continuous=True`` the angular chronology advances across both
     partition and frame; false reuses the same angles at every partition.
 
+    Parameters
+    ----------
+    matrix : tuple of int
+        3D image matrix ``(nx, ny, nz)``.
+    views_per_partition : int or None, optional
+        Number of rotated views per partition; defaults to the
+        Nyquist-matched view count for ``matrix``.
+    frames : int, optional
+        Number of structural/dynamic volumes.
+    partition_order : {'sequential', 'reverse', 'interleaved', 'center_out', 'outside_in'}, optional
+        Traversal order of the ``nz`` partitions.
+    scheme : str, optional
+        Angular tilt scheme; forwarded to :func:`make_radial_tilt`.
+    period : float, optional
+        Angular period (rad); forwarded to :func:`make_radial_tilt`.
+    tiny_index : int, optional
+        Tiny-golden-angle index; forwarded to :func:`make_radial_tilt`.
+    approximation_order : int, optional
+        Golden-angle rational-approximation order; forwarded to
+        :func:`make_radial_tilt`.
+    continuous : bool, optional
+        If True (default), the angular chronology advances across partitions
+        and frames; if False, the same angular set replays at every partition.
+
+    Returns
+    -------
+    AcquisitionPlan
+        Plan of kind ``"noncartesian_stack"``; each entry's ``coordinates``
+        is its rotation angle (rad) and ``par_idx`` its kz partition.
+
+    Examples
+    --------
+    A stack of rotated in-plane trajectories, tilted continuously across
+    partition and frame::
+
+        pp.make_noncartesian_stack_sampling((64, 64, 8), views_per_partition=8,
+                                            frames=2, partition_order="center_out")
+
     .. plot::
        :include-source: false
 
@@ -683,6 +820,36 @@ def make_noncartesian_projection_sampling(
     Golden means is stable in every temporal window and is the default for
     dynamic imaging. Spiral phyllotaxis is available when smooth interleaved
     direction changes are preferred.
+
+    Parameters
+    ----------
+    matrix : tuple of int
+        3D image matrix ``(nx, ny, nz)``.
+    views_per_frame : int or None, optional
+        Number of direction views per frame; defaults to a Nyquist-matched
+        spherical view count for ``matrix``.
+    frames : int, optional
+        Number of structural/dynamic volumes.
+    scheme : {'golden_means', 'phyllotaxis'}, optional
+        Direction-tilt scheme.
+    interleaves : int, optional
+        Number of interleaves; used only by ``scheme='phyllotaxis'``.
+    continuous : bool, optional
+        If True (default), the direction chronology advances across frames;
+        if False, the same direction set replays at every frame.
+
+    Returns
+    -------
+    AcquisitionPlan
+        Plan of kind ``"noncartesian_projection"``; each entry's
+        ``coordinates`` is its unit direction vector.
+
+    Examples
+    --------
+    Dynamic golden-means directions spanning two frames::
+
+        pp.make_noncartesian_projection_sampling((64, 64, 64),
+                                                 views_per_frame=128, frames=2)
 
     .. plot::
        :include-source: false

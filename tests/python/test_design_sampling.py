@@ -22,13 +22,6 @@ def test_chunk_and_linear_order_agree() -> None:
     assert sampling.calc_chunk_indices([0, 1, 2, 3, 4], 2) == sampling.make_linear_order(5, 2)
 
 
-def test_outer_inner_order() -> None:
-    assert sampling.make_outer_inner_order([0, 1], 2) == [
-        [(0, 0), (0, 1)],
-        [(1, 0), (1, 1)],
-    ]
-
-
 @pytest.mark.parametrize(
     "fn",
     [sampling.make_linear_order, sampling.make_radial_order, sampling.make_radial_adaptive_order],

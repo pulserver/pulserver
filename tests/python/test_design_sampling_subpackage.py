@@ -46,20 +46,11 @@ def test_pattern_validates_mask_and_indices():
     assert empty.flatten().shape == (0, 2)
 
 
-def test_generic_ordering_and_outer_dimensions():
+def test_generic_ordering():
     assert np.array_equal(sampling.ordering.interleaved(6), [0, 2, 4, 1, 3, 5])
     assert np.array_equal(sampling.ordering.center_out(5), [2, 1, 3, 0, 4])
     assert np.array_equal(sampling.ordering.center_out(4), [1, 2, 0, 3])
     assert np.array_equal(sampling.ordering.outside_in(4), [3, 0, 2, 1])
-    outer = sampling.make_outer_product(frame=range(2), slice=range(3))
-    assert outer == (
-        {"frame": 0, "slice": 0},
-        {"frame": 0, "slice": 1},
-        {"frame": 0, "slice": 2},
-        {"frame": 1, "slice": 0},
-        {"frame": 1, "slice": 1},
-        {"frame": 1, "slice": 2},
-    )
 
 
 @pytest.mark.parametrize("ordering", ["linear", "radial", "radial_adaptive", "shuffling"])

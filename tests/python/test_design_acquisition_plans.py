@@ -52,8 +52,7 @@ def test_cartesian_sampling_supports_3d_masks_and_custom_low_level_composition()
     mask[::2] = True
     low_level = pp.SamplingPattern.from_mask(mask, train_length=2)
     groups = pp.make_slice_sampling(2, 5e-3)
-    outer = pp.make_outer_product(frame=range(3), slice_group=groups)
-    assert len(outer) == 3 * len(groups)
+    assert len(groups) == 2
     assert len(low_level) == low_level.n_shots
     assert not hasattr(pp.AcquisitionPlan, "from_sampling")
 

@@ -32,7 +32,7 @@ from .noncartesian import (
     make_radial_tilt,
     make_spiral_phyllotaxis_tilt,
 )
-from .ordering import calc_chunk_indices, make_outer_inner_order, make_outer_product
+from .ordering import calc_chunk_indices
 from .slices import SliceGroup, SliceSampling, make_slice_sampling
 
 __all__ = [
@@ -61,8 +61,6 @@ __all__ = [
     "make_noncartesian_2d_sampling",
     "make_noncartesian_projection_sampling",
     "make_noncartesian_stack_sampling",
-    "make_outer_inner_order",
-    "make_outer_product",
     "make_poisson_disc_mask",
     "make_radial_adaptive_order",
     "make_radial_order",

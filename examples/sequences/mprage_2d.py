@@ -75,6 +75,7 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
+from pulserver.pypulseq._sampling import calc_chunk_indices
 
 encoding = readout = sampling = system = excitation = preparations = pp
 
@@ -183,7 +184,7 @@ class Mprage2DPulseqSequence(Sequence):
             }
 
         sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        n_segments = len(pp.calc_chunk_indices(sampled_pe, cfg.etl))
+        n_segments = len(calc_chunk_indices(sampled_pe, cfg.etl))
         shot_s = timing["shot_s"]
         duration_s = shot_s * n_segments * cfg.nslices
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -216,7 +217,7 @@ class Mprage2DPulseqSequence(Sequence):
         phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
         max_pe_area = float(np.max(np.abs(phase_areas)))
         sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        segments = sampling.calc_chunk_indices(sampled_pe, cfg.etl)
+        segments = calc_chunk_indices(sampled_pe, cfg.etl)
 
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
 
@@ -445,7 +446,7 @@ def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None
     timing = _compute_public(opts, cfg, strict=False)
     seq = pp.Sequence(opts)
     sampled = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-    segments = pp.calc_chunk_indices(sampled, cfg.etl)
+    segments = calc_chunk_indices(sampled, cfg.etl)
     phases = pp.make_rf_spoiling_schedule(sum(len(segment) for segment in segments) * cfg.nslices)
     te_delay = pp.make_delay(timing["te_delay_s"]) if timing["te_delay_s"] > 0 else None
     tr_delay = pp.make_delay(timing["tr_delay_s"]) if timing["tr_delay_s"] > 0 else None

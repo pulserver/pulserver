@@ -686,3 +686,82 @@ def pattern_figure(pattern, *, title="", cmap="viridis"):
     left.set_ylabel("kz")
     fig.tight_layout()
     return fig
+
+
+def _blip_parabola(xy1, xy2, *, num=11):
+    """Points tracing the two back-to-back parabolic arcs of a gradient blip.
+
+    A trapezoidal z-blip's k-space trajectory (its time integral) is a
+    parabola on the way up and another on the way down; connecting two
+    samples this way rather than with a straight line is what makes a
+    skipped-CAIPI trajectory figure read as a *played* gradient waveform
+    instead of an abstract point-to-point path — see Stirnberg & Stöcker,
+    MRM 2020, DOI ``10.1002/mrm.28486``.
+    """
+    x1, y1 = xy1
+    x2, y2 = xy2
+    x = np.linspace(x1, x2, num)
+    half = (num + 1) // 2
+    a = 2.0 * (y2 - y1) / (x2 - x1) ** 2 if x2 != x1 else 0.0
+    y = np.empty_like(x)
+    y[:half] = a * (x[:half] - x1) ** 2 + y1
+    y[half:] = -a * (x[half:] - x2) ** 2 + y2
+    return x, y
+
+
+def epi_sampling_figure(plans, *, cmap="tab10"):
+    """Show one or more EPI/skipped-CAIPI plans as shot trajectories on their lattice.
+
+    Every sampled location of the plan's full Cartesian lattice is drawn as a
+    bordered checkerboard cell, then every shot's phase-encode trajectory is
+    overlaid as blip-parabola-connected points: shot 0 bold in front, the
+    remaining shots faint behind it. This is the same visual grammar as
+    Stirnberg & Stöcker's skipped-CAIPI reference figures (MRM 2020, DOI
+    ``10.1002/mrm.28486``) — the segmented interleaves read off directly as
+    parallel paths through one shared lattice. A 2D (ky-only) plan has no
+    lattice to grid against, so each shot is instead drawn on its own row.
+
+    Axes carry their ky/kz labels; panels are left untitled, so the
+    surrounding prose names them.
+    """
+    accent = plt.get_cmap(cmap)(3)
+    fig, axes = plt.subplots(1, len(plans), figsize=(4.6 * len(plans), 3.7), squeeze=False)
+    for axis, plan in zip(axes[0], plans, strict=True):
+        # Accept either an AcquisitionPlan or a bare SamplingPattern.
+        sampling = getattr(plan, "sampling", plan)
+        n_shots = sampling.n_shots
+        if sampling.support.shape[1] == 2 and sampling.mask is not None:
+            ny, nz = sampling.mask.shape
+            # Reference convention: unsampled cells mid-grey, sampled white.
+            axis.pcolor(
+                sampling.mask.T.astype(float) + 0.3,
+                cmap="gray",
+                edgecolors="0.2",
+                linewidth=0.5,
+                vmin=0.0,
+                vmax=1.0,
+            )
+            for shot in reversed(range(n_shots)):
+                c = sampling[shot] + 0.5
+                bold = shot == 0
+                # Reference convention: the leading shot in colour, the
+                # remaining interleaves darkened behind it.
+                colour = accent if bold else tuple(0.45 * channel for channel in accent[:3])
+                for (x1, y1), (x2, y2) in zip(c[:-1], c[1:], strict=True):
+                    x, y = _blip_parabola((x1, y1), (x2, y2))
+                    axis.plot(x, y, color=colour, lw=1.4 if bold else 0.6, zorder=3 if bold else 2)
+                axis.scatter(
+                    c[:, 0], c[:, 1], color=colour, s=14 if bold else 5, zorder=4 if bold else 2
+                )
+            axis.set(xlabel="ky", ylabel="kz", aspect="equal", xlim=(0, ny), ylim=(0, nz))
+        else:
+            colours = plt.get_cmap(cmap)
+            for shot in range(n_shots):
+                c = sampling[shot]
+                axis.plot(
+                    c[:, 0], np.full(len(c), shot), marker="o", ms=3.5, lw=1.0, color=colours(shot % 10)
+                )
+            axis.set(xlabel="ky", ylabel="shot")
+            axis.set_yticks(range(n_shots))
+    fig.tight_layout()
+    return fig

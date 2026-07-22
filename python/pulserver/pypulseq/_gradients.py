@@ -250,6 +250,18 @@ def make_phase_blip(
         for step in plan.increments(shot)[:, 0]:
             seq.add_block(make_phase_blip(system, "y", fov, steps=step))
 
+    .. plot::
+       :include-source: false
+
+       import pypulseq as pp_up
+       from pulserver.pypulseq import make_phase_blip
+       import matplotlib.pyplot as plt
+       g = make_phase_blip(pp_up.Opts(), "y", 0.24, steps=2)
+       t = [0, g.rise_time, g.rise_time + g.flat_time,
+            g.rise_time + g.flat_time + g.fall_time]
+       plt.plot([x * 1e3 for x in t], [0, g.amplitude, g.amplitude, 0])
+       plt.xlabel("t [ms]"); plt.ylabel("G [Hz/m]")
+
     See Also
     --------
     make_phase_encoding : the full-area encode used once per shot.

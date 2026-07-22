@@ -16,7 +16,10 @@ seq = design_gre_2d(te_ms=8.0, tr_ms=250.0, nx=128, ny=128)
 
 `pulserver.sequence` is a singular compatibility alias for this namespace.
 
-## Cartesian GRE and bSSFP
+## Cartesian
+
+GRE, multi-echo GRE, FSE, bSSFP and MPRAGE on a Cartesian (phase-encoded)
+readout, each in its 2D and 3D form.
 
 ```{eval-rst}
 .. autosummary::
@@ -28,16 +31,21 @@ seq = design_gre_2d(te_ms=8.0, tr_ms=250.0, nx=128, ny=128)
    pulserver.sequences.design_gre_3d
    pulserver.sequences.design_gre_multiecho_2d
    pulserver.sequences.design_gre_multiecho_3d
+   pulserver.sequences.design_fse_2d
+   pulserver.sequences.design_fse_3d
    pulserver.sequences.design_bssfp_2d
    pulserver.sequences.design_bssfp_3d
+   pulserver.sequences.design_mprage_2d
+   pulserver.sequences.design_mprage_3d
 ```
 
-## EPI and FSE
+## EPI
 
 EPI callbacks construct one volume.  For structural imaging, use the desired
 high-resolution geometry once; for fMRI, invoke the same callback once per
 volume with the functional geometry and TR.  This keeps volume scheduling in
-the calling sequence rather than coupling it to readout design.
+the calling sequence rather than coupling it to readout design.  See each
+function's own page for its structural and fMRI-volume renderings.
 
 ```{eval-rst}
 .. autosummary::
@@ -46,54 +54,27 @@ the calling sequence rather than coupling it to readout design.
 
    pulserver.sequences.design_epi_2d
    pulserver.sequences.design_epi_3d
-   pulserver.sequences.design_fse_2d
-   pulserver.sequences.design_fse_3d
 ```
 
-```{eval-rst}
-.. plot::
+## Non-Cartesian
 
-   from _figures import sequence_figure
-   from pulserver.sequences import design_epi_2d
-
-   structural = design_epi_2d(nx=128, ny=128, tr_ms=3000.0)
-   sequence_figure(structural, time_range=(0.0, 0.08), title="2D EPI — structural volume")
-```
-
-```{eval-rst}
-.. plot::
-
-   from _figures import sequence_figure
-   from pulserver.sequences import design_epi_2d
-
-   fmri_volume = design_epi_2d(nx=64, ny=64, tr_ms=2000.0)
-   sequence_figure(fmri_volume, time_range=(0.0, 0.08), title="2D EPI — fMRI volume")
-```
-
-## MPRAGE and non-Cartesian GRE
+GRE and MPRAGE on a non-Cartesian readout.  `design_gre_noncart_*` selects
+its in-plane base waveform (spiral or rosette) through its `trajectory`
+argument; `design_gre_radial_*` and `design_gre_mprage_radial_*` are the
+plain-trapezoid radial family; ZTE is the half-spoke radial variant with a
+near-zero echo time.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/sequences
    :nosignatures:
 
-   pulserver.sequences.design_mprage_2d
-   pulserver.sequences.design_mprage_3d
-   pulserver.sequences.design_gre_mprage_radial_2d
-   pulserver.sequences.design_gre_mprage_radial_3d
-   pulserver.sequences.design_gre_radial_2d
-   pulserver.sequences.design_gre_radial_3d
    pulserver.sequences.design_gre_noncart_2d
    pulserver.sequences.design_gre_noncart_3d
-```
-
-## ZTE
-
-```{eval-rst}
-.. autosummary::
-   :toctree: generated/sequences
-   :nosignatures:
-
+   pulserver.sequences.design_gre_radial_2d
+   pulserver.sequences.design_gre_radial_3d
+   pulserver.sequences.design_gre_mprage_radial_2d
+   pulserver.sequences.design_gre_mprage_radial_3d
    pulserver.sequences.design_zte_2d
    pulserver.sequences.design_zte_3d
 ```

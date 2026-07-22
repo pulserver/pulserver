@@ -261,20 +261,17 @@ and `from_relative_shifts` constructors. See the
    pulserver.pypulseq.calc_uniform_angles
 ```
 
-### Independent outer-loop utilities
+### Slice grouping
 
-These remain useful when directly combining a `SamplingPattern` with slice,
-frame, average or contrast loops. The high-level 2D factories already
-incorporate slice/SMS grouping and expose the resulting frequency table.
+Useful when directly combining a `SamplingPattern` with a slice loop. The
+high-level 2D factories already incorporate slice/SMS grouping and expose
+the resulting frequency table.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/pypulseq
    :nosignatures:
 
-   pulserver.pypulseq.calc_chunk_indices
-   pulserver.pypulseq.make_outer_inner_order
-   pulserver.pypulseq.make_outer_product
    pulserver.pypulseq.make_slice_sampling
 ```
 

@@ -116,6 +116,18 @@ def make_phase_cycling_schedule(
     >>> np.rad2deg(make_phase_cycling_schedule(4, (0.0, np.pi / 2)))
     array([ 0., 90.,  0., 90.])
 
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import matplotlib.pyplot as plt
+       from pulserver.pypulseq import make_phase_cycling_schedule
+       plt.figure(figsize=(6, 3))
+       plt.plot(np.rad2deg(make_phase_cycling_schedule(16)), marker="o", ms=3, lw=0.7)
+       plt.xlabel("repetition"); plt.ylabel("RF phase [deg]")
+       plt.title("bSSFP (0, pi) phase cycling")
+       plt.tight_layout()
+
     See Also
     --------
     make_rf_spoiling_schedule : for spoiled, non-steady-state sequences.

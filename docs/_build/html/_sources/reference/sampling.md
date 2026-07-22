@@ -192,7 +192,9 @@ for acquisition in projection:
 
 Use this layer when a built-in high-level sampling factory is almost right but
 one stage must be replaced. Build the `SamplingPattern` directly, then nest it
-under the independent outer loops your sequence needs.
+under whatever outer loops your sequence needs — plain `for` loops over the
+non-imaging dimensions (frames, contrasts, averages) are the natural way to
+write this, with no helper required to flatten them.
 
 ```python
 import numpy as np
@@ -203,10 +205,10 @@ mask = pp.make_poisson_disc_mask(
 sampling = pp.SamplingPattern.from_mask(
     mask, train_length=16, ordering="radial",
 )
-outer = pp.make_outer_product(frame=range(3), contrast=range(2))
-for state in outer:
-    for shot in sampling:
-        pass  # set the readout state from `shot` and `state`
+for frame in range(3):
+    for contrast in range(2):
+        for shot in sampling:
+            pass  # set the readout state from `shot`, `frame`, `contrast`
 ```
 
 The stages remain independently available:
@@ -237,24 +239,21 @@ sampling = pp.SamplingPattern.from_relative_shifts(
             [[0, 0], [2, -1], [4, -2]]],
     shape=(32, 8),
 )
-for outer in pp.make_outer_product(frame=range(20)):
+for frame in range(20):
     for shot in sampling:
-        pass  # configure one EPI readout from `outer` and `shot`
+        pass  # configure one EPI readout from `frame` and `shot`
 ```
 
-## Independent outer-loop utilities
+## Slice grouping
 
 `make_slice_sampling` remains useful when building a custom loop. Its
 selection mask is over physical slices, not phase encodes, and its ordering
 therefore never changes a Cartesian echo-train order:
-`make_outer_product` covers non-imaging dimensions such as averages,
-contrasts or diffusion directions:
 
 ```python
 slice_sampling = pp.make_slice_sampling(
     48, spacing_m=3e-3, order="interleaved", sms_factor=3,
 )
-outer = pp.make_outer_product(average=range(2), contrast=range(4))
 ```
 
 ## References

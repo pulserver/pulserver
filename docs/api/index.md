@@ -8,7 +8,7 @@ defines them.
 :maxdepth: 1
 
 pulserver
-pulserver.sequences <sequences>
+sequences
 pypulseq
 io
 recon

@@ -266,6 +266,7 @@ def _factory_doc(name: str, fields: list[tuple[str, object, object, str]], plugi
    sequence_figure(dynamic, time_range=(0.0, min(0.05, dynamic.duration()[0])), title="{name} — triggered dynamic acquisition")"""
     elif name.startswith("mprage_"):
         rendered_examples = f""".. plot::
+   :context:
    :include-source: false
 
    from _figures import sequence_figure
@@ -275,14 +276,13 @@ def _factory_doc(name: str, fields: list[tuple[str, object, object, str]], plugi
    sequence_figure(seq, time_range=(0.0, min(0.03, seq.duration()[0])), title="{name} — inversion preparation")
 
 .. plot::
+   :context: close-figs
    :include-source: false
 
    from _figures import sequence_figure
-   from pulserver.sequences import design_{name}
 
-   seq = design_{name}()
    ti = seq.get_definition("TI")
-   sequence_figure(seq, time_range=(max(0.0, ti - 0.025), min(ti + 0.08, seq.duration()[0])), title="{name} — gradient-echo acquisition train")"""
+   sequence_figure(seq, time_range=(max(0.0, ti - 0.025), min(ti + 0.08, seq.duration()[0])), title="{name} — gradient-echo train, same acquisition")"""
     else:
         rendered_examples = f""".. plot::
    :include-source: false

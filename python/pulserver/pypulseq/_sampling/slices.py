@@ -201,7 +201,6 @@ def make_slice_sampling(num_slices, spacing_m, *, order="interleaved", sms_facto
     See Also
     --------
     SliceGroup.frequency_offsets_hz : offsets that select a group's slices.
-    make_outer_product : combine the slice loop with other outer dimensions.
     """
     num_slices, sms_factor = int(num_slices), int(sms_factor)
     spacing_m = float(spacing_m)
