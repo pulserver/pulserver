@@ -22,11 +22,11 @@ Requires the optional `pypulseq` dependency (same tier as
 | `pulserver.params` | Protocol-dict getters/setters, phase-FOV and ACS resolution, readout/phase axis resolution. |
 | `pulserver.pypulseq.make_*_pulse` | RF excitation and magnetization-preparation module factories. |
 | `pulserver.pypulseq.make_*_readout` | Cartesian, EPI, FSE/CPMG, non-Cartesian, and ZTE readout module factories. |
-| `pulserver.pypulseq.make_crusher`, `make_spoiler`, `make_phase_encoding`, `make_phase_blip` | Gradient factories. |
+| `pulserver.pypulseq.make_crusher`, `make_phase_encoding`, `make_phase_blip` | Gradient factories. Call `make_crusher` independently on each required axis. |
 | `pulserver.pypulseq.make_*_schedule` | RF phase, phase-cycling, and refocusing-flip schedules. |
 | [Flat sampling helpers](sampling.md) | Structured mask/tilt support and acquisition ordering for Cartesian, EPI, radial/spherical non-Cartesian, slice, and SMS sampling. |
 | `pulserver.run_cli` | Declarative offline CLI shared by every plugin. |
-| `pulserver.SequenceModule`, `pulserver.SamplingPattern`, `pulserver.SliceGroup` | The abstract types those factories return. |
+| `pulserver.SequenceModule`, `pulserver.SamplingPattern`, `pulserver.SliceSampling`, `pulserver.SliceGroup` | The abstract types those factories return. |
 
 The corresponding implementation modules under `pulserver.pypulseq` use
 leading underscores and are not public import locations.
@@ -43,13 +43,12 @@ segmented GRE alike. They take phase-encode locations in the (ky, kz) plane
 and return a list of shots (each an ordered list of view indices; the
 echo/segment index is the position within the shot):
 
-- `make_linear_order`, `make_outer_inner_order` — the sequential nested-loop orderings
-  used by the current FSE/MPRAGE plugins.
-- `make_fse_linear_order` — raster (kz-major) linear reordering.
-- `make_fse_radial_order` — center-out radial (wedge) reordering.
-- `make_fse_radial_adaptive_order` — adaptive radial reordering with per-shot
+- `calc_chunk_indices`, `make_outer_inner_order` — generic nested-loop helpers.
+- `make_linear_order` — raster (kz-major) linear reordering.
+- `make_radial_order` — center-out radial (wedge) reordering.
+- `make_radial_adaptive_order` — adaptive radial reordering with per-shot
   parameter support.
-- `make_fse_shuffling_order` — randomly shuffled (T2-Shuffling) reordering with
+- `make_shuffling_order` — randomly shuffled (T2-Shuffling) reordering with
   spatial clustering to limit gradient switching.
 
 References: Buonincontri et al., *Doubling the repetition time without paying
@@ -61,7 +60,7 @@ random shuffling.
 
 ## Advanced excitation
 
-Beyond the slice-selective, hard, and adiabatic builders,
+Beyond the slice-selective and hard builders,
 `make_frequency_selective_pulse` creates spectrally selective pulses and the
 spatial factories accept existing or generated multidimensional trajectories.
 All return the common `pulserver.SequenceModule` protocol.

@@ -188,6 +188,7 @@ class _FseTrain(Readout):
         refoc_flip_scale=None,
         refoc_phase_rad=None,
         crusher_cycles=CRUSHER_CYCLES_Z,
+        spoil_voxel_size=None,
         x_spoil_factor=DEFAULT_X_SPOIL_FACTOR,
         z_spoil_factor=DEFAULT_Z_SPOIL_FACTOR,
         ro_axis="x",
@@ -225,7 +226,11 @@ class _FseTrain(Readout):
         self._gs4 = pp.make_extended_trapezoid(
             channel="z", times=np.array([0.0, self._t_refwd]), amplitudes=np.array([self._ref_amp, self._ref_amp]), system=system
         )
-        self._Cz = 0.5 * gs_ref.area * (1.0 + z_spoil_factor)  # z crusher (spoiler) area
+        spoil_voxel_size = self.fov_x_m / self.nx if spoil_voxel_size is None else float(spoil_voxel_size)
+        if spoil_voxel_size <= 0 or crusher_cycles < 0:
+            raise ValueError("spoil_voxel_size must be > 0 and spoil_cycles must be >= 0")
+        spoil_area = float(crusher_cycles) / spoil_voxel_size
+        self._Cz = 0.5 * gs_ref.area + spoil_area
 
         # --- x readout geometry + flat lobe (GR6) -------------------------
         self._ro = _build_readout(system, ro_axis, self.nx, self.fov_x_m, bandwidth_hz_px, oversamp, pf)
@@ -238,7 +243,7 @@ class _FseTrain(Readout):
         # GR6 sweep minus twice the echo lead-in). The once-per-shot prephaser
         # then lands kx=0 on the echo sample; it works out to half the GR6 sweep.
         ro_amp, readout_time_s = self._ro.ro_amp, self._ro.readout_time_s
-        self._Sx = x_spoil_factor * self._ro.k_width  # x crusher area
+        self._Sx = spoil_area
         self._dx_reb = 0.5 * ro_amp * (readout_time_s - 2.0 * self._ro.adc_echo_offset_s)
         self._prephase_area = self._Sx + 0.5 * ro_amp * readout_time_s
 

@@ -42,7 +42,7 @@ def make_rotation(rot_quaternion: Any) -> SimpleNamespace:
 
     Rotate a radial base spoke over a golden-angle plan::
 
-        for angle in pp.make_radial_sampling(377, scheme="golden").support[:, 0]:
+        for angle in pp.make_radial_tilt(377, scheme="golden").support[:, 0]:
             readout(seq, rotation=Rotation.from_euler("z", angle))
 
     See Also

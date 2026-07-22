@@ -652,9 +652,17 @@ class Rosette(NonCartesianGradient):
         dwell_from_fov = 1.0 / (float(oversamp) * fov_m * max_k_speed)
         dwell_from_bandwidth = 1.0 / float(bandwidth_hz_px)
         max_dwell = min(dwell_from_fov, dwell_from_bandwidth)
-        samples_per_petal = max(1, int(math.ceil((read_duration / petals) / max_dwell - 1e-12)))
+        # Choose the dwell first, on the ADC raster, then fit an integral
+        # number of samples into every petal.  Choosing the sample count first
+        # and letting ``_make_adc`` round the dwell down can leave an entire
+        # tail of the final petal unacquired when the gradient and ADC rasters
+        # differ.  The displayed/acquired path must cover the complete petal
+        # set requested by the user, not merely the time-optimal gradient.
+        dwell = math.floor(max_dwell / system.adc_raster_time + 1e-12) * system.adc_raster_time
+        dwell = max(float(system.adc_raster_time), dwell)
+        samples_per_petal = max(1, int(math.floor(read_duration / petals / dwell + 1e-12)))
         n_adc = petals * samples_per_petal
-        adc = _make_adc(system, n_adc, read_duration)
+        adc = pp.make_adc(num_samples=n_adc, dwell=dwell, system=system)
         acquired_trajectory = _sample_gradient_trajectory(gradient, raster, adc)
         gradients = _make_grad_events(system, gradient, axes, first=np.zeros(2), last=np.zeros(2))
         super().__init__(

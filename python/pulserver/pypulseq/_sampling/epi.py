@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from ._pattern import SamplingPattern
-from .cartesian import make_caipirinha_sampling
+from .cartesian import make_caipirinha_mask
 
 
 def _integers(value, name):
@@ -97,7 +97,7 @@ def interleaved(shape, *, acceleration=1, num_shots=1, axis=0, reverse_alternate
     return _from_shots(shots, shape)
 
 
-def make_skipped_caipi_sampling(shape, *, acceleration, caipi_shift, segments):
+def make_skipped_caipi_order(shape, *, acceleration, caipi_shift, segments):
     """Build a segmented skipped-CAIPI 3D-EPI sampling plan.
 
     Combines in-plane and through-plane acceleration with a CAIPI shift that
@@ -106,7 +106,7 @@ def make_skipped_caipi_sampling(shape, *, acceleration, caipi_shift, segments):
     blurring and distortion) shortens without changing the sampled lattice.
 
     The construction is verified against
-    :func:`~pulserver.pypulseq.make_caipirinha_sampling` before returning: the shots
+    :func:`~pulserver.pypulseq.make_caipirinha_mask` before returning: the shots
     cover that lattice exactly, once each.
 
     Parameters
@@ -134,8 +134,8 @@ def make_skipped_caipi_sampling(shape, *, acceleration, caipi_shift, segments):
 
     Examples
     --------
-    >>> from pulserver.pypulseq import make_skipped_caipi_sampling
-    >>> plan = make_skipped_caipi_sampling((32, 8), acceleration=(2, 2), caipi_shift=1, segments=2)
+    >>> from pulserver.pypulseq import make_skipped_caipi_order
+    >>> plan = make_skipped_caipi_order((32, 8), acceleration=(2, 2), caipi_shift=1, segments=2)
     >>> plan.n_shots, plan.n_samples
     (8, 64)
     >>> plan[0]
@@ -152,8 +152,8 @@ def make_skipped_caipi_sampling(shape, *, acceleration, caipi_shift, segments):
        :include-source: false
 
        import matplotlib.pyplot as plt
-       from pulserver.pypulseq import make_skipped_caipi_sampling
-       plan = make_skipped_caipi_sampling((32, 8), acceleration=(2, 2), caipi_shift=1, segments=2)
+       from pulserver.pypulseq import make_skipped_caipi_order
+       plan = make_skipped_caipi_order((32, 8), acceleration=(2, 2), caipi_shift=1, segments=2)
        fig, ax = plt.subplots(figsize=(6, 2.6))
        for shot in range(plan.n_shots):
            c = plan[shot]
@@ -181,7 +181,7 @@ def make_skipped_caipi_sampling(shape, *, acceleration, caipi_shift, segments):
             kz = (family * rz + (ky // ry) * caipi_shift) % nz
             shots.append(np.column_stack((ky, kz)))
     pattern = _from_shots(shots, (ny, nz))
-    expected = make_caipirinha_sampling((ny, nz), ry, rz, delta=caipi_shift)
+    expected = make_caipirinha_mask((ny, nz), ry, rz, delta=caipi_shift)
     if not np.array_equal(pattern.mask, expected) or pattern.n_samples != int(expected.sum()):
         raise RuntimeError("skipped-CAIPI construction did not cover its CAIPI mask exactly")
     return pattern

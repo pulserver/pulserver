@@ -36,8 +36,10 @@ protocol and synthesises the `.seq` file.
 The things every `pulserver.pypulseq` factory returns, named here because they
 are part of the contract rather than of any one waveform family. A
 `SequenceModule` is a reusable, stateful fragment — an RF pulse, a
-preparation, a readout shot — designed once and re-parameterised per shot; a
-`SamplingPattern` is *where* k-space is sampled paired with *when*; a
+preparation, a readout shot — designed once and re-parameterised per shot;
+`AcquisitionPlan` is the high-level frame/slice/shot loop and yields one
+`Acquisition` at a time; `SamplingPattern` is its lower-level k-space support
+and ordering; `SliceSampling` is the independent physical slice/SMS schedule;
 `SliceGroup` is one excitation's worth of slices.
 
 ```{eval-rst}
@@ -45,9 +47,12 @@ preparation, a readout shot — designed once and re-parameterised per shot; a
    :toctree: generated/pulserver
    :nosignatures:
 
+   pulserver.Acquisition
+   pulserver.AcquisitionPlan
    pulserver.SamplingPattern
    pulserver.SequenceModule
    pulserver.SliceGroup
+   pulserver.SliceSampling
 ```
 
 ## Protocol parameter types

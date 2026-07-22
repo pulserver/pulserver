@@ -18,7 +18,8 @@ def _readonly_copy(value, *, dtype=None):
 class SamplingPattern(Sequence[np.ndarray]):
     """Sampled support plus its shot-by-shot acquisition order.
 
-    Every sampling helper in :mod:`pulserver.pypulseq` returns one of these.
+    Every low-level sampling helper in :mod:`pulserver.pypulseq` returns one
+    of these.
     *Where* k-space is sampled and *when* each location is acquired are kept
     separate: ``support`` lists the distinct sampled locations once, and each
     entry of ``order`` indexes into it for one shot. Trains of unequal length
@@ -47,8 +48,8 @@ class SamplingPattern(Sequence[np.ndarray]):
 
     Examples
     --------
-    >>> from pulserver.pypulseq import make_radial_sampling
-    >>> pattern = make_radial_sampling(8, segment_length=4)
+    >>> from pulserver.pypulseq import make_radial_tilt
+    >>> pattern = make_radial_tilt(8, segment_length=4)
     >>> pattern.n_shots, pattern.inner_lengths
     (2, (4, 4))
     >>> pattern[0].shape
@@ -130,7 +131,7 @@ class SamplingPattern(Sequence[np.ndarray]):
             1D ``(ny,)`` or 2D ``(ny, nz)`` sampling mask.
         train_length : int, optional
             Echo-train / segment length (default 1).
-        ordering : {'linear', 'radial', 'radial_adaptive', 'shuffling'}, optional
+        ordering : {'linear', 'centric', 'radial', 'radial_adaptive', 'shuffling'}, optional
             Echo-train ordering applied to the sampled locations.
         seed : int, optional
             Seed for ``ordering='shuffling'``.
@@ -152,7 +153,7 @@ class SamplingPattern(Sequence[np.ndarray]):
         --------
         >>> import pulserver.pypulseq as pp
         >>> from pulserver import SamplingPattern
-        >>> mask = pp.make_caipirinha_sampling((32, 8), 2, 2, delta=1)
+        >>> mask = pp.make_caipirinha_mask((32, 8), 2, 2, delta=1)
         >>> plan = SamplingPattern.from_mask(mask, train_length=8, ordering="radial")
         >>> plan.n_samples == int(mask.sum())
         True
@@ -167,14 +168,14 @@ class SamplingPattern(Sequence[np.ndarray]):
            import pulserver.pypulseq as pp
            from pulserver import SamplingPattern
            from _figures import pattern_figure
-           mask = pp.make_poisson_disc_sampling((48, 48), 4.0, calib=(10, 10), seed=0)
+           mask = pp.make_poisson_disc_mask((48, 48), 4.0, calib=(10, 10), seed=0)
            pattern_figure(SamplingPattern.from_mask(mask, train_length=16, ordering="radial"),
                           title="Poisson-disc R=4, radial train of 16")
 
         See Also
         --------
-        pulserver.pypulseq.make_random_sampling : mask generators.
-        pulserver.pypulseq.make_fse_radial_order : the underlying orderings.
+        pulserver.pypulseq.make_random_mask : mask generators.
+        pulserver.pypulseq.make_radial_order : one of the underlying orderings.
         """
         from .cartesian import build_from_mask
 
@@ -234,7 +235,7 @@ class SamplingPattern(Sequence[np.ndarray]):
 
         See Also
         --------
-        pulserver.pypulseq.make_skipped_caipi_sampling : segmented blipped-CAIPI
+        pulserver.pypulseq.make_skipped_caipi_order : segmented blipped-CAIPI
             plan built on this representation.
         """
         from .epi import build_from_relative_shifts
@@ -276,16 +277,16 @@ class SamplingPattern(Sequence[np.ndarray]):
         --------
         >>> import numpy as np
         >>> import pulserver.pypulseq as pp
-        >>> rotations = pp.make_golden_means_3d_sampling(4).to_rotations()
+        >>> rotations = pp.make_golden_means_3d_tilt(4).to_rotations()
         >>> rotations.shape
         (4, 3, 3)
-        >>> angles = pp.make_radial_sampling(4).to_rotations()
+        >>> angles = pp.make_radial_tilt(4).to_rotations()
         >>> np.round(angles[1] @ np.array([1.0, 0.0, 0.0]), 6)
         array([0.707107, 0.707107, 0.      ])
 
         Rotate a 3D radial base waveform shot by shot::
 
-            for rotation in pp.make_golden_means_3d_sampling(1000).to_rotations():
+            for rotation in pp.make_golden_means_3d_tilt(1000).to_rotations():
                 readout(seq, rotation=rotation)
         """
         from .noncartesian import angles_to_rotations, directions_to_rotations

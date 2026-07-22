@@ -73,9 +73,18 @@ def test_cartesian_pattern_covers_mask_once(ordering):
     assert pattern.inner_lengths[-1] <= 4
 
 
+def test_sampling_pattern_and_ordering_accept_masks():
+    mask = np.zeros((8, 6), dtype=bool)
+    mask[::2, ::2] = True
+    pattern = sampling.SamplingPattern.from_mask(mask, train_length=3, ordering="radial")
+    assert np.array_equal(pattern.mask, mask)
+    shots = sampling.make_radial_order(mask, 3)
+    assert sorted(index for shot in shots for index in shot) == list(range(mask.sum()))
+
+
 def test_poisson_cpp_is_deterministic_and_keeps_acs():
-    first = sampling.make_poisson_disc_sampling((48, 40), 4.0, calib=(8, 6), seed=9, tol=0.15)
-    second = sampling.make_poisson_disc_sampling((48, 40), 4.0, calib=(8, 6), seed=9, tol=0.15)
+    first = sampling.make_poisson_disc_mask((48, 40), 4.0, calib=(8, 6), seed=9, tol=0.15)
+    second = sampling.make_poisson_disc_mask((48, 40), 4.0, calib=(8, 6), seed=9, tol=0.15)
     assert first.dtype == bool and first.shape == (48, 40)
     assert np.array_equal(first, second)
     assert first[20:28, 17:23].all()
@@ -97,8 +106,8 @@ def test_relative_epi_plan_and_repeated_samples():
 
 
 def test_segmented_skipped_caipi_has_exact_union_and_order():
-    pattern = sampling.make_skipped_caipi_sampling((8, 8), acceleration=(2, 2), caipi_shift=1, segments=2)
-    expected = sampling.make_caipirinha_sampling((8, 8), 2, 2, delta=1)
+    pattern = sampling.make_skipped_caipi_order((8, 8), acceleration=(2, 2), caipi_shift=1, segments=2)
+    expected = sampling.make_caipirinha_mask((8, 8), 2, 2, delta=1)
     assert np.array_equal(pattern.mask, expected)
     assert pattern.n_samples == expected.sum()
     assert np.array_equal(pattern[0], [[0, 0], [4, 2]])
@@ -113,25 +122,25 @@ def test_epi_interleaving_accepts_arbitrary_outer_dimensions():
 
 
 def test_radial_tilts_and_raga_keep_support_and_temporal_order():
-    golden = sampling.make_radial_sampling(4, scheme="golden")
+    golden = sampling.make_radial_tilt(4, scheme="golden")
     assert np.allclose(golden.flatten().ravel(), np.mod(np.arange(4) * np.pi / ((1 + np.sqrt(5)) / 2), np.pi))
-    tiny = sampling.make_radial_sampling(3, scheme="tiny_golden", tiny_index=2)
+    tiny = sampling.make_radial_tilt(3, scheme="tiny_golden", tiny_index=2)
     assert tiny.flatten()[1, 0] == pytest.approx(np.pi / ((1 + np.sqrt(5)) / 2 + 1))
-    raga = sampling.make_radial_sampling(8, scheme="raga", tiny_index=1, approximation_order=5, segment_length=3)
+    raga = sampling.make_radial_tilt(8, scheme="raga", tiny_index=1, approximation_order=5, segment_length=3)
     assert len(raga.support) == 5
     assert np.array_equal(raga.flatten().ravel(), raga.support[[0, 3, 1, 4, 2, 0, 3, 1], 0])
     assert raga.inner_lengths == (3, 3, 2)
 
 
 def test_spherical_orders_and_rotation_matrices():
-    means = sampling.make_golden_means_3d_sampling(13, segment_length=5)
+    means = sampling.make_golden_means_3d_tilt(13, segment_length=5)
     assert means.inner_lengths == (5, 5, 3)
     assert np.allclose(np.linalg.norm(means.support, axis=1), 1)
-    phy = sampling.make_spiral_phyllotaxis_sampling(15, 5)
+    phy = sampling.make_spiral_phyllotaxis_tilt(15, 5)
     assert np.array_equal(phy.shot_indices(2), [2, 7, 12])
     assert np.allclose(np.linalg.norm(phy.support, axis=1), 1)
     with pytest.raises(ValueError, match="Fibonacci"):
-        sampling.make_spiral_phyllotaxis_sampling(12, 4)
+        sampling.make_spiral_phyllotaxis_tilt(12, 4)
     directions = np.array([[1, 0, 0], [-1, 0, 0], [0, 0, 1]], float)
     rotations = sampling.SamplingPattern(directions, ((0, 1, 2),)).to_rotations()
     assert np.allclose(rotations @ np.array([1.0, 0, 0]), directions)
@@ -140,13 +149,13 @@ def test_spherical_orders_and_rotation_matrices():
 
 
 def test_slice_groups_order_sms_and_frequency_offsets():
-    groups = sampling.make_slice_groups(8, 0.005, order="interleaved", sms_factor=2)
+    groups = sampling.make_slice_sampling(8, 0.005, order="interleaved", sms_factor=2)
     assert [group.group_index for group in groups] == [0, 2, 1, 3]
     assert groups[0].slice_indices == (0, 4)
     assert sorted(index for group in groups for index in group.slice_indices) == list(range(8))
     assert np.allclose(groups[0].frequency_offsets_hz(1000), [-17.5, 2.5])
     with pytest.raises(ValueError):
-        sampling.make_slice_groups(7, 0.005, sms_factor=2)
+        sampling.make_slice_sampling(7, 0.005, sms_factor=2)
 
 
 def test_line_and_epi_emit_absolute_labels_from_sampling_plan():

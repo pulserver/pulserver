@@ -10,6 +10,7 @@ import pypulseq as pp
 
 from .._gradients import make_spoiler
 from .._make_label import make_label
+from .._opts import default_system
 from .._system import round_to_raster
 from ._base import RfModule, RfPulse
 from ._excitation import make_frequency_selective_pulse, make_hard_pulse, make_refocusing_pulse
@@ -98,10 +99,11 @@ def make_fat_saturation_pulse(
     >>> round(fatsat.duration * 1e3, 2)
     9.42
 
-    Play it once per TR, before the excitation::
+    Append it once per TR, before the excitation::
 
-        fatsat(seq)
-        excitation(seq)
+        for module in (fatsat, excitation):
+            for block in module:
+                seq.add_block(*block)
 
     Saturation is confined to the fat resonance and leaves water untouched:
 
@@ -110,17 +112,17 @@ def make_fat_saturation_pulse(
 
        import numpy as np
        import pulserver.pypulseq as pp
-       from _figures import rf_figure
+       from _figures import preparation_figure
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-       rf_figure(pp.make_fat_saturation_pulse(b0=3.0, voxel_size=1e-3, system=system),
-                 "frequency", title="fat saturation at 3 T", extent=800)
+       preparation_figure(pp.make_fat_saturation_pulse(b0=3.0, voxel_size=1e-3, system=system),
+                          span=800, title="fat saturation at 3 T")
 
     See Also
     --------
     make_frequency_selective_pulse : the underlying spectral pulse.
     make_spsp_pulse : spectral-spatial alternative that needs no spoiler.
     """
-    system = pp.Opts.default if system is None else system
+    system = default_system(system)
     if freq_offset is None:
         if b0 is None:
             raise ValueError("provide either freq_offset or b0")
@@ -200,7 +202,9 @@ def make_mt_pulse(
     Acquire an MT-on / MT-off pair by amplitude-gating the same module::
 
         for scale in (1.0, 0.0):
-            mt(seq, amplitude_scale=scale)
+            mt.set_state(amplitude_scale=scale)
+            for block in mt:
+                seq.add_block(*block)
 
     The saturation band sits far off resonance, where only the bound pool absorbs:
 
@@ -209,16 +213,16 @@ def make_mt_pulse(
 
        import numpy as np
        import pulserver.pypulseq as pp
-       from _figures import rf_figure
+       from _figures import preparation_figure
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-       rf_figure(pp.make_mt_pulse(voxel_size=1e-3, system=system),
-                 "frequency", title="MT saturation, -1500 Hz offset", extent=3000)
+       preparation_figure(pp.make_mt_pulse(voxel_size=1e-3, system=system),
+                          span=3000, title="MT saturation, -1500 Hz offset")
 
     See Also
     --------
     make_ihmt_pulse : dual-offset variant isolating the inhomogeneous pool.
     """
-    system = pp.Opts.default if system is None else system
+    system = default_system(system)
     if freq_offset == 0:
         raise ValueError("freq_offset must be non-zero for MT")
     rf = pp.make_gauss_pulse(
@@ -300,6 +304,12 @@ def make_ihmt_pulse(
     >>> ihmt.rf_positive.freq_offset, ihmt.rf_negative.freq_offset
     (7000.0, -7000.0)
 
+    Append the alternating RF train and its final spoiler::
+
+        seq = pp.Sequence(ihmt.system)
+        for block in ihmt:
+            seq.add_block(*block)
+
     The module's blocks, as they are played:
 
     .. plot::
@@ -308,13 +318,14 @@ def make_ihmt_pulse(
        import numpy as np
        import pulserver.pypulseq as pp
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-       pp.make_ihmt_pulse(voxel_size=1e-3, system=system).plot()
+       from _figures import preparation_figure
+       preparation_figure(pp.make_ihmt_pulse(voxel_size=1e-3, system=system), span=10000)
 
     See Also
     --------
     make_mt_pulse : the single-offset reference arm.
     """
-    system = pp.Opts.default if system is None else system
+    system = default_system(system)
     if freq_offset <= 0:
         raise ValueError("freq_offset must be > 0; both signs are generated")
     if repetitions < 2:
@@ -395,8 +406,10 @@ def make_bloch_siegert_pulse(
     Acquire the sign-reversed pair::
 
         for offset in (4000.0, -4000.0):
-            pp.make_bloch_siegert_pulse(freq_offset=offset)(seq)
-            readout(seq)
+            pulse = pp.make_bloch_siegert_pulse(freq_offset=offset)
+            for module in (pulse, readout):
+                for block in module:
+                    seq.add_block(*block)
 
     The off-resonant pulse that imprints the B1-dependent phase shift:
 
@@ -414,7 +427,7 @@ def make_bloch_siegert_pulse(
     ----------
     Sacolick et al., Bloch-Siegert B1 mapping, DOI ``10.1002/mrm.22357``.
     """
-    system = pp.Opts.default if system is None else system
+    system = default_system(system)
     if freq_offset == 0:
         raise ValueError("freq_offset must be non-zero")
     if duration <= 0 or peak_b1 <= 0 or dwell <= 0:
@@ -482,6 +495,7 @@ class T2PrepPulse(RfModule):
         delay1: float,
         delay2: float,
         spoiler: tuple,
+        echo_time: float,
         duration: float,
         final_tip: str,
     ):
@@ -491,6 +505,7 @@ class T2PrepPulse(RfModule):
         self.delay1 = delay1
         self.delay2 = delay2
         self.spoiler = spoiler
+        self.echo_time = float(echo_time)
         self.duration = duration
         self.final_tip = final_tip
         blocks: list[tuple] = [(self.rf90_down,)]
@@ -575,8 +590,10 @@ def make_t2prep_pulse(
     Sweep the preparation TE to fit T2::
 
         for te in (0.0, 30e-3, 60e-3, 90e-3):
-            pp.make_t2prep_pulse(te, voxel_size=2e-3)(seq)
-            readout_train(seq)
+            prep = pp.make_t2prep_pulse(te, voxel_size=2e-3)
+            for module in (prep, readout_train):
+                for block in module:
+                    seq.add_block(*block)
 
     The module's blocks, as they are played:
 
@@ -586,13 +603,17 @@ def make_t2prep_pulse(
        import numpy as np
        import pulserver.pypulseq as pp
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-       pp.make_t2prep_pulse(50e-3, voxel_size=1e-3, system=system).plot()
+       from _figures import preparation_figure
+       preparation_figure(
+           pp.make_t2prep_pulse(50e-3, voxel_size=1e-3, system=system),
+           t2_values=np.linspace(20e-3, 160e-3, 121),
+           title="T2 preparation, 50 ms")
 
     See Also
     --------
     make_t1t2_prep_pulse : the ``final_tip='down'`` hybrid.
     """
-    system = pp.Opts.default if system is None else system
+    system = default_system(system)
     if final_tip not in ("up", "down"):
         raise ValueError("final_tip must be 'up' or 'down'")
     if adiabatic:
@@ -623,10 +644,20 @@ def make_t2prep_pulse(
     delay1, delay2 = max(0.0, delay1), max(0.0, delay2)
     spoiler = make_spoiler(system, voxel_size, dephasing_cycles=spoil_cycles)
     total = d90 + delay1 + d180 + delay2 + pp.calc_duration(rf90_up) + pp.calc_duration(*spoiler)
-    return T2PrepPulse(system, rf90_down, rf180, rf90_up, delay1, delay2, spoiler, total, final_tip)
+    return T2PrepPulse(system, rf90_down, rf180, rf90_up, delay1, delay2, spoiler, echo_time, total, final_tip)
 
 
-def make_t1t2_prep_pulse(echo_time: float, **kwargs) -> T2PrepPulse:
+def make_t1t2_prep_pulse(
+    echo_time: float,
+    *,
+    voxel_size: float,
+    adiabatic: bool = True,
+    spoil_cycles: float = 4.0,
+    half_passage_duration: float = 4e-3,
+    refocusing_duration: float = 10.24e-3,
+    dwell: float = 10e-6,
+    system: pp.Opts | None = None,
+) -> T2PrepPulse:
     """Create hybrid T1/T2 preparation, storing the magnetization on -z.
 
     :func:`make_t2prep_pulse` with ``final_tip='down'``. Restoring to ``-z``
@@ -639,8 +670,20 @@ def make_t1t2_prep_pulse(echo_time: float, **kwargs) -> T2PrepPulse:
     ----------
     echo_time : float
         Preparation echo time (s).
-    **kwargs
-        Forwarded to :func:`make_t2prep_pulse` (``voxel_size`` is required).
+    voxel_size : float
+        Reference length (m) the spoiler dephases across.
+    adiabatic : bool, optional
+        Use adiabatic half-passages and refocusing.
+    spoil_cycles : float, optional
+        Dephasing cycles per ``voxel_size``.
+    half_passage_duration : float, optional
+        Duration of each adiabatic half-passage (s).
+    refocusing_duration : float, optional
+        Duration of the adiabatic refocusing pulse (s).
+    dwell : float, optional
+        RF sample spacing (s).
+    system : pypulseq.Opts, optional
+        System limits.
 
     Returns
     -------
@@ -654,13 +697,42 @@ def make_t1t2_prep_pulse(echo_time: float, **kwargs) -> T2PrepPulse:
     >>> prep.final_tip
     'down'
 
+    Append all preparation blocks::
+
+        seq = pp.Sequence(prep.system)
+        for block in prep:
+            seq.add_block(*block)
+
+    The final tip stores the T2-weighted magnetization on ``-z``:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       from _figures import preparation_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       preparation_figure(
+           pp.make_t1t2_prep_pulse(50e-3, voxel_size=1e-3, system=system),
+           t2_values=np.linspace(20e-3, 160e-3, 121),
+           title="T1/T2 preparation, 50 ms")
+
     See Also
     --------
     make_t2prep_pulse : the general form.
     make_inversion_pulse : pure T1 preparation.
     """
-    kwargs["final_tip"] = "down"
-    return make_t2prep_pulse(echo_time, **kwargs)
+    return make_t2prep_pulse(
+        echo_time,
+        adiabatic=adiabatic,
+        final_tip="down",
+        voxel_size=voxel_size,
+        spoil_cycles=spoil_cycles,
+        half_passage_duration=half_passage_duration,
+        refocusing_duration=refocusing_duration,
+        dwell=dwell,
+        system=system,
+    )
 
 
 class DiffusionPrepPulse(RfModule):
@@ -835,9 +907,11 @@ def make_diffusion_prep(
 
     Sweep directions and b-values from the single design::
 
-        directions = pp.make_golden_means_3d_sampling(6).support
+        directions = pp.make_golden_means_3d_tilt(6).support
         for rotation in pp.SamplingPattern(directions, (range(len(directions)),)).to_rotations():
-            prep(seq, b_value=250.0, rotation=rotation)
+            prep.set_state(b_value=250.0, rotation=rotation)
+            for block in prep:
+                seq.add_block(*block)
 
     The module's blocks, as they are played:
 
@@ -847,13 +921,14 @@ def make_diffusion_prep(
        import numpy as np
        import pulserver.pypulseq as pp
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-       pp.make_diffusion_prep(1000.0, voxel_size=2e-3, system=system).plot()
+       from _figures import preparation_figure
+       preparation_figure(pp.make_diffusion_prep(1000.0, voxel_size=2e-3, system=system))
 
     See Also
     --------
     pulserver.SamplingPattern.to_rotations : diffusion-direction rotation matrices.
     """
-    system = pp.Opts.default if system is None else system
+    system = default_system(system)
     if b_value <= 0 or gradient_duration <= 0 or gradient_separation <= gradient_duration:
         raise ValueError("require b_value > 0 and gradient_separation > gradient_duration > 0")
     max_gradient = pp.make_trapezoid(

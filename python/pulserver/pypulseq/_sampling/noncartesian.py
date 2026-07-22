@@ -24,7 +24,7 @@ def _generalized_fibonacci(order, index):
     return current
 
 
-def make_radial_sampling(
+def make_radial_tilt(
     n_spokes,
     *,
     scheme="linear",
@@ -77,11 +77,11 @@ def make_radial_sampling(
     Examples
     --------
     >>> import numpy as np
-    >>> from pulserver.pypulseq import make_radial_sampling
-    >>> uniform = make_radial_sampling(8)
+    >>> from pulserver.pypulseq import make_radial_tilt
+    >>> uniform = make_radial_tilt(8)
     >>> np.rad2deg(uniform.support[:, 0]).round(1)
     array([  0. ,  22.5,  45. ,  67.5,  90. , 112.5, 135. , 157.5])
-    >>> golden = make_radial_sampling(400, scheme="golden", segment_length=100)
+    >>> golden = make_radial_tilt(400, scheme="golden", segment_length=100)
     >>> golden.n_shots
     4
 
@@ -90,10 +90,10 @@ def make_radial_sampling(
 
        import numpy as np
        import matplotlib.pyplot as plt
-       from pulserver.pypulseq import make_radial_sampling
+       from pulserver.pypulseq import make_radial_tilt
        fig, axes = plt.subplots(1, 2, figsize=(8, 4), subplot_kw={"polar": True})
        for ax, scheme in zip(axes, ("linear", "golden")):
-           angles = make_radial_sampling(21, scheme=scheme).support[:, 0]
+           angles = make_radial_tilt(21, scheme=scheme).support[:, 0]
            for i, a in enumerate(angles):
                ax.plot([a, a], [-1, 1], color=plt.cm.viridis(i / 20))
            ax.set_yticks([]); ax.set_title(f"{scheme}, 21 spokes")
@@ -161,7 +161,7 @@ def calc_golden_angles(n: int) -> np.ndarray:
     A flat angle array rather than a :class:`~pulserver.SamplingPattern`, in
     the full-circle (``2 * pi``) convention: pair it directly with a base
     waveform and :func:`pulserver.pypulseq.make_rotation`. Use
-    :func:`make_radial_sampling` when the angular period or the segmentation
+    :func:`make_radial_tilt` when the angular period or the segmentation
     matters.
 
     Parameters
@@ -212,7 +212,7 @@ def calc_golden_angles(n: int) -> np.ndarray:
     --------
     calc_tiny_golden_angles : smaller increments with the same uniformity.
     calc_raga_angles : rational, exactly repeatable approximation.
-    make_radial_sampling : full spoke plan with period and segmentation control.
+    make_radial_tilt : full spoke tilt schedule with period and segmentation control.
     """
     return _accumulated(n, np.pi / _PHI)
 
@@ -259,7 +259,7 @@ def calc_raga_angles(n: int, *, tiny_index: int = 1, approximation_order: int = 
     --------
     calc_golden_angles : the irrational increment RAGA approximates.
     """
-    pattern = make_radial_sampling(
+    pattern = make_radial_tilt(
         n,
         scheme="raga",
         period=2.0 * np.pi,
@@ -357,7 +357,7 @@ def _directions(z, azimuth):
     return np.column_stack((radius * np.cos(azimuth), radius * np.sin(azimuth), z))
 
 
-def make_golden_means_3d_sampling(n_spokes, *, segment_length=1):
+def make_golden_means_3d_tilt(n_spokes, *, segment_length=1):
     """Generate 3D centre-out spoke directions from the 2D golden means.
 
     Extends the golden-angle idea to the sphere: polar and azimuthal indices
@@ -380,8 +380,8 @@ def make_golden_means_3d_sampling(n_spokes, *, segment_length=1):
 
     Examples
     --------
-    >>> from pulserver.pypulseq import make_golden_means_3d_sampling
-    >>> pattern = make_golden_means_3d_sampling(6, segment_length=3)
+    >>> from pulserver.pypulseq import make_golden_means_3d_tilt
+    >>> pattern = make_golden_means_3d_tilt(6, segment_length=3)
     >>> pattern.support.shape, pattern.n_shots
     ((6, 3), 2)
 
@@ -389,13 +389,13 @@ def make_golden_means_3d_sampling(n_spokes, *, segment_length=1):
        :include-source: false
 
        import matplotlib.pyplot as plt
-       from pulserver.pypulseq import make_golden_means_3d_sampling
-       d = make_golden_means_3d_sampling(300).support
+       from pulserver.pypulseq import make_golden_means_3d_tilt
+       d = make_golden_means_3d_tilt(300).support
        fig = plt.figure(figsize=(5, 5))
        ax = fig.add_subplot(projection="3d")
        ax.scatter(d[:, 0], d[:, 1], d[:, 2], s=6)
        ax.set_box_aspect((1, 1, 1))
-       ax.set_title("make_golden_means_3d_sampling(300)")
+       ax.set_title("make_golden_means_3d_tilt(300)")
 
     References
     ----------
@@ -404,7 +404,7 @@ def make_golden_means_3d_sampling(n_spokes, *, segment_length=1):
 
     See Also
     --------
-    make_spiral_phyllotaxis_sampling : interleaved alternative with smooth intra-shot paths.
+    make_spiral_phyllotaxis_tilt : interleaved alternative with smooth intra-shot paths.
     pulserver.SamplingPattern.to_rotations : convert the support to block rotations.
     """
     n_spokes, segment_length = int(n_spokes), int(segment_length)
@@ -423,7 +423,7 @@ def _is_fibonacci(value):
     )
 
 
-def make_spiral_phyllotaxis_sampling(n_spokes, n_interleaves, *, require_fibonacci=True):
+def make_spiral_phyllotaxis_tilt(n_spokes, n_interleaves, *, require_fibonacci=True):
     """Generate 3D spoke directions on a spiral phyllotaxis, interleaved.
 
     Directions follow a single pole-to-pole spiral (the sunflower-seed
@@ -452,8 +452,8 @@ def make_spiral_phyllotaxis_sampling(n_spokes, n_interleaves, *, require_fibonac
 
     Examples
     --------
-    >>> from pulserver.pypulseq import make_spiral_phyllotaxis_sampling
-    >>> pattern = make_spiral_phyllotaxis_sampling(8, 2)
+    >>> from pulserver.pypulseq import make_spiral_phyllotaxis_tilt
+    >>> pattern = make_spiral_phyllotaxis_tilt(8, 2)
     >>> pattern.n_shots, pattern.order[0]
     (2, array([0, 2, 4, 6]))
 
@@ -461,15 +461,15 @@ def make_spiral_phyllotaxis_sampling(n_spokes, n_interleaves, *, require_fibonac
        :include-source: false
 
        import matplotlib.pyplot as plt
-       from pulserver.pypulseq import make_spiral_phyllotaxis_sampling
-       pattern = make_spiral_phyllotaxis_sampling(377, 13)
+       from pulserver.pypulseq import make_spiral_phyllotaxis_tilt
+       pattern = make_spiral_phyllotaxis_tilt(377, 13)
        fig = plt.figure(figsize=(5, 5))
        ax = fig.add_subplot(projection="3d")
        for shot in range(3):
            d = pattern[shot]
            ax.plot(d[:, 0], d[:, 1], d[:, 2], marker="o", ms=3, lw=0.6)
        ax.set_box_aspect((1, 1, 1))
-       ax.set_title("make_spiral_phyllotaxis_sampling(377, 13): first 3 shots")
+       ax.set_title("make_spiral_phyllotaxis_tilt(377, 13): first 3 shots")
 
     References
     ----------
@@ -477,7 +477,7 @@ def make_spiral_phyllotaxis_sampling(n_spokes, n_interleaves, *, require_fibonac
 
     See Also
     --------
-    make_golden_means_3d_sampling : uniform in any window, at the cost of shot smoothness.
+    make_golden_means_3d_tilt : uniform in any window, at the cost of shot smoothness.
     """
     n_spokes, n_interleaves = int(n_spokes), int(n_interleaves)
     if n_spokes <= 0 or n_interleaves <= 0 or n_spokes % n_interleaves:

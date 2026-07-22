@@ -609,6 +609,20 @@ extern "C"
     int pulseg_cursor_next(pulseg_collection *coll);
 
     /**
+     * @brief Advance the cursor and fetch the new block's info in one call.
+     *
+     * Convenience wrapper over pulseg_cursor_next() + pulseg_cursor_get_info()
+     * for the common iteration pattern:
+     * @code
+     *   while (pulseg_cursor_advance(coll, &info) == PULSEG_CURSOR_BLOCK) { ... }
+     * @endcode
+     *
+     * @return PULSEG_CURSOR_BLOCK (info filled), PULSEG_CURSOR_DONE (end of
+     *         collection), or a negative error code if info retrieval failed.
+     */
+    int pulseg_cursor_advance(pulseg_collection *coll, pulseg_cursor_info *info);
+
+    /**
      * @brief Reset the cursor to the last marked position.
      *
      * Rewinds the cursor by the number of blocks advanced since the last

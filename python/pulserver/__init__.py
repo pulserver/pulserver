@@ -26,8 +26,8 @@ The authoring modules (``io`` and ``pypulseq``) require the *optional*
 ``pypulseq`` dependency, so they are imported lazily (PEP 562): ``import
 pulserver`` — and hence ``pulserver.recon``, which runs in the scanner recon
 env without ``pypulseq`` — stays import-clean; accessing an authoring name pulls
-it in (raising a clear error if the extra is absent). ``SamplingPattern`` and
-``SliceGroup`` are authoring types and load the same way.
+it in (raising a clear error if the extra is absent). ``SamplingPattern``,
+``SliceSampling`` and ``SliceGroup`` are authoring types and load the same way.
 """
 
 from __future__ import annotations
@@ -42,7 +42,10 @@ __all__ = [
     "PulseqSequence",
     "SequenceModule",
     "SamplingPattern",
+    "Acquisition",
+    "AcquisitionPlan",
     "SliceGroup",
+    "SliceSampling",
     "run_cli",
     "UIParam",
     "Validate",
@@ -74,7 +77,7 @@ __all__ = [
 
 _CORE_MODULES = {"params"}
 #: Authoring data types defined under ``pypulseq`` but named by the contract.
-_AUTHORING_TYPES = {"SamplingPattern", "SliceGroup"}
+_AUTHORING_TYPES = {"Acquisition", "AcquisitionPlan", "SamplingPattern", "SliceGroup", "SliceSampling"}
 
 
 def __getattr__(name: str):

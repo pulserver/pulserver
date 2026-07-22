@@ -135,6 +135,19 @@ def test_rosette_has_no_winders_and_derives_adc_sampling():
     assert np.allclose(k_full[:, -1], 0.0, atol=1e-3)
 
 
+def test_rosette_acquires_every_requested_petal():
+    arm = readout.Rosette(_opts(), 0.22, 64, petals=5, derate=False)
+    radius = np.linalg.norm(arm.trajectory, axis=1)
+    kmax = 64 / (2.0 * 0.22)
+
+    # Every equal-duration petal segment reaches the requested k-space edge;
+    # the ADC also reaches the final return to the centre rather than ending
+    # a dwell-raster-sized tail early.
+    for petal in np.array_split(radius, arm.petals):
+        assert np.max(petal) >= 0.98 * kmax
+    assert radius[-1] <= 0.05 * kmax
+
+
 def test_rosette_echo_spacing_stretches_gradient_and_rejects_impossible_request():
     base = readout.Rosette(_opts(), 0.22, 32, petals=5, derate=False)
     target_spacing = 1.5 * base.min_echo_spacing_s

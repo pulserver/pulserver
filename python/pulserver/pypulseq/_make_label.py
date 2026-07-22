@@ -1,8 +1,100 @@
 """Custom label support for Sequence."""
 
-__all__ = ["make_label"]
+__all__ = ["get_supported_labels", "make_label"]
 
 from types import SimpleNamespace
+
+_SUPPORTED_LABELS = (
+    "SLC",
+    "SEG",
+    "REP",
+    "AVG",
+    "SET",
+    "ECO",
+    "PHS",
+    "LIN",
+    "PAR",
+    "ACQ",
+    "NAV",
+    "REV",
+    "SMS",
+    "REF",
+    "IMA",
+    "NOISE",
+    "PMC",
+    "NOROT",
+    "NOPOS",
+    "NOSCL",
+    "ONCE",
+    "TRID",
+    "OFF",
+    "MODULE",
+)
+
+
+def get_supported_labels() -> tuple[str, ...]:
+    """Return every counter and flag understood by Pulserver.
+
+    This extends the Pulseq/PyPulseq set with ``OFF`` (discard an acquisition)
+    and ``MODULE`` (mark module scope), both consumed by Pulserver's
+    interpreter.
+
+    .. list-table:: Supported labels
+       :header-rows: 1
+       :widths: 14 86
+
+       * - Label
+         - Meaning
+       * - ``SLC``
+         - Slice index.
+       * - ``SEG``
+         - Segment or shot-within-repetition index.
+       * - ``REP``
+         - Repetition index.
+       * - ``AVG``
+         - Signal-average index.
+       * - ``SET``
+         - Acquisition-set index.
+       * - ``ECO``
+         - Echo index.
+       * - ``PHS``
+         - Phase-cycle or phase-contrast index.
+       * - ``LIN``
+         - In-plane phase-encoding line index.
+       * - ``PAR``
+         - Through-plane partition index.
+       * - ``ACQ``
+         - Acquisition index.
+       * - ``NAV``
+         - Navigator acquisition flag.
+       * - ``REV``
+         - Reversed readout-polarity flag.
+       * - ``SMS``
+         - Simultaneous-multislice group or band index.
+       * - ``REF``
+         - Calibration/reference acquisition flag.
+       * - ``IMA``
+         - Imaging acquisition flag.
+       * - ``NOISE``
+         - Noise-only acquisition flag.
+       * - ``PMC``
+         - Prospective-motion-correction acquisition flag.
+       * - ``NOROT``
+         - Suppress geometric rotation for the labelled module.
+       * - ``NOPOS``
+         - Suppress position-dependent frequency translation.
+       * - ``NOSCL``
+         - Suppress geometric gradient scaling.
+       * - ``ONCE``
+         - Execute or emit the labelled block only once.
+       * - ``TRID``
+         - Trigger identifier.
+       * - ``OFF``
+         - Discard the associated acquisition downstream.
+       * - ``MODULE``
+         - Sticky structural/safety module-group identifier.
+    """
+    return _SUPPORTED_LABELS
 
 
 def make_label(label: str, type: str, value: int | bool | float) -> SimpleNamespace:  # noqa: A002

@@ -91,24 +91,18 @@ def test_refocusing_is_nominal_pi_and_supports_nonselective_and_selective(system
     assert selective.rephasers[0].channel == "z"
 
 
-def test_inversion_supports_nonselective_and_selective_slr_and_adiabatic(system):
+def test_inversion_supports_nonselective_slr_and_adiabatic(system):
     slr = rf.make_inversion_pulse(
         adiabatic=False,
         duration=1.28e-3,
         dwell=10e-6,
         system=system,
     )
-    selective = rf.make_inversion_pulse(
-        adiabatic=False,
-        slice_thickness=5e-3,
-        duration=3e-3,
-        dwell=10e-6,
-        system=system,
-    )
     adiabatic = rf.make_inversion_pulse(duration=4e-3, dwell=10e-6, system=system)
     assert slr.rf.use == adiabatic.rf.use == "inversion"
-    assert len(selective.gradients) == len(selective.rephasers) == 1
-    assert selective.rephasers[0].channel == "z"
+    assert not slr.gradients and not adiabatic.gradients
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+        rf.make_inversion_pulse(slice_thickness=5e-3, system=system)
 
 
 def test_spsp_uses_slr_sublobes_and_returns_rephaser(system):
@@ -124,6 +118,22 @@ def test_spsp_uses_slr_sublobes_and_returns_rephaser(system):
     assert pulse.gradients[0].channel == pulse.rephasers[0].channel == "z"
     assert not pulse.self_refocused
     assert pulse.kspace.shape == (pulse.rf.signal.size, 1)
+    assert len(pulse.gradients[0].waveform) == 3 * 8 + 1
+
+
+def test_multiband_always_contains_zero_and_uses_power_weights(system):
+    base = rf.make_frequency_selective_pulse(np.pi / 6, 500.0, system=system)
+    pulse = rf.make_multiband(base, 4, 1000.0, sideband_power=4.0)
+    assert np.array_equal(pulse.band_offsets, [-1000.0, 0.0, 1000.0, 2000.0])
+    assert np.abs(pulse.band_weights) == pytest.approx([2.0, 1.0, 2.0, 2.0])
+
+
+def test_pins_center_convention_and_sparse_gradient(system):
+    pulse = rf.make_pins_slice_selective_pulse(np.pi / 6, 5e-3, 4, 20e-3, system=system)
+    assert not np.any(np.isclose(pulse.slice_positions, 0.0))
+    assert len(pulse.gradients[0].waveform) < pulse.rf.signal.size / 10
+    centered = rf.make_pins_slice_selective_pulse(np.pi / 6, 5e-3, 3, 20e-3, include_center=True, system=system)
+    assert np.any(np.isclose(centered.slice_positions, 0.0))
 
 
 def _smooth_gradient(samples: int, dimensions: int) -> np.ndarray:
@@ -155,8 +165,8 @@ def test_explicit_3d_factory_rejects_2d_trajectory(system):
         rf.make_3d_selective_pulse(np.pi / 12, _smooth_gradient(40, 2), (0.2,) * 3, (8,) * 3, system=system)
 
 
-def test_automatic_2d_factory_reuses_arbgrad_spiral(system):
-    pulse = rf.make_2d_selective_pulse(
+def test_plane_selective_factory_rewinds_each_arbgrad_interleaf(system):
+    pulse = rf.make_plane_selective_pulse(
         np.pi / 12,
         0.16,
         16,
@@ -164,7 +174,10 @@ def test_automatic_2d_factory_reuses_arbgrad_spiral(system):
         system=system,
     )
     assert pulse.kspace.shape[1] == 2
-    assert len(pulse.gradients) == len(pulse.rephasers) == 2
+    assert len(pulse.gradients) == 2
+    assert not pulse.rephasers and pulse.self_refocused
+    assert np.count_nonzero(np.isclose(pulse.rf.signal, 0.0)) >= pulse.rf.signal.size // 2
+    assert np.count_nonzero(np.linalg.norm(pulse.kspace, axis=1) < 1e-8) > 2
 
 
 def test_refocusing_output_is_directly_accepted_by_fse_constructor(system):
@@ -182,6 +195,9 @@ def test_refocusing_output_is_directly_accepted_by_fse_constructor(system):
 def test_fat_saturation_scopes_and_resets_fov_exemption_labels(system):
     pulse = rf.make_fat_saturation_pulse(b0=3.0, voxel_size=3e-3, system=system)
     assert pulse.rf.freq_offset == pytest.approx(rf.fat_shift_hz(3.0, system.gamma))
+    assert any(
+        getattr(event, "type", None) in ("grad", "trap") for block in pulse for event in block
+    ), "fat saturation must retain its terminating spoiler gradients"
     assert [event.label for event in pulse.labels_on] == ["NOPOS", "NOROT"]
     assert [event.value for event in pulse.labels_on] == [1, 1]
     assert [event.value for event in pulse.labels_off] == [0, 0]
@@ -211,6 +227,7 @@ def test_t2_and_hybrid_t1t2_preps_differ_in_final_tip(system):
     hybrid = rf.make_t1t2_prep_pulse(30e-3, adiabatic=False, voxel_size=3e-3, system=system)
     assert t2.final_tip == "up"
     assert hybrid.final_tip == "down"
+    assert t2.echo_time == hybrid.echo_time == pytest.approx(30e-3)
     assert (t2.rf90_up.phase_offset - hybrid.rf90_up.phase_offset) % (2 * np.pi) == pytest.approx(np.pi)
 
 
@@ -231,6 +248,11 @@ def test_adiabatic_t2prep_uses_half_passages_for_both_90s(system):
 def test_diffusion_prep_is_full_scale_rotatable_and_scopes_fov_labels(system):
     pulse = rf.make_diffusion_prep(800.0, voxel_size=3e-3, system=system)
     assert pulse.gradient.channel == "z"
+    assert sum(
+        getattr(event, "channel", None) == "z" and getattr(event, "type", None) in ("grad", "trap")
+        for block in pulse
+        for event in block
+    ) >= 2
     assert pulse.gradient_scale(200.0) == pytest.approx(0.5)
     assert pulse.gradient_for_b_value(200.0).amplitude == pytest.approx(0.5 * pulse.gradient.amplitude)
     assert [event.label for event in pulse.labels_on] == ["NOPOS", "NOROT"]

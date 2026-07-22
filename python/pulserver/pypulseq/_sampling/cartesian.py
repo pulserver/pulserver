@@ -64,7 +64,11 @@ def calc_sampled_lines(n: int, r: int, acs_lines: int) -> list[int]:
 
 def _as_coords(coords) -> np.ndarray:
     """Normalize a coordinate argument to an ``(N, 2)`` float array."""
-    arr = np.asarray(coords, dtype=float)
+    raw = np.asarray(coords)
+    if raw.dtype == bool and raw.ndim in (1, 2):
+        arr = np.argwhere(raw).astype(float)
+    else:
+        arr = np.asarray(coords, dtype=float)
     if arr.ndim == 1:
         arr = np.column_stack([arr, np.zeros_like(arr)])
     if arr.ndim != 2 or arr.shape[1] != 2:
@@ -76,8 +80,8 @@ def _split_into_shots(order: list[int], etl: int) -> list[list[int]]:
     return calc_chunk_indices(order, etl)
 
 
-def make_fse_linear_order(coords, etl: int) -> list[list[int]]:
-    """Linear (raster) echo-train ordering over a (ky, kz) point set.
+def make_linear_order(coords, train_length: int) -> list[list[int]]:
+    """Linear (raster) train ordering over a Cartesian point set.
 
     Views are sorted in raster order (kz major, ky minor) and chunked into
     echo trains. This is scheme A ("linear reordering") of ISMRM abstract
@@ -85,11 +89,11 @@ def make_fse_linear_order(coords, etl: int) -> list[list[int]]:
 
     Parameters
     ----------
-    coords : array_like
-        Phase-encode locations, shape ``(N,)`` (ky only) or ``(N, 2)``
-        (ky, kz).
-    etl : int
-        Echo train length.
+    coords : int or array_like
+        Number of sequential views, or phase-encode locations with shape
+        ``(N,)`` (ky only) or ``(N, 2)`` (ky, kz).
+    train_length : int
+        Echo-train or segment length.
 
     Returns
     -------
@@ -100,16 +104,50 @@ def make_fse_linear_order(coords, etl: int) -> list[list[int]]:
     Examples
     --------
     >>> import pulserver.pypulseq as pp
-    >>> shots = pp.make_fse_linear_order([[0, 0], [1, 0], [0, 1], [1, 1]], 2)
+    >>> shots = pp.make_linear_order([[0, 0], [1, 0], [0, 1], [1, 1]], 2)
     >>> sorted(i for shot in shots for i in shot)
     [0, 1, 2, 3]
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       from _figures import order_figure
+       ky, kz = np.meshgrid(np.arange(-16, 16), np.arange(-16, 16))
+       coords = np.column_stack([ky.ravel(), kz.ravel()])
+       order_figure([("linear", pp.make_linear_order(coords, 32))], coords)
     """
+    if np.asarray(coords).ndim == 0:
+        count = int(coords)
+        if count < 0:
+            raise ValueError("coords must be nonnegative when given as a count")
+        return _split_into_shots(list(range(count)), train_length)
     pts = _as_coords(coords)
     order = sorted(range(len(pts)), key=lambda i: (pts[i, 1], pts[i, 0]))
-    return _split_into_shots(order, etl)
+    return _split_into_shots(order, train_length)
 
 
-def make_fse_radial_order(coords, etl: int) -> list[list[int]]:
+def make_centric_order(coords, train_length: int) -> list[list[int]]:
+    """Globally center-out Cartesian ordering, chunked into trains.
+
+    This is the conventional centric segmented-GRE/MPRAGE ordering: sampled
+    locations are sorted by distance from the encoded k-space centre before
+    being split into segments.  Unlike :func:`make_radial_order`, it does not
+    form angular wedges whose individual trains each start near the centre.
+    """
+    pts = _as_coords(coords)
+    if not len(pts):
+        return []
+    center = pts.mean(axis=0)
+    relative = pts - center
+    radius = np.hypot(relative[:, 0], relative[:, 1])
+    angle = np.arctan2(relative[:, 1], relative[:, 0])
+    order = sorted(range(len(pts)), key=lambda index: (radius[index], angle[index]))
+    return _split_into_shots(order, train_length)
+
+
+def make_radial_order(coords, train_length: int) -> list[list[int]]:
     """Center-out radial (wedge) echo-train ordering.
 
     k-space is partitioned into angular wedges (one per shot). Within each
@@ -122,8 +160,9 @@ def make_fse_radial_order(coords, etl: int) -> list[list[int]]:
     ----------
     coords : array_like
         Phase-encode locations, shape ``(N,)`` or ``(N, 2)``.
-    etl : int
-        Echo train length; the number of wedges is ``ceil(N / etl)``.
+    train_length : int
+        Echo-train or segment length; the number of wedges is
+        ``ceil(N / train_length)``.
 
     Returns
     -------
@@ -136,43 +175,26 @@ def make_fse_radial_order(coords, etl: int) -> list[list[int]]:
     >>> import pulserver.pypulseq as pp
     >>> ky, kz = np.meshgrid(np.arange(-2, 3), np.arange(-2, 3))
     >>> coords = np.column_stack([ky.ravel(), kz.ravel()])
-    >>> shots = pp.make_fse_radial_order(coords, 5)
+    >>> shots = pp.make_radial_order(coords, 5)
     >>> all(len(s) <= 5 for s in shots)
     True
 
-    Echo index (colour) across (ky, kz) for the four echo-train orderings —
-    what determines the T2 weighting of each region of k-space:
+    Echo index (colour) across (ky, kz) determines the T2 weighting of each
+    region of k-space:
 
     .. plot::
        :include-source: false
 
        import numpy as np
-       import matplotlib.pyplot as plt
        import pulserver.pypulseq as pp
+       from _figures import order_figure
        ky, kz = np.meshgrid(np.arange(-16, 16), np.arange(-16, 16))
        coords = np.column_stack([ky.ravel(), kz.ravel()])
-       etl = 32
-       orderings = [
-           ("make_fse_linear_order", pp.make_fse_linear_order(coords, etl)),
-           ("make_fse_radial_order", pp.make_fse_radial_order(coords, etl)),
-           ("make_fse_radial_adaptive_order", pp.make_fse_radial_adaptive_order(coords, etl)),
-           ("make_fse_shuffling_order", pp.make_fse_shuffling_order(coords, etl, seed=0)),
-       ]
-       fig, axes = plt.subplots(1, 4, figsize=(12, 3.4), sharey=True)
-       for ax, (title, shots) in zip(axes, orderings):
-           echo = np.zeros(len(coords))
-           for shot in shots:
-               for e, idx in enumerate(shot):
-                   echo[idx] = e
-           im = ax.scatter(coords[:, 0], coords[:, 1], c=echo, s=6, cmap="viridis")
-           ax.set_title(title, fontsize=8)
-           ax.set_xlabel("ky"); ax.set_aspect("equal")
-       axes[0].set_ylabel("kz")
-       fig.colorbar(im, ax=axes, label="echo index", shrink=0.8)
+       order_figure([("radial", pp.make_radial_order(coords, 32))], coords)
 
     See Also
     --------
-    make_fse_linear_order, make_fse_radial_adaptive_order, make_fse_shuffling_order
+    make_linear_order, make_radial_adaptive_order, make_shuffling_order
     """
     pts = _as_coords(coords)
     n = len(pts)
@@ -182,18 +204,18 @@ def make_fse_radial_order(coords, etl: int) -> list[list[int]]:
     rel = pts - center
     radius = np.hypot(rel[:, 0], rel[:, 1])
     angle = np.arctan2(rel[:, 1], rel[:, 0])
-    n_shots = int(np.ceil(n / etl))
+    n_shots = int(np.ceil(n / train_length))
     # Angular wedges of equal view count keep every echo train the same length.
     by_angle = sorted(range(n), key=lambda i: angle[i])
     shots: list[list[int]] = []
     for s in range(n_shots):
-        wedge = by_angle[s * etl : (s + 1) * etl]
+        wedge = by_angle[s * train_length : (s + 1) * train_length]
         wedge.sort(key=lambda i: radius[i])
         shots.append(wedge)
     return shots
 
 
-def make_fse_radial_adaptive_order(coords, etl: int, *, n_sections: int = 3) -> list[list[int]]:
+def make_radial_adaptive_order(coords, train_length: int, *, n_sections: int = 3) -> list[list[int]]:
     """Adaptive radial echo-train ordering (individually parameterized trains).
 
     k-space is divided into ``n_sections`` concentric radial sections; the
@@ -207,8 +229,9 @@ def make_fse_radial_adaptive_order(coords, etl: int, *, n_sections: int = 3) -> 
     ----------
     coords : array_like
         Phase-encode locations, shape ``(N,)`` or ``(N, 2)``.
-    etl : int
-        Echo train length; the number of shots is ``ceil(N / etl)``.
+    train_length : int
+        Echo-train or segment length; the number of shots is
+        ``ceil(N / train_length)``.
     n_sections : int, optional
         Number of radial sections.
 
@@ -224,7 +247,7 @@ def make_fse_radial_adaptive_order(coords, etl: int, *, n_sections: int = 3) -> 
     >>> import pulserver.pypulseq as pp
     >>> ky, kz = np.meshgrid(np.arange(-3, 4), np.arange(-3, 4))
     >>> coords = np.column_stack([ky.ravel(), kz.ravel()])
-    >>> shots = pp.make_fse_radial_adaptive_order(coords, 7, n_sections=3)
+    >>> shots = pp.make_radial_adaptive_order(coords, 7, n_sections=3)
     >>> len(shots)
     7
     >>> sum(len(shot) for shot in shots) == len(coords)
@@ -236,6 +259,16 @@ def make_fse_radial_adaptive_order(coords, etl: int, *, n_sections: int = 3) -> 
 
     >>> sorted({len(shot) for shot in shots})
     [6, 7, 9]
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       from _figures import order_figure
+       ky, kz = np.meshgrid(np.arange(-16, 16), np.arange(-16, 16))
+       coords = np.column_stack([ky.ravel(), kz.ravel()])
+       order_figure([("radial adaptive", pp.make_radial_adaptive_order(coords, 32))], coords)
     """
     pts = _as_coords(coords)
     n = len(pts)
@@ -246,7 +279,7 @@ def make_fse_radial_adaptive_order(coords, etl: int, *, n_sections: int = 3) -> 
     rel = pts - center
     radius = np.hypot(rel[:, 0], rel[:, 1])
     angle = np.arctan2(rel[:, 1], rel[:, 0])
-    n_shots = int(np.ceil(n / etl))
+    n_shots = int(np.ceil(n / train_length))
 
     # Assign each view to a radial section by equal-count quantile so the
     # innermost views reliably land in the earliest echoes.
@@ -265,7 +298,9 @@ def make_fse_radial_adaptive_order(coords, etl: int, *, n_sections: int = 3) -> 
     return [s for s in shots if s]
 
 
-def make_fse_shuffling_order(coords, etl: int, *, seed: int | None = None, cluster: bool = True) -> list[list[int]]:
+def make_shuffling_order(
+    coords, train_length: int, *, seed: int | None = None, cluster: bool = True
+) -> list[list[int]]:
     """Randomly shuffled echo-train ordering (T2 Shuffling).
 
     Phase encodes are randomly assigned to echo positions so that k-t space
@@ -279,7 +314,7 @@ def make_fse_shuffling_order(coords, etl: int, *, seed: int | None = None, clust
     ----------
     coords : array_like
         Phase-encode locations, shape ``(N,)`` or ``(N, 2)``.
-    etl : int
+    train_length : int
         Echo train length.
     seed : int or None, optional
         Seed for reproducible shuffling.
@@ -298,17 +333,27 @@ def make_fse_shuffling_order(coords, etl: int, *, seed: int | None = None, clust
     >>> import pulserver.pypulseq as pp
     >>> ky, kz = np.meshgrid(np.arange(8), np.arange(8))
     >>> coords = np.column_stack([ky.ravel(), kz.ravel()])
-    >>> a = pp.make_fse_shuffling_order(coords, 8, seed=0)
-    >>> b = pp.make_fse_shuffling_order(coords, 8, seed=0)
+    >>> a = pp.make_shuffling_order(coords, 8, seed=0)
+    >>> b = pp.make_shuffling_order(coords, 8, seed=0)
     >>> a == b
     True
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       from _figures import order_figure
+       ky, kz = np.meshgrid(np.arange(-16, 16), np.arange(-16, 16))
+       coords = np.column_stack([ky.ravel(), kz.ravel()])
+       order_figure([("T2 shuffling", pp.make_shuffling_order(coords, 32, seed=0))], coords)
     """
     pts = _as_coords(coords)
     n = len(pts)
     if n == 0:
         return []
     rng = np.random.default_rng(seed)
-    n_shots = int(np.ceil(n / etl))
+    n_shots = int(np.ceil(n / train_length))
 
     # Grid-strip clustering sorts by kz then ky so each train covers a
     # spatially compact region; the alternative starts from a random order.
@@ -316,13 +361,13 @@ def make_fse_shuffling_order(coords, etl: int, *, seed: int | None = None, clust
 
     shots: list[list[int]] = []
     for s in range(n_shots):
-        train = base_order[s * etl : (s + 1) * etl]
+        train = base_order[s * train_length : (s + 1) * train_length]
         train = list(rng.permutation(train))
         shots.append(train)
     return shots
 
 
-def make_random_sampling(
+def make_random_mask(
     shape: tuple[int, int],
     accel: float,
     *,
@@ -353,7 +398,7 @@ def make_random_sampling(
     Examples
     --------
     >>> import pulserver.pypulseq as pp
-    >>> mask = pp.make_random_sampling((32, 32), 4.0, calib=(8, 8), seed=0)
+    >>> mask = pp.make_random_mask((32, 32), 4.0, calib=(8, 8), seed=0)
     >>> mask.shape
     (32, 32)
 
@@ -364,9 +409,9 @@ def make_random_sampling(
        import pulserver.pypulseq as pp
        fig, axes = plt.subplots(1, 3, figsize=(9, 3.2))
        masks = [
-           ("random, R=4", pp.make_random_sampling((64, 64), 4.0, calib=(12, 12), seed=0)),
-           ("poisson-disc, R=4", pp.make_poisson_disc_sampling((64, 64), 4.0, calib=(12, 12), seed=1)),
-           ("CAIPI 2x2, delta=1", pp.make_caipirinha_sampling((64, 64), 2, 2, delta=1)),
+           ("random, R=4", pp.make_random_mask((64, 64), 4.0, calib=(12, 12), seed=0)),
+           ("poisson-disc, R=4", pp.make_poisson_disc_mask((64, 64), 4.0, calib=(12, 12), seed=1)),
+           ("CAIPI 2x2, delta=1", pp.make_caipirinha_mask((64, 64), 2, 2, delta=1)),
        ]
        for ax, (title, mask) in zip(axes, masks):
            ax.imshow(mask.T, cmap="gray", origin="lower", interpolation="nearest")
@@ -376,8 +421,8 @@ def make_random_sampling(
 
     See Also
     --------
-    make_poisson_disc_sampling : incoherent but locally uniform alternative.
-    make_caipirinha_sampling : deterministic lattice for parallel imaging.
+    make_poisson_disc_mask : incoherent but locally uniform alternative.
+    make_caipirinha_mask : deterministic lattice for parallel imaging.
     SamplingPattern.from_mask : turn a mask into shots.
     """
     if accel <= 1:
@@ -398,7 +443,7 @@ def make_random_sampling(
     return flat.reshape(shape)
 
 
-def make_caipirinha_sampling(
+def make_caipirinha_mask(
     shape: tuple[int, int],
     ry: int,
     rz: int,
@@ -431,7 +476,7 @@ def make_caipirinha_sampling(
     Examples
     --------
     >>> import pulserver.pypulseq as pp
-    >>> mask = pp.make_caipirinha_sampling((8, 8), 2, 2, delta=1)
+    >>> mask = pp.make_caipirinha_mask((8, 8), 2, 2, delta=1)
     >>> int(mask.sum())
     16
 
@@ -442,7 +487,7 @@ def make_caipirinha_sampling(
        import pulserver.pypulseq as pp
        fig, axes = plt.subplots(1, 3, figsize=(9, 3.2))
        for ax, delta in zip(axes, (0, 1, 2)):
-           ax.imshow(pp.make_caipirinha_sampling((32, 16), 2, 3, delta=delta).T,
+           ax.imshow(pp.make_caipirinha_mask((32, 16), 2, 3, delta=delta).T,
                      cmap="gray", origin="lower", interpolation="nearest")
            ax.set_title(f"ry=2, rz=3, delta={delta}", fontsize=9)
            ax.set_xlabel("ky"); ax.set_ylabel("kz")
@@ -454,7 +499,7 @@ def make_caipirinha_sampling(
 
     See Also
     --------
-    make_skipped_caipi_sampling : segmented EPI plan covering this lattice.
+    make_skipped_caipi_order : segmented EPI ordering over this lattice.
     """
     if ry < 1 or rz < 1:
         raise ValueError("ry and rz must be >= 1")
@@ -485,15 +530,17 @@ def build_from_mask(
         return SamplingPattern(support, (), mask)
     coords = support[:, 0] if mask.ndim == 1 else support
     if ordering == "linear":
-        shots = make_fse_linear_order(coords, train_length)
+        shots = make_linear_order(coords, train_length)
+    elif ordering in ("centric", "center_out"):
+        shots = make_centric_order(coords, train_length)
     elif ordering == "radial":
-        shots = make_fse_radial_order(coords, train_length)
+        shots = make_radial_order(coords, train_length)
     elif ordering == "radial_adaptive":
-        shots = make_fse_radial_adaptive_order(coords, train_length, n_sections=n_sections)
+        shots = make_radial_adaptive_order(coords, train_length, n_sections=n_sections)
     elif ordering == "shuffling":
-        shots = make_fse_shuffling_order(coords, train_length, seed=seed)
+        shots = make_shuffling_order(coords, train_length, seed=seed)
     else:
-        raise ValueError("ordering must be linear, radial, radial_adaptive, or shuffling")
+        raise ValueError("ordering must be linear, centric, radial, radial_adaptive, or shuffling")
     indices = tuple(np.asarray(shot, dtype=np.intp) for shot in shots)
     flattened = np.concatenate(indices) if indices else np.empty(0, dtype=np.intp)
     if len(flattened) != len(support) or len(np.unique(flattened)) != len(support):
@@ -501,7 +548,7 @@ def build_from_mask(
     return SamplingPattern(support, indices, mask)
 
 
-def make_poisson_disc_sampling(
+def make_poisson_disc_mask(
     shape: tuple[int, int],
     accel: float,
     *,
@@ -543,7 +590,7 @@ def make_poisson_disc_sampling(
     Examples
     --------
     >>> import pulserver.pypulseq as pp
-    >>> mask = pp.make_poisson_disc_sampling((48, 48), 4.0, calib=(8, 8), seed=1)
+    >>> mask = pp.make_poisson_disc_mask((48, 48), 4.0, calib=(8, 8), seed=1)
     >>> mask.shape
     (48, 48)
 
@@ -554,7 +601,7 @@ def make_poisson_disc_sampling(
        import pulserver.pypulseq as pp
        fig, axes = plt.subplots(1, 3, figsize=(9, 3.2))
        for ax, accel in zip(axes, (2.0, 4.0, 8.0)):
-           ax.imshow(pp.make_poisson_disc_sampling((64, 64), accel, calib=(12, 12), seed=1).T,
+           ax.imshow(pp.make_poisson_disc_mask((64, 64), accel, calib=(12, 12), seed=1).T,
                      cmap="gray", origin="lower", interpolation="nearest")
            ax.set_title(f"R={accel:g}", fontsize=9)
            ax.set_xlabel("ky"); ax.set_ylabel("kz")

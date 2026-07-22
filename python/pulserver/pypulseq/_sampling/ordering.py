@@ -72,7 +72,7 @@ def make_outer_product(**dimensions) -> tuple[dict[str, object], ...]:
 
     Drive a sequence loop directly with it::
 
-        for outer in make_outer_product(frame=range(20), group=make_slice_groups(8, 3e-3)):
+        for outer in make_outer_product(frame=range(20), group=make_slice_sampling(8, 3e-3)):
             readout(seq, **outer)
     """
     names = tuple(dimensions)
@@ -107,38 +107,6 @@ def calc_chunk_indices(indices: list[int], size: int) -> list[list[int]]:
     """
     size = max(1, int(size))
     return [indices[i : i + size] for i in range(0, len(indices), size)]
-
-
-def make_linear_order(n: int, etl: int) -> list[list[int]]:
-    """Split ``n`` sequential views into echo trains of length ``etl``.
-
-    The simplest FSE/segmented ordering: views are acquired in increasing
-    index order and cut into consecutive trains. Equivalent to
-    ``calc_chunk_indices(range(n), etl)``.
-
-    Parameters
-    ----------
-    n : int
-        Number of views.
-    etl : int
-        Echo-train (or segment) length.
-
-    Returns
-    -------
-    list of list of int
-        One list of view indices per shot.
-
-    Examples
-    --------
-    >>> from pulserver.pypulseq import make_linear_order
-    >>> make_linear_order(6, 3)
-    [[0, 1, 2], [3, 4, 5]]
-
-    See Also
-    --------
-    make_fse_linear_order : same idea over a 2D (ky, kz) point set.
-    """
-    return calc_chunk_indices(list(range(n)), etl)
 
 
 def make_outer_inner_order(outer_indices: list[int], inner_len: int) -> list[list[tuple[int, int]]]:

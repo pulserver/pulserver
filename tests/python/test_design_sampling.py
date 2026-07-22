@@ -31,7 +31,7 @@ def test_outer_inner_order() -> None:
 
 @pytest.mark.parametrize(
     "fn",
-    [sampling.make_fse_linear_order, sampling.make_fse_radial_order, sampling.make_fse_radial_adaptive_order],
+    [sampling.make_linear_order, sampling.make_radial_order, sampling.make_radial_adaptive_order],
 )
 def test_orderings_cover_every_view_once(fn) -> None:
     coords = _coords_grid(6)
@@ -44,7 +44,7 @@ def test_orderings_cover_every_view_once(fn) -> None:
 def test_radial_order_is_center_out() -> None:
     coords = _coords_grid(7)  # 49 points, center at (3, 3)
     etl = 7
-    shots = sampling.make_fse_radial_order(coords, etl)
+    shots = sampling.make_radial_order(coords, etl)
     center = coords.mean(axis=0)
     for shot in shots:
         radii = [np.hypot(*(coords[i] - center)) for i in shot]
@@ -54,7 +54,7 @@ def test_radial_order_is_center_out() -> None:
 def test_radial_adaptive_early_echoes_are_central() -> None:
     coords = _coords_grid(8)
     etl = 8
-    shots = sampling.make_fse_radial_adaptive_order(coords, etl, n_sections=4)
+    shots = sampling.make_radial_adaptive_order(coords, etl, n_sections=4)
     center = coords.mean(axis=0)
     # First echo of every shot should be nearer the center than its last echo.
     for shot in shots:
@@ -68,49 +68,49 @@ def test_radial_adaptive_early_echoes_are_central() -> None:
 def test_shuffling_reproducible_and_incoherent() -> None:
     coords = _coords_grid(8)
     etl = 8
-    a = sampling.make_fse_shuffling_order(coords, etl, seed=42)
-    b = sampling.make_fse_shuffling_order(coords, etl, seed=42)
-    c = sampling.make_fse_shuffling_order(coords, etl, seed=7)
+    a = sampling.make_shuffling_order(coords, etl, seed=42)
+    b = sampling.make_shuffling_order(coords, etl, seed=42)
+    c = sampling.make_shuffling_order(coords, etl, seed=7)
     assert a == b
     assert a != c
     assert _all_views_once(a, len(coords))
     # A shuffled train should not be in strict raster order (incoherence).
-    linear = sampling.make_fse_linear_order(coords, etl)
+    linear = sampling.make_linear_order(coords, etl)
     assert a != linear
 
 
 def test_empty_inputs() -> None:
-    assert sampling.make_fse_linear_order(np.empty((0, 2)), 4) == []
-    assert sampling.make_fse_radial_order(np.empty((0, 2)), 4) == []
-    assert sampling.make_fse_shuffling_order(np.empty((0, 2)), 4, seed=0) == []
+    assert sampling.make_linear_order(np.empty((0, 2)), 4) == []
+    assert sampling.make_radial_order(np.empty((0, 2)), 4) == []
+    assert sampling.make_shuffling_order(np.empty((0, 2)), 4, seed=0) == []
 
 
 def test_1d_coords_accepted() -> None:
-    shots = sampling.make_fse_linear_order(np.arange(5.0), 2)
+    shots = sampling.make_linear_order(np.arange(5.0), 2)
     assert _all_views_once(shots, 5)
 
 
 def test_random_mask_acceleration_and_calib() -> None:
-    mask = sampling.make_random_sampling((32, 32), 4.0, calib=(8, 8), seed=0)
+    mask = sampling.make_random_mask((32, 32), 4.0, calib=(8, 8), seed=0)
     accel = mask.size / mask.sum()
     assert accel == pytest.approx(4.0, rel=0.05)
     assert mask[12:20, 12:20].all()
-    again = sampling.make_random_sampling((32, 32), 4.0, calib=(8, 8), seed=0)
+    again = sampling.make_random_mask((32, 32), 4.0, calib=(8, 8), seed=0)
     assert np.array_equal(mask, again)
 
 
 def test_caipirinha_mask_acceleration_and_shift() -> None:
-    mask = sampling.make_caipirinha_sampling((12, 12), 2, 2, delta=1)
+    mask = sampling.make_caipirinha_mask((12, 12), 2, 2, delta=1)
     assert mask.size / mask.sum() == pytest.approx(4.0)
     row0 = np.flatnonzero(mask[0])
     row2 = np.flatnonzero(mask[2])
     assert set((row0 + 1) % 12) == set(row2)
-    plain = sampling.make_caipirinha_sampling((12, 12), 2, 2, delta=0)
+    plain = sampling.make_caipirinha_mask((12, 12), 2, 2, delta=0)
     assert np.array_equal(np.flatnonzero(plain[0]), np.flatnonzero(plain[2]))
 
 
 def test_poisson_disc_mask_acceleration() -> None:
-    mask = sampling.make_poisson_disc_sampling((48, 48), 4.0, calib=(8, 8), seed=1)
+    mask = sampling.make_poisson_disc_mask((48, 48), 4.0, calib=(8, 8), seed=1)
     accel = mask.size / mask.sum()
     assert accel == pytest.approx(4.0, abs=0.15)
     assert mask[20:28, 20:28].all()
@@ -118,9 +118,9 @@ def test_poisson_disc_mask_acceleration() -> None:
 
 def test_mask_rejects_bad_accel() -> None:
     with pytest.raises(ValueError):
-        sampling.make_random_sampling((16, 16), 1.0)
+        sampling.make_random_mask((16, 16), 1.0)
     with pytest.raises(ValueError):
-        sampling.make_poisson_disc_sampling((16, 16), 0.5)
+        sampling.make_poisson_disc_mask((16, 16), 0.5)
 
 
 def test_golden_and_uniform_angles() -> None:

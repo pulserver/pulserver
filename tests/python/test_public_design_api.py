@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 
 import numpy as np
 import pulserver
@@ -19,38 +20,81 @@ from pulserver.pypulseq import (
     make_phase_blip,
     make_phase_cycling_schedule,
     make_phase_encoding,
+    make_radial_tilt,
     make_rf_spoiling_schedule,
-    make_spoiler,
     make_traps_schedule,
-    make_radial_sampling,
 )
 
 
 def test_enhanced_pypulseq_contains_complete_upstream_namespace() -> None:
-    upstream_names = {name for name in dir(upstream) if not name.startswith("_")}
+    upstream_names = {name for name in dir(upstream) if not name.startswith("_")} - {"make_adiabatic_pulse"}
     assert upstream_names <= set(pp.__all__)
     assert all(hasattr(pp, name) for name in upstream_names)
+    assert not hasattr(pp, "make_adiabatic_pulse")
     assert issubclass(pp.Sequence, upstream.Sequence)
     assert pp.make_delay is upstream.make_delay
     assert callable(pp.traj2grad)
+
+
+def test_pulserver_base_overrides_are_vendor_neutral_and_callable() -> None:
+    system = pp.Opts()
+    assert system.rf_dead_time == system.rf_ringdown_time == system.adc_dead_time == 0.0
+    assert system.rf_raster_time == system.adc_raster_time == pytest.approx(2e-6)
+    assert system.grad_raster_time == system.block_duration_raster == pytest.approx(10e-6)
+    assert {"OFF", "MODULE"} <= set(pp.get_supported_labels())
+    assert all(callable(getattr(pp, name)) for name in ("compress_shape", "decompress_shape", "convert"))
+    assert all(
+        getattr(pp, name).__module__ == "pulserver.pypulseq"
+        for name in ("compress_shape", "decompress_shape", "convert")
+    )
+
+
+def test_ordering_names_are_sequence_agnostic() -> None:
+    generic = {
+        "make_linear_order",
+        "make_radial_order",
+        "make_radial_adaptive_order",
+        "make_shuffling_order",
+    }
+    old_fse_names = {name.replace("make_", "make_fse_") for name in generic}
+    assert generic <= set(pp.__all__)
+    assert old_fse_names.isdisjoint(pp.__all__)
+
+
+def test_preparation_signatures_have_no_slice_selection_controls() -> None:
+    names = {
+        "make_inversion_pulse",
+        "make_fat_saturation_pulse",
+        "make_mt_pulse",
+        "make_ihmt_pulse",
+        "make_bloch_siegert_pulse",
+        "make_t2prep_pulse",
+        "make_t1t2_prep_pulse",
+        "make_diffusion_prep",
+    }
+    forbidden = {"slice_thickness", "return_gz", "center_pos"}
+    for name in names:
+        signature = inspect.signature(getattr(pp, name))
+        assert forbidden.isdisjoint(signature.parameters)
+        assert not any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in signature.parameters.values())
 
 
 def test_root_exports_plugin_contract_without_core_imports() -> None:
     assert pulserver.Sequence is pulserver.PulseqSequence
     assert callable(pulserver.run_cli)
     assert callable(pulserver.validate_protocol)
-    assert isinstance(make_radial_sampling(4), SamplingPattern)
+    assert isinstance(make_radial_tilt(4), SamplingPattern)
 
 
 def test_root_exports_the_abstract_authoring_types() -> None:
     assert pulserver.SamplingPattern is SamplingPattern
     assert pulserver.SequenceModule is SequenceModule
-    assert {"SamplingPattern", "SliceGroup", "SequenceModule"} <= set(pulserver.__all__)
-    assert {"SamplingPattern", "SliceGroup"}.isdisjoint(pp.__all__)
+    assert {"SamplingPattern", "SliceSampling", "SliceGroup", "SequenceModule"} <= set(pulserver.__all__)
+    assert {"SamplingPattern", "SliceSampling", "SliceGroup"}.isdisjoint(pp.__all__)
 
 
 def test_root_namespace_excludes_waveform_authoring_helpers() -> None:
-    leaked = {"make_hard_pulse", "make_crusher", "make_line_readout", "make_radial_sampling"}
+    leaked = {"make_hard_pulse", "make_crusher", "make_line_readout", "make_radial_tilt"}
     assert leaked.isdisjoint(pulserver.__all__)
     for name in leaked:
         with pytest.raises(AttributeError):
@@ -100,12 +144,21 @@ def test_gradient_helpers_use_physical_units_and_axes() -> None:
     explicit = make_crusher(system, "z", area=800.0)
     template, areas = make_phase_encoding(system, "y", 0.24, 64)
     blip = make_phase_blip(system, "y", 0.24, steps=2)
-    spoilers = make_spoiler(system, 5e-3, dephasing_cycles=4.0)
 
     assert crusher.area == pytest.approx(explicit.area)
     assert template.channel == "y" and len(areas) == 64
     assert blip.area == pytest.approx(2 / 0.24)
-    assert {gradient.channel for gradient in spoilers} == {"x", "y", "z"}
+    assert "make_spoiler" not in pp.__all__
+
+
+def test_readout_axes_are_fixed_and_spoiling_uses_cycles() -> None:
+    system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    readout = make_line_readout(system, (0.22, 0.22), (64, 64), spoil_cycles=8.0, derate=False)
+    assert readout._spoil_factor == pytest.approx(8.0)
+    with pytest.raises(TypeError, match="fixed to x/y/z"):
+        make_line_readout(system, (0.22, 0.22), (64, 64), ro_axis="y")
+    with pytest.raises(TypeError, match="spoil_cycles"):
+        make_line_readout(system, (0.22, 0.22), (64, 64), spoil_factor=2.0)
 
 
 def test_adc_timing_is_feasible_on_both_rasters() -> None:

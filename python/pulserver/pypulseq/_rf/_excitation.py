@@ -8,6 +8,7 @@ from typing import Literal
 import numpy as np
 import pypulseq as pp
 
+from .._opts import default_system
 from ._base import RfPulse
 from ._slr import design_slr
 
@@ -21,7 +22,7 @@ RF_SPOILING_INCREMENT_DEG = 117.0
 
 
 def _system_or_default(system: pp.Opts | None) -> pp.Opts:
-    return pp.Opts.default if system is None else system
+    return default_system(system)
 
 
 def _slr_sample_count(duration: float, dwell: float) -> int:
@@ -65,9 +66,12 @@ def make_hard_pulse(flip_angle: float, *, system: pp.Opts | None = None, **kwarg
     >>> pulse.rf.t[-1]
     np.float64(0.0005)
 
-    Append it, phase-cycled, to a sequence::
+    Append its Pulseq blocks explicitly::
 
-        pulse(seq, phase_offset_rad=np.pi)
+        seq = pp.Sequence(pulse.system)
+        pulse.set_state(phase_offset_rad=np.pi)
+        for block in pulse:
+            seq.add_block(*block)
 
     A non-selective pulse has no profile to show but its envelope:
 
@@ -256,6 +260,12 @@ def make_slr_pulse(
     >>> pulse.rf.signal.shape
     (2000,)
 
+    Append the RF block, and any requested selection/rephasing blocks::
+
+        seq = pp.Sequence(pulse.system)
+        for block in pulse:
+            seq.add_block(*block)
+
     The pulse, and the profile a Bloch simulation of it produces:
 
     .. plot::
@@ -320,6 +330,7 @@ def make_slr_pulse(
     rephase_area = -flat_area * (1.0 - center_pos) - 0.5 * ramp_area
     gz_reph = pp.make_trapezoid(channel="z", area=rephase_area, system=system)
     return RfPulse(system, rf, (gz,), (gz_reph,))
+
 
 # Back-compatible name for pypulseq's former SigPy-backed factory.
 make_sigpy_pulse = make_slr_pulse
@@ -389,6 +400,12 @@ def make_frequency_selective_pulse(
     ... )
     >>> pulse.rf.freq_offset
     -440.0
+
+    Append the pulse to a sequence::
+
+        seq = pp.Sequence(pulse.system)
+        for block in pulse:
+            seq.add_block(*block)
 
     With no gradient the same envelope selects a band of off-resonance instead of a band of space:
 
@@ -480,9 +497,12 @@ def make_slice_selective_pulse(
     >>> pulse.gradients[0].channel, len(pulse.rephasers)
     ('z', 1)
 
-    Move the excitation to another slice by offsetting its frequency::
+    Move the excitation to another slice, then append every block::
 
-        pulse(seq, freq_offset_hz=pulse.gradients[0].amplitude * position_m)
+        seq = pp.Sequence(pulse.system)
+        pulse.set_state(freq_offset_hz=pulse.gradients[0].amplitude * position_m)
+        for block in pulse:
+            seq.add_block(*block)
 
     Time-bandwidth product sets the sharpness of the slice edges — the same nominal thickness, three different profiles:
 
@@ -502,7 +522,7 @@ def make_slice_selective_pulse(
     See Also
     --------
     make_slr_pulse : the underlying pulse design.
-    make_slice_groups : plan the slice loop and its frequency offsets.
+    make_slice_sampling : plan the physical slice/SMS loop and its frequency offsets.
     """
     return make_slr_pulse(
         flip_angle,
@@ -566,6 +586,12 @@ def make_refocusing_pulse(
     >>> np.rad2deg(refocusing.rf.phase_offset)
     np.float64(90.0)
 
+    Append the RF, selection-gradient, and rephasing blocks::
+
+        seq = pp.Sequence(refocusing.system)
+        for block in refocusing:
+            seq.add_block(*block)
+
     Build an FSE train that reuses it at reduced flip angles::
 
         readout = pp.make_fse_readout(system, fov, matrix, 32, refocusing)
@@ -588,7 +614,7 @@ def make_refocusing_pulse(
     make_fse_readout : consumes this module to build the echo train.
     make_traps_schedule : variable refocusing flip angles.
     """
-    return make_slr_pulse(
+    result = make_slr_pulse(
         np.pi,
         duration=duration,
         phase_offset=phase_offset,
@@ -600,16 +626,19 @@ def make_refocusing_pulse(
         use="refocusing",
         **kwargs,
     )
+    result.slice_thickness = slice_thickness
+    return result
 
 
 def make_inversion_pulse(
     *,
     adiabatic: bool = True,
-    slice_thickness: float | None = None,
     duration: float = 10.24e-3,
     time_bw_product: float = 6.0,
+    dwell: float = 10e-6,
+    freq_offset: float = 0.0,
+    phase_offset: float = 0.0,
     system: pp.Opts | None = None,
-    **kwargs,
 ):
     """Create a 180-degree inversion pulse, adiabatic by default.
 
@@ -618,29 +647,32 @@ def make_inversion_pulse(
     hyperbolic-secant default. Set ``adiabatic=False`` for an SLR ``"inv"``
     pulse, which is shorter and deposits less power but is B1-sensitive.
 
-    With ``slice_thickness=None`` the pulse is non-selective (invert
-    everything, as in MP-RAGE); give a thickness for a selective inversion.
+    This factory is intentionally non-selective. Spatially selective
+    inversion has sequence-specific adiabaticity and gradient constraints and
+    is therefore not exposed as a generic preparation.
 
     Parameters
     ----------
     adiabatic : bool, optional
         Use a hyperbolic-secant adiabatic pulse (default True).
-    slice_thickness : float or None, optional
-        Slice/slab thickness (m), or ``None`` for non-selective.
     duration : float, optional
         Pulse duration (s); adiabaticity needs a long pulse, hence the
         10.24 ms default.
     time_bw_product : float, optional
         Time-bandwidth product for the non-adiabatic branch.
+    dwell : float, optional
+        RF sample spacing (s).
+    freq_offset : float, optional
+        RF frequency offset (Hz).
+    phase_offset : float, optional
+        RF phase offset (rad).
     system : pypulseq.Opts, optional
         System limits.
-    **kwargs
-        Forwarded to the underlying factory (``dwell``, ``phase_offset``, ...).
 
     Returns
     -------
     RfPulse
-        Module with ``.rf`` and, when selective, its gradients.
+        Non-selective module holding ``.rf``.
 
     Examples
     --------
@@ -648,11 +680,14 @@ def make_inversion_pulse(
     >>> inversion = pp.make_inversion_pulse()
     >>> len(inversion.gradients)
     0
-    >>> selective = pp.make_inversion_pulse(slice_thickness=8e-3)
-    >>> selective.gradients[0].channel
-    'z'
 
-    Adiabatic and conventional inversion, over the same slice:
+    Append the non-selective inversion block::
+
+        seq = pp.Sequence(inversion.system)
+        for block in inversion:
+            seq.add_block(*block)
+
+    Adiabatic and conventional non-selective inversion envelopes:
 
     .. plot::
        :include-source: false
@@ -662,39 +697,32 @@ def make_inversion_pulse(
        from _figures import rf_comparison
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
        rf_comparison(
-           [("adiabatic", pp.make_inversion_pulse(slice_thickness=5e-3, system=system)),
-            ("SLR", pp.make_inversion_pulse(adiabatic=False, slice_thickness=5e-3,
-                                            system=system))],
-           "slice", extent=0.015, title="make_inversion_pulse")
+           [("adiabatic", pp.make_inversion_pulse(system=system)),
+            ("SLR", pp.make_inversion_pulse(adiabatic=False, system=system))],
+           "frequency", extent=1500,
+           title="non-selective inversion: final magnetization")
 
-    See Also
-    --------
-    make_adiabatic_pulse : full control over the adiabatic family.
     """
     system = _system_or_default(system)
     if adiabatic:
         result = pp.make_adiabatic_pulse(
             pulse_type="hypsec",
             duration=duration,
-            dwell=kwargs.pop("dwell", 10e-6),
-            slice_thickness=0.0 if slice_thickness is None else slice_thickness,
-            return_gz=slice_thickness is not None,
+            dwell=dwell,
+            freq_offset=freq_offset,
+            phase_offset=phase_offset,
             system=system,
             use="inversion",
-            **kwargs,
         )
-        if isinstance(result, tuple):
-            event, gradient, rephaser = result
-            return RfPulse(system, event, (gradient,), (rephaser,))
         return RfPulse(system, result)
     return make_slr_pulse(
         np.pi,
         duration=duration,
-        slice_thickness=0.0 if slice_thickness is None else slice_thickness,
-        return_gz=slice_thickness is not None,
+        dwell=dwell,
+        freq_offset=freq_offset,
+        phase_offset=phase_offset,
         time_bw_product=time_bw_product,
         pulse_type="inv",
         system=system,
         use="inversion",
-        **kwargs,
     )

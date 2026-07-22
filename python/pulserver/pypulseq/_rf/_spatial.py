@@ -7,6 +7,7 @@ from collections.abc import Sequence
 import numpy as np
 import pypulseq as pp
 
+from .._opts import default_system
 from ._base import RfModule
 from ._slr import design_slr
 
@@ -95,6 +96,102 @@ def _gradient_events_and_rephasers(
         if not np.isclose(event.area, 0.0, atol=1e-9):
             rephasers.append(pp.make_trapezoid(channel=axis, area=-event.area, system=system))
     return tuple(gradients), tuple(rephasers)
+
+
+def _assemble_spatial_pulse(
+    flip_angle: float,
+    gradient: np.ndarray,
+    fov: tuple[float, ...],
+    matrix: tuple[int, ...],
+    selective_size: tuple[float, ...] | None,
+    target: np.ndarray | None,
+    axes: tuple[str, ...],
+    system: pp.Opts,
+    use: str,
+    freq_offset: float,
+    phase_offset: float,
+    active_samples: np.ndarray | None = None,
+) -> SpatialPulse:
+    """Assemble an RF pulse after trajectory arguments have been validated."""
+    dwell = system.grad_raster_time
+    gradient_hz_per_m = gradient * system.gamma
+    # Excitation k-space at an RF sample is the gradient moment remaining
+    # after that sample. This convention directly includes the final phase.
+    kspace = -np.cumsum(gradient_hz_per_m[::-1], axis=0)[::-1] * dwell
+    desired, coordinates = _target_and_coordinates(matrix, fov, selective_size, target)
+    weights = _small_tip_weights(desired, coordinates, kspace)
+    if active_samples is not None:
+        active_samples = np.asarray(active_samples, dtype=bool)
+        if active_samples.shape != (len(weights),):
+            raise ValueError("active_samples must have one entry per gradient sample")
+        weights[~active_samples] = 0.0
+    rf = pp.make_arbitrary_rf(
+        signal=weights,
+        flip_angle=flip_angle,
+        dwell=dwell,
+        freq_offset=freq_offset,
+        phase_offset=phase_offset,
+        system=system,
+        use=use,
+    )
+    gradients, rephasers = _gradient_events_and_rephasers(gradient, axes, system)
+    return SpatialPulse(
+        system=system,
+        rf=rf,
+        gradients=gradients,
+        rephasers=rephasers,
+        kspace=kspace,
+        self_refocused=len(rephasers) == 0,
+    )
+
+
+def _sample_trapezoid(event, dwell: float) -> np.ndarray:
+    """Sample a trapezoid at RF-raster midpoints."""
+    duration = event.rise_time + event.flat_time + event.fall_time
+    time = (np.arange(int(round(duration / dwell))) + 0.5) * dwell
+    knots = np.array([0.0, event.rise_time, event.rise_time + event.flat_time, duration])
+    values = np.array([0.0, event.amplitude, event.amplitude, 0.0])
+    return np.interp(time, knots, values)
+
+
+def _verse_to_trapezoid(signal: np.ndarray, event, dwell: float) -> np.ndarray:
+    """VERSE an RF envelope from a flat gradient onto a trapezoid."""
+    gradient = _sample_trapezoid(event, dwell)
+    magnitude = np.abs(gradient)
+    total = magnitude.sum()
+    if total <= 0:
+        raise ValueError("VERSE gradient has zero area")
+    excitation_position = (np.cumsum(magnitude) - 0.5 * magnitude) / total
+    source_position = (np.arange(len(signal)) + 0.5) / len(signal)
+    source = np.asarray(signal, dtype=complex)
+    interpolated = np.interp(excitation_position, source_position, source.real) + 1j * np.interp(
+        excitation_position, source_position, source.imag
+    )
+    return interpolated * magnitude / np.max(magnitude)
+
+
+def _alternating_extended_trapezoid(event, count: int, system: pp.Opts):
+    """Concatenate alternating trapezoids without rasterizing their ramps."""
+    lobe_duration = event.rise_time + event.flat_time + event.fall_time
+    times = []
+    amplitudes = []
+    for index in range(count):
+        start = index * lobe_duration
+        sign = 1.0 if index % 2 == 0 else -1.0
+        knots = (start, start + event.rise_time, start + event.rise_time + event.flat_time, start + lobe_duration)
+        values = (0.0, sign * event.amplitude, sign * event.amplitude, 0.0)
+        for knot, value in zip(knots, values, strict=True):
+            if times and np.isclose(knot, times[-1], atol=1e-15):
+                amplitudes[-1] = value
+            else:
+                times.append(knot)
+                amplitudes.append(value)
+    return pp.make_extended_trapezoid(
+        channel="z",
+        times=np.asarray(times),
+        amplitudes=np.asarray(amplitudes),
+        system=system,
+    )
 
 
 def make_spatially_selective_pulse(
@@ -192,7 +289,7 @@ def make_spatially_selective_pulse(
     make_spiral_selective_pulse : spiral trajectory from ``arbgrad``.
     make_3d_selective_pulse : the 3D entry point.
     """
-    system = pp.Opts.default if system is None else system
+    system = default_system(system)
     gradient = np.asarray(gradient, dtype=float)
     if gradient.ndim != 2 or gradient.shape[1] not in (2, 3) or gradient.shape[0] < 2:
         raise ValueError("gradient must have shape (samples, 2) or (samples, 3)")
@@ -208,30 +305,18 @@ def make_spatially_selective_pulse(
     if not np.allclose(gradient[[0, -1]], 0.0, atol=1e-9):
         raise ValueError("gradient must ramp from and return to zero")
 
-    dwell = system.grad_raster_time
-    gradient_hz_per_m = gradient * system.gamma
-    # Excitation k-space at an RF sample is the gradient moment remaining
-    # after that sample. This convention directly includes the final phase.
-    kspace = -np.cumsum(gradient_hz_per_m[::-1], axis=0)[::-1] * dwell
-    desired, coordinates = _target_and_coordinates(matrix, fov, size, target)
-    weights = _small_tip_weights(desired, coordinates, kspace)
-    rf = pp.make_arbitrary_rf(
-        signal=weights,
-        flip_angle=flip_angle,
-        dwell=dwell,
-        freq_offset=freq_offset,
-        phase_offset=phase_offset,
-        system=system,
-        use=use,
-    )
-    gradients, rephasers = _gradient_events_and_rephasers(gradient, axes, system)
-    return SpatialPulse(
-        system=system,
-        rf=rf,
-        gradients=gradients,
-        rephasers=rephasers,
-        kspace=kspace,
-        self_refocused=len(rephasers) == 0,
+    return _assemble_spatial_pulse(
+        flip_angle,
+        gradient,
+        fov,
+        matrix,
+        size,
+        target,
+        axes,
+        system,
+        use,
+        freq_offset,
+        phase_offset,
     )
 
 
@@ -305,7 +390,7 @@ def make_spiral_selective_pulse(
     # Keep the compiled arbgrad extension optional for all other RF designs.
     from .. import _arbgrad as arbgrad
 
-    system = pp.Opts.default if system is None else system
+    system = default_system(system)
     native = arbgrad.spiral(
         fov=fov,
         n_pix=matrix,
@@ -313,12 +398,116 @@ def make_spiral_selective_pulse(
         grad_limit=system.max_grad * fov / matrix,
         dt=system.grad_raster_time,
     )
-    gradient = arbgrad.to_gradient_tesla_per_meter(native, fov, matrix, system.gamma)
-    return make_spatially_selective_pulse(
+    # MRArbGrad returns one centre-out interleaf plus the number required for
+    # Nyquist coverage. Rewind every rotated interleaf to the origin before
+    # starting the next one; RF is active only on the centre-out traversal.
+    # Concatenating bare interleaves would instead walk around the cumulative
+    # outer-k-space endpoints and produces a striped, displaced profile.
+    interleaves = []
+    active_samples = []
+    for angle in arbgrad.shot_angles(native.n_shots, mode="uniform"):
+        cosine, sine = np.cos(angle), np.sin(angle)
+        rotation = np.array([[cosine, -sine], [sine, cosine]])
+        interleaf = native.gradient[:, :2] @ rotation.T
+        interleaves.extend((interleaf, -interleaf[::-1]))
+        active_samples.extend((np.ones(len(interleaf), dtype=bool), np.zeros(len(interleaf), dtype=bool)))
+    native_gradient = np.concatenate(interleaves, axis=0)
+    active_samples = np.concatenate(active_samples)
+    gradient = arbgrad.to_gradient_tesla_per_meter(native_gradient, fov, matrix, system.gamma)
+    size = None if selective_size is None else _as_tuple(selective_size, 2, "selective_size")
+    use = kwargs.pop("use", "excitation")
+    freq_offset = kwargs.pop("freq_offset", 0.0)
+    phase_offset = kwargs.pop("phase_offset", 0.0)
+    if kwargs:
+        names = ", ".join(sorted(kwargs))
+        raise TypeError(f"unexpected keyword argument(s): {names}")
+    return _assemble_spatial_pulse(
         flip_angle,
         gradient[:, :2],
         (fov, fov),
         (matrix, matrix),
+        size,
+        target,
+        ("x", "y"),
+        system,
+        use,
+        freq_offset,
+        phase_offset,
+        active_samples,
+    )
+
+
+def make_plane_selective_pulse(
+    flip_angle: float,
+    fov: float,
+    matrix: int,
+    *,
+    selective_size: float | Sequence[float] | None = None,
+    target: np.ndarray | None = None,
+    system: pp.Opts | None = None,
+    **kwargs,
+) -> SpatialPulse:
+    """Create a plane-selective pulse on an internally generated spiral.
+
+    This is the supported multidimensional RF entry point. The spiral covers
+    two-dimensional excitation k-space and the RF envelope selects the target
+    region within that plane.
+
+    Parameters
+    ----------
+    flip_angle : float
+        Nominal flip angle (rad).
+    fov : float
+        Square excitation field of view (m).
+    matrix : int
+        Square excitation matrix.
+    selective_size : float or sequence of float, optional
+        Diameter (m) of the excited disc.
+    target : numpy.ndarray, optional
+        Explicit complex desired profile, overriding ``selective_size``.
+    system : pypulseq.Opts, optional
+        System limits.
+    **kwargs
+        Passed to the small-tip spatial design.
+
+    Returns
+    -------
+    SpatialPulse
+        RF event and both in-plane spiral gradients.
+
+    Examples
+    --------
+    Append the RF/gradient blocks to a sequence::
+
+        import numpy as np
+        import pulserver.pypulseq as pp
+
+        pulse = pp.make_plane_selective_pulse(
+            np.deg2rad(30), 0.24, 24, selective_size=0.05)
+        seq = pp.Sequence(pulse.system)
+        for block in pulse:
+            seq.add_block(*block)
+
+    The complete set of spiral interleaves is concatenated into one module;
+    the magnetization map therefore reflects the full plane-selective design:
+
+    .. plot::
+       :include-source: false
+
+       import numpy as np
+       import pulserver.pypulseq as pp
+       from _figures import rf_figure
+       system = pp.Opts(max_grad=40, grad_unit="mT/m",
+                        max_slew=150, slew_unit="T/m/s")
+       pulse = pp.make_plane_selective_pulse(
+           np.deg2rad(30), 0.24, 24, selective_size=0.05, system=system)
+       rf_figure(pulse, "xy", title="plane selective, 30 deg, 50 mm spot",
+                 extent=0.12)
+    """
+    return make_spiral_selective_pulse(
+        flip_angle,
+        fov,
+        matrix,
         selective_size=selective_size,
         target=target,
         system=system,
@@ -563,6 +752,12 @@ def make_spsp_pulse(
     >>> len(pulse.gradients), len(pulse.rephasers)
     (1, 1)
 
+    Append the single RF waveform, sparse alternating gradient, and rephaser::
+
+        seq = pp.Sequence(pulse.system)
+        for block in pulse:
+            seq.add_block(*block)
+
     Selective in space *and* in frequency — the whole point of the design. Fat, several hundred Hz away, falls in a null:
 
     .. plot::
@@ -581,7 +776,7 @@ def make_spsp_pulse(
     make_fat_saturation_pulse : the separate-module alternative.
     make_frequency_selective_pulse : purely spectral selectivity.
     """
-    system = pp.Opts.default if system is None else system
+    system = default_system(system)
     if slice_thickness <= 0 or spectral_bandwidth <= 0:
         raise ValueError("slice_thickness and spectral_bandwidth must be > 0")
     if n_subpulses < 4:
@@ -589,66 +784,78 @@ def make_spsp_pulse(
     if n_subpulses % 2:
         n_subpulses += 1
 
-    dwell = system.grad_raster_time
+    grad_raster = system.grad_raster_time
+    rf_raster = system.rf_raster_time
     total_duration = spectral_time_bandwidth_product / spectral_bandwidth
-    samples_per_lobe = int(round(total_duration / (n_subpulses * dwell)))
-    if samples_per_lobe < 8:
+    lobe_duration = round(total_duration / (n_subpulses * grad_raster)) * grad_raster
+    if lobe_duration < 8 * grad_raster:
         raise ValueError("spectral bandwidth is too large for the requested subpulse count")
 
-    # Reserve 20% of each lobe for ramps. If the resulting amplitude cannot
-    # meet the system slew limit, the requested selectivity is infeasible.
-    ramp_samples = max(1, int(round(0.1 * samples_per_lobe)))
-    flat_samples = samples_per_lobe - 2 * ramp_samples
-    if flat_samples < 8:
+    # Reserve 20% of each lobe for the two ramps, on the gradient raster.
+    ramp_time = max(grad_raster, round(0.1 * lobe_duration / grad_raster) * grad_raster)
+    flat_time = lobe_duration - 2.0 * ramp_time
+    if flat_time < 8 * rf_raster:
         raise ValueError("SPSP sublobes leave fewer than 8 RF samples")
-    if flat_samples % 2:
-        flat_samples -= 1
-        samples_per_lobe -= 1
-    flat_time = flat_samples * dwell
     amplitude_hz_per_m = spatial_time_bandwidth_product / (flat_time * slice_thickness)
     if amplitude_hz_per_m > system.max_grad:
         raise ValueError("SPSP slice-selection amplitude exceeds system.max_grad")
-    slew = amplitude_hz_per_m / (ramp_samples * dwell)
+    slew = amplitude_hz_per_m / ramp_time
     if slew > system.max_slew * (1.0 + 1e-9):
         raise ValueError("SPSP slice-selection ramps exceed system.max_slew")
 
-    ramp_up = amplitude_hz_per_m * (np.arange(ramp_samples) + 0.5) / ramp_samples
-    flat = np.full(flat_samples, amplitude_hz_per_m)
-    ramp_down = ramp_up[::-1]
-    positive_lobe = np.concatenate((ramp_up, flat, ramp_down))
-    spatial = design_slr(flat_samples, spatial_time_bandwidth_product, pulse_type="st", filter_type="ls")
+    # Design the spatial SLR pulse on the flat top, build one trapezoid, then
+    # VERSE the RF onto its ramps. This keeps time-bandwidth product intact
+    # while allowing the RF and gradient to overlap for the entire lobe.
+    from ._excitation import make_slr_pulse
+
+    spatial_module = make_slr_pulse(
+        1.0,
+        duration=flat_time,
+        dwell=rf_raster,
+        time_bw_product=spatial_time_bandwidth_product,
+        pulse_type="st",
+        system=system,
+        use=use,
+    )
+    positive_lobe = pp.make_trapezoid(
+        channel="z",
+        amplitude=amplitude_hz_per_m,
+        flat_time=flat_time,
+        rise_time=ramp_time,
+        fall_time=ramp_time,
+        system=system,
+    )
+    spatial = _verse_to_trapezoid(spatial_module.rf.signal, positive_lobe, rf_raster)
     spectral = design_slr(n_subpulses, spectral_time_bandwidth_product, pulse_type="st", filter_type="ls")
 
-    gradient_hz_per_m = np.empty(n_subpulses * positive_lobe.size)
-    rf_shape = np.zeros_like(gradient_hz_per_m, dtype=np.complex128)
+    rf_shape = np.empty(n_subpulses * spatial.size, dtype=np.complex128)
     for index in range(n_subpulses):
-        start = index * positive_lobe.size
-        stop = start + positive_lobe.size
-        sign = 1.0 if index % 2 == 0 else -1.0
-        gradient_hz_per_m[start:stop] = sign * positive_lobe
-        rf_shape[start + ramp_samples : start + ramp_samples + flat_samples] = spectral[index] * spatial
+        start = index * spatial.size
+        stop = start + spatial.size
+        subpulse = spatial if index % 2 == 0 else spatial[::-1]
+        rf_shape[start:stop] = spectral[index] * subpulse
 
     rf = pp.make_arbitrary_rf(
         signal=rf_shape,
         flip_angle=flip_angle,
-        dwell=dwell,
+        dwell=rf_raster,
         freq_offset=freq_offset,
         system=system,
         use=use,
     )
-    gz = pp.make_arbitrary_grad(
-        channel="z",
-        waveform=np.ascontiguousarray(gradient_hz_per_m),
-        first=0.0,
-        last=0.0,
-        system=system,
-    )
+    gz = _alternating_extended_trapezoid(positive_lobe, n_subpulses, system)
     # Rephase from the center of the final spatial subpulse. The alternating
     # full-lobe areas cancel for even n_subpulses, but this half-lobe remains.
     last_sign = -1.0
-    rephase_area = -last_sign * 0.5 * amplitude_hz_per_m * (flat_time + ramp_samples * dwell)
+    rephase_area = -last_sign * 0.5 * positive_lobe.area
     gz_reph = pp.make_trapezoid(channel="z", area=rephase_area, system=system)
-    kspace = -np.cumsum(gradient_hz_per_m[::-1])[::-1, None] * dwell
+    dense_gradient = np.concatenate(
+        [
+            _sample_trapezoid(positive_lobe, rf_raster) * (1.0 if index % 2 == 0 else -1.0)
+            for index in range(n_subpulses)
+        ]
+    )
+    kspace = -np.cumsum(dense_gradient[::-1])[::-1, None] * rf_raster
     return SpatialPulse(
         system=system,
         rf=rf,

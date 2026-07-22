@@ -184,21 +184,26 @@ def _gradient_axis(ax, module):
     return True
 
 
-def _pulse_panels(module, *, with_profile):
+def _pulse_panels(module, *, with_profile, multidimensional=False):
     """Lay out the RF row, an optional gradient row, and an optional profile.
 
     The gradient row appears only when the module actually carries gradients,
     so a non-selective pulse still renders as a single envelope panel.
     """
     has_gradients = bool(module_gradients(module)[1])
-    if with_profile:
+    if multidimensional:
+        width, ratios = 12.5, [1.15, 1.0, 1.0]
+    elif with_profile:
         width, ratios = 9.5, [1.15, 1.0]
     else:
         width, ratios = 5.6, [1.0]
     height = 4.2 if has_gradients else 3.3
-    rows = [["rf", "profile"]] if with_profile else [["rf"]]
+    rows = [["rf", "mxy", "mz"]] if multidimensional else [["rf", "profile"]] if with_profile else [["rf"]]
     if has_gradients:
-        rows.append(["gradient", "profile"] if with_profile else ["gradient"])
+        if multidimensional:
+            rows.append(["gradient", "mxy", "mz"])
+        else:
+            rows.append(["gradient", "profile"] if with_profile else ["gradient"])
     fig, axes = plt.subplot_mosaic(
         rows,
         figsize=(width, height),
@@ -258,11 +263,16 @@ def rf_figure(module, kind="none", *, title=None, extent=None, n_points=201, spa
     step = float(t[1] - t[0])
     title = title or type(module).__name__
 
-    fig, axes, has_gradients = _pulse_panels(module, with_profile=kind != "none")
+    multidimensional = kind in ("xy", "zf")
+    fig, axes, has_gradients = _pulse_panels(
+        module,
+        with_profile=kind != "none",
+        multidimensional=multidimensional,
+    )
     _finish_pulse_panels(module, axes, t, b1, title, has_gradients)
     if kind == "none":
         return fig
-    profile_axis = axes["profile"]
+    profile_axis = None if multidimensional else axes["profile"]
 
     if kind in ("xy", "zf"):
         if kind == "xy":
@@ -286,12 +296,25 @@ def rf_figure(module, kind="none", *, title=None, extent=None, n_points=201, spa
         grid_a, grid_b = np.meshgrid(first, second, indexing="ij")
         bz = np.outer(grid_a.ravel(), bz_first)
         bz = bz + (np.outer(grid_b.ravel(), bz_second) if bz_second is not None else grid_b.ravel()[:, None])
-        profile = _transverse(bloch(b1, bz, step)).reshape(grid_a.shape)
-        image = profile_axis.imshow(profile.T, origin="lower", aspect=aspect, cmap="viridis", extent=limits)
-        profile_axis.set_xlabel(labels[0])
-        profile_axis.set_ylabel(labels[1])
-        profile_axis.set_title("|Mxy| profile", fontsize=9)
-        fig.colorbar(image, ax=profile_axis, shrink=0.85)
+        magnetisation = bloch(b1, bz, step)
+        profiles = (
+            (axes["mxy"], _transverse(magnetisation), "|Mxy|", "viridis", 0.0, 1.0),
+            (axes["mz"], magnetisation[:, 2], "Mz", "coolwarm", -1.0, 1.0),
+        )
+        for profile_axis, values, component, cmap, lower, upper in profiles:
+            image = profile_axis.imshow(
+                values.reshape(grid_a.shape).T,
+                origin="lower",
+                aspect=aspect,
+                cmap=cmap,
+                extent=limits,
+                vmin=lower,
+                vmax=upper,
+            )
+            profile_axis.set_xlabel(labels[0])
+            profile_axis.set_ylabel(labels[1])
+            profile_axis.set_title(f"{component} profile", fontsize=9)
+            fig.colorbar(image, ax=profile_axis, shrink=0.85)
         return fig
 
     if kind == "slice":
@@ -356,7 +379,22 @@ def rf_comparison(entries, kind="slice", *, extent=None, n_points=201, title=Non
         step = float(t[1] - t[0])
         bz = np.outer(axis, sample_gradient(_channel(module, "z"), t)) if kind == "slice" else axis[:, None]
         axes["rf"].plot((t - t[0]) * 1e3, np.abs(b1), lw=1.1, color=colour, label=label)
-        axes["profile"].plot(axis * scale, _transverse(bloch(b1, bz, step)), lw=1.2, color=colour, label=label)
+        magnetisation = bloch(b1, bz, step)
+        axes["profile"].plot(
+            axis * scale,
+            _transverse(magnetisation),
+            lw=1.2,
+            color=colour,
+            label=f"{label} |Mxy|",
+        )
+        axes["profile"].plot(
+            axis * scale,
+            magnetisation[:, 2],
+            lw=1.0,
+            ls="--",
+            color=colour,
+            label=f"{label} Mz",
+        )
         if with_gradients:
             grad_t, traces = module_gradients(module)
             for trace in traces.values():
@@ -373,9 +411,209 @@ def rf_comparison(entries, kind="slice", *, extent=None, n_points=201, title=Non
     else:
         axes["rf"].set_xlabel("t [ms]")
     axes["profile"].set_xlabel(xlabel)
-    axes["profile"].set_ylabel("|Mxy| / M0")
+    axes["profile"].set_ylabel("M / M0")
+    axes["profile"].set_ylim(-1.05, 1.05)
     axes["profile"].set_title("simulated profiles", fontsize=9)
     axes["profile"].legend(fontsize=7)
+    return fig
+
+
+def preparation_figure(module, *, span=1500.0, n_points=201, dt=10e-6, title=None, t2_values=None):
+    """Draw a composite preparation, all played gradients, and final Mxy/Mz.
+
+    ``t2_values`` switches the profile panel from off-resonance to the ideal
+    stored T2-weighted longitudinal response of a :class:`T2PrepPulse`.
+    """
+    import pypulseq as pp
+
+    blocks = tuple(module)
+    durations = np.asarray([pp.calc_duration(*block) for block in blocks])
+    starts = np.concatenate(([0.0], np.cumsum(durations[:-1])))
+    total = float(durations.sum())
+    time = (np.arange(max(1, int(np.ceil(total / dt)))) + 0.5) * dt
+    b1 = np.zeros(time.size, dtype=complex)
+    gradient_traces = {}
+    for block_start, block in zip(starts, blocks, strict=True):
+        for event in block:
+            if getattr(event, "type", None) == "rf":
+                event_time = block_start + float(event.delay) + np.asarray(event.t)
+                signal = np.asarray(event.signal) * np.exp(
+                    1j * (2.0 * np.pi * float(event.freq_offset) * event_time + float(event.phase_offset))
+                )
+                active = (time >= event_time[0]) & (time <= event_time[-1])
+                b1[active] += np.interp(time[active], event_time, signal.real) + 1j * np.interp(
+                    time[active], event_time, signal.imag
+                )
+            elif getattr(event, "type", None) in ("grad", "trap"):
+                channel = event.channel
+                gradient_traces.setdefault(channel, np.zeros(time.size))
+                gradient_traces[channel] += sample_gradient(event, time - block_start)
+
+    if t2_values is None:
+        offsets = np.linspace(-span, span, n_points)
+        magnetisation = bloch(b1, offsets[:, None], dt)
+    if gradient_traces:
+        fig, (waveform, gradient, profile) = plt.subplots(1, 3, figsize=(13.0, 3.4), layout="constrained")
+    else:
+        fig, (waveform, profile) = plt.subplots(1, 2, figsize=(9.5, 3.4), layout="constrained")
+        gradient = None
+    waveform.plot(time * 1e3, b1.real, lw=1.0, label="real")
+    waveform.plot(time * 1e3, b1.imag, lw=1.0, label="imag")
+    waveform.set(xlabel="t [ms]", ylabel="B1 [Hz]", title=title or type(module).__name__)
+    waveform.legend(fontsize=7)
+    if gradient is not None:
+        for channel, trace in gradient_traces.items():
+            gradient.plot(time * 1e3, trace * 1e-3, lw=1.0, color=_GRADIENT_COLOURS[channel], label=f"G{channel}")
+        gradient.axhline(0.0, lw=0.6, color="0.7")
+        gradient.set(xlabel="t [ms]", ylabel="G [kHz/m]", title="played gradients")
+        gradient.legend(fontsize=7)
+    if t2_values is None:
+        profile.plot(offsets, _transverse(magnetisation), label="|Mxy|")
+        profile.plot(offsets, magnetisation[:, 2], ls="--", label="Mz")
+        profile.set(xlabel="off-resonance [Hz]", title="final magnetization")
+    else:
+        t2_values = np.asarray(t2_values, dtype=float)
+        if t2_values.ndim != 1 or t2_values.size < 2 or np.any(t2_values <= 0):
+            raise ValueError("t2_values must be a one-dimensional array of at least two positive values")
+        echo_time = float(module.echo_time)
+        direction = -1.0 if getattr(module, "final_tip", "up") == "down" else 1.0
+        profile.plot(t2_values * 1e3, np.zeros_like(t2_values), label="|Mxy|")
+        profile.plot(t2_values * 1e3, direction * np.exp(-echo_time / t2_values), ls="--", label="Mz")
+        flip = "180°" if direction < 0 else "0°"
+        profile.set(
+            xlabel="assumed T2 [ms]",
+            title=f"T2-weighted stored M (effective {flip})",
+        )
+    profile.set(ylabel="M / M0", ylim=(-1.05, 1.05))
+    profile.legend(fontsize=7)
+    return fig
+
+
+def frequency_profile_gallery(entries, *, extent=2800.0, n_points=401, title=None):
+    """Compare the Mxy and Mz frequency profiles of several RF modules."""
+    offsets = np.linspace(-extent, extent, n_points)
+    fig, axes = plt.subplots(1, len(entries), figsize=(4.0 * len(entries), 3.4), sharey=True, layout="constrained")
+    axes = np.atleast_1d(axes)
+    for axis, (label, module) in zip(axes, entries, strict=True):
+        rf = getattr(module, "rf", module)
+        time, b1 = _rf_grid(rf)
+        magnetisation = bloch(b1, offsets[:, None], float(time[1] - time[0]))
+        axis.plot(offsets, _transverse(magnetisation), label="|Mxy|")
+        axis.plot(offsets, magnetisation[:, 2], ls="--", label="Mz")
+        axis.set(xlabel="off-resonance [Hz]", title=label, ylim=(-1.05, 1.05))
+        axis.legend(fontsize=7)
+    axes[0].set_ylabel("M / M0")
+    if title:
+        fig.suptitle(title)
+    return fig
+
+
+# --------------------------------------------------------------------------
+# readouts
+# --------------------------------------------------------------------------
+
+
+def _readout_trajectory(module):
+    readout = getattr(module, "readout", module)
+    trajectory = np.asarray(readout.trajectory, dtype=float)
+    if trajectory.ndim != 2 or trajectory.shape[1] < 2:
+        raise ValueError("readout trajectory must have at least two columns")
+    return trajectory
+
+
+def _square_trajectory_axes(axis, trajectory):
+    lower = np.min(trajectory[:, :2], axis=0)
+    upper = np.max(trajectory[:, :2], axis=0)
+    center = 0.5 * (lower + upper)
+    half_width = max(1.0, 0.55 * float(np.max(upper - lower)))
+    axis.set_xlim(center[0] - half_width, center[0] + half_width)
+    axis.set_ylim(center[1] - half_width, center[1] + half_width)
+    axis.set_aspect("equal", adjustable="box")
+
+
+def trajectory_figure(entries, *, title=None):
+    """Show canonical in-plane kx'/ky' paths for one or more readouts."""
+    fig, axes = plt.subplots(
+        1,
+        len(entries),
+        figsize=(3.4 * len(entries), 3.4),
+        squeeze=False,
+        layout="constrained",
+    )
+    for axis, (label, module) in zip(axes[0], entries, strict=True):
+        trajectory = _readout_trajectory(module)
+        axis.plot(trajectory[:, 0], trajectory[:, 1], lw=0.9)
+        axis.scatter(trajectory[0, 0], trajectory[0, 1], s=18, marker="o", label="start")
+        axis.scatter(trajectory[-1, 0], trajectory[-1, 1], s=22, marker="x", label="end")
+        axis.set(xlabel="kx' [cycles/m]", ylabel="ky' [cycles/m]", title=label)
+        _square_trajectory_axes(axis, trajectory)
+        axis.legend(fontsize=7)
+    if title:
+        fig.suptitle(title)
+    return fig
+
+
+def noncartesian_readout_figure(module, *, title=None):
+    """Show the played blocks and canonical in-plane trajectory together."""
+    plot = module.plot()
+    waveform_figure = plot.fig1
+    if title:
+        waveform_figure.suptitle(title)
+    waveform_figure.canvas.draw()
+    waveform_pixels = np.asarray(waveform_figure.canvas.buffer_rgba()).copy()
+    plt.close(waveform_figure)
+
+    trajectory = _readout_trajectory(module)
+    fig, (waveform, path) = plt.subplots(
+        1,
+        2,
+        figsize=(13.0, 5.2),
+        gridspec_kw={"width_ratios": (2.3, 1.0)},
+        layout="constrained",
+    )
+    waveform.imshow(waveform_pixels)
+    waveform.axis("off")
+    path.plot(trajectory[:, 0], trajectory[:, 1], lw=0.9)
+    path.scatter(trajectory[0, 0], trajectory[0, 1], s=18, marker="o", label="start")
+    path.scatter(trajectory[-1, 0], trajectory[-1, 1], s=22, marker="x", label="end")
+    path.set(
+        xlabel="kx' [cycles/m]",
+        ylabel="ky' [cycles/m]",
+        title=f"{title or type(module).__name__}: canonical trajectory",
+    )
+    _square_trajectory_axes(path, trajectory)
+    path.legend(fontsize=7)
+    return fig
+
+
+def zte_readout_figure(module, *, title="ZTE"):
+    """Show a ZTE segment and its sampled in-plane half-spokes."""
+    plot = module.plot()
+    waveform_figure = plot.fig1
+    waveform_figure.suptitle(title)
+    waveform_figure.canvas.draw()
+    waveform_pixels = np.asarray(waveform_figure.canvas.buffer_rgba()).copy()
+    plt.close(waveform_figure)
+    start = (module.num_missing_samples + 0.5) * module.delta_k
+    stop = module.kmax
+    radii = np.linspace(start, stop, module.n_samples)
+    fig, (waveform, axis) = plt.subplots(
+        1,
+        2,
+        figsize=(13.0, 5.2),
+        gridspec_kw={"width_ratios": (2.3, 1.0)},
+        layout="constrained",
+    )
+    waveform.imshow(waveform_pixels)
+    waveform.axis("off")
+    for direction in module.directions:
+        axis.plot(radii * direction[0], radii * direction[1], lw=0.8)
+    axis.set(
+        xlabel="kx' [cycles/m]",
+        ylabel="ky' [cycles/m]",
+        title=f"{title}: acquired trajectory",
+    )
+    axis.set_aspect("equal", adjustable="box")
     return fig
 
 

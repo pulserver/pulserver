@@ -2759,6 +2759,19 @@ int pulseg_cursor_next(pulseg_collection *coll)
     return PULSEG_CURSOR_BLOCK;
 }
 
+int pulseg_cursor_advance(pulseg_collection *coll, pulseg_cursor_info *info)
+{
+    int status = pulseg_cursor_next(coll);
+    if (status != PULSEG_CURSOR_BLOCK)
+        return status;   /* PULSEG_CURSOR_DONE */
+
+    status = pulseg_cursor_get_info(coll, info);
+    if (PULSEG_FAILED(status))
+        return status;   /* propagate info-retrieval error */
+
+    return PULSEG_CURSOR_BLOCK;
+}
+
 void pulseg_cursor_rewind(pulseg_collection *coll)
 {
     pulseg_block_cursor *cursor;

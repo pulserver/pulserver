@@ -1,0 +1,993 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>pulserver.pypulseq.SamplingPattern &#8212; pulserver  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css?v=7f9a90b1" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/generated/pypulseq/pulserver.pypulseq.SamplingPattern';</script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="pulserver.pypulseq.make_cartesian_sampling" href="pulserver.pypulseq.make_cartesian_sampling.html" />
+    <link rel="prev" title="pulserver.pypulseq.make_noncartesian_projection_plan" href="pulserver.pypulseq.make_noncartesian_projection_plan.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">pulserver  documentation</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting started</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../../examples.html">Examples</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../../pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.Opts.html">pulserver.pypulseq.Opts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.Sequence.html">pulserver.pypulseq.Sequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.add_gradients.html">pulserver.pypulseq.add_gradients</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.align.html">pulserver.pypulseq.align</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_adc_segments.html">pulserver.pypulseq.calc_adc_segments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_adc_timing.html">pulserver.pypulseq.calc_adc_timing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_duration.html">pulserver.pypulseq.calc_duration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_ramp.html">pulserver.pypulseq.calc_ramp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_rf_bandwidth.html">pulserver.pypulseq.calc_rf_bandwidth</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_rf_center.html">pulserver.pypulseq.calc_rf_center</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.compress_shape.html">pulserver.pypulseq.compress_shape</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.convert.html">pulserver.pypulseq.convert</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.decompress_shape.html">pulserver.pypulseq.decompress_shape</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.disable_trace.html">pulserver.pypulseq.disable_trace</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.enable_trace.html">pulserver.pypulseq.enable_trace</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.get_supported_labels.html">pulserver.pypulseq.get_supported_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_adc.html">pulserver.pypulseq.make_adc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_arbitrary_grad.html">pulserver.pypulseq.make_arbitrary_grad</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_arbitrary_rf.html">pulserver.pypulseq.make_arbitrary_rf</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_block_pulse.html">pulserver.pypulseq.make_block_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_delay.html">pulserver.pypulseq.make_delay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_digital_output_pulse.html">pulserver.pypulseq.make_digital_output_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_extended_trapezoid.html">pulserver.pypulseq.make_extended_trapezoid</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_extended_trapezoid_area.html">pulserver.pypulseq.make_extended_trapezoid_area</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_gauss_pulse.html">pulserver.pypulseq.make_gauss_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_label.html">pulserver.pypulseq.make_label</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rf_shim.html">pulserver.pypulseq.make_rf_shim</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rotation.html">pulserver.pypulseq.make_rotation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_sinc_pulse.html">pulserver.pypulseq.make_sinc_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_soft_delay.html">pulserver.pypulseq.make_soft_delay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_trapezoid.html">pulserver.pypulseq.make_trapezoid</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_trigger.html">pulserver.pypulseq.make_trigger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.points_to_waveform.html">pulserver.pypulseq.points_to_waveform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.rotate.html">pulserver.pypulseq.rotate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.round_half_up.html">pulserver.pypulseq.round_half_up</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.scale_grad.html">pulserver.pypulseq.scale_grad</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.split_gradient.html">pulserver.pypulseq.split_gradient</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.split_gradient_at.html">pulserver.pypulseq.split_gradient_at</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.traj2grad.html">pulserver.pypulseq.traj2grad</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_crusher.html">pulserver.pypulseq.make_crusher</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_phase_blip.html">pulserver.pypulseq.make_phase_blip</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_phase_encoding.html">pulserver.pypulseq.make_phase_encoding</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_hard_pulse.html">pulserver.pypulseq.make_hard_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_frequency_selective_pulse.html">pulserver.pypulseq.make_frequency_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_slice_selective_pulse.html">pulserver.pypulseq.make_slice_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_refocusing_pulse.html">pulserver.pypulseq.make_refocusing_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_slr_pulse.html">pulserver.pypulseq.make_slr_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_multiband_frequency_selective_pulse.html">pulserver.pypulseq.make_multiband_frequency_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_pins_slice_selective_pulse.html">pulserver.pypulseq.make_pins_slice_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_multiband.html">pulserver.pypulseq.make_multiband</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_pins.html">pulserver.pypulseq.make_pins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_plane_selective_pulse.html">pulserver.pypulseq.make_plane_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_spsp_pulse.html">pulserver.pypulseq.make_spsp_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_bloch_siegert_pulse.html">pulserver.pypulseq.make_bloch_siegert_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_diffusion_prep.html">pulserver.pypulseq.make_diffusion_prep</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_fat_saturation_pulse.html">pulserver.pypulseq.make_fat_saturation_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_ihmt_pulse.html">pulserver.pypulseq.make_ihmt_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_inversion_pulse.html">pulserver.pypulseq.make_inversion_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_mt_pulse.html">pulserver.pypulseq.make_mt_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_t1t2_prep_pulse.html">pulserver.pypulseq.make_t1t2_prep_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_t2prep_pulse.html">pulserver.pypulseq.make_t2prep_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_epi_readout.html">pulserver.pypulseq.make_epi_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_fse_readout.html">pulserver.pypulseq.make_fse_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_line_readout.html">pulserver.pypulseq.make_line_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_noncartesian_2d_readout.html">pulserver.pypulseq.make_noncartesian_2d_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_noncartesian_3d_readout.html">pulserver.pypulseq.make_noncartesian_3d_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_radial_projection_readout.html">pulserver.pypulseq.make_radial_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_radial_readout.html">pulserver.pypulseq.make_radial_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_radial_stack_readout.html">pulserver.pypulseq.make_radial_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rosette_projection_readout.html">pulserver.pypulseq.make_rosette_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rosette_readout.html">pulserver.pypulseq.make_rosette_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rosette_stack_readout.html">pulserver.pypulseq.make_rosette_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_spiral_projection_readout.html">pulserver.pypulseq.make_spiral_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_spiral_readout.html">pulserver.pypulseq.make_spiral_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_spiral_stack_readout.html">pulserver.pypulseq.make_spiral_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_zte_readout.html">pulserver.pypulseq.make_zte_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.Acquisition.html">pulserver.pypulseq.Acquisition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.AcquisitionPlan.html">pulserver.pypulseq.AcquisitionPlan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_cartesian_plan.html">pulserver.pypulseq.make_cartesian_plan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_epi_plan.html">pulserver.pypulseq.make_epi_plan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_noncartesian_2d_plan.html">pulserver.pypulseq.make_noncartesian_2d_plan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_noncartesian_stack_plan.html">pulserver.pypulseq.make_noncartesian_stack_plan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_noncartesian_projection_plan.html">pulserver.pypulseq.make_noncartesian_projection_plan</a></li>
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">pulserver.pypulseq.SamplingPattern</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_cartesian_sampling.html">pulserver.pypulseq.make_cartesian_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_skipped_caipi_sampling.html">pulserver.pypulseq.make_skipped_caipi_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_radial_sampling.html">pulserver.pypulseq.make_radial_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_golden_means_3d_sampling.html">pulserver.pypulseq.make_golden_means_3d_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_spiral_phyllotaxis_sampling.html">pulserver.pypulseq.make_spiral_phyllotaxis_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_centric_order.html">pulserver.pypulseq.make_centric_order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_linear_order.html">pulserver.pypulseq.make_linear_order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_radial_adaptive_order.html">pulserver.pypulseq.make_radial_adaptive_order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_radial_order.html">pulserver.pypulseq.make_radial_order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_shuffling_order.html">pulserver.pypulseq.make_shuffling_order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_caipirinha_sampling.html">pulserver.pypulseq.make_caipirinha_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_poisson_disc_sampling.html">pulserver.pypulseq.make_poisson_disc_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_random_sampling.html">pulserver.pypulseq.make_random_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_sampled_lines.html">pulserver.pypulseq.calc_sampled_lines</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_golden_angles.html">pulserver.pypulseq.calc_golden_angles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_raga_angles.html">pulserver.pypulseq.calc_raga_angles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_tiny_golden_angles.html">pulserver.pypulseq.calc_tiny_golden_angles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_uniform_angles.html">pulserver.pypulseq.calc_uniform_angles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_chunk_indices.html">pulserver.pypulseq.calc_chunk_indices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_outer_inner_order.html">pulserver.pypulseq.make_outer_inner_order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_outer_product.html">pulserver.pypulseq.make_outer_product</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_slice_groups.html">pulserver.pypulseq.make_slice_groups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_phase_cycling_schedule.html">pulserver.pypulseq.make_phase_cycling_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rf_spoiling_schedule.html">pulserver.pypulseq.make_rf_spoiling_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_traps_schedule.html">pulserver.pypulseq.make_traps_schedule</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../pulserver.html"><code class="docutils literal notranslate"><span class="pre">pulserver</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.PulseqSequence.html">pulserver.PulseqSequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.Sequence.html">pulserver.Sequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.run_cli.html">pulserver.run_cli</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.Acquisition.html">pulserver.Acquisition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.AcquisitionPlan.html">pulserver.AcquisitionPlan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.SamplingPattern.html">pulserver.SamplingPattern</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.SequenceModule.html">pulserver.SequenceModule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.SliceGroup.html">pulserver.SliceGroup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.BoolParam.html">pulserver.BoolParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.Description.html">pulserver.Description</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.DropdownFloatParam.html">pulserver.DropdownFloatParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.DropdownIntParam.html">pulserver.DropdownIntParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.StringListParam.html">pulserver.StringListParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.TypeinFloatParam.html">pulserver.TypeinFloatParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.TypeinIntParam.html">pulserver.TypeinIntParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.BoolKey.html">pulserver.BoolKey</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.EnumKey.html">pulserver.EnumKey</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.FloatKey.html">pulserver.FloatKey</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.ImagingMode.html">pulserver.ImagingMode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.InputMode.html">pulserver.InputMode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.IntKey.html">pulserver.IntKey</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.ParamKind.html">pulserver.ParamKind</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.PreparationType.html">pulserver.PreparationType</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.SequenceType.html">pulserver.SequenceType</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.TriggerType.html">pulserver.TriggerType</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.UIParam.html">pulserver.UIParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.Validate.html">pulserver.Validate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.dict_to_protocol.html">pulserver.dict_to_protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.make_enum_param.html">pulserver.make_enum_param</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.protocol_to_dict.html">pulserver.protocol_to_dict</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.validate_protocol.html">pulserver.validate_protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.params.html">pulserver.params</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../../pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.Opts.html">pulserver.pypulseq.Opts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.Sequence.html">pulserver.pypulseq.Sequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.add_gradients.html">pulserver.pypulseq.add_gradients</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.align.html">pulserver.pypulseq.align</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_adc_segments.html">pulserver.pypulseq.calc_adc_segments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_adc_timing.html">pulserver.pypulseq.calc_adc_timing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_duration.html">pulserver.pypulseq.calc_duration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_ramp.html">pulserver.pypulseq.calc_ramp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_rf_bandwidth.html">pulserver.pypulseq.calc_rf_bandwidth</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_rf_center.html">pulserver.pypulseq.calc_rf_center</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.compress_shape.html">pulserver.pypulseq.compress_shape</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.convert.html">pulserver.pypulseq.convert</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.decompress_shape.html">pulserver.pypulseq.decompress_shape</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.disable_trace.html">pulserver.pypulseq.disable_trace</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.enable_trace.html">pulserver.pypulseq.enable_trace</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.get_supported_labels.html">pulserver.pypulseq.get_supported_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_adc.html">pulserver.pypulseq.make_adc</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_arbitrary_grad.html">pulserver.pypulseq.make_arbitrary_grad</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_arbitrary_rf.html">pulserver.pypulseq.make_arbitrary_rf</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_block_pulse.html">pulserver.pypulseq.make_block_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_delay.html">pulserver.pypulseq.make_delay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_digital_output_pulse.html">pulserver.pypulseq.make_digital_output_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_extended_trapezoid.html">pulserver.pypulseq.make_extended_trapezoid</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_extended_trapezoid_area.html">pulserver.pypulseq.make_extended_trapezoid_area</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_gauss_pulse.html">pulserver.pypulseq.make_gauss_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_label.html">pulserver.pypulseq.make_label</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rf_shim.html">pulserver.pypulseq.make_rf_shim</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rotation.html">pulserver.pypulseq.make_rotation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_sinc_pulse.html">pulserver.pypulseq.make_sinc_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_soft_delay.html">pulserver.pypulseq.make_soft_delay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_trapezoid.html">pulserver.pypulseq.make_trapezoid</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_trigger.html">pulserver.pypulseq.make_trigger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.points_to_waveform.html">pulserver.pypulseq.points_to_waveform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.rotate.html">pulserver.pypulseq.rotate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.round_half_up.html">pulserver.pypulseq.round_half_up</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.scale_grad.html">pulserver.pypulseq.scale_grad</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.split_gradient.html">pulserver.pypulseq.split_gradient</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.split_gradient_at.html">pulserver.pypulseq.split_gradient_at</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.traj2grad.html">pulserver.pypulseq.traj2grad</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_crusher.html">pulserver.pypulseq.make_crusher</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_phase_blip.html">pulserver.pypulseq.make_phase_blip</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_phase_encoding.html">pulserver.pypulseq.make_phase_encoding</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_hard_pulse.html">pulserver.pypulseq.make_hard_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_frequency_selective_pulse.html">pulserver.pypulseq.make_frequency_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_slice_selective_pulse.html">pulserver.pypulseq.make_slice_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_refocusing_pulse.html">pulserver.pypulseq.make_refocusing_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_slr_pulse.html">pulserver.pypulseq.make_slr_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_multiband_frequency_selective_pulse.html">pulserver.pypulseq.make_multiband_frequency_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_pins_slice_selective_pulse.html">pulserver.pypulseq.make_pins_slice_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_multiband.html">pulserver.pypulseq.make_multiband</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_pins.html">pulserver.pypulseq.make_pins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_plane_selective_pulse.html">pulserver.pypulseq.make_plane_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_spsp_pulse.html">pulserver.pypulseq.make_spsp_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_bloch_siegert_pulse.html">pulserver.pypulseq.make_bloch_siegert_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_diffusion_prep.html">pulserver.pypulseq.make_diffusion_prep</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_fat_saturation_pulse.html">pulserver.pypulseq.make_fat_saturation_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_ihmt_pulse.html">pulserver.pypulseq.make_ihmt_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_inversion_pulse.html">pulserver.pypulseq.make_inversion_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_mt_pulse.html">pulserver.pypulseq.make_mt_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_t1t2_prep_pulse.html">pulserver.pypulseq.make_t1t2_prep_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_t2prep_pulse.html">pulserver.pypulseq.make_t2prep_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_epi_readout.html">pulserver.pypulseq.make_epi_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_fse_readout.html">pulserver.pypulseq.make_fse_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_line_readout.html">pulserver.pypulseq.make_line_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_noncartesian_2d_readout.html">pulserver.pypulseq.make_noncartesian_2d_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_noncartesian_3d_readout.html">pulserver.pypulseq.make_noncartesian_3d_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_radial_projection_readout.html">pulserver.pypulseq.make_radial_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_radial_readout.html">pulserver.pypulseq.make_radial_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_radial_stack_readout.html">pulserver.pypulseq.make_radial_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rosette_projection_readout.html">pulserver.pypulseq.make_rosette_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rosette_readout.html">pulserver.pypulseq.make_rosette_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rosette_stack_readout.html">pulserver.pypulseq.make_rosette_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_spiral_projection_readout.html">pulserver.pypulseq.make_spiral_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_spiral_readout.html">pulserver.pypulseq.make_spiral_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_spiral_stack_readout.html">pulserver.pypulseq.make_spiral_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_zte_readout.html">pulserver.pypulseq.make_zte_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.Acquisition.html">pulserver.pypulseq.Acquisition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.AcquisitionPlan.html">pulserver.pypulseq.AcquisitionPlan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_cartesian_plan.html">pulserver.pypulseq.make_cartesian_plan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_epi_plan.html">pulserver.pypulseq.make_epi_plan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_noncartesian_2d_plan.html">pulserver.pypulseq.make_noncartesian_2d_plan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_noncartesian_stack_plan.html">pulserver.pypulseq.make_noncartesian_stack_plan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_noncartesian_projection_plan.html">pulserver.pypulseq.make_noncartesian_projection_plan</a></li>
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">pulserver.pypulseq.SamplingPattern</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_cartesian_sampling.html">pulserver.pypulseq.make_cartesian_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_skipped_caipi_sampling.html">pulserver.pypulseq.make_skipped_caipi_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_radial_sampling.html">pulserver.pypulseq.make_radial_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_golden_means_3d_sampling.html">pulserver.pypulseq.make_golden_means_3d_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_spiral_phyllotaxis_sampling.html">pulserver.pypulseq.make_spiral_phyllotaxis_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_centric_order.html">pulserver.pypulseq.make_centric_order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_linear_order.html">pulserver.pypulseq.make_linear_order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_radial_adaptive_order.html">pulserver.pypulseq.make_radial_adaptive_order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_radial_order.html">pulserver.pypulseq.make_radial_order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_shuffling_order.html">pulserver.pypulseq.make_shuffling_order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_caipirinha_sampling.html">pulserver.pypulseq.make_caipirinha_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_poisson_disc_sampling.html">pulserver.pypulseq.make_poisson_disc_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_random_sampling.html">pulserver.pypulseq.make_random_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_sampled_lines.html">pulserver.pypulseq.calc_sampled_lines</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_golden_angles.html">pulserver.pypulseq.calc_golden_angles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_raga_angles.html">pulserver.pypulseq.calc_raga_angles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_tiny_golden_angles.html">pulserver.pypulseq.calc_tiny_golden_angles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_uniform_angles.html">pulserver.pypulseq.calc_uniform_angles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.calc_chunk_indices.html">pulserver.pypulseq.calc_chunk_indices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_outer_inner_order.html">pulserver.pypulseq.make_outer_inner_order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_outer_product.html">pulserver.pypulseq.make_outer_product</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_slice_groups.html">pulserver.pypulseq.make_slice_groups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_phase_cycling_schedule.html">pulserver.pypulseq.make_phase_cycling_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rf_spoiling_schedule.html">pulserver.pypulseq.make_rf_spoiling_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_traps_schedule.html">pulserver.pypulseq.make_traps_schedule</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../io.html"><code class="docutils literal notranslate"><span class="pre">pulserver.io</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.write.html">pulserver.io.write</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../recon.html"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../gehc.html"><code class="docutils literal notranslate"><span class="pre">pulserver.gehc</span></code></a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver</span></code> — sequence-building blocks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/sampling.html">Sampling plans</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/mechanical_resonance_safety.html">Mechanical Resonance Safety: Structural Acoustic Analysis</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../more.html">More</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/public_api.html">pulseg Public C API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../pulseg_conformance.html">Pulserver as a Concrete Implementation of PulSeg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../rename_map_v2.html">Rename map v2 — public C API hygiene audit (test-01)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../rename_map_v3.html">Rename map v3 — pulseq module split, static-helper arg order, PulSeg vocabulary</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<a href="https://github.com/INFN-MRI/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button"
+   title="Source repository"
+   data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+
+</a>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../../../_sources/api/generated/pypulseq/pulserver.pypulseq.SamplingPattern.rst" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.rst</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>pulserver.pypulseq.SamplingPattern</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern"><code class="docutils literal notranslate"><span class="pre">SamplingPattern</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.from_mask"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.from_mask()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.from_relative_shifts"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.from_relative_shifts()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.__init__"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.__init__()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.flatten"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.flatten()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.increments"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.increments()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.relative"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.relative()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.shot_indices"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.shot_indices()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.to_rotations"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.to_rotations()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.inner_lengths"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.inner_lengths</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.n_samples"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.n_samples</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.n_shots"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.n_shots</span></code></a></li>
+</ul>
+</li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="pulserver-pypulseq-samplingpattern">
+<h1>pulserver.pypulseq.SamplingPattern<a class="headerlink" href="#pulserver-pypulseq-samplingpattern" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="pulserver.pypulseq.SamplingPattern">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pulserver.pypulseq.</span></span><span class="sig-name descname"><span class="pre">SamplingPattern</span></span><a class="headerlink" href="#pulserver.pypulseq.SamplingPattern" title="Link to this definition">#</a></dt>
+<dd><p>Sampled support plus its shot-by-shot acquisition order.</p>
+<p>Every sampling helper in <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code> returns one of these.
+<em>Where</em> k-space is sampled and <em>when</em> each location is acquired are kept
+separate: <code class="docutils literal notranslate"><span class="pre">support</span></code> lists the distinct sampled locations once, and each
+entry of <code class="docutils literal notranslate"><span class="pre">order</span></code> indexes into it for one shot. Trains of unequal length
+are supported by construction.</p>
+<p>A pattern is an immutable <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequence</span></code> of shots:
+<code class="docutils literal notranslate"><span class="pre">len(pattern)</span></code> is the shot count and <code class="docutils literal notranslate"><span class="pre">pattern[i]</span></code> returns shot <code class="docutils literal notranslate"><span class="pre">i</span></code>’s
+coordinates, already in acquisition order — so a sequence loop reads as
+<code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">shot</span> <span class="pre">in</span> <span class="pre">pattern:</span></code>.</p>
+<p>Three alternate constructors build one without listing coordinates by
+hand: <a class="reference internal" href="#pulserver.pypulseq.SamplingPattern.from_mask" title="pulserver.pypulseq.SamplingPattern.from_mask"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_mask()</span></code></a> from a Cartesian sampling mask,
+<a class="reference internal" href="#pulserver.pypulseq.SamplingPattern.from_relative_shifts" title="pulserver.pypulseq.SamplingPattern.from_relative_shifts"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_relative_shifts()</span></code></a> from per-shot starts plus blip increments,
+and the <code class="docutils literal notranslate"><span class="pre">make_*_sampling</span></code> factories for analytic plans.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>support</strong> (<em>array_like</em>) – Shape <code class="docutils literal notranslate"><span class="pre">(n_points,</span> <span class="pre">D)</span></code>: Cartesian <code class="docutils literal notranslate"><span class="pre">(ky[,</span> <span class="pre">kz])</span></code> indices, spoke
+angles, or unit direction vectors. 1D input is treated as <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">1)</span></code>.</p></li>
+<li><p><strong>order</strong> (<em>tuple</em><em> of </em><em>numpy.ndarray</em>) – One integer index array per shot, indexing into <code class="docutils literal notranslate"><span class="pre">support</span></code>.</p></li>
+<li><p><strong>mask</strong> (<em>numpy.ndarray</em><em>, </em><em>optional</em>) – Cartesian boolean mask, when the support came from one. Its nonzero
+count must equal <code class="docutils literal notranslate"><span class="pre">len(support)</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_radial_sampling</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">pattern</span> <span class="o">=</span> <span class="n">make_radial_sampling</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="n">segment_length</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">pattern</span><span class="o">.</span><span class="n">n_shots</span><span class="p">,</span> <span class="n">pattern</span><span class="o">.</span><span class="n">inner_lengths</span>
+<span class="go">(2, (4, 4))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">pattern</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">(4, 1)</span>
+</pre></div>
+</div>
+<p>Relative steps for a blipped train, instead of absolute coordinates:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">SamplingPattern</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plan</span> <span class="o">=</span> <span class="n">SamplingPattern</span><span class="o">.</span><span class="n">from_relative_shifts</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span> <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">]],</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plan</span><span class="o">.</span><span class="n">relative</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="go">array([[0, 0],</span>
+<span class="go">       [2, 1]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plan</span><span class="o">.</span><span class="n">increments</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="go">array([[2, 1]])</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.SamplingPattern.from_mask">
+<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_length</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ordering</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'linear'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_sections</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.SamplingPattern.from_mask" title="Link to this definition">#</a></dt>
+<dd><p>Build a plan from a Cartesian mask by ordering its sampled lines.</p>
+<p>The bridge from <em>which</em> lines are sampled (a boolean mask) to <em>when</em>
+they are acquired (echo trains). Every sampled location is covered
+exactly once — the result is verified before returning — and the
+originating mask is retained on the pattern for the reconstruction.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">train_length=1</span></code> for GRE and other acquisitions without an inner
+train; the result is then one shot per sampled line.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mask</strong> (<em>array_like</em><em> of </em><em>bool</em>) – 1D <code class="docutils literal notranslate"><span class="pre">(ny,)</span></code> or 2D <code class="docutils literal notranslate"><span class="pre">(ny,</span> <span class="pre">nz)</span></code> sampling mask.</p></li>
+<li><p><strong>train_length</strong> (<em>int</em><em>, </em><em>optional</em>) – Echo-train / segment length (default 1).</p></li>
+<li><p><strong>ordering</strong> (<em>{'linear'</em><em>, </em><em>'centric'</em><em>, </em><em>'radial'</em><em>, </em><em>'radial_adaptive'</em><em>, </em><em>'shuffling'}</em><em>, </em><em>optional</em>) – Echo-train ordering applied to the sampled locations.</p></li>
+<li><p><strong>seed</strong> (<em>int</em><em>, </em><em>optional</em>) – Seed for <code class="docutils literal notranslate"><span class="pre">ordering='shuffling'</span></code>.</p></li>
+<li><p><strong>n_sections</strong> (<em>int</em><em>, </em><em>optional</em>) – Radial section count for <code class="docutils literal notranslate"><span class="pre">ordering='radial_adaptive'</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>SamplingPattern</em> – <code class="docutils literal notranslate"><span class="pre">support</span></code> of sampled <code class="docutils literal notranslate"><span class="pre">(ky[,</span> <span class="pre">kz])</span></code> indices, one order entry per
+shot, and the originating <code class="docutils literal notranslate"><span class="pre">mask</span></code>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>RuntimeError</strong> – If the chosen ordering does not cover the mask exactly once.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">SamplingPattern</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mask</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_caipirinha_sampling</span><span class="p">((</span><span class="mi">32</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">delta</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plan</span> <span class="o">=</span> <span class="n">SamplingPattern</span><span class="o">.</span><span class="n">from_mask</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">train_length</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">ordering</span><span class="o">=</span><span class="s2">&quot;radial&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plan</span><span class="o">.</span><span class="n">n_samples</span> <span class="o">==</span> <span class="nb">int</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plan</span><span class="o">.</span><span class="n">inner_lengths</span>
+<span class="go">(8, 8, 8, 8, 8, 8, 8, 8)</span>
+</pre></div>
+</div>
+<p>Which shot acquires each sampled line, and at which echo of its train:</p>
+<p>(<a class="reference download internal" download="" href="../../../_downloads/9f3bfb91e2419358a14065709ac44e2d/pulserver-pypulseq-SamplingPattern-1.png"><code class="xref download docutils literal notranslate"><span class="pre">png</span></code></a>)</p>
+<figure class="align-default">
+<img alt="../../../_images/pulserver-pypulseq-SamplingPattern-1.png" class="plot-directive" src="../../../_images/pulserver-pypulseq-SamplingPattern-1.png" />
+</figure>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="pulserver.pypulseq.make_random_sampling.html#pulserver.pypulseq.make_random_sampling" title="pulserver.pypulseq.make_random_sampling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.pypulseq.make_random_sampling</span></code></a></dt><dd><p>mask generators.</p>
+</dd>
+<dt><a class="reference internal" href="pulserver.pypulseq.make_radial_order.html#pulserver.pypulseq.make_radial_order" title="pulserver.pypulseq.make_radial_order"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.pypulseq.make_radial_order</span></code></a></dt><dd><p>one of the underlying orderings.</p>
+</dd>
+</dl>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.SamplingPattern.from_relative_shifts">
+<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_relative_shifts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">starts</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shifts</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.SamplingPattern.from_relative_shifts" title="Link to this definition">#</a></dt>
+<dd><p>Build a plan from per-shot start points and blip increments.</p>
+<p>The natural description of any blipped train: a shot starts somewhere
+in (ky, kz) and each subsequent echo is reached by a <em>relative</em> step.
+Both views the sequence needs come out of the result —
+<code class="docutils literal notranslate"><span class="pre">pattern[shot]</span></code> gives the absolute coordinates to label,
+<code class="docutils literal notranslate"><span class="pre">pattern.increments(shot)</span></code> the blip areas to play.</p>
+<p><code class="docutils literal notranslate"><span class="pre">shifts</span></code> may be one shared list of increments, or one list per shot
+when trains differ (EPTI, zigzag).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>starts</strong> (<em>array_like</em>) – Shape <code class="docutils literal notranslate"><span class="pre">(n_shots,</span> <span class="pre">D)</span></code> integer start coordinates.</p></li>
+<li><p><strong>shifts</strong> (<em>array_like</em>) – Shape <code class="docutils literal notranslate"><span class="pre">(inner,</span> <span class="pre">D)</span></code> shared by all shots, or
+<code class="docutils literal notranslate"><span class="pre">(n_shots,</span> <span class="pre">inner,</span> <span class="pre">D)</span></code>. Entry 0 is normally all-zero so the first
+echo sits on <code class="docutils literal notranslate"><span class="pre">starts</span></code>.</p></li>
+<li><p><strong>shape</strong> (<em>tuple</em><em> of </em><em>int</em>) – Cartesian grid extent; every coordinate must fall inside it.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>SamplingPattern</em> – Deduplicated <code class="docutils literal notranslate"><span class="pre">support</span></code> of absolute coordinates, one order entry
+per shot, plus the implied Cartesian <code class="docutils literal notranslate"><span class="pre">mask</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">SamplingPattern</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plan</span> <span class="o">=</span> <span class="n">SamplingPattern</span><span class="o">.</span><span class="n">from_relative_shifts</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">starts</span><span class="o">=</span><span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span>
+<span class="gp">... </span>    <span class="n">shifts</span><span class="o">=</span><span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">]],</span>
+<span class="gp">... </span>    <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plan</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="go">array([[0, 0],</span>
+<span class="go">       [2, 1],</span>
+<span class="go">       [4, 2]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plan</span><span class="o">.</span><span class="n">increments</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="go">array([[2, 1],</span>
+<span class="go">       [2, 1]])</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="pulserver.pypulseq.make_skipped_caipi_sampling.html#pulserver.pypulseq.make_skipped_caipi_sampling" title="pulserver.pypulseq.make_skipped_caipi_sampling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.pypulseq.make_skipped_caipi_sampling</span></code></a></dt><dd><p>segmented blipped-CAIPI plan built on this representation.</p>
+</dd>
+</dl>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.SamplingPattern.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">support</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.SamplingPattern.__init__" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.SamplingPattern.flatten">
+<span class="sig-name descname"><span class="pre">flatten</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.SamplingPattern.flatten" title="Link to this definition">#</a></dt>
+<dd><p>Return every acquired coordinate, concatenated in acquisition order.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.SamplingPattern.increments">
+<span class="sig-name descname"><span class="pre">increments</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shot</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.SamplingPattern.increments" title="Link to this definition">#</a></dt>
+<dd><p>Return the step between consecutive points of shot <code class="docutils literal notranslate"><span class="pre">shot</span></code>.</p>
+<p>One entry shorter than the shot: these are the blip areas to play
+between echoes.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.SamplingPattern.relative">
+<span class="sig-name descname"><span class="pre">relative</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shot</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.SamplingPattern.relative" title="Link to this definition">#</a></dt>
+<dd><p>Return shot <code class="docutils literal notranslate"><span class="pre">shot</span></code>’s coordinates relative to its own first point.</p>
+<p>The prewinder-relative view: what the gradients must reach once the
+shot’s start has been played.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.SamplingPattern.shot_indices">
+<span class="sig-name descname"><span class="pre">shot_indices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shot</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.SamplingPattern.shot_indices" title="Link to this definition">#</a></dt>
+<dd><p>Return shot <code class="docutils literal notranslate"><span class="pre">shot</span></code>’s indices into <code class="docutils literal notranslate"><span class="pre">support</span></code> (not the values).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.SamplingPattern.to_rotations">
+<span class="sig-name descname"><span class="pre">to_rotations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(1.0,</span> <span class="pre">0.0,</span> <span class="pre">0.0)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.SamplingPattern.to_rotations" title="Link to this definition">#</a></dt>
+<dd><p>Convert this pattern’s support into per-shot rotation matrices.</p>
+<p>The bridge from a non-Cartesian plan to the sequence: the readout
+designs <strong>one</strong> base waveform along <code class="docutils literal notranslate"><span class="pre">reference</span></code>, and each entry of
+<code class="docutils literal notranslate"><span class="pre">support</span></code> replays it under the matrix returned here. A one-column
+support is read as in-plane spoke angles (rotation about <code class="docutils literal notranslate"><span class="pre">z</span></code>); a
+three-column support as unit directions, each mapped by the shortest
+rotation taking <code class="docutils literal notranslate"><span class="pre">reference</span></code> onto it (Rodrigues). Antipodal
+directions get a well-defined 180-degree rotation rather than a
+singular matrix.</p>
+<p>Feed the result to <a class="reference internal" href="pulserver.pypulseq.make_rotation.html#pulserver.pypulseq.make_rotation" title="pulserver.pypulseq.make_rotation"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.pypulseq.make_rotation()</span></code></a>, or pass a
+row to a readout module’s <code class="docutils literal notranslate"><span class="pre">rotation=</span></code> argument.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>reference</strong> (<em>array_like</em><em>, </em><em>optional</em>) – Direction the base waveform was designed along (default <code class="docutils literal notranslate"><span class="pre">+x</span></code>).
+Ignored for angle-valued support.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>numpy.ndarray</em> – Shape <code class="docutils literal notranslate"><span class="pre">(len(support),</span> <span class="pre">3,</span> <span class="pre">3)</span></code> rotation matrices.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">support</span></code> has neither one nor three columns.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rotations</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_golden_means_3d_sampling</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="o">.</span><span class="n">to_rotations</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rotations</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">(4, 3, 3)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">angles</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_radial_sampling</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="o">.</span><span class="n">to_rotations</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">angles</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span> <span class="mi">6</span><span class="p">)</span>
+<span class="go">array([0.707107, 0.707107, 0.      ])</span>
+</pre></div>
+</div>
+<p>Rotate a 3D radial base waveform shot by shot:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">rotation</span> <span class="ow">in</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_golden_means_3d_sampling</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span><span class="o">.</span><span class="n">to_rotations</span><span class="p">():</span>
+    <span class="n">readout</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.pypulseq.SamplingPattern.inner_lengths">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">inner_lengths</span></span><a class="headerlink" href="#pulserver.pypulseq.SamplingPattern.inner_lengths" title="Link to this definition">#</a></dt>
+<dd><p>Train length of each shot.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.pypulseq.SamplingPattern.n_samples">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">n_samples</span></span><a class="headerlink" href="#pulserver.pypulseq.SamplingPattern.n_samples" title="Link to this definition">#</a></dt>
+<dd><p>Total number of acquired points, summed over shots.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.pypulseq.SamplingPattern.n_shots">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">n_shots</span></span><a class="headerlink" href="#pulserver.pypulseq.SamplingPattern.n_shots" title="Link to this definition">#</a></dt>
+<dd><p>Number of shots in the plan.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="pulserver.pypulseq.make_noncartesian_projection_plan.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">pulserver.pypulseq.make_noncartesian_projection_plan</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="pulserver.pypulseq.make_cartesian_sampling.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">pulserver.pypulseq.make_cartesian_sampling</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern"><code class="docutils literal notranslate"><span class="pre">SamplingPattern</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.from_mask"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.from_mask()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.from_relative_shifts"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.from_relative_shifts()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.__init__"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.__init__()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.flatten"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.flatten()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.increments"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.increments()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.relative"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.relative()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.shot_indices"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.shot_indices()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.to_rotations"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.to_rotations()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.inner_lengths"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.inner_lengths</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.n_samples"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.n_samples</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.SamplingPattern.n_shots"><code class="docutils literal notranslate"><span class="pre">SamplingPattern.n_shots</span></code></a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Author name not set
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2026, INFN-MRI.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

@@ -15,13 +15,14 @@ readout = pp.make_line_readout(pp.Opts(), (0.22, 0.22), (128, 128))
 
 Sections below run from the smallest unit outwards: single events, then the
 multi-block modules built from them, then the plans that drive those modules.
-Within a section the entries are alphabetical.
+Within specialized sections the entries follow the design workflow.
 
 The `make_*_pulse` and `make_*_readout` factories return a
 {class}`~pulserver.SequenceModule` — a stateful, reusable fragment designed
-once and re-indexed per shot. The sampling factories return a
-{class}`~pulserver.SamplingPattern`. Both types are documented in
-{doc}`pulserver <pulserver>`.
+once and re-indexed per shot. High-level sampling factories return an
+{class}`~pulserver.AcquisitionPlan`; lower-level masks, orderings and tilts
+remain independently composable through {class}`~pulserver.SamplingPattern`.
+These types are documented in {doc}`pulserver <pulserver>`.
 
 ## Base PyPulseq
 
@@ -32,6 +33,9 @@ lower per-block overhead; `make_label` accepts user-defined label strings;
 `make_rotation` and `make_rf_shim` are Pulserver extension events;
 `traj2grad` supersedes upstream `traj_to_grad`, re-parameterising a k-space
 path in time instead of differentiating whatever sampling it arrived with.
+Pulserver's `Opts` uses zero dead/ringdown times and vendor-neutral 2 us
+RF/ADC and 10 us gradient/block rasters. Scanner-specific code should still
+pass explicit limits.
 
 ```{eval-rst}
 .. autosummary::
@@ -48,6 +52,9 @@ path in time instead of differentiating whatever sampling it arrived with.
    pulserver.pypulseq.calc_ramp
    pulserver.pypulseq.calc_rf_bandwidth
    pulserver.pypulseq.calc_rf_center
+   pulserver.pypulseq.compress_shape
+   pulserver.pypulseq.convert
+   pulserver.pypulseq.decompress_shape
    pulserver.pypulseq.disable_trace
    pulserver.pypulseq.enable_trace
    pulserver.pypulseq.get_supported_labels
@@ -74,15 +81,11 @@ path in time instead of differentiating whatever sampling it arrived with.
    pulserver.pypulseq.split_gradient
    pulserver.pypulseq.split_gradient_at
    pulserver.pypulseq.traj2grad
-   pypulseq.compress_shape.compress_shape
-   pypulseq.decompress_shape.decompress_shape
-   pypulseq.convert.convert
 ```
 
-Timing is validated with `Sequence.check_timing()`. Upstream binds
-`compress_shape`, `decompress_shape` and `convert` to their *modules* rather
-than to the functions, so `pp.compress_shape` is a module; the callables are
-listed above at the paths that actually resolve.
+Timing is validated with `Sequence.check_timing()`. Unlike upstream,
+`compress_shape`, `decompress_shape` and `convert` resolve directly to
+callables in this namespace.
 
 ## Gradients
 
@@ -97,7 +100,6 @@ cycles, FOV, matrix — rather than in area.
    pulserver.pypulseq.make_crusher
    pulserver.pypulseq.make_phase_blip
    pulserver.pypulseq.make_phase_encoding
-   pulserver.pypulseq.make_spoiler
 ```
 
 ## RF pulses — excitation and refocusing
@@ -114,29 +116,29 @@ compatibility with the pypulseq factory it replaces.
    :toctree: generated/pypulseq
    :nosignatures:
 
-   pulserver.pypulseq.make_adiabatic_pulse
-   pulserver.pypulseq.make_frequency_selective_pulse
    pulserver.pypulseq.make_hard_pulse
+   pulserver.pypulseq.make_frequency_selective_pulse
+   pulserver.pypulseq.make_slice_selective_pulse
    pulserver.pypulseq.make_refocusing_pulse
    pulserver.pypulseq.make_slr_pulse
-   pulserver.pypulseq.make_slice_selective_pulse
+   pulserver.pypulseq.make_multiband_frequency_selective_pulse
+   pulserver.pypulseq.make_pins_slice_selective_pulse
+   pulserver.pypulseq.make_multiband
+   pulserver.pypulseq.make_pins
 ```
 
 ## RF pulses — multidimensional and spectral-spatial
 
-Pulses whose selectivity comes from playing RF concurrently with a gradient
-trajectory: small-tip 2D/3D excitation on a spiral or EPI path, and
-alternating-gradient spectral-spatial design.
+The supported plane-selective spiral design and alternating-gradient
+spectral-spatial design. Generic caller-supplied and unvalidated 3D variants
+are intentionally kept out of the public API.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/pypulseq
    :nosignatures:
 
-   pulserver.pypulseq.make_2d_selective_pulse
-   pulserver.pypulseq.make_3d_selective_pulse
-   pulserver.pypulseq.make_spatially_selective_pulse
-   pulserver.pypulseq.make_spiral_selective_pulse
+   pulserver.pypulseq.make_plane_selective_pulse
    pulserver.pypulseq.make_spsp_pulse
 ```
 
@@ -200,39 +202,69 @@ a gradient for it directly.
 
 ## Sampling
 
-Which k-space locations are acquired, and in which order — kept numeric and
-sequence-independent. `make_*_sampling` returns a
-{class}`~pulserver.SamplingPattern`, or the Cartesian mask one is built from;
-`make_*_order` returns a list of shots; `calc_*` returns a plain array. See
-the {doc}`sampling reference <../reference/sampling>` for the full model.
+High-level plans accept plain UI-facing values such as matrix,
+acceleration, ETL/segment length, slice count, SMS factor and frame count.
+They do not require a protocol object and remain sequence-independent.
+Ordering functions and
+mask/tilt generators form the lower-level layer. Construct a
+`SamplingPattern` directly from custom support/order, or use its `from_mask`
+and `from_relative_shifts` constructors. See the
+{doc}`sampling reference <../reference/sampling>` for the full model.
+
+### High-level acquisition sampling
 
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/pypulseq
    :nosignatures:
 
-   pulserver.pypulseq.calc_golden_angles
-   pulserver.pypulseq.calc_raga_angles
-   pulserver.pypulseq.calc_sampled_lines
-   pulserver.pypulseq.calc_tiny_golden_angles
-   pulserver.pypulseq.calc_uniform_angles
-   pulserver.pypulseq.make_caipirinha_sampling
-   pulserver.pypulseq.make_fse_linear_order
-   pulserver.pypulseq.make_fse_radial_adaptive_order
-   pulserver.pypulseq.make_fse_radial_order
-   pulserver.pypulseq.make_fse_shuffling_order
-   pulserver.pypulseq.make_golden_means_3d_sampling
-   pulserver.pypulseq.make_poisson_disc_sampling
-   pulserver.pypulseq.make_radial_sampling
-   pulserver.pypulseq.make_random_sampling
-   pulserver.pypulseq.make_skipped_caipi_sampling
-   pulserver.pypulseq.make_spiral_phyllotaxis_sampling
+   pulserver.pypulseq.make_cartesian_sampling
+   pulserver.pypulseq.make_epi_sampling
+   pulserver.pypulseq.make_noncartesian_2d_sampling
+   pulserver.pypulseq.make_noncartesian_stack_sampling
+   pulserver.pypulseq.make_noncartesian_projection_sampling
 ```
 
-### Loops outside the readout
+### Low-level orderings
 
-Slice/SMS grouping with per-band frequency offsets, and the generic helpers
-for enumerating the loops the readout sits inside.
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/pypulseq
+   :nosignatures:
+
+   pulserver.pypulseq.make_skipped_caipi_order
+   pulserver.pypulseq.make_centric_order
+   pulserver.pypulseq.make_linear_order
+   pulserver.pypulseq.make_radial_adaptive_order
+   pulserver.pypulseq.make_radial_order
+   pulserver.pypulseq.make_shuffling_order
+```
+
+### Low-level masks and tilts
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/pypulseq
+   :nosignatures:
+
+   pulserver.pypulseq.make_caipirinha_mask
+   pulserver.pypulseq.make_poisson_disc_mask
+   pulserver.pypulseq.make_random_mask
+   pulserver.pypulseq.make_radial_tilt
+   pulserver.pypulseq.make_golden_means_3d_tilt
+   pulserver.pypulseq.make_spiral_phyllotaxis_tilt
+   pulserver.pypulseq.calc_sampled_lines
+   pulserver.pypulseq.calc_golden_angles
+   pulserver.pypulseq.calc_raga_angles
+   pulserver.pypulseq.calc_tiny_golden_angles
+   pulserver.pypulseq.calc_uniform_angles
+```
+
+### Independent outer-loop utilities
+
+These remain useful when directly combining a `SamplingPattern` with slice,
+frame, average or contrast loops. The high-level 2D factories already
+incorporate slice/SMS grouping and expose the resulting frequency table.
 
 ```{eval-rst}
 .. autosummary::
@@ -240,10 +272,9 @@ for enumerating the loops the readout sits inside.
    :nosignatures:
 
    pulserver.pypulseq.calc_chunk_indices
-   pulserver.pypulseq.make_linear_order
    pulserver.pypulseq.make_outer_inner_order
    pulserver.pypulseq.make_outer_product
-   pulserver.pypulseq.make_slice_groups
+   pulserver.pypulseq.make_slice_sampling
 ```
 
 ## RF phase and flip-angle schedules
