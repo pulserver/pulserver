@@ -6,6 +6,8 @@ __all__ = ["Sequence"]
 
 import math
 from copy import deepcopy
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 import numpy as np
@@ -25,6 +27,34 @@ _RF_USE_CHAR_TO_CODE = {
     "o": 6,
 }
 _RF_USE_CODE_TO_CHAR = {v: k for k, v in _RF_USE_CHAR_TO_CODE.items()}
+
+
+def _plot_payload(payload: bytes) -> bytes:
+    """Drop Pulserver-only extensions from a Pulseq payload for upstream plotters."""
+    lines: list[str] = []
+    in_blocks = False
+    skipping_extensions = False
+    for line in payload.decode("utf-8").splitlines(keepends=True):
+        section = line.strip()
+        if section == "[BLOCKS]":
+            in_blocks, skipping_extensions = True, False
+        elif section == "[EXTENSIONS]":
+            in_blocks, skipping_extensions = False, True
+            continue
+        elif skipping_extensions and section == "[SHAPES]":
+            skipping_extensions = False
+        elif skipping_extensions:
+            continue
+        elif section.startswith("["):
+            in_blocks = False
+
+        if in_blocks and line.lstrip()[:1].isdigit():
+            fields = line.split()
+            if len(fields) == 8:
+                fields[-1] = "0"
+                line = " ".join(fields) + "\n"
+        lines.append(line)
+    return "".join(lines).encode("utf-8")
 
 
 class Sequence(pp.Sequence):
@@ -242,6 +272,37 @@ class Sequence(pp.Sequence):
         if isinstance(use, int | np.integer):
             use = _RF_USE_CODE_TO_CHAR.get(int(use), "u")
         return super().rf_from_lib_data(lib_data, use)
+
+    @property
+    def _seq(self) -> pp.Sequence:
+        """Decode this fast builder to an upstream sequence for inspection.
+
+        This is a transient plotting view, not a second mutable sequence.  It
+        is rebuilt on every access so events appended after a prior plot are
+        included.  Pulserver-only block extensions are omitted because
+        upstream PyPulseq does not decode them; the resulting diagram shows
+        the underlying RF, gradient, and ADC waveforms.
+        """
+        from pulserver.io import write
+
+        payload = _plot_payload(write(self, output=None, remove_duplicates=False, check_timing=False))
+        with TemporaryDirectory(prefix="pulserver-plot-") as directory:
+            path = Path(directory) / "sequence.seq"
+            path.write_bytes(payload)
+            decoded = pp.Sequence(system=self.system)
+            decoded.read(path)
+        return decoded
+
+    def plot(self, **kwargs):
+        """Plot the current sequence through :attr:`_seq`.
+
+        The fast builder cannot decode its own block libraries, so plotting is
+        delegated to the upstream Pulseq sequence returned by :attr:`_seq`.
+        The diagram includes all ordinary RF, gradient, and ADC events; custom
+        labels, rotations, and RF shims are metadata and are omitted from this
+        visual preview.
+        """
+        return self._seq.plot(**kwargs)
 
     # ------------------------------------------------------------------
     # Unsupported pypulseq API in fast-builder mode

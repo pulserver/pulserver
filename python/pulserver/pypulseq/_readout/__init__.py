@@ -48,6 +48,7 @@ from ._surgery import (
     surgery_ramp_time_s,
     surgery_timing,
 )
+from .bssfp import Bssfp2D, Bssfp3D
 from .epi import Epi2D, Epi2DFlyback, Epi3D, Epi3DFlyback
 from .fse import (
     CPMG_PHASE_OFFSET_RAD,
@@ -123,6 +124,8 @@ __all__ = [
     "Epi3D",
     "Epi2DFlyback",
     "Epi3DFlyback",
+    "Bssfp2D",
+    "Bssfp3D",
     "Line2D",
     "Line3D",
     "DEFAULT_SPOIL_FACTOR",

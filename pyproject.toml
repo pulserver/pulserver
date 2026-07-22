@@ -32,15 +32,21 @@ doc       = [
 
 [tool.scikit-build]
 cmake.source-dir = "."
-wheel.packages = ["python/pulserver"]
 sdist.include = [
   "csrc/**",
   "cxx/**",
+  "examples/sequences/**",
   "python/**",
   "tests/**",
   "README.rst",
   "LICENSE.txt",
 ]
+
+[tool.scikit-build.wheel]
+# scikit-build-core maps package paths to arbitrary source directories.  This
+# installs the self-contained bridge plugins directly as
+# ``pulserver.sequences.<name>`` without copying or moving their source.
+packages = { "pulserver" = "python/pulserver", "pulserver/sequences" = "examples/sequences" }
 
 [tool.ruff]
 line-length = 120

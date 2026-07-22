@@ -184,6 +184,7 @@ a gradient for it directly.
    :nosignatures:
 
    pulserver.pypulseq.make_epi_readout
+   pulserver.pypulseq.make_bssfp_readout
    pulserver.pypulseq.make_fse_readout
    pulserver.pypulseq.make_line_readout
    pulserver.pypulseq.make_noncartesian_2d_readout

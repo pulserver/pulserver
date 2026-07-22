@@ -19,7 +19,7 @@ the physical Z axis and, for 3D, stacks that with a separate Cartesian
 partition encode — ``gre_radial_3d.py``, ``gre_noncart_3d.py``), true ZTE
 has no separate slice/partition dimension to stack: the whole non-selective
 FOV is covered by spokes pointing anywhere on the sphere. Directions come
-from ``pulserver.pypulseq.arbgrad.generate_fibonacci_sphere`` (near-uniform 3D
+from ``pulserver.pypulseq.make_golden_means_3d_tilt`` (near-uniform 3D
 coverage). The full ordered direction list is passed to
 :func:`pulserver.make_zte_readout`, which keeps the gradient live and
 slews directly between consecutive sphere points.
@@ -55,9 +55,6 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _rf as rf
-from pulserver.pypulseq import arbgrad
 
 ZTE_RF_DURATION_S = 20e-6
 
@@ -150,20 +147,21 @@ def _read_protocol(prot: dict) -> _Config:
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    directions = arbgrad.generate_fibonacci_sphere(cfg.num_shots)
-    excitation = rf.make_hard_pulse(
+    tilts = pp.make_golden_means_3d_tilt(cfg.num_shots, segment_length=cfg.num_shots)
+    directions = tilts[0]
+    excitation = pp.make_hard_pulse(
         np.deg2rad(cfg.flip_deg),
         duration=ZTE_RF_DURATION_S,
         system=opts,
         use="excitation",
     )
     try:
-        module = readout.Zte(
+        module = pp.make_zte_readout(
             opts,
             cfg.fov_m,
             cfg.nx_ro,
             directions,
-            excitation.rf,
+            excitation,
             tr_s=cfg.tr_s,
         )
     except ValueError as error:

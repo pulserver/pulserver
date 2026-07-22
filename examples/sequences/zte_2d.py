@@ -58,9 +58,6 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _rf as rf
-from pulserver.pypulseq import _sampling as sampling
 
 ZTE_RF_DURATION_S = 20e-6
 
@@ -166,23 +163,23 @@ def _read_protocol(prot: dict) -> _Config:
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     angles = (
-        sampling.calc_golden_angles(cfg.num_shots)
+        pp.calc_golden_angles(cfg.num_shots)
         if cfg.order_mode == "golden"
-        else sampling.calc_uniform_angles(cfg.num_shots)
+        else pp.calc_uniform_angles(cfg.num_shots)
     )
-    excitation = rf.make_hard_pulse(
+    excitation = pp.make_hard_pulse(
         np.deg2rad(cfg.flip_deg),
         duration=ZTE_RF_DURATION_S,
         system=opts,
         use="excitation",
     )
     try:
-        module = readout.Zte(
+        module = pp.make_zte_readout(
             opts,
             cfg.fov_m,
             cfg.nx_ro,
             angles,
-            excitation.rf,
+            excitation,
             tr_s=cfg.tr_s,
         )
     except ValueError as error:

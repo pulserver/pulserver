@@ -40,7 +40,7 @@ rule: GE's real UI has no generic "prep type = MT" slot).
 reused from the MPRAGE family. TI, ``TE_prep``, the inversion/refocus-mode
 toggles, and the MT enable/params all lack a native GE counterpart, so they
 are ``opuser`` custom variables. Trajectory is plain full-echo radial
-(rotated spokes, ``pulserver.pypulseq.make_rotation`` — no ``pulserver.pypulseq.arbgrad``
+(rotated spokes from the public radial tilt factory — no arbitrary-gradient
 waveform solver needed) — see ``gre_noncart_3d.py`` for the arbgrad-backed
 spiral/rosette sibling; swapping the readout builder there for this file's
 prep/segment scheduling is a mechanical follow-up, not implemented here.
@@ -77,14 +77,9 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq import _gradients as encoding
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _sampling as sampling
-from pulserver.pypulseq import _system as system
-from pulserver.pypulseq import arbgrad
-from pulserver.pypulseq._rf import _excitation_helpers as excitation
-from pulserver.pypulseq._rf import _preparation_helpers as preparations
 from scipy.spatial.transform import Rotation
+
+encoding = readout = sampling = system = arbgrad = excitation = preparations = pp
 
 NUM_ECHOES = 1
 FLYBACK = True
@@ -150,7 +145,7 @@ class GreMprageRadial3DPulseqSequence(Sequence):
             ),
             UIParam.RZ: TypeinFloatParam(value=1.0, min=1.0, max=8.0, incr=1.0, unit="", validate=Validate.NONE),
             UIParam.BANDWIDTH: TypeinFloatParam(
-                value=system.DEFAULT_BANDWIDTH_HZ_PX, min=5_000.0, max=500_000.0, incr=100.0,
+                value=125_000.0, min=5_000.0, max=500_000.0, incr=100.0,
                 unit="Hz/px", validate=Validate.NONE,
             ),
             UIParam.SEQUENCE_TYPE: make_enum_param(UIParam.SEQUENCE_TYPE, SequenceType.GRADIENT_ECHO),
@@ -207,7 +202,7 @@ class GreMprageRadial3DPulseqSequence(Sequence):
         if cfg.prep_type == PreparationType.T2_PREP and cfg.te_prep_s <= 0.0:
             return {"valid": False, "duration": None, "info": "TE_prep must be > 0"}
 
-        timing = _compute_timing(opts=opts, cfg=cfg, strict=True)
+        timing = _compute_public(opts=opts, cfg=cfg, strict=True)
         if timing is None:
             return {
                 "valid": False,
@@ -215,8 +210,8 @@ class GreMprageRadial3DPulseqSequence(Sequence):
                 "info": "TE, TR, TI, or TE_prep infeasible for the requested gradients/ETL",
             }
 
-        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
-        n_segments = len(sampling.calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl))
+        sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+        n_segments = len(pp.calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl))
         shot_s = timing["shot_s"]
         duration_s = shot_s * n_segments * len(sampled_par)
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -224,6 +219,7 @@ class GreMprageRadial3DPulseqSequence(Sequence):
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
         prot = dict_to_protocol(protocol)
         cfg = _read_protocol(prot)
+        return _make_public_sequence(opts, cfg, output_path)
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
 
@@ -364,7 +360,7 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.slice_spacing_m = params.param_float(prot, UIParam.SLICE_SPACING) * 1e-3
     cfg.nx_ro = params.param_int(prot, UIParam.NX)
     cfg.npar = params.param_int(prot, UIParam.NSLICES)
-    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, system.DEFAULT_BANDWIDTH_HZ_PX)
+    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, 125_000.0)
     cfg.rz = max(1, int(round(params.param_float_optional(prot, UIParam.RZ, 1.0))))
     cfg.num_shots = params.param_int_optional(prot, UIParam.NUM_SHOTS, 32)
     cfg.order_mode = _order_mode_name(params.user_float(prot, USER_SLOT_ORDER_MODE, 1.0))
@@ -479,6 +475,121 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
         "mt_spoiler": mt_spoiler,
         "shot_s": shot_s,
     }
+
+
+def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
+    pulse = pp.make_slice_selective_pulse(
+        np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
+    )
+    radial = pp.make_radial_stack_readout(
+        opts,
+        cfg.fov_m,
+        cfg.nx_ro,
+        cfg.slice_spacing_m * cfg.npar,
+        cfg.npar,
+        bandwidth_hz_px=cfg.bandwidth_hz_px,
+        slice_rephasing=pulse.rephasers[0],
+    )
+    prep = (
+        pp.make_inversion_pulse(adiabatic=cfg.inv_mode == "adiabatic", system=opts)
+        if cfg.prep_type == PreparationType.INVERSION
+        else pp.make_t2prep_pulse(
+            cfg.te_prep_s,
+            adiabatic=cfg.refocus_mode == "adiabatic",
+            voxel_size=cfg.fov_m / cfg.nx_ro,
+            system=opts,
+        )
+    )
+    mt = (
+        pp.make_mt_pulse(voxel_size=cfg.fov_m / cfg.nx_ro, system=opts)
+        if cfg.mt_enable
+        else None
+    )
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    center = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
+    raster = opts.block_duration_raster
+    te_delay_s = round(
+        (cfg.te_s - (d_pulse - center) - radial.t_prephase_s - 0.5 * radial.readout.read_duration)
+        / raster
+    ) * raster
+    if te_delay_s < -1e-9 and strict:
+        return None
+    te_delay_s = max(0.0, te_delay_s)
+    mt_duration = 0.0 if mt is None else sum(pp.calc_duration(*block) for block in mt)
+    min_block_s = mt_duration + d_pulse + te_delay_s + radial.duration
+    tr_delay_s = round((cfg.tr_s - min_block_s) / raster) * raster
+    if tr_delay_s < -1e-9 and strict:
+        return None
+    prep_duration = sum(pp.calc_duration(*block) for block in prep)
+    prep_delay_s = cfg.ti_s - prep_duration if cfg.prep_type == PreparationType.INVERSION else 0.0
+    prep_delay_s = round(prep_delay_s / raster) * raster
+    if prep_delay_s < -1e-9 and strict:
+        return None
+    shot_s = prep_duration + max(0.0, prep_delay_s) + cfg.etl * cfg.tr_s + cfg.trecovery_s
+    return {
+        "pulse": pulse,
+        "radial": radial,
+        "prep": prep,
+        "mt": mt,
+        "te_delay_s": te_delay_s,
+        "tr_delay_s": max(0.0, tr_delay_s),
+        "prep_delay_s": max(0.0, prep_delay_s),
+        "min_block_s": min_block_s,
+        "shot_s": shot_s,
+    }
+
+
+def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None:
+    timing = _compute_public(opts, cfg, strict=False)
+    seq = pp.Sequence(opts)
+    segments = pp.calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl)
+    rotations = pp.make_radial_tilt(cfg.num_shots, scheme=cfg.order_mode).to_rotations()
+    sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+    phases = pp.make_rf_spoiling_schedule(cfg.num_shots * len(sampled_par))
+    te_delay = pp.make_delay(timing["te_delay_s"]) if timing["te_delay_s"] > 0 else None
+    tr_delay = pp.make_delay(timing["tr_delay_s"]) if timing["tr_delay_s"] > 0 else None
+    prep_delay = pp.make_delay(timing["prep_delay_s"]) if timing["prep_delay_s"] > 0 else None
+    recovery_s = round(cfg.trecovery_s / opts.block_duration_raster) * opts.block_duration_raster
+    recovery = pp.make_delay(recovery_s) if recovery_s > 0 else None
+    phase_idx = 0
+    for par in sampled_par:
+        for segment in segments:
+            for block in timing["prep"]:
+                seq.add_block(*block)
+            if prep_delay is not None:
+                seq.add_block(prep_delay)
+            for shot in segment:
+                if timing["mt"] is not None:
+                    for block in timing["mt"]:
+                        seq.add_block(*block)
+                phase = float(phases[phase_idx])
+                timing["pulse"].set_state(phase_offset_rad=phase)
+                for block in timing["pulse"]:
+                    seq.add_block(*block)
+                if te_delay is not None:
+                    seq.add_block(te_delay)
+                timing["radial"].set_state(
+                    lin_idx=int(shot),
+                    par_idx=int(par),
+                    adc_phase_rad=phase,
+                    rotation=rotations[shot],
+                )
+                for block in timing["radial"]:
+                    seq.add_block(*block)
+                if tr_delay is not None:
+                    seq.add_block(tr_delay)
+                phase_idx += 1
+            if recovery is not None:
+                seq.add_block(recovery)
+    seq.set_definition("Name", "gre_mprage_radial_3d")
+    seq.set_definition("FOV", [cfg.fov_m, cfg.fov_m, cfg.slice_spacing_m * cfg.npar])
+    seq.set_definition("TE", cfg.te_s)
+    seq.set_definition("TR", cfg.tr_s)
+    seq.set_definition("PreparationType", str(cfg.prep_type))
+    seq.set_definition("Trajectory", "radial")
+    seq.set_definition("ImagingMode", "3d")
+    seq.set_definition("RfSpoilingIncDeg", 117.0)
+    pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
 PLUGIN = GreMprageRadial3DPulseqSequence()

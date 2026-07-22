@@ -14,6 +14,7 @@ from pulserver import SequenceModule
 from pulserver.pypulseq import (
     SamplingPattern,
     calc_adc_timing,
+    make_bssfp_readout,
     make_crusher,
     make_hard_pulse,
     make_line_readout,
@@ -136,6 +137,9 @@ def test_rf_and_readout_factories_return_only_common_module_protocol() -> None:
     assert isinstance(pulse, SequenceModule)
     assert isinstance(readout, SequenceModule)
     assert isinstance(readout.set_state(lin_idx=4), SequenceModule)
+    excitation = pp.make_slice_selective_pulse(np.deg2rad(25), 5e-3, duration=0.6e-3, system=system)
+    bssfp = make_bssfp_readout(system, (0.22, 0.22), (32, 8), excitation)
+    assert isinstance(bssfp, SequenceModule)
 
 
 def test_gradient_helpers_use_physical_units_and_axes() -> None:

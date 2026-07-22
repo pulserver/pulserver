@@ -644,7 +644,7 @@ def unbalanced_line(
     axis: str = "x",
     spoil_factor: float = SPOIL_FACTOR_X,
 ):
-    """Build the bridged (split-gradient) Cartesian readout used by ``gre.py``.
+    """Build the bridged (split-gradient) Cartesian readout used by ``gre_2d.py``.
 
     The readout trapezoid is split at the end of its flat top
     (``pp.split_gradient_at``): the returned ``gx`` carries rise + flat only,

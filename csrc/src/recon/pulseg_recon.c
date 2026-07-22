@@ -22,9 +22,10 @@
 #define PGR_SECTION_SEQDESC 7
 
 /* ================================================================== */
-/*  Byte-swap / typed I/O helpers (mirrors pulseg_trajectory.c /       */
-/*  pulseg_cache_seqdesc.c -- duplicated locally per module convention */
-/*  since these helpers are file-static everywhere else too).          */
+/*  Byte-swap / typed I/O helpers.  pulseg core shares one copy         */
+/*  (pulseg__swap4/read4, pulseg_internal.h), but this reader is a      */
+/*  standalone leaf that links only the public API and never the        */
+/*  private internal header, so it keeps its own local copies.          */
 /* ================================================================== */
 
 static int pgr_read4(FILE *f, void *p, int count)

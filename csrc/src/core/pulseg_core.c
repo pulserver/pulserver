@@ -517,39 +517,6 @@ static int check_cross_pass_rf_consistency(
     return PULSEG_SUCCESS;
 }
 
-static int block_defs_structurally_equal_core(
-    const pulseg_sequence_descriptor *desc,
-    int id_a,
-    int id_b)
-{
-    const pulseg_base_block *a;
-    const pulseg_base_block *b;
-
-    if (!desc)
-        return 0;
-    if (id_a < 0 || id_a >= desc->num_unique_blocks)
-        return 0;
-    if (id_b < 0 || id_b >= desc->num_unique_blocks)
-        return 0;
-
-    a = &desc->base_blocks[id_a];
-    b = &desc->base_blocks[id_b];
-
-    if (a->duration_us != b->duration_us)
-        return 0;
-    if ((a->rf_id >= 0) != (b->rf_id >= 0))
-        return 0;
-    if ((a->gx_id >= 0) != (b->gx_id >= 0))
-        return 0;
-    if ((a->gy_id >= 0) != (b->gy_id >= 0))
-        return 0;
-    if ((a->gz_id >= 0) != (b->gz_id >= 0))
-        return 0;
-    if ((a->adc_id >= 0) != (b->adc_id >= 0))
-        return 0;
-    return 1;
-}
-
 /*
  * check_exec_stream_segments --
  *   Walk the scan table and verify that each entry's block definition ID
@@ -635,7 +602,8 @@ static int check_exec_stream_segments(
             if (!both_pure_delay && desc->tr_descriptor.num_prep_blocks == 0 &&
                 desc->tr_descriptor.num_cooldown_blocks == 0)
             {
-                structural_match = block_defs_structurally_equal_core(desc, bdef_id, expected_id);
+                structural_match =
+                    pulseg__block_defs_structurally_equal(desc, bdef_id, expected_id);
             }
         }
 
@@ -1011,15 +979,6 @@ static const pulseg_base_block *seg_block_def(
     return NULL;
 }
 
-/* A block definition is a pure delay when it carries no RF, gradient or ADC
- * event -- only a duration.  Such a block's duration is runtime-adjustable
- * (setperiod), so two segments that differ only in a pure-delay block's
- * duration still materialise the same instruction memory. */
-static int block_def_is_pure_delay(const pulseg_base_block *b)
-{
-    return (b->rf_id < 0 && b->gx_id < 0 && b->gy_id < 0 && b->gz_id < 0 && b->adc_id < 0);
-}
-
 /* Segment-level physio-trigger TYPE (or 0 if none), for topology compare. */
 static int seg_trigger_type(
     const pulseg_sequence_descriptor *desc,
@@ -1082,9 +1041,9 @@ static int segments_content_equal(
          * trigger/rotation delay block is never collapsed onto a fixed
          * wait. */
         {
-            int a_adj = block_def_is_pure_delay(ba) && !sa->has_digitalout[b] &&
+            int a_adj = pulseg__block_def_is_pure_delay(ba) && !sa->has_digitalout[b] &&
                 !sa->has_rotation[b] && (sa->is_dynamic_delay ? sa->is_dynamic_delay[b] : 1);
-            int b_adj = block_def_is_pure_delay(bb) && !sb->has_digitalout[b] &&
+            int b_adj = pulseg__block_def_is_pure_delay(bb) && !sb->has_digitalout[b] &&
                 !sb->has_rotation[b] && (sb->is_dynamic_delay ? sb->is_dynamic_delay[b] : 1);
             if (!(a_adj && b_adj))
             {

@@ -1,7 +1,7 @@
 """Standalone 2D fast/turbo spin-echo (FSE) sequence plugin for pulserver.
 
 This module implements the three mandatory module-level entry points
-required by the bridge dispatcher (see ``gre.py`` for the Cartesian GRE
+required by the bridge dispatcher (see ``gre_2d.py`` for the Cartesian GRE
 family this parallels, ``epi_2d.py`` for the other spin-echo-family
 sibling, and ``_gre_common.py`` / ``_fse_common.py`` / ``_diffusion_common.py``
 for the shared building blocks):
@@ -73,12 +73,8 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq import _gradients as encoding
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _sampling as sampling
-from pulserver.pypulseq import _system as system
-from pulserver.pypulseq._rf import _excitation_helpers as excitation
-from pulserver.pypulseq._rf import _preparation_helpers as preparations
+
+encoding = readout = sampling = system = excitation = preparations = pp
 
 # Refocusing scheme (TRAPS on/off) has no native GE CV — carried as an
 # opuser custom variable, same convention as gre_multiecho_2d.py's
@@ -105,7 +101,7 @@ class Fse2DPulseqSequence(Sequence):
             # excitation is fixed, not user-selectable — see module
             # docstring / _fse_common.EXCITATION_FLIP_DEG).
             UIParam.FLIP: DropdownFloatParam(
-                value=readout.DEFAULT_REFOCUS_FLIP_DEG, min=90.0, max=180.0, incr=1.0, unit="deg",
+                value=180.0, min=90.0, max=180.0, incr=1.0, unit="deg",
                 options=[90.0, 120.0, 150.0, 180.0], validate=Validate.NONE,
             ),
             UIParam.FOV: DropdownFloatParam(
@@ -177,8 +173,7 @@ class Fse2DPulseqSequence(Sequence):
         if cfg.b_value_s_mm2 < 0.0:
             return {"valid": False, "duration": None, "info": "Diffusion b-value must be >= 0"}
 
-        compute_timing = _compute_timing_legacy if cfg.b_value_s_mm2 > 0.0 else _compute_timing_surgery
-        timing = compute_timing(opts=opts, cfg=cfg, strict=True)
+        timing = _compute_public(opts, cfg, strict=True)
         if timing is None:
             return {
                 "valid": False,
@@ -195,10 +190,7 @@ class Fse2DPulseqSequence(Sequence):
         cfg = _read_protocol(prot)
 
         seq = pp.Sequence(opts)
-        if cfg.b_value_s_mm2 > 0.0:
-            n_shots, n_directions = _build_legacy(seq, opts, cfg)
-        else:
-            n_shots, n_directions = _build_surgery(seq, opts, cfg)
+        n_shots, n_directions = _build_public(seq, opts, cfg)
 
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
         seq.set_definition("Name", "fse_2d")
@@ -209,11 +201,11 @@ class Fse2DPulseqSequence(Sequence):
         seq.set_definition("TE", cfg.te_s)
         seq.set_definition("TR", cfg.tr_s)
         seq.set_definition("Flip", cfg.refocus_flip_deg)
-        seq.set_definition("ExcitationFlip", readout.EXCITATION_FLIP_DEG)
+        seq.set_definition("ExcitationFlip", 90.0)
         seq.set_definition("RefocusVariable", cfg.refocus_variable)
         seq.set_definition("ImagingMode", "2d")
-        seq.set_definition("ReadoutAxis", cfg.ro_axis)
-        seq.set_definition("PhaseAxis", cfg.pe_axis)
+        seq.set_definition("ReadoutAxis", "x")
+        seq.set_definition("PhaseAxis", "y")
         seq.set_definition("ETL", cfg.etl)
         seq.set_definition("NumShots", n_shots)
         seq.set_definition("BValue", cfg.b_value_s_mm2)
@@ -227,7 +219,7 @@ class Fse2DPulseqSequence(Sequence):
 
 
 def _n_shots(cfg: _Config) -> int:
-    sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
+    sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
     return len(range(0, len(sampled_pe), cfg.etl))
 
 
@@ -256,11 +248,103 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.nslices = params.param_int(prot, UIParam.NSLICES)
     cfg.etl = params.param_int_optional(prot, UIParam.ETL, cfg.ny_pe)
     cfg.ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
-    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, system.DEFAULT_BANDWIDTH_HZ_PX)
+    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, 125_000.0)
     cfg.b_value_s_mm2 = params.param_float_optional(prot, UIParam.DIFFUSION_BVALUES, 0.0)
     cfg.n_directions = params.param_int_optional(prot, UIParam.DIFFUSION_DIRECTIONS, 3)
     cfg.ro_axis, cfg.pe_axis = params.resolve_readout_phase_axes(prot)
     return cfg
+
+
+def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
+    excitation_pulse = pp.make_slice_selective_pulse(
+        np.pi / 2.0, cfg.slice_thickness_m, system=opts
+    )
+    refocusing = pp.make_refocusing_pulse(
+        slice_thickness=cfg.slice_thickness_m, system=opts
+    )
+    flips = pp.make_traps_schedule(
+        cfg.etl, np.deg2rad(cfg.refocus_flip_deg), variable=cfg.refocus_variable
+    )
+    train = pp.make_fse_readout(
+        opts,
+        (cfg.fov_ro_m, cfg.fov_pe_m),
+        (cfg.nx_ro, cfg.ny_pe),
+        cfg.etl,
+        refocusing,
+        bandwidth_hz_px=cfg.bandwidth_hz_px,
+        esp_s=cfg.te_s,
+        refoc_flip_scale=flips / np.pi,
+        spoil_cycles=4.0,
+    )
+    diffusion = None
+    if cfg.b_value_s_mm2 > 0.0:
+        try:
+            diffusion = pp.make_diffusion_prep(
+                cfg.b_value_s_mm2,
+                voxel_size=cfg.fov_ro_m / cfg.nx_ro,
+                system=opts,
+            )
+        except ValueError:
+            if strict:
+                return None
+
+    d_exc = sum(pp.calc_duration(*block) for block in excitation_pulse)
+    center = pp.calc_rf_center(excitation_pulse.rf)[0] + excitation_pulse.rf.delay
+    gap_s = max(0.0, train.t_exc_center_to_train_start - (d_exc - center))
+    raster = opts.block_duration_raster
+    gap_s = round(gap_s / raster) * raster
+    prep_s = 0.0 if diffusion is None else diffusion.duration
+    min_block_s = prep_s + d_exc + gap_s + train.duration
+    tr_delay_s = round((cfg.tr_s - min_block_s) / raster) * raster
+    if tr_delay_s < -1e-9 and strict:
+        return None
+    return {
+        "excitation": excitation_pulse,
+        "train": train,
+        "diffusion": diffusion,
+        "gap_s": gap_s,
+        "tr_delay_s": max(0.0, tr_delay_s),
+        "min_block_s": min_block_s,
+    }
+
+
+def _build_public(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
+    timing = _compute_public(opts, cfg, strict=False)
+    excitation_pulse = timing["excitation"]
+    train = timing["train"]
+    diffusion = timing["diffusion"]
+    gap = pp.make_delay(timing["gap_s"]) if timing["gap_s"] > 0.0 else None
+    tr_delay = pp.make_delay(timing["tr_delay_s"]) if timing["tr_delay_s"] > 0.0 else None
+    sampled = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
+    segments = [sampled[start : start + cfg.etl] for start in range(0, len(sampled), cfg.etl)]
+    rotations = (
+        pp.make_golden_means_3d_tilt(cfg.n_directions).to_rotations()
+        if diffusion is not None
+        else [None]
+    )
+    slice_step = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
+    for rotation in rotations:
+        for sl in range(cfg.nslices):
+            position = (sl - 0.5 * (cfg.nslices - 1)) * slice_step
+            freq = excitation_pulse.gradients[0].amplitude * position
+            for segment in segments:
+                indices = np.resize(segment, cfg.etl)
+                if diffusion is not None:
+                    diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotation)
+                    for block in diffusion:
+                        seq.add_block(*block)
+                excitation_pulse.set_state(freq_offset_hz=freq)
+                for block_idx, block in enumerate(excitation_pulse):
+                    labels = (pp.make_label(type="SET", label="SLC", value=sl),) if block_idx == 0 else ()
+                    seq.add_block(*block, *labels)
+                if gap is not None:
+                    seq.add_block(gap)
+                train.set_state(lin_idx=indices, freq_offset_hz=freq)
+                for block in train:
+                    seq.add_block(*block)
+                if tr_delay is not None:
+                    seq.add_block(tr_delay)
+    return len(segments), len(rotations)
 
 
 def _compute_timing_legacy(opts: pp.Opts, cfg: _Config, strict: bool):
@@ -295,7 +379,6 @@ def _compute_timing_legacy(opts: pp.Opts, cfg: _Config, strict: bool):
     max_pe_area = 0.5 * cfg.ny_pe * (1.0 / cfg.fov_pe_m)
     gy_template = pp.make_trapezoid(channel=cfg.pe_axis, area=max_pe_area, system=opts)
 
-    voxel_size_m = cfg.fov_ro_m / cfg.nx_ro
     crusher = readout.build_z_crusher(opts, cfg.slice_thickness_m)
 
     delta_s, separation_s = preparations.diffusion_timing(cfg.te_s)

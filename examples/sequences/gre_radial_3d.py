@@ -15,7 +15,7 @@ gradient-combination helpers reused here unmodified):
 Stack-of-stars: the same in-plane full-echo radial spoke (logical X axis,
 designed once via ``_gre_common``) is rotated per shot about the physical Z
 axis (``ROTATIONS`` extension, ``pulserver.pypulseq.make_rotation`` — no
-``pulserver.pypulseq.arbgrad`` waveform solver needed for straight spokes) while the
+arbitrary-trajectory solver needed for straight spokes) while the
 partition (kz) dimension is phase-encoded with a conventional Z-channel
 trapezoid, exactly as in ``gre_3d.py``. A rotation purely about Z leaves the
 Z gradient channel untouched, so the two compose in the same block without
@@ -58,17 +58,8 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq import _gradients as encoding
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _sampling as sampling
-from pulserver.pypulseq import _system as system
-from pulserver.pypulseq import arbgrad
-from pulserver.pypulseq._rf import _excitation_helpers as excitation
-from scipy.spatial.transform import Rotation
 
-NUM_ECHOES = 1
-FLYBACK = True
-RO_AXIS = "x"
+DEFAULT_BANDWIDTH_HZ_PX = 125_000.0
 
 USER_SLOT_ORDER_MODE = 0
 
@@ -118,7 +109,7 @@ class GreRadial3DPulseqSequence(Sequence):
             ),
             UIParam.RZ: TypeinFloatParam(value=1.0, min=1.0, max=8.0, incr=1.0, unit="", validate=Validate.NONE),
             UIParam.BANDWIDTH: TypeinFloatParam(
-                value=system.DEFAULT_BANDWIDTH_HZ_PX, min=5_000.0, max=500_000.0, incr=100.0,
+                value=DEFAULT_BANDWIDTH_HZ_PX, min=5_000.0, max=500_000.0, incr=100.0,
                 unit="Hz/px", validate=Validate.NONE,
             ),
             UIParam.SEQUENCE_TYPE: make_enum_param(UIParam.SEQUENCE_TYPE, SequenceType.GRADIENT_ECHO),
@@ -162,7 +153,6 @@ class GreRadial3DPulseqSequence(Sequence):
                 ),
             }
 
-        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
         duration_s = cfg.tr_s * float(cfg.num_shots)
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
@@ -172,10 +162,8 @@ class GreRadial3DPulseqSequence(Sequence):
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
 
-        gz_reph = timing["gz_reph"]
-        gz_spoil = timing["gz_spoil"]
-        gz_pe_template = timing["gz_pe_template"]
-        echo = timing["echo"]
+        pulse = timing["pulse"]
+        radial = timing["radial"]
         te_delay_s = timing["te_delay_s"]
         tr_delay_s = timing["tr_delay_s"]
 
@@ -184,40 +172,29 @@ class GreRadial3DPulseqSequence(Sequence):
 
         seq = pp.Sequence(opts)
 
-        angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
-        par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+        rotations = pp.make_radial_tilt(cfg.num_shots, scheme=cfg.order_mode).to_rotations()
+        sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+        rf_phases = pp.make_rf_spoiling_schedule(cfg.num_shots * len(sampled_par))
+        shot = 0
 
-        rf_phase_deg = 0.0
-        rf_phase_inc_deg = 0.0
-
-        for spoke, angle in enumerate(angles):
-            rotation = pp.make_rotation(Rotation.from_euler("z", float(angle)))
-            label_lin = pp.make_label(type="SET", label="LIN", value=spoke)
-
+        for spoke, rotation in enumerate(rotations):
             for par in sampled_par:
-                z_scale = par_areas[par] / max_par_area if max_par_area > 0.0 else 0.0
-                gz_pre_combined, gz_post_combined = encoding.combined_z_gradients(
-                    z_scale, gz_pe_template, gz_reph, gz_spoil, opts
-                )
-
-                rf_curr = system.copy_event(timing["rf"])
-                rf_curr.phase_offset = np.deg2rad(rf_phase_deg)
-                adc_curr = system.copy_event(echo["adc"])
-                adc_curr.phase_offset = rf_curr.phase_offset
-
-                label_par = pp.make_label(type="SET", label="PAR", value=par)
-                label_slc = pp.make_label(type="SET", label="SLC", value=0)
-
-                seq.add_block(rf_curr, timing["gz"], label_slc, label_par, label_lin)
-                seq.add_block(echo["gx_pre"], gz_pre_combined, rotation)
+                phase = float(rf_phases[shot])
+                pulse.set_state(phase_offset_rad=phase)
+                for block_idx, block in enumerate(pulse):
+                    labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
+                    seq.add_block(*block, *labels)
                 if te_delay is not None:
                     seq.add_block(te_delay)
-                seq.add_block(echo["gx_echo"], adc_curr, rotation)
-                seq.add_block(echo["gx_spoil"], gz_post_combined, rotation)
-
-                rf_phase_deg = (rf_phase_deg + rf_phase_inc_deg) % 360.0
-                rf_phase_inc_deg = (rf_phase_inc_deg + excitation.RF_SPOILING_INC_DEG) % 360.0
+                radial.set_state(
+                    lin_idx=spoke,
+                    par_idx=int(par),
+                    adc_phase_rad=phase,
+                    rotation=rotation,
+                )
+                for block in radial:
+                    seq.add_block(*block)
+                shot += 1
 
             if tr_delay is not None:
                 seq.add_block(tr_delay)
@@ -232,7 +209,7 @@ class GreRadial3DPulseqSequence(Sequence):
         seq.set_definition("SpokeOrder", cfg.order_mode)
         seq.set_definition("BandwidthHzPerPx", cfg.bandwidth_hz_px)
         seq.set_definition("Rz", cfg.rz)
-        seq.set_definition("RfSpoilingIncDeg", excitation.RF_SPOILING_INC_DEG)
+        seq.set_definition("RfSpoilingIncDeg", 117.0)
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("NumShots", cfg.num_shots)
         seq.set_definition("NumPartitions", cfg.npar)
@@ -256,7 +233,7 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.slice_spacing_m = params.param_float(prot, UIParam.SLICE_SPACING) * 1e-3
     cfg.nx_ro = params.param_int(prot, UIParam.NX)
     cfg.npar = params.param_int(prot, UIParam.NSLICES)
-    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, system.DEFAULT_BANDWIDTH_HZ_PX)
+    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, DEFAULT_BANDWIDTH_HZ_PX)
     cfg.rz = max(1, int(round(params.param_float_optional(prot, UIParam.RZ, 1.0))))
     cfg.num_shots = params.param_int_optional(prot, UIParam.NUM_SHOTS, 100)
     cfg.order_mode = _order_mode_name(params.user_float(prot, USER_SLOT_ORDER_MODE, 1.0))
@@ -265,58 +242,39 @@ def _read_protocol(prot: dict) -> _Config:
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | None = None):
     if n_inner is None:
-        n_inner = len(sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0))
-    system.apply_system_derates(opts)
-
-    rf, gz, gz_reph = excitation.slice_selective(opts, cfg.flip_deg, cfg.slab_thickness_m)
-
-    echo = readout.compute_readout_and_echo_train(
-        opts=opts,
-        ro_axis=RO_AXIS,
-        nx_ro=cfg.nx_ro,
-        fov_ro_m=cfg.fov_m,
-        bandwidth_hz_px=cfg.bandwidth_hz_px,
-        slice_thickness_m=cfg.slab_thickness_m,
-        num_echoes=NUM_ECHOES,
-        echo_spacing_s=0.0,
-        flyback=FLYBACK,
-        strict=strict,
+        n_inner = len(pp.calc_sampled_lines(cfg.npar, cfg.rz, 0))
+    pulse = pp.make_slice_selective_pulse(
+        np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
     )
-    if echo is None:
-        return None
-
-    gz_spoil = pp.make_trapezoid(channel="z", area=encoding.SPOIL_FACTOR_Z / cfg.slab_thickness_m, system=opts)
-
-    _, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-    gz_pe_template = pp.make_trapezoid(channel="z", area=max_par_area, system=opts) if max_par_area > 0.0 else None
-    gz_pre_worst, gz_post_worst = encoding.z_worst_case_trapezoids(gz_reph, gz_spoil, max_par_area, opts)
-
-    d_rf = pp.calc_duration(rf, gz)
-    d_pre = pp.calc_duration(echo["gx_pre"], gz_pre_worst)
-    d_post = pp.calc_duration(echo["gx_spoil"], gz_post_worst)
-
-    rf_center_s = pp.calc_rf_center(rf)[0]
-    min_te_s = (d_rf - rf_center_s) + d_pre + echo["adc_center_s"]
-    te_delay_s = cfg.te_s - min_te_s
+    radial = pp.make_radial_stack_readout(
+        opts,
+        cfg.fov_m,
+        cfg.nx_ro,
+        cfg.slice_spacing_m * cfg.npar,
+        cfg.npar,
+        bandwidth_hz_px=cfg.bandwidth_hz_px,
+        slice_rephasing=pulse.rephasers[0],
+    )
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
+    min_te_s = (d_pulse - rf_center_s) + radial.t_prephase_s + 0.5 * radial.readout.read_duration
+    raster = opts.block_duration_raster
+    te_delay_s = round((cfg.te_s - min_te_s) / raster) * raster
     if te_delay_s < -1e-9 and strict:
         return None
     if te_delay_s < 0.0:
         te_delay_s = 0.0
 
-    min_block_s = d_rf + d_pre + te_delay_s + echo["echo_train_span_s"] + d_post
-    tr_delay_s = cfg.tr_s - n_inner * min_block_s
+    min_block_s = d_pulse + te_delay_s + radial.duration
+    tr_delay_s = round((cfg.tr_s - n_inner * min_block_s) / raster) * raster
     if tr_delay_s < -1e-9 and strict:
         return None
     if tr_delay_s < 0.0:
         tr_delay_s = 0.0
 
     return {
-        "rf": rf,
-        "gz": gz,
-        "gz_reph": gz_reph,
-        "gz_spoil": gz_spoil,
-        "gz_pe_template": gz_pe_template,
-        "echo": echo,
+        "pulse": pulse,
+        "radial": radial,
         "te_delay_s": te_delay_s,
         "tr_delay_s": tr_delay_s,
         "min_block_s": min_block_s,

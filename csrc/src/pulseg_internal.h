@@ -634,6 +634,24 @@ typedef struct pulseg__uniform_grad_waveforms
 /* --- pulseg_error.c --- */
 void pulseg__diag_printf(pulseg_diagnostic *diag, const char *fmt, ...);
 
+/* --- pulseg_cache.c: binary-cache IO primitives shared by every .pge
+ * section writer/reader (cache, cache_seqdesc, trajectory, freqmod).
+ * All cache words are 4 bytes; swap on an endianness mismatch. --- */
+void pulseg__swap4(void *p);
+void pulseg__swap4_array(void *p, int count);
+int pulseg__write4(FILE *f, const void *p, int count);
+int pulseg__read4(FILE *f, void *p, int count);
+/* Derive a cache path from a .seq path by swapping the extension (ext
+ * includes the dot; NULL/empty -> PULSEG_CACHE_EXT_DEFAULT). Caller frees. */
+char *pulseg__make_cache_path(const char *seq_path, const char *ext);
+
+/* --- Shared block-definition predicates (pulseg_structure.c) --- */
+int pulseg__block_def_is_pure_delay(const pulseg_base_block *b);
+int pulseg__block_defs_structurally_equal(
+    const pulseg_sequence_descriptor *desc,
+    int id_a,
+    int id_b);
+
 /* --- pulseg_math.c --- */
 float pulseg__trapz_real_uniform(const float *s, int n, float dt);
 float pulseg__trapz_real_nonuniform(const float *s, const float *t, int n);

@@ -1,7 +1,7 @@
 """Standalone 2D single-/multi-shot spin-echo EPI sequence plugin.
 
 This module implements the three mandatory module-level entry points
-required by the bridge dispatcher (see ``gre.py`` for the Cartesian GRE
+required by the bridge dispatcher (see ``gre_2d.py`` for the Cartesian GRE
 family this parallels, and ``_gre_common.py`` / ``_epi_common.py`` /
 ``pulserver`` / ``_diffusion_common.py`` for the shared building
 blocks):
@@ -67,15 +67,6 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq import _gradients as encoding
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _system as system
-from pulserver.pypulseq._rf import _excitation_helpers as excitation
-from pulserver.pypulseq._rf import _preparation_helpers as preparations
-
-RF_REFOCUS_TIME_S = 3.0e-3
-RF_REFOCUS_APODIZATION = 0.5
-RF_REFOCUS_TIME_BW_PRODUCT = 4.0
 
 USER_SLOT_RAMP_SAMPLE = 0
 
@@ -182,20 +173,13 @@ class Epi2DPulseqSequence(Sequence):
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
 
-        gz90 = timing["gz90"]
-        gz_reph = timing["gz_reph"]
-        gx_pre = timing["gx_pre"]
-        gy_pre_template = timing["gy_pre_template"]
-        gy_blip = timing["gy_blip"]
-        gx_pos = timing["gx_pos"]
-        gx_neg = timing["gx_neg"]
-        adc = timing["adc"]
-        tau1_s = timing["tau1_s"]
-        tau2_s = timing["tau2_s"]
+        pulse = timing["pulse"]
+        epi = timing["epi"]
+        diffusion = timing["diffusion"]
+        te_delay_s = timing["te_delay_s"]
         tr_delay_s = timing["tr_delay_s"]
 
-        tau1_delay = pp.make_delay(tau1_s) if tau1_s > 0.0 else None
-        tau2_delay = pp.make_delay(tau2_s) if tau2_s > 0.0 else None
+        te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
         seq = pp.Sequence(opts)
@@ -203,48 +187,32 @@ class Epi2DPulseqSequence(Sequence):
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
         shot_starts = list(range(0, cfg.ny_pe, cfg.etl))
         n_directions = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
-        directions = preparations.diffusion_directions(cfg.n_directions) if cfg.b_value_s_mm2 > 0.0 else [None]
+        rotations = (
+            pp.make_golden_means_3d_tilt(cfg.n_directions).to_rotations()
+            if diffusion is not None
+            else [None]
+        )
 
-        for direction in directions[:n_directions]:
-            diff_grad = (
-                preparations.build_diffusion_gradients(opts, direction, timing["delta_s"], timing["grad_t_per_m"])
-                if direction is not None
-                else []
-            )
-
+        for rotation in rotations[:n_directions]:
             for sl in range(cfg.nslices):
                 slice_offset_m = (sl - 0.5 * (cfg.nslices - 1)) * slice_step_m
 
-                for shot_idx, ky_start in enumerate(shot_starts):
-                    n_lines = min(cfg.etl, cfg.ny_pe - ky_start)
-
-                    rf90 = system.copy_event(timing["rf90"])
-                    rf90.freq_offset = gz90.amplitude * slice_offset_m
-                    rf180 = system.copy_event(timing["rf180"])
-                    rf180.freq_offset = timing["gz180"].amplitude * slice_offset_m
-
-                    seq.add_block(rf90, gz90)
-                    seq.add_block(gz_reph)
-                    seq.add_block(*timing["crusher_before"])
-                    if diff_grad:
-                        seq.add_block(*diff_grad)
-                    if tau1_delay is not None:
-                        seq.add_block(tau1_delay)
-                    seq.add_block(rf180, timing["gz180"])
-                    seq.add_block(*timing["crusher_after"])
-                    if diff_grad:
-                        seq.add_block(*diff_grad)
-                    if tau2_delay is not None:
-                        seq.add_block(tau2_delay)
-
-                    y_start_scale = (2.0 * ky_start / cfg.ny_pe) - 1.0
-                    gy_pre = pp.scale_grad(gy_pre_template, y_start_scale)
-                    seq.add_block(gx_pre, gy_pre)
-
-                    readout.add_epi_train_blocks(
-                        seq, gx_pos, gx_neg, gy_blip, adc, n_lines,
-                        start_polarity_positive=True, emit_lin_labels=True, lin_start=ky_start,
+                for ky_start in shot_starts:
+                    if diffusion is not None:
+                        diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotation)
+                        for block in diffusion:
+                            seq.add_block(*block)
+                    pulse.set_state(
+                        freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m
                     )
+                    for block_idx, block in enumerate(pulse):
+                        labels = (pp.make_label(type="SET", label="SLC", value=sl),) if block_idx == 0 else ()
+                        seq.add_block(*block, *labels)
+                    if te_delay is not None:
+                        seq.add_block(te_delay)
+                    epi.set_state(lin_idx=ky_start)
+                    for block in epi:
+                        seq.add_block(*block)
 
                     if tr_delay is not None:
                         seq.add_block(tr_delay)
@@ -303,100 +271,52 @@ def _read_protocol(prot: dict) -> _Config:
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    system.apply_system_derates(opts)
-
-    rf90, gz90, gz_reph = excitation.slice_selective(opts, cfg.flip_deg, cfg.slice_thickness_m)
-    rf180, gz180, _ = pp.make_sinc_pulse(
-        flip_angle=np.pi,
-        duration=RF_REFOCUS_TIME_S,
-        slice_thickness=cfg.slice_thickness_m,
-        apodization=RF_REFOCUS_APODIZATION,
-        time_bw_product=RF_REFOCUS_TIME_BW_PRODUCT,
-        system=opts,
-        use="refocusing",
-        return_gz=True,
+    pulse = pp.make_slice_selective_pulse(
+        np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, system=opts
     )
-
-    gx_pos, gx_neg, adc = readout.build_epi_readout(
-        opts, "x", cfg.nx_ro, cfg.fov_ro_m, cfg.bandwidth_hz_px, cfg.ramp_sample
+    mask = np.arange(min(cfg.etl, cfg.ny_pe), dtype=int)
+    epi = pp.make_epi_readout(
+        opts,
+        (cfg.fov_ro_m, cfg.fov_pe_m),
+        (cfg.nx_ro, cfg.ny_pe),
+        _n_shots(cfg),
+        mask,
+        bandwidth_hz_px=cfg.bandwidth_hz_px,
+        ramp_sample=cfg.ramp_sample,
     )
-    gy_blip = readout.build_pe_blip(opts, "y", cfg.fov_pe_m)
+    diffusion = None
+    if cfg.b_value_s_mm2 > 0.0:
+        try:
+            diffusion = pp.make_diffusion_prep(
+                cfg.b_value_s_mm2,
+                voxel_size=cfg.fov_ro_m / cfg.nx_ro,
+                system=opts,
+            )
+        except ValueError:
+            if strict:
+                return None
 
-    gx_pre = pp.make_trapezoid(channel="x", area=-0.5 * gx_pos.area, system=opts)
-    max_pe_area = 0.5 * cfg.ny_pe * (1.0 / cfg.fov_pe_m)
-    gy_pre_template = pp.make_trapezoid(channel="y", area=max_pe_area, system=opts)
-
-    voxel_size_m = cfg.fov_ro_m / cfg.nx_ro
-    crusher_before = encoding.make_spoiler(opts, voxel_size_m)
-    crusher_after = encoding.make_spoiler(opts, voxel_size_m)
-
-    delta_s, separation_s = preparations.diffusion_timing(cfg.te_s)
-    grad_t_per_m = preparations.required_gradient_t_per_m(cfg.b_value_s_mm2, delta_s, separation_s, opts.gamma)
-    max_grad_t_per_m = opts.max_grad / opts.gamma
-    if grad_t_per_m > max_grad_t_per_m:
-        if strict:
-            return None
-        grad_t_per_m = max_grad_t_per_m
-    diff_grad_duration_s = delta_s if cfg.b_value_s_mm2 > 0.0 else 0.0
-
-    d90_s = pp.calc_duration(rf90, gz90)
-    c90_s = pp.calc_rf_center(rf90)[0]
-    d180_s = pp.calc_duration(rf180, gz180)
-    c180_s = pp.calc_rf_center(rf180)[0]
-
-    d_gz_reph_s = pp.calc_duration(gz_reph)
-    d_crusher_before_s = pp.calc_duration(*crusher_before)
-    d_crusher_after_s = pp.calc_duration(*crusher_after)
-    d_prephasers_s = pp.calc_duration(gx_pre, gy_pre_template)
-
-    if cfg.ramp_sample:
-        adc_center_s = adc.delay + 0.5 * pp.calc_duration(gx_pos)
-    else:
-        adc_center_s = adc.delay + 0.5 * gx_pos.flat_time
-
-    pre180_fixed_s = d_gz_reph_s + d_crusher_before_s + diff_grad_duration_s
-    post180_fixed_s = d_crusher_after_s + diff_grad_duration_s + d_prephasers_s + adc_center_s
-
-    delays = readout.pre_post_180_delays(
-        cfg.te_s / 2.0, d90_s, c90_s, d180_s, c180_s, pre180_fixed_s, post180_fixed_s, strict
-    )
-    if delays is None:
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
+    first_echo_s = epi.duration - (epi.etl - 0.5) * epi.esp
+    raster = opts.block_duration_raster
+    te_delay_s = round((cfg.te_s - (d_pulse - rf_center_s) - first_echo_s) / raster) * raster
+    if te_delay_s < -1e-9 and strict:
         return None
-    tau1_s, tau2_s = delays
-
-    n_lines_first_shot = min(cfg.etl, cfg.ny_pe)
-    line_period_s = pp.calc_duration(gx_pos)
-    train_span_s = n_lines_first_shot * line_period_s + max(0, n_lines_first_shot - 1) * pp.calc_duration(gy_blip)
-
-    min_block_s = (
-        d90_s + d_gz_reph_s + d_crusher_before_s + diff_grad_duration_s + tau1_s
-        + d180_s + d_crusher_after_s + diff_grad_duration_s + tau2_s
-        + d_prephasers_s + train_span_s
-    )
-    tr_delay_s = cfg.tr_s - min_block_s
+    te_delay_s = max(0.0, te_delay_s)
+    prep_duration = 0.0 if diffusion is None else diffusion.duration
+    min_block_s = prep_duration + d_pulse + te_delay_s + epi.duration
+    tr_delay_s = round((cfg.tr_s - min_block_s) / raster) * raster
     if tr_delay_s < -1e-9 and strict:
         return None
     if tr_delay_s < 0.0:
         tr_delay_s = 0.0
 
     return {
-        "rf90": rf90,
-        "gz90": gz90,
-        "gz_reph": gz_reph,
-        "rf180": rf180,
-        "gz180": gz180,
-        "gx_pre": gx_pre,
-        "gy_pre_template": gy_pre_template,
-        "gy_blip": gy_blip,
-        "gx_pos": gx_pos,
-        "gx_neg": gx_neg,
-        "adc": adc,
-        "crusher_before": crusher_before,
-        "crusher_after": crusher_after,
-        "delta_s": delta_s,
-        "grad_t_per_m": grad_t_per_m,
-        "tau1_s": tau1_s,
-        "tau2_s": tau2_s,
+        "pulse": pulse,
+        "epi": epi,
+        "diffusion": diffusion,
+        "te_delay_s": te_delay_s,
         "tr_delay_s": tr_delay_s,
         "min_block_s": min_block_s,
     }

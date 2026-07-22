@@ -1958,28 +1958,8 @@ write_fail:
  * header carries an endian marker and the COMMON/ROTATIONS/SHAPES/SCANLOOP
  * payload readers already swap on mismatch. This payload is read on the
  * @rsp/@pg target board (big-endian PowerPC on LX scanners) from a file
- * written by the little-endian host, so it needs the same treatment.
- * fm_-prefixed names: pulseg_cache.c has its own static swap4 and the PSD
- * amalgamation compiles both files into one translation unit. */
-
-static void fm_swap4(void *p)
-{
-    unsigned char *b = (unsigned char *)p;
-    unsigned char t;
-    t = b[0];
-    b[0] = b[3];
-    b[3] = t;
-    t = b[1];
-    b[1] = b[2];
-    b[2] = t;
-}
-
-static void fm_swap4_array(void *p, size_t count)
-{
-    size_t i;
-    for (i = 0; i < count; ++i)
-        fm_swap4((unsigned char *)p + i * 4);
-}
+ * written by the little-endian host, so it needs the same treatment via the
+ * shared pulseg__swap4 helpers (pulseg_internal.h). */
 
 static int freq_mod_library_read_cache(
     pulseg_freq_mod_library **out_lib,
@@ -2008,9 +1988,9 @@ static int freq_mod_library_read_cache(
         goto read_fail;
     if (do_swap)
     {
-        fm_swap4(&lib->num_entries);
-        fm_swap4(&lib->max_samples);
-        fm_swap4(&lib->raster_us);
+        pulseg__swap4(&lib->num_entries);
+        pulseg__swap4(&lib->max_samples);
+        pulseg__swap4(&lib->raster_us);
     }
 
     if (lib->num_entries > 0)
@@ -2022,7 +2002,7 @@ static int freq_mod_library_read_cache(
             (size_t)lib->num_entries)
             goto read_fail;
         if (do_swap)
-            fm_swap4_array(lib->entry_num_samples, (size_t)lib->num_entries);
+            pulseg__swap4_array(lib->entry_num_samples, (size_t)lib->num_entries);
     }
 
     /* 3-channel waveforms (always present) */
@@ -2035,7 +2015,7 @@ static int freq_mod_library_read_cache(
         if (fread(lib->entry_waveform_3ch, sizeof(float), total, f) != total)
             goto read_fail;
         if (do_swap)
-            fm_swap4_array(lib->entry_waveform_3ch, total);
+            pulseg__swap4_array(lib->entry_waveform_3ch, total);
 
         {
             size_t reftotal = (size_t)lib->num_entries * 3;
@@ -2045,7 +2025,7 @@ static int freq_mod_library_read_cache(
             if (fread(lib->entry_ref_3ch, sizeof(float), reftotal, f) != reftotal)
                 goto read_fail;
             if (do_swap)
-                fm_swap4_array(lib->entry_ref_3ch, reftotal);
+                pulseg__swap4_array(lib->entry_ref_3ch, reftotal);
         }
     }
 
@@ -2053,7 +2033,7 @@ static int freq_mod_library_read_cache(
     if (fread(&lib->num_rotations, sizeof(int), 1, f) != 1)
         goto read_fail;
     if (do_swap)
-        fm_swap4(&lib->num_rotations);
+        pulseg__swap4(&lib->num_rotations);
     if (lib->num_rotations > 0)
     {
         lib->rotations = PULSEG_ALLOC((size_t)lib->num_rotations * sizeof(float[9]));
@@ -2063,14 +2043,14 @@ static int freq_mod_library_read_cache(
             (size_t)lib->num_rotations)
             goto read_fail;
         if (do_swap)
-            fm_swap4_array(lib->rotations, (size_t)lib->num_rotations * 9);
+            pulseg__swap4_array(lib->rotations, (size_t)lib->num_rotations * 9);
     }
 
     /* Plan instance metadata */
     if (fread(&lib->num_plan_instances, sizeof(int), 1, f) != 1)
         goto read_fail;
     if (do_swap)
-        fm_swap4(&lib->num_plan_instances);
+        pulseg__swap4(&lib->num_plan_instances);
     if (lib->num_plan_instances > 0)
     {
         lib->pi_entry_idx = (int *)PULSEG_ALLOC((size_t)lib->num_plan_instances * sizeof(int));
@@ -2086,8 +2066,8 @@ static int freq_mod_library_read_cache(
             goto read_fail;
         if (do_swap)
         {
-            fm_swap4_array(lib->pi_entry_idx, (size_t)lib->num_plan_instances);
-            fm_swap4_array(lib->pi_rotation_idx, (size_t)lib->num_plan_instances);
+            pulseg__swap4_array(lib->pi_entry_idx, (size_t)lib->num_plan_instances);
+            pulseg__swap4_array(lib->pi_rotation_idx, (size_t)lib->num_plan_instances);
         }
 
         /* Allocate plan arrays */
@@ -2098,7 +2078,7 @@ static int freq_mod_library_read_cache(
             (size_t)lib->num_plan_instances)
             goto read_fail;
         if (do_swap)
-            fm_swap4_array(lib->plan_num_samples, (size_t)lib->num_plan_instances);
+            pulseg__swap4_array(lib->plan_num_samples, (size_t)lib->num_plan_instances);
 
         /* plan_waveform_data / plan_phase are NOT cached (shift-dependent).
          * alloc_plan already set up the plan_waveforms row pointers, and
@@ -2110,7 +2090,7 @@ static int freq_mod_library_read_cache(
     if (fread(&lib->exec_stream_len, sizeof(int), 1, f) != 1)
         goto read_fail;
     if (do_swap)
-        fm_swap4(&lib->exec_stream_len);
+        pulseg__swap4(&lib->exec_stream_len);
     if (lib->exec_stream_len > 0)
     {
         lib->scan_to_plan = (int *)PULSEG_ALLOC((size_t)lib->exec_stream_len * sizeof(int));
@@ -2120,7 +2100,7 @@ static int freq_mod_library_read_cache(
             (size_t)lib->exec_stream_len)
             goto read_fail;
         if (do_swap)
-            fm_swap4_array(lib->scan_to_plan, (size_t)lib->exec_stream_len);
+            pulseg__swap4_array(lib->scan_to_plan, (size_t)lib->exec_stream_len);
 
         /* Inactive-axis gradient areas */
         {
@@ -2128,7 +2108,7 @@ static int freq_mod_library_read_cache(
             if (fread(&has_ia, sizeof(int), 1, f) != 1)
                 goto read_fail;
             if (do_swap)
-                fm_swap4(&has_ia);
+                pulseg__swap4(&has_ia);
             if (has_ia)
             {
                 size_t ia_total = (size_t)lib->exec_stream_len * 3;
@@ -2138,7 +2118,7 @@ static int freq_mod_library_read_cache(
                 if (fread(lib->scan_inactive_area_3ch, sizeof(float), ia_total, f) != ia_total)
                     goto read_fail;
                 if (do_swap)
-                    fm_swap4_array(lib->scan_inactive_area_3ch, ia_total);
+                    pulseg__swap4_array(lib->scan_inactive_area_3ch, ia_total);
                 lib->scan_phase_extra =
                     (float *)PULSEG_ALLOC((size_t)lib->exec_stream_len * sizeof(float));
                 if (!lib->scan_phase_extra)
@@ -2336,7 +2316,7 @@ int pulseg__freq_mod_collection_read_f(
     if (fread(&nsub, sizeof(int), 1, f) != 1)
         return PULSEG_ERR_FILE_READ_FAILED;
     if (do_swap)
-        fm_swap4(&nsub);
+        pulseg__swap4(&nsub);
     if (nsub != coll->num_subsequences)
         return PULSEG_ERR_FILE_READ_FAILED;
 

@@ -56,13 +56,6 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq import _gradients as encoding
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _sampling as sampling
-from pulserver.pypulseq import _system as system
-from pulserver.pypulseq import arbgrad
-from pulserver.pypulseq._rf import _excitation_helpers as excitation
-from scipy.spatial.transform import Rotation
 
 USER_SLOT_TRAJECTORY = 0
 USER_SLOT_ORDER_MODE = 1
@@ -160,12 +153,8 @@ class GreNoncart3DPulseqSequence(Sequence):
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
 
-        gz_reph = timing["gz_reph"]
-        gz_spoil = timing["gz_spoil"]
-        gz_pe_template = timing["gz_pe_template"]
-        gx_ro = timing["gx_ro"]
-        gy_ro = timing["gy_ro"]
-        adc = timing["adc"]
+        pulse = timing["pulse"]
+        readout_module = timing["readout"]
         te_delay_s = timing["te_delay_s"]
         tr_delay_s = timing["tr_delay_s"]
 
@@ -174,40 +163,29 @@ class GreNoncart3DPulseqSequence(Sequence):
 
         seq = pp.Sequence(opts)
 
-        angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
-        par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+        rotations = pp.make_radial_tilt(cfg.num_shots, scheme=cfg.order_mode).to_rotations()
+        sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+        rf_phases = pp.make_rf_spoiling_schedule(cfg.num_shots * len(sampled_par))
+        phase_idx = 0
 
-        rf_phase_deg = 0.0
-        rf_phase_inc_deg = 0.0
-
-        for shot, angle in enumerate(angles):
-            rotation = pp.make_rotation(Rotation.from_euler("z", float(angle)))
-            label_lin = pp.make_label(type="SET", label="LIN", value=shot)
-
+        for shot, rotation in enumerate(rotations):
             for par in sampled_par:
-                z_scale = par_areas[par] / max_par_area if max_par_area > 0.0 else 0.0
-                gz_pre_combined, gz_post_combined = encoding.combined_z_gradients(
-                    z_scale, gz_pe_template, gz_reph, gz_spoil, opts
-                )
-
-                rf_curr = system.copy_event(timing["rf"])
-                rf_curr.phase_offset = np.deg2rad(rf_phase_deg)
-                adc_curr = system.copy_event(adc)
-                adc_curr.phase_offset = rf_curr.phase_offset
-
-                label_par = pp.make_label(type="SET", label="PAR", value=par)
-                label_slc = pp.make_label(type="SET", label="SLC", value=0)
-
-                seq.add_block(rf_curr, timing["gz"], label_slc, label_par, label_lin)
-                seq.add_block(gz_pre_combined)
+                phase = float(rf_phases[phase_idx])
+                pulse.set_state(phase_offset_rad=phase)
+                for block_idx, block in enumerate(pulse):
+                    labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
+                    seq.add_block(*block, *labels)
                 if te_delay is not None:
                     seq.add_block(te_delay)
-                seq.add_block(gx_ro, gy_ro, adc_curr, rotation)
-                seq.add_block(gz_post_combined)
-
-                rf_phase_deg = (rf_phase_deg + rf_phase_inc_deg) % 360.0
-                rf_phase_inc_deg = (rf_phase_inc_deg + excitation.RF_SPOILING_INC_DEG) % 360.0
+                readout_module.set_state(
+                    lin_idx=shot,
+                    par_idx=int(par),
+                    adc_phase_rad=phase,
+                    rotation=rotation,
+                )
+                for block in readout_module:
+                    seq.add_block(*block)
+                phase_idx += 1
 
             if tr_delay is not None:
                 seq.add_block(tr_delay)
@@ -221,7 +199,7 @@ class GreNoncart3DPulseqSequence(Sequence):
         seq.set_definition("Trajectory", cfg.trajectory)
         seq.set_definition("ShotOrder", cfg.order_mode)
         seq.set_definition("Rz", cfg.rz)
-        seq.set_definition("RfSpoilingIncDeg", excitation.RF_SPOILING_INC_DEG)
+        seq.set_definition("RfSpoilingIncDeg", 117.0)
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("NumShots", cfg.num_shots)
         seq.set_definition("NumPartitions", cfg.npar)
@@ -247,57 +225,58 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.npar = params.param_int(prot, UIParam.NSLICES)
     cfg.rz = max(1, int(round(params.param_float_optional(prot, UIParam.RZ, 1.0))))
     cfg.num_shots = params.param_int_optional(prot, UIParam.NUM_SHOTS, 32)
-    cfg.trajectory = readout.trajectory_name(params.user_float(prot, USER_SLOT_TRAJECTORY, 0.0))
-    cfg.order_mode = readout.order_mode_name(params.user_float(prot, USER_SLOT_ORDER_MODE, 1.0))
+    cfg.trajectory = "rosette" if params.user_float(prot, USER_SLOT_TRAJECTORY, 0.0) >= 0.5 else "spiral"
+    cfg.order_mode = "golden" if params.user_float(prot, USER_SLOT_ORDER_MODE, 1.0) >= 0.5 else "uniform"
     return cfg
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | None = None):
     if n_inner is None:
-        n_inner = len(sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0))
-    system.apply_system_derates(opts)
+        n_inner = len(pp.calc_sampled_lines(cfg.npar, cfg.rz, 0))
+    pulse = pp.make_slice_selective_pulse(
+        np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
+    )
+    fov_z = cfg.slice_spacing_m * cfg.npar
+    if cfg.trajectory == "spiral":
+        readout_module = pp.make_spiral_stack_readout(
+            opts,
+            cfg.fov_m,
+            cfg.nx_ro,
+            cfg.num_shots,
+            fov_z,
+            cfg.npar,
+            slice_rephasing=pulse.rephasers[0],
+        )
+    else:
+        readout_module = pp.make_rosette_stack_readout(
+            opts,
+            cfg.fov_m,
+            cfg.nx_ro,
+            fov_z,
+            cfg.npar,
+            slice_rephasing=pulse.rephasers[0],
+        )
 
-    rf, gz, gz_reph = excitation.slice_selective(opts, cfg.flip_deg, cfg.slab_thickness_m)
-
-    _, grad_si_xy, _ = readout.build_base_waveform(opts, cfg.trajectory, cfg.fov_m, cfg.nx_ro)
-    gx_ro, gy_ro = readout.build_readout_gradients(opts, grad_si_xy)
-    adc = readout.build_readout_adc(opts, grad_si_xy.shape[0])
-
-    gz_spoil = pp.make_trapezoid(channel="z", area=encoding.SPOIL_FACTOR_Z / cfg.slab_thickness_m, system=opts)
-
-    _, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-    gz_pe_template = pp.make_trapezoid(channel="z", area=max_par_area, system=opts) if max_par_area > 0.0 else None
-    gz_pre_worst, gz_post_worst = encoding.z_worst_case_trapezoids(gz_reph, gz_spoil, max_par_area, opts)
-
-    d_rf = pp.calc_duration(rf, gz)
-    d_pre = pp.calc_duration(gz_pre_worst)
-    d_ro = pp.calc_duration(gx_ro, gy_ro, adc)
-    d_post = pp.calc_duration(gz_post_worst)
-
-    rf_center_s = pp.calc_rf_center(rf)[0]
-    min_te_s = (d_rf - rf_center_s) + d_pre + adc.delay
-    te_delay_s = cfg.te_s - min_te_s
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
+    min_te_s = d_pulse - rf_center_s + readout_module.t_prephase_s
+    raster = opts.block_duration_raster
+    te_delay_s = round((cfg.te_s - min_te_s) / raster) * raster
     if te_delay_s < -1e-9 and strict:
         return None
     if te_delay_s < 0.0:
         te_delay_s = 0.0
 
-    min_block_s = d_rf + d_pre + te_delay_s + d_ro + d_post
-    tr_delay_s = cfg.tr_s - n_inner * min_block_s
+    min_block_s = d_pulse + te_delay_s + readout_module.duration
+    tr_delay_s = round((cfg.tr_s - n_inner * min_block_s) / raster) * raster
     if tr_delay_s < -1e-9 and strict:
         return None
     if tr_delay_s < 0.0:
         tr_delay_s = 0.0
 
     return {
-        "rf": rf,
-        "gz": gz,
-        "gz_reph": gz_reph,
-        "gz_spoil": gz_spoil,
-        "gz_pe_template": gz_pe_template,
-        "gx_ro": gx_ro,
-        "gy_ro": gy_ro,
-        "adc": adc,
+        "pulse": pulse,
+        "readout": readout_module,
         "te_delay_s": te_delay_s,
         "tr_delay_s": tr_delay_s,
         "min_block_s": min_block_s,

@@ -1,7 +1,7 @@
 """Standalone 2D non-Cartesian (spiral/rosette) GRE sequence plugin.
 
 This module implements the three mandatory module-level entry points
-required by the bridge dispatcher (see ``gre.py`` for the Cartesian 2D GRE
+required by the bridge dispatcher (see ``gre_2d.py`` for the Cartesian 2D GRE
 this parallels, ``gre_radial_2d.py`` for the plain-trapezoid non-Cartesian
 sibling, and ``_noncart_common.py``/``_gre_common.py`` for the shared
 building blocks):
@@ -13,7 +13,7 @@ building blocks):
   and write it to *output_path* using :func:`pulserver.io.write`.
 
 A single slew/gradient-limited base waveform (spiral or rosette, chosen via
-an ``opuser`` toggle) is designed once via ``pulserver.pypulseq.arbgrad`` and
+an ``opuser`` toggle) is designed once via the public readout factories and
 replayed per shot with a per-shot in-plane rotation (pulseq ``ROTATIONS``
 extension, ``pulserver.pypulseq.make_rotation``) — the C++ solver never loops
 over shots itself, per the project's arbgrad design rule. The trajectory
@@ -58,12 +58,6 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq import _gradients as encoding
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _system as system
-from pulserver.pypulseq import arbgrad
-from pulserver.pypulseq._rf import _excitation_helpers as excitation
-from scipy.spatial.transform import Rotation
 
 USER_SLOT_TRAJECTORY = 0
 USER_SLOT_ORDER_MODE = 1
@@ -160,12 +154,8 @@ class GreNoncart2DPulseqSequence(Sequence):
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
 
-        gz = timing["gz"]
-        gz_reph = timing["gz_reph"]
-        gz_spoil = timing["gz_spoil"]
-        gx_ro = timing["gx_ro"]
-        gy_ro = timing["gy_ro"]
-        adc = timing["adc"]
+        pulse = timing["pulse"]
+        readout_module = timing["readout"]
         te_delay_s = timing["te_delay_s"]
         tr_delay_s = timing["tr_delay_s"]
 
@@ -174,35 +164,30 @@ class GreNoncart2DPulseqSequence(Sequence):
 
         seq = pp.Sequence(opts)
 
-        angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
+        rotations = pp.make_radial_tilt(cfg.num_shots, scheme=cfg.order_mode).to_rotations()
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
-        rf_phase_deg = 0.0
-        rf_phase_inc_deg = 0.0
+        rf_phases = pp.make_rf_spoiling_schedule(cfg.num_shots * cfg.nslices)
+        phase_idx = 0
 
-        for shot, angle in enumerate(angles):
-            rotation = pp.make_rotation(Rotation.from_euler("z", float(angle)))
-            label_lin = pp.make_label(type="SET", label="LIN", value=shot)
-
+        for shot, rotation in enumerate(rotations):
             for sl in range(cfg.nslices):
                 slice_offset_m = (sl - 0.5 * (cfg.nslices - 1)) * slice_step_m
-
-                rf_curr = system.copy_event(timing["rf"])
-                rf_curr.freq_offset = gz.amplitude * slice_offset_m
-                rf_curr.phase_offset = np.deg2rad(rf_phase_deg)
-                adc_curr = system.copy_event(adc)
-                adc_curr.phase_offset = rf_curr.phase_offset
-
-                label_slc = pp.make_label(type="SET", label="SLC", value=sl)
-
-                seq.add_block(rf_curr, gz, label_slc, label_lin)
-                seq.add_block(gz_reph)
+                phase = float(rf_phases[phase_idx])
+                pulse.set_state(
+                    freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m,
+                    phase_offset_rad=phase,
+                )
+                for block_idx, block in enumerate(pulse):
+                    labels = (pp.make_label(type="SET", label="SLC", value=sl),) if block_idx == 0 else ()
+                    seq.add_block(*block, *labels)
                 if te_delay is not None:
                     seq.add_block(te_delay)
-                seq.add_block(gx_ro, gy_ro, adc_curr, rotation)
-                seq.add_block(gz_spoil)
-
-                rf_phase_deg = (rf_phase_deg + rf_phase_inc_deg) % 360.0
-                rf_phase_inc_deg = (rf_phase_inc_deg + excitation.RF_SPOILING_INC_DEG) % 360.0
+                readout_module.set_state(
+                    lin_idx=shot, adc_phase_rad=phase, rotation=rotation
+                )
+                for block in readout_module:
+                    seq.add_block(*block)
+                phase_idx += 1
 
             if tr_delay is not None:
                 seq.add_block(tr_delay)
@@ -215,7 +200,7 @@ class GreNoncart2DPulseqSequence(Sequence):
         seq.set_definition("ImagingMode", "2d")
         seq.set_definition("Trajectory", cfg.trajectory)
         seq.set_definition("ShotOrder", cfg.order_mode)
-        seq.set_definition("RfSpoilingIncDeg", excitation.RF_SPOILING_INC_DEG)
+        seq.set_definition("RfSpoilingIncDeg", 117.0)
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("NumShots", cfg.num_shots)
         seq.set_definition("NumSlices", cfg.nslices)
@@ -240,53 +225,50 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.nx_ro = params.param_int(prot, UIParam.NX)
     cfg.nslices = params.param_int(prot, UIParam.NSLICES)
     cfg.num_shots = params.param_int_optional(prot, UIParam.NUM_SHOTS, 32)
-    cfg.trajectory = readout.trajectory_name(params.user_float(prot, USER_SLOT_TRAJECTORY, 0.0))
-    cfg.order_mode = readout.order_mode_name(params.user_float(prot, USER_SLOT_ORDER_MODE, 1.0))
+    cfg.trajectory = "rosette" if params.user_float(prot, USER_SLOT_TRAJECTORY, 0.0) >= 0.5 else "spiral"
+    cfg.order_mode = "golden" if params.user_float(prot, USER_SLOT_ORDER_MODE, 1.0) >= 0.5 else "uniform"
     return cfg
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | None = None):
     if n_inner is None:
         n_inner = cfg.nslices
-    system.apply_system_derates(opts)
+    pulse = pp.make_slice_selective_pulse(
+        np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, system=opts
+    )
+    if cfg.trajectory == "spiral":
+        readout_module = pp.make_spiral_readout(
+            opts,
+            cfg.fov_m,
+            cfg.nx_ro,
+            cfg.num_shots,
+            slice_rephasing=pulse.rephasers[0],
+        )
+    else:
+        readout_module = pp.make_rosette_readout(
+            opts, cfg.fov_m, cfg.nx_ro, slice_rephasing=pulse.rephasers[0]
+        )
 
-    rf, gz, gz_reph = excitation.slice_selective(opts, cfg.flip_deg, cfg.slice_thickness_m)
-
-    _, grad_si_xy, _ = readout.build_base_waveform(opts, cfg.trajectory, cfg.fov_m, cfg.nx_ro)
-    gx_ro, gy_ro = readout.build_readout_gradients(opts, grad_si_xy)
-    adc = readout.build_readout_adc(opts, grad_si_xy.shape[0])
-
-    gz_spoil = pp.make_trapezoid(channel="z", area=encoding.SPOIL_FACTOR_Z / cfg.slice_thickness_m, system=opts)
-
-    d_rf = pp.calc_duration(rf, gz)
-    d_pre = pp.calc_duration(gz_reph)
-    d_ro = pp.calc_duration(gx_ro, gy_ro, adc)
-    d_spoil = pp.calc_duration(gz_spoil)
-
-    rf_center_s = pp.calc_rf_center(rf)[0]
-    # k-space center is the first ADC sample (waveform starts at k0 ~ 0).
-    min_te_s = (d_rf - rf_center_s) + d_pre + adc.delay
-    te_delay_s = cfg.te_s - min_te_s
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
+    min_te_s = d_pulse - rf_center_s + readout_module.t_prephase_s
+    raster = opts.block_duration_raster
+    te_delay_s = round((cfg.te_s - min_te_s) / raster) * raster
     if te_delay_s < -1e-9 and strict:
         return None
     if te_delay_s < 0.0:
         te_delay_s = 0.0
 
-    min_block_s = d_rf + d_pre + te_delay_s + d_ro + d_spoil
-    tr_delay_s = cfg.tr_s - n_inner * min_block_s
+    min_block_s = d_pulse + te_delay_s + readout_module.duration
+    tr_delay_s = round((cfg.tr_s - n_inner * min_block_s) / raster) * raster
     if tr_delay_s < -1e-9 and strict:
         return None
     if tr_delay_s < 0.0:
         tr_delay_s = 0.0
 
     return {
-        "rf": rf,
-        "gz": gz,
-        "gz_reph": gz_reph,
-        "gz_spoil": gz_spoil,
-        "gx_ro": gx_ro,
-        "gy_ro": gy_ro,
-        "adc": adc,
+        "pulse": pulse,
+        "readout": readout_module,
         "te_delay_s": te_delay_s,
         "tr_delay_s": tr_delay_s,
         "min_block_s": min_block_s,

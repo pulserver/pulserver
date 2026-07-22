@@ -21,6 +21,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from types import SimpleNamespace
 
+from .bssfp import Bssfp2D, Bssfp3D
 from .epi import Epi2D, Epi2DFlyback, Epi3D, Epi3DFlyback
 from .fse import Fse2D, Fse3D
 from .line import Line2D, Line3D
@@ -59,6 +60,197 @@ def _readout_width(fov_x: float, nx: int, oversamp: float, pf: float) -> float:
     return n_samples / (oversamp * fov_x)
 
 
+def _unpack_bssfp_excitation(excitation):
+    """Return the caller-designed ``(rf, gz, gz_reph)`` bSSFP input triple."""
+    try:
+        rf = excitation.rf
+        gradients = tuple(excitation.gradients)
+        rephasers = tuple(excitation.rephasers)
+    except AttributeError:
+        try:
+            rf, gradient, rephaser = excitation
+        except (TypeError, ValueError) as error:
+            try:
+                rf = excitation.rf
+            except AttributeError:
+                raise TypeError(
+                    "excitation must be an RfPulse or an (rf, gradient, rephaser) triple"
+                ) from error
+            gradients = ()
+            rephasers = ()
+        else:
+            gradients = (gradient,)
+            rephasers = (rephaser,)
+    if not gradients and not rephasers:
+        return rf, None, None
+    if len(gradients) != 1 or len(rephasers) != 1:
+        raise ValueError("bSSFP excitation must contain exactly one selection gradient and one rephaser")
+    gradient, rephaser = gradients[0], rephasers[0]
+    if getattr(gradient, "channel", None) != "z" or getattr(rephaser, "channel", None) != "z":
+        raise ValueError("bSSFP excitation selection gradient and rephaser must both be on z")
+    return rf, gradient, rephaser
+
+
+def make_bssfp_readout(
+    system,
+    fov,
+    matrix,
+    excitation,
+    *,
+    segment: int = 1,
+    bandwidth_hz_px: float = 100_000.0,
+):
+    """Create an optimized continuous-gradient bSSFP/TRUFI acquisition.
+
+    This is a complete bSSFP encoding train, not a balanced isolated line.
+    The caller owns RF design through ``excitation``; this factory reshapes
+    its supplied selection gradient and rephaser into the Pulseq
+    ``writeTrufi`` construction: an alpha/2 startup pulse, alternating 0/pi
+    RF and receiver phase, and phase encodes whose readout and slice/slab
+    gradients share ramps across consecutive TRs.
+    Every emitted train starts with ``SET ONCE=1`` and ends with ``SET
+    ONCE=2`` so an interpreter can identify the startup and ramp-down.
+
+    The 2D variant contains the complete ``ky`` acquisition in one module.
+    For 3D, ``segment`` divides the complete ``ky``/``kz`` grid into that many
+    equal-length, structurally identical shots; append each with a different
+    ``segment_idx``.  The 3D form deliberately does not make one monolithic
+    block train that would exceed an EPIC segment's practical size.
+
+    Parameters
+    ----------
+    system : pypulseq.Opts
+        System limits used both to design ``excitation`` and to build the
+        bSSFP encoding; the factory does not mutate them.
+    fov : tuple of float
+        ``(fov_x_m, fov_y_m)`` for 2D or ``(fov_x_m, fov_y_m, fov_z_m)`` for
+        3D, in metres.
+    matrix : tuple of int
+        ``(nx, ny)`` for 2D or ``(nx, ny, nz)`` for 3D.
+    excitation : SequenceModule or tuple
+        Caller-designed RF module.  A slice/slab-selective module, normally
+        from :func:`make_slice_selective_pulse`, must contain exactly one z
+        selection gradient and one z rephaser.  A nonselective module, such
+        as :func:`make_hard_pulse`, is accepted for 3D only.  An explicit
+        ``(rf, selection_gradient, rephaser)`` triple is also accepted.
+    segment : int, optional
+        Number of equal 3D shots (default 1).  It must divide ``ny*nz``.  2D
+        accepts only the default value.
+    bandwidth_hz_px : float, optional
+        Receiver bandwidth per readout pixel (default 100 kHz).
+
+    Returns
+    -------
+    Bssfp2D or Bssfp3D
+        Stateful module.  ``tr_s`` and ``te_s`` are the steady-state timing;
+        ``lines_per_segment`` and ``num_segments`` describe the 3D split.
+
+    Raises
+    ------
+    ValueError
+        If dimensions are invalid or a 3D segment is uneven.
+
+    Examples
+    --------
+    Design the RF independently, then append a complete optimized 2D TRUFI
+    train::
+
+        excitation = pp.make_slice_selective_pulse(
+            np.deg2rad(35), 5e-3, duration=0.6e-3, system=system)
+        bssfp = pp.make_bssfp_readout(
+            system, (0.22, 0.22), (128, 128), excitation)
+        bssfp.set_state(rf_phase_rad=0.0)
+        for block in bssfp:
+            seq.add_block(*block)
+
+    Partition a slab-selective 3D volume into four equal shots.  All four calls have the
+    same block structure; only LIN/PAR labels, phase encodes, and the global
+    alternating RF phase advance::
+
+        excitation = pp.make_slice_selective_pulse(
+            np.deg2rad(25), 0.16, duration=0.6e-3, system=system)
+        bssfp = pp.make_bssfp_readout(
+            system, (0.22, 0.22, 0.16), (128, 64, 16), excitation, segment=4)
+        for segment_idx in range(bssfp.num_segments):
+            bssfp.set_state(segment_idx=segment_idx)
+            for block in bssfp:
+                seq.add_block(*block)
+
+    .. plot::
+       :include-source: false
+
+       import matplotlib.pyplot as plt
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = pp.make_slice_selective_pulse(np.deg2rad(35), 5e-3, duration=0.6e-3, system=system)
+       train = pp.make_bssfp_readout(system, (0.22, 0.22), (64, 12), excitation)
+       train.plot()
+       plt.gcf().suptitle("optimized 2D bSSFP: alpha/2 prep, continuous TRs, ramp-down")
+
+    .. plot::
+       :include-source: false
+
+       import matplotlib.pyplot as plt
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = pp.make_slice_selective_pulse(np.deg2rad(25), 0.12, duration=0.6e-3, system=system)
+       train = pp.make_bssfp_readout(system, (0.22, 0.22, 0.12), (48, 4, 4), excitation, segment=2)
+       train.set_state(segment_idx=1).plot()
+       plt.gcf().suptitle("optimized 3D bSSFP: one of two equal segments")
+
+    A nonselective 3D variant has no slab gradient; it uses the same
+    segmented encoding and makes no slice/slab selection claim::
+
+        excitation = pp.make_hard_pulse(np.deg2rad(25), duration=0.5e-3, system=system)
+        bssfp = pp.make_bssfp_readout(
+            system, (0.22, 0.22, 0.16), (128, 64, 16), excitation, segment=4)
+
+    .. plot::
+       :include-source: false
+
+       import matplotlib.pyplot as plt
+       import numpy as np
+       import pulserver.pypulseq as pp
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = pp.make_hard_pulse(np.deg2rad(25), duration=0.5e-3, system=system)
+       train = pp.make_bssfp_readout(system, (0.22, 0.22, 0.12), (48, 4, 4), excitation, segment=2)
+       train.set_state(segment_idx=1).plot()
+       plt.gcf().suptitle("optimized nonselective 3D bSSFP: one of two equal segments")
+    """
+    dimensions = _dimensions(matrix)
+    if dimensions not in (2, 3):
+        raise ValueError("bSSFP readout matrix must have two or three dimensions")
+    if len(fov) != dimensions:
+        raise ValueError("fov and matrix must have the same dimensionality")
+    rf, gradient, rephaser = _unpack_bssfp_excitation(excitation)
+    if dimensions == 2:
+        if gradient is None:
+            raise ValueError("2D bSSFP requires a slice-selective excitation with z selection and rephasing gradients")
+        if int(segment) != 1:
+            raise ValueError("2D bSSFP is one complete train; segment is supported for 3D only")
+        return Bssfp2D(
+            system,
+            fov,
+            matrix,
+            excitation_rf=rf,
+            excitation_gz=gradient,
+            excitation_rephaser=rephaser,
+            bandwidth_hz_px=bandwidth_hz_px,
+        )
+    return Bssfp3D(
+        system,
+        fov,
+        matrix,
+        excitation_rf=rf,
+        excitation_gz=gradient,
+        excitation_rephaser=rephaser,
+        segments=int(segment),
+        bandwidth_hz_px=bandwidth_hz_px,
+    )
+
+
 def make_line_readout(system, fov, matrix, num_echoes: int = 1, **kwargs):
     """Create a Cartesian line readout: one phase-encode step per shot.
 
@@ -69,7 +261,8 @@ def make_line_readout(system, fov, matrix, num_echoes: int = 1, **kwargs):
 
     ``spoil_position`` selects the steady state: ``"post"`` (default) for
     spoiled GRE / SSFP-FID, ``"pre"`` for SSFP-Echo/PSIF, ``"none"`` for a
-    fully balanced (bSSFP) readout.
+    fully balanced isolated-line readout.  For an optimized continuous-gradient
+    bSSFP/TRUFI train, use :func:`make_bssfp_readout` instead.
 
     Parameters
     ----------

@@ -89,7 +89,7 @@ typedef struct pulseg_cache_section_entry
 
 /* ------ Byte-swap helpers ------ */
 
-static void swap4(void *p)
+void pulseg__swap4(void *p)
 {
     unsigned char *b = (unsigned char *)p;
     unsigned char t;
@@ -101,21 +101,21 @@ static void swap4(void *p)
     b[2] = t;
 }
 
-static void swap4_array(void *p, int count)
+void pulseg__swap4_array(void *p, int count)
 {
     int i;
     for (i = 0; i < count; ++i)
-        swap4((unsigned char *)p + (size_t)i * 4);
+        pulseg__swap4((unsigned char *)p + (size_t)i * 4);
 }
 
 /* ------ I/O helpers ------ */
 
-static int write4(FILE *f, const void *p, int count)
+int pulseg__write4(FILE *f, const void *p, int count)
 {
     return (int)fwrite(p, 4, (size_t)count, f) == count;
 }
 
-static int read4(FILE *f, void *p, int count)
+int pulseg__read4(FILE *f, void *p, int count)
 {
     return (int)fread(p, 4, (size_t)count, f) == count;
 }
@@ -124,7 +124,7 @@ static int read4(FILE *f, void *p, int count)
 
 /* ext: cache file extension including the dot (e.g. ".pseg"); NULL or
  * empty falls back to PULSEG_CACHE_EXT_DEFAULT. */
-static char *make_cache_path(const char *seq_path, const char *ext)
+char *pulseg__make_cache_path(const char *seq_path, const char *ext)
 {
     size_t len, ext_len;
     char *out;
@@ -182,190 +182,190 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
     int ival;
 
     /* scalars */
-    if (!write4(f, &d->num_prep_blocks, 1))
+    if (!pulseg__write4(f, &d->num_prep_blocks, 1))
         return 0;
-    if (!write4(f, &d->num_cooldown_blocks, 1))
+    if (!pulseg__write4(f, &d->num_cooldown_blocks, 1))
         return 0;
-    if (!write4(f, &d->rf_raster_us, 1))
+    if (!pulseg__write4(f, &d->rf_raster_us, 1))
         return 0;
-    if (!write4(f, &d->grad_raster_us, 1))
+    if (!pulseg__write4(f, &d->grad_raster_us, 1))
         return 0;
-    if (!write4(f, &d->adc_raster_us, 1))
+    if (!pulseg__write4(f, &d->adc_raster_us, 1))
         return 0;
-    if (!write4(f, &d->block_raster_us, 1))
+    if (!pulseg__write4(f, &d->block_raster_us, 1))
         return 0;
-    if (!write4(f, &d->ignore_fov_shift, 1))
+    if (!pulseg__write4(f, &d->ignore_fov_shift, 1))
         return 0;
-    if (!write4(f, &d->enable_pmc, 1))
+    if (!pulseg__write4(f, &d->enable_pmc, 1))
         return 0;
-    if (!write4(f, &d->ignore_averages, 1))
+    if (!pulseg__write4(f, &d->ignore_averages, 1))
         return 0;
-    if (!write4(f, &d->num_gain_cal_readouts, 1))
+    if (!pulseg__write4(f, &d->num_gain_cal_readouts, 1))
         return 0;
-    if (!write4(f, &d->num_passes, 1))
+    if (!pulseg__write4(f, &d->num_passes, 1))
         return 0;
-    if (!write4(f, &d->vendor, 1))
+    if (!pulseg__write4(f, &d->vendor, 1))
         return 0;
-    if (!write4(f, d->label_column_map, 3))
+    if (!pulseg__write4(f, d->label_column_map, 3))
         return 0;
-    if (!write4(f, d->fov, 3))
+    if (!pulseg__write4(f, d->fov, 3))
         return 0;
-    if (!write4(f, d->matrix, 3))
+    if (!pulseg__write4(f, d->matrix, 3))
         return 0;
-    if (!write4(f, d->nav_fov, 3))
+    if (!pulseg__write4(f, d->nav_fov, 3))
         return 0;
-    if (!write4(f, d->nav_matrix, 3))
+    if (!pulseg__write4(f, d->nav_matrix, 3))
         return 0;
 
     /* block definitions */
-    if (!write4(f, &d->num_unique_blocks, 1))
+    if (!pulseg__write4(f, &d->num_unique_blocks, 1))
         return 0;
     for (i = 0; i < d->num_unique_blocks; ++i)
     {
-        if (!write4(f, &d->base_blocks[i].id, 1))
+        if (!pulseg__write4(f, &d->base_blocks[i].id, 1))
             return 0;
-        if (!write4(f, &d->base_blocks[i].duration_us, 1))
+        if (!pulseg__write4(f, &d->base_blocks[i].duration_us, 1))
             return 0;
-        if (!write4(f, &d->base_blocks[i].rf_id, 1))
+        if (!pulseg__write4(f, &d->base_blocks[i].rf_id, 1))
             return 0;
-        if (!write4(f, &d->base_blocks[i].gx_id, 1))
+        if (!pulseg__write4(f, &d->base_blocks[i].gx_id, 1))
             return 0;
-        if (!write4(f, &d->base_blocks[i].gy_id, 1))
+        if (!pulseg__write4(f, &d->base_blocks[i].gy_id, 1))
             return 0;
-        if (!write4(f, &d->base_blocks[i].gz_id, 1))
+        if (!pulseg__write4(f, &d->base_blocks[i].gz_id, 1))
             return 0;
-        if (!write4(f, &d->base_blocks[i].adc_id, 1))
+        if (!pulseg__write4(f, &d->base_blocks[i].adc_id, 1))
             return 0;
     }
 
     /* RF definitions */
-    if (!write4(f, &d->num_unique_rfs, 1))
+    if (!pulseg__write4(f, &d->num_unique_rfs, 1))
         return 0;
     for (i = 0; i < d->num_unique_rfs; ++i)
     {
-        if (!write4(f, &d->rf_definitions[i].id, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].id, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].mag_shape_id, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].mag_shape_id, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].phase_shape_id, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].phase_shape_id, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].time_shape_id, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].time_shape_id, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].delay, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].delay, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].num_channels, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].num_channels, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.flip_angle_rad, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.flip_angle_rad, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.area, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.area, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.vendor_stat[0], 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.vendor_stat[0], 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.vendor_stat[1], 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.vendor_stat[1], 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.vendor_stat[2], 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.vendor_stat[2], 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.vendor_stat[3], 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.vendor_stat[3], 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.duration_us, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.duration_us, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.isodelay_us, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.isodelay_us, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.bandwidth_hz, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.bandwidth_hz, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.base_amplitude_hz, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.base_amplitude_hz, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.num_samples, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.num_samples, 1))
             return 0;
         /* v20: multiband/power fields */
-        if (!write4(f, &d->rf_definitions[i].stats.num_bands, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.num_bands, 1))
             return 0;
-        if (!write4(f, d->rf_definitions[i].stats.band_freq_offsets_hz, PULSEG_MAX_BANDS))
+        if (!pulseg__write4(f, d->rf_definitions[i].stats.band_freq_offsets_hz, PULSEG_MAX_BANDS))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.band_bandwidth_hz, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.band_bandwidth_hz, 1))
             return 0;
-        if (!write4(f, &d->rf_definitions[i].stats.total_b1sq_power, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.total_b1sq_power, 1))
             return 0;
         /* v1.3: vendor tag */
-        if (!write4(f, &d->rf_definitions[i].stats.vendor, 1))
+        if (!pulseg__write4(f, &d->rf_definitions[i].stats.vendor, 1))
             return 0;
     }
 
     /* gradient definitions */
-    if (!write4(f, &d->num_unique_grads, 1))
+    if (!pulseg__write4(f, &d->num_unique_grads, 1))
         return 0;
     for (i = 0; i < d->num_unique_grads; ++i)
     {
         const pulseg_grad_definition *gd = &d->grad_definitions[i];
-        if (!write4(f, &gd->id, 1))
+        if (!pulseg__write4(f, &gd->id, 1))
             return 0;
-        if (!write4(f, &gd->type, 1))
+        if (!pulseg__write4(f, &gd->type, 1))
             return 0;
-        if (!write4(f, &gd->rise_time_or_unused, 1))
+        if (!pulseg__write4(f, &gd->rise_time_or_unused, 1))
             return 0;
-        if (!write4(f, &gd->flat_time_or_unused, 1))
+        if (!pulseg__write4(f, &gd->flat_time_or_unused, 1))
             return 0;
-        if (!write4(f, &gd->fall_time_or_num_uncompressed_samples, 1))
+        if (!pulseg__write4(f, &gd->fall_time_or_num_uncompressed_samples, 1))
             return 0;
-        if (!write4(f, &gd->unused_or_time_shape_id, 1))
+        if (!pulseg__write4(f, &gd->unused_or_time_shape_id, 1))
             return 0;
-        if (!write4(f, &gd->delay, 1))
+        if (!pulseg__write4(f, &gd->delay, 1))
             return 0;
-        if (!write4(f, &gd->num_shots, 1))
+        if (!pulseg__write4(f, &gd->num_shots, 1))
             return 0;
-        if (!write4(f, gd->shot_shape_ids, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__write4(f, gd->shot_shape_ids, PULSEG_MAX_GRAD_SHOTS))
             return 0;
-        if (!write4(f, gd->max_amplitude, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__write4(f, gd->max_amplitude, PULSEG_MAX_GRAD_SHOTS))
             return 0;
-        if (!write4(f, gd->min_amplitude, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__write4(f, gd->min_amplitude, PULSEG_MAX_GRAD_SHOTS))
             return 0;
-        if (!write4(f, gd->slew_rate, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__write4(f, gd->slew_rate, PULSEG_MAX_GRAD_SHOTS))
             return 0;
-        if (!write4(f, gd->energy, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__write4(f, gd->energy, PULSEG_MAX_GRAD_SHOTS))
             return 0;
-        if (!write4(f, gd->first_value, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__write4(f, gd->first_value, PULSEG_MAX_GRAD_SHOTS))
             return 0;
-        if (!write4(f, gd->last_value, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__write4(f, gd->last_value, PULSEG_MAX_GRAD_SHOTS))
             return 0;
     }
 
     /* ADC definitions */
-    if (!write4(f, &d->num_unique_adcs, 1))
+    if (!pulseg__write4(f, &d->num_unique_adcs, 1))
         return 0;
     for (i = 0; i < d->num_unique_adcs; ++i)
     {
-        if (!write4(f, &d->adc_definitions[i].id, 1))
+        if (!pulseg__write4(f, &d->adc_definitions[i].id, 1))
             return 0;
-        if (!write4(f, &d->adc_definitions[i].num_samples, 1))
+        if (!pulseg__write4(f, &d->adc_definitions[i].num_samples, 1))
             return 0;
-        if (!write4(f, &d->adc_definitions[i].dwell_time, 1))
+        if (!pulseg__write4(f, &d->adc_definitions[i].dwell_time, 1))
             return 0;
-        if (!write4(f, &d->adc_definitions[i].delay, 1))
+        if (!pulseg__write4(f, &d->adc_definitions[i].delay, 1))
             return 0;
     }
 
     /* freq_mod definitions (no longer stored; write count = 0) */
     {
         int zero = 0;
-        if (!write4(f, &zero, 1))
+        if (!pulseg__write4(f, &zero, 1))
             return 0;
     }
 
     /* rf_shim definitions */
-    if (!write4(f, &d->num_rf_shims, 1))
+    if (!pulseg__write4(f, &d->num_rf_shims, 1))
         return 0;
     for (i = 0; i < d->num_rf_shims; ++i)
     {
         const pulseg_rf_shim_definition *rs = &d->rf_shim_definitions[i];
-        if (!write4(f, &rs->id, 1))
+        if (!pulseg__write4(f, &rs->id, 1))
             return 0;
-        if (!write4(f, &rs->num_channels, 1))
+        if (!pulseg__write4(f, &rs->num_channels, 1))
             return 0;
         if (rs->num_channels > 0)
         {
-            if (!write4(f, rs->magnitudes, rs->num_channels))
+            if (!pulseg__write4(f, rs->magnitudes, rs->num_channels))
                 return 0;
-            if (!write4(f, rs->phases, rs->num_channels))
+            if (!pulseg__write4(f, rs->phases, rs->num_channels))
                 return 0;
         }
     }
@@ -373,89 +373,92 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
     /* rotations: emitted in the ROTATIONS section (write_rotations) */
 
     /* triggers — serialize long/short as int for portability */
-    if (!write4(f, &d->num_triggers, 1))
+    if (!pulseg__write4(f, &d->num_triggers, 1))
         return 0;
     for (i = 0; i < d->num_triggers; ++i)
     {
         ival = (int)d->trigger_events[i].type;
-        if (!write4(f, &ival, 1))
+        if (!pulseg__write4(f, &ival, 1))
             return 0;
         ival = (int)d->trigger_events[i].duration;
-        if (!write4(f, &ival, 1))
+        if (!pulseg__write4(f, &ival, 1))
             return 0;
         ival = (int)d->trigger_events[i].delay;
-        if (!write4(f, &ival, 1))
+        if (!pulseg__write4(f, &ival, 1))
             return 0;
-        if (!write4(f, &d->trigger_events[i].trigger_type, 1))
+        if (!pulseg__write4(f, &d->trigger_events[i].trigger_type, 1))
             return 0;
-        if (!write4(f, &d->trigger_events[i].trigger_channel, 1))
+        if (!pulseg__write4(f, &d->trigger_events[i].trigger_channel, 1))
             return 0;
     }
 
     /* shapes: emitted in the SHAPES section (write_shapes) */
 
     /* TR descriptor (10 fields: 9 int + 1 float) */
-    if (!write4(f, &d->tr_descriptor.num_prep_blocks, 1))
+    if (!pulseg__write4(f, &d->tr_descriptor.num_prep_blocks, 1))
         return 0;
-    if (!write4(f, &d->tr_descriptor.num_cooldown_blocks, 1))
+    if (!pulseg__write4(f, &d->tr_descriptor.num_cooldown_blocks, 1))
         return 0;
-    if (!write4(f, &d->tr_descriptor.tr_size, 1))
+    if (!pulseg__write4(f, &d->tr_descriptor.tr_size, 1))
         return 0;
-    if (!write4(f, &d->tr_descriptor.num_trs, 1))
+    if (!pulseg__write4(f, &d->tr_descriptor.num_trs, 1))
         return 0;
-    if (!write4(f, &d->tr_descriptor.num_prep_trs, 1))
+    if (!pulseg__write4(f, &d->tr_descriptor.num_prep_trs, 1))
         return 0;
-    if (!write4(f, &d->tr_descriptor.degenerate_prep, 1))
+    if (!pulseg__write4(f, &d->tr_descriptor.degenerate_prep, 1))
         return 0;
-    if (!write4(f, &d->tr_descriptor.num_cooldown_trs, 1))
+    if (!pulseg__write4(f, &d->tr_descriptor.num_cooldown_trs, 1))
         return 0;
-    if (!write4(f, &d->tr_descriptor.degenerate_cooldown, 1))
+    if (!pulseg__write4(f, &d->tr_descriptor.degenerate_cooldown, 1))
         return 0;
-    if (!write4(f, &d->tr_descriptor.imaging_tr_start, 1))
+    if (!pulseg__write4(f, &d->tr_descriptor.imaging_tr_start, 1))
         return 0;
-    if (!write4(f, &d->tr_descriptor.tr_duration_us, 1))
+    if (!pulseg__write4(f, &d->tr_descriptor.tr_duration_us, 1))
         return 0;
 
     /* segment definitions */
-    if (!write4(f, &d->num_unique_segments, 1))
+    if (!pulseg__write4(f, &d->num_unique_segments, 1))
         return 0;
     for (i = 0; i < d->num_unique_segments; ++i)
     {
         const pulseg_virtual_segment *seg = &d->segment_definitions[i];
-        if (!write4(f, &seg->start_block, 1))
+        if (!pulseg__write4(f, &seg->start_block, 1))
             return 0;
-        if (!write4(f, &seg->num_blocks, 1))
+        if (!pulseg__write4(f, &seg->num_blocks, 1))
             return 0;
-        if (!write4(f, &seg->max_energy_start_block, 1))
+        if (!pulseg__write4(f, &seg->max_energy_start_block, 1))
             return 0;
         if (seg->num_blocks > 0)
         {
-            if (!write4(f, seg->unique_block_indices, seg->num_blocks))
+            if (!pulseg__write4(f, seg->unique_block_indices, seg->num_blocks))
                 return 0;
-            if (!write4(f, seg->has_digitalout, seg->num_blocks))
+            if (!pulseg__write4(f, seg->has_digitalout, seg->num_blocks))
                 return 0;
-            if (!write4(f, seg->has_rotation, seg->num_blocks))
+            if (!pulseg__write4(f, seg->has_rotation, seg->num_blocks))
                 return 0;
-            if (!write4(f, seg->norot_flag, seg->num_blocks))
+            if (!pulseg__write4(f, seg->norot_flag, seg->num_blocks))
                 return 0;
-            if (!write4(f, seg->nopos_flag, seg->num_blocks))
+            if (!pulseg__write4(f, seg->nopos_flag, seg->num_blocks))
                 return 0;
-            if (!write4(f, seg->has_freq_mod, seg->num_blocks))
+            if (!pulseg__write4(f, seg->has_freq_mod, seg->num_blocks))
                 return 0;
-            if (!write4(f, seg->has_adc, seg->num_blocks))
+            if (!pulseg__write4(f, seg->has_adc, seg->num_blocks))
                 return 0;
-            if (!write4(f, seg->is_dynamic_delay, seg->num_blocks))
+            if (!pulseg__write4(f, seg->is_dynamic_delay, seg->num_blocks))
                 return 0;
             /* Frozen per-position initial event state (structure step 11e):
              * what the representative scan instance resolves to, so the
              * pulsegen path never needs the INSTANCES section. All fields are
              * 4-byte, so the records serialize as a packed word array. */
-            if (!write4(f, seg->initial_states, seg->num_blocks * PULSEG_BLOCK_INITIAL_STATE_WORDS))
+            if (!pulseg__write4(
+                    f,
+                    seg->initial_states,
+                    seg->num_blocks * PULSEG_BLOCK_INITIAL_STATE_WORDS))
                 return 0;
         }
-        if (!write4(f, &seg->trigger_id, 1))
+        if (!pulseg__write4(f, &seg->trigger_id, 1))
             return 0;
-        if (!write4(f, &seg->is_nav, 1))
+        if (!pulseg__write4(f, &seg->is_nav, 1))
             return 0;
 
         /* Segment timing anchors (k-space refs: RF isocenter, ADC kzero, plus
@@ -464,21 +467,21 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
          * cache load paths do not rebuild them (no trajectory available), and
          * freq-mod requires the exact isocenter/kzero. All fields are 4-byte, so
          * the structs serialize as packed word arrays. */
-        if (!write4(f, &seg->timing.num_rf_anchors, 1))
+        if (!pulseg__write4(f, &seg->timing.num_rf_anchors, 1))
             return 0;
         if (seg->timing.num_rf_anchors > 0)
         {
-            if (!write4(
+            if (!pulseg__write4(
                     f,
                     seg->timing.rf_anchors,
                     seg->timing.num_rf_anchors * (int)(sizeof(pulseg_segment_rf_anchor) / 4)))
                 return 0;
         }
-        if (!write4(f, &seg->timing.num_adc_anchors, 1))
+        if (!pulseg__write4(f, &seg->timing.num_adc_anchors, 1))
             return 0;
         if (seg->timing.num_adc_anchors > 0)
         {
-            if (!write4(
+            if (!pulseg__write4(
                     f,
                     seg->timing.adc_anchors,
                     seg->timing.num_adc_anchors * (int)(sizeof(pulseg_segment_adc_anchor) / 4)))
@@ -487,22 +490,28 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
     }
 
     /* segment table */
-    if (!write4(f, &d->segment_table.num_unique_segments, 1))
+    if (!pulseg__write4(f, &d->segment_table.num_unique_segments, 1))
         return 0;
-    if (!write4(f, &d->segment_table.num_prep_segments, 1))
+    if (!pulseg__write4(f, &d->segment_table.num_prep_segments, 1))
         return 0;
     if (d->segment_table.num_prep_segments > 0)
-        if (!write4(f, d->segment_table.prep_segment_table, d->segment_table.num_prep_segments))
+        if (!pulseg__write4(
+                f,
+                d->segment_table.prep_segment_table,
+                d->segment_table.num_prep_segments))
             return 0;
-    if (!write4(f, &d->segment_table.num_main_segments, 1))
+    if (!pulseg__write4(f, &d->segment_table.num_main_segments, 1))
         return 0;
     if (d->segment_table.num_main_segments > 0)
-        if (!write4(f, d->segment_table.main_segment_table, d->segment_table.num_main_segments))
+        if (!pulseg__write4(
+                f,
+                d->segment_table.main_segment_table,
+                d->segment_table.num_main_segments))
             return 0;
-    if (!write4(f, &d->segment_table.num_cooldown_segments, 1))
+    if (!pulseg__write4(f, &d->segment_table.num_cooldown_segments, 1))
         return 0;
     if (d->segment_table.num_cooldown_segments > 0)
-        if (!write4(
+        if (!pulseg__write4(
                 f,
                 d->segment_table.cooldown_segment_table,
                 d->segment_table.num_cooldown_segments))
@@ -558,10 +567,10 @@ static int write_rotations(FILE *f, const pulseg_sequence_descriptor *d)
 {
     int i;
 
-    if (!write4(f, &d->num_rotations, 1))
+    if (!pulseg__write4(f, &d->num_rotations, 1))
         return 0;
     for (i = 0; i < d->num_rotations; ++i)
-        if (!write4(f, d->rotation_matrices[i], 9))
+        if (!pulseg__write4(f, d->rotation_matrices[i], 9))
             return 0;
 
     return 1;
@@ -573,17 +582,17 @@ static int write_shapes(FILE *f, const pulseg_sequence_descriptor *d)
 {
     int i, n;
 
-    if (!write4(f, &d->num_shapes, 1))
+    if (!pulseg__write4(f, &d->num_shapes, 1))
         return 0;
     for (i = 0; i < d->num_shapes; ++i)
     {
-        if (!write4(f, &d->shapes[i].num_uncompressed_samples, 1))
+        if (!pulseg__write4(f, &d->shapes[i].num_uncompressed_samples, 1))
             return 0;
-        if (!write4(f, &d->shapes[i].num_samples, 1))
+        if (!pulseg__write4(f, &d->shapes[i].num_samples, 1))
             return 0;
         n = d->shapes[i].num_samples;
         if (n > 0 && d->shapes[i].samples)
-            if (!write4(f, d->shapes[i].samples, n))
+            if (!pulseg__write4(f, d->shapes[i].samples, n))
                 return 0;
     }
 
@@ -601,86 +610,86 @@ static int write_instances(FILE *f, const pulseg_sequence_descriptor *d)
     int i;
 
     /* block table */
-    if (!write4(f, &d->num_blocks, 1))
+    if (!pulseg__write4(f, &d->num_blocks, 1))
         return 0;
     for (i = 0; i < d->num_blocks; ++i)
     {
-        if (!write4(f, &d->block_table[i].id, 1))
+        if (!pulseg__write4(f, &d->block_table[i].id, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].duration_us, 1))
+        if (!pulseg__write4(f, &d->block_table[i].duration_us, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].rf_id, 1))
+        if (!pulseg__write4(f, &d->block_table[i].rf_id, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].gx_id, 1))
+        if (!pulseg__write4(f, &d->block_table[i].gx_id, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].gy_id, 1))
+        if (!pulseg__write4(f, &d->block_table[i].gy_id, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].gz_id, 1))
+        if (!pulseg__write4(f, &d->block_table[i].gz_id, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].adc_id, 1))
+        if (!pulseg__write4(f, &d->block_table[i].adc_id, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].digitalout_id, 1))
+        if (!pulseg__write4(f, &d->block_table[i].digitalout_id, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].rotation_id, 1))
+        if (!pulseg__write4(f, &d->block_table[i].rotation_id, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].once_flag, 1))
+        if (!pulseg__write4(f, &d->block_table[i].once_flag, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].norot_flag, 1))
+        if (!pulseg__write4(f, &d->block_table[i].norot_flag, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].nopos_flag, 1))
+        if (!pulseg__write4(f, &d->block_table[i].nopos_flag, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].pmc_flag, 1))
+        if (!pulseg__write4(f, &d->block_table[i].pmc_flag, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].nav_flag, 1))
+        if (!pulseg__write4(f, &d->block_table[i].nav_flag, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].freq_mod_id, 1))
+        if (!pulseg__write4(f, &d->block_table[i].freq_mod_id, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].rf_shim_id, 1))
+        if (!pulseg__write4(f, &d->block_table[i].rf_shim_id, 1))
             return 0;
-        if (!write4(f, &d->block_table[i].module_id, 1))
+        if (!pulseg__write4(f, &d->block_table[i].module_id, 1))
             return 0;
     }
 
     /* RF table */
-    if (!write4(f, &d->rf_table_size, 1))
+    if (!pulseg__write4(f, &d->rf_table_size, 1))
         return 0;
     for (i = 0; i < d->rf_table_size; ++i)
     {
-        if (!write4(f, &d->rf_table[i].id, 1))
+        if (!pulseg__write4(f, &d->rf_table[i].id, 1))
             return 0;
-        if (!write4(f, &d->rf_table[i].amplitude, 1))
+        if (!pulseg__write4(f, &d->rf_table[i].amplitude, 1))
             return 0;
-        if (!write4(f, &d->rf_table[i].freq_offset, 1))
+        if (!pulseg__write4(f, &d->rf_table[i].freq_offset, 1))
             return 0;
-        if (!write4(f, &d->rf_table[i].phase_offset, 1))
+        if (!pulseg__write4(f, &d->rf_table[i].phase_offset, 1))
             return 0;
-        if (!write4(f, &d->rf_table[i].rf_use, 1))
+        if (!pulseg__write4(f, &d->rf_table[i].rf_use, 1))
             return 0;
     }
 
     /* gradient table */
-    if (!write4(f, &d->grad_table_size, 1))
+    if (!pulseg__write4(f, &d->grad_table_size, 1))
         return 0;
     for (i = 0; i < d->grad_table_size; ++i)
     {
-        if (!write4(f, &d->grad_table[i].id, 1))
+        if (!pulseg__write4(f, &d->grad_table[i].id, 1))
             return 0;
-        if (!write4(f, &d->grad_table[i].shot_index, 1))
+        if (!pulseg__write4(f, &d->grad_table[i].shot_index, 1))
             return 0;
-        if (!write4(f, &d->grad_table[i].amplitude, 1))
+        if (!pulseg__write4(f, &d->grad_table[i].amplitude, 1))
             return 0;
     }
 
     /* ADC table */
-    if (!write4(f, &d->adc_table_size, 1))
+    if (!pulseg__write4(f, &d->adc_table_size, 1))
         return 0;
     for (i = 0; i < d->adc_table_size; ++i)
     {
-        if (!write4(f, &d->adc_table[i].id, 1))
+        if (!pulseg__write4(f, &d->adc_table[i].id, 1))
             return 0;
-        if (!write4(f, &d->adc_table[i].freq_offset, 1))
+        if (!pulseg__write4(f, &d->adc_table[i].freq_offset, 1))
             return 0;
-        if (!write4(f, &d->adc_table[i].phase_offset, 1))
+        if (!pulseg__write4(f, &d->adc_table[i].phase_offset, 1))
             return 0;
     }
 
@@ -705,17 +714,17 @@ static int write_instances(FILE *f, const pulseg_sequence_descriptor *d)
 static int write_scanloop(FILE *f, const pulseg_sequence_descriptor *d)
 {
     /* scan table */
-    if (!write4(f, &d->exec_stream_len, 1))
+    if (!pulseg__write4(f, &d->exec_stream_len, 1))
         return 0;
     if (d->exec_stream_len > 0)
     {
-        if (!write4(f, d->exec_stream_block_idx, d->exec_stream_len))
+        if (!pulseg__write4(f, d->exec_stream_block_idx, d->exec_stream_len))
             return 0;
-        if (!write4(f, d->exec_stream_tr_id, d->exec_stream_len))
+        if (!pulseg__write4(f, d->exec_stream_tr_id, d->exec_stream_len))
             return 0;
-        if (!write4(f, d->exec_stream_seg_id, d->exec_stream_len))
+        if (!pulseg__write4(f, d->exec_stream_seg_id, d->exec_stream_len))
             return 0;
-        if (!write4(f, d->exec_stream_avg_id, d->exec_stream_len))
+        if (!pulseg__write4(f, d->exec_stream_avg_id, d->exec_stream_len))
             return 0;
     }
 
@@ -724,11 +733,11 @@ static int write_scanloop(FILE *f, const pulseg_sequence_descriptor *d)
         int vgf_len = (d->variable_grad_flags && d->tr_descriptor.tr_size > 0)
             ? d->tr_descriptor.tr_size * 3
             : 0;
-        if (!write4(f, &vgf_len, 1))
+        if (!pulseg__write4(f, &vgf_len, 1))
             return 0;
         if (vgf_len > 0)
         {
-            if (!write4(f, d->variable_grad_flags, vgf_len))
+            if (!pulseg__write4(f, d->variable_grad_flags, vgf_len))
                 return 0;
         }
     }
@@ -746,146 +755,146 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     memset(d, 0, sizeof(*d));
 
     /* scalars */
-    if (!read4(f, &d->num_prep_blocks, 1))
+    if (!pulseg__read4(f, &d->num_prep_blocks, 1))
         return 0;
-    if (!read4(f, &d->num_cooldown_blocks, 1))
+    if (!pulseg__read4(f, &d->num_cooldown_blocks, 1))
         return 0;
-    if (!read4(f, &d->rf_raster_us, 1))
+    if (!pulseg__read4(f, &d->rf_raster_us, 1))
         return 0;
-    if (!read4(f, &d->grad_raster_us, 1))
+    if (!pulseg__read4(f, &d->grad_raster_us, 1))
         return 0;
-    if (!read4(f, &d->adc_raster_us, 1))
+    if (!pulseg__read4(f, &d->adc_raster_us, 1))
         return 0;
-    if (!read4(f, &d->block_raster_us, 1))
+    if (!pulseg__read4(f, &d->block_raster_us, 1))
         return 0;
-    if (!read4(f, &d->ignore_fov_shift, 1))
+    if (!pulseg__read4(f, &d->ignore_fov_shift, 1))
         return 0;
-    if (!read4(f, &d->enable_pmc, 1))
+    if (!pulseg__read4(f, &d->enable_pmc, 1))
         return 0;
-    if (!read4(f, &d->ignore_averages, 1))
+    if (!pulseg__read4(f, &d->ignore_averages, 1))
         return 0;
-    if (!read4(f, &d->num_gain_cal_readouts, 1))
+    if (!pulseg__read4(f, &d->num_gain_cal_readouts, 1))
         return 0;
-    if (!read4(f, &d->num_passes, 1))
+    if (!pulseg__read4(f, &d->num_passes, 1))
         return 0;
-    if (!read4(f, &d->vendor, 1))
+    if (!pulseg__read4(f, &d->vendor, 1))
         return 0;
-    if (!read4(f, d->label_column_map, 3))
-        return 0;
-    if (do_swap)
-        swap4_array(&d->num_prep_blocks, 15);
-    if (!read4(f, d->fov, 3))
-        return 0;
-    if (!read4(f, d->matrix, 3))
-        return 0;
-    if (!read4(f, d->nav_fov, 3))
-        return 0;
-    if (!read4(f, d->nav_matrix, 3))
+    if (!pulseg__read4(f, d->label_column_map, 3))
         return 0;
     if (do_swap)
-        swap4_array((int *)d->fov, 12);
+        pulseg__swap4_array(&d->num_prep_blocks, 15);
+    if (!pulseg__read4(f, d->fov, 3))
+        return 0;
+    if (!pulseg__read4(f, d->matrix, 3))
+        return 0;
+    if (!pulseg__read4(f, d->nav_fov, 3))
+        return 0;
+    if (!pulseg__read4(f, d->nav_matrix, 3))
+        return 0;
+    if (do_swap)
+        pulseg__swap4_array((int *)d->fov, 12);
 
     /* block definitions */
-    if (!read4(f, &d->num_unique_blocks, 1))
+    if (!pulseg__read4(f, &d->num_unique_blocks, 1))
         return 0;
     if (do_swap)
-        swap4(&d->num_unique_blocks);
+        pulseg__swap4(&d->num_unique_blocks);
     d->base_blocks =
         (pulseg_base_block *)PULSEG_ALLOC((size_t)d->num_unique_blocks * sizeof(pulseg_base_block));
     if (!d->base_blocks)
         return 0;
     for (i = 0; i < d->num_unique_blocks; ++i)
     {
-        if (!read4(f, &d->base_blocks[i].id, 1))
+        if (!pulseg__read4(f, &d->base_blocks[i].id, 1))
             return 0;
-        if (!read4(f, &d->base_blocks[i].duration_us, 1))
+        if (!pulseg__read4(f, &d->base_blocks[i].duration_us, 1))
             return 0;
-        if (!read4(f, &d->base_blocks[i].rf_id, 1))
+        if (!pulseg__read4(f, &d->base_blocks[i].rf_id, 1))
             return 0;
-        if (!read4(f, &d->base_blocks[i].gx_id, 1))
+        if (!pulseg__read4(f, &d->base_blocks[i].gx_id, 1))
             return 0;
-        if (!read4(f, &d->base_blocks[i].gy_id, 1))
+        if (!pulseg__read4(f, &d->base_blocks[i].gy_id, 1))
             return 0;
-        if (!read4(f, &d->base_blocks[i].gz_id, 1))
+        if (!pulseg__read4(f, &d->base_blocks[i].gz_id, 1))
             return 0;
-        if (!read4(f, &d->base_blocks[i].adc_id, 1))
+        if (!pulseg__read4(f, &d->base_blocks[i].adc_id, 1))
             return 0;
         if (do_swap)
-            swap4_array(&d->base_blocks[i].id, 7);
+            pulseg__swap4_array(&d->base_blocks[i].id, 7);
     }
 
     /* RF definitions */
-    if (!read4(f, &d->num_unique_rfs, 1))
+    if (!pulseg__read4(f, &d->num_unique_rfs, 1))
         return 0;
     if (do_swap)
-        swap4(&d->num_unique_rfs);
+        pulseg__swap4(&d->num_unique_rfs);
     d->rf_definitions = (pulseg_rf_definition *)PULSEG_ALLOC(
         (size_t)d->num_unique_rfs * sizeof(pulseg_rf_definition));
     if (!d->rf_definitions)
         return 0;
     for (i = 0; i < d->num_unique_rfs; ++i)
     {
-        if (!read4(f, &d->rf_definitions[i].id, 1))
+        if (!pulseg__read4(f, &d->rf_definitions[i].id, 1))
             return 0;
-        if (!read4(f, &d->rf_definitions[i].mag_shape_id, 1))
+        if (!pulseg__read4(f, &d->rf_definitions[i].mag_shape_id, 1))
             return 0;
-        if (!read4(f, &d->rf_definitions[i].phase_shape_id, 1))
+        if (!pulseg__read4(f, &d->rf_definitions[i].phase_shape_id, 1))
             return 0;
-        if (!read4(f, &d->rf_definitions[i].time_shape_id, 1))
+        if (!pulseg__read4(f, &d->rf_definitions[i].time_shape_id, 1))
             return 0;
-        if (!read4(f, &d->rf_definitions[i].delay, 1))
+        if (!pulseg__read4(f, &d->rf_definitions[i].delay, 1))
             return 0;
-        if (!read4(f, &d->rf_definitions[i].num_channels, 1))
-            return 0;
-        if (do_swap)
-            swap4_array(&d->rf_definitions[i].id, 6);
-        if (!read4(f, &d->rf_definitions[i].stats.flip_angle_rad, 1))
-            return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.area, 1))
-            return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.vendor_stat[0], 1))
-            return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.vendor_stat[1], 1))
-            return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.vendor_stat[2], 1))
-            return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.vendor_stat[3], 1))
-            return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.duration_us, 1))
-            return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.isodelay_us, 1))
-            return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.bandwidth_hz, 1))
-            return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.base_amplitude_hz, 1))
-            return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.num_samples, 1))
+        if (!pulseg__read4(f, &d->rf_definitions[i].num_channels, 1))
             return 0;
         if (do_swap)
-            swap4_array(&d->rf_definitions[i].stats.flip_angle_rad, 11);
+            pulseg__swap4_array(&d->rf_definitions[i].id, 6);
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.flip_angle_rad, 1))
+            return 0;
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.area, 1))
+            return 0;
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.vendor_stat[0], 1))
+            return 0;
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.vendor_stat[1], 1))
+            return 0;
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.vendor_stat[2], 1))
+            return 0;
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.vendor_stat[3], 1))
+            return 0;
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.duration_us, 1))
+            return 0;
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.isodelay_us, 1))
+            return 0;
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.bandwidth_hz, 1))
+            return 0;
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.base_amplitude_hz, 1))
+            return 0;
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.num_samples, 1))
+            return 0;
+        if (do_swap)
+            pulseg__swap4_array(&d->rf_definitions[i].stats.flip_angle_rad, 11);
         /* v20: multiband/power fields */
-        if (!read4(f, &d->rf_definitions[i].stats.num_bands, 1))
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.num_bands, 1))
             return 0;
-        if (!read4(f, d->rf_definitions[i].stats.band_freq_offsets_hz, PULSEG_MAX_BANDS))
+        if (!pulseg__read4(f, d->rf_definitions[i].stats.band_freq_offsets_hz, PULSEG_MAX_BANDS))
             return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.band_bandwidth_hz, 1))
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.band_bandwidth_hz, 1))
             return 0;
-        if (!read4(f, &d->rf_definitions[i].stats.total_b1sq_power, 1))
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.total_b1sq_power, 1))
             return 0;
         if (do_swap)
-            swap4_array(&d->rf_definitions[i].stats.num_bands, 1 + PULSEG_MAX_BANDS + 2);
+            pulseg__swap4_array(&d->rf_definitions[i].stats.num_bands, 1 + PULSEG_MAX_BANDS + 2);
         /* v1.3: vendor tag */
-        if (!read4(f, &d->rf_definitions[i].stats.vendor, 1))
+        if (!pulseg__read4(f, &d->rf_definitions[i].stats.vendor, 1))
             return 0;
         if (do_swap)
-            swap4(&d->rf_definitions[i].stats.vendor);
+            pulseg__swap4(&d->rf_definitions[i].stats.vendor);
     }
 
     /* gradient definitions */
-    if (!read4(f, &d->num_unique_grads, 1))
+    if (!pulseg__read4(f, &d->num_unique_grads, 1))
         return 0;
     if (do_swap)
-        swap4(&d->num_unique_grads);
+        pulseg__swap4(&d->num_unique_grads);
     d->grad_definitions = (pulseg_grad_definition *)PULSEG_ALLOC(
         (size_t)d->num_unique_grads * sizeof(pulseg_grad_definition));
     if (!d->grad_definitions)
@@ -893,75 +902,75 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     for (i = 0; i < d->num_unique_grads; ++i)
     {
         pulseg_grad_definition *gd = &d->grad_definitions[i];
-        if (!read4(f, &gd->id, 1))
+        if (!pulseg__read4(f, &gd->id, 1))
             return 0;
-        if (!read4(f, &gd->type, 1))
+        if (!pulseg__read4(f, &gd->type, 1))
             return 0;
-        if (!read4(f, &gd->rise_time_or_unused, 1))
+        if (!pulseg__read4(f, &gd->rise_time_or_unused, 1))
             return 0;
-        if (!read4(f, &gd->flat_time_or_unused, 1))
+        if (!pulseg__read4(f, &gd->flat_time_or_unused, 1))
             return 0;
-        if (!read4(f, &gd->fall_time_or_num_uncompressed_samples, 1))
+        if (!pulseg__read4(f, &gd->fall_time_or_num_uncompressed_samples, 1))
             return 0;
-        if (!read4(f, &gd->unused_or_time_shape_id, 1))
+        if (!pulseg__read4(f, &gd->unused_or_time_shape_id, 1))
             return 0;
-        if (!read4(f, &gd->delay, 1))
+        if (!pulseg__read4(f, &gd->delay, 1))
             return 0;
-        if (!read4(f, &gd->num_shots, 1))
+        if (!pulseg__read4(f, &gd->num_shots, 1))
             return 0;
         if (do_swap)
-            swap4_array(&gd->id, 8);
-        if (!read4(f, gd->shot_shape_ids, PULSEG_MAX_GRAD_SHOTS))
+            pulseg__swap4_array(&gd->id, 8);
+        if (!pulseg__read4(f, gd->shot_shape_ids, PULSEG_MAX_GRAD_SHOTS))
             return 0;
-        if (!read4(f, gd->max_amplitude, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__read4(f, gd->max_amplitude, PULSEG_MAX_GRAD_SHOTS))
             return 0;
-        if (!read4(f, gd->min_amplitude, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__read4(f, gd->min_amplitude, PULSEG_MAX_GRAD_SHOTS))
             return 0;
-        if (!read4(f, gd->slew_rate, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__read4(f, gd->slew_rate, PULSEG_MAX_GRAD_SHOTS))
             return 0;
-        if (!read4(f, gd->energy, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__read4(f, gd->energy, PULSEG_MAX_GRAD_SHOTS))
             return 0;
-        if (!read4(f, gd->first_value, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__read4(f, gd->first_value, PULSEG_MAX_GRAD_SHOTS))
             return 0;
-        if (!read4(f, gd->last_value, PULSEG_MAX_GRAD_SHOTS))
+        if (!pulseg__read4(f, gd->last_value, PULSEG_MAX_GRAD_SHOTS))
             return 0;
         if (do_swap)
             /* 7 contiguous MAX_GRAD_SHOTS arrays end the struct
              * (shot_shape_ids .. last_value); swapping 8 ran one array
              * past the allocation for the final element. */
-            swap4_array(gd->shot_shape_ids, 7 * PULSEG_MAX_GRAD_SHOTS);
+            pulseg__swap4_array(gd->shot_shape_ids, 7 * PULSEG_MAX_GRAD_SHOTS);
     }
 
     /* ADC definitions */
-    if (!read4(f, &d->num_unique_adcs, 1))
+    if (!pulseg__read4(f, &d->num_unique_adcs, 1))
         return 0;
     if (do_swap)
-        swap4(&d->num_unique_adcs);
+        pulseg__swap4(&d->num_unique_adcs);
     d->adc_definitions = (pulseg_adc_definition *)PULSEG_ALLOC(
         (size_t)d->num_unique_adcs * sizeof(pulseg_adc_definition));
     if (!d->adc_definitions)
         return 0;
     for (i = 0; i < d->num_unique_adcs; ++i)
     {
-        if (!read4(f, &d->adc_definitions[i].id, 4))
+        if (!pulseg__read4(f, &d->adc_definitions[i].id, 4))
             return 0;
         if (do_swap)
-            swap4_array(&d->adc_definitions[i].id, 4);
+            pulseg__swap4_array(&d->adc_definitions[i].id, 4);
     }
 
     /* freq_mod definitions (legacy: read and skip if count > 0) */
-    if (!read4(f, &d->num_freq_mod_defs, 1))
+    if (!pulseg__read4(f, &d->num_freq_mod_defs, 1))
         return 0;
     if (do_swap)
-        swap4(&d->num_freq_mod_defs);
+        pulseg__swap4(&d->num_freq_mod_defs);
     d->num_freq_mod_defs = 0;
     d->freq_mod_definitions = NULL;
 
     /* rf_shim definitions */
-    if (!read4(f, &d->num_rf_shims, 1))
+    if (!pulseg__read4(f, &d->num_rf_shims, 1))
         return 0;
     if (do_swap)
-        swap4(&d->num_rf_shims);
+        pulseg__swap4(&d->num_rf_shims);
     if (d->num_rf_shims > 0)
     {
         d->rf_shim_definitions = (pulseg_rf_shim_definition *)PULSEG_ALLOC(
@@ -972,26 +981,26 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         {
             pulseg_rf_shim_definition *rs = &d->rf_shim_definitions[i];
             memset(rs, 0, sizeof(*rs));
-            if (!read4(f, &rs->id, 1))
+            if (!pulseg__read4(f, &rs->id, 1))
                 return 0;
-            if (!read4(f, &rs->num_channels, 1))
+            if (!pulseg__read4(f, &rs->num_channels, 1))
                 return 0;
             if (do_swap)
             {
-                swap4(&rs->id);
-                swap4(&rs->num_channels);
+                pulseg__swap4(&rs->id);
+                pulseg__swap4(&rs->num_channels);
             }
             n = rs->num_channels;
             if (n > 0 && n <= PULSEG_MAX_RF_SHIM_CHANNELS)
             {
-                if (!read4(f, rs->magnitudes, n))
+                if (!pulseg__read4(f, rs->magnitudes, n))
                     return 0;
-                if (!read4(f, rs->phases, n))
+                if (!pulseg__read4(f, rs->phases, n))
                     return 0;
                 if (do_swap)
                 {
-                    swap4_array(rs->magnitudes, n);
-                    swap4_array(rs->phases, n);
+                    pulseg__swap4_array(rs->magnitudes, n);
+                    pulseg__swap4_array(rs->phases, n);
                 }
             }
         }
@@ -1000,10 +1009,10 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     /* rotations: read from the ROTATIONS section (read_rotations) */
 
     /* triggers */
-    if (!read4(f, &d->num_triggers, 1))
+    if (!pulseg__read4(f, &d->num_triggers, 1))
         return 0;
     if (do_swap)
-        swap4(&d->num_triggers);
+        pulseg__swap4(&d->num_triggers);
     if (d->num_triggers > 0)
     {
         d->trigger_events = (pulseq_trigger_event *)PULSEG_ALLOC(
@@ -1012,61 +1021,61 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             return 0;
         for (i = 0; i < d->num_triggers; ++i)
         {
-            if (!read4(f, &ival, 1))
+            if (!pulseg__read4(f, &ival, 1))
                 return 0;
             if (do_swap)
-                swap4(&ival);
+                pulseg__swap4(&ival);
             d->trigger_events[i].type = (short)ival;
-            if (!read4(f, &ival, 1))
+            if (!pulseg__read4(f, &ival, 1))
                 return 0;
             if (do_swap)
-                swap4(&ival);
+                pulseg__swap4(&ival);
             d->trigger_events[i].duration = (long)ival;
-            if (!read4(f, &ival, 1))
+            if (!pulseg__read4(f, &ival, 1))
                 return 0;
             if (do_swap)
-                swap4(&ival);
+                pulseg__swap4(&ival);
             d->trigger_events[i].delay = (long)ival;
-            if (!read4(f, &d->trigger_events[i].trigger_type, 1))
+            if (!pulseg__read4(f, &d->trigger_events[i].trigger_type, 1))
                 return 0;
-            if (!read4(f, &d->trigger_events[i].trigger_channel, 1))
+            if (!pulseg__read4(f, &d->trigger_events[i].trigger_channel, 1))
                 return 0;
             if (do_swap)
-                swap4_array(&d->trigger_events[i].trigger_type, 2);
+                pulseg__swap4_array(&d->trigger_events[i].trigger_type, 2);
         }
     }
 
     /* shapes: read from the SHAPES section (read_shapes) */
 
     /* TR descriptor */
-    if (!read4(f, &d->tr_descriptor.num_prep_blocks, 1))
+    if (!pulseg__read4(f, &d->tr_descriptor.num_prep_blocks, 1))
         return 0;
-    if (!read4(f, &d->tr_descriptor.num_cooldown_blocks, 1))
+    if (!pulseg__read4(f, &d->tr_descriptor.num_cooldown_blocks, 1))
         return 0;
-    if (!read4(f, &d->tr_descriptor.tr_size, 1))
+    if (!pulseg__read4(f, &d->tr_descriptor.tr_size, 1))
         return 0;
-    if (!read4(f, &d->tr_descriptor.num_trs, 1))
+    if (!pulseg__read4(f, &d->tr_descriptor.num_trs, 1))
         return 0;
-    if (!read4(f, &d->tr_descriptor.num_prep_trs, 1))
+    if (!pulseg__read4(f, &d->tr_descriptor.num_prep_trs, 1))
         return 0;
-    if (!read4(f, &d->tr_descriptor.degenerate_prep, 1))
+    if (!pulseg__read4(f, &d->tr_descriptor.degenerate_prep, 1))
         return 0;
-    if (!read4(f, &d->tr_descriptor.num_cooldown_trs, 1))
+    if (!pulseg__read4(f, &d->tr_descriptor.num_cooldown_trs, 1))
         return 0;
-    if (!read4(f, &d->tr_descriptor.degenerate_cooldown, 1))
+    if (!pulseg__read4(f, &d->tr_descriptor.degenerate_cooldown, 1))
         return 0;
-    if (!read4(f, &d->tr_descriptor.imaging_tr_start, 1))
+    if (!pulseg__read4(f, &d->tr_descriptor.imaging_tr_start, 1))
         return 0;
-    if (!read4(f, &d->tr_descriptor.tr_duration_us, 1))
+    if (!pulseg__read4(f, &d->tr_descriptor.tr_duration_us, 1))
         return 0;
     if (do_swap)
-        swap4_array(&d->tr_descriptor.num_prep_blocks, 10);
+        pulseg__swap4_array(&d->tr_descriptor.num_prep_blocks, 10);
 
     /* segment definitions */
-    if (!read4(f, &d->num_unique_segments, 1))
+    if (!pulseg__read4(f, &d->num_unique_segments, 1))
         return 0;
     if (do_swap)
-        swap4(&d->num_unique_segments);
+        pulseg__swap4(&d->num_unique_segments);
     if (d->num_unique_segments > 0)
     {
         d->segment_definitions = (pulseg_virtual_segment *)PULSEG_ALLOC(
@@ -1091,14 +1100,14 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             seg->timing.num_adc_anchors = 0;
             seg->timing.adc_anchors = NULL;
 
-            if (!read4(f, &seg->start_block, 1))
+            if (!pulseg__read4(f, &seg->start_block, 1))
                 return 0;
-            if (!read4(f, &seg->num_blocks, 1))
+            if (!pulseg__read4(f, &seg->num_blocks, 1))
                 return 0;
-            if (!read4(f, &seg->max_energy_start_block, 1))
+            if (!pulseg__read4(f, &seg->max_energy_start_block, 1))
                 return 0;
             if (do_swap)
-                swap4_array(&seg->start_block, 3);
+                pulseg__swap4_array(&seg->start_block, 3);
 
             n = seg->num_blocks;
             if (n > 0)
@@ -1117,52 +1126,52 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                     !seg->norot_flag || !seg->nopos_flag || !seg->has_freq_mod || !seg->has_adc ||
                     !seg->is_dynamic_delay || !seg->initial_states)
                     return 0;
-                if (!read4(f, seg->unique_block_indices, n))
+                if (!pulseg__read4(f, seg->unique_block_indices, n))
                     return 0;
-                if (!read4(f, seg->has_digitalout, n))
+                if (!pulseg__read4(f, seg->has_digitalout, n))
                     return 0;
-                if (!read4(f, seg->has_rotation, n))
+                if (!pulseg__read4(f, seg->has_rotation, n))
                     return 0;
-                if (!read4(f, seg->norot_flag, n))
+                if (!pulseg__read4(f, seg->norot_flag, n))
                     return 0;
-                if (!read4(f, seg->nopos_flag, n))
+                if (!pulseg__read4(f, seg->nopos_flag, n))
                     return 0;
-                if (!read4(f, seg->has_freq_mod, n))
+                if (!pulseg__read4(f, seg->has_freq_mod, n))
                     return 0;
-                if (!read4(f, seg->has_adc, n))
+                if (!pulseg__read4(f, seg->has_adc, n))
                     return 0;
-                if (!read4(f, seg->is_dynamic_delay, n))
+                if (!pulseg__read4(f, seg->is_dynamic_delay, n))
                     return 0;
-                if (!read4(f, seg->initial_states, n * PULSEG_BLOCK_INITIAL_STATE_WORDS))
+                if (!pulseg__read4(f, seg->initial_states, n * PULSEG_BLOCK_INITIAL_STATE_WORDS))
                     return 0;
                 if (do_swap)
                 {
-                    swap4_array(seg->unique_block_indices, n);
-                    swap4_array(seg->has_digitalout, n);
-                    swap4_array(seg->has_rotation, n);
-                    swap4_array(seg->norot_flag, n);
-                    swap4_array(seg->nopos_flag, n);
-                    swap4_array(seg->has_freq_mod, n);
-                    swap4_array(seg->has_adc, n);
-                    swap4_array(seg->is_dynamic_delay, n);
-                    swap4_array(seg->initial_states, n * PULSEG_BLOCK_INITIAL_STATE_WORDS);
+                    pulseg__swap4_array(seg->unique_block_indices, n);
+                    pulseg__swap4_array(seg->has_digitalout, n);
+                    pulseg__swap4_array(seg->has_rotation, n);
+                    pulseg__swap4_array(seg->norot_flag, n);
+                    pulseg__swap4_array(seg->nopos_flag, n);
+                    pulseg__swap4_array(seg->has_freq_mod, n);
+                    pulseg__swap4_array(seg->has_adc, n);
+                    pulseg__swap4_array(seg->is_dynamic_delay, n);
+                    pulseg__swap4_array(seg->initial_states, n * PULSEG_BLOCK_INITIAL_STATE_WORDS);
                 }
             }
-            if (!read4(f, &seg->trigger_id, 1))
+            if (!pulseg__read4(f, &seg->trigger_id, 1))
                 return 0;
             if (do_swap)
-                swap4(&seg->trigger_id);
-            if (!read4(f, &seg->is_nav, 1))
+                pulseg__swap4(&seg->trigger_id);
+            if (!pulseg__read4(f, &seg->is_nav, 1))
                 return 0;
             if (do_swap)
-                swap4(&seg->is_nav);
+                pulseg__swap4(&seg->is_nav);
 
             /* Segment timing anchors (k-space refs), serialized by
              * write_common. (num_*_anchors / *_anchors were zeroed above.) */
-            if (!read4(f, &seg->timing.num_rf_anchors, 1))
+            if (!pulseg__read4(f, &seg->timing.num_rf_anchors, 1))
                 return 0;
             if (do_swap)
-                swap4(&seg->timing.num_rf_anchors);
+                pulseg__swap4(&seg->timing.num_rf_anchors);
             if (seg->timing.num_rf_anchors > 0)
             {
                 int nw = seg->timing.num_rf_anchors * (int)(sizeof(pulseg_segment_rf_anchor) / 4);
@@ -1170,15 +1179,15 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                     (size_t)seg->timing.num_rf_anchors * sizeof(pulseg_segment_rf_anchor));
                 if (!seg->timing.rf_anchors)
                     return 0;
-                if (!read4(f, seg->timing.rf_anchors, nw))
+                if (!pulseg__read4(f, seg->timing.rf_anchors, nw))
                     return 0;
                 if (do_swap)
-                    swap4_array(seg->timing.rf_anchors, nw);
+                    pulseg__swap4_array(seg->timing.rf_anchors, nw);
             }
-            if (!read4(f, &seg->timing.num_adc_anchors, 1))
+            if (!pulseg__read4(f, &seg->timing.num_adc_anchors, 1))
                 return 0;
             if (do_swap)
-                swap4(&seg->timing.num_adc_anchors);
+                pulseg__swap4(&seg->timing.num_adc_anchors);
             if (seg->timing.num_adc_anchors > 0)
             {
                 int nw = seg->timing.num_adc_anchors * (int)(sizeof(pulseg_segment_adc_anchor) / 4);
@@ -1186,64 +1195,74 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                     (size_t)seg->timing.num_adc_anchors * sizeof(pulseg_segment_adc_anchor));
                 if (!seg->timing.adc_anchors)
                     return 0;
-                if (!read4(f, seg->timing.adc_anchors, nw))
+                if (!pulseg__read4(f, seg->timing.adc_anchors, nw))
                     return 0;
                 if (do_swap)
-                    swap4_array(seg->timing.adc_anchors, nw);
+                    pulseg__swap4_array(seg->timing.adc_anchors, nw);
             }
         }
     }
 
     /* segment table */
-    if (!read4(f, &d->segment_table.num_unique_segments, 1))
+    if (!pulseg__read4(f, &d->segment_table.num_unique_segments, 1))
         return 0;
-    if (!read4(f, &d->segment_table.num_prep_segments, 1))
+    if (!pulseg__read4(f, &d->segment_table.num_prep_segments, 1))
         return 0;
     if (do_swap)
-        swap4_array(&d->segment_table.num_unique_segments, 2);
+        pulseg__swap4_array(&d->segment_table.num_unique_segments, 2);
     if (d->segment_table.num_prep_segments > 0)
     {
         d->segment_table.prep_segment_table =
             (int *)PULSEG_ALLOC((size_t)d->segment_table.num_prep_segments * sizeof(int));
         if (!d->segment_table.prep_segment_table)
             return 0;
-        if (!read4(f, d->segment_table.prep_segment_table, d->segment_table.num_prep_segments))
+        if (!pulseg__read4(
+                f,
+                d->segment_table.prep_segment_table,
+                d->segment_table.num_prep_segments))
             return 0;
         if (do_swap)
-            swap4_array(d->segment_table.prep_segment_table, d->segment_table.num_prep_segments);
+            pulseg__swap4_array(
+                d->segment_table.prep_segment_table,
+                d->segment_table.num_prep_segments);
     }
-    if (!read4(f, &d->segment_table.num_main_segments, 1))
+    if (!pulseg__read4(f, &d->segment_table.num_main_segments, 1))
         return 0;
     if (do_swap)
-        swap4(&d->segment_table.num_main_segments);
+        pulseg__swap4(&d->segment_table.num_main_segments);
     if (d->segment_table.num_main_segments > 0)
     {
         d->segment_table.main_segment_table =
             (int *)PULSEG_ALLOC((size_t)d->segment_table.num_main_segments * sizeof(int));
         if (!d->segment_table.main_segment_table)
             return 0;
-        if (!read4(f, d->segment_table.main_segment_table, d->segment_table.num_main_segments))
+        if (!pulseg__read4(
+                f,
+                d->segment_table.main_segment_table,
+                d->segment_table.num_main_segments))
             return 0;
         if (do_swap)
-            swap4_array(d->segment_table.main_segment_table, d->segment_table.num_main_segments);
+            pulseg__swap4_array(
+                d->segment_table.main_segment_table,
+                d->segment_table.num_main_segments);
     }
-    if (!read4(f, &d->segment_table.num_cooldown_segments, 1))
+    if (!pulseg__read4(f, &d->segment_table.num_cooldown_segments, 1))
         return 0;
     if (do_swap)
-        swap4(&d->segment_table.num_cooldown_segments);
+        pulseg__swap4(&d->segment_table.num_cooldown_segments);
     if (d->segment_table.num_cooldown_segments > 0)
     {
         d->segment_table.cooldown_segment_table =
             (int *)PULSEG_ALLOC((size_t)d->segment_table.num_cooldown_segments * sizeof(int));
         if (!d->segment_table.cooldown_segment_table)
             return 0;
-        if (!read4(
+        if (!pulseg__read4(
                 f,
                 d->segment_table.cooldown_segment_table,
                 d->segment_table.num_cooldown_segments))
             return 0;
         if (do_swap)
-            swap4_array(
+            pulseg__swap4_array(
                 d->segment_table.cooldown_segment_table,
                 d->segment_table.num_cooldown_segments);
     }
@@ -1268,75 +1287,75 @@ static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     int i;
 
     /* block table */
-    if (!read4(f, &d->num_blocks, 1))
+    if (!pulseg__read4(f, &d->num_blocks, 1))
         return 0;
     if (do_swap)
-        swap4(&d->num_blocks);
+        pulseg__swap4(&d->num_blocks);
     d->block_table = (pulseg_block_table_element *)PULSEG_ALLOC(
         (size_t)d->num_blocks * sizeof(pulseg_block_table_element));
     if (!d->block_table)
         return 0;
     for (i = 0; i < d->num_blocks; ++i)
     {
-        if (!read4(f, &d->block_table[i].id, 17))
+        if (!pulseg__read4(f, &d->block_table[i].id, 17))
             return 0;
         if (do_swap)
-            swap4_array(&d->block_table[i].id, 17);
+            pulseg__swap4_array(&d->block_table[i].id, 17);
     }
 
     /* RF table */
-    if (!read4(f, &d->rf_table_size, 1))
+    if (!pulseg__read4(f, &d->rf_table_size, 1))
         return 0;
     if (do_swap)
-        swap4(&d->rf_table_size);
+        pulseg__swap4(&d->rf_table_size);
     d->rf_table = (pulseg_rf_table_element *)PULSEG_ALLOC(
         (size_t)d->rf_table_size * sizeof(pulseg_rf_table_element));
     if (!d->rf_table)
         return 0;
     for (i = 0; i < d->rf_table_size; ++i)
     {
-        if (!read4(f, &d->rf_table[i].id, 4))
+        if (!pulseg__read4(f, &d->rf_table[i].id, 4))
             return 0;
         if (do_swap)
-            swap4_array(&d->rf_table[i].id, 4);
-        if (!read4(f, &d->rf_table[i].rf_use, 1))
+            pulseg__swap4_array(&d->rf_table[i].id, 4);
+        if (!pulseg__read4(f, &d->rf_table[i].rf_use, 1))
             return 0;
         if (do_swap)
-            swap4(&d->rf_table[i].rf_use);
+            pulseg__swap4(&d->rf_table[i].rf_use);
     }
 
     /* gradient table */
-    if (!read4(f, &d->grad_table_size, 1))
+    if (!pulseg__read4(f, &d->grad_table_size, 1))
         return 0;
     if (do_swap)
-        swap4(&d->grad_table_size);
+        pulseg__swap4(&d->grad_table_size);
     d->grad_table = (pulseg_grad_table_element *)PULSEG_ALLOC(
         (size_t)d->grad_table_size * sizeof(pulseg_grad_table_element));
     if (!d->grad_table)
         return 0;
     for (i = 0; i < d->grad_table_size; ++i)
     {
-        if (!read4(f, &d->grad_table[i].id, 3))
+        if (!pulseg__read4(f, &d->grad_table[i].id, 3))
             return 0;
         if (do_swap)
-            swap4_array(&d->grad_table[i].id, 3);
+            pulseg__swap4_array(&d->grad_table[i].id, 3);
     }
 
     /* ADC table */
-    if (!read4(f, &d->adc_table_size, 1))
+    if (!pulseg__read4(f, &d->adc_table_size, 1))
         return 0;
     if (do_swap)
-        swap4(&d->adc_table_size);
+        pulseg__swap4(&d->adc_table_size);
     d->adc_table = (pulseg_adc_table_element *)PULSEG_ALLOC(
         (size_t)d->adc_table_size * sizeof(pulseg_adc_table_element));
     if (!d->adc_table)
         return 0;
     for (i = 0; i < d->adc_table_size; ++i)
     {
-        if (!read4(f, &d->adc_table[i].id, 3))
+        if (!pulseg__read4(f, &d->adc_table[i].id, 3))
             return 0;
         if (do_swap)
-            swap4_array(&d->adc_table[i].id, 3);
+            pulseg__swap4_array(&d->adc_table[i].id, 3);
     }
 
     /* label table.
@@ -1349,8 +1368,8 @@ static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         return 0;
     if (do_swap)
     {
-        swap4(&d->label_num_columns);
-        swap4(&d->label_num_entries);
+        pulseg__swap4(&d->label_num_columns);
+        pulseg__swap4(&d->label_num_entries);
     }
     if (d->label_num_entries > 0)
     {
@@ -1365,7 +1384,7 @@ static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                 f) != (size_t)d->label_num_entries * (size_t)d->label_num_columns)
             return 0;
         if (do_swap)
-            swap4_array(d->label_table, d->label_num_entries * d->label_num_columns);
+            pulseg__swap4_array(d->label_table, d->label_num_entries * d->label_num_columns);
     }
     else
     {
@@ -1374,7 +1393,7 @@ static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     if (fread(&d->label_limits, sizeof(pulseg_label_limits), 1, f) != 1)
         return 0;
     if (do_swap)
-        swap4_array(&d->label_limits, (int)(sizeof(pulseg_label_limits) / 4));
+        pulseg__swap4_array(&d->label_limits, (int)(sizeof(pulseg_label_limits) / 4));
 
     return 1;
 }
@@ -1393,7 +1412,7 @@ static int read_definitions_cache(FILE *f, pulseg_sequence_descriptor *d, int do
     if (fread(&d->num_definitions, sizeof(int), 1, f) != 1)
         return 0;
     if (do_swap)
-        swap4(&d->num_definitions);
+        pulseg__swap4(&d->num_definitions);
     if (d->num_definitions > 0)
     {
         d->definitions = (pulseq_definition *)PULSEG_ALLOC(
@@ -1409,7 +1428,7 @@ static int read_definitions_cache(FILE *f, pulseg_sequence_descriptor *d, int do
             if (fread(&name_len, sizeof(int), 1, f) != 1)
                 return 0;
             if (do_swap)
-                swap4(&name_len);
+                pulseg__swap4(&name_len);
             if (name_len > 0 && name_len < PULSEQ_DEFINITION_NAME_LENGTH)
             {
                 if (fread(d->definitions[i].name, 1, (size_t)name_len, f) != (size_t)name_len)
@@ -1419,7 +1438,7 @@ static int read_definitions_cache(FILE *f, pulseg_sequence_descriptor *d, int do
             if (fread(&d->definitions[i].value_size, sizeof(int), 1, f) != 1)
                 return 0;
             if (do_swap)
-                swap4(&d->definitions[i].value_size);
+                pulseg__swap4(&d->definitions[i].value_size);
             if (d->definitions[i].value_size > 0)
             {
                 int j;
@@ -1434,7 +1453,7 @@ static int read_definitions_cache(FILE *f, pulseg_sequence_descriptor *d, int do
                     if (fread(&vlen, sizeof(int), 1, f) != 1)
                         return 0;
                     if (do_swap)
-                        swap4(&vlen);
+                        pulseg__swap4(&vlen);
                     if (vlen > 0)
                     {
                         d->definitions[i].value[j] = (char *)PULSEG_ALLOC((size_t)(vlen + 1));
@@ -1458,10 +1477,10 @@ static int read_rotations(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
 {
     int i;
 
-    if (!read4(f, &d->num_rotations, 1))
+    if (!pulseg__read4(f, &d->num_rotations, 1))
         return 0;
     if (do_swap)
-        swap4(&d->num_rotations);
+        pulseg__swap4(&d->num_rotations);
     if (d->num_rotations > 0)
     {
         d->rotation_matrices =
@@ -1470,10 +1489,10 @@ static int read_rotations(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             return 0;
         for (i = 0; i < d->num_rotations; ++i)
         {
-            if (!read4(f, d->rotation_matrices[i], 9))
+            if (!pulseg__read4(f, d->rotation_matrices[i], 9))
                 return 0;
             if (do_swap)
-                swap4_array(d->rotation_matrices[i], 9);
+                pulseg__swap4_array(d->rotation_matrices[i], 9);
         }
     }
 
@@ -1486,10 +1505,10 @@ static int read_shapes(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
 {
     int i, n;
 
-    if (!read4(f, &d->num_shapes, 1))
+    if (!pulseg__read4(f, &d->num_shapes, 1))
         return 0;
     if (do_swap)
-        swap4(&d->num_shapes);
+        pulseg__swap4(&d->num_shapes);
     if (d->num_shapes > 0)
     {
         d->shapes = (pulseq_shape *)PULSEG_ALLOC((size_t)d->num_shapes * sizeof(pulseq_shape));
@@ -1498,22 +1517,22 @@ static int read_shapes(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         for (i = 0; i < d->num_shapes; ++i)
         {
             d->shapes[i].samples = NULL;
-            if (!read4(f, &d->shapes[i].num_uncompressed_samples, 1))
+            if (!pulseg__read4(f, &d->shapes[i].num_uncompressed_samples, 1))
                 return 0;
-            if (!read4(f, &d->shapes[i].num_samples, 1))
+            if (!pulseg__read4(f, &d->shapes[i].num_samples, 1))
                 return 0;
             if (do_swap)
-                swap4_array(&d->shapes[i].num_uncompressed_samples, 2);
+                pulseg__swap4_array(&d->shapes[i].num_uncompressed_samples, 2);
             n = d->shapes[i].num_samples;
             if (n > 0)
             {
                 d->shapes[i].samples = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
                 if (!d->shapes[i].samples)
                     return 0;
-                if (!read4(f, d->shapes[i].samples, n))
+                if (!pulseg__read4(f, d->shapes[i].samples, n))
                     return 0;
                 if (do_swap)
-                    swap4_array(d->shapes[i].samples, n);
+                    pulseg__swap4_array(d->shapes[i].samples, n);
             }
         }
     }
@@ -1529,7 +1548,7 @@ static int read_scanloop(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     if (fread(&d->exec_stream_len, sizeof(int), 1, f) != 1)
         return 0;
     if (do_swap)
-        swap4(&d->exec_stream_len);
+        pulseg__swap4(&d->exec_stream_len);
     if (d->exec_stream_len > 0)
     {
         d->exec_stream_block_idx = (int *)PULSEG_ALLOC((size_t)d->exec_stream_len * sizeof(int));
@@ -1553,10 +1572,10 @@ static int read_scanloop(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             return 0;
         if (do_swap)
         {
-            swap4_array(d->exec_stream_block_idx, d->exec_stream_len);
-            swap4_array(d->exec_stream_tr_id, d->exec_stream_len);
-            swap4_array(d->exec_stream_seg_id, d->exec_stream_len);
-            swap4_array(d->exec_stream_avg_id, d->exec_stream_len);
+            pulseg__swap4_array(d->exec_stream_block_idx, d->exec_stream_len);
+            pulseg__swap4_array(d->exec_stream_tr_id, d->exec_stream_len);
+            pulseg__swap4_array(d->exec_stream_seg_id, d->exec_stream_len);
+            pulseg__swap4_array(d->exec_stream_avg_id, d->exec_stream_len);
         }
     }
     else
@@ -1573,7 +1592,7 @@ static int read_scanloop(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         if (fread(&vgf_len, sizeof(int), 1, f) != 1)
             return 0;
         if (do_swap)
-            swap4(&vgf_len);
+            pulseg__swap4(&vgf_len);
         if (vgf_len > 0)
         {
             d->variable_grad_flags = (int *)PULSEG_ALLOC((size_t)vgf_len * sizeof(int));
@@ -1582,7 +1601,7 @@ static int read_scanloop(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             if (fread(d->variable_grad_flags, sizeof(int), (size_t)vgf_len, f) != (size_t)vgf_len)
                 return 0;
             if (do_swap)
-                swap4_array(d->variable_grad_flags, vgf_len);
+                pulseg__swap4_array(d->variable_grad_flags, vgf_len);
         }
         else
         {
@@ -1600,31 +1619,31 @@ static int write_common_payload(FILE *f, const pulseg_collection *coll)
     int i;
 
     /* collection scalars */
-    if (!write4(f, &coll->num_subsequences, 1))
+    if (!pulseg__write4(f, &coll->num_subsequences, 1))
     {
         return 0;
     }
-    if (!write4(f, &coll->num_repetitions, 1))
+    if (!pulseg__write4(f, &coll->num_repetitions, 1))
     {
         return 0;
     }
-    if (!write4(f, &coll->total_unique_segments, 1))
+    if (!pulseg__write4(f, &coll->total_unique_segments, 1))
     {
         return 0;
     }
-    if (!write4(f, &coll->total_unique_adcs, 1))
+    if (!pulseg__write4(f, &coll->total_unique_adcs, 1))
     {
         return 0;
     }
-    if (!write4(f, &coll->total_blocks, 1))
+    if (!pulseg__write4(f, &coll->total_blocks, 1))
     {
         return 0;
     }
-    if (!write4(f, &coll->total_readouts, 1))
+    if (!pulseg__write4(f, &coll->total_readouts, 1))
     {
         return 0;
     }
-    if (!write4(f, &coll->total_duration_us, 1))
+    if (!pulseg__write4(f, &coll->total_duration_us, 1))
     {
         return 0;
     }
@@ -1632,19 +1651,19 @@ static int write_common_payload(FILE *f, const pulseg_collection *coll)
     /* subsequence info */
     for (i = 0; i < coll->num_subsequences; ++i)
     {
-        if (!write4(f, &coll->subsequence_info[i].sequence_index, 1))
+        if (!pulseg__write4(f, &coll->subsequence_info[i].sequence_index, 1))
         {
             return 0;
         }
-        if (!write4(f, &coll->subsequence_info[i].adc_id_offset, 1))
+        if (!pulseg__write4(f, &coll->subsequence_info[i].adc_id_offset, 1))
         {
             return 0;
         }
-        if (!write4(f, &coll->subsequence_info[i].segment_id_offset, 1))
+        if (!pulseg__write4(f, &coll->subsequence_info[i].segment_id_offset, 1))
         {
             return 0;
         }
-        if (!write4(f, &coll->subsequence_info[i].block_index_offset, 1))
+        if (!pulseg__write4(f, &coll->subsequence_info[i].block_index_offset, 1))
         {
             return 0;
         }
@@ -1673,7 +1692,7 @@ static int write_augment_payload(FILE *f, const pulseg_collection *coll, desc_wr
 {
     int i;
 
-    if (!write4(f, &coll->num_subsequences, 1))
+    if (!pulseg__write4(f, &coll->num_subsequences, 1))
         return 0;
     for (i = 0; i < coll->num_subsequences; ++i)
         if (!wfn(f, &coll->descriptors[i]))
@@ -1745,37 +1764,37 @@ static int write_cache(const char *cache_path, const pulseg_collection *coll, in
     version_revision = PULSEG_CACHE_VERSION_REVISION;
     num_sections = 6;
 
-    if (!write4(f, &marker, 1))
+    if (!pulseg__write4(f, &marker, 1))
     {
         fclose(f);
         return 0;
     }
-    if (!write4(f, &version_major, 1))
+    if (!pulseg__write4(f, &version_major, 1))
     {
         fclose(f);
         return 0;
     }
-    if (!write4(f, &version_minor, 1))
+    if (!pulseg__write4(f, &version_minor, 1))
     {
         fclose(f);
         return 0;
     }
-    if (!write4(f, &version_revision, 1))
+    if (!pulseg__write4(f, &version_revision, 1))
     {
         fclose(f);
         return 0;
     }
-    if (!write4(f, &vendor, 1))
+    if (!pulseg__write4(f, &vendor, 1))
     {
         fclose(f);
         return 0;
     }
-    if (!write4(f, &seq_file_size, 1))
+    if (!pulseg__write4(f, &seq_file_size, 1))
     {
         fclose(f);
         return 0;
     }
-    if (!write4(f, &num_sections, 1))
+    if (!pulseg__write4(f, &num_sections, 1))
     {
         fclose(f);
         return 0;
@@ -1796,7 +1815,7 @@ static int write_cache(const char *cache_path, const pulseg_collection *coll, in
     for (i = 0; i < PULSEG_CACHE_MAX_SECTIONS * 3; ++i)
     {
         int zero = 0;
-        if (!write4(f, &zero, 1))
+        if (!pulseg__write4(f, &zero, 1))
         {
             fclose(f);
             return 0;
@@ -1843,17 +1862,17 @@ static int write_cache(const char *cache_path, const pulseg_collection *coll, in
 
     for (i = 0; i < num_sections; ++i)
     {
-        if (!write4(f, &entries[i].section_id, 1))
+        if (!pulseg__write4(f, &entries[i].section_id, 1))
         {
             fclose(f);
             return 0;
         }
-        if (!write4(f, &entries[i].offset, 1))
+        if (!pulseg__write4(f, &entries[i].offset, 1))
         {
             fclose(f);
             return 0;
         }
-        if (!write4(f, &entries[i].size, 1))
+        if (!pulseg__write4(f, &entries[i].size, 1))
         {
             fclose(f);
             return 0;
@@ -1877,43 +1896,43 @@ static int read_common_payload(FILE *f, pulseg_collection *coll, int do_swap)
     int i;
 
     /* collection scalars */
-    if (!read4(f, &coll->num_subsequences, 1))
+    if (!pulseg__read4(f, &coll->num_subsequences, 1))
     {
         return 0;
     }
-    if (!read4(f, &coll->num_repetitions, 1))
+    if (!pulseg__read4(f, &coll->num_repetitions, 1))
     {
         return 0;
     }
-    if (!read4(f, &coll->total_unique_segments, 1))
+    if (!pulseg__read4(f, &coll->total_unique_segments, 1))
     {
         return 0;
     }
-    if (!read4(f, &coll->total_unique_adcs, 1))
+    if (!pulseg__read4(f, &coll->total_unique_adcs, 1))
     {
         return 0;
     }
-    if (!read4(f, &coll->total_blocks, 1))
+    if (!pulseg__read4(f, &coll->total_blocks, 1))
     {
         return 0;
     }
-    if (!read4(f, &coll->total_readouts, 1))
+    if (!pulseg__read4(f, &coll->total_readouts, 1))
     {
         return 0;
     }
-    if (!read4(f, &coll->total_duration_us, 1))
+    if (!pulseg__read4(f, &coll->total_duration_us, 1))
     {
         return 0;
     }
     if (do_swap)
     {
-        swap4(&coll->num_subsequences);
-        swap4(&coll->num_repetitions);
-        swap4(&coll->total_unique_segments);
-        swap4(&coll->total_unique_adcs);
-        swap4(&coll->total_blocks);
-        swap4(&coll->total_readouts);
-        swap4(&coll->total_duration_us);
+        pulseg__swap4(&coll->num_subsequences);
+        pulseg__swap4(&coll->num_repetitions);
+        pulseg__swap4(&coll->total_unique_segments);
+        pulseg__swap4(&coll->total_unique_adcs);
+        pulseg__swap4(&coll->total_blocks);
+        pulseg__swap4(&coll->total_readouts);
+        pulseg__swap4(&coll->total_duration_us);
     }
 
     /* allocate arrays */
@@ -1935,12 +1954,12 @@ static int read_common_payload(FILE *f, pulseg_collection *coll, int do_swap)
     /* subsequence info */
     for (i = 0; i < coll->num_subsequences; ++i)
     {
-        if (!read4(f, &coll->subsequence_info[i].sequence_index, 4))
+        if (!pulseg__read4(f, &coll->subsequence_info[i].sequence_index, 4))
         {
             return 0;
         }
         if (do_swap)
-            swap4_array(&coll->subsequence_info[i].sequence_index, 4);
+            pulseg__swap4_array(&coll->subsequence_info[i].sequence_index, 4);
     }
 
     /* per-subsequence COMMON descriptors */
@@ -1981,10 +2000,10 @@ static int read_augment_payload(FILE *f, pulseg_collection *coll, int do_swap, d
 
     if (!coll->descriptors)
         return 0; /* COMMON must be read first */
-    if (!read4(f, &ns, 1))
+    if (!pulseg__read4(f, &ns, 1))
         return 0;
     if (do_swap)
-        swap4(&ns);
+        pulseg__swap4(&ns);
     if (ns != coll->num_subsequences)
         return 0;
     for (i = 0; i < coll->num_subsequences; ++i)
@@ -2045,7 +2064,7 @@ static int read_sections(
     if (!f)
         return 0;
 
-    if (!read4(f, &marker, 1))
+    if (!pulseg__read4(f, &marker, 1))
     {
         fclose(f);
         return 0;
@@ -2054,7 +2073,7 @@ static int read_sections(
     do_swap = 0;
     if (marker != PULSEG_CACHE_ENDIAN_MARKER)
     {
-        swap4(&marker);
+        pulseg__swap4(&marker);
         if (marker != PULSEG_CACHE_ENDIAN_MARKER)
         {
             fclose(f);
@@ -2063,26 +2082,26 @@ static int read_sections(
         do_swap = 1;
     }
 
-    if (!read4(f, &version_major, 1))
+    if (!pulseg__read4(f, &version_major, 1))
     {
         fclose(f);
         return 0;
     }
-    if (!read4(f, &version_minor, 1))
+    if (!pulseg__read4(f, &version_minor, 1))
     {
         fclose(f);
         return 0;
     }
-    if (!read4(f, &version_revision, 1))
+    if (!pulseg__read4(f, &version_revision, 1))
     {
         fclose(f);
         return 0;
     }
     if (do_swap)
     {
-        swap4(&version_major);
-        swap4(&version_minor);
-        swap4(&version_revision);
+        pulseg__swap4(&version_major);
+        pulseg__swap4(&version_minor);
+        pulseg__swap4(&version_revision);
     }
     if (version_major != PULSEG_CACHE_VERSION_MAJOR ||
         version_minor != PULSEG_CACHE_VERSION_MINOR ||
@@ -2092,39 +2111,39 @@ static int read_sections(
         return 0;
     }
 
-    if (!read4(f, &vendor, 1))
+    if (!pulseg__read4(f, &vendor, 1))
     {
         fclose(f);
         return 0;
     }
     if (do_swap)
-        swap4(&vendor);
+        pulseg__swap4(&vendor);
     if (vendor != PULSEG_VENDOR)
     {
         fclose(f);
         return 0;
     }
 
-    if (!read4(f, &stored_size, 1))
+    if (!pulseg__read4(f, &stored_size, 1))
     {
         fclose(f);
         return 0;
     }
     if (do_swap)
-        swap4(&stored_size);
+        pulseg__swap4(&stored_size);
     if (enforce_source_size && stored_size != expected_seq_file_size)
     {
         fclose(f);
         return 0;
     }
 
-    if (!read4(f, &num_sections, 1))
+    if (!pulseg__read4(f, &num_sections, 1))
     {
         fclose(f);
         return 0;
     }
     if (do_swap)
-        swap4(&num_sections);
+        pulseg__swap4(&num_sections);
     if (num_sections <= 0 || num_sections > 16)
     {
         fclose(f);
@@ -2133,26 +2152,26 @@ static int read_sections(
 
     for (i = 0; i < num_sections; ++i)
     {
-        if (!read4(f, &entries[i].section_id, 1))
+        if (!pulseg__read4(f, &entries[i].section_id, 1))
         {
             fclose(f);
             return 0;
         }
-        if (!read4(f, &entries[i].offset, 1))
+        if (!pulseg__read4(f, &entries[i].offset, 1))
         {
             fclose(f);
             return 0;
         }
-        if (!read4(f, &entries[i].size, 1))
+        if (!pulseg__read4(f, &entries[i].size, 1))
         {
             fclose(f);
             return 0;
         }
         if (do_swap)
         {
-            swap4(&entries[i].section_id);
-            swap4(&entries[i].offset);
-            swap4(&entries[i].size);
+            pulseg__swap4(&entries[i].section_id);
+            pulseg__swap4(&entries[i].offset);
+            pulseg__swap4(&entries[i].size);
         }
     }
 
@@ -2241,7 +2260,7 @@ int pulseg__write_cache(pulseg_collection *coll, const char *seq_path, const pul
     if (!coll || !seq_path || !opts)
         return 0;
 
-    cache_path = make_cache_path(seq_path, opts->cache_ext);
+    cache_path = pulseg__make_cache_path(seq_path, opts->cache_ext);
     if (!cache_path)
         return 0;
 
@@ -2282,7 +2301,7 @@ int pulseg__try_read_cache(pulseg_collection *coll, const char *seq_path, const 
     if (!coll || !seq_path)
         return 0;
 
-    cache_path = make_cache_path(seq_path, cache_ext);
+    cache_path = pulseg__make_cache_path(seq_path, cache_ext);
     if (!cache_path)
         return 0;
 
@@ -2344,7 +2363,7 @@ static int load_cache_from_seq_path(
         return PULSEG_ERR_ALLOC_FAILED;
     memset(coll, 0, sizeof(*coll));
 
-    cache_path = make_cache_path(seq_path, NULL);
+    cache_path = pulseg__make_cache_path(seq_path, NULL);
     if (!cache_path)
     {
         PULSEG_FREE(coll);
@@ -2431,7 +2450,7 @@ int pulseg_clear_cache(const char *seq_path)
     if (!seq_path)
         return PULSEG_ERR_NULL_POINTER;
 
-    cache_path = make_cache_path(seq_path, NULL);
+    cache_path = pulseg__make_cache_path(seq_path, NULL);
     if (!cache_path)
         return PULSEG_ERR_ALLOC_FAILED;
 
@@ -2463,7 +2482,7 @@ int pulseg__save_freq_mod_section(const pulseg_collection *coll, const char *seq
     if (!coll->freq_mod)
         return PULSEG_ERR_NULL_POINTER;
 
-    cache_path = make_cache_path(
+    cache_path = pulseg__make_cache_path(
         seq_path,
         coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
     if (!cache_path)
@@ -2477,37 +2496,37 @@ int pulseg__save_freq_mod_section(const pulseg_collection *coll, const char *seq
     }
 
     /* Read header */
-    if (!read4(f, &marker, 1))
+    if (!pulseg__read4(f, &marker, 1))
         goto fm_write_fail;
     do_swap = 0;
     if (marker != PULSEG_CACHE_ENDIAN_MARKER)
     {
-        swap4(&marker);
+        pulseg__swap4(&marker);
         if (marker != PULSEG_CACHE_ENDIAN_MARKER)
             goto fm_write_fail;
         do_swap = 1;
     }
-    if (!read4(f, &version_major, 1))
+    if (!pulseg__read4(f, &version_major, 1))
         goto fm_write_fail;
-    if (!read4(f, &version_minor, 1))
+    if (!pulseg__read4(f, &version_minor, 1))
         goto fm_write_fail;
-    if (!read4(f, &version_revision, 1))
+    if (!pulseg__read4(f, &version_revision, 1))
         goto fm_write_fail;
-    if (!read4(f, &vendor, 1))
+    if (!pulseg__read4(f, &vendor, 1))
         goto fm_write_fail;
-    if (!read4(f, &stored_size, 1))
+    if (!pulseg__read4(f, &stored_size, 1))
         goto fm_write_fail;
     hdr_ns_pos = ftell(f); /* position of num_sections in file */
-    if (!read4(f, &num_sections, 1))
+    if (!pulseg__read4(f, &num_sections, 1))
         goto fm_write_fail;
     if (do_swap)
     {
-        swap4(&version_major);
-        swap4(&version_minor);
-        swap4(&version_revision);
-        swap4(&vendor);
-        swap4(&stored_size);
-        swap4(&num_sections);
+        pulseg__swap4(&version_major);
+        pulseg__swap4(&version_minor);
+        pulseg__swap4(&version_revision);
+        pulseg__swap4(&vendor);
+        pulseg__swap4(&stored_size);
+        pulseg__swap4(&num_sections);
     }
     if (num_sections <= 0 || num_sections > 15)
         goto fm_write_fail;
@@ -2518,17 +2537,17 @@ int pulseg__save_freq_mod_section(const pulseg_collection *coll, const char *seq
 
     for (i = 0; i < num_sections; ++i)
     {
-        if (!read4(f, &entries[i].section_id, 1))
+        if (!pulseg__read4(f, &entries[i].section_id, 1))
             goto fm_write_fail;
-        if (!read4(f, &entries[i].offset, 1))
+        if (!pulseg__read4(f, &entries[i].offset, 1))
             goto fm_write_fail;
-        if (!read4(f, &entries[i].size, 1))
+        if (!pulseg__read4(f, &entries[i].size, 1))
             goto fm_write_fail;
         if (do_swap)
         {
-            swap4(&entries[i].section_id);
-            swap4(&entries[i].offset);
-            swap4(&entries[i].size);
+            pulseg__swap4(&entries[i].section_id);
+            pulseg__swap4(&entries[i].offset);
+            pulseg__swap4(&entries[i].size);
         }
     }
 
@@ -2569,7 +2588,7 @@ int pulseg__save_freq_mod_section(const pulseg_collection *coll, const char *seq
     /* Patch num_sections */
     if (fseek(f, hdr_ns_pos, SEEK_SET) != 0)
         goto fm_write_fail;
-    if (!write4(f, &num_sections, 1))
+    if (!pulseg__write4(f, &num_sections, 1))
         goto fm_write_fail;
 
     /* Rewrite all section entries (at the same position, but extend if needed) */
@@ -2577,11 +2596,11 @@ int pulseg__save_freq_mod_section(const pulseg_collection *coll, const char *seq
         goto fm_write_fail;
     for (i = 0; i < num_sections; ++i)
     {
-        if (!write4(f, &entries[i].section_id, 1))
+        if (!pulseg__write4(f, &entries[i].section_id, 1))
             goto fm_write_fail;
-        if (!write4(f, &entries[i].offset, 1))
+        if (!pulseg__write4(f, &entries[i].offset, 1))
             goto fm_write_fail;
-        if (!write4(f, &entries[i].size, 1))
+        if (!pulseg__write4(f, &entries[i].size, 1))
             goto fm_write_fail;
     }
 
@@ -2633,7 +2652,7 @@ int pulseg_write_vendor_cache_section(
         return PULSEG_SUCCESS; /* callback opted out this time */
     }
 
-    cache_path = make_cache_path(
+    cache_path = pulseg__make_cache_path(
         seq_path,
         coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
     if (!cache_path)
@@ -2650,37 +2669,37 @@ int pulseg_write_vendor_cache_section(
         return PULSEG_ERR_FILE_READ_FAILED;
     }
 
-    if (!read4(f, &marker, 1))
+    if (!pulseg__read4(f, &marker, 1))
         goto vs_write_fail;
     do_swap = 0;
     if (marker != PULSEG_CACHE_ENDIAN_MARKER)
     {
-        swap4(&marker);
+        pulseg__swap4(&marker);
         if (marker != PULSEG_CACHE_ENDIAN_MARKER)
             goto vs_write_fail;
         do_swap = 1;
     }
-    if (!read4(f, &version_major, 1))
+    if (!pulseg__read4(f, &version_major, 1))
         goto vs_write_fail;
-    if (!read4(f, &version_minor, 1))
+    if (!pulseg__read4(f, &version_minor, 1))
         goto vs_write_fail;
-    if (!read4(f, &version_revision, 1))
+    if (!pulseg__read4(f, &version_revision, 1))
         goto vs_write_fail;
-    if (!read4(f, &vendor, 1))
+    if (!pulseg__read4(f, &vendor, 1))
         goto vs_write_fail;
-    if (!read4(f, &stored_size, 1))
+    if (!pulseg__read4(f, &stored_size, 1))
         goto vs_write_fail;
     hdr_ns_pos = ftell(f);
-    if (!read4(f, &num_sections, 1))
+    if (!pulseg__read4(f, &num_sections, 1))
         goto vs_write_fail;
     if (do_swap)
     {
-        swap4(&version_major);
-        swap4(&version_minor);
-        swap4(&version_revision);
-        swap4(&vendor);
-        swap4(&stored_size);
-        swap4(&num_sections);
+        pulseg__swap4(&version_major);
+        pulseg__swap4(&version_minor);
+        pulseg__swap4(&version_revision);
+        pulseg__swap4(&vendor);
+        pulseg__swap4(&stored_size);
+        pulseg__swap4(&num_sections);
     }
     if (num_sections <= 0 || num_sections > 15)
         goto vs_write_fail;
@@ -2691,17 +2710,17 @@ int pulseg_write_vendor_cache_section(
 
     for (i = 0; i < num_sections; ++i)
     {
-        if (!read4(f, &entries[i].section_id, 1))
+        if (!pulseg__read4(f, &entries[i].section_id, 1))
             goto vs_write_fail;
-        if (!read4(f, &entries[i].offset, 1))
+        if (!pulseg__read4(f, &entries[i].offset, 1))
             goto vs_write_fail;
-        if (!read4(f, &entries[i].size, 1))
+        if (!pulseg__read4(f, &entries[i].size, 1))
             goto vs_write_fail;
         if (do_swap)
         {
-            swap4(&entries[i].section_id);
-            swap4(&entries[i].offset);
-            swap4(&entries[i].size);
+            pulseg__swap4(&entries[i].section_id);
+            pulseg__swap4(&entries[i].offset);
+            pulseg__swap4(&entries[i].size);
         }
     }
 
@@ -2726,7 +2745,7 @@ int pulseg_write_vendor_cache_section(
     if (data_start < 0)
         goto vs_write_fail;
 
-    if (!write4(f, &blob_len, 1))
+    if (!pulseg__write4(f, &blob_len, 1))
         goto vs_write_fail;
     if (blob_len > 0 && (int)fwrite(blob, 1, (size_t)blob_len, f) != blob_len)
         goto vs_write_fail;
@@ -2740,18 +2759,18 @@ int pulseg_write_vendor_cache_section(
 
     if (fseek(f, hdr_ns_pos, SEEK_SET) != 0)
         goto vs_write_fail;
-    if (!write4(f, &num_sections, 1))
+    if (!pulseg__write4(f, &num_sections, 1))
         goto vs_write_fail;
 
     if (fseek(f, entries_pos, SEEK_SET) != 0)
         goto vs_write_fail;
     for (i = 0; i < num_sections; ++i)
     {
-        if (!write4(f, &entries[i].section_id, 1))
+        if (!pulseg__write4(f, &entries[i].section_id, 1))
             goto vs_write_fail;
-        if (!write4(f, &entries[i].offset, 1))
+        if (!pulseg__write4(f, &entries[i].offset, 1))
             goto vs_write_fail;
-        if (!write4(f, &entries[i].size, 1))
+        if (!pulseg__write4(f, &entries[i].size, 1))
             goto vs_write_fail;
     }
 
@@ -2787,7 +2806,7 @@ int pulseg_read_vendor_cache_section(
     *out_buf = NULL;
     *out_len = 0;
 
-    cache_path = make_cache_path(seq_path, cache_ext);
+    cache_path = pulseg__make_cache_path(seq_path, cache_ext);
     if (!cache_path)
         return PULSEG_ERR_ALLOC_FAILED;
 
@@ -2798,30 +2817,30 @@ int pulseg_read_vendor_cache_section(
         return PULSEG_ERR_FILE_READ_FAILED;
     }
 
-    if (!read4(f, &marker, 1))
+    if (!pulseg__read4(f, &marker, 1))
         goto vs_read_fail;
     do_swap = 0;
     if (marker != PULSEG_CACHE_ENDIAN_MARKER)
     {
-        swap4(&marker);
+        pulseg__swap4(&marker);
         if (marker != PULSEG_CACHE_ENDIAN_MARKER)
             goto vs_read_fail;
         do_swap = 1;
     }
-    if (!read4(f, &version_major, 1))
+    if (!pulseg__read4(f, &version_major, 1))
         goto vs_read_fail;
-    if (!read4(f, &version_minor, 1))
+    if (!pulseg__read4(f, &version_minor, 1))
         goto vs_read_fail;
-    if (!read4(f, &version_revision, 1))
+    if (!pulseg__read4(f, &version_revision, 1))
         goto vs_read_fail;
-    if (!read4(f, &vendor, 1))
+    if (!pulseg__read4(f, &vendor, 1))
         goto vs_read_fail;
-    if (!read4(f, &stored_size, 1))
+    if (!pulseg__read4(f, &stored_size, 1))
         goto vs_read_fail;
-    if (!read4(f, &num_sections, 1))
+    if (!pulseg__read4(f, &num_sections, 1))
         goto vs_read_fail;
     if (do_swap)
-        swap4(&num_sections);
+        pulseg__swap4(&num_sections);
     if (num_sections <= 0 || num_sections > 15)
         goto vs_read_fail;
 
@@ -2832,17 +2851,17 @@ int pulseg_read_vendor_cache_section(
     for (i = 0; i < num_sections; ++i)
     {
         pulseg_cache_section_entry e;
-        if (!read4(f, &e.section_id, 1))
+        if (!pulseg__read4(f, &e.section_id, 1))
             goto vs_read_fail;
-        if (!read4(f, &e.offset, 1))
+        if (!pulseg__read4(f, &e.offset, 1))
             goto vs_read_fail;
-        if (!read4(f, &e.size, 1))
+        if (!pulseg__read4(f, &e.size, 1))
             goto vs_read_fail;
         if (do_swap)
         {
-            swap4(&e.section_id);
-            swap4(&e.offset);
-            swap4(&e.size);
+            pulseg__swap4(&e.section_id);
+            pulseg__swap4(&e.offset);
+            pulseg__swap4(&e.size);
         }
         if (e.section_id == PULSEG_CACHE_SECTION_VENDOR)
         {
@@ -2860,10 +2879,10 @@ int pulseg_read_vendor_cache_section(
 
     if (fseek(f, section.offset, SEEK_SET) != 0)
         goto vs_read_fail;
-    if (!read4(f, &blob_len, 1))
+    if (!pulseg__read4(f, &blob_len, 1))
         goto vs_read_fail;
     if (do_swap)
-        swap4(&blob_len);
+        pulseg__swap4(&blob_len);
     if (blob_len < 0 || blob_len > section.size)
         goto vs_read_fail;
 
@@ -2911,7 +2930,7 @@ int pulseg_load_freq_mod_cache(pulseg_collection *coll, const char *seq_path)
         coll->freq_mod = NULL;
     }
 
-    cache_path = make_cache_path(
+    cache_path = pulseg__make_cache_path(
         seq_path,
         coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
     if (!cache_path)
@@ -2923,7 +2942,7 @@ int pulseg_load_freq_mod_cache(pulseg_collection *coll, const char *seq_path)
         return PULSEG_ERR_FILE_READ_FAILED;
 
     /* Read header */
-    if (!read4(f, &marker, 1))
+    if (!pulseg__read4(f, &marker, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
@@ -2931,7 +2950,7 @@ int pulseg_load_freq_mod_cache(pulseg_collection *coll, const char *seq_path)
     do_swap = 0;
     if (marker != PULSEG_CACHE_ENDIAN_MARKER)
     {
-        swap4(&marker);
+        pulseg__swap4(&marker);
         if (marker != PULSEG_CACHE_ENDIAN_MARKER)
         {
             fclose(f);
@@ -2939,44 +2958,44 @@ int pulseg_load_freq_mod_cache(pulseg_collection *coll, const char *seq_path)
         }
         do_swap = 1;
     }
-    if (!read4(f, &version_major, 1))
+    if (!pulseg__read4(f, &version_major, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
-    if (!read4(f, &version_minor, 1))
+    if (!pulseg__read4(f, &version_minor, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
-    if (!read4(f, &version_revision, 1))
+    if (!pulseg__read4(f, &version_revision, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
-    if (!read4(f, &vendor, 1))
+    if (!pulseg__read4(f, &vendor, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
-    if (!read4(f, &stored_size, 1))
+    if (!pulseg__read4(f, &stored_size, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
-    if (!read4(f, &num_sections, 1))
+    if (!pulseg__read4(f, &num_sections, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
     if (do_swap)
     {
-        swap4(&version_major);
-        swap4(&version_minor);
-        swap4(&version_revision);
-        swap4(&vendor);
-        swap4(&stored_size);
-        swap4(&num_sections);
+        pulseg__swap4(&version_major);
+        pulseg__swap4(&version_minor);
+        pulseg__swap4(&version_revision);
+        pulseg__swap4(&vendor);
+        pulseg__swap4(&stored_size);
+        pulseg__swap4(&num_sections);
     }
     if (num_sections <= 0 || num_sections > 16)
     {
@@ -2990,26 +3009,26 @@ int pulseg_load_freq_mod_cache(pulseg_collection *coll, const char *seq_path)
     for (i = 0; i < num_sections; ++i)
     {
         pulseg_cache_section_entry entry;
-        if (!read4(f, &entry.section_id, 1))
+        if (!pulseg__read4(f, &entry.section_id, 1))
         {
             fclose(f);
             return PULSEG_ERR_FILE_READ_FAILED;
         }
-        if (!read4(f, &entry.offset, 1))
+        if (!pulseg__read4(f, &entry.offset, 1))
         {
             fclose(f);
             return PULSEG_ERR_FILE_READ_FAILED;
         }
-        if (!read4(f, &entry.size, 1))
+        if (!pulseg__read4(f, &entry.size, 1))
         {
             fclose(f);
             return PULSEG_ERR_FILE_READ_FAILED;
         }
         if (do_swap)
         {
-            swap4(&entry.section_id);
-            swap4(&entry.offset);
-            swap4(&entry.size);
+            pulseg__swap4(&entry.section_id);
+            pulseg__swap4(&entry.offset);
+            pulseg__swap4(&entry.size);
         }
         if (entry.section_id == PULSEG_CACHE_SECTION_FREQMOD)
         {

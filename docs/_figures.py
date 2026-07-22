@@ -19,6 +19,18 @@ import numpy as np
 GAMMA_HZ_PER_T = 42.576e6
 
 
+def sequence_figure(sequence, *, time_range, title: str) -> None:
+    """Render a fast Pulserver builder through a decoded upstream sequence.
+
+    Its public :meth:`pulserver.pypulseq.Sequence.plot` method delegates to
+    the transient upstream sequence exposed as ``sequence._seq``.  Keeping
+    the conversion on the public object makes REPL and documentation views
+    identical.
+    """
+    sequence.plot(time_range=time_range, time_disp="ms", plot_now=False)
+    plt.gcf().suptitle(title)
+
+
 # --------------------------------------------------------------------------
 # event sampling
 # --------------------------------------------------------------------------

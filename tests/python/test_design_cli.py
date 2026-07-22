@@ -14,7 +14,7 @@ from pulserver import run_cli
 
 @pytest.fixture
 def gre_plugin():
-    plugin_path = Path(__file__).resolve().parents[2] / "examples" / "sequences" / "gre.py"
+    plugin_path = Path(__file__).resolve().parents[2] / "examples" / "sequences" / "gre_2d.py"
     if not plugin_path.is_file():
         pytest.skip(f"gre plugin not found: {plugin_path}")
     spec = importlib.util.spec_from_file_location("cli_test_gre_plugin", plugin_path)

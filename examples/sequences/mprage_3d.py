@@ -67,12 +67,8 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq import _gradients as encoding
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _sampling as sampling
-from pulserver.pypulseq import _system as system
-from pulserver.pypulseq._rf import _excitation_helpers as excitation
-from pulserver.pypulseq._rf import _preparation_helpers as preparations
+
+encoding = readout = sampling = system = excitation = preparations = pp
 
 NUM_ECHOES = 1
 FLYBACK = True
@@ -134,7 +130,7 @@ class Mprage3DPulseqSequence(Sequence):
             UIParam.RY: TypeinFloatParam(value=1.0, min=1.0, max=8.0, incr=1.0, unit="", validate=Validate.NONE),
             UIParam.RZ: TypeinFloatParam(value=1.0, min=1.0, max=8.0, incr=1.0, unit="", validate=Validate.NONE),
             UIParam.BANDWIDTH: TypeinFloatParam(
-                value=system.DEFAULT_BANDWIDTH_HZ_PX, min=5_000.0, max=500_000.0, incr=100.0,
+                value=125_000.0, min=5_000.0, max=500_000.0, incr=100.0,
                 unit="Hz/px", validate=Validate.NONE,
             ),
             UIParam.SWAP_PHASE_FREQ: BoolParam(value=False, validate=Validate.NONE),
@@ -171,7 +167,7 @@ class Mprage3DPulseqSequence(Sequence):
         if cfg.trecovery_s < 0.0:
             return {"valid": False, "duration": None, "info": "Trecovery must be >= 0"}
 
-        timing = _compute_timing(opts=opts, cfg=cfg, strict=True)
+        timing = _compute_public(opts=opts, cfg=cfg, strict=True)
         if timing is None:
             return {
                 "valid": False,
@@ -179,9 +175,9 @@ class Mprage3DPulseqSequence(Sequence):
                 "info": "TE, TR, or TI infeasible for the requested gradients/ETL",
             }
 
-        sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
-        n_segments = len(sampling.calc_chunk_indices(sampled_pe, cfg.etl))
+        sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
+        sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+        n_segments = len(pp.calc_chunk_indices(sampled_pe, cfg.etl))
         shot_s = timing["shot_s"]
         duration_s = shot_s * n_segments * len(sampled_par)
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -189,6 +185,7 @@ class Mprage3DPulseqSequence(Sequence):
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
         prot = dict_to_protocol(protocol)
         cfg = _read_protocol(prot)
+        return _make_public_sequence(opts, cfg, output_path)
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
 
@@ -314,7 +311,7 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.nx_ro = params.param_int(prot, UIParam.NX)
     cfg.ny_pe = params.param_int(prot, UIParam.NY)
     cfg.npar = params.param_int(prot, UIParam.NSLICES)
-    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, system.DEFAULT_BANDWIDTH_HZ_PX)
+    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, 125_000.0)
     cfg.ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
     cfg.rz = max(1, int(round(params.param_float_optional(prot, UIParam.RZ, 1.0))))
     cfg.ro_axis, cfg.pe_axis = params.resolve_readout_phase_axes(prot)
@@ -405,6 +402,99 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
         "spoiler_duration_s": spoiler_duration_s,
         "shot_s": shot_s,
     }
+
+
+def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
+    inversion = pp.make_inversion_pulse(adiabatic=cfg.inv_mode == "adiabatic", system=opts)
+    pulse = pp.make_slice_selective_pulse(
+        np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
+    )
+    line = pp.make_line_readout(
+        opts,
+        (cfg.fov_ro_m, cfg.fov_pe_m, cfg.slice_spacing_m * cfg.npar),
+        (cfg.nx_ro, cfg.ny_pe, cfg.npar),
+        bandwidth_hz_px=cfg.bandwidth_hz_px,
+        spoil_position="post",
+        spoil_cycles=1.0,
+    )
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    rf_center = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
+    raster = opts.block_duration_raster
+    te_delay_s = round((cfg.te_s - (d_pulse - rf_center) - line.t_first_echo_s) / raster) * raster
+    if te_delay_s < -1e-9 and strict:
+        return None
+    te_delay_s = max(0.0, te_delay_s)
+    min_block_s = d_pulse + te_delay_s + line.duration
+    tr_delay_s = round((cfg.tr_s - min_block_s) / raster) * raster
+    if tr_delay_s < -1e-9 and strict:
+        return None
+    inversion_duration = sum(pp.calc_duration(*block) for block in inversion)
+    ti_delay_s = round((cfg.ti_s - inversion_duration) / raster) * raster
+    if ti_delay_s < -1e-9 and strict:
+        return None
+    ti_delay_s = max(0.0, ti_delay_s)
+    shot_s = inversion_duration + ti_delay_s + cfg.etl * cfg.tr_s + cfg.trecovery_s
+    return {
+        "inversion": inversion,
+        "pulse": pulse,
+        "line": line,
+        "te_delay_s": te_delay_s,
+        "tr_delay_s": max(0.0, tr_delay_s),
+        "ti_delay_s": ti_delay_s,
+        "min_block_s": min_block_s,
+        "shot_s": shot_s,
+    }
+
+
+def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None:
+    timing = _compute_public(opts, cfg, strict=False)
+    seq = pp.Sequence(opts)
+    sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
+    sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+    coords = np.asarray([(ky, par) for par in sampled_par for ky in sampled_pe], dtype=int)
+    segments = [coords[start : start + cfg.etl] for start in range(0, len(coords), cfg.etl)]
+    phases = pp.make_rf_spoiling_schedule(len(coords))
+    te_delay = pp.make_delay(timing["te_delay_s"]) if timing["te_delay_s"] > 0 else None
+    tr_delay = pp.make_delay(timing["tr_delay_s"]) if timing["tr_delay_s"] > 0 else None
+    ti_delay = pp.make_delay(timing["ti_delay_s"]) if timing["ti_delay_s"] > 0 else None
+    recovery_s = round(cfg.trecovery_s / opts.block_duration_raster) * opts.block_duration_raster
+    recovery = pp.make_delay(recovery_s) if recovery_s > 0 else None
+    phase_idx = 0
+    for segment in segments:
+        for block in timing["inversion"]:
+            seq.add_block(*block)
+        if ti_delay is not None:
+            seq.add_block(ti_delay)
+        for ky, par in segment:
+            phase = float(phases[phase_idx])
+            timing["pulse"].set_state(phase_offset_rad=phase)
+            for block in timing["pulse"]:
+                seq.add_block(*block)
+            if te_delay is not None:
+                seq.add_block(te_delay)
+            timing["line"].set_state(
+                lin_idx=int(ky), par_idx=int(par), adc_phase_rad=phase
+            )
+            for block in timing["line"]:
+                seq.add_block(*block)
+            if tr_delay is not None:
+                seq.add_block(tr_delay)
+            phase_idx += 1
+        if recovery is not None:
+            seq.add_block(recovery)
+    seq.set_definition("Name", "mprage_3d")
+    seq.set_definition("FOV", [cfg.fov_ro_m, cfg.fov_pe_m, cfg.slice_spacing_m * cfg.npar])
+    seq.set_definition("TE", cfg.te_s)
+    seq.set_definition("TR", cfg.tr_s)
+    seq.set_definition("TI", cfg.ti_s)
+    seq.set_definition("Trecovery", cfg.trecovery_s)
+    seq.set_definition("ETL", cfg.etl)
+    seq.set_definition("InversionMode", cfg.inv_mode)
+    seq.set_definition("ImagingMode", "3d")
+    seq.set_definition("ReadoutAxis", "x")
+    seq.set_definition("PhaseAxis", "y")
+    seq.set_definition("RfSpoilingIncDeg", 117.0)
+    pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
 PLUGIN = Mprage3DPulseqSequence()

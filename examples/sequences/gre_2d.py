@@ -26,12 +26,12 @@ Usage
 Register the plugin in the interpreter tree by symlinking (or copying) this
 file to the ``sequences/src/`` directory and creating a numbered alias::
 
-    cp gre.py pulserver-interpreter/tree/pulserver/sequences/src/gre.py
-    ln -sf src/gre.py  pulserver-interpreter/tree/pulserver/sequences/sequence5.py
+    cp gre_2d.py pulserver-interpreter/tree/pulserver/sequences/src/gre_2d.py
+    ln -sf src/gre_2d.py  pulserver-interpreter/tree/pulserver/sequences/sequence5.py
 
 Or pass the file directly to the bridge host for testing::
 
-    python -m pulserver.bridge --plugin examples/gre.py --action default_protocol
+    python -m pulserver.bridge --plugin examples/sequences/gre_2d.py --action default_protocol
 """
 
 from __future__ import annotations
@@ -55,11 +55,9 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq import _gradients as encoding
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _sampling as sampling
-from pulserver.pypulseq import _system as system
-from pulserver.pypulseq._rf import _excitation_helpers as excitation
+
+DEFAULT_BANDWIDTH_HZ_PX = 125_000.0
+RF_SPOILING_INCREMENT_RAD = np.deg2rad(117.0)
 
 
 class GrePulseqSequence(Sequence):
@@ -156,7 +154,7 @@ class GrePulseqSequence(Sequence):
                 validate=Validate.NONE,
             ),
             UIParam.BANDWIDTH: TypeinFloatParam(
-                value=system.DEFAULT_BANDWIDTH_HZ_PX,
+                value=DEFAULT_BANDWIDTH_HZ_PX,
                 min=5_000.0,
                 max=500_000.0,
                 incr=100.0,
@@ -196,7 +194,7 @@ class GrePulseqSequence(Sequence):
         nx_ro = params.param_int(prot, UIParam.NX)
         ny_pe = params.param_int(prot, UIParam.NY)
         nslices = params.param_int(prot, UIParam.NSLICES)
-        bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, system.DEFAULT_BANDWIDTH_HZ_PX)
+        bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, DEFAULT_BANDWIDTH_HZ_PX)
         ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
         acs_lines = params.acs_lines_from_protocol(prot, ny_pe, 0)
         ro_axis, pe_axis = params.resolve_readout_phase_axes(prot)
@@ -249,7 +247,7 @@ class GrePulseqSequence(Sequence):
                 ),
             }
 
-        sampled_pe = sampling.calc_sampled_lines(ny_pe, ry, acs_lines)
+        sampled_pe = pp.calc_sampled_lines(ny_pe, ry, acs_lines)
         duration_s = tr_s * float(len(sampled_pe))
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
@@ -266,7 +264,7 @@ class GrePulseqSequence(Sequence):
         nx_ro = params.param_int(prot, UIParam.NX)
         ny_pe = params.param_int(prot, UIParam.NY)
         nslices = params.param_int(prot, UIParam.NSLICES)
-        bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, system.DEFAULT_BANDWIDTH_HZ_PX)
+        bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, DEFAULT_BANDWIDTH_HZ_PX)
         ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
         acs_lines = params.acs_lines_from_protocol(prot, ny_pe, 0)
         ro_axis, pe_axis = params.resolve_readout_phase_axes(prot)
@@ -288,15 +286,9 @@ class GrePulseqSequence(Sequence):
             strict=False,
         )
 
-        rf = timing["rf"]
-        gz = timing["gz"]
-        gz_reph = timing["gz_reph"]
-        gx = timing["gx"]
-        adc = timing["adc"]
-        gx_pre = timing["gx_pre"]
-        gx_spoil = timing["gx_spoil"]
-        gz_spoil = timing["gz_spoil"]
-        gy_template = timing["gy_template"]
+        pulse = timing["pulse"]
+        line = timing["readout"]
+        gz_spoil = timing["crusher"]
         te_delay_s = timing["te_delay_s"]
         tr_delay_s = timing["tr_delay_s"]
 
@@ -305,13 +297,13 @@ class GrePulseqSequence(Sequence):
 
         seq = pp.Sequence(opts)
 
-        delta_k_pe = 1.0 / fov_pe_m
-        phase_areas = (np.arange(ny_pe) - 0.5 * ny_pe) * delta_k_pe
-        max_pe_area = float(np.max(np.abs(phase_areas)))
-        sampled_pe = sampling.calc_sampled_lines(ny_pe, ry, acs_lines)
+        sampled_pe = pp.calc_sampled_lines(ny_pe, ry, acs_lines)
         slice_step_m = slice_spacing_m if nslices > 1 else 0.0
-        rf_phase_deg = 0.0
-        rf_phase_inc_deg = 0.0
+        rf_phases = pp.make_rf_spoiling_schedule(
+            len(sampled_pe) * nslices,
+            increment=RF_SPOILING_INCREMENT_RAD,
+        )
+        phase_index = 0
 
         # PE-outer / SLC-inner loop order: fftrecon reshapes as [cha, RO, PE, SLC]
         # assuming slice is the fast (innermost) dimension.  LABELSET SLC and LIN
@@ -319,39 +311,34 @@ class GrePulseqSequence(Sequence):
         # trajectory cache; without them every readout gets slc=0 and multi-slice
         # reconstruction silently collapses to a single image.
         for ky in sampled_pe:
-            y_scale = phase_areas[ky] / max_pe_area if max_pe_area > 0.0 else 0.0
-            gy_pre = pp.scale_grad(gy_template, y_scale)
-            gy_reph = pp.scale_grad(gy_template, -y_scale)
             label_lin = pp.make_label(type="SET", label="LIN", value=ky)
 
             for sl in range(nslices):
                 slice_offset_m = (sl - 0.5 * (nslices - 1)) * slice_step_m
 
-                rf_curr = system.copy_event(rf)
-                rf_curr.freq_offset = gz.amplitude * slice_offset_m
-                rf_curr.phase_offset = np.deg2rad(rf_phase_deg)
-                adc_curr = system.copy_event(adc)
-                adc_curr.phase_offset = rf_curr.phase_offset
-
                 label_slc = pp.make_label(type="SET", label="SLC", value=sl)
-
-                seq.add_block(rf_curr, gz, label_slc, label_lin)
-                seq.add_block(gx_pre, gy_pre, gz_reph)
+                rf_phase = float(rf_phases[phase_index])
+                pulse.set_state(
+                    freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m,
+                    phase_offset_rad=rf_phase,
+                )
+                for block_index, block in enumerate(pulse):
+                    labels = (label_slc, label_lin) if block_index == 0 else ()
+                    seq.add_block(*block, *labels)
                 if te_delay is not None:
                     seq.add_block(te_delay)
-                seq.add_block(gx, adc_curr)
-                seq.add_block(gx_spoil, gy_reph, gz_spoil)
-
-                # Standard RF spoiling phase progression per TR.
-                rf_phase_deg = (rf_phase_deg + rf_phase_inc_deg) % 360.0
-                rf_phase_inc_deg = (rf_phase_inc_deg + excitation.RF_SPOILING_INC_DEG) % 360.0
+                line.set_state(lin_idx=ky, adc_phase_rad=rf_phase)
+                for block in line:
+                    seq.add_block(*block)
+                seq.add_block(gz_spoil)
+                phase_index += 1
 
             # TR delay is appended once after all slices so that the time between
             # successive excitations of the same slice equals the user-set TR.
             if tr_delay is not None:
                 seq.add_block(tr_delay)
 
-        seq.set_definition("Name", "gre")
+        seq.set_definition("Name", "gre_2d")
         seq.set_definition(
             "FOV",
             [fov_ro_m, fov_pe_m, slice_step_m * nslices if nslices > 1 else slice_thickness_m],
@@ -364,7 +351,7 @@ class GrePulseqSequence(Sequence):
         seq.set_definition("BandwidthHzPerPx", bandwidth_hz_px)
         seq.set_definition("Ry", ry)
         seq.set_definition("AcsLines", acs_lines)
-        seq.set_definition("RfSpoilingIncDeg", excitation.RF_SPOILING_INC_DEG)
+        seq.set_definition("RfSpoilingIncDeg", 117.0)
         seq.set_definition("Nx", nx_ro)
         seq.set_definition("Ny", ny_pe)
         seq.set_definition("NySampled", len(sampled_pe))
@@ -393,61 +380,50 @@ def _compute_timing(
     tr_s: float,
     strict: bool = True,
 ):
-    system.apply_system_derates(opts)
-
-    rf, gz, gz_reph = excitation.slice_selective(opts, flip_deg, slice_thickness_m)
-
-    ro_events = readout.unbalanced_line(
+    if (ro_axis, pe_axis) != ("x", "y"):
+        # Public readouts deliberately use the fixed x/y/z convention.
+        ro_axis, pe_axis = "x", "y"
+    line = pp.make_line_readout(
         opts,
-        fov_ro_m,
-        nx_ro,
+        (fov_ro_m, fov_pe_m),
+        (nx_ro, ny_pe),
         bandwidth_hz_px=bandwidth_hz_px,
-        slice_thickness_m=slice_thickness_m,
-        axis=ro_axis,
+        spoil_position="post",
+        spoil_cycles=1.0,
     )
-    gx = ro_events["gx"]
-    adc = ro_events["adc"]
-    gx_pre = ro_events["gx_pre"]
-    gx_spoil = ro_events["gx_spoil"]
-    gz_spoil = pp.make_trapezoid(channel="z", area=encoding.SPOIL_FACTOR_Z / slice_thickness_m, system=opts)
-    max_pe_area = 0.5 * ny_pe * (1.0 / fov_pe_m)
-    gy_template = pp.make_trapezoid(
-        channel=pe_axis,
-        area=max_pe_area,
+    pulse = pp.make_slice_selective_pulse(
+        np.deg2rad(flip_deg),
+        slice_thickness_m,
         system=opts,
     )
+    crusher = pp.make_crusher(
+        opts,
+        "z",
+        dephasing_cycles=4.0,
+        voxel_size=slice_thickness_m,
+    )
 
-    d_rf = pp.calc_duration(rf, gz)
-    d_pre = pp.calc_duration(gx_pre, gy_template, gz_reph)
-    d_ro = pp.calc_duration(gx, adc)
-    d_spoil = pp.calc_duration(gx_spoil, gy_template, gz_spoil)
-
-    rf_center_s = pp.calc_rf_center(rf)[0]
-    adc_center_s = ro_events["adc_center_s"]
-    min_te_s = (d_rf - rf_center_s) + d_pre + adc_center_s
-    te_delay_s = te_s - min_te_s
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
+    min_te_s = (d_pulse - rf_center_s) + line.t_first_echo_s
+    block_raster_s = opts.block_duration_raster
+    te_delay_s = round((te_s - min_te_s) / block_raster_s) * block_raster_s
     if te_delay_s < -1e-9 and strict:
         return None
     if te_delay_s < 0.0:
         te_delay_s = 0.0
 
-    min_block_s = d_rf + d_pre + te_delay_s + d_ro + d_spoil
-    tr_delay_s = tr_s - nslices * min_block_s
+    min_block_s = d_pulse + te_delay_s + line.duration + pp.calc_duration(crusher)
+    tr_delay_s = round((tr_s - nslices * min_block_s) / block_raster_s) * block_raster_s
     if tr_delay_s < -1e-9 and strict:
         return None
     if tr_delay_s < 0.0:
         tr_delay_s = 0.0
 
     return {
-        "rf": rf,
-        "gz": gz,
-        "gz_reph": gz_reph,
-        "gx": gx,
-        "adc": adc,
-        "gx_pre": gx_pre,
-        "gx_spoil": gx_spoil,
-        "gz_spoil": gz_spoil,
-        "gy_template": gy_template,
+        "pulse": pulse,
+        "readout": line,
+        "crusher": crusher,
         "te_delay_s": te_delay_s,
         "tr_delay_s": tr_delay_s,
         "min_block_s": min_block_s,
@@ -498,6 +474,6 @@ if __name__ == "__main__":
             sys.argv[1:],
             arg_map=_ARG_MAP,
             description='Generate a Cartesian GRE .seq offline using the same implementation as the nimpulseqgui plugin path.',
-            default_output='gre.seq',
+            default_output='gre_2d.seq',
         )
     )

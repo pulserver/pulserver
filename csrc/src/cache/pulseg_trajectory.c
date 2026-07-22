@@ -20,13 +20,6 @@
 #include "pulseg.h"
 
 /* ================================================================== */
-/*  Forward declarations (internal helpers from other files)           */
-/* ================================================================== */
-
-/* from pulseg_cache.c (we reuse these via the same pattern) */
-static char *traj_make_cache_path(const char *seq_path, const char *ext);
-
-/* ================================================================== */
 /*  Constants                                                         */
 /* ================================================================== */
 
@@ -35,31 +28,6 @@ static char *traj_make_cache_path(const char *seq_path, const char *ext);
 /* ================================================================== */
 /*  Helpers                                                           */
 /* ================================================================== */
-
-/* ext: cache file extension including the dot; NULL/empty falls back to
- * PULSEG_CACHE_EXT_DEFAULT. */
-static char *traj_make_cache_path(const char *seq_path, const char *ext)
-{
-    size_t len, ext_len;
-    char *out;
-    const char *dot;
-
-    if (!ext || !ext[0])
-        ext = PULSEG_CACHE_EXT_DEFAULT;
-    ext_len = strlen(ext);
-
-    len = strlen(seq_path);
-    out = (char *)PULSEG_ALLOC(len + ext_len + 1);
-    if (!out)
-        return NULL;
-    strcpy(out, seq_path);
-    dot = strrchr(out, '.');
-    if (dot && (strrchr(out, '/') == NULL || dot > strrchr(out, '/')))
-        strcpy((char *)(out + (dot - out)), ext);
-    else
-        strcat(out, ext);
-    return out;
-}
 
 /* Compare two k-space shot shapes; returns 1 if identical within tolerance. */
 static int shots_equal(const float *a, const float *b, int n)
@@ -1225,39 +1193,6 @@ static int pulseg_merge_trajectory(pulseg_trajectory *dst, const pulseg_trajecto
 }
 
 /* ================================================================== */
-/*  Cache I/O helpers (local to this file)                            */
-/* ================================================================== */
-
-static void traj_swap4(void *p)
-{
-    unsigned char *b = (unsigned char *)p;
-    unsigned char t;
-    t = b[0];
-    b[0] = b[3];
-    b[3] = t;
-    t = b[1];
-    b[1] = b[2];
-    b[2] = t;
-}
-
-static void traj_swap4_array(void *p, int count)
-{
-    int i;
-    for (i = 0; i < count; ++i)
-        traj_swap4((unsigned char *)p + (size_t)i * 4);
-}
-
-static int traj_write4(FILE *f, const void *p, int count)
-{
-    return (int)fwrite(p, 4, (size_t)count, f) == count;
-}
-
-static int traj_read4(FILE *f, void *p, int count)
-{
-    return (int)fread(p, 4, (size_t)count, f) == count;
-}
-
-/* ================================================================== */
 /*  Write trajectory cache (TRAJECTORY section)                       */
 /* ================================================================== */
 
@@ -1281,7 +1216,7 @@ static int pulseg_write_trajectory_cache(
     if (!traj || !seq_path)
         return PULSEG_ERR_NULL_POINTER;
 
-    cache_path = traj_make_cache_path(seq_path, cache_ext);
+    cache_path = pulseg__make_cache_path(seq_path, cache_ext);
     if (!cache_path)
         return PULSEG_ERR_ALLOC_FAILED;
 
@@ -1293,37 +1228,37 @@ static int pulseg_write_trajectory_cache(
     }
 
     /* Read header */
-    if (!traj_read4(f, &marker, 1))
+    if (!pulseg__read4(f, &marker, 1))
         goto tw_fail;
     do_swap = 0;
     if (marker != CACHE_ENDIAN_MARKER)
     {
-        traj_swap4(&marker);
+        pulseg__swap4(&marker);
         if (marker != CACHE_ENDIAN_MARKER)
             goto tw_fail;
         do_swap = 1;
     }
-    if (!traj_read4(f, &version_major, 1))
+    if (!pulseg__read4(f, &version_major, 1))
         goto tw_fail;
-    if (!traj_read4(f, &version_minor, 1))
+    if (!pulseg__read4(f, &version_minor, 1))
         goto tw_fail;
-    if (!traj_read4(f, &version_revision, 1))
+    if (!pulseg__read4(f, &version_revision, 1))
         goto tw_fail;
-    if (!traj_read4(f, &vendor, 1))
+    if (!pulseg__read4(f, &vendor, 1))
         goto tw_fail;
-    if (!traj_read4(f, &stored_size, 1))
+    if (!pulseg__read4(f, &stored_size, 1))
         goto tw_fail;
     hdr_ns_pos = ftell(f);
-    if (!traj_read4(f, &num_sections, 1))
+    if (!pulseg__read4(f, &num_sections, 1))
         goto tw_fail;
     if (do_swap)
     {
-        traj_swap4(&version_major);
-        traj_swap4(&version_minor);
-        traj_swap4(&version_revision);
-        traj_swap4(&vendor);
-        traj_swap4(&stored_size);
-        traj_swap4(&num_sections);
+        pulseg__swap4(&version_major);
+        pulseg__swap4(&version_minor);
+        pulseg__swap4(&version_revision);
+        pulseg__swap4(&vendor);
+        pulseg__swap4(&stored_size);
+        pulseg__swap4(&num_sections);
     }
     if (num_sections <= 0 || num_sections > 15)
         goto tw_fail;
@@ -1335,10 +1270,10 @@ static int pulseg_write_trajectory_cache(
     /* Read existing section entries */
     for (i = 0; i < num_sections; ++i)
     {
-        if (!traj_read4(f, &entries_buf[i * 3], 3))
+        if (!pulseg__read4(f, &entries_buf[i * 3], 3))
             goto tw_fail;
         if (do_swap)
-            traj_swap4_array(&entries_buf[i * 3], 3);
+            pulseg__swap4_array(&entries_buf[i * 3], 3);
     }
 
     /* Check if the trajectory section already exists */
@@ -1365,76 +1300,76 @@ static int pulseg_write_trajectory_cache(
         goto tw_fail;
 
     /* Write kshot library */
-    if (!traj_write4(f, &traj->kshots.num_shots, 1))
+    if (!pulseg__write4(f, &traj->kshots.num_shots, 1))
         goto tw_fail;
     for (i = 0; i < traj->kshots.num_shots; ++i)
     {
-        if (!traj_write4(f, &traj->kshots.shots[i].num_samples, 1))
+        if (!pulseg__write4(f, &traj->kshots.shots[i].num_samples, 1))
             goto tw_fail;
         if (traj->kshots.shots[i].num_samples > 0)
         {
-            if (!traj_write4(f, traj->kshots.shots[i].k, traj->kshots.shots[i].num_samples))
+            if (!pulseg__write4(f, traj->kshots.shots[i].k, traj->kshots.shots[i].num_samples))
                 goto tw_fail;
         }
     }
 
     /* Write encoding spaces */
-    if (!traj_write4(f, &traj->num_encoding_spaces, 1))
+    if (!pulseg__write4(f, &traj->num_encoding_spaces, 1))
         goto tw_fail;
     for (i = 0; i < traj->num_encoding_spaces; ++i)
     {
         const pulseg_encoding_space *es = &traj->encoding_spaces[i];
-        if (!traj_write4(f, &es->subseq_idx, 1))
+        if (!pulseg__write4(f, &es->subseq_idx, 1))
             goto tw_fail;
-        if (!traj_write4(f, &es->nav_subseq_offset, 1))
+        if (!pulseg__write4(f, &es->nav_subseq_offset, 1))
             goto tw_fail;
-        if (!traj_write4(f, &es->geometry_tag, 1))
+        if (!pulseg__write4(f, &es->geometry_tag, 1))
             goto tw_fail;
-        if (!traj_write4(f, &es->label_limits, sizeof(pulseg_label_limits) / sizeof(int)))
+        if (!pulseg__write4(f, &es->label_limits, sizeof(pulseg_label_limits) / sizeof(int)))
             goto tw_fail;
     }
 
     /* Write trajectory table */
-    if (!traj_write4(f, &traj->num_adc_events, 1))
+    if (!pulseg__write4(f, &traj->num_adc_events, 1))
         goto tw_fail;
     for (i = 0; i < traj->num_adc_events; ++i)
     {
         const pulseg_traj_table_entry *e = &traj->table[i];
         /* Write as contiguous 17 ints/floats:
          * 3 shot_ids + 3 amplitudes + rotation_id + 10 labels */
-        if (!traj_write4(f, &e->kx_shot_id, 1))
+        if (!pulseg__write4(f, &e->kx_shot_id, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->ky_shot_id, 1))
+        if (!pulseg__write4(f, &e->ky_shot_id, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->kz_shot_id, 1))
+        if (!pulseg__write4(f, &e->kz_shot_id, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->gx_amplitude, 1))
+        if (!pulseg__write4(f, &e->gx_amplitude, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->gy_amplitude, 1))
+        if (!pulseg__write4(f, &e->gy_amplitude, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->gz_amplitude, 1))
+        if (!pulseg__write4(f, &e->gz_amplitude, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->rotation_id, 1))
+        if (!pulseg__write4(f, &e->rotation_id, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->slc, 1))
+        if (!pulseg__write4(f, &e->slc, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->seg, 1))
+        if (!pulseg__write4(f, &e->seg, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->rep, 1))
+        if (!pulseg__write4(f, &e->rep, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->avg, 1))
+        if (!pulseg__write4(f, &e->avg, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->set, 1))
+        if (!pulseg__write4(f, &e->set, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->eco, 1))
+        if (!pulseg__write4(f, &e->eco, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->phs, 1))
+        if (!pulseg__write4(f, &e->phs, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->lin, 1))
+        if (!pulseg__write4(f, &e->lin, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->par, 1))
+        if (!pulseg__write4(f, &e->par, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->acq, 1))
+        if (!pulseg__write4(f, &e->acq, 1))
             goto tw_fail;
         /* new fields: flags (as 2 ints for portability), center_sample,
          * sample_time_us, encoding_space_ref.
@@ -1446,28 +1381,28 @@ static int pulseg_write_trajectory_cache(
             {
                 flags_hi = (int)((e->flags >> 16) >> 16);
             }
-            if (!traj_write4(f, &flags_lo, 1))
+            if (!pulseg__write4(f, &flags_lo, 1))
                 goto tw_fail;
-            if (!traj_write4(f, &flags_hi, 1))
+            if (!pulseg__write4(f, &flags_hi, 1))
                 goto tw_fail;
         }
-        if (!traj_write4(f, &e->center_sample, 1))
+        if (!pulseg__write4(f, &e->center_sample, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->sample_time_us, 1))
+        if (!pulseg__write4(f, &e->sample_time_us, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->encoding_space_ref, 1))
+        if (!pulseg__write4(f, &e->encoding_space_ref, 1))
             goto tw_fail;
-        if (!traj_write4(f, &e->off, 1))
+        if (!pulseg__write4(f, &e->off, 1))
             goto tw_fail;
     }
 
     /* rotation-matrix library, folded in so the recon reader
      * is self-contained (no separate ROTATIONS-section read). */
-    if (!traj_write4(f, &traj->num_rotations, 1))
+    if (!pulseg__write4(f, &traj->num_rotations, 1))
         goto tw_fail;
     if (traj->num_rotations > 0)
     {
-        if (!traj_write4(f, traj->rotation_matrices, traj->num_rotations * 9))
+        if (!pulseg__write4(f, traj->rotation_matrices, traj->num_rotations * 9))
             goto tw_fail;
     }
 
@@ -1481,7 +1416,7 @@ static int pulseg_write_trajectory_cache(
     /* Patch num_sections */
     if (fseek(f, hdr_ns_pos, SEEK_SET) != 0)
         goto tw_fail;
-    if (!traj_write4(f, &num_sections, 1))
+    if (!pulseg__write4(f, &num_sections, 1))
         goto tw_fail;
 
     /* Rewrite all section entries */
@@ -1489,7 +1424,7 @@ static int pulseg_write_trajectory_cache(
         goto tw_fail;
     for (i = 0; i < num_sections; ++i)
     {
-        if (!traj_write4(f, &entries_buf[i * 3], 3))
+        if (!pulseg__write4(f, &entries_buf[i * 3], 3))
             goto tw_fail;
     }
 
@@ -1575,7 +1510,7 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
     int section_id, section_offset, section_size;
 
     /* Read header */
-    if (!traj_read4(f, &marker, 1))
+    if (!pulseg__read4(f, &marker, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
@@ -1583,7 +1518,7 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
     do_swap = 0;
     if (marker != CACHE_ENDIAN_MARKER)
     {
-        traj_swap4(&marker);
+        pulseg__swap4(&marker);
         if (marker != CACHE_ENDIAN_MARKER)
         {
             fclose(f);
@@ -1591,44 +1526,44 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
         }
         do_swap = 1;
     }
-    if (!traj_read4(f, &version_major, 1))
+    if (!pulseg__read4(f, &version_major, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
-    if (!traj_read4(f, &version_minor, 1))
+    if (!pulseg__read4(f, &version_minor, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
-    if (!traj_read4(f, &version_revision, 1))
+    if (!pulseg__read4(f, &version_revision, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
-    if (!traj_read4(f, &vendor, 1))
+    if (!pulseg__read4(f, &vendor, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
-    if (!traj_read4(f, &stored_size, 1))
+    if (!pulseg__read4(f, &stored_size, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
-    if (!traj_read4(f, &num_sections, 1))
+    if (!pulseg__read4(f, &num_sections, 1))
     {
         fclose(f);
         return PULSEG_ERR_FILE_READ_FAILED;
     }
     if (do_swap)
     {
-        traj_swap4(&version_major);
-        traj_swap4(&version_minor);
-        traj_swap4(&version_revision);
-        traj_swap4(&vendor);
-        traj_swap4(&stored_size);
-        traj_swap4(&num_sections);
+        pulseg__swap4(&version_major);
+        pulseg__swap4(&version_minor);
+        pulseg__swap4(&version_revision);
+        pulseg__swap4(&vendor);
+        pulseg__swap4(&stored_size);
+        pulseg__swap4(&num_sections);
     }
 
     /* Find the trajectory section */
@@ -1637,26 +1572,26 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
     section_size = 0;
     for (i = 0; i < num_sections; ++i)
     {
-        if (!traj_read4(f, &section_id, 1))
+        if (!pulseg__read4(f, &section_id, 1))
         {
             fclose(f);
             return PULSEG_ERR_FILE_READ_FAILED;
         }
-        if (!traj_read4(f, &section_offset, 1))
+        if (!pulseg__read4(f, &section_offset, 1))
         {
             fclose(f);
             return PULSEG_ERR_FILE_READ_FAILED;
         }
-        if (!traj_read4(f, &section_size, 1))
+        if (!pulseg__read4(f, &section_size, 1))
         {
             fclose(f);
             return PULSEG_ERR_FILE_READ_FAILED;
         }
         if (do_swap)
         {
-            traj_swap4(&section_id);
-            traj_swap4(&section_offset);
-            traj_swap4(&section_size);
+            pulseg__swap4(&section_id);
+            pulseg__swap4(&section_offset);
+            pulseg__swap4(&section_size);
         }
         if (section_id == CACHE_SECTION_TRAJECTORY)
         {
@@ -1679,10 +1614,10 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
     }
 
     /* Read kshot library */
-    if (!traj_read4(f, &out->kshots.num_shots, 1))
+    if (!pulseg__read4(f, &out->kshots.num_shots, 1))
         goto lr_fail;
     if (do_swap)
-        traj_swap4(&out->kshots.num_shots);
+        pulseg__swap4(&out->kshots.num_shots);
 
     if (out->kshots.num_shots > 0)
     {
@@ -1694,10 +1629,10 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
 
         for (i = 0; i < out->kshots.num_shots; ++i)
         {
-            if (!traj_read4(f, &out->kshots.shots[i].num_samples, 1))
+            if (!pulseg__read4(f, &out->kshots.shots[i].num_samples, 1))
                 goto lr_fail;
             if (do_swap)
-                traj_swap4(&out->kshots.shots[i].num_samples);
+                pulseg__swap4(&out->kshots.shots[i].num_samples);
 
             if (out->kshots.shots[i].num_samples > 0)
             {
@@ -1705,19 +1640,19 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
                     (float *)PULSEG_ALLOC((size_t)out->kshots.shots[i].num_samples * sizeof(float));
                 if (!out->kshots.shots[i].k)
                     goto lr_fail;
-                if (!traj_read4(f, out->kshots.shots[i].k, out->kshots.shots[i].num_samples))
+                if (!pulseg__read4(f, out->kshots.shots[i].k, out->kshots.shots[i].num_samples))
                     goto lr_fail;
                 if (do_swap)
-                    traj_swap4_array(out->kshots.shots[i].k, out->kshots.shots[i].num_samples);
+                    pulseg__swap4_array(out->kshots.shots[i].k, out->kshots.shots[i].num_samples);
             }
         }
     }
 
     /* Read encoding spaces */
-    if (!traj_read4(f, &out->num_encoding_spaces, 1))
+    if (!pulseg__read4(f, &out->num_encoding_spaces, 1))
         goto lr_fail;
     if (do_swap)
-        traj_swap4(&out->num_encoding_spaces);
+        pulseg__swap4(&out->num_encoding_spaces);
 
     if (out->num_encoding_spaces > 0)
     {
@@ -1729,25 +1664,25 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
         for (i = 0; i < out->num_encoding_spaces; ++i)
         {
             pulseg_encoding_space *es = &out->encoding_spaces[i];
-            if (!traj_read4(f, &es->subseq_idx, 1))
+            if (!pulseg__read4(f, &es->subseq_idx, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &es->nav_subseq_offset, 1))
+            if (!pulseg__read4(f, &es->nav_subseq_offset, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &es->geometry_tag, 1))
+            if (!pulseg__read4(f, &es->geometry_tag, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &es->label_limits, sizeof(pulseg_label_limits) / sizeof(int)))
+            if (!pulseg__read4(f, &es->label_limits, sizeof(pulseg_label_limits) / sizeof(int)))
                 goto lr_fail;
             /* swap all fields: 3 ints + 20 ints (label_limits) = 23 words */
             if (do_swap)
-                traj_swap4_array(&es->subseq_idx, 23);
+                pulseg__swap4_array(&es->subseq_idx, 23);
         }
     }
 
     /* Read trajectory table */
-    if (!traj_read4(f, &out->num_adc_events, 1))
+    if (!pulseg__read4(f, &out->num_adc_events, 1))
         goto lr_fail;
     if (do_swap)
-        traj_swap4(&out->num_adc_events);
+        pulseg__swap4(&out->num_adc_events);
 
     if (out->num_adc_events > 0)
     {
@@ -1759,53 +1694,53 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
         for (i = 0; i < out->num_adc_events; ++i)
         {
             pulseg_traj_table_entry *e = &out->table[i];
-            if (!traj_read4(f, &e->kx_shot_id, 1))
+            if (!pulseg__read4(f, &e->kx_shot_id, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->ky_shot_id, 1))
+            if (!pulseg__read4(f, &e->ky_shot_id, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->kz_shot_id, 1))
+            if (!pulseg__read4(f, &e->kz_shot_id, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->gx_amplitude, 1))
+            if (!pulseg__read4(f, &e->gx_amplitude, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->gy_amplitude, 1))
+            if (!pulseg__read4(f, &e->gy_amplitude, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->gz_amplitude, 1))
+            if (!pulseg__read4(f, &e->gz_amplitude, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->rotation_id, 1))
+            if (!pulseg__read4(f, &e->rotation_id, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->slc, 1))
+            if (!pulseg__read4(f, &e->slc, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->seg, 1))
+            if (!pulseg__read4(f, &e->seg, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->rep, 1))
+            if (!pulseg__read4(f, &e->rep, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->avg, 1))
+            if (!pulseg__read4(f, &e->avg, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->set, 1))
+            if (!pulseg__read4(f, &e->set, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->eco, 1))
+            if (!pulseg__read4(f, &e->eco, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->phs, 1))
+            if (!pulseg__read4(f, &e->phs, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->lin, 1))
+            if (!pulseg__read4(f, &e->lin, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->par, 1))
+            if (!pulseg__read4(f, &e->par, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->acq, 1))
+            if (!pulseg__read4(f, &e->acq, 1))
                 goto lr_fail;
             if (do_swap)
-                traj_swap4_array(&e->kx_shot_id, 17);
+                pulseg__swap4_array(&e->kx_shot_id, 17);
             /* new fields */
             {
                 int flags_lo = 0, flags_hi = 0;
-                if (!traj_read4(f, &flags_lo, 1))
+                if (!pulseg__read4(f, &flags_lo, 1))
                     goto lr_fail;
-                if (!traj_read4(f, &flags_hi, 1))
+                if (!pulseg__read4(f, &flags_hi, 1))
                     goto lr_fail;
                 if (do_swap)
                 {
-                    traj_swap4(&flags_lo);
-                    traj_swap4(&flags_hi);
+                    pulseg__swap4(&flags_lo);
+                    pulseg__swap4(&flags_hi);
                 }
                 e->flags = (unsigned long)(unsigned int)flags_lo;
                 if (sizeof(unsigned long) > 4)
@@ -1813,34 +1748,34 @@ static int traj_load_from_open_file(pulseg_trajectory *out, FILE *f)
                     e->flags |= ((unsigned long)(unsigned int)flags_hi << 16) << 16;
                 }
             }
-            if (!traj_read4(f, &e->center_sample, 1))
+            if (!pulseg__read4(f, &e->center_sample, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->sample_time_us, 1))
+            if (!pulseg__read4(f, &e->sample_time_us, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->encoding_space_ref, 1))
+            if (!pulseg__read4(f, &e->encoding_space_ref, 1))
                 goto lr_fail;
-            if (!traj_read4(f, &e->off, 1))
+            if (!pulseg__read4(f, &e->off, 1))
                 goto lr_fail;
             if (do_swap)
-                traj_swap4_array(&e->center_sample, 4);
+                pulseg__swap4_array(&e->center_sample, 4);
         }
     }
 
     /* folded-in rotation-matrix library. */
-    if (!traj_read4(f, &out->num_rotations, 1))
+    if (!pulseg__read4(f, &out->num_rotations, 1))
         goto lr_fail;
     if (do_swap)
-        traj_swap4(&out->num_rotations);
+        pulseg__swap4(&out->num_rotations);
     if (out->num_rotations > 0)
     {
         out->rotation_matrices =
             (float(*)[9])PULSEG_ALLOC((size_t)out->num_rotations * sizeof(float[9]));
         if (!out->rotation_matrices)
             goto lr_fail;
-        if (!traj_read4(f, out->rotation_matrices, out->num_rotations * 9))
+        if (!pulseg__read4(f, out->rotation_matrices, out->num_rotations * 9))
             goto lr_fail;
         if (do_swap)
-            traj_swap4_array(out->rotation_matrices, out->num_rotations * 9);
+            pulseg__swap4_array(out->rotation_matrices, out->num_rotations * 9);
     }
 
     fclose(f);

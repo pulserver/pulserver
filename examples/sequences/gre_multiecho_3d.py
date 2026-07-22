@@ -23,7 +23,7 @@ gradient-echo with a Z phase-encode/partition loop:
 - Either flyback (unipolar, rewound between echoes) or bipolar (alternating
   polarity, no rewinder, odd echoes reversed) readout trains.
 - RF spoiling with a 117 deg quadratic phase increment (once per TR).
-- Phase/frequency axis swap, same as ``gre.py``.
+- Phase/frequency axis swap, same as ``gre_2d.py``.
 
 Parameters without a native GE UI counterpart (echo spacing, flyback
 toggle) are carried as ``opuser`` custom variables.
@@ -60,11 +60,8 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq import _gradients as encoding
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _sampling as sampling
-from pulserver.pypulseq import _system as system
-from pulserver.pypulseq._rf import _excitation_helpers as excitation
+
+DEFAULT_BANDWIDTH_HZ_PX = 125_000.0
 
 USER_SLOT_ECHO_SPACING = 0
 USER_SLOT_FLYBACK = 1
@@ -119,7 +116,7 @@ class GreMultiEcho3DPulseqSequence(Sequence):
             UIParam.RY: TypeinFloatParam(value=1.0, min=1.0, max=8.0, incr=1.0, unit="", validate=Validate.NONE),
             UIParam.RZ: TypeinFloatParam(value=1.0, min=1.0, max=8.0, incr=1.0, unit="", validate=Validate.NONE),
             UIParam.BANDWIDTH: TypeinFloatParam(
-                value=system.DEFAULT_BANDWIDTH_HZ_PX, min=5_000.0, max=500_000.0, incr=100.0,
+                value=DEFAULT_BANDWIDTH_HZ_PX, min=5_000.0, max=500_000.0, incr=100.0,
                 unit="Hz/px", validate=Validate.NONE,
             ),
             UIParam.SWAP_PHASE_FREQ: BoolParam(value=False, validate=Validate.NONE),
@@ -174,7 +171,7 @@ class GreMultiEcho3DPulseqSequence(Sequence):
                 ),
             }
 
-        sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, cfg.acs_lines)
+        sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, cfg.acs_lines)
         duration_s = cfg.tr_s * float(len(sampled_pe))
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
@@ -184,11 +181,8 @@ class GreMultiEcho3DPulseqSequence(Sequence):
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
 
-        gz_reph = timing["gz_reph"]
-        gz_spoil = timing["gz_spoil"]
-        gz_pe_template = timing["gz_pe_template"]
-        echo = timing["echo"]
-        gy_template = timing["gy_template"]
+        pulse = timing["pulse"]
+        line = timing["line"]
         te_delay_s = timing["te_delay_s"]
         tr_delay_s = timing["tr_delay_s"]
 
@@ -197,44 +191,24 @@ class GreMultiEcho3DPulseqSequence(Sequence):
 
         seq = pp.Sequence(opts)
 
-        delta_k_pe = 1.0 / cfg.fov_pe_m
-        phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
-        max_pe_area = float(np.max(np.abs(phase_areas)))
-        sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, cfg.acs_lines)
-
-        par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
-
-        rf_phase_deg = 0.0
-        rf_phase_inc_deg = 0.0
+        sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, cfg.acs_lines)
+        sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+        rf_phases = pp.make_rf_spoiling_schedule(len(sampled_pe) * len(sampled_par))
+        shot = 0
 
         for ky in sampled_pe:
-            y_scale = phase_areas[ky] / max_pe_area if max_pe_area > 0.0 else 0.0
-            gy_pre = pp.scale_grad(gy_template, y_scale)
-            gy_reph = pp.scale_grad(gy_template, -y_scale)
-            label_lin = pp.make_label(type="SET", label="LIN", value=ky)
-
             for par in sampled_par:
-                z_scale = par_areas[par] / max_par_area if max_par_area > 0.0 else 0.0
-                gz_pre_combined, gz_post_combined = encoding.combined_z_gradients(z_scale, gz_pe_template, gz_reph, gz_spoil, opts)
-
-                rf_curr = system.copy_event(timing["rf"])
-                rf_curr.phase_offset = np.deg2rad(rf_phase_deg)
-
-                label_par = pp.make_label(type="SET", label="PAR", value=par)
-                label_slc = pp.make_label(type="SET", label="SLC", value=0)
-
-                seq.add_block(rf_curr, timing["gz"], label_slc, label_par, label_lin)
-                seq.add_block(echo["gx_pre"], gy_pre, gz_pre_combined)
+                phase = float(rf_phases[shot])
+                pulse.set_state(phase_offset_rad=phase)
+                for block_idx, block in enumerate(pulse):
+                    labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
+                    seq.add_block(*block, *labels)
                 if te_delay is not None:
                     seq.add_block(te_delay)
-
-                readout.add_echo_train_blocks(seq, echo, cfg.num_echoes, cfg.flyback, rf_curr.phase_offset)
-
-                seq.add_block(echo["gx_spoil"], gy_reph, gz_post_combined)
-
-                rf_phase_deg = (rf_phase_deg + rf_phase_inc_deg) % 360.0
-                rf_phase_inc_deg = (rf_phase_inc_deg + excitation.RF_SPOILING_INC_DEG) % 360.0
+                line.set_state(lin_idx=int(ky), par_idx=int(par), adc_phase_rad=phase)
+                for block in line:
+                    seq.add_block(*block)
+                shot += 1
 
             if tr_delay is not None:
                 seq.add_block(tr_delay)
@@ -252,13 +226,13 @@ class GreMultiEcho3DPulseqSequence(Sequence):
         seq.set_definition("TR", cfg.tr_s)
         seq.set_definition("Flip", cfg.flip_deg)
         seq.set_definition("ImagingMode", "3d")
-        seq.set_definition("ReadoutAxis", cfg.ro_axis)
-        seq.set_definition("PhaseAxis", cfg.pe_axis)
+        seq.set_definition("ReadoutAxis", "x")
+        seq.set_definition("PhaseAxis", "y")
         seq.set_definition("BandwidthHzPerPx", cfg.bandwidth_hz_px)
         seq.set_definition("Ry", cfg.ry)
         seq.set_definition("Rz", cfg.rz)
         seq.set_definition("AcsLines", cfg.acs_lines)
-        seq.set_definition("RfSpoilingIncDeg", excitation.RF_SPOILING_INC_DEG)
+        seq.set_definition("RfSpoilingIncDeg", 117.0)
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("Ny", cfg.ny_pe)
         seq.set_definition("NySampled", len(sampled_pe))
@@ -286,7 +260,7 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.nx_ro = params.param_int(prot, UIParam.NX)
     cfg.ny_pe = params.param_int(prot, UIParam.NY)
     cfg.npar = params.param_int(prot, UIParam.NSLICES)
-    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, system.DEFAULT_BANDWIDTH_HZ_PX)
+    cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, DEFAULT_BANDWIDTH_HZ_PX)
     cfg.ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
     cfg.rz = max(1, int(round(params.param_float_optional(prot, UIParam.RZ, 1.0))))
     cfg.acs_lines = 0
@@ -303,60 +277,40 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | No
     # (make_sequence uses the real partition count) — see gre_multiecho_2d.py.
     if n_inner is None:
         n_inner = cfg.npar
-    system.apply_system_derates(opts)
-
-    rf, gz, gz_reph = excitation.slice_selective(opts, cfg.flip_deg, cfg.slab_thickness_m)
-
-    echo = readout.compute_readout_and_echo_train(
-        opts=opts,
-        ro_axis=cfg.ro_axis,
-        nx_ro=cfg.nx_ro,
-        fov_ro_m=cfg.fov_ro_m,
-        bandwidth_hz_px=cfg.bandwidth_hz_px,
-        slice_thickness_m=cfg.slab_thickness_m,
-        num_echoes=cfg.num_echoes,
-        echo_spacing_s=cfg.echo_spacing_s,
-        flyback=cfg.flyback,
-        strict=strict,
+    pulse = pp.make_slice_selective_pulse(
+        np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
     )
-    if echo is None:
-        return None
-
-    gz_spoil = pp.make_trapezoid(channel="z", area=encoding.SPOIL_FACTOR_Z / cfg.slab_thickness_m, system=opts)
-    max_pe_area = 0.5 * cfg.ny_pe * (1.0 / cfg.fov_pe_m)
-    gy_template = pp.make_trapezoid(channel=cfg.pe_axis, area=max_pe_area, system=opts)
-
-    _, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-    gz_pe_template = pp.make_trapezoid(channel="z", area=max_par_area, system=opts) if max_par_area > 0.0 else None
-    gz_pre_worst, gz_post_worst = encoding.z_worst_case_trapezoids(gz_reph, gz_spoil, max_par_area, opts)
-
-    d_rf = pp.calc_duration(rf, gz)
-    d_pre = pp.calc_duration(echo["gx_pre"], gy_template, gz_pre_worst)
-    d_post = pp.calc_duration(echo["gx_spoil"], gy_template, gz_post_worst)
-
-    rf_center_s = pp.calc_rf_center(rf)[0]
-    min_te_s = (d_rf - rf_center_s) + d_pre + echo["adc_center_s"]
-    te_delay_s = cfg.te_s - min_te_s
+    line = pp.make_line_readout(
+        opts,
+        (cfg.fov_ro_m, cfg.fov_pe_m, cfg.slice_spacing_m * cfg.npar),
+        (cfg.nx_ro, cfg.ny_pe, cfg.npar),
+        num_echoes=cfg.num_echoes,
+        bandwidth_hz_px=cfg.bandwidth_hz_px,
+        esp_s=cfg.echo_spacing_s,
+        flyback=cfg.flyback,
+        spoil_position="post",
+        spoil_cycles=1.0,
+    )
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
+    min_te_s = (d_pulse - rf_center_s) + line.t_first_echo_s
+    raster = opts.block_duration_raster
+    te_delay_s = round((cfg.te_s - min_te_s) / raster) * raster
     if te_delay_s < -1e-9 and strict:
         return None
     if te_delay_s < 0.0:
         te_delay_s = 0.0
 
-    min_block_s = d_rf + d_pre + te_delay_s + echo["echo_train_span_s"] + d_post
-    tr_delay_s = cfg.tr_s - n_inner * min_block_s
+    min_block_s = d_pulse + te_delay_s + line.duration
+    tr_delay_s = round((cfg.tr_s - n_inner * min_block_s) / raster) * raster
     if tr_delay_s < -1e-9 and strict:
         return None
     if tr_delay_s < 0.0:
         tr_delay_s = 0.0
 
     return {
-        "rf": rf,
-        "gz": gz,
-        "gz_reph": gz_reph,
-        "gz_spoil": gz_spoil,
-        "gz_pe_template": gz_pe_template,
-        "gy_template": gy_template,
-        "echo": echo,
+        "pulse": pulse,
+        "line": line,
         "te_delay_s": te_delay_s,
         "tr_delay_s": tr_delay_s,
         "min_block_s": min_block_s,

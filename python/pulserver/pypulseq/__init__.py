@@ -25,6 +25,7 @@ from ._make_rf_shim import make_rf_shim as _make_rf_shim
 from ._make_rotation import make_rotation as _make_rotation
 from ._opts import Opts as _Opts
 from ._readout._factories import (  # noqa: F401
+    make_bssfp_readout,
     make_epi_readout,
     make_fse_readout,
     make_line_readout,
@@ -178,6 +179,7 @@ _PREPARATION = {
     "make_t2prep_pulse",
 }
 _READOUTS = {
+    "make_bssfp_readout",
     "make_epi_readout",
     "make_fse_readout",
     "make_line_readout",

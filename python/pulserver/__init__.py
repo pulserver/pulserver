@@ -37,6 +37,8 @@ import importlib
 __all__ = [
     "pypulseq",
     "io",
+    "sequence",
+    "sequences",
     "params",
     "Sequence",
     "PulseqSequence",
@@ -81,7 +83,7 @@ _AUTHORING_TYPES = {"Acquisition", "AcquisitionPlan", "SamplingPattern", "SliceG
 
 
 def __getattr__(name: str):
-    if name in ("io", "pypulseq"):
+    if name in ("io", "pypulseq", "sequence", "sequences"):
         return importlib.import_module(f"{__name__}.{name}")
     if name in _CORE_MODULES:
         return importlib.import_module(f"{__name__}._core._protocol")

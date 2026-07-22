@@ -42,7 +42,7 @@
 /* A block definition is a pure delay when it carries no RF, gradient or ADC
  * event -- only a duration (matches the parser's block_table duration_us >= 0
  * marker).  Its duration is runtime-adjustable via setperiod. */
-static int block_def_is_pure_delay_struct(const pulseg_base_block *b)
+int pulseg__block_def_is_pure_delay(const pulseg_base_block *b)
 {
     return (b->rf_id < 0 && b->gx_id < 0 && b->gy_id < 0 && b->gz_id < 0 && b->adc_id < 0);
 }
@@ -67,7 +67,7 @@ static int is_adjustable_delay_at(
     if (bt_idx < 0 || bt_idx >= desc->num_blocks)
         return 0;
     bt = &desc->block_table[bt_idx];
-    if (!block_def_is_pure_delay_struct(&desc->base_blocks[bt->id]))
+    if (!pulseg__block_def_is_pure_delay(&desc->base_blocks[bt->id]))
         return 0;
     if (bt->digitalout_id != -1)
         return 0;
@@ -120,7 +120,10 @@ static int is_single_pure_delay_segment_scan(
     return (bt_idx >= 0 && bt[bt_idx].duration_us >= 0) ? 1 : 0;
 }
 
-static int block_defs_structurally_equal(const pulseg_sequence_descriptor *desc, int id_a, int id_b)
+int pulseg__block_defs_structurally_equal(
+    const pulseg_sequence_descriptor *desc,
+    int id_a,
+    int id_b)
 {
     const pulseg_base_block *a;
     const pulseg_base_block *b;
@@ -164,7 +167,7 @@ static int segments_structurally_equal(
 
     for (i = 0; i < sa->num_blocks; ++i)
     {
-        if (!block_defs_structurally_equal(
+        if (!pulseg__block_defs_structurally_equal(
                 desc,
                 sa->unique_block_indices[i],
                 sb->unique_block_indices[i]))
@@ -230,7 +233,7 @@ static int first_repeating_segment_structural(
             b_idx = start + (i % l);
             a_id = desc->block_table[a_idx].id;
             b_id = desc->block_table[b_idx].id;
-            if (!block_defs_structurally_equal(desc, a_id, b_id))
+            if (!pulseg__block_defs_structurally_equal(desc, a_id, b_id))
             {
                 match = 0;
                 break;

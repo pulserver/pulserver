@@ -29,19 +29,19 @@ target_include_directories(pulseq PRIVATE
 set(PULSEG_SOURCES
     src/core/pulseg_error.c
     src/core/pulseg_math.c
+    src/core/pulseg_core.c
     src/io/pulseg_opts.c
+    src/io/pulseg_protocol.c
     src/structure/pulseg_dedup.c
     src/structure/pulseg_structure.c
-    src/core/pulseg_core.c
+    src/structure/pulseg_getters.c
+    src/structure/pulseg_seqdesc.c
     src/waveforms/pulseg_waveforms.c
     src/safety/pulseg_safety.c
-    src/structure/pulseg_getters.c
     src/freqmod/pulseg_freqmod.c
-    src/io/pulseg_protocol.c
-    src/waveforms/pulseg_trajectory.c
     src/cache/pulseg_cache.c
-    src/structure/pulseg_seqdesc.c
     src/cache/pulseg_cache_seqdesc.c
+    src/cache/pulseg_trajectory.c
 )
 
 add_library(pulseg STATIC ${PULSEG_SOURCES} ${KISSFFT_SOURCES})
@@ -68,5 +68,5 @@ target_link_libraries(pulseg_recon PUBLIC pulseg)
 # ---------------------------------------------------------------------------
 #  pulseg_bridge -- out-of-process sequence-generation bridge (server infra).
 # ---------------------------------------------------------------------------
-add_library(pulseg_bridge STATIC src/core/pulseg_bridge.c)
+add_library(pulseg_bridge STATIC src/bridge/pulseg_bridge.c)
 target_link_libraries(pulseg_bridge PUBLIC pulseg)

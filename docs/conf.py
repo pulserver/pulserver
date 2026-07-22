@@ -1,6 +1,7 @@
 """Sphinx configuration for the Pulserver documentation."""
 
 import sys
+import warnings
 from pathlib import Path
 
 # Prefer this checkout when another editable pulserver tree is installed in
@@ -72,6 +73,32 @@ exclude_patterns = ["_build", "README.md"]
 # files and headings outside this Sphinx project.  MyST cannot resolve those
 # as documentation targets, but they remain valid repository links.
 suppress_warnings = ["myst.xref_missing"]
+
+# Plot directives execute representative designs.  Their defaults are valid;
+# these upstream diagnostics concern an ignored optional trapezoid argument,
+# a known 1.5.1-versus-1.5.0 preview-reader mismatch, and tight-layout on
+# PyPulseq's manually positioned axes.  Keep the documentation build focused
+# on actual Sphinx diagnostics while leaving all other warnings visible.
+warnings.filterwarnings(
+    "ignore",
+    message=r"Rise time and fall time is ignored when calculating the shortest duration from `area`\.",
+    category=UserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r"Using default 4 ms duration for block pulse\.",
+    category=UserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r"File version 1\.5\.1 is higher than installed package version 1\.5\.0.*",
+    category=UserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r"This figure includes Axes that are not compatible with tight_layout.*",
+    category=UserWarning,
+)
 
 
 # ``get_supported_labels`` is re-exported from upstream PyPulseq and opens

@@ -15,6 +15,11 @@ import pulserver.pypulseq as pp           # waveforms and events
 from pulserver import Sequence, UIParam   # plugin contract
 ```
 
+Ready-to-run sequence callbacks are intentionally a separate public namespace:
+{doc}`pulserver.sequences <sequences>`.  They accept explicit sequence
+controls and return a `pulserver.pypulseq.Sequence`, while this root namespace
+continues to hold the bridge/plugin contract.
+
 ## Plugin contracts
 
 The base class a plugin builds on, plus the entry point that turns one into a

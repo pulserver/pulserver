@@ -56,7 +56,7 @@ external slice thickness -- this train has no notion of "slice" vs "slab"
   dephasing happens *after* the read, and only affects the *next* shot's
   starting magnetization, not this one's own acquired data.
 * ``"pre"`` -- the mirror construction, before echo 0 instead: SSFP-Echo /
-  PSIF / CE-FAST. Matching ``"post"`` exactly (gre.py's own convention), the
+  PSIF / CE-FAST. Matching ``"post"`` exactly (gre_2d.py's own convention), the
   bridge's own area is ``spoil_factor * k_width`` alone, independent of the
   prewind's normal target -- *not* "the normal prewind target plus spoil",
   which would force the bridge to swing through/past zero to hit a
@@ -71,7 +71,7 @@ The phase-encode/partition axes are always fully rewound regardless of
 ``spoil_position`` -- only the readout axis is affected by spoiling.
 
 Whenever ``spoil_position != "none"``, the spoiled prewind/rewind is a
-*bridged* trapezoid -- the same construction as ``gre.py``'s
+*bridged* trapezoid -- the same construction as ``gre_2d.py``'s
 ``unbalanced_line``: the adjoining echo (echo 0 for ``"pre"``, the last echo
 for ``"post"``) is split (:func:`pypulseq.split_gradient_at`) to drop the
 ramp it no longer needs, and the spoiler is reshaped
@@ -161,7 +161,7 @@ def _bridge(system, channel, area, grad_start, grad_end):
     """The shortest ``grad_start -> ... -> grad_end`` extended trapezoid achieving ``area``.
 
     Thin wrapper around :func:`pypulseq.make_extended_trapezoid_area` -- the
-    same bridged-crusher construction ``gre.py``'s ``unbalanced_line`` uses:
+    same bridged-crusher construction ``gre_2d.py``'s ``unbalanced_line`` uses:
     it searches for a slew-safe ramp/plateau solution directly (unlike a
     fixed-ramp-time trapezoid, this stays feasible even when ``grad_start``/
     ``grad_end`` and the solved plateau have opposite signs and/or a combined
@@ -297,7 +297,7 @@ class _LineTrain(Readout):
         # prewind/rewind (this side spoiled) instead targets the flat-top
         # boundary directly and hands off at gx.amplitude (nonzero) -- the
         # adjoining echo is split (via pp.split_gradient_at) to drop the
-        # ramp it no longer needs, exactly mirroring gre.py's unbalanced_line
+        # ramp it no longer needs, exactly mirroring gre_2d.py's unbalanced_line
         # bridged-crusher construction (no redundant return-through-zero
         # between the echo and its spoiler).
         n_pre, n_post, dk = self._ro.n_pre, self._ro.n_post, self._ro.delta_k
@@ -322,7 +322,7 @@ class _LineTrain(Readout):
 
         # --- prewind: plain rewind-to-echo0, or bridged w/ pre-spoil ------
         if self._spoil_position == "pre":
-            # Mirrors the post-spoil bridge exactly (gre.py convention): the
+            # Mirrors the post-spoil bridge exactly (gre_2d.py convention): the
             # bridge's own area is spoil_delta alone, signed to match
             # grad_end so the shape is a clean (0, spoil_plateau,
             # readout_plateau) staircase -- rising to an elevated plateau
@@ -351,7 +351,7 @@ class _LineTrain(Readout):
 
         # --- postwind: plain rewind-to-zero, or bridged w/ post-spoil -----
         if self._spoil_position == "post":
-            # Matches gre.py's unbalanced_line exactly: the spoiler's own
+            # Matches gre_2d.py's unbalanced_line exactly: the spoiler's own
             # area is spoil_delta alone (signed to continue in the same
             # direction the last echo was already heading) -- positioning is
             # already done (the prewind, unaffected by spoiling), so nothing

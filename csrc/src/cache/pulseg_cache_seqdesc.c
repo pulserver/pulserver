@@ -49,59 +49,9 @@
 #include "pulseg_internal.h"
 #include "pulseg.h"
 
-/* ================================================================== */
-/*  I/O helpers (duplicated from pulseg_trajectory.c pattern)       */
-/* ================================================================== */
-
-static int sd_write4(FILE *f, const void *p, int count)
-{
-    return (int)fwrite(p, 4, (size_t)count, f) == count;
-}
-
-static int sd_read4(FILE *f, void *p, int count)
-{
-    return (int)fread(p, 4, (size_t)count, f) == count;
-}
-
-static void sd_swap4(void *p)
-{
-    unsigned char *b = (unsigned char *)p;
-    unsigned char t;
-    t = b[0];
-    b[0] = b[3];
-    b[3] = t;
-    t = b[1];
-    b[1] = b[2];
-    b[2] = t;
-}
-
-static void sd_swap4_array(void *p, int count)
-{
-    int i;
-    for (i = 0; i < count; ++i)
-        sd_swap4((unsigned char *)p + (size_t)i * 4);
-}
-
-/* ================================================================== */
-/*  Path helper: .seq -> cache_ext (same helper as in trajectory.c)      */
-/* ================================================================== */
-static char *sd_make_cache_path(const char *seq_path, const char *ext)
-{
-    size_t len = strlen(seq_path);
-    size_t ext_len;
-    char *p;
-    if (len < 4 || strcmp(seq_path + len - 4, ".seq") != 0)
-        return NULL;
-    if (!ext || !ext[0])
-        ext = PULSEG_CACHE_EXT_DEFAULT;
-    ext_len = strlen(ext);
-    p = (char *)PULSEG_ALLOC(len - 4 + ext_len + 1);
-    if (!p)
-        return NULL;
-    memcpy(p, seq_path, len - 4);
-    memcpy(p + len - 4, ext, ext_len + 1);
-    return p;
-}
+/* Binary-cache IO primitives and the .seq -> cache-path helper are shared;
+ * see pulseg_internal.h (pulseg__swap4 / pulseg__read4 / pulseg__write4 /
+ * pulseg__make_cache_path). */
 
 /* ================================================================== */
 /*  Write one (still-compressed) RF shape triplet, copied verbatim     */
@@ -115,17 +65,17 @@ static int sd_write_rf_shape(FILE *f, const pulseg_sequence_descriptor *desc, in
     if (shape_id <= 0 || shape_id > desc->num_shapes)
     {
         int zero = 0;
-        return sd_write4(f, &zero, 1) && sd_write4(f, &zero, 1);
+        return pulseg__write4(f, &zero, 1) && pulseg__write4(f, &zero, 1);
     }
 
     shape = &desc->shapes[shape_id - 1];
-    if (!sd_write4(f, &shape->num_uncompressed_samples, 1))
+    if (!pulseg__write4(f, &shape->num_uncompressed_samples, 1))
         return 0;
-    if (!sd_write4(f, &shape->num_samples, 1))
+    if (!pulseg__write4(f, &shape->num_samples, 1))
         return 0;
     n = shape->num_samples;
     if (n > 0 && shape->samples)
-        if (!sd_write4(f, shape->samples, n))
+        if (!pulseg__write4(f, shape->samples, n))
             return 0;
 
     return 1;
@@ -139,7 +89,7 @@ static int sd_write_rf_def_library(FILE *f, const pulseg_sequence_descriptor *de
 {
     int i;
 
-    if (!sd_write4(f, &desc->num_unique_rfs, 1))
+    if (!pulseg__write4(f, &desc->num_unique_rfs, 1))
         return 0;
     for (i = 0; i < desc->num_unique_rfs; ++i)
     {
@@ -147,30 +97,30 @@ static int sd_write_rf_def_library(FILE *f, const pulseg_sequence_descriptor *de
         const pulseg_rf_stats *stats = &rdef->stats;
         int has_phase, has_time;
 
-        if (!sd_write4(f, &i, 1))
+        if (!pulseg__write4(f, &i, 1))
             return 0;
-        if (!sd_write4(f, &stats->bandwidth_hz, 1))
+        if (!pulseg__write4(f, &stats->bandwidth_hz, 1))
             return 0;
-        if (!sd_write4(f, &stats->num_bands, 1))
+        if (!pulseg__write4(f, &stats->num_bands, 1))
             return 0;
-        if (!sd_write4(f, stats->band_freq_offsets_hz, PULSEG_MAX_BANDS))
+        if (!pulseg__write4(f, stats->band_freq_offsets_hz, PULSEG_MAX_BANDS))
             return 0;
-        if (!sd_write4(f, &stats->band_bandwidth_hz, 1))
+        if (!pulseg__write4(f, &stats->band_bandwidth_hz, 1))
             return 0;
-        if (!sd_write4(f, &stats->total_b1sq_power, 1))
+        if (!pulseg__write4(f, &stats->total_b1sq_power, 1))
             return 0;
 
         if (!sd_write_rf_shape(f, desc, rdef->mag_shape_id))
             return 0;
 
         has_phase = rdef->phase_shape_id > 0 && rdef->phase_shape_id <= desc->num_shapes;
-        if (!sd_write4(f, &has_phase, 1))
+        if (!pulseg__write4(f, &has_phase, 1))
             return 0;
         if (has_phase && !sd_write_rf_shape(f, desc, rdef->phase_shape_id))
             return 0;
 
         has_time = rdef->time_shape_id > 0 && rdef->time_shape_id <= desc->num_shapes;
-        if (!sd_write4(f, &has_time, 1))
+        if (!pulseg__write4(f, &has_time, 1))
             return 0;
         if (has_time && !sd_write_rf_shape(f, desc, rdef->time_shape_id))
             return 0;
@@ -189,22 +139,22 @@ static int sd_write_subseq(
 {
     int i;
 
-    if (!sd_write4(f, &sd->subseq_idx, 1))
+    if (!pulseg__write4(f, &sd->subseq_idx, 1))
         return 0;
-    if (!sd_write4(f, &sd->tr_duration_us, 1))
+    if (!pulseg__write4(f, &sd->tr_duration_us, 1))
         return 0;
 
     /* Compact row table: one row per pass block */
-    if (!sd_write4(f, &sd->num_rows, 1))
+    if (!pulseg__write4(f, &sd->num_rows, 1))
         return 0;
     for (i = 0; i < sd->num_rows; ++i)
     {
         const pulseg_seq_event *row = &sd->rows[i];
-        if (!sd_write4(f, &row->type, 1))
+        if (!pulseg__write4(f, &row->type, 1))
             return 0;
-        if (!sd_write4(f, &row->timestamp_us, 1))
+        if (!pulseg__write4(f, &row->timestamp_us, 1))
             return 0;
-        if (!sd_write4(f, row->params, PULSEG_SEQ_EVENT_PARAMS))
+        if (!pulseg__write4(f, row->params, PULSEG_SEQ_EVENT_PARAMS))
             return 0;
     }
 
@@ -235,7 +185,7 @@ int pulseg__save_seqdesc_cache_section(const pulseg_collection *coll, const char
     if (!coll || !seq_path)
         return PULSEG_ERR_NULL_POINTER;
 
-    cache_path = sd_make_cache_path(
+    cache_path = pulseg__make_cache_path(
         seq_path,
         coll->num_subsequences > 0 ? coll->descriptors[0].cache_ext : NULL);
     if (!cache_path)
@@ -249,7 +199,7 @@ int pulseg__save_seqdesc_cache_section(const pulseg_collection *coll, const char
     }
 
     /* Read file header */
-    if (!sd_read4(f, &marker, 1))
+    if (!pulseg__read4(f, &marker, 1))
     {
         ret = PULSEG_ERR_FILE_READ_FAILED;
         goto done;
@@ -257,7 +207,7 @@ int pulseg__save_seqdesc_cache_section(const pulseg_collection *coll, const char
     do_swap = 0;
     if (marker != SD_CACHE_ENDIAN_MARKER)
     {
-        sd_swap4(&marker);
+        pulseg__swap4(&marker);
         if (marker != SD_CACHE_ENDIAN_MARKER)
         {
             ret = PULSEG_ERR_FILE_READ_FAILED;
@@ -265,27 +215,27 @@ int pulseg__save_seqdesc_cache_section(const pulseg_collection *coll, const char
         }
         do_swap = 1;
     }
-    if (!sd_read4(f, &version_major, 1))
+    if (!pulseg__read4(f, &version_major, 1))
     {
         ret = PULSEG_ERR_FILE_READ_FAILED;
         goto done;
     }
-    if (!sd_read4(f, &version_minor, 1))
+    if (!pulseg__read4(f, &version_minor, 1))
     {
         ret = PULSEG_ERR_FILE_READ_FAILED;
         goto done;
     }
-    if (!sd_read4(f, &version_revision, 1))
+    if (!pulseg__read4(f, &version_revision, 1))
     {
         ret = PULSEG_ERR_FILE_READ_FAILED;
         goto done;
     }
-    if (!sd_read4(f, &vendor, 1))
+    if (!pulseg__read4(f, &vendor, 1))
     {
         ret = PULSEG_ERR_FILE_READ_FAILED;
         goto done;
     }
-    if (!sd_read4(f, &stored_size, 1))
+    if (!pulseg__read4(f, &stored_size, 1))
     {
         ret = PULSEG_ERR_FILE_READ_FAILED;
         goto done;
@@ -296,19 +246,19 @@ int pulseg__save_seqdesc_cache_section(const pulseg_collection *coll, const char
         ret = PULSEG_ERR_FILE_READ_FAILED;
         goto done;
     }
-    if (!sd_read4(f, &num_sections, 1))
+    if (!pulseg__read4(f, &num_sections, 1))
     {
         ret = PULSEG_ERR_FILE_READ_FAILED;
         goto done;
     }
     if (do_swap)
     {
-        sd_swap4(&version_major);
-        sd_swap4(&version_minor);
-        sd_swap4(&version_revision);
-        sd_swap4(&vendor);
-        sd_swap4(&stored_size);
-        sd_swap4(&num_sections);
+        pulseg__swap4(&version_major);
+        pulseg__swap4(&version_minor);
+        pulseg__swap4(&version_revision);
+        pulseg__swap4(&vendor);
+        pulseg__swap4(&stored_size);
+        pulseg__swap4(&num_sections);
     }
     if (num_sections <= 0 || num_sections > 17)
     {
@@ -326,13 +276,13 @@ int pulseg__save_seqdesc_cache_section(const pulseg_collection *coll, const char
     /* Read existing section entries */
     for (i = 0; i < num_sections; ++i)
     {
-        if (!sd_read4(f, &entries_buf[i * 3], 3))
+        if (!pulseg__read4(f, &entries_buf[i * 3], 3))
         {
             ret = PULSEG_ERR_FILE_READ_FAILED;
             goto done;
         }
         if (do_swap)
-            sd_swap4_array(&entries_buf[i * 3], 3);
+            pulseg__swap4_array(&entries_buf[i * 3], 3);
     }
 
     /* Find or allocate slot for the seqdesc section */
@@ -370,10 +320,10 @@ int pulseg__save_seqdesc_cache_section(const pulseg_collection *coll, const char
     if (ret != PULSEG_SUCCESS)
         goto done;
 
-    if (!sd_write4(f, &sp.min_te_us, 1) || !sd_write4(f, &sp.min_tr_us, 1) ||
-        !sd_write4(f, &sp.max_tr_us, 1) || !sd_write4(f, &sp.max_flip_angle_deg, 1) ||
-        !sd_write4(f, &sp.total_scan_time_us, 1) || !sd_write4(f, &sp.num_subseqs, 1) ||
-        !sd_write4(f, sp.reserved, 3))
+    if (!pulseg__write4(f, &sp.min_te_us, 1) || !pulseg__write4(f, &sp.min_tr_us, 1) ||
+        !pulseg__write4(f, &sp.max_tr_us, 1) || !pulseg__write4(f, &sp.max_flip_angle_deg, 1) ||
+        !pulseg__write4(f, &sp.total_scan_time_us, 1) || !pulseg__write4(f, &sp.num_subseqs, 1) ||
+        !pulseg__write4(f, sp.reserved, 3))
     {
         ret = PULSEG_ERR_FILE_READ_FAILED;
         goto done;
@@ -414,7 +364,7 @@ int pulseg__save_seqdesc_cache_section(const pulseg_collection *coll, const char
         ret = PULSEG_ERR_FILE_READ_FAILED;
         goto done;
     }
-    if (!sd_write4(f, &num_sections, 1))
+    if (!pulseg__write4(f, &num_sections, 1))
     {
         ret = PULSEG_ERR_FILE_READ_FAILED;
         goto done;
@@ -428,7 +378,7 @@ int pulseg__save_seqdesc_cache_section(const pulseg_collection *coll, const char
     }
     for (i = 0; i < num_sections; ++i)
     {
-        if (!sd_write4(f, &entries_buf[i * 3], 3))
+        if (!pulseg__write4(f, &entries_buf[i * 3], 3))
         {
             ret = PULSEG_ERR_FILE_READ_FAILED;
             goto done;
