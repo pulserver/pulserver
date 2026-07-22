@@ -224,6 +224,7 @@ def make_pins(
     *,
     slice_thickness: float,
     include_center: bool = False,
+    center_offset: float | None = None,
     max_rf: float | None = None,
 ) -> RfPulse:
     """Convert a slice-selective pulse into a PINS pulse train.
@@ -232,6 +233,8 @@ def make_pins(
     gradient blip area is ``1 / slice_offset``. ``include_center=False``
     shifts the periodic slice comb by half a spacing, avoiding a slice at the
     nominal position; set it true for the alternative SMS convention.
+    ``center_offset`` translates the complete comb and is useful for cycling
+    through SMS slice groups while retaining the same band separation.
 
     Examples
     --------
@@ -294,7 +297,8 @@ def make_pins(
     blip_duration = pp.calc_duration(blip)
     total_duration = n_subpulses * hard_duration + (n_subpulses - 1) * blip_duration
     output = np.zeros(int(round(total_duration / dwell)), dtype=complex)
-    comb_shift = 0.0 if include_center else 0.5 * slice_offset
+    center_offset = 0.0 if center_offset is None else float(center_offset)
+    comb_shift = (0.0 if include_center else 0.5 * slice_offset) + center_offset
     cursor = 0
     for index, coefficient in enumerate(coefficients):
         phase = np.exp(-2j * np.pi * index * comb_shift / slice_offset)
@@ -316,7 +320,8 @@ def make_pins(
     gradient = _extended_blip_train(system, n_subpulses, hard_duration, blip)
     rephaser = pp.make_trapezoid(channel="z", area=-0.5 * gradient.area, system=system)
     result = RfPulse(system, event, (gradient,), (rephaser,))
-    result.slice_positions = _slice_positions(num_slices, slice_offset, include_center)
+    positions = _slice_positions(num_slices, slice_offset, include_center)
+    result.slice_positions = positions + center_offset
     result.slice_offset = float(slice_offset)
     result.slice_thickness = float(slice_thickness)
     return result
@@ -329,9 +334,13 @@ def make_pins_slice_selective_pulse(
     slice_offset: float,
     *,
     include_center: bool = False,
+    center_offset: float | None = None,
     **kwargs,
 ) -> RfPulse:
     """Design a slice-selective SLR pulse and convert it to PINS.
+
+    ``center_offset`` translates the complete slice comb in metres, allowing
+    several calls to cover interleaved SMS groups.
 
     Examples
     --------
@@ -368,4 +377,5 @@ def make_pins_slice_selective_pulse(
         slice_offset,
         slice_thickness=slice_thickness,
         include_center=include_center,
+        center_offset=center_offset,
     )

@@ -65,6 +65,8 @@ DEFAULT_BANDWIDTH_HZ_PX = 125_000.0
 
 USER_SLOT_ECHO_SPACING = 0
 USER_SLOT_FLYBACK = 1
+USER_SLOT_SPSP = 2
+USER_SLOT_SPSP_BW = 3
 
 
 class GreMultiEcho3DPulseqSequence(Sequence):
@@ -129,6 +131,14 @@ class GreMultiEcho3DPulseqSequence(Sequence):
             UIParam.user_value(USER_SLOT_FLYBACK): DropdownFloatParam(
                 value=1.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
             ),
+            UIParam.user_name(USER_SLOT_SPSP): Description(text="Excitation (0=slab selective, 1=SPSP water selective)"),
+            UIParam.user_value(USER_SLOT_SPSP): DropdownFloatParam(
+                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+            ),
+            UIParam.user_name(USER_SLOT_SPSP_BW): Description(text="SPSP spectral bandwidth"),
+            UIParam.user_value(USER_SLOT_SPSP_BW): TypeinFloatParam(
+                value=250.0, min=50.0, max=1000.0, incr=10.0, unit="Hz", validate=Validate.NONE,
+            ),
         }
         return protocol_to_dict(protocol)
 
@@ -146,6 +156,8 @@ class GreMultiEcho3DPulseqSequence(Sequence):
             return {"valid": False, "duration": None, "info": "NX, NY, and NSLICES (partitions) must be >= 1"}
         if cfg.bandwidth_hz_px <= 0.0:
             return {"valid": False, "duration": None, "info": "Bandwidth must be > 0"}
+        if cfg.spsp and cfg.spsp_bandwidth_hz <= 0.0:
+            return {"valid": False, "duration": None, "info": "SPSP bandwidth must be > 0"}
         if cfg.num_echoes < 1:
             return {"valid": False, "duration": None, "info": "NUM_ECHOES must be >= 1"}
         if cfg.echo_spacing_s <= 0.0:
@@ -237,6 +249,7 @@ class GreMultiEcho3DPulseqSequence(Sequence):
         seq.set_definition("Ny", cfg.ny_pe)
         seq.set_definition("NySampled", len(sampled_pe))
         seq.set_definition("NumPartitions", cfg.npar)
+        seq.set_definition("SPSPExcitation", cfg.spsp)
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
@@ -244,7 +257,7 @@ class _Config:
     __slots__ = (
         "te_s", "tr_s", "flip_deg", "fov_ro_m", "fov_pe_m", "slab_thickness_m", "slice_spacing_m",
         "nx_ro", "ny_pe", "npar", "bandwidth_hz_px", "ry", "rz", "acs_lines", "ro_axis", "pe_axis",
-        "num_echoes", "echo_spacing_s", "flyback",
+        "num_echoes", "echo_spacing_s", "flyback", "spsp", "spsp_bandwidth_hz",
     )
 
 
@@ -268,6 +281,8 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.num_echoes = params.param_int_optional(prot, UIParam.NUM_ECHOES, 1)
     cfg.echo_spacing_s = params.user_float(prot, USER_SLOT_ECHO_SPACING, 5.0) * 1e-3
     cfg.flyback = params.user_float(prot, USER_SLOT_FLYBACK, 1.0) >= 0.5
+    cfg.spsp = params.user_float(prot, USER_SLOT_SPSP, 0.0) >= 0.5
+    cfg.spsp_bandwidth_hz = params.user_float(prot, USER_SLOT_SPSP_BW, 250.0)
     return cfg
 
 
@@ -277,8 +292,15 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | No
     # (make_sequence uses the real partition count) — see gre_multiecho_2d.py.
     if n_inner is None:
         n_inner = cfg.npar
-    pulse = pp.make_slice_selective_pulse(
-        np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
+    pulse = (
+        pp.make_spsp_pulse(
+            np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m,
+            cfg.spsp_bandwidth_hz, system=opts,
+        )
+        if cfg.spsp
+        else pp.make_slice_selective_pulse(
+            np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
+        )
     )
     line = pp.make_line_readout(
         opts,
@@ -356,6 +378,8 @@ _ARG_MAP = [
     ('--ry', UIParam.RY, float, ""),
     ('--rz', UIParam.RZ, float, ""),
     ('--swap-phase-freq', UIParam.SWAP_PHASE_FREQ, ("const", True), ""),
+    ('--spsp', UIParam.user_value(USER_SLOT_SPSP), ("const", 1.0), ""),
+    ('--spsp-bandwidth-hz', UIParam.user_value(USER_SLOT_SPSP_BW), float, ""),
 ]
 
 if __name__ == "__main__":

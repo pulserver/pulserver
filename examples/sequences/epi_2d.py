@@ -54,6 +54,7 @@ import pulserver.io as pio
 import pulserver.pypulseq as pp
 from pulserver import (
     BoolParam,
+    Description,
     DropdownFloatParam,
     DropdownIntParam,
     Sequence,
@@ -69,6 +70,9 @@ from pulserver import (
 )
 
 USER_SLOT_RAMP_SAMPLE = 0
+USER_SLOT_FAT_SAT = 1
+USER_SLOT_B0 = 2
+USER_SLOT_TTL = 3
 
 
 class Epi2DPulseqSequence(Sequence):
@@ -114,6 +118,12 @@ class Epi2DPulseqSequence(Sequence):
             UIParam.NSLICES: DropdownIntParam(
                 value=1, min=1, max=128, incr=1, options=[1, 5, 10, 20, 40], validate=Validate.NONE,
             ),
+            UIParam.MULTIBAND: TypeinFloatParam(
+                value=1.0, min=1.0, max=16.0, incr=1.0, unit="", validate=Validate.NONE,
+            ),
+            UIParam.NUM_FRAMES: DropdownIntParam(
+                value=1, min=1, max=10000, incr=1, options=[1, 10, 50, 100], validate=Validate.NONE,
+            ),
             UIParam.ETL: DropdownIntParam(
                 value=64, min=1, max=512, incr=1, options=[16, 32, 64, 128, 256], validate=Validate.NONE,
             ),
@@ -130,6 +140,18 @@ class Epi2DPulseqSequence(Sequence):
             UIParam.SWAP_PHASE_FREQ: BoolParam(value=False, validate=Validate.NONE),
             UIParam.SEQUENCE_TYPE: make_enum_param(UIParam.SEQUENCE_TYPE, SequenceType.SPIN_ECHO),
             UIParam.user_value(USER_SLOT_RAMP_SAMPLE): DropdownFloatParam(
+                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+            ),
+            UIParam.user_name(USER_SLOT_FAT_SAT): Description(text="Fat saturation before each EPI shot"),
+            UIParam.user_value(USER_SLOT_FAT_SAT): DropdownFloatParam(
+                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+            ),
+            UIParam.user_name(USER_SLOT_B0): Description(text="Main field for fat frequency"),
+            UIParam.user_value(USER_SLOT_B0): TypeinFloatParam(
+                value=3.0, min=0.1, max=14.0, incr=0.1, unit="T", validate=Validate.NONE,
+            ),
+            UIParam.user_name(USER_SLOT_TTL): Description(text="TTL output at each volume start"),
+            UIParam.user_value(USER_SLOT_TTL): DropdownFloatParam(
                 value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
             ),
         }
@@ -153,6 +175,10 @@ class Epi2DPulseqSequence(Sequence):
             return {"valid": False, "duration": None, "info": "ETL must be >= 1"}
         if cfg.b_value_s_mm2 < 0.0:
             return {"valid": False, "duration": None, "info": "Diffusion b-value must be >= 0"}
+        if cfg.num_frames < 1:
+            return {"valid": False, "duration": None, "info": "NUM_FRAMES must be >= 1"}
+        if not np.isclose(cfg.multiband_value, cfg.multiband) or cfg.multiband < 1 or cfg.nslices % cfg.multiband:
+            return {"valid": False, "duration": None, "info": "Multiband must be an integer factor of NSLICES"}
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=True)
         if timing is None:
@@ -164,7 +190,9 @@ class Epi2DPulseqSequence(Sequence):
 
         n_shots = _n_shots(cfg)
         n_dirs = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
-        duration_s = cfg.tr_s * float(n_shots) * float(cfg.nslices) * float(n_dirs)
+        duration_s = cfg.tr_s * float(n_shots) * float(cfg.n_slice_groups) * float(n_dirs) * cfg.num_frames
+        if cfg.ttl_output:
+            duration_s += 1e-3 * cfg.num_frames
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
@@ -174,8 +202,10 @@ class Epi2DPulseqSequence(Sequence):
         timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
 
         pulse = timing["pulse"]
+        pulses = timing["pulses"]
         epi = timing["epi"]
         diffusion = timing["diffusion"]
+        fat_sat = timing["fat_sat"]
         te_delay_s = timing["te_delay_s"]
         tr_delay_s = timing["tr_delay_s"]
 
@@ -193,29 +223,41 @@ class Epi2DPulseqSequence(Sequence):
             else [None]
         )
 
-        for rotation in rotations[:n_directions]:
-            for sl in range(cfg.nslices):
-                slice_offset_m = (sl - 0.5 * (cfg.nslices - 1)) * slice_step_m
+        ttl = pp.make_digital_output_pulse("ext1", duration=1e-3, system=opts) if cfg.ttl_output else None
+        for frame in range(cfg.num_frames):
+            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+            if ttl is not None:
+                seq.add_block(ttl, phase_label)
+            else:
+                seq.add_block(phase_label)
+            for rotation in rotations[:n_directions]:
+                for group in range(cfg.n_slice_groups):
+                    slice_offset_m = (group - 0.5 * (cfg.n_slice_groups - 1)) * slice_step_m
+                    pulse = pulses[group]
 
-                for ky_start in shot_starts:
-                    if diffusion is not None:
-                        diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotation)
-                        for block in diffusion:
+                    for ky_start in shot_starts:
+                        if fat_sat is not None:
+                            for block in fat_sat:
+                                seq.add_block(*block)
+                        if diffusion is not None:
+                            diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotation)
+                            for block in diffusion:
+                                seq.add_block(*block)
+                        if cfg.multiband == 1:
+                            pulse.set_state(
+                                freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m
+                            )
+                        for block_idx, block in enumerate(pulse):
+                            labels = (pp.make_label(type="SET", label="SLC", value=group),) if block_idx == 0 else ()
+                            seq.add_block(*block, *labels)
+                        if te_delay is not None:
+                            seq.add_block(te_delay)
+                        epi.set_state(lin_idx=ky_start)
+                        for block in epi:
                             seq.add_block(*block)
-                    pulse.set_state(
-                        freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m
-                    )
-                    for block_idx, block in enumerate(pulse):
-                        labels = (pp.make_label(type="SET", label="SLC", value=sl),) if block_idx == 0 else ()
-                        seq.add_block(*block, *labels)
-                    if te_delay is not None:
-                        seq.add_block(te_delay)
-                    epi.set_state(lin_idx=ky_start)
-                    for block in epi:
-                        seq.add_block(*block)
 
-                    if tr_delay is not None:
-                        seq.add_block(tr_delay)
+                        if tr_delay is not None:
+                            seq.add_block(tr_delay)
 
         seq.set_definition("Name", "epi_2d")
         seq.set_definition(
@@ -235,6 +277,11 @@ class Epi2DPulseqSequence(Sequence):
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("Ny", cfg.ny_pe)
         seq.set_definition("NumSlices", cfg.nslices)
+        seq.set_definition("MultibandFactor", cfg.multiband)
+        seq.set_definition("NumSliceGroups", cfg.n_slice_groups)
+        seq.set_definition("NumFrames", cfg.num_frames)
+        seq.set_definition("FatSaturation", cfg.fat_sat)
+        seq.set_definition("TTLExternalOutput", cfg.ttl_output)
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
@@ -246,7 +293,8 @@ class _Config:
     __slots__ = (
         "te_s", "tr_s", "flip_deg", "fov_ro_m", "fov_pe_m", "slice_thickness_m", "slice_spacing_m",
         "nx_ro", "ny_pe", "nslices", "etl", "bandwidth_hz_px", "ramp_sample",
-        "b_value_s_mm2", "n_directions",
+        "b_value_s_mm2", "n_directions", "multiband_value", "multiband", "n_slice_groups",
+        "num_frames", "fat_sat", "b0_t", "ttl_output",
     )
 
 
@@ -267,13 +315,35 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.ramp_sample = params.user_float(prot, USER_SLOT_RAMP_SAMPLE, 0.0) >= 0.5
     cfg.b_value_s_mm2 = params.param_float_optional(prot, UIParam.DIFFUSION_BVALUES, 0.0)
     cfg.n_directions = params.param_int_optional(prot, UIParam.DIFFUSION_DIRECTIONS, 3)
+    cfg.multiband_value = params.param_float_optional(prot, UIParam.MULTIBAND, 1.0)
+    cfg.multiband = int(round(cfg.multiband_value))
+    cfg.n_slice_groups = cfg.nslices // max(1, cfg.multiband)
+    cfg.num_frames = params.param_int_optional(prot, UIParam.NUM_FRAMES, 1)
+    cfg.fat_sat = params.user_float(prot, USER_SLOT_FAT_SAT, 0.0) >= 0.5
+    cfg.b0_t = params.user_float(prot, USER_SLOT_B0, 3.0)
+    cfg.ttl_output = params.user_float(prot, USER_SLOT_TTL, 0.0) >= 0.5
     return cfg
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    pulse = pp.make_slice_selective_pulse(
-        np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, system=opts
-    )
+    if cfg.multiband > 1:
+        sms_spacing = cfg.n_slice_groups * cfg.slice_spacing_m
+        pulses = tuple(
+            pp.make_pins_slice_selective_pulse(
+                np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, cfg.multiband,
+                sms_spacing,
+                include_center=False,
+                center_offset=(group - 0.5 * (cfg.n_slice_groups - 1)) * cfg.slice_spacing_m,
+                system=opts,
+            )
+            for group in range(cfg.n_slice_groups)
+        )
+        pulse = pulses[0]
+    else:
+        pulse = pp.make_slice_selective_pulse(
+            np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, system=opts
+        )
+        pulses = (pulse,)
     mask = np.arange(min(cfg.etl, cfg.ny_pe), dtype=int)
     epi = pp.make_epi_readout(
         opts,
@@ -295,6 +365,13 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
         except ValueError:
             if strict:
                 return None
+    fat_sat = (
+        pp.make_fat_saturation_pulse(
+            b0=cfg.b0_t, voxel_size=cfg.fov_ro_m / cfg.nx_ro, system=opts
+        )
+        if cfg.fat_sat
+        else None
+    )
 
     d_pulse = sum(pp.calc_duration(*block) for block in pulse)
     rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
@@ -304,7 +381,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     if te_delay_s < -1e-9 and strict:
         return None
     te_delay_s = max(0.0, te_delay_s)
-    prep_duration = 0.0 if diffusion is None else diffusion.duration
+    prep_duration = (0.0 if diffusion is None else diffusion.duration) + (0.0 if fat_sat is None else fat_sat.duration)
     min_block_s = prep_duration + d_pulse + te_delay_s + epi.duration
     tr_delay_s = round((cfg.tr_s - min_block_s) / raster) * raster
     if tr_delay_s < -1e-9 and strict:
@@ -314,8 +391,10 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
 
     return {
         "pulse": pulse,
+        "pulses": pulses,
         "epi": epi,
         "diffusion": diffusion,
+        "fat_sat": fat_sat,
         "te_delay_s": te_delay_s,
         "tr_delay_s": tr_delay_s,
         "min_block_s": min_block_s,
@@ -353,11 +432,16 @@ _ARG_MAP = [
     ('--nx', UIParam.NX, int, ""),
     ('--ny', UIParam.NY, int, ""),
     ('--nslices', UIParam.NSLICES, int, ""),
+    ('--multiband', UIParam.MULTIBAND, float, ""),
+    ('--num-frames', UIParam.NUM_FRAMES, int, ""),
     ('--etl', UIParam.ETL, int, ""),
     ('--bandwidth-hz-px', UIParam.BANDWIDTH, float, ""),
     ('--ramp-sample', UIParam.user_value(USER_SLOT_RAMP_SAMPLE), ("const", 1.0), ""),
     ('--bvalue', UIParam.DIFFUSION_BVALUES, float, ""),
     ('--directions', UIParam.DIFFUSION_DIRECTIONS, int, ""),
+    ('--fat-sat', UIParam.user_value(USER_SLOT_FAT_SAT), ("const", 1.0), ""),
+    ('--b0-t', UIParam.user_value(USER_SLOT_B0), float, ""),
+    ('--ttl-output', UIParam.user_value(USER_SLOT_TTL), ("const", 1.0), ""),
     ('--swap-phase-freq', UIParam.SWAP_PHASE_FREQ, ("const", True), ""),
 ]
 

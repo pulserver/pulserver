@@ -12,6 +12,7 @@ from pulserver import (
     DropdownIntParam,
     Sequence,
     SequenceType,
+    TriggerType,
     TypeinFloatParam,
     UIParam,
     Validate,
@@ -58,6 +59,10 @@ class Bssfp2DPulseqSequence(Sequence):
                     value=100_000.0, min=5_000.0, max=500_000.0, incr=100.0,
                     unit="Hz/px", validate=Validate.NONE,
                 ),
+                UIParam.NUM_FRAMES: DropdownIntParam(
+                    value=1, min=1, max=10000, incr=1, options=[1, 10, 20, 50], validate=Validate.NONE,
+                ),
+                UIParam.TRIGGER_TYPE: make_enum_param(UIParam.TRIGGER_TYPE, TriggerType.NONE),
                 UIParam.SEQUENCE_TYPE: make_enum_param(
                     UIParam.SEQUENCE_TYPE, SequenceType.GRADIENT_ECHO
                 ),
@@ -66,9 +71,13 @@ class Bssfp2DPulseqSequence(Sequence):
 
     def validate_protocol(self, opts: pp.Opts, protocol: dict[str, dict]) -> dict:
         cfg = _read_protocol(dict_to_protocol(protocol))
+        if cfg.num_frames < 1:
+            return {"valid": False, "duration": None, "info": "NUM_FRAMES must be >= 1"}
         try:
             train = _make_train(opts, cfg)
-            duration = sum(pp.calc_duration(*block) for block in train)
+            duration = sum(pp.calc_duration(*block) for block in train) * cfg.num_frames
+            if cfg.trigger != TriggerType.NONE:
+                duration += 1e-3 * cfg.num_frames
         except (TypeError, ValueError) as error:
             return {"valid": False, "duration": None, "info": str(error)}
         return {
@@ -81,15 +90,23 @@ class Bssfp2DPulseqSequence(Sequence):
         cfg = _read_protocol(dict_to_protocol(protocol))
         train = _make_train(opts, cfg)
         seq = pp.Sequence(opts)
-        train.set_state(rf_phase_rad=0.0)
-        for block in train:
-            seq.add_block(*block)
+        for frame in range(cfg.num_frames):
+            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+            if cfg.trigger != TriggerType.NONE:
+                seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
+                phase_label = None
+            train.set_state(rf_phase_rad=0.0)
+            for block_idx, block in enumerate(train):
+                labels = (phase_label,) if block_idx == 0 and phase_label is not None else ()
+                seq.add_block(*block, *labels)
         seq.set_definition("Name", "bssfp_2d")
         seq.set_definition("FOV", [cfg.fov_x_m, cfg.fov_y_m, cfg.slice_thickness_m])
         seq.set_definition("TE", train.te_s)
         seq.set_definition("TR", train.tr_s)
         seq.set_definition("Flip", cfg.flip_deg)
         seq.set_definition("ImagingMode", "2d")
+        seq.set_definition("NumFrames", cfg.num_frames)
+        seq.set_definition("TriggerType", str(cfg.trigger))
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
@@ -106,6 +123,8 @@ def _read_protocol(prot) -> _Config:
     cfg.nx = params.param_int(prot, UIParam.NX)
     cfg.ny = params.param_int(prot, UIParam.NY)
     cfg.bandwidth = params.param_float_optional(prot, UIParam.BANDWIDTH, 100_000.0)
+    cfg.num_frames = params.param_int_optional(prot, UIParam.NUM_FRAMES, 1)
+    cfg.trigger = prot[str(UIParam.TRIGGER_TYPE)].value
     return cfg
 
 
@@ -136,6 +155,8 @@ _ARG_MAP = [
     ("--nx", UIParam.NX, int, ""),
     ("--ny", UIParam.NY, int, ""),
     ("--bandwidth-hz-px", UIParam.BANDWIDTH, float, ""),
+    ("--num-frames", UIParam.NUM_FRAMES, int, ""),
+    ("--trigger", UIParam.TRIGGER_TYPE, {"none": "none", "respiratory": "physio1", "cardiac": "physio2"}, ""),
 ]
 
 if __name__ == "__main__":

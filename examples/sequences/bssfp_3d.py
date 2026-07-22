@@ -13,6 +13,7 @@ from pulserver import (
     DropdownIntParam,
     Sequence,
     SequenceType,
+    TriggerType,
     TypeinFloatParam,
     UIParam,
     Validate,
@@ -69,6 +70,10 @@ class Bssfp3DPulseqSequence(Sequence):
                     value=100_000.0, min=5_000.0, max=500_000.0, incr=100.0,
                     unit="Hz/px", validate=Validate.NONE,
                 ),
+                UIParam.NUM_FRAMES: DropdownIntParam(
+                    value=1, min=1, max=10000, incr=1, options=[1, 10, 20, 50], validate=Validate.NONE,
+                ),
+                UIParam.TRIGGER_TYPE: make_enum_param(UIParam.TRIGGER_TYPE, TriggerType.NONE),
                 UIParam.SEQUENCE_TYPE: make_enum_param(
                     UIParam.SEQUENCE_TYPE, SequenceType.GRADIENT_ECHO
                 ),
@@ -84,12 +89,16 @@ class Bssfp3DPulseqSequence(Sequence):
 
     def validate_protocol(self, opts: pp.Opts, protocol: dict[str, dict]) -> dict:
         cfg = _read_protocol(dict_to_protocol(protocol))
+        if cfg.num_frames < 1:
+            return {"valid": False, "duration": None, "info": "NUM_FRAMES must be >= 1"}
         try:
             train = _make_train(opts, cfg)
             one_segment = sum(pp.calc_duration(*block) for block in train)
         except (TypeError, ValueError) as error:
             return {"valid": False, "duration": None, "info": str(error)}
-        duration = one_segment * train.num_segments
+        duration = one_segment * train.num_segments * cfg.num_frames
+        if cfg.trigger != TriggerType.NONE:
+            duration += 1e-3 * cfg.num_frames
         return {
             "valid": True,
             "duration": duration,
@@ -100,10 +109,20 @@ class Bssfp3DPulseqSequence(Sequence):
         cfg = _read_protocol(dict_to_protocol(protocol))
         train = _make_train(opts, cfg)
         seq = pp.Sequence(opts)
-        for segment_idx in range(train.num_segments):
-            train.set_state(segment_idx=segment_idx, rf_phase_rad=0.0)
-            for block in train:
-                seq.add_block(*block)
+        for frame in range(cfg.num_frames):
+            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+            if cfg.trigger != TriggerType.NONE:
+                seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
+                phase_label = None
+            for segment_idx in range(train.num_segments):
+                train.set_state(segment_idx=segment_idx, rf_phase_rad=0.0)
+                for block_idx, block in enumerate(train):
+                    labels = (
+                        (phase_label,)
+                        if segment_idx == 0 and block_idx == 0 and phase_label is not None
+                        else ()
+                    )
+                    seq.add_block(*block, *labels)
         seq.set_definition("Name", "bssfp_3d")
         seq.set_definition("FOV", [cfg.fov_x_m, cfg.fov_y_m, cfg.fov_z_m])
         seq.set_definition("TE", train.te_s)
@@ -112,6 +131,8 @@ class Bssfp3DPulseqSequence(Sequence):
         seq.set_definition("ImagingMode", "3d")
         seq.set_definition("Segments", cfg.segments)
         seq.set_definition("SlabSelective", cfg.selective)
+        seq.set_definition("NumFrames", cfg.num_frames)
+        seq.set_definition("TriggerType", str(cfg.trigger))
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
@@ -131,6 +152,8 @@ def _read_protocol(prot) -> _Config:
     cfg.segments = params.param_int_optional(prot, UIParam.NUM_SHOTS, 8)
     cfg.bandwidth = params.param_float_optional(prot, UIParam.BANDWIDTH, 100_000.0)
     cfg.selective = params.user_float(prot, USER_SLOT_SELECTIVE, 0.0) >= 0.5
+    cfg.num_frames = params.param_int_optional(prot, UIParam.NUM_FRAMES, 1)
+    cfg.trigger = prot[str(UIParam.TRIGGER_TYPE)].value
     return cfg
 
 
@@ -170,6 +193,8 @@ _ARG_MAP = [
     ("--segments", UIParam.NUM_SHOTS, int, ""),
     ("--bandwidth-hz-px", UIParam.BANDWIDTH, float, ""),
     ("--slab-selective", UIParam.user_value(USER_SLOT_SELECTIVE), ("const", 1.0), ""),
+    ("--num-frames", UIParam.NUM_FRAMES, int, ""),
+    ("--trigger", UIParam.TRIGGER_TYPE, {"none": "none", "respiratory": "physio1", "cardiac": "physio2"}, ""),
 ]
 
 if __name__ == "__main__":

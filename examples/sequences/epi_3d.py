@@ -42,6 +42,7 @@ import numpy as np
 import pulserver.io as pio
 import pulserver.pypulseq as pp
 from pulserver import (
+    Description,
     DropdownFloatParam,
     DropdownIntParam,
     Sequence,
@@ -57,6 +58,9 @@ from pulserver import (
 )
 
 USER_SLOT_RAMP_SAMPLE = 0
+USER_SLOT_SPSP = 1
+USER_SLOT_SPSP_BW = 2
+USER_SLOT_TTL = 3
 
 
 class Epi3DPulseqSequence(Sequence):
@@ -116,8 +120,23 @@ class Epi3DPulseqSequence(Sequence):
             UIParam.DIFFUSION_DIRECTIONS: DropdownIntParam(
                 value=3, min=1, max=32, incr=1, options=[1, 3, 6], validate=Validate.NONE,
             ),
+            UIParam.NUM_FRAMES: DropdownIntParam(
+                value=1, min=1, max=10000, incr=1, options=[1, 10, 50, 100], validate=Validate.NONE,
+            ),
             UIParam.SEQUENCE_TYPE: make_enum_param(UIParam.SEQUENCE_TYPE, SequenceType.SPIN_ECHO),
             UIParam.user_value(USER_SLOT_RAMP_SAMPLE): DropdownFloatParam(
+                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+            ),
+            UIParam.user_name(USER_SLOT_SPSP): Description(text="Excitation (0=slab selective, 1=SPSP water selective)"),
+            UIParam.user_value(USER_SLOT_SPSP): DropdownFloatParam(
+                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+            ),
+            UIParam.user_name(USER_SLOT_SPSP_BW): Description(text="SPSP spectral bandwidth"),
+            UIParam.user_value(USER_SLOT_SPSP_BW): TypeinFloatParam(
+                value=250.0, min=50.0, max=1000.0, incr=10.0, unit="Hz", validate=Validate.NONE,
+            ),
+            UIParam.user_name(USER_SLOT_TTL): Description(text="TTL output at each volume start"),
+            UIParam.user_value(USER_SLOT_TTL): DropdownFloatParam(
                 value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
             ),
         }
@@ -141,6 +160,10 @@ class Epi3DPulseqSequence(Sequence):
             return {"valid": False, "duration": None, "info": "ETL must be >= 1"}
         if cfg.b_value_s_mm2 < 0.0:
             return {"valid": False, "duration": None, "info": "Diffusion b-value must be >= 0"}
+        if cfg.num_frames < 1:
+            return {"valid": False, "duration": None, "info": "NUM_FRAMES must be >= 1"}
+        if cfg.spsp and cfg.spsp_bandwidth_hz <= 0.0:
+            return {"valid": False, "duration": None, "info": "SPSP bandwidth must be > 0"}
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=True)
         if timing is None:
@@ -153,7 +176,9 @@ class Epi3DPulseqSequence(Sequence):
         n_shots = _n_shots(cfg)
         sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
         n_dirs = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
-        duration_s = cfg.tr_s * float(n_shots) * float(len(sampled_par)) * float(n_dirs)
+        duration_s = cfg.tr_s * float(n_shots) * float(len(sampled_par)) * float(n_dirs) * cfg.num_frames
+        if cfg.ttl_output:
+            duration_s += 1e-3 * cfg.num_frames
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
@@ -182,24 +207,31 @@ class Epi3DPulseqSequence(Sequence):
             else [None]
         )
 
-        for rotation in rotations[:n_directions]:
-            for par in sampled_par:
-                for ky_start in shot_starts:
-                    if diffusion is not None:
-                        diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotation)
-                        for block in diffusion:
+        ttl = pp.make_digital_output_pulse("ext1", duration=1e-3, system=opts) if cfg.ttl_output else None
+        for frame in range(cfg.num_frames):
+            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+            if ttl is not None:
+                seq.add_block(ttl, phase_label)
+            else:
+                seq.add_block(phase_label)
+            for rotation in rotations[:n_directions]:
+                for par in sampled_par:
+                    for ky_start in shot_starts:
+                        if diffusion is not None:
+                            diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotation)
+                            for block in diffusion:
+                                seq.add_block(*block)
+                        for block_idx, block in enumerate(pulse):
+                            labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
+                            seq.add_block(*block, *labels)
+                        if te_delay is not None:
+                            seq.add_block(te_delay)
+                        epi.set_state(lin_idx=ky_start, par_idx=int(par))
+                        for block in epi:
                             seq.add_block(*block)
-                    for block_idx, block in enumerate(pulse):
-                        labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
-                        seq.add_block(*block, *labels)
-                    if te_delay is not None:
-                        seq.add_block(te_delay)
-                    epi.set_state(lin_idx=ky_start, par_idx=int(par))
-                    for block in epi:
-                        seq.add_block(*block)
 
-                    if tr_delay is not None:
-                        seq.add_block(tr_delay)
+                        if tr_delay is not None:
+                            seq.add_block(tr_delay)
 
         seq.set_definition("Name", "epi_3d")
         seq.set_definition("FOV", [cfg.fov_ro_m, cfg.fov_pe_m, cfg.slice_spacing_m * cfg.npar])
@@ -217,6 +249,9 @@ class Epi3DPulseqSequence(Sequence):
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("Ny", cfg.ny_pe)
         seq.set_definition("NumPartitions", cfg.npar)
+        seq.set_definition("NumFrames", cfg.num_frames)
+        seq.set_definition("TTLExternalOutput", cfg.ttl_output)
+        seq.set_definition("SPSPExcitation", cfg.spsp)
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
@@ -228,7 +263,8 @@ class _Config:
     __slots__ = (
         "te_s", "tr_s", "flip_deg", "fov_ro_m", "fov_pe_m", "slab_thickness_m", "slice_spacing_m",
         "nx_ro", "ny_pe", "npar", "etl", "rz", "bandwidth_hz_px", "ramp_sample",
-        "b_value_s_mm2", "n_directions",
+        "b_value_s_mm2", "n_directions", "num_frames", "ttl_output",
+        "spsp", "spsp_bandwidth_hz",
     )
 
 
@@ -250,12 +286,23 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.ramp_sample = params.user_float(prot, USER_SLOT_RAMP_SAMPLE, 0.0) >= 0.5
     cfg.b_value_s_mm2 = params.param_float_optional(prot, UIParam.DIFFUSION_BVALUES, 0.0)
     cfg.n_directions = params.param_int_optional(prot, UIParam.DIFFUSION_DIRECTIONS, 3)
+    cfg.num_frames = params.param_int_optional(prot, UIParam.NUM_FRAMES, 1)
+    cfg.ttl_output = params.user_float(prot, USER_SLOT_TTL, 0.0) >= 0.5
+    cfg.spsp = params.user_float(prot, USER_SLOT_SPSP, 0.0) >= 0.5
+    cfg.spsp_bandwidth_hz = params.user_float(prot, USER_SLOT_SPSP_BW, 250.0)
     return cfg
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    pulse = pp.make_slice_selective_pulse(
-        np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
+    pulse = (
+        pp.make_spsp_pulse(
+            np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m,
+            cfg.spsp_bandwidth_hz, system=opts,
+        )
+        if cfg.spsp
+        else pp.make_slice_selective_pulse(
+            np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
+        )
     )
     n_lines = min(cfg.etl, cfg.ny_pe)
     mask = np.column_stack((np.arange(n_lines, dtype=int), np.zeros(n_lines, dtype=int)))
@@ -344,6 +391,10 @@ _ARG_MAP = [
     ('--ramp-sample', UIParam.user_value(USER_SLOT_RAMP_SAMPLE), ("const", 1.0), ""),
     ('--bvalue', UIParam.DIFFUSION_BVALUES, float, ""),
     ('--directions', UIParam.DIFFUSION_DIRECTIONS, int, ""),
+    ('--num-frames', UIParam.NUM_FRAMES, int, ""),
+    ('--ttl-output', UIParam.user_value(USER_SLOT_TTL), ("const", 1.0), ""),
+    ('--spsp', UIParam.user_value(USER_SLOT_SPSP), ("const", 1.0), ""),
+    ('--spsp-bandwidth-hz', UIParam.user_value(USER_SLOT_SPSP_BW), float, ""),
 ]
 
 if __name__ == "__main__":

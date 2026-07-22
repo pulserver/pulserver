@@ -47,6 +47,7 @@ from pulserver import (
     DropdownIntParam,
     Sequence,
     SequenceType,
+    TriggerType,
     TypeinFloatParam,
     UIParam,
     Validate,
@@ -100,6 +101,10 @@ class GreNoncart3DPulseqSequence(Sequence):
             UIParam.NUM_SHOTS: DropdownIntParam(
                 value=32, min=1, max=2048, incr=1, options=[16, 32, 64, 128, 256], validate=Validate.NONE,
             ),
+            UIParam.NUM_FRAMES: DropdownIntParam(
+                value=1, min=1, max=10000, incr=1, options=[1, 10, 20, 50], validate=Validate.NONE,
+            ),
+            UIParam.TRIGGER_TYPE: make_enum_param(UIParam.TRIGGER_TYPE, TriggerType.NONE),
             UIParam.RZ: TypeinFloatParam(value=1.0, min=1.0, max=8.0, incr=1.0, unit="", validate=Validate.NONE),
             UIParam.SEQUENCE_TYPE: make_enum_param(UIParam.SEQUENCE_TYPE, SequenceType.GRADIENT_ECHO),
             UIParam.user_name(USER_SLOT_TRAJECTORY): Description(text="Trajectory (0=spiral, 1=rosette)"),
@@ -127,6 +132,8 @@ class GreNoncart3DPulseqSequence(Sequence):
             return {"valid": False, "duration": None, "info": "NX and NSLICES (partitions) must be >= 1"}
         if cfg.num_shots < 1:
             return {"valid": False, "duration": None, "info": "NumShots must be >= 1"}
+        if cfg.num_frames < 1:
+            return {"valid": False, "duration": None, "info": "NUM_FRAMES must be >= 1"}
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=True, n_inner=1)
         if timing is None:
@@ -144,7 +151,9 @@ class GreNoncart3DPulseqSequence(Sequence):
                 ),
             }
 
-        duration_s = cfg.tr_s * float(cfg.num_shots)
+        duration_s = cfg.tr_s * float(cfg.num_shots) * cfg.num_frames
+        if cfg.trigger != TriggerType.NONE:
+            duration_s += 1e-3 * cfg.num_frames
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
@@ -165,30 +174,36 @@ class GreNoncart3DPulseqSequence(Sequence):
 
         rotations = pp.make_radial_tilt(cfg.num_shots, scheme=cfg.order_mode).to_rotations()
         sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
-        rf_phases = pp.make_rf_spoiling_schedule(cfg.num_shots * len(sampled_par))
+        rf_phases = pp.make_rf_spoiling_schedule(cfg.num_shots * len(sampled_par) * cfg.num_frames)
         phase_idx = 0
 
-        for shot, rotation in enumerate(rotations):
-            for par in sampled_par:
-                phase = float(rf_phases[phase_idx])
-                pulse.set_state(phase_offset_rad=phase)
-                for block_idx, block in enumerate(pulse):
-                    labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
-                    seq.add_block(*block, *labels)
-                if te_delay is not None:
-                    seq.add_block(te_delay)
-                readout_module.set_state(
-                    lin_idx=shot,
-                    par_idx=int(par),
-                    adc_phase_rad=phase,
-                    rotation=rotation,
-                )
-                for block in readout_module:
-                    seq.add_block(*block)
-                phase_idx += 1
+        for frame in range(cfg.num_frames):
+            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+            if cfg.trigger != TriggerType.NONE:
+                seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
+            else:
+                seq.add_block(phase_label)
+            for shot, rotation in enumerate(rotations):
+                for par in sampled_par:
+                    phase = float(rf_phases[phase_idx])
+                    pulse.set_state(phase_offset_rad=phase)
+                    for block_idx, block in enumerate(pulse):
+                        labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
+                        seq.add_block(*block, *labels)
+                    if te_delay is not None:
+                        seq.add_block(te_delay)
+                    readout_module.set_state(
+                        lin_idx=shot,
+                        par_idx=int(par),
+                        adc_phase_rad=phase,
+                        rotation=rotation,
+                    )
+                    for block in readout_module:
+                        seq.add_block(*block)
+                    phase_idx += 1
 
-            if tr_delay is not None:
-                seq.add_block(tr_delay)
+                if tr_delay is not None:
+                    seq.add_block(tr_delay)
 
         seq.set_definition("Name", "gre_noncart_3d")
         seq.set_definition("FOV", [cfg.fov_m, cfg.fov_m, cfg.slice_spacing_m * cfg.npar])
@@ -203,13 +218,15 @@ class GreNoncart3DPulseqSequence(Sequence):
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("NumShots", cfg.num_shots)
         seq.set_definition("NumPartitions", cfg.npar)
+        seq.set_definition("NumFrames", cfg.num_frames)
+        seq.set_definition("TriggerType", str(cfg.trigger))
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
 class _Config:
     __slots__ = (
         "te_s", "tr_s", "flip_deg", "fov_m", "slab_thickness_m", "slice_spacing_m",
-        "nx_ro", "npar", "rz", "num_shots", "trajectory", "order_mode",
+        "nx_ro", "npar", "rz", "num_shots", "trajectory", "order_mode", "num_frames", "trigger",
     )
 
 
@@ -227,6 +244,8 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.num_shots = params.param_int_optional(prot, UIParam.NUM_SHOTS, 32)
     cfg.trajectory = "rosette" if params.user_float(prot, USER_SLOT_TRAJECTORY, 0.0) >= 0.5 else "spiral"
     cfg.order_mode = "golden" if params.user_float(prot, USER_SLOT_ORDER_MODE, 1.0) >= 0.5 else "uniform"
+    cfg.num_frames = params.param_int_optional(prot, UIParam.NUM_FRAMES, 1)
+    cfg.trigger = prot[str(UIParam.TRIGGER_TYPE)].value
     return cfg
 
 
@@ -316,6 +335,8 @@ _ARG_MAP = [
     ('--rz', UIParam.RZ, float, ""),
     ('--trajectory', UIParam.user_value(USER_SLOT_TRAJECTORY), {'spiral': 0.0, 'rosette': 1.0}, ""),
     ('--order-mode', UIParam.user_value(USER_SLOT_ORDER_MODE), {'uniform': 0.0, 'golden': 1.0}, ""),
+    ('--num-frames', UIParam.NUM_FRAMES, int, ""),
+    ('--trigger', UIParam.TRIGGER_TYPE, {'none': 'none', 'respiratory': 'physio1', 'cardiac': 'physio2'}, ""),
 ]
 
 if __name__ == "__main__":

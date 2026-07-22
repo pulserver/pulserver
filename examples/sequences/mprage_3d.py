@@ -75,6 +75,8 @@ FLYBACK = True
 
 USER_SLOT_TI = 0
 USER_SLOT_INV_MODE = 1
+USER_SLOT_SPSP = 2
+USER_SLOT_SPSP_BW = 3
 
 
 class Mprage3DPulseqSequence(Sequence):
@@ -143,6 +145,14 @@ class Mprage3DPulseqSequence(Sequence):
             UIParam.user_value(USER_SLOT_INV_MODE): DropdownFloatParam(
                 value=1.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
             ),
+            UIParam.user_name(USER_SLOT_SPSP): Description(text="Excitation (0=slab selective, 1=SPSP water selective)"),
+            UIParam.user_value(USER_SLOT_SPSP): DropdownFloatParam(
+                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+            ),
+            UIParam.user_name(USER_SLOT_SPSP_BW): Description(text="SPSP spectral bandwidth"),
+            UIParam.user_value(USER_SLOT_SPSP_BW): TypeinFloatParam(
+                value=250.0, min=50.0, max=1000.0, incr=10.0, unit="Hz", validate=Validate.NONE,
+            ),
         }
         return protocol_to_dict(protocol)
 
@@ -160,6 +170,8 @@ class Mprage3DPulseqSequence(Sequence):
             return {"valid": False, "duration": None, "info": "NX, NY, and NSLICES (partitions) must be >= 1"}
         if cfg.bandwidth_hz_px <= 0.0:
             return {"valid": False, "duration": None, "info": "Bandwidth must be > 0"}
+        if cfg.spsp and cfg.spsp_bandwidth_hz <= 0.0:
+            return {"valid": False, "duration": None, "info": "SPSP bandwidth must be > 0"}
         if cfg.etl < 1:
             return {"valid": False, "duration": None, "info": "ETL must be >= 1"}
         if cfg.ti_s <= 0.0:
@@ -295,7 +307,7 @@ class _Config:
     __slots__ = (
         "te_s", "tr_s", "flip_deg", "fov_ro_m", "fov_pe_m", "slab_thickness_m", "slice_spacing_m",
         "nx_ro", "ny_pe", "npar", "bandwidth_hz_px", "ry", "rz", "ro_axis", "pe_axis",
-        "etl", "ti_s", "trecovery_s", "inv_mode",
+        "etl", "ti_s", "trecovery_s", "inv_mode", "spsp", "spsp_bandwidth_hz",
     )
 
 
@@ -319,6 +331,8 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.ti_s = params.user_float(prot, USER_SLOT_TI, 900.0) * 1e-3
     cfg.trecovery_s = params.param_float_optional(prot, UIParam.TRECOVERY, 1200.0) * 1e-3
     cfg.inv_mode = "adiabatic" if params.user_float(prot, USER_SLOT_INV_MODE, 1.0) >= 0.5 else "hard"
+    cfg.spsp = params.user_float(prot, USER_SLOT_SPSP, 0.0) >= 0.5
+    cfg.spsp_bandwidth_hz = params.user_float(prot, USER_SLOT_SPSP_BW, 250.0)
     return cfg
 
 
@@ -406,8 +420,15 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
 
 def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
     inversion = pp.make_inversion_pulse(adiabatic=cfg.inv_mode == "adiabatic", system=opts)
-    pulse = pp.make_slice_selective_pulse(
-        np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
+    pulse = (
+        pp.make_spsp_pulse(
+            np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m,
+            cfg.spsp_bandwidth_hz, system=opts,
+        )
+        if cfg.spsp
+        else pp.make_slice_selective_pulse(
+            np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
+        )
     )
     line = pp.make_line_readout(
         opts,
@@ -494,6 +515,7 @@ def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None
     seq.set_definition("ReadoutAxis", "x")
     seq.set_definition("PhaseAxis", "y")
     seq.set_definition("RfSpoilingIncDeg", 117.0)
+    seq.set_definition("SPSPExcitation", cfg.spsp)
     pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
@@ -536,6 +558,8 @@ _ARG_MAP = [
     ('--ry', UIParam.RY, float, ""),
     ('--rz', UIParam.RZ, float, ""),
     ('--swap-phase-freq', UIParam.SWAP_PHASE_FREQ, ("const", True), ""),
+    ('--spsp', UIParam.user_value(USER_SLOT_SPSP), ("const", 1.0), ""),
+    ('--spsp-bandwidth-hz', UIParam.user_value(USER_SLOT_SPSP_BW), float, ""),
 ]
 
 if __name__ == "__main__":

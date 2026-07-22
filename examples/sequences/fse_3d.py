@@ -64,6 +64,8 @@ encoding = readout = sampling = system = excitation = preparations = pp
 # See fse_2d.py: refocusing scheme (TRAPS on/off) carried as an opuser
 # custom variable; the refocusing flip ANGLE reuses UIParam.FLIP directly.
 USER_SLOT_REFOCUS_SCHEME = 0
+USER_SLOT_SPSP = 1
+USER_SLOT_SPSP_BW = 2
 
 
 class Fse3DPulseqSequence(Sequence):
@@ -133,6 +135,14 @@ class Fse3DPulseqSequence(Sequence):
             UIParam.user_value(USER_SLOT_REFOCUS_SCHEME): DropdownFloatParam(
                 value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
             ),
+            UIParam.user_name(USER_SLOT_SPSP): Description(text="Excitation (0=slab selective, 1=SPSP water selective)"),
+            UIParam.user_value(USER_SLOT_SPSP): DropdownFloatParam(
+                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+            ),
+            UIParam.user_name(USER_SLOT_SPSP_BW): Description(text="SPSP spectral bandwidth"),
+            UIParam.user_value(USER_SLOT_SPSP_BW): TypeinFloatParam(
+                value=250.0, min=50.0, max=1000.0, incr=10.0, unit="Hz", validate=Validate.NONE,
+            ),
         }
         return protocol_to_dict(protocol)
 
@@ -150,6 +160,8 @@ class Fse3DPulseqSequence(Sequence):
             return {"valid": False, "duration": None, "info": "NX, NY, and NSLICES (partitions) must be >= 1"}
         if cfg.bandwidth_hz_px <= 0.0:
             return {"valid": False, "duration": None, "info": "Bandwidth must be > 0"}
+        if cfg.spsp and cfg.spsp_bandwidth_hz <= 0.0:
+            return {"valid": False, "duration": None, "info": "SPSP bandwidth must be > 0"}
         if cfg.etl < 1:
             return {"valid": False, "duration": None, "info": "ETL must be >= 1"}
         if cfg.b_value_s_mm2 < 0.0:
@@ -193,6 +205,7 @@ class Fse3DPulseqSequence(Sequence):
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("Ny", cfg.ny_pe)
         seq.set_definition("NumPartitions", cfg.npar)
+        seq.set_definition("SPSPExcitation", cfg.spsp)
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
@@ -206,6 +219,7 @@ class _Config:
         "te_s", "tr_s", "refocus_flip_deg", "refocus_variable",
         "fov_ro_m", "fov_pe_m", "slab_thickness_m", "slice_spacing_m",
         "nx_ro", "ny_pe", "npar", "etl", "ry", "rz", "bandwidth_hz_px", "b_value_s_mm2", "n_directions",
+        "spsp", "spsp_bandwidth_hz",
     )
 
 
@@ -229,11 +243,22 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, 125_000.0)
     cfg.b_value_s_mm2 = params.param_float_optional(prot, UIParam.DIFFUSION_BVALUES, 0.0)
     cfg.n_directions = params.param_int_optional(prot, UIParam.DIFFUSION_DIRECTIONS, 3)
+    cfg.spsp = params.user_float(prot, USER_SLOT_SPSP, 0.0) >= 0.5
+    cfg.spsp_bandwidth_hz = params.user_float(prot, USER_SLOT_SPSP_BW, 250.0)
     return cfg
 
 
 def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
-    excitation_pulse = pp.make_hard_pulse(np.pi / 2.0, system=opts)
+    excitation_pulse = (
+        pp.make_spsp_pulse(
+            np.pi / 2.0, cfg.slab_thickness_m,
+            cfg.spsp_bandwidth_hz, system=opts,
+        )
+        if cfg.spsp
+        else pp.make_slice_selective_pulse(
+            np.pi / 2.0, cfg.slab_thickness_m, system=opts
+        )
+    )
     refocusing = pp.make_refocusing_pulse(system=opts)
     flips = pp.make_traps_schedule(
         cfg.etl, np.deg2rad(cfg.refocus_flip_deg), variable=cfg.refocus_variable
@@ -704,6 +729,8 @@ _ARG_MAP = [
     ('--tr-ms', UIParam.TR, float, ""),
     ('--flip-deg', UIParam.FLIP, float, 'Refocusing flip angle (deg); excitation is fixed at 90'),
     ('--refocus-variable', UIParam.user_value(USER_SLOT_REFOCUS_SCHEME), ("const", 1.0), ""),
+    ('--spsp', UIParam.user_value(USER_SLOT_SPSP), ("const", 1.0), ""),
+    ('--spsp-bandwidth-hz', UIParam.user_value(USER_SLOT_SPSP_BW), float, ""),
     ('--fov-mm', UIParam.FOV, float, ""),
     ('--phase-fov-mm', UIParam.PHASE_FOV, float, ""),
     ('--slab-thickness-mm', UIParam.SLICE_THICKNESS, float, ""),

@@ -47,6 +47,7 @@ from pulserver import (
     DropdownIntParam,
     Sequence,
     SequenceType,
+    TriggerType,
     TypeinFloatParam,
     UIParam,
     Validate,
@@ -105,6 +106,10 @@ class GreRadial2DPulseqSequence(Sequence):
             UIParam.NUM_SHOTS: DropdownIntParam(
                 value=100, min=8, max=2048, incr=1, options=[50, 100, 200, 400, 800], validate=Validate.NONE,
             ),
+            UIParam.NUM_FRAMES: DropdownIntParam(
+                value=1, min=1, max=10000, incr=1, options=[1, 10, 20, 50], validate=Validate.NONE,
+            ),
+            UIParam.TRIGGER_TYPE: make_enum_param(UIParam.TRIGGER_TYPE, TriggerType.NONE),
             UIParam.BANDWIDTH: TypeinFloatParam(
                 value=DEFAULT_BANDWIDTH_HZ_PX, min=5_000.0, max=500_000.0, incr=100.0,
                 unit="Hz/px", validate=Validate.NONE,
@@ -133,6 +138,8 @@ class GreRadial2DPulseqSequence(Sequence):
             return {"valid": False, "duration": None, "info": "Bandwidth must be > 0"}
         if cfg.num_shots < 1:
             return {"valid": False, "duration": None, "info": "NumShots must be >= 1"}
+        if cfg.num_frames < 1:
+            return {"valid": False, "duration": None, "info": "NUM_FRAMES must be >= 1"}
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=True, n_inner=1)
         if timing is None:
@@ -150,7 +157,9 @@ class GreRadial2DPulseqSequence(Sequence):
                 ),
             }
 
-        duration_s = cfg.tr_s * float(cfg.num_shots)
+        duration_s = cfg.tr_s * float(cfg.num_shots) * cfg.num_frames
+        if cfg.trigger != TriggerType.NONE:
+            duration_s += 1e-3 * cfg.num_frames
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
@@ -172,29 +181,35 @@ class GreRadial2DPulseqSequence(Sequence):
         tilts = pp.make_radial_tilt(cfg.num_shots, scheme=cfg.order_mode)
         rotations = tilts.to_rotations()
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
-        rf_phases = pp.make_rf_spoiling_schedule(cfg.num_shots * cfg.nslices)
+        rf_phases = pp.make_rf_spoiling_schedule(cfg.num_shots * cfg.nslices * cfg.num_frames)
         phase_idx = 0
 
-        for spoke, rotation in enumerate(rotations):
-            for sl in range(cfg.nslices):
-                slice_offset_m = (sl - 0.5 * (cfg.nslices - 1)) * slice_step_m
-                phase = float(rf_phases[phase_idx])
-                pulse.set_state(
-                    freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m,
-                    phase_offset_rad=phase,
-                )
-                for block_idx, block in enumerate(pulse):
-                    labels = (pp.make_label(type="SET", label="SLC", value=sl),) if block_idx == 0 else ()
-                    seq.add_block(*block, *labels)
-                if te_delay is not None:
-                    seq.add_block(te_delay)
-                radial.set_state(lin_idx=spoke, adc_phase_rad=phase, rotation=rotation)
-                for block in radial:
-                    seq.add_block(*block)
-                phase_idx += 1
+        for frame in range(cfg.num_frames):
+            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+            if cfg.trigger != TriggerType.NONE:
+                seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
+            else:
+                seq.add_block(phase_label)
+            for spoke, rotation in enumerate(rotations):
+                for sl in range(cfg.nslices):
+                    slice_offset_m = (sl - 0.5 * (cfg.nslices - 1)) * slice_step_m
+                    phase = float(rf_phases[phase_idx])
+                    pulse.set_state(
+                        freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m,
+                        phase_offset_rad=phase,
+                    )
+                    for block_idx, block in enumerate(pulse):
+                        labels = (pp.make_label(type="SET", label="SLC", value=sl),) if block_idx == 0 else ()
+                        seq.add_block(*block, *labels)
+                    if te_delay is not None:
+                        seq.add_block(te_delay)
+                    radial.set_state(lin_idx=spoke, adc_phase_rad=phase, rotation=rotation)
+                    for block in radial:
+                        seq.add_block(*block)
+                    phase_idx += 1
 
-            if tr_delay is not None:
-                seq.add_block(tr_delay)
+                if tr_delay is not None:
+                    seq.add_block(tr_delay)
 
         seq.set_definition("Name", "gre_radial_2d")
         seq.set_definition("FOV", [cfg.fov_m, cfg.fov_m, slice_step_m * cfg.nslices if cfg.nslices > 1 else cfg.slice_thickness_m])
@@ -209,13 +224,15 @@ class GreRadial2DPulseqSequence(Sequence):
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("NumShots", cfg.num_shots)
         seq.set_definition("NumSlices", cfg.nslices)
+        seq.set_definition("NumFrames", cfg.num_frames)
+        seq.set_definition("TriggerType", str(cfg.trigger))
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
 class _Config:
     __slots__ = (
         "te_s", "tr_s", "flip_deg", "fov_m", "slice_thickness_m", "slice_spacing_m",
-        "nx_ro", "nslices", "bandwidth_hz_px", "num_shots", "order_mode",
+        "nx_ro", "nslices", "bandwidth_hz_px", "num_shots", "order_mode", "num_frames", "trigger",
     )
 
 
@@ -232,6 +249,8 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, DEFAULT_BANDWIDTH_HZ_PX)
     cfg.num_shots = params.param_int_optional(prot, UIParam.NUM_SHOTS, 100)
     cfg.order_mode = _order_mode_name(params.user_float(prot, USER_SLOT_ORDER_MODE, 1.0))
+    cfg.num_frames = params.param_int_optional(prot, UIParam.NUM_FRAMES, 1)
+    cfg.trigger = prot[str(UIParam.TRIGGER_TYPE)].value
     return cfg
 
 
@@ -306,6 +325,8 @@ _ARG_MAP = [
     ('--num-shots', UIParam.NUM_SHOTS, int, ""),
     ('--bandwidth-hz-px', UIParam.BANDWIDTH, float, ""),
     ('--order-mode', UIParam.user_value(USER_SLOT_ORDER_MODE), {'uniform': 0.0, 'golden': 1.0}, ""),
+    ('--num-frames', UIParam.NUM_FRAMES, int, ""),
+    ('--trigger', UIParam.TRIGGER_TYPE, {'none': 'none', 'respiratory': 'physio1', 'cardiac': 'physio2'}, ""),
 ]
 
 if __name__ == "__main__":

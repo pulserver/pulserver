@@ -151,6 +151,14 @@ def _parameter_description(name: str, help_text: str) -> str:
         "order_mode": "View-angle ordering mode",
         "segments": "Number of 3D bSSFP segments",
         "slab_selective": "Use a slab-selective instead of nonselective excitation",
+        "spsp": "Use water-selective spectral-spatial slab excitation",
+        "spsp_bandwidth_hz": "SPSP water passband bandwidth in Hz",
+        "fat_sat": "Play a spectrally selective fat-saturation module before each shot",
+        "b0_t": "Main field strength used to place the fat-saturation band in tesla",
+        "multiband": "Simultaneous-multislice acceleration factor",
+        "num_frames": "Number of dynamic volumes or phases",
+        "ttl_output": "Emit an external TTL pulse at the start of every volume",
+        "trigger": "Optional physiological trigger source at the start of every phase",
         "prep_type": "Magnetization preparation family",
         "inversion_mode": "Inversion RF pulse family",
         "refocus_mode": "T2-preparation refocusing RF pulse family",
@@ -182,7 +190,7 @@ def _factory_doc(name: str, fields: list[tuple[str, object, object, str]], plugi
                 "volume uses a shorter TR and is designed once for each requested volume::",
                 "",
                 f"    structural = design_{name}(nx=128, ny=128)",
-                f"    fmri_volume = design_{name}(tr_ms=2000.0, nx=64, ny=64)",
+                f"    fmri_run = design_{name}(tr_ms=2000.0, nx=64, ny=64, num_frames=2, ttl_output=True)",
             ]
         )
         rendered_examples = f""".. plot::
@@ -200,8 +208,81 @@ def _factory_doc(name: str, fields: list[tuple[str, object, object, str]], plugi
    from _figures import sequence_figure
    from pulserver.sequences import design_{name}
 
-   fmri_volume = design_{name}(nx=64, ny=64, tr_ms=2000.0)
-   sequence_figure(fmri_volume, time_range=(0.0, min(0.08, fmri_volume.duration()[0])), title="{name} — fMRI volume")"""
+   fmri_run = design_{name}(nx=64, ny=64, tr_ms=2000.0, num_frames=2, ttl_output=True)
+   sequence_figure(fmri_run, time_range=(0.0, min(0.08, fmri_run.duration()[0])), title="{name} — fMRI run with volume TTL")"""
+    elif name.startswith("bssfp_"):
+        examples.extend(
+            [
+                "",
+                "A dynamic cardiac acquisition uses the multiphase count and optional",
+                "cardiac trigger directly::",
+                "",
+                f"    cine = design_{name}(num_frames=20, trigger=\"cardiac\")",
+            ]
+        )
+        rendered_examples = f""".. plot::
+   :include-source: false
+
+   from _figures import sequence_figure
+   from pulserver.sequences import design_{name}
+
+   structural = design_{name}()
+   sequence_figure(structural, time_range=(0.0, min(0.05, structural.duration()[0])), title="{name} — structural acquisition")
+
+.. plot::
+   :include-source: false
+
+   from _figures import sequence_figure
+   from pulserver.sequences import design_{name}
+
+   cine = design_{name}(num_frames=2, trigger="cardiac")
+   sequence_figure(cine, time_range=(0.0, min(0.05, cine.duration()[0])), title="{name} — cardiac-triggered multiphase acquisition")"""
+    elif name.startswith(("gre_noncart_", "gre_radial_")):
+        examples.extend(
+            [
+                "",
+                "Dynamic view ordering continues across frames and can optionally wait",
+                "for a physiological trigger at each frame boundary::",
+                "",
+                f"    dynamic = design_{name}(num_frames=20, trigger=\"cardiac\")",
+            ]
+        )
+        rendered_examples = f""".. plot::
+   :include-source: false
+
+   from _figures import sequence_figure
+   from pulserver.sequences import design_{name}
+
+   structural = design_{name}(nx=32, num_shots=8)
+   sequence_figure(structural, time_range=(0.0, min(0.05, structural.duration()[0])), title="{name} — structural acquisition")
+
+.. plot::
+   :include-source: false
+
+   from _figures import sequence_figure
+   from pulserver.sequences import design_{name}
+
+   dynamic = design_{name}(nx=32, num_shots=8, num_frames=2, trigger="cardiac")
+   sequence_figure(dynamic, time_range=(0.0, min(0.05, dynamic.duration()[0])), title="{name} — triggered dynamic acquisition")"""
+    elif name.startswith("mprage_"):
+        rendered_examples = f""".. plot::
+   :include-source: false
+
+   from _figures import sequence_figure
+   from pulserver.sequences import design_{name}
+
+   seq = design_{name}()
+   sequence_figure(seq, time_range=(0.0, min(0.03, seq.duration()[0])), title="{name} — inversion preparation")
+
+.. plot::
+   :include-source: false
+
+   from _figures import sequence_figure
+   from pulserver.sequences import design_{name}
+
+   seq = design_{name}()
+   ti = seq.get_definition("TI")
+   sequence_figure(seq, time_range=(max(0.0, ti - 0.025), min(ti + 0.08, seq.duration()[0])), title="{name} — gradient-echo acquisition train")"""
     else:
         rendered_examples = f""".. plot::
    :include-source: false

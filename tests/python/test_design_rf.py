@@ -136,6 +136,19 @@ def test_pins_center_convention_and_sparse_gradient(system):
     assert np.any(np.isclose(centered.slice_positions, 0.0))
 
 
+def test_pins_center_offset_supports_sms_slice_groups(system):
+    first = rf.make_pins_slice_selective_pulse(
+        np.deg2rad(90.0), 3e-3, 2, 10e-3,
+        center_offset=-2.5e-3, system=system,
+    )
+    second = rf.make_pins_slice_selective_pulse(
+        np.deg2rad(90.0), 3e-3, 2, 10e-3,
+        center_offset=2.5e-3, system=system,
+    )
+    positions = np.sort(np.concatenate((first.slice_positions, second.slice_positions)))
+    assert np.allclose(positions, [-7.5e-3, -2.5e-3, 2.5e-3, 7.5e-3])
+
+
 def _smooth_gradient(samples: int, dimensions: int) -> np.ndarray:
     time = np.linspace(0.0, np.pi, samples)
     columns = [1e-3 * np.sin(time), 0.5e-3 * np.sin(time), 0.25e-3 * np.sin(time)]
