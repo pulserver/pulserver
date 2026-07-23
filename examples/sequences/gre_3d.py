@@ -35,6 +35,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     BoolParam,
@@ -156,8 +157,7 @@ class Gre3DPulseqSequence(Sequence):
                 ),
             }
 
-        sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        duration_s = cfg.tr_s * float(len(sampled_pe))
+        duration_s = cfg.tr_s * float(len(_phase_encode_loop(cfg)))
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
@@ -176,25 +176,27 @@ class Gre3DPulseqSequence(Sequence):
 
         seq = pp.Sequence(opts)
 
-        sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
-        rf_phases = pp.make_rf_spoiling_schedule(
-            len(sampled_pe) * len(sampled_par), increment=RF_SPOILING_INCREMENT_RAD
+        pe_loop = _phase_encode_loop(cfg)
+        par_loop = _partition_loop(cfg)
+        rf_phases = design.make_rf_spoiling_schedule(
+            len(pe_loop) * len(par_loop), increment=RF_SPOILING_INCREMENT_RAD
         )
 
         shot = 0
-        for ky in sampled_pe:
-            for par in sampled_par:
+        for pe_shot in pe_loop:
+            for par_shot in par_loop:
                 phase = float(rf_phases[shot])
                 pulse.set_state(phase_offset_rad=phase)
-                for block_idx, block in enumerate(pulse):
-                    if block_idx == 0:
-                        seq.add_block(*block, pp.make_label(type="SET", label="SLC", value=0))
-                    else:
-                        seq.add_block(*block)
+                pulse.set_labels(SLC=0)
+                for block in pulse:
+                    seq.add_block(*block)
                 if te_delay is not None:
                     seq.add_block(te_delay)
-                line.set_state(lin_idx=int(ky), par_idx=int(par), adc_phase_rad=phase)
+                line.set_state(
+                    lin_idx=int(pe_shot[0, 0]),
+                    par_idx=int(par_shot[0, 0]),
+                    phase_offset_rad=phase,
+                )
                 for block in line:
                     seq.add_block(*block)
                 shot += 1
@@ -216,7 +218,7 @@ class Gre3DPulseqSequence(Sequence):
         seq.set_definition("RfSpoilingIncDeg", 117.0)
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("Ny", cfg.ny_pe)
-        seq.set_definition("NySampled", len(sampled_pe))
+        seq.set_definition("NySampled", len(pe_loop))
         seq.set_definition("NumPartitions", cfg.npar)
         seq.set_definition("SPSPExcitation", cfg.spsp)
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
@@ -251,6 +253,16 @@ def _read_protocol(prot: dict) -> _Config:
     return cfg
 
 
+def _phase_encode_loop(cfg: _Config):
+    """In-plane phase-encode loop; one shot per TR."""
+    return design.make_cartesian_sampling((cfg.nx_ro, cfg.ny_pe), acceleration=cfg.ry)
+
+
+def _partition_loop(cfg: _Config):
+    """Partition (kz) loop, played inside one TR — its own encoded axis."""
+    return design.make_cartesian_sampling((cfg.nx_ro, cfg.npar), acceleration=cfg.rz)
+
+
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | None = None):
     # n_inner decouples the TE-feasibility check (validate_protocol always
     # probes with n_inner=1) from the TR-fits-N-partitions budget
@@ -258,16 +270,16 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | No
     if n_inner is None:
         n_inner = cfg.npar
     pulse = (
-        pp.make_spsp_pulse(
+        design.make_spsp_pulse(
             np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m,
             cfg.spsp_bandwidth_hz, system=opts,
         )
         if cfg.spsp
-        else pp.make_slice_selective_pulse(
+        else design.make_slice_selective_pulse(
             np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
         )
     )
-    line = pp.make_line_readout(
+    line = design.make_line_readout(
         opts,
         (cfg.fov_ro_m, cfg.fov_pe_m, cfg.slice_spacing_m * cfg.npar),
         (cfg.nx_ro, cfg.ny_pe, cfg.npar),

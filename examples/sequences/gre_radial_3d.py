@@ -42,6 +42,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     Description,
@@ -181,19 +182,22 @@ class GreRadial3DPulseqSequence(Sequence):
 
         seq = pp.Sequence(opts)
 
-        rotations = pp.make_radial_tilt(cfg.num_shots, scheme=cfg.order_mode).to_rotations()
-        sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
-        rf_phases = pp.make_rf_spoiling_schedule(cfg.num_shots * len(sampled_par) * cfg.num_frames)
+        rotations = design.make_noncartesian_2d_sampling(
+            (cfg.nx_ro, cfg.nx_ro), views=cfg.num_shots, scheme=cfg.order_mode
+        ).to_rotations()
+        par_loop = design.make_cartesian_sampling((cfg.nx_ro, cfg.npar), acceleration=cfg.rz)
+        rf_phases = design.make_rf_spoiling_schedule(cfg.num_shots * len(par_loop) * cfg.num_frames)
         shot = 0
 
-        for frame in range(cfg.num_frames):
-            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+        frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+        for frame in range(len(frames)):
+            (phase_label,) = frames.labels(frame)
             if cfg.trigger != TriggerType.NONE:
                 seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
             else:
                 seq.add_block(phase_label)
             for spoke, rotation in enumerate(rotations):
-                for par in sampled_par:
+                for par_shot in par_loop:
                     phase = float(rf_phases[shot])
                     pulse.set_state(phase_offset_rad=phase)
                     for block_idx, block in enumerate(pulse):
@@ -203,8 +207,8 @@ class GreRadial3DPulseqSequence(Sequence):
                         seq.add_block(te_delay)
                     radial.set_state(
                         lin_idx=spoke,
-                        par_idx=int(par),
-                        adc_phase_rad=phase,
+                        par_idx=int(par_shot[0, 0]),
+                        phase_offset_rad=phase,
                         rotation=rotation,
                     )
                     for block in radial:
@@ -261,19 +265,24 @@ def _read_protocol(prot: dict) -> _Config:
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | None = None):
     if n_inner is None:
-        n_inner = len(pp.calc_sampled_lines(cfg.npar, cfg.rz, 0))
-    pulse = pp.make_slice_selective_pulse(
+        n_inner = len(design.make_cartesian_sampling((cfg.nx_ro, cfg.npar), acceleration=cfg.rz))
+    pulse = design.make_slice_selective_pulse(
         np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
     )
-    radial = pp.make_radial_stack_readout(
+    radial = design.make_radial_stack_readout(
         opts,
         cfg.fov_m,
         cfg.nx_ro,
         cfg.slice_spacing_m * cfg.npar,
         cfg.npar,
         bandwidth_hz_px=cfg.bandwidth_hz_px,
-        slice_rephasing=pulse.rephasers[0],
+        slice_rephasing=pulse.rephasers,
     )
+    # The readout folds the rephaser into its own prewinder, so the
+    # excitation must stop playing it -- otherwise the slice is rephased
+    # twice and every shot ends with a net selection moment.
+    pulse = pulse.without_rephasers()
+
     d_pulse = sum(pp.calc_duration(*block) for block in pulse)
     rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
     min_te_s = (d_pulse - rf_center_s) + radial.t_prephase_s + 0.5 * radial.readout.read_duration

@@ -7,8 +7,8 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.pypulseq import _readout as readout  # noqa: E402
-from pulserver.pypulseq import traj2grad  # noqa: E402
+from pulserver.design import _readout as readout  # noqa: E402
+from pulserver.design import traj2grad  # noqa: E402
 
 OPTS_KW = dict(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 
@@ -94,7 +94,7 @@ def test_spiral_variants_have_expected_winders_and_refocus(variant, has_pre, has
         assert arm.n_samples == 64
 
     seq = pp.Sequence(opts)
-    readout.NonCartesian2D(arm)(seq, rotation_idx=3)
+    readout.NonCartesian2D(arm).set_state(lin_idx=3).add_to(seq)
     _, k_full, *_ = seq.calculate_kspace()
     assert np.allclose(k_full[:, -1], 0.0, atol=1e-6)
     assert seq.check_timing()[0]
@@ -107,7 +107,7 @@ def test_radial_has_both_winders_and_nyquist_shot_count():
     assert spoke.has_prewinder and spoke.has_rewinder
     assert spoke.recommended_rotations == int(np.ceil(np.pi * 64 / 2))
     seq = pp.Sequence(opts)
-    readout.NonCartesian2D(spoke)(seq)
+    readout.NonCartesian2D(spoke).set_state().add_to(seq)
     _, k_full, *_ = seq.calculate_kspace()
     assert np.allclose(k_full[:, -1], 0.0, atol=1e-6)
     assert seq.check_timing()[0]
@@ -128,7 +128,7 @@ def test_rosette_has_no_winders_and_derives_adc_sampling():
     assert np.max(acquired_steps) <= 1.0 / 0.22 + 1e-9
 
     seq = pp.Sequence(arm.system)
-    readout.NonCartesian2D(arm)(seq, rotation_idx=2)
+    readout.NonCartesian2D(arm).set_state(lin_idx=2).add_to(seq)
     assert seq.check_timing()[0]
     assert all(abs(gradient.area) < 1e-9 for gradient in arm.gradients)
     _, k_full, *_ = seq.calculate_kspace()
@@ -173,7 +173,7 @@ def test_slice_rephasing_is_right_aligned_with_prewinder():
     arm = readout.Spiral(opts, 0.22, 32, 8, variant="inward", num_points=256)
     gz = pp.make_trapezoid(channel="z", area=-30.0, system=opts)
     seq = pp.Sequence(opts)
-    readout.NonCartesian2D(arm, slice_rephasing=gz)(seq)
+    readout.NonCartesian2D(arm, slice_rephasing=gz).set_state().add_to(seq)
     block = seq.get_block(1)
     duration = pp.calc_duration(block)
     assert pp.calc_duration(block.gz) == pytest.approx(duration)
@@ -184,7 +184,7 @@ def test_multiecho_labels_set_then_increment():
     opts = _opts()
     arm = readout.Radial(opts, 0.22, 32)
     seq = pp.Sequence(opts)
-    readout.NonCartesian2D(arm, num_echoes=3)(seq)
+    readout.NonCartesian2D(arm, num_echoes=3).set_state().add_to(seq)
     assert _labels(seq, "ECO") == [("labelset", 0), ("labelinc", 1), ("labelinc", 1)]
 
 
@@ -201,7 +201,7 @@ def test_stack_generates_full_phase_template_and_labels_indices():
     )
     assert stack._phase_template is not None
     seq = pp.Sequence(opts)
-    stack(seq, rotation_idx=5, phase_idx=2)
+    stack.set_state(lin_idx=5, par_idx=2).add_to(seq)
     assert seq.check_timing()[0]
     assert seq.duration()[0] == pytest.approx(stack.duration)
     assert _labels(seq, "LIN") == [("labelset", 5)]
@@ -212,12 +212,12 @@ def test_stack_generates_full_phase_template_and_labels_indices():
     # rephasing moment remains in this isolated readout-train test.
     assert np.allclose(k_full[:, -1], [0.0, 0.0, gz_reph.area], atol=1e-6)
     with pytest.raises(IndexError):
-        stack(pp.Sequence(opts), phase_idx=8)
+        stack.set_state(par_idx=8).add_to(pp.Sequence(opts))
 
 
 def test_projection_accepts_matrix_rotation_with_fast_sequence():
     arm = readout.Radial(_opts(), 0.22, 16)
-    sequence = readout.Projection(arm)(rotation=np.eye(3), rotation_idx=4)
+    sequence = readout.Projection(arm).set_state(lin_idx=4, rotation=np.eye(3)).get()
     assert len(sequence.block_events) == 3
 
 
@@ -228,7 +228,7 @@ def test_arbitrary_native_3d_path():
     shot = readout.Arbitrary(opts, path, matrix=32)
     train = readout.NonCartesian3D(shot)
     seq = pp.Sequence(opts)
-    train(seq, rotation_idx=1)
+    train.set_state(lin_idx=1).add_to(seq)
     assert shot.gz is not None
     assert seq.check_timing()[0]
     _, k_full, *_ = seq.calculate_kspace()

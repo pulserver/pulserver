@@ -47,6 +47,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     BoolParam,
@@ -179,8 +180,7 @@ class GreMultiEcho2DPulseqSequence(Sequence):
                 ),
             }
 
-        sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, cfg.acs_lines)
-        duration_s = cfg.tr_s * float(len(sampled_pe))
+        duration_s = cfg.tr_s * float(len(_phase_encode_loop(cfg)))
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
@@ -199,30 +199,31 @@ class GreMultiEcho2DPulseqSequence(Sequence):
 
         seq = pp.Sequence(opts)
 
-        sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, cfg.acs_lines)
+        pe_loop = _phase_encode_loop(cfg)
 
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
-        rf_phases = pp.make_rf_spoiling_schedule(len(sampled_pe) * cfg.nslices)
+        slices = design.make_slice_loop(
+            cfg.nslices, slice_step_m or cfg.slice_thickness_m, order="sequential"
+        )
+        slice_offsets_hz = slices.to_frequencies(pulse.gradients[0].amplitude) if slice_step_m else None
+        rf_phases = design.make_rf_spoiling_schedule(len(pe_loop) * len(slices))
         shot = 0
 
-        for ky in sampled_pe:
+        for pe_shot in pe_loop:
+            ky = int(pe_shot[0, 0])
             label_lin = pp.make_label(type="SET", label="LIN", value=ky)
 
-            for sl in range(cfg.nslices):
-                slice_offset_m = (sl - 0.5 * (cfg.nslices - 1)) * slice_step_m
+            for sl, band in enumerate(slices.shots):
+                offset_hz = float(slice_offsets_hz[band[0]]) if slice_offsets_hz is not None else 0.0
 
-                label_slc = pp.make_label(type="SET", label="SLC", value=sl)
                 phase = float(rf_phases[shot])
-                pulse.set_state(
-                    freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m,
-                    phase_offset_rad=phase,
-                )
-                for block_idx, block in enumerate(pulse):
-                    labels = (label_slc, label_lin) if block_idx == 0 else ()
-                    seq.add_block(*block, *labels)
+                pulse.set_state(freq_offset_hz=offset_hz, phase_offset_rad=phase)
+                pulse.set_labels(*slices.labels(sl), label_lin)
+                for block in pulse:
+                    seq.add_block(*block)
                 if te_delay is not None:
                     seq.add_block(te_delay)
-                line.set_state(lin_idx=int(ky), adc_phase_rad=phase)
+                line.set_state(lin_idx=ky, phase_offset_rad=phase)
                 for block in line:
                     seq.add_block(*block)
                 shot += 1
@@ -254,7 +255,7 @@ class GreMultiEcho2DPulseqSequence(Sequence):
         seq.set_definition("RfSpoilingIncDeg", 117.0)
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("Ny", cfg.ny_pe)
-        seq.set_definition("NySampled", len(sampled_pe))
+        seq.set_definition("NySampled", len(pe_loop))
         seq.set_definition("NumSlices", cfg.nslices)
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
@@ -289,6 +290,13 @@ def _read_protocol(prot: dict) -> _Config:
     return cfg
 
 
+def _phase_encode_loop(cfg: _Config):
+    """In-plane phase-encode loop; one shot per TR."""
+    return design.make_cartesian_sampling(
+        (cfg.nx_ro, cfg.ny_pe), acceleration=cfg.ry, calibration=cfg.acs_lines
+    )
+
+
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | None = None):
     # n_inner decouples the TE-feasibility check (validate_protocol always
     # probes with n_inner=1) from the TR-fits-N-slices budget (make_sequence
@@ -297,10 +305,10 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | No
     # by tripping the same strict early-return.
     if n_inner is None:
         n_inner = cfg.nslices
-    pulse = pp.make_slice_selective_pulse(
+    pulse = design.make_slice_selective_pulse(
         np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, system=opts
     )
-    line = pp.make_line_readout(
+    line = design.make_line_readout(
         opts,
         (cfg.fov_ro_m, cfg.fov_pe_m),
         (cfg.nx_ro, cfg.ny_pe),

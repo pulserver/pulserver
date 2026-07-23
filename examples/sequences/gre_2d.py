@@ -40,6 +40,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     BoolParam,
@@ -247,8 +248,8 @@ class GrePulseqSequence(Sequence):
                 ),
             }
 
-        sampled_pe = pp.calc_sampled_lines(ny_pe, ry, acs_lines)
-        duration_s = tr_s * float(len(sampled_pe))
+        sampling = design.make_cartesian_sampling((nx_ro, ny_pe), acceleration=ry, calibration=acs_lines)
+        duration_s = tr_s * float(len(sampling))
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
@@ -297,10 +298,12 @@ class GrePulseqSequence(Sequence):
 
         seq = pp.Sequence(opts)
 
-        sampled_pe = pp.calc_sampled_lines(ny_pe, ry, acs_lines)
+        sampling = design.make_cartesian_sampling((nx_ro, ny_pe), acceleration=ry, calibration=acs_lines)
         slice_step_m = slice_spacing_m if nslices > 1 else 0.0
-        rf_phases = pp.make_rf_spoiling_schedule(
-            len(sampled_pe) * nslices,
+        slices = design.make_slice_loop(nslices, slice_step_m or slice_thickness_m, order="sequential")
+        slice_offsets_hz = slices.to_frequencies(pulse.gradients[0].amplitude) if slice_step_m else None
+        rf_phases = design.make_rf_spoiling_schedule(
+            len(sampling) * len(slices),
             increment=RF_SPOILING_INCREMENT_RAD,
         )
         phase_index = 0
@@ -310,24 +313,21 @@ class GrePulseqSequence(Sequence):
         # are required so pulserverlib writes correct slc/lin entries into the
         # trajectory cache; without them every readout gets slc=0 and multi-slice
         # reconstruction silently collapses to a single image.
-        for ky in sampled_pe:
+        for shot in sampling:
+            ky = int(shot[0, 0])
             label_lin = pp.make_label(type="SET", label="LIN", value=ky)
 
-            for sl in range(nslices):
-                slice_offset_m = (sl - 0.5 * (nslices - 1)) * slice_step_m
+            for sl, band in enumerate(slices.shots):
+                offset_hz = float(slice_offsets_hz[band[0]]) if slice_offsets_hz is not None else 0.0
 
-                label_slc = pp.make_label(type="SET", label="SLC", value=sl)
                 rf_phase = float(rf_phases[phase_index])
-                pulse.set_state(
-                    freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m,
-                    phase_offset_rad=rf_phase,
-                )
-                for block_index, block in enumerate(pulse):
-                    labels = (label_slc, label_lin) if block_index == 0 else ()
-                    seq.add_block(*block, *labels)
+                pulse.set_state(freq_offset_hz=offset_hz, phase_offset_rad=rf_phase)
+                pulse.set_labels(*slices.labels(sl), label_lin)
+                for block in pulse:
+                    seq.add_block(*block)
                 if te_delay is not None:
                     seq.add_block(te_delay)
-                line.set_state(lin_idx=ky, adc_phase_rad=rf_phase)
+                line.set_state(lin_idx=ky, phase_offset_rad=rf_phase)
                 for block in line:
                     seq.add_block(*block)
                 seq.add_block(gz_spoil)
@@ -354,7 +354,7 @@ class GrePulseqSequence(Sequence):
         seq.set_definition("RfSpoilingIncDeg", 117.0)
         seq.set_definition("Nx", nx_ro)
         seq.set_definition("Ny", ny_pe)
-        seq.set_definition("NySampled", len(sampled_pe))
+        seq.set_definition("NySampled", len(sampling))
         seq.set_definition("NumSlices", nslices)
         pio.write(
             seq,
@@ -383,7 +383,7 @@ def _compute_timing(
     if (ro_axis, pe_axis) != ("x", "y"):
         # Public readouts deliberately use the fixed x/y/z convention.
         ro_axis, pe_axis = "x", "y"
-    line = pp.make_line_readout(
+    line = design.make_line_readout(
         opts,
         (fov_ro_m, fov_pe_m),
         (nx_ro, ny_pe),
@@ -391,12 +391,12 @@ def _compute_timing(
         spoil_position="post",
         spoil_cycles=1.0,
     )
-    pulse = pp.make_slice_selective_pulse(
+    pulse = design.make_slice_selective_pulse(
         np.deg2rad(flip_deg),
         slice_thickness_m,
         system=opts,
     )
-    crusher = pp.make_crusher(
+    crusher = design.make_crusher(
         opts,
         "z",
         dephasing_cycles=4.0,

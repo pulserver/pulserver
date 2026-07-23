@@ -50,6 +50,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     BoolParam,
@@ -67,9 +68,6 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq._sampling import calc_chunk_indices
-
-encoding = readout = sampling = system = excitation = preparations = pp
 
 NUM_ECHOES = 1
 FLYBACK = True
@@ -188,120 +186,14 @@ class Mprage3DPulseqSequence(Sequence):
                 "info": "TE, TR, or TI infeasible for the requested gradients/ETL",
             }
 
-        sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
-        n_segments = len(calc_chunk_indices(sampled_pe, cfg.etl))
         shot_s = timing["shot_s"]
-        duration_s = shot_s * n_segments * len(sampled_par)
+        duration_s = shot_s * len(_segment_loop(cfg))
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
         prot = dict_to_protocol(protocol)
         cfg = _read_protocol(prot)
         return _make_public_sequence(opts, cfg, output_path)
-
-        timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
-
-        gz_reph = timing["gz_reph"]
-        gz_spoil = timing["gz_spoil"]
-        gz_pe_template = timing["gz_pe_template"]
-        echo = timing["echo"]
-        gy_template = timing["gy_template"]
-        te_delay_s = timing["te_delay_s"]
-        tr_delay_s = timing["tr_delay_s"]
-        rf_inv = timing["rf_inv"]
-        gx_inv, gy_inv, gz_inv = timing["inv_spoiler"]
-        spoiler_duration_s = timing["spoiler_duration_s"]
-
-        te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
-        tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
-        trecovery_s_rounded = system.round_to_raster(cfg.trecovery_s)
-        trecovery_delay = pp.make_delay(trecovery_s_rounded) if trecovery_s_rounded > 0.0 else None
-
-        seq = pp.Sequence(opts)
-
-        delta_k_pe = 1.0 / cfg.fov_pe_m
-        phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
-        max_pe_area = float(np.max(np.abs(phase_areas)))
-        sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-        segments = calc_chunk_indices(sampled_pe, cfg.etl)
-
-        par_areas, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-        sampled_par = sampling.calc_sampled_lines(cfg.npar, cfg.rz, 0)
-
-        for par in sampled_par:
-            z_scale = par_areas[par] / max_par_area if max_par_area > 0.0 else 0.0
-            label_par = pp.make_label(type="SET", label="PAR", value=par)
-            label_slc = pp.make_label(type="SET", label="SLC", value=0)
-
-            for segment in segments:
-                segment_duration_s = len(segment) * cfg.tr_s
-                ti_delay_s = preparations.ti_delay_seconds(
-                    cfg.ti_s, rf_inv, spoiler_duration_s, segment_duration_s, strict=False
-                )
-                ti_delay = pp.make_delay(ti_delay_s) if ti_delay_s > 0.0 else None
-
-                seq.add_block(system.copy_event(rf_inv))
-                seq.add_block(gx_inv, gy_inv, gz_inv)
-                if ti_delay is not None:
-                    seq.add_block(ti_delay)
-
-                rf_phase_deg = 0.0
-                rf_phase_inc_deg = 0.0
-
-                for ky in segment:
-                    y_scale = phase_areas[ky] / max_pe_area if max_pe_area > 0.0 else 0.0
-                    gy_pre = pp.scale_grad(gy_template, y_scale)
-                    gy_reph = pp.scale_grad(gy_template, -y_scale)
-                    gz_pre_combined, gz_post_combined = encoding.combined_z_gradients(
-                        z_scale, gz_pe_template, gz_reph, gz_spoil, opts
-                    )
-
-                    rf_curr = system.copy_event(timing["rf"])
-                    rf_curr.phase_offset = np.deg2rad(rf_phase_deg)
-
-                    label_lin = pp.make_label(type="SET", label="LIN", value=ky)
-
-                    seq.add_block(rf_curr, timing["gz"], label_slc, label_par, label_lin)
-                    seq.add_block(echo["gx_pre"], gy_pre, gz_pre_combined)
-                    if te_delay is not None:
-                        seq.add_block(te_delay)
-
-                    readout.add_echo_train_blocks(
-                        seq, echo, NUM_ECHOES, FLYBACK, rf_curr.phase_offset, emit_labels=False
-                    )
-
-                    seq.add_block(echo["gx_spoil"], gy_reph, gz_post_combined)
-                    if tr_delay is not None:
-                        seq.add_block(tr_delay)
-
-                    rf_phase_deg = (rf_phase_deg + rf_phase_inc_deg) % 360.0
-                    rf_phase_inc_deg = (rf_phase_inc_deg + excitation.RF_SPOILING_INC_DEG) % 360.0
-
-                if trecovery_delay is not None:
-                    seq.add_block(trecovery_delay)
-
-        seq.set_definition("Name", "mprage_3d")
-        seq.set_definition("FOV", [cfg.fov_ro_m, cfg.fov_pe_m, cfg.slice_spacing_m * cfg.npar])
-        seq.set_definition("TE", cfg.te_s)
-        seq.set_definition("TR", cfg.tr_s)
-        seq.set_definition("TI", cfg.ti_s)
-        seq.set_definition("Trecovery", cfg.trecovery_s)
-        seq.set_definition("ETL", cfg.etl)
-        seq.set_definition("InversionMode", cfg.inv_mode)
-        seq.set_definition("Flip", cfg.flip_deg)
-        seq.set_definition("ImagingMode", "3d")
-        seq.set_definition("ReadoutAxis", cfg.ro_axis)
-        seq.set_definition("PhaseAxis", cfg.pe_axis)
-        seq.set_definition("BandwidthHzPerPx", cfg.bandwidth_hz_px)
-        seq.set_definition("Ry", cfg.ry)
-        seq.set_definition("Rz", cfg.rz)
-        seq.set_definition("RfSpoilingIncDeg", excitation.RF_SPOILING_INC_DEG)
-        seq.set_definition("Nx", cfg.nx_ro)
-        seq.set_definition("Ny", cfg.ny_pe)
-        seq.set_definition("NySampled", len(sampled_pe))
-        seq.set_definition("NumPartitions", cfg.npar)
-        pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
 class _Config:
@@ -337,101 +229,19 @@ def _read_protocol(prot: dict) -> _Config:
     return cfg
 
 
-def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    system.apply_system_derates(opts)
-
-    rf, gz, gz_reph = excitation.slice_selective(opts, cfg.flip_deg, cfg.slab_thickness_m)
-
-    echo = readout.compute_readout_and_echo_train(
-        opts=opts,
-        ro_axis=cfg.ro_axis,
-        nx_ro=cfg.nx_ro,
-        fov_ro_m=cfg.fov_ro_m,
-        bandwidth_hz_px=cfg.bandwidth_hz_px,
-        slice_thickness_m=cfg.slab_thickness_m,
-        num_echoes=NUM_ECHOES,
-        echo_spacing_s=0.0,
-        flyback=FLYBACK,
-        strict=strict,
-    )
-    if echo is None:
-        return None
-
-    gz_spoil = pp.make_trapezoid(channel="z", area=encoding.SPOIL_FACTOR_Z / cfg.slab_thickness_m, system=opts)
-    max_pe_area = 0.5 * cfg.ny_pe * (1.0 / cfg.fov_pe_m)
-    gy_template = pp.make_trapezoid(channel=cfg.pe_axis, area=max_pe_area, system=opts)
-
-    _, max_par_area = encoding.partition_geometry(cfg.npar, cfg.slice_spacing_m)
-    gz_pe_template = pp.make_trapezoid(channel="z", area=max_par_area, system=opts) if max_par_area > 0.0 else None
-    gz_pre_worst, gz_post_worst = encoding.z_worst_case_trapezoids(gz_reph, gz_spoil, max_par_area, opts)
-
-    d_rf = pp.calc_duration(rf, gz)
-    d_pre = pp.calc_duration(echo["gx_pre"], gy_template, gz_pre_worst)
-    d_post = pp.calc_duration(echo["gx_spoil"], gy_template, gz_post_worst)
-
-    rf_center_s = pp.calc_rf_center(rf)[0]
-    min_te_s = (d_rf - rf_center_s) + d_pre + echo["adc_center_s"]
-    te_delay_s = cfg.te_s - min_te_s
-    if te_delay_s < -1e-9 and strict:
-        return None
-    if te_delay_s < 0.0:
-        te_delay_s = 0.0
-
-    min_block_s = d_rf + d_pre + te_delay_s + echo["echo_train_span_s"] + d_post
-    tr_delay_s = cfg.tr_s - min_block_s
-    if tr_delay_s < -1e-9 and strict:
-        return None
-    if tr_delay_s < 0.0:
-        tr_delay_s = 0.0
-
-    voxel_size_m = cfg.fov_pe_m / cfg.ny_pe
-    inv_module = preparations.inversion(opts, cfg.inv_mode, voxel_size_m)
-    rf_inv = inv_module.rf
-    inv_spoiler = inv_module.spoiler
-    spoiler_duration_s = inv_module.spoiler_duration_s
-
-    # Worst-case (largest) segment gates the strict TI feasibility check —
-    # every segment except possibly the last is exactly ETL lines long.
-    worst_segment_len = max(1, min(cfg.etl, cfg.ny_pe))
-    worst_segment_duration_s = worst_segment_len * cfg.tr_s
-    ti_delay_s = preparations.ti_delay_seconds(cfg.ti_s, rf_inv, spoiler_duration_s, worst_segment_duration_s, strict=strict)
-    if ti_delay_s is None:
-        return None
-
-    inv_duration_s = pp.calc_duration(rf_inv)
-    shot_s = inv_duration_s + spoiler_duration_s + ti_delay_s + worst_segment_duration_s + cfg.trecovery_s
-
-    return {
-        "rf": rf,
-        "gz": gz,
-        "gz_reph": gz_reph,
-        "gz_spoil": gz_spoil,
-        "gz_pe_template": gz_pe_template,
-        "gy_template": gy_template,
-        "echo": echo,
-        "te_delay_s": te_delay_s,
-        "tr_delay_s": tr_delay_s,
-        "min_block_s": min_block_s,
-        "rf_inv": rf_inv,
-        "inv_spoiler": inv_spoiler,
-        "spoiler_duration_s": spoiler_duration_s,
-        "shot_s": shot_s,
-    }
-
-
 def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
-    inversion = pp.make_inversion_pulse(adiabatic=cfg.inv_mode == "adiabatic", system=opts)
+    inversion = design.make_inversion_pulse(adiabatic=cfg.inv_mode == "adiabatic", system=opts)
     pulse = (
-        pp.make_spsp_pulse(
+        design.make_spsp_pulse(
             np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m,
             cfg.spsp_bandwidth_hz, system=opts,
         )
         if cfg.spsp
-        else pp.make_slice_selective_pulse(
+        else design.make_slice_selective_pulse(
             np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
         )
     )
-    line = pp.make_line_readout(
+    line = design.make_line_readout(
         opts,
         (cfg.fov_ro_m, cfg.fov_pe_m, cfg.slice_spacing_m * cfg.npar),
         (cfg.nx_ro, cfg.ny_pe, cfg.npar),
@@ -468,14 +278,20 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
     }
 
 
+def _segment_loop(cfg: _Config):
+    """(ky, kz) loop chunked into inversion segments — one shot per segment."""
+    return design.make_cartesian_sampling(
+        (cfg.nx_ro, cfg.ny_pe, cfg.npar),
+        acceleration=(cfg.ry, cfg.rz),
+        train_length=cfg.etl,
+    )
+
+
 def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None:
     timing = _compute_public(opts, cfg, strict=False)
     seq = pp.Sequence(opts)
-    sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-    sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
-    coords = np.asarray([(ky, par) for par in sampled_par for ky in sampled_pe], dtype=int)
-    segments = [coords[start : start + cfg.etl] for start in range(0, len(coords), cfg.etl)]
-    phases = pp.make_rf_spoiling_schedule(len(coords))
+    segments = _segment_loop(cfg)
+    phases = design.make_rf_spoiling_schedule(segments.n_positions)
     te_delay = pp.make_delay(timing["te_delay_s"]) if timing["te_delay_s"] > 0 else None
     tr_delay = pp.make_delay(timing["tr_delay_s"]) if timing["tr_delay_s"] > 0 else None
     ti_delay = pp.make_delay(timing["ti_delay_s"]) if timing["ti_delay_s"] > 0 else None
@@ -495,7 +311,7 @@ def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None
             if te_delay is not None:
                 seq.add_block(te_delay)
             timing["line"].set_state(
-                lin_idx=int(ky), par_idx=int(par), adc_phase_rad=phase
+                lin_idx=int(ky), par_idx=int(par), phase_offset_rad=phase
             )
             for block in timing["line"]:
                 seq.add_block(*block)

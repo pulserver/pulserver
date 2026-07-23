@@ -1,10 +1,20 @@
 """Custom label support for Sequence."""
 
-__all__ = ["get_supported_labels", "make_label"]
+__all__ = [
+    "COUNTER_LABELS",
+    "FLAG_LABELS",
+    "STICKY_FLAGS",
+    "get_supported_labels",
+    "make_label",
+]
 
 from types import SimpleNamespace
 
-_SUPPORTED_LABELS = (
+#: Counters: per-acquisition integer indices, one ISMRMRD ``EncodingCounters``
+#: field each. These are what a :class:`~pulserver.ScanLoop` axis emits — the
+#: reconstruction sorts data by them, and the interpreter derives the
+#: ``FIRST_IN_*``/``LAST_IN_*`` MRD flags from their observed range.
+COUNTER_LABELS = (
     "SLC",
     "SEG",
     "REP",
@@ -15,6 +25,13 @@ _SUPPORTED_LABELS = (
     "LIN",
     "PAR",
     "ACQ",
+)
+
+#: Flags: sticky booleans (and two sticky ids) describing *how a block is
+#: played or classified*, not where its data belongs. These are what a
+#: :class:`~pulserver.SequenceModule` emits, through
+#: :meth:`~pulserver.SequenceModule.set_flags`.
+FLAG_LABELS = (
     "NAV",
     "REV",
     "SMS",
@@ -25,11 +42,19 @@ _SUPPORTED_LABELS = (
     "NOROT",
     "NOPOS",
     "NOSCL",
+    "OFF",
     "ONCE",
     "TRID",
-    "OFF",
     "MODULE",
 )
+
+#: Flags whose meaning spans more than the module that sets them, so they are
+#: *not* auto-reset at the module's last block: ``ONCE`` delimits a whole
+#: prep/cooldown section, ``MODULE`` groups consecutive modules under one
+#: safety id, ``TRID`` names a repeating TR block for the interpreter.
+STICKY_FLAGS = ("ONCE", "MODULE", "TRID")
+
+_SUPPORTED_LABELS = COUNTER_LABELS + FLAG_LABELS
 
 
 def get_supported_labels() -> tuple[str, ...]:
@@ -39,34 +64,56 @@ def get_supported_labels() -> tuple[str, ...]:
     and ``MODULE`` (mark module scope), both consumed by Pulserver's
     interpreter.
 
-    .. list-table:: Supported labels
+    The set splits in two, and the split is the design toolbox's division of
+    labour: :data:`COUNTER_LABELS` say *where an acquisition belongs* and come
+    from a :class:`~pulserver.ScanLoop` axis;
+    :data:`FLAG_LABELS` say *how a block is played or classified* and come from
+    :meth:`pulserver.SequenceModule.set_flags`.
+
+    .. list-table:: Counters — one ISMRMRD ``idx`` field each, set by a scan loop
        :header-rows: 1
        :widths: 14 86
 
        * - Label
          - Meaning
+       * - ``LIN``
+         - In-plane phase-encoding line index (``kspace_encode_step_1``).
+       * - ``PAR``
+         - Through-plane partition index (``kspace_encode_step_2``).
        * - ``SLC``
          - Slice index.
-       * - ``SEG``
-         - Segment or shot-within-repetition index.
+       * - ``ECO``
+         - Echo/contrast index. Owned by the readout, which knows its own train.
+       * - ``PHS``
+         - Cardiac/respiratory phase, or phase-cycle index.
        * - ``REP``
-         - Repetition index.
+         - Repetition index — the frame counter of a dynamic acquisition.
+       * - ``SET``
+         - Acquisition-set index — the usual home of a non-echo contrast
+           dimension (inversion time, b-value, saturation offset).
        * - ``AVG``
          - Signal-average index.
-       * - ``SET``
-         - Acquisition-set index.
-       * - ``ECO``
-         - Echo index.
-       * - ``PHS``
-         - Phase-cycle or phase-contrast index.
-       * - ``LIN``
-         - In-plane phase-encoding line index.
-       * - ``PAR``
-         - Through-plane partition index.
+       * - ``SEG``
+         - Segment or shot-within-repetition index.
        * - ``ACQ``
          - Acquisition index.
+
+    .. list-table:: Flags — sticky block properties, set by a sequence module
+       :header-rows: 1
+       :widths: 14 86
+
+       * - Label
+         - Meaning
+       * - ``NOROT``
+         - Suppress geometric rotation for the labelled block.
+       * - ``NOPOS``
+         - Suppress position-dependent frequency translation.
+       * - ``NOSCL``
+         - Suppress geometric gradient scaling.
+       * - ``PMC``
+         - Prospective-motion-correction acquisition flag.
        * - ``NAV``
-         - Navigator acquisition flag.
+         - Navigator acquisition flag; routes data to its own encoding space.
        * - ``REV``
          - Reversed readout-polarity flag.
        * - ``SMS``
@@ -77,22 +124,22 @@ def get_supported_labels() -> tuple[str, ...]:
          - Imaging acquisition flag.
        * - ``NOISE``
          - Noise-only acquisition flag.
-       * - ``PMC``
-         - Prospective-motion-correction acquisition flag.
-       * - ``NOROT``
-         - Suppress geometric rotation for the labelled module.
-       * - ``NOPOS``
-         - Suppress position-dependent frequency translation.
-       * - ``NOSCL``
-         - Suppress geometric gradient scaling.
-       * - ``ONCE``
-         - Execute or emit the labelled block only once.
-       * - ``TRID``
-         - Trigger identifier.
        * - ``OFF``
-         - Discard the associated acquisition downstream.
+         - Discard the associated acquisition downstream — an ADC that is
+           played (so timing is unchanged) but whose data is dropped.
+       * - ``ONCE``
+         - Section marker: ``1`` = preparation (played once, leading), ``2`` =
+           cooldown (played once, trailing), ``0`` = steady-state body.
+       * - ``TRID``
+         - Trigger identifier naming a repeating TR block.
        * - ``MODULE``
          - Sticky structural/safety module-group identifier.
+
+    See Also
+    --------
+    COUNTER_LABELS, FLAG_LABELS, STICKY_FLAGS : the same split as constants.
+    pulserver.SequenceModule.set_flags : emit flags with the right scope.
+    pulserver.ScanLoop.labels : emit counters from a loop's axes.
     """
     return _SUPPORTED_LABELS
 

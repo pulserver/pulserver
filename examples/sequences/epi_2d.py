@@ -51,6 +51,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     BoolParam,
@@ -218,14 +219,17 @@ class Epi2DPulseqSequence(Sequence):
         shot_starts = list(range(0, cfg.ny_pe, cfg.etl))
         n_directions = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
         rotations = (
-            pp.make_golden_means_3d_tilt(cfg.n_directions).to_rotations()
+            design.make_noncartesian_projection_sampling(
+            (cfg.nx_ro, cfg.nx_ro, cfg.nx_ro), views=cfg.n_directions
+        ).to_rotations()
             if diffusion is not None
             else [None]
         )
 
         ttl = pp.make_digital_output_pulse("ext1", duration=1e-3, system=opts) if cfg.ttl_output else None
-        for frame in range(cfg.num_frames):
-            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+        frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+        for frame in range(len(frames)):
+            (phase_label,) = frames.labels(frame)
             if ttl is not None:
                 seq.add_block(ttl, phase_label)
             else:
@@ -329,7 +333,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     if cfg.multiband > 1:
         sms_spacing = cfg.n_slice_groups * cfg.slice_spacing_m
         pulses = tuple(
-            pp.make_pins_slice_selective_pulse(
+            design.make_pins_slice_selective_pulse(
                 np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, cfg.multiband,
                 sms_spacing,
                 include_center=False,
@@ -340,12 +344,12 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
         )
         pulse = pulses[0]
     else:
-        pulse = pp.make_slice_selective_pulse(
+        pulse = design.make_slice_selective_pulse(
             np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, system=opts
         )
         pulses = (pulse,)
     mask = np.arange(min(cfg.etl, cfg.ny_pe), dtype=int)
-    epi = pp.make_epi_readout(
+    epi = design.make_epi_readout(
         opts,
         (cfg.fov_ro_m, cfg.fov_pe_m),
         (cfg.nx_ro, cfg.ny_pe),
@@ -357,7 +361,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     diffusion = None
     if cfg.b_value_s_mm2 > 0.0:
         try:
-            diffusion = pp.make_diffusion_prep(
+            diffusion = design.make_diffusion_prep(
                 cfg.b_value_s_mm2,
                 voxel_size=cfg.fov_ro_m / cfg.nx_ro,
                 system=opts,
@@ -366,7 +370,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
             if strict:
                 return None
     fat_sat = (
-        pp.make_fat_saturation_pulse(
+        design.make_fat_saturation_pulse(
             b0=cfg.b0_t, voxel_size=cfg.fov_ro_m / cfg.nx_ro, system=opts
         )
         if cfg.fat_sat

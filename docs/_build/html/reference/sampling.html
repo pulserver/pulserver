@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Sampling plans &#8212; pulserver  documentation</title>
+    <title>Scan loops &#8212; pulserver  documentation</title>
   
   
   
@@ -32,7 +32,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=4418a689" />
-    <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css?v=7f9a90b1" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -49,7 +49,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Mechanical Resonance Safety: Structural Acoustic Analysis" href="../explanations/mechanical_resonance_safety.html" />
-    <link rel="prev" title="pulserver — sequence-building blocks" href="design.html" />
+    <link rel="prev" title="pulserver.design — sequence-building blocks" href="design.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -191,111 +191,20 @@
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting started</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../how_to.html">How-to guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../how-to/write_a_plugin_with_modules.html">How to write a sequence plugin with the design toolbox</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../how-to/customise_a_plugin.html">How to customise a plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../how-to/write_a_new_module.html">How to write a new module or loop structure</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../api/pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.Opts.html">pulserver.pypulseq.Opts</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.Sequence.html">pulserver.pypulseq.Sequence</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.add_gradients.html">pulserver.pypulseq.add_gradients</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.align.html">pulserver.pypulseq.align</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_adc_segments.html">pulserver.pypulseq.calc_adc_segments</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_adc_timing.html">pulserver.pypulseq.calc_adc_timing</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_duration.html">pulserver.pypulseq.calc_duration</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_ramp.html">pulserver.pypulseq.calc_ramp</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_rf_bandwidth.html">pulserver.pypulseq.calc_rf_bandwidth</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_rf_center.html">pulserver.pypulseq.calc_rf_center</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.compress_shape.html">pulserver.pypulseq.compress_shape</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.convert.html">pulserver.pypulseq.convert</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.decompress_shape.html">pulserver.pypulseq.decompress_shape</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.disable_trace.html">pulserver.pypulseq.disable_trace</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.enable_trace.html">pulserver.pypulseq.enable_trace</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.get_supported_labels.html">pulserver.pypulseq.get_supported_labels</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_adc.html">pulserver.pypulseq.make_adc</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_arbitrary_grad.html">pulserver.pypulseq.make_arbitrary_grad</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_arbitrary_rf.html">pulserver.pypulseq.make_arbitrary_rf</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_block_pulse.html">pulserver.pypulseq.make_block_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_delay.html">pulserver.pypulseq.make_delay</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_digital_output_pulse.html">pulserver.pypulseq.make_digital_output_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_extended_trapezoid.html">pulserver.pypulseq.make_extended_trapezoid</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_extended_trapezoid_area.html">pulserver.pypulseq.make_extended_trapezoid_area</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_gauss_pulse.html">pulserver.pypulseq.make_gauss_pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_label.html">pulserver.pypulseq.make_label</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_rf_shim.html">pulserver.pypulseq.make_rf_shim</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_rotation.html">pulserver.pypulseq.make_rotation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_sinc_pulse.html">pulserver.pypulseq.make_sinc_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_soft_delay.html">pulserver.pypulseq.make_soft_delay</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_trapezoid.html">pulserver.pypulseq.make_trapezoid</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_trigger.html">pulserver.pypulseq.make_trigger</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.points_to_waveform.html">pulserver.pypulseq.points_to_waveform</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.rotate.html">pulserver.pypulseq.rotate</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.round_half_up.html">pulserver.pypulseq.round_half_up</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.scale_grad.html">pulserver.pypulseq.scale_grad</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.split_gradient.html">pulserver.pypulseq.split_gradient</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.split_gradient_at.html">pulserver.pypulseq.split_gradient_at</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.traj2grad.html">pulserver.pypulseq.traj2grad</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_crusher.html">pulserver.pypulseq.make_crusher</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_phase_blip.html">pulserver.pypulseq.make_phase_blip</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_phase_encoding.html">pulserver.pypulseq.make_phase_encoding</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_hard_pulse.html">pulserver.pypulseq.make_hard_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_frequency_selective_pulse.html">pulserver.pypulseq.make_frequency_selective_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_slice_selective_pulse.html">pulserver.pypulseq.make_slice_selective_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_refocusing_pulse.html">pulserver.pypulseq.make_refocusing_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_slr_pulse.html">pulserver.pypulseq.make_slr_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_multiband_frequency_selective_pulse.html">pulserver.pypulseq.make_multiband_frequency_selective_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_pins_slice_selective_pulse.html">pulserver.pypulseq.make_pins_slice_selective_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_multiband.html">pulserver.pypulseq.make_multiband</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_pins.html">pulserver.pypulseq.make_pins</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_plane_selective_pulse.html">pulserver.pypulseq.make_plane_selective_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_spsp_pulse.html">pulserver.pypulseq.make_spsp_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_bloch_siegert_pulse.html">pulserver.pypulseq.make_bloch_siegert_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_diffusion_prep.html">pulserver.pypulseq.make_diffusion_prep</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_fat_saturation_pulse.html">pulserver.pypulseq.make_fat_saturation_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_ihmt_pulse.html">pulserver.pypulseq.make_ihmt_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_inversion_pulse.html">pulserver.pypulseq.make_inversion_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_mt_pulse.html">pulserver.pypulseq.make_mt_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_t1t2_prep_pulse.html">pulserver.pypulseq.make_t1t2_prep_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_t2prep_pulse.html">pulserver.pypulseq.make_t2prep_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_epi_readout.html">pulserver.pypulseq.make_epi_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_bssfp_readout.html">pulserver.pypulseq.make_bssfp_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_fse_readout.html">pulserver.pypulseq.make_fse_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_line_readout.html">pulserver.pypulseq.make_line_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_noncartesian_2d_readout.html">pulserver.pypulseq.make_noncartesian_2d_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_noncartesian_3d_readout.html">pulserver.pypulseq.make_noncartesian_3d_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_radial_projection_readout.html">pulserver.pypulseq.make_radial_projection_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_radial_readout.html">pulserver.pypulseq.make_radial_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_radial_stack_readout.html">pulserver.pypulseq.make_radial_stack_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_rosette_projection_readout.html">pulserver.pypulseq.make_rosette_projection_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_rosette_readout.html">pulserver.pypulseq.make_rosette_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_rosette_stack_readout.html">pulserver.pypulseq.make_rosette_stack_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_spiral_projection_readout.html">pulserver.pypulseq.make_spiral_projection_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_spiral_readout.html">pulserver.pypulseq.make_spiral_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_spiral_stack_readout.html">pulserver.pypulseq.make_spiral_stack_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_zte_readout.html">pulserver.pypulseq.make_zte_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_cartesian_sampling.html">pulserver.pypulseq.make_cartesian_sampling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_epi_sampling.html">pulserver.pypulseq.make_epi_sampling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_noncartesian_2d_sampling.html">pulserver.pypulseq.make_noncartesian_2d_sampling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_noncartesian_stack_sampling.html">pulserver.pypulseq.make_noncartesian_stack_sampling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_noncartesian_projection_sampling.html">pulserver.pypulseq.make_noncartesian_projection_sampling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_skipped_caipi_order.html">pulserver.pypulseq.make_skipped_caipi_order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_centric_order.html">pulserver.pypulseq.make_centric_order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_linear_order.html">pulserver.pypulseq.make_linear_order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_radial_adaptive_order.html">pulserver.pypulseq.make_radial_adaptive_order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_radial_order.html">pulserver.pypulseq.make_radial_order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_shuffling_order.html">pulserver.pypulseq.make_shuffling_order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_caipirinha_mask.html">pulserver.pypulseq.make_caipirinha_mask</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_poisson_disc_mask.html">pulserver.pypulseq.make_poisson_disc_mask</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_random_mask.html">pulserver.pypulseq.make_random_mask</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_radial_tilt.html">pulserver.pypulseq.make_radial_tilt</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_golden_means_3d_tilt.html">pulserver.pypulseq.make_golden_means_3d_tilt</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_spiral_phyllotaxis_tilt.html">pulserver.pypulseq.make_spiral_phyllotaxis_tilt</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_sampled_lines.html">pulserver.pypulseq.calc_sampled_lines</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_golden_angles.html">pulserver.pypulseq.calc_golden_angles</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_raga_angles.html">pulserver.pypulseq.calc_raga_angles</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_tiny_golden_angles.html">pulserver.pypulseq.calc_tiny_golden_angles</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_uniform_angles.html">pulserver.pypulseq.calc_uniform_angles</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_slice_sampling.html">pulserver.pypulseq.make_slice_sampling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_phase_cycling_schedule.html">pulserver.pypulseq.make_phase_cycling_schedule</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_rf_spoiling_schedule.html">pulserver.pypulseq.make_rf_spoiling_schedule</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_traps_schedule.html">pulserver.pypulseq.make_traps_schedule</a></li>
 </ul>
 </details></li>
 </ul>
@@ -305,12 +214,9 @@
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.PulseqSequence.html">pulserver.PulseqSequence</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.Sequence.html">pulserver.Sequence</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.run_cli.html">pulserver.run_cli</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.Acquisition.html">pulserver.Acquisition</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.AcquisitionPlan.html">pulserver.AcquisitionPlan</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.SamplingPattern.html">pulserver.SamplingPattern</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.ScanLoop.html">pulserver.ScanLoop</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.SequenceModule.html">pulserver.SequenceModule</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.SliceGroup.html">pulserver.SliceGroup</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.SliceSampling.html">pulserver.SliceSampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.EncodingAxis.html">pulserver.EncodingAxis</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.BoolParam.html">pulserver.BoolParam</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.Description.html">pulserver.Description</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pulserver/pulserver.DropdownFloatParam.html">pulserver.DropdownFloatParam</a></li>
@@ -361,110 +267,66 @@
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/sequences/pulserver.sequences.design_zte_3d.html">pulserver.sequences.design_zte_3d</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../api/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_crusher.html">pulserver.design.make_crusher</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_phase_blip.html">pulserver.design.make_phase_blip</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_phase_encoding.html">pulserver.design.make_phase_encoding</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_hard_pulse.html">pulserver.design.make_hard_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_frequency_selective_pulse.html">pulserver.design.make_frequency_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_slice_selective_pulse.html">pulserver.design.make_slice_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_refocusing_pulse.html">pulserver.design.make_refocusing_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_slr_pulse.html">pulserver.design.make_slr_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_multiband_frequency_selective_pulse.html">pulserver.design.make_multiband_frequency_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_pins_slice_selective_pulse.html">pulserver.design.make_pins_slice_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_multiband.html">pulserver.design.make_multiband</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_pins.html">pulserver.design.make_pins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_plane_selective_pulse.html">pulserver.design.make_plane_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_spsp_pulse.html">pulserver.design.make_spsp_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_bloch_siegert_pulse.html">pulserver.design.make_bloch_siegert_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_diffusion_prep.html">pulserver.design.make_diffusion_prep</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_fat_saturation_pulse.html">pulserver.design.make_fat_saturation_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_ihmt_pulse.html">pulserver.design.make_ihmt_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_inversion_pulse.html">pulserver.design.make_inversion_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_mt_pulse.html">pulserver.design.make_mt_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_t1t2_prep_pulse.html">pulserver.design.make_t1t2_prep_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_t2prep_pulse.html">pulserver.design.make_t2prep_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_epi_readout.html">pulserver.design.make_epi_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_bssfp_readout.html">pulserver.design.make_bssfp_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_fse_readout.html">pulserver.design.make_fse_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_line_readout.html">pulserver.design.make_line_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_noncartesian_2d_readout.html">pulserver.design.make_noncartesian_2d_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_noncartesian_3d_readout.html">pulserver.design.make_noncartesian_3d_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_radial_projection_readout.html">pulserver.design.make_radial_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_radial_readout.html">pulserver.design.make_radial_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_radial_stack_readout.html">pulserver.design.make_radial_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_rosette_projection_readout.html">pulserver.design.make_rosette_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_rosette_readout.html">pulserver.design.make_rosette_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_rosette_stack_readout.html">pulserver.design.make_rosette_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_spiral_projection_readout.html">pulserver.design.make_spiral_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_spiral_readout.html">pulserver.design.make_spiral_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_spiral_stack_readout.html">pulserver.design.make_spiral_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_zte_readout.html">pulserver.design.make_zte_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_cartesian_sampling.html">pulserver.design.make_cartesian_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_epi_sampling.html">pulserver.design.make_epi_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_noncartesian_2d_sampling.html">pulserver.design.make_noncartesian_2d_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_noncartesian_projection_sampling.html">pulserver.design.make_noncartesian_projection_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_slice_loop.html">pulserver.design.make_slice_loop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_counter_loop.html">pulserver.design.make_counter_loop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.calc_encoding_scales.html">pulserver.design.calc_encoding_scales</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_phase_cycling_schedule.html">pulserver.design.make_phase_cycling_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_rf_spoiling_schedule.html">pulserver.design.make_rf_spoiling_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.make_traps_schedule.html">pulserver.design.make_traps_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.calc_adc_timing.html">pulserver.design.calc_adc_timing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.traj2grad.html">pulserver.design.traj2grad</a></li>
+</ul>
+</details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../api/pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.Opts.html">pulserver.pypulseq.Opts</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.Sequence.html">pulserver.pypulseq.Sequence</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.add_gradients.html">pulserver.pypulseq.add_gradients</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.align.html">pulserver.pypulseq.align</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_adc_segments.html">pulserver.pypulseq.calc_adc_segments</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_adc_timing.html">pulserver.pypulseq.calc_adc_timing</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_duration.html">pulserver.pypulseq.calc_duration</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_ramp.html">pulserver.pypulseq.calc_ramp</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_rf_bandwidth.html">pulserver.pypulseq.calc_rf_bandwidth</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_rf_center.html">pulserver.pypulseq.calc_rf_center</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.compress_shape.html">pulserver.pypulseq.compress_shape</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.convert.html">pulserver.pypulseq.convert</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.decompress_shape.html">pulserver.pypulseq.decompress_shape</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.disable_trace.html">pulserver.pypulseq.disable_trace</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.enable_trace.html">pulserver.pypulseq.enable_trace</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.get_supported_labels.html">pulserver.pypulseq.get_supported_labels</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_adc.html">pulserver.pypulseq.make_adc</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_arbitrary_grad.html">pulserver.pypulseq.make_arbitrary_grad</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_arbitrary_rf.html">pulserver.pypulseq.make_arbitrary_rf</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_block_pulse.html">pulserver.pypulseq.make_block_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_delay.html">pulserver.pypulseq.make_delay</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_digital_output_pulse.html">pulserver.pypulseq.make_digital_output_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_extended_trapezoid.html">pulserver.pypulseq.make_extended_trapezoid</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_extended_trapezoid_area.html">pulserver.pypulseq.make_extended_trapezoid_area</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_gauss_pulse.html">pulserver.pypulseq.make_gauss_pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_label.html">pulserver.pypulseq.make_label</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_rf_shim.html">pulserver.pypulseq.make_rf_shim</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_rotation.html">pulserver.pypulseq.make_rotation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_sinc_pulse.html">pulserver.pypulseq.make_sinc_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_soft_delay.html">pulserver.pypulseq.make_soft_delay</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_trapezoid.html">pulserver.pypulseq.make_trapezoid</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_trigger.html">pulserver.pypulseq.make_trigger</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.points_to_waveform.html">pulserver.pypulseq.points_to_waveform</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.rotate.html">pulserver.pypulseq.rotate</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.round_half_up.html">pulserver.pypulseq.round_half_up</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.scale_grad.html">pulserver.pypulseq.scale_grad</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.split_gradient.html">pulserver.pypulseq.split_gradient</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.split_gradient_at.html">pulserver.pypulseq.split_gradient_at</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.traj2grad.html">pulserver.pypulseq.traj2grad</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_crusher.html">pulserver.pypulseq.make_crusher</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_phase_blip.html">pulserver.pypulseq.make_phase_blip</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_phase_encoding.html">pulserver.pypulseq.make_phase_encoding</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_hard_pulse.html">pulserver.pypulseq.make_hard_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_frequency_selective_pulse.html">pulserver.pypulseq.make_frequency_selective_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_slice_selective_pulse.html">pulserver.pypulseq.make_slice_selective_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_refocusing_pulse.html">pulserver.pypulseq.make_refocusing_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_slr_pulse.html">pulserver.pypulseq.make_slr_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_multiband_frequency_selective_pulse.html">pulserver.pypulseq.make_multiband_frequency_selective_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_pins_slice_selective_pulse.html">pulserver.pypulseq.make_pins_slice_selective_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_multiband.html">pulserver.pypulseq.make_multiband</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_pins.html">pulserver.pypulseq.make_pins</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_plane_selective_pulse.html">pulserver.pypulseq.make_plane_selective_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_spsp_pulse.html">pulserver.pypulseq.make_spsp_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_bloch_siegert_pulse.html">pulserver.pypulseq.make_bloch_siegert_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_diffusion_prep.html">pulserver.pypulseq.make_diffusion_prep</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_fat_saturation_pulse.html">pulserver.pypulseq.make_fat_saturation_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_ihmt_pulse.html">pulserver.pypulseq.make_ihmt_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_inversion_pulse.html">pulserver.pypulseq.make_inversion_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_mt_pulse.html">pulserver.pypulseq.make_mt_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_t1t2_prep_pulse.html">pulserver.pypulseq.make_t1t2_prep_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_t2prep_pulse.html">pulserver.pypulseq.make_t2prep_pulse</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_epi_readout.html">pulserver.pypulseq.make_epi_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_bssfp_readout.html">pulserver.pypulseq.make_bssfp_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_fse_readout.html">pulserver.pypulseq.make_fse_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_line_readout.html">pulserver.pypulseq.make_line_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_noncartesian_2d_readout.html">pulserver.pypulseq.make_noncartesian_2d_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_noncartesian_3d_readout.html">pulserver.pypulseq.make_noncartesian_3d_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_radial_projection_readout.html">pulserver.pypulseq.make_radial_projection_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_radial_readout.html">pulserver.pypulseq.make_radial_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_radial_stack_readout.html">pulserver.pypulseq.make_radial_stack_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_rosette_projection_readout.html">pulserver.pypulseq.make_rosette_projection_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_rosette_readout.html">pulserver.pypulseq.make_rosette_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_rosette_stack_readout.html">pulserver.pypulseq.make_rosette_stack_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_spiral_projection_readout.html">pulserver.pypulseq.make_spiral_projection_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_spiral_readout.html">pulserver.pypulseq.make_spiral_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_spiral_stack_readout.html">pulserver.pypulseq.make_spiral_stack_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_zte_readout.html">pulserver.pypulseq.make_zte_readout</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_cartesian_sampling.html">pulserver.pypulseq.make_cartesian_sampling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_epi_sampling.html">pulserver.pypulseq.make_epi_sampling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_noncartesian_2d_sampling.html">pulserver.pypulseq.make_noncartesian_2d_sampling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_noncartesian_stack_sampling.html">pulserver.pypulseq.make_noncartesian_stack_sampling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_noncartesian_projection_sampling.html">pulserver.pypulseq.make_noncartesian_projection_sampling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_skipped_caipi_order.html">pulserver.pypulseq.make_skipped_caipi_order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_centric_order.html">pulserver.pypulseq.make_centric_order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_linear_order.html">pulserver.pypulseq.make_linear_order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_radial_adaptive_order.html">pulserver.pypulseq.make_radial_adaptive_order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_radial_order.html">pulserver.pypulseq.make_radial_order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_shuffling_order.html">pulserver.pypulseq.make_shuffling_order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_caipirinha_mask.html">pulserver.pypulseq.make_caipirinha_mask</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_poisson_disc_mask.html">pulserver.pypulseq.make_poisson_disc_mask</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_random_mask.html">pulserver.pypulseq.make_random_mask</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_radial_tilt.html">pulserver.pypulseq.make_radial_tilt</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_golden_means_3d_tilt.html">pulserver.pypulseq.make_golden_means_3d_tilt</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_spiral_phyllotaxis_tilt.html">pulserver.pypulseq.make_spiral_phyllotaxis_tilt</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_sampled_lines.html">pulserver.pypulseq.calc_sampled_lines</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_golden_angles.html">pulserver.pypulseq.calc_golden_angles</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_raga_angles.html">pulserver.pypulseq.calc_raga_angles</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_tiny_golden_angles.html">pulserver.pypulseq.calc_tiny_golden_angles</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.calc_uniform_angles.html">pulserver.pypulseq.calc_uniform_angles</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_slice_sampling.html">pulserver.pypulseq.make_slice_sampling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_phase_cycling_schedule.html">pulserver.pypulseq.make_phase_cycling_schedule</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_rf_spoiling_schedule.html">pulserver.pypulseq.make_rf_spoiling_schedule</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../api/generated/pypulseq/pulserver.pypulseq.make_traps_schedule.html">pulserver.pypulseq.make_traps_schedule</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../api/io.html"><code class="docutils literal notranslate"><span class="pre">pulserver.io</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -476,8 +338,8 @@
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../explanation.html">Explanation</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="design.html"><code class="docutils literal notranslate"><span class="pre">pulserver</span></code> — sequence-building blocks</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Sampling plans</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Scan loops</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/mechanical_resonance_safety.html">Mechanical Resonance Safety: Structural Acoustic Analysis</a></li>
 </ul>
 </details></li>
@@ -645,7 +507,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Sampling plans</h1>
+    <h1>Scan loops</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -655,13 +517,16 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#which-high-level-factory-should-i-call">Which high-level factory should I call?</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#a-loop-is-not-a-k-space-object">A loop is not a k-space object</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#counters-and-why-they-are-not-optional">Counters, and why they are not optional</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#which-factory-should-i-call">Which factory should I call?</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cartesian-gre-fse-and-mprage">Cartesian GRE, FSE and MPRAGE</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#epi-structural-and-multiple-volume">EPI: structural and multiple-volume</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-structural-and-dynamic-plans">Non-Cartesian structural and dynamic plans</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lower-level-mask-and-ordering-composition">Lower-level mask and ordering composition</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-slice-loop">The slice loop</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frames-contrasts-and-averages">Frames, contrasts and averages</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#epi-structural-and-dynamic">EPI: structural and dynamic</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-continuous-or-replayed-chronology">Non-Cartesian: continuous or replayed chronology</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#when-a-factory-is-almost-right">When a factory is almost right</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#relative-epi-traversals">Relative EPI traversals</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#slice-grouping">Slice grouping</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">References</a></li>
 </ul>
             </nav>
@@ -674,26 +539,120 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="sampling-plans">
-<h1>Sampling plans<a class="headerlink" href="#sampling-plans" title="Link to this heading">#</a></h1>
-<p>Pulserver exposes two deliberately separate levels:</p>
+  <section id="scan-loops">
+<h1>Scan loops<a class="headerlink" href="#scan-loops" title="Link to this heading">#</a></h1>
+<p>Pulserver describes an acquisition with one loop type and <strong>no</strong> object that
+owns the loop nesting:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">AcquisitionPlan</span></code> is the normal sequence-author API. Its factories accept
-plain UI-facing numeric values: image matrix, acceleration, ETL or segment
-length, frames, slice geometry, SMS and non-Cartesian view count. Iterating
-it yields one <code class="docutils literal notranslate"><span class="pre">Acquisition</span></code> per sequence iteration.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">SamplingPattern</span></code> is the lower-level support/order representation. It joins
-a custom boolean mask to an ordering, or describes raw angle/direction
-support. Mask generators and ordering functions can therefore be replaced
-independently.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ScanLoop</span></code> — a table of <strong>positions</strong>, a grouping of them into <strong>shots</strong> (one
+shot being one excitation’s worth of the loop), and one <code class="docutils literal notranslate"><span class="pre">EncodingAxis</span></code> per
+position column saying what the numbers mean. Every sampling and scheduling
+factory returns one.</p></li>
+<li><p>the loop nesting itself — plain <code class="docutils literal notranslate"><span class="pre">for</span></code> statements in the sequence, over
+frames, contrasts, averages, inversion times, or anything else.</p></li>
 </ul>
-<p>Neither level accepts a protocol object, appends blocks or depends on a
-sequence module. An
-<code class="docutils literal notranslate"><span class="pre">Acquisition</span></code> merely carries numeric state: <code class="docutils literal notranslate"><span class="pre">lin_idx</span></code>, <code class="docutils literal notranslate"><span class="pre">par_idx</span></code>, absolute
-<code class="docutils literal notranslate"><span class="pre">labels</span></code>, a relative EPI traversal, slice positions/frequencies and, for a
-non-Cartesian scan, a rotation matrix.</p>
-<section id="which-high-level-factory-should-i-call">
-<h2>Which high-level factory should I call?<a class="headerlink" href="#which-high-level-factory-should-i-call" title="Link to this heading">#</a></h2>
+<p>There is deliberately no type that flattens frames × slices × shots into one
+iterable. That flattening is what makes it hard to put a trigger at the top of
+a frame, an inversion at the top of a shot, or a dummy TR anywhere; keeping the
+loop in the plugin costs three lines and buys all of it back.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">ScanLoop</span></code> never accepts a protocol object, appends blocks, or depends on a
+sequence module. It carries numbers, and the counter each column is labelled
+with.</p>
+<section id="a-loop-is-not-a-k-space-object">
+<h2>A loop is not a k-space object<a class="headerlink" href="#a-loop-is-not-a-k-space-object" title="Link to this heading">#</a></h2>
+<p>An encoding position is a set of frequency offsets, gradient scalings and
+rotations. Nothing about that restricts it to <code class="docutils literal notranslate"><span class="pre">ky</span></code>, <code class="docutils literal notranslate"><span class="pre">kz</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code> or an interleave
+angle: a frame of a dynamic series, an inversion time, a b-value, a saturation
+offset are the same table under a different axis declaration. So one type
+covers every dimension of a scan, and the only thing that distinguishes them is
+which counter they emit.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Loop</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">positions</span></code> hold</p></th>
+<th class="head"><p>axis <code class="docutils literal notranslate"><span class="pre">kind</span></code></p></th>
+<th class="head"><p>counter</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Cartesian k-space</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(ky[,</span> <span class="pre">kz])</span></code> integer indices</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">index</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">LIN</span></code>, <code class="docutils literal notranslate"><span class="pre">PAR</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>non-Cartesian</p></td>
+<td><p>spoke angles or unit directions</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">angle</span></code>, <code class="docutils literal notranslate"><span class="pre">direction</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">LIN</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>slices / SMS</p></td>
+<td><p>positions along the axis (m)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">position</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SLC</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>frames, dynamics</p></td>
+<td><p>frame number</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">index</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">REP</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>contrasts</p></td>
+<td><p>TI, b-value, offset, …</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">value</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SET</span></code>, <code class="docutils literal notranslate"><span class="pre">PHS</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>averages</p></td>
+<td><p>average number</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">index</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">AVG</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The echo dimension is the exception, and it is not an omission: <code class="docutils literal notranslate"><span class="pre">ECO</span></code> lives
+inside the readout, because a multiecho train’s echoes are blocks of one shot
+rather than iterations of a loop. <code class="docutils literal notranslate"><span class="pre">num_echoes</span></code> belongs to <code class="docutils literal notranslate"><span class="pre">make_line_readout</span></code>,
+and the readout emits <code class="docutils literal notranslate"><span class="pre">SET</span> <span class="pre">ECO</span> <span class="pre">0</span></code> / <code class="docutils literal notranslate"><span class="pre">INC</span> <span class="pre">ECO</span> <span class="pre">1</span></code> itself.</p>
+</section>
+<section id="counters-and-why-they-are-not-optional">
+<h2>Counters, and why they are not optional<a class="headerlink" href="#counters-and-why-they-are-not-optional" title="Link to this heading">#</a></h2>
+<p>A loop carries no gradients and no events — it carries the numbers those are
+derived from, plus the counter that lets the reconstruction find the data
+again:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">sampling</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">((</span><span class="mi">256</span><span class="p">,</span> <span class="mi">128</span><span class="p">),</span> <span class="n">acceleration</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="n">shot</span>   <span class="o">=</span> <span class="n">sampling</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>        <span class="c1"># absolute (ky[, kz]) -&gt; lin_idx / par_idx</span>
+<span class="n">scale</span>  <span class="o">=</span> <span class="n">sampling</span><span class="o">.</span><span class="n">to_scales</span><span class="p">()</span>  <span class="c1"># [-1, 1) -&gt; pp.scale_grad(gy, ...)</span>
+<span class="n">labels</span> <span class="o">=</span> <span class="n">sampling</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>    <span class="c1"># the SET LIN event for shot 0</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">labels(shot)</span></code> returns one <code class="docutils literal notranslate"><span class="pre">SET</span> <span class="pre">&lt;label&gt;</span></code> event per axis. Pass it to
+<code class="docutils literal notranslate"><span class="pre">SequenceModule.set_labels</span></code> for every loop the readout does <em>not</em> consume
+through <code class="docutils literal notranslate"><span class="pre">set_state</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">excitation</span><span class="o">.</span><span class="n">set_labels</span><span class="p">(</span><span class="o">*</span><span class="n">frames</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">f</span><span class="p">),</span> <span class="o">*</span><span class="n">slices</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">s</span><span class="p">))</span>
+</pre></div>
+</div>
+<p><strong>Emitting them is what makes the MRD <code class="docutils literal notranslate"><span class="pre">FIRST_IN_*</span></code> / <code class="docutils literal notranslate"><span class="pre">LAST_IN_*</span></code> flags
+correct.</strong> Those flags are not written by the sequence. The interpreter
+computes them by comparing each acquisition’s counter against the <em>observed</em>
+minimum and maximum of that counter over the scan. A frame loop that never
+emits <code class="docutils literal notranslate"><span class="pre">REP</span></code> therefore reports <code class="docutils literal notranslate"><span class="pre">min</span> <span class="pre">==</span> <span class="pre">max</span> <span class="pre">==</span> <span class="pre">0</span></code>, and every acquisition comes
+back flagged both first <em>and</em> last in repetition — which is exactly the failure
+that makes a dynamic reconstruction fire once per line instead of once per
+frame. <code class="docutils literal notranslate"><span class="pre">label_limits()</span></code> is the loop’s own prediction of where those flags will
+land:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">sampling</span><span class="o">.</span><span class="n">label_limits</span><span class="p">()</span>      <span class="c1"># {&#39;LIN&#39;: (0, 254)}</span>
+<span class="n">frames</span><span class="o">.</span><span class="n">label_limits</span><span class="p">()</span>        <span class="c1"># {&#39;REP&#39;: (0, 39)}</span>
+</pre></div>
+</div>
+<p>The label value is the position <em>value</em> on an <code class="docutils literal notranslate"><span class="pre">index</span></code> axis — its numbers
+already are the encoding indices — and the position <em>index</em> on every other
+kind, because angles, metres and inversion times are not counters but their
+order is. That is the rule the shipped modules have always followed; declaring
+the axis is what makes it executable rather than a convention you have to
+remember.</p>
+</section>
+<section id="which-factory-should-i-call">
+<h2>Which factory should I call?<a class="headerlink" href="#which-factory-should-i-call" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Acquisition</p></th>
@@ -704,7 +663,7 @@ non-Cartesian scan, a rotation matrix.</p>
 <tbody>
 <tr class="row-even"><td><p>2D/3D GRE, including multiecho</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">make_cartesian_sampling</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">train_length=1</span></code>, matrix, acceleration, frames/slices</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">train_length=1</span></code>, matrix, acceleration</p></td>
 </tr>
 <tr class="row-odd"><td><p>2D/3D FSE</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">make_cartesian_sampling</span></code></p></td>
@@ -714,233 +673,243 @@ non-Cartesian scan, a rotation matrix.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">make_cartesian_sampling</span></code></p></td>
 <td><p>segment length, <code class="docutils literal notranslate"><span class="pre">ordering=&quot;centric&quot;</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>2D/3D EPI, structural or fMRI</p></td>
+<tr class="row-odd"><td><p>2D/3D EPI</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">make_epi_sampling</span></code></p></td>
-<td><p>acceleration, segments, CAIPI shift, frames</p></td>
+<td><p>acceleration, segments, CAIPI shift</p></td>
 </tr>
 <tr class="row-even"><td><p>2D radial/spiral/rosette</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">make_noncartesian_2d_sampling</span></code></p></td>
-<td><p>views per frame, slices, frames, angle scheme</p></td>
+<td><p>view count, angle scheme</p></td>
 </tr>
 <tr class="row-odd"><td><p>3D stack of trajectories</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">make_noncartesian_stack_sampling</span></code></p></td>
-<td><p>views per partition, partition order, frames</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">make_noncartesian_2d_sampling</span></code> + <code class="docutils literal notranslate"><span class="pre">calc_traversal_order</span></code></p></td>
+<td><p>views, partition order</p></td>
 </tr>
 <tr class="row-even"><td><p>3D projection</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">make_noncartesian_projection_sampling</span></code></p></td>
-<td><p>views per frame, direction scheme, frames</p></td>
+<td><p>views, direction scheme</p></td>
+</tr>
+<tr class="row-odd"><td><p>the slice loop of any 2D scan</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">make_slice_loop</span></code></p></td>
+<td><p>slice count, spacing, order, SMS</p></td>
+</tr>
+<tr class="row-even"><td><p>frames, contrasts, averages, any other counter</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">make_counter_loop</span></code></p></td>
+<td><p>count or value table, <code class="docutils literal notranslate"><span class="pre">label</span></code>, order</p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>The readout’s echo count is not a sampling dimension. GRE and multiecho GRE
-therefore share the same plan; <code class="docutils literal notranslate"><span class="pre">num_echoes</span></code> belongs to
-<code class="docutils literal notranslate"><span class="pre">make_line_readout</span></code>.</p>
+<p>Every one of them fills in its own axes, so <code class="docutils literal notranslate"><span class="pre">to_scales()</span></code> needs no matrix
+argument and <code class="docutils literal notranslate"><span class="pre">labels()</span></code> needs no label argument.</p>
 </section>
 <section id="cartesian-gre-fse-and-mprage">
 <h2>Cartesian GRE, FSE and MPRAGE<a class="headerlink" href="#cartesian-gre-fse-and-mprage" title="Link to this heading">#</a></h2>
-<p>The same factory covers these families because their difference at the plan
-level is how many encoded locations occur inside one excitation.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<p>One factory covers these families because their only difference at the
+sampling level is how many encoded locations occur inside one excitation.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">design</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 
-<span class="n">gre2d</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">),</span> <span class="n">acceleration</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">calibration</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
-    <span class="n">num_slices</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">slice_spacing_m</span><span class="o">=</span><span class="mf">5e-3</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">gre3d</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">acceleration</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">calibration</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span>
-<span class="p">)</span>
-<span class="n">fse2d</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">),</span> <span class="n">train_length</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">ordering</span><span class="o">=</span><span class="s2">&quot;radial&quot;</span><span class="p">,</span>
-    <span class="n">num_slices</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">slice_spacing_m</span><span class="o">=</span><span class="mf">5e-3</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">fse3d</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">train_length</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">ordering</span><span class="o">=</span><span class="s2">&quot;radial_adaptive&quot;</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">mprage2d</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">192</span><span class="p">),</span> <span class="n">train_length</span><span class="o">=</span><span class="mi">96</span><span class="p">,</span> <span class="n">ordering</span><span class="o">=</span><span class="s2">&quot;centric&quot;</span><span class="p">,</span>
-    <span class="n">num_slices</span><span class="o">=</span><span class="mi">24</span><span class="p">,</span> <span class="n">slice_spacing_m</span><span class="o">=</span><span class="mf">5e-3</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">mprage3d</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">192</span><span class="p">,</span> <span class="mi">160</span><span class="p">),</span> <span class="n">acceleration</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
-    <span class="n">train_length</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span> <span class="n">ordering</span><span class="o">=</span><span class="s2">&quot;centric&quot;</span><span class="p">,</span>
+<span class="n">gre2d</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">((</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">),</span> <span class="n">acceleration</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">calibration</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+<span class="n">gre3d</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">((</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">acceleration</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">calibration</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+<span class="n">fse2d</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">((</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">),</span> <span class="n">train_length</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">ordering</span><span class="o">=</span><span class="s2">&quot;radial&quot;</span><span class="p">)</span>
+<span class="n">fse3d</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">((</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">train_length</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">ordering</span><span class="o">=</span><span class="s2">&quot;radial_adaptive&quot;</span><span class="p">)</span>
+<span class="n">mprage3d</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">(</span>
+    <span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">192</span><span class="p">,</span> <span class="mi">160</span><span class="p">),</span> <span class="n">acceleration</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">train_length</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span> <span class="n">ordering</span><span class="o">=</span><span class="s2">&quot;centric&quot;</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>The loop consumes only numeric entry properties:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">acquisition</span> <span class="ow">in</span> <span class="n">fse3d</span><span class="p">:</span>
-    <span class="n">readout</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span>
-        <span class="n">lin_idx</span><span class="o">=</span><span class="n">acquisition</span><span class="o">.</span><span class="n">lin_idx</span><span class="p">,</span>
-        <span class="n">par_idx</span><span class="o">=</span><span class="n">acquisition</span><span class="o">.</span><span class="n">par_idx</span><span class="p">,</span>
-    <span class="p">)</span>
+<p>The loop consumes integer coordinates:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">shot</span> <span class="ow">in</span> <span class="n">fse3d</span><span class="p">:</span>
+    <span class="n">readout</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">lin_idx</span><span class="o">=</span><span class="n">shot</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">par_idx</span><span class="o">=</span><span class="n">shot</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span>
     <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">readout</span><span class="p">:</span>
         <span class="n">seq</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="o">*</span><span class="n">block</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>For 2D plans, the slice/SMS schedule is deliberately separate from the
-Cartesian <code class="docutils literal notranslate"><span class="pre">(ky,</span> <span class="pre">kz)</span></code> mask and its echo-train ordering. Its rows select one
-physical slice for conventional imaging or <code class="docutils literal notranslate"><span class="pre">sms_factor</span></code> simultaneous bands;
-it covers every requested position once. Slice spacing fixes the physical
-positions, and the selective-gradient amplitude later converts them to RF
-frequency offsets:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">plan</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">),</span> <span class="n">num_slices</span><span class="o">=</span><span class="mi">48</span><span class="p">,</span> <span class="n">slice_spacing_m</span><span class="o">=</span><span class="mf">3e-3</span><span class="p">,</span> <span class="n">sms_factor</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">frequency_table_hz</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">slice_frequency_table_hz</span><span class="p">(</span><span class="n">gz</span><span class="o">.</span><span class="n">amplitude</span><span class="p">)</span>
+<p>An FSE shot is a whole train, so <code class="docutils literal notranslate"><span class="pre">shot[:,</span> <span class="pre">0]</span></code> is the per-echo <code class="docutils literal notranslate"><span class="pre">ky</span></code> schedule.
+A GRE shot has one entry, so <code class="docutils literal notranslate"><span class="pre">int(shot[0,</span> <span class="pre">0])</span></code> is the line.</p>
+<p><code class="docutils literal notranslate"><span class="pre">to_scales()</span></code> converts the whole table at once, but it is indexed like
+<code class="docutils literal notranslate"><span class="pre">positions</span></code> — on an accelerated loop those are only the sampled lines, so index
+it with <code class="docutils literal notranslate"><span class="pre">scales[loop.shots[i]]</span></code>, never <code class="docutils literal notranslate"><span class="pre">scales[ky]</span></code>. Converting each shot’s own
+coordinates with <code class="docutils literal notranslate"><span class="pre">calc_encoding_scales</span></code> avoids the question. The extents come
+from the <em>encoded matrix</em>, not from the sampled support, so acceleration and
+partial Fourier drop views without rescaling the ones that remain.</p>
+</section>
+<section id="the-slice-loop">
+<h2>The slice loop<a class="headerlink" href="#the-slice-loop" title="Link to this heading">#</a></h2>
+<p>For a 2D scan the slice loop is a separate <code class="docutils literal notranslate"><span class="pre">ScanLoop</span></code>, nested outside or
+inside the k-space loop as the sequence requires. Its rows select one physical
+slice, or <code class="docutils literal notranslate"><span class="pre">sms_factor</span></code> simultaneous bands; it covers every requested position
+exactly once. Slice spacing fixes the physical positions, and the
+selective-gradient amplitude converts them to RF frequency offsets:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">slices</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_slice_loop</span><span class="p">(</span><span class="mi">48</span><span class="p">,</span> <span class="n">spacing_m</span><span class="o">=</span><span class="mf">3e-3</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s2">&quot;interleaved&quot;</span><span class="p">,</span> <span class="n">sms_factor</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+<span class="n">offsets</span> <span class="o">=</span> <span class="n">slices</span><span class="o">.</span><span class="n">to_frequencies</span><span class="p">(</span><span class="n">excitation</span><span class="o">.</span><span class="n">gradients</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">amplitude</span><span class="p">)</span>
 
-<span class="k">for</span> <span class="n">acquisition</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">:</span>
-    <span class="n">offsets_hz</span> <span class="o">=</span> <span class="n">acquisition</span><span class="o">.</span><span class="n">frequency_offsets_hz</span><span class="p">(</span><span class="n">gz</span><span class="o">.</span><span class="n">amplitude</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">s</span><span class="p">,</span> <span class="n">slice_shot</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">slices</span><span class="o">.</span><span class="n">shots</span><span class="p">):</span>
+    <span class="n">excitation</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">freq_offset_hz</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">offsets</span><span class="p">[</span><span class="n">slice_shot</span><span class="p">[</span><span class="mi">0</span><span class="p">]]))</span>
+    <span class="n">excitation</span><span class="o">.</span><span class="n">set_labels</span><span class="p">(</span><span class="o">*</span><span class="n">slices</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">s</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">shot</span> <span class="ow">in</span> <span class="n">sampling</span><span class="p">:</span>
+        <span class="o">...</span>
+</pre></div>
+</div>
+<p>Iterate <code class="docutils literal notranslate"><span class="pre">slices</span></code> when you want positions, <code class="docutils literal notranslate"><span class="pre">slices.shots</span></code> when you want
+indices, and <code class="docutils literal notranslate"><span class="pre">labels(s)</span></code> when you want the <code class="docutils literal notranslate"><span class="pre">SLC</span></code> counter. Pass the whole
+<code class="docutils literal notranslate"><span class="pre">offsets[slice_shot]</span></code> row rather than <code class="docutils literal notranslate"><span class="pre">[0]</span></code> to an SMS multiband pulse;
+<code class="docutils literal notranslate"><span class="pre">labels(s)</span></code> then names the first band, and <code class="docutils literal notranslate"><span class="pre">labels(s,</span> <span class="pre">position=n)</span></code> any other.</p>
+</section>
+<section id="frames-contrasts-and-averages">
+<h2>Frames, contrasts and averages<a class="headerlink" href="#frames-contrasts-and-averages" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">make_counter_loop</span></code> builds the loop over any counter that is neither k-space
+nor slices. Two forms, chosen by what you pass:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">frames</span>     <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_counter_loop</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;REP&quot;</span><span class="p">)</span>                  <span class="c1"># a bare counter</span>
+<span class="n">inversions</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_counter_loop</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;SET&quot;</span><span class="p">)</span>  <span class="c1"># values it schedules</span>
+<span class="n">averages</span>   <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_counter_loop</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;AVG&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The loop does not know what its values <em>drive</em>. Converting an inversion time
+into a delay, or a saturation offset into <code class="docutils literal notranslate"><span class="pre">freq_offset_hz</span></code>, is the sequence’s
+business — which is exactly why one factory covers every contrast dimension
+instead of one per physics:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">frames</span><span class="p">)):</span>
+    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">inversions</span><span class="p">)):</span>
+        <span class="n">inversion</span><span class="o">.</span><span class="n">set_state</span><span class="p">()</span><span class="o">.</span><span class="n">set_labels</span><span class="p">(</span><span class="o">*</span><span class="n">frames</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">f</span><span class="p">),</span> <span class="o">*</span><span class="n">inversions</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">c</span><span class="p">))</span>
+        <span class="n">inversion</span><span class="o">.</span><span class="n">add_to</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
+        <span class="n">seq</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="n">make_delay</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">inversions</span><span class="p">[</span><span class="n">c</span><span class="p">][</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])))</span>
+        <span class="k">for</span> <span class="n">shot</span> <span class="ow">in</span> <span class="n">sampling</span><span class="p">:</span>
+            <span class="n">readout</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">lin_idx</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">shot</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]))</span><span class="o">.</span><span class="n">add_to</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">order=</span></code> reorders the <em>visits</em> without renumbering the data — the counter
+follows the position, so <code class="docutils literal notranslate"><span class="pre">make_counter_loop(6,</span> <span class="pre">label=&quot;AVG&quot;,</span> <span class="pre">order=&quot;center_out&quot;)</span></code>
+still labels average 2 as <code class="docutils literal notranslate"><span class="pre">AVG</span> <span class="pre">2</span></code>, it just acquires it first.</p>
+<p><code class="docutils literal notranslate"><span class="pre">with_axes</span></code> retargets an existing loop’s counter without rebuilding it, for
+when a rotation loop indexes frames rather than views:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">EncodingAxis</span>
+
+<span class="n">phases</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_noncartesian_2d_sampling</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">views</span><span class="o">=</span><span class="n">n</span><span class="p">)</span><span class="o">.</span><span class="n">with_axes</span><span class="p">(</span>
+    <span class="n">EncodingAxis</span><span class="p">(</span><span class="s2">&quot;PHS&quot;</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;angle&quot;</span><span class="p">)</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="epi-structural-and-multiple-volume">
-<h2>EPI: structural and multiple-volume<a class="headerlink" href="#epi-structural-and-multiple-volume" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">frames=1</span></code> is structural; larger values produce the repeated volume loop used
-by fMRI. In 2D, slice groups sit inside each frame. In 3D, each frame directly
-covers <code class="docutils literal notranslate"><span class="pre">(ky,</span> <span class="pre">kz)</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">epi2d</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_epi_sampling</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">96</span><span class="p">,</span> <span class="mi">96</span><span class="p">),</span> <span class="n">acceleration</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">segments</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">frames</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">num_slices</span><span class="o">=</span><span class="mi">48</span><span class="p">,</span> <span class="n">slice_spacing_m</span><span class="o">=</span><span class="mf">3e-3</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">epi3d</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_epi_sampling</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">96</span><span class="p">,</span> <span class="mi">96</span><span class="p">,</span> <span class="mi">32</span><span class="p">),</span> <span class="n">acceleration</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">segments</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-    <span class="n">caipi_shift</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">frames</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-<p>An EPI plan may contain more than one relative traversal. Build one reusable
-readout per plan shot, then use the absolute entry state for each volume:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">readouts</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">pp</span><span class="o">.</span><span class="n">make_epi_readout</span><span class="p">(</span>
-        <span class="n">system</span><span class="p">,</span> <span class="n">fov</span><span class="p">,</span> <span class="n">matrix</span><span class="p">,</span> <span class="n">epi3d</span><span class="o">.</span><span class="n">sampling</span><span class="o">.</span><span class="n">n_shots</span><span class="p">,</span>
-        <span class="n">epi3d</span><span class="o">.</span><span class="n">sampling</span><span class="o">.</span><span class="n">relative</span><span class="p">(</span><span class="n">shot</span><span class="p">),</span>
-    <span class="p">)</span>
-    <span class="k">for</span> <span class="n">shot</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">epi3d</span><span class="o">.</span><span class="n">sampling</span><span class="o">.</span><span class="n">n_shots</span><span class="p">)</span>
+<section id="epi-structural-and-dynamic">
+<h2>EPI: structural and dynamic<a class="headerlink" href="#epi-structural-and-dynamic" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">make_epi_sampling</span></code> describes one volume’s interleaves. Repeating them is the
+frame loop, and nothing in the loop object changes:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">epi3d</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_epi_sampling</span><span class="p">((</span><span class="mi">96</span><span class="p">,</span> <span class="mi">96</span><span class="p">,</span> <span class="mi">32</span><span class="p">),</span> <span class="n">acceleration</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">segments</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">caipi_shift</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">frames</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_counter_loop</span><span class="p">(</span><span class="n">n_frames</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;REP&quot;</span><span class="p">)</span>
+
+<span class="n">readouts</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">design</span><span class="o">.</span><span class="n">make_epi_readout</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">fov</span><span class="p">,</span> <span class="n">matrix</span><span class="p">,</span> <span class="n">epi3d</span><span class="o">.</span><span class="n">n_shots</span><span class="p">,</span> <span class="n">epi3d</span><span class="o">.</span><span class="n">relative</span><span class="p">(</span><span class="n">shot</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">shot</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">epi3d</span><span class="o">.</span><span class="n">n_shots</span><span class="p">)</span>
 <span class="p">]</span>
 
-<span class="k">for</span> <span class="n">acquisition</span> <span class="ow">in</span> <span class="n">epi3d</span><span class="p">:</span>
-    <span class="n">readout</span> <span class="o">=</span> <span class="n">readouts</span><span class="p">[</span><span class="n">acquisition</span><span class="o">.</span><span class="n">shot</span><span class="p">]</span>
-    <span class="n">readout</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span>
-        <span class="n">lin_idx</span><span class="o">=</span><span class="n">acquisition</span><span class="o">.</span><span class="n">lin_idx</span><span class="p">,</span>
-        <span class="n">par_idx</span><span class="o">=</span><span class="n">acquisition</span><span class="o">.</span><span class="n">par_idx</span><span class="p">,</span>
-        <span class="n">labels</span><span class="o">=</span><span class="n">acquisition</span><span class="o">.</span><span class="n">labels</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">readout</span><span class="p">:</span>
-        <span class="n">seq</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="o">*</span><span class="n">block</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">frames</span><span class="p">)):</span>
+    <span class="k">for</span> <span class="n">shot</span><span class="p">,</span> <span class="n">readout</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">readouts</span><span class="p">):</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">epi3d</span><span class="p">[</span><span class="n">shot</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">readout</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">lin_idx</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">start</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">par_idx</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">start</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="n">labels</span><span class="o">=</span><span class="n">epi3d</span><span class="p">[</span><span class="n">shot</span><span class="p">])</span>
+        <span class="n">readout</span><span class="o">.</span><span class="n">set_labels</span><span class="p">(</span><span class="o">*</span><span class="n">frames</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">f</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">readout</span><span class="p">:</span>
+            <span class="n">seq</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="o">*</span><span class="n">block</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>A loop may contain more than one traversal, which is why the readout is
+built per shot from <code class="docutils literal notranslate"><span class="pre">relative(shot)</span></code> and only the absolute start varies per
+frame.</p>
+</section>
+<section id="non-cartesian-continuous-or-replayed-chronology">
+<h2>Non-Cartesian: continuous or replayed chronology<a class="headerlink" href="#non-cartesian-continuous-or-replayed-chronology" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">views</span></code> is the length of the whole angular chronology, not a per-frame count.
+Whether golden angles continue across frames and slices or replay at each one
+is decided by <em>where you call <code class="docutils literal notranslate"><span class="pre">iter()</span></code></em> — there is no <code class="docutils literal notranslate"><span class="pre">continuous=</span></code> switch:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tilt</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_noncartesian_2d_sampling</span><span class="p">(</span>
+    <span class="p">(</span><span class="mi">192</span><span class="p">,</span> <span class="mi">192</span><span class="p">),</span> <span class="n">views</span><span class="o">=</span><span class="n">n_frames</span> <span class="o">*</span> <span class="n">n_slices</span> <span class="o">*</span> <span class="n">n_views</span><span class="p">,</span> <span class="n">scheme</span><span class="o">=</span><span class="s2">&quot;tiny_golden&quot;</span><span class="p">,</span> <span class="n">tiny_index</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">rotations</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">tilt</span><span class="o">.</span><span class="n">to_rotations</span><span class="p">())</span>          <span class="c1"># continuous across the whole scan</span>
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">frames</span><span class="p">)):</span>
+    <span class="k">for</span> <span class="n">s</span><span class="p">,</span> <span class="n">slice_shot</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">slices</span><span class="o">.</span><span class="n">shots</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">view</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_views</span><span class="p">):</span>
+            <span class="n">readout</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">lin_idx</span><span class="o">=</span><span class="n">view</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="nb">next</span><span class="p">(</span><span class="n">rotations</span><span class="p">))</span>
+            <span class="n">readout</span><span class="o">.</span><span class="n">set_labels</span><span class="p">(</span><span class="o">*</span><span class="n">frames</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">f</span><span class="p">),</span> <span class="o">*</span><span class="n">slices</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">s</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">readout</span><span class="p">:</span>
+                <span class="n">seq</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="o">*</span><span class="n">block</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Move <code class="docutils literal notranslate"><span class="pre">rotations</span> <span class="pre">=</span> <span class="pre">iter(...)</span></code> inside the slice loop and every slice replays the
+same angular set.</p>
+<p>A stack of trajectories is the same in-plane loop with a partition loop
+around it:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rotations</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">design</span><span class="o">.</span><span class="n">make_noncartesian_2d_sampling</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">views</span><span class="o">=</span><span class="n">nz</span> <span class="o">*</span> <span class="n">n_views</span><span class="p">)</span><span class="o">.</span><span class="n">to_rotations</span><span class="p">())</span>
+<span class="n">partitions</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_counter_loop</span><span class="p">(</span><span class="n">nz</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;PAR&quot;</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s2">&quot;center_out&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">par</span> <span class="ow">in</span> <span class="n">partitions</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">view</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_views</span><span class="p">):</span>
+        <span class="n">readout</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">lin_idx</span><span class="o">=</span><span class="n">view</span><span class="p">,</span> <span class="n">par_idx</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">par</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span> <span class="n">rotation</span><span class="o">=</span><span class="nb">next</span><span class="p">(</span><span class="n">rotations</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>3D projections need no partition loop:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">projection</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_noncartesian_projection_sampling</span><span class="p">(</span>
+    <span class="p">(</span><span class="mi">192</span><span class="p">,</span> <span class="mi">192</span><span class="p">,</span> <span class="mi">192</span><span class="p">),</span> <span class="n">views</span><span class="o">=</span><span class="mi">20_000</span><span class="p">,</span> <span class="n">scheme</span><span class="o">=</span><span class="s2">&quot;golden_means&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">for</span> <span class="n">view</span><span class="p">,</span> <span class="n">rotation</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">projection</span><span class="o">.</span><span class="n">to_rotations</span><span class="p">()):</span>
+    <span class="n">readout</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">lin_idx</span><span class="o">=</span><span class="n">view</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="non-cartesian-structural-and-dynamic-plans">
-<h2>Non-Cartesian structural and dynamic plans<a class="headerlink" href="#non-cartesian-structural-and-dynamic-plans" title="Link to this heading">#</a></h2>
-<p>The 2D factory applies to any rotated in-plane base trajectory, not only
-radial. Golden/RAGA angles continue chronologically across slice and frame by
-default, so different slices and dynamic windows see different tilts. Set
-<code class="docutils literal notranslate"><span class="pre">continuous=False</span></code> when every outer location must replay an identical set.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">inplane</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_noncartesian_2d_sampling</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">192</span><span class="p">,</span> <span class="mi">192</span><span class="p">),</span> <span class="n">views_per_frame</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">frames</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
-    <span class="n">num_slices</span><span class="o">=</span><span class="mi">24</span><span class="p">,</span> <span class="n">slice_spacing_m</span><span class="o">=</span><span class="mf">5e-3</span><span class="p">,</span>
-    <span class="n">scheme</span><span class="o">=</span><span class="s2">&quot;tiny_golden&quot;</span><span class="p">,</span> <span class="n">tiny_index</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="k">for</span> <span class="n">acquisition</span> <span class="ow">in</span> <span class="n">inplane</span><span class="p">:</span>
-    <span class="n">readout</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span>
-        <span class="n">lin_idx</span><span class="o">=</span><span class="n">acquisition</span><span class="o">.</span><span class="n">view</span><span class="p">,</span>
-        <span class="n">rotation</span><span class="o">=</span><span class="n">acquisition</span><span class="o">.</span><span class="n">rotation</span><span class="p">,</span>
-    <span class="p">)</span>
-</pre></div>
-</div>
-<p>Stacks add a Cartesian partition index while allowing the in-plane angle to
-continue across both partition and frame:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">stack</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_noncartesian_stack_sampling</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">192</span><span class="p">,</span> <span class="mi">192</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">views_per_partition</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">frames</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
-    <span class="n">partition_order</span><span class="o">=</span><span class="s2">&quot;center_out&quot;</span><span class="p">,</span> <span class="n">scheme</span><span class="o">=</span><span class="s2">&quot;golden&quot;</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="k">for</span> <span class="n">acquisition</span> <span class="ow">in</span> <span class="n">stack</span><span class="p">:</span>
-    <span class="n">readout</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span>
-        <span class="n">lin_idx</span><span class="o">=</span><span class="n">acquisition</span><span class="o">.</span><span class="n">view</span><span class="p">,</span>
-        <span class="n">par_idx</span><span class="o">=</span><span class="n">acquisition</span><span class="o">.</span><span class="n">par_idx</span><span class="p">,</span>
-        <span class="n">rotation</span><span class="o">=</span><span class="n">acquisition</span><span class="o">.</span><span class="n">rotation</span><span class="p">,</span>
-    <span class="p">)</span>
-</pre></div>
-</div>
-<p>Projection plans provide full 3D rotations whose directions vary in both
-azimuth and polar angle:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">projection</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_noncartesian_projection_sampling</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">192</span><span class="p">,</span> <span class="mi">192</span><span class="p">,</span> <span class="mi">192</span><span class="p">),</span> <span class="n">views_per_frame</span><span class="o">=</span><span class="mi">20_000</span><span class="p">,</span>
-    <span class="n">frames</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">scheme</span><span class="o">=</span><span class="s2">&quot;golden_means&quot;</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="k">for</span> <span class="n">acquisition</span> <span class="ow">in</span> <span class="n">projection</span><span class="p">:</span>
-    <span class="n">readout</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span>
-        <span class="n">lin_idx</span><span class="o">=</span><span class="n">acquisition</span><span class="o">.</span><span class="n">view</span><span class="p">,</span>
-        <span class="n">rotation</span><span class="o">=</span><span class="n">acquisition</span><span class="o">.</span><span class="n">rotation</span><span class="p">,</span>
-    <span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="lower-level-mask-and-ordering-composition">
-<h2>Lower-level mask and ordering composition<a class="headerlink" href="#lower-level-mask-and-ordering-composition" title="Link to this heading">#</a></h2>
-<p>Use this layer when a built-in high-level sampling factory is almost right but
-one stage must be replaced. Build the <code class="docutils literal notranslate"><span class="pre">SamplingPattern</span></code> directly, then nest it
-under whatever outer loops your sequence needs — plain <code class="docutils literal notranslate"><span class="pre">for</span></code> loops over the
-non-imaging dimensions (frames, contrasts, averages) are the natural way to
-write this, with no helper required to flatten them.</p>
+<section id="when-a-factory-is-almost-right">
+<h2>When a factory is almost right<a class="headerlink" href="#when-a-factory-is-almost-right" title="Link to this heading">#</a></h2>
+<p>Support and ordering are independent stages, and both are reachable without
+leaving the public API.</p>
+<p>Replace only the <strong>ordering</strong>: every scan-loop factory takes <code class="docutils literal notranslate"><span class="pre">ordering=</span></code>
+(<code class="docutils literal notranslate"><span class="pre">linear</span></code>, <code class="docutils literal notranslate"><span class="pre">centric</span></code>, <code class="docutils literal notranslate"><span class="pre">radial</span></code>, <code class="docutils literal notranslate"><span class="pre">radial_adaptive</span></code>, <code class="docutils literal notranslate"><span class="pre">shuffling</span></code>), and
+<code class="docutils literal notranslate"><span class="pre">make_slice_loop</span></code> / <code class="docutils literal notranslate"><span class="pre">make_counter_loop</span></code> take <code class="docutils literal notranslate"><span class="pre">order=</span></code> (<code class="docutils literal notranslate"><span class="pre">sequential</span></code>,
+<code class="docutils literal notranslate"><span class="pre">interleaved</span></code>, <code class="docutils literal notranslate"><span class="pre">reverse</span></code>, <code class="docutils literal notranslate"><span class="pre">center_out</span></code>, <code class="docutils literal notranslate"><span class="pre">outside_in</span></code>).</p>
+<p>Replace only the <strong>support</strong>: <code class="docutils literal notranslate"><span class="pre">make_cartesian_sampling</span></code> covers <code class="docutils literal notranslate"><span class="pre">mask=&quot;uniform&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;caipi&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;random&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;poisson&quot;</span></code>. Beyond those, hand a boolean array to
+<a class="reference internal" href="../api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.from_mask" title="pulserver.ScanLoop.from_mask"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_mask()</span></code></a> and keep the shipped ordering:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScanLoop</span>
 
-<span class="n">mask</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_poisson_disc_mask</span><span class="p">(</span>
-    <span class="p">(</span><span class="mi">128</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="mf">4.0</span><span class="p">,</span> <span class="n">calib</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">sampling</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">SamplingPattern</span><span class="o">.</span><span class="n">from_mask</span><span class="p">(</span>
-    <span class="n">mask</span><span class="p">,</span> <span class="n">train_length</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">ordering</span><span class="o">=</span><span class="s2">&quot;radial&quot;</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="k">for</span> <span class="n">frame</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
-    <span class="k">for</span> <span class="n">contrast</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">shot</span> <span class="ow">in</span> <span class="n">sampling</span><span class="p">:</span>
-            <span class="k">pass</span>  <span class="c1"># set the readout state from `shot`, `frame`, `contrast`</span>
+<span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">128</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+<span class="n">mask</span><span class="p">[::</span><span class="mi">4</span><span class="p">,</span> <span class="p">::</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">mask</span><span class="p">[</span><span class="mi">56</span><span class="p">:</span><span class="mi">72</span><span class="p">,</span> <span class="mi">28</span><span class="p">:</span><span class="mi">36</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">sampling</span> <span class="o">=</span> <span class="n">ScanLoop</span><span class="o">.</span><span class="n">from_mask</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">train_length</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">ordering</span><span class="o">=</span><span class="s2">&quot;radial&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>The stages remain independently available:</p>
-<ul class="simple">
-<li><p>Ordering functions (<code class="docutils literal notranslate"><span class="pre">make_linear_order</span></code>, <code class="docutils literal notranslate"><span class="pre">make_centric_order</span></code>,
-<code class="docutils literal notranslate"><span class="pre">make_radial_order</span></code>, <code class="docutils literal notranslate"><span class="pre">make_radial_adaptive_order</span></code>, <code class="docutils literal notranslate"><span class="pre">make_shuffling_order</span></code>)
-accept coordinates or a boolean mask and return support indices grouped by
-train.</p></li>
-<li><p>Mask functions (<code class="docutils literal notranslate"><span class="pre">make_random_mask</span></code>, <code class="docutils literal notranslate"><span class="pre">make_poisson_disc_mask</span></code>,
-<code class="docutils literal notranslate"><span class="pre">make_caipirinha_mask</span></code>) return boolean
-masks only.</p></li>
-<li><p>Individual tilt generators (<code class="docutils literal notranslate"><span class="pre">calc_uniform_angles</span></code>, <code class="docutils literal notranslate"><span class="pre">calc_golden_angles</span></code>,
-<code class="docutils literal notranslate"><span class="pre">calc_tiny_golden_angles</span></code>, <code class="docutils literal notranslate"><span class="pre">calc_raga_angles</span></code>) return flat angle arrays.</p></li>
-<li><p>Low-level EPI ordering (<code class="docutils literal notranslate"><span class="pre">make_skipped_caipi_order</span></code>) and tilt generators
-(<code class="docutils literal notranslate"><span class="pre">make_radial_tilt</span></code>, <code class="docutils literal notranslate"><span class="pre">make_golden_means_3d_tilt</span></code>,
-<code class="docutils literal notranslate"><span class="pre">make_spiral_phyllotaxis_tilt</span></code>) expose support and ordering without adding
-frames or slices.</p></li>
-</ul>
+<p><code class="docutils literal notranslate"><span class="pre">from_mask</span></code> checks that the ordering covers every sampled location exactly
+once, so a hand-written mask cannot silently drop or duplicate lines.
+<a class="reference internal" href="../api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.from_relative_shifts" title="pulserver.ScanLoop.from_relative_shifts"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_relative_shifts()</span></code></a> does the same for
+EPI-style relative traversals, and a <code class="docutils literal notranslate"><span class="pre">ScanLoop</span></code> can always be constructed
+directly from positions and shots when neither fits.</p>
+<p>Replace the <strong>angles</strong>: <code class="docutils literal notranslate"><span class="pre">make_noncartesian_2d_sampling</span></code> takes <code class="docutils literal notranslate"><span class="pre">scheme=</span></code>
+(<code class="docutils literal notranslate"><span class="pre">linear</span></code>, <code class="docutils literal notranslate"><span class="pre">golden</span></code>, <code class="docutils literal notranslate"><span class="pre">tiny_golden</span></code>, <code class="docutils literal notranslate"><span class="pre">raga</span></code>) with <code class="docutils literal notranslate"><span class="pre">period</span></code>, <code class="docutils literal notranslate"><span class="pre">tiny_index</span></code> and
+<code class="docutils literal notranslate"><span class="pre">approximation_order</span></code>, plus <code class="docutils literal notranslate"><span class="pre">segment_length</span></code> for prepared trains;
+<code class="docutils literal notranslate"><span class="pre">make_noncartesian_projection_sampling</span></code> takes <code class="docutils literal notranslate"><span class="pre">scheme=</span></code> (<code class="docutils literal notranslate"><span class="pre">golden_means</span></code>,
+<code class="docutils literal notranslate"><span class="pre">phyllotaxis</span></code>) and <code class="docutils literal notranslate"><span class="pre">interleaves</span></code>.</p>
+<p>A loop built by hand from bare positions infers its axes: integer columns
+become <code class="docutils literal notranslate"><span class="pre">LIN</span></code>/<code class="docutils literal notranslate"><span class="pre">PAR</span></code> encoding indices, three float columns a <code class="docutils literal notranslate"><span class="pre">direction</span></code> axis,
+anything else a neutral <code class="docutils literal notranslate"><span class="pre">value</span></code> axis that labels by index and leaves every
+converter available. Declare them explicitly when you want a different counter
+or a matrix extent the positions cannot imply:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">EncodingAxis</span><span class="p">,</span> <span class="n">ScanLoop</span>
+
+<span class="n">loop</span> <span class="o">=</span> <span class="n">ScanLoop</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">shots</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="n">EncodingAxis</span><span class="p">(</span><span class="s2">&quot;LIN&quot;</span><span class="p">,</span> <span class="s2">&quot;index&quot;</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">192</span><span class="p">),))</span>
+</pre></div>
+</div>
 </section>
 <section id="relative-epi-traversals">
 <h2>Relative EPI traversals<a class="headerlink" href="#relative-epi-traversals" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">SamplingPattern.from_relative_shifts</span></code> is the escape hatch for EPTI, zigzag
-or another custom blipped train:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">sampling</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">SamplingPattern</span><span class="o">.</span><span class="n">from_relative_shifts</span><span class="p">(</span>
+<p><code class="docutils literal notranslate"><span class="pre">ScanLoop.from_relative_shifts</span></code> is the escape hatch for EPTI, zigzag or
+another custom blipped train — a shot is a start point plus per-echo
+increments:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">sampling</span> <span class="o">=</span> <span class="n">ScanLoop</span><span class="o">.</span><span class="n">from_relative_shifts</span><span class="p">(</span>
     <span class="n">starts</span><span class="o">=</span><span class="p">[[</span><span class="mi">8</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">9</span><span class="p">,</span> <span class="mi">2</span><span class="p">]],</span>
     <span class="n">shifts</span><span class="o">=</span><span class="p">[[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">]],</span>
             <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">]]],</span>
     <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span>
 <span class="p">)</span>
-<span class="k">for</span> <span class="n">frame</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">20</span><span class="p">):</span>
-    <span class="k">for</span> <span class="n">shot</span> <span class="ow">in</span> <span class="n">sampling</span><span class="p">:</span>
-        <span class="k">pass</span>  <span class="c1"># configure one EPI readout from `frame` and `shot`</span>
-</pre></div>
-</div>
-</section>
-<section id="slice-grouping">
-<h2>Slice grouping<a class="headerlink" href="#slice-grouping" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">make_slice_sampling</span></code> remains useful when building a custom loop. Its
-selection mask is over physical slices, not phase encodes, and its ordering
-therefore never changes a Cartesian echo-train order:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">slice_sampling</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_slice_sampling</span><span class="p">(</span>
-    <span class="mi">48</span><span class="p">,</span> <span class="n">spacing_m</span><span class="o">=</span><span class="mf">3e-3</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s2">&quot;interleaved&quot;</span><span class="p">,</span> <span class="n">sms_factor</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="n">sampling</span><span class="o">.</span><span class="n">increments</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>   <span class="c1"># blip areas to play between echoes</span>
+<span class="n">sampling</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>              <span class="c1"># absolute coordinates to label</span>
 </pre></div>
 </div>
 </section>
@@ -973,7 +942,7 @@ therefore never changes a Cartesian echo-train order:</p>
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title"><code class="docutils literal notranslate"><span class="pre">pulserver</span></code> — sequence-building blocks</p>
+        <p class="prev-next-title"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</p>
       </div>
     </a>
     <a class="right-next"
@@ -1003,13 +972,16 @@ therefore never changes a Cartesian echo-train order:</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#which-high-level-factory-should-i-call">Which high-level factory should I call?</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#a-loop-is-not-a-k-space-object">A loop is not a k-space object</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#counters-and-why-they-are-not-optional">Counters, and why they are not optional</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#which-factory-should-i-call">Which factory should I call?</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cartesian-gre-fse-and-mprage">Cartesian GRE, FSE and MPRAGE</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#epi-structural-and-multiple-volume">EPI: structural and multiple-volume</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-structural-and-dynamic-plans">Non-Cartesian structural and dynamic plans</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lower-level-mask-and-ordering-composition">Lower-level mask and ordering composition</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-slice-loop">The slice loop</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#frames-contrasts-and-averages">Frames, contrasts and averages</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#epi-structural-and-dynamic">EPI: structural and dynamic</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-continuous-or-replayed-chronology">Non-Cartesian: continuous or replayed chronology</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#when-a-factory-is-almost-right">When a factory is almost right</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#relative-epi-traversals">Relative EPI traversals</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#slice-grouping">Slice grouping</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">References</a></li>
 </ul>
   </nav></div>

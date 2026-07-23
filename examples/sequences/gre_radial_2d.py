@@ -40,6 +40,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     Description,
@@ -178,32 +179,36 @@ class GreRadial2DPulseqSequence(Sequence):
 
         seq = pp.Sequence(opts)
 
-        tilts = pp.make_radial_tilt(cfg.num_shots, scheme=cfg.order_mode)
+        tilts = design.make_noncartesian_2d_sampling(
+            (cfg.nx_ro, cfg.nx_ro), views=cfg.num_shots, scheme=cfg.order_mode
+        )
         rotations = tilts.to_rotations()
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
-        rf_phases = pp.make_rf_spoiling_schedule(cfg.num_shots * cfg.nslices * cfg.num_frames)
+        slices = design.make_slice_loop(
+            cfg.nslices, slice_step_m or cfg.slice_thickness_m, order="sequential"
+        )
+        offsets_hz = slices.to_frequencies(pulse.gradients[0].amplitude) if slice_step_m else None
+        frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+        rf_phases = design.make_rf_spoiling_schedule(cfg.num_shots * len(slices) * len(frames))
         phase_idx = 0
 
-        for frame in range(cfg.num_frames):
-            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+        for frame in range(len(frames)):
+            (phase_label,) = frames.labels(frame)
             if cfg.trigger != TriggerType.NONE:
                 seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
             else:
                 seq.add_block(phase_label)
             for spoke, rotation in enumerate(rotations):
-                for sl in range(cfg.nslices):
-                    slice_offset_m = (sl - 0.5 * (cfg.nslices - 1)) * slice_step_m
+                for sl, band in enumerate(slices.shots):
+                    offset_hz = float(offsets_hz[band[0]]) if offsets_hz is not None else 0.0
                     phase = float(rf_phases[phase_idx])
-                    pulse.set_state(
-                        freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m,
-                        phase_offset_rad=phase,
-                    )
-                    for block_idx, block in enumerate(pulse):
-                        labels = (pp.make_label(type="SET", label="SLC", value=sl),) if block_idx == 0 else ()
-                        seq.add_block(*block, *labels)
+                    pulse.set_state(freq_offset_hz=offset_hz, phase_offset_rad=phase)
+                    pulse.set_labels(*slices.labels(sl))
+                    for block in pulse:
+                        seq.add_block(*block)
                     if te_delay is not None:
                         seq.add_block(te_delay)
-                    radial.set_state(lin_idx=spoke, adc_phase_rad=phase, rotation=rotation)
+                    radial.set_state(lin_idx=spoke, phase_offset_rad=phase, rotation=rotation)
                     for block in radial:
                         seq.add_block(*block)
                     phase_idx += 1
@@ -257,10 +262,10 @@ def _read_protocol(prot: dict) -> _Config:
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | None = None):
     if n_inner is None:
         n_inner = cfg.nslices
-    pulse = pp.make_slice_selective_pulse(
+    pulse = design.make_slice_selective_pulse(
         np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, system=opts
     )
-    radial = pp.make_radial_readout(
+    radial = design.make_radial_readout(
         opts,
         cfg.fov_m,
         cfg.nx_ro,

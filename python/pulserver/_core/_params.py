@@ -135,8 +135,8 @@ class PreparationType(StrEnum):
     """Preparation pulse family shown in the UI.
 
     Selects which magnetization-preparation module a plugin plays before the
-    imaging train — see :func:`pulserver.pypulseq.make_inversion_pulse` and
-    :func:`pulserver.pypulseq.make_t2prep_pulse`.
+    imaging train — see :func:`pulserver.design.make_inversion_pulse` and
+    :func:`pulserver.design.make_t2prep_pulse`.
 
     Examples
     --------

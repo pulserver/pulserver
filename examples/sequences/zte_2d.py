@@ -43,6 +43,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     Description,
@@ -130,7 +131,7 @@ class Zte2DPulseqSequence(Sequence):
 
         zte = timing["readout"]
         seq = pp.Sequence(opts)
-        zte(seq=seq, lin_idx=np.arange(cfg.num_shots))
+        zte.set_state(lin_idx=np.arange(cfg.num_shots)).add_to(seq)
 
         seq.set_definition("Name", "zte_2d")
         seq.set_definition("FOV", [cfg.fov_m, cfg.fov_m, cfg.fov_m])
@@ -162,19 +163,22 @@ def _read_protocol(prot: dict) -> _Config:
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    angles = (
-        pp.calc_golden_angles(cfg.num_shots)
-        if cfg.order_mode == "golden"
-        else pp.calc_uniform_angles(cfg.num_shots)
-    )
-    excitation = pp.make_hard_pulse(
+    # Half (centre-out) projections, so the angular period is the full circle
+    # rather than the pi of a through-centre spoke.
+    angles = design.make_noncartesian_2d_sampling(
+        (cfg.nx_ro, cfg.nx_ro),
+        views=cfg.num_shots,
+        scheme="golden" if cfg.order_mode == "golden" else "linear",
+        period=2.0 * np.pi,
+    ).flatten()[:, 0]
+    excitation = design.make_hard_pulse(
         np.deg2rad(cfg.flip_deg),
         duration=ZTE_RF_DURATION_S,
         system=opts,
         use="excitation",
     )
     try:
-        module = pp.make_zte_readout(
+        module = design.make_zte_readout(
             opts,
             cfg.fov_m,
             cfg.nx_ro,

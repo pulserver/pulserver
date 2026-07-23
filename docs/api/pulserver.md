@@ -5,15 +5,19 @@ plugin subclasses, the abstract types it exchanges with the authoring
 namespace, the typed parameters its scanner UI is built from, and the offline
 CLI.
 
-It deliberately exports *no* waveform-authoring helpers. RF pulses, gradients,
-readout factories, sampling factories and phase schedules live in
-{doc}`pulserver.pypulseq <pypulseq>` and are importable only from there, so a
-plugin's two halves stay visibly separate:
+It deliberately exports *no* authoring helpers. Those are split across two
+namespaces by role, so a plugin's parts stay visibly separate:
 
 ```python
-import pulserver.pypulseq as pp           # waveforms and events
+import pulserver.pypulseq as pp           # events, Sequence, Opts
+import pulserver.design as design         # modules and scan loops
 from pulserver import Sequence, UIParam   # plugin contract
 ```
+
+{doc}`pulserver.pypulseq <pypulseq>` is the event layer: upstream PyPulseq
+re-exported whole, plus Pulserver's replacements for a few of its objects.
+{doc}`pulserver.design <design>` is the toolbox above it — every factory
+returning a `SequenceModule` or a `ScanLoop`.
 
 Ready-to-run sequence callbacks are intentionally a separate public namespace:
 {doc}`pulserver.sequences <sequences>`.  They accept explicit sequence
@@ -38,26 +42,43 @@ protocol and synthesises the `.seq` file.
 
 ## Abstract types
 
-The things every `pulserver.pypulseq` factory returns, named here because they
-are part of the contract rather than of any one waveform family. A
-`SequenceModule` is a reusable, stateful fragment — an RF pulse, a
-preparation, a readout shot — designed once and re-parameterised per shot;
-`AcquisitionPlan` is the high-level frame/slice/shot loop and yields one
-`Acquisition` at a time; `SamplingPattern` is its lower-level k-space support
-and ordering; `SliceSampling` is the independent physical slice/SMS schedule;
-`SliceGroup` is one excitation's worth of slices.
+The things every `pulserver.design` factory returns, named here because they
+are part of the contract rather than of any one waveform family. There are
+two, plus the descriptor that annotates one of them:
+
+| Type | Question | Feeds |
+| --- | --- | --- |
+| `SequenceModule` | *what do I play?* | `seq.add_block(*block)` |
+| `ScanLoop` | *what varies, in what order?* | `lin_idx`/`par_idx`, `rotation`, `freq_offset_hz` |
+| `EncodingAxis` | *what does one column of that loop mean?* | the counter it emits, the converter that applies |
+
+There is one loop type, not one per axis. A `ScanLoop` is a table of
+**positions**, a grouping of them into **shots** — one shot being one
+excitation's worth of the loop — and one `EncodingAxis` per position column.
+An encoding position is a set of frequency offsets, gradient scalings and
+rotations, and nothing about that restricts it to k-space: a Cartesian echo
+train, a non-Cartesian view list, an SMS slice group, a dynamic frame and an
+inversion-time series are the same table under different axis declarations.
+The axis fixes which converter applies (`to_scales`, `to_rotations`,
+`to_frequencies`) and which counter `labels()` emits.
+
+A module answers to four independent setters: `set_state` (the numbers that
+re-render its waveforms), `set_labels` (per-shot counters), `set_flags`
+(sticky block properties, scoped to the module) and `set_triggers` (trigger
+and digital-output events, per block).
+
+Neither type owns the loop itself. How frames, slices, contrasts and shots
+nest is plain `for` statements in the plugin, which is what keeps a
+preparation, a trigger or a dummy TR insertable at any level.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/pulserver
    :nosignatures:
 
-   pulserver.Acquisition
-   pulserver.AcquisitionPlan
-   pulserver.SamplingPattern
+   pulserver.ScanLoop
    pulserver.SequenceModule
-   pulserver.SliceGroup
-   pulserver.SliceSampling
+   pulserver.EncodingAxis
 ```
 
 ## Protocol parameter types

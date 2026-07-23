@@ -19,7 +19,7 @@ the physical Z axis and, for 3D, stacks that with a separate Cartesian
 partition encode — ``gre_radial_3d.py``, ``gre_noncart_3d.py``), true ZTE
 has no separate slice/partition dimension to stack: the whole non-selective
 FOV is covered by spokes pointing anywhere on the sphere. Directions come
-from ``pulserver.pypulseq.make_golden_means_3d_tilt`` (near-uniform 3D
+from ``pulserver.design.make_noncartesian_projection_sampling`` (near-uniform 3D
 coverage). The full ordered direction list is passed to
 :func:`pulserver.make_zte_readout`, which keeps the gradient live and
 slews directly between consecutive sphere points.
@@ -41,6 +41,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     DropdownFloatParam,
@@ -117,7 +118,7 @@ class Zte3DPulseqSequence(Sequence):
 
         zte = timing["readout"]
         seq = pp.Sequence(opts)
-        zte(seq=seq, lin_idx=np.arange(cfg.num_shots))
+        zte.set_state(lin_idx=np.arange(cfg.num_shots)).add_to(seq)
 
         seq.set_definition("Name", "zte_3d")
         seq.set_definition("FOV", [cfg.fov_m, cfg.fov_m, cfg.fov_m])
@@ -147,16 +148,17 @@ def _read_protocol(prot: dict) -> _Config:
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    tilts = pp.make_golden_means_3d_tilt(cfg.num_shots, segment_length=cfg.num_shots)
-    directions = tilts[0]
-    excitation = pp.make_hard_pulse(
+    directions = design.make_noncartesian_projection_sampling(
+        (cfg.nx_ro, cfg.nx_ro, cfg.nx_ro), views=cfg.num_shots
+    ).flatten()
+    excitation = design.make_hard_pulse(
         np.deg2rad(cfg.flip_deg),
         duration=ZTE_RF_DURATION_S,
         system=opts,
         use="excitation",
     )
     try:
-        module = pp.make_zte_readout(
+        module = design.make_zte_readout(
             opts,
             cfg.fov_m,
             cfg.nx_ro,

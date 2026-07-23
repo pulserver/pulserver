@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pypulseq as pp
 import pytest
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _rf as rf
-from pulserver.pypulseq import _sampling as sampling
+from pulserver.design import _readout as readout
+from pulserver.design import _rf as rf
+from pulserver.design import _sampling as sampling
 from scipy.spatial.transform import Rotation
 
 OPTS_KW = dict(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
@@ -38,7 +38,7 @@ def test_zte_accepts_caller_rf_and_keeps_gradient_live_between_ordered_views():
         ]
     )
     module = readout.Zte(system, 0.22, 64, directions, excitation.rf, tr_s=2e-3)
-    module.set_state(lin_idx=np.arange(len(directions)), rf_phase_rad=np.arange(len(directions)) * 0.1)
+    module.set_state(lin_idx=np.arange(len(directions)), phase_offset_rad=np.arange(len(directions)) * 0.1)
 
     assert len(module) == module.num_views + 1  # one ramp-up + one block per acquired view
     assert _gradient_vector(module[0], "first") == pytest.approx(np.zeros(3))
@@ -136,4 +136,4 @@ def test_zte_validates_isotropy_view_order_and_state_schedules():
 
     module = readout.Zte(system, 0.22, 64, sampling.calc_uniform_angles(4), excitation.rf)
     with pytest.raises(ValueError, match="length 4"):
-        module.set_state(rf_phase_rad=[0.0, 0.1])
+        module.set_state(phase_offset_rad=[0.0, 0.1])

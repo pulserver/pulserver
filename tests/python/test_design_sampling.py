@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from pulserver.pypulseq import _sampling as sampling
+from pulserver.design import _sampling as sampling
 
 
 def _coords_grid(n: int) -> np.ndarray:

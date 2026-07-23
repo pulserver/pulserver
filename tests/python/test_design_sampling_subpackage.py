@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _sampling as sampling
+from pulserver.design import _readout as readout
+from pulserver.design import _sampling as sampling
 
 
 def _labels(blocks, name):
@@ -17,32 +17,32 @@ def _labels(blocks, name):
     return values
 
 
-def test_pattern_separates_support_and_order_and_is_immutable():
+def test_pattern_separates_locations_and_shots_and_is_immutable():
     support = np.array([[0, 0], [1, 2], [3, 4]])
     mask = np.zeros((4, 5), bool)
     mask[tuple(support.T)] = True
-    pattern = sampling.SamplingPattern(support, (np.array([2, 0]), np.array([1])), mask)
+    pattern = sampling.ScanLoop(support, (np.array([2, 0]), np.array([1])), mask)
     support[:] = -1
     mask[:] = False
     assert pattern.n_shots == 2
     assert pattern.n_samples == 3
-    assert pattern.inner_lengths == (2, 1)
+    assert pattern.shot_lengths == (2, 1)
     assert np.array_equal(pattern[0], [[3, 4], [0, 0]])
     assert np.array_equal(pattern.relative(0), [[0, 0], [-3, -4]])
     assert np.array_equal(pattern.increments(0), [[-3, -4]])
     assert np.array_equal(pattern.flatten(), [[3, 4], [0, 0], [1, 2]])
     with pytest.raises(ValueError):
-        pattern.support[0, 0] = 9
+        pattern.positions[0, 0] = 9
     with pytest.raises(ValueError):
-        pattern.order[0][0] = 9
+        pattern.shots[0][0] = 9
 
 
 def test_pattern_validates_mask_and_indices():
     with pytest.raises(ValueError, match="mask sample count"):
-        sampling.SamplingPattern([[0]], (np.array([0]),), np.zeros(2, bool))
+        sampling.ScanLoop([[0]], (np.array([0]),), np.zeros(2, bool))
     with pytest.raises(IndexError):
-        sampling.SamplingPattern([[0]], (np.array([1]),))
-    empty = sampling.SamplingPattern(np.empty((0, 2)), ())
+        sampling.ScanLoop([[0]], (np.array([1]),))
+    empty = sampling.ScanLoop(np.empty((0, 2)), ())
     assert empty.flatten().shape == (0, 2)
 
 
@@ -57,17 +57,17 @@ def test_generic_ordering():
 def test_cartesian_pattern_covers_mask_once(ordering):
     mask = np.zeros((7, 5), bool)
     mask[::2, ::2] = True
-    pattern = sampling.SamplingPattern.from_mask(mask, train_length=4, ordering=ordering, seed=3)
+    pattern = sampling.ScanLoop.from_mask(mask, train_length=4, ordering=ordering, seed=3)
     assert np.array_equal(pattern.mask, mask)
     assert pattern.n_samples == mask.sum()
-    assert sorted(np.concatenate(pattern.order)) == list(range(mask.sum()))
-    assert pattern.inner_lengths[-1] <= 4
+    assert sorted(np.concatenate(pattern.shots)) == list(range(mask.sum()))
+    assert pattern.shot_lengths[-1] <= 4
 
 
 def test_sampling_pattern_and_ordering_accept_masks():
     mask = np.zeros((8, 6), dtype=bool)
     mask[::2, ::2] = True
-    pattern = sampling.SamplingPattern.from_mask(mask, train_length=3, ordering="radial")
+    pattern = sampling.ScanLoop.from_mask(mask, train_length=3, ordering="radial")
     assert np.array_equal(pattern.mask, mask)
     shots = sampling.make_radial_order(mask, 3)
     assert sorted(index for shot in shots for index in shot) == list(range(mask.sum()))
@@ -83,17 +83,17 @@ def test_poisson_cpp_is_deterministic_and_keeps_acs():
 
 
 def test_relative_epi_plan_and_repeated_samples():
-    pattern = sampling.SamplingPattern.from_relative_shifts(
+    pattern = sampling.ScanLoop.from_relative_shifts(
         [[2, 1], [5, 1]],
         np.array([[[0, 0], [1, 1], [0, 0]], [[0, 0], [-1, 2], [-2, 2]]]),
         shape=(8, 8),
     )
     assert pattern.n_samples == 6
-    assert len(pattern.support) == 5
+    assert len(pattern.positions) == 5
     assert np.array_equal(pattern.relative(0), [[0, 0], [1, 1], [0, 0]])
     assert np.array_equal(pattern.increments(0), [[1, 1], [-1, -1]])
     with pytest.raises(IndexError):
-        sampling.SamplingPattern.from_relative_shifts([[0]], [[-1]], shape=(4,))
+        sampling.ScanLoop.from_relative_shifts([[0]], [[-1]], shape=(4,))
 
 
 def test_segmented_skipped_caipi_has_exact_union_and_order():
@@ -108,45 +108,46 @@ def test_segmented_skipped_caipi_has_exact_union_and_order():
 def test_epi_interleaving_accepts_arbitrary_outer_dimensions():
     pattern = sampling.epi.interleaved((8, 4), acceleration=(2, 2), num_shots=2, axis=0)
     assert pattern.n_samples == 8
-    assert pattern.inner_lengths == (4, 4)
+    assert pattern.shot_lengths == (4, 4)
     assert all(np.all(point % 2 == 0) for point in pattern.flatten())
 
 
-def test_radial_tilts_and_raga_keep_support_and_temporal_order():
+def test_radial_tilts_and_raga_keep_locations_and_temporal_order():
     golden = sampling.make_radial_tilt(4, scheme="golden")
     assert np.allclose(golden.flatten().ravel(), np.mod(np.arange(4) * np.pi / ((1 + np.sqrt(5)) / 2), np.pi))
     tiny = sampling.make_radial_tilt(3, scheme="tiny_golden", tiny_index=2)
     assert tiny.flatten()[1, 0] == pytest.approx(np.pi / ((1 + np.sqrt(5)) / 2 + 1))
     raga = sampling.make_radial_tilt(8, scheme="raga", tiny_index=1, approximation_order=5, segment_length=3)
-    assert len(raga.support) == 5
-    assert np.array_equal(raga.flatten().ravel(), raga.support[[0, 3, 1, 4, 2, 0, 3, 1], 0])
-    assert raga.inner_lengths == (3, 3, 2)
+    assert len(raga.positions) == 5
+    assert np.array_equal(raga.flatten().ravel(), raga.positions[[0, 3, 1, 4, 2, 0, 3, 1], 0])
+    assert raga.shot_lengths == (3, 3, 2)
 
 
 def test_spherical_orders_and_rotation_matrices():
     means = sampling.make_golden_means_3d_tilt(13, segment_length=5)
-    assert means.inner_lengths == (5, 5, 3)
-    assert np.allclose(np.linalg.norm(means.support, axis=1), 1)
+    assert means.shot_lengths == (5, 5, 3)
+    assert np.allclose(np.linalg.norm(means.positions, axis=1), 1)
     phy = sampling.make_spiral_phyllotaxis_tilt(15, 5)
-    assert np.array_equal(phy.shot_indices(2), [2, 7, 12])
-    assert np.allclose(np.linalg.norm(phy.support, axis=1), 1)
+    assert np.array_equal(phy.shots[2], [2, 7, 12])
+    assert np.allclose(np.linalg.norm(phy.positions, axis=1), 1)
     with pytest.raises(ValueError, match="Fibonacci"):
         sampling.make_spiral_phyllotaxis_tilt(12, 4)
     directions = np.array([[1, 0, 0], [-1, 0, 0], [0, 0, 1]], float)
-    rotations = sampling.SamplingPattern(directions, ((0, 1, 2),)).to_rotations()
+    rotations = sampling.ScanLoop(directions, (np.arange(3),)).to_rotations()
     assert np.allclose(rotations @ np.array([1.0, 0, 0]), directions)
     assert np.allclose(rotations @ np.swapaxes(rotations, 1, 2), np.eye(3))
     assert np.allclose(np.linalg.det(rotations), 1)
 
 
-def test_slice_groups_order_sms_and_frequency_offsets():
-    groups = sampling.make_slice_sampling(8, 0.005, order="interleaved", sms_factor=2)
-    assert [group.group_index for group in groups] == [0, 2, 1, 3]
-    assert groups[0].slice_indices == (0, 4)
-    assert sorted(index for group in groups for index in group.slice_indices) == list(range(8))
-    assert np.allclose(groups[0].frequency_offsets_hz(1000), [-17.5, 2.5])
+def test_slice_loop_orders_sms_shots_and_converts_positions_to_frequencies():
+    loop = sampling.make_slice_loop(8, 0.005, order="interleaved", sms_factor=2)
+    assert [int(shot[0]) for shot in loop.shots] == [0, 2, 1, 3]
+    assert list(loop.shots[0]) == [0, 4]
+    assert sorted(index for shot in loop.shots for index in shot) == list(range(8))
+    offsets = loop.to_frequencies(1000)
+    assert np.allclose(offsets[loop.shots[0]], [-17.5, 2.5])
     with pytest.raises(ValueError):
-        sampling.make_slice_sampling(7, 0.005, sms_factor=2)
+        sampling.make_slice_loop(7, 0.005, sms_factor=2)
 
 
 def test_line_and_epi_emit_absolute_labels_from_sampling_plan():
@@ -157,7 +158,7 @@ def test_line_and_epi_emit_absolute_labels_from_sampling_plan():
     assert _labels(blocks, "LIN") == [("labelset", 3)]
     assert _labels(blocks, "PAR") == [("labelset", 7)]
 
-    plan = sampling.SamplingPattern.from_relative_shifts([[4]], [[0], [2], [1]], shape=(16,))
+    plan = sampling.ScanLoop.from_relative_shifts([[4]], [[0], [2], [1]], shape=(16,))
     epi = readout.Epi2D(opts, (0.22, 0.22), (16, 16), 1, plan.relative(0))
     blocks = tuple(epi.set_state(lin_idx=4, labels=plan[0]))
     assert _labels(blocks, "LIN") == [("labelset", 4), ("labelset", 6), ("labelset", 5)]

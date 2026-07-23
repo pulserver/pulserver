@@ -43,6 +43,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     Description,
@@ -173,32 +174,36 @@ class GreNoncart2DPulseqSequence(Sequence):
 
         seq = pp.Sequence(opts)
 
-        rotations = pp.make_radial_tilt(cfg.num_shots, scheme=cfg.order_mode).to_rotations()
+        rotations = design.make_noncartesian_2d_sampling(
+            (cfg.nx_ro, cfg.nx_ro), views=cfg.num_shots, scheme=cfg.order_mode
+        ).to_rotations()
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
-        rf_phases = pp.make_rf_spoiling_schedule(cfg.num_shots * cfg.nslices * cfg.num_frames)
+        slices = design.make_slice_loop(
+            cfg.nslices, slice_step_m or cfg.slice_thickness_m, order="sequential"
+        )
+        offsets_hz = slices.to_frequencies(pulse.gradients[0].amplitude) if slice_step_m else None
+        frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+        rf_phases = design.make_rf_spoiling_schedule(cfg.num_shots * len(slices) * len(frames))
         phase_idx = 0
 
-        for frame in range(cfg.num_frames):
-            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+        for frame in range(len(frames)):
+            (phase_label,) = frames.labels(frame)
             if cfg.trigger != TriggerType.NONE:
                 seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
             else:
                 seq.add_block(phase_label)
             for shot, rotation in enumerate(rotations):
-                for sl in range(cfg.nslices):
-                    slice_offset_m = (sl - 0.5 * (cfg.nslices - 1)) * slice_step_m
+                for sl, band in enumerate(slices.shots):
+                    offset_hz = float(offsets_hz[band[0]]) if offsets_hz is not None else 0.0
                     phase = float(rf_phases[phase_idx])
-                    pulse.set_state(
-                        freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m,
-                        phase_offset_rad=phase,
-                    )
-                    for block_idx, block in enumerate(pulse):
-                        labels = (pp.make_label(type="SET", label="SLC", value=sl),) if block_idx == 0 else ()
-                        seq.add_block(*block, *labels)
+                    pulse.set_state(freq_offset_hz=offset_hz, phase_offset_rad=phase)
+                    pulse.set_labels(*slices.labels(sl))
+                    for block in pulse:
+                        seq.add_block(*block)
                     if te_delay is not None:
                         seq.add_block(te_delay)
                     readout_module.set_state(
-                        lin_idx=shot, adc_phase_rad=phase, rotation=rotation
+                        lin_idx=shot, phase_offset_rad=phase, rotation=rotation
                     )
                     for block in readout_module:
                         seq.add_block(*block)
@@ -252,21 +257,26 @@ def _read_protocol(prot: dict) -> _Config:
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | None = None):
     if n_inner is None:
         n_inner = cfg.nslices
-    pulse = pp.make_slice_selective_pulse(
+    pulse = design.make_slice_selective_pulse(
         np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, system=opts
     )
     if cfg.trajectory == "spiral":
-        readout_module = pp.make_spiral_readout(
+        readout_module = design.make_spiral_readout(
             opts,
             cfg.fov_m,
             cfg.nx_ro,
             cfg.num_shots,
-            slice_rephasing=pulse.rephasers[0],
+            slice_rephasing=pulse.rephasers,
         )
     else:
-        readout_module = pp.make_rosette_readout(
-            opts, cfg.fov_m, cfg.nx_ro, slice_rephasing=pulse.rephasers[0]
+        readout_module = design.make_rosette_readout(
+            opts, cfg.fov_m, cfg.nx_ro, slice_rephasing=pulse.rephasers
         )
+
+    # The readout folds the rephaser into its own prewinder, so the
+    # excitation must stop playing it -- otherwise the slice is rephased
+    # twice and every shot ends with a net selection moment.
+    pulse = pulse.without_rephasers()
 
     d_pulse = sum(pp.calc_duration(*block) for block in pulse)
     rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay

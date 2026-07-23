@@ -6,6 +6,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     Description,
@@ -109,13 +110,14 @@ class Bssfp3DPulseqSequence(Sequence):
         cfg = _read_protocol(dict_to_protocol(protocol))
         train = _make_train(opts, cfg)
         seq = pp.Sequence(opts)
-        for frame in range(cfg.num_frames):
-            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+        frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+        for frame in range(len(frames)):
+            (phase_label,) = frames.labels(frame)
             if cfg.trigger != TriggerType.NONE:
                 seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
                 phase_label = None
             for segment_idx in range(train.num_segments):
-                train.set_state(segment_idx=segment_idx, rf_phase_rad=0.0)
+                train.set_state(segment_idx=segment_idx, phase_offset_rad=0.0)
                 for block_idx, block in enumerate(train):
                     labels = (
                         (phase_label,)
@@ -159,14 +161,14 @@ def _read_protocol(prot) -> _Config:
 
 def _make_train(opts, cfg):
     if cfg.selective:
-        excitation = pp.make_slice_selective_pulse(
+        excitation = design.make_slice_selective_pulse(
             np.deg2rad(cfg.flip_deg), cfg.fov_z_m, duration=0.6e-3, system=opts
         )
     else:
-        excitation = pp.make_hard_pulse(
+        excitation = design.make_hard_pulse(
             np.deg2rad(cfg.flip_deg), duration=0.5e-3, system=opts
         )
-    return pp.make_bssfp_readout(
+    return design.make_bssfp_readout(
         opts,
         (cfg.fov_x_m, cfg.fov_y_m, cfg.fov_z_m),
         (cfg.nx, cfg.ny, cfg.nz),

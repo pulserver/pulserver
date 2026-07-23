@@ -9,6 +9,7 @@ defines them.
 
 pulserver
 sequences
+design
 pypulseq
 io
 recon

@@ -41,6 +41,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     Description,
@@ -58,10 +59,6 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-from pulserver.pypulseq._sampling import calc_chunk_indices
-from scipy.spatial.transform import Rotation
-
-encoding = readout = sampling = system = arbgrad = excitation = preparations = pp
 
 NUM_ECHOES = 1
 FLYBACK = True
@@ -191,7 +188,7 @@ class GreMprageRadial2DPulseqSequence(Sequence):
                 "info": "TE, TR, TI, or TE_prep infeasible for the requested gradients/ETL",
             }
 
-        n_segments = len(calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl))
+        n_segments = len(_view_loop(cfg))
         shot_s = timing["shot_s"]
         duration_s = shot_s * n_segments * cfg.nslices
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -200,114 +197,6 @@ class GreMprageRadial2DPulseqSequence(Sequence):
         prot = dict_to_protocol(protocol)
         cfg = _read_protocol(prot)
         return _make_public_sequence(opts, cfg, output_path)
-
-        timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
-
-        gz = timing["gz"]
-        gz_reph = timing["gz_reph"]
-        gz_spoil = timing["gz_spoil"]
-        echo = timing["echo"]
-        te_delay_s = timing["te_delay_s"]
-        tr_delay_s = timing["tr_delay_s"]
-
-        te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
-        tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
-        trecovery_delay = pp.make_delay(system.round_to_raster(cfg.trecovery_s)) if cfg.trecovery_s > 0.0 else None
-
-        seq = pp.Sequence(opts)
-
-        angles = arbgrad.shot_angles(cfg.num_shots, mode=cfg.order_mode)
-        segments = calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl)
-        slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
-
-        for sl in range(cfg.nslices):
-            slice_offset_m = (sl - 0.5 * (cfg.nslices - 1)) * slice_step_m
-            label_slc = pp.make_label(type="SET", label="SLC", value=sl)
-
-            for segment in segments:
-                segment_duration_s = len(segment) * cfg.tr_s
-                _emit_prep_module(seq, timing, cfg, segment_duration_s)
-
-                rf_phase_deg = 0.0
-                rf_phase_inc_deg = 0.0
-
-                for shot in segment:
-                    angle = float(angles[shot])
-                    rotation = pp.make_rotation(Rotation.from_euler("z", angle))
-                    label_lin = pp.make_label(type="SET", label="LIN", value=shot)
-
-                    if cfg.mt_enable:
-                        seq.add_block(system.copy_event(timing["rf_mt"]))
-                        seq.add_block(*timing["mt_spoiler"])
-
-                    rf_curr = system.copy_event(timing["rf"])
-                    rf_curr.freq_offset = gz.amplitude * slice_offset_m
-                    rf_curr.phase_offset = np.deg2rad(rf_phase_deg)
-                    adc_curr = system.copy_event(echo["adc"])
-                    adc_curr.phase_offset = rf_curr.phase_offset
-
-                    seq.add_block(rf_curr, gz, label_slc, label_lin)
-                    seq.add_block(echo["gx_pre"], gz_reph, rotation)
-                    if te_delay is not None:
-                        seq.add_block(te_delay)
-                    seq.add_block(echo["gx_echo"], adc_curr, rotation)
-                    seq.add_block(echo["gx_spoil"], gz_spoil, rotation)
-                    if tr_delay is not None:
-                        seq.add_block(tr_delay)
-
-                    rf_phase_deg = (rf_phase_deg + rf_phase_inc_deg) % 360.0
-                    rf_phase_inc_deg = (rf_phase_inc_deg + excitation.RF_SPOILING_INC_DEG) % 360.0
-
-                if trecovery_delay is not None:
-                    seq.add_block(trecovery_delay)
-
-        seq.set_definition("Name", "gre_mprage_radial_2d")
-        seq.set_definition(
-            "FOV",
-            [cfg.fov_m, cfg.fov_m, slice_step_m * cfg.nslices if cfg.nslices > 1 else cfg.slice_thickness_m],
-        )
-        seq.set_definition("TE", cfg.te_s)
-        seq.set_definition("TR", cfg.tr_s)
-        seq.set_definition("Trecovery", cfg.trecovery_s)
-        seq.set_definition("ETL", cfg.etl)
-        seq.set_definition("PreparationType", str(cfg.prep_type))
-        seq.set_definition("TI", cfg.ti_s)
-        seq.set_definition("TEprep", cfg.te_prep_s)
-        seq.set_definition("MTEnabled", cfg.mt_enable)
-        seq.set_definition("Flip", cfg.flip_deg)
-        seq.set_definition("ImagingMode", "2d")
-        seq.set_definition("Trajectory", "radial")
-        seq.set_definition("SpokeOrder", cfg.order_mode)
-        seq.set_definition("BandwidthHzPerPx", cfg.bandwidth_hz_px)
-        seq.set_definition("RfSpoilingIncDeg", excitation.RF_SPOILING_INC_DEG)
-        seq.set_definition("Nx", cfg.nx_ro)
-        seq.set_definition("NumShots", cfg.num_shots)
-        seq.set_definition("NumSlices", cfg.nslices)
-        pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
-
-
-def _emit_prep_module(seq, timing: dict, cfg: _Config, segment_duration_s: float) -> None:
-    """Emit the (inversion or T2-prep) magnetization-prep blocks for one
-    segment — see ``gre_mprage_radial_3d.py`` for the full rationale."""
-    if cfg.prep_type == PreparationType.INVERSION:
-        rf_inv = timing["rf_inv"]
-        spoiler = timing["prep_spoiler"]
-        spoiler_duration_s = timing["prep_spoiler_duration_s"]
-        ti_delay_s = preparations.ti_delay_seconds(cfg.ti_s, rf_inv, spoiler_duration_s, segment_duration_s, strict=False)
-        seq.add_block(system.copy_event(rf_inv))
-        seq.add_block(*spoiler)
-        if ti_delay_s > 0.0:
-            seq.add_block(pp.make_delay(ti_delay_s))
-    else:
-        t2prep = timing["t2prep"]
-        seq.add_block(system.copy_event(t2prep.rf90_down))
-        if t2prep.delay1_s > 0.0:
-            seq.add_block(pp.make_delay(t2prep.delay1_s))
-        seq.add_block(system.copy_event(t2prep.rf180))
-        if t2prep.delay2_s > 0.0:
-            seq.add_block(pp.make_delay(t2prep.delay2_s))
-        seq.add_block(system.copy_event(t2prep.rf90_up))
-        seq.add_block(*t2prep.spoiler)
 
 
 class _Config:
@@ -343,108 +232,11 @@ def _read_protocol(prot: dict) -> _Config:
     return cfg
 
 
-def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
-    system.apply_system_derates(opts)
-
-    rf, gz, gz_reph = excitation.slice_selective(opts, cfg.flip_deg, cfg.slice_thickness_m)
-
-    echo = readout.compute_readout_and_echo_train(
-        opts=opts,
-        ro_axis=RO_AXIS,
-        nx_ro=cfg.nx_ro,
-        fov_ro_m=cfg.fov_m,
-        bandwidth_hz_px=cfg.bandwidth_hz_px,
-        slice_thickness_m=cfg.slice_thickness_m,
-        num_echoes=NUM_ECHOES,
-        echo_spacing_s=0.0,
-        flyback=FLYBACK,
-        strict=strict,
-    )
-    if echo is None:
-        return None
-
-    gz_spoil = pp.make_trapezoid(channel="z", area=encoding.SPOIL_FACTOR_Z / cfg.slice_thickness_m, system=opts)
-
-    d_rf = pp.calc_duration(rf, gz)
-    d_pre = pp.calc_duration(echo["gx_pre"], gz_reph)
-    d_post = pp.calc_duration(echo["gx_spoil"], gz_spoil)
-
-    rf_center_s = pp.calc_rf_center(rf)[0]
-    min_te_s = (d_rf - rf_center_s) + d_pre + echo["adc_center_s"]
-    te_delay_s = cfg.te_s - min_te_s
-    if te_delay_s < -1e-9 and strict:
-        return None
-    if te_delay_s < 0.0:
-        te_delay_s = 0.0
-
-    per_view_s = d_rf + d_pre + te_delay_s + echo["echo_train_span_s"] + d_post
-    if cfg.mt_enable:
-        mt_module = preparations.mt_saturation(opts, voxel_size_m=cfg.fov_m / cfg.nx_ro)
-        rf_mt = mt_module.rf
-        mt_spoiler = mt_module.spoiler
-        per_view_s += mt_module.duration_s
-    else:
-        rf_mt = None
-        mt_spoiler = None
-
-    min_block_s = per_view_s
-    tr_delay_s = cfg.tr_s - min_block_s
-    if tr_delay_s < -1e-9 and strict:
-        return None
-    if tr_delay_s < 0.0:
-        tr_delay_s = 0.0
-
-    voxel_size_m = cfg.fov_m / cfg.nx_ro
-    worst_segment_len = max(1, min(cfg.etl, cfg.num_shots))
-    worst_segment_duration_s = worst_segment_len * cfg.tr_s
-
-    if cfg.prep_type == PreparationType.INVERSION:
-        inv_module = preparations.inversion(opts, cfg.inv_mode, voxel_size_m)
-        rf_inv = inv_module.rf
-        prep_spoiler = inv_module.spoiler
-        prep_spoiler_duration_s = inv_module.spoiler_duration_s
-        ti_delay_s = inv_module.ti_delay_s(cfg.ti_s, worst_segment_duration_s, strict)
-        if ti_delay_s is None:
-            return None
-        prep_duration_s = inv_module.rf_duration_s + prep_spoiler_duration_s + ti_delay_s
-        t2prep = None
-    else:
-        t2prep = preparations.t2_prep(
-            opts, cfg.te_prep_s, refocus_mode=cfg.refocus_mode, voxel_size_m=voxel_size_m, strict=strict
-        )
-        if t2prep is None:
-            return None
-        prep_spoiler = t2prep.spoiler
-        prep_spoiler_duration_s = pp.calc_duration(*t2prep.spoiler)
-        prep_duration_s = t2prep.duration_s
-        rf_inv = None
-
-    shot_s = prep_duration_s + worst_segment_duration_s + cfg.trecovery_s
-
-    return {
-        "rf": rf,
-        "gz": gz,
-        "gz_reph": gz_reph,
-        "gz_spoil": gz_spoil,
-        "echo": echo,
-        "te_delay_s": te_delay_s,
-        "tr_delay_s": tr_delay_s,
-        "min_block_s": min_block_s,
-        "rf_inv": rf_inv,
-        "t2prep": t2prep,
-        "prep_spoiler": prep_spoiler,
-        "prep_spoiler_duration_s": prep_spoiler_duration_s,
-        "rf_mt": rf_mt,
-        "mt_spoiler": mt_spoiler,
-        "shot_s": shot_s,
-    }
-
-
 def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
-    pulse = pp.make_slice_selective_pulse(
+    pulse = design.make_slice_selective_pulse(
         np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, system=opts
     )
-    radial = pp.make_radial_readout(
+    radial = design.make_radial_readout(
         opts,
         cfg.fov_m,
         cfg.nx_ro,
@@ -452,9 +244,9 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
         slice_rephasing=pulse.rephasers[0],
     )
     prep = (
-        pp.make_inversion_pulse(adiabatic=cfg.inv_mode == "adiabatic", system=opts)
+        design.make_inversion_pulse(adiabatic=cfg.inv_mode == "adiabatic", system=opts)
         if cfg.prep_type == PreparationType.INVERSION
-        else pp.make_t2prep_pulse(
+        else design.make_t2prep_pulse(
             cfg.te_prep_s,
             adiabatic=cfg.refocus_mode == "adiabatic",
             voxel_size=cfg.fov_m / cfg.nx_ro,
@@ -462,7 +254,7 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
         )
     )
     mt = (
-        pp.make_mt_pulse(voxel_size=cfg.fov_m / cfg.nx_ro, system=opts)
+        design.make_mt_pulse(voxel_size=cfg.fov_m / cfg.nx_ro, system=opts)
         if cfg.mt_enable
         else None
     )
@@ -500,21 +292,36 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
     }
 
 
+def _view_loop(cfg: _Config):
+    """Radial view chronology, grouped into one shot per prepared segment."""
+    return design.make_noncartesian_2d_sampling(
+        (cfg.nx_ro, cfg.nx_ro),
+        views=cfg.num_shots,
+        scheme=cfg.order_mode,
+        segment_length=cfg.etl,
+    )
+
+
 def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None:
     timing = _compute_public(opts, cfg, strict=False)
     seq = pp.Sequence(opts)
-    segments = calc_chunk_indices(list(range(cfg.num_shots)), cfg.etl)
-    rotations = pp.make_radial_tilt(cfg.num_shots, scheme=cfg.order_mode).to_rotations()
-    phases = pp.make_rf_spoiling_schedule(cfg.num_shots * cfg.nslices)
+    views = _view_loop(cfg)
+    segments = views.shots
+    rotations = views.to_rotations()
+    phases = design.make_rf_spoiling_schedule(cfg.num_shots * cfg.nslices)
     te_delay = pp.make_delay(timing["te_delay_s"]) if timing["te_delay_s"] > 0 else None
     tr_delay = pp.make_delay(timing["tr_delay_s"]) if timing["tr_delay_s"] > 0 else None
     prep_delay = pp.make_delay(timing["prep_delay_s"]) if timing["prep_delay_s"] > 0 else None
     recovery_s = round(cfg.trecovery_s / opts.block_duration_raster) * opts.block_duration_raster
     recovery = pp.make_delay(recovery_s) if recovery_s > 0 else None
     slice_step = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
+    slices = design.make_slice_loop(
+        cfg.nslices, slice_step or cfg.slice_thickness_m, order="sequential"
+    )
+    offsets_hz = slices.to_frequencies(timing["pulse"].gradients[0].amplitude) if slice_step else None
     phase_idx = 0
-    for sl in range(cfg.nslices):
-        position = (sl - 0.5 * (cfg.nslices - 1)) * slice_step
+    for sl, band in enumerate(slices.shots):
+        offset_hz = float(offsets_hz[band[0]]) if offsets_hz is not None else 0.0
         for segment in segments:
             for block in timing["prep"]:
                 seq.add_block(*block)
@@ -525,17 +332,14 @@ def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None
                     for block in timing["mt"]:
                         seq.add_block(*block)
                 phase = float(phases[phase_idx])
-                timing["pulse"].set_state(
-                    freq_offset_hz=timing["pulse"].gradients[0].amplitude * position,
-                    phase_offset_rad=phase,
-                )
-                for block_idx, block in enumerate(timing["pulse"]):
-                    labels = (pp.make_label(type="SET", label="SLC", value=sl),) if block_idx == 0 else ()
-                    seq.add_block(*block, *labels)
+                timing["pulse"].set_state(freq_offset_hz=offset_hz, phase_offset_rad=phase)
+                timing["pulse"].set_labels(*slices.labels(sl))
+                for block in timing["pulse"]:
+                    seq.add_block(*block)
                 if te_delay is not None:
                     seq.add_block(te_delay)
                 timing["radial"].set_state(
-                    lin_idx=int(shot), adc_phase_rad=phase, rotation=rotations[shot]
+                    lin_idx=int(shot), phase_offset_rad=phase, rotation=rotations[shot]
                 )
                 for block in timing["radial"]:
                     seq.add_block(*block)

@@ -1,259 +1,345 @@
-# Sampling plans
+# Scan loops
 
-Pulserver exposes two deliberately separate levels:
+Pulserver describes an acquisition with one loop type and **no** object that
+owns the loop nesting:
 
-- `AcquisitionPlan` is the normal sequence-author API. Its factories accept
-  plain UI-facing numeric values: image matrix, acceleration, ETL or segment
-  length, frames, slice geometry, SMS and non-Cartesian view count. Iterating
-  it yields one `Acquisition` per sequence iteration.
-- `SamplingPattern` is the lower-level support/order representation. It joins
-  a custom boolean mask to an ordering, or describes raw angle/direction
-  support. Mask generators and ordering functions can therefore be replaced
-  independently.
+- `ScanLoop` — a table of **positions**, a grouping of them into **shots** (one
+  shot being one excitation's worth of the loop), and one `EncodingAxis` per
+  position column saying what the numbers mean. Every sampling and scheduling
+  factory returns one.
+- the loop nesting itself — plain `for` statements in the sequence, over
+  frames, contrasts, averages, inversion times, or anything else.
 
-Neither level accepts a protocol object, appends blocks or depends on a
-sequence module. An
-`Acquisition` merely carries numeric state: `lin_idx`, `par_idx`, absolute
-`labels`, a relative EPI traversal, slice positions/frequencies and, for a
-non-Cartesian scan, a rotation matrix.
+There is deliberately no type that flattens frames × slices × shots into one
+iterable. That flattening is what makes it hard to put a trigger at the top of
+a frame, an inversion at the top of a shot, or a dummy TR anywhere; keeping the
+loop in the plugin costs three lines and buys all of it back.
 
-## Which high-level factory should I call?
+A `ScanLoop` never accepts a protocol object, appends blocks, or depends on a
+sequence module. It carries numbers, and the counter each column is labelled
+with.
+
+## A loop is not a k-space object
+
+An encoding position is a set of frequency offsets, gradient scalings and
+rotations. Nothing about that restricts it to `ky`, `kz`, `z` or an interleave
+angle: a frame of a dynamic series, an inversion time, a b-value, a saturation
+offset are the same table under a different axis declaration. So one type
+covers every dimension of a scan, and the only thing that distinguishes them is
+which counter they emit.
+
+| Loop | `positions` hold | axis `kind` | counter |
+|---|---|---|---|
+| Cartesian k-space | `(ky[, kz])` integer indices | `index` | `LIN`, `PAR` |
+| non-Cartesian | spoke angles or unit directions | `angle`, `direction` | `LIN` |
+| slices / SMS | positions along the axis (m) | `position` | `SLC` |
+| frames, dynamics | frame number | `index` | `REP` |
+| contrasts | TI, b-value, offset, … | `value` | `SET`, `PHS` |
+| averages | average number | `index` | `AVG` |
+
+The echo dimension is the exception, and it is not an omission: `ECO` lives
+inside the readout, because a multiecho train's echoes are blocks of one shot
+rather than iterations of a loop. `num_echoes` belongs to `make_line_readout`,
+and the readout emits `SET ECO 0` / `INC ECO 1` itself.
+
+## Counters, and why they are not optional
+
+A loop carries no gradients and no events — it carries the numbers those are
+derived from, plus the counter that lets the reconstruction find the data
+again:
+
+```python
+sampling = design.make_cartesian_sampling((256, 128), acceleration=2)
+
+shot   = sampling[0]        # absolute (ky[, kz]) -> lin_idx / par_idx
+scale  = sampling.to_scales()  # [-1, 1) -> pp.scale_grad(gy, ...)
+labels = sampling.labels(0)    # the SET LIN event for shot 0
+```
+
+`labels(shot)` returns one `SET <label>` event per axis. Pass it to
+`SequenceModule.set_labels` for every loop the readout does *not* consume
+through `set_state`:
+
+```python
+excitation.set_labels(*frames.labels(f), *slices.labels(s))
+```
+
+**Emitting them is what makes the MRD `FIRST_IN_*` / `LAST_IN_*` flags
+correct.** Those flags are not written by the sequence. The interpreter
+computes them by comparing each acquisition's counter against the *observed*
+minimum and maximum of that counter over the scan. A frame loop that never
+emits `REP` therefore reports `min == max == 0`, and every acquisition comes
+back flagged both first *and* last in repetition — which is exactly the failure
+that makes a dynamic reconstruction fire once per line instead of once per
+frame. `label_limits()` is the loop's own prediction of where those flags will
+land:
+
+```python
+sampling.label_limits()      # {'LIN': (0, 254)}
+frames.label_limits()        # {'REP': (0, 39)}
+```
+
+The label value is the position *value* on an `index` axis — its numbers
+already are the encoding indices — and the position *index* on every other
+kind, because angles, metres and inversion times are not counters but their
+order is. That is the rule the shipped modules have always followed; declaring
+the axis is what makes it executable rather than a convention you have to
+remember.
+
+## Which factory should I call?
 
 | Acquisition | Factory | Important knobs |
 |---|---|---|
-| 2D/3D GRE, including multiecho | `make_cartesian_sampling` | `train_length=1`, matrix, acceleration, frames/slices |
+| 2D/3D GRE, including multiecho | `make_cartesian_sampling` | `train_length=1`, matrix, acceleration |
 | 2D/3D FSE | `make_cartesian_sampling` | `train_length=ETL`, FSE ordering |
 | 2D/3D MPRAGE or segmented GRE | `make_cartesian_sampling` | segment length, `ordering="centric"` |
-| 2D/3D EPI, structural or fMRI | `make_epi_sampling` | acceleration, segments, CAIPI shift, frames |
-| 2D radial/spiral/rosette | `make_noncartesian_2d_sampling` | views per frame, slices, frames, angle scheme |
-| 3D stack of trajectories | `make_noncartesian_stack_sampling` | views per partition, partition order, frames |
-| 3D projection | `make_noncartesian_projection_sampling` | views per frame, direction scheme, frames |
+| 2D/3D EPI | `make_epi_sampling` | acceleration, segments, CAIPI shift |
+| 2D radial/spiral/rosette | `make_noncartesian_2d_sampling` | view count, angle scheme |
+| 3D stack of trajectories | `make_noncartesian_2d_sampling` + `calc_traversal_order` | views, partition order |
+| 3D projection | `make_noncartesian_projection_sampling` | views, direction scheme |
+| the slice loop of any 2D scan | `make_slice_loop` | slice count, spacing, order, SMS |
+| frames, contrasts, averages, any other counter | `make_counter_loop` | count or value table, `label`, order |
 
-The readout's echo count is not a sampling dimension. GRE and multiecho GRE
-therefore share the same plan; `num_echoes` belongs to
-`make_line_readout`.
+Every one of them fills in its own axes, so `to_scales()` needs no matrix
+argument and `labels()` needs no label argument.
 
 ## Cartesian GRE, FSE and MPRAGE
 
-The same factory covers these families because their difference at the plan
-level is how many encoded locations occur inside one excitation.
+One factory covers these families because their only difference at the
+sampling level is how many encoded locations occur inside one excitation.
 
 ```python
+import pulserver.design as design
 import pulserver.pypulseq as pp
 
-gre2d = pp.make_cartesian_sampling(
-    (128, 128), acceleration=2, calibration=16,
-    num_slices=32, slice_spacing_m=5e-3,
-)
-gre3d = pp.make_cartesian_sampling(
-    (128, 128, 64), acceleration=(2, 2), calibration=(16, 8),
-)
-fse2d = pp.make_cartesian_sampling(
-    (128, 128), train_length=16, ordering="radial",
-    num_slices=32, slice_spacing_m=5e-3,
-)
-fse3d = pp.make_cartesian_sampling(
-    (128, 128, 64), train_length=32, ordering="radial_adaptive",
-)
-mprage2d = pp.make_cartesian_sampling(
-    (256, 192), train_length=96, ordering="centric",
-    num_slices=24, slice_spacing_m=5e-3,
-)
-mprage3d = pp.make_cartesian_sampling(
-    (256, 192, 160), acceleration=(2, 2),
-    train_length=128, ordering="centric",
+gre2d = design.make_cartesian_sampling((128, 128), acceleration=2, calibration=16)
+gre3d = design.make_cartesian_sampling((128, 128, 64), acceleration=(2, 2), calibration=(16, 8))
+fse2d = design.make_cartesian_sampling((128, 128), train_length=16, ordering="radial")
+fse3d = design.make_cartesian_sampling((128, 128, 64), train_length=32, ordering="radial_adaptive")
+mprage3d = design.make_cartesian_sampling(
+    (256, 192, 160), acceleration=(2, 2), train_length=128, ordering="centric",
 )
 ```
 
-The loop consumes only numeric entry properties:
+The loop consumes integer coordinates:
 
 ```python
-for acquisition in fse3d:
-    readout.set_state(
-        lin_idx=acquisition.lin_idx,
-        par_idx=acquisition.par_idx,
-    )
+for shot in fse3d:
+    readout.set_state(lin_idx=shot[:, 0], par_idx=shot[:, 1])
     for block in readout:
         seq.add_block(*block)
 ```
 
-For 2D plans, the slice/SMS schedule is deliberately separate from the
-Cartesian ``(ky, kz)`` mask and its echo-train ordering. Its rows select one
-physical slice for conventional imaging or ``sms_factor`` simultaneous bands;
-it covers every requested position once. Slice spacing fixes the physical
-positions, and the selective-gradient amplitude later converts them to RF
-frequency offsets:
+An FSE shot is a whole train, so `shot[:, 0]` is the per-echo `ky` schedule.
+A GRE shot has one entry, so `int(shot[0, 0])` is the line.
+
+`to_scales()` converts the whole table at once, but it is indexed like
+`positions` — on an accelerated loop those are only the sampled lines, so index
+it with `scales[loop.shots[i]]`, never `scales[ky]`. Converting each shot's own
+coordinates with `calc_encoding_scales` avoids the question. The extents come
+from the *encoded matrix*, not from the sampled support, so acceleration and
+partial Fourier drop views without rescaling the ones that remain.
+
+## The slice loop
+
+For a 2D scan the slice loop is a separate `ScanLoop`, nested outside or
+inside the k-space loop as the sequence requires. Its rows select one physical
+slice, or `sms_factor` simultaneous bands; it covers every requested position
+exactly once. Slice spacing fixes the physical positions, and the
+selective-gradient amplitude converts them to RF frequency offsets:
 
 ```python
-plan = pp.make_cartesian_sampling(
-    (128, 128), num_slices=48, slice_spacing_m=3e-3, sms_factor=3,
-)
-frequency_table_hz = plan.slice_frequency_table_hz(gz.amplitude)
+slices = design.make_slice_loop(48, spacing_m=3e-3, order="interleaved", sms_factor=3)
+offsets = slices.to_frequencies(excitation.gradients[0].amplitude)
 
-for acquisition in plan:
-    offsets_hz = acquisition.frequency_offsets_hz(gz.amplitude)
+for s, slice_shot in enumerate(slices.shots):
+    excitation.set_state(freq_offset_hz=float(offsets[slice_shot[0]]))
+    excitation.set_labels(*slices.labels(s))
+    for shot in sampling:
+        ...
 ```
 
-## EPI: structural and multiple-volume
+Iterate `slices` when you want positions, `slices.shots` when you want
+indices, and `labels(s)` when you want the `SLC` counter. Pass the whole
+`offsets[slice_shot]` row rather than `[0]` to an SMS multiband pulse;
+`labels(s)` then names the first band, and `labels(s, position=n)` any other.
 
-`frames=1` is structural; larger values produce the repeated volume loop used
-by fMRI. In 2D, slice groups sit inside each frame. In 3D, each frame directly
-covers `(ky, kz)`.
+## Frames, contrasts and averages
+
+`make_counter_loop` builds the loop over any counter that is neither k-space
+nor slices. Two forms, chosen by what you pass:
 
 ```python
-epi2d = pp.make_epi_sampling(
-    (96, 96), acceleration=2, segments=1,
-    frames=200, num_slices=48, slice_spacing_m=3e-3,
-)
-epi3d = pp.make_epi_sampling(
-    (96, 96, 32), acceleration=(2, 2), segments=2,
-    caipi_shift=1, frames=100,
+frames     = design.make_counter_loop(40, label="REP")                  # a bare counter
+inversions = design.make_counter_loop([0.1, 0.3, 1.0, 2.5], label="SET")  # values it schedules
+averages   = design.make_counter_loop(4, label="AVG")
+```
+
+The loop does not know what its values *drive*. Converting an inversion time
+into a delay, or a saturation offset into `freq_offset_hz`, is the sequence's
+business — which is exactly why one factory covers every contrast dimension
+instead of one per physics:
+
+```python
+for f in range(len(frames)):
+    for c in range(len(inversions)):
+        inversion.set_state().set_labels(*frames.labels(f), *inversions.labels(c))
+        inversion.add_to(seq)
+        seq.add_block(pp.make_delay(float(inversions[c][0, 0])))
+        for shot in sampling:
+            readout.set_state(lin_idx=int(shot[0, 0])).add_to(seq)
+```
+
+`order=` reorders the *visits* without renumbering the data — the counter
+follows the position, so `make_counter_loop(6, label="AVG", order="center_out")`
+still labels average 2 as `AVG 2`, it just acquires it first.
+
+`with_axes` retargets an existing loop's counter without rebuilding it, for
+when a rotation loop indexes frames rather than views:
+
+```python
+from pulserver import EncodingAxis
+
+phases = design.make_noncartesian_2d_sampling(matrix, views=n).with_axes(
+    EncodingAxis("PHS", kind="angle")
 )
 ```
 
-An EPI plan may contain more than one relative traversal. Build one reusable
-readout per plan shot, then use the absolute entry state for each volume:
+## EPI: structural and dynamic
+
+`make_epi_sampling` describes one volume's interleaves. Repeating them is the
+frame loop, and nothing in the loop object changes:
 
 ```python
+epi3d = design.make_epi_sampling((96, 96, 32), acceleration=(2, 2), segments=2, caipi_shift=1)
+frames = design.make_counter_loop(n_frames, label="REP")
+
 readouts = [
-    pp.make_epi_readout(
-        system, fov, matrix, epi3d.sampling.n_shots,
-        epi3d.sampling.relative(shot),
-    )
-    for shot in range(epi3d.sampling.n_shots)
+    design.make_epi_readout(system, fov, matrix, epi3d.n_shots, epi3d.relative(shot))
+    for shot in range(epi3d.n_shots)
 ]
 
-for acquisition in epi3d:
-    readout = readouts[acquisition.shot]
-    readout.set_state(
-        lin_idx=acquisition.lin_idx,
-        par_idx=acquisition.par_idx,
-        labels=acquisition.labels,
-    )
-    for block in readout:
-        seq.add_block(*block)
+for f in range(len(frames)):
+    for shot, readout in enumerate(readouts):
+        start = epi3d[shot][0]
+        readout.set_state(lin_idx=int(start[0]), par_idx=int(start[1]), labels=epi3d[shot])
+        readout.set_labels(*frames.labels(f))
+        for block in readout:
+            seq.add_block(*block)
 ```
 
-## Non-Cartesian structural and dynamic plans
+A loop may contain more than one traversal, which is why the readout is
+built per shot from `relative(shot)` and only the absolute start varies per
+frame.
 
-The 2D factory applies to any rotated in-plane base trajectory, not only
-radial. Golden/RAGA angles continue chronologically across slice and frame by
-default, so different slices and dynamic windows see different tilts. Set
-`continuous=False` when every outer location must replay an identical set.
+## Non-Cartesian: continuous or replayed chronology
+
+`views` is the length of the whole angular chronology, not a per-frame count.
+Whether golden angles continue across frames and slices or replay at each one
+is decided by *where you call `iter()`* — there is no `continuous=` switch:
 
 ```python
-inplane = pp.make_noncartesian_2d_sampling(
-    (192, 192), views_per_frame=300, frames=20,
-    num_slices=24, slice_spacing_m=5e-3,
-    scheme="tiny_golden", tiny_index=2,
+tilt = design.make_noncartesian_2d_sampling(
+    (192, 192), views=n_frames * n_slices * n_views, scheme="tiny_golden", tiny_index=2,
 )
 
-for acquisition in inplane:
-    readout.set_state(
-        lin_idx=acquisition.view,
-        rotation=acquisition.rotation,
-    )
+rotations = iter(tilt.to_rotations())          # continuous across the whole scan
+for f in range(len(frames)):
+    for s, slice_shot in enumerate(slices.shots):
+        for view in range(n_views):
+            readout.set_state(lin_idx=view, rotation=next(rotations))
+            readout.set_labels(*frames.labels(f), *slices.labels(s))
+            for block in readout:
+                seq.add_block(*block)
 ```
 
-Stacks add a Cartesian partition index while allowing the in-plane angle to
-continue across both partition and frame:
+Move `rotations = iter(...)` inside the slice loop and every slice replays the
+same angular set.
+
+A stack of trajectories is the same in-plane loop with a partition loop
+around it:
 
 ```python
-stack = pp.make_noncartesian_stack_sampling(
-    (192, 192, 64), views_per_partition=200, frames=10,
-    partition_order="center_out", scheme="golden",
-)
-
-for acquisition in stack:
-    readout.set_state(
-        lin_idx=acquisition.view,
-        par_idx=acquisition.par_idx,
-        rotation=acquisition.rotation,
-    )
+rotations = iter(design.make_noncartesian_2d_sampling(matrix, views=nz * n_views).to_rotations())
+partitions = design.make_counter_loop(nz, label="PAR", order="center_out")
+for par in partitions:
+    for view in range(n_views):
+        readout.set_state(lin_idx=view, par_idx=int(par[0, 0]), rotation=next(rotations))
 ```
 
-Projection plans provide full 3D rotations whose directions vary in both
-azimuth and polar angle:
+3D projections need no partition loop:
 
 ```python
-projection = pp.make_noncartesian_projection_sampling(
-    (192, 192, 192), views_per_frame=20_000,
-    frames=10, scheme="golden_means",
+projection = design.make_noncartesian_projection_sampling(
+    (192, 192, 192), views=20_000, scheme="golden_means",
 )
-
-for acquisition in projection:
-    readout.set_state(
-        lin_idx=acquisition.view,
-        rotation=acquisition.rotation,
-    )
+for view, rotation in enumerate(projection.to_rotations()):
+    readout.set_state(lin_idx=view, rotation=rotation)
 ```
 
-## Lower-level mask and ordering composition
+## When a factory is almost right
 
-Use this layer when a built-in high-level sampling factory is almost right but
-one stage must be replaced. Build the `SamplingPattern` directly, then nest it
-under whatever outer loops your sequence needs — plain `for` loops over the
-non-imaging dimensions (frames, contrasts, averages) are the natural way to
-write this, with no helper required to flatten them.
+Support and ordering are independent stages, and both are reachable without
+leaving the public API.
+
+Replace only the **ordering**: every scan-loop factory takes `ordering=`
+(`linear`, `centric`, `radial`, `radial_adaptive`, `shuffling`), and
+`make_slice_loop` / `make_counter_loop` take `order=` (`sequential`,
+`interleaved`, `reverse`, `center_out`, `outside_in`).
+
+Replace only the **support**: `make_cartesian_sampling` covers `mask="uniform"`,
+`"caipi"`, `"random"` and `"poisson"`. Beyond those, hand a boolean array to
+{meth}`~pulserver.ScanLoop.from_mask` and keep the shipped ordering:
 
 ```python
 import numpy as np
+from pulserver import ScanLoop
 
-mask = pp.make_poisson_disc_mask(
-    (128, 64), 4.0, calib=(16, 8), seed=0,
-)
-sampling = pp.SamplingPattern.from_mask(
-    mask, train_length=16, ordering="radial",
-)
-for frame in range(3):
-    for contrast in range(2):
-        for shot in sampling:
-            pass  # set the readout state from `shot`, `frame`, `contrast`
+mask = np.zeros((128, 64), dtype=bool)
+mask[::4, ::2] = True
+mask[56:72, 28:36] = True
+sampling = ScanLoop.from_mask(mask, train_length=16, ordering="radial")
 ```
 
-The stages remain independently available:
+`from_mask` checks that the ordering covers every sampled location exactly
+once, so a hand-written mask cannot silently drop or duplicate lines.
+{meth}`~pulserver.ScanLoop.from_relative_shifts` does the same for
+EPI-style relative traversals, and a `ScanLoop` can always be constructed
+directly from positions and shots when neither fits.
 
-- Ordering functions (`make_linear_order`, `make_centric_order`,
-  `make_radial_order`, `make_radial_adaptive_order`, `make_shuffling_order`)
-  accept coordinates or a boolean mask and return support indices grouped by
-  train.
-- Mask functions (`make_random_mask`, `make_poisson_disc_mask`,
-  `make_caipirinha_mask`) return boolean
-  masks only.
-- Individual tilt generators (`calc_uniform_angles`, `calc_golden_angles`,
-  `calc_tiny_golden_angles`, `calc_raga_angles`) return flat angle arrays.
-- Low-level EPI ordering (`make_skipped_caipi_order`) and tilt generators
-  (`make_radial_tilt`, `make_golden_means_3d_tilt`,
-  `make_spiral_phyllotaxis_tilt`) expose support and ordering without adding
-  frames or slices.
+Replace the **angles**: `make_noncartesian_2d_sampling` takes `scheme=`
+(`linear`, `golden`, `tiny_golden`, `raga`) with `period`, `tiny_index` and
+`approximation_order`, plus `segment_length` for prepared trains;
+`make_noncartesian_projection_sampling` takes `scheme=` (`golden_means`,
+`phyllotaxis`) and `interleaves`.
+
+A loop built by hand from bare positions infers its axes: integer columns
+become `LIN`/`PAR` encoding indices, three float columns a `direction` axis,
+anything else a neutral `value` axis that labels by index and leaves every
+converter available. Declare them explicitly when you want a different counter
+or a matrix extent the positions cannot imply:
+
+```python
+from pulserver import EncodingAxis, ScanLoop
+
+loop = ScanLoop(positions, shots, axes=(EncodingAxis("LIN", "index", size=192),))
+```
 
 ## Relative EPI traversals
 
-`SamplingPattern.from_relative_shifts` is the escape hatch for EPTI, zigzag
-or another custom blipped train:
+`ScanLoop.from_relative_shifts` is the escape hatch for EPTI, zigzag or
+another custom blipped train — a shot is a start point plus per-echo
+increments:
 
 ```python
-sampling = pp.SamplingPattern.from_relative_shifts(
+sampling = ScanLoop.from_relative_shifts(
     starts=[[8, 2], [9, 2]],
     shifts=[[[0, 0], [2, 1], [4, 2]],
             [[0, 0], [2, -1], [4, -2]]],
     shape=(32, 8),
 )
-for frame in range(20):
-    for shot in sampling:
-        pass  # configure one EPI readout from `frame` and `shot`
-```
-
-## Slice grouping
-
-`make_slice_sampling` remains useful when building a custom loop. Its
-selection mask is over physical slices, not phase encodes, and its ordering
-therefore never changes a Cartesian echo-train order:
-
-```python
-slice_sampling = pp.make_slice_sampling(
-    48, spacing_m=3e-3, order="interleaved", sms_factor=3,
-)
+sampling.increments(0)   # blip areas to play between echoes
+sampling[0]              # absolute coordinates to label
 ```
 
 ## References

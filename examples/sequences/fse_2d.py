@@ -56,6 +56,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     BoolParam,
@@ -73,8 +74,6 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
-
-encoding = readout = sampling = system = excitation = preparations = pp
 
 # Refocusing scheme (TRAPS on/off) has no native GE CV — carried as an
 # opuser custom variable, same convention as gre_multiecho_2d.py's
@@ -181,7 +180,7 @@ class Fse2DPulseqSequence(Sequence):
                 "info": "TE (ESP) too short for the 90/180/crushers/diffusion/readout, or TR too short",
             }
 
-        n_shots = _n_shots(cfg)
+        n_shots = len(_segment_loop(cfg))
         duration_s = cfg.tr_s * float(n_shots)
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
 
@@ -218,9 +217,11 @@ class Fse2DPulseqSequence(Sequence):
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
-def _n_shots(cfg: _Config) -> int:
-    sampled_pe = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-    return len(range(0, len(sampled_pe), cfg.etl))
+def _segment_loop(cfg: _Config):
+    """Phase-encode loop chunked into echo trains — one shot per train."""
+    return design.make_cartesian_sampling(
+        (cfg.nx_ro, cfg.ny_pe), acceleration=cfg.ry, train_length=cfg.etl
+    )
 
 
 class _Config:
@@ -256,16 +257,16 @@ def _read_protocol(prot: dict) -> _Config:
 
 
 def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
-    excitation_pulse = pp.make_slice_selective_pulse(
+    excitation_pulse = design.make_slice_selective_pulse(
         np.pi / 2.0, cfg.slice_thickness_m, system=opts
     )
-    refocusing = pp.make_refocusing_pulse(
+    refocusing = design.make_refocusing_pulse(
         slice_thickness=cfg.slice_thickness_m, system=opts
     )
-    flips = pp.make_traps_schedule(
+    flips = design.make_traps_schedule(
         cfg.etl, np.deg2rad(cfg.refocus_flip_deg), variable=cfg.refocus_variable
     )
-    train = pp.make_fse_readout(
+    train = design.make_fse_readout(
         opts,
         (cfg.fov_ro_m, cfg.fov_pe_m),
         (cfg.nx_ro, cfg.ny_pe),
@@ -279,7 +280,7 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
     diffusion = None
     if cfg.b_value_s_mm2 > 0.0:
         try:
-            diffusion = pp.make_diffusion_prep(
+            diffusion = design.make_diffusion_prep(
                 cfg.b_value_s_mm2,
                 voxel_size=cfg.fov_ro_m / cfg.nx_ro,
                 system=opts,
@@ -315,28 +316,32 @@ def _build_public(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
     diffusion = timing["diffusion"]
     gap = pp.make_delay(timing["gap_s"]) if timing["gap_s"] > 0.0 else None
     tr_delay = pp.make_delay(timing["tr_delay_s"]) if timing["tr_delay_s"] > 0.0 else None
-    sampled = pp.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-    segments = [sampled[start : start + cfg.etl] for start in range(0, len(sampled), cfg.etl)]
+    segments = _segment_loop(cfg)
     rotations = (
-        pp.make_golden_means_3d_tilt(cfg.n_directions).to_rotations()
+        design.make_noncartesian_projection_sampling(
+            (cfg.nx_ro, cfg.nx_ro, cfg.nx_ro), views=cfg.n_directions
+        ).to_rotations()
         if diffusion is not None
         else [None]
     )
     slice_step = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
+    slices = design.make_slice_loop(
+        cfg.nslices, slice_step or cfg.slice_thickness_m, order="sequential"
+    )
+    offsets_hz = slices.to_frequencies(excitation_pulse.gradients[0].amplitude) if slice_step else None
     for rotation in rotations:
-        for sl in range(cfg.nslices):
-            position = (sl - 0.5 * (cfg.nslices - 1)) * slice_step
-            freq = excitation_pulse.gradients[0].amplitude * position
+        for sl, band in enumerate(slices.shots):
+            freq = float(offsets_hz[band[0]]) if offsets_hz is not None else 0.0
             for segment in segments:
-                indices = np.resize(segment, cfg.etl)
+                indices = np.resize(segment[:, 0].astype(int), cfg.etl)
                 if diffusion is not None:
                     diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotation)
                     for block in diffusion:
                         seq.add_block(*block)
                 excitation_pulse.set_state(freq_offset_hz=freq)
-                for block_idx, block in enumerate(excitation_pulse):
-                    labels = (pp.make_label(type="SET", label="SLC", value=sl),) if block_idx == 0 else ()
-                    seq.add_block(*block, *labels)
+                excitation_pulse.set_labels(*slices.labels(sl))
+                for block in excitation_pulse:
+                    seq.add_block(*block)
                 if gap is not None:
                     seq.add_block(gap)
                 train.set_state(lin_idx=indices, freq_offset_hz=freq)
@@ -345,356 +350,6 @@ def _build_public(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
                 if tr_delay is not None:
                     seq.add_block(tr_delay)
     return len(segments), len(rotations)
-
-
-def _compute_timing_legacy(opts: pp.Opts, cfg: _Config, strict: bool):
-    """Legacy (unfused) timing — used only for diffusion-weighted shots
-    (``b_value > 0``). See ``_fse_common.py`` module docstring for why
-    gradient surgery is scoped to ``b_value == 0``."""
-    system.apply_system_derates(opts)
-
-    rf90, gz90, gz_reph = excitation.slice_selective(opts, readout.EXCITATION_FLIP_DEG, cfg.slice_thickness_m)
-    rf180, gz180 = readout.build_refocusing_pulse(opts, cfg.slice_thickness_m)
-
-    echo = readout.compute_readout_and_echo_train(
-        opts=opts,
-        ro_axis=cfg.ro_axis,
-        nx_ro=cfg.nx_ro,
-        fov_ro_m=cfg.fov_ro_m,
-        bandwidth_hz_px=cfg.bandwidth_hz_px,
-        slice_thickness_m=cfg.slice_thickness_m,
-        num_echoes=1,
-        echo_spacing_s=0.0,
-        # FSE has no flyback/bipolar echo-train concept (unlike GRE multi-
-        # echo): with num_echoes=1, `flyback` is inert in this helper — the
-        # per-echo readout polarity and prephase/rewind here are built
-        # manually below, following the CPMG net-zero-per-cycle rule (see
-        # make_sequence), not the GRE-style flyback rewind.
-        flyback=False,
-        strict=strict,
-    )
-    if echo is None:
-        return None
-
-    max_pe_area = 0.5 * cfg.ny_pe * (1.0 / cfg.fov_pe_m)
-    gy_template = pp.make_trapezoid(channel=cfg.pe_axis, area=max_pe_area, system=opts)
-
-    crusher = readout.build_z_crusher(opts, cfg.slice_thickness_m)
-
-    delta_s, separation_s = preparations.diffusion_timing(cfg.te_s)
-    grad_t_per_m = preparations.required_gradient_t_per_m(cfg.b_value_s_mm2, delta_s, separation_s, opts.gamma)
-    max_grad_t_per_m = opts.max_grad / opts.gamma
-    if grad_t_per_m > max_grad_t_per_m:
-        if strict:
-            return None
-        grad_t_per_m = max_grad_t_per_m
-    diff_grad_duration_s = delta_s if cfg.b_value_s_mm2 > 0.0 else 0.0
-
-    d90_s = pp.calc_duration(rf90, gz90)
-    c90_s = pp.calc_rf_center(rf90)[0]
-    d180_s = pp.calc_duration(rf180, gz180)
-    c180_s = pp.calc_rf_center(rf180)[0]
-
-    d_gz_reph_s = pp.calc_duration(gz_reph)
-    d_crusher_s = pp.calc_duration(crusher)
-    d_pre_s = pp.calc_duration(echo["gx_pre"], gy_template)
-    adc_center_s = echo["adc_center_s"]
-
-    half_loop_fixed_first_s = d_gz_reph_s + diff_grad_duration_s
-    half_loop_fixed_steady_s = diff_grad_duration_s + d_pre_s + adc_center_s
-
-    # First half-period (90 -> first 180) and steady half-period (every
-    # subsequent 180-to-readout / readout-to-180 gap) can have different
-    # fixed overhead (gz_reph only applies once, right after the 90), so
-    # tau_first uses the 90-side overhead and tau_steady uses the
-    # readout-side overhead — both target half_esp_s = TE/2.
-    delays_first = readout.fse_timing(
-        cfg.te_s, d90_s, c90_s, d180_s, c180_s, d_crusher_s, half_loop_fixed_first_s, strict
-    )
-    delays_steady = readout.fse_timing(
-        cfg.te_s, d90_s, c90_s, d180_s, c180_s, d_crusher_s, half_loop_fixed_steady_s, strict
-    )
-    if delays_first is None or delays_steady is None:
-        return None
-    tau_first_s, _ = delays_first
-    _, tau_steady_s = delays_steady
-
-    # The post-readout rewind reuses gx_pre (same -0.5*area trapezoid, same
-    # duration) — see the CPMG net-zero-per-cycle rationale in make_sequence.
-    line_period_s = (
-        d180_s + d_crusher_s + tau_steady_s + d_pre_s + pp.calc_duration(echo["gx_echo"], echo["adc"])
-        + d_pre_s + tau_steady_s + d_crusher_s
-    )
-    n_lines_first_shot = min(cfg.etl, cfg.ny_pe)
-
-    min_block_s = d90_s + d_gz_reph_s + d_crusher_s + tau_first_s + n_lines_first_shot * line_period_s
-    tr_delay_s = cfg.tr_s - min_block_s
-    if tr_delay_s < -1e-9 and strict:
-        return None
-    if tr_delay_s < 0.0:
-        tr_delay_s = 0.0
-
-    return {
-        "rf90": rf90,
-        "gz90": gz90,
-        "gz_reph": gz_reph,
-        "rf180": rf180,
-        "gz180": gz180,
-        "echo": echo,
-        "gy_template": gy_template,
-        "crusher": crusher,
-        "delta_s": delta_s,
-        "grad_t_per_m": grad_t_per_m,
-        "tau_first_s": tau_first_s,
-        "tau_steady_s": tau_steady_s,
-        "tr_delay_s": tr_delay_s,
-        "min_block_s": min_block_s,
-    }
-
-
-def _build_legacy(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
-    """Diffusion-weighted path (``b_value > 0``): unfused design (separate
-    crusher + padding delay), unchanged from before gradient surgery. See
-    ``_fse_common.py`` module docstring for scope rationale. Returns
-    ``(n_shots, n_directions)`` for the caller's ``set_definition`` calls."""
-    timing = _compute_timing_legacy(opts=opts, cfg=cfg, strict=False)
-
-    gz90 = timing["gz90"]
-    gz_reph = timing["gz_reph"]
-    gz180 = timing["gz180"]
-    echo = timing["echo"]
-    gy_template = timing["gy_template"]
-    tau_first_s = timing["tau_first_s"]
-    tau_steady_s = timing["tau_steady_s"]
-    tr_delay_s = timing["tr_delay_s"]
-
-    tau_first_delay = pp.make_delay(tau_first_s) if tau_first_s > 0.0 else None
-    tau_steady_delay = pp.make_delay(tau_steady_s) if tau_steady_s > 0.0 else None
-    tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
-
-    delta_k_pe = 1.0 / cfg.fov_pe_m
-    phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
-    max_pe_area = float(np.max(np.abs(phase_areas)))
-    sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-    shot_starts = list(range(0, len(sampled_pe), cfg.etl))
-
-    refocus_flip_schedule = readout.build_refocus_flip_schedule(cfg.etl, cfg.refocus_flip_deg, cfg.refocus_variable)
-
-    slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
-    n_directions = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
-    directions = preparations.diffusion_directions(cfg.n_directions) if cfg.b_value_s_mm2 > 0.0 else [None]
-
-    for direction in directions[:n_directions]:
-        diff_grad = (
-            preparations.build_diffusion_gradients(opts, direction, timing["delta_s"], timing["grad_t_per_m"])
-            if direction is not None
-            else []
-        )
-
-        for sl in range(cfg.nslices):
-            slice_offset_m = (sl - 0.5 * (cfg.nslices - 1)) * slice_step_m
-
-            for shot_start in shot_starts:
-                segment = sampled_pe[shot_start : shot_start + cfg.etl]
-
-                rf90 = system.copy_event(timing["rf90"])
-                rf90.freq_offset = gz90.amplitude * slice_offset_m
-                seq.add_block(rf90, gz90)
-                seq.add_block(gz_reph)
-                seq.add_block(timing["crusher"])
-                if diff_grad:
-                    seq.add_block(*diff_grad)
-                if tau_first_delay is not None:
-                    seq.add_block(tau_first_delay)
-
-                for echo_idx, ky in enumerate(segment):
-                    rf180 = readout.scale_refocusing_pulse(timing["rf180"], refocus_flip_schedule[echo_idx])
-                    rf180.freq_offset = gz180.amplitude * slice_offset_m
-                    seq.add_block(rf180, gz180)
-                    seq.add_block(timing["crusher"])
-                    if echo_idx == 0 and diff_grad:
-                        seq.add_block(*diff_grad)
-                    if tau_steady_delay is not None:
-                        seq.add_block(tau_steady_delay)
-
-                    y_scale = phase_areas[ky] / max_pe_area if max_pe_area > 0.0 else 0.0
-                    gy_pre = pp.scale_grad(gy_template, y_scale)
-                    gy_reph = pp.scale_grad(gy_template, -y_scale)
-                    label_lin = pp.make_label(type="SET", label="LIN", value=ky)
-
-                    # Every 180 flips the sign of the accumulated k_x (pypulseq's
-                    # calculate_kspace models refocusing as an exact sign flip), so
-                    # the post-readout gradient must bring the NET x-moment for the
-                    # whole prephase+readout+rewind cycle back to exactly ZERO (not
-                    # to the pre-prephase state, i.e. NOT the "-full area" flyback
-                    # rewind _gre_common builds for ordinary GRE echo trains, which
-                    # assumes no intervening refocusing). -half + full - half = 0,
-                    # so the rewind reuses the SAME -0.5*area trapezoid as the
-                    # prephaser — applied every echo, unconditionally. Getting this
-                    # wrong was caught as a real, verified-via-calculate_kspace
-                    # asymmetric-kx bug in an earlier draft (see fse_2d.py history).
-                    seq.add_block(echo["gx_pre"], gy_pre)
-                    seq.add_block(echo["gx_echo"], echo["adc"], label_lin)
-                    seq.add_block(echo["gx_pre"], gy_reph)
-
-                    if tau_steady_delay is not None:
-                        seq.add_block(tau_steady_delay)
-                    seq.add_block(timing["crusher"])
-
-                if tr_delay is not None:
-                    seq.add_block(tr_delay)
-
-    return len(shot_starts), n_directions
-
-
-def _compute_timing_surgery(opts: pp.Opts, cfg: _Config, strict: bool):
-    """Gradient-surgery timing (default, ``b_value == 0``) — see
-    ``_fse_common.py`` module docstring."""
-    system.apply_system_derates(opts)
-
-    rf90, gz90_auto, gz_reph = excitation.slice_selective(opts, readout.EXCITATION_FLIP_DEG, cfg.slice_thickness_m)
-    rf180, gz180_auto = readout.build_refocusing_pulse(opts, cfg.slice_thickness_m)
-
-    # GS2/GS4 are flat-only (the ramp is supplied externally by GS1/GS3/
-    # GS5/GS7), so the RF's own delay must be just rf_dead_time — not the
-    # gz-rise-time-inflated delay `make_sinc_pulse(..., return_gz=True)`
-    # sets by default for a self-contained trapezoid.
-    rf90.delay = opts.rf_dead_time
-    rf180.delay = opts.rf_dead_time
-
-    gz_ex_amp = gz90_auto.amplitude
-    gz_ref_amp = gz180_auto.amplitude
-
-    ro_events = readout.build_surgery_readout(opts, cfg.ro_axis, cfg.nx_ro, cfg.fov_ro_m, cfg.bandwidth_hz_px)
-
-    max_pe_area = 0.5 * cfg.ny_pe * (1.0 / cfg.fov_pe_m)
-
-    t_ex_wd_s = excitation.DEFAULT_SLICE_RF_DURATION_S + opts.rf_dead_time + opts.rf_ringdown_time
-    t_ref_wd_s = readout.RF_REFOCUS_TIME_S + opts.rf_dead_time + opts.rf_ringdown_time
-
-    c90_s = pp.calc_rf_center(rf90)[0]
-    c180_s = pp.calc_rf_center(rf180)[0]
-
-    # dg_s is only for GS1/GS2_FALL (plain, unconstrained 0<->gz_ex_amp
-    # ramps); GS3/GS5/GS7/GR5/GR7 each independently resolve their own leg
-    # ramp times via `_bridge` — see `surgery_ramp_time_s`'s docstring for
-    # why a single shared dG is unsafe for those.
-    dg_s = readout.surgery_ramp_time_s(opts, [gz_ex_amp])
-    d_gz_reph_s = pp.calc_duration(gz_reph)
-
-    delays = readout.surgery_timing(
-        cfg.te_s, t_ex_wd_s, c90_s, dg_s, d_gz_reph_s, t_ref_wd_s, c180_s, ro_events["adc_center_s"], strict
-    )
-    if delays is None:
-        return None
-    t_spex_s, t_sp_s = delays
-
-    crusher_area = encoding.CRUSHER_CYCLES_Z / cfg.slice_thickness_m
-
-    try:
-        slice_chain = readout.build_slice_surgery_chain(
-            opts, gz_ex_amp, gz_ref_amp, crusher_area, t_ex_wd_s, t_ref_wd_s, t_spex_s, t_sp_s, dg_s
-        )
-        readout_chain = readout.build_readout_surgery_chain(
-            opts, cfg.ro_axis, ro_events["readout_area"], ro_events["gx_flat_amp"], ro_events["flat_time_s"], t_sp_s,
-        )
-        # No explicit rise_time: pypulseq's own shortest-feasible-ramp solve
-        # for a plain 0->amp->0 trapezoid is self-consistent (no cross-
-        # channel amplitude coupling the way GR5/GR7's bridges have).
-        gy_template = pp.make_trapezoid(channel=cfg.pe_axis, area=max_pe_area, duration=t_sp_s, system=opts)
-    except (ValueError, AssertionError):
-        if strict:
-            return None
-        raise
-
-    line_period_s = t_ref_wd_s + t_sp_s + ro_events["flat_time_s"] + t_sp_s
-    n_lines_first_shot = min(cfg.etl, cfg.ny_pe)
-
-    min_block_s = (
-        dg_s + t_ex_wd_s + dg_s + d_gz_reph_s + t_spex_s  # GS1, GS2, GS2_FALL, gz_reph, GS3
-        + n_lines_first_shot * line_period_s
-        + t_ref_wd_s + t_sp_s  # trailing GS4 (no RF) + GS5 close-out
-    )
-    tr_delay_s = cfg.tr_s - min_block_s
-    if tr_delay_s < -1e-9 and strict:
-        return None
-    if tr_delay_s < 0.0:
-        tr_delay_s = 0.0
-
-    return {
-        "rf90": rf90,
-        "rf180": rf180,
-        "gz_reph": gz_reph,
-        "gz_ex_amp": gz_ex_amp,
-        "gz_ref_amp": gz_ref_amp,
-        "readout": ro_events,
-        "slice_chain": slice_chain,
-        "readout_chain": readout_chain,
-        "gy_template": gy_template,
-        "tr_delay_s": tr_delay_s,
-        "min_block_s": min_block_s,
-    }
-
-
-def _build_surgery(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
-    """Default path (``b_value == 0``): gradient-surgery design — see
-    ``_fse_common.py`` module docstring. Returns ``(n_shots,
-    n_directions)`` for the caller's ``set_definition`` calls
-    (``n_directions`` is always 1 here — diffusion uses ``_build_legacy``)."""
-    timing = _compute_timing_surgery(opts=opts, cfg=cfg, strict=False)
-
-    chain = timing["slice_chain"]
-    rchain = timing["readout_chain"]
-    ro_events = timing["readout"]
-    gy_template = timing["gy_template"]
-    tr_delay_s = timing["tr_delay_s"]
-    tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
-
-    delta_k_pe = 1.0 / cfg.fov_pe_m
-    phase_areas = (np.arange(cfg.ny_pe) - 0.5 * cfg.ny_pe) * delta_k_pe
-    max_pe_area = float(np.max(np.abs(phase_areas)))
-    sampled_pe = sampling.calc_sampled_lines(cfg.ny_pe, cfg.ry, 0)
-    shot_starts = list(range(0, len(sampled_pe), cfg.etl))
-
-    refocus_flip_schedule = readout.build_refocus_flip_schedule(cfg.etl, cfg.refocus_flip_deg, cfg.refocus_variable)
-
-    slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
-
-    for sl in range(cfg.nslices):
-        slice_offset_m = (sl - 0.5 * (cfg.nslices - 1)) * slice_step_m
-
-        for shot_start in shot_starts:
-            segment = sampled_pe[shot_start : shot_start + cfg.etl]
-
-            rf90 = system.copy_event(timing["rf90"])
-            rf90.freq_offset = timing["gz_ex_amp"] * slice_offset_m
-            seq.add_block(chain["GS1"])
-            seq.add_block(chain["GS2"], rf90)
-            seq.add_block(chain["GS2_FALL"])
-            seq.add_block(timing["gz_reph"])
-            seq.add_block(chain["GS3"])
-
-            for echo_idx, ky in enumerate(segment):
-                rf180 = readout.scale_refocusing_pulse(timing["rf180"], refocus_flip_schedule[echo_idx])
-                rf180.freq_offset = timing["gz_ref_amp"] * slice_offset_m
-                seq.add_block(chain["GS4"], rf180)
-
-                y_scale = phase_areas[ky] / max_pe_area if max_pe_area > 0.0 else 0.0
-                gy_pre = pp.scale_grad(gy_template, y_scale)
-                gy_reph = pp.scale_grad(gy_template, -y_scale)
-                label_lin = pp.make_label(type="SET", label="LIN", value=ky)
-
-                seq.add_block(chain["GS5"], rchain["GR5"], gy_pre)
-                seq.add_block(rchain["GR6"], ro_events["adc"], label_lin)
-                seq.add_block(chain["GS7"], rchain["GR7"], gy_reph)
-
-            seq.add_block(chain["GS4"])  # close-out flat hold, no RF (writeTSE.m convention)
-            seq.add_block(chain["GS5"])  # ramp back down to 0
-
-            if tr_delay is not None:
-                seq.add_block(tr_delay)
-
-    return len(shot_starts), 1
 
 
 PLUGIN = Fse2DPulseqSequence()

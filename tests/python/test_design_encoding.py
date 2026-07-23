@@ -7,33 +7,42 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.pypulseq import _gradients as encoding
+from pulserver.design import _gradients as encoding  # noqa: E402
+from pulserver.pypulseq import scale_grad  # noqa: E402
+from pulserver.design import calc_encoding_scales
 
 
-def test_phase_encode_gradient_defaults() -> None:
+def test_phase_encode_gradient_is_fixed_by_resolution_alone() -> None:
     opts = pp.Opts()
-    template, areas = encoding.make_phase_encoding(opts, "y", 0.22, 64)
-    delta_k = 1.0 / 0.22
-    assert len(areas) == 64
-    assert areas[0] == pytest.approx(-32 * delta_k)
-    assert areas[-1] == pytest.approx(31 * delta_k)
-    assert abs(template.area) == pytest.approx(float(np.max(np.abs(areas))))
+    fov, ny = 0.22, 64
+    template = encoding.make_phase_encoding(opts, "y", fov / ny)
+
+    # The extreme step of an ny-view encode over `fov`, reached without ever
+    # naming fov or ny: (ny / 2) * (1 / fov) == 1 / (2 * resolution).
+    assert template.channel == "y"
+    assert template.area == pytest.approx(0.5 * ny / fov)
+
+    # Any (fov, matrix) pair with the same resolution gives the same gradient.
+    same = encoding.make_phase_encoding(opts, "y", (2 * fov) / (2 * ny))
+    assert same.area == pytest.approx(template.area)
 
 
-def test_phase_encode_gradient_partial_fourier_shrinks_template() -> None:
+def test_phase_encode_gradient_scales_to_every_view() -> None:
     opts = pp.Opts()
-    full, _ = encoding.make_phase_encoding(opts, "y", 0.22, 64)
-    pf, areas = encoding.make_phase_encoding(opts, "y", 0.22, 64, partial_fourier=0.75)
-    assert abs(pf.area) < abs(full.area)
-    assert len(areas) == 64
+    fov, ny = 0.22, 64
+    template = encoding.make_phase_encoding(opts, "y", fov / ny)
+
+    areas = [scale_grad(template, s).area for s in calc_encoding_scales(np.arange(ny), ny)]
+    assert areas[0] == pytest.approx(-32 / fov)
+    assert areas[-1] == pytest.approx(31 / fov)
 
 
-def test_phase_encode_gradient_rejects_bad_args() -> None:
+def test_phase_encode_gradient_rejects_bad_resolution() -> None:
     opts = pp.Opts()
-    with pytest.raises(ValueError):
-        encoding.make_phase_encoding(opts, "y", 0.22, 64, partial_fourier=0.0)
-    with pytest.raises(ValueError):
-        encoding.make_phase_encoding(opts, "y", 0.22, 64, acceleration=0.5)
+    with pytest.raises(ValueError, match="resolution_m"):
+        encoding.make_phase_encoding(opts, "y", 0.0)
+    with pytest.raises(ValueError, match="resolution_m"):
+        encoding.make_phase_encoding(opts, "y", -1e-3)
 
 
 def test_crusher_by_cycles_matches_explicit_area() -> None:

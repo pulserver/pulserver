@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pypulseq as pp
 import pytest
-from pulserver.pypulseq import _readout as readout
-from pulserver.pypulseq import _rf as rf
+from pulserver.design import _readout as readout
+from pulserver.design import _rf as rf
 from scipy.spatial.transform import Rotation
 
 

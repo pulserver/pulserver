@@ -40,6 +40,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     Description,
@@ -174,9 +175,9 @@ class Epi3DPulseqSequence(Sequence):
             }
 
         n_shots = _n_shots(cfg)
-        sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+        par_loop = design.make_cartesian_sampling((cfg.nx_ro, cfg.npar), acceleration=cfg.rz)
         n_dirs = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
-        duration_s = cfg.tr_s * float(n_shots) * float(len(sampled_par)) * float(n_dirs) * cfg.num_frames
+        duration_s = cfg.tr_s * float(n_shots) * float(len(par_loop)) * float(n_dirs) * cfg.num_frames
         if cfg.ttl_output:
             duration_s += 1e-3 * cfg.num_frames
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -199,23 +200,26 @@ class Epi3DPulseqSequence(Sequence):
         seq = pp.Sequence(opts)
 
         shot_starts = list(range(0, cfg.ny_pe, cfg.etl))
-        sampled_par = pp.calc_sampled_lines(cfg.npar, cfg.rz, 0)
+        par_loop = design.make_cartesian_sampling((cfg.nx_ro, cfg.npar), acceleration=cfg.rz)
         n_directions = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
         rotations = (
-            pp.make_golden_means_3d_tilt(cfg.n_directions).to_rotations()
+            design.make_noncartesian_projection_sampling(
+            (cfg.nx_ro, cfg.nx_ro, cfg.nx_ro), views=cfg.n_directions
+        ).to_rotations()
             if diffusion is not None
             else [None]
         )
 
         ttl = pp.make_digital_output_pulse("ext1", duration=1e-3, system=opts) if cfg.ttl_output else None
-        for frame in range(cfg.num_frames):
-            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+        frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+        for frame in range(len(frames)):
+            (phase_label,) = frames.labels(frame)
             if ttl is not None:
                 seq.add_block(ttl, phase_label)
             else:
                 seq.add_block(phase_label)
             for rotation in rotations[:n_directions]:
-                for par in sampled_par:
+                for par_shot in par_loop:
                     for ky_start in shot_starts:
                         if diffusion is not None:
                             diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotation)
@@ -226,7 +230,7 @@ class Epi3DPulseqSequence(Sequence):
                             seq.add_block(*block, *labels)
                         if te_delay is not None:
                             seq.add_block(te_delay)
-                        epi.set_state(lin_idx=ky_start, par_idx=int(par))
+                        epi.set_state(lin_idx=ky_start, par_idx=int(par_shot[0, 0]))
                         for block in epi:
                             seq.add_block(*block)
 
@@ -295,18 +299,18 @@ def _read_protocol(prot: dict) -> _Config:
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     pulse = (
-        pp.make_spsp_pulse(
+        design.make_spsp_pulse(
             np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m,
             cfg.spsp_bandwidth_hz, system=opts,
         )
         if cfg.spsp
-        else pp.make_slice_selective_pulse(
+        else design.make_slice_selective_pulse(
             np.deg2rad(cfg.flip_deg), cfg.slab_thickness_m, system=opts
         )
     )
     n_lines = min(cfg.etl, cfg.ny_pe)
     mask = np.column_stack((np.arange(n_lines, dtype=int), np.zeros(n_lines, dtype=int)))
-    epi = pp.make_epi_readout(
+    epi = design.make_epi_readout(
         opts,
         (cfg.fov_ro_m, cfg.fov_pe_m, cfg.slice_spacing_m * cfg.npar),
         (cfg.nx_ro, cfg.ny_pe, cfg.npar),
@@ -318,7 +322,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     diffusion = None
     if cfg.b_value_s_mm2 > 0.0:
         try:
-            diffusion = pp.make_diffusion_prep(
+            diffusion = design.make_diffusion_prep(
                 cfg.b_value_s_mm2,
                 voxel_size=cfg.fov_ro_m / cfg.nx_ro,
                 system=opts,
@@ -337,7 +341,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     te_delay_s = max(0.0, te_delay_s)
     prep_duration = 0.0 if diffusion is None else diffusion.duration
     min_block_s = prep_duration + d_pulse + te_delay_s + epi.duration
-    n_inner = 1 if strict else len(pp.calc_sampled_lines(cfg.npar, cfg.rz, 0))
+    n_inner = 1 if strict else len(design.make_cartesian_sampling((cfg.nx_ro, cfg.npar), acceleration=cfg.rz))
     tr_delay_s = round((cfg.tr_s - n_inner * min_block_s) / raster) * raster
     if tr_delay_s < -1e-9 and strict:
         return None

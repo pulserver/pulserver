@@ -7,7 +7,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.pypulseq import _readout as readout
+from pulserver.design import _readout as readout
 
 OPTS_KW = dict(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 
@@ -152,7 +152,7 @@ def test_multiecho_z_crusher_has_no_echo_parity_residual() -> None:
     train = readout.MultiEchoSE(opts, fov_x_m=0.22, nx=128, etl=etl, refoc_rf=rf, refoc_gz=gz)
 
     seq = pp.Sequence(opts)
-    train(seq=seq)
+    train.set_state().add_to(seq)
     k_traj_adc = seq.calculate_kspace()[0]
 
     kz_echoes = [k_traj_adc[2, e * train.n_samples + train.echo_sample] for e in range(etl)]
@@ -168,7 +168,7 @@ def test_fse3d_kz_offset_is_uniform_across_echo_parity() -> None:
     par_idx = np.arange(etl) % nz
     lin_idx = np.full(etl, nz // 2)
     seq = pp.Sequence(opts)
-    train(seq=seq, lin_idx=lin_idx, par_idx=par_idx)
+    train.set_state(lin_idx=lin_idx, par_idx=par_idx).add_to(seq)
     k_traj_adc = seq.calculate_kspace()[0]
 
     kz_echoes = np.array([k_traj_adc[2, e * train.n_samples + train.echo_sample] for e in range(etl)])

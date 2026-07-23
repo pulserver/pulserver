@@ -1,0 +1,1295 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>pulserver.ScanLoop &#8212; pulserver  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css?v=7f9a90b1" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/generated/pulserver/pulserver.ScanLoop';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="pulserver.SequenceModule" href="pulserver.SequenceModule.html" />
+    <link rel="prev" title="pulserver.run_cli" href="pulserver.run_cli.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">pulserver  documentation</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting started</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../how_to.html">How-to guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../how-to/write_a_plugin_with_modules.html">How to write a sequence plugin with the design toolbox</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../how-to/customise_a_plugin.html">How to customise a plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../how-to/write_a_new_module.html">How to write a new module or loop structure</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.Opts.html">pulserver.pypulseq.Opts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.Sequence.html">pulserver.pypulseq.Sequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.get_supported_labels.html">pulserver.pypulseq.get_supported_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.make_label.html">pulserver.pypulseq.make_label</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.make_rf_shim.html">pulserver.pypulseq.make_rf_shim</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.make_rotation.html">pulserver.pypulseq.make_rotation</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../../pulserver.html"><code class="docutils literal notranslate"><span class="pre">pulserver</span></code></a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="pulserver.PulseqSequence.html">pulserver.PulseqSequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.Sequence.html">pulserver.Sequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.run_cli.html">pulserver.run_cli</a></li>
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">pulserver.ScanLoop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.SequenceModule.html">pulserver.SequenceModule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.EncodingAxis.html">pulserver.EncodingAxis</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.BoolParam.html">pulserver.BoolParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.Description.html">pulserver.Description</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.DropdownFloatParam.html">pulserver.DropdownFloatParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.DropdownIntParam.html">pulserver.DropdownIntParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.StringListParam.html">pulserver.StringListParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.TypeinFloatParam.html">pulserver.TypeinFloatParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.TypeinIntParam.html">pulserver.TypeinIntParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.BoolKey.html">pulserver.BoolKey</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.EnumKey.html">pulserver.EnumKey</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.FloatKey.html">pulserver.FloatKey</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.ImagingMode.html">pulserver.ImagingMode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.InputMode.html">pulserver.InputMode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.IntKey.html">pulserver.IntKey</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.ParamKind.html">pulserver.ParamKind</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.PreparationType.html">pulserver.PreparationType</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.SequenceType.html">pulserver.SequenceType</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.TriggerType.html">pulserver.TriggerType</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.UIParam.html">pulserver.UIParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.Validate.html">pulserver.Validate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.dict_to_protocol.html">pulserver.dict_to_protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.make_enum_param.html">pulserver.make_enum_param</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.protocol_to_dict.html">pulserver.protocol_to_dict</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.validate_protocol.html">pulserver.validate_protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.params.html">pulserver.params</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../sequences.html"><code class="docutils literal notranslate"><span class="pre">pulserver.sequences</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre.html">pulserver.sequences.design_gre</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_2d.html">pulserver.sequences.design_gre_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_3d.html">pulserver.sequences.design_gre_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_multiecho_2d.html">pulserver.sequences.design_gre_multiecho_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_multiecho_3d.html">pulserver.sequences.design_gre_multiecho_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_fse_2d.html">pulserver.sequences.design_fse_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_fse_3d.html">pulserver.sequences.design_fse_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_bssfp_2d.html">pulserver.sequences.design_bssfp_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_bssfp_3d.html">pulserver.sequences.design_bssfp_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_mprage_2d.html">pulserver.sequences.design_mprage_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_mprage_3d.html">pulserver.sequences.design_mprage_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_epi_2d.html">pulserver.sequences.design_epi_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_epi_3d.html">pulserver.sequences.design_epi_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_noncart_2d.html">pulserver.sequences.design_gre_noncart_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_noncart_3d.html">pulserver.sequences.design_gre_noncart_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_radial_2d.html">pulserver.sequences.design_gre_radial_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_radial_3d.html">pulserver.sequences.design_gre_radial_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_mprage_radial_2d.html">pulserver.sequences.design_gre_mprage_radial_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_mprage_radial_3d.html">pulserver.sequences.design_gre_mprage_radial_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_zte_2d.html">pulserver.sequences.design_zte_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_zte_3d.html">pulserver.sequences.design_zte_3d</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_crusher.html">pulserver.design.make_crusher</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_phase_blip.html">pulserver.design.make_phase_blip</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_phase_encoding.html">pulserver.design.make_phase_encoding</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_hard_pulse.html">pulserver.design.make_hard_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_frequency_selective_pulse.html">pulserver.design.make_frequency_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_slice_selective_pulse.html">pulserver.design.make_slice_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_refocusing_pulse.html">pulserver.design.make_refocusing_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_slr_pulse.html">pulserver.design.make_slr_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_multiband_frequency_selective_pulse.html">pulserver.design.make_multiband_frequency_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_pins_slice_selective_pulse.html">pulserver.design.make_pins_slice_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_multiband.html">pulserver.design.make_multiband</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_pins.html">pulserver.design.make_pins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_plane_selective_pulse.html">pulserver.design.make_plane_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_spsp_pulse.html">pulserver.design.make_spsp_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_bloch_siegert_pulse.html">pulserver.design.make_bloch_siegert_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_diffusion_prep.html">pulserver.design.make_diffusion_prep</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_fat_saturation_pulse.html">pulserver.design.make_fat_saturation_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_ihmt_pulse.html">pulserver.design.make_ihmt_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_inversion_pulse.html">pulserver.design.make_inversion_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_mt_pulse.html">pulserver.design.make_mt_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_t1t2_prep_pulse.html">pulserver.design.make_t1t2_prep_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_t2prep_pulse.html">pulserver.design.make_t2prep_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_epi_readout.html">pulserver.design.make_epi_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_bssfp_readout.html">pulserver.design.make_bssfp_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_fse_readout.html">pulserver.design.make_fse_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_line_readout.html">pulserver.design.make_line_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_noncartesian_2d_readout.html">pulserver.design.make_noncartesian_2d_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_noncartesian_3d_readout.html">pulserver.design.make_noncartesian_3d_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_radial_projection_readout.html">pulserver.design.make_radial_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_radial_readout.html">pulserver.design.make_radial_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_radial_stack_readout.html">pulserver.design.make_radial_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_rosette_projection_readout.html">pulserver.design.make_rosette_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_rosette_readout.html">pulserver.design.make_rosette_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_rosette_stack_readout.html">pulserver.design.make_rosette_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_spiral_projection_readout.html">pulserver.design.make_spiral_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_spiral_readout.html">pulserver.design.make_spiral_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_spiral_stack_readout.html">pulserver.design.make_spiral_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_zte_readout.html">pulserver.design.make_zte_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_cartesian_sampling.html">pulserver.design.make_cartesian_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_epi_sampling.html">pulserver.design.make_epi_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_noncartesian_2d_sampling.html">pulserver.design.make_noncartesian_2d_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_noncartesian_projection_sampling.html">pulserver.design.make_noncartesian_projection_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_slice_loop.html">pulserver.design.make_slice_loop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_counter_loop.html">pulserver.design.make_counter_loop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.calc_encoding_scales.html">pulserver.design.calc_encoding_scales</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_phase_cycling_schedule.html">pulserver.design.make_phase_cycling_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_rf_spoiling_schedule.html">pulserver.design.make_rf_spoiling_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_traps_schedule.html">pulserver.design.make_traps_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.calc_adc_timing.html">pulserver.design.calc_adc_timing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.traj2grad.html">pulserver.design.traj2grad</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.Opts.html">pulserver.pypulseq.Opts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.Sequence.html">pulserver.pypulseq.Sequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.get_supported_labels.html">pulserver.pypulseq.get_supported_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.make_label.html">pulserver.pypulseq.make_label</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.make_rf_shim.html">pulserver.pypulseq.make_rf_shim</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.make_rotation.html">pulserver.pypulseq.make_rotation</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../io.html"><code class="docutils literal notranslate"><span class="pre">pulserver.io</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.write.html">pulserver.io.write</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../recon.html"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../gehc.html"><code class="docutils literal notranslate"><span class="pre">pulserver.gehc</span></code></a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/sampling.html">Scan loops</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/mechanical_resonance_safety.html">Mechanical Resonance Safety: Structural Acoustic Analysis</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../more.html">More</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/public_api.html">pulseg Public C API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../pulseg_conformance.html">Pulserver as a Concrete Implementation of PulSeg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../rename_map_v2.html">Rename map v2 — public C API hygiene audit (test-01)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../rename_map_v3.html">Rename map v3 — pulseq module split, static-helper arg order, PulSeg vocabulary</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<a href="https://github.com/INFN-MRI/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button"
+   title="Source repository"
+   data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+
+</a>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../../../_sources/api/generated/pulserver/pulserver.ScanLoop.rst" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.rst</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>pulserver.ScanLoop</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop"><code class="docutils literal notranslate"><span class="pre">ScanLoop</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.from_mask"><code class="docutils literal notranslate"><span class="pre">ScanLoop.from_mask()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.from_relative_shifts"><code class="docutils literal notranslate"><span class="pre">ScanLoop.from_relative_shifts()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.__init__"><code class="docutils literal notranslate"><span class="pre">ScanLoop.__init__()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.flatten"><code class="docutils literal notranslate"><span class="pre">ScanLoop.flatten()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.increments"><code class="docutils literal notranslate"><span class="pre">ScanLoop.increments()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.label_limits"><code class="docutils literal notranslate"><span class="pre">ScanLoop.label_limits()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.label_value"><code class="docutils literal notranslate"><span class="pre">ScanLoop.label_value()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.labels"><code class="docutils literal notranslate"><span class="pre">ScanLoop.labels()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.relative"><code class="docutils literal notranslate"><span class="pre">ScanLoop.relative()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.to_frequencies"><code class="docutils literal notranslate"><span class="pre">ScanLoop.to_frequencies()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.to_rotations"><code class="docutils literal notranslate"><span class="pre">ScanLoop.to_rotations()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.to_scales"><code class="docutils literal notranslate"><span class="pre">ScanLoop.to_scales()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.with_axes"><code class="docutils literal notranslate"><span class="pre">ScanLoop.with_axes()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.n_dims"><code class="docutils literal notranslate"><span class="pre">ScanLoop.n_dims</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.n_positions"><code class="docutils literal notranslate"><span class="pre">ScanLoop.n_positions</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.n_samples"><code class="docutils literal notranslate"><span class="pre">ScanLoop.n_samples</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.n_shots"><code class="docutils literal notranslate"><span class="pre">ScanLoop.n_shots</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.shot_lengths"><code class="docutils literal notranslate"><span class="pre">ScanLoop.shot_lengths</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.sizes"><code class="docutils literal notranslate"><span class="pre">ScanLoop.sizes</span></code></a></li>
+</ul>
+</li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="pulserver-scanloop">
+<h1>pulserver.ScanLoop<a class="headerlink" href="#pulserver-scanloop" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="pulserver.ScanLoop">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.</span></span><span class="sig-name descname"><span class="pre">ScanLoop</span></span><a class="headerlink" href="#pulserver.ScanLoop" title="Link to this definition">#</a></dt>
+<dd><p>One ordered list of scan-loop iterations: what varies, and in what order.</p>
+<p>Every sampling and scheduling helper in <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.design</span></code> returns
+one of these, because every outer loop in an MR sequence has the same
+shape: a table of <strong>positions</strong> the loop visits, a grouping of those
+positions into <strong>shots</strong> — one shot being one excitation’s worth of the
+loop, in acquisition order — and one <a class="reference internal" href="pulserver.EncodingAxis.html#pulserver.EncodingAxis" title="pulserver.EncodingAxis"><code class="xref py py-class docutils literal notranslate"><span class="pre">EncodingAxis</span></code></a> per position
+column saying what the numbers mean.</p>
+<p>A loop is <em>not</em> a k-space object. An encoding position is a set of
+frequency offsets, gradient scalings and rotations, and nothing about that
+restricts it to <code class="docutils literal notranslate"><span class="pre">ky</span></code>/<code class="docutils literal notranslate"><span class="pre">kz</span></code>/<code class="docutils literal notranslate"><span class="pre">z</span></code>/interleave angle: a frame of a dynamic
+series, an inversion time, a b-value or a saturation offset is the same
+table under a different <code class="xref py py-attr docutils literal notranslate"><span class="pre">axes</span></code> declaration.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Loop</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">positions</span></code> hold</p></th>
+<th class="head"><p>feed a module as</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Cartesian k-space</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(ky[,</span> <span class="pre">kz])</span></code> integer indices</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">lin_idx</span></code>/<code class="docutils literal notranslate"><span class="pre">par_idx</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>non-Cartesian</p></td>
+<td><p>spoke angles or unit directions</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">rotation</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>slices / SMS</p></td>
+<td><p>positions along the axis (m)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">freq_offset_hz</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>frames, contrasts</p></td>
+<td><p>any physical parameter</p></td>
+<td><p>a delay, an
+amplitude, a flip</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A loop is an immutable <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequence</span></code> of shots:
+<code class="docutils literal notranslate"><span class="pre">len(loop)</span></code> is the shot count and <code class="docutils literal notranslate"><span class="pre">loop[i]</span></code> returns shot <code class="docutils literal notranslate"><span class="pre">i</span></code>’s
+positions, already in acquisition order — so the sequence loop reads as
+<code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">shot</span> <span class="pre">in</span> <span class="pre">loop:</span></code>. Trains of unequal length are supported by
+construction, so an echo train, a 3D partition and an SMS band group are
+all just shots of differing length.</p>
+<p>It deliberately carries <strong>no</strong> loop nesting. Frames outside slices outside
+shots, or the reverse, are <cite>for</cite> statements you write, which is what keeps
+a trigger, an inversion or a dummy TR insertable at any nesting level.</p>
+<p>It carries no gradients and no events — it carries the numbers those are
+derived from, plus the counters that let the reconstruction find the data
+again:</p>
+<ul class="simple">
+<li><p><strong>Counters.</strong> <a class="reference internal" href="#pulserver.ScanLoop.labels" title="pulserver.ScanLoop.labels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">labels()</span></code></a> returns the <code class="docutils literal notranslate"><span class="pre">SET</span> <span class="pre">&lt;label&gt;</span></code> events for one
+shot, one per axis. Emitting them is not optional bookkeeping: the
+interpreter derives every <code class="docutils literal notranslate"><span class="pre">FIRST_IN_*</span></code>/<code class="docutils literal notranslate"><span class="pre">LAST_IN_*</span></code> MRD flag from the
+<em>observed range</em> of each counter, so a dimension that is looped but
+never labelled collapses to a single index and its flags fire on every
+acquisition. See <a class="reference internal" href="#pulserver.ScanLoop.label_limits" title="pulserver.ScanLoop.label_limits"><code class="xref py py-meth docutils literal notranslate"><span class="pre">label_limits()</span></code></a>.</p></li>
+<li><p><strong>Amplitudes.</strong> <a class="reference internal" href="#pulserver.ScanLoop.to_scales" title="pulserver.ScanLoop.to_scales"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_scales()</span></code></a> gives the <code class="docutils literal notranslate"><span class="pre">[-1,</span> <span class="pre">1]</span></code> factors for
+<code class="xref py py-func docutils literal notranslate"><span class="pre">pypulseq.scale_grad()</span></code>, <a class="reference internal" href="#pulserver.ScanLoop.to_rotations" title="pulserver.ScanLoop.to_rotations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_rotations()</span></code></a> the per-view rotation
+matrices, and <a class="reference internal" href="#pulserver.ScanLoop.to_frequencies" title="pulserver.ScanLoop.to_frequencies"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_frequencies()</span></code></a> the RF offsets that select a slice.
+Each applies to the position semantics it names and raises otherwise.</p></li>
+</ul>
+<p>Three alternate constructors build one without listing positions by hand:
+<a class="reference internal" href="#pulserver.ScanLoop.from_mask" title="pulserver.ScanLoop.from_mask"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_mask()</span></code></a> from a Cartesian sampling mask,
+<a class="reference internal" href="#pulserver.ScanLoop.from_relative_shifts" title="pulserver.ScanLoop.from_relative_shifts"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_relative_shifts()</span></code></a> from per-shot starts plus blip increments,
+and the <code class="docutils literal notranslate"><span class="pre">make_*_sampling</span></code> / <code class="docutils literal notranslate"><span class="pre">make_slice_loop</span></code> /
+<a class="reference internal" href="../design/pulserver.design.make_counter_loop.html#pulserver.design.make_counter_loop" title="pulserver.design.make_counter_loop"><code class="xref py py-func docutils literal notranslate"><span class="pre">make_counter_loop()</span></code></a> factories.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>positions</strong> (<em>array_like</em>) – Shape <code class="docutils literal notranslate"><span class="pre">(n_positions,</span> <span class="pre">D)</span></code>. 1D input is treated as <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">1)</span></code>.</p></li>
+<li><p><strong>shots</strong> (<em>tuple</em><em> of </em><em>numpy.ndarray</em>) – One integer index array per shot, indexing into <code class="docutils literal notranslate"><span class="pre">positions</span></code>.</p></li>
+<li><p><strong>mask</strong> (<em>numpy.ndarray</em><em>, </em><em>optional</em>) – Cartesian support mask, when the positions came from one. Its nonzero
+count must equal <code class="docutils literal notranslate"><span class="pre">len(positions)</span></code>.</p></li>
+<li><p><strong>axes</strong> (<em>tuple</em><em> of </em><a class="reference internal" href="pulserver.EncodingAxis.html#pulserver.EncodingAxis" title="pulserver.EncodingAxis"><em>EncodingAxis</em></a><em>, </em><em>optional</em>) – One axis per position column (three columns for a <code class="docutils literal notranslate"><span class="pre">'direction'</span></code>
+axis). Inferred when omitted: integer columns become <code class="docutils literal notranslate"><span class="pre">LIN</span></code>/<code class="docutils literal notranslate"><span class="pre">PAR</span></code>
+encoding indices, three float columns a <code class="docutils literal notranslate"><span class="pre">direction</span></code> axis, anything
+else a neutral <code class="docutils literal notranslate"><span class="pre">value</span></code> axis.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design._lowlevel</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_radial_tilt</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span> <span class="o">=</span> <span class="n">make_radial_tilt</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="n">segment_length</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span><span class="o">.</span><span class="n">n_shots</span><span class="p">,</span> <span class="n">loop</span><span class="o">.</span><span class="n">shot_lengths</span>
+<span class="go">(2, (4, 4))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">(4, 1)</span>
+</pre></div>
+</div>
+<p>The two views a Cartesian sequence loop needs, from one object:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">design</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lowlevel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">((</span><span class="mi">128</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="n">acceleration</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">shot</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">shot</span> <span class="ow">in</span> <span class="n">loop</span><span class="p">]</span>              <span class="c1"># LIN labels</span>
+<span class="go">[0, 2, 4, 6]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span><span class="o">.</span><span class="n">to_scales</span><span class="p">()[</span><span class="n">loop</span><span class="o">.</span><span class="n">shots</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>   <span class="c1"># gradient scaling</span>
+<span class="go">[[-1.0]]</span>
+</pre></div>
+</div>
+<p>The same object describes the slice loop, in metres:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">design</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lowlevel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">slices</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_slice_loop</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mf">5e-3</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">slices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+<span class="go">[-0.0075]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">slices</span><span class="o">.</span><span class="n">to_frequencies</span><span class="p">(</span><span class="mf">42_000.0</span><span class="p">)</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+<span class="go">[-315.0, -105.0, 105.0, 315.0]</span>
+</pre></div>
+</div>
+<p>…and the frame loop of a dynamic acquisition, which differs only in
+which counter it names:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">design</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lowlevel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">frames</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_counter_loop</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;REP&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">event</span><span class="o">.</span><span class="n">label</span> <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">frames</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="mi">7</span><span class="p">)],</span> <span class="n">frames</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="mi">7</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+<span class="go">([&#39;REP&#39;], 7)</span>
+</pre></div>
+</div>
+<p>Relative steps for a blipped train, instead of absolute positions:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScanLoop</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span> <span class="o">=</span> <span class="n">ScanLoop</span><span class="o">.</span><span class="n">from_relative_shifts</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span> <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">]],</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span><span class="o">.</span><span class="n">relative</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="go">array([[0, 0],</span>
+<span class="go">       [2, 1]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span><span class="o">.</span><span class="n">increments</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="go">array([[2, 1]])</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="pulserver.SequenceModule.html#pulserver.SequenceModule" title="pulserver.SequenceModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.SequenceModule</span></code></a></dt><dd><p>consumes <code class="docutils literal notranslate"><span class="pre">lin_idx</span></code>/<code class="docutils literal notranslate"><span class="pre">par_idx</span></code>/<code class="docutils literal notranslate"><span class="pre">rotation</span></code>/<code class="docutils literal notranslate"><span class="pre">freq_offset_hz</span></code>.</p>
+</dd>
+<dt><a class="reference internal" href="pulserver.EncodingAxis.html#pulserver.EncodingAxis" title="pulserver.EncodingAxis"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.EncodingAxis</span></code></a></dt><dd><p>what one position column means.</p>
+</dd>
+</dl>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.from_mask">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_length</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ordering</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'linear'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_sections</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.from_mask" title="Link to this definition">#</a></dt>
+<dd><p>Build a k-space loop from a Cartesian mask by ordering its sampled lines.</p>
+<p>The bridge from <em>which</em> lines are sampled (a boolean mask) to <em>when</em>
+they are acquired (echo trains). Every sampled position is covered
+exactly once — the result is verified before returning — and the
+originating mask is retained for the reconstruction.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">train_length=1</span></code> for GRE and other acquisitions without an inner
+train; the result is then one shot per sampled line.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mask</strong> (<em>array_like</em><em> of </em><em>bool</em>) – 1D <code class="docutils literal notranslate"><span class="pre">(ny,)</span></code> or 2D <code class="docutils literal notranslate"><span class="pre">(ny,</span> <span class="pre">nz)</span></code> sampling mask.</p></li>
+<li><p><strong>train_length</strong> (<em>int</em><em>, </em><em>optional</em>) – Echo-train / segment length (default 1).</p></li>
+<li><p><strong>ordering</strong> (<em>{'linear'</em><em>, </em><em>'centric'</em><em>, </em><em>'radial'</em><em>, </em><em>'radial_adaptive'</em><em>, </em><em>'shuffling'}</em><em>, </em><em>optional</em>) – Echo-train ordering applied to the sampled positions.</p></li>
+<li><p><strong>seed</strong> (<em>int</em><em>, </em><em>optional</em>) – Seed for <code class="docutils literal notranslate"><span class="pre">ordering='shuffling'</span></code>.</p></li>
+<li><p><strong>n_sections</strong> (<em>int</em><em>, </em><em>optional</em>) – Radial section count for <code class="docutils literal notranslate"><span class="pre">ordering='radial_adaptive'</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ScanLoop</em> – <code class="docutils literal notranslate"><span class="pre">positions</span></code> of sampled <code class="docutils literal notranslate"><span class="pre">(ky[,</span> <span class="pre">kz])</span></code> indices, one entry in
+<code class="docutils literal notranslate"><span class="pre">shots</span></code> per shot, and the originating <code class="docutils literal notranslate"><span class="pre">mask</span></code>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>RuntimeError</strong> – If the chosen ordering does not cover the mask exactly once.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">design</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lowlevel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScanLoop</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mask</span> <span class="o">=</span> <span class="n">_lowlevel</span><span class="o">.</span><span class="n">make_caipirinha_mask</span><span class="p">((</span><span class="mi">32</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">delta</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span> <span class="o">=</span> <span class="n">ScanLoop</span><span class="o">.</span><span class="n">from_mask</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">train_length</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">ordering</span><span class="o">=</span><span class="s2">&quot;radial&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span><span class="o">.</span><span class="n">n_samples</span> <span class="o">==</span> <span class="nb">int</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span><span class="o">.</span><span class="n">shot_lengths</span>
+<span class="go">(8, 8, 8, 8, 8, 8, 8, 8)</span>
+</pre></div>
+</div>
+<p>Which shot acquires each sampled line, and at which echo of its train:</p>
+<p>(<a class="reference download internal" download="" href="../../../_downloads/904605658e2fd7638fdb6e35489fbcf5/pulserver-ScanLoop-1.png"><code class="xref download docutils literal notranslate"><span class="pre">png</span></code></a>)</p>
+<figure class="align-default">
+<img alt="../../../_images/pulserver-ScanLoop-1.png" class="plot-directive" src="../../../_images/pulserver-ScanLoop-1.png" />
+</figure>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design._lowlevel.make_random_mask</span></code></dt><dd><p>mask generators.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design._lowlevel.make_radial_order</span></code></dt><dd><p>one of the underlying orderings.</p>
+</dd>
+</dl>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.from_relative_shifts">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_relative_shifts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">starts</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shifts</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.from_relative_shifts" title="Link to this definition">#</a></dt>
+<dd><p>Build a k-space loop from per-shot start points and blip increments.</p>
+<p>The natural description of any blipped train: a shot starts somewhere
+in (ky, kz) and each subsequent echo is reached by a <em>relative</em> step.
+Both views the sequence needs come out of the result — <code class="docutils literal notranslate"><span class="pre">loop[shot]</span></code>
+gives the absolute positions to label, <code class="docutils literal notranslate"><span class="pre">loop.increments(shot)</span></code> the
+blip areas to play.</p>
+<p><code class="docutils literal notranslate"><span class="pre">shifts</span></code> may be one shared list of increments, or one list per shot
+when trains differ (EPTI, zigzag).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>starts</strong> (<em>array_like</em>) – Shape <code class="docutils literal notranslate"><span class="pre">(n_shots,</span> <span class="pre">D)</span></code> integer start positions.</p></li>
+<li><p><strong>shifts</strong> (<em>array_like</em>) – Shape <code class="docutils literal notranslate"><span class="pre">(inner,</span> <span class="pre">D)</span></code> shared by all shots, or
+<code class="docutils literal notranslate"><span class="pre">(n_shots,</span> <span class="pre">inner,</span> <span class="pre">D)</span></code>. Entry 0 is normally all-zero so the first
+echo sits on <code class="docutils literal notranslate"><span class="pre">starts</span></code>.</p></li>
+<li><p><strong>shape</strong> (<em>tuple</em><em> of </em><em>int</em>) – Cartesian grid extent; every position must fall inside it.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ScanLoop</em> – Deduplicated <code class="docutils literal notranslate"><span class="pre">positions</span></code>, one entry in <code class="docutils literal notranslate"><span class="pre">shots</span></code> per shot, plus
+the implied Cartesian <code class="docutils literal notranslate"><span class="pre">mask</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScanLoop</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span> <span class="o">=</span> <span class="n">ScanLoop</span><span class="o">.</span><span class="n">from_relative_shifts</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">starts</span><span class="o">=</span><span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span>
+<span class="gp">... </span>    <span class="n">shifts</span><span class="o">=</span><span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">]],</span>
+<span class="gp">... </span>    <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="go">array([[0, 0],</span>
+<span class="go">       [2, 1],</span>
+<span class="go">       [4, 2]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span><span class="o">.</span><span class="n">increments</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="go">array([[2, 1],</span>
+<span class="go">       [2, 1]])</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design._lowlevel.make_skipped_caipi_order</span></code></dt><dd><p>segmented blipped-CAIPI loop built on this representation.</p>
+</dd>
+</dl>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">positions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shots</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.__init__" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.flatten">
+<span class="sig-name descname"><span class="pre">flatten</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.flatten" title="Link to this definition">#</a></dt>
+<dd><p>Return every visited position, concatenated in acquisition order.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.increments">
+<span class="sig-name descname"><span class="pre">increments</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shot</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.increments" title="Link to this definition">#</a></dt>
+<dd><p>Return the step between consecutive positions of shot <code class="docutils literal notranslate"><span class="pre">shot</span></code>.</p>
+<p>One entry shorter than the shot: these are the blip areas to play
+between echoes.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.label_limits">
+<span class="sig-name descname"><span class="pre">label_limits</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.label_limits" title="Link to this definition">#</a></dt>
+<dd><p>Return <code class="docutils literal notranslate"><span class="pre">{label:</span> <span class="pre">(min,</span> <span class="pre">max)}</span></code> over every position the loop visits.</p>
+<p>The interpreter derives <code class="docutils literal notranslate"><span class="pre">FIRST_IN_&lt;axis&gt;</span></code> and <code class="docutils literal notranslate"><span class="pre">LAST_IN_&lt;axis&gt;</span></code> by
+comparing each acquisition’s counter against these same limits, so
+this is the loop’s own prediction of where those flags will fire. A
+one-element range means both flags fire on every acquisition of the
+axis.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>dict</em> – One entry per axis; empty when the loop visits no positions.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">design</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lowlevel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">design</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">((</span><span class="mi">64</span><span class="p">,</span> <span class="mi">32</span><span class="p">),</span> <span class="n">acceleration</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">label_limits</span><span class="p">()</span>
+<span class="go">{&#39;LIN&#39;: (0, 30)}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">design</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lowlevel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">design</span><span class="o">.</span><span class="n">make_slice_loop</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mf">3e-3</span><span class="p">)</span><span class="o">.</span><span class="n">label_limits</span><span class="p">()</span>
+<span class="go">{&#39;SLC&#39;: (0, 5)}</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.label_value">
+<span class="sig-name descname"><span class="pre">label_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shot</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">position</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.label_value" title="Link to this definition">#</a></dt>
+<dd><p>Return one counter value per axis for a shot’s <code class="docutils literal notranslate"><span class="pre">position</span></code>-th entry.</p>
+<p>The value is the position <em>value</em> on an <code class="docutils literal notranslate"><span class="pre">index</span></code> axis (its numbers
+already are the encoding indices) and the position <em>index</em> on every
+other kind (angles, metres and inversion times are not counters, but
+their order is).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>shot</strong> (<em>int</em>) – Shot index.</p></li>
+<li><p><strong>position</strong> (<em>int</em><em>, </em><em>optional</em>) – Which entry within the shot; <code class="docutils literal notranslate"><span class="pre">0</span></code> (the default) is the shot’s
+own first position, which is the labelled one for a slice, frame
+or SMS group. A readout labels the rest of a train itself.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>tuple of int</em> – One value per entry in <code class="xref py py-attr docutils literal notranslate"><span class="pre">axes</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.labels">
+<span class="sig-name descname"><span class="pre">labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shot</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">position</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.labels" title="Link to this definition">#</a></dt>
+<dd><p>Return the <code class="docutils literal notranslate"><span class="pre">SET</span></code> label events for one shot, one per axis.</p>
+<p>This is how a loop reaches the reconstruction. Pass the result to
+<a class="reference internal" href="pulserver.SequenceModule.html#pulserver.SequenceModule.set_labels" title="pulserver.SequenceModule.set_labels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pulserver.SequenceModule.set_labels()</span></code></a> — or spread it into
+<code class="docutils literal notranslate"><span class="pre">seq.add_block</span></code> — for every loop the readout does <em>not</em> consume
+through <code class="docutils literal notranslate"><span class="pre">set_state</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">excitation</span><span class="o">.</span><span class="n">set_labels</span><span class="p">(</span><span class="o">*</span><span class="n">slices</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">s</span><span class="p">),</span> <span class="o">*</span><span class="n">frames</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">f</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>Emitting them is what makes the <code class="docutils literal notranslate"><span class="pre">FIRST_IN_*</span></code>/<code class="docutils literal notranslate"><span class="pre">LAST_IN_*</span></code> MRD flags
+correct. Those flags are not written by the sequence: the interpreter
+computes them by comparing each acquisition’s counter against the
+<em>observed</em> minimum and maximum of that counter over the scan. A frame
+loop that never emits <code class="docutils literal notranslate"><span class="pre">REP</span></code> therefore reports <code class="docutils literal notranslate"><span class="pre">min</span> <span class="pre">==</span> <span class="pre">max</span> <span class="pre">==</span> <span class="pre">0</span></code>,
+and every acquisition comes back flagged both first and last in
+repetition — which is exactly the failure that makes a dynamic
+reconstruction fire once per line.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>shot</strong> (<em>int</em>) – Shot index.</p></li>
+<li><p><strong>position</strong> (<em>int</em><em>, </em><em>optional</em>) – Which entry within the shot to label; see <a class="reference internal" href="#pulserver.ScanLoop.label_value" title="pulserver.ScanLoop.label_value"><code class="xref py py-meth docutils literal notranslate"><span class="pre">label_value()</span></code></a>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>tuple</em> – Label events from <a class="reference internal" href="../pypulseq/pulserver.pypulseq.make_label.html#pulserver.pypulseq.make_label" title="pulserver.pypulseq.make_label"><code class="xref py py-func docutils literal notranslate"><span class="pre">make_label()</span></code></a>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">design</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lowlevel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">slices</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_slice_loop</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mf">3e-3</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[(</span><span class="n">e</span><span class="o">.</span><span class="n">label</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">slices</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="mi">1</span><span class="p">)]</span>
+<span class="go">[(&#39;SLC&#39;, 2)]</span>
+</pre></div>
+</div>
+<p>Every counter a scan varies gets one line in the loop body:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">frames</span><span class="p">)):</span>
+    <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">slices</span><span class="p">)):</span>
+        <span class="n">excitation</span><span class="o">.</span><span class="n">set_labels</span><span class="p">(</span><span class="o">*</span><span class="n">frames</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">f</span><span class="p">),</span> <span class="o">*</span><span class="n">slices</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="n">s</span><span class="p">))</span>
+        <span class="n">excitation</span><span class="o">.</span><span class="n">add_to</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="#pulserver.ScanLoop.label_limits" title="pulserver.ScanLoop.label_limits"><code class="xref py py-obj docutils literal notranslate"><span class="pre">label_limits</span></code></a></dt><dd><p>the ranges those flags are derived from.</p>
+</dd>
+<dt><a class="reference internal" href="pulserver.SequenceModule.html#pulserver.SequenceModule.set_labels" title="pulserver.SequenceModule.set_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.SequenceModule.set_labels</span></code></a></dt><dd><p>where the events go.</p>
+</dd>
+</dl>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.relative">
+<span class="sig-name descname"><span class="pre">relative</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shot</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.relative" title="Link to this definition">#</a></dt>
+<dd><p>Return shot <code class="docutils literal notranslate"><span class="pre">shot</span></code>’s positions relative to its own first point.</p>
+<p>The prewinder-relative view: what the gradients must reach once the
+shot’s start has been played.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.to_frequencies">
+<span class="sig-name descname"><span class="pre">to_frequencies</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gradient_hz_per_m</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.to_frequencies" title="Link to this definition">#</a></dt>
+<dd><p>Convert positions in metres into the RF offsets (Hz) that select them.</p>
+<p>The bridge from a slice loop to the excitation: under a selection
+gradient of <code class="docutils literal notranslate"><span class="pre">gradient_hz_per_m</span></code>, a spin at position <code class="docutils literal notranslate"><span class="pre">z</span></code> resonates
+at <code class="docutils literal notranslate"><span class="pre">z</span> <span class="pre">*</span> <span class="pre">gradient_hz_per_m</span></code>. Pass the result to an excitation module
+as <code class="docutils literal notranslate"><span class="pre">freq_offset_hz</span></code> — one value for conventional imaging, one per
+band for an SMS multiband pulse.</p>
+<p>The result is indexed like <code class="docutils literal notranslate"><span class="pre">positions</span></code>, so take one shot’s offsets
+with <code class="docutils literal notranslate"><span class="pre">offsets[loop.shots[i]]</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>gradient_hz_per_m</strong> (<em>float</em>) – Selection gradient amplitude in Pulseq units (Hz/m).</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>numpy.ndarray</em> – Shape <code class="docutils literal notranslate"><span class="pre">(len(positions),)</span></code> frequency offsets (Hz).</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">positions</span></code> is not one-dimensional, or the gradient is not
+    finite.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_slice_loop</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span> <span class="o">=</span> <span class="n">make_slice_loop</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mf">3e-3</span><span class="p">,</span> <span class="n">sms_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">offsets</span> <span class="o">=</span> <span class="n">loop</span><span class="o">.</span><span class="n">to_frequencies</span><span class="p">(</span><span class="mf">42_000.0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">offsets</span><span class="p">[</span><span class="n">loop</span><span class="o">.</span><span class="n">shots</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+<span class="go">[-315.0, 63.0]</span>
+</pre></div>
+</div>
+<p>Drive the slice loop, labelling by physical slice index:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">offsets</span> <span class="o">=</span> <span class="n">slices</span><span class="o">.</span><span class="n">to_frequencies</span><span class="p">(</span><span class="n">excitation</span><span class="o">.</span><span class="n">gradients</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">amplitude</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">shot</span> <span class="ow">in</span> <span class="n">slices</span><span class="o">.</span><span class="n">shots</span><span class="p">:</span>
+    <span class="n">excitation</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">freq_offset_hz</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">offsets</span><span class="p">[</span><span class="n">shot</span><span class="p">[</span><span class="mi">0</span><span class="p">]]))</span>
+    <span class="n">excitation</span><span class="o">.</span><span class="n">set_labels</span><span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="n">make_label</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="s2">&quot;SET&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;SLC&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">shot</span><span class="p">[</span><span class="mi">0</span><span class="p">])))</span>
+    <span class="n">excitation</span><span class="o">.</span><span class="n">add_to</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="../design/pulserver.design.make_slice_loop.html#pulserver.design.make_slice_loop" title="pulserver.design.make_slice_loop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.make_slice_loop</span></code></a></dt><dd><p>builds the loop these offsets select.</p>
+</dd>
+</dl>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.to_rotations">
+<span class="sig-name descname"><span class="pre">to_rotations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(1.0,</span> <span class="pre">0.0,</span> <span class="pre">0.0)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.to_rotations" title="Link to this definition">#</a></dt>
+<dd><p>Convert angle or direction positions into per-view rotation matrices.</p>
+<p>The bridge from a non-Cartesian loop to the sequence: the readout
+designs <strong>one</strong> base waveform along <code class="docutils literal notranslate"><span class="pre">reference</span></code>, and each position
+replays it under the matrix returned here. A one-column loop is read
+as in-plane spoke angles (rotation about <code class="docutils literal notranslate"><span class="pre">z</span></code>); a three-column one as
+unit directions, each mapped by the shortest rotation taking
+<code class="docutils literal notranslate"><span class="pre">reference</span></code> onto it (Rodrigues). Antipodal directions get a
+well-defined 180-degree rotation rather than a singular matrix.</p>
+<p>Feed the result to <a class="reference internal" href="../pypulseq/pulserver.pypulseq.make_rotation.html#pulserver.pypulseq.make_rotation" title="pulserver.pypulseq.make_rotation"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.pypulseq.make_rotation()</span></code></a>, or pass a
+row to a readout module’s <code class="docutils literal notranslate"><span class="pre">rotation=</span></code> argument.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>reference</strong> (<em>array_like</em><em>, </em><em>optional</em>) – Direction the base waveform was designed along (default <code class="docutils literal notranslate"><span class="pre">+x</span></code>).
+Ignored for angle-valued positions.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>numpy.ndarray</em> – Shape <code class="docutils literal notranslate"><span class="pre">(len(positions),</span> <span class="pre">3,</span> <span class="pre">3)</span></code> rotation matrices.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">positions</span></code> has neither one nor three columns.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">design</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lowlevel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rotations</span> <span class="o">=</span> <span class="n">_lowlevel</span><span class="o">.</span><span class="n">make_golden_means_3d_tilt</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="o">.</span><span class="n">to_rotations</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rotations</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">(4, 3, 3)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">design</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lowlevel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">angles</span> <span class="o">=</span> <span class="n">_lowlevel</span><span class="o">.</span><span class="n">make_radial_tilt</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="o">.</span><span class="n">to_rotations</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">angles</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span> <span class="mi">6</span><span class="p">)</span>
+<span class="go">array([0.707107, 0.707107, 0.      ])</span>
+</pre></div>
+</div>
+<p>Rotate a 3D radial base waveform view by view — the view number is
+also its <code class="docutils literal notranslate"><span class="pre">LIN</span></code> label:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">view</span><span class="p">,</span> <span class="n">rotation</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">_lowlevel</span><span class="o">.</span><span class="n">make_golden_means_3d_tilt</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span><span class="o">.</span><span class="n">to_rotations</span><span class="p">()):</span>
+    <span class="n">readout</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">lin_idx</span><span class="o">=</span><span class="n">view</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">)</span><span class="o">.</span><span class="n">add_to</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.to_scales">
+<span class="sig-name descname"><span class="pre">to_scales</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.to_scales" title="Link to this definition">#</a></dt>
+<dd><p>Convert Cartesian indices into phase-encode gradient scale factors.</p>
+<p>The bridge from a k-space loop to the gradients that realise it. Index
+<code class="docutils literal notranslate"><span class="pre">i</span></code> along an axis of extent <code class="docutils literal notranslate"><span class="pre">n</span></code> encodes area <code class="docutils literal notranslate"><span class="pre">(i</span> <span class="pre">-</span> <span class="pre">n/2)</span> <span class="pre">/</span> <span class="pre">fov</span></code>,
+and the full-amplitude template
+<a class="reference internal" href="../design/pulserver.design.make_phase_encoding.html#pulserver.design.make_phase_encoding" title="pulserver.design.make_phase_encoding"><code class="xref py py-func docutils literal notranslate"><span class="pre">make_phase_encoding()</span></code></a> builds carries
+<code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">/</span> <span class="pre">(2</span> <span class="pre">*</span> <span class="pre">fov)</span></code>; the ratio is the <code class="docutils literal notranslate"><span class="pre">[-1,</span> <span class="pre">1)</span></code> factor
+<code class="xref py py-func docutils literal notranslate"><span class="pre">pypulseq.scale_grad()</span></code> expects. This is exactly the convention
+every shipped readout module uses, so a hand-built readout encodes the
+same k-space as a shipped one.</p>
+<p>The factors depend only on the indices and the matrix size, never on
+which views this loop happens to contain — acceleration and partial
+Fourier drop views, they do not rescale the ones that remain.</p>
+<p>The result is indexed like <code class="docutils literal notranslate"><span class="pre">positions</span></code>, <strong>not</strong> by k-space index: on
+an accelerated loop <code class="docutils literal notranslate"><span class="pre">positions</span></code> holds only the sampled lines, so
+<code class="docutils literal notranslate"><span class="pre">scales[ky]</span></code> is a bug waiting to happen. Take one shot’s rows with
+<code class="docutils literal notranslate"><span class="pre">scales[loop.shots[i]]</span></code>, or skip the table entirely and convert the
+shot’s own coordinates with
+<a class="reference internal" href="../design/pulserver.design.calc_encoding_scales.html#pulserver.design.calc_encoding_scales" title="pulserver.design.calc_encoding_scales"><code class="xref py py-func docutils literal notranslate"><span class="pre">calc_encoding_scales()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>shape</strong> (<em>tuple</em><em> of </em><em>int</em><em>, </em><em>optional</em>) – Encoded matrix extent per column of <code class="docutils literal notranslate"><span class="pre">positions</span></code> — <code class="docutils literal notranslate"><span class="pre">(ny,)</span></code> for
+a 2D loop, <code class="docutils literal notranslate"><span class="pre">(ny,</span> <span class="pre">nz)</span></code> for a 3D one. Defaults to <a class="reference internal" href="#pulserver.ScanLoop.sizes" title="pulserver.ScanLoop.sizes"><code class="xref py py-attr docutils literal notranslate"><span class="pre">sizes</span></code></a>,
+which every shipped Cartesian factory fills in from the matrix it
+was given, so passing it is only needed for a hand-built loop.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>numpy.ndarray</em> – Shape <code class="docutils literal notranslate"><span class="pre">(len(positions),</span> <span class="pre">D)</span></code> factors in <code class="docutils literal notranslate"><span class="pre">[-1,</span> <span class="pre">1)</span></code>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">shape</span></code> does not match the number of position columns.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">design</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lowlevel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_cartesian_sampling</span><span class="p">((</span><span class="mi">64</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loop</span><span class="o">.</span><span class="n">to_scales</span><span class="p">()[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+<span class="go">[-1.0, -0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75]</span>
+</pre></div>
+</div>
+<p>Encode a shot by hand, with no readout module involved — converting
+each shot’s own coordinates keeps the indexing correct however
+undersampled the loop is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">gy</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_phase_encoding</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="n">fov_y</span> <span class="o">/</span> <span class="n">ny</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">shot</span> <span class="ow">in</span> <span class="n">loop</span><span class="p">:</span>
+    <span class="n">ky</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">shot</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">design</span><span class="o">.</span><span class="n">calc_encoding_scales</span><span class="p">(</span><span class="n">ky</span><span class="p">,</span> <span class="n">ny</span><span class="p">))</span>
+    <span class="n">seq</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="n">scale_grad</span><span class="p">(</span><span class="n">gy</span><span class="p">,</span> <span class="n">scale</span><span class="p">),</span> <span class="n">gx_pre</span><span class="p">)</span>
+    <span class="n">seq</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="n">gx</span><span class="p">,</span> <span class="n">adc</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_label</span><span class="p">(</span><span class="nb">type</span><span class="o">=</span><span class="s2">&quot;SET&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;LIN&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">ky</span><span class="p">))</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="../design/pulserver.design.calc_encoding_scales.html#pulserver.design.calc_encoding_scales" title="pulserver.design.calc_encoding_scales"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.calc_encoding_scales</span></code></a></dt><dd><p>the same conversion for bare position arrays.</p>
+</dd>
+<dt><a class="reference internal" href="../design/pulserver.design.make_phase_encoding.html#pulserver.design.make_phase_encoding" title="pulserver.design.make_phase_encoding"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.make_phase_encoding</span></code></a></dt><dd><p>the template these scale.</p>
+</dd>
+</dl>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.with_axes">
+<span class="sig-name descname"><span class="pre">with_axes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">axes</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.ScanLoop.with_axes" title="Link to this definition">#</a></dt>
+<dd><p>Return the same loop under different axis declarations.</p>
+<p>The positions and the shot order are untouched; only what the columns
+<em>mean</em> changes. Use it to retarget a loop’s counter — a rotation loop
+that indexes frames rather than views, a parameter loop that belongs
+on <code class="docutils literal notranslate"><span class="pre">PHS</span></code> rather than <code class="docutils literal notranslate"><span class="pre">SET</span></code> — without rebuilding it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>*axes</strong> (<a class="reference internal" href="pulserver.EncodingAxis.html#pulserver.EncodingAxis" title="pulserver.EncodingAxis"><em>EncodingAxis</em></a>) – One axis per position column, as for the constructor.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ScanLoop</em> – A new loop; this one is unchanged.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">design</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">_lowlevel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.pypulseq</span><span class="w"> </span><span class="kn">import</span> <span class="n">EncodingAxis</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">views</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">make_noncartesian_2d_sampling</span><span class="p">((</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span> <span class="n">views</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">views</span><span class="o">.</span><span class="n">with_axes</span><span class="p">(</span><span class="n">EncodingAxis</span><span class="p">(</span><span class="s2">&quot;PHS&quot;</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;angle&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">labels</span><span class="p">(</span><span class="mi">3</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">label</span>
+<span class="go">&#39;PHS&#39;</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.n_dims">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">n_dims</span></span><a class="headerlink" href="#pulserver.ScanLoop.n_dims" title="Link to this definition">#</a></dt>
+<dd><p>Number of position columns (1 for ky, an angle or metres; 2 for ky/kz; 3 for a direction).</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.n_positions">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">n_positions</span></span><a class="headerlink" href="#pulserver.ScanLoop.n_positions" title="Link to this definition">#</a></dt>
+<dd><p>Number of distinct positions the loop visits.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.n_samples">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">n_samples</span></span><a class="headerlink" href="#pulserver.ScanLoop.n_samples" title="Link to this definition">#</a></dt>
+<dd><p>Total number of positions visited, summed over shots.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.n_shots">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">n_shots</span></span><a class="headerlink" href="#pulserver.ScanLoop.n_shots" title="Link to this definition">#</a></dt>
+<dd><p>Number of shots in the loop.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.shot_lengths">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">shot_lengths</span></span><a class="headerlink" href="#pulserver.ScanLoop.shot_lengths" title="Link to this definition">#</a></dt>
+<dd><p>Number of positions in each shot.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.ScanLoop.sizes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">sizes</span></span><a class="headerlink" href="#pulserver.ScanLoop.sizes" title="Link to this definition">#</a></dt>
+<dd><p>Full encoded extent per axis, defaulting to the position count.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="pulserver.run_cli.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">pulserver.run_cli</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="pulserver.SequenceModule.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">pulserver.SequenceModule</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop"><code class="docutils literal notranslate"><span class="pre">ScanLoop</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.from_mask"><code class="docutils literal notranslate"><span class="pre">ScanLoop.from_mask()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.from_relative_shifts"><code class="docutils literal notranslate"><span class="pre">ScanLoop.from_relative_shifts()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.__init__"><code class="docutils literal notranslate"><span class="pre">ScanLoop.__init__()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.flatten"><code class="docutils literal notranslate"><span class="pre">ScanLoop.flatten()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.increments"><code class="docutils literal notranslate"><span class="pre">ScanLoop.increments()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.label_limits"><code class="docutils literal notranslate"><span class="pre">ScanLoop.label_limits()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.label_value"><code class="docutils literal notranslate"><span class="pre">ScanLoop.label_value()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.labels"><code class="docutils literal notranslate"><span class="pre">ScanLoop.labels()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.relative"><code class="docutils literal notranslate"><span class="pre">ScanLoop.relative()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.to_frequencies"><code class="docutils literal notranslate"><span class="pre">ScanLoop.to_frequencies()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.to_rotations"><code class="docutils literal notranslate"><span class="pre">ScanLoop.to_rotations()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.to_scales"><code class="docutils literal notranslate"><span class="pre">ScanLoop.to_scales()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.with_axes"><code class="docutils literal notranslate"><span class="pre">ScanLoop.with_axes()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.n_dims"><code class="docutils literal notranslate"><span class="pre">ScanLoop.n_dims</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.n_positions"><code class="docutils literal notranslate"><span class="pre">ScanLoop.n_positions</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.n_samples"><code class="docutils literal notranslate"><span class="pre">ScanLoop.n_samples</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.n_shots"><code class="docutils literal notranslate"><span class="pre">ScanLoop.n_shots</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.shot_lengths"><code class="docutils literal notranslate"><span class="pre">ScanLoop.shot_lengths</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ScanLoop.sizes"><code class="docutils literal notranslate"><span class="pre">ScanLoop.sizes</span></code></a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Author name not set
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2026, INFN-MRI.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

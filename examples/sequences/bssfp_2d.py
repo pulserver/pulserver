@@ -6,6 +6,7 @@ import sys
 
 import numpy as np
 import pulserver.io as pio
+import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     DropdownFloatParam,
@@ -90,12 +91,13 @@ class Bssfp2DPulseqSequence(Sequence):
         cfg = _read_protocol(dict_to_protocol(protocol))
         train = _make_train(opts, cfg)
         seq = pp.Sequence(opts)
-        for frame in range(cfg.num_frames):
-            phase_label = pp.make_label(type="SET", label="PHS", value=frame)
+        frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+        for frame in range(len(frames)):
+            (phase_label,) = frames.labels(frame)
             if cfg.trigger != TriggerType.NONE:
                 seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
                 phase_label = None
-            train.set_state(rf_phase_rad=0.0)
+            train.set_state(phase_offset_rad=0.0)
             for block_idx, block in enumerate(train):
                 labels = (phase_label,) if block_idx == 0 and phase_label is not None else ()
                 seq.add_block(*block, *labels)
@@ -129,10 +131,10 @@ def _read_protocol(prot) -> _Config:
 
 
 def _make_train(opts, cfg):
-    excitation = pp.make_slice_selective_pulse(
+    excitation = design.make_slice_selective_pulse(
         np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, duration=0.6e-3, system=opts
     )
-    return pp.make_bssfp_readout(
+    return design.make_bssfp_readout(
         opts,
         (cfg.fov_x_m, cfg.fov_y_m),
         (cfg.nx, cfg.ny),

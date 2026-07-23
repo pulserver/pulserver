@@ -5,10 +5,11 @@ from __future__ import annotations
 import inspect
 
 import numpy as np
+import pulserver.design as design
 import pulserver.pypulseq as pp
 import pypulseq as upstream
 import pytest
-from pulserver.pypulseq import _readout as readout
+from pulserver.design import _readout as readout
 
 OPTS_KW = dict(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 
@@ -18,7 +19,7 @@ def _opts():
 
 
 def _excitation(system, flip_angle_deg: float, thickness_m: float):
-    return pp.make_slice_selective_pulse(
+    return design.make_slice_selective_pulse(
         np.deg2rad(flip_angle_deg), thickness_m, duration=0.6e-3, system=system
     )
 
@@ -42,7 +43,7 @@ def _as_sequence(train):
 def test_2d_bssfp_is_an_rf_owned_continuous_trufi_train() -> None:
     system = _opts()
     excitation = _excitation(system, 35, 5e-3)
-    train = pp.make_bssfp_readout(
+    train = design.make_bssfp_readout(
         system, (0.22, 0.22), (64, 8), excitation
     )
 
@@ -60,16 +61,16 @@ def test_2d_bssfp_is_an_rf_owned_continuous_trufi_train() -> None:
 
 
 def test_bssfp_requires_a_caller_designed_selection_pulse() -> None:
-    parameters = inspect.signature(pp.make_bssfp_readout).parameters
+    parameters = inspect.signature(design.make_bssfp_readout).parameters
     assert "excitation" in parameters
     assert {"flip_angle_rad", "slab_thickness_m", "rf_duration_s", "derate"}.isdisjoint(parameters)
     with pytest.raises(TypeError, match="excitation must be"):
-        pp.make_bssfp_readout(_opts(), (0.22, 0.22), (32, 8), object())
+        design.make_bssfp_readout(_opts(), (0.22, 0.22), (32, 8), object())
 
 
 def test_3d_bssfp_segments_cover_kspace_with_identical_shot_structure() -> None:
     system = _opts()
-    train = pp.make_bssfp_readout(
+    train = design.make_bssfp_readout(
         system, (0.22, 0.22, 0.12), (32, 4, 4), _excitation(system, 25, 0.12), segment=2
     )
     assert isinstance(train, readout.Bssfp3D)
@@ -107,8 +108,8 @@ def test_3d_bssfp_segments_cover_kspace_with_identical_shot_structure() -> None:
 
 def test_3d_bssfp_accepts_a_nonselective_caller_designed_pulse() -> None:
     system = _opts()
-    excitation = pp.make_hard_pulse(np.deg2rad(25), duration=0.5e-3, system=system)
-    train = pp.make_bssfp_readout(system, (0.22, 0.22, 0.12), (32, 4, 4), excitation, segment=2)
+    excitation = design.make_hard_pulse(np.deg2rad(25), duration=0.5e-3, system=system)
+    train = design.make_bssfp_readout(system, (0.22, 0.22, 0.12), (32, 4, 4), excitation, segment=2)
 
     assert isinstance(train, readout.Bssfp3D)
     assert train._gz_1 is train._gz_2 is None
@@ -120,12 +121,12 @@ def test_3d_bssfp_accepts_a_nonselective_caller_designed_pulse() -> None:
 def test_bssfp_rejects_unequal_3d_segments_and_2d_segmentation() -> None:
     system = _opts()
     with pytest.raises(ValueError, match="divide ny\\*nz"):
-        pp.make_bssfp_readout(
+        design.make_bssfp_readout(
             system, (0.22, 0.22, 0.12), (32, 4, 3), _excitation(system, 25, 0.12), segment=5
         )
     with pytest.raises(ValueError, match="2D bSSFP"):
-        pp.make_bssfp_readout(system, (0.22, 0.22), (32, 8), _excitation(system, 25, 5e-3), segment=2)
+        design.make_bssfp_readout(system, (0.22, 0.22), (32, 8), _excitation(system, 25, 5e-3), segment=2)
     with pytest.raises(ValueError, match="2D bSSFP requires"):
-        pp.make_bssfp_readout(
-            system, (0.22, 0.22), (32, 8), pp.make_hard_pulse(np.deg2rad(25), duration=0.5e-3, system=system)
+        design.make_bssfp_readout(
+            system, (0.22, 0.22), (32, 8), design.make_hard_pulse(np.deg2rad(25), duration=0.5e-3, system=system)
         )

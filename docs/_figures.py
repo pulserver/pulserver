@@ -666,14 +666,14 @@ def order_figure(entries, coords, *, cmap="viridis", label="echo index"):
 
 
 def pattern_figure(pattern, *, title="", cmap="viridis"):
-    """Colour a Cartesian plan's support by shot index and by position in the shot."""
+    """Colour a Cartesian loop's positions by shot index and by position in the shot."""
     fig, (left, right) = plt.subplots(1, 2, figsize=(9.0, 3.4), sharey=True)
-    support = np.asarray(pattern.support, dtype=float)
+    support = np.asarray(pattern.positions, dtype=float)
     if support.shape[1] == 1:
         support = np.column_stack([support[:, 0], np.zeros(len(support))])
     shot_index = np.zeros(len(support))
     echo_index = np.zeros(len(support))
-    for shot, indices in enumerate(pattern.order):
+    for shot, indices in enumerate(pattern.shots):
         for position, point in enumerate(indices):
             shot_index[point] = shot
             echo_index[point] = position
@@ -726,11 +726,9 @@ def epi_sampling_figure(plans, *, cmap="tab10"):
     """
     accent = plt.get_cmap(cmap)(3)
     fig, axes = plt.subplots(1, len(plans), figsize=(4.6 * len(plans), 3.7), squeeze=False)
-    for axis, plan in zip(axes[0], plans, strict=True):
-        # Accept either an AcquisitionPlan or a bare SamplingPattern.
-        sampling = getattr(plan, "sampling", plan)
+    for axis, sampling in zip(axes[0], plans, strict=True):
         n_shots = sampling.n_shots
-        if sampling.support.shape[1] == 2 and sampling.mask is not None:
+        if sampling.positions.shape[1] == 2 and sampling.mask is not None:
             ny, nz = sampling.mask.shape
             # Reference convention: unsampled cells mid-grey, sampled white.
             axis.pcolor(
