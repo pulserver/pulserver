@@ -2,7 +2,7 @@
 
 Recipes for changing one part of a working plugin without touching the rest.
 Each assumes the structure of [Write a sequence plugin with the design
-toolbox](write_a_plugin_with_modules.md): modules designed once, sampling and
+toolbox](../tutorials/build_a_sequence_plugin.md): modules designed once, sampling and
 slice objects built once, and a loop you own.
 
 The whole point of the split is that these changes are local. Swapping the

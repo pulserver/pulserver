@@ -11,17 +11,17 @@ Two pieces are provided:
   GE uses, as opposed to the SAFE model upstream PyPulseq implements. It is a
   line-for-line Python counterpart of ``pulserver_ge_pns.c`` so a plot here and
   a predownload verdict on the scanner cannot silently disagree.
-* :func:`read_esp_bands` / :func:`bands_to_resonances` — reading mechanical
-  resonance bands out of a vendor ESP lockout table and handing them to
-  upstream's spectrogram plotter.
+* :func:`read_esp_bands` / :func:`read_asc_bands` / :func:`bands_to_resonances`
+  — reading mechanical resonance bands out of a vendor lockout table, in either
+  vendor's spelling, and handing them to upstream's spectrogram plotter.
 
-The ESP file format is documented here; no vendor ESP table is distributed
-with Pulserver, and none is needed to use the rest of the module.
+Both table formats are documented here; no vendor table of either kind is
+distributed with Pulserver, and none is needed to use the rest of the module.
 """
 
 from __future__ import annotations
 
-__all__ = ["bands_to_resonances", "chronaxie_pns", "read_esp_bands"]
+__all__ = ["bands_to_resonances", "chronaxie_pns", "read_asc_bands", "read_esp_bands"]
 
 from pathlib import Path
 
@@ -177,6 +177,47 @@ def read_esp_bands(path: str | Path) -> list[tuple[float, float, float, str]]:
                 raise ValueError(f"ESP table {path}: negative amplitude limit {amp_g_per_cm}")
             bands.append((5.0e5 / esp_max, 5.0e5 / esp_min, amp_g_per_cm * 10.0, axis))
 
+    return bands
+
+
+def read_asc_bands(path: str | Path) -> list[tuple[float, float, float]]:
+    """Read mechanical resonance bands from a Siemens ``.asc`` file.
+
+    The same tables :meth:`pypulseq.Sequence.calculate_pns` reads for its SAFE
+    hardware description also declare the gradient coil's acoustic resonances,
+    as a centre frequency and a bandwidth per resonance. This reads them with
+    upstream's own parser and restates them as ``(fmin, fmax)`` bands, the form
+    :class:`~pulserver.pypulseq.Opts` and the C safety core take.
+
+    A Siemens table declares no amplitude limit and no axis, so the limit comes
+    back as ``0.0``: the safety core then falls back to its hardware-scaled
+    floor, ``0.08 * max_grad``, for that band. Bands are unlabelled, which is
+    what the core wants — it checks every axis against every band regardless.
+
+    No ``.asc`` table ships with Pulserver — supply the one for the system you
+    are targeting.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to the Siemens ``.asc`` file.
+
+    Returns
+    -------
+    list of tuple
+        ``(freq_min_hz, freq_max_hz, max_amplitude_mT_per_m)``.
+    """
+    from pypulseq.utils.siemens.asc_to_hw import asc_to_acoustic_resonances
+    from pypulseq.utils.siemens.readasc import readasc
+
+    asc, _ = readasc(str(path))
+    bands: list[tuple[float, float, float]] = []
+    for resonance in asc_to_acoustic_resonances(asc):
+        centre = float(resonance["frequency"])
+        width = float(resonance["bandwidth"])
+        if centre <= 0.0 or width <= 0.0:
+            continue
+        bands.append((max(centre - 0.5 * width, 0.0), centre + 0.5 * width, 0.0))
     return bands
 
 

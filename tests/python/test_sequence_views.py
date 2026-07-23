@@ -8,6 +8,7 @@ import pulserver.io as pio
 import pulserver.pypulseq as ps
 import pypulseq as pp
 import pytest
+from pulserver.pypulseq import _safety
 from scipy.spatial.transform import Rotation
 
 matplotlib.use("Agg")
@@ -196,6 +197,12 @@ def test_pns_rejects_an_unknown_model(system, gradient):
         seq.pns(model="safest", plot=False)
 
 
+def test_safe_pns_reports_the_two_ways_to_supply_siemens_hardware(system, gradient):
+    seq = _build(system, gradient)
+    with pytest.raises(ValueError, match="pns_hardware"):
+        seq.pns(model="safe", plot=False)
+
+
 # ── io.read ──────────────────────────────────────────────────────────
 
 
@@ -291,3 +298,50 @@ def test_read_esp_bands_fails_closed_on_a_malformed_table(tmp_path, table):
     path.write_text(table)
     with pytest.raises(ValueError):
         pio.read_esp_bands(path)
+
+
+# ── Siemens .asc acoustic resonances ─────────────────────────────────
+
+
+ASC_FILE = """\
+aflGCAcousticResonanceFrequency[0]	 = 	590.0
+aflGCAcousticResonanceFrequency[1]	 = 	1100.0
+aflGCAcousticResonanceFrequency[2]	 = 	0.0
+aflGCAcousticResonanceBandwidth[0]	 = 	100.0
+aflGCAcousticResonanceBandwidth[1]	 = 	220.0
+aflGCAcousticResonanceBandwidth[2]	 = 	0.0
+### ASCCONV END ###
+"""
+
+
+def test_read_asc_bands_restates_centre_and_bandwidth_as_a_range(tmp_path):
+    path = tmp_path / "coil.asc"
+    path.write_text(ASC_FILE)
+
+    bands = pio.read_asc_bands(path)
+
+    # The zero-frequency entry is padding, not a resonance.
+    assert len(bands) == 2
+    assert bands[0] == pytest.approx((540.0, 640.0, 0.0))
+    assert bands[1] == pytest.approx((990.0, 1210.0, 0.0))
+
+
+def test_asc_bands_survive_the_round_trip_back_to_upstream_resonances(tmp_path):
+    path = tmp_path / "coil.asc"
+    path.write_text(ASC_FILE)
+
+    resonances = _safety.bands_to_resonances(pio.read_asc_bands(path))
+
+    # Upstream draws each band as frequency ± bandwidth/2, so a round trip
+    # through our (fmin, fmax) form has to land back on the declared numbers.
+    assert resonances[0] == pytest.approx({"frequency": 590.0, "bandwidth": 100.0})
+    assert resonances[1] == pytest.approx({"frequency": 1100.0, "bandwidth": 220.0})
+
+
+def test_asc_bands_are_accepted_by_opts(tmp_path, system):
+    path = tmp_path / "coil.asc"
+    path.write_text(ASC_FILE)
+
+    system.set_forbidden_bands(pio.read_asc_bands(path))
+
+    assert system.forbidden_bands[0] == pytest.approx((540.0, 640.0, 0.0))

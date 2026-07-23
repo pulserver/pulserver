@@ -1,0 +1,172 @@
+# Peripheral nerve stimulation
+
+## The physical problem
+
+A changing magnetic field induces an electric field in tissue. Switch a
+gradient fast enough and the induced field depolarises peripheral nerve
+membranes, which the subject feels — a tap, a twitch, at worst pain. Unlike
+[mechanical resonance](mechanical_resonance_safety.md), this is a limit on the
+subject, not the hardware, and it is regulatory rather than advisory.
+
+The quantity that stimulates is not the gradient amplitude but its **rate of
+change**, $\mathrm{d}G/\mathrm{d}t$, and not its instantaneous value either. A
+nerve integrates: a short, intense slew and a longer, gentler one can be
+equally stimulating. The threshold therefore depends on pulse *duration*, and
+the classical description of that dependence is the strength–duration curve.
+
+Two model families are in use, and Pulserver supports both because they are
+the two you meet in practice:
+
+**Irnich rheobase/chronaxie**, the form GE uses. The stimulation threshold for
+a rectangular slew pulse of duration $\tau$ is
+
+$$S_\text{thr}(\tau) = \frac{S_\text{min}}{1 - \bigl(\tfrac{c}{c+\tau}\bigr)}
+\quad\text{with}\quad S_\text{min} = \frac{\text{rheobase}}{\alpha},$$
+
+where $c$ is the chronaxie time, the rheobase is the asymptotic threshold for
+an infinitely long pulse, and $\alpha$ is a coil attenuation factor. Realised
+as a linear filter, this is a convolution of the slew waveform with the kernel
+
+$$k[i] = \frac{\Delta t}{S_\text{min}}\cdot\frac{c}{(c + i\,\Delta t)^2},$$
+
+whose $1/\tau^2$ tail is truncated after 20 chronaxie constants. The result is
+a fraction of threshold, per axis, at every instant.
+
+**SAFE** (Szczepankiewicz and Witzel), the form Siemens `.asc` hardware files
+describe, and what upstream PyPulseq implements. Pulserver delegates to
+upstream for this one rather than reimplementing it.
+
+Both are available from
+{meth}`pulserver.pypulseq.Sequence.pns`; `model='chronaxie'` is the default
+because it is the arithmetic the interpreter runs at predownload, and
+`model='safe'` reads its hardware description from `system.pns_hardware` or an
+explicit `hardware=` argument.
+
+## The naive algorithm
+
+Render the whole scan to a gradient waveform. Differentiate. Convolve with the
+kernel. Root-sum-square across axes. Compare the peak against 100 %.
+
+Unlike the mechanical resonance case, **this one cannot be replaced by a
+structural shortcut**, and it is worth being precise about why.
+
+The mechanical resonance criterion asks about the spectrum, and the Fourier
+transform is linear and shift-covariant, so a sum of time-shifted block shapes
+transforms into a sum of phase-rotated block transforms. The verdict is the
+*coherent sum* over the whole window, and that sum can be assembled
+analytically from per-definition transforms.
+
+PNS asks for the **pointwise maximum of a convolution**. Convolution is linear
+too, so the response is likewise a sum of per-event responses — but the
+verdict is $\max_t$ of the root-sum-square of that sum, and a maximum is
+neither linear nor decomposable. You cannot bound the peak from per-definition
+peaks without being either wrong or uselessly conservative: two adjacent
+events each at 60 % of threshold may combine to 90 % or to 30 % depending
+entirely on their relative timing and sign. The instant of the peak is a
+property of the whole window, so the whole window has to be evaluated.
+
+So PNS genuinely needs a materialised time-domain waveform. What can still be
+avoided is materialising the *whole scan*.
+
+## What Pulserver computes
+
+**One canonical TR, circularly padded.** The waveform is built for a single
+canonical TR — the same window
+[the mechanical resonance analysis](mechanical_resonance_safety.md#stage-1--the-canonical-structural-window)
+uses — and the slew rate computed on it. Because a TR is played back to back
+with copies of itself, the convolution needs history from before the window
+starts; the waveform is therefore **circularly padded** by however many
+samples the nerve model declares it needs (`required_padding()` — for the
+Irnich kernel, 20 chronaxie constants' worth). The model then sees a fully
+warmed-up history, and the peak found inside one TR is the peak of the
+steady-state scan.
+
+That padding query is the whole reason the split below exists.
+
+**The core computes slew; the vendor computes stimulation.** `pulseg_calc_pns`
+returns $\mathrm{d}G/\mathrm{d}t$ per axis, in T/m/s, and nothing else. The
+nerve model is injected as two function pointers — `required_padding(dt)` and
+`evaluate(dgdt_x, dgdt_y, dgdt_z, n, dt)` — so the vendor-neutral library
+carries no nerve-stimulation constants and no vendor's threshold curve. GE's
+implementation lives in `pulserver_ge_pns.c` in the interpreter; the Python
+counterpart in `pulserver.pypulseq._safety` is a line-for-line match of it, so
+a plot drawn while authoring a sequence and a verdict returned on the scanner
+cannot disagree by reimplementation.
+
+This is a deliberate boundary, not an accident of layering. Nerve models and
+their coefficients are the part of safety most likely to be vendor-specific,
+proprietary, or revised; the padding query is exactly the minimum the core
+needs to know about a model in order to hand it a correct waveform.
+
+**Rasterisation.** The slew waveform is built on the gradient raster, from the
+same block definitions the rest of the pipeline uses — trapezoid vertices
+expanded exactly, arbitrary gradients taken as their raw samples. No
+interpolation onto a finer grid, because the raster is where the hardware's
+own slew limit is defined.
+
+## What this costs, and on what
+
+Measured on the shipped example zoo, one slice, one average, against the same
+compiled engine predownload runs:
+
+| Sequence | Canonical TR | Slew samples | Waveform build | Nerve model | Mech-res gate |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GRE | 250 ms | 51 427 | 707 ms | 16 ms | 25 ms |
+| FSE, ETL 16 | 3000 ms | 601 409 | 8 442 ms | 208 ms | 785 ms |
+| bSSFP | 129 ms | 27 247 | 369 ms | 9 ms | 41 ms |
+| MPRAGE | 2163 ms | 434 129 | 6 099 ms | 150 ms | 360 ms |
+| Spiral, 48 short shots | 960 ms | 193 441 | 2 694 ms | 61 ms | 377 ms |
+| Spiral, 4 long shots | 80 ms | 17 441 | 236 ms | 5 ms | 83 ms |
+
+Reproduce with `python docs/_bench/bench_safety.py --esp <table>`.
+
+Three things follow directly from that table.
+
+**Cost tracks TR duration, not sequence complexity.** Sample count is
+$T_\text{TR}/\Delta t$ and nothing else: FSE's 3-second TR costs 12× GRE's
+250 ms one, and the ratio of their sample counts is 11.7. Compare with the
+mechanical resonance column, which tracks the *number of blocks* in the window
+— that is the signature of a structural analysis versus a materialised one.
+
+**The nerve model is 2–3 % of the cost; building the waveform is the rest.**
+This is the useful consequence of the function-pointer split: swapping in a
+different nerve model, or evaluating several, is nearly free, because the
+expensive half — expanding block definitions into a padded, rasterised slew
+waveform — is done once and shared.
+
+**PNS is ~10× the mechanical resonance gate on the same sequence.** Both are
+paid at predownload while the operator waits, so it is worth knowing which one
+dominates. The reason is entirely the one above: mechanical resonance never
+builds a waveform, and PNS must.
+
+**A note on what these numbers are not.** The peak stimulation percentages
+this sweep produces are not meaningful safety figures — the Irnich constants
+used are representative body-gradient values chosen to exercise the code path,
+not any particular system's, and the real ones come from scanner
+configuration. What the table is measuring is cost and its scaling.
+
+## Inspecting PNS while authoring
+
+`Sequence.pns` is a visualisation, not a gate. It draws per-axis and combined
+stimulation against threshold lines so the margin is visible while a sequence
+is being written:
+
+```python
+import pulserver.pypulseq as pp
+
+system = pp.Opts(chronaxie_us=360.0, rheobase=4.25e8, alpha=0.333)
+seq = build_my_sequence(system)
+
+pns_percent, t = seq.pns(tr_index=0)          # Irnich, from the Opts
+pns_percent, t = seq.pns(model="safe")        # SAFE, from system.pns_hardware
+```
+
+Scoping it to one TR with `tr_index=` is the right default: it is the window
+the scanner evaluates, and it avoids materialising a whole scan to look at a
+quantity that is periodic anyway.
+
+No verdict is returned. The authoritative gate is `pulseg_check_safety` at
+predownload, plus the vendor's own checks — and the reason to keep the
+inspection view non-authoritative is that a sequence author's `Opts` need not
+match the scanner's configuration, so any pass this printed would be a
+promise Pulserver is not in a position to make.

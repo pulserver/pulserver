@@ -181,6 +181,24 @@ typedef struct pulseg_opts
      *  frees it after use. */
     int (*vendor_section_write_fn)(void *ctx, unsigned char **out_buf, int *out_len);
     void *vendor_section_ctx;
+
+    /**
+     * @brief Accept RF amplitude that varies across canonical TR instances.
+     *
+     * Default 1. When set, a subsequence whose positional RF amplitude
+     * pattern differs between TR instances (or passes) is accepted instead
+     * of returning @c PULSEG_ERR_CONSISTENCY_RF_PERIODIC; the descriptor's
+     * @c rf_amplitude_variable flag is raised and the RF safety model is
+     * built from the *positional-max envelope* rather than one canonical
+     * instance -- see pulseg_get_rf_array().
+     *
+     * RF *shim* pattern variation stays rejected regardless of this flag:
+     * VOP SAR with changing shim vectors is not order-monotone in any
+     * per-position scalar, so no envelope dominates it.
+     *
+     * Set to 0 to restore the strict periodicity gate.
+     */
+    int allow_variable_rf_amplitude;
 } pulseg_opts;
 
 /* clang-format off */
@@ -189,7 +207,7 @@ typedef struct pulseg_opts
     0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, \
     PULSEG_PEAK_LOG10_THRESHOLD_DEFAULT, PULSEG_PEAK_NORM_SCALE_DEFAULT, \
     PULSEG_PEAK_EPS_DEFAULT, PULSEG_PEAK_PROMINENCE_DEFAULT, NULL, NULL, {0, 1, 2}, \
-    PULSEG_CACHE_EXT_DEFAULT, NULL, NULL \
+    PULSEG_CACHE_EXT_DEFAULT, NULL, NULL, 1 \
     }
 /* clang-format on */
 

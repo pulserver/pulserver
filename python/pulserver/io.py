@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__ = ["read", "read_esp_bands", "write"]
+__all__ = ["read", "read_asc_bands", "read_esp_bands", "write"]
 
 import hashlib
 from pathlib import Path
@@ -13,7 +13,7 @@ import numpy as np
 import pypulseq as pp
 from pypulseq.supported_labels_rf_use import get_supported_rf_uses
 
-from pulserver.pypulseq._safety import read_esp_bands
+from pulserver.pypulseq._safety import read_asc_bands, read_esp_bands
 from pulserver.pypulseq._sequence import _RF_USE_CODE_TO_CHAR
 from pulserver.pypulseq._views import build_views
 

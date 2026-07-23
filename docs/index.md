@@ -7,8 +7,8 @@ sequences.
 :maxdepth: 2
 
 getting_started
+tutorials
 how_to
-examples
 api/index
 explanation
 more

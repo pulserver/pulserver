@@ -32,3 +32,9 @@ build_test/
 bridge/pypulseq_host
 bridge/matlab_host
 docs/api/generated/
+
+# Documentation-only benchmark tooling: built binary and generated sequences.
+docs/_bench/bench_pipeline
+docs/_bench/work/
+docs/_bench/results.json
+docs/_bench/safety.json

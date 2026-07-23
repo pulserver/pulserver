@@ -438,6 +438,14 @@ typedef struct pulseg_sequence_descriptor
     int rf_table_size;
     pulseg_rf_table_element *rf_table;
 
+    /** 1 when positional RF amplitude differs across canonical TR instances
+     *  and pulseg_opts.allow_variable_rf_amplitude accepted it. The RF safety
+     *  model is then built from the positional-max envelope
+     *  (pulseg__rf_position_max) instead of one canonical instance, so it
+     *  dominates every instance in peak and in time-averaged terms alike.
+     *  Serialized in the cache COMMON section. */
+    int rf_amplitude_variable;
+
     int num_unique_grads;
     pulseg_grad_definition *grad_definitions;
     int grad_table_size;

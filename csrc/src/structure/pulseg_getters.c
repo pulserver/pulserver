@@ -378,6 +378,67 @@ int pulseg_get_tr_rf_ids(const pulseg_collection *coll, int *out_rf_ids, int sub
 }
 
 /* ================================================================== */
+/*  Positional-max RF amplitude envelope                              */
+/* ================================================================== */
+
+/*
+ * Worst-case |amplitude| at canonical position @p pos across every TR
+ * instance (degenerate path) or pass (non-degenerate path). This is the
+ * safety envelope for a subsequence whose RF amplitude varies across
+ * instances (desc->rf_amplitude_variable): peak B1 and every time-averaged
+ * (SAR / B1rms) limit are dominated by the positional max, because
+ * Â_pos >= |A_{u,pos}| for every instance u and Â_pos^2 >= A_{u,pos}^2
+ * per position.
+ *
+ * The walk mirrors pulseg_get_rf_array's own instance layout so the
+ * envelope and the canonical-instance value coincide exactly for a periodic
+ * sequence (Â_pos == |A_{0,pos}|), which is the regression contract.
+ */
+static float pulseg__rf_position_max(
+    const pulseg_sequence_descriptor *desc,
+    int use_exec_stream,
+    int base_start,
+    int unit_size,
+    int num_units,
+    int pos)
+{
+    float best = 0.0f;
+    int u;
+
+    for (u = 0; u < num_units; ++u)
+    {
+        int st = base_start + u * unit_size + pos;
+        int blk_idx;
+        const pulseg_block_table_element *bte;
+        float a;
+
+        if (use_exec_stream)
+        {
+            if (st < 0 || st >= desc->exec_stream_len)
+                continue;
+            blk_idx = desc->exec_stream_block_idx[st];
+        }
+        else
+        {
+            blk_idx = st;
+        }
+        if (blk_idx < 0 || blk_idx >= desc->num_blocks)
+            continue;
+
+        bte = &desc->block_table[blk_idx];
+        if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
+            continue;
+
+        a = desc->rf_table[bte->rf_id].amplitude;
+        if (a < 0.0f)
+            a = -a;
+        if (a > best)
+            best = a;
+    }
+    return best;
+}
+
+/* ================================================================== */
 /*  pulseg_get_rf_array --                                         */
 /*    Build an ordered array of RF stats for a TR region.             */
 /*    Each entry gets the base rf_stats patched with the actual       */
@@ -394,6 +455,9 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
     int use_exec_stream;
     int num_passes, pass_size;
     int i, n, num_rf;
+    /* Positional-max envelope walk (only used when rf_amplitude_variable):
+     * the u-th instance's position p lives at env_base + u*env_stride + p. */
+    int env_base, env_stride, env_units;
 
     if (!coll || !out_pulses)
         return PULSEG_ERR_NULL_POINTER;

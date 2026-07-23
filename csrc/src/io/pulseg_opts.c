@@ -55,6 +55,7 @@ void pulseg_opts_init_full(
     opts->cache_ext[sizeof(opts->cache_ext) - 1] = '\0';
     opts->vendor_section_write_fn = NULL;
     opts->vendor_section_ctx = NULL;
+    opts->allow_variable_rf_amplitude = 1;
 }
 
 void pulseg_opts_init(

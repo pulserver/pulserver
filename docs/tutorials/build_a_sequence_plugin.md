@@ -1,11 +1,17 @@
-# How to write a sequence plugin with the design toolbox
+# Build a sequence plugin with the design toolbox
 
-This guide builds a complete 2D multi-slice GRE plugin — RF-spoiled,
-slice-selective, optionally accelerated with ACS lines — out of shipped
-modules and sampling objects. It assumes you can already write the same
-sequence in plain PyPulseq; if you cannot, start from
-[`examples/sequences/gre_2d.py`](https://github.com/INFN-MRI/pulserver/tree/main/examples/sequences/gre_2d.py),
-which does exactly that.
+In this tutorial you will build a complete 2D multi-slice GRE plugin —
+RF-spoiled, slice-selective, optionally accelerated with ACS lines — out of
+shipped modules and sampling objects, and finish with a file you can hand to
+the scanner. Work through it in one sitting; every step's code is given in
+full, and the finished plugin is at the end so you can check yourself against
+it at any point.
+
+It assumes you can already write this sequence in plain PyPulseq. If you
+cannot, read
+[`examples/sequences/gre_2d.py`](https://github.com/INFN-MRI/pulserver/tree/main/examples/sequences/gre_2d.py)
+first — it does exactly that, and this tutorial is the same sequence rebuilt
+on the toolbox.
 
 **Nothing here replaces the way you already write PyPulseq.** `seq` is still a
 `Sequence`, blocks still go in with `seq.add_block`, and the loop nesting is
@@ -503,11 +509,17 @@ def make_sequence(opts, protocol, output_path):
     return PLUGIN.make_sequence(opts, protocol, output_path)
 ```
 
-## Next
+## What you learned, and where to go next
 
-- [Customise a plugin](customise_a_plugin.md) — swap the excitation, add a
-  preparation, change the sampling.
-- [Write a new module or loop structure](write_a_new_module.md) — when the
-  shipped families do not cover your sequence.
+You designed modules once and re-rendered them per shot, planned k-space and
+slices as independent tables, budgeted TE and TR from module timing landmarks
+rather than hard-coded numbers, and checked the played k-space against the
+planned one. That is the whole authoring model; everything else is more
+factories.
+
+- [Customise a plugin](../how-to/customise_a_plugin.md) — swap the excitation,
+  add a preparation, change the sampling.
+- [Write a new module or loop structure](../how-to/write_a_new_module.md) —
+  when the shipped families do not cover your sequence.
 - [Scan-loop reference](../reference/sampling.md) — every loop factory and
   what its shots contain.

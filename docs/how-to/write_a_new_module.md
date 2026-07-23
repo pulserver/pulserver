@@ -283,4 +283,4 @@ assert np.array_equal(played, planned)
 
 - [Scan-loop reference](../reference/sampling.md) — the loop factories your
   module will be driven by.
-- [Write a sequence plugin with the design toolbox](write_a_plugin_with_modules.md)
+- [Write a sequence plugin with the design toolbox](../tutorials/build_a_sequence_plugin.md)

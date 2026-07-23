@@ -44,5 +44,7 @@ The loop nesting stays yours: nothing in `pulserver.design` iterates the
 sequence for you, which is what keeps a preparation, a trigger or a dummy TR
 insertable at any level.
 
-See the {doc}`API reference <api/index>` for the grouped public interface, and
-{doc}`how_to` for worked plugins.
+Next, {doc}`build a complete plugin <tutorials/build_a_sequence_plugin>` — one
+sitting, ending with a file you could hand to a scanner. After that,
+{doc}`how_to` has the task-shaped recipes, {doc}`api/index` the grouped public
+interface, and {doc}`explanation` the reasoning underneath both.

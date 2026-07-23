@@ -37,10 +37,17 @@ class Opts(_pp.Opts):
     alpha : float, optional
         PNS coil attenuation factor; the stimulation threshold is
         ``rheobase / alpha``.
+    pns_hardware : optional
+        SAFE hardware description, or the path to the Siemens ``.asc`` file
+        holding one, in the form :meth:`pypulseq.Sequence.calculate_pns`
+        takes. Only the SAFE nerve model reads it; the Irnich model uses the
+        three constants above.
     forbidden_bands : sequence of tuple, optional
         Mechanical resonance bands as
         ``(freq_min_hz, freq_max_hz, max_amplitude_mT_per_m[, channel])``,
-        where channel is ``'gx'``, ``'gy'`` or ``'gz'``.
+        where channel is ``'gx'``, ``'gy'`` or ``'gz'``. Read them from a
+        vendor table with :func:`pulserver.io.read_esp_bands` (GE) or
+        :func:`pulserver.io.read_asc_bands` (Siemens).
     adc_ringdown_time, segment_dead_time, segment_ringdown_time : float
         Additional hardware timing metadata, in seconds.
 
@@ -75,6 +82,7 @@ class Opts(_pp.Opts):
         chronaxie_us: float | None = None,
         rheobase: float | None = None,
         alpha: float | None = None,
+        pns_hardware=None,
         forbidden_bands: _Sequence | None = None,
         adc_ringdown_time: float = 0.0,
         segment_dead_time: float = 0.0,
@@ -105,6 +113,7 @@ class Opts(_pp.Opts):
         self.chronaxie_us = None if chronaxie_us is None else float(chronaxie_us)
         self.rheobase = None if rheobase is None else float(rheobase)
         self.alpha = None if alpha is None else float(alpha)
+        self.pns_hardware = pns_hardware
         self.adc_ringdown_time = float(adc_ringdown_time)
         self.segment_dead_time = float(segment_dead_time)
         self.segment_ringdown_time = float(segment_ringdown_time)

@@ -25,8 +25,15 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
+    "sphinx.ext.mathjax",
     "matplotlib.sphinxext.plot_directive",
 ]
+
+# The explanation pages carry real formulae. Without ``dollarmath`` MyST does
+# not treat ``$...$`` / ``$$...$$`` as maths at all and renders the LaTeX
+# verbatim, dollar signs and all. ``amsmath`` adds the numbered environments
+# (``align``, ``gather``) alongside it.
+myst_enable_extensions = ["dollarmath", "amsmath"]
 
 # API prose is the source of truth.  Type annotations remain available to IDEs
 # and type checkers, but are intentionally not repeated in rendered signatures

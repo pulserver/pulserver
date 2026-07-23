@@ -16,7 +16,7 @@ from pypulseq.compress_shape import compress_shape
 from pypulseq.event_lib import EventLibrary
 from pypulseq.supported_labels_rf_use import get_supported_labels
 
-from ._safety import bands_to_resonances, chronaxie_pns, read_esp_bands
+from ._safety import bands_to_resonances, chronaxie_pns, read_asc_bands, read_esp_bands
 from ._views import build_views, slice_view, time_bounds
 
 _RF_USE_CHAR_TO_CODE = {
@@ -633,6 +633,7 @@ class Sequence(pp.Sequence):
         segment: int | None = None,
         bands: list | None = None,
         esp_file=None,
+        asc_file=None,
         window_width: float | None = None,
         max_frequency: float = 2000.0,
         plot: bool = True,
@@ -655,8 +656,11 @@ class Sequence(pp.Sequence):
             Defaults to ``system.forbidden_bands`` when the sequence's
             :class:`~pypulseq.Opts` carries them.
         esp_file : str or pathlib.Path, optional
-            Read the bands from a vendor ESP lockout table instead. See
+            Read the bands from a GE ESP lockout table instead. See
             :func:`~pulserver.pypulseq._safety.read_esp_bands`.
+        asc_file : str or pathlib.Path, optional
+            Read the bands from a Siemens ``.asc`` file instead. See
+            :func:`~pulserver.pypulseq._safety.read_asc_bands`.
         window_width : float, optional
             Analysis window in seconds.
         max_frequency : float, default 2000.0
@@ -670,8 +674,12 @@ class Sequence(pp.Sequence):
             ``(spectrograms, spectrogram_sos, frequencies, times)``, as
             :meth:`pypulseq.Sequence.calculate_gradient_spectrum` returns.
         """
+        if esp_file is not None and asc_file is not None:
+            raise ValueError("Pass either esp_file or asc_file, not both.")
         if esp_file is not None:
             bands = read_esp_bands(esp_file)
+        elif asc_file is not None:
+            bands = read_asc_bands(asc_file)
         elif bands is None:
             bands = list(getattr(self.system, "forbidden_bands", []) or [])
 
@@ -728,7 +736,9 @@ class Sequence(pp.Sequence):
             the sequence's :class:`~pypulseq.Opts` when it carries them
             (:class:`pulserver.pypulseq.Opts` does).
         hardware : optional
-            SAFE hardware description or ``.asc`` path, for ``model='safe'``.
+            SAFE hardware description or Siemens ``.asc`` path, for
+            ``model='safe'``. Defaults to ``system.pns_hardware`` when the
+            sequence's :class:`~pypulseq.Opts` carries one.
         thresholds : sequence of float, default (80.0, 100.0)
             Percentage lines to draw.
         plot : bool, default True
@@ -740,8 +750,12 @@ class Sequence(pp.Sequence):
             ``(pns_percent, t)`` where ``pns_percent`` has shape ``(N, 3)``.
         """
         if model == "safe":
+            hardware = hardware if hardware is not None else getattr(self.system, "pns_hardware", None)
             if hardware is None:
-                raise ValueError("model='safe' requires the hardware= argument (SAFE parameters or .asc path).")
+                raise ValueError(
+                    "model='safe' needs SAFE hardware parameters or a Siemens .asc path. Pass them "
+                    "as hardware=, or set pns_hardware on the sequence's pulserver.pypulseq.Opts."
+                )
             time_range = self._time_range(tr_index, segment, default=None)
             _, _, pns_components, t = self._scoped_view(tr_index, segment).calculate_pns(
                 hardware, time_range=time_range, do_plots=plot

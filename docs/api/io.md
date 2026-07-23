@@ -7,9 +7,11 @@ rotation, RF-shim and custom-label extensions included — back into a
 {class}`pulserver.pypulseq.Sequence` whose inspection views are already built,
 so it can be plotted or analysed straight away.
 
-`read_esp_bands` parses a vendor ESP lockout table into the mechanical
-resonance bands that `Sequence.grad_spectrum` overlays. No ESP table ships
-with Pulserver; supply the one for the system you target.
+`read_esp_bands` and `read_asc_bands` parse a vendor lockout table — a GE ESP
+table or a Siemens `.asc` file respectively — into the mechanical resonance
+bands that `Sequence.grad_spectrum` overlays and `Opts.forbidden_bands` holds.
+No vendor table of either kind ships with Pulserver; supply the one for the
+system you target.
 
 ```{eval-rst}
 .. autosummary::
@@ -19,4 +21,5 @@ with Pulserver; supply the one for the system you target.
    pulserver.io.write
    pulserver.io.read
    pulserver.io.read_esp_bands
+   pulserver.io.read_asc_bands
 ```

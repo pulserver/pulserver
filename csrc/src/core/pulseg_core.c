@@ -340,7 +340,8 @@ static int get_block_rf_shim_id(const pulseg_sequence_descriptor *desc, int bloc
  *   Compares each TR in [first_tr, last_tr] against ref_tr.
  */
 static int check_rf_amplitude_periodicity(
-    const pulseg_sequence_descriptor *desc,
+    pulseg_sequence_descriptor *desc,
+    int allow_variable,
     int ref_tr,
     int first_tr,
     int last_tr,
@@ -369,19 +370,39 @@ static int check_rf_amplitude_periodicity(
             chk_amp = get_block_rf_amplitude(desc, chk_start + j);
             if (ref_amp != chk_amp)
             {
-                if (diag)
+                if (!allow_variable)
+                {
+                    if (diag)
+                    {
+                        pulseg__diag_printf(
+                            diag,
+                            "RF periodicity: TR %d block %d has amplitude %.6g, "
+                            "expected %.6g (from reference TR %d)\n",
+                            tr_idx,
+                            j,
+                            (double)chk_amp,
+                            (double)ref_amp,
+                            ref_tr);
+                    }
+                    return PULSEG_ERR_CONSISTENCY_RF_PERIODIC;
+                }
+                /* Accepted: the RF safety model switches to the positional-max
+                 * envelope (pulseg_get_rf_array). Record the first mismatch for
+                 * debuggability, then keep scanning -- shim periodicity below
+                 * still applies. */
+                if (!desc->rf_amplitude_variable && diag)
                 {
                     pulseg__diag_printf(
                         diag,
-                        "RF periodicity: TR %d block %d has amplitude %.6g, "
-                        "expected %.6g (from reference TR %d)\n",
+                        "RF amplitude varies (TR %d block %d: %.6g vs %.6g at "
+                        "TR %d); using positional-max safety envelope\n",
                         tr_idx,
                         j,
                         (double)chk_amp,
                         (double)ref_amp,
                         ref_tr);
                 }
-                return PULSEG_ERR_CONSISTENCY_RF_PERIODIC;
+                desc->rf_amplitude_variable = 1;
             }
         }
     }
@@ -451,7 +472,8 @@ static int check_rf_shim_periodicity(
  *   subsequences, one expanded pass is the canonical RF unit.
  */
 static int check_cross_pass_rf_consistency(
-    const pulseg_sequence_descriptor *desc,
+    pulseg_sequence_descriptor *desc,
+    int allow_variable,
     pulseg_diagnostic *diag)
 {
     int num_passes, pass_size, p, j;
@@ -479,18 +501,34 @@ static int check_cross_pass_rf_consistency(
             chk_amp = get_block_rf_amplitude(desc, chk_bt);
             if (ref_amp != chk_amp)
             {
-                if (diag)
+                if (!allow_variable)
+                {
+                    if (diag)
+                    {
+                        pulseg__diag_printf(
+                            diag,
+                            "Cross-pass RF amplitude mismatch: pass %d "
+                            "pos %d has %.6g, pass 0 has %.6g\n",
+                            p,
+                            j,
+                            (double)chk_amp,
+                            (double)ref_amp);
+                    }
+                    return PULSEG_ERR_CONSISTENCY_RF_PERIODIC;
+                }
+                if (!desc->rf_amplitude_variable && diag)
                 {
                     pulseg__diag_printf(
                         diag,
-                        "Cross-pass RF amplitude mismatch: pass %d "
-                        "pos %d has %.6g, pass 0 has %.6g\n",
+                        "Cross-pass RF amplitude varies (pass %d pos %d: %.6g "
+                        "vs %.6g at pass 0); using positional-max safety "
+                        "envelope\n",
                         p,
                         j,
                         (double)chk_amp,
                         (double)ref_amp);
                 }
-                return PULSEG_ERR_CONSISTENCY_RF_PERIODIC;
+                desc->rf_amplitude_variable = 1;
             }
 
             /* RF shim ID */
@@ -630,10 +668,10 @@ static int check_exec_stream_segments(
     return PULSEG_SUCCESS;
 }
 
-static int check_consistency(const pulseg_collection *coll, pulseg_diagnostic *diag)
+static int check_consistency(pulseg_collection *coll, int allow_variable_rf, pulseg_diagnostic *diag)
 {
     int subseq_idx, rc;
-    const pulseg_sequence_descriptor *desc;
+    pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *trd;
     int ref_tr, first_check, last_check;
     int has_nd_prep, has_nd_cool;
@@ -675,7 +713,7 @@ static int check_consistency(const pulseg_collection *coll, pulseg_diagnostic *d
          * use one full expanded pass (including average expansion). */
         if (has_nd_prep || has_nd_cool)
         {
-            rc = check_cross_pass_rf_consistency(desc, diag);
+            rc = check_cross_pass_rf_consistency(desc, allow_variable_rf, diag);
             if (PULSEG_FAILED(rc))
             {
                 if (diag)
@@ -695,7 +733,8 @@ static int check_consistency(const pulseg_collection *coll, pulseg_diagnostic *d
             first_check = 1;
             last_check = trd->num_trs - 1;
 
-            rc = check_rf_amplitude_periodicity(desc, ref_tr, first_check, last_check, diag);
+            rc = check_rf_amplitude_periodicity(
+                desc, allow_variable_rf, ref_tr, first_check, last_check, diag);
             if (PULSEG_FAILED(rc))
             {
                 if (diag)
@@ -728,7 +767,16 @@ static int check_consistency(const pulseg_collection *coll, pulseg_diagnostic *d
     return PULSEG_SUCCESS;
 }
 
-/* Public wrapper around check_consistency */
+/* Public wrapper around check_consistency.
+ *
+ * Uses the permissive gate (variable RF amplitude accepted), matching the
+ * PULSEG_OPTS_INIT default: a caller re-running the check on an
+ * already-converted collection should not reject what conversion accepted. To
+ * assert strict periodicity, run conversion with
+ * pulseg_opts.allow_variable_rf_amplitude = 0, which fails before this point.
+ * The cast drops const: on a genuinely variable sequence this raises the
+ * descriptor's rf_amplitude_variable flag (idempotent -- it is already set
+ * from conversion). */
 int pulseg_check_consistency(const pulseg_collection *coll, pulseg_diagnostic *diag)
 {
     pulseg_diagnostic local_diag;
@@ -737,7 +785,7 @@ int pulseg_check_consistency(const pulseg_collection *coll, pulseg_diagnostic *d
         pulseg_diagnostic_init(&local_diag);
         diag = &local_diag;
     }
-    return check_consistency(coll, diag);
+    return check_consistency((pulseg_collection *)coll, /*allow_variable_rf=*/1, diag);
 }
 
 /* ================================================================== */
@@ -1400,7 +1448,7 @@ int pulseg_convert_collection(
 
     /* Cross-subsequence consistency (folded in from the former separate
      * pulseg_read()/pulseg_read_from_buffers() call). */
-    rc = check_consistency(coll, diag);
+    rc = check_consistency(coll, opts ? opts->allow_variable_rf_amplitude : 1, diag);
     if (PULSEG_FAILED(rc))
     {
         diag->code = rc;
