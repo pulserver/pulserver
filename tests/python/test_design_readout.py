@@ -135,7 +135,7 @@ def test_wave_gradients_rejects_bad_args() -> None:
 # FSE/CPMG train: z-axis crusher parity regression (fse.py).
 #
 # rf_dead_time != rf_ringdown_time (the realistic case, see
-# pulserver.analysis._opts.Opts's 72us/56us defaults) puts the refocusing
+# GE's 72us/56us dead/ringdown times) puts the refocusing
 # RF's true center off-midpoint within the fused GS4 lobe. calculate_kspace()
 # flips the running z-moment sign at that exact instant, so if the lead-in
 # crusher (before the first 180) isn't seeded to match, even- and odd-indexed

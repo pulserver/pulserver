@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-__all__ = ["Sequence"]
+__all__ = ["Segment", "Sequence"]
 
 import math
 from copy import deepcopy
-from pathlib import Path
-from tempfile import TemporaryDirectory
+from dataclasses import dataclass
 from types import SimpleNamespace
 
 import numpy as np
@@ -16,6 +15,9 @@ from pypulseq.block_to_events import block_to_events
 from pypulseq.compress_shape import compress_shape
 from pypulseq.event_lib import EventLibrary
 from pypulseq.supported_labels_rf_use import get_supported_labels
+
+from ._safety import bands_to_resonances, chronaxie_pns, read_esp_bands
+from ._views import build_views, slice_view, time_bounds
 
 _RF_USE_CHAR_TO_CODE = {
     "u": 0,
@@ -29,32 +31,61 @@ _RF_USE_CHAR_TO_CODE = {
 _RF_USE_CODE_TO_CHAR = {v: k for k, v in _RF_USE_CHAR_TO_CODE.items()}
 
 
-def _plot_payload(payload: bytes) -> bytes:
-    """Drop Pulserver-only extensions from a Pulseq payload for upstream plotters."""
-    lines: list[str] = []
-    in_blocks = False
-    skipping_extensions = False
-    for line in payload.decode("utf-8").splitlines(keepends=True):
-        section = line.strip()
-        if section == "[BLOCKS]":
-            in_blocks, skipping_extensions = True, False
-        elif section == "[EXTENSIONS]":
-            in_blocks, skipping_extensions = False, True
-            continue
-        elif skipping_extensions and section == "[SHAPES]":
-            skipping_extensions = False
-        elif skipping_extensions:
-            continue
-        elif section.startswith("["):
-            in_blocks = False
+@dataclass(frozen=True)
+class Segment:
+    """One virtual segment of a sequence, resolved to its max-energy instance.
 
-        if in_blocks and line.lstrip()[:1].isdigit():
-            fields = line.split()
-            if len(fields) == 8:
-                fields[-1] = "0"
-                line = " ".join(fields) + "\n"
-        lines.append(line)
-    return "".join(lines).encode("utf-8")
+    A segment definition is played many times with different gradient
+    amplitudes. The instance described here is the one carrying the most
+    gradient energy — the one worth looking at, and the one the safety
+    backend reasons about.
+
+    Attributes
+    ----------
+    index : int
+        Segment index within the sequence.
+    first_block, last_block : int
+        Inclusive 1-based Pulseq block indices of this instance.
+    duration : float
+        Segment duration in seconds.
+    pure_delay, is_nav, has_trigger : bool
+        Segment classification flags from the C backend.
+    from_max_energy_instance : bool
+        ``False`` when the scan table was unavailable and the segment
+        definition's own first instance was used instead.
+    """
+
+    index: int
+    first_block: int
+    last_block: int
+    duration: float
+    pure_delay: bool
+    is_nav: bool
+    has_trigger: bool
+    from_max_energy_instance: bool
+    _parent: Sequence = None
+
+    @property
+    def num_blocks(self) -> int:
+        """Number of blocks in the segment."""
+        return self.last_block - self.first_block + 1
+
+    @property
+    def time_range(self) -> tuple[float, float]:
+        """Start and end time of this instance within the parent sequence, in seconds."""
+        return time_bounds(self._parent._seqplot, self.first_block, self.last_block)
+
+    def to_sequence(self) -> pp.Sequence:
+        """Build a standalone :class:`pypulseq.Sequence` holding just this segment.
+
+        The result shares the parent's :class:`pypulseq.Opts`, so raster times
+        and limits are identical.
+        """
+        return slice_view(self._parent._seqplot, self.first_block, self.last_block)
+
+    def plot(self, **kwargs):
+        """Plot this segment, delegating to the parent's plotting view."""
+        return self._parent._seqplot.plot(time_range=self.time_range, **kwargs)
 
 
 class Sequence(pp.Sequence):
@@ -116,6 +147,12 @@ class Sequence(pp.Sequence):
         _builtin = get_supported_labels()
         self._label_registry: dict[str, int] = {lbl: i + 1 for i, lbl in enumerate(_builtin)}
         self._label_registry_inv: dict[int, str] = {i + 1: lbl for i, lbl in enumerate(_builtin)}
+        # Lazily built analysis state; see _views(). Keyed by block count so
+        # appending after an inspection transparently invalidates it, without
+        # costing anything in the add_block hot loop.
+        self._view_cache: dict | None = None
+        self._collection_cache: dict | None = None
+        self._segment_cache: dict | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -141,10 +178,11 @@ class Sequence(pp.Sequence):
         if in_place:
             seq_copy = self
         else:
-            tmp = self.block_cache
+            tmp = (self.block_cache, self._view_cache, self._collection_cache, self._segment_cache)
             self.block_cache = {}
+            self._view_cache = self._collection_cache = self._segment_cache = None
             seq_copy = deepcopy(self)
-            self.block_cache = tmp
+            (self.block_cache, self._view_cache, self._collection_cache, self._segment_cache) = tmp
 
         seq_copy.shape_library, shape_map = seq_copy.shape_library.remove_duplicates(9)
 
@@ -273,36 +311,507 @@ class Sequence(pp.Sequence):
             use = _RF_USE_CODE_TO_CHAR.get(int(use), "u")
         return super().rf_from_lib_data(lib_data, use)
 
-    @property
-    def _seq(self) -> pp.Sequence:
-        """Decode this fast builder to an upstream sequence for inspection.
+    # ------------------------------------------------------------------
+    # Inspection views
+    # ------------------------------------------------------------------
 
-        This is a transient plotting view, not a second mutable sequence.  It
-        is rebuilt on every access so events appended after a prior plot are
-        included.  Pulserver-only block extensions are omitted because
-        upstream PyPulseq does not decode them; the resulting diagram shows
-        the underlying RF, gradient, and ADC waveforms.
+    def payload(self) -> bytes:
+        """Serialise this sequence to the ``.seq`` payload the views are built from.
+
+        Deduplicated, exactly as :func:`pulserver.io.write` would emit it —
+        the C backend requires canonical event IDs to recognise repeated RF
+        shims and gradients across TRs, and the views should show what is
+        actually going to be written.
         """
         from pulserver.io import write
 
-        payload = _plot_payload(write(self, output=None, remove_duplicates=False, check_timing=False))
-        with TemporaryDirectory(prefix="pulserver-plot-") as directory:
-            path = Path(directory) / "sequence.seq"
-            path.write_bytes(payload)
-            decoded = pp.Sequence(system=self.system)
-            decoded.read(path)
-        return decoded
+        return write(self, output=None, remove_duplicates=True, check_timing=False)
 
-    def plot(self, **kwargs):
-        """Plot the current sequence through :attr:`_seq`.
+    def _views(self) -> dict:
+        """Build (or reuse) the upstream views of the current block list."""
+        n_blocks = self.next_free_block_ID - 1
+        cache = self._view_cache
+        if cache is None or cache["n_blocks"] != n_blocks:
+            plain, plotting, extensions = build_views(self, self.payload())
+            cache = {
+                "n_blocks": n_blocks,
+                "plain": plain,
+                "plot": plotting,
+                "extensions": extensions,
+            }
+            self._view_cache = cache
+        return cache
 
-        The fast builder cannot decode its own block libraries, so plotting is
-        delegated to the upstream Pulseq sequence returned by :attr:`_seq`.
-        The diagram includes all ordinary RF, gradient, and ADC events; custom
-        labels, rotations, and RF shims are metadata and are omitted from this
-        visual preview.
+    @property
+    def _seq(self) -> pp.Sequence:
+        """Plain upstream view: RF, gradients and ADC, extensions dropped.
+
+        This is what the file literally stores. Built on first access and
+        reused until more blocks are appended.
         """
-        return self._seq.plot(**kwargs)
+        return self._views()["plain"]
+
+    @property
+    def _seqplot(self) -> pp.Sequence:
+        """Plotting view: rotations applied and RF shims expanded.
+
+        Every ``ROTATIONS`` extension has been folded into the block's
+        gradients and every ``RF_SHIMS`` extension into a multi-channel RF
+        waveform, so this view shows what the scanner actually plays. It is
+        the same object as :attr:`_seq` when the sequence uses neither.
+        """
+        return self._views()["plot"]
+
+    @property
+    def extensions(self) -> dict:
+        """Block extensions, keyed by 1-based block index.
+
+        See :class:`pulserver.pypulseq._extensions.BlockExtensions`.
+        """
+        return self._views()["extensions"]
+
+    def _collection(self):
+        """Build (or reuse) the C-backend collection for structural queries."""
+        n_blocks = self.next_free_block_ID - 1
+        cache = self._collection_cache
+        if cache is None or cache["n_blocks"] != n_blocks:
+            from pulserver._ext._pulseg_wrapper import _PulseqCollection
+
+            system = self.system
+            collection = _PulseqCollection(
+                [self.payload()],
+                float(system.gamma),
+                float(system.B0),
+                float(system.max_grad),
+                float(system.max_slew),
+                float(system.rf_raster_time),
+                float(system.grad_raster_time),
+                float(system.adc_raster_time),
+                float(system.block_duration_raster),
+                True,
+                1,
+            )
+            cache = {"n_blocks": n_blocks, "collection": collection}
+            self._collection_cache = cache
+        return cache["collection"]
+
+    # ------------------------------------------------------------------
+    # TR and segment structure (C backend)
+    # ------------------------------------------------------------------
+
+    @property
+    def tr_info(self) -> dict:
+        """TR structure of the sequence as detected by the C backend.
+
+        Returns
+        -------
+        dict
+            Keys include ``tr_size`` (blocks per TR), ``num_trs``,
+            ``num_prep_blocks``, ``tr_duration_us`` and ``num_canonical_trs``.
+        """
+        from pulserver._ext._pulseg_wrapper import _find_tr
+
+        return _find_tr(self._collection(), subsequence_idx=0)
+
+    @property
+    def num_trs(self) -> int:
+        """Number of TRs detected in the sequence."""
+        return int(self.tr_info["num_trs"])
+
+    @property
+    def tr_duration(self) -> float:
+        """Detected TR duration in seconds."""
+        return float(self.tr_info["tr_duration_us"]) * 1e-6
+
+    def tr_block_range(self, tr_index: int) -> tuple[int, int]:
+        """Inclusive 1-based block range of TR ``tr_index``.
+
+        The TR layout comes from the C library, so a plugin does not have to
+        declare it — whatever structure the blocks actually have is what gets
+        indexed.
+        """
+        info = self.tr_info
+        num_trs = int(info["num_trs"])
+        if num_trs <= 0:
+            raise ValueError("No TR structure was detected in this sequence.")
+        if not -num_trs <= tr_index < num_trs:
+            raise IndexError(f"tr_index {tr_index} out of range for {num_trs} TRs")
+        if tr_index < 0:
+            tr_index += num_trs
+
+        tr_size = int(info["tr_size"])
+        first = int(info["num_prep_blocks"]) + tr_index * tr_size + 1
+        return first, first + tr_size - 1
+
+    @property
+    def segments(self) -> tuple[Segment, ...]:
+        """Every virtual segment, resolved to its max-energy instance.
+
+        Segmentation is the C library's, so this is the same partitioning the
+        scanner executes and the safety backend analyses.
+        """
+        n_blocks = self.next_free_block_ID - 1
+        cache = self._segment_cache
+        if cache is None or cache["n_blocks"] != n_blocks:
+            try:
+                from pulserver._ext._pulseg_wrapper import _get_segments
+            except ImportError as exc:  # pragma: no cover - stale build artifact
+                raise RuntimeError(
+                    "The pulseg extension module predates segment queries. Rebuild it: "
+                    "cmake --build build --target _pulseg_wrapper"
+                ) from exc
+
+            segments = []
+            for row in _get_segments(self._collection(), 0):
+                indices = list(row["block_indices"])
+                if not indices:
+                    continue
+                segments.append(
+                    Segment(
+                        index=int(row["index"]),
+                        first_block=min(indices) + 1,
+                        last_block=max(indices) + 1,
+                        duration=float(row["duration_us"]) * 1e-6,
+                        pure_delay=bool(row["pure_delay"]),
+                        is_nav=bool(row["is_nav"]),
+                        has_trigger=bool(row["has_trigger"]),
+                        from_max_energy_instance=bool(row["from_max_energy_instance"]),
+                        _parent=self,
+                    )
+                )
+            cache = {"n_blocks": n_blocks, "segments": tuple(segments)}
+            self._segment_cache = cache
+        return cache["segments"]
+
+    def segment(self, index: int) -> Segment:
+        """Return one :class:`Segment` by index."""
+        return self.segments[index]
+
+    # ------------------------------------------------------------------
+    # Scope resolution
+    # ------------------------------------------------------------------
+
+    def _scope(
+        self,
+        tr_index: int | None = None,
+        segment: int | None = None,
+    ) -> tuple[int, int] | None:
+        """Resolve ``tr_index`` / ``segment`` to an inclusive block range."""
+        if tr_index is not None and segment is not None:
+            raise ValueError("Pass either tr_index or segment, not both.")
+        if tr_index is not None:
+            return self.tr_block_range(tr_index)
+        if segment is not None:
+            seg = self.segment(segment)
+            return seg.first_block, seg.last_block
+        return None
+
+    def _time_range(
+        self,
+        tr_index: int | None,
+        segment: int | None,
+        default=(0, np.inf),
+    ):
+        """Resolve a scope to an absolute time range in seconds."""
+        block_range = self._scope(tr_index, segment)
+        if block_range is None:
+            return default
+        return time_bounds(self._seqplot, *block_range)
+
+    def _scoped_view(self, tr_index: int | None, segment: int | None) -> pp.Sequence:
+        """Return the plotting view, sliced when a scope is given."""
+        block_range = self._scope(tr_index, segment)
+        if block_range is None:
+            return self._seqplot
+        return slice_view(self._seqplot, *block_range)
+
+    # ------------------------------------------------------------------
+    # Visualisation and analysis
+    # ------------------------------------------------------------------
+
+    def plot(self, *, tr_index: int | None = None, segment: int | None = None, **kwargs):
+        """Plot the sequence as the scanner plays it.
+
+        Rotations and RF shims are resolved into the waveforms (see
+        :attr:`_seqplot`), so a rotated readout is drawn on the axes it will
+        actually run on and a pTx pulse shows one trace per transmit channel.
+
+        Parameters
+        ----------
+        tr_index : int, optional
+            Restrict the plot to one TR. Mutually exclusive with ``segment``.
+        segment : int, optional
+            Restrict the plot to one segment's max-energy instance.
+        **kwargs
+            Passed through to :meth:`pypulseq.Sequence.plot`; ``time_range``
+            is set for you when a scope is given.
+        """
+        kwargs.setdefault("time_range", self._time_range(tr_index, segment))
+        return self._seqplot.plot(**kwargs)
+
+    def check_timing(self, print_errors: bool = False):
+        """Run upstream's timing check against the plotting view."""
+        return self._seqplot.check_timing(print_errors=print_errors)
+
+    def duration(self):
+        """Total duration, block count and event count of the sequence."""
+        return self._seqplot.duration()
+
+    def test_report(self) -> str:
+        """Upstream's textual sequence report."""
+        return self._seqplot.test_report()
+
+    def waveforms(self, *, tr_index: int | None = None, segment: int | None = None, append_RF: bool = False):
+        """Uniformly sampled waveforms, optionally restricted to a TR or segment."""
+        time_range = self._time_range(tr_index, segment, default=None)
+        return self._seqplot.waveforms(append_RF=append_RF, time_range=time_range)
+
+    def waveforms_and_times(self, append_RF: bool = False):
+        """Event waveforms with their time stamps, from the plotting view."""
+        return self._seqplot.waveforms_and_times(append_RF=append_RF)
+
+    def calculate_kspace(self, *, tr_index: int | None = None, segment: int | None = None, **kwargs):
+        """k-space trajectory of the sequence, or of one TR / segment.
+
+        Upstream's trajectory calculation has no time-range argument, so a
+        scoped call runs against a sliced copy of the plotting view.
+        """
+        return self._scoped_view(tr_index, segment).calculate_kspace(**kwargs)
+
+    def plot_kspace(
+        self,
+        *,
+        tr_index: int | None = None,
+        segment: int | None = None,
+        plot_now: bool = True,
+        **kwargs,
+    ):
+        """Plot the k-space trajectory, with ADC sample locations marked.
+
+        Parameters
+        ----------
+        tr_index, segment : int, optional
+            Restrict to one TR or segment.
+        plot_now : bool, default True
+            Show the figure immediately.
+        **kwargs
+            Passed to :meth:`calculate_kspace`.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+        """
+        import matplotlib.pyplot as plt
+
+        k_traj_adc, k_traj, *_ = self.calculate_kspace(tr_index=tr_index, segment=segment, **kwargs)
+
+        fig, axes = plt.subplots(1, 2, figsize=(11, 5))
+        axes[0].plot(k_traj.T)
+        axes[0].set_xlabel("Sample")
+        axes[0].set_ylabel("k (1/m)")
+        axes[0].set_title("Trajectory components")
+        axes[0].legend(["kx", "ky", "kz"], loc="upper right")
+        axes[0].grid(True, alpha=0.3)
+
+        axes[1].plot(k_traj[0], k_traj[1], color="0.6", linewidth=0.8)
+        axes[1].plot(k_traj_adc[0], k_traj_adc[1], ".", markersize=2)
+        axes[1].set_xlabel("kx (1/m)")
+        axes[1].set_ylabel("ky (1/m)")
+        axes[1].set_title("kx-ky (ADC samples marked)")
+        axes[1].set_aspect("equal", adjustable="datalim")
+        axes[1].grid(True, alpha=0.3)
+
+        fig.tight_layout()
+        if plot_now:
+            plt.show()
+        return fig
+
+    def grad_spectrum(
+        self,
+        *,
+        tr_index: int | None = None,
+        segment: int | None = None,
+        bands: list | None = None,
+        esp_file=None,
+        window_width: float | None = None,
+        max_frequency: float = 2000.0,
+        plot: bool = True,
+        **kwargs,
+    ):
+        """Gradient spectrum, with mechanical resonance bands overlaid.
+
+        This is a visualisation only — whether a sequence clears a forbidden
+        band is decided by the C safety core at predownload, not here.
+
+        Parameters
+        ----------
+        tr_index, segment : int, optional
+            Restrict the analysis to one TR or segment. When ``tr_index`` is
+            given and ``window_width`` is not, the window is set to the whole
+            TR, so the result is one spectrum rather than a spectrogram.
+        bands : list of tuple, optional
+            Forbidden bands as
+            ``(freq_min_hz, freq_max_hz, max_amplitude_mT_per_m[, channel])``.
+            Defaults to ``system.forbidden_bands`` when the sequence's
+            :class:`~pypulseq.Opts` carries them.
+        esp_file : str or pathlib.Path, optional
+            Read the bands from a vendor ESP lockout table instead. See
+            :func:`~pulserver.pypulseq._safety.read_esp_bands`.
+        window_width : float, optional
+            Analysis window in seconds.
+        max_frequency : float, default 2000.0
+            Upper frequency limit of the spectrum.
+        plot : bool, default True
+            Draw the spectrogram.
+
+        Returns
+        -------
+        tuple
+            ``(spectrograms, spectrogram_sos, frequencies, times)``, as
+            :meth:`pypulseq.Sequence.calculate_gradient_spectrum` returns.
+        """
+        if esp_file is not None:
+            bands = read_esp_bands(esp_file)
+        elif bands is None:
+            bands = list(getattr(self.system, "forbidden_bands", []) or [])
+
+        time_range = self._time_range(tr_index, segment, default=None)
+        if window_width is None:
+            window_width = (time_range[1] - time_range[0]) if time_range is not None else 0.05
+
+        # Upstream samples only as far as the last gradient in the range, so a
+        # window covering the scope's dead time would exceed the signal and
+        # scipy would reject the overlap. Clamp to what will actually be there.
+        _, sampled_t = self._sample_gradients(tr_index, segment, self.system.grad_raster_time)
+        window_width = min(window_width, len(sampled_t) * self.system.grad_raster_time)
+
+        return self._seqplot.calculate_gradient_spectrum(
+            max_frequency=max_frequency,
+            window_width=window_width,
+            time_range=list(time_range) if time_range is not None else None,
+            plot=plot,
+            acoustic_resonances=bands_to_resonances(bands),
+            **kwargs,
+        )
+
+    def pns(
+        self,
+        *,
+        tr_index: int | None = None,
+        segment: int | None = None,
+        model: str = "chronaxie",
+        chronaxie_us: float | None = None,
+        rheobase: float | None = None,
+        alpha: float | None = None,
+        hardware=None,
+        thresholds=(80.0, 100.0),
+        plot: bool = True,
+    ):
+        """Peripheral nerve stimulation response, for inspection only.
+
+        Two nerve models are available. ``'chronaxie'`` is the Irnich
+        rheobase/chronaxie form GE uses, and is the same arithmetic the
+        interpreter runs at predownload. ``'safe'`` delegates to upstream's
+        SAFE implementation, which needs Siemens hardware parameters.
+
+        No verdict is returned: the threshold lines are drawn so the margin is
+        visible, and the pass/fail decision stays with the C safety core.
+
+        Parameters
+        ----------
+        tr_index, segment : int, optional
+            Restrict the analysis to one TR or segment.
+        model : {'chronaxie', 'safe'}, default 'chronaxie'
+            Nerve model to use.
+        chronaxie_us, rheobase, alpha : float, optional
+            Irnich model parameters. Default to the matching attributes of
+            the sequence's :class:`~pypulseq.Opts` when it carries them
+            (:class:`pulserver.pypulseq.Opts` does).
+        hardware : optional
+            SAFE hardware description or ``.asc`` path, for ``model='safe'``.
+        thresholds : sequence of float, default (80.0, 100.0)
+            Percentage lines to draw.
+        plot : bool, default True
+            Draw the result.
+
+        Returns
+        -------
+        tuple
+            ``(pns_percent, t)`` where ``pns_percent`` has shape ``(N, 3)``.
+        """
+        if model == "safe":
+            if hardware is None:
+                raise ValueError("model='safe' requires the hardware= argument (SAFE parameters or .asc path).")
+            time_range = self._time_range(tr_index, segment, default=None)
+            _, _, pns_components, t = self._scoped_view(tr_index, segment).calculate_pns(
+                hardware, time_range=time_range, do_plots=plot
+            )
+            return 100.0 * pns_components, t
+
+        if model != "chronaxie":
+            raise ValueError(f"Unknown PNS model {model!r}; expected 'chronaxie' or 'safe'.")
+
+        system = self.system
+        chronaxie_us = chronaxie_us if chronaxie_us is not None else getattr(system, "chronaxie_us", None)
+        rheobase = rheobase if rheobase is not None else getattr(system, "rheobase", None)
+        alpha = alpha if alpha is not None else getattr(system, "alpha", None)
+        if chronaxie_us is None or rheobase is None:
+            raise ValueError(
+                "chronaxie_us and rheobase are required. Pass them explicitly, or set them "
+                "on the sequence's pulserver.pypulseq.Opts."
+            )
+
+        dt = float(self.system.grad_raster_time)
+        gradients, t = self._sample_gradients(tr_index, segment, dt)
+        pns_percent = chronaxie_pns(
+            gradients,
+            dt,
+            chronaxie_us=float(chronaxie_us),
+            rheobase=float(rheobase),
+            alpha=float(alpha) if alpha is not None else 1.0,
+        )
+
+        if plot:
+            self._plot_pns(pns_percent, t, thresholds)
+        return pns_percent, t
+
+    def _sample_gradients(self, tr_index, segment, dt) -> tuple[np.ndarray, np.ndarray]:
+        """Sample the gradient waveforms on a uniform raster, in Hz/m."""
+        time_range = self._time_range(tr_index, segment, default=None)
+        gradients = self._seqplot.get_gradients(time_range=time_range)
+        max_t = max(g.x[-1] for g in gradients if g is not None) - 1e-10
+
+        if time_range is None:
+            t = (np.arange(int(np.ceil(max_t / dt))) + 0.5) * dt
+        else:
+            span = min(time_range[1], max_t) - max(time_range[0], 0)
+            t = max(time_range[0], 0) + (np.arange(int(np.ceil(span / dt))) + 0.5) * dt
+
+        sampled = np.zeros((t.shape[0], 3))
+        for axis, grad in enumerate(gradients[:3]):
+            if grad is not None:
+                sampled[:, axis] = grad(t)
+        return sampled, t
+
+    @staticmethod
+    def _plot_pns(pns_percent: np.ndarray, t: np.ndarray, thresholds) -> None:
+        """Draw per-axis and combined PNS against the requested threshold lines."""
+        import matplotlib.pyplot as plt
+
+        combined = np.sqrt((pns_percent**2).sum(axis=1))
+        fig, ax = plt.subplots(figsize=(11, 4.5))
+        ax.plot(t * 1e3, combined, color="C3", linewidth=1.8, label="combined")
+        for axis, name in enumerate(("x", "y", "z")):
+            ax.plot(t * 1e3, pns_percent[:, axis], linewidth=1.0, label=name)
+        for threshold in sorted(float(v) for v in thresholds):
+            ax.axhline(threshold, color="0.3", linestyle=":", linewidth=1.4)
+            ax.annotate(f"{threshold:g}%", (t[0] * 1e3, threshold), va="bottom", fontsize=8, color="0.3")
+        ax.set_xlabel("Time (ms)")
+        ax.set_ylabel("PNS (% of threshold)")
+        ax.set_ylim(bottom=0)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper right")
+        fig.tight_layout()
 
     # ------------------------------------------------------------------
     # Unsupported pypulseq API in fast-builder mode
@@ -332,9 +841,13 @@ class Sequence(pp.Sequence):
         )
 
     def get_block(self, block_index: int) -> SimpleNamespace:
-        """Fast builder does not support decoding blocks back to event objects."""
-        del block_index
-        raise NotImplementedError("pulserver.pypulseq.Sequence is a fast builder and does not implement get_block().")
+        """Decode one block through the plain view.
+
+        The block libraries of the fast builder are write-only, so this goes
+        through :attr:`_seq`. Extensions are not part of the returned block;
+        read them from :attr:`extensions`.
+        """
+        return self._seq.get_block(block_index)
 
     # ------------------------------------------------------------------
     # Internal fast block/event registration helpers

@@ -14,17 +14,18 @@ spread uniformly across the interval (uniform spacing was tried first and
 confirmed to miss every sidelobe once M exceeded the sample count).
 
 These tests exercise the low-level ``_calc_mech_resonances`` binding
-directly (not the pass/fail ``.check()`` wrapper) so the actual candidate
-amplitudes -- not just a boolean verdict -- can be inspected.
+directly, so the actual candidate amplitudes -- not just a verdict -- can be
+inspected.
 """
 
 from pathlib import Path
 
 import pypulseq as pp
 import pytest
-
 from pulserver._ext._pulseg_wrapper import _calc_mech_resonances
-from pulserver.analysis import Opts, SequenceCollection
+from pulserver.pypulseq import Opts
+
+from .conftest import build_collection
 
 RASTER = 20e-6
 BAND = (500.0, 3000.0, 0.0)  # zero-tolerance band, forces eps to the G_max floor
@@ -37,13 +38,22 @@ def _build_two_block_seq(tmp_path: Path) -> Path:
     under this test (which happened, and was noted, when this was first
     tried with a single repeated block)."""
     sys_ = pp.Opts(
-        max_grad=50, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s",
-        grad_raster_time=RASTER, block_duration_raster=RASTER,
-        rf_raster_time=1e-6, adc_raster_time=1e-7,
+        max_grad=50,
+        grad_unit="mT/m",
+        max_slew=150,
+        slew_unit="T/m/s",
+        grad_raster_time=RASTER,
+        block_duration_raster=RASTER,
+        rf_raster_time=1e-6,
+        adc_raster_time=1e-7,
     )
     seq = pp.Sequence(system=sys_)
-    g1 = pp.make_trapezoid(channel="x", amplitude=0.5 * sys_.max_grad, flat_time=400e-6, rise_time=RASTER * 20, system=sys_)
-    g2 = pp.make_trapezoid(channel="y", amplitude=0.3 * sys_.max_grad, flat_time=300e-6, rise_time=RASTER * 20, system=sys_)
+    g1 = pp.make_trapezoid(
+        channel="x", amplitude=0.5 * sys_.max_grad, flat_time=400e-6, rise_time=RASTER * 20, system=sys_
+    )
+    g2 = pp.make_trapezoid(
+        channel="y", amplitude=0.3 * sys_.max_grad, flat_time=300e-6, rise_time=RASTER * 20, system=sys_
+    )
     seq.add_block(g1)
     seq.add_block(g2)
     path = tmp_path / "two_block.seq"
@@ -52,13 +62,27 @@ def _build_two_block_seq(tmp_path: Path) -> Path:
 
 
 def _candidate_grad_amps(seq_path: Path, num_averages: int):
-    a_sys = Opts(max_grad=50.0, max_slew=150.0, B0=3.0, grad_raster_time=RASTER, block_duration_raster=RASTER)
-    sc = SequenceCollection(str(seq_path), system=a_sys, num_averages=num_averages)
+    system = Opts(
+        max_grad=50.0,
+        grad_unit="mT/m",
+        max_slew=150.0,
+        slew_unit="T/m/s",
+        B0=3.0,
+        grad_raster_time=RASTER,
+        block_duration_raster=RASTER,
+    )
+    collection = build_collection(seq_path, system, num_averages=num_averages)
     rd = _calc_mech_resonances(
-        sc._cseq, subsequence_idx=0, canonical_tr_idx=0,
-        target_resolution_hz=1.0, max_freq_hz=3000.0,
+        collection,
+        subsequence_idx=0,
+        canonical_tr_idx=0,
+        target_resolution_hz=1.0,
+        max_freq_hz=3000.0,
         forbidden_bands=[BAND],
-        peak_log10_threshold=None, peak_norm_scale=None, peak_eps=None, peak_prominence=None,
+        peak_log10_threshold=None,
+        peak_norm_scale=None,
+        peak_eps=None,
+        peak_prominence=None,
     )
     assert rd["num_instances"] == num_averages
     return rd["candidate_grad_amps"]
@@ -111,6 +135,6 @@ def test_finite_outer_rep_large_m_sidelobe_envelope_stabilizes(tmp_path):
     amps_m16 = _candidate_grad_amps(seq_path, num_averages=16)
     amps_m64 = _candidate_grad_amps(seq_path, num_averages=64)
 
-    dist_16_64 = sum(abs(a - b) for a, b in zip(amps_m16, amps_m64))
-    dist_1_64 = sum(abs(a - b) for a, b in zip(amps_m1, amps_m64))
+    dist_16_64 = sum(abs(a - b) for a, b in zip(amps_m16, amps_m64, strict=True))
+    dist_1_64 = sum(abs(a - b) for a, b in zip(amps_m1, amps_m64, strict=True))
     assert dist_16_64 < dist_1_64

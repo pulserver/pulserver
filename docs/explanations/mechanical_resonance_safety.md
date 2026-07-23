@@ -304,8 +304,8 @@ Mechanics:
 ## Visual validation
 
 [`mechres_plots/aeq_current.py`](../../../../../mechres_plots/aeq_current.py) drives the same
-compiled engine used by predownload — via `pulserver.analysis.SequenceCollection` and the
-pybind11 binding around `pulseg_safety.c`, never a standalone re-implementation — across the
+compiled engine used by predownload — through the pybind11 binding around `pulseg_safety.c`,
+never a standalone re-implementation — across the
 ratified S1 corpus (gre / epi / fse / mprage / bssfp) and reproduces the ratified verdict on all
 five. Two representative panels:
 

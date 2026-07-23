@@ -62,11 +62,13 @@ def test_write_supports_path_output():
     assert b"# Pulseq sequence file" in payload
 
 
-def test_get_block_not_implemented_for_fast_builder():
+def test_get_block_decodes_through_the_plain_view():
     seq = ps.Sequence()
-    seq.add_block(pp.make_delay(1e-3))
-    with pytest.raises(NotImplementedError):
-        seq.get_block(1)
+    _make_simple_seq(seq)
+
+    block = seq.get_block(1)
+    assert block.gx is not None
+    assert block.adc.num_samples == 16
 
 
 def test_seq_write_not_implemented_for_fast_builder():

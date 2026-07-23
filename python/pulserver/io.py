@@ -1,6 +1,8 @@
-"""I/O helpers for pulserver sequence writing."""
+"""I/O helpers for reading and writing pulserver sequences."""
 
 from __future__ import annotations
+
+__all__ = ["read", "read_esp_bands", "write"]
 
 import hashlib
 from pathlib import Path
@@ -8,9 +10,12 @@ from typing import BinaryIO
 from warnings import warn
 
 import numpy as np
+import pypulseq as pp
 from pypulseq.supported_labels_rf_use import get_supported_rf_uses
 
+from pulserver.pypulseq._safety import read_esp_bands
 from pulserver.pypulseq._sequence import _RF_USE_CODE_TO_CHAR
+from pulserver.pypulseq._views import build_views
 
 
 def write(
@@ -299,3 +304,146 @@ def write(
         file_name = file_name.with_suffix(file_name.suffix + ".seq")
     file_name.write_bytes(payload)
     return signature
+
+
+#: ``[DEFINITIONS]`` key -> :class:`pypulseq.Opts` attribute for the raster
+#: times a Pulseq file records about the system that wrote it.
+_RASTER_DEFINITIONS = {
+    "GradientRasterTime": "grad_raster_time",
+    "RadiofrequencyRasterTime": "rf_raster_time",
+    "AdcRasterTime": "adc_raster_time",
+    "BlockDurationRaster": "block_duration_raster",
+}
+
+
+def _parse_definitions(payload: bytes) -> dict:
+    """Read the ``[DEFINITIONS]`` block, numbers parsed as floats or lists."""
+    definitions: dict = {}
+    in_section = False
+    for raw in payload.decode("utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("["):
+            in_section = line == "[DEFINITIONS]"
+            continue
+        if not in_section:
+            continue
+        key, _, rest = line.partition(" ")
+        fields = rest.split()
+        try:
+            values = [float(v) for v in fields]
+        except ValueError:
+            definitions[key] = rest.strip()
+            continue
+        definitions[key] = values[0] if len(values) == 1 else values
+    return definitions
+
+
+def _system_from_definitions(definitions: dict, system):
+    """Build system limits carrying the raster times the file records.
+
+    A ``.seq`` file stores its raster times but not gradient or slew limits,
+    so those keep whatever the caller supplied (or Pulserver's vendor-neutral
+    defaults). An explicit ``system`` is honoured unchanged.
+    """
+    if system is not None:
+        return system
+
+    from pulserver.pypulseq._opts import Opts
+
+    overrides = {attr: float(definitions[key]) for key, attr in _RASTER_DEFINITIONS.items() if key in definitions}
+    return Opts(**overrides)
+
+
+def _extension_events(ext, seq) -> list:
+    """Rebuild the event objects for one block's extensions."""
+    from scipy.spatial.transform import Rotation
+
+    from pulserver.pypulseq._make_label import make_label
+    from pulserver.pypulseq._make_rf_shim import make_rf_shim
+    from pulserver.pypulseq._make_rotation import make_rotation
+
+    del seq
+    events = []
+    for label, value in ext.label_sets:
+        events.append(make_label(label, "SET", value))
+    for label, value in ext.label_incs:
+        events.append(make_label(label, "INC", value))
+    for kind, channel, delay, duration in ext.triggers:
+        if kind == "output":
+            events.append(pp.make_digital_output_pulse(channel=channel, delay=delay, duration=duration))
+        else:
+            events.append(pp.make_trigger(channel=channel, delay=delay, duration=duration))
+    if ext.rf_shim is not None:
+        events.append(make_rf_shim(ext.rf_shim))
+    if ext.rotation is not None:
+        events.append(make_rotation(Rotation.from_matrix(ext.rotation)))
+    return events
+
+
+def read(source: str | Path | bytes, *, system=None):
+    """Read a ``.seq`` file back into a :class:`pulserver.pypulseq.Sequence`.
+
+    Upstream PyPulseq 1.5.0 cannot decode the two extensions Pulserver relies
+    on — block rotations and pTx shim vectors — nor label strings outside its
+    built-in set. So the ordinary events are read through upstream and the
+    extensions are parsed alongside, then both are replayed into a fresh
+    Pulserver sequence. The result round-trips through :func:`write` and
+    arrives with its inspection views already built, so plotting it costs
+    nothing further.
+
+    Parameters
+    ----------
+    source : str, pathlib.Path or bytes
+        Path to a ``.seq`` file, or the payload itself.
+    system : pypulseq.Opts, optional
+        System limits to attach. By default the raster times recorded in
+        ``[DEFINITIONS]`` are used, on top of Pulserver's vendor-neutral
+        defaults.
+
+    Returns
+    -------
+    pulserver.pypulseq.Sequence
+        With ``_seq``, ``_seqplot`` and the extension map already populated.
+
+    See Also
+    --------
+    write : the inverse.
+    """
+    from pulserver.pypulseq._sequence import Sequence
+
+    payload = source if isinstance(source, bytes) else Path(source).read_bytes()
+
+    definitions = _parse_definitions(payload)
+    system = _system_from_definitions(definitions, system)
+
+    seq = Sequence(system=system)
+    plain, plotting, extensions = build_views(seq, payload)
+
+    for block_index in plain.block_events:
+        block = plain.get_block(block_index)
+        events = []
+        for name in ("rf", "gx", "gy", "gz", "adc"):
+            event = getattr(block, name, None)
+            if event is not None:
+                events.append(event)
+        ext = extensions.get(block_index)
+        if ext is not None:
+            events.extend(_extension_events(ext, seq))
+        duration = plain.block_durations[block_index]
+        if duration > 0:
+            events.append(pp.make_delay(duration))
+        seq.add_block(*events)
+        seq.block_durations[block_index] = duration
+
+    for key, value in plain.definitions.items():
+        seq.set_definition(key, value)
+
+    seq._view_cache = {
+        "n_blocks": seq.next_free_block_ID - 1,
+        "plain": plain,
+        "plot": plotting,
+        "extensions": extensions,
+    }
+    return seq

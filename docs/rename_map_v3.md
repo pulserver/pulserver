@@ -182,9 +182,9 @@ read from the existing block / RF / gradient / ADC / rotation tables on
 each call. Both entry points now share one `resolve_block_instance()`
 implementation.
 
-Exposed as `pulseg::Collection::get_block_instance_at(ss, pos)` (cxx) and
-`_get_block_instance(collection, subseq_idx, exec_stream_pos)` (pybind,
-read-only, returns a dict).
+Exposed as `pulseg::Collection::get_block_instance_at(ss, pos)` (cxx). The
+pybind binding was dropped when the Python analysis layer was removed; the
+C and C++ entry points are unchanged.
 
 Covered by `tests/ctests/test_block_instance.c` on one cartesian
 (`gre_2d_3sl_3avg`) and one rotated (`mprage_noncart_3d_3sl_1avg_userotext1`)
