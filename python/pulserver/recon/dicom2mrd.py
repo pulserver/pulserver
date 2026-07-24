@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
+import ctypes
 import logging
 import os
 import re
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
-import ctypes
 import ismrmrd
 import numpy as np
 import pydicom
@@ -295,10 +296,8 @@ def _convert_series(
         )
         img.acquisition_time_stamp = round(t_s * 1000 / 2.5)
 
-        try:
+        with contextlib.suppress(AttributeError):
             img.physiology_time_stamp[0] = round(int(dcm.TriggerTime) / 2.5)
-        except AttributeError:
-            pass
 
         try:
             table_pos = dcm.get_private_item(0x0019, 0x13, "SIEMENS MR HEADER").value
@@ -310,10 +309,8 @@ def _convert_series(
         img.image_index = getattr(dcm, "InstanceNumber", 0)
         img.slice = slice_locs.tolist().index(dcm.SliceLocation)
 
-        try:
+        with contextlib.suppress(AttributeError):
             img.phase = trig_times.tolist().index(dcm.TriggerTime)
-        except AttributeError:
-            pass
 
         meta = ismrmrd.Meta()
         meta["SequenceDescription"] = dcm.SeriesDescription
@@ -327,10 +324,8 @@ def _convert_series(
         except (AttributeError, TypeError):
             pass
 
-        try:
+        with contextlib.suppress(AttributeError):
             meta["ImageComments"] = dcm.ImageComments
-        except AttributeError:
-            pass
 
         # Embed full DICOM header as base64-encoded JSON so downstream tools
         # can recover non-MRD metadata if needed.

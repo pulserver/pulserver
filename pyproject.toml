@@ -60,7 +60,10 @@ packages = { "pulserver" = "python/pulserver", "pulserver/sequences" = "examples
 [tool.ruff]
 line-length = 120
 target-version = "py310"
-exclude = ["build", "build_tests"]
+# tests/utils/pulseq and external/pulseq are vendored copies of the upstream
+# Pulseq project (not first-party pulserver code); docs/_build is generated
+# Sphinx output. Lint neither as our own.
+exclude = ["build", "build_tests", "tests/utils/pulseq", "external", "docs/_build"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]

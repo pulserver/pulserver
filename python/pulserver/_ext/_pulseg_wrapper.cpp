@@ -18,7 +18,6 @@
 #include "pulseg.hpp"
 #include "pulseg.h"
 #include "pulseg_types.h"
-#include "pulseg_internal.h"
 
 namespace py = pybind11;
 
@@ -26,9 +25,9 @@ namespace py = pybind11;
 
 class _PulseqCollection
 {
-  public:
+public:
     _PulseqCollection(
-        const py::list &seq_bytes_list,
+        const py::list& seq_bytes_list,
         float gamma,
         float B0,
         float max_grad,
@@ -52,7 +51,7 @@ class _PulseqCollection
 
         int n = static_cast<int>(seq_bytes_list.size());
         std::vector<std::string> buffers(n);
-        std::vector<const char *> buf_ptrs(n);
+        std::vector<const char*> buf_ptrs(n);
         std::vector<int> buf_sizes(n);
         for (int i = 0; i < n; ++i)
         {
@@ -73,7 +72,7 @@ class _PulseqCollection
 
     /** Load from a .seq file path, using the .pge cache when present. */
     _PulseqCollection(
-        const std::string &file_path,
+        const std::string& file_path,
         float gamma,
         float B0,
         float max_grad,
@@ -105,11 +104,11 @@ class _PulseqCollection
         source_size_ = 0;
     }
 
-    pulseg::Collection &coll()
+    pulseg::Collection& coll()
     {
         return *coll_;
     }
-    const pulseg::Collection &coll() const
+    const pulseg::Collection& coll() const
     {
         return *coll_;
     }
@@ -118,16 +117,16 @@ class _PulseqCollection
         return source_size_;
     }
 
-  private:
+private:
     std::unique_ptr<pulseg::Collection> coll_;
     int source_size_ = 0;
 };
 
 // ─── Thin conversion functions ──────────────────────────────────────
 
-static py::dict _find_tr(_PulseqCollection &pc, int subsequence_idx = 0)
+static py::dict _find_tr(_PulseqCollection& pc, int subsequence_idx = 0)
 {
-    const auto &c = pc.coll();
+    const auto& c = pc.coll();
     auto si = c.subseq_info(subsequence_idx);
     py::dict out;
     out["tr_size"] = si.tr_size;
@@ -146,7 +145,7 @@ static py::dict _find_tr(_PulseqCollection &pc, int subsequence_idx = 0)
 }
 
 static py::dict _calc_mech_resonances(
-    _PulseqCollection &pc,
+    _PulseqCollection& pc,
     int subsequence_idx,
     int canonical_tr_idx,
     float target_resolution_hz,
@@ -168,7 +167,7 @@ static py::dict _calc_mech_resonances(
         bands.push_back(b);
     }
 
-    auto parse_optional_float = [](const py::object &obj) -> float
+    auto parse_optional_float = [](const py::object& obj) -> float
     {
         if (obj.is_none())
         {
@@ -247,7 +246,7 @@ static py::dict _calc_mech_resonances(
 }
 
 static py::dict _calc_pns(
-    _PulseqCollection &pc,
+    _PulseqCollection& pc,
     int subsequence_idx,
     int canonical_tr_idx,
     float chronaxie_us,
@@ -271,13 +270,13 @@ static py::dict _calc_pns(
 
 // ─── Check functions ────────────────────────────────────────────────
 
-static void _check_consistency(_PulseqCollection &pc)
+static void _check_consistency(_PulseqCollection& pc)
 {
     pc.coll().check_consistency();
 }
 
 static void _check_safety(
-    _PulseqCollection &pc,
+    _PulseqCollection& pc,
     py::list py_bands,
     float stim_threshold,
     float decay_constant_us,
@@ -295,7 +294,7 @@ static void _check_safety(
         bands.push_back(b);
     }
 
-    const pulseg::PnsParams *pns_ptr = nullptr;
+    const pulseg::PnsParams* pns_ptr = nullptr;
     pulseg::PnsParams pns;
     if (!skip_pns)
     {
@@ -312,64 +311,34 @@ static void _check_safety(
 
 /**
  * Per-segment layout of one subsequence, resolved to the *max-energy*
- * instance of every unique segment.
- *
- * `max_energy_start_block` is a scan-table (exec stream) position, so it is
- * translated here into the 0-based .seq block indices that instance occupies;
- * Python only ever sees .seq block indices.  Falls back to the segment
- * definition's own `start_block` when the exec stream is unavailable (e.g. a
- * pulsegen cache load that never materialised the scan table).
+ * instance of every unique segment. All resolution logic lives in
+ * pulseg::Collection::segments() (cxx/include/pulseg/collection.hpp); this
+ * function only converts its result to Python types.
  */
-static py::list _get_segments(_PulseqCollection &pc, int subseq_idx)
+static py::list _get_segments(_PulseqCollection& pc, int subseq_idx)
 {
-    const pulseg_collection *coll_ptr = pc.coll().handle();
-    if (!coll_ptr)
-        throw std::runtime_error("pulseg collection is not initialised");
-    if (subseq_idx < 0 || subseq_idx >= coll_ptr->num_subsequences)
-        throw std::out_of_range("subseq_idx out of range");
-
-    const pulseg_sequence_descriptor *desc = &coll_ptr->descriptors[subseq_idx];
-
-    int seg_offset = 0;
-    for (int i = 0; i < subseq_idx; ++i)
-        seg_offset += coll_ptr->descriptors[i].num_unique_segments;
-
     py::list out;
-    for (int s = 0; s < desc->num_unique_segments; ++s)
+    const auto segments = pc.coll().segments(subseq_idx);
+    for (size_t s = 0; s < segments.size(); ++s)
     {
-        const pulseg_virtual_segment *seg = &desc->segment_definitions[s];
-        int nb = seg->num_blocks;
-        int start = seg->max_energy_start_block;
+        const auto& seg = segments[s];
 
         py::list block_indices;
-        bool from_exec = (start >= 0 && desc->exec_stream_block_idx != NULL &&
-                          start + nb <= desc->exec_stream_len);
-        for (int b = 0; b < nb; ++b)
-        {
-            int blk = from_exec ? desc->exec_stream_block_idx[start + b] : (seg->start_block + b);
-            if (blk < 0 || blk >= desc->num_blocks)
-            {
-                block_indices = py::list();
-                break;
-            }
+        for (int blk : seg.block_indices)
             block_indices.append(blk);
-        }
-
-        pulseg_segment_info info = PULSEG_SEGMENT_INFO_INIT;
-        pulseg_get_segment_info(coll_ptr, &info, seg_offset + s);
 
         py::dict d;
-        d["index"] = s;
-        d["global_index"] = seg_offset + s;
-        d["num_blocks"] = nb;
-        d["start_block"] = seg->start_block;
-        d["max_energy_start_block"] = start;
-        d["from_max_energy_instance"] = from_exec;
+        d["index"] = static_cast<int>(s);
+        d["global_index"] = seg.global_index;
+        d["num_blocks"] = seg.num_blocks;
+        d["start_block"] = seg.start_block;
+        d["max_energy_start_block"] = seg.max_energy_start_block;
+        d["from_max_energy_instance"] = seg.from_max_energy_instance;
         d["block_indices"] = block_indices;
-        d["duration_us"] = info.duration_us;
-        d["pure_delay"] = info.pure_delay;
-        d["is_nav"] = info.is_nav;
-        d["has_trigger"] = info.has_trigger;
+        d["duration_us"] = seg.duration_us;
+        d["pure_delay"] = seg.pure_delay;
+        d["is_nav"] = seg.is_nav;
+        d["has_trigger"] = seg.has_trigger;
         out.append(d);
     }
     return out;
@@ -457,5 +426,4 @@ PYBIND11_MODULE(_pulseg_wrapper, m)
         py::arg("skip_pns") = true);
 
     m.def("_get_segments", &_get_segments, py::arg("collection"), py::arg("subseq_idx") = 0);
-
 }

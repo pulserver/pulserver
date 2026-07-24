@@ -7,12 +7,12 @@ including reading and writing various message types with logging and filtering c
 
 __all__ = ["Connection", "DataSaver", "DummySaver", "build_save_path"]
 
+import contextlib
 import logging
 import os
 import re
 import socket
 import threading
-
 from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
@@ -21,25 +21,24 @@ from typing import Any
 import ismrmrd
 
 from . import constants
-
 from .mrd2dicom import DicomWithName
 from .readers import (
     read,
     read_acquisition,
-    read_waveform,
-    read_image,
-    read_dicom,
-    read_text,
-    read_config_text,
     read_config_file,
+    read_config_text,
+    read_dicom,
     read_header,
+    read_image,
+    read_text,
+    read_waveform,
 )
 from .writers import (
     write_acquisition,
-    write_waveform,
-    write_image,
     write_dicom,
+    write_image,
     write_text,
+    write_waveform,
 )
 
 
@@ -142,10 +141,11 @@ def build_save_path(metadata: Any, fallback_dir: str) -> str:
 
     filename = f"mrd_{scanner_id}_{ts}.h5"
 
-    if bucket_pid is not None:
-        folder = os.path.join(_BUCKET_BASE, str(bucket_pid))
-    else:
-        folder = fallback_dir or "/tmp/mrdserver"
+    folder = (
+        os.path.join(_BUCKET_BASE, str(bucket_pid))
+        if bucket_pid is not None
+        else fallback_dir or "/tmp/mrdserver"
+    )
 
     os.makedirs(folder, exist_ok=True)
     return os.path.join(folder, filename)
@@ -215,7 +215,7 @@ class DataSaver:
             elif mid == constants.GADGET_MESSAGE_ISMRMRD_WAVEFORM:
                 self.dset.append_waveform(item)
             elif mid == constants.GADGET_MESSAGE_ISMRMRD_IMAGE:
-                self.dset.append_image("image_%d" % item.image_series_index, item)
+                self.dset.append_image(f"image_{item.image_series_index}", item)
             # Add more types as needed
             else:
                 pass
@@ -447,7 +447,7 @@ class Connection:
         TypeError
             If no appropriate writer is found.
         ValueError
-            If the connection is exhausted.
+            If the connection has been closed for sending.
         """
         if self._send_closed:
             error = ValueError("Cannot send on a closed connection.")
@@ -543,21 +543,15 @@ class Connection:
         loop never gets the close token and blocks indefinitely.
         """
         # 1. Send protocol CLOSE before any OS-level shutdown.
-        try:
+        with contextlib.suppress(OSError):
             end = constants.GadgetMessageIdentifier.pack(constants.GADGET_MESSAGE_CLOSE)
             self.socket.socket.sendall(end)
-        except OSError:
-            pass
         # 2. Shut down the socket (both directions).
-        try:
+        with contextlib.suppress(OSError):
             self.socket.socket.shutdown(socket.SHUT_RDWR)
-        except OSError:
-            pass
         # 3. Close the raw socket.
-        try:
+        with contextlib.suppress(OSError):
             self.socket.socket.close()
-        except OSError:
-            pass
         self.is_exhausted = True
         self._send_closed = True
         logging.info("Socket closed")
@@ -579,10 +573,10 @@ class Connection:
     def _read_message_identifier(self):
         try:
             return read(self.socket, constants.GadgetMessageIdentifier)
-        except ConnectionResetError:
+        except ConnectionResetError as err:
             logging.error("Connection closed unexpectedly")
             self.is_exhausted = True
-            raise StopIteration
+            raise StopIteration from err
 
     def _read_item(self):
         message_identifier = self._read_message_identifier()

@@ -29,10 +29,9 @@ import dataclasses
 import logging
 from typing import Any
 
+import ismrmrd
 import numpy as np
 import pydicom
-
-import ismrmrd
 
 
 @dataclasses.dataclass
@@ -163,11 +162,7 @@ def convert_string_vrs(ds: pydicom.Dataset) -> pydicom.Dataset:
             val = elem.value
 
             # Single numeric value → convert to str
-            if isinstance(val, (int, float)):
-                elem.value = str(val)
-
-            # PersonName → convert to str
-            elif isinstance(val, pydicom.valuerep.PersonName):
+            if isinstance(val, (int, float, pydicom.valuerep.PersonName)):
                 elem.value = str(val)
 
             # Multi-valued → convert each numeric item to str
@@ -468,22 +463,26 @@ class MrdDicomBuilder:
                 numTR = len(mrdHead.sequenceParameters.TR)
 
                 # Get parameter for current image
-                if mrdHead.sequenceParameters.flipAngle_deg:
-                    FA = mrdHead.sequenceParameters.flipAngle_deg[contrastIdx % numFA]
-                else:
-                    FA = np.nan
-                if mrdHead.sequenceParameters.TI:
-                    TI = mrdHead.sequenceParameters.TI[contrastIdx % numTI]
-                else:
-                    TI = np.nan
-                if mrdHead.sequenceParameters.TE:
-                    TE = mrdHead.sequenceParameters.TE[contrastIdx % numTE]
-                else:
-                    TE = np.nan
-                if mrdHead.sequenceParameters.TR:
-                    TR = mrdHead.sequenceParameters.TR[contrastIdx % numTR]
-                else:
-                    TR = np.nan
+                FA = (
+                    mrdHead.sequenceParameters.flipAngle_deg[contrastIdx % numFA]
+                    if mrdHead.sequenceParameters.flipAngle_deg
+                    else np.nan
+                )
+                TI = (
+                    mrdHead.sequenceParameters.TI[contrastIdx % numTI]
+                    if mrdHead.sequenceParameters.TI
+                    else np.nan
+                )
+                TE = (
+                    mrdHead.sequenceParameters.TE[contrastIdx % numTE]
+                    if mrdHead.sequenceParameters.TE
+                    else np.nan
+                )
+                TR = (
+                    mrdHead.sequenceParameters.TR[contrastIdx % numTR]
+                    if mrdHead.sequenceParameters.TR
+                    else np.nan
+                )
 
                 # Assign to dicom Header
                 if mrdHead.sequenceParameters.sequence_type is not None:
@@ -515,10 +514,9 @@ class MrdDicomBuilder:
                     if diffusionBValue is None or diffusionBValue == 0.0:
                         diffusionDirectionality = "NONE"
                     else:
-                        if diffusionGradientOrientation is None:
-                            diffusionDirectionality = "ISOTROPIC"
-                        else:
-                            diffusionDirectionality = "DIRECTIONAL"
+                        diffusionDirectionality = (
+                            "ISOTROPIC" if diffusionGradientOrientation is None else "DIRECTIONAL"
+                        )
 
                     # Assign
                     dicomDset.DiffusionDirectionality = diffusionDirectionality
@@ -567,10 +565,7 @@ class MrdDicomBuilder:
 
         # ----- Update DICOM header from MRD ImageHeader -----
         vendor = dicomDset.get("Manufacturer", "default")
-        if "GE" in vendor.upper():
-            vendor = "GE"
-        else:
-            vendor = "default"
+        vendor = "GE" if "GE" in vendor.upper() else "default"
         if "GE" in vendor.upper():
             dicomDset.add(
                 pydicom.DataElement(
@@ -614,7 +609,7 @@ class MrdDicomBuilder:
             sec = time_sec - hour * 3600 - minutes * 60
             logging.info(mrdImg.acquisition_time_stamp)
             logging.info(time_sec, hour, minutes, sec)
-            dicomDset.AcquisitionTime = "%02.0f%02.0f%09.6f" % (hour, minutes, sec)
+            dicomDset.AcquisitionTime = f"{hour:02.0f}{minutes:02.0f}{sec:09.6f}"
         dicomDset.TriggerTime = mrdImg.physiology_time_stamp[0] / 2.5
 
         # ----- Update DICOM header from MRD Image MetaAttributes -----
@@ -678,11 +673,9 @@ class MrdDicomBuilder:
         dicomDset = convert_string_vrs(dicomDset)
 
         # Generate FileName
-        fileName = "EX%s_%02.0f_%s_%03.0f.dcm" % (
-            dicomDset.StudyID,
-            dicomDset.SeriesNumber,
-            dicomDset.SeriesDescription,
-            dicomDset.InstanceNumber,
+        fileName = (
+            f"EX{dicomDset.StudyID}_{dicomDset.SeriesNumber:02.0f}_"
+            f"{dicomDset.SeriesDescription}_{dicomDset.InstanceNumber:03.0f}.dcm"
         )
 
         # Update instance Number

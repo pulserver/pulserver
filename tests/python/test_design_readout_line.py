@@ -7,7 +7,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design import _readout as readout
+from pulserver.design import _readout as readout  # noqa: E402
 
 OPTS_KW = dict(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 
@@ -266,7 +266,7 @@ def test_post_spoil_bridges_last_echo_directly_into_spoiler() -> None:
     train = readout.Line2D(opts, (0.22, 0.22), (64, 64), num_echoes=1, spoil_position="post", spoil_factor=1.0)
     seq = pp.Sequence(opts)
     train.set_state(lin_idx=10).add_to(seq)
-    types, firsts, lasts = zip(*_gx_shapes(seq))
+    types, firsts, lasts = zip(*_gx_shapes(seq), strict=True)
     assert types == ("trap", "grad", "grad")  # plain prewind, split echo, bridge
     # echo's own block ends *at* plateau amplitude (no fall ramp) ...
     assert firsts[1] == pytest.approx(0.0)
@@ -281,7 +281,7 @@ def test_pre_spoil_bridges_prewind_directly_into_first_echo() -> None:
     train = readout.Line2D(opts, (0.22, 0.22), (64, 64), num_echoes=1, spoil_position="pre", spoil_factor=1.0)
     seq = pp.Sequence(opts)
     train.set_state(lin_idx=10).add_to(seq)
-    types, firsts, lasts = zip(*_gx_shapes(seq))
+    types, firsts, lasts = zip(*_gx_shapes(seq), strict=True)
     assert types == ("grad", "grad", "trap")  # bridge, split echo, plain rewind
     assert firsts[0] == pytest.approx(0.0)
     assert lasts[0] == pytest.approx(train._ro.gx.amplitude)
@@ -301,7 +301,7 @@ def test_monopolar_three_echo_pf1_matches_bridged_read_spoil_layout() -> None:
     assert types == ["trap", "trap", "trap", "trap", "trap", "grad", "grad"]
     # blocks 6+7 are the bridged (read, spoil) pair: split last echo -> spoiler,
     # continuous through the shared plateau amplitude, never back through zero.
-    _, firsts, lasts = zip(*_gx_shapes(seq))
+    _, firsts, lasts = zip(*_gx_shapes(seq), strict=True)
     assert lasts[5] == pytest.approx(firsts[6])
     assert lasts[6] == pytest.approx(0.0)
     ok, err = seq.check_timing()

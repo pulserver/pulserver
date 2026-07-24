@@ -2,6 +2,7 @@
 
 __all__ = ["Server"]
 
+import contextlib
 import importlib
 import importlib.util
 import logging
@@ -264,10 +265,8 @@ class Server:
                 logging.info("Recon slot released  handler=%s", config)
             connection.shutdown_close()
             if hasattr(connection.saver, "dset") and connection.saver.dset is not None:
-                try:
+                with contextlib.suppress(Exception):
                     connection.saver.dset.close()
-                except Exception:
-                    pass
             if (
                 hasattr(connection.saver, "mrdFilePath")
                 and connection.saver.mrdFilePath
@@ -330,10 +329,8 @@ class Server:
                 saver.save(mid, item)
         finally:
             if saver.dset is not None:
-                try:
+                with contextlib.suppress(Exception):
                     saver.dset.close()
-                except Exception:
-                    pass
 
         sidecar_path = enqueue(save_path, config, bucket_pid)
         logging.info(

@@ -1,7 +1,8 @@
 # MRD Helper functions
-import ismrmrd
-import re
 import base64
+import re
+
+import ismrmrd
 
 
 def update_img_header_from_raw(imgHead, rawHead):
@@ -116,7 +117,7 @@ def get_sequence_resource_paths(metadata):
 
 def get_meta_value(meta, key):
     """Get a value from MRD Meta Attributes (returns None if key not found)"""
-    if key in meta.keys():
+    if key in meta:
         return meta[key]
     else:
         return None
@@ -128,10 +129,7 @@ def extract_minihead_bool_param(miniHead, name):
 
     if val is None:
         return False
-    elif val.strip('" ').lower() == "true".lower():
-        return True
-    else:
-        return False
+    return val.strip('" ').lower() == "true".lower()
 
 
 def extract_minihead_long_param(miniHead, name):
@@ -139,7 +137,7 @@ def extract_minihead_long_param(miniHead, name):
     val = extract_minihead_param(miniHead, name, "ParamLong")
 
     if val is None:
-        return int(0)
+        return 0
     else:
         return int(val)
 
@@ -239,16 +237,16 @@ def create_roi(x, y, rgb=(1, 0, 0), thickness=1, style: int = 0, visibility: int
     xy = [(x[i], y[i]) for i in range(0, len(x))]  # List of (x,y) tuples
 
     roi = []
-    roi.append("%f" % rgb[0])
-    roi.append("%f" % rgb[1])
-    roi.append("%f" % rgb[2])
-    roi.append("%f" % thickness)
-    roi.append("%d" % style)
-    roi.append("%d" % visibility)
+    roi.append(f"{rgb[0]:f}")
+    roi.append(f"{rgb[1]:f}")
+    roi.append(f"{rgb[2]:f}")
+    roi.append(f"{thickness:f}")
+    roi.append(f"{style:d}")
+    roi.append(f"{visibility:d}")
 
     for i in range(0, len(xy)):
-        roi.append("%f" % xy[i][0])
-        roi.append("%f" % xy[i][1])
+        roi.append(f"{xy[i][0]:f}")
+        roi.append(f"{xy[i][1]:f}")
 
     return roi
 
@@ -298,13 +296,13 @@ def create_text(x, y, rgb=(1, 0, 0), visibility: int = 1, string=""):
                                    with field name starting with "Text_"
     """
     txt = []
-    txt.append("%f" % rgb[0])
-    txt.append("%f" % rgb[1])
-    txt.append("%f" % rgb[2])
-    txt.append("%f" % x)
-    txt.append("%f" % y)
-    txt.append("%d" % visibility)
-    txt.append("%s" % string)
+    txt.append(f"{rgb[0]:f}")
+    txt.append(f"{rgb[1]:f}")
+    txt.append(f"{rgb[2]:f}")
+    txt.append(f"{x:f}")
+    txt.append(f"{y:f}")
+    txt.append(f"{visibility:d}")
+    txt.append(f"{string:s}")
 
     return txt
 

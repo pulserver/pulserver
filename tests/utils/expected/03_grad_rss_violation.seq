@@ -31,4 +31,4 @@ RadiofrequencyRasterTime 1e-06
 # preceding [SIGNATURE] BELONGS to the signature (and needs to be sripped away
 # for recalculating/verification)
 Type md5
-Hash 30ad180f04aac5eb67e23979f6bb25e5
+Hash d4afb44ff8fe6ea079ce1ea8ad6651ff

@@ -5,11 +5,11 @@ Accumulates all readouts until ``ACQ_LAST_IN_MEASUREMENT``, reshapes into
 DICOM images via the ``mrd2dicom`` converter.
 """
 
+import ctypes
 import logging
 from collections.abc import Generator, Iterator
 from typing import Any
 
-import ctypes
 import ismrmrd
 import numpy as np
 import numpy.fft as fft

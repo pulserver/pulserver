@@ -6,7 +6,6 @@ import ismrmrd
 import numpy as np
 import pydicom
 import pytest
-
 from pulserver.recon.mrd2dicom import (
     DicomWithName,
     MrdDicomBuilder,
@@ -23,7 +22,14 @@ from pulserver.recon.mrd2dicom import (
 @pytest.fixture
 def minimal_mrd_header() -> ismrmrd.xsd.ismrmrdHeader:
     """Create a minimal valid ISMRMRD header."""
-    header = ismrmrd.xsd.ismrmrdHeader()
+    # experimentalConditions is a required keyword-only field as of ismrmrd
+    # >= 1.15's generated xsd dataclasses; construct it eagerly rather than
+    # assigning it after the fact.
+    header = ismrmrd.xsd.ismrmrdHeader(
+        experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
+            H1resonanceFrequency_Hz=63_750_000
+        )
+    )
 
     header.acquisitionSystemInformation = ismrmrd.xsd.acquisitionSystemInformationType()
     header.acquisitionSystemInformation.systemVendor = "GE"
@@ -31,18 +37,16 @@ def minimal_mrd_header() -> ismrmrd.xsd.ismrmrdHeader:
     header.acquisitionSystemInformation.systemFieldStrength_T = 1.5
     header.acquisitionSystemInformation.institutionName = "Test Hospital"
 
-    header.experimentalConditions = ismrmrd.xsd.experimentalConditionsType()
-    header.experimentalConditions.H1resonanceFrequency_Hz = 63_750_000
-
-    enc = ismrmrd.xsd.encodingType()
-    enc.trajectory = ismrmrd.xsd.trajectoryType("cartesian")
-
-    space = ismrmrd.xsd.encodingSpaceType()
-    space.matrixSize = ismrmrd.xsd.matrixSizeType(x=256, y=192, z=1)
-    space.fieldOfView_mm = ismrmrd.xsd.fieldOfViewMm(x=300.0, y=300.0, z=5.0)
-    enc.encodedSpace = space
-    enc.reconSpace = space
-    enc.encodingLimits = ismrmrd.xsd.encodingLimitsType()
+    space = ismrmrd.xsd.encodingSpaceType(
+        matrixSize=ismrmrd.xsd.matrixSizeType(x=256, y=192, z=1),
+        fieldOfView_mm=ismrmrd.xsd.fieldOfViewMm(x=300.0, y=300.0, z=5.0),
+    )
+    enc = ismrmrd.xsd.encodingType(
+        encodedSpace=space,
+        reconSpace=space,
+        encodingLimits=ismrmrd.xsd.encodingLimitsType(),
+        trajectory=ismrmrd.xsd.trajectoryType("cartesian"),
+    )
 
     header.encoding.append(enc)
     header.sequenceParameters = ismrmrd.xsd.sequenceParametersType()
@@ -207,7 +211,8 @@ class TestMrdDicomBuilderInit:
 
         assert builder.dicomDset is not None
         assert builder.mrdHead is minimal_mrd_header
-        assert builder.instanceNumber == 0
+        # DICOM InstanceNumber is 1-based (see MrdDicomBuilder.__init__).
+        assert builder.instanceNumber == 1
         assert builder.dicomDset.SamplesPerPixel == 1
         assert builder.dicomDset.PhotometricInterpretation == "MONOCHROME2"
         assert builder.dicomDset.PixelRepresentation == 0
@@ -244,7 +249,8 @@ class TestMrdDicomBuilderCall:
     ) -> None:
         """Instance counter should increment after each call attempt."""
         builder = MrdDicomBuilder(minimal_mrd_header)
-        assert builder.instanceNumber == 0
+        # DICOM InstanceNumber is 1-based (see MrdDicomBuilder.__init__).
+        assert builder.instanceNumber == 1
 
         # Note: __call__ with complex data will fail, but we're testing the counter initialization
         # In production, magnitude images (real-valued) are used, not complex data
@@ -274,7 +280,11 @@ class TestMrdDicomBuilderWithMetadata:
 
     def test_subject_information_mapped(self) -> None:
         """Subject information (patient details) should be mapped."""
-        header = ismrmrd.xsd.ismrmrdHeader()
+        header = ismrmrd.xsd.ismrmrdHeader(
+            experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
+                H1resonanceFrequency_Hz=63_750_000
+            )
+        )
 
         header.subjectInformation = ismrmrd.xsd.subjectInformationType()
         header.subjectInformation.patientName = "Doe^John"
@@ -285,7 +295,6 @@ class TestMrdDicomBuilderWithMetadata:
         header.acquisitionSystemInformation = (
             ismrmrd.xsd.acquisitionSystemInformationType()
         )
-        header.experimentalConditions = ismrmrd.xsd.experimentalConditionsType()
         header.sequenceParameters = ismrmrd.xsd.sequenceParametersType()
 
         builder = MrdDicomBuilder(header)
@@ -297,7 +306,11 @@ class TestMrdDicomBuilderWithMetadata:
 
     def test_study_information_mapped(self) -> None:
         """Study information should be mapped."""
-        header = ismrmrd.xsd.ismrmrdHeader()
+        header = ismrmrd.xsd.ismrmrdHeader(
+            experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
+                H1resonanceFrequency_Hz=63_750_000
+            )
+        )
 
         header.studyInformation = ismrmrd.xsd.studyInformationType()
         header.studyInformation.studyID = "STUDY001"
@@ -307,7 +320,6 @@ class TestMrdDicomBuilderWithMetadata:
         header.acquisitionSystemInformation = (
             ismrmrd.xsd.acquisitionSystemInformationType()
         )
-        header.experimentalConditions = ismrmrd.xsd.experimentalConditionsType()
         header.sequenceParameters = ismrmrd.xsd.sequenceParametersType()
 
         builder = MrdDicomBuilder(header)
@@ -327,7 +339,11 @@ class TestIntegration:
 
     def test_builder_initialization_with_all_metadata(self) -> None:
         """Test that builder properly initializes with complete metadata."""
-        header = ismrmrd.xsd.ismrmrdHeader()
+        header = ismrmrd.xsd.ismrmrdHeader(
+            experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
+                H1resonanceFrequency_Hz=63_750_000
+            )
+        )
 
         # Add complete metadata
         header.subjectInformation = ismrmrd.xsd.subjectInformationType()
@@ -344,7 +360,6 @@ class TestIntegration:
             ismrmrd.xsd.acquisitionSystemInformationType()
         )
         header.acquisitionSystemInformation.systemVendor = "Siemens"
-        header.experimentalConditions = ismrmrd.xsd.experimentalConditionsType()
         header.sequenceParameters = ismrmrd.xsd.sequenceParametersType()
 
         # Create builder

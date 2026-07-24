@@ -4,7 +4,6 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
-
 from pulserver.recon.server import Server, _NullHandler
 
 # ---------------------------------------------------------------------------

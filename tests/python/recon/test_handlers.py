@@ -4,7 +4,6 @@
 import ismrmrd
 import numpy as np
 
-
 # ---------------------------------------------------------------------------
 # Helpers: fake connection that yields pre-built acquisitions
 # ---------------------------------------------------------------------------
@@ -67,27 +66,40 @@ def _make_metadata(
     fov_z: float = 5.0,
 ):
     """Create a minimal ISMRMRD metadata header (as xsd object)."""
-    hdr = ismrmrd.xsd.ismrmrdHeader()
-    enc = ismrmrd.xsd.encodingType()
-    enc.trajectory = ismrmrd.xsd.trajectoryType("cartesian")
-
-    es = ismrmrd.xsd.encodingSpaceType()
-    es.matrixSize = ismrmrd.xsd.matrixSizeType(x=n_ro, y=n_pe, z=1)
-    es.fieldOfView_mm = ismrmrd.xsd.fieldOfViewMm(x=fov_x, y=fov_y, z=fov_z)
-    enc.encodedSpace = es
-
-    rs = ismrmrd.xsd.encodingSpaceType()
-    rs.matrixSize = ismrmrd.xsd.matrixSizeType(x=n_ro, y=n_pe, z=1)
-    rs.fieldOfView_mm = ismrmrd.xsd.fieldOfViewMm(x=fov_x, y=fov_y, z=fov_z)
-    enc.reconSpace = rs
-
-    lim = ismrmrd.xsd.encodingLimitsType()
-    lim.kspace_encoding_step_1 = ismrmrd.xsd.limitType(
-        minimum=0,
-        maximum=n_pe - 1,
-        center=n_pe // 2,
+    # experimentalConditions is a required keyword-only field as of ismrmrd
+    # >= 1.15's generated xsd dataclasses; construct it eagerly rather than
+    # assigning it after the fact.
+    hdr = ismrmrd.xsd.ismrmrdHeader(
+        experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
+            H1resonanceFrequency_Hz=63_750_000
+        )
     )
-    enc.encodingLimits = lim
+
+    # encodingSpaceType/fieldOfViewMm/encodingType are required keyword-only
+    # fields as of ismrmrd >= 1.15's generated xsd dataclasses; build the
+    # nested objects bottom-up rather than assigning attributes after a
+    # no-arg construction.
+    es = ismrmrd.xsd.encodingSpaceType(
+        matrixSize=ismrmrd.xsd.matrixSizeType(x=n_ro, y=n_pe, z=1),
+        fieldOfView_mm=ismrmrd.xsd.fieldOfViewMm(x=fov_x, y=fov_y, z=fov_z),
+    )
+    rs = ismrmrd.xsd.encodingSpaceType(
+        matrixSize=ismrmrd.xsd.matrixSizeType(x=n_ro, y=n_pe, z=1),
+        fieldOfView_mm=ismrmrd.xsd.fieldOfViewMm(x=fov_x, y=fov_y, z=fov_z),
+    )
+    lim = ismrmrd.xsd.encodingLimitsType(
+        kspace_encoding_step_1=ismrmrd.xsd.limitType(
+            minimum=0,
+            maximum=n_pe - 1,
+            center=n_pe // 2,
+        )
+    )
+    enc = ismrmrd.xsd.encodingType(
+        encodedSpace=es,
+        reconSpace=rs,
+        encodingLimits=lim,
+        trajectory=ismrmrd.xsd.trajectoryType("cartesian"),
+    )
 
     hdr.encoding.append(enc)
     return hdr

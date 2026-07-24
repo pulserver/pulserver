@@ -3719,3 +3719,97 @@ int pulseg_get_segment_block_def_indices(const pulseg_collection *coll, int *out
         out_ids[i] = seg->unique_block_indices[i];
     return seg->num_blocks;
 }
+
+/* ================================================================== */
+/*  Subsequence-local segment layout                                  */
+/* ================================================================== */
+
+/* Resolve subsequence-local segment local_seg_idx to its deduplicated
+ * global segment id (same space as resolve_segment()'s seg_idx). Falls
+ * back to the pre-dedup contiguous offset (identity map) when the
+ * cross-subsequence remap has not been built. */
+static int resolve_subseq_local_segment_global_id(
+    const pulseg_collection *coll,
+    int subseq_idx,
+    int local_seg_idx)
+{
+    int offset;
+
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return -1;
+    if (local_seg_idx < 0 ||
+        local_seg_idx >= coll->descriptors[subseq_idx].num_unique_segments)
+        return -1;
+
+    offset = coll->subsequence_info[subseq_idx].segment_id_offset;
+    if (coll->seg_local_to_global)
+        return coll->seg_local_to_global[offset + local_seg_idx];
+    return offset + local_seg_idx;
+}
+
+int pulseg_get_subseq_segment_layout(
+    const pulseg_collection *coll,
+    pulseg_segment_layout *info,
+    int subseq_idx,
+    int local_seg_idx)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_virtual_segment *seg;
+    int global_id;
+
+    if (!coll || !info)
+        return PULSEG_ERR_NULL_POINTER;
+
+    global_id = resolve_subseq_local_segment_global_id(coll, subseq_idx, local_seg_idx);
+    if (global_id < 0)
+        return PULSEG_ERR_INDEX;
+
+    desc = &coll->descriptors[subseq_idx];
+    seg = &desc->segment_definitions[local_seg_idx];
+
+    info->global_index = global_id;
+    info->num_blocks = seg->num_blocks;
+    info->start_block = seg->start_block;
+    info->max_energy_start_block = seg->max_energy_start_block;
+    info->from_max_energy_instance =
+        (seg->max_energy_start_block >= 0 && desc->exec_stream_block_idx != NULL &&
+         seg->max_energy_start_block + seg->num_blocks <= desc->exec_stream_len)
+        ? 1
+        : 0;
+
+    return PULSEG_SUCCESS;
+}
+
+int pulseg_get_subseq_segment_block_indices(
+    const pulseg_collection *coll,
+    int *out_indices,
+    int subseq_idx,
+    int local_seg_idx)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_virtual_segment *seg;
+    int global_id, from_exec, i, blk;
+
+    if (!coll || !out_indices)
+        return PULSEG_ERR_NULL_POINTER;
+
+    global_id = resolve_subseq_local_segment_global_id(coll, subseq_idx, local_seg_idx);
+    if (global_id < 0)
+        return PULSEG_ERR_INDEX;
+
+    desc = &coll->descriptors[subseq_idx];
+    seg = &desc->segment_definitions[local_seg_idx];
+
+    from_exec = (seg->max_energy_start_block >= 0 && desc->exec_stream_block_idx != NULL &&
+                 seg->max_energy_start_block + seg->num_blocks <= desc->exec_stream_len);
+
+    for (i = 0; i < seg->num_blocks; ++i)
+    {
+        blk = from_exec ? desc->exec_stream_block_idx[seg->max_energy_start_block + i]
+                         : (seg->start_block + i);
+        if (blk < 0 || blk >= desc->num_blocks)
+            return 0;
+        out_indices[i] = blk;
+    }
+    return seg->num_blocks;
+}

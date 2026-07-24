@@ -489,10 +489,28 @@ static int compute_block_kspace(
     tr_size = desc->tr_descriptor.tr_size;
     pos_in_tr = block_table_idx - num_prep;
 
+    /* The canonical array covers exactly one tr_size-block window. When the
+     * main TR pattern repeats back-to-back within a single pass (num_trs > 1
+     * -- e.g. a degenerate-prep sequence that plays one identical
+     * prep+readout+navigator unit per slice, with slice as the outer loop),
+     * wrap any repeat's position back into that window so repeat #2, #3, ...
+     * reuse the same canonical samples instead of falling "out of window"
+     * and silently degrading to an all-zero trajectory. Blocks beyond the
+     * last repeat (real cooldown) are deliberately left unwrapped, so they
+     * still degrade as documented below. */
+    if (tr_size > 0 && pos_in_tr >= 0)
+    {
+        int num_trs = (desc->tr_descriptor.num_trs > 0) ? desc->tr_descriptor.num_trs : 1;
+        int repeat_span = tr_size * num_trs;
+        if (pos_in_tr < repeat_span)
+            pos_in_tr = pos_in_tr % tr_size;
+    }
+
     if (desc->has_canonical_kspace && pos_in_tr >= 0 && pos_in_tr < tr_size)
     {
+        int local_block_table_idx = num_prep + pos_in_tr;
         float block_time_offset_us =
-            traj_block_time_offset_in_tr_us(desc, num_prep, block_table_idx);
+            traj_block_time_offset_in_tr_us(desc, num_prep, local_block_table_idx);
 
         traj_slice_canonical_axis(
             out_kx,

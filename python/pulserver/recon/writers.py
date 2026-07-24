@@ -24,11 +24,11 @@ __all__ = [
 import io
 import logging
 import struct
+from collections.abc import Callable
+from typing import Any
 
-from typing import Any, Callable
-
-import numpy as np
 import ismrmrd
+import numpy as np
 
 from . import constants
 from .mrd2dicom import DicomWithName
@@ -310,6 +310,6 @@ def write_text(destination: Any, contents: str) -> None:
         constants.GADGET_MESSAGE_TEXT
     )
     destination.write(message_id_bytes)
-    contents_with_nul = "%s\0" % contents  # Add null terminator
+    contents_with_nul = f"{contents}\0"  # Add null terminator
     destination.write(constants.uint32.pack(len(contents_with_nul.encode())))
     destination.write(contents_with_nul.encode())

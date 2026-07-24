@@ -7,7 +7,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design._rf import _excitation_helpers as excitation
+from pulserver.design._rf import _excitation_helpers as excitation  # noqa: E402
 
 
 def _flip_deg_from_integral(rf) -> float:

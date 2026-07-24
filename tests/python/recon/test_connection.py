@@ -1,20 +1,20 @@
 """Tests for pulserver.recon.connection — Connection, MessageType, DataSaver."""
 
+import contextlib
 import io
 import socket
 from unittest.mock import MagicMock
 
 import ismrmrd
 import pytest
-
 from pulserver.recon import constants
 from pulserver.recon.connection import (
+    MID_TO_TYPE,
+    NAME_TO_TYPE,
     Connection,
     DataSaver,
     DummySaver,
     MessageType,
-    MID_TO_TYPE,
-    NAME_TO_TYPE,
 )
 
 # ---------------------------------------------------------------------------
@@ -103,10 +103,8 @@ def test_data_saver_save_acquisition(tmp_path):
 
 def _safe_close(conn: Connection) -> None:
     """Shutdown a Connection ignoring BrokenPipeError from peer-already-closed."""
-    try:
+    with contextlib.suppress(BrokenPipeError, OSError):
         conn.shutdown_close()
-    except (BrokenPipeError, OSError):
-        pass
 
 
 def _make_connection_pair(
@@ -241,10 +239,12 @@ def test_connection_peek():
         _safe_close(conn)
 
 
-def test_connection_send_raises_on_exhausted():
+def test_connection_send_raises_on_closed():
+    # is_exhausted gates reading; _send_closed gates sending (see
+    # Connection.__init__ / .close()) -- send() must check the latter.
     conn, peer = _make_connection_pair()
-    conn.is_exhausted = True
-    with pytest.raises(ValueError, match="exhausted"):
+    conn._send_closed = True
+    with pytest.raises(ValueError, match="closed"):
         conn.send("anything")
     peer.close()
     _safe_close(conn)

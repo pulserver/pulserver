@@ -7,7 +7,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design import _readout as readout
+from pulserver.design import _readout as readout  # noqa: E402
 
 OPTS_KW = dict(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 
@@ -115,7 +115,6 @@ def test_wave_on_adds_expected_gradients() -> None:
         assert np.max(np.abs(np.diff(g.waveform))) / dt <= opts.max_slew * 1.01
         assert np.max(np.abs(g.waveform)) <= 0.5 * opts.max_grad * 1.001
     # sine axis: n_cycles zero crossings per period -> count sign changes on flat top
-    flat = gy.waveform[np.abs(gy.waveform) > 0]
     crossings = np.sum(np.diff(np.signbit(gy.waveform[round(gx.rise_time/dt):-round(gx.fall_time/dt)])) != 0)
     assert abs(crossings - 2 * n_cycles) <= 2
     # quadrature: cosine peaks where sine crosses zero

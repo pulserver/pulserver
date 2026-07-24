@@ -9,7 +9,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver import run_cli
+from pulserver import run_cli  # noqa: E402
 
 
 @pytest.fixture

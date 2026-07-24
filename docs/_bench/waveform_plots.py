@@ -28,7 +28,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-
 import pulserver.io as pio  # noqa: E402
 import pulserver.pypulseq as pp  # noqa: E402
 

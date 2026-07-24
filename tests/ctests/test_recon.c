@@ -75,16 +75,22 @@ MU_TEST(test_recon_missing_trajectory_is_hard_error)
     char diag[256];
     int rc;
 
-    /* 03_grad_rss_violation.pge is a stale pre-refactor artifact with no
-     * TRAJECTORY section at all (see tests/cpptests/dump_recon_cache.cpp
-     * for the full story). It must fail loudly, not return an empty
-     * cache -- that silent-degrade behavior belonged to the pre-Stage-4
-     * C++ reader and was deliberately removed. */
+    /* tests/ctests/fixtures/missing_trajectory.pge is a preserved
+     * pre-Stage-4 cache artifact with no TRAJECTORY section at all (it used
+     * to be 03_grad_rss_violation.pge itself, before that fixture's stale
+     * .seq [SIGNATURE] was fixed and it started regenerating as a complete
+     * cache like every other tests/utils/expected/ fixture -- see
+     * tests/cpptests/dump_recon_cache.cpp for the full story). Kept outside
+     * tests/utils/expected/ so it is never swept up by the cpptests
+     * AllFixtures test suites' auto-discovery, which expects every .pge
+     * there to be a complete, current-format cache. Reading it must fail loudly, not
+     * return an empty cache -- that silent-degrade behavior belonged to the
+     * pre-Stage-4 C++ reader and was deliberately removed. */
     memset(&cache, 0, sizeof(cache));
     diag[0] = '\0';
     rc = pulseg_recon_cache_read(
         &cache,
-        TEST_DATA_DIR "03_grad_rss_violation.pge",
+        TEST_ROOT_DIR "/tests/ctests/fixtures/missing_trajectory.pge",
         diag,
         sizeof(diag));
     mu_assert(rc != PULSEG_SUCCESS, "missing TRAJECTORY must fail, not degrade");

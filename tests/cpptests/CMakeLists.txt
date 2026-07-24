@@ -74,9 +74,21 @@ target_compile_definitions(test_seq_desc_truth PRIVATE
     MRDSERVER_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../utils/expected")
 target_link_libraries(test_seq_desc_truth PRIVATE GTest::gtest_main)
 
+# ------------------------------------------------------------------
+# pulseq::File / pulseq::FileSet C++ wrapper (cxx/include/pulseq).
+# pulseq (csrc) is already built unconditionally above (pulseg depends on it).
+# ------------------------------------------------------------------
+add_executable(test_pulseq_file test_pulseq_file.cpp)
+target_include_directories(test_pulseq_file PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../cxx/include/pulseq)
+target_compile_definitions(test_pulseq_file PRIVATE
+    PULSEQ_FILE_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../utils/expected")
+target_link_libraries(test_pulseq_file PRIVATE pulseq GTest::gtest_main)
+
 include(GoogleTest)
 gtest_discover_tests(test_trajectory_cache_loader)
 gtest_discover_tests(test_seq_desc_truth)
+gtest_discover_tests(test_pulseq_file)
 
 # ------------------------------------------------------------------
 # Stage 4 (recon-cache-to-C) Step 0: golden-dump CLI tool. Dumps every

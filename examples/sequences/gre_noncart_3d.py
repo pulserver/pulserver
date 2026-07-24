@@ -39,8 +39,8 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pulserver.io as pio
 import pulserver.design as design
+import pulserver.io as pio
 import pulserver.pypulseq as pp
 from pulserver import (
     Description,

@@ -4,11 +4,11 @@ Accumulates k-space lines per slice, applies 2D IFFT + root-sum-of-squares
 coil combination, and sends back ISMRMRD images.
 """
 
+import ctypes
 import logging
 from collections.abc import Generator, Iterator
 from typing import Any
 
-import ctypes
 import ismrmrd
 import numpy as np
 import numpy.fft as fft

@@ -28,14 +28,13 @@ namespace fs = std::filesystem;
 namespace
 {
 
-    /* A handful of tests/utils/expected/*.pge files are not real trajectory
-     * caches at all -- e.g. 03_grad_rss_violation.pge / 04_slew_rss_violation.pge
-     * are stale pre-refactor artifacts kept only because their companion .seq
-     * intentionally violates gradient/slew limits and cache regeneration for
-     * them fails signature validation (see pge-fixture-regeneration notes).
-     * They are consumed via their .seq by tests/ctests/test_safety_grad.c, not
-     * via this .pge. Detect "no TRAJECTORY section" and skip rather than
-     * baking a meaningless empty dump into the golden set. */
+    /* Defensive skip: a *.pge without a TRAJECTORY section is not a real
+     * trajectory cache (e.g. tests/ctests/fixtures/missing_trajectory.pge,
+     * a deliberately-incomplete cache kept only to exercise
+     * test_recon_missing_trajectory_is_hard_error in tests/ctests/test_recon.c
+     * -- see that test for why it must stay incomplete). Detect "no
+     * TRAJECTORY section" and skip rather than baking a meaningless empty
+     * dump into the golden set. */
     bool has_trajectory_section(const fs::path &p)
     {
         std::ifstream f(p, std::ios::binary);

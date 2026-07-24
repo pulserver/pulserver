@@ -13,6 +13,7 @@ process are treated identically to ``*.queued.json`` on startup.
 
 __all__ = ["ReplayConnection", "ReplayWorker", "enqueue"]
 
+import contextlib
 import glob
 import json
 import logging
@@ -20,11 +21,10 @@ import os
 import tempfile
 import threading
 from datetime import datetime, timezone
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import ismrmrd
 import ismrmrd.xsd
-
 
 if TYPE_CHECKING:
     from .server import Server
@@ -73,10 +73,8 @@ def enqueue(mrd_path: str, handler_name: str, bucket_pid: str | None) -> str:
             json.dump(sidecar, f, indent=2)
         os.replace(tmp_path, sidecar_path)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_path)
-        except OSError:
-            pass
         raise
 
     return sidecar_path
@@ -137,10 +135,8 @@ class ReplayConnection:
             logging.error("ReplayConnection: error reading %s: %s", self._mrd_path, exc)
         finally:
             if dset is not None:
-                try:
+                with contextlib.suppress(Exception):
                     dset.close()
-                except Exception:
-                    pass
             self.is_exhausted = True
 
     # ------------------------------------------------------------------

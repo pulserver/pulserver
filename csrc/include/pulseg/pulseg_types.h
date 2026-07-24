@@ -894,6 +894,40 @@ typedef struct pulseg_segment_info
 #define PULSEG_TRIGGER_TYPE_INPUT 2  /**< ECG / cardiac gating */
 
 /* ================================================================== */
+/*  Segment layout (subsequence-local segment, resolved to a scan     */
+/*  instance -- replaces ad hoc consumer-side exec_stream walking)    */
+/* ================================================================== */
+
+/**
+ * @brief Position/layout of one subsequence-local unique segment,
+ * resolved to a concrete .seq block range.
+ *
+ * Returned by pulseg_get_subseq_segment_layout(). @c global_index is the
+ * deduplicated cross-subsequence segment id (same space as every seg_idx
+ * elsewhere in this API, e.g. pulseg_get_segment_info()); pair with
+ * pulseg_get_subseq_segment_block_indices() for the resolved per-position
+ * .seq block indices.
+ */
+typedef struct pulseg_segment_layout
+{
+    int global_index;             /**< deduplicated global segment id      */
+    int num_blocks;               /**< blocks in the segment               */
+    int start_block;              /**< segment definition's own start block
+                                        (used when no scan-table instance
+                                        is available)                      */
+    int max_energy_start_block;   /**< start block of the max-energy scan
+                                        instance, -1 if none                */
+    int from_max_energy_instance; /**< 1 if pulseg_get_subseq_segment_-
+                                        block_indices() resolved via the
+                                        max-energy scan instance, 0 if it
+                                        fell back to @c start_block         */
+} pulseg_segment_layout;
+
+/* clang-format off */
+#define PULSEG_SEGMENT_LAYOUT_INIT {-1, 0, 0, -1, 0}
+/* clang-format on */
+
+/* ================================================================== */
 /*  Block info (replaces per-block has/get accessor pairs)            */
 /* ================================================================== */
 

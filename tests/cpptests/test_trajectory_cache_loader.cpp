@@ -11,6 +11,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -363,6 +364,35 @@ TEST_P(TrajectoryCacheFixture, LoadsAndPreComputesCleanly)
                      << truth_path;
     }
 
+    /* Per-ES active-axis map, mirroring pre_compute_trajectories' own
+         * has_x/has_y/has_z (cxx/recon/trajectory_cache_reader.cpp): an axis
+         * occupies a slot in T.data (packed x,y,z in that order, skipping
+         * absent axes) iff at least one row in the ES recorded a real shot
+         * for it. Needed below to know which packed dim index a given row's
+         * kx/ky/kz_shot_id corresponds to. */
+    std::vector<std::array<bool, 3>> es_has_axis(
+        static_cast<size_t>(n_es),
+        std::array<bool, 3>{false, false, false});
+    for (const auto &e : cache.table)
+    {
+        if (e.encoding_space_ref < 0 || e.encoding_space_ref >= n_es)
+            continue;
+        auto &has = es_has_axis[static_cast<size_t>(e.encoding_space_ref)];
+        if (e.kx_shot_id >= 0)
+            has[0] = true;
+        if (e.ky_shot_id >= 0)
+            has[1] = true;
+        if (e.kz_shot_id >= 0)
+            has[2] = true;
+    }
+    // Packed-dim -> physical-axis (0=x,1=y,2=z) map per ES, in the same
+    // x,y,z order pre_compute_trajectories packs them in.
+    std::vector<std::vector<int>> es_axis_of_dim(static_cast<size_t>(n_es));
+    for (int es = 0; es < n_es; ++es)
+        for (int axis = 0; axis < 3; ++axis)
+            if (es_has_axis[static_cast<size_t>(es)][static_cast<size_t>(axis)])
+                es_axis_of_dim[static_cast<size_t>(es)].push_back(axis);
+
     /* Iterate ADCs 1:1 in scan order, accumulating per-encoding-space row
          * positions in the order pre_compute_trajectories packs them.        */
     std::vector<size_t> es_pos(static_cast<size_t>(n_es), 0);
@@ -406,6 +436,72 @@ TEST_P(TrajectoryCacheFixture, LoadsAndPreComputesCleanly)
             kz_idx = 0;
         if (kz_idx >= T.num_samples)
             kz_idx = T.num_samples - 1;
+        /* A packed dim is only comparable for THIS row if cache recorded a
+             * real shot for its physical axis here: kx/ky/kz_shot_id == -1
+             * means pre_compute_trajectories deliberately zero-filled that
+             * dim for this ADC (the axis is reconstructed downstream from
+             * gradient-amplitude metadata instead, e.g. a Cartesian
+             * partition/phase-encode step, or -- as with an unrewound
+             * slice-select gradient on an orthogonal-plane navigator -- a
+             * genuinely constant-during-ADC axis with no recorded shot at
+             * all) -- that zero-fill is not a physical k value and must not
+             * be diffed against truth's real, continuously-integrated k(t)
+             * on the same axis.
+             *
+             * A second, related case: a rotated block always gets a real
+             * (non -1) shot id on every active axis (the rotated frame
+             * needs real per-sample data for axes the rotation actually
+             * mixes), even when that axis's canonical k-space was itself
+             * deliberately zeroed out for varying independent of rotation
+             * (PULSEG_AMP_ZERO_VAR only retains the *invariant* part of the
+             * canonical TR -- a phase/partition-encode axis whose amplitude
+             * varies per repeat is excluded by design, same as the
+             * Cartesian case above, and is meant to be reconstructed from
+             * that amplitude metadata instead). The tell is unambiguous:
+             * a nonzero recorded gradient amplitude cannot physically
+             * integrate to an identically-zero k(t) over the whole
+             * readout, so "amplitude != 0 but every sample == 0" means the
+             * shot is such a canonical-extraction placeholder, not real
+             * data, and must be skipped the same way. */
+        const auto &axis_of_dim = es_axis_of_dim[static_cast<size_t>(es)];
+        auto row_has_shot_for_axis = [&](int axis) -> bool
+        {
+            switch (axis)
+            {
+            case 0:
+                return cache_e.kx_shot_id >= 0;
+            case 1:
+                return cache_e.ky_shot_id >= 0;
+            default:
+                return cache_e.kz_shot_id >= 0;
+            }
+        };
+        auto row_amplitude_for_axis = [&](int axis) -> float
+        {
+            switch (axis)
+            {
+            case 0:
+                return cache_e.gx_amplitude;
+            case 1:
+                return cache_e.gy_amplitude;
+            default:
+                return cache_e.gz_amplitude;
+            }
+        };
+        std::array<bool, 3> dim_is_zero_placeholder{false, false, false};
+        for (int d = 0; d < dim && d < static_cast<int>(axis_of_dim.size()); ++d)
+        {
+            if (!row_has_shot_for_axis(axis_of_dim[static_cast<size_t>(d)]))
+                continue; /* already excluded above */
+            if (row_amplitude_for_axis(axis_of_dim[static_cast<size_t>(d)]) == 0.0f)
+                continue;
+            bool all_zero = true;
+            for (int s = 0; s < T.num_samples && all_zero; ++s)
+                if (cache_row[s * T.ndim + d] != 0.0f)
+                    all_zero = false;
+            dim_is_zero_placeholder[static_cast<size_t>(d)] = all_zero;
+        }
+
         float truth_anchor[3] = {0.0f, 0.0f, 0.0f};
         float cache_anchor[3] = {0.0f, 0.0f, 0.0f};
         for (int d = 0; d < dim; ++d)
@@ -417,6 +513,11 @@ TEST_P(TrajectoryCacheFixture, LoadsAndPreComputesCleanly)
         {
             for (int d = 0; d < dim; ++d)
             {
+                if (d < static_cast<int>(axis_of_dim.size()) &&
+                    !row_has_shot_for_axis(axis_of_dim[static_cast<size_t>(d)]))
+                    continue;
+                if (dim_is_zero_placeholder[static_cast<size_t>(d)])
+                    continue;
                 const float cv = cache_row[s * T.ndim + d] - cache_anchor[d];
                 const float tv = truth_row[s * truth.ndim + d] - truth_anchor[d];
                 const double diff = static_cast<double>(cv) - static_cast<double>(tv);

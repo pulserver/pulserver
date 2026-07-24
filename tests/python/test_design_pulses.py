@@ -7,7 +7,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design._rf import _auxiliary_helpers as pulses
+from pulserver.design._rf import _auxiliary_helpers as pulses  # noqa: E402
 
 
 def test_fat_shift_hz() -> None:

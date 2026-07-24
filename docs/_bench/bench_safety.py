@@ -39,7 +39,6 @@ sys.path.insert(0, str(REPO_ROOT / "python"))
 import numpy as np  # noqa: E402
 import pulserver.pypulseq as pp  # noqa: E402
 from pulserver import UIParam  # noqa: E402
-from pulserver.pypulseq._safety import chronaxie_kernel  # noqa: E402
 from pulserver._ext._pulseg_wrapper import (  # noqa: E402
     _calc_mech_resonances,
     _calc_pns,
@@ -48,6 +47,7 @@ from pulserver._ext._pulseg_wrapper import (  # noqa: E402
     _PulseqCollection,
 )
 from pulserver.io import read_esp_bands  # noqa: E402
+from pulserver.pypulseq._safety import chronaxie_kernel  # noqa: E402
 
 MAX_FREQ_HZ = 3000.0
 RESOLUTION_HZ = 5.0

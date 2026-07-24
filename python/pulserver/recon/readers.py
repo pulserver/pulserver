@@ -28,17 +28,18 @@ __all__ = [
 ]
 
 import ast
+import contextlib
 import ctypes
 import functools
 import io
 import json
 import logging
 import xml.etree.ElementTree as xml
+from collections.abc import Callable
+from typing import Any
 
-from typing import Any, Callable
-
-import numpy as np
 import ismrmrd
+import numpy as np
 import pydicom
 
 from . import constants
@@ -447,10 +448,8 @@ def read_header(source: Any) -> Any:
 
 def _auto_cast_str(val):
     # Try fails if cannot eval, therefore is string
-    try:
+    with contextlib.suppress(Exception):
         val = ast.literal_eval(val)
-    except Exception:
-        pass
     return val
 
 
@@ -525,9 +524,9 @@ def _deserialize_config(content: str, default_config: str = "default") -> dict:
 def _load_config_from_file(filename: str, default_config: str = "default") -> dict:
     """Load and deserialize config from file."""
     try:
-        with open(filename, "r") as f:
+        with open(filename) as f:
             content = f.read()
         return _deserialize_config(content, default_config)
-    except (FileNotFoundError, IOError) as e:
+    except (OSError, FileNotFoundError) as e:
         logging.error("Failed to load config file '%s': %s", filename, e)
         return {"parameters": {"config": default_config}}

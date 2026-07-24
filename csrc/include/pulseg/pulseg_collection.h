@@ -756,6 +756,52 @@ extern "C"
         int *out_ids,
         int seg_idx);
 
+    /* ================================================================== */
+    /*  Subsequence-local segment layout                                  */
+    /* ================================================================== */
+
+    /**
+     * @brief Fill a pulseg_segment_layout for a subsequence-local unique
+     * segment, resolving its deduplicated global index and (if a scan
+     * table is available) the start block of its max-energy instance.
+     *
+     * @param[in]  coll           Loaded collection.
+     * @param[out] info           Filled with the resolved layout.
+     * @param[in]  subseq_idx     0-based subsequence index.
+     * @param[in]  local_seg_idx  0-based index into that subsequence's own
+     *                            (pre-dedup) segment_definitions array.
+     * @return PULSEG_SUCCESS on success, negative error code on failure.
+     */
+    int pulseg_get_subseq_segment_layout(
+        const pulseg_collection *coll,
+        pulseg_segment_layout *info,
+        int subseq_idx,
+        int local_seg_idx);
+
+    /**
+     * @brief Copy resolved .seq block indices for a subsequence-local
+     * segment into a caller-supplied buffer.
+     *
+     * Prefers the max-energy scan instance (pulseg_segment_layout.-
+     * max_energy_start_block via the execution stream); falls back to the
+     * segment definition's own start_block when no scan table is
+     * available. If any resolved index would be out of range, nothing is
+     * written and the function returns 0 (not a partial result).
+     *
+     * @param[in]  coll           Loaded collection.
+     * @param[out] out_indices    Buffer of at least num_blocks ints (see
+     *                            pulseg_get_subseq_segment_layout()).
+     * @param[in]  subseq_idx     0-based subsequence index.
+     * @param[in]  local_seg_idx  0-based index into that subsequence's own
+     *                            (pre-dedup) segment_definitions array.
+     * @return Number of indices written (>= 0), or negative error code.
+     */
+    int pulseg_get_subseq_segment_block_indices(
+        const pulseg_collection *coll,
+        int *out_indices,
+        int subseq_idx,
+        int local_seg_idx);
+
 #ifdef __cplusplus
 }
 #endif

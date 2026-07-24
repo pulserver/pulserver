@@ -6,7 +6,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design import _system as system
+from pulserver.design import _system as system  # noqa: E402
 
 
 @pytest.mark.parametrize(
