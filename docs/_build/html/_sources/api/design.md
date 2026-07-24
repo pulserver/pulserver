@@ -119,7 +119,7 @@ from `matrix`.
 
 Most of them also take a `slice_rephasing` argument, which folds the
 excitation's rephaser into the prewinder instead of paying for it as its own
-block; see {doc}`../how-to/write_a_plugin_with_modules` for how to use it.
+block; see {doc}`../tutorials/build_a_sequence_plugin` for how to use it.
 
 The non-Cartesian families come in three coverages of the same base waveform:
 the plain factory rotates it *in plane* (2D imaging), `*_projection_*` steers

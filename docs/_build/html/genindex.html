@@ -186,22 +186,15 @@
     <div class="bd-toc-item navbar-nav active">
         <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="tutorials.html">Tutorials</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/build_a_sequence_plugin.html">Build a sequence plugin with the design toolbox</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="how_to.html">How-to guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="how-to/write_a_plugin_with_modules.html">How to write a sequence plugin with the design toolbox</a></li>
 <li class="toctree-l2"><a class="reference internal" href="how-to/customise_a_plugin.html">How to customise a plugin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="how-to/write_a_new_module.html">How to write a new module or loop structure</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="examples.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="api/pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="api/generated/pypulseq/pulserver.pypulseq.Opts.html">pulserver.pypulseq.Opts</a></li>
-<li class="toctree-l3"><a class="reference internal" href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html">pulserver.pypulseq.Sequence</a></li>
-<li class="toctree-l3"><a class="reference internal" href="api/generated/pypulseq/pulserver.pypulseq.get_supported_labels.html">pulserver.pypulseq.get_supported_labels</a></li>
-<li class="toctree-l3"><a class="reference internal" href="api/generated/pypulseq/pulserver.pypulseq.make_label.html">pulserver.pypulseq.make_label</a></li>
-<li class="toctree-l3"><a class="reference internal" href="api/generated/pypulseq/pulserver.pypulseq.make_rf_shim.html">pulserver.pypulseq.make_rf_shim</a></li>
-<li class="toctree-l3"><a class="reference internal" href="api/generated/pypulseq/pulserver.pypulseq.make_rotation.html">pulserver.pypulseq.make_rotation</a></li>
-</ul>
-</details></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/sampling.html">Scan loops</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -326,16 +319,57 @@
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="api/io.html"><code class="docutils literal notranslate"><span class="pre">pulserver.io</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="api/generated/io/pulserver.io.write.html">pulserver.io.write</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/io/pulserver.io.read.html">pulserver.io.read</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/io/pulserver.io.read_esp_bands.html">pulserver.io.read_esp_bands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/io/pulserver.io.read_asc_bands.html">pulserver.io.read_asc_bands</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="api/recon.html"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/gehc.html"><code class="docutils literal notranslate"><span class="pre">pulserver.gehc</span></code></a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="api/recon.html"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.linops.deepinverse_multicoil_mri.html">pulserver.recon.linops.deepinverse_multicoil_mri</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.linops.mrpro_operator.html">pulserver.recon.linops.mrpro_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.linops.mrinufft_operator.html">pulserver.recon.linops.mrinufft_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.linops.available_nufft_backends.html">pulserver.recon.linops.available_nufft_backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.prox.deepinverse_prior.html">pulserver.recon.prox.deepinverse_prior</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.optimizers.mrpro_optimizer.html">pulserver.recon.optimizers.mrpro_optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.optimizers.deepinverse_optimizer.html">pulserver.recon.optimizers.deepinverse_optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.calibration.nlinv_sensitivities.html">pulserver.recon.calibration.nlinv_sensitivities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.calibration.estimate_sensitivities.html">pulserver.recon.calibration.estimate_sensitivities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.metadata.MrdMetadata.html">pulserver.recon.metadata.MrdMetadata</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.metadata.user_parameter.html">pulserver.recon.metadata.user_parameter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.metadata.acquisition_label.html">pulserver.recon.metadata.acquisition_label</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.metadata.acquisition_labels.html">pulserver.recon.metadata.acquisition_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.metadata.has_acquisition_flag.html">pulserver.recon.metadata.has_acquisition_flag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.grouping.group_by_labels.html">pulserver.recon.grouping.group_by_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.grouping.split_on_flag.html">pulserver.recon.grouping.split_on_flag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.grouping.filter_acquisitions.html">pulserver.recon.grouping.filter_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.serialization.images_to_dicom.html">pulserver.recon.serialization.images_to_dicom</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.serialization.write_dicom_series.html">pulserver.recon.serialization.write_dicom_series</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.mrd2dicom.MrdDicomBuilder.html">pulserver.recon.mrd2dicom.MrdDicomBuilder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.dicom2mrd.dicom_folder_to_mrd.html">pulserver.recon.dicom2mrd.dicom_folder_to_mrd</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.epi.EpiAcquisitionGroups.html">pulserver.recon.epi.EpiAcquisitionGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.epi.partition_epi_acquisitions.html">pulserver.recon.epi.partition_epi_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.sms.SmsEpiInputs.html">pulserver.recon.sms.SmsEpiInputs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.distortion.run_pyhysco.html">pulserver.recon.distortion.run_pyhysco</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.connection.Connection.html">pulserver.recon.connection.Connection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.server.Server.html">pulserver.recon.server.Server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.rtp_connection.RtpServer.html">pulserver.recon.rtp_connection.RtpServer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.main.main.html">pulserver.recon.main.main</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.replay.html">pulserver.recon.replay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.readers.html">pulserver.recon.readers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.writers.html">pulserver.recon.writers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.handlers.html">pulserver.recon.handlers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.mrdhelper.html">pulserver.recon.mrdhelper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.constants.html">pulserver.recon.constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.concurrency.html">pulserver.recon.concurrency</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="reference/sampling.html">Scan loops</a></li>
-<li class="toctree-l2"><a class="reference internal" href="explanations/mechanical_resonance_safety.html">Mechanical Resonance Safety: Structural Acoustic Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/sequence_representation.html">How a sequence is represented</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/mechanical_resonance_safety.html">Mechanical resonance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/pns_safety.html">Peripheral nerve stimulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/performance.html">Runtime and memory</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="more.html">More</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -478,6 +512,7 @@
  | <a href="#E"><strong>E</strong></a>
  | <a href="#F"><strong>F</strong></a>
  | <a href="#G"><strong>G</strong></a>
+ | <a href="#H"><strong>H</strong></a>
  | <a href="#I"><strong>I</strong></a>
  | <a href="#L"><strong>L</strong></a>
  | <a href="#M"><strong>M</strong></a>
@@ -510,6 +545,22 @@
 </li>
         <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.__init__">(pulserver.pypulseq.Sequence method)</a>
 </li>
+        <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.__init__">(pulserver.recon.connection.Connection method)</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.SocketWrapper.__init__">(pulserver.recon.connection.Connection.SocketWrapper method)</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.epi.EpiAcquisitionGroups.html#pulserver.recon.epi.EpiAcquisitionGroups.__init__">(pulserver.recon.epi.EpiAcquisitionGroups method)</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.metadata.MrdMetadata.html#pulserver.recon.metadata.MrdMetadata.__init__">(pulserver.recon.metadata.MrdMetadata method)</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.mrd2dicom.MrdDicomBuilder.html#pulserver.recon.mrd2dicom.MrdDicomBuilder.__init__">(pulserver.recon.mrd2dicom.MrdDicomBuilder method)</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.rtp_connection.RtpServer.html#pulserver.recon.rtp_connection.RtpServer.__init__">(pulserver.recon.rtp_connection.RtpServer method)</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.server.Server.html#pulserver.recon.server.Server.__init__">(pulserver.recon.server.Server method)</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.sms.SmsEpiInputs.html#pulserver.recon.sms.SmsEpiInputs.__init__">(pulserver.recon.sms.SmsEpiInputs method)</a>
+</li>
         <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.__init__">(pulserver.ScanLoop method)</a>
 </li>
         <li><a href="api/generated/pulserver/pulserver.SequenceModule.html#pulserver.SequenceModule.__init__">(pulserver.SequenceModule method)</a>
@@ -527,11 +578,21 @@
 <h2 id="A">A</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/recon/pulserver.recon.metadata.acquisition_label.html#pulserver.recon.metadata.acquisition_label">acquisition_label() (in module pulserver.recon.metadata)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.metadata.acquisition_labels.html#pulserver.recon.metadata.acquisition_labels">acquisition_labels() (in module pulserver.recon.metadata)</a>
+</li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.add_block">add_block() (pulserver.pypulseq.Sequence method)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.add_reader">add_reader() (pulserver.recon.connection.Connection method)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.SequenceModule.html#pulserver.SequenceModule.add_to">add_to() (pulserver.SequenceModule method)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.add_writer">add_writer() (pulserver.recon.connection.Connection method)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.linops.available_nufft_backends.html#pulserver.recon.linops.available_nufft_backends">available_nufft_backends() (in module pulserver.recon.linops)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -557,9 +618,19 @@
 </li>
       <li><a href="api/generated/design/pulserver.design.calc_encoding_scales.html#pulserver.design.calc_encoding_scales">calc_encoding_scales() (in module pulserver.design)</a>
 </li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.calculate_kspace">calculate_kspace() (pulserver.pypulseq.Sequence method)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.check_timing">check_timing() (pulserver.pypulseq.Sequence method)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.SocketWrapper.close">close() (pulserver.recon.connection.Connection.SocketWrapper method)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.EncodingAxis.html#pulserver.EncodingAxis.columns">columns (pulserver.EncodingAxis property)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection">Connection (class in pulserver.recon.connection)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.SocketWrapper">Connection.SocketWrapper (class in pulserver.recon.connection)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.custom_labels">custom_labels (pulserver.pypulseq.Sequence property)</a>
 </li>
@@ -569,6 +640,14 @@
 <h2 id="D">D</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/recon/pulserver.recon.linops.deepinverse_multicoil_mri.html#pulserver.recon.linops.deepinverse_multicoil_mri">deepinverse_multicoil_mri() (in module pulserver.recon.linops)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.optimizers.deepinverse_optimizer.html#pulserver.recon.optimizers.deepinverse_optimizer">deepinverse_optimizer() (in module pulserver.recon.optimizers)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.prox.deepinverse_prior.html#pulserver.recon.prox.deepinverse_prior">deepinverse_prior() (in module pulserver.recon.prox)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Opts.html#pulserver.pypulseq.Opts.default_stim_threshold">default_stim_threshold() (pulserver.pypulseq.Opts method)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.Description.html#pulserver.Description">Description (class in pulserver)</a>
 </li>
       <li><a href="api/generated/sequences/pulserver.sequences.design_bssfp_2d.html#pulserver.sequences.design_bssfp_2d">design_bssfp_2d() (in module pulserver.sequences)</a>
@@ -593,10 +672,10 @@
 </li>
       <li><a href="api/generated/sequences/pulserver.sequences.design_gre_mprage_radial_3d.html#pulserver.sequences.design_gre_mprage_radial_3d">design_gre_mprage_radial_3d() (in module pulserver.sequences)</a>
 </li>
-      <li><a href="api/generated/sequences/pulserver.sequences.design_gre_multiecho_2d.html#pulserver.sequences.design_gre_multiecho_2d">design_gre_multiecho_2d() (in module pulserver.sequences)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/sequences/pulserver.sequences.design_gre_multiecho_2d.html#pulserver.sequences.design_gre_multiecho_2d">design_gre_multiecho_2d() (in module pulserver.sequences)</a>
+</li>
       <li><a href="api/generated/sequences/pulserver.sequences.design_gre_multiecho_3d.html#pulserver.sequences.design_gre_multiecho_3d">design_gre_multiecho_3d() (in module pulserver.sequences)</a>
 </li>
       <li><a href="api/generated/sequences/pulserver.sequences.design_gre_noncart_2d.html#pulserver.sequences.design_gre_noncart_2d">design_gre_noncart_2d() (in module pulserver.sequences)</a>
@@ -615,6 +694,10 @@
 </li>
       <li><a href="api/generated/sequences/pulserver.sequences.design_zte_3d.html#pulserver.sequences.design_zte_3d">design_zte_3d() (in module pulserver.sequences)</a>
 </li>
+      <li><a href="api/generated/recon/pulserver.recon.dicom2mrd.dicom_folder_to_mrd.html#pulserver.recon.dicom2mrd.dicom_folder_to_mrd">dicom_folder_to_mrd() (in module pulserver.recon.dicom2mrd)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.mrd2dicom.MrdDicomBuilder.html#pulserver.recon.mrd2dicom.MrdDicomBuilder.dicomDset">dicomDset (pulserver.recon.mrd2dicom.MrdDicomBuilder attribute)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.dict_to_protocol.html#pulserver.dict_to_protocol">dict_to_protocol() (in module pulserver)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.DropdownFloatParam.html#pulserver.DropdownFloatParam">DropdownFloatParam (class in pulserver)</a>
@@ -623,17 +706,29 @@
 </li>
       <li><a href="api/generated/pulserver/pulserver.SequenceModule.html#pulserver.SequenceModule.duration">duration (pulserver.SequenceModule property)</a>
 </li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.duration">duration() (pulserver.pypulseq.Sequence method)</a>
+</li>
   </ul></td>
 </tr></table>
 
 <h2 id="E">E</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/recon/pulserver.recon.metadata.MrdMetadata.html#pulserver.recon.metadata.MrdMetadata.encoded_matrix">encoded_matrix() (pulserver.recon.metadata.MrdMetadata method)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.metadata.MrdMetadata.html#pulserver.recon.metadata.MrdMetadata.encoding">encoding() (pulserver.recon.metadata.MrdMetadata method)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.EncodingAxis.html#pulserver.EncodingAxis">EncodingAxis (class in pulserver)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pulserver/pulserver.EnumKey.html#pulserver.EnumKey">EnumKey (class in pulserver)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.epi.EpiAcquisitionGroups.html#pulserver.recon.epi.EpiAcquisitionGroups">EpiAcquisitionGroups (class in pulserver.recon.epi)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.calibration.estimate_sensitivities.html#pulserver.recon.calibration.estimate_sensitivities">estimate_sensitivities() (in module pulserver.recon.calibration)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.extensions">extensions (pulserver.pypulseq.Sequence property)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -641,6 +736,12 @@
 <h2 id="F">F</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/recon/pulserver.recon.metadata.MrdMetadata.html#pulserver.recon.metadata.MrdMetadata.field_of_view_mm">field_of_view_mm() (pulserver.recon.metadata.MrdMetadata method)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.filter">filter() (pulserver.recon.connection.Connection method)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.grouping.filter_acquisitions.html#pulserver.recon.grouping.filter_acquisitions">filter_acquisitions() (in module pulserver.recon.grouping)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.SequenceModule.html#pulserver.SequenceModule.flags">flags (pulserver.SequenceModule property)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.flatten">flatten() (pulserver.ScanLoop method)</a>
@@ -648,6 +749,10 @@
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pulserver/pulserver.FloatKey.html#pulserver.FloatKey">FloatKey (class in pulserver)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Opts.html#pulserver.pypulseq.Opts.forbidden_bands">forbidden_bands (pulserver.pypulseq.Opts property)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Opts.html#pulserver.pypulseq.Opts.forbidden_bands_hz_per_m">forbidden_bands_hz_per_m() (pulserver.pypulseq.Opts method)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.from_mask">from_mask() (pulserver.ScanLoop class method)</a>
 </li>
@@ -663,11 +768,23 @@
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.get_block">get_block() (pulserver.pypulseq.Sequence method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pulserver/pulserver.PulseqSequence.html#pulserver.PulseqSequence.get_default_protocol">get_default_protocol() (pulserver.PulseqSequence method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.get_supported_labels.html#pulserver.pypulseq.get_supported_labels">get_supported_labels() (in module pulserver.pypulseq)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.grad_spectrum">grad_spectrum() (pulserver.pypulseq.Sequence method)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.grouping.group_by_labels.html#pulserver.recon.grouping.group_by_labels">group_by_labels() (in module pulserver.recon.grouping)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="H">H</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/recon/pulserver.recon.metadata.has_acquisition_flag.html#pulserver.recon.metadata.has_acquisition_flag">has_acquisition_flag() (in module pulserver.recon.metadata)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -675,17 +792,23 @@
 <h2 id="I">I</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/recon/pulserver.recon.serialization.images_to_dicom.html#pulserver.recon.serialization.images_to_dicom">images_to_dicom() (in module pulserver.recon.serialization)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.ImagingMode.html#pulserver.ImagingMode">ImagingMode (class in pulserver)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.increments">increments() (pulserver.ScanLoop method)</a>
 </li>
+      <li><a href="api/generated/pulserver/pulserver.InputMode.html#pulserver.InputMode">InputMode (class in pulserver)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api/generated/pulserver/pulserver.InputMode.html#pulserver.InputMode">InputMode (class in pulserver)</a>
+      <li><a href="api/generated/recon/pulserver.recon.mrd2dicom.MrdDicomBuilder.html#pulserver.recon.mrd2dicom.MrdDicomBuilder.instanceNumber">instanceNumber (pulserver.recon.mrd2dicom.MrdDicomBuilder attribute)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.IntKey.html#pulserver.IntKey">IntKey (class in pulserver)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.EncodingAxis.html#pulserver.EncodingAxis.is_counter">is_counter (pulserver.EncodingAxis property)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.iter_with_mids">iter_with_mids() (pulserver.recon.connection.Connection method)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -707,6 +830,8 @@
 <h2 id="M">M</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/recon/pulserver.recon.main.main.html#pulserver.recon.main.main">main() (in module pulserver.recon.main)</a>
+</li>
       <li><a href="api/generated/design/pulserver.design.make_bloch_siegert_pulse.html#pulserver.design.make_bloch_siegert_pulse">make_bloch_siegert_pulse() (in module pulserver.design)</a>
 </li>
       <li><a href="api/generated/design/pulserver.design.make_bssfp_readout.html#pulserver.design.make_bssfp_readout">make_bssfp_readout() (in module pulserver.design)</a>
@@ -761,8 +886,6 @@
 </li>
       <li><a href="api/generated/design/pulserver.design.make_phase_encoding.html#pulserver.design.make_phase_encoding">make_phase_encoding() (in module pulserver.design)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/design/pulserver.design.make_pins.html#pulserver.design.make_pins">make_pins() (in module pulserver.design)</a>
 </li>
       <li><a href="api/generated/design/pulserver.design.make_pins_slice_selective_pulse.html#pulserver.design.make_pins_slice_selective_pulse">make_pins_slice_selective_pulse() (in module pulserver.design)</a>
@@ -775,6 +898,8 @@
 </li>
       <li><a href="api/generated/design/pulserver.design.make_radial_stack_readout.html#pulserver.design.make_radial_stack_readout">make_radial_stack_readout() (in module pulserver.design)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/design/pulserver.design.make_refocusing_pulse.html#pulserver.design.make_refocusing_pulse">make_refocusing_pulse() (in module pulserver.design)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.make_rf_shim.html#pulserver.pypulseq.make_rf_shim">make_rf_shim() (in module pulserver.pypulseq)</a>
@@ -819,7 +944,33 @@
       <ul>
         <li><a href="api/generated/pulserver/pulserver.params.html#module-pulserver.params">pulserver.params</a>
 </li>
+        <li><a href="api/generated/recon/pulserver.recon.concurrency.html#module-pulserver.recon.concurrency">pulserver.recon.concurrency</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.constants.html#module-pulserver.recon.constants">pulserver.recon.constants</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.handlers.html#module-pulserver.recon.handlers">pulserver.recon.handlers</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.mrdhelper.html#module-pulserver.recon.mrdhelper">pulserver.recon.mrdhelper</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.readers.html#module-pulserver.recon.readers">pulserver.recon.readers</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.replay.html#module-pulserver.recon.replay">pulserver.recon.replay</a>
+</li>
+        <li><a href="api/generated/recon/pulserver.recon.writers.html#module-pulserver.recon.writers">pulserver.recon.writers</a>
+</li>
       </ul></li>
+      <li><a href="api/generated/recon/pulserver.recon.mrd2dicom.MrdDicomBuilder.html#pulserver.recon.mrd2dicom.MrdDicomBuilder">MrdDicomBuilder (class in pulserver.recon.mrd2dicom)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.mrd2dicom.MrdDicomBuilder.html#pulserver.recon.mrd2dicom.MrdDicomBuilder.mrdHead">mrdHead (pulserver.recon.mrd2dicom.MrdDicomBuilder attribute)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.metadata.MrdMetadata.html#pulserver.recon.metadata.MrdMetadata">MrdMetadata (class in pulserver.recon.metadata)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.linops.mrinufft_operator.html#pulserver.recon.linops.mrinufft_operator">mrinufft_operator() (in module pulserver.recon.linops)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.linops.mrpro_operator.html#pulserver.recon.linops.mrpro_operator">mrpro_operator() (in module pulserver.recon.linops)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.optimizers.mrpro_optimizer.html#pulserver.recon.optimizers.mrpro_optimizer">mrpro_optimizer() (in module pulserver.recon.optimizers)</a>
+</li>
   </ul></td>
 </tr></table>
 
@@ -830,13 +981,19 @@
 </li>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.n_positions">n_positions (pulserver.ScanLoop property)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.n_samples">n_samples (pulserver.ScanLoop property)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.n_shots">n_shots (pulserver.ScanLoop property)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.next">next() (pulserver.recon.connection.Connection method)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.calibration.nlinv_sensitivities.html#pulserver.recon.calibration.nlinv_sensitivities">nlinv_sensitivities() (in module pulserver.recon.calibration)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.SequenceModule.html#pulserver.SequenceModule.num_blocks">num_blocks (pulserver.SequenceModule property)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.num_trs">num_trs (pulserver.pypulseq.Sequence property)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -854,16 +1011,24 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pulserver/pulserver.ParamKind.html#pulserver.ParamKind">ParamKind (class in pulserver)</a>
 </li>
+      <li><a href="api/generated/recon/pulserver.recon.epi.partition_epi_acquisitions.html#pulserver.recon.epi.partition_epi_acquisitions">partition_epi_acquisitions() (in module pulserver.recon.epi)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.payload">payload() (pulserver.pypulseq.Sequence method)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.peek">peek() (pulserver.recon.connection.Connection method)</a>
+</li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.plot">plot() (pulserver.pypulseq.Sequence method)</a>
 
       <ul>
         <li><a href="api/generated/pulserver/pulserver.SequenceModule.html#pulserver.SequenceModule.plot">(pulserver.SequenceModule method)</a>
 </li>
       </ul></li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.plot_kspace">plot_kspace() (pulserver.pypulseq.Sequence method)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.pns">pns() (pulserver.pypulseq.Sequence method)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.PreparationType.html#pulserver.PreparationType">PreparationType (class in pulserver)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pulserver/pulserver.protocol_to_dict.html#pulserver.protocol_to_dict">protocol_to_dict() (in module pulserver)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.PulseqSequence.html#pulserver.PulseqSequence">PulseqSequence (class in pulserver)</a>
@@ -876,24 +1041,91 @@
 </li>
       </ul></li>
   </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    pulserver.recon.concurrency
+
+      <ul>
+        <li><a href="api/generated/recon/pulserver.recon.concurrency.html#module-pulserver.recon.concurrency">module</a>
+</li>
+      </ul></li>
+      <li>
+    pulserver.recon.constants
+
+      <ul>
+        <li><a href="api/generated/recon/pulserver.recon.constants.html#module-pulserver.recon.constants">module</a>
+</li>
+      </ul></li>
+      <li>
+    pulserver.recon.handlers
+
+      <ul>
+        <li><a href="api/generated/recon/pulserver.recon.handlers.html#module-pulserver.recon.handlers">module</a>
+</li>
+      </ul></li>
+      <li>
+    pulserver.recon.mrdhelper
+
+      <ul>
+        <li><a href="api/generated/recon/pulserver.recon.mrdhelper.html#module-pulserver.recon.mrdhelper">module</a>
+</li>
+      </ul></li>
+      <li>
+    pulserver.recon.readers
+
+      <ul>
+        <li><a href="api/generated/recon/pulserver.recon.readers.html#module-pulserver.recon.readers">module</a>
+</li>
+      </ul></li>
+      <li>
+    pulserver.recon.replay
+
+      <ul>
+        <li><a href="api/generated/recon/pulserver.recon.replay.html#module-pulserver.recon.replay">module</a>
+</li>
+      </ul></li>
+      <li>
+    pulserver.recon.writers
+
+      <ul>
+        <li><a href="api/generated/recon/pulserver.recon.writers.html#module-pulserver.recon.writers">module</a>
+</li>
+      </ul></li>
+  </ul></td>
 </tr></table>
 
 <h2 id="R">R</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.read">read() (pulserver.pypulseq.Sequence method)</a>
+      <li><a href="api/generated/io/pulserver.io.read.html#pulserver.io.read">read() (in module pulserver.io)</a>
+
+      <ul>
+        <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.read">(pulserver.pypulseq.Sequence method)</a>
 </li>
+        <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.SocketWrapper.read">(pulserver.recon.connection.Connection.SocketWrapper method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/generated/io/pulserver.io.read_asc_bands.html#pulserver.io.read_asc_bands">read_asc_bands() (in module pulserver.io)</a>
+</li>
+      <li><a href="api/generated/io/pulserver.io.read_esp_bands.html#pulserver.io.read_esp_bands">read_esp_bands() (in module pulserver.io)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.metadata.MrdMetadata.html#pulserver.recon.metadata.MrdMetadata.recon_matrix">recon_matrix() (pulserver.recon.metadata.MrdMetadata method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.relative">relative() (pulserver.ScanLoop method)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.remove_duplicates">remove_duplicates() (pulserver.pypulseq.Sequence method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Opts.html#pulserver.pypulseq.Opts.reset_default">reset_default() (pulserver.pypulseq.Opts class method)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.rf_from_lib_data">rf_from_lib_data() (pulserver.pypulseq.Sequence method)</a>
 </li>
+      <li><a href="api/generated/recon/pulserver.recon.rtp_connection.RtpServer.html#pulserver.recon.rtp_connection.RtpServer">RtpServer (class in pulserver.recon.rtp_connection)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.run_cli.html#pulserver.run_cli">run_cli() (in module pulserver)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.distortion.run_pyhysco.html#pulserver.recon.distortion.run_pyhysco">run_pyhysco() (in module pulserver.recon.distortion)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -902,6 +1134,12 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop">ScanLoop (class in pulserver)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.segment">segment() (pulserver.pypulseq.Sequence method)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.segments">segments (pulserver.pypulseq.Sequence property)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.send">send() (pulserver.recon.connection.Connection method)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence">Sequence (class in pulserver.pypulseq)</a>
 
@@ -913,13 +1151,23 @@
 </li>
       <li><a href="api/generated/pulserver/pulserver.SequenceType.html#pulserver.SequenceType">SequenceType (class in pulserver)</a>
 </li>
-      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Opts.html#pulserver.pypulseq.Opts.set_as_default">set_as_default() (pulserver.pypulseq.Opts method)</a>
+      <li><a href="api/generated/recon/pulserver.recon.server.Server.html#pulserver.recon.server.Server.serve">serve() (pulserver.recon.server.Server method)</a>
 </li>
-      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.set_block">set_block() (pulserver.pypulseq.Sequence method)</a>
+      <li><a href="api/generated/recon/pulserver.recon.rtp_connection.RtpServer.html#pulserver.recon.rtp_connection.RtpServer.serve_forever">serve_forever() (pulserver.recon.rtp_connection.RtpServer method)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.rtp_connection.RtpServer.html#pulserver.recon.rtp_connection.RtpServer.serve_in_thread">serve_in_thread() (pulserver.recon.rtp_connection.RtpServer method)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.server.Server.html#pulserver.recon.server.Server">Server (class in pulserver.recon.server)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Opts.html#pulserver.pypulseq.Opts.set_as_default">set_as_default() (pulserver.pypulseq.Opts method)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.set_block">set_block() (pulserver.pypulseq.Sequence method)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.SequenceModule.html#pulserver.SequenceModule.set_flags">set_flags() (pulserver.SequenceModule method)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Opts.html#pulserver.pypulseq.Opts.set_forbidden_bands">set_forbidden_bands() (pulserver.pypulseq.Opts method)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.SequenceModule.html#pulserver.SequenceModule.set_labels">set_labels() (pulserver.SequenceModule method)</a>
 </li>
@@ -929,7 +1177,15 @@
 </li>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.shot_lengths">shot_lengths (pulserver.ScanLoop property)</a>
 </li>
+      <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.shutdown_close">shutdown_close() (pulserver.recon.connection.Connection method)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.sizes">sizes (pulserver.ScanLoop property)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.sms.SmsEpiInputs.html#pulserver.recon.sms.SmsEpiInputs">SmsEpiInputs (class in pulserver.recon.sms)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.grouping.split_on_flag.html#pulserver.recon.grouping.split_on_flag">split_on_flag() (in module pulserver.recon.grouping)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.server.Server.html#pulserver.recon.server.Server.start_rtp_server">start_rtp_server() (pulserver.recon.server.Server method)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.StringListParam.html#pulserver.StringListParam">StringListParam (class in pulserver)</a>
 </li>
@@ -941,14 +1197,22 @@
 <h2 id="T">T</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.test_report">test_report() (pulserver.pypulseq.Sequence method)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.to_frequencies">to_frequencies() (pulserver.ScanLoop method)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.to_rotations">to_rotations() (pulserver.ScanLoop method)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.to_scales">to_scales() (pulserver.ScanLoop method)</a>
 </li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.tr_block_range">tr_block_range() (pulserver.pypulseq.Sequence method)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.tr_duration">tr_duration (pulserver.pypulseq.Sequence property)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.tr_info">tr_info (pulserver.pypulseq.Sequence property)</a>
+</li>
       <li><a href="api/generated/design/pulserver.design.traj2grad.html#pulserver.design.traj2grad">traj2grad() (in module pulserver.design)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.TriggerType.html#pulserver.TriggerType">TriggerType (class in pulserver)</a>
@@ -969,12 +1233,18 @@
 </li>
       <li><a href="api/generated/pulserver/pulserver.UIParam.html#pulserver.UIParam.user_max">user_max() (pulserver.UIParam static method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pulserver/pulserver.UIParam.html#pulserver.UIParam.user_min">user_min() (pulserver.UIParam static method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pulserver/pulserver.UIParam.html#pulserver.UIParam.user_name">user_name() (pulserver.UIParam static method)</a>
 </li>
+      <li><a href="api/generated/recon/pulserver.recon.metadata.user_parameter.html#pulserver.recon.metadata.user_parameter">user_parameter() (in module pulserver.recon.metadata)</a>
+
+      <ul>
+        <li><a href="api/generated/recon/pulserver.recon.metadata.MrdMetadata.html#pulserver.recon.metadata.MrdMetadata.user_parameter">(pulserver.recon.metadata.MrdMetadata method)</a>
+</li>
+      </ul></li>
       <li><a href="api/generated/pulserver/pulserver.UIParam.html#pulserver.UIParam.user_value">user_value() (pulserver.UIParam static method)</a>
 </li>
   </ul></td>
@@ -984,6 +1254,8 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pulserver/pulserver.Validate.html#pulserver.Validate">Validate (class in pulserver)</a>
+</li>
+      <li><a href="api/generated/recon/pulserver.recon.sms.SmsEpiInputs.html#pulserver.recon.sms.SmsEpiInputs.validate">validate() (pulserver.recon.sms.SmsEpiInputs method)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
@@ -999,6 +1271,10 @@
 <h2 id="W">W</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.waveforms">waveforms() (pulserver.pypulseq.Sequence method)</a>
+</li>
+      <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.waveforms_and_times">waveforms_and_times() (pulserver.pypulseq.Sequence method)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.ScanLoop.html#pulserver.ScanLoop.with_axes">with_axes() (pulserver.ScanLoop method)</a>
 </li>
   </ul></td>
@@ -1008,7 +1284,11 @@
       <ul>
         <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.write">(pulserver.pypulseq.Sequence method)</a>
 </li>
+        <li><a href="api/generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection.SocketWrapper.write">(pulserver.recon.connection.Connection.SocketWrapper method)</a>
+</li>
       </ul></li>
+      <li><a href="api/generated/recon/pulserver.recon.serialization.write_dicom_series.html#pulserver.recon.serialization.write_dicom_series">write_dicom_series() (in module pulserver.recon.serialization)</a>
+</li>
   </ul></td>
 </tr></table>
 

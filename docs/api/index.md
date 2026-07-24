@@ -13,5 +13,4 @@ design
 pypulseq
 io
 recon
-gehc
 ```

@@ -50,8 +50,8 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pulserver.io as pio
 import pulserver.design as design
+import pulserver.io as pio
 import pulserver.pypulseq as pp
 from pulserver import (
     BoolParam,
@@ -74,6 +74,9 @@ USER_SLOT_RAMP_SAMPLE = 0
 USER_SLOT_FAT_SAT = 1
 USER_SLOT_B0 = 2
 USER_SLOT_TTL = 3
+USER_SLOT_PHASE_CORRECTION = 4
+USER_SLOT_REVERSE_PE = 5
+USER_SLOT_SMS_REFERENCE = 6
 
 
 class Epi2DPulseqSequence(Sequence):
@@ -155,6 +158,24 @@ class Epi2DPulseqSequence(Sequence):
             UIParam.user_value(USER_SLOT_TTL): DropdownFloatParam(
                 value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
             ),
+            UIParam.user_name(USER_SLOT_PHASE_CORRECTION): Description(
+                text="Acquire blip-nulled EPI navigator for odd/even phase correction"
+            ),
+            UIParam.user_value(USER_SLOT_PHASE_CORRECTION): DropdownFloatParam(
+                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+            ),
+            UIParam.user_name(USER_SLOT_REVERSE_PE): Description(
+                text="Acquire one b=0 volume with reversed phase-encode polarity"
+            ),
+            UIParam.user_value(USER_SLOT_REVERSE_PE): DropdownFloatParam(
+                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+            ),
+            UIParam.user_name(USER_SLOT_SMS_REFERENCE): Description(
+                text="Acquire single-band reference volume for SMS Slice-GRAPPA"
+            ),
+            UIParam.user_value(USER_SLOT_SMS_REFERENCE): DropdownFloatParam(
+                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+            ),
         }
         return protocol_to_dict(protocol)
 
@@ -180,6 +201,8 @@ class Epi2DPulseqSequence(Sequence):
             return {"valid": False, "duration": None, "info": "NUM_FRAMES must be >= 1"}
         if not np.isclose(cfg.multiband_value, cfg.multiband) or cfg.multiband < 1 or cfg.nslices % cfg.multiband:
             return {"valid": False, "duration": None, "info": "Multiband must be an integer factor of NSLICES"}
+        if cfg.sms_reference and cfg.multiband == 1:
+            return {"valid": False, "duration": None, "info": "SMS reference requires MULTIBAND > 1"}
 
         timing = _compute_timing(opts=opts, cfg=cfg, strict=True)
         if timing is None:
@@ -192,6 +215,12 @@ class Epi2DPulseqSequence(Sequence):
         n_shots = _n_shots(cfg)
         n_dirs = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
         duration_s = cfg.tr_s * float(n_shots) * float(cfg.n_slice_groups) * float(n_dirs) * cfg.num_frames
+        if cfg.phase_correction:
+            duration_s += cfg.tr_s * float(cfg.n_slice_groups)
+        if cfg.reverse_pe:
+            duration_s += cfg.tr_s * float(n_shots) * float(cfg.n_slice_groups)
+        if cfg.sms_reference:
+            duration_s += cfg.tr_s * float(n_shots) * float(cfg.nslices)
         if cfg.ttl_output:
             duration_s += 1e-3 * cfg.num_frames
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -205,6 +234,11 @@ class Epi2DPulseqSequence(Sequence):
         pulse = timing["pulse"]
         pulses = timing["pulses"]
         epi = timing["epi"]
+        navigator = timing["navigator"]
+        reverse_epi = timing["reverse_epi"]
+        reference_pulse = timing["reference_pulse"]
+        reference_te_delay_s = timing["reference_te_delay_s"]
+        reference_tr_delay_s = timing["reference_tr_delay_s"]
         diffusion = timing["diffusion"]
         fat_sat = timing["fat_sat"]
         te_delay_s = timing["te_delay_s"]
@@ -212,6 +246,8 @@ class Epi2DPulseqSequence(Sequence):
 
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
+        reference_te_delay = pp.make_delay(reference_te_delay_s) if reference_te_delay_s > 0.0 else None
+        reference_tr_delay = pp.make_delay(reference_tr_delay_s) if reference_tr_delay_s > 0.0 else None
 
         seq = pp.Sequence(opts)
 
@@ -228,6 +264,52 @@ class Epi2DPulseqSequence(Sequence):
 
         ttl = pp.make_digital_output_pulse("ext1", duration=1e-3, system=opts) if cfg.ttl_output else None
         frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+        image_labels = (pp.make_label(type="SET", label="SET", value=0),)
+        sms_label = (pp.make_label(type="SET", label="SMS", value=1),) if cfg.multiband > 1 else ()
+
+        if cfg.phase_correction:
+            navigator_labels = (
+                pp.make_label(type="SET", label="NAV", value=1),
+                pp.make_label(type="SET", label="REF", value=1),
+                *sms_label,
+            )
+            for group in range(cfg.n_slice_groups):
+                pulse = pulses[group]
+                if cfg.multiband == 1:
+                    slice_offset_m = (group - 0.5 * (cfg.n_slice_groups - 1)) * slice_step_m
+                    pulse.set_state(freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m)
+                for block_idx, block in enumerate(pulse):
+                    labels = (pp.make_label(type="SET", label="SLC", value=group),) if block_idx == 0 else ()
+                    seq.add_block(*block, *labels)
+                if te_delay is not None:
+                    seq.add_block(te_delay)
+                navigator.set_state(lin_idx=0, adc_labels=navigator_labels)
+                for block in navigator:
+                    seq.add_block(*block)
+                if tr_delay is not None:
+                    seq.add_block(tr_delay)
+
+        if cfg.sms_reference:
+            for slice_index in range(cfg.nslices):
+                slice_offset_m = (slice_index - 0.5 * (cfg.nslices - 1)) * slice_step_m
+                reference_pulse.set_state(
+                    freq_offset_hz=reference_pulse.gradients[0].amplitude * slice_offset_m
+                )
+                for ky_start in shot_starts:
+                    for block_idx, block in enumerate(reference_pulse):
+                        labels = (pp.make_label(type="SET", label="SLC", value=slice_index),) if block_idx == 0 else ()
+                        seq.add_block(*block, *labels)
+                    if reference_te_delay is not None:
+                        seq.add_block(reference_te_delay)
+                    epi.set_state(
+                        lin_idx=ky_start,
+                        adc_labels=(pp.make_label(type="SET", label="REF", value=1),),
+                    )
+                    for block in epi:
+                        seq.add_block(*block)
+                    if reference_tr_delay is not None:
+                        seq.add_block(reference_tr_delay)
+
         for frame in range(len(frames)):
             (phase_label,) = frames.labels(frame)
             if ttl is not None:
@@ -256,12 +338,31 @@ class Epi2DPulseqSequence(Sequence):
                             seq.add_block(*block, *labels)
                         if te_delay is not None:
                             seq.add_block(te_delay)
-                        epi.set_state(lin_idx=ky_start)
+                        epi.set_state(lin_idx=ky_start, adc_labels=(*image_labels, *sms_label))
                         for block in epi:
                             seq.add_block(*block)
 
                         if tr_delay is not None:
                             seq.add_block(tr_delay)
+
+        if cfg.reverse_pe:
+            reverse_labels = (pp.make_label(type="SET", label="SET", value=1), *sms_label)
+            for group in range(cfg.n_slice_groups):
+                slice_offset_m = (group - 0.5 * (cfg.n_slice_groups - 1)) * slice_step_m
+                pulse = pulses[group]
+                if cfg.multiband == 1:
+                    pulse.set_state(freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m)
+                for ky_start in shot_starts:
+                    for block_idx, block in enumerate(pulse):
+                        labels = (pp.make_label(type="SET", label="SLC", value=group),) if block_idx == 0 else ()
+                        seq.add_block(*block, *labels)
+                    if te_delay is not None:
+                        seq.add_block(te_delay)
+                    reverse_epi.set_state(lin_idx=ky_start, adc_labels=reverse_labels)
+                    for block in reverse_epi:
+                        seq.add_block(*block)
+                    if tr_delay is not None:
+                        seq.add_block(tr_delay)
 
         seq.set_definition("Name", "epi_2d")
         seq.set_definition(
@@ -282,10 +383,14 @@ class Epi2DPulseqSequence(Sequence):
         seq.set_definition("Ny", cfg.ny_pe)
         seq.set_definition("NumSlices", cfg.nslices)
         seq.set_definition("MultibandFactor", cfg.multiband)
+        seq.set_definition("CaipiBlipArea", timing["caipi_blip_area"])
         seq.set_definition("NumSliceGroups", cfg.n_slice_groups)
         seq.set_definition("NumFrames", cfg.num_frames)
         seq.set_definition("FatSaturation", cfg.fat_sat)
         seq.set_definition("TTLExternalOutput", cfg.ttl_output)
+        seq.set_definition("EpiPhaseCorrectionNavigator", cfg.phase_correction)
+        seq.set_definition("ReversePhaseEncodeReference", cfg.reverse_pe)
+        seq.set_definition("SmsSingleBandReference", cfg.sms_reference)
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
@@ -298,7 +403,7 @@ class _Config:
         "te_s", "tr_s", "flip_deg", "fov_ro_m", "fov_pe_m", "slice_thickness_m", "slice_spacing_m",
         "nx_ro", "ny_pe", "nslices", "etl", "bandwidth_hz_px", "ramp_sample",
         "b_value_s_mm2", "n_directions", "multiband_value", "multiband", "n_slice_groups",
-        "num_frames", "fat_sat", "b0_t", "ttl_output",
+        "num_frames", "fat_sat", "b0_t", "ttl_output", "phase_correction", "reverse_pe", "sms_reference",
     )
 
 
@@ -326,12 +431,17 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.fat_sat = params.user_float(prot, USER_SLOT_FAT_SAT, 0.0) >= 0.5
     cfg.b0_t = params.user_float(prot, USER_SLOT_B0, 3.0)
     cfg.ttl_output = params.user_float(prot, USER_SLOT_TTL, 0.0) >= 0.5
+    cfg.phase_correction = params.user_float(prot, USER_SLOT_PHASE_CORRECTION, 0.0) >= 0.5
+    cfg.reverse_pe = params.user_float(prot, USER_SLOT_REVERSE_PE, 0.0) >= 0.5
+    cfg.sms_reference = params.user_float(prot, USER_SLOT_SMS_REFERENCE, 0.0) >= 0.5
     return cfg
 
 
 def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
+    caipi_blip_area = 0.0
     if cfg.multiband > 1:
         sms_spacing = cfg.n_slice_groups * cfg.slice_spacing_m
+        caipi_blip_area = 1.0 / (cfg.multiband * sms_spacing)
         pulses = tuple(
             design.make_pins_slice_selective_pulse(
                 np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, cfg.multiband,
@@ -347,7 +457,9 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
         pulse = design.make_slice_selective_pulse(
             np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, system=opts
         )
-        pulses = (pulse,)
+        # One object, indexed per group and re-configured via set_state() before each use
+        # (see the cfg.multiband == 1 branch above) -- not one pulse per slice group.
+        pulses = (pulse,) * cfg.n_slice_groups
     mask = np.arange(min(cfg.etl, cfg.ny_pe), dtype=int)
     epi = design.make_epi_readout(
         opts,
@@ -357,6 +469,32 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
         mask,
         bandwidth_hz_px=cfg.bandwidth_hz_px,
         ramp_sample=cfg.ramp_sample,
+        caipi_axis="z" if cfg.multiband > 1 else None,
+        caipi_blip_area=caipi_blip_area,
+    )
+    navigator = design.make_epi_readout(
+        opts,
+        (cfg.fov_ro_m, cfg.fov_pe_m),
+        (cfg.nx_ro, cfg.ny_pe),
+        1,
+        np.zeros(epi.etl, dtype=int),
+        bandwidth_hz_px=cfg.bandwidth_hz_px,
+        ramp_sample=cfg.ramp_sample,
+        blip_duration_s=epi.blip_duration_s,
+    )
+    reverse_epi = design.make_epi_readout(
+        opts,
+        (cfg.fov_ro_m, cfg.fov_pe_m),
+        (cfg.nx_ro, cfg.ny_pe),
+        _n_shots(cfg),
+        np.arange(epi.etl - 1, -1, -1, dtype=int),
+        bandwidth_hz_px=cfg.bandwidth_hz_px,
+        ramp_sample=cfg.ramp_sample,
+        caipi_axis="z" if cfg.multiband > 1 else None,
+        caipi_blip_area=caipi_blip_area,
+    )
+    reference_pulse = design.make_slice_selective_pulse(
+        np.deg2rad(cfg.flip_deg), cfg.slice_thickness_m, system=opts
     )
     diffusion = None
     if cfg.b_value_s_mm2 > 0.0:
@@ -393,10 +531,28 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     if tr_delay_s < 0.0:
         tr_delay_s = 0.0
 
+    d_reference = sum(pp.calc_duration(*block) for block in reference_pulse)
+    reference_center_s = pp.calc_rf_center(reference_pulse.rf)[0] + reference_pulse.rf.delay
+    reference_te_delay_s = round((cfg.te_s - (d_reference - reference_center_s) - first_echo_s) / raster) * raster
+    if reference_te_delay_s < -1e-9 and strict:
+        return None
+    reference_te_delay_s = max(0.0, reference_te_delay_s)
+    reference_min_block_s = d_reference + reference_te_delay_s + epi.duration
+    reference_tr_delay_s = round((cfg.tr_s - reference_min_block_s) / raster) * raster
+    if reference_tr_delay_s < -1e-9 and strict:
+        return None
+    reference_tr_delay_s = max(0.0, reference_tr_delay_s)
+
     return {
         "pulse": pulse,
         "pulses": pulses,
         "epi": epi,
+        "navigator": navigator,
+        "reverse_epi": reverse_epi,
+        "reference_pulse": reference_pulse,
+        "reference_te_delay_s": reference_te_delay_s,
+        "reference_tr_delay_s": reference_tr_delay_s,
+        "caipi_blip_area": caipi_blip_area,
         "diffusion": diffusion,
         "fat_sat": fat_sat,
         "te_delay_s": te_delay_s,
@@ -446,6 +602,9 @@ _ARG_MAP = [
     ('--fat-sat', UIParam.user_value(USER_SLOT_FAT_SAT), ("const", 1.0), ""),
     ('--b0-t', UIParam.user_value(USER_SLOT_B0), float, ""),
     ('--ttl-output', UIParam.user_value(USER_SLOT_TTL), ("const", 1.0), ""),
+    ('--phase-correction', UIParam.user_value(USER_SLOT_PHASE_CORRECTION), ("const", 1.0), ""),
+    ('--reverse-pe', UIParam.user_value(USER_SLOT_REVERSE_PE), ("const", 1.0), ""),
+    ('--sms-reference', UIParam.user_value(USER_SLOT_SMS_REFERENCE), ("const", 1.0), ""),
     ('--swap-phase-freq', UIParam.SWAP_PHASE_FREQ, ("const", True), ""),
 ]
 

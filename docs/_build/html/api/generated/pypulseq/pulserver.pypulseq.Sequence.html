@@ -191,22 +191,15 @@
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting started</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../tutorials.html">Tutorials</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/build_a_sequence_plugin.html">Build a sequence plugin with the design toolbox</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../how_to.html">How-to guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../how-to/write_a_plugin_with_modules.html">How to write a sequence plugin with the design toolbox</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../how-to/customise_a_plugin.html">How to customise a plugin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../how-to/write_a_new_module.html">How to write a new module or loop structure</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../../examples.html">Examples</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2 current active has-children"><a class="reference internal" href="../../pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.Opts.html">pulserver.pypulseq.Opts</a></li>
-<li class="toctree-l3 current active"><a class="current reference internal" href="#">pulserver.pypulseq.Sequence</a></li>
-<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.get_supported_labels.html">pulserver.pypulseq.get_supported_labels</a></li>
-<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_label.html">pulserver.pypulseq.make_label</a></li>
-<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rf_shim.html">pulserver.pypulseq.make_rf_shim</a></li>
-<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rotation.html">pulserver.pypulseq.make_rotation</a></li>
-</ul>
-</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/sampling.html">Scan loops</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../../index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
@@ -331,16 +324,57 @@
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../io.html"><code class="docutils literal notranslate"><span class="pre">pulserver.io</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.write.html">pulserver.io.write</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.read.html">pulserver.io.read</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.read_esp_bands.html">pulserver.io.read_esp_bands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.read_asc_bands.html">pulserver.io.read_asc_bands</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../recon.html"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../gehc.html"><code class="docutils literal notranslate"><span class="pre">pulserver.gehc</span></code></a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../recon.html"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.linops.deepinverse_multicoil_mri.html">pulserver.recon.linops.deepinverse_multicoil_mri</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.linops.mrpro_operator.html">pulserver.recon.linops.mrpro_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.linops.mrinufft_operator.html">pulserver.recon.linops.mrinufft_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.linops.available_nufft_backends.html">pulserver.recon.linops.available_nufft_backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.prox.deepinverse_prior.html">pulserver.recon.prox.deepinverse_prior</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.optimizers.mrpro_optimizer.html">pulserver.recon.optimizers.mrpro_optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.optimizers.deepinverse_optimizer.html">pulserver.recon.optimizers.deepinverse_optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.calibration.nlinv_sensitivities.html">pulserver.recon.calibration.nlinv_sensitivities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.calibration.estimate_sensitivities.html">pulserver.recon.calibration.estimate_sensitivities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.metadata.MrdMetadata.html">pulserver.recon.metadata.MrdMetadata</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.metadata.user_parameter.html">pulserver.recon.metadata.user_parameter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.metadata.acquisition_label.html">pulserver.recon.metadata.acquisition_label</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.metadata.acquisition_labels.html">pulserver.recon.metadata.acquisition_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.metadata.has_acquisition_flag.html">pulserver.recon.metadata.has_acquisition_flag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.grouping.group_by_labels.html">pulserver.recon.grouping.group_by_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.grouping.split_on_flag.html">pulserver.recon.grouping.split_on_flag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.grouping.filter_acquisitions.html">pulserver.recon.grouping.filter_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.serialization.images_to_dicom.html">pulserver.recon.serialization.images_to_dicom</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.serialization.write_dicom_series.html">pulserver.recon.serialization.write_dicom_series</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.mrd2dicom.MrdDicomBuilder.html">pulserver.recon.mrd2dicom.MrdDicomBuilder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.dicom2mrd.dicom_folder_to_mrd.html">pulserver.recon.dicom2mrd.dicom_folder_to_mrd</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.epi.EpiAcquisitionGroups.html">pulserver.recon.epi.EpiAcquisitionGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.epi.partition_epi_acquisitions.html">pulserver.recon.epi.partition_epi_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.sms.SmsEpiInputs.html">pulserver.recon.sms.SmsEpiInputs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.distortion.run_pyhysco.html">pulserver.recon.distortion.run_pyhysco</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.connection.Connection.html">pulserver.recon.connection.Connection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.server.Server.html">pulserver.recon.server.Server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.rtp_connection.RtpServer.html">pulserver.recon.rtp_connection.RtpServer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.main.main.html">pulserver.recon.main.main</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.replay.html">pulserver.recon.replay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.readers.html">pulserver.recon.readers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.writers.html">pulserver.recon.writers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.handlers.html">pulserver.recon.handlers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.mrdhelper.html">pulserver.recon.mrdhelper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.constants.html">pulserver.recon.constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.concurrency.html">pulserver.recon.concurrency</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../reference/sampling.html">Scan loops</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/mechanical_resonance_safety.html">Mechanical Resonance Safety: Structural Acoustic Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/sequence_representation.html">How a sequence is represented</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/mechanical_resonance_safety.html">Mechanical resonance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/pns_safety.html">Peripheral nerve stimulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/performance.html">Runtime and memory</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../more.html">More</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -520,14 +554,31 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence"><code class="docutils literal notranslate"><span class="pre">Sequence</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.__init__"><code class="docutils literal notranslate"><span class="pre">Sequence.__init__()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.add_block"><code class="docutils literal notranslate"><span class="pre">Sequence.add_block()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.calculate_kspace"><code class="docutils literal notranslate"><span class="pre">Sequence.calculate_kspace()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.check_timing"><code class="docutils literal notranslate"><span class="pre">Sequence.check_timing()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.duration"><code class="docutils literal notranslate"><span class="pre">Sequence.duration()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.get_block"><code class="docutils literal notranslate"><span class="pre">Sequence.get_block()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.grad_spectrum"><code class="docutils literal notranslate"><span class="pre">Sequence.grad_spectrum()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.payload"><code class="docutils literal notranslate"><span class="pre">Sequence.payload()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.plot"><code class="docutils literal notranslate"><span class="pre">Sequence.plot()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.plot_kspace"><code class="docutils literal notranslate"><span class="pre">Sequence.plot_kspace()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.pns"><code class="docutils literal notranslate"><span class="pre">Sequence.pns()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.read"><code class="docutils literal notranslate"><span class="pre">Sequence.read()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.remove_duplicates"><code class="docutils literal notranslate"><span class="pre">Sequence.remove_duplicates()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.rf_from_lib_data"><code class="docutils literal notranslate"><span class="pre">Sequence.rf_from_lib_data()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.segment"><code class="docutils literal notranslate"><span class="pre">Sequence.segment()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.set_block"><code class="docutils literal notranslate"><span class="pre">Sequence.set_block()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.test_report"><code class="docutils literal notranslate"><span class="pre">Sequence.test_report()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.tr_block_range"><code class="docutils literal notranslate"><span class="pre">Sequence.tr_block_range()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.waveforms"><code class="docutils literal notranslate"><span class="pre">Sequence.waveforms()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.waveforms_and_times"><code class="docutils literal notranslate"><span class="pre">Sequence.waveforms_and_times()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.write"><code class="docutils literal notranslate"><span class="pre">Sequence.write()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.custom_labels"><code class="docutils literal notranslate"><span class="pre">Sequence.custom_labels</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.extensions"><code class="docutils literal notranslate"><span class="pre">Sequence.extensions</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.num_trs"><code class="docutils literal notranslate"><span class="pre">Sequence.num_trs</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.segments"><code class="docutils literal notranslate"><span class="pre">Sequence.segments</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.tr_duration"><code class="docutils literal notranslate"><span class="pre">Sequence.tr_duration</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.tr_info"><code class="docutils literal notranslate"><span class="pre">Sequence.tr_info</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -598,20 +649,153 @@ adding them.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.calculate_kspace">
+<span class="sig-name descname"><span class="pre">calculate_kspace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">tr_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.calculate_kspace" title="Link to this definition">#</a></dt>
+<dd><p>k-space trajectory of the sequence, or of one TR / segment.</p>
+<p>Upstream’s trajectory calculation has no time-range argument, so a
+scoped call runs against a sliced copy of the plotting view.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.check_timing">
+<span class="sig-name descname"><span class="pre">check_timing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">print_errors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.check_timing" title="Link to this definition">#</a></dt>
+<dd><p>Run upstream’s timing check against the plotting view.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.duration">
+<span class="sig-name descname"><span class="pre">duration</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.duration" title="Link to this definition">#</a></dt>
+<dd><p>Total duration, block count and event count of the sequence.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.get_block">
 <span class="sig-name descname"><span class="pre">get_block</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">block_index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.get_block" title="Link to this definition">#</a></dt>
-<dd><p>Fast builder does not support decoding blocks back to event objects.</p>
+<dd><p>Decode one block through the plain view.</p>
+<p>The block libraries of the fast builder are write-only, so this goes
+through <code class="xref py py-attr docutils literal notranslate"><span class="pre">_seq</span></code>. Extensions are not part of the returned block;
+read them from <a class="reference internal" href="#pulserver.pypulseq.Sequence.extensions" title="pulserver.pypulseq.Sequence.extensions"><code class="xref py py-attr docutils literal notranslate"><span class="pre">extensions</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.grad_spectrum">
+<span class="sig-name descname"><span class="pre">grad_spectrum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">tr_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bands</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">esp_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">asc_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_frequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plot</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.grad_spectrum" title="Link to this definition">#</a></dt>
+<dd><p>Gradient spectrum, with mechanical resonance bands overlaid.</p>
+<p>This is a visualisation only — whether a sequence clears a forbidden
+band is decided by the C safety core at predownload, not here.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tr_index</strong> (<em>int</em><em>, </em><em>optional</em>) – Restrict the analysis to one TR or segment. When <code class="docutils literal notranslate"><span class="pre">tr_index</span></code> is
+given and <code class="docutils literal notranslate"><span class="pre">window_width</span></code> is not, the window is set to the whole
+TR, so the result is one spectrum rather than a spectrogram.</p></li>
+<li><p><strong>segment</strong> (<em>int</em><em>, </em><em>optional</em>) – Restrict the analysis to one TR or segment. When <code class="docutils literal notranslate"><span class="pre">tr_index</span></code> is
+given and <code class="docutils literal notranslate"><span class="pre">window_width</span></code> is not, the window is set to the whole
+TR, so the result is one spectrum rather than a spectrogram.</p></li>
+<li><p><strong>bands</strong> (<em>list</em><em> of </em><em>tuple</em><em>, </em><em>optional</em>) – Forbidden bands as
+<code class="docutils literal notranslate"><span class="pre">(freq_min_hz,</span> <span class="pre">freq_max_hz,</span> <span class="pre">max_amplitude_mT_per_m[,</span> <span class="pre">channel])</span></code>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">system.forbidden_bands</span></code> when the sequence’s
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Opts</span></code> carries them.</p></li>
+<li><p><strong>esp_file</strong> (<em>str</em><em> or </em><em>pathlib.Path</em><em>, </em><em>optional</em>) – Read the bands from a GE ESP lockout table instead. See
+<code class="xref py py-func docutils literal notranslate"><span class="pre">read_esp_bands()</span></code>.</p></li>
+<li><p><strong>asc_file</strong> (<em>str</em><em> or </em><em>pathlib.Path</em><em>, </em><em>optional</em>) – Read the bands from a Siemens <code class="docutils literal notranslate"><span class="pre">.asc</span></code> file instead. See
+<code class="xref py py-func docutils literal notranslate"><span class="pre">read_asc_bands()</span></code>.</p></li>
+<li><p><strong>window_width</strong> (<em>float</em><em>, </em><em>optional</em>) – Analysis window in seconds.</p></li>
+<li><p><strong>max_frequency</strong> (<em>float</em><em>, </em><em>default 2000.0</em>) – Upper frequency limit of the spectrum.</p></li>
+<li><p><strong>plot</strong> (<em>bool</em><em>, </em><em>default True</em>) – Draw the spectrogram.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>tuple</em> – <code class="docutils literal notranslate"><span class="pre">(spectrograms,</span> <span class="pre">spectrogram_sos,</span> <span class="pre">frequencies,</span> <span class="pre">times)</span></code>, as
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseq.Sequence.calculate_gradient_spectrum()</span></code> returns.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.payload">
+<span class="sig-name descname"><span class="pre">payload</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.payload" title="Link to this definition">#</a></dt>
+<dd><p>Serialise this sequence to the <code class="docutils literal notranslate"><span class="pre">.seq</span></code> payload the views are built from.</p>
+<p>Deduplicated, exactly as <a class="reference internal" href="../io/pulserver.io.write.html#pulserver.io.write" title="pulserver.io.write"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.io.write()</span></code></a> would emit it —
+the C backend requires canonical event IDs to recognise repeated RF
+shims and gradients across TRs, and the views should show what is
+actually going to be written.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.plot">
-<span class="sig-name descname"><span class="pre">plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.plot" title="Link to this definition">#</a></dt>
-<dd><p>Plot the current sequence through <code class="xref py py-attr docutils literal notranslate"><span class="pre">_seq</span></code>.</p>
-<p>The fast builder cannot decode its own block libraries, so plotting is
-delegated to the upstream Pulseq sequence returned by <code class="xref py py-attr docutils literal notranslate"><span class="pre">_seq</span></code>.
-The diagram includes all ordinary RF, gradient, and ADC events; custom
-labels, rotations, and RF shims are metadata and are omitted from this
-visual preview.</p>
+<span class="sig-name descname"><span class="pre">plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">tr_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.plot" title="Link to this definition">#</a></dt>
+<dd><p>Plot the sequence as the scanner plays it.</p>
+<p>Rotations and RF shims are resolved into the waveforms (see
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">_seqplot</span></code>), so a rotated readout is drawn on the axes it will
+actually run on and a pTx pulse shows one trace per transmit channel.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tr_index</strong> (<em>int</em><em>, </em><em>optional</em>) – Restrict the plot to one TR. Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">segment</span></code>.</p></li>
+<li><p><strong>segment</strong> (<em>int</em><em>, </em><em>optional</em>) – Restrict the plot to one segment’s max-energy instance.</p></li>
+<li><p><strong>**kwargs</strong> – Passed through to <code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseq.Sequence.plot()</span></code>; <code class="docutils literal notranslate"><span class="pre">time_range</span></code>
+is set for you when a scope is given.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.plot_kspace">
+<span class="sig-name descname"><span class="pre">plot_kspace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">tr_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plot_now</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.plot_kspace" title="Link to this definition">#</a></dt>
+<dd><p>Plot the k-space trajectory, with ADC sample locations marked.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tr_index</strong> (<em>int</em><em>, </em><em>optional</em>) – Restrict to one TR or segment.</p></li>
+<li><p><strong>segment</strong> (<em>int</em><em>, </em><em>optional</em>) – Restrict to one TR or segment.</p></li>
+<li><p><strong>plot_now</strong> (<em>bool</em><em>, </em><em>default True</em>) – Show the figure immediately.</p></li>
+<li><p><strong>**kwargs</strong> – Passed to <a class="reference internal" href="#pulserver.pypulseq.Sequence.calculate_kspace" title="pulserver.pypulseq.Sequence.calculate_kspace"><code class="xref py py-meth docutils literal notranslate"><span class="pre">calculate_kspace()</span></code></a>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>matplotlib.figure.Figure</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.pns">
+<span class="sig-name descname"><span class="pre">pns</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">tr_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'chronaxie'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chronaxie_us</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rheobase</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hardware</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thresholds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(80.0,</span> <span class="pre">100.0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plot</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.pns" title="Link to this definition">#</a></dt>
+<dd><p>Peripheral nerve stimulation response, for inspection only.</p>
+<p>Two nerve models are available. <code class="docutils literal notranslate"><span class="pre">'chronaxie'</span></code> is the Irnich
+rheobase/chronaxie form GE uses, and is the same arithmetic the
+interpreter runs at predownload. <code class="docutils literal notranslate"><span class="pre">'safe'</span></code> delegates to upstream’s
+SAFE implementation, which needs Siemens hardware parameters.</p>
+<p>No verdict is returned: the threshold lines are drawn so the margin is
+visible, and the pass/fail decision stays with the C safety core.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tr_index</strong> (<em>int</em><em>, </em><em>optional</em>) – Restrict the analysis to one TR or segment.</p></li>
+<li><p><strong>segment</strong> (<em>int</em><em>, </em><em>optional</em>) – Restrict the analysis to one TR or segment.</p></li>
+<li><p><strong>model</strong> (<em>{'chronaxie'</em><em>, </em><em>'safe'}</em><em>, </em><em>default 'chronaxie'</em>) – Nerve model to use.</p></li>
+<li><p><strong>chronaxie_us</strong> (<em>float</em><em>, </em><em>optional</em>) – Irnich model parameters. Default to the matching attributes of
+the sequence’s <code class="xref py py-class docutils literal notranslate"><span class="pre">Opts</span></code> when it carries them
+(<a class="reference internal" href="pulserver.pypulseq.Opts.html#pulserver.pypulseq.Opts" title="pulserver.pypulseq.Opts"><code class="xref py py-class docutils literal notranslate"><span class="pre">pulserver.pypulseq.Opts</span></code></a> does).</p></li>
+<li><p><strong>rheobase</strong> (<em>float</em><em>, </em><em>optional</em>) – Irnich model parameters. Default to the matching attributes of
+the sequence’s <code class="xref py py-class docutils literal notranslate"><span class="pre">Opts</span></code> when it carries them
+(<a class="reference internal" href="pulserver.pypulseq.Opts.html#pulserver.pypulseq.Opts" title="pulserver.pypulseq.Opts"><code class="xref py py-class docutils literal notranslate"><span class="pre">pulserver.pypulseq.Opts</span></code></a> does).</p></li>
+<li><p><strong>alpha</strong> (<em>float</em><em>, </em><em>optional</em>) – Irnich model parameters. Default to the matching attributes of
+the sequence’s <code class="xref py py-class docutils literal notranslate"><span class="pre">Opts</span></code> when it carries them
+(<a class="reference internal" href="pulserver.pypulseq.Opts.html#pulserver.pypulseq.Opts" title="pulserver.pypulseq.Opts"><code class="xref py py-class docutils literal notranslate"><span class="pre">pulserver.pypulseq.Opts</span></code></a> does).</p></li>
+<li><p><strong>hardware</strong> (<em>optional</em>) – SAFE hardware description or Siemens <code class="docutils literal notranslate"><span class="pre">.asc</span></code> path, for
+<code class="docutils literal notranslate"><span class="pre">model='safe'</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">system.pns_hardware</span></code> when the
+sequence’s <code class="xref py py-class docutils literal notranslate"><span class="pre">Opts</span></code> carries one.</p></li>
+<li><p><strong>thresholds</strong> (<em>sequence</em><em> of </em><em>float</em><em>, </em><em>default</em><em> (</em><em>80.0</em><em>, </em><em>100.0</em><em>)</em>) – Percentage lines to draw.</p></li>
+<li><p><strong>plot</strong> (<em>bool</em><em>, </em><em>default True</em>) – Draw the result.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>tuple</em> – <code class="docutils literal notranslate"><span class="pre">(pns_percent,</span> <span class="pre">t)</span></code> where <code class="docutils literal notranslate"><span class="pre">pns_percent</span></code> has shape <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">3)</span></code>.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -641,9 +825,42 @@ are shared across blocks.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.segment">
+<span class="sig-name descname"><span class="pre">segment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.segment" title="Link to this definition">#</a></dt>
+<dd><p>Return one <code class="xref py py-class docutils literal notranslate"><span class="pre">Segment</span></code> by index.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.set_block">
 <span class="sig-name descname"><span class="pre">set_block</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">_block_index</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.set_block" title="Link to this definition">#</a></dt>
 <dd><p>Disable positional insertion/update in fast mode.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.test_report">
+<span class="sig-name descname"><span class="pre">test_report</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.test_report" title="Link to this definition">#</a></dt>
+<dd><p>Upstream’s textual sequence report.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.tr_block_range">
+<span class="sig-name descname"><span class="pre">tr_block_range</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tr_index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.tr_block_range" title="Link to this definition">#</a></dt>
+<dd><p>Inclusive 1-based block range of TR <code class="docutils literal notranslate"><span class="pre">tr_index</span></code>.</p>
+<p>The TR layout comes from the C library, so a plugin does not have to
+declare it — whatever structure the blocks actually have is what gets
+indexed.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.waveforms">
+<span class="sig-name descname"><span class="pre">waveforms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">tr_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">append_RF</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.waveforms" title="Link to this definition">#</a></dt>
+<dd><p>Uniformly sampled waveforms, optionally restricted to a TR or segment.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.waveforms_and_times">
+<span class="sig-name descname"><span class="pre">waveforms_and_times</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">append_RF</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Sequence.waveforms_and_times" title="Link to this definition">#</a></dt>
+<dd><p>Event waveforms with their time stamps, from the plotting view.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -658,6 +875,45 @@ are shared across blocks.</p>
 <dd><p>Labels auto-registered beyond the built-in <code class="docutils literal notranslate"><span class="pre">get_supported_labels()</span></code> set.</p>
 <p>Maps <code class="docutils literal notranslate"><span class="pre">label_string</span> <span class="pre">-&gt;</span> <span class="pre">int_idx</span></code> for every custom label encountered via
 <a class="reference internal" href="#pulserver.pypulseq.Sequence.add_block" title="pulserver.pypulseq.Sequence.add_block"><code class="xref py py-meth docutils literal notranslate"><span class="pre">add_block()</span></code></a>.  The custom write helper uses this to serialise them.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.extensions">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">extensions</span></span><a class="headerlink" href="#pulserver.pypulseq.Sequence.extensions" title="Link to this definition">#</a></dt>
+<dd><p>Block extensions, keyed by 1-based block index.</p>
+<p>See <code class="xref py py-class docutils literal notranslate"><span class="pre">pulserver.pypulseq._extensions.BlockExtensions</span></code>.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.num_trs">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_trs</span></span><a class="headerlink" href="#pulserver.pypulseq.Sequence.num_trs" title="Link to this definition">#</a></dt>
+<dd><p>Number of TRs detected in the sequence.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.segments">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">segments</span></span><a class="headerlink" href="#pulserver.pypulseq.Sequence.segments" title="Link to this definition">#</a></dt>
+<dd><p>Every virtual segment, resolved to its max-energy instance.</p>
+<p>Segmentation is the C library’s, so this is the same partitioning the
+scanner executes and the safety backend analyses.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.tr_duration">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">tr_duration</span></span><a class="headerlink" href="#pulserver.pypulseq.Sequence.tr_duration" title="Link to this definition">#</a></dt>
+<dd><p>Detected TR duration in seconds.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Sequence.tr_info">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">tr_info</span></span><a class="headerlink" href="#pulserver.pypulseq.Sequence.tr_info" title="Link to this definition">#</a></dt>
+<dd><p>TR structure of the sequence as detected by the C backend.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>dict</em> – Keys include <code class="docutils literal notranslate"><span class="pre">tr_size</span></code> (blocks per TR), <code class="docutils literal notranslate"><span class="pre">num_trs</span></code>,
+<code class="docutils literal notranslate"><span class="pre">num_prep_blocks</span></code>, <code class="docutils literal notranslate"><span class="pre">tr_duration_us</span></code> and <code class="docutils literal notranslate"><span class="pre">num_canonical_trs</span></code>.</p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>
@@ -714,14 +970,31 @@ are shared across blocks.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence"><code class="docutils literal notranslate"><span class="pre">Sequence</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.__init__"><code class="docutils literal notranslate"><span class="pre">Sequence.__init__()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.add_block"><code class="docutils literal notranslate"><span class="pre">Sequence.add_block()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.calculate_kspace"><code class="docutils literal notranslate"><span class="pre">Sequence.calculate_kspace()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.check_timing"><code class="docutils literal notranslate"><span class="pre">Sequence.check_timing()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.duration"><code class="docutils literal notranslate"><span class="pre">Sequence.duration()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.get_block"><code class="docutils literal notranslate"><span class="pre">Sequence.get_block()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.grad_spectrum"><code class="docutils literal notranslate"><span class="pre">Sequence.grad_spectrum()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.payload"><code class="docutils literal notranslate"><span class="pre">Sequence.payload()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.plot"><code class="docutils literal notranslate"><span class="pre">Sequence.plot()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.plot_kspace"><code class="docutils literal notranslate"><span class="pre">Sequence.plot_kspace()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.pns"><code class="docutils literal notranslate"><span class="pre">Sequence.pns()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.read"><code class="docutils literal notranslate"><span class="pre">Sequence.read()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.remove_duplicates"><code class="docutils literal notranslate"><span class="pre">Sequence.remove_duplicates()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.rf_from_lib_data"><code class="docutils literal notranslate"><span class="pre">Sequence.rf_from_lib_data()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.segment"><code class="docutils literal notranslate"><span class="pre">Sequence.segment()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.set_block"><code class="docutils literal notranslate"><span class="pre">Sequence.set_block()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.test_report"><code class="docutils literal notranslate"><span class="pre">Sequence.test_report()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.tr_block_range"><code class="docutils literal notranslate"><span class="pre">Sequence.tr_block_range()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.waveforms"><code class="docutils literal notranslate"><span class="pre">Sequence.waveforms()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.waveforms_and_times"><code class="docutils literal notranslate"><span class="pre">Sequence.waveforms_and_times()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.write"><code class="docutils literal notranslate"><span class="pre">Sequence.write()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.custom_labels"><code class="docutils literal notranslate"><span class="pre">Sequence.custom_labels</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.extensions"><code class="docutils literal notranslate"><span class="pre">Sequence.extensions</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.num_trs"><code class="docutils literal notranslate"><span class="pre">Sequence.num_trs</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.segments"><code class="docutils literal notranslate"><span class="pre">Sequence.segments</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.tr_duration"><code class="docutils literal notranslate"><span class="pre">Sequence.tr_duration</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Sequence.tr_info"><code class="docutils literal notranslate"><span class="pre">Sequence.tr_info</span></code></a></li>
 </ul>
 </li>
 </ul>

@@ -44,6 +44,7 @@ __all__ = [
     "io",
     "sequence",
     "sequences",
+    "examples",
     "params",
     "Sequence",
     "PulseqSequence",
@@ -82,7 +83,7 @@ __all__ = [
 _CORE_MODULES = {"params"}
 #: Authoring data types defined under ``design`` but named by the contract.
 _AUTHORING_TYPES = {"ScanLoop", "EncodingAxis"}
-_SUBMODULES = {"io", "pypulseq", "design", "sequence", "sequences"}
+_SUBMODULES = {"io", "pypulseq", "design", "sequence", "sequences", "examples"}
 
 
 def __getattr__(name: str):

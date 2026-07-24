@@ -224,7 +224,23 @@ typedef struct pulseg_opts
 typedef struct pulseg_rf_stats
 {
     float flip_angle_rad;   /**< nominal flip angle (radians)           */
-    float act_amplitude_hz; /**< actual |gamma*B1| amplitude (Hz)       */
+    float act_amplitude_hz; /**< actual |gamma*B1| amplitude (Hz). When the
+                              *  descriptor's rf_amplitude_variable flag is
+                              *  set, this is the REAL amplitude of the
+                              *  worst-B1rms TR instance at this position
+                              *  (not a synthetic per-position envelope) --
+                              *  feeds time-averaged SAR / amplifier-duty
+                              *  consumers (GE minseqrfamp/maxsar). See
+                              *  peak_amplitude_hz for the peak-dominant
+                              *  counterpart. */
+    float peak_amplitude_hz; /**< positional-max |gamma*B1| amplitude (Hz)
+                               *  across every TR instance at this position
+                               *  -- for peak-only consumers (GE peakB1())
+                               *  that need per-position dominance across
+                               *  ALL instances, which act_amplitude_hz no
+                               *  longer guarantees once it tracks a single
+                               *  real worst-B1rms instance. Equal to
+                               *  act_amplitude_hz for periodic sequences. */
     float area;             /**< integral of |B1(t)| dt  (a.u.)        */
     /** Vendor-specific envelope statistics, filled by the optional
      *  pulseg_opts.vendor_rf_stats_fn callback; all 0 when unset. Meaning
@@ -255,7 +271,7 @@ typedef struct pulseg_rf_stats
 /* clang-format off */
 #define PULSEG_RF_STATS_INIT \
     { \
-    0.0f, 0.0f, 0.0f, {0.0f}, 0.0f, 0, 0.0f, 0.0f, 0, 0, 1, {0.0f}, 0.0f, 0.0f, 0, 0 \
+    0.0f, 0.0f, 0.0f, 0.0f, {0.0f}, 0.0f, 0, 0.0f, 0.0f, 0, 0, 1, {0.0f}, 0.0f, 0.0f, 0, 0 \
     }
 /* clang-format on */
 

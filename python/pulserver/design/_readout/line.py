@@ -161,6 +161,40 @@ def _min_trap_duration(system, axis, area):
     return pp.calc_duration(trial)
 
 
+def _trap_template(system, axis, worst_mag, duration_s):
+    """One canonical trapezoid at the worst-case ``|area|`` for ``(axis, duration_s)``.
+
+    Every shot's smaller-magnitude area on this axis is realised by
+    :func:`pypulseq.scale_grad` on this single template rather than a fresh
+    ``pp.make_trapezoid(area=..., duration=duration_s)`` call. Area is linear
+    in amplitude at fixed rise/flat/fall timing, so scaling reproduces the
+    exact target area for any ``|area| <= worst_mag`` while holding the
+    gradient *shape* (and hence duration) fixed across every shot -- unlike
+    re-solving a trapezoid per shot, which keeps ramps at max slew and
+    absorbs the difference in flat-top time, producing a distinct rise/flat/
+    fall split (a distinct base-block gradient shape) per distinct area. The
+    base-block dedup (``pulseg_dedup.c``) hashes shape timing, not amplitude,
+    so one scaled template collapses an entire encoding ladder to one shape
+    instead of one shape per step.
+    Returns ``None`` when ``worst_mag`` is ~0 (every shot's area on this axis
+    is also ~0 -- nothing to template).
+    """
+    if worst_mag <= 0.0:
+        return None
+    return pp.make_trapezoid(channel=axis, area=worst_mag, duration=duration_s, system=system)
+
+
+def _scaled_trap(template, axis, area, worst_mag, duration_s, system):
+    """``area`` on ``axis``, from ``template`` (built at ``worst_mag``) via ``scale_grad``.
+
+    Falls back to a direct ``make_trapezoid`` only in the degenerate case
+    where ``template`` is ``None`` (``worst_mag <= 0``, so ``area`` is ~0 too).
+    """
+    if template is None:
+        return pp.make_trapezoid(channel=axis, area=area, duration=duration_s, system=system)
+    return pp.scale_grad(template, area / worst_mag)
+
+
 def _trap_fits(system, axis, area, duration_s):
     """Whether ``area`` is achievable on ``axis`` within exactly ``duration_s``."""
     if area == 0.0:
@@ -429,6 +463,34 @@ class _LineTrain(Readout):
         self.t_postphase_s = _feasible_duration(system, raster, max(t_post_gx, t_pe, t_par), post_demands)
         self.t_first_echo_s = self.t_prephase_s + t_first_echo_offset_s
 
+        # --- canonical per-axis templates (see _trap_template) -----------
+        # One shape per (axis, block) built at the worst-case area over every
+        # shot; _run() scales it per shot instead of re-solving a fresh
+        # trapezoid for each distinct pe_idx/par_idx.
+        pre_worst = self._worst_case_prewind_areas()
+        self._pe_pre_worst = pre_worst.get(self._pe.axis, self._pe.max_area) if self._pe is not None else 0.0
+        self._pe_pre_tmpl = (
+            _trap_template(system, self._pe.axis, self._pe_pre_worst, self.t_prephase_s)
+            if self._pe is not None
+            else None
+        )
+        self._pe_post_tmpl = (
+            _trap_template(system, self._pe.axis, self._pe.max_area, self.t_postphase_s)
+            if self._pe is not None
+            else None
+        )
+        self._par_pre_worst = pre_worst.get(self._par.axis, self._par.max_area) if self._par is not None else 0.0
+        self._par_pre_tmpl = (
+            _trap_template(system, self._par.axis, self._par_pre_worst, self.t_prephase_s)
+            if self._par is not None
+            else None
+        )
+        self._par_post_tmpl = (
+            _trap_template(system, self._par.axis, self._par.max_area, self.t_postphase_s)
+            if self._par is not None
+            else None
+        )
+
         # A bridged prewind (spoil_position == "pre") must end *exactly* at
         # the prewind block's boundary -- echo 0's split remainder resumes at
         # gx.amplitude from t=0 of the *next* block, so any extra time from a
@@ -499,20 +561,28 @@ class _LineTrain(Readout):
             area = self._pe.areas[int(pe_idx)]
             merged = area + pending.pop(self._pe.axis, 0.0)
             pre.append(
-                pp.make_trapezoid(channel=self._pe.axis, area=merged, duration=self.t_prephase_s, system=self._opts)
+                _scaled_trap(
+                    self._pe_pre_tmpl, self._pe.axis, merged, self._pe_pre_worst, self.t_prephase_s, self._opts
+                )
             )
             # Only the encoding is unwound: a rephaser is a one-way moment.
             post.append(
-                pp.make_trapezoid(channel=self._pe.axis, area=-area, duration=self.t_postphase_s, system=self._opts)
+                _scaled_trap(
+                    self._pe_post_tmpl, self._pe.axis, -area, self._pe.max_area, self.t_postphase_s, self._opts
+                )
             )
         if self._par is not None:
             area = self._par.areas[int(par_idx)]
             merged = area + pending.pop(self._par.axis, 0.0)
             pre.append(
-                pp.make_trapezoid(channel=self._par.axis, area=merged, duration=self.t_prephase_s, system=self._opts)
+                _scaled_trap(
+                    self._par_pre_tmpl, self._par.axis, merged, self._par_pre_worst, self.t_prephase_s, self._opts
+                )
             )
             post.append(
-                pp.make_trapezoid(channel=self._par.axis, area=-area, duration=self.t_postphase_s, system=self._opts)
+                _scaled_trap(
+                    self._par_post_tmpl, self._par.axis, -area, self._par.max_area, self.t_postphase_s, self._opts
+                )
             )
         for axis, area in pending.items():
             pre.append(pp.make_trapezoid(channel=axis, area=area, duration=self.t_prephase_s, system=self._opts))

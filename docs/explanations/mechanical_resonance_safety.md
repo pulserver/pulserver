@@ -331,8 +331,30 @@ C code — only 18 event phasors and a running complex sum.
 
 ## Reading the plots
 
-`mechres_plots/aeq_current.py` drives the same compiled engine across a
-reference corpus. Two representative panels:
+`mechres_plots/aeq_current.py` drives the same compiled engine across the
+five-sequence reference corpus (`gre_2d`, `epi_2d`, `fse_2d`, `mprage_2d`
+PASS; `bssfp_2d` the one genuine FAIL). For context, `docs/_bench/waveform_plots.py`
+draws the same corpus's representative TR — the same window this analysis
+runs on, scoped past each fixture's leading dummy (non-ADC) TRs — so the
+frequency-domain verdict below can be read directly against the waveform that
+produced it; [the PNS page shows the same pairing](pns_safety.md#reading-the-plots)
+for GRE and EPI.
+
+**GRE**, one isolated readout gradient per TR — the baseline case, comfortably
+inside every band:
+
+![GRE representative TR](assets/representative_tr/gre_2d_tr.png)
+
+![gre](assets/mechanical_resonance/current_gre.png)
+
+**EPI**, a long blipped echo train. Unlike PNS (where EPI is the extreme
+case), mechanical resonance only asks about the readout's own switching
+frequency — one Gx harmonic near 750 Hz standing well clear of the forbidden
+bands, plus the blip train's own fundamental on Gz:
+
+![EPI representative TR](assets/representative_tr/epi_2d_tr.png)
+
+![epi](assets/mechanical_resonance/current_epi.png)
 
 **bSSFP**, whose sustained balanced readout drives the TR fundamental hardest:
 
@@ -343,7 +365,7 @@ descriptor:
 
 ![mprage](assets/mechanical_resonance/current_mprage.png)
 
-In both: dark stems are $A_\text{eq}$ at exact TR harmonics — stems rather
+In all four: dark stems are $A_\text{eq}$ at exact TR harmonics — stems rather
 than a line, because there is genuinely no content between them. The faint
 curve underneath is the matched analytic envelope: the same closed-form
 $S_\text{ax}(f)$, evaluated on a dense uniform grid. Because the stems are

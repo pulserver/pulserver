@@ -386,10 +386,12 @@ static int check_rf_amplitude_periodicity(
                     }
                     return PULSEG_ERR_CONSISTENCY_RF_PERIODIC;
                 }
-                /* Accepted: the RF safety model switches to the positional-max
-                 * envelope (pulseg_get_rf_array). Record the first mismatch for
-                 * debuggability, then keep scanning -- shim periodicity below
-                 * still applies. */
+                /* Accepted: the RF safety model switches to the worst-B1rms
+                 * real instance for time-averaged limits, with a
+                 * positional-max envelope kept alongside for peak-only
+                 * limits (pulseg_get_rf_array). Record the first mismatch
+                 * for debuggability, then keep scanning -- shim periodicity
+                 * below still applies. */
                 if (!desc->rf_amplitude_variable && diag)
                 {
                     pulseg__diag_printf(

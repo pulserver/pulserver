@@ -39,8 +39,8 @@ from __future__ import annotations
 import sys
 
 import numpy as np
-import pulserver.io as pio
 import pulserver.design as design
+import pulserver.io as pio
 import pulserver.pypulseq as pp
 from pulserver import (
     Description,
@@ -62,6 +62,8 @@ USER_SLOT_RAMP_SAMPLE = 0
 USER_SLOT_SPSP = 1
 USER_SLOT_SPSP_BW = 2
 USER_SLOT_TTL = 3
+USER_SLOT_PHASE_CORRECTION = 4
+USER_SLOT_REVERSE_PE = 5
 
 
 class Epi3DPulseqSequence(Sequence):
@@ -140,6 +142,18 @@ class Epi3DPulseqSequence(Sequence):
             UIParam.user_value(USER_SLOT_TTL): DropdownFloatParam(
                 value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
             ),
+            UIParam.user_name(USER_SLOT_PHASE_CORRECTION): Description(
+                text="Acquire blip-nulled EPI navigator for odd/even phase correction"
+            ),
+            UIParam.user_value(USER_SLOT_PHASE_CORRECTION): DropdownFloatParam(
+                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+            ),
+            UIParam.user_name(USER_SLOT_REVERSE_PE): Description(
+                text="Acquire one b=0 volume with reversed phase-encode polarity"
+            ),
+            UIParam.user_value(USER_SLOT_REVERSE_PE): DropdownFloatParam(
+                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+            ),
         }
         return protocol_to_dict(protocol)
 
@@ -178,6 +192,10 @@ class Epi3DPulseqSequence(Sequence):
         par_loop = design.make_cartesian_sampling((cfg.nx_ro, cfg.npar), acceleration=cfg.rz)
         n_dirs = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
         duration_s = cfg.tr_s * float(n_shots) * float(len(par_loop)) * float(n_dirs) * cfg.num_frames
+        if cfg.phase_correction:
+            duration_s += cfg.tr_s
+        if cfg.reverse_pe:
+            duration_s += cfg.tr_s * float(n_shots) * float(len(par_loop))
         if cfg.ttl_output:
             duration_s += 1e-3 * cfg.num_frames
         return {"valid": True, "duration": duration_s, "info": f"TA = {duration_s:.2f} s"}
@@ -190,6 +208,8 @@ class Epi3DPulseqSequence(Sequence):
 
         pulse = timing["pulse"]
         epi = timing["epi"]
+        navigator = timing["navigator"]
+        reverse_epi = timing["reverse_epi"]
         diffusion = timing["diffusion"]
         te_delay_s = timing["te_delay_s"]
         tr_delay_s = timing["tr_delay_s"]
@@ -212,6 +232,25 @@ class Epi3DPulseqSequence(Sequence):
 
         ttl = pp.make_digital_output_pulse("ext1", duration=1e-3, system=opts) if cfg.ttl_output else None
         frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+        image_labels = (pp.make_label(type="SET", label="SET", value=0),)
+        if cfg.phase_correction:
+            for block_idx, block in enumerate(pulse):
+                labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
+                seq.add_block(*block, *labels)
+            if te_delay is not None:
+                seq.add_block(te_delay)
+            navigator.set_state(
+                lin_idx=0,
+                par_idx=0,
+                adc_labels=(
+                    pp.make_label(type="SET", label="NAV", value=1),
+                    pp.make_label(type="SET", label="REF", value=1),
+                ),
+            )
+            for block in navigator:
+                seq.add_block(*block)
+            if tr_delay is not None:
+                seq.add_block(tr_delay)
         for frame in range(len(frames)):
             (phase_label,) = frames.labels(frame)
             if ttl is not None:
@@ -230,12 +269,31 @@ class Epi3DPulseqSequence(Sequence):
                             seq.add_block(*block, *labels)
                         if te_delay is not None:
                             seq.add_block(te_delay)
-                        epi.set_state(lin_idx=ky_start, par_idx=int(par_shot[0, 0]))
+                        epi.set_state(
+                            lin_idx=ky_start, par_idx=int(par_shot[0, 0]), adc_labels=image_labels
+                        )
                         for block in epi:
                             seq.add_block(*block)
 
                         if tr_delay is not None:
                             seq.add_block(tr_delay)
+
+        if cfg.reverse_pe:
+            reverse_labels = (pp.make_label(type="SET", label="SET", value=1),)
+            for par_shot in par_loop:
+                for ky_start in shot_starts:
+                    for block_idx, block in enumerate(pulse):
+                        labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
+                        seq.add_block(*block, *labels)
+                    if te_delay is not None:
+                        seq.add_block(te_delay)
+                    reverse_epi.set_state(
+                        lin_idx=ky_start, par_idx=int(par_shot[0, 0]), adc_labels=reverse_labels
+                    )
+                    for block in reverse_epi:
+                        seq.add_block(*block)
+                    if tr_delay is not None:
+                        seq.add_block(tr_delay)
 
         seq.set_definition("Name", "epi_3d")
         seq.set_definition("FOV", [cfg.fov_ro_m, cfg.fov_pe_m, cfg.slice_spacing_m * cfg.npar])
@@ -256,6 +314,8 @@ class Epi3DPulseqSequence(Sequence):
         seq.set_definition("NumFrames", cfg.num_frames)
         seq.set_definition("TTLExternalOutput", cfg.ttl_output)
         seq.set_definition("SPSPExcitation", cfg.spsp)
+        seq.set_definition("EpiPhaseCorrectionNavigator", cfg.phase_correction)
+        seq.set_definition("ReversePhaseEncodeReference", cfg.reverse_pe)
         pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
 
 
@@ -268,7 +328,7 @@ class _Config:
         "te_s", "tr_s", "flip_deg", "fov_ro_m", "fov_pe_m", "slab_thickness_m", "slice_spacing_m",
         "nx_ro", "ny_pe", "npar", "etl", "rz", "bandwidth_hz_px", "ramp_sample",
         "b_value_s_mm2", "n_directions", "num_frames", "ttl_output",
-        "spsp", "spsp_bandwidth_hz",
+        "spsp", "spsp_bandwidth_hz", "phase_correction", "reverse_pe",
     )
 
 
@@ -294,6 +354,8 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.ttl_output = params.user_float(prot, USER_SLOT_TTL, 0.0) >= 0.5
     cfg.spsp = params.user_float(prot, USER_SLOT_SPSP, 0.0) >= 0.5
     cfg.spsp_bandwidth_hz = params.user_float(prot, USER_SLOT_SPSP_BW, 250.0)
+    cfg.phase_correction = params.user_float(prot, USER_SLOT_PHASE_CORRECTION, 0.0) >= 0.5
+    cfg.reverse_pe = params.user_float(prot, USER_SLOT_REVERSE_PE, 0.0) >= 0.5
     return cfg
 
 
@@ -316,6 +378,25 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
         (cfg.nx_ro, cfg.ny_pe, cfg.npar),
         _n_shots(cfg),
         mask,
+        bandwidth_hz_px=cfg.bandwidth_hz_px,
+        ramp_sample=cfg.ramp_sample,
+    )
+    navigator = design.make_epi_readout(
+        opts,
+        (cfg.fov_ro_m, cfg.fov_pe_m, cfg.slice_spacing_m * cfg.npar),
+        (cfg.nx_ro, cfg.ny_pe, cfg.npar),
+        1,
+        np.zeros((epi.etl, 2), dtype=int),
+        bandwidth_hz_px=cfg.bandwidth_hz_px,
+        ramp_sample=cfg.ramp_sample,
+        blip_duration_s=epi.blip_duration_s,
+    )
+    reverse_epi = design.make_epi_readout(
+        opts,
+        (cfg.fov_ro_m, cfg.fov_pe_m, cfg.slice_spacing_m * cfg.npar),
+        (cfg.nx_ro, cfg.ny_pe, cfg.npar),
+        _n_shots(cfg),
+        np.column_stack((np.arange(epi.etl - 1, -1, -1, dtype=int), np.zeros(epi.etl, dtype=int))),
         bandwidth_hz_px=cfg.bandwidth_hz_px,
         ramp_sample=cfg.ramp_sample,
     )
@@ -351,6 +432,8 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     return {
         "pulse": pulse,
         "epi": epi,
+        "navigator": navigator,
+        "reverse_epi": reverse_epi,
         "diffusion": diffusion,
         "te_delay_s": te_delay_s,
         "tr_delay_s": tr_delay_s,
@@ -397,6 +480,8 @@ _ARG_MAP = [
     ('--directions', UIParam.DIFFUSION_DIRECTIONS, int, ""),
     ('--num-frames', UIParam.NUM_FRAMES, int, ""),
     ('--ttl-output', UIParam.user_value(USER_SLOT_TTL), ("const", 1.0), ""),
+    ('--phase-correction', UIParam.user_value(USER_SLOT_PHASE_CORRECTION), ("const", 1.0), ""),
+    ('--reverse-pe', UIParam.user_value(USER_SLOT_REVERSE_PE), ("const", 1.0), ""),
     ('--spsp', UIParam.user_value(USER_SLOT_SPSP), ("const", 1.0), ""),
     ('--spsp-bandwidth-hz', UIParam.user_value(USER_SLOT_SPSP_BW), float, ""),
 ]

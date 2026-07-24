@@ -188,22 +188,15 @@
     <div class="bd-toc-item navbar-nav active">
         <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="tutorials.html">Tutorials</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/build_a_sequence_plugin.html">Build a sequence plugin with the design toolbox</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="how_to.html">How-to guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="how-to/write_a_plugin_with_modules.html">How to write a sequence plugin with the design toolbox</a></li>
 <li class="toctree-l2"><a class="reference internal" href="how-to/customise_a_plugin.html">How to customise a plugin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="how-to/write_a_new_module.html">How to write a new module or loop structure</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="examples.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="api/pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="api/generated/pypulseq/pulserver.pypulseq.Opts.html">pulserver.pypulseq.Opts</a></li>
-<li class="toctree-l3"><a class="reference internal" href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html">pulserver.pypulseq.Sequence</a></li>
-<li class="toctree-l3"><a class="reference internal" href="api/generated/pypulseq/pulserver.pypulseq.get_supported_labels.html">pulserver.pypulseq.get_supported_labels</a></li>
-<li class="toctree-l3"><a class="reference internal" href="api/generated/pypulseq/pulserver.pypulseq.make_label.html">pulserver.pypulseq.make_label</a></li>
-<li class="toctree-l3"><a class="reference internal" href="api/generated/pypulseq/pulserver.pypulseq.make_rf_shim.html">pulserver.pypulseq.make_rf_shim</a></li>
-<li class="toctree-l3"><a class="reference internal" href="api/generated/pypulseq/pulserver.pypulseq.make_rotation.html">pulserver.pypulseq.make_rotation</a></li>
-</ul>
-</details></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/sampling.html">Scan loops</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -328,16 +321,57 @@
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="api/io.html"><code class="docutils literal notranslate"><span class="pre">pulserver.io</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="api/generated/io/pulserver.io.write.html">pulserver.io.write</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/io/pulserver.io.read.html">pulserver.io.read</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/io/pulserver.io.read_esp_bands.html">pulserver.io.read_esp_bands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/io/pulserver.io.read_asc_bands.html">pulserver.io.read_asc_bands</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="api/recon.html"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/gehc.html"><code class="docutils literal notranslate"><span class="pre">pulserver.gehc</span></code></a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="api/recon.html"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.linops.deepinverse_multicoil_mri.html">pulserver.recon.linops.deepinverse_multicoil_mri</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.linops.mrpro_operator.html">pulserver.recon.linops.mrpro_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.linops.mrinufft_operator.html">pulserver.recon.linops.mrinufft_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.linops.available_nufft_backends.html">pulserver.recon.linops.available_nufft_backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.prox.deepinverse_prior.html">pulserver.recon.prox.deepinverse_prior</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.optimizers.mrpro_optimizer.html">pulserver.recon.optimizers.mrpro_optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.optimizers.deepinverse_optimizer.html">pulserver.recon.optimizers.deepinverse_optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.calibration.nlinv_sensitivities.html">pulserver.recon.calibration.nlinv_sensitivities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.calibration.estimate_sensitivities.html">pulserver.recon.calibration.estimate_sensitivities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.metadata.MrdMetadata.html">pulserver.recon.metadata.MrdMetadata</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.metadata.user_parameter.html">pulserver.recon.metadata.user_parameter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.metadata.acquisition_label.html">pulserver.recon.metadata.acquisition_label</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.metadata.acquisition_labels.html">pulserver.recon.metadata.acquisition_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.metadata.has_acquisition_flag.html">pulserver.recon.metadata.has_acquisition_flag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.grouping.group_by_labels.html">pulserver.recon.grouping.group_by_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.grouping.split_on_flag.html">pulserver.recon.grouping.split_on_flag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.grouping.filter_acquisitions.html">pulserver.recon.grouping.filter_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.serialization.images_to_dicom.html">pulserver.recon.serialization.images_to_dicom</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.serialization.write_dicom_series.html">pulserver.recon.serialization.write_dicom_series</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.mrd2dicom.MrdDicomBuilder.html">pulserver.recon.mrd2dicom.MrdDicomBuilder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.dicom2mrd.dicom_folder_to_mrd.html">pulserver.recon.dicom2mrd.dicom_folder_to_mrd</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.epi.EpiAcquisitionGroups.html">pulserver.recon.epi.EpiAcquisitionGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.epi.partition_epi_acquisitions.html">pulserver.recon.epi.partition_epi_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.sms.SmsEpiInputs.html">pulserver.recon.sms.SmsEpiInputs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.distortion.run_pyhysco.html">pulserver.recon.distortion.run_pyhysco</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.connection.Connection.html">pulserver.recon.connection.Connection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.server.Server.html">pulserver.recon.server.Server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.rtp_connection.RtpServer.html">pulserver.recon.rtp_connection.RtpServer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.main.main.html">pulserver.recon.main.main</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.replay.html">pulserver.recon.replay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.readers.html">pulserver.recon.readers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.writers.html">pulserver.recon.writers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.handlers.html">pulserver.recon.handlers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.mrdhelper.html">pulserver.recon.mrdhelper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.constants.html">pulserver.recon.constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.concurrency.html">pulserver.recon.concurrency</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="reference/sampling.html">Scan loops</a></li>
-<li class="toctree-l2"><a class="reference internal" href="explanations/mechanical_resonance_safety.html">Mechanical Resonance Safety: Structural Acoustic Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/sequence_representation.html">How a sequence is represented</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/mechanical_resonance_safety.html">Mechanical resonance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/pns_safety.html">Peripheral nerve stimulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/performance.html">Runtime and memory</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="more.html">More</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -516,20 +550,24 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pulserver">
+  <section class="tex2jax_ignore mathjax_ignore" id="pulserver">
 <h1>Pulserver<a class="headerlink" href="#pulserver" title="Link to this heading">#</a></h1>
 <p>Tools for designing, serialising, analysing, and reconstructing Pulseq MRI
 sequences.</p>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="how_to.html">How-to guides</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="how-to/write_a_plugin_with_modules.html">How to write a sequence plugin with the design toolbox</a></li>
-<li class="toctree-l2"><a class="reference internal" href="how-to/customise_a_plugin.html">How to customise a plugin</a></li>
-<li class="toctree-l2"><a class="reference internal" href="how-to/write_a_new_module.html">How to write a new module or loop structure</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/build_a_sequence_plugin.html">Build a sequence plugin with the design toolbox</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how_to.html">How-to guides</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="how-to/customise_a_plugin.html">How to customise a plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="how-to/write_a_new_module.html">How to write a new module or loop structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference/sampling.html">Scan loops</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="api/index.html">API reference</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="api/pulserver.html"><code class="docutils literal notranslate"><span class="pre">pulserver</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/sequences.html"><code class="docutils literal notranslate"><span class="pre">pulserver.sequences</span></code></a></li>
@@ -537,13 +575,13 @@ sequences.</p>
 <li class="toctree-l2"><a class="reference internal" href="api/pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/io.html"><code class="docutils literal notranslate"><span class="pre">pulserver.io</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/recon.html"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/gehc.html"><code class="docutils literal notranslate"><span class="pre">pulserver.gehc</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="explanation.html">Explanation</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="reference/sampling.html">Scan loops</a></li>
-<li class="toctree-l2"><a class="reference internal" href="explanations/mechanical_resonance_safety.html">Mechanical Resonance Safety: Structural Acoustic Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/sequence_representation.html">How a sequence is represented</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/mechanical_resonance_safety.html">Mechanical resonance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/pns_safety.html">Peripheral nerve stimulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/performance.html">Runtime and memory</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="more.html">More</a><ul>

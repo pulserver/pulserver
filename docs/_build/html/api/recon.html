@@ -48,8 +48,8 @@
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="pulserver.gehc" href="gehc.html" />
-    <link rel="prev" title="pulserver.io.write" href="generated/io/pulserver.io.write.html" />
+    <link rel="next" title="pulserver.recon.linops.deepinverse_multicoil_mri" href="generated/recon/pulserver.recon.linops.deepinverse_multicoil_mri.html" />
+    <link rel="prev" title="pulserver.io.read_asc_bands" href="generated/io/pulserver.io.read_asc_bands.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -137,6 +137,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -187,22 +191,15 @@
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting started</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../tutorials.html">Tutorials</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/build_a_sequence_plugin.html">Build a sequence plugin with the design toolbox</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../how_to.html">How-to guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../how-to/write_a_plugin_with_modules.html">How to write a sequence plugin with the design toolbox</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../how-to/customise_a_plugin.html">How to customise a plugin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../how-to/write_a_new_module.html">How to write a new module or loop structure</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../examples.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.Opts.html">pulserver.pypulseq.Opts</a></li>
-<li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.Sequence.html">pulserver.pypulseq.Sequence</a></li>
-<li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.get_supported_labels.html">pulserver.pypulseq.get_supported_labels</a></li>
-<li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.make_label.html">pulserver.pypulseq.make_label</a></li>
-<li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.make_rf_shim.html">pulserver.pypulseq.make_rf_shim</a></li>
-<li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.make_rotation.html">pulserver.pypulseq.make_rotation</a></li>
-</ul>
-</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../reference/sampling.html">Scan loops</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
@@ -327,16 +324,57 @@
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="io.html"><code class="docutils literal notranslate"><span class="pre">pulserver.io</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/io/pulserver.io.write.html">pulserver.io.write</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/io/pulserver.io.read.html">pulserver.io.read</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/io/pulserver.io.read_esp_bands.html">pulserver.io.read_esp_bands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/io/pulserver.io.read_asc_bands.html">pulserver.io.read_asc_bands</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="gehc.html"><code class="docutils literal notranslate"><span class="pre">pulserver.gehc</span></code></a></li>
+<li class="toctree-l2 current active has-children"><a class="current reference internal" href="#"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.linops.deepinverse_multicoil_mri.html">pulserver.recon.linops.deepinverse_multicoil_mri</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.linops.mrpro_operator.html">pulserver.recon.linops.mrpro_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.linops.mrinufft_operator.html">pulserver.recon.linops.mrinufft_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.linops.available_nufft_backends.html">pulserver.recon.linops.available_nufft_backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.prox.deepinverse_prior.html">pulserver.recon.prox.deepinverse_prior</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.optimizers.mrpro_optimizer.html">pulserver.recon.optimizers.mrpro_optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.optimizers.deepinverse_optimizer.html">pulserver.recon.optimizers.deepinverse_optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.calibration.nlinv_sensitivities.html">pulserver.recon.calibration.nlinv_sensitivities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.calibration.estimate_sensitivities.html">pulserver.recon.calibration.estimate_sensitivities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.metadata.MrdMetadata.html">pulserver.recon.metadata.MrdMetadata</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.metadata.user_parameter.html">pulserver.recon.metadata.user_parameter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.metadata.acquisition_label.html">pulserver.recon.metadata.acquisition_label</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.metadata.acquisition_labels.html">pulserver.recon.metadata.acquisition_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.metadata.has_acquisition_flag.html">pulserver.recon.metadata.has_acquisition_flag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.grouping.group_by_labels.html">pulserver.recon.grouping.group_by_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.grouping.split_on_flag.html">pulserver.recon.grouping.split_on_flag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.grouping.filter_acquisitions.html">pulserver.recon.grouping.filter_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.serialization.images_to_dicom.html">pulserver.recon.serialization.images_to_dicom</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.serialization.write_dicom_series.html">pulserver.recon.serialization.write_dicom_series</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.mrd2dicom.MrdDicomBuilder.html">pulserver.recon.mrd2dicom.MrdDicomBuilder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.dicom2mrd.dicom_folder_to_mrd.html">pulserver.recon.dicom2mrd.dicom_folder_to_mrd</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.epi.EpiAcquisitionGroups.html">pulserver.recon.epi.EpiAcquisitionGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.epi.partition_epi_acquisitions.html">pulserver.recon.epi.partition_epi_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.sms.SmsEpiInputs.html">pulserver.recon.sms.SmsEpiInputs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.distortion.run_pyhysco.html">pulserver.recon.distortion.run_pyhysco</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.connection.Connection.html">pulserver.recon.connection.Connection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.server.Server.html">pulserver.recon.server.Server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.rtp_connection.RtpServer.html">pulserver.recon.rtp_connection.RtpServer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.main.main.html">pulserver.recon.main.main</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.replay.html">pulserver.recon.replay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.readers.html">pulserver.recon.readers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.writers.html">pulserver.recon.writers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.handlers.html">pulserver.recon.handlers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.mrdhelper.html">pulserver.recon.mrdhelper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.constants.html">pulserver.recon.constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.concurrency.html">pulserver.recon.concurrency</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../reference/sampling.html">Scan loops</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/mechanical_resonance_safety.html">Mechanical Resonance Safety: Structural Acoustic Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/sequence_representation.html">How a sequence is represented</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/mechanical_resonance_safety.html">Mechanical resonance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/pns_safety.html">Peripheral nerve stimulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/performance.html">Runtime and memory</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../more.html">More</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -490,7 +528,9 @@
 <button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
 </button>
-
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
 </div></div>
       
     </div>
@@ -506,6 +546,22 @@
     <div id="print-main-content">
         <div id="jb-print-toc">
             
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-primitives">Reconstruction primitives</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gadgetron-style-mrd-helpers">Gadgetron-style MRD helpers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#epi-and-sms-preprocessing">EPI and SMS preprocessing</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#server-submodules">Server submodules</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#submodule-api-reference">Submodule API reference</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#classes">Classes</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#functions">Functions</a></li>
+</ul>
+</li>
+</ul>
+            </nav>
         </div>
     </div>
 </div>
@@ -515,11 +571,1930 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="pulserver-recon">
+  <section class="tex2jax_ignore mathjax_ignore" id="pulserver-recon">
 <h1><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code><a class="headerlink" href="#pulserver-recon" title="Link to this heading">#</a></h1>
-<p>Reconstruction-server APIs are intentionally left as a namespace stub for
-now. They depend on the optional <code class="docutils literal notranslate"><span class="pre">pulserver[recon]</span></code> dependencies and will gain
-their own grouped reference once the public recon boundary is formalised.</p>
+<p><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code> combines the Gadgetron-compatible MRD server with a
+Torch-first integration layer. It does not implement imaging operators,
+proximal maps, or solvers: Cartesian/non-Cartesian MRPro operators, DeepInverse
+physics/priors/optimisers, and PyGROG NLINV are selected and composed directly.
+Torch owns CPU/CUDA dispatch, so tensors remain on the caller-selected device.
+mri-nufft remains available with FINUFFT or CUFINUFFT for its established
+backend-specific operators.</p>
+<p>Install <code class="docutils literal notranslate"><span class="pre">pulserver[recon]</span></code> for the server, DICOM, and MRD layers.
+Install <code class="docutils literal notranslate"><span class="pre">pulserver[recon-cpu]</span></code> for FINUFFT, MRPro, and DeepInverse; add
+<code class="docutils literal notranslate"><span class="pre">pulserver[recon-nlinv]</span></code> for PyGROG NLINV calibration or install
+<code class="docutils literal notranslate"><span class="pre">pulserver[recon-cuda]</span></code> for CUFINUFFT on Linux CUDA hosts.
+Install <code class="docutils literal notranslate"><span class="pre">pulserver[recon-distortion]</span></code> only when PyHySCO reverse-polarity
+distortion correction is required. PyHySCO is GPL-3.0-only, so Pulserver does
+not vendor or import it.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.recon</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepinverse_multicoil_mri</span><span class="p">,</span> <span class="n">deepinverse_prior</span>
+
+<span class="n">physics</span> <span class="o">=</span> <span class="n">deepinverse_multicoil_mri</span><span class="p">(</span><span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span> <span class="n">coil_maps</span><span class="o">=</span><span class="n">coil_maps</span><span class="p">)</span>
+<span class="n">image</span> <span class="o">=</span> <span class="n">physics</span><span class="o">.</span><span class="n">A_dagger</span><span class="p">(</span><span class="n">kspace</span><span class="p">)</span>  <span class="c1"># tensors remain on coil_maps.device</span>
+<span class="n">prior</span> <span class="o">=</span> <span class="n">deepinverse_prior</span><span class="p">(</span><span class="s2">&quot;tv&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For MRD-native Cartesian and non-Cartesian reconstructions, obtain the exact
+MRPro operator class with <code class="docutils literal notranslate"><span class="pre">mrpro_operator(&quot;fourier&quot;)</span></code> and use MRPro’s
+reconstruction algorithms on <code class="docutils literal notranslate"><span class="pre">KData</span></code>. For non-Cartesian mri-nufft workflows,
+<code class="docutils literal notranslate"><span class="pre">mrinufft_operator(&quot;finufft&quot;,</span> <span class="pre">...)</span></code> and <code class="docutils literal notranslate"><span class="pre">mrinufft_operator(&quot;cufinufft&quot;,</span> <span class="pre">...)</span></code>
+return the maintained backend operators.</p>
+<section id="reconstruction-primitives">
+<h2>Reconstruction primitives<a class="headerlink" href="#reconstruction-primitives" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.linops.deepinverse_multicoil_mri.html#pulserver.recon.linops.deepinverse_multicoil_mri" title="pulserver.recon.linops.deepinverse_multicoil_mri"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.linops.deepinverse_multicoil_mri</span></code></a></p></td>
+<td><p>Construct DeepInverse's Torch-native Cartesian parallel-MRI physics.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.linops.mrpro_operator.html#pulserver.recon.linops.mrpro_operator" title="pulserver.recon.linops.mrpro_operator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.linops.mrpro_operator</span></code></a></p></td>
+<td><p>Return a maintained MRPro operator class by role.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.linops.mrinufft_operator.html#pulserver.recon.linops.mrinufft_operator" title="pulserver.recon.linops.mrinufft_operator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.linops.mrinufft_operator</span></code></a></p></td>
+<td><p>Create and return an mri-nufft operator with the requested backend.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.linops.available_nufft_backends.html#pulserver.recon.linops.available_nufft_backends" title="pulserver.recon.linops.available_nufft_backends"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.linops.available_nufft_backends</span></code></a></p></td>
+<td><p>Return available mri-nufft backends, or an empty list if it is absent.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.prox.deepinverse_prior.html#pulserver.recon.prox.deepinverse_prior" title="pulserver.recon.prox.deepinverse_prior"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.prox.deepinverse_prior</span></code></a></p></td>
+<td><p>Construct a DeepInverse prior by role.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.optimizers.mrpro_optimizer.html#pulserver.recon.optimizers.mrpro_optimizer" title="pulserver.recon.optimizers.mrpro_optimizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.optimizers.mrpro_optimizer</span></code></a></p></td>
+<td><p>Return an MRPro optimizer function by role.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.optimizers.deepinverse_optimizer.html#pulserver.recon.optimizers.deepinverse_optimizer" title="pulserver.recon.optimizers.deepinverse_optimizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.optimizers.deepinverse_optimizer</span></code></a></p></td>
+<td><p>Construct a DeepInverse optimiser by role.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.calibration.nlinv_sensitivities.html#pulserver.recon.calibration.nlinv_sensitivities" title="pulserver.recon.calibration.nlinv_sensitivities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.calibration.nlinv_sensitivities</span></code></a></p></td>
+<td><p>Estimate sensitivity maps with PyGROG's NLINV calibration.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.calibration.estimate_sensitivities.html#pulserver.recon.calibration.estimate_sensitivities" title="pulserver.recon.calibration.estimate_sensitivities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.calibration.estimate_sensitivities</span></code></a></p></td>
+<td><p>Alias for <code class="xref py py-func docutils literal notranslate"><span class="pre">nlinv_sensitivities()</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="gadgetron-style-mrd-helpers">
+<h2>Gadgetron-style MRD helpers<a class="headerlink" href="#gadgetron-style-mrd-helpers" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.metadata.MrdMetadata.html#pulserver.recon.metadata.MrdMetadata" title="pulserver.recon.metadata.MrdMetadata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.metadata.MrdMetadata</span></code></a></p></td>
+<td><p>Gadgetron-style convenience view over one parsed MRD XML header.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.metadata.user_parameter.html#pulserver.recon.metadata.user_parameter" title="pulserver.recon.metadata.user_parameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.metadata.user_parameter</span></code></a></p></td>
+<td><p>Return a typed MRD user parameter by name, or <code class="docutils literal notranslate"><span class="pre">default</span></code> if absent.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.metadata.acquisition_label.html#pulserver.recon.metadata.acquisition_label" title="pulserver.recon.metadata.acquisition_label"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.metadata.acquisition_label</span></code></a></p></td>
+<td><p>Return one acquisition index/header label by its MRD field name.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.metadata.acquisition_labels.html#pulserver.recon.metadata.acquisition_labels" title="pulserver.recon.metadata.acquisition_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.metadata.acquisition_labels</span></code></a></p></td>
+<td><p>Return the standard MRD index and encoding labels as a dictionary.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.metadata.has_acquisition_flag.html#pulserver.recon.metadata.has_acquisition_flag" title="pulserver.recon.metadata.has_acquisition_flag"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.metadata.has_acquisition_flag</span></code></a></p></td>
+<td><p>Return whether an MRD acquisition has a numeric or named flag set.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.grouping.group_by_labels.html#pulserver.recon.grouping.group_by_labels" title="pulserver.recon.grouping.group_by_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.grouping.group_by_labels</span></code></a></p></td>
+<td><p>Group acquisitions by one or more MRD labels, preserving order.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.grouping.split_on_flag.html#pulserver.recon.grouping.split_on_flag" title="pulserver.recon.grouping.split_on_flag"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.grouping.split_on_flag</span></code></a></p></td>
+<td><p>Yield ordered acquisition groups ending at each occurrence of <code class="docutils literal notranslate"><span class="pre">flag</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.grouping.filter_acquisitions.html#pulserver.recon.grouping.filter_acquisitions" title="pulserver.recon.grouping.filter_acquisitions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.grouping.filter_acquisitions</span></code></a></p></td>
+<td><p>Yield acquisitions satisfying all required and no rejected flags.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.serialization.images_to_dicom.html#pulserver.recon.serialization.images_to_dicom" title="pulserver.recon.serialization.images_to_dicom"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.serialization.images_to_dicom</span></code></a></p></td>
+<td><p>Convert reconstructed MRD images to named DICOM datasets.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.serialization.write_dicom_series.html#pulserver.recon.serialization.write_dicom_series" title="pulserver.recon.serialization.write_dicom_series"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.serialization.write_dicom_series</span></code></a></p></td>
+<td><p>Convert images to DICOM and write a complete series to <code class="docutils literal notranslate"><span class="pre">output_dir</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.mrd2dicom.MrdDicomBuilder.html#pulserver.recon.mrd2dicom.MrdDicomBuilder" title="pulserver.recon.mrd2dicom.MrdDicomBuilder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.mrd2dicom.MrdDicomBuilder</span></code></a></p></td>
+<td><p>Stateful builder for converting ISMRMRD images to DICOM datasets.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.dicom2mrd.dicom_folder_to_mrd.html#pulserver.recon.dicom2mrd.dicom_folder_to_mrd" title="pulserver.recon.dicom2mrd.dicom_folder_to_mrd"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.dicom2mrd.dicom_folder_to_mrd</span></code></a></p></td>
+<td><p>Convert all DICOM files in <em>folder</em> to an ISMRMRD / MRD <code class="docutils literal notranslate"><span class="pre">.h5</span></code> file.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="epi-and-sms-preprocessing">
+<h2>EPI and SMS preprocessing<a class="headerlink" href="#epi-and-sms-preprocessing" title="Link to this heading">#</a></h2>
+<p>The EPI zoo can optionally emit a blip-nulled <code class="docutils literal notranslate"><span class="pre">NAV</span></code>/<code class="docutils literal notranslate"><span class="pre">REF</span></code> navigator for
+odd/even phase calibration, a <code class="docutils literal notranslate"><span class="pre">SET=1</span></code> reverse-phase-encode b=0 reference, and
+a single-band <code class="docutils literal notranslate"><span class="pre">REF</span></code> volume for SMS. <code class="docutils literal notranslate"><span class="pre">partition_epi_acquisitions</span></code> turns those
+standard MRD flags and labels into ordered groups; it deliberately does not
+reimplement odd/even phase fitting, Slice-GRAPPA, or distortion estimation.
+Pass the grouped tensors to an EPI-capable upstream backend and use the known
+CAIPI encoding for SMS.</p>
+<p>FSE uses its CPMG RF/receiver phase relation and does <strong>not</strong> need EPI’s
+alternating-readout navigator or an opposite-PE distortion pair. A
+phase-sensitive FSE application may still acquire its own phase reference.</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.epi.EpiAcquisitionGroups.html#pulserver.recon.epi.EpiAcquisitionGroups" title="pulserver.recon.epi.EpiAcquisitionGroups"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.epi.EpiAcquisitionGroups</span></code></a></p></td>
+<td><p>MRD acquisitions partitioned by the EPI labels emitted by the zoo.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.epi.partition_epi_acquisitions.html#pulserver.recon.epi.partition_epi_acquisitions" title="pulserver.recon.epi.partition_epi_acquisitions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.epi.partition_epi_acquisitions</span></code></a></p></td>
+<td><p>Partition EPI acquisitions using standard MRD flags and <code class="docutils literal notranslate"><span class="pre">idx.set</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.sms.SmsEpiInputs.html#pulserver.recon.sms.SmsEpiInputs" title="pulserver.recon.sms.SmsEpiInputs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.sms.SmsEpiInputs</span></code></a></p></td>
+<td><p>Inputs required by an SMS-EPI reconstruction backend.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.distortion.run_pyhysco.html#pulserver.recon.distortion.run_pyhysco" title="pulserver.recon.distortion.run_pyhysco"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.distortion.run_pyhysco</span></code></a></p></td>
+<td><p>Run the externally installed PyHySCO CLI on an opposite-PE NIfTI pair.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Importable runnable examples mirror the zoo layout:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.examples.recon</span><span class="w"> </span><span class="kn">import</span> <span class="n">prepare_epi</span><span class="p">,</span> <span class="n">prepare_sms_epi</span>
+
+<span class="n">groups</span> <span class="o">=</span> <span class="n">prepare_epi</span><span class="p">(</span><span class="n">acquisitions</span><span class="p">)</span>
+<span class="n">sms_inputs</span> <span class="o">=</span> <span class="n">prepare_sms_epi</span><span class="p">(</span>
+    <span class="n">groups</span><span class="o">.</span><span class="n">imaging</span><span class="p">,</span>
+    <span class="n">multiband_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">caipi_encoding</span><span class="o">=</span><span class="n">caipi_encoding</span><span class="p">,</span>
+    <span class="n">coil_maps</span><span class="o">=</span><span class="n">coil_maps</span><span class="p">,</span>
+    <span class="n">single_band_reference</span><span class="o">=</span><span class="n">groups</span><span class="o">.</span><span class="n">single_band_reference</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="server-submodules">
+<h2>Server submodules<a class="headerlink" href="#server-submodules" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection" title="pulserver.recon.connection.Connection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.connection.Connection</span></code></a></p></td>
+<td><p>Represents a connection to an ISMRMRD client.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.server.Server.html#pulserver.recon.server.Server" title="pulserver.recon.server.Server"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.server.Server</span></code></a></p></td>
+<td><p>TCP server that accepts ISMRMRD/MRD streaming connections.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.rtp_connection.RtpServer.html#pulserver.recon.rtp_connection.RtpServer" title="pulserver.recon.rtp_connection.RtpServer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.rtp_connection.RtpServer</span></code></a></p></td>
+<td><p>TCP server that accepts a single RTP client connection at a time.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.main.main.html#pulserver.recon.main.main" title="pulserver.recon.main.main"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.main.main</span></code></a></p></td>
+<td><p>Run the MRD streaming server.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.replay.html#module-pulserver.recon.replay" title="pulserver.recon.replay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.replay</span></code></a></p></td>
+<td><p>Offline replay of queued ISMRMRD sessions.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.readers.html#module-pulserver.recon.readers" title="pulserver.recon.readers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.readers</span></code></a></p></td>
+<td><p>Readers for ISMRMRD data types.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.writers.html#module-pulserver.recon.writers" title="pulserver.recon.writers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.writers</span></code></a></p></td>
+<td><p>Writers for ISMRMRD data types.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.handlers.html#module-pulserver.recon.handlers" title="pulserver.recon.handlers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.handlers</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.mrdhelper.html#module-pulserver.recon.mrdhelper" title="pulserver.recon.mrdhelper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.mrdhelper</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.constants.html#module-pulserver.recon.constants" title="pulserver.recon.constants"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.constants</span></code></a></p></td>
+<td><p>Constants for ISMRMRD message handling.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.concurrency.html#module-pulserver.recon.concurrency" title="pulserver.recon.concurrency"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.concurrency</span></code></a></p></td>
+<td><p>RAM-based concurrency limit for ISMRMRD reconstruction sessions.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="submodule-api-reference">
+<h2>Submodule API reference<a class="headerlink" href="#submodule-api-reference" title="Link to this heading">#</a></h2>
+<p>Access maintained MRI linear operators without copying their implementations.</p>
+<p>MRPro owns Cartesian SENSE, Fourier, sampling, and NUFFT operators.  mri-nufft
+owns its FINUFFT/CUFINUFFT operator backends.  This module deliberately only
+selects and returns those upstream objects.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.linops.</span></span><span class="sig-name descname"><span class="pre">available_nufft_backends</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>Return available mri-nufft backends, or an empty list if it is absent.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.linops.</span></span><span class="sig-name descname"><span class="pre">deepinverse_multicoil_mri</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coil_maps</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">three_d</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Construct DeepInverse’s Torch-native Cartesian parallel-MRI physics.</p>
+<p><code class="docutils literal notranslate"><span class="pre">mask</span></code> and <code class="docutils literal notranslate"><span class="pre">coil_maps</span></code> must be <code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code> objects.  The physics
+module remains on their device (CPU or CUDA) and therefore preserves
+DeepInverse’s automatic Torch dispatch.  Additional keyword arguments are
+forwarded unchanged to <code class="xref py py-class docutils literal notranslate"><span class="pre">deepinv.physics.MultiCoilMRI</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.linops.</span></span><span class="sig-name descname"><span class="pre">mrinufft_operator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'finufft'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create and return an mri-nufft operator with the requested backend.</p>
+<p>Parameters are passed unchanged to <code class="docutils literal notranslate"><span class="pre">mrinufft.get_operator(backend)</span></code>.
+Use <code class="docutils literal notranslate"><span class="pre">backend=&quot;finufft&quot;</span></code> with <code class="docutils literal notranslate"><span class="pre">pulserver[recon-cpu]</span></code> or
+<code class="docutils literal notranslate"><span class="pre">backend=&quot;cufinufft&quot;</span></code> with <code class="docutils literal notranslate"><span class="pre">pulserver[recon-cuda]</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.linops.</span></span><span class="sig-name descname"><span class="pre">mrpro_operator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return a maintained MRPro operator class by role.</p>
+<p><code class="docutils literal notranslate"><span class="pre">name</span></code> is one of <code class="docutils literal notranslate"><span class="pre">cartesian_mask</span></code>, <code class="docutils literal notranslate"><span class="pre">cartesian_sampling</span></code>,
+<code class="docutils literal notranslate"><span class="pre">fast_fourier</span></code>, <code class="docutils literal notranslate"><span class="pre">fourier</span></code>, <code class="docutils literal notranslate"><span class="pre">nufft</span></code>, or <code class="docutils literal notranslate"><span class="pre">sensitivity</span></code>.  Compose the
+returned MRPro classes directly (for example <code class="docutils literal notranslate"><span class="pre">FourierOp</span> <span class="pre">&#64;</span> <span class="pre">SensitivityOp</span></code>)
+and use MRPro’s reconstruction algorithms with MRPro <code class="docutils literal notranslate"><span class="pre">KData</span></code> objects.</p>
+</dd></dl>
+
+<p>Access DeepInverse priors and proximal operators.</p>
+<p>DeepInverse owns the regularisers, proximal maps, and plug-and-play priors.
+This module only resolves its public classes by a stable reconstruction role.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.prox.</span></span><span class="sig-name descname"><span class="pre">deepinverse_prior</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Construct a DeepInverse prior by role.</p>
+<p><code class="docutils literal notranslate"><span class="pre">name</span></code> is one of <code class="docutils literal notranslate"><span class="pre">l1</span></code>, <code class="docutils literal notranslate"><span class="pre">l12</span></code>, <code class="docutils literal notranslate"><span class="pre">pnp</span></code>, <code class="docutils literal notranslate"><span class="pre">tikhonov</span></code>, <code class="docutils literal notranslate"><span class="pre">tv</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">wavelet</span></code>.  Keyword arguments are passed unchanged to the selected
+DeepInverse class, whose <code class="docutils literal notranslate"><span class="pre">prox</span></code> implementation remains authoritative.</p>
+</dd></dl>
+
+<p>Access MRPro and DeepInverse optimisation implementations.</p>
+<p>No iterative algorithm lives here.  The functions return the maintained
+upstream implementation selected by its reconstruction role.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.optimizers.</span></span><span class="sig-name descname"><span class="pre">deepinverse_optimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Construct a DeepInverse optimiser by role.</p>
+<p><code class="docutils literal notranslate"><span class="pre">name</span></code> is one of <code class="docutils literal notranslate"><span class="pre">admm</span></code>, <code class="docutils literal notranslate"><span class="pre">fista</span></code>, <code class="docutils literal notranslate"><span class="pre">hqs</span></code>, <code class="docutils literal notranslate"><span class="pre">pdhg</span></code>, or <code class="docutils literal notranslate"><span class="pre">pgd</span></code>.
+Parameters are passed unchanged to the selected DeepInverse optimiser.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.optimizers.</span></span><span class="sig-name descname"><span class="pre">mrpro_optimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return an MRPro optimizer function by role.</p>
+<p><code class="docutils literal notranslate"><span class="pre">name</span></code> is one of <code class="docutils literal notranslate"><span class="pre">adam</span></code>, <code class="docutils literal notranslate"><span class="pre">cg</span></code>, <code class="docutils literal notranslate"><span class="pre">lbfgs</span></code>, <code class="docutils literal notranslate"><span class="pre">pdhg</span></code>, or <code class="docutils literal notranslate"><span class="pre">pgd</span></code>.
+The returned function uses the exact MRPro tensor/operator interface.</p>
+</dd></dl>
+
+<p>Torch-native coil-sensitivity calibration adapters.</p>
+<p>NLINV delegates to <code class="xref py py-mod docutils literal notranslate"><span class="pre">pygrog</span></code>, the preferred maintained implementation in
+this workspace.  PyGROG preserves a Torch tensor’s CPU/CUDA device. Pulserver
+supplies the dispatch boundary, not a calibration implementation.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.calibration.</span></span><span class="sig-name descname"><span class="pre">estimate_sensitivities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">kspace</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trajectory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_shape</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Alias for <a class="reference internal" href="generated/recon/pulserver.recon.calibration.nlinv_sensitivities.html#pulserver.recon.calibration.nlinv_sensitivities" title="pulserver.recon.calibration.nlinv_sensitivities"><code class="xref py py-func docutils literal notranslate"><span class="pre">nlinv_sensitivities()</span></code></a>.</p>
+<p>PyGROG NLINV is the supported Torch-native sensitivity calibration path.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.calibration.</span></span><span class="sig-name descname"><span class="pre">nlinv_sensitivities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">kspace</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trajectory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_shape</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Estimate sensitivity maps with PyGROG’s NLINV calibration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>kspace</strong> (<em>torch.Tensor</em>) – Cartesian data of shape <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">*matrix)</span></code> or non-Cartesian data of
+shape <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">samples)</span></code>.</p></li>
+<li><p><strong>mask</strong> (<em>torch.Tensor</em><em>, </em><em>optional</em>) – Cartesian acquisition mask.</p></li>
+<li><p><strong>trajectory</strong> (<em>torch.Tensor</em><em>, </em><em>optional</em>) – Non-Cartesian trajectory with shape <code class="docutils literal notranslate"><span class="pre">(samples,</span> <span class="pre">dimensions)</span></code>.  Its
+presence selects the non-Cartesian NLINV path.</p></li>
+<li><p><strong>image_shape</strong> (<em>tuple</em><em>[</em><em>int</em><em>, </em><em>...</em><em>]</em><em>, </em><em>optional</em>) – Required for non-Cartesian data; ignored for Cartesian data.</p></li>
+<li><p><strong>**kwargs</strong> – Additional keyword arguments accepted by <code class="docutils literal notranslate"><span class="pre">pygrog.utils.nlinv_calib</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>torch.Tensor</em> – Coil maps with shape <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">*image_shape)</span></code> on <code class="docutils literal notranslate"><span class="pre">kspace.device</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>EPI acquisition-role helpers; phase fitting stays with an upstream backend.</p>
+<p>The helpers only partition an MRD stream.  They deliberately do not estimate
+an odd/even phase ramp: that numerical operation belongs to a selected
+reconstruction backend, not to Pulserver.</p>
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.epi.</span></span><span class="sig-name descname"><span class="pre">EpiAcquisitionGroups</span></span></dt>
+<dd><p>MRD acquisitions partitioned by the EPI labels emitted by the zoo.</p>
+<p><code class="docutils literal notranslate"><span class="pre">phase_correction</span></code> contains the blip-nulled navigator (<code class="docutils literal notranslate"><span class="pre">NAV</span></code>/<code class="docutils literal notranslate"><span class="pre">REF</span></code>),
+<code class="docutils literal notranslate"><span class="pre">reverse_polarity</span></code> the optional <code class="docutils literal notranslate"><span class="pre">SET=1</span></code> reference volume, and
+<code class="docutils literal notranslate"><span class="pre">single_band_reference</span></code> the SMS <code class="docutils literal notranslate"><span class="pre">REF</span></code> data.  All remaining samples
+are <code class="docutils literal notranslate"><span class="pre">imaging</span></code> data.</p>
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">phase_correction</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">single_band_reference</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reverse_polarity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">imaging</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.epi.</span></span><span class="sig-name descname"><span class="pre">partition_epi_acquisitions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">acquisitions</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">reverse_polarity_set</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Partition EPI acquisitions using standard MRD flags and <code class="docutils literal notranslate"><span class="pre">idx.set</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>acquisitions</strong> – MRD acquisition stream produced by the EPI zoo sequence.</p></li>
+<li><p><strong>reverse_polarity_set</strong> – <code class="docutils literal notranslate"><span class="pre">idx.set</span></code> value reserved for the reverse phase-encode reference.
+The EPI zoo uses <code class="docutils literal notranslate"><span class="pre">1</span></code> and uses <code class="docutils literal notranslate"><span class="pre">0</span></code> for imaging data.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>EpiAcquisitionGroups</em> – Ordered lists for phase correction, SMS reference, reverse-polarity,
+and image data.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>SMS-EPI data contracts for upstream SENSE or Slice-GRAPPA reconstruction.</p>
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.sms.</span></span><span class="sig-name descname"><span class="pre">SmsEpiInputs</span></span></dt>
+<dd><p>Inputs required by an SMS-EPI reconstruction backend.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>imaging</strong> (<em>Any</em>) – Multiband EPI data with the acquisition’s known CAIPI encoding.</p></li>
+<li><p><strong>coil_maps</strong> (<em>Any</em><em> | </em><em>None</em>) – Per-slice coil maps for model-based MRPro/DeepInverse SENSE.  Keep
+this tensor on the selected Torch CPU/CUDA device.</p></li>
+<li><p><strong>single_band_reference</strong> (<em>Any</em><em> | </em><em>None</em>) – Individual-slice reference data required by Slice-GRAPPA.  It may be
+<code class="docutils literal notranslate"><span class="pre">None</span></code> for model-based SENSE.</p></li>
+<li><p><strong>caipi_encoding</strong> (<em>Any</em><em> | </em><em>None</em>) – The known CAIPI phase/modulation model.  It must be supplied when the
+multiband factor is greater than one.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>This class intentionally does not implement Slice-GRAPPA or SMS unaliasing.
+It makes the required acquired data explicit and leaves the numerical
+reconstruction to the selected upstream backend.</p>
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">imaging</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coil_maps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">single_band_reference</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">caipi_encoding</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">validate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">multiband_factor</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> when an SMS backend lacks essential inputs.</p>
+</dd></dl>
+
+</dd></dl>
+
+<p>Optional external PyHySCO invocation for reverse-polarity EPI correction.</p>
+<p>PyHySCO is GPL-3.0-only, so Pulserver neither imports nor vendors it.  This
+thin subprocess adapter is usable only after explicitly installing the
+<code class="docutils literal notranslate"><span class="pre">recon-distortion</span></code> extra.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.distortion.</span></span><span class="sig-name descname"><span class="pre">run_pyhysco</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">positive_phase_encode</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">negative_phase_encode</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phase_encode_direction</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">executable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'pyhysco'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extra_args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">()</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Run the externally installed PyHySCO CLI on an opposite-PE NIfTI pair.</p>
+<p>Parameters match PyHySCO’s <code class="docutils literal notranslate"><span class="pre">pyhysco</span> <span class="pre">--file_1</span> <span class="pre">--file_2</span> <span class="pre">--ped</span></code> command.
+The inputs must be reconstructed NIfTI files; raw MRD data is first
+reconstructed with the regular Pulserver/MRPro workflow.</p>
+</dd></dl>
+
+<p>Convenient, dependency-light accessors for Gadgetron-style MRD metadata.</p>
+<p>The helpers deliberately use duck typing so handlers can use ISMRMRD objects,
+test doubles, and objects supplied by upstream Gadgetron bindings alike.</p>
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.metadata.</span></span><span class="sig-name descname"><span class="pre">MrdMetadata</span></span></dt>
+<dd><p>Gadgetron-style convenience view over one parsed MRD XML header.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>header</strong> (<em>object</em>) – Parsed ISMRMRD <code class="docutils literal notranslate"><span class="pre">ismrmrdHeader</span></code> or an API-compatible object.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">header</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">encoded_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return the encoded matrix as <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y,</span> <span class="pre">z)</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">encoding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return encoding <code class="docutils literal notranslate"><span class="pre">index</span></code> or raise <code class="docutils literal notranslate"><span class="pre">IndexError</span></code> if it is absent.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">field_of_view_mm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return reconstruction field of view in millimetres as <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y,</span> <span class="pre">z)</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">recon_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return the reconstruction matrix as <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y,</span> <span class="pre">z)</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">user_parameter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return an MRD user parameter by name.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.metadata.</span></span><span class="sig-name descname"><span class="pre">acquisition_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">acquisition</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return one acquisition index/header label by its MRD field name.</p>
+<p>Index labels (for example <code class="docutils literal notranslate"><span class="pre">slice</span></code>, <code class="docutils literal notranslate"><span class="pre">repetition</span></code>,
+<code class="docutils literal notranslate"><span class="pre">kspace_encode_step_1</span></code>) are read from <code class="docutils literal notranslate"><span class="pre">acquisition.idx</span></code>.  Header
+labels such as <code class="docutils literal notranslate"><span class="pre">encoding_space_ref</span></code> are read directly from the
+acquisition object.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.metadata.</span></span><span class="sig-name descname"><span class="pre">acquisition_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">acquisition</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return the standard MRD index and encoding labels as a dictionary.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.metadata.</span></span><span class="sig-name descname"><span class="pre">has_acquisition_flag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">acquisition</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flag</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return whether an MRD acquisition has a numeric or named flag set.</p>
+<p>Named flags use the <code class="docutils literal notranslate"><span class="pre">ismrmrd.ACQ_*</span></code> constant names, for example
+<code class="docutils literal notranslate"><span class="pre">&quot;ACQ_LAST_IN_MEASUREMENT&quot;</span></code>.  This helper does not import ISMRMRD unless
+a named flag is requested.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.metadata.</span></span><span class="sig-name descname"><span class="pre">user_parameter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return a typed MRD user parameter by name, or <code class="docutils literal notranslate"><span class="pre">default</span></code> if absent.</p>
+<p>All standard MRD parameter collections (long, double, string, and base64)
+are searched in order.  The value is returned unmodified by the XML
+binding, except that a missing parameter yields <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p>
+</dd></dl>
+
+<p>Grouping and filtering helpers for MRD acquisition streams.</p>
+<p>They preserve input order and accept any acquisition-like object, making them
+safe to use in a Gadgetron handler before data is converted to a framework
+specific container.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.grouping.</span></span><span class="sig-name descname"><span class="pre">filter_acquisitions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">acquisitions</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">require_flags</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">()</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reject_flags</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">()</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Yield acquisitions satisfying all required and no rejected flags.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.grouping.</span></span><span class="sig-name descname"><span class="pre">group_by_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">acquisitions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Group acquisitions by one or more MRD labels, preserving order.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>acquisitions</strong> (<em>iterable</em>) – Acquisition stream or collection.</p></li>
+<li><p><strong>labels</strong> (<em>str</em><em> or </em><em>tuple</em><em>[</em><em>str</em><em>, </em><em>...</em><em>]</em>) – <code class="docutils literal notranslate"><span class="pre">idx</span></code> labels such as <code class="docutils literal notranslate"><span class="pre">(&quot;repetition&quot;,</span> <span class="pre">&quot;slice&quot;)</span></code>.  Header labels
+such as <code class="docutils literal notranslate"><span class="pre">&quot;encoding_space_ref&quot;</span></code> are also supported.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>collections.OrderedDict</em> – A mapping from a scalar key (one label) or tuple key (many labels) to
+the corresponding acquisition list.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.grouping.</span></span><span class="sig-name descname"><span class="pre">split_on_flag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">acquisitions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flag</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Yield ordered acquisition groups ending at each occurrence of <code class="docutils literal notranslate"><span class="pre">flag</span></code>.</p>
+<p>The terminating acquisition remains in its group.  A final unterminated
+group is yielded, which is useful for replaying incomplete saved data.</p>
+</dd></dl>
+
+<p>DICOM serialisation convenience functions for reconstructed MRD images.</p>
+<p>The implementation delegates image/header conversion to the established
+<a class="reference internal" href="generated/recon/pulserver.recon.mrd2dicom.MrdDicomBuilder.html#pulserver.recon.mrd2dicom.MrdDicomBuilder" title="pulserver.recon.mrd2dicom.MrdDicomBuilder"><code class="xref py py-class docutils literal notranslate"><span class="pre">MrdDicomBuilder</span></code></a>; this module only makes a
+complete Gadgetron-style series operation convenient for handlers.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.serialization.</span></span><span class="sig-name descname"><span class="pre">images_to_dicom</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">images</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Convert reconstructed MRD images to named DICOM datasets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>images</strong> (<em>iterable</em>) – <code class="docutils literal notranslate"><span class="pre">ismrmrd.Image</span></code> objects to serialise.</p></li>
+<li><p><strong>metadata</strong> (<em>object</em>) – Parsed MRD XML header passed to <code class="xref py py-class docutils literal notranslate"><span class="pre">MrdDicomBuilder</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.serialization.</span></span><span class="sig-name descname"><span class="pre">write_dicom_series</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">images</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Convert images to DICOM and write a complete series to <code class="docutils literal notranslate"><span class="pre">output_dir</span></code>.</p>
+<p>Returns the written paths.  A failed image conversion raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>
+rather than silently producing an incomplete series.</p>
+</dd></dl>
+
+<p>Module for handling ISMRMRD connections.</p>
+<p>This module provides the Connection class for managing connections to ISMRMRD clients,
+including reading and writing various message types with logging and filtering capabilities.</p>
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.connection.</span></span><span class="sig-name descname"><span class="pre">Connection</span></span></dt>
+<dd><p>Represents a connection to an ISMRMRD client.</p>
+<p>This class handles the communication with an ISMRMRD client, providing methods
+to read and write various message types, apply filters, and manage logging.</p>
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">SocketWrapper</span></span></dt>
+<dd><p>Thin wrapper providing <code class="docutils literal notranslate"><span class="pre">read</span></code>/<code class="docutils literal notranslate"><span class="pre">write</span></code> over a raw TCP socket.</p>
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sock</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>Send a CLOSE message and close the underlying socket.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nbytes</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read exactly <em>nbytes</em> from the socket.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">byte_array</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Send <em>byte_array</em> to the peer.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">socket</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">savedata</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">savedataFile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">savedataFolder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">savedataGroup</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'dataset'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auto_read_config_header</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">add_reader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reader</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Add a reader to the connection’s readers.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mid</strong> (<em>int</em>) – The ISMRMRD Message ID for which the reader is called.</p></li>
+<li><p><strong>reader</strong> (<em>callable</em>) – Reader function to be called when <cite>mid</cite> is encountered on the connection.</p></li>
+<li><p><strong>*args</strong> (<em>Any</em>) – Additional arguments forwarded to the reader when it’s called.</p></li>
+<li><p><strong>**kwargs</strong> (<em>Any</em>) – Additional keyword-arguments forwarded to the reader when it’s called.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Add (or overwrite) a reader to the connection’s reader-set. Readers are used to deserialize
+binary ISMRMRD data into usable items.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">add_writer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">accepts</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">writer</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Add a writer to the connection’s writers.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>accepts</strong> (<em>callable</em>) – Predicate used to determine if a writer accepts an item.</p></li>
+<li><p><strong>writer</strong> (<em>callable</em>) – Writer function to be called when <cite>accepts</cite> predicate returned truthy value.</p></li>
+<li><p><strong>*args</strong> (<em>Any</em>) – Additional arguments forwarded to the writer when it’s called.</p></li>
+<li><p><strong>**kwargs</strong> (<em>Any</em>) – Additional keyword-arguments forwarded to the writer when it’s called.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Add a writer to the connection’s writer-set. Writers are used to serialize items into appropriate
+ISMRMRD binary data.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">predicate</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Filters the items that come through the Connection.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>predicate</strong> (<em>callable</em><em> or </em><em>type</em>) – Predicate used when filtering items. Accepts types as well as function predicates.
+Supplying a type is shorthand for <cite>isinstance</cite> based filtering.</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Filters the items returned by <cite>next</cite>, such that only items for which <cite>predicate(item)</cite>
+returns a truthy value is returned. Items not satisfying the predicate will be silently
+sent back to the client.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">iter_with_mids</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>Iterate yielding <code class="docutils literal notranslate"><span class="pre">(message_id,</span> <span class="pre">item)</span></code> tuples.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">next</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>Retrieves the next item available on a connection.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>tuple[int, Any]</em> – The next message from the connection (along with the corresponding MessageID).</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>StopIteration</strong> – If no more items are available.</p></li>
+<li><p><strong>TypeError</strong> – If no appropriate reader is found.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>When <cite>next</cite> is called, the next ISMRMRD message id is read from the connection.
+This message id is used to select an appropriate reader, which in turn reads
+the next item from the connection. The item is returned to the caller.</p>
+<p>If the connection is filtered, only items satisfying the predicate is
+returned. Any items not satisfying the predicate is silently returned to the
+client.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">peek</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>Peek at the next message identifier without consuming it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>int or None</em> – The message identifier if available, or None if the connection is exhausted or an error occurs.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">send</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Send an item to the client.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>item</strong> (<em>Any</em>) – Item to be sent.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>TypeError</strong> – If no appropriate writer is found.</p></li>
+<li><p><strong>ValueError</strong> – If the connection is exhausted.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">shutdown_close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>Gracefully shuts down the socket and closes the connection.</p>
+<p>Sends the protocol-level CLOSE message first so the remote peer (e.g.
+GadgetronClientConnector on the C++ side) receives it before the TCP
+connection is torn down.  Without this ordering the remote connector.wait()
+loop never gets the close token and blocks indefinitely.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.connection.</span></span><span class="sig-name descname"><span class="pre">DataSaver</span></span></dt>
+<dd><p>Persist incoming ISMRMRD data to an HDF5 file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>savedataFile</strong> (<em>str</em>) – Filename for the HDF5 file (auto-generated via <code class="xref py py-func docutils literal notranslate"><span class="pre">build_save_path()</span></code>
+if empty).</p></li>
+<li><p><strong>savedataFolder</strong> (<em>str</em>) – Directory for saved files (used only when <code class="docutils literal notranslate"><span class="pre">savedataFile</span></code> is empty).</p></li>
+<li><p><strong>savedataGroup</strong> (<em>str</em>) – HDF5 group name inside the file.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">savedataFile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">savedataFolder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">savedataGroup</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Append <em>item</em> to the HDF5 dataset, keyed by message id <em>mid</em>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.connection.</span></span><span class="sig-name descname"><span class="pre">DummySaver</span></span></dt>
+<dd><p>No-op saver used when data saving is disabled.</p>
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">savedataFile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">savedataFolder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">savedataGroup</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'dataset'</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.connection.</span></span><span class="sig-name descname"><span class="pre">build_save_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fallback_dir</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return the full path for saving one scan’s ISMRMRD data.</p>
+<p>Reads <code class="docutils literal notranslate"><span class="pre">bucket_pid</span></code> and <code class="docutils literal notranslate"><span class="pre">stationName</span></code> from the parsed ISMRMRD header
+when available, and constructs:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">export</span><span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">sdc</span><span class="o">/</span><span class="n">pulserver</span><span class="o">/</span><span class="n">bucket</span><span class="o">/&lt;</span><span class="n">pid</span><span class="o">&gt;/</span><span class="n">mrd_</span><span class="o">&lt;</span><span class="n">scanner</span><span class="o">&gt;</span><span class="n">_</span><span class="o">&lt;</span><span class="n">YYYYMMDDTHHMMSS</span><span class="o">&gt;.</span><span class="n">h5</span>
+</pre></div>
+</div>
+<p>Falls back to <code class="docutils literal notranslate"><span class="pre">fallback_dir/mrd_unknown_&lt;ts&gt;.h5</span></code> when header fields are
+absent (e.g. in development / test environments).</p>
+<p>The directory is created with <code class="docutils literal notranslate"><span class="pre">exist_ok=True</span></code> before returning.</p>
+</dd></dl>
+
+<p>MRD streaming server with dynamic handler loading.</p>
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.server.</span></span><span class="sig-name descname"><span class="pre">Server</span></span></dt>
+<dd><p>TCP server that accepts ISMRMRD/MRD streaming connections.</p>
+<p>Each incoming connection is handled in a separate thread.  The server
+reads the config message to determine which handler module to load,
+then delegates processing to <code class="docutils literal notranslate"><span class="pre">module.process(connection,</span> <span class="pre">config,</span> <span class="pre">metadata)</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>host</strong> (<em>str</em>) – Bind address (default <code class="docutils literal notranslate"><span class="pre">&quot;0.0.0.0&quot;</span></code>).</p></li>
+<li><p><strong>port</strong> (<em>int</em>) – Bind port (default <code class="docutils literal notranslate"><span class="pre">9002</span></code>).</p></li>
+<li><p><strong>default_handler</strong> (<em>str</em>) – Fallback handler module name when config is empty or unknown.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em>) – Directory for saved MRD data and per-connection logs.</p></li>
+<li><p><strong>save_data</strong> (<em>bool</em>) – Whether to persist incoming MRD data to HDF5.</p></li>
+<li><p><strong>handler_dirs</strong> (<em>list</em><em>[</em><em>str</em><em>] or </em><em>None</em>) – Additional directories to search for handler <code class="docutils literal notranslate"><span class="pre">.py</span></code> files.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'0.0.0.0'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">9002</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default_handler</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'savedataonly'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">handler_dirs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rtp_port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rtp_handler</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'pmcrecon'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_concurrent_recons</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">per_recon_gb</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">48.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">idle_timeout_s</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">serve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>Block and accept connections until interrupted.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">start_rtp_server</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>Start the RTP PMC server in a background daemon thread (if rtp_port is set).</p>
+</dd></dl>
+
+</dd></dl>
+
+<p>RTP (Real-Time Processing) connection for PMC (Physiological Motion Correction).</p>
+<p>The RtpServer listens on a separate TCP port (default 9003) and accepts a
+single connection at a time.  The protocol is symmetric with the regular
+MRD streaming protocol:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>Client → Server:</dt><dd><p>GADGET_MESSAGE_HEADER          → XML header (navigator-only encoding spaces)
+GADGET_MESSAGE_ISMRMRD_ACQUISITION* (navigator readouts, one per TR)
+GADGET_MESSAGE_CLOSE</p>
+</dd>
+<dt>Server → Client:</dt><dd><p>GADGET_MESSAGE_PMC_PAYLOAD     → one per received acquisition</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="simple">
+<dt>PmcPayload wire layout (52 bytes, little-endian):</dt><dd><p>float32 × 3   shift      — additive translation delta [m] along scanner X/Y/Z
+float32 × 9   rotation   — 3×3 rotation correction matrix (row-major)
+int32         rescan     — non-zero → RTP app requests TR rescan</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.rtp_connection.</span></span><span class="sig-name descname"><span class="pre">PmcPayload</span></span></dt>
+<dd><p>Rigid-body motion correction parameters returned to PSD.</p>
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shift</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rotation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rescan</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.rtp_connection.</span></span><span class="sig-name descname"><span class="pre">RtpServer</span></span></dt>
+<dd><p>TCP server that accepts a single RTP client connection at a time.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>host</strong> (<em>str</em>) – Bind address.</p></li>
+<li><p><strong>port</strong> (<em>int</em>) – Bind port (default 9003).</p></li>
+<li><p><strong>handler_module</strong> – Module with a <code class="docutils literal notranslate"><span class="pre">process(connection,</span> <span class="pre">config,</span> <span class="pre">metadata)</span></code> function.
+The handler receives an <code class="xref py py-class docutils literal notranslate"><span class="pre">RtpConnection</span></code> as <em>connection</em>, the
+raw config string as <em>config</em>, and the parsed ISMRMRD header as
+<em>metadata</em>.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'0.0.0.0'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">9003</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">handler_module</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">serve_forever</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>Block, accepting one connection at a time, until the socket closes.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">serve_in_thread</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>Start <a class="reference internal" href="generated/recon/pulserver.recon.rtp_connection.RtpServer.html#pulserver.recon.rtp_connection.RtpServer.serve_forever" title="pulserver.recon.rtp_connection.RtpServer.serve_forever"><code class="xref py py-meth docutils literal notranslate"><span class="pre">serve_forever()</span></code></a> in a daemon thread and return it.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.rtp_connection.</span></span><span class="sig-name descname"><span class="pre">write_pmc_payload</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">writable</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">payload</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Serialise <em>payload</em> to <em>writable</em> as GADGET_MESSAGE_PMC_PAYLOAD.</p>
+</dd></dl>
+
+<p>CLI entry point for the MRD streaming server.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.main.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Run the MRD streaming server.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>argv</strong> (<em>list</em><em>[</em><em>str</em><em>] or </em><em>None</em>) – Command-line arguments.  Defaults to <code class="docutils literal notranslate"><span class="pre">sys.argv[1:]</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Readers for ISMRMRD data types.</p>
+<p>This module provides functions to deserialize binary ISMRMRD data from a source
+(e.g., a socket or file-like object) into usable Python objects like acquisitions,
+images, and waveforms.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read and unpack a single value from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>source</strong> (<em>Any</em>) – The source to read from (e.g., a socket wrapper).</p></li>
+<li><p><strong>type</strong> (<em>type</em>) – The struct type to unpack (e.g., constants.uint32).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Any</em> – The unpacked value.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_acquisition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read an acquisition from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ismrmrd.Acquisition</em> – The deserialized acquisition.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_acquisition_header</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read an acquisition header from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ismrmrd.AcquisitionHeader</em> – The deserialized acquisition header.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_array</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">numpy_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;class</span> <span class="pre">'numpy.uint64'&gt;</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read a multi-dimensional array from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p></li>
+<li><p><strong>numpy_type</strong> (<em>type</em><em>, </em><em>optional</em>) – The numpy data type (default: np.uint64).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>np.ndarray</em> – The read array, reshaped in Fortran order.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_byte_string</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">Struct('&lt;I')</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read a byte string from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p></li>
+<li><p><strong>type</strong> (<em>type</em><em>, </em><em>optional</em>) – The type for the length (default: constants.uint32).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>bytes</em> – The read byte string.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_config_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read the Gadgetron configuration filename from the source.</p>
+<p>The wire format is a fixed 1024-byte <code class="docutils literal notranslate"><span class="pre">GadgetMessageConfigurationFile</span></code>
+struct (a null-padded char array), NOT a length-prefixed string.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>str</em> – The configuration filename / handler module name.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_config_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read and deserialize config text from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>dict</em> – The deserialized config dict.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_dicom</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read DICOM data with filename from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><p><em>DicomWithName</em> –</p>
+<dl class="simple">
+<dt>A DicomWithName object with two attributes:</dt><dd><dl class="simple">
+<dt>dset<span class="classifier">pydicom.Dataset</span></dt><dd><p>The DICOM dataset read.</p>
+</dd>
+<dt>filenames<span class="classifier">str</span></dt><dd><p>The filename.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_gadget_message_length</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">Struct('&lt;I')</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read the length of a Gadget message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p></li>
+<li><p><strong>type</strong> (<em>type</em><em>, </em><em>optional</em>) – The type for the length (default: constants.uint32).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>int</em> – The message length.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_header</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read and deserialize ISMRMRD header from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Any</em> – The deserialized header (e.g., ismrmrd.xsd object).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read an image from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ismrmrd.Image</em> – The deserialized image.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_image_header</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read an image header from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ismrmrd.ImageHeader</em> – The deserialized image header.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_object_array</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">read_object</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read an array of objects from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p></li>
+<li><p><strong>read_object</strong> (<em>Callable</em>) – Function to read each object.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>np.ndarray</em> – The read object array, reshaped in Fortran order.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_optional</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">continuation</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read an optional value from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p></li>
+<li><p><strong>continuation</strong> (<em>Callable</em>) – Function to call if the value is present.</p></li>
+<li><p><strong>*args</strong> (<em>Any</em>) – Additional arguments for continuation.</p></li>
+<li><p><strong>**kwargs</strong> (<em>Any</em>) – Additional keyword arguments for continuation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Any or None</em> – The result of continuation if present, else None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read arbitrary text from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>str</em> – The decoded text.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_vector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">numpy_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;class</span> <span class="pre">'numpy.uint64'&gt;</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read a vector of values from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p></li>
+<li><p><strong>numpy_type</strong> (<em>type</em><em>, </em><em>optional</em>) – The numpy data type (default: np.uint64).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>np.ndarray</em> – The read vector.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_waveform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read a waveform from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ismrmrd.Waveform</em> – The deserialized waveform.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.readers.</span></span><span class="sig-name descname"><span class="pre">read_waveform_header</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Read a waveform header from the source.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>source</strong> (<em>Any</em>) – The source to read from.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ismrmrd.Waveform</em> – The deserialized waveform header.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Writers for ISMRMRD data types.</p>
+<p>This module provides functions to serialize Python objects (e.g., acquisitions,
+images, waveforms) into binary ISMRMRD data for writing to a destination
+(e.g., a socket or file-like object).</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.writers.</span></span><span class="sig-name descname"><span class="pre">write_acquisition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">acquisition</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write an acquisition to the destination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>Any</em>) – The destination to write to.</p></li>
+<li><p><strong>acquisition</strong> (<em>ismrmrd.Acquisition</em>) – The acquisition to write.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.writers.</span></span><span class="sig-name descname"><span class="pre">write_acquisition_header</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">header</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write an acquisition header to the destination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>Any</em>) – The destination to write to.</p></li>
+<li><p><strong>header</strong> (<em>ismrmrd.AcquisitionHeader</em>) – The header to write.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.writers.</span></span><span class="sig-name descname"><span class="pre">write_array</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write a multi-dimensional array to the destination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>Any</em>) – The destination to write to.</p></li>
+<li><p><strong>array</strong> (<em>np.ndarray</em>) – The array to write.</p></li>
+<li><p><strong>dtype</strong> (<em>type</em>) – The numpy data type.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.writers.</span></span><span class="sig-name descname"><span class="pre">write_byte_string</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">byte_string</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">Struct('&lt;I')</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write a byte string to the destination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>Any</em>) – The destination to write to.</p></li>
+<li><p><strong>byte_string</strong> (<em>bytes</em>) – The byte string to write.</p></li>
+<li><p><strong>type</strong> (<em>type</em><em>, </em><em>optional</em>) – The type for the length (default: constants.uint32).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.writers.</span></span><span class="sig-name descname"><span class="pre">write_dicom</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dset_with_filename</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write DICOM data with filename to the destination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>Any</em>) – The destination to write to.</p></li>
+<li><p><strong>dset_with_filename</strong> (<em>DicomWithName</em>) – <dl class="simple">
+<dt>A DicomWithName object with two attributes:</dt><dd><dl class="simple">
+<dt>dset<span class="classifier">pydicom.Dataset</span></dt><dd><p>The DICOM dataset to write.</p>
+</dd>
+<dt>filename<span class="classifier">str</span></dt><dd><p>The filename to use for the DICOM dataset.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.writers.</span></span><span class="sig-name descname"><span class="pre">write_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write an image to the destination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>Any</em>) – The destination to write to.</p></li>
+<li><p><strong>image</strong> (<em>ismrmrd.Image</em>) – The image to write.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.writers.</span></span><span class="sig-name descname"><span class="pre">write_image_header</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">header</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write an image header to the destination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>Any</em>) – The destination to write to.</p></li>
+<li><p><strong>header</strong> (<em>ismrmrd.ImageHeader</em>) – The header to write.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.writers.</span></span><span class="sig-name descname"><span class="pre">write_object_array</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">writer</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write an array of objects to the destination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>Any</em>) – The destination to write to.</p></li>
+<li><p><strong>array</strong> (<em>np.ndarray</em>) – The object array to write.</p></li>
+<li><p><strong>writer</strong> (<em>Callable</em>) – Function to write each object.</p></li>
+<li><p><strong>*args</strong> (<em>Any</em>) – Additional arguments for writer.</p></li>
+<li><p><strong>**kwargs</strong> (<em>Any</em>) – Additional keyword arguments for writer.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.writers.</span></span><span class="sig-name descname"><span class="pre">write_optional</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optional</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">continuation</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write an optional value to the destination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>Any</em>) – The destination to write to.</p></li>
+<li><p><strong>optional</strong> (<em>Any</em>) – The value to write (None if absent).</p></li>
+<li><p><strong>continuation</strong> (<em>Callable</em>) – Function to call if the value is present.</p></li>
+<li><p><strong>*args</strong> (<em>Any</em>) – Additional arguments for continuation.</p></li>
+<li><p><strong>**kwargs</strong> (<em>Any</em>) – Additional keyword arguments for continuation.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.writers.</span></span><span class="sig-name descname"><span class="pre">write_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contents</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write arbitrary text to the destination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>Any</em>) – The destination to write to.</p></li>
+<li><p><strong>contents</strong> (<em>str</em>) – The text to write.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.writers.</span></span><span class="sig-name descname"><span class="pre">write_vector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">values</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">Struct('&lt;Q')</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write a vector of values to the destination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>Any</em>) – The destination to write to.</p></li>
+<li><p><strong>values</strong> (<em>list</em><em> or </em><em>np.ndarray</em>) – The values to write.</p></li>
+<li><p><strong>type</strong> (<em>type</em><em>, </em><em>optional</em>) – The type for each value (default: constants.uint64).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.writers.</span></span><span class="sig-name descname"><span class="pre">write_waveform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">waveform</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write a waveform to the destination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>Any</em>) – The destination to write to.</p></li>
+<li><p><strong>waveform</strong> (<em>ismrmrd.Waveform</em>) – The waveform to write.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">create_roi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rgb</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(1,</span> <span class="pre">0,</span> <span class="pre">0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thickness</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">style</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">visibility</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span></dt>
+<dd><dl class="simple">
+<dt>Create an MRD-formatted ROI</dt><dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>x (1D ndarray)     : x coordinates in units of pixels, with (0,0) at the top left</p></li>
+<li><p>y (1D ndarray)     : y coordinates in units of pixels, matching the length of x</p></li>
+<li><p>rgb (3 item tuple) : Colour as an (red, green, blue) tuple normalized to 1</p></li>
+<li><p>thickness (float)  : Line thickness</p></li>
+<li><p>style (int)        : Line style (0 = solid, 1 = dashed)</p></li>
+<li><p>visibility (int)   : Line visibility (0 = false, 1 = true)</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><ul class="simple">
+<li><dl class="simple">
+<dt>roi (string list)<span class="classifier">MRD-formatted ROI, intended to be stored as a MetaAttribute</span></dt><dd><p>with field name starting with “<a href="#id1"><span class="problematic" id="id2">ROI_</span></a>”</p>
+</dd>
+</dl>
+</li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">create_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rgb</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(1,</span> <span class="pre">0,</span> <span class="pre">0)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">visibility</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">string</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span></dt>
+<dd><dl class="simple">
+<dt>Create an MRD-formatted text object</dt><dd><dl class="simple">
+<dt>Parameters:</dt><dd><ul class="simple">
+<li><p>x (float)          : x coordinate in units of pixels, with (0,0) at the top left</p></li>
+<li><p>y (float)          : y coordinate in units of pixels</p></li>
+<li><p>rgb (3 item tuple) : Colour as an (red, green, blue) tuple normalized to 1</p></li>
+<li><p>visibility (int)   : Line visibility (0 = false, 1 = true)</p></li>
+<li><p>string (string)    : Text string</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><ul class="simple">
+<li><dl class="simple">
+<dt>txt (string list)<span class="classifier">MRD-formatted text, intended to be stored as a MetaAttribute</span></dt><dd><p>with field name starting with “<a href="#id3"><span class="problematic" id="id4">Text_</span></a>”</p>
+</dd>
+</dl>
+</li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">extract_minihead_bool_param</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">miniHead</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Extract a bool parameter from the serialized text of the ICE MiniHeader</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">extract_minihead_double_param</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">miniHead</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Extract a double parameter from the serialized text of the ICE MiniHeader</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">extract_minihead_long_param</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">miniHead</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Extract a long parameter from the serialized text of the ICE MiniHeader</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">extract_minihead_param</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">miniHead</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strType</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Extract a string parameter from the serialized text of the ICE MiniHeader</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">extract_minihead_string_param</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">miniHead</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Extract a string parameter from the serialized text of the ICE MiniHeader</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">get_json_config_param</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'str'</span></span></em><span class="sig-paren">)</span></dt>
+<dd><dl class="simple">
+<dt>Read a parameter from JSON config</dt><dd><dl class="simple">
+<dt>Input:</dt><dd><ul class="simple">
+<li><p>config  : dict of parameters</p></li>
+<li><p>key     : name (key) of parameter</p></li>
+<li><p>default : value if key is not present or config is invalid</p></li>
+<li><p>type    : type casting of the parameter (int, float, string, bool)</p></li>
+</ul>
+</dd>
+<dt>Output:</dt><dd><ul class="simple">
+<li><p>value of parameter, or default if absent</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">get_meta_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">meta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Get a value from MRD Meta Attributes (returns None if key not found)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">get_sequence_resource_paths</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return the pulserver sequence-resource paths from the MRD XMLHeader.</p>
+<p>These are written by the VRE OnPrep stage of the pulserver-interpreter
+(see <code class="docutils literal notranslate"><span class="pre">mrdserver/csrc/trajectory_cache_reader.cpp::add_sequence_resource_paths</span></code>)
+based on the rhuser6/7 raw-header slots set by the PSD:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">tensor_dat_path</span></code>: absolute path to a diffusion tensor file
+(e.g. <code class="docutils literal notranslate"><span class="pre">/usr/g/bin/tensor7.dat</span></code>). Present only when the PSD’s
+<code class="docutils literal notranslate"><span class="pre">opuser3</span></code> is non-zero.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">grad_coef_path</span></code>: absolute path to a gradient coefficient file
+matching the scanner’s gradient subsystem (<code class="docutils literal notranslate"><span class="pre">cfgradcoil</span></code>).</p></li>
+</ul>
+<p>Either entry may be missing; the caller is responsible for handling
+<code class="docutils literal notranslate"><span class="pre">None</span></code> values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p>dict with keys <code class="docutils literal notranslate"><span class="pre">&quot;tensor_dat_path&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;grad_coef_path&quot;</span></code>. Values</p></li>
+<li><p>are <code class="docutils literal notranslate"><span class="pre">str</span></code> if the entry is present, otherwise <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">get_userParameterBase64_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Get a value from MRD Header userParameterBase64 (returns None if key not found)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">get_userParameterDouble_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Get a value from MRD Header userParameterDouble (returns None if key not found)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">get_userParameterLong_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Get a value from MRD Header userParameterLong (returns None if key not found)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">get_userParameterString_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Get a value from MRD Header userParameterString (returns None if key not found)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">parse_roi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">roi</span></span></em><span class="sig-paren">)</span></dt>
+<dd><dl class="simple">
+<dt>Parse an MRD-formatted ROI</dt><dd><dl class="simple">
+<dt>Input:</dt><dd><ul class="simple">
+<li><p>roi (string list)  : MRD-formatted ROI from a MetaAttribute</p></li>
+</ul>
+</dd>
+<dt>Output:</dt><dd><ul class="simple">
+<li><p>x (1D ndarray)     : x coordinates in units of pixels, with (0,0) at the top left</p></li>
+<li><p>y (1D ndarray)     : y coordinates in units of pixels, matching the length of x</p></li>
+<li><p>rgb (3 item tuple) : Colour as an (red, green, blue) tuple normalized to 1</p></li>
+<li><p>thickness (float)  : Line thickness</p></li>
+<li><p>style (int)        : Line style (0 = solid, 1 = dashed)</p></li>
+<li><p>visibility (int)   : Line visibility (0 = false, 1 = true)</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">parse_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">txt</span></span></em><span class="sig-paren">)</span></dt>
+<dd><dl class="simple">
+<dt>Parse an MRD-formatted text object</dt><dd><dl class="simple">
+<dt>Input:</dt><dd><ul class="simple">
+<li><p>txt (string list)  : MRD-formatted text from a MetaAttribute</p></li>
+</ul>
+</dd>
+<dt>Output:</dt><dd><ul class="simple">
+<li><p>x (float)          : x coordinate in units of pixels, with (0,0) at the top left</p></li>
+<li><p>y (float)          : y coordinate in units of pixels</p></li>
+<li><p>rgb (3 item tuple) : Colour as an (red, green, blue) tuple normalized to 1</p></li>
+<li><p>visibility (int)   : Line visibility (0 = false, 1 = true)</p></li>
+<li><p>string (string)    : Text string</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrdhelper.</span></span><span class="sig-name descname"><span class="pre">update_img_header_from_raw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">imgHead</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rawHead</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Populate ImageHeader fields from AcquisitionHeader</p>
+</dd></dl>
+
+<p>Convert ISMRMRD/MRD images to DICOM format.</p>
+<p>This module provides utilities to convert ISMRMRD (<code class="docutils literal notranslate"><span class="pre">ismrmrd.Image</span></code>) objects
+to DICOM datasets (<code class="docutils literal notranslate"><span class="pre">pydicom.Dataset</span></code>), populating DICOM headers from ISMRMRD
+metadata while preserving image pixel data and geometry information.</p>
+<section id="classes">
+<h3>Classes<a class="headerlink" href="#classes" title="Link to this heading">#</a></h3>
+<dl class="simple">
+<dt>MrdDicomBuilder</dt><dd><p>Stateful converter that maps ISMRMRD XML headers → DICOM datasets,
+accumulating per-scan instance numbering.</p>
+</dd>
+<dt>DicomWithName</dt><dd><p>Lightweight struct coupling a DICOM dataset with a generated filename.</p>
+</dd>
+</dl>
+</section>
+<section id="functions">
+<h3>Functions<a class="headerlink" href="#functions" title="Link to this heading">#</a></h3>
+<dl class="simple">
+<dt>to_dicom_date</dt><dd><p>Convert ISMRMRD date values to DICOM DA (YYYYMMDD) format.</p>
+</dd>
+<dt>to_dicom_time</dt><dd><p>Convert ISMRMRD time values to DICOM TM (HHMMSS) format.</p>
+</dd>
+<dt>convert_string_vrs</dt><dd><p>Recursively enforce string-type value representations in DICOM elements.</p>
+</dd>
+</dl>
+</section>
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrd2dicom.</span></span><span class="sig-name descname"><span class="pre">DicomWithName</span></span></dt>
+<dd><p>DICOM dataset coupled with a generated filename.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">dset</span></span></dt>
+<dd><p>The DICOM dataset, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if conversion failed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pydicom.Dataset or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">filename</span></span></dt>
+<dd><p>Generated filename for the DICOM instance, typically in format
+<code class="docutils literal notranslate"><span class="pre">EX&lt;StudyID&gt;_&lt;SeriesNumber&gt;_&lt;SeriesDescription&gt;_&lt;InstanceNumber&gt;.dcm</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.mrd2dicom.</span></span><span class="sig-name descname"><span class="pre">MrdDicomBuilder</span></span></dt>
+<dd><p>Stateful builder for converting ISMRMRD images to DICOM datasets.</p>
+<p>This class maintains a DICOM template and per-scan instance counter,
+allowing incremental conversion of MRD images while ensuring consistent
+numbering across a series.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>mrdHead</strong> (<em>ismrmrd.xsd.ismrmrdHeader</em>) – Parsed ISMRMRD XML header for the measurement.  Used to populate
+DICOM fields from patient, study, acquisition, and sequence metadata.</p>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">dicomDset</span></span></dt>
+<dd><p>The DICOM template, updated with metadata from <code class="docutils literal notranslate"><span class="pre">mrdHead</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pydicom.Dataset</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">mrdHead</span></span></dt>
+<dd><p>Stored reference to the input header.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ismrmrd.xsd.ismrmrdHeader</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">instanceNumber</span></span></dt>
+<dd><p>Counter that increments after each <code class="docutils literal notranslate"><span class="pre">__call__</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mrdHead</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<p>Convert a folder of DICOM files to an ISMRMRD / MRD <code class="docutils literal notranslate"><span class="pre">.h5</span></code> file.</p>
+<p>This module provides both a programmatic API and a <code class="docutils literal notranslate"><span class="pre">dicom2mrd</span></code> CLI entry
+point.  It mirrors the existing <code class="docutils literal notranslate"><span class="pre">mrd2dicom</span></code> module in the opposite direction.</p>
+<p>CLI usage:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dicom2mrd</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">dicom_folder</span> <span class="o">-</span><span class="n">o</span> <span class="n">output</span><span class="o">.</span><span class="n">h5</span>
+</pre></div>
+</div>
+<p>Or equivalently:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">pulserver</span><span class="o">.</span><span class="n">recon</span><span class="o">.</span><span class="n">dicom2mrd</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">dicom_folder</span> <span class="o">-</span><span class="n">o</span> <span class="n">output</span><span class="o">.</span><span class="n">h5</span>
+</pre></div>
+</div>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.dicom2mrd.</span></span><span class="sig-name descname"><span class="pre">dicom_folder_to_mrd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">folder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'dataset'</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Convert all DICOM files in <em>folder</em> to an ISMRMRD / MRD <code class="docutils literal notranslate"><span class="pre">.h5</span></code> file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>folder</strong> (<em>str</em><em> or </em><em>Path</em>) – Directory containing <code class="docutils literal notranslate"><span class="pre">.dcm</span></code> or <code class="docutils literal notranslate"><span class="pre">.ima</span></code> files (searched
+recursively).</p></li>
+<li><p><strong>output_file</strong> (<em>str</em><em> or </em><em>Path</em>) – Destination <code class="docutils literal notranslate"><span class="pre">.h5</span></code> file path.  Created or overwritten.</p></li>
+<li><p><strong>group</strong> (<em>str</em><em>, </em><em>optional</em>) – HDF5 group name inside the output file.  Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;dataset&quot;</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>FileNotFoundError</strong> – If <em>folder</em> contains no DICOM files.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.dicom2mrd.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>CLI entry point for the <code class="docutils literal notranslate"><span class="pre">dicom2mrd</span></code> command.</p>
+</dd></dl>
+
+<p>Offline replay of queued ISMRMRD sessions.</p>
+<p>When all recon slots are busy, pulserver.recon drains an incoming stream to an HDF5
+file and writes a <code class="docutils literal notranslate"><span class="pre">*.queued.json</span></code> sidecar alongside it.  The
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayWorker</span></code> daemon thread picks these up one at a time, acquires a
+recon slot, runs the originally requested handler through
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayConnection</span></code>, then renames the sidecar to <code class="docutils literal notranslate"><span class="pre">*.processed.json</span></code>
+(or <code class="docutils literal notranslate"><span class="pre">*.failed.json</span></code> on error).</p>
+<p>Recovery after server crash:  <code class="docutils literal notranslate"><span class="pre">*.processing.json</span></code> files left by the previous
+process are treated identically to <code class="docutils literal notranslate"><span class="pre">*.queued.json</span></code> on startup.</p>
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.replay.</span></span><span class="sig-name descname"><span class="pre">ReplayConnection</span></span></dt>
+<dd><p>Connection-like facade that reads from a saved ISMRMRD HDF5 file.</p>
+<p>Handlers see the same <code class="docutils literal notranslate"><span class="pre">__iter__</span></code> / <code class="docutils literal notranslate"><span class="pre">send</span></code> / <code class="docutils literal notranslate"><span class="pre">socket.write</span></code>
+interface as a live <a class="reference internal" href="generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection" title="pulserver.recon.connection.Connection"><code class="xref py py-class docutils literal notranslate"><span class="pre">Connection</span></code></a>.
+Outputs (DICOM images, MRD images) are written to <em>output_dir</em>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mrd_path</strong> (<em>str</em>) – Path to the ISMRMRD HDF5 file to replay.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em>) – Directory where handler outputs are written.</p></li>
+<li><p><strong>group</strong> (<em>str</em>) – HDF5 dataset group name (default <code class="docutils literal notranslate"><span class="pre">&quot;dataset&quot;</span></code>).</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mrd_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'dataset'</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">predicate</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>No-op: replay does not filter items.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">send</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Route handler output to <em>output_dir</em> instead of a TCP socket.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">shutdown_close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>No-op: no socket to close.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.replay.</span></span><span class="sig-name descname"><span class="pre">ReplayWorker</span></span></dt>
+<dd><p>Background daemon thread that processes queued ISMRMRD sessions.</p>
+<p>Scans bucket and output directories for <code class="docutils literal notranslate"><span class="pre">*.queued.json</span></code> (and stale
+<code class="docutils literal notranslate"><span class="pre">*.processing.json</span></code> from a previous crash) sidecars, processes them
+one at a time through the requested handler, then renames the sidecar
+to <code class="docutils literal notranslate"><span class="pre">*.processed.json</span></code> (success) or <code class="docutils literal notranslate"><span class="pre">*.failed.json</span></code> (error).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>server</strong> (<a class="reference internal" href="generated/recon/pulserver.recon.server.Server.html#pulserver.recon.server.Server" title="pulserver.recon.server.Server"><em>Server</em></a>) – The running <a class="reference internal" href="generated/recon/pulserver.recon.server.Server.html#pulserver.recon.server.Server" title="pulserver.recon.server.Server"><code class="xref py py-class docutils literal notranslate"><span class="pre">Server</span></code></a> instance.  The worker
+calls <code class="docutils literal notranslate"><span class="pre">server._slots.acquire()</span></code> / <code class="docutils literal notranslate"><span class="pre">server._slots.release()</span></code>
+and <code class="docutils literal notranslate"><span class="pre">server._resolve_handler()</span></code> / <code class="docutils literal notranslate"><span class="pre">server.output_dir</span></code>.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">server</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>This constructor should always be called with keyword arguments. Arguments are:</p>
+<p><em>group</em> should be None; reserved for future extension when a ThreadGroup
+class is implemented.</p>
+<p><em>target</em> is the callable object to be invoked by the run()
+method. Defaults to None, meaning nothing is called.</p>
+<p><em>name</em> is the thread name. By default, a unique name is constructed of
+the form “Thread-N” where N is a small decimal number.</p>
+<p><em>args</em> is a list or tuple of arguments for the target invocation. Defaults to ().</p>
+<p><em>kwargs</em> is a dictionary of keyword arguments for the target
+invocation. Defaults to {}.</p>
+<p><em>context</em> is the contextvars.Context value to use for the thread.
+The default value is None, which means to check
+sys.flags.thread_inherit_context.  If that flag is true, use a copy
+of the context of the caller.  If false, use an empty context.  To
+explicitly start with an empty context, pass a new instance of
+contextvars.Context().  To explicitly start with a copy of the current
+context, pass the value from contextvars.copy_context().</p>
+<p>If a subclass overrides the constructor, it must make sure to invoke
+the base class constructor (Thread.__init__()) before doing anything
+else to the thread.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>Method representing the thread’s activity.</p>
+<p>You may override this method in a subclass. The standard run() method
+invokes the callable object passed to the object’s constructor as the
+target argument, if any, with sequential and keyword arguments taken
+from the args and kwargs arguments, respectively.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span></dt>
+<dd><p>Signal the worker to exit after the current iteration.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.replay.</span></span><span class="sig-name descname"><span class="pre">enqueue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mrd_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">handler_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bucket_pid</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Write a <code class="docutils literal notranslate"><span class="pre">*.queued.json</span></code> sidecar next to <em>mrd_path</em>, atomically.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mrd_path</strong> (<em>str</em>) – Absolute path to the ISMRMRD HDF5 file being queued.</p></li>
+<li><p><strong>handler_name</strong> (<em>str</em>) – Name of the reconstruction handler to run when a slot becomes free.</p></li>
+<li><p><strong>bucket_pid</strong> (<em>str</em><em> or </em><em>None</em>) – Bucket PID extracted from the ISMRMRD header, for cross-referencing.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>str</em> – Path of the sidecar file that was written.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>RAM-based concurrency limit for ISMRMRD reconstruction sessions.</p>
+<p>The default estimate of 48 GiB per reconstruction session is sized for modern
+iterative / deep-learning MR reconstructions on a GE Premier/UHP-class server.
+On a 156 GiB VRE box (~142 GiB available), the formula yields 2 slots:</p>
+<blockquote>
+<div><p>max(1, floor(142 × 0.8 / 48)) = 2   → 96 GiB working set</p>
+</div></blockquote>
+<p>Both <code class="docutils literal notranslate"><span class="pre">per_recon_gb</span></code> and the overall limit are overridable at runtime via CLI
+flags (<code class="docutils literal notranslate"><span class="pre">--per-recon-gb</span></code>, <code class="docutils literal notranslate"><span class="pre">--max-recon</span></code>) or the environment variables
+<code class="docutils literal notranslate"><span class="pre">MRDSERVER_PER_RECON_GB</span></code> / <code class="docutils literal notranslate"><span class="pre">MRDSERVER_MAX_RECON</span></code>.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.concurrency.</span></span><span class="sig-name descname"><span class="pre">compute_max_concurrent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">per_recon_gb</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">48.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">headroom_fraction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">override</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return the maximum number of simultaneous reconstruction sessions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>per_recon_gb</strong> (<em>float</em>) – Estimated RAM (GiB) consumed by one reconstruction session.
+Default: 48 GiB.</p></li>
+<li><p><strong>headroom_fraction</strong> (<em>float</em>) – Fraction of available RAM allocated to reconstruction.
+Default: 0.8 (80 %).</p></li>
+<li><p><strong>override</strong> (<em>int</em><em> or </em><em>None</em>) – If set and &gt; 0, skip auto-detection and return this value directly.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>int</em> – Number of concurrent reconstruction sessions allowed (minimum 1).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Constants for ISMRMRD message handling.</p>
+<p>This module defines constants for Gadgetron and ISMRMRD message identifiers,
+struct formats for binary data serialization, and logging severity levels.</p>
+<p>Simple 2D FFT reconstruction handler.</p>
+<p>Accumulates k-space lines per slice, applies 2D IFFT + root-sum-of-squares
+coil combination, and sends back ISMRMRD images.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.handlers.simplefft.</span></span><span class="sig-name descname"><span class="pre">process</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">connection</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Run simple 2D FFT reconstruction.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>connection</strong> (<a class="reference internal" href="generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection" title="pulserver.recon.connection.Connection"><em>Connection</em></a>) – Active MRD connection yielding <code class="docutils literal notranslate"><span class="pre">ismrmrd.Acquisition</span></code> items.</p></li>
+<li><p><strong>config</strong> (<em>Any</em>) – Configuration dict/string from the CONFIG message.</p></li>
+<li><p><strong>metadata</strong> (<em>Any</em>) – Parsed ISMRMRD XML header (<code class="docutils literal notranslate"><span class="pre">ismrmrd.xsd</span></code> object or raw text).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Multi-slice 2D FFT reconstruction with DICOM export.</p>
+<p>Accumulates all readouts until <code class="docutils literal notranslate"><span class="pre">ACQ_LAST_IN_MEASUREMENT</span></code>, reshapes into
+<code class="docutils literal notranslate"><span class="pre">[cha,</span> <span class="pre">RO,</span> <span class="pre">PE,</span> <span class="pre">SLC]</span></code>, applies 2D IFFT + coil combine, and sends back
+DICOM images via the <code class="docutils literal notranslate"><span class="pre">mrd2dicom</span></code> converter.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.handlers.fftrecon.</span></span><span class="sig-name descname"><span class="pre">process</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">connection</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Run multi-slice 2D FFT reconstruction with DICOM export.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>connection</strong> (<a class="reference internal" href="generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection" title="pulserver.recon.connection.Connection"><em>Connection</em></a>) – Active MRD connection yielding <code class="docutils literal notranslate"><span class="pre">ismrmrd.Acquisition</span></code> items.</p></li>
+<li><p><strong>config</strong> (<em>Any</em>) – Configuration dict/string from the CONFIG message.</p></li>
+<li><p><strong>metadata</strong> (<em>Any</em>) – Parsed ISMRMRD XML header.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Save-data-only handler: drains all acquisitions without reconstruction.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.handlers.savedataonly.</span></span><span class="sig-name descname"><span class="pre">process</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">connection</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Drain all incoming data without reconstruction.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>connection</strong> (<a class="reference internal" href="generated/recon/pulserver.recon.connection.Connection.html#pulserver.recon.connection.Connection" title="pulserver.recon.connection.Connection"><em>Connection</em></a>) – Active MRD connection.</p></li>
+<li><p><strong>config</strong> (<em>Any</em>) – Unused configuration payload.</p></li>
+<li><p><strong>metadata</strong> (<em>Any</em>) – Unused ISMRMRD XML header.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
 </section>
 
 
@@ -534,20 +2509,20 @@ their own grouped reference once the public recon boundary is formalised.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="generated/io/pulserver.io.write.html"
+       href="generated/io/pulserver.io.read_asc_bands.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pulserver.io.write</p>
+        <p class="prev-next-title">pulserver.io.read_asc_bands</p>
       </div>
     </a>
     <a class="right-next"
-       href="gehc.html"
+       href="generated/recon/pulserver.recon.linops.deepinverse_multicoil_mri.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title"><code class="docutils literal notranslate"><span class="pre">pulserver.gehc</span></code></p>
+        <p class="prev-next-title">pulserver.recon.linops.deepinverse_multicoil_mri</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -557,6 +2532,31 @@ their own grouped reference once the public recon boundary is formalised.</p>
             </div>
             
             
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-primitives">Reconstruction primitives</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gadgetron-style-mrd-helpers">Gadgetron-style MRD helpers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#epi-and-sms-preprocessing">EPI and SMS preprocessing</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#server-submodules">Server submodules</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#submodule-api-reference">Submodule API reference</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#classes">Classes</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#functions">Functions</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
           </div>

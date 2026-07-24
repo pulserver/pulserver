@@ -191,22 +191,15 @@
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting started</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../tutorials.html">Tutorials</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/build_a_sequence_plugin.html">Build a sequence plugin with the design toolbox</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../how_to.html">How-to guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../how-to/write_a_plugin_with_modules.html">How to write a sequence plugin with the design toolbox</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../how-to/customise_a_plugin.html">How to customise a plugin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../how-to/write_a_new_module.html">How to write a new module or loop structure</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../../examples.html">Examples</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2 current active has-children"><a class="reference internal" href="../../pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l3 current active"><a class="current reference internal" href="#">pulserver.pypulseq.Opts</a></li>
-<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.Sequence.html">pulserver.pypulseq.Sequence</a></li>
-<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.get_supported_labels.html">pulserver.pypulseq.get_supported_labels</a></li>
-<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_label.html">pulserver.pypulseq.make_label</a></li>
-<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rf_shim.html">pulserver.pypulseq.make_rf_shim</a></li>
-<li class="toctree-l3"><a class="reference internal" href="pulserver.pypulseq.make_rotation.html">pulserver.pypulseq.make_rotation</a></li>
-</ul>
-</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/sampling.html">Scan loops</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../../index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
@@ -331,16 +324,57 @@
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../io.html"><code class="docutils literal notranslate"><span class="pre">pulserver.io</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.write.html">pulserver.io.write</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.read.html">pulserver.io.read</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.read_esp_bands.html">pulserver.io.read_esp_bands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.read_asc_bands.html">pulserver.io.read_asc_bands</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../recon.html"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../gehc.html"><code class="docutils literal notranslate"><span class="pre">pulserver.gehc</span></code></a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../recon.html"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.linops.deepinverse_multicoil_mri.html">pulserver.recon.linops.deepinverse_multicoil_mri</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.linops.mrpro_operator.html">pulserver.recon.linops.mrpro_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.linops.mrinufft_operator.html">pulserver.recon.linops.mrinufft_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.linops.available_nufft_backends.html">pulserver.recon.linops.available_nufft_backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.prox.deepinverse_prior.html">pulserver.recon.prox.deepinverse_prior</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.optimizers.mrpro_optimizer.html">pulserver.recon.optimizers.mrpro_optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.optimizers.deepinverse_optimizer.html">pulserver.recon.optimizers.deepinverse_optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.calibration.nlinv_sensitivities.html">pulserver.recon.calibration.nlinv_sensitivities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.calibration.estimate_sensitivities.html">pulserver.recon.calibration.estimate_sensitivities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.metadata.MrdMetadata.html">pulserver.recon.metadata.MrdMetadata</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.metadata.user_parameter.html">pulserver.recon.metadata.user_parameter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.metadata.acquisition_label.html">pulserver.recon.metadata.acquisition_label</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.metadata.acquisition_labels.html">pulserver.recon.metadata.acquisition_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.metadata.has_acquisition_flag.html">pulserver.recon.metadata.has_acquisition_flag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.grouping.group_by_labels.html">pulserver.recon.grouping.group_by_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.grouping.split_on_flag.html">pulserver.recon.grouping.split_on_flag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.grouping.filter_acquisitions.html">pulserver.recon.grouping.filter_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.serialization.images_to_dicom.html">pulserver.recon.serialization.images_to_dicom</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.serialization.write_dicom_series.html">pulserver.recon.serialization.write_dicom_series</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.mrd2dicom.MrdDicomBuilder.html">pulserver.recon.mrd2dicom.MrdDicomBuilder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.dicom2mrd.dicom_folder_to_mrd.html">pulserver.recon.dicom2mrd.dicom_folder_to_mrd</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.epi.EpiAcquisitionGroups.html">pulserver.recon.epi.EpiAcquisitionGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.epi.partition_epi_acquisitions.html">pulserver.recon.epi.partition_epi_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.sms.SmsEpiInputs.html">pulserver.recon.sms.SmsEpiInputs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.distortion.run_pyhysco.html">pulserver.recon.distortion.run_pyhysco</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.connection.Connection.html">pulserver.recon.connection.Connection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.server.Server.html">pulserver.recon.server.Server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.rtp_connection.RtpServer.html">pulserver.recon.rtp_connection.RtpServer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.main.main.html">pulserver.recon.main.main</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.replay.html">pulserver.recon.replay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.readers.html">pulserver.recon.readers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.writers.html">pulserver.recon.writers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.handlers.html">pulserver.recon.handlers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.mrdhelper.html">pulserver.recon.mrdhelper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.constants.html">pulserver.recon.constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../recon/pulserver.recon.concurrency.html">pulserver.recon.concurrency</a></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../reference/sampling.html">Scan loops</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/mechanical_resonance_safety.html">Mechanical Resonance Safety: Structural Acoustic Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/sequence_representation.html">How a sequence is represented</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/mechanical_resonance_safety.html">Mechanical resonance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/pns_safety.html">Peripheral nerve stimulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/performance.html">Runtime and memory</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../more.html">More</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -520,7 +554,11 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts"><code class="docutils literal notranslate"><span class="pre">Opts</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.reset_default"><code class="docutils literal notranslate"><span class="pre">Opts.reset_default()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.__init__"><code class="docutils literal notranslate"><span class="pre">Opts.__init__()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.default_stim_threshold"><code class="docutils literal notranslate"><span class="pre">Opts.default_stim_threshold()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.forbidden_bands_hz_per_m"><code class="docutils literal notranslate"><span class="pre">Opts.forbidden_bands_hz_per_m()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.set_as_default"><code class="docutils literal notranslate"><span class="pre">Opts.set_as_default()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.set_forbidden_bands"><code class="docutils literal notranslate"><span class="pre">Opts.set_forbidden_bands()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.forbidden_bands"><code class="docutils literal notranslate"><span class="pre">Opts.forbidden_bands</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -544,6 +582,42 @@
 defaults deliberately use the coarsest common GE/Siemens values so a
 sequence designed without explicit scanner limits is not silently tied to
 either vendor.</p>
+<p>Beyond upstream’s limits it also carries the hardware metadata the safety
+views need — the PNS nerve-model constants and the mechanical resonance
+forbidden bands — so <a class="reference internal" href="pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.pns" title="pulserver.pypulseq.Sequence.pns"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pulserver.pypulseq.Sequence.pns()</span></code></a> and
+<a class="reference internal" href="pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.grad_spectrum" title="pulserver.pypulseq.Sequence.grad_spectrum"><code class="xref py py-meth docutils literal notranslate"><span class="pre">grad_spectrum()</span></code></a> can pick them up from
+the system rather than being told twice. All of it is optional; a sequence
+that never looks at PNS never needs to set any of it. Vendor coil tables
+that fill these in live in separately distributed vendor extension
+packages, not in this repository.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>b1_max_uT</strong> (<em>float</em><em>, </em><em>optional</em>) – RF peak limit in microtesla.</p></li>
+<li><p><strong>psd_rf_wait_s</strong> (<em>float</em><em>, </em><em>default 0.0</em>) – Extra RF / gradient wait times in seconds.</p></li>
+<li><p><strong>psd_grd_wait_s</strong> (<em>float</em><em>, </em><em>default 0.0</em>) – Extra RF / gradient wait times in seconds.</p></li>
+<li><p><strong>chronaxie_us</strong> (<em>float</em><em>, </em><em>optional</em>) – PNS chronaxie in microseconds.</p></li>
+<li><p><strong>rheobase</strong> (<em>float</em><em>, </em><em>optional</em>) – PNS rheobase in Hz/m/s.</p></li>
+<li><p><strong>alpha</strong> (<em>float</em><em>, </em><em>optional</em>) – PNS coil attenuation factor; the stimulation threshold is
+<code class="docutils literal notranslate"><span class="pre">rheobase</span> <span class="pre">/</span> <span class="pre">alpha</span></code>.</p></li>
+<li><p><strong>pns_hardware</strong> (<em>optional</em>) – SAFE hardware description, or the path to the Siemens <code class="docutils literal notranslate"><span class="pre">.asc</span></code> file
+holding one, in the form <code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseq.Sequence.calculate_pns()</span></code>
+takes. Only the SAFE nerve model reads it; the Irnich model uses the
+three constants above.</p></li>
+<li><p><strong>forbidden_bands</strong> (<em>sequence</em><em> of </em><em>tuple</em><em>, </em><em>optional</em>) – Mechanical resonance bands as
+<code class="docutils literal notranslate"><span class="pre">(freq_min_hz,</span> <span class="pre">freq_max_hz,</span> <span class="pre">max_amplitude_mT_per_m[,</span> <span class="pre">channel])</span></code>,
+where channel is <code class="docutils literal notranslate"><span class="pre">'gx'</span></code>, <code class="docutils literal notranslate"><span class="pre">'gy'</span></code> or <code class="docutils literal notranslate"><span class="pre">'gz'</span></code>. Read them from a
+vendor table with <a class="reference internal" href="../io/pulserver.io.read_esp_bands.html#pulserver.io.read_esp_bands" title="pulserver.io.read_esp_bands"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.io.read_esp_bands()</span></code></a> (GE) or
+<a class="reference internal" href="../io/pulserver.io.read_asc_bands.html#pulserver.io.read_asc_bands" title="pulserver.io.read_asc_bands"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.io.read_asc_bands()</span></code></a> (Siemens).</p></li>
+<li><p><strong>adc_ringdown_time</strong> (<em>float</em>) – Additional hardware timing metadata, in seconds.</p></li>
+<li><p><strong>segment_dead_time</strong> (<em>float</em>) – Additional hardware timing metadata, in seconds.</p></li>
+<li><p><strong>segment_ringdown_time</strong> (<em>float</em>) – Additional hardware timing metadata, in seconds.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Public forbidden-band units are <code class="docutils literal notranslate"><span class="pre">(Hz,</span> <span class="pre">mT/m)</span></code>. The C safety backend
+expects <code class="docutils literal notranslate"><span class="pre">(Hz,</span> <span class="pre">Hz/m)</span></code>; use <a class="reference internal" href="#pulserver.pypulseq.Opts.forbidden_bands_hz_per_m" title="pulserver.pypulseq.Opts.forbidden_bands_hz_per_m"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forbidden_bands_hz_per_m()</span></code></a>.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.pypulseq.Opts.reset_default">
 <span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">reset_default</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Opts.reset_default" title="Link to this definition">#</a></dt>
@@ -552,13 +626,51 @@ either vendor.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.pypulseq.Opts.__init__">
-<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adc_dead_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_raster_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">block_duration_raster</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gamma</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grad_raster_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grad_unit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Hz/m'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_grad</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_slew</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rf_dead_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rf_raster_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rf_ringdown_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_samples_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_samples_divisor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rise_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slew_unit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Hz/m/s'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B0</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Opts.__init__" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adc_dead_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_raster_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">block_duration_raster</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gamma</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grad_raster_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grad_unit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Hz/m'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_grad</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_slew</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rf_dead_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rf_raster_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rf_ringdown_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_samples_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_samples_divisor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rise_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slew_unit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Hz/m/s'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B0</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">b1_max_uT</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd_rf_wait_s</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">psd_grd_wait_s</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chronaxie_us</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rheobase</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pns_hardware</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">forbidden_bands</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adc_ringdown_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segment_dead_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segment_ringdown_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Opts.__init__" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Opts.default_stim_threshold">
+<span class="sig-name descname"><span class="pre">default_stim_threshold</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Opts.default_stim_threshold" title="Link to this definition">#</a></dt>
+<dd><p>PNS stimulation threshold <code class="docutils literal notranslate"><span class="pre">rheobase</span> <span class="pre">/</span> <span class="pre">alpha</span></code> in Hz/m/s, if known.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Opts.forbidden_bands_hz_per_m">
+<span class="sig-name descname"><span class="pre">forbidden_bands_hz_per_m</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Opts.forbidden_bands_hz_per_m" title="Link to this definition">#</a></dt>
+<dd><p>Mechanical resonance bands in backend units <code class="docutils literal notranslate"><span class="pre">(Hz,</span> <span class="pre">Hz/m)</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>include_channel</strong> (<em>bool</em><em>, </em><em>default False</em>) – Keep the channel tag on bands that carry one.</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.pypulseq.Opts.set_as_default">
 <span class="sig-name descname"><span class="pre">set_as_default</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Opts.set_as_default" title="Link to this definition">#</a></dt>
 <dd><p>Use this object as the default for Pulserver RF factories.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Opts.set_forbidden_bands">
+<span class="sig-name descname"><span class="pre">set_forbidden_bands</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">forbidden_bands</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.pypulseq.Opts.set_forbidden_bands" title="Link to this definition">#</a></dt>
+<dd><p>Set the mechanical resonance bands, in <code class="docutils literal notranslate"><span class="pre">(Hz,</span> <span class="pre">mT/m)</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>forbidden_bands</strong> (<em>sequence</em><em> of </em><em>tuple</em>) – <code class="docutils literal notranslate"><span class="pre">(freq_min_hz,</span> <span class="pre">freq_max_hz,</span> <span class="pre">max_amplitude_mT_per_m)</span></code>, optionally
+with a trailing <code class="docutils literal notranslate"><span class="pre">'gx'</span></code> / <code class="docutils literal notranslate"><span class="pre">'gy'</span></code> / <code class="docutils literal notranslate"><span class="pre">'gz'</span></code> channel tag.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If a band’s bounds or amplitude limit are invalid.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="pulserver.pypulseq.Opts.forbidden_bands">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">forbidden_bands</span></span><a class="headerlink" href="#pulserver.pypulseq.Opts.forbidden_bands" title="Link to this definition">#</a></dt>
+<dd><p>Mechanical resonance bands in public units <code class="docutils literal notranslate"><span class="pre">(Hz,</span> <span class="pre">mT/m)</span></code>.</p>
 </dd></dl>
 
 </dd></dl>
@@ -615,7 +727,11 @@ either vendor.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts"><code class="docutils literal notranslate"><span class="pre">Opts</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.reset_default"><code class="docutils literal notranslate"><span class="pre">Opts.reset_default()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.__init__"><code class="docutils literal notranslate"><span class="pre">Opts.__init__()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.default_stim_threshold"><code class="docutils literal notranslate"><span class="pre">Opts.default_stim_threshold()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.forbidden_bands_hz_per_m"><code class="docutils literal notranslate"><span class="pre">Opts.forbidden_bands_hz_per_m()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.set_as_default"><code class="docutils literal notranslate"><span class="pre">Opts.set_as_default()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.set_forbidden_bands"><code class="docutils literal notranslate"><span class="pre">Opts.set_forbidden_bands()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.pypulseq.Opts.forbidden_bands"><code class="docutils literal notranslate"><span class="pre">Opts.forbidden_bands</span></code></a></li>
 </ul>
 </li>
 </ul>

@@ -21,8 +21,8 @@ class Opts(_pp.Opts):
     :meth:`~pulserver.pypulseq.Sequence.grad_spectrum` can pick them up from
     the system rather than being told twice. All of it is optional; a sequence
     that never looks at PNS never needs to set any of it. Vendor coil tables
-    that fill these in live in the vendor extension packages (see
-    ``pulserver.gehc``).
+    that fill these in live in separately distributed vendor extension
+    packages, not in this repository.
 
     Parameters
     ----------

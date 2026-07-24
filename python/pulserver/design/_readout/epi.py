@@ -89,6 +89,7 @@ class _EpiState:
     pe_start: int | tuple[int, int]
     rotation: object | None
     labels: np.ndarray | None = None
+    adc_labels: tuple[object, ...] = ()
 
 
 def _floor_to_raster(value_s: float, raster_s: float) -> float:
@@ -291,21 +292,52 @@ def _build_readout_x_blipped(opts, ro_axis, nx, fov_x_m, bandwidth_hz_px, oversa
     )
 
 
-def _prewind_events(system, ro_prewinder, pe, pe_area, par, par_area, rephasing):
+def _prewind_worst_area(axis, rephasing):
+    """Worst-case ``|merged prewind area|`` on ``axis.axis`` over every shot (own encode + any shared rephasing)."""
+    if axis is None:
+        return 0.0
+    shift = rephasing.get(axis.axis, 0.0)
+    return float(np.max(np.abs(axis.areas + shift)))
+
+
+def _prewind_template(system, axis, rephasing, duration_s):
+    """One canonical prewind trapezoid for ``axis`` at its worst-case merged area (see line.py's ``_trap_template``).
+
+    Every shot's smaller-magnitude merged area is realised by scaling this
+    one shape -- otherwise every distinct pe_idx/par_idx produces its own
+    base-block gradient shape (``pp.make_trapezoid(area=..., system=...)``
+    with no fixed ``duration`` always takes the "shortest duration for area"
+    path, which is a different rise/flat/fall split per distinct area).
+    Returns ``(template_or_None, worst_mag)``.
+    """
+    if axis is None:
+        return None, 0.0
+    worst = _prewind_worst_area(axis, rephasing)
+    if worst <= 0.0:
+        return None, 0.0
+    return pp.make_trapezoid(channel=axis.axis, area=worst, duration=duration_s, system=system), worst
+
+
+def _prewind_events(system, ro_prewinder, pe, pe_area, pe_template, pe_worst, par, par_area, par_template, par_worst, rephasing):
     """Prewind-block gradients: the readout prewinder, the encodes, the rephasing.
 
     A slice rephaser sharing an axis with an encode is *merged* into it --
     two gradients cannot occupy one channel in one block -- while one on a
     free axis rides alongside. Only the encoding half is ever unwound later;
-    a rephaser is a one-way moment.
+    a rephaser is a one-way moment. The pe/par encode is realised from its
+    precomputed template (see :func:`_prewind_template`) rather than a fresh
+    ``make_trapezoid`` call.
     """
     pending = dict(rephasing)
     events = [ro_prewinder]
-    for axis, area in ((pe, pe_area), (par, par_area)):
+    for axis, area, template, worst in ((pe, pe_area, pe_template, pe_worst), (par, par_area, par_template, par_worst)):
         if axis is None:
             continue
         merged = area + pending.pop(axis.axis, 0.0)
-        events.append(pp.make_trapezoid(channel=axis.axis, area=merged, system=system))
+        if template is None:
+            events.append(pp.make_trapezoid(channel=axis.axis, area=merged, system=system))
+        else:
+            events.append(pp.scale_grad(template, merged / worst))
     for channel, area in pending.items():
         events.append(pp.make_trapezoid(channel=channel, area=area, system=system))
     return events
@@ -353,6 +385,9 @@ class _EpiTrainBlipped(Readout):
         oversamp=1.0,
         ramp_sample=True,
         start_polarity_positive=True,
+        blip_duration_s=None,
+        caipi_axis=None,
+        caipi_blip_area=0.0,
         ro_axis="x",
         slice_rephasing=None,
         derate=True,
@@ -368,6 +403,15 @@ class _EpiTrainBlipped(Readout):
         self._ramp_sample = bool(ramp_sample)
         self._bandwidth_hz_px = float(bandwidth_hz_px)
         self._oversamp = float(oversamp)
+        self._fixed_blip_duration_s = None if blip_duration_s is None else float(blip_duration_s)
+        if self._fixed_blip_duration_s is not None and self._fixed_blip_duration_s < 0.0:
+            raise ValueError("blip_duration_s must be non-negative")
+        self.caipi_axis = caipi_axis
+        self.caipi_blip_area = float(caipi_blip_area)
+        if self.caipi_axis is None and self.caipi_blip_area != 0.0:
+            raise ValueError("caipi_axis is required when caipi_blip_area is non-zero")
+        if self.caipi_axis == self.ro_axis:
+            raise ValueError("caipi_axis must differ from the readout axis")
 
         self._pe = _make_axis(pe_spec)
         self._par = _make_axis(par_spec)
@@ -394,9 +438,18 @@ class _EpiTrainBlipped(Readout):
         dur_par = _min_blip_duration(
             self._opts, self._par.axis if self._par else None, getattr(self._par, "delta_k", 0.0), deltas_par
         )
-        worst = max(dur_pe, dur_par)
-        blip_duration = ceil_to_raster(worst, 2.0 * raster) if worst > 0.0 else 0.0
+        dur_caipi = (
+            pp.calc_duration(
+                pp.make_trapezoid(channel=self.caipi_axis, area=self.caipi_blip_area, system=self._opts)
+            )
+            if self.caipi_blip_area != 0.0 and self.etl > 1
+            else 0.0
+        )
+        worst = max(dur_pe, dur_par, dur_caipi)
+        requested = max(worst, self._fixed_blip_duration_s or 0.0)
+        blip_duration = ceil_to_raster(requested, 2.0 * raster) if requested > 0.0 else 0.0
         self._blip_duration = blip_duration
+        self.blip_duration_s = blip_duration
 
         self._ro = _build_readout_x_blipped(
             self._opts,
@@ -414,9 +467,17 @@ class _EpiTrainBlipped(Readout):
 
         self._pe_events = self._axis_events(self._pe, deltas_pe, blip_duration)
         self._par_events = self._axis_events(self._par, deltas_par, blip_duration)
+        self._caipi_events = self._constant_blip_events(blip_duration)
 
-        gx_pre_dur = _prewind_duration(self._opts, self._make_prephase_x(), self._pe, self._par, self._slice_rephasing)
+        self._gx_prephase = self._make_prephase_x()
+        gx_pre_dur = _prewind_duration(self._opts, self._gx_prephase, self._pe, self._par, self._slice_rephasing)
         self.t_prephase_s = gx_pre_dur
+        self._pe_prewind_tmpl, self._pe_prewind_worst = _prewind_template(
+            self._opts, self._pe, self._slice_rephasing, gx_pre_dur
+        )
+        self._par_prewind_tmpl, self._par_prewind_worst = _prewind_template(
+            self._opts, self._par, self._slice_rephasing, gx_pre_dur
+        )
         self.duration = gx_pre_dur + self.etl * self.esp
 
     def _axis_events(self, axis, deltas, blip_duration):
@@ -446,6 +507,24 @@ class _EpiTrainBlipped(Readout):
             events.append(_combine_flanking_halves(before, after, gx_anchor, self._opts))
         return events
 
+    def _constant_blip_events(self, blip_duration):
+        """Return split, equal-area CAIPI blips between every pair of EPI lines."""
+        if self.caipi_blip_area == 0.0 or self.etl < 2 or blip_duration == 0.0:
+            return [None] * self.etl
+        template = pp.make_trapezoid(
+            channel=self.caipi_axis, area=self.caipi_blip_area, duration=blip_duration, system=self._opts
+        )
+        before_after = pp.split_gradient_at(grad=template, time_point=blip_duration / 2.0, system=self._opts)
+        return [
+            _combine_flanking_halves(
+                before_after[1] if line > 0 else None,
+                before_after[0] if line < self.etl - 1 else None,
+                self._ro.gx_pos,
+                self._opts,
+            )
+            for line in range(self.etl)
+        ]
+
     def _make_prephase_x(self):
         area = -0.5 * self._ro.k_width if self._start_pos else 0.5 * self._ro.k_width
         return pp.make_trapezoid(channel=self.ro_axis, area=area, system=self._opts)
@@ -465,9 +544,11 @@ class _EpiTrainBlipped(Readout):
 
     def _build_blocks(self):
         state = self._require_state()
-        return self._collect_blocks(lambda seq: self._run(seq, state.pe_start, state.rotation, state.labels))
+        return self._collect_blocks(
+            lambda seq: self._run(seq, state.pe_start, state.rotation, state.labels, state.adc_labels)
+        )
 
-    def _run(self, seq, pe_start, rotation, labels=None):
+    def _run(self, seq, pe_start, rotation, labels=None, adc_labels=()):
         if seq is None:
             import pulserver.pypulseq as _ps
 
@@ -479,11 +560,15 @@ class _EpiTrainBlipped(Readout):
 
         pre = _prewind_events(
             self._opts,
-            self._make_prephase_x(),
+            self._gx_prephase,
             self._pe,
             self._pe.areas[pe_idx + int(self._mask_pe[0])] if self._pe is not None else 0.0,
+            self._pe_prewind_tmpl,
+            self._pe_prewind_worst,
             self._par,
             self._par.areas[par_idx + int(self._mask_par[0])] if self._par is not None else 0.0,
+            self._par_prewind_tmpl,
+            self._par_prewind_worst,
             self._slice_rephasing,
         )
         pre_aligned = pp.align(right=pre)
@@ -499,11 +584,13 @@ class _EpiTrainBlipped(Readout):
             if self._par is not None:
                 line_labels.append(pp.make_label(type="SET", label=self._par.label, value=int(absolute_labels[j, 1])))
 
-            events = [gx, adc, *line_labels]
+            events = [gx, adc, *line_labels, *adc_labels]
             if self._pe_events[j] is not None:
                 events.append(self._pe_events[j])
             if self._par_events[j] is not None:
                 events.append(self._par_events[j])
+            if self._caipi_events[j] is not None:
+                events.append(self._caipi_events[j])
             if rotation is not None:
                 events.append(rotation)
             seq.add_block(*events)
@@ -650,8 +737,15 @@ class _EpiTrainFlyback(Readout):
         self._par_gap_events = _flyback_axis_events(self._opts, self._par, deltas_par, flyback_duration, n_gaps)
 
         self.esp = pp.calc_duration(self._ro.gx) + self._flyback_duration
-        gx_pre_dur = _prewind_duration(self._opts, self._make_prephase_x(), self._pe, self._par, self._slice_rephasing)
+        self._gx_prephase = self._make_prephase_x()
+        gx_pre_dur = _prewind_duration(self._opts, self._gx_prephase, self._pe, self._par, self._slice_rephasing)
         self.t_prephase_s = gx_pre_dur
+        self._pe_prewind_tmpl, self._pe_prewind_worst = _prewind_template(
+            self._opts, self._pe, self._slice_rephasing, gx_pre_dur
+        )
+        self._par_prewind_tmpl, self._par_prewind_worst = _prewind_template(
+            self._opts, self._par, self._slice_rephasing, gx_pre_dur
+        )
         self.duration = (
             gx_pre_dur + self.etl * pp.calc_duration(self._ro.gx) + max(self.etl - 1, 0) * self._flyback_duration
         )
@@ -684,11 +778,15 @@ class _EpiTrainFlyback(Readout):
 
         pre = _prewind_events(
             self._opts,
-            self._make_prephase_x(),
+            self._gx_prephase,
             self._pe,
             self._pe.areas[pe_idx + int(self._mask_pe[0])] if self._pe is not None else 0.0,
+            self._pe_prewind_tmpl,
+            self._pe_prewind_worst,
             self._par,
             self._par.areas[par_idx + int(self._mask_par[0])] if self._par is not None else 0.0,
+            self._par_prewind_tmpl,
+            self._par_prewind_worst,
             self._slice_rephasing,
         )
         pre_aligned = pp.align(right=pre)
@@ -748,6 +846,14 @@ class Epi2D(_EpiTrainBlipped):
         (default), else only the flat top.
     start_polarity_positive : bool
         Polarity of the first line's readout gradient.
+    blip_duration_s : float, optional
+        Minimum fixed duration for every inter-line gradient window.  Use the
+        imaging train's value for a blip-nulled phase-correction navigator so
+        its readout timing remains identical.
+    caipi_axis, caipi_blip_area : str, float, optional
+        Equal-area extra blip played between every pair of EPI lines.  This
+        creates blipped-CAIPI encoding for SMS; ``caipi_blip_area`` is in
+        cycles/m and requires a non-readout gradient ``caipi_axis``.
     ro_axis, pe_axis : str
         Readout / phase-encode gradient channels.
     slice_rephasing : optional
@@ -785,10 +891,14 @@ class Epi2D(_EpiTrainBlipped):
         self.pe_axis = pe_axis
         self.fov_y_m, self.ny = float(fov[1]), int(matrix[1])
 
-    def set_state(self, lin_idx=0, rotation=None, *, labels=None):
-        """Set the phase-encode offset and rotation for one EPI shot."""
+    def set_state(self, lin_idx=0, rotation=None, *, labels=None, adc_labels=()):
+        """Set one shot; append ``adc_labels`` (for example ``NAV``/``REF``) to every ADC line."""
         labels = _absolute_labels(labels, int(lin_idx), self._mask_pe, self._mask_par)
-        self._replace_state(_EpiState(pe_start=int(lin_idx), rotation=normalize_rotation(rotation), labels=labels))
+        self._replace_state(
+            _EpiState(
+                pe_start=int(lin_idx), rotation=normalize_rotation(rotation), labels=labels, adc_labels=tuple(adc_labels)
+            )
+        )
         return self
 
 
@@ -816,13 +926,14 @@ class Epi3D(_EpiTrainBlipped):
         self.fov_y_m, self.ny = float(fov[1]), int(matrix[1])
         self.fov_z_m, self.nz = float(fov[2]), int(matrix[2])
 
-    def set_state(self, lin_idx=0, par_idx=0, rotation=None, *, labels=None):
-        """Set the phase/partition offsets and rotation for one EPI shot."""
+    def set_state(self, lin_idx=0, par_idx=0, rotation=None, *, labels=None, adc_labels=()):
+        """Set one shot; append ``adc_labels`` (for example ``NAV``/``REF``) to every ADC line."""
         self._replace_state(
             _EpiState(
                 pe_start=(int(lin_idx), int(par_idx)),
                 rotation=normalize_rotation(rotation),
                 labels=_absolute_labels(labels, (int(lin_idx), int(par_idx)), self._mask_pe, self._mask_par),
+                adc_labels=tuple(adc_labels),
             )
         )
         return self

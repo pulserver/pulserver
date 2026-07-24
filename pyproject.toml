@@ -16,7 +16,16 @@ dependencies = []
 
 [project.optional-dependencies]
 sequence  = ["pypulseq>=1.5.0", "scipy", "numpy>=2.0", "matplotlib"]
-recon     = ["numpy", "ismrmrd>=1.14.1", "pydicom", "h5py", "psutil"]
+recon     = ["numpy>=2.0", "ismrmrd>=1.14.1", "pydicom", "h5py", "psutil"]
+# The reconstruction primitives use mri-nufft rather than maintaining a
+# second NUFFT implementation.  ``recon-cpu`` is the portable default;
+# ``recon-cuda`` selects the CUFINUFFT backend on Linux/CUDA hosts.
+recon-cpu = ["pulserver[recon]", "torch>=2.3", "mri-nufft[finufft]", "finufft", "mrpro", "deepinv"]
+recon-cuda = ["pulserver[recon-cpu]", "mri-nufft[cufinufft]; platform_system == 'Linux'"]
+recon-nlinv = ["pulserver[recon-cpu]", "pygrog"]
+# PyHySCO is GPL-3.0-only.  It remains an opt-in external executable and is
+# neither imported nor bundled by the MIT-licensed Pulserver package.
+recon-distortion = ["PyHySCO"]
 host      = ["pulserver[sequence]"]
 vre       = ["pulserver[recon]"]
 test      = ["pytest>=8.2", "pytest-cov>=5.0"]
@@ -35,6 +44,7 @@ sdist.include = [
   "csrc/**",
   "cxx/**",
   "examples/sequences/**",
+  "examples/recon/**",
   "python/**",
   "tests/**",
   "README.rst",
@@ -45,7 +55,7 @@ sdist.include = [
 # scikit-build-core maps package paths to arbitrary source directories.  This
 # installs the self-contained bridge plugins directly as
 # ``pulserver.sequences.<name>`` without copying or moving their source.
-packages = { "pulserver" = "python/pulserver", "pulserver/sequences" = "examples/sequences" }
+packages = { "pulserver" = "python/pulserver", "pulserver/sequences" = "examples/sequences", "pulserver/examples/recon" = "examples/recon" }
 
 [tool.ruff]
 line-length = 120

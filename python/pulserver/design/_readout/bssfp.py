@@ -49,10 +49,22 @@ def _copy_at_start(grad):
     return grad
 
 
-def _phase_gradient(system, channel: str, area: float, duration_s: float):
-    if abs(area) < 1e-12:
+def _phase_template(system, channel: str, worst_mag: float, duration_s: float):
+    """One canonical trapezoid at the worst-case ``|area|`` on ``channel`` (see line.py's ``_trap_template``).
+
+    Every ``ky``/``kz`` line is realised by scaling this one shape rather than
+    a fresh ``pp.make_trapezoid`` per line -- otherwise every distinct
+    phase-encode/partition value becomes its own base-block gradient shape.
+    """
+    if worst_mag <= 0.0:
         return None
-    return pp.make_trapezoid(channel=channel, area=float(area), duration=duration_s, system=system)
+    return pp.make_trapezoid(channel=channel, area=worst_mag, duration=duration_s, system=system)
+
+
+def _scaled_phase_gradient(template, area: float, worst_mag: float):
+    if abs(area) < 1e-12 or template is None:
+        return None
+    return pp.scale_grad(template, area / worst_mag)
 
 
 def _safe_phase_duration(system, initial_s: float, ky_areas, kz_areas, gz_1, gz_2) -> float:
@@ -179,6 +191,10 @@ class _Bssfp(Readout):
         self._pe_duration_s = _safe_phase_duration(
             system, _duration(self._gx_2), self._ky_areas, self._kz_areas, self._gz_1, self._gz_2
         )
+        self._y_worst = float(np.max(np.abs(self._ky_areas)))
+        self._z_worst = float(np.max(np.abs(self._kz_areas)))
+        self._y_template = _phase_template(system, "y", self._y_worst, self._pe_duration_s)
+        self._z_template = _phase_template(system, "z", self._z_worst, self._pe_duration_s)
 
         # A short readout (especially a small 3D matrix) and partition
         # encoding can make the ADC-side block shorter than the RF-side one.
@@ -220,8 +236,8 @@ class _Bssfp(Readout):
 
     def _phase_events(self, ky_idx: int, kz_idx: int, *, previous: bool):
         sign = -1.0 if previous else 1.0
-        gy = _phase_gradient(self._opts, "y", sign * self._ky_areas[ky_idx], self._pe_duration_s)
-        gz = _phase_gradient(self._opts, "z", sign * self._kz_areas[kz_idx], self._pe_duration_s)
+        gy = _scaled_phase_gradient(self._y_template, sign * self._ky_areas[ky_idx], self._y_worst)
+        gz = _scaled_phase_gradient(self._z_template, sign * self._kz_areas[kz_idx], self._z_worst)
         return gy, gz
 
     def _selection_with_partition(self, selection, partition):

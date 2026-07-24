@@ -1,0 +1,678 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>pulserver.recon.metadata.acquisition_labels &#8212; pulserver  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css?v=7f9a90b1" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/generated/recon/pulserver.recon.metadata.acquisition_labels';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="pulserver.recon.metadata.has_acquisition_flag" href="pulserver.recon.metadata.has_acquisition_flag.html" />
+    <link rel="prev" title="pulserver.recon.metadata.acquisition_label" href="pulserver.recon.metadata.acquisition_label.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">pulserver  documentation</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting started</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../tutorials.html">Tutorials</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/build_a_sequence_plugin.html">Build a sequence plugin with the design toolbox</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../how_to.html">How-to guides</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../how-to/customise_a_plugin.html">How to customise a plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../how-to/write_a_new_module.html">How to write a new module or loop structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code> — sequence-building blocks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/sampling.html">Scan loops</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../pulserver.html"><code class="docutils literal notranslate"><span class="pre">pulserver</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.PulseqSequence.html">pulserver.PulseqSequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.Sequence.html">pulserver.Sequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.run_cli.html">pulserver.run_cli</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.ScanLoop.html">pulserver.ScanLoop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.SequenceModule.html">pulserver.SequenceModule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.EncodingAxis.html">pulserver.EncodingAxis</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.BoolParam.html">pulserver.BoolParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.Description.html">pulserver.Description</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.DropdownFloatParam.html">pulserver.DropdownFloatParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.DropdownIntParam.html">pulserver.DropdownIntParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.StringListParam.html">pulserver.StringListParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.TypeinFloatParam.html">pulserver.TypeinFloatParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.TypeinIntParam.html">pulserver.TypeinIntParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.BoolKey.html">pulserver.BoolKey</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.EnumKey.html">pulserver.EnumKey</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.FloatKey.html">pulserver.FloatKey</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.ImagingMode.html">pulserver.ImagingMode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.InputMode.html">pulserver.InputMode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.IntKey.html">pulserver.IntKey</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.ParamKind.html">pulserver.ParamKind</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.PreparationType.html">pulserver.PreparationType</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.SequenceType.html">pulserver.SequenceType</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.TriggerType.html">pulserver.TriggerType</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.UIParam.html">pulserver.UIParam</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.Validate.html">pulserver.Validate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.dict_to_protocol.html">pulserver.dict_to_protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.make_enum_param.html">pulserver.make_enum_param</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.protocol_to_dict.html">pulserver.protocol_to_dict</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.validate_protocol.html">pulserver.validate_protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pulserver/pulserver.params.html">pulserver.params</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../sequences.html"><code class="docutils literal notranslate"><span class="pre">pulserver.sequences</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre.html">pulserver.sequences.design_gre</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_2d.html">pulserver.sequences.design_gre_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_3d.html">pulserver.sequences.design_gre_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_multiecho_2d.html">pulserver.sequences.design_gre_multiecho_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_multiecho_3d.html">pulserver.sequences.design_gre_multiecho_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_fse_2d.html">pulserver.sequences.design_fse_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_fse_3d.html">pulserver.sequences.design_fse_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_bssfp_2d.html">pulserver.sequences.design_bssfp_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_bssfp_3d.html">pulserver.sequences.design_bssfp_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_mprage_2d.html">pulserver.sequences.design_mprage_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_mprage_3d.html">pulserver.sequences.design_mprage_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_epi_2d.html">pulserver.sequences.design_epi_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_epi_3d.html">pulserver.sequences.design_epi_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_noncart_2d.html">pulserver.sequences.design_gre_noncart_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_noncart_3d.html">pulserver.sequences.design_gre_noncart_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_radial_2d.html">pulserver.sequences.design_gre_radial_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_radial_3d.html">pulserver.sequences.design_gre_radial_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_mprage_radial_2d.html">pulserver.sequences.design_gre_mprage_radial_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_gre_mprage_radial_3d.html">pulserver.sequences.design_gre_mprage_radial_3d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_zte_2d.html">pulserver.sequences.design_zte_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sequences/pulserver.sequences.design_zte_3d.html">pulserver.sequences.design_zte_3d</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../design.html"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_crusher.html">pulserver.design.make_crusher</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_phase_blip.html">pulserver.design.make_phase_blip</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_phase_encoding.html">pulserver.design.make_phase_encoding</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_hard_pulse.html">pulserver.design.make_hard_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_frequency_selective_pulse.html">pulserver.design.make_frequency_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_slice_selective_pulse.html">pulserver.design.make_slice_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_refocusing_pulse.html">pulserver.design.make_refocusing_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_slr_pulse.html">pulserver.design.make_slr_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_multiband_frequency_selective_pulse.html">pulserver.design.make_multiband_frequency_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_pins_slice_selective_pulse.html">pulserver.design.make_pins_slice_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_multiband.html">pulserver.design.make_multiband</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_pins.html">pulserver.design.make_pins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_plane_selective_pulse.html">pulserver.design.make_plane_selective_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_spsp_pulse.html">pulserver.design.make_spsp_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_bloch_siegert_pulse.html">pulserver.design.make_bloch_siegert_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_diffusion_prep.html">pulserver.design.make_diffusion_prep</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_fat_saturation_pulse.html">pulserver.design.make_fat_saturation_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_ihmt_pulse.html">pulserver.design.make_ihmt_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_inversion_pulse.html">pulserver.design.make_inversion_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_mt_pulse.html">pulserver.design.make_mt_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_t1t2_prep_pulse.html">pulserver.design.make_t1t2_prep_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_t2prep_pulse.html">pulserver.design.make_t2prep_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_epi_readout.html">pulserver.design.make_epi_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_bssfp_readout.html">pulserver.design.make_bssfp_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_fse_readout.html">pulserver.design.make_fse_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_line_readout.html">pulserver.design.make_line_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_noncartesian_2d_readout.html">pulserver.design.make_noncartesian_2d_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_noncartesian_3d_readout.html">pulserver.design.make_noncartesian_3d_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_radial_projection_readout.html">pulserver.design.make_radial_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_radial_readout.html">pulserver.design.make_radial_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_radial_stack_readout.html">pulserver.design.make_radial_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_rosette_projection_readout.html">pulserver.design.make_rosette_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_rosette_readout.html">pulserver.design.make_rosette_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_rosette_stack_readout.html">pulserver.design.make_rosette_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_spiral_projection_readout.html">pulserver.design.make_spiral_projection_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_spiral_readout.html">pulserver.design.make_spiral_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_spiral_stack_readout.html">pulserver.design.make_spiral_stack_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_zte_readout.html">pulserver.design.make_zte_readout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_cartesian_sampling.html">pulserver.design.make_cartesian_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_epi_sampling.html">pulserver.design.make_epi_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_noncartesian_2d_sampling.html">pulserver.design.make_noncartesian_2d_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_noncartesian_projection_sampling.html">pulserver.design.make_noncartesian_projection_sampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_slice_loop.html">pulserver.design.make_slice_loop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_counter_loop.html">pulserver.design.make_counter_loop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.calc_encoding_scales.html">pulserver.design.calc_encoding_scales</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_phase_cycling_schedule.html">pulserver.design.make_phase_cycling_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_rf_spoiling_schedule.html">pulserver.design.make_rf_spoiling_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.make_traps_schedule.html">pulserver.design.make_traps_schedule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.calc_adc_timing.html">pulserver.design.calc_adc_timing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/pulserver.design.traj2grad.html">pulserver.design.traj2grad</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../pypulseq.html"><code class="docutils literal notranslate"><span class="pre">pulserver.pypulseq</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.Opts.html">pulserver.pypulseq.Opts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.Sequence.html">pulserver.pypulseq.Sequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.get_supported_labels.html">pulserver.pypulseq.get_supported_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.make_label.html">pulserver.pypulseq.make_label</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.make_rf_shim.html">pulserver.pypulseq.make_rf_shim</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pypulseq/pulserver.pypulseq.make_rotation.html">pulserver.pypulseq.make_rotation</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../io.html"><code class="docutils literal notranslate"><span class="pre">pulserver.io</span></code></a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.write.html">pulserver.io.write</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.read.html">pulserver.io.read</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.read_esp_bands.html">pulserver.io.read_esp_bands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../io/pulserver.io.read_asc_bands.html">pulserver.io.read_asc_bands</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../../recon.html"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.linops.deepinverse_multicoil_mri.html">pulserver.recon.linops.deepinverse_multicoil_mri</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.linops.mrpro_operator.html">pulserver.recon.linops.mrpro_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.linops.mrinufft_operator.html">pulserver.recon.linops.mrinufft_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.linops.available_nufft_backends.html">pulserver.recon.linops.available_nufft_backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.prox.deepinverse_prior.html">pulserver.recon.prox.deepinverse_prior</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.optimizers.mrpro_optimizer.html">pulserver.recon.optimizers.mrpro_optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.optimizers.deepinverse_optimizer.html">pulserver.recon.optimizers.deepinverse_optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.calibration.nlinv_sensitivities.html">pulserver.recon.calibration.nlinv_sensitivities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.calibration.estimate_sensitivities.html">pulserver.recon.calibration.estimate_sensitivities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.metadata.MrdMetadata.html">pulserver.recon.metadata.MrdMetadata</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.metadata.user_parameter.html">pulserver.recon.metadata.user_parameter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.metadata.acquisition_label.html">pulserver.recon.metadata.acquisition_label</a></li>
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">pulserver.recon.metadata.acquisition_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.metadata.has_acquisition_flag.html">pulserver.recon.metadata.has_acquisition_flag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.grouping.group_by_labels.html">pulserver.recon.grouping.group_by_labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.grouping.split_on_flag.html">pulserver.recon.grouping.split_on_flag</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.grouping.filter_acquisitions.html">pulserver.recon.grouping.filter_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.serialization.images_to_dicom.html">pulserver.recon.serialization.images_to_dicom</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.serialization.write_dicom_series.html">pulserver.recon.serialization.write_dicom_series</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.mrd2dicom.MrdDicomBuilder.html">pulserver.recon.mrd2dicom.MrdDicomBuilder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.dicom2mrd.dicom_folder_to_mrd.html">pulserver.recon.dicom2mrd.dicom_folder_to_mrd</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.epi.EpiAcquisitionGroups.html">pulserver.recon.epi.EpiAcquisitionGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.epi.partition_epi_acquisitions.html">pulserver.recon.epi.partition_epi_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.sms.SmsEpiInputs.html">pulserver.recon.sms.SmsEpiInputs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.distortion.run_pyhysco.html">pulserver.recon.distortion.run_pyhysco</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.connection.Connection.html">pulserver.recon.connection.Connection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.server.Server.html">pulserver.recon.server.Server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.rtp_connection.RtpServer.html">pulserver.recon.rtp_connection.RtpServer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.main.main.html">pulserver.recon.main.main</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.replay.html">pulserver.recon.replay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.readers.html">pulserver.recon.readers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.writers.html">pulserver.recon.writers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.handlers.html">pulserver.recon.handlers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.mrdhelper.html">pulserver.recon.mrdhelper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.constants.html">pulserver.recon.constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.recon.concurrency.html">pulserver.recon.concurrency</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/sequence_representation.html">How a sequence is represented</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/mechanical_resonance_safety.html">Mechanical resonance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/pns_safety.html">Peripheral nerve stimulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/performance.html">Runtime and memory</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../more.html">More</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/public_api.html">pulseg Public C API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../pulseg_conformance.html">Pulserver as a Concrete Implementation of PulSeg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../rename_map_v2.html">Rename map v2 — public C API hygiene audit (test-01)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../rename_map_v3.html">Rename map v3 — pulseq module split, static-helper arg order, PulSeg vocabulary</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<a href="https://github.com/INFN-MRI/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button"
+   title="Source repository"
+   data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+
+</a>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../../../_sources/api/generated/recon/pulserver.recon.metadata.acquisition_labels.rst" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.rst</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>pulserver.recon.metadata.acquisition_labels</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.recon.metadata.acquisition_labels"><code class="docutils literal notranslate"><span class="pre">acquisition_labels()</span></code></a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="pulserver-recon-metadata-acquisition-labels">
+<h1>pulserver.recon.metadata.acquisition_labels<a class="headerlink" href="#pulserver-recon-metadata-acquisition-labels" title="Link to this heading">#</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="pulserver.recon.metadata.acquisition_labels">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.metadata.</span></span><span class="sig-name descname"><span class="pre">acquisition_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">acquisition</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.recon.metadata.acquisition_labels" title="Link to this definition">#</a></dt>
+<dd><p>Return the standard MRD index and encoding labels as a dictionary.</p>
+</dd></dl>
+
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="pulserver.recon.metadata.acquisition_label.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">pulserver.recon.metadata.acquisition_label</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="pulserver.recon.metadata.has_acquisition_flag.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">pulserver.recon.metadata.has_acquisition_flag</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.recon.metadata.acquisition_labels"><code class="docutils literal notranslate"><span class="pre">acquisition_labels()</span></code></a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Author name not set
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2026, INFN-MRI.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

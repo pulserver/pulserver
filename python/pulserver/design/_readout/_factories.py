@@ -443,6 +443,7 @@ def make_epi_readout(system, fov, matrix, num_shots, sampling_mask, *, flyback: 
     **kwargs
         Forwarded to the ``Epi2D``/``Epi3D`` class: ``bandwidth_hz_px``,
         ``oversamp``, ``ramp_sample``, ``start_polarity_positive``,
+        ``blip_duration_s``, ``caipi_axis``, ``caipi_blip_area``,
         ``slice_rephasing`` and ``derate``. Pass
         ``slice_rephasing=excitation.rephasers`` to absorb the excitation's
         rephasing moment into this readout's prewinder, and pair it with

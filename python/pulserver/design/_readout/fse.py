@@ -270,6 +270,26 @@ class _FseTrain(Readout):
         self._t_sp_pre = round_to_raster(half_esp - half_pre_fixed, raster)
         self._t_sp_post = round_to_raster(half_esp - half_post_fixed, raster)
 
+        # --- canonical per-echo PE/PAR templates (see _pe_template) -------
+        self._pe_worst = self._pe.max_area if self._pe is not None else 0.0
+        self._pe_pre_tmpl = (
+            _pe_template(system, self._pe.axis, self._pe_worst, self._t_sp_pre, self._dG)
+            if self._pe is not None
+            else None
+        )
+        self._pe_rew_tmpl = (
+            _pe_template(system, self._pe.axis, self._pe_worst, self._t_sp_post, self._dG)
+            if self._pe is not None
+            else None
+        )
+        self._par_worst = self._par.max_area if self._par is not None else 0.0
+        self._par_pre_tmpl = (
+            _pe_template(system, "z", self._par_worst, self._t_sp_pre, self._dG) if self._par is not None else None
+        )
+        self._par_rew_tmpl = (
+            _pe_template(system, "z", self._par_worst, self._t_sp_post, self._dG) if self._par is not None else None
+        )
+
         # --- fused fixed x/z lobes (GR5/GR7/GS5/GS7) + lead-in/close-out ---
         self._gr5 = _fuse_lobe(system, ro_axis, self._Sx + self._dx_reb - 0.5 * self._dG * ro_amp,
                                0.0, ro_amp, self._t_sp_pre, self._dG)
@@ -375,14 +395,14 @@ class _FseTrain(Readout):
             if self._pe is not None:
                 ky = int(lin[i_echo])
                 area = self._pe.areas[ky]
-                pre_extra.append(pp.make_trapezoid(channel=self._pe.axis, area=area, rise_time=self._dG, system=self._opts))
-                rew_extra.append(pp.make_trapezoid(channel=self._pe.axis, area=-area, rise_time=self._dG, system=self._opts))
+                pre_extra.append(_scaled_pe_grad(self._pe_pre_tmpl, area, self._pe_worst))
+                rew_extra.append(_scaled_pe_grad(self._pe_rew_tmpl, -area, self._pe_worst))
                 labels.append(pp.make_label(type="SET", label=self._pe.label, value=ky))
             if self._par is not None:
                 kz = int(par[i_echo])
                 kz_area = self._par.areas[kz]
-                gp_par_pre = pp.make_trapezoid(channel="z", area=kz_area, duration=self._t_sp_pre, rise_time=self._dG, system=self._opts)
-                gp_par_rew = pp.make_trapezoid(channel="z", area=-kz_area, duration=self._t_sp_post, rise_time=self._dG, system=self._opts)
+                gp_par_pre = _scaled_pe_grad(self._par_pre_tmpl, kz_area, self._par_worst)
+                gp_par_rew = _scaled_pe_grad(self._par_rew_tmpl, -kz_area, self._par_worst)
                 gs5 = pp.add_gradients([self._gs5, gp_par_pre], system=self._opts)
                 gs7 = pp.add_gradients([self._gs7, gp_par_rew], system=self._opts)
                 labels.append(pp.make_label(type="SET", label=self._par.label, value=kz))
@@ -550,6 +570,30 @@ def _lobe_dur(system, dG, area):
     ``dG`` ramps: ``2*dG`` (triangle) unless the area forces a plateau."""
     need = dG + abs(area) / system.max_grad  # plateau at max_grad
     return ceil_to_raster(max(2.0 * dG, need), system.grad_raster_time)
+
+
+def _pe_template(system, axis, worst_mag, duration_s, rise_time):
+    """One canonical PE/PAR trapezoid at the worst-case ``|area|`` (see line.py's ``_trap_template``).
+
+    Every echo's smaller-magnitude area on ``axis`` is realised by scaling
+    this one shape instead of a fresh ``pp.make_trapezoid`` call per echo --
+    the previous per-echo ``area`` + ``rise_time`` (no ``duration``) call
+    silently dropped ``rise_time`` (pypulseq falls back to its "shortest
+    duration for area" solver whenever neither ``duration`` nor ``flat_time``
+    is also given), so every distinct PE/PAR value got its own ramp/flat
+    split -- both a correctness bug (the intended fixed-``dG`` ramp was never
+    applied) and a base-block-dedup blowup (one gradient shape per distinct
+    echo value instead of one, scaled).
+    """
+    if worst_mag <= 0.0:
+        return None
+    return pp.make_trapezoid(channel=axis, area=worst_mag, duration=duration_s, rise_time=rise_time, system=system)
+
+
+def _scaled_pe_grad(template, area, worst_mag):
+    if template is None:
+        return None
+    return pp.scale_grad(template, area / worst_mag)
 
 
 def _build_readout(opts, ro_axis, nx, fov_x_m, bandwidth_hz_px, oversamp, pf):

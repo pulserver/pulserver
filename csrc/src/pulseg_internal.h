@@ -533,7 +533,8 @@ typedef struct pulseg_sequence_descriptor
 #define PULSEG_SEQUENCE_DESCRIPTOR_INIT \
     { \
     0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 1, 0, 1, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
-    0}, {0, 0, 0}, {0, 0, 0}, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, \
+    0}, {0, 0, 0}, {0, 0, 0}, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, /* rf_amplitude_variable */ \
+    0, NULL, 0, NULL, 0, \
     NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, \
     PULSEG_TR_DESCRIPTOR_INIT, 0, NULL, PULSEG_SEGMENT_TABLE_RESULT_INIT, 0, NULL, NULL, \
     NULL, NULL, NULL, NULL, 0, 0, NULL, {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, \

@@ -378,21 +378,70 @@ int pulseg_get_tr_rf_ids(const pulseg_collection *coll, int *out_rf_ids, int sub
 }
 
 /* ================================================================== */
-/*  Positional-max RF amplitude envelope                              */
+/*  Variable-RF-amplitude safety arrays                                */
 /* ================================================================== */
 
 /*
- * Worst-case |amplitude| at canonical position @p pos across every TR
- * instance (degenerate path) or pass (non-degenerate path). This is the
- * safety envelope for a subsequence whose RF amplitude varies across
- * instances (desc->rf_amplitude_variable): peak B1 and every time-averaged
- * (SAR / B1rms) limit are dominated by the positional max, because
- * Â_pos >= |A_{u,pos}| for every instance u and Â_pos^2 >= A_{u,pos}^2
- * per position.
+ * pulseg__rf_pulse_at --
+ *   RF occurrence at absolute walk position @p st (a block_table index, or
+ *   an exec_stream slot when @p use_exec_stream). Returns 0 (no RF / out of
+ *   range) or 1, filling *out_amp (|amplitude|, Hz) and *out_rf_def_id
+ *   (index into desc->rf_definitions) when non-NULL.
+ */
+static int pulseg__rf_pulse_at(
+    const pulseg_sequence_descriptor *desc,
+    int use_exec_stream,
+    int st,
+    float *out_amp,
+    int *out_rf_def_id)
+{
+    int blk_idx, rf_def_id;
+    const pulseg_block_table_element *bte;
+
+    if (use_exec_stream)
+    {
+        if (st < 0 || st >= desc->exec_stream_len)
+            return 0;
+        blk_idx = desc->exec_stream_block_idx[st];
+    }
+    else
+    {
+        blk_idx = st;
+    }
+    if (blk_idx < 0 || blk_idx >= desc->num_blocks)
+        return 0;
+
+    bte = &desc->block_table[blk_idx];
+    if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
+        return 0;
+
+    rf_def_id = desc->rf_table[bte->rf_id].id;
+    if (rf_def_id < 0 || rf_def_id >= desc->num_unique_rfs)
+        return 0;
+
+    if (out_amp)
+    {
+        float a = desc->rf_table[bte->rf_id].amplitude;
+        *out_amp = (a < 0.0f) ? -a : a;
+    }
+    if (out_rf_def_id)
+        *out_rf_def_id = rf_def_id;
+
+    return 1;
+}
+
+/*
+ * pulseg__rf_position_max --
+ *   Worst-case |amplitude| at canonical position @p pos across every TR
+ *   instance (degenerate path) or pass (non-degenerate path). Feeds
+ *   pulseg_rf_stats.peak_amplitude_hz: peak-only consumers (GE peakB1())
+ *   need per-position dominance across every instance --
+ *   Â_pos >= |A_{u,pos}| for every instance u by construction.
  *
- * The walk mirrors pulseg_get_rf_array's own instance layout so the
- * envelope and the canonical-instance value coincide exactly for a periodic
- * sequence (Â_pos == |A_{0,pos}|), which is the regression contract.
+ *   The walk mirrors pulseg_get_rf_array's own instance layout so the
+ *   envelope and the canonical-instance value coincide exactly for a
+ *   periodic sequence (Â_pos == |A_{0,pos}|), which is the regression
+ *   contract.
  */
 static float pulseg__rf_position_max(
     const pulseg_sequence_descriptor *desc,
@@ -407,35 +456,75 @@ static float pulseg__rf_position_max(
 
     for (u = 0; u < num_units; ++u)
     {
-        int st = base_start + u * unit_size + pos;
-        int blk_idx;
-        const pulseg_block_table_element *bte;
-        float a;
-
-        if (use_exec_stream)
-        {
-            if (st < 0 || st >= desc->exec_stream_len)
-                continue;
-            blk_idx = desc->exec_stream_block_idx[st];
-        }
-        else
-        {
-            blk_idx = st;
-        }
-        if (blk_idx < 0 || blk_idx >= desc->num_blocks)
-            continue;
-
-        bte = &desc->block_table[blk_idx];
-        if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
-            continue;
-
-        a = desc->rf_table[bte->rf_id].amplitude;
-        if (a < 0.0f)
-            a = -a;
-        if (a > best)
-            best = a;
+        float amp;
+        if (pulseg__rf_pulse_at(desc, use_exec_stream, base_start + u * unit_size + pos, &amp, NULL) &&
+            amp > best)
+            best = amp;
     }
     return best;
+}
+
+/*
+ * pulseg__rf_worst_b1rms_instance --
+ *   Among @p num_units TR instances (or passes) of @p count positions each,
+ *   find the instance with the largest time-averaged B1^2 energy,
+ *   Sum_j A_{u,j}^2 * total_b1sq_power_j. TR duration is constant across
+ *   instances here (only RF amplitude may vary -- pulseg_core.c's
+ *   periodicity gate), so it is a common divisor and dropped from the
+ *   ranking; the sum alone orders instances by B1rms.
+ *
+ *   total_b1sq_power is integral |h_norm(t)|^2 dt of the unit-peak-
+ *   normalised pulse shape (pulseg_dedup.c), so A^2 * total_b1sq_power
+ *   recovers integral |B1(t)|^2 dt for this occurrence directly -- no
+ *   separate duration factor needed.
+ *
+ *   Returns the winning instance index in [0, num_units); 0 when num_units
+ *   <= 1 or no RF pulses are found anywhere (degenerates to the canonical
+ *   instance).
+ *
+ *   Bounds are small in practice (num_units is the periodicity-checked TR
+ *   count, not multiplied by NEX; count is one TR's block span) --
+ *   O(num_units * count) float multiply-adds, no memoization needed.
+ */
+static int pulseg__rf_worst_b1rms_instance(
+    const pulseg_sequence_descriptor *desc,
+    int use_exec_stream,
+    int base_start,
+    int unit_size,
+    int num_units,
+    int count)
+{
+    int u, pos, best_u;
+    double best_score;
+
+    best_u = 0;
+    best_score = -1.0;
+
+    for (u = 0; u < num_units; ++u)
+    {
+        double score = 0.0;
+
+        for (pos = 0; pos < count; ++pos)
+        {
+            float amp;
+            int rf_def_id;
+
+            if (!pulseg__rf_pulse_at(
+                    desc, use_exec_stream, base_start + u * unit_size + pos, &amp, &rf_def_id))
+                continue;
+
+            score += (double)amp * (double)amp *
+                     (double)desc->rf_definitions[rf_def_id].stats.total_b1sq_power;
+        }
+
+        if (score > best_score)
+        {
+            best_score = score;
+            best_u = u;
+        }
+    }
+
+    return best_u;
 }
 
 /* ================================================================== */
@@ -455,9 +544,14 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
     int use_exec_stream;
     int num_passes, pass_size;
     int i, n, num_rf;
-    /* Positional-max envelope walk (only used when rf_amplitude_variable):
-     * the u-th instance's position p lives at env_base + u*env_stride + p. */
+    /* Variable-RF-amplitude instance walk (only used when
+     * rf_amplitude_variable): the u-th instance's position p lives at
+     * env_base + u*env_stride + p. env_base == start (u=0 IS the canonical
+     * instance already extracted below), so the walk and the canonical
+     * fill stay position-aligned regardless of any prep/imaging_tr_start
+     * offset baked into start. */
     int env_base, env_stride, env_units;
+    int winner_u;
 
     if (!coll || !out_pulses)
         return PULSEG_ERR_NULL_POINTER;
@@ -479,6 +573,10 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
         count = pass_size;
         num_instances = num_passes;
         use_exec_stream = 1;
+
+        env_base = start;
+        env_stride = pass_size;
+        env_units = num_passes;
     }
     else
     {
@@ -490,7 +588,13 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
         num_instances = num_avgs * trd->num_trs + trd->num_prep_trs + trd->num_cooldown_trs;
         if (num_instances < 0)
             num_instances = 0;
+
+        env_base = start;
+        env_stride = trd->tr_size;
+        env_units = trd->num_trs;
     }
+    if (env_units < 1)
+        env_units = 1;
 
     /* Clamp to available block range */
     if (use_exec_stream)
@@ -504,6 +608,15 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
     }
     if (count < 0)
         count = 0;
+
+    /* Instance carrying the worst (largest) time-averaged B1^2 energy over
+     * this TR/pass, real amplitudes only -- see
+     * pulseg__rf_worst_b1rms_instance(). u=0 (the canonical instance
+     * already selected by start/count above) when the sequence is
+     * periodic, which keeps this a no-op for the regression contract. */
+    winner_u = 0;
+    if (desc->rf_amplitude_variable && env_units > 1)
+        winner_u = pulseg__rf_worst_b1rms_instance(desc, use_exec_stream, env_base, env_stride, env_units, count);
 
     /* Pass 1: count RF-bearing blocks */
     num_rf = 0;
@@ -548,9 +661,27 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
         /* Hard-copy base stats */
         (*out_pulses)[n] = rfdef->stats;
 
-        /* Patch event-specific amplitude-dependent stats from rf_table. */
-        act_amp = desc->rf_table[bte->rf_id].amplitude;
-        (*out_pulses)[n].act_amplitude_hz = (act_amp >= 0.0f) ? act_amp : -act_amp;
+        /* Patch event-specific amplitude-dependent stats from rf_table.
+         * See pulseg_rf_stats.act_amplitude_hz / peak_amplitude_hz for the
+         * worst-B1rms-instance vs positional-max split; both collapse to
+         * the canonical instance's value when !rf_amplitude_variable
+         * (periodic sequence), which is the regression contract. */
+        if (desc->rf_amplitude_variable && env_units > 1)
+        {
+            float winner_amp = 0.0f;
+            (void)pulseg__rf_pulse_at(
+                desc, use_exec_stream, env_base + winner_u * env_stride + i, &winner_amp, NULL);
+            act_amp = winner_amp;
+            (*out_pulses)[n].peak_amplitude_hz =
+                pulseg__rf_position_max(desc, use_exec_stream, env_base, env_stride, env_units, i);
+        }
+        else
+        {
+            act_amp = desc->rf_table[bte->rf_id].amplitude;
+            act_amp = (act_amp >= 0.0f) ? act_amp : -act_amp;
+            (*out_pulses)[n].peak_amplitude_hz = act_amp;
+        }
+        (*out_pulses)[n].act_amplitude_hz = act_amp;
 
         /* base_amplitude_hz retains definition-level nominal amplitude
          * from the hard-copy above (rfdef->stats.base_amplitude_hz). */
