@@ -234,7 +234,7 @@ def create_roi(x, y, rgb=(1, 0, 0), thickness=1, style: int = 0, visibility: int
             - roi (string list)  : MRD-formatted ROI, intended to be stored as a MetaAttribute
                                    with field name starting with "ROI_"
     """
-    xy = [(x[i], y[i]) for i in range(0, len(x))]  # List of (x,y) tuples
+    xy = [(x[i], y[i]) for i in range(len(x))]  # List of (x,y) tuples
 
     roi = []
     roi.append(f"{rgb[0]:f}")
@@ -244,7 +244,7 @@ def create_roi(x, y, rgb=(1, 0, 0), thickness=1, style: int = 0, visibility: int
     roi.append(f"{style:d}")
     roi.append(f"{visibility:d}")
 
-    for i in range(0, len(xy)):
+    for i in range(len(xy)):
         roi.append(f"{xy[i][0]:f}")
         roi.append(f"{xy[i][1]:f}")
 

@@ -193,9 +193,24 @@ class Mprage2DPulseqSequence(Sequence):
 
 class _Config:
     __slots__ = (
-        "te_s", "tr_s", "flip_deg", "fov_ro_m", "fov_pe_m", "slice_thickness_m", "slice_spacing_m",
-        "nx_ro", "ny_pe", "nslices", "bandwidth_hz_px", "ry", "ro_axis", "pe_axis",
-        "etl", "ti_s", "trecovery_s", "inv_mode",
+        "bandwidth_hz_px",
+        "etl",
+        "flip_deg",
+        "fov_pe_m",
+        "fov_ro_m",
+        "inv_mode",
+        "nslices",
+        "nx_ro",
+        "ny_pe",
+        "pe_axis",
+        "ro_axis",
+        "ry",
+        "slice_spacing_m",
+        "slice_thickness_m",
+        "te_s",
+        "ti_s",
+        "tr_s",
+        "trecovery_s",
     )
 
 
@@ -212,7 +227,7 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.ny_pe = params.param_int(prot, UIParam.NY)
     cfg.nslices = params.param_int(prot, UIParam.NSLICES)
     cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, 125_000.0)
-    cfg.ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
+    cfg.ry = max(1, round(params.param_float_optional(prot, UIParam.RY, 1.0)))
     cfg.ro_axis, cfg.pe_axis = params.resolve_readout_phase_axes(prot)
     cfg.etl = params.param_int_optional(prot, UIParam.ETL, cfg.ny_pe)
     cfg.ti_s = params.user_float(prot, USER_SLOT_TI, 900.0) * 1e-3

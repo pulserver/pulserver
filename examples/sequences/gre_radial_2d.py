@@ -236,8 +236,19 @@ class GreRadial2DPulseqSequence(Sequence):
 
 class _Config:
     __slots__ = (
-        "te_s", "tr_s", "flip_deg", "fov_m", "slice_thickness_m", "slice_spacing_m",
-        "nx_ro", "nslices", "bandwidth_hz_px", "num_shots", "order_mode", "num_frames", "trigger",
+        "bandwidth_hz_px",
+        "flip_deg",
+        "fov_m",
+        "nslices",
+        "num_frames",
+        "num_shots",
+        "nx_ro",
+        "order_mode",
+        "slice_spacing_m",
+        "slice_thickness_m",
+        "te_s",
+        "tr_s",
+        "trigger",
     )
 
 

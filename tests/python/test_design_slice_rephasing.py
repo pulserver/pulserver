@@ -14,10 +14,10 @@ import pytest
 
 pytest.importorskip("pypulseq")
 
-import pulserver.design as design  # noqa: E402
-import pulserver.pypulseq as pp  # noqa: E402
+import pulserver.design as design
+import pulserver.pypulseq as pp
 
-OPTS_KW = dict(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+OPTS_KW = {"max_grad": 40, "grad_unit": "mT/m", "max_slew": 150, "slew_unit": "T/m/s"}
 
 
 @pytest.fixture

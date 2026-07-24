@@ -22,7 +22,7 @@ convert_string_vrs
     Recursively enforce string-type value representations in DICOM elements.
 """
 
-__all__ = ["MrdDicomBuilder", "DicomWithName"]
+__all__ = ["DicomWithName", "MrdDicomBuilder"]
 
 import copy
 import dataclasses
@@ -169,7 +169,7 @@ def convert_string_vrs(ds: pydicom.Dataset) -> pydicom.Dataset:
             elif isinstance(val, (list, tuple)):
                 elem.value = [str(v) if isinstance(v, (int, float)) else v for v in val]
 
-            # If it’s already a str, leave it
+            # If it is already a str, leave it
     return ds
 
 

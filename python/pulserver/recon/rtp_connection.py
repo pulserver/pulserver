@@ -13,12 +13,12 @@ MRD streaming protocol:
     GADGET_MESSAGE_PMC_PAYLOAD     → one per received acquisition
 
 PmcPayload wire layout (52 bytes, little-endian):
-    float32 × 3   shift      — additive translation delta [m] along scanner X/Y/Z
-    float32 × 9   rotation   — 3×3 rotation correction matrix (row-major)
-    int32         rescan     — non-zero → RTP app requests TR rescan
+    float32 x 3   shift      - additive translation delta [m] along scanner X/Y/Z
+    float32 x 9   rotation   - 3x3 rotation correction matrix (row-major)
+    int32         rescan     - non-zero -> RTP app requests TR rescan
 """
 
-__all__ = ["RtpServer", "PmcPayload", "write_pmc_payload"]
+__all__ = ["PmcPayload", "RtpServer", "write_pmc_payload"]
 
 import logging
 import socket
@@ -44,7 +44,7 @@ class PmcPayload:
     """Rigid-body motion correction parameters returned to PSD."""
 
     shift: "list[float]" = None  # translation delta [m]   (3 values)
-    rotation: "list[float]" = None  # 3×3 rotation matrix, row-major (9 values)
+    rotation: "list[float]" = None  # 3x3 rotation matrix, row-major (9 values)
     rescan: int = 0  # non-zero → request TR rescan
 
     def __post_init__(self):

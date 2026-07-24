@@ -107,7 +107,7 @@ def quantize_readout_timing(
     True
     """
     target_dwell = 1.0 / target_bw_hz_px
-    m_target = max(1, int(round(target_dwell / adc_raster_s)))
+    m_target = max(1, round(target_dwell / adc_raster_s))
 
     m_min = max(m_target, int(np.ceil(min_flat_time_s / (nx_ro * adc_raster_s))))
 

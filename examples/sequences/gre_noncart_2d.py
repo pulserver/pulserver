@@ -231,8 +231,19 @@ class GreNoncart2DPulseqSequence(Sequence):
 
 class _Config:
     __slots__ = (
-        "te_s", "tr_s", "flip_deg", "fov_m", "slice_thickness_m", "slice_spacing_m",
-        "nx_ro", "nslices", "num_shots", "trajectory", "order_mode", "num_frames", "trigger",
+        "flip_deg",
+        "fov_m",
+        "nslices",
+        "num_frames",
+        "num_shots",
+        "nx_ro",
+        "order_mode",
+        "slice_spacing_m",
+        "slice_thickness_m",
+        "te_s",
+        "tr_s",
+        "trajectory",
+        "trigger",
     )
 
 

@@ -229,8 +229,20 @@ class GreNoncart3DPulseqSequence(Sequence):
 
 class _Config:
     __slots__ = (
-        "te_s", "tr_s", "flip_deg", "fov_m", "slab_thickness_m", "slice_spacing_m",
-        "nx_ro", "npar", "rz", "num_shots", "trajectory", "order_mode", "num_frames", "trigger",
+        "flip_deg",
+        "fov_m",
+        "npar",
+        "num_frames",
+        "num_shots",
+        "nx_ro",
+        "order_mode",
+        "rz",
+        "slab_thickness_m",
+        "slice_spacing_m",
+        "te_s",
+        "tr_s",
+        "trajectory",
+        "trigger",
     )
 
 
@@ -244,7 +256,7 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.slice_spacing_m = params.param_float(prot, UIParam.SLICE_SPACING) * 1e-3
     cfg.nx_ro = params.param_int(prot, UIParam.NX)
     cfg.npar = params.param_int(prot, UIParam.NSLICES)
-    cfg.rz = max(1, int(round(params.param_float_optional(prot, UIParam.RZ, 1.0))))
+    cfg.rz = max(1, round(params.param_float_optional(prot, UIParam.RZ, 1.0)))
     cfg.num_shots = params.param_int_optional(prot, UIParam.NUM_SHOTS, 32)
     cfg.trajectory = "rosette" if params.user_float(prot, USER_SLOT_TRAJECTORY, 0.0) >= 0.5 else "spiral"
     cfg.order_mode = "golden" if params.user_float(prot, USER_SLOT_ORDER_MODE, 1.0) >= 0.5 else "uniform"

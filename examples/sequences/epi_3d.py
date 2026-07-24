@@ -325,10 +325,28 @@ def _n_shots(cfg: _Config) -> int:
 
 class _Config:
     __slots__ = (
-        "te_s", "tr_s", "flip_deg", "fov_ro_m", "fov_pe_m", "slab_thickness_m", "slice_spacing_m",
-        "nx_ro", "ny_pe", "npar", "etl", "rz", "bandwidth_hz_px", "ramp_sample",
-        "b_value_s_mm2", "n_directions", "num_frames", "ttl_output",
-        "spsp", "spsp_bandwidth_hz", "phase_correction", "reverse_pe",
+        "b_value_s_mm2",
+        "bandwidth_hz_px",
+        "etl",
+        "flip_deg",
+        "fov_pe_m",
+        "fov_ro_m",
+        "n_directions",
+        "npar",
+        "num_frames",
+        "nx_ro",
+        "ny_pe",
+        "phase_correction",
+        "ramp_sample",
+        "reverse_pe",
+        "rz",
+        "slab_thickness_m",
+        "slice_spacing_m",
+        "spsp",
+        "spsp_bandwidth_hz",
+        "te_s",
+        "tr_s",
+        "ttl_output",
     )
 
 
@@ -345,7 +363,7 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.ny_pe = params.param_int(prot, UIParam.NY)
     cfg.npar = params.param_int(prot, UIParam.NSLICES)
     cfg.etl = params.param_int_optional(prot, UIParam.ETL, cfg.ny_pe)
-    cfg.rz = max(1, int(round(params.param_float_optional(prot, UIParam.RZ, 1.0))))
+    cfg.rz = max(1, round(params.param_float_optional(prot, UIParam.RZ, 1.0)))
     cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, 250_000.0)
     cfg.ramp_sample = params.user_float(prot, USER_SLOT_RAMP_SAMPLE, 0.0) >= 0.5
     cfg.b_value_s_mm2 = params.param_float_optional(prot, UIParam.DIFFUSION_BVALUES, 0.0)

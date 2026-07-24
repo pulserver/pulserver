@@ -226,10 +226,24 @@ def _segment_loop(cfg: _Config):
 
 class _Config:
     __slots__ = (
-        "te_s", "tr_s", "refocus_flip_deg", "refocus_variable",
-        "fov_ro_m", "fov_pe_m", "slice_thickness_m", "slice_spacing_m",
-        "nx_ro", "ny_pe", "nslices", "etl", "ry", "bandwidth_hz_px", "b_value_s_mm2", "n_directions",
-        "ro_axis", "pe_axis",
+        "b_value_s_mm2",
+        "bandwidth_hz_px",
+        "etl",
+        "fov_pe_m",
+        "fov_ro_m",
+        "n_directions",
+        "nslices",
+        "nx_ro",
+        "ny_pe",
+        "pe_axis",
+        "refocus_flip_deg",
+        "refocus_variable",
+        "ro_axis",
+        "ry",
+        "slice_spacing_m",
+        "slice_thickness_m",
+        "te_s",
+        "tr_s",
     )
 
 
@@ -248,7 +262,7 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.ny_pe = params.param_int(prot, UIParam.NY)
     cfg.nslices = params.param_int(prot, UIParam.NSLICES)
     cfg.etl = params.param_int_optional(prot, UIParam.ETL, cfg.ny_pe)
-    cfg.ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
+    cfg.ry = max(1, round(params.param_float_optional(prot, UIParam.RY, 1.0)))
     cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, 125_000.0)
     cfg.b_value_s_mm2 = params.param_float_optional(prot, UIParam.DIFFUSION_BVALUES, 0.0)
     cfg.n_directions = params.param_int_optional(prot, UIParam.DIFFUSION_DIRECTIONS, 3)

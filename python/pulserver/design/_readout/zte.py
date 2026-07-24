@@ -24,7 +24,7 @@ filling, BURST-ZTE, Looping Star, or multi-echo refocusing is implemented.
 
 from __future__ import annotations
 
-__all__ = ["Zte", "DEFAULT_ZTE_BANDWIDTH_HZ", "DEFAULT_RADIAL_OVERSAMP"]
+__all__ = ["DEFAULT_RADIAL_OVERSAMP", "DEFAULT_ZTE_BANDWIDTH_HZ", "Zte"]
 
 import copy
 from dataclasses import dataclass
@@ -215,7 +215,7 @@ class Zte(Readout):
 
         self.delta_k = 1.0 / (self.oversamp * self.fov_m)
         self.kmax = 0.5 * self.matrix / self.fov_m
-        self.nominal_samples = max(1, int(round(self.kmax / self.delta_k)))
+        self.nominal_samples = max(1, round(self.kmax / self.delta_k))
         k_extent = self.nominal_samples * self.delta_k
         dwell_s, _ = quantize_readout_timing(
             nx_ro=self.nominal_samples,

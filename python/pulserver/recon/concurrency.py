@@ -4,7 +4,7 @@ The default estimate of 48 GiB per reconstruction session is sized for modern
 iterative / deep-learning MR reconstructions on a GE Premier/UHP-class server.
 On a 156 GiB VRE box (~142 GiB available), the formula yields 2 slots:
 
-    max(1, floor(142 × 0.8 / 48)) = 2   → 96 GiB working set
+    max(1, floor(142 x 0.8 / 48)) = 2 -> 96 GiB working set
 
 Both ``per_recon_gb`` and the overall limit are overridable at runtime via CLI
 flags (``--per-recon-gb``, ``--max-recon``) or the environment variables
@@ -78,7 +78,7 @@ def compute_max_concurrent(
     slots = max(1, math.floor(avail_gb * headroom_fraction / per_recon_gb))
     logging.info(
         "MRD concurrency limit: %d slot(s)  "
-        "(%.1f GiB available × %.0f%% headroom / %.1f GiB per recon)",
+        "(%.1f GiB available x %.0f%% headroom / %.1f GiB per recon)",
         slots,
         avail_gb,
         headroom_fraction * 100,

@@ -456,7 +456,7 @@ def make_bloch_siegert_pulse(
         raise ValueError("duration, peak_b1, and dwell must be > 0")
     if not 0 < flat_fraction < 1 or transition_fraction <= 0:
         raise ValueError("flat_fraction must lie in (0, 1) and transition_fraction must be > 0")
-    n = max(2, int(round(duration / dwell)))
+    n = max(2, round(duration / dwell))
     actual_duration = n * dwell
     time = (np.arange(n) + 0.5) * dwell
     half_flat = 0.5 * flat_fraction * actual_duration
@@ -848,7 +848,7 @@ class DiffusionPrepPulse(RfModule):
 
 
 def _trapezoid_samples(event, dwell: float) -> np.ndarray:
-    count = int(round(pp.calc_duration(event) / dwell))
+    count = round(pp.calc_duration(event) / dwell)
     time = (np.arange(count) + 0.5) * dwell
     knots = np.asarray(
         [
@@ -863,7 +863,7 @@ def _trapezoid_samples(event, dwell: float) -> np.ndarray:
 
 def _diffusion_pair_b_value(event, middle_duration: float, dwell: float) -> float:
     lobe = _trapezoid_samples(event, dwell)
-    middle_count = int(round(middle_duration / dwell))
+    middle_count = round(middle_duration / dwell)
     # The 180 reverses the sign of the second physical lobe in the toggling
     # frame. event amplitudes are Hz/m, so 2*pi converts q to rad/m.
     effective_gradient = np.concatenate((lobe, np.zeros(middle_count), -lobe))

@@ -105,7 +105,7 @@ class ReplayConnection:
     class _NoOpSocket:
         """Absorbs ``write()`` calls — replay has no TCP peer."""
 
-        def write(self, data: bytes) -> None:  # noqa: ARG002
+        def write(self, data: bytes) -> None:
             pass
 
         def close(self) -> None:
@@ -176,7 +176,6 @@ class ReplayConnection:
 
     def filter(self, predicate: Any) -> None:
         """No-op: replay does not filter items."""
-        pass
 
     def shutdown_close(self) -> None:
         """No-op: no socket to close."""

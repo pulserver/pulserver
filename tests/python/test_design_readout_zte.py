@@ -10,7 +10,7 @@ from pulserver.design import _rf as rf
 from pulserver.design import _sampling as sampling
 from scipy.spatial.transform import Rotation
 
-OPTS_KW = dict(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+OPTS_KW = {"max_grad": 40, "grad_unit": "mT/m", "max_slew": 150, "slew_unit": "T/m/s"}
 
 
 def _system(**kwargs):

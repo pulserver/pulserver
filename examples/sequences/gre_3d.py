@@ -226,9 +226,23 @@ class Gre3DPulseqSequence(Sequence):
 
 class _Config:
     __slots__ = (
-        "te_s", "tr_s", "flip_deg", "fov_ro_m", "fov_pe_m", "slab_thickness_m", "slice_spacing_m",
-        "nx_ro", "ny_pe", "npar", "bandwidth_hz_px", "ry", "rz", "ro_axis", "pe_axis",
-        "spsp", "spsp_bandwidth_hz",
+        "bandwidth_hz_px",
+        "flip_deg",
+        "fov_pe_m",
+        "fov_ro_m",
+        "npar",
+        "nx_ro",
+        "ny_pe",
+        "pe_axis",
+        "ro_axis",
+        "ry",
+        "rz",
+        "slab_thickness_m",
+        "slice_spacing_m",
+        "spsp",
+        "spsp_bandwidth_hz",
+        "te_s",
+        "tr_s",
     )
 
 
@@ -245,8 +259,8 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.ny_pe = params.param_int(prot, UIParam.NY)
     cfg.npar = params.param_int(prot, UIParam.NSLICES)
     cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, DEFAULT_BANDWIDTH_HZ_PX)
-    cfg.ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
-    cfg.rz = max(1, int(round(params.param_float_optional(prot, UIParam.RZ, 1.0))))
+    cfg.ry = max(1, round(params.param_float_optional(prot, UIParam.RY, 1.0)))
+    cfg.rz = max(1, round(params.param_float_optional(prot, UIParam.RZ, 1.0)))
     cfg.ro_axis, cfg.pe_axis = params.resolve_readout_phase_axes(prot)
     cfg.spsp = params.user_float(prot, USER_SLOT_SPSP, 0.0) >= 0.5
     cfg.spsp_bandwidth_hz = params.user_float(prot, USER_SLOT_SPSP_BW, 250.0)

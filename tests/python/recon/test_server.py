@@ -14,7 +14,7 @@ from pulserver.recon.server import Server, _NullHandler
 def test_resolve_handler_from_importable_module():
     """A config that matches an importable module with process() is loaded."""
     fake_module = types.ModuleType("fake_handler")
-    fake_module.process = lambda conn, cfg, meta: None
+    fake_module.process = lambda _conn, _cfg, _meta: None
 
     server = Server.__new__(Server)
     server.default_handler = "savedataonly"
@@ -28,7 +28,7 @@ def test_resolve_handler_from_importable_module():
 def test_resolve_handler_fallback_to_default():
     """Unknown config falls back to default_handler."""
     fake_default = types.ModuleType("my_default")
-    fake_default.process = lambda conn, cfg, meta: None
+    fake_default.process = lambda _conn, _cfg, _meta: None
 
     server = Server.__new__(Server)
     server.default_handler = "my_default"
@@ -42,7 +42,7 @@ def test_resolve_handler_fallback_to_default():
 def test_resolve_handler_null_config():
     """Config 'null' goes directly to default handler."""
     fake_default = types.ModuleType("savedataonly")
-    fake_default.process = lambda conn, cfg, meta: None
+    fake_default.process = lambda _conn, _cfg, _meta: None
 
     server = Server.__new__(Server)
     server.default_handler = "savedataonly"
@@ -73,7 +73,7 @@ def test_resolve_handler_file_without_process_skipped(tmp_path):
     handler_file.write_text("x = 42\n")
 
     fake_default = types.ModuleType("savedataonly")
-    fake_default.process = lambda conn, cfg, meta: None
+    fake_default.process = lambda _conn, _cfg, _meta: None
 
     server = Server.__new__(Server)
     server.default_handler = "savedataonly"

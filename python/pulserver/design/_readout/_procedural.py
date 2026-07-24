@@ -311,7 +311,7 @@ def build_epi_readout(opts: pp.Opts, ro_axis: str, nx_ro: int, fov_ro_m: float, 
 
     if ramp_sample:
         total_duration_s = pp.calc_duration(gx_pos)
-        n_samples = max(1, int(round(total_duration_s / dwell_s)))
+        n_samples = max(1, round(total_duration_s / dwell_s))
         adc = pp.make_adc(num_samples=n_samples, dwell=dwell_s, delay=0.0, system=opts)
     else:
         adc = pp.make_adc(num_samples=nx_ro, dwell=dwell_s, delay=gx_pos.rise_time, system=opts)
@@ -900,9 +900,9 @@ def wave_gradients(
         raise ValueError("axes must contain one or two channels")
 
     dt = opts.grad_raster_time
-    n_flat = int(round(flat_time_s / dt))
-    n_rise = int(round(rise_time_s / dt))
-    n_fall = int(round(fall_time_s / dt))
+    n_flat = round(flat_time_s / dt)
+    n_rise = round(rise_time_s / dt)
+    n_fall = round(fall_time_s / dt)
 
     omega = 2.0 * np.pi * n_cycles / flat_time_s
     amp_cap = max_wave_grad_hz_m if max_wave_grad_hz_m is not None else 0.5 * opts.max_grad

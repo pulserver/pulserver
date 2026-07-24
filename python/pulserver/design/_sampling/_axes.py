@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__ = ["EncodingAxis", "KINDS", "infer_axes"]
+__all__ = ["KINDS", "EncodingAxis", "infer_axes"]
 
 from dataclasses import dataclass
 

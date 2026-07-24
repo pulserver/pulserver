@@ -3,11 +3,11 @@
 import numpy as np
 
 __all__ = [
-    "is_from_fibonacci_sequence",
-    "get_closest_fibonacci_number",
-    "generate_fibonacci_lattice",
     "generate_fibonacci_circle",
+    "generate_fibonacci_lattice",
     "generate_fibonacci_sphere",
+    "get_closest_fibonacci_number",
+    "is_from_fibonacci_sequence",
 ]
 
 

@@ -191,7 +191,7 @@ def bloch_siegert(
     if freq_offset_hz == 0.0:
         raise ValueError("freq_offset_hz must be non-zero (off-resonant pulse)")
 
-    n = max(2, int(round(duration_s / dwell)))
+    n = max(2, round(duration_s / dwell))
     t = (np.arange(n) + 0.5) * dwell
     t0 = t0_fraction * duration_s
     a = a_fraction * duration_s

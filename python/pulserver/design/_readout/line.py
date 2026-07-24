@@ -101,9 +101,9 @@ the train emits -- same convention as :mod:`pulserver.design._readout.epi`.
 from __future__ import annotations
 
 __all__ = [
+    "DEFAULT_SPOIL_FACTOR",
     "Line2D",
     "Line3D",
-    "DEFAULT_SPOIL_FACTOR",
 ]
 
 import copy
@@ -256,9 +256,9 @@ def _build_readout_x(opts, ro_axis, nx, fov_x_m, bandwidth_hz_px, oversamp, pf):
         raise ValueError(f"oversamp must be >= 1, got {oversamp}")
 
     delta_k = 1.0 / (oversamp * fov_x_m)
-    n_full = int(round(oversamp * nx))
+    n_full = round(oversamp * nx)
     n_post = n_full // 2
-    n_samp = max(n_post + 1, int(round(pf * n_full)))
+    n_samp = max(n_post + 1, round(pf * n_full))
     n_pre = n_samp - n_post
     k_width = n_samp * delta_k
 

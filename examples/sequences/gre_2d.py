@@ -196,7 +196,7 @@ class GrePulseqSequence(Sequence):
         ny_pe = params.param_int(prot, UIParam.NY)
         nslices = params.param_int(prot, UIParam.NSLICES)
         bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, DEFAULT_BANDWIDTH_HZ_PX)
-        ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
+        ry = max(1, round(params.param_float_optional(prot, UIParam.RY, 1.0)))
         acs_lines = params.acs_lines_from_protocol(prot, ny_pe, 0)
         ro_axis, pe_axis = params.resolve_readout_phase_axes(prot)
 
@@ -266,7 +266,7 @@ class GrePulseqSequence(Sequence):
         ny_pe = params.param_int(prot, UIParam.NY)
         nslices = params.param_int(prot, UIParam.NSLICES)
         bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, DEFAULT_BANDWIDTH_HZ_PX)
-        ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
+        ry = max(1, round(params.param_float_optional(prot, UIParam.RY, 1.0)))
         acs_lines = params.acs_lines_from_protocol(prot, ny_pe, 0)
         ro_axis, pe_axis = params.resolve_readout_phase_axes(prot)
 

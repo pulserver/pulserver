@@ -7,18 +7,18 @@ images, waveforms) into binary ISMRMRD data for writing to a destination
 """
 
 __all__ = [
-    "write_optional",
-    "write_vector",
-    "write_array",
-    "write_object_array",
-    "write_acquisition_header",
-    "write_image_header",
-    "write_byte_string",
     "write_acquisition",
-    "write_waveform",
-    "write_image",
+    "write_acquisition_header",
+    "write_array",
+    "write_byte_string",
     "write_dicom",
+    "write_image",
+    "write_image_header",
+    "write_object_array",
+    "write_optional",
     "write_text",
+    "write_vector",
+    "write_waveform",
 ]
 
 import io

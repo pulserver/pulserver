@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import numpy as np
@@ -55,7 +56,7 @@ def test_write_supports_path_output():
         out_path = f"{tmp}/fast"
         signature = pio.write(seq, output=out_path, check_timing=False)
         assert signature is None
-        with open(f"{out_path}.seq", "rb") as f:
+        with Path(f"{out_path}.seq").open("rb") as f:
             payload = f.read()
 
     assert len(payload) > 0

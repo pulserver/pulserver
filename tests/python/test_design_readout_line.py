@@ -7,9 +7,9 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design import _readout as readout  # noqa: E402
+from pulserver.design import _readout as readout
 
-OPTS_KW = dict(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+OPTS_KW = {"max_grad": 40, "grad_unit": "mT/m", "max_slew": 150, "slew_unit": "T/m/s"}
 
 
 def _opts():

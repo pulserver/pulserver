@@ -400,10 +400,31 @@ def _n_shots(cfg: _Config) -> int:
 
 class _Config:
     __slots__ = (
-        "te_s", "tr_s", "flip_deg", "fov_ro_m", "fov_pe_m", "slice_thickness_m", "slice_spacing_m",
-        "nx_ro", "ny_pe", "nslices", "etl", "bandwidth_hz_px", "ramp_sample",
-        "b_value_s_mm2", "n_directions", "multiband_value", "multiband", "n_slice_groups",
-        "num_frames", "fat_sat", "b0_t", "ttl_output", "phase_correction", "reverse_pe", "sms_reference",
+        "b0_t",
+        "b_value_s_mm2",
+        "bandwidth_hz_px",
+        "etl",
+        "fat_sat",
+        "flip_deg",
+        "fov_pe_m",
+        "fov_ro_m",
+        "multiband",
+        "multiband_value",
+        "n_directions",
+        "n_slice_groups",
+        "nslices",
+        "num_frames",
+        "nx_ro",
+        "ny_pe",
+        "phase_correction",
+        "ramp_sample",
+        "reverse_pe",
+        "slice_spacing_m",
+        "slice_thickness_m",
+        "sms_reference",
+        "te_s",
+        "tr_s",
+        "ttl_output",
     )
 
 
@@ -425,7 +446,7 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.b_value_s_mm2 = params.param_float_optional(prot, UIParam.DIFFUSION_BVALUES, 0.0)
     cfg.n_directions = params.param_int_optional(prot, UIParam.DIFFUSION_DIRECTIONS, 3)
     cfg.multiband_value = params.param_float_optional(prot, UIParam.MULTIBAND, 1.0)
-    cfg.multiband = int(round(cfg.multiband_value))
+    cfg.multiband = round(cfg.multiband_value)
     cfg.n_slice_groups = cfg.nslices // max(1, cfg.multiband)
     cfg.num_frames = params.param_int_optional(prot, UIParam.NUM_FRAMES, 1)
     cfg.fat_sat = params.user_float(prot, USER_SLOT_FAT_SAT, 0.0) >= 0.5

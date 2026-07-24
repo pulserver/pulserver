@@ -13,8 +13,8 @@ from typing import Any
 __all__ = [
     "available_nufft_backends",
     "deepinverse_multicoil_mri",
-    "mrpro_operator",
     "mrinufft_operator",
+    "mrpro_operator",
 ]
 
 _MRPRO_OPERATORS = {

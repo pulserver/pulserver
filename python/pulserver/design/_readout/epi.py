@@ -59,8 +59,8 @@ from __future__ import annotations
 
 __all__ = [
     "Epi2D",
-    "Epi3D",
     "Epi2DFlyback",
+    "Epi3D",
     "Epi3DFlyback",
 ]
 
@@ -225,7 +225,7 @@ def _build_readout_x_blipped(opts, ro_axis, nx, fov_x_m, bandwidth_hz_px, oversa
     """
     raster = opts.grad_raster_time
     delta_k = 1.0 / (oversamp * fov_x_m)
-    n_full = int(round(oversamp * nx))
+    n_full = round(oversamp * nx)
     k_width = n_full * delta_k
 
     _, flat_time_s = quantize_readout_timing(
@@ -256,7 +256,7 @@ def _build_readout_x_blipped(opts, ro_axis, nx, fov_x_m, bandwidth_hz_px, oversa
 
     if ramp_sample:
         adc_dwell_s = _floor_to_raster(delta_k / gx.amplitude, opts.adc_raster_time)
-        n_samples = max(1, int(round(flat_time_s / adc_dwell_s)))
+        n_samples = max(1, round(flat_time_s / adc_dwell_s))
         adc = pp.make_adc(num_samples=n_samples, dwell=adc_dwell_s, delay=blip_duration_s / 2.0, system=opts)
         time_to_center = adc_dwell_s * ((n_samples - 1) / 2.0 + 0.5)
         # ADC start time must land on rf_raster_time (not adc_raster_time) -- pypulseq
@@ -606,7 +606,7 @@ def _build_readout_x_flyback(opts, ro_axis, nx, fov_x_m, bandwidth_hz_px, oversa
     """Plain (non-elongated) flat-top readout trapezoid + ADC -- every line plays the same polarity."""
     raster = opts.grad_raster_time
     delta_k = 1.0 / (oversamp * fov_x_m)
-    n_full = int(round(oversamp * nx))
+    n_full = round(oversamp * nx)
     k_width = n_full * delta_k
 
     dwell_s, flat_time_s = quantize_readout_timing(
@@ -620,7 +620,7 @@ def _build_readout_x_flyback(opts, ro_axis, nx, fov_x_m, bandwidth_hz_px, oversa
     gx = pp.make_trapezoid(channel=ro_axis, flat_area=sign * k_width, flat_time=flat_time_s, system=opts)
 
     if ramp_sample:
-        n_samples = max(1, int(round(pp.calc_duration(gx) / dwell_s)))
+        n_samples = max(1, round(pp.calc_duration(gx) / dwell_s))
         adc = pp.make_adc(num_samples=n_samples, dwell=dwell_s, delay=0.0, system=opts)
     else:
         n_samples = n_full

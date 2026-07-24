@@ -7,10 +7,10 @@ import pytest
 
 pytest.importorskip("pypulseq")
 
-import pulserver  # noqa: E402
+import pulserver
 import pulserver.design as design
-import pulserver.pypulseq as pp  # noqa: E402
-from pulserver import EncodingAxis, ScanLoop  # noqa: E402
+import pulserver.pypulseq as pp
+from pulserver import EncodingAxis, ScanLoop
 
 
 def _pairs(events):

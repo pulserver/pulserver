@@ -296,7 +296,7 @@ def make_epi_sampling(matrix, *, acceleration=1, segments=1, caipi_shift=0):
 
 
 def _default_inplane_views(matrix):
-    return int(math.ceil(np.pi * max(matrix[:2]) / 2.0))
+    return math.ceil(np.pi * max(matrix[:2]) / 2.0)
 
 
 def make_noncartesian_2d_sampling(
@@ -473,7 +473,7 @@ def make_noncartesian_projection_sampling(matrix, *, views=None, scheme="golden_
        ax.set_box_aspect((1, 1, 1)); ax.set_title("3D projection: golden-means directions")
     """
     matrix = _matrix(matrix, 3)
-    views = int(math.ceil(np.pi * max(matrix) ** 2)) if views is None else int(views)
+    views = math.ceil(np.pi * max(matrix) ** 2) if views is None else int(views)
     if views < 1:
         raise ValueError("views must be positive")
     if scheme == "golden_means":

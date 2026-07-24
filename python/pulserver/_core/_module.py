@@ -321,7 +321,7 @@ class SequenceModule(Sequence[Block], ABC):
         set_flags : ``TRID``, the label that names a repeating TR block.
         """
         remaining = tuple(item for item in self._triggers if item[0] != block)
-        self._triggers = remaining + ((block, tuple(events)),) if events else remaining
+        self._triggers = (*remaining, (block, tuple(events))) if events else remaining
         return self
 
     @property

@@ -30,7 +30,7 @@ def _slr_sample_count(duration: float, dwell: float) -> int:
         raise ValueError("duration must be > 0")
     if dwell <= 0:
         raise ValueError("dwell must be > 0")
-    count = max(8, int(round(duration / dwell)))
+    count = max(8, round(duration / dwell))
     return count + count % 2
 
 

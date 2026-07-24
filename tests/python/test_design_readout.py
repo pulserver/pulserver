@@ -7,9 +7,9 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design import _readout as readout  # noqa: E402
+from pulserver.design import _readout as readout
 
-OPTS_KW = dict(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+OPTS_KW = {"max_grad": 40, "grad_unit": "mT/m", "max_slew": 150, "slew_unit": "T/m/s"}
 
 
 def test_unbalanced_line_matches_gre_convention() -> None:
@@ -141,7 +141,7 @@ def test_wave_gradients_rejects_bad_args() -> None:
 # echoes settle on two different residual z baselines: harmless drift for
 # the plain crusher (MultiEchoSE/Fse2D), a real per-echo kz error once Fse3D
 # folds the partition encode onto the same axis (GS5 += kz, GS7 -= kz).
-_ASYM_RF_TIMING = dict(rf_dead_time=100e-6, rf_ringdown_time=30e-6)
+_ASYM_RF_TIMING = {"rf_dead_time": 100e-6, "rf_ringdown_time": 30e-6}
 
 
 def test_multiecho_z_crusher_has_no_echo_parity_residual() -> None:

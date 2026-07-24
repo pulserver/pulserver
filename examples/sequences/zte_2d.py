@@ -148,7 +148,7 @@ class Zte2DPulseqSequence(Sequence):
 
 
 class _Config:
-    __slots__ = ("tr_s", "flip_deg", "fov_m", "nx_ro", "num_shots", "order_mode")
+    __slots__ = ("flip_deg", "fov_m", "num_shots", "nx_ro", "order_mode", "tr_s")
 
 
 def _read_protocol(prot: dict) -> _Config:

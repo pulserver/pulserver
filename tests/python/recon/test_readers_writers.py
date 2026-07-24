@@ -112,7 +112,7 @@ def test_text_roundtrip():
 def test_acquisition_roundtrip():
     acq = ismrmrd.Acquisition()
     acq.resize(256, 8)  # 256 samples, 8 channels
-    acq.data[:] = np.random.randn(8, 256).astype(np.complex64)
+    acq.data[:] = np.random.default_rng().standard_normal((8, 256)).astype(np.complex64)
     acq.idx.kspace_encode_step_1 = 42
 
     dst = _make_write_socket()
@@ -134,7 +134,7 @@ def test_acquisition_roundtrip():
 
 
 def test_image_roundtrip():
-    data = np.random.randn(1, 1, 64, 64).astype(np.float32)
+    data = np.random.default_rng().standard_normal((1, 1, 64, 64)).astype(np.float32)
     image = ismrmrd.Image.from_array(data, transpose=False)
     image.image_index = 7
 

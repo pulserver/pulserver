@@ -436,7 +436,7 @@ def make_golden_means_3d_tilt(n_spokes, *, segment_length=1):
 
 def _is_fibonacci(value):
     return any(
-        int(math.isqrt(candidate)) ** 2 == candidate for candidate in (5 * value * value + 4, 5 * value * value - 4)
+        math.isqrt(candidate) ** 2 == candidate for candidate in (5 * value * value + 4, 5 * value * value - 4)
     )
 
 

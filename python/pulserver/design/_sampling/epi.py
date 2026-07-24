@@ -86,7 +86,7 @@ def interleaved(shape, *, acceleration=1, num_shots=1, axis=0, reverse_alternate
     coords = coords[np.all(coords % accel == 0, axis=1)]
     shots = []
     slow_axes = [d for d in range(ndim) if d != axis]
-    keys = tuple([coords[:, axis], *[coords[:, d] for d in reversed(slow_axes)]])
+    keys = (coords[:, axis], *[coords[:, d] for d in reversed(slow_axes)])
     coords = coords[np.lexsort(keys)]
     groups = (coords[:, axis] // accel[axis]) % num_shots
     for shot_idx in range(num_shots):

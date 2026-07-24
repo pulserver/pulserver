@@ -254,7 +254,7 @@ class ScanLoop(Sequence[np.ndarray]):
         row = self.positions[entry]
         values, column = [], 0
         for axis in self.axes:
-            values.append(int(round(float(row[column]))) if axis.kind == "index" else entry)
+            values.append(round(float(row[column])) if axis.kind == "index" else entry)
             column += axis.columns
         return tuple(values)
 
@@ -709,7 +709,7 @@ class ScanLoop(Sequence[np.ndarray]):
     @property
     def n_positions(self) -> int:
         """Number of distinct positions the loop visits."""
-        return int(len(self.positions))
+        return len(self.positions)
 
     @property
     def n_samples(self) -> int:

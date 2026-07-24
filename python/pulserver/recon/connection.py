@@ -234,7 +234,7 @@ class DummySaver:
     ) -> None:
         pass
 
-    def save(self, mid: int, item: Any) -> None:  # noqa: ARG002
+    def save(self, mid: int, item: Any) -> None:
         pass
 
 

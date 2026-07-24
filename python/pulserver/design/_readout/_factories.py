@@ -54,9 +54,9 @@ def _reject_axis_keywords(kwargs) -> None:
 
 
 def _readout_width(fov_x: float, nx: int, oversamp: float, pf: float) -> float:
-    n_full = int(round(oversamp * nx))
+    n_full = round(oversamp * nx)
     n_post = n_full // 2
-    n_samples = max(n_post + 1, int(round(pf * n_full)))
+    n_samples = max(n_post + 1, round(pf * n_full))
     return n_samples / (oversamp * fov_x)
 
 

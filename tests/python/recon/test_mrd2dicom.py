@@ -59,7 +59,7 @@ def minimal_mrd_image() -> ismrmrd.Image:
     """Create a minimal valid ISMRMRD image."""
     img = ismrmrd.Image()
     img.resize(256, 256, 1, 1)
-    img.data[:] = np.random.randint(0, 4096, size=img.data.shape, dtype=np.int16)
+    img.data[:] = np.random.default_rng().integers(0, 4096, size=img.data.shape, dtype=np.int16)
     img.position = (0.0, 0.0, 0.0)
     img.read_dir = (1.0, 0.0, 0.0)
     img.phase_dir = (0.0, 1.0, 0.0)

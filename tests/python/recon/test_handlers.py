@@ -43,7 +43,7 @@ def _make_acquisitions(
         for pe in range(n_pe):
             acq = ismrmrd.Acquisition()
             acq.resize(n_ro, n_channels)
-            acq.data[:] = np.random.randn(n_channels, n_ro).astype(np.complex64)
+            acq.data[:] = np.random.default_rng().standard_normal((n_channels, n_ro)).astype(np.complex64)
             acq.idx.kspace_encode_step_1 = pe
             acq.idx.slice = slc
 
@@ -173,7 +173,7 @@ def test_fftrecon_array2image():
     from pulserver.recon.handlers.fftrecon import _array2image
 
     n_pe, n_ro = 8, 16
-    data = np.random.randint(0, 100, (n_ro, n_pe), dtype=np.int16)
+    data = np.random.default_rng().integers(0, 100, (n_ro, n_pe), dtype=np.int16)
     acqs = _make_acquisitions(n_pe=n_pe, n_ro=n_ro, n_channels=1)
     metadata = _make_metadata(n_ro=n_ro, n_pe=n_pe)
 
@@ -228,7 +228,7 @@ def test_fftrecon_process_filters_interleaved_waveforms(monkeypatch):
 
     # Interleave: one waveform mid-stream, one right after the final
     # LAST_IN_MEASUREMENT-flagged acquisition (as the VRE client does).
-    stream = acqs[: n_pe // 2] + [waveform] + acqs[n_pe // 2 :] + [waveform]
+    stream = [*acqs[:n_pe // 2], waveform, *acqs[n_pe // 2:], waveform]
     conn = FakeConnection(stream)
     metadata = _make_metadata_kw(n_ro=n_ro, n_pe=n_pe)
 
@@ -244,9 +244,9 @@ def test_fftrecon_process_filters_interleaved_waveforms(monkeypatch):
         return real_reconstruct(group, metadata)
 
     monkeypatch.setattr(fftrecon, "_reconstruct", _spy_reconstruct)
-    monkeypatch.setattr(fftrecon, "_array2image", lambda *a, **k: object())
+    monkeypatch.setattr(fftrecon, "_array2image", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
-        fftrecon, "MrdDicomBuilder", lambda metadata: (lambda img: ("dset", img))
+        fftrecon, "MrdDicomBuilder", lambda _metadata: (lambda img: ("dset", img))
     )
 
     fftrecon.process(conn, "recon1.py", metadata)  # must not raise

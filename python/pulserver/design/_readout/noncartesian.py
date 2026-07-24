@@ -11,20 +11,20 @@ trajectory generation.
 from __future__ import annotations
 
 __all__ = [
-    "NonCartesianGradient",
     "Arbitrary",
-    "Radial",
-    "Spiral",
-    "Rosette",
     "NonCartesian2D",
-    "StackOfTrajectories",
-    "Projection",
     "NonCartesian3D",
-    "NonCartesianStack3D",
+    "NonCartesianGradient",
     "NonCartesianProjection",
+    "NonCartesianStack3D",
+    "Projection",
+    "Radial",
+    "Rosette",
+    "Spiral",
+    "StackOfTrajectories",
     "radial_trajectory",
-    "spiral_trajectory",
     "rosette_trajectory",
+    "spiral_trajectory",
 ]
 
 import copy
@@ -202,7 +202,7 @@ def _stretch_gradient(gradient, target_duration, raster):
     """Time-stretch ``gradient`` to at least ``target_duration``, preserving area."""
     gradient = np.asarray(gradient, dtype=float)
     old_n = gradient.shape[0]
-    new_n = max(old_n, int(math.ceil(target_duration / raster - 1e-12)))
+    new_n = max(old_n, math.ceil(target_duration / raster - 1e-12))
     if new_n == old_n:
         return gradient
     k_edges = np.vstack((np.zeros((1, gradient.shape[1])), np.cumsum(gradient, axis=0) * raster))
@@ -348,7 +348,7 @@ class Arbitrary(NonCartesianGradient):
         k_start = path[0]
         has_pre = not np.allclose(k_start, 0.0, atol=1e-12)
         has_rew = not np.allclose(path[-1], 0.0, atol=1e-12)
-        n_adc = max(2, int(round(n * oversamp)))
+        n_adc = max(2, round(n * oversamp))
         gradient = traj2grad(
             path,
             system,
@@ -393,7 +393,7 @@ class Radial(NonCartesianGradient):
             apply_system_derates(system)
         raster = system.grad_raster_time
         kmax = n / (2.0 * fov_m)
-        n_adc = max(2, int(round(n * oversamp)))
+        n_adc = max(2, round(n * oversamp))
         target_duration = n_adc / float(bandwidth_hz_px)
         read_duration = ceil_to_raster(max(target_duration, 2.0 * kmax / system.max_grad), raster)
         amplitude = 2.0 * kmax / read_duration
@@ -416,7 +416,7 @@ class Radial(NonCartesianGradient):
             gradients=(grad,),
             adc=adc,
             trajectory=trajectory,
-            recommended_rotations=int(math.ceil(np.pi * n / 2.0)),
+            recommended_rotations=math.ceil(np.pi * n / 2.0),
             prewinders=(pre,),
             rewinders=(rew,),
             variant="full",
@@ -494,7 +494,7 @@ class Spiral(NonCartesianGradient):
             start_at_zero=True,
             end_at_zero=False,
         )[:, :2]
-        n_adc = max(2, int(round(n * oversamp * (2 if variant == "in_out" else 1))))
+        n_adc = max(2, round(n * oversamp * (2 if variant == "in_out" else 1)))
         grad_out = _stretch_gradient(grad_out, n_adc / bandwidth_hz_px, system.grad_raster_time)
         out_area = np.sum(grad_out, axis=0) * system.grad_raster_time
 
@@ -660,7 +660,7 @@ class Rosette(NonCartesianGradient):
         # set requested by the user, not merely the time-optimal gradient.
         dwell = math.floor(max_dwell / system.adc_raster_time + 1e-12) * system.adc_raster_time
         dwell = max(float(system.adc_raster_time), dwell)
-        samples_per_petal = max(1, int(math.floor(read_duration / petals / dwell + 1e-12)))
+        samples_per_petal = max(1, math.floor(read_duration / petals / dwell + 1e-12))
         n_adc = petals * samples_per_petal
         adc = pp.make_adc(num_samples=n_adc, dwell=dwell, system=system)
         acquired_trajectory = _sample_gradient_trajectory(gradient, raster, adc)

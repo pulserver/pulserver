@@ -7,11 +7,11 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design._rf import _excitation_helpers as excitation  # noqa: E402
+from pulserver.design._rf import _excitation_helpers as excitation
 
 
 def _flip_deg_from_integral(rf) -> float:
-    return np.rad2deg(2 * np.pi * np.abs(np.trapz(rf.signal, rf.t)))
+    return np.rad2deg(2 * np.pi * np.abs(np.trapezoid(rf.signal, rf.t)))
 
 
 @pytest.mark.parametrize("flip", [30.0, 90.0, 180.0])

@@ -239,8 +239,20 @@ class GreRadial3DPulseqSequence(Sequence):
 
 class _Config:
     __slots__ = (
-        "te_s", "tr_s", "flip_deg", "fov_m", "slab_thickness_m", "slice_spacing_m",
-        "nx_ro", "npar", "bandwidth_hz_px", "rz", "num_shots", "order_mode", "num_frames", "trigger",
+        "bandwidth_hz_px",
+        "flip_deg",
+        "fov_m",
+        "npar",
+        "num_frames",
+        "num_shots",
+        "nx_ro",
+        "order_mode",
+        "rz",
+        "slab_thickness_m",
+        "slice_spacing_m",
+        "te_s",
+        "tr_s",
+        "trigger",
     )
 
 
@@ -255,7 +267,7 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.nx_ro = params.param_int(prot, UIParam.NX)
     cfg.npar = params.param_int(prot, UIParam.NSLICES)
     cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, DEFAULT_BANDWIDTH_HZ_PX)
-    cfg.rz = max(1, int(round(params.param_float_optional(prot, UIParam.RZ, 1.0))))
+    cfg.rz = max(1, round(params.param_float_optional(prot, UIParam.RZ, 1.0)))
     cfg.num_shots = params.param_int_optional(prot, UIParam.NUM_SHOTS, 100)
     cfg.order_mode = _order_mode_name(params.user_float(prot, USER_SLOT_ORDER_MODE, 1.0))
     cfg.num_frames = params.param_int_optional(prot, UIParam.NUM_FRAMES, 1)

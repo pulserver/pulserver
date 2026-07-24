@@ -7,7 +7,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design._rf import _auxiliary_helpers as pulses  # noqa: E402
+from pulserver.design._rf import _auxiliary_helpers as pulses
 
 
 def test_fat_shift_hz() -> None:
@@ -24,7 +24,7 @@ def test_fat_saturation_module() -> None:
     assert len(fs.spoiler) == 3
     assert fs.duration_s > 8e-3
     # flip angle from envelope integral ~ 110 deg
-    flip = np.rad2deg(2 * np.pi * np.abs(np.trapz(fs.rf.signal, fs.rf.t)))
+    flip = np.rad2deg(2 * np.pi * np.abs(np.trapezoid(fs.rf.signal, fs.rf.t)))
     assert flip == pytest.approx(110.0, rel=0.02)
 
 

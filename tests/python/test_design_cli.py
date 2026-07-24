@@ -9,7 +9,7 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver import run_cli  # noqa: E402
+from pulserver import run_cli
 
 
 @pytest.fixture
@@ -59,7 +59,7 @@ def test_writes_sequence_file(gre_plugin, tmp_path, capsys):
     assert f"Wrote sequence: {out}" in capsys.readouterr().out
 
 
-def test_const_flag_sets_value(gre_plugin, capsys):
+def test_const_flag_sets_value(gre_plugin):
     rc = run_cli(
         gre_plugin.PLUGIN, ["--validate-only", "--swap-phase-freq"], arg_map=gre_plugin._ARG_MAP
     )

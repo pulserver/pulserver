@@ -251,7 +251,7 @@ class _Bssfp(Readout):
         state = self._require_state()
         start = state.segment_idx * self.lines_per_segment
         stop = start + self.lines_per_segment
-        first_ky, first_kz = self._coordinates(start)
+        _first_ky, _first_kz = self._coordinates(start)
         last_ky, last_kz = self._coordinates(stop - 1)
 
         # alpha/2 preparation: the ONCE label identifies the entry transient.

@@ -266,7 +266,7 @@ def acs_lines_from_protocol(protocol: dict, ny_pe: int, slot: int) -> int:
     0
     """
     raw = user_float(protocol, slot, 0.0)
-    acs = int(round(raw))
+    acs = round(raw)
     if acs < 0:
         return 0
     return min(acs, ny_pe)

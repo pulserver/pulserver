@@ -7,9 +7,9 @@ import pytest
 
 pp = pytest.importorskip("pypulseq")
 
-from pulserver.design import _gradients as encoding  # noqa: E402
-from pulserver.design import calc_encoding_scales  # noqa: E402
-from pulserver.pypulseq import scale_grad  # noqa: E402
+from pulserver.design import _gradients as encoding
+from pulserver.design import calc_encoding_scales
+from pulserver.pypulseq import scale_grad
 
 
 def test_phase_encode_gradient_is_fixed_by_resolution_alone() -> None:

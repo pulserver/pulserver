@@ -355,7 +355,7 @@ def make_pins(
     source_area = source * (float(rf.shape_dur) / len(source))
     edges = np.linspace(0, len(source_area), n_subpulses + 1)
     coefficients = np.array(
-        [source_area[int(round(edges[i])) : int(round(edges[i + 1]))].sum() for i in range(n_subpulses)]
+        [source_area[round(edges[i]) : round(edges[i + 1])].sum() for i in range(n_subpulses)]
     )
     if not np.any(coefficients):
         raise ValueError("pulse has zero RF area")
@@ -367,12 +367,12 @@ def make_pins(
     block_raster = max(system.grad_raster_time, system.block_duration_raster)
     hard_duration = math.ceil((np.max(np.abs(coefficients)) / max_rf) / block_raster) * block_raster
     hard_duration = max(block_raster, hard_duration)
-    hard_samples = int(round(hard_duration / dwell))
+    hard_samples = round(hard_duration / dwell)
 
     blip = pp.make_trapezoid(channel="z", area=1.0 / slice_offset, system=system)
     blip_duration = pp.calc_duration(blip)
     total_duration = n_subpulses * hard_duration + (n_subpulses - 1) * blip_duration
-    output = np.zeros(int(round(total_duration / dwell)), dtype=complex)
+    output = np.zeros(round(total_duration / dwell), dtype=complex)
     center_offset = 0.0 if center_offset is None else float(center_offset)
     comb_shift = (0.0 if include_center else 0.5 * slice_offset) + center_offset
     cursor = 0
@@ -381,7 +381,7 @@ def make_pins(
         output[cursor : cursor + hard_samples] = coefficient * phase / hard_duration
         cursor += hard_samples
         if index < n_subpulses - 1:
-            cursor += int(round(blip_duration / dwell))
+            cursor += round(blip_duration / dwell)
 
     event = pp.make_arbitrary_rf(
         signal=output,

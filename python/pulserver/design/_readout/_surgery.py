@@ -198,18 +198,18 @@ def surgery_timing(esp_s, t_ex_wd_s, c90_s, dg_s, d_gz_reph_s, t_ref_wd_s, c180_
 
 
 __all__ = [
-    "RF_REFOCUS_TIME_S",
     "CPMG_PHASE_OFFSET_RAD",
     "DEFAULT_REFOCUS_FLIP_DEG",
     "EXCITATION_FLIP_DEG",
-    "build_refocusing_pulse",
-    "scale_refocusing_pulse",
-    "build_refocus_flip_schedule",
-    "fse_timing",
-    "surgery_ramp_time_s",
-    "build_slice_surgery_chain",
+    "RF_REFOCUS_TIME_S",
     "build_kz_crusher_bridge",
-    "build_surgery_readout",
     "build_readout_surgery_chain",
+    "build_refocus_flip_schedule",
+    "build_refocusing_pulse",
+    "build_slice_surgery_chain",
+    "build_surgery_readout",
+    "fse_timing",
+    "scale_refocusing_pulse",
+    "surgery_ramp_time_s",
     "surgery_timing",
 ]

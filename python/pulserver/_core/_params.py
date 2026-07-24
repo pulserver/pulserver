@@ -889,7 +889,7 @@ def expected_param_kind(key: UIParam | str) -> ParamKind | None:
         return ParamKind.FLOAT
     if key_str.endswith("_enabled") and key_str.startswith("user"):
         return ParamKind.BOOL
-    if (key_str.endswith("_min") or key_str.endswith("_max")) and key_str.startswith("user"):
+    if (key_str.endswith(("_min", "_max"))) and key_str.startswith("user"):
         return ParamKind.FLOAT
     if key_str.endswith("_name") and key_str.startswith("user"):
         return ParamKind.DESCRIPTION

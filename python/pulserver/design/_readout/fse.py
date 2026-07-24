@@ -59,14 +59,14 @@ Design notes
 from __future__ import annotations
 
 __all__ = [
-    "MultiEchoSE",
-    "Fse2D",
-    "Fse3D",
-    "build_refocusing_pulse",
-    "build_refocus_flip_schedule",
-    "build_z_crusher",
     "CPMG_PHASE_OFFSET_RAD",
     "DEFAULT_REFOCUS_FLIP_DEG",
+    "Fse2D",
+    "Fse3D",
+    "MultiEchoSE",
+    "build_refocus_flip_schedule",
+    "build_refocusing_pulse",
+    "build_z_crusher",
 ]
 
 import copy
@@ -609,9 +609,9 @@ def _build_readout(opts, ro_axis, nx, fov_x_m, bandwidth_hz_px, oversamp, pf):
         raise ValueError(f"oversamp must be >= 1, got {oversamp}")
 
     delta_k = 1.0 / (oversamp * fov_x_m)
-    n_full = int(round(oversamp * nx))
+    n_full = round(oversamp * nx)
     n_post = n_full // 2
-    n_samp = max(n_post + 1, int(round(pf * n_full)))
+    n_samp = max(n_post + 1, round(pf * n_full))
     n_pre = n_samp - n_post
     echo_sample = n_pre
     k_width = n_samp * delta_k

@@ -22,7 +22,7 @@ import os
 import sys
 import urllib.request
 import urllib.error
-from datetime import datetime, timezone
+from datetime import datetime
 
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
 DEFAULT_REPO_OWNER = "pulseq"

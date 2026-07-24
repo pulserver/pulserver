@@ -582,7 +582,7 @@ def make_random_mask(
     z0 = nz // 2 - calib[1] // 2
     mask[y0 : y0 + calib[0], z0 : z0 + calib[1]] = True
 
-    n_target = int(round(ny * nz / accel))
+    n_target = round(ny * nz / accel)
     n_extra = max(0, n_target - int(mask.sum()))
     free = np.flatnonzero(~mask.ravel())
     chosen = rng.choice(free, size=min(n_extra, free.size), replace=False)

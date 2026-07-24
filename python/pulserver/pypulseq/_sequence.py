@@ -847,7 +847,7 @@ class Sequence(pp.Sequence):
         """Fast builder does not support reading/parsing external sequence files."""
         raise NotImplementedError("pulserver.pypulseq.Sequence is a fast builder and does not implement read().")
 
-    def set_block(self, _block_index: int, *args: SimpleNamespace | float) -> None:  # noqa: ARG002
+    def set_block(self, _block_index: int, *args: SimpleNamespace | float) -> None:
         """Disable positional insertion/update in fast mode."""
         raise NotImplementedError(
             "pulserver.pypulseq.Sequence only supports sequential add_block(). "

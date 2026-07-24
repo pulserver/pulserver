@@ -9,28 +9,36 @@ description = "Pulseq MRI sequence runtime — contracts, C library, and reconst
 readme = "README.rst"
 license = { file = "LICENSE.txt" }
 requires-python = ">=3.10"
-authors = [
-  { name = "INFN-MRI" },
-]
+authors = [{ name = "pulserver" }]
 dependencies = []
 
 [project.optional-dependencies]
-sequence  = ["pypulseq>=1.5.0", "scipy", "numpy>=2.0", "matplotlib"]
-recon     = ["numpy>=2.0", "ismrmrd>=1.14.1", "pydicom", "h5py", "psutil"]
+sequence = ["pypulseq>=1.5.0", "scipy", "numpy>=2.0", "matplotlib"]
+recon = ["numpy>=2.0", "ismrmrd>=1.14.1", "pydicom", "h5py", "psutil"]
 # The reconstruction primitives use mri-nufft rather than maintaining a
 # second NUFFT implementation.  ``recon-cpu`` is the portable default;
 # ``recon-cuda`` selects the CUFINUFFT backend on Linux/CUDA hosts.
-recon-cpu = ["pulserver[recon]", "torch>=2.3", "mri-nufft[finufft]", "finufft", "mrpro", "deepinv"]
-recon-cuda = ["pulserver[recon-cpu]", "mri-nufft[cufinufft]; platform_system == 'Linux'"]
+recon-cpu = [
+  "pulserver[recon]",
+  "torch>=2.3",
+  "mri-nufft[finufft]",
+  "finufft",
+  "mrpro",
+  "deepinv",
+]
+recon-cuda = [
+  "pulserver[recon-cpu]",
+  "mri-nufft[cufinufft]; platform_system == 'Linux'",
+]
 recon-nlinv = ["pulserver[recon-cpu]", "pygrog"]
 # PyHySCO is GPL-3.0-only.  It remains an opt-in external executable and is
 # neither imported nor bundled by the MIT-licensed Pulserver package.
 recon-distortion = ["PyHySCO"]
-host      = ["pulserver[sequence]"]
-vre       = ["pulserver[recon]"]
-test      = ["pytest>=8.2", "pytest-cov>=5.0"]
-dev       = ["pulserver[host,vre,test]", "ruff>=0.6", "pre-commit>=3.8"]
-doc       = [
+host = ["pulserver[sequence]"]
+vre = ["pulserver[recon]"]
+test = ["pytest>=8.2", "pytest-cov>=5.0"]
+dev = ["pulserver[host,vre,test]", "ruff>=0.6", "pre-commit>=3.8"]
+doc = [
   "pulserver[sequence]",
   "sphinx>=7.4",
   "myst-parser>=3.0",
@@ -57,22 +65,91 @@ sdist.include = [
 # ``pulserver.sequences.<name>`` without copying or moving their source.
 packages = { "pulserver" = "python/pulserver", "pulserver/sequences" = "examples/sequences", "pulserver/examples/recon" = "examples/recon" }
 
+# Formatting + linting using ruff.
 [tool.ruff]
-line-length = 120
-target-version = "py310"
-# tests/utils/pulseq and external/pulseq are vendored copies of the upstream
-# Pulseq project (not first-party pulserver code); docs/_build is generated
-# Sphinx output. Lint neither as our own.
-exclude = ["build", "build_tests", "tests/utils/pulseq", "external", "docs/_build"]
+line-length = 88
+fix = true
+extend-exclude = ["__init__.py", "docs/**", "external/**", "tests/utils/pulseq/**"]
+exclude = ["docs/**"]
 
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# RUFF section
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "SIM"]
-ignore = ["E501"]
+select = [
+  "A",
+  "ARG",
+  "B",
+  "C4",
+  "COM",
+  "F",
+  "I",
+  "NPY",
+  "RUF",
+  "S",
+  "SIM",
+  "PIE",
+  "PTH",
+  "Q",
+  "W",
+  "YTT",
+]
+ignore = [
+  "E501",   # line too long
+  "W191",   # tabs
+  "E203",   # spacing before ':'
+  "COM812", # missing trailing comma
+  "Q000",
+  "Q001",
+  "Q002",   # quote rules handled by Ruff formatter
+  "I001",
+  "I002",   # import sorting intentionally not enforced
+  "S101",
+]
+extend-ignore = [
+  "E501", # line too long
+  "W191", # tabs
+  "E203", # colon spacing
+]
+
+[tool.ruff.lint.isort]
+force-single-line = false
+split-on-trailing-comma = false
+
+[tool.ruff.lint.flake8-quotes]
+docstring-quotes = "double"
+inline-quotes = "double"
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+# Public handler and protocol interfaces deliberately retain their established
+# argument names.  The recon server also accepts filesystem paths supplied by
+# scanner configuration, where converting every intermediate value to Path
+# would not improve safety or clarity.
+[tool.ruff.lint.per-file-ignores]
+"bridge/tests/test_plugin.py" = ["ARG001", "PTH123"]
+"python/pulserver/design/_readout/_surgery.py" = ["ARG001"]
+"python/pulserver/design/_readout/fse.py" = ["ARG002"]
+"python/pulserver/io.py" = ["S324"]
+"python/pulserver/recon/connection.py" = ["A003", "PTH", "S108", "S110"]
+"python/pulserver/recon/constants.py" = ["A001"]
+"python/pulserver/recon/dicom2mrd.py" = ["S110"]
+"python/pulserver/recon/distortion.py" = ["S603"]
+"python/pulserver/recon/handlers/savedataonly.py" = ["ARG001"]
+"python/pulserver/recon/main.py" = ["PTH", "S104", "S108"]
+"python/pulserver/recon/mrdhelper.py" = ["A002"]
+"python/pulserver/recon/readers.py" = ["A002", "ARG001", "PTH123"]
+"python/pulserver/recon/replay.py" = ["PTH", "S110"]
+"python/pulserver/recon/rtp_connection.py" = ["S104"]
+"python/pulserver/recon/server.py" = ["ARG001", "ARG004", "PTH", "S104", "S110"]
+"python/pulserver/recon/writers.py" = ["A002"]
+"python/pulserver/sequences/_shim.py" = ["S102"]
+"tests/python/test_sequences_repl.py" = ["S603"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
-addopts   = "-ra --import-mode=importlib"
-
-[tool.black]
-line-length = 120
-target-version = ["py310"]
+addopts = "-ra --import-mode=importlib"

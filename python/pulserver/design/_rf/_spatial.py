@@ -148,7 +148,7 @@ def _assemble_spatial_pulse(
 def _sample_trapezoid(event, dwell: float) -> np.ndarray:
     """Sample a trapezoid at RF-raster midpoints."""
     duration = event.rise_time + event.flat_time + event.fall_time
-    time = (np.arange(int(round(duration / dwell))) + 0.5) * dwell
+    time = (np.arange(round(duration / dwell)) + 0.5) * dwell
     knots = np.array([0.0, event.rise_time, event.rise_time + event.flat_time, duration])
     values = np.array([0.0, event.amplitude, event.amplitude, 0.0])
     return np.interp(time, knots, values)

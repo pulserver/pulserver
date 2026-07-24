@@ -42,6 +42,7 @@ __all__ = [
     "design_epi_3d",
     "design_fse_2d",
     "design_fse_3d",
+    "design_gre",
     "design_gre_2d",
     "design_gre_3d",
     "design_gre_mprage_radial_2d",
@@ -56,7 +57,6 @@ __all__ = [
     "design_mprage_3d",
     "design_zte_2d",
     "design_zte_3d",
-    "design_gre",
 ]
 
 
@@ -217,7 +217,7 @@ def _factory_doc(name: str, fields: list[tuple[str, object, object, str]], plugi
                 "A dynamic cardiac acquisition uses the multiphase count and optional",
                 "cardiac trigger directly::",
                 "",
-                f"    cine = design_{name}(num_frames=20, trigger=\"cardiac\")",
+                f'    cine = design_{name}(num_frames=20, trigger="cardiac")',
             ]
         )
         rendered_examples = f""".. plot::
@@ -244,7 +244,7 @@ def _factory_doc(name: str, fields: list[tuple[str, object, object, str]], plugi
                 "Dynamic view ordering continues across frames and can optionally wait",
                 "for a physiological trigger at each frame boundary::",
                 "",
-                f"    dynamic = design_{name}(num_frames=20, trigger=\"cardiac\")",
+                f'    dynamic = design_{name}(num_frames=20, trigger="cardiac")',
             ]
         )
         rendered_examples = f""".. plot::

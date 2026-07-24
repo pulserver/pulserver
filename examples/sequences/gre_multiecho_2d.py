@@ -262,9 +262,24 @@ class GreMultiEcho2DPulseqSequence(Sequence):
 
 class _Config:
     __slots__ = (
-        "te_s", "tr_s", "flip_deg", "fov_ro_m", "fov_pe_m", "slice_thickness_m", "slice_spacing_m",
-        "nx_ro", "ny_pe", "nslices", "bandwidth_hz_px", "ry", "acs_lines", "ro_axis", "pe_axis",
-        "num_echoes", "echo_spacing_s", "flyback",
+        "acs_lines",
+        "bandwidth_hz_px",
+        "echo_spacing_s",
+        "flip_deg",
+        "flyback",
+        "fov_pe_m",
+        "fov_ro_m",
+        "nslices",
+        "num_echoes",
+        "nx_ro",
+        "ny_pe",
+        "pe_axis",
+        "ro_axis",
+        "ry",
+        "slice_spacing_m",
+        "slice_thickness_m",
+        "te_s",
+        "tr_s",
     )
 
 
@@ -281,7 +296,7 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.ny_pe = params.param_int(prot, UIParam.NY)
     cfg.nslices = params.param_int(prot, UIParam.NSLICES)
     cfg.bandwidth_hz_px = params.param_float_optional(prot, UIParam.BANDWIDTH, DEFAULT_BANDWIDTH_HZ_PX)
-    cfg.ry = max(1, int(round(params.param_float_optional(prot, UIParam.RY, 1.0))))
+    cfg.ry = max(1, round(params.param_float_optional(prot, UIParam.RY, 1.0)))
     cfg.acs_lines = params.acs_lines_from_protocol(prot, cfg.ny_pe, USER_SLOT_ACS)
     cfg.ro_axis, cfg.pe_axis = params.resolve_readout_phase_axes(prot)
     cfg.num_echoes = params.param_int_optional(prot, UIParam.NUM_ECHOES, 1)
