@@ -596,10 +596,11 @@ static int fill_grad_waveform_for_block(
 {
     int i, idx;
     float sign, max_amp;
-    float delay_us, t_sample, last_written;
+    float delay_us, t_sample;
     int shape_id, time_shape_id, shot_idx, num_samples;
     float rise_us, flat_us, fall_us;
     float grad_raster_us, block_end_us;
+    float rel_end_us;
     pulseq_shape decomp_wave, decomp_time;
     int has_time_shape;
 
@@ -620,7 +621,6 @@ static int fill_grad_waveform_for_block(
         return idx - start_idx;
     }
 
-    last_written = t0;
     shot_idx = gte->shot_index;
     max_amp = pos_max_amp[shot_idx];
     sign = (max_amp >= 0.0f) ? 1.0f : -1.0f;
@@ -633,7 +633,6 @@ static int fill_grad_waveform_for_block(
         t_sample = t0;
         time[idx] = t_sample;
         waveform[idx] = 0.0f;
-        last_written = t_sample;
         idx++;
     }
 
@@ -648,25 +647,21 @@ static int fill_grad_waveform_for_block(
             t_sample = t0 + delay_us;
             time[idx] = t_sample;
             waveform[idx] = 0.0f;
-            last_written = t_sample;
             idx++;
 
             t_sample = t0 + delay_us + rise_us;
             time[idx] = t_sample;
             waveform[idx] = sign * max_amp;
-            last_written = t_sample;
             idx++;
 
             t_sample = t0 + delay_us + rise_us + flat_us;
             time[idx] = t_sample;
             waveform[idx] = sign * max_amp;
-            last_written = t_sample;
             idx++;
 
             t_sample = t0 + delay_us + rise_us + flat_us + fall_us;
             time[idx] = t_sample;
             waveform[idx] = 0.0f;
-            last_written = t_sample;
             idx++;
         }
         else
@@ -674,21 +669,20 @@ static int fill_grad_waveform_for_block(
             t_sample = t0 + delay_us;
             time[idx] = t_sample;
             waveform[idx] = 0.0f;
-            last_written = t_sample;
             idx++;
 
             t_sample = t0 + delay_us + rise_us;
             time[idx] = t_sample;
             waveform[idx] = sign * max_amp;
-            last_written = t_sample;
             idx++;
 
             t_sample = t0 + delay_us + rise_us + fall_us;
             time[idx] = t_sample;
             waveform[idx] = 0.0f;
-            last_written = t_sample;
             idx++;
         }
+
+        rel_end_us = delay_us + rise_us + flat_us + fall_us;
     }
     else
     {
@@ -718,9 +712,9 @@ static int fill_grad_waveform_for_block(
                 t_sample = t0 + delay_us + decomp_time.samples[i];
                 time[idx] = t_sample;
                 waveform[idx] = sign * max_amp * decomp_wave.samples[i];
-                last_written = t_sample;
                 idx++;
             }
+            rel_end_us = delay_us + decomp_time.samples[num_samples - 1];
         }
         else
         {
@@ -729,9 +723,9 @@ static int fill_grad_waveform_for_block(
                 t_sample = t0 + delay_us + 0.5f * grad_raster_us + (float)i * grad_raster_us;
                 time[idx] = t_sample;
                 waveform[idx] = sign * max_amp * decomp_wave.samples[i];
-                last_written = t_sample;
                 idx++;
             }
+            rel_end_us = delay_us + 0.5f * grad_raster_us + grad_raster_us * (float)(num_samples - 1);
         }
 
         if (decomp_wave.samples)
@@ -740,7 +734,13 @@ static int fill_grad_waveform_for_block(
             PULSEG_FREE(decomp_time.samples);
     }
 
-    if (block_end_us > last_written)
+    /* Tail decision must match count_grad_samples_for_block's arithmetic
+     * exactly (same small, t0-independent terms). Comparing t0-embedded
+     * absolute times instead loses float32 precision once t0 grows into
+     * the block's tail (up to ~1e8 us on long protocols), so the two
+     * functions can disagree on whether a trailing sample is needed --
+     * overflowing the array count() sized for it. */
+    if (rel_end_us < block_duration_us)
     {
         float tail_amp = 0.0f;
         if (gdef->type == 1 && idx > start_idx)

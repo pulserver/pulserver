@@ -100,15 +100,6 @@ CASES = [
         dict([_p(UIParam.NX, 256), _p(UIParam.NY, 256), _p(UIParam.NSLICES, 20), _p(UIParam.ETL, 16)]),
     ),
     Case(
-        # KNOWN CRASH (2026-07-24): this size reliably segfaults bench_pipeline's C
-        # convert stage with "corrupted size vs. prev_size" (glibc heap-corruption
-        # abort). gdb backtrace: pulseg__get_gradient_waveforms_range ->
-        # interpolate_to_uniform, csrc/src/waveforms/pulseg_waveforms.c, triggered by
-        # a 6721-block segment range -- a real, pre-existing bug in the C library,
-        # unrelated to the Python design code. Left in deliberately (bench_zoo.py
-        # catches the subprocess crash and records it as c_error rather than dying)
-        # so this stays an easy repro until the C bug is fixed; do not use its
-        # numbers in the docs tables until it produces a clean result.
         "epi_2d",
         "256² × 20 slices, ETL 16",
         dict([_p(UIParam.NX, 256), _p(UIParam.NY, 256), _p(UIParam.NSLICES, 20), _p(UIParam.ETL, 16)]),
