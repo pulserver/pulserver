@@ -19,9 +19,9 @@ sequence has to answer before it is allowed to run is narrow and specific:
 
 Note what the question is *not*. It is not "how much acoustic energy is
 produced", and it is not a broadband noise figure. The forbidden band is a
-statement about a resonance, and a resonance responds to coherent drive at its
-own frequency. So the quantity that matters is the amplitude of the sinusoid
-the sequence effectively presents at that frequency.
+statement about a resonance, and a resonance responds to coherent drive at
+its own frequency. So the quantity that matters is the amplitude of the
+sinusoid the sequence effectively presents at that frequency.
 
 ## The naive algorithm
 
@@ -36,10 +36,11 @@ problems on a scanner.
 samples per axis. The check runs at predownload, while the operator waits.
 
 **Windowing.** A single FFT of a minutes-long record has microhertz
-resolution and no meaningful notion of "the amplitude at 1150 Hz" — the answer
-depends entirely on the window you choose, and a spectrogram's answer depends
-on the window width you happened to pick. There is no principled window width,
-because the sequence's own structure supplies the timescale, not the analyst.
+resolution and no meaningful notion of "the amplitude at 1150 Hz" — the
+answer depends entirely on the window you choose, and a spectrogram's answer
+depends on the window width you happened to pick. There is no principled
+window width, because the sequence's own structure supplies the timescale,
+not the analyst.
 
 **Truncation.** The record you transform is the scan you happened to
 prescribe. Half as many repetitions gives a different spectrum for the same
@@ -48,27 +49,27 @@ what the gradient coil experiences per unit time.
 
 ## What Pulserver computes instead
 
-The analysis never renders a waveform. It exploits two exact properties of the
-Fourier transform, and the fact that a Pulseq sequence is *already* written in
-the form those properties want.
+The analysis never renders a waveform. It exploits two exact properties of
+the Fourier transform, and the fact that a Pulseq sequence is *already*
+written in the form those properties want.
 
-**Linearity.** The transform of a sum is the sum of the transforms. A sequence
-is a sum of time-shifted, amplitude-scaled copies of a small library of block
-shapes.
+**Linearity.** The transform of a sum is the sum of the transforms. A
+sequence is a sum of time-shifted, amplitude-scaled copies of a small library
+of block shapes.
 
 **The shift theorem.** Delaying a waveform by $t_k$ multiplies its transform
 by $e^{-j2\pi f t_k}$ and changes nothing else.
 
 Together: transform each *unique* block shape once, then get every occurrence
-of it for free. Occurrence $k$, with signed amplitude $A_k$, starting at $t_k$,
-contributes
+of it for free. Occurrence $k$, with signed amplitude $A_k$, starting at
+$t_k$, contributes
 
 $$a_k(f) = A_k\, W_k(f)\, e^{-j2\pi f t_k}$$
 
 and the per-axis spectrum is the coherent complex sum $S_\text{ax}(f) = \sum_k
 a_k(f)$. This is not an approximation traded for speed — it is algebraically
-the same number the concatenated-waveform transform would give, reached by not
-redoing work the mathematics says is redundant.
+the same number the concatenated-waveform transform would give, reached by
+not redoing work the mathematics says is redundant.
 
 The verdict statistic is
 
@@ -80,7 +81,9 @@ not a normalised score.
 
 ### Stage 1 — the canonical structural window
 
-Everything is computed over **one canonical window**, the unit that repeats.
+Everything is computed over **one canonical window**, the unit that repeats
+(the same window {doc}`the TR-detection overlay <../sequence_representation/pulserver>`
+supplies).
 
 - **Degenerate prep/cooldown** (absent, or structurally identical to the
   repeating body): the window is **one imaging TR**.
@@ -102,8 +105,8 @@ deliberately worst-case.
 Each gradient definition's normalised complex response $W_k(f)$, with
 $W_k(0)=1$, comes from its true shape:
 
-- **Trapezoid, extended trapezoid, ramp**: the exact analytic transform of the
-  piecewise-linear vertex sequence.
+- **Trapezoid, extended trapezoid, ramp**: the exact analytic transform of
+  the piecewise-linear vertex sequence.
 - **Arbitrary waveforms**: the exact transform of the raw sample sequence,
   cell-centred at $t_m = t_\text{start} + (m+\tfrac12)\Delta t$, evaluated
   directly at each query frequency.
@@ -125,12 +128,12 @@ $$S_\text{ax}(f) = \sum_k a_k(f)\, D_{N_k}(f, T_k).$$
 
 Only NEX is folded this way. **No inner periodicity is ever declared.** An
 echo train's spacing, a multi-slice repeat, a segmented readout — each
-instance is simply one more materialised event inside the window, and the comb
-structure *emerges* from the coherent sum, because a sum of $N$ identical
-equally-spaced phasors is algebraically the Dirichlet kernel whether you write
-the closed form or accumulate it term by term. The engine can therefore export
-the individual per-event phasors that make up a line, which a closed-form
-product model cannot.
+instance is simply one more materialised event inside the window, and the
+comb structure *emerges* from the coherent sum, because a sum of $N$
+identical equally-spaced phasors is algebraically the Dirichlet kernel
+whether you write the closed form or accumulate it term by term. The engine
+can therefore export the individual per-event phasors that make up a line,
+which a closed-form product model cannot.
 
 ### Stage 4 — the evaluation grid
 
@@ -168,8 +171,8 @@ there are two stages rather than one.
 **Stage A — which frequencies are worth checking at all.** A forbidden band
 arrives as $(f_\text{lo}, f_\text{hi}, \text{limit})$, but the true width of
 the underlying mechanical resonance is not known — only that the vendor drew
-the band about as narrow as their sharpest resonance. So every band is widened
-symmetrically by a **guard**:
+the band about as narrow as their sharpest resonance. So every band is
+widened symmetrically by a **guard**:
 
 $$\text{guard} = \tfrac12\min(\text{band widths}),$$
 
@@ -180,8 +183,8 @@ the same guard. Every evaluation frequency landing in $[f_\text{lo}-
 is deliberately generous: it costs one spectral evaluation to be wrong, and
 missing a line here is unrecoverable.
 
-**Stage B — whether a candidate is actually a violation.** For each candidate,
-on each axis independently:
+**Stage B — whether a candidate is actually a violation.** For each
+candidate, on each axis independently:
 
 $$A_\text{eq}(f) > \varepsilon_\text{band},\qquad
 \varepsilon_\text{band} = \max(\text{band limit},\ 0.08\cdot G_\text{max}).$$
@@ -189,8 +192,8 @@ $$A_\text{eq}(f) > \varepsilon_\text{band},\qquad
 The floor at $0.08\,G_\text{max}$ scales with the hardware and absorbs
 incidental spectral leakage — a phase-encode blip's tail landing near a band
 edge — independently of how tight a particular band limit happens to be. A
-vendor band with a limit of exactly zero would otherwise reject every sequence
-that puts any energy anywhere near it.
+vendor band with a limit of exactly zero would otherwise reject every
+sequence that puts any energy anywhere near it.
 
 Crucially **the same statistic does both jobs**. The amplitude compared
 against the limit is exactly the amplitude used to decide the frequency was
@@ -213,7 +216,8 @@ The table below is the shipped example zoo, analysed by the same compiled
 engine predownload runs, against a real vendor ESP lockout table. Each is a
 one-slice, one-average protocol; the analysis cost depends on the complexity
 of one canonical window, not on how many TRs follow it, so these numbers do
-not change when the protocol grows to clinical size.
+not change when the protocol grows to clinical size. Timing is reported in
+full in {doc}`../benchmarks`.
 
 | Sequence | $T_\text{TR}$ | Window | Candidates | Peak $A_\text{eq}$ | Gate | Verdict |
 | --- | ---: | --- | ---: | ---: | ---: | --- |
@@ -229,15 +233,15 @@ Reproduce with `python docs/_bench/bench_safety.py --esp <table>`.
 Two things in that table carry the argument.
 
 **The spiral pair is the whole point of the criterion.** Both rows are the
-same plugin, the same matrix, the same trajectory family — only the shot count
-differs, and with it the readout length. The 48-shot version spreads its
-gradient oscillation across many short readouts and passes comfortably. The
-4-shot version concentrates it into long readouts whose fundamental lands
-inside a forbidden band, and fails on Gx at 1150 Hz with
-132 kHz/m against a limit of 123 kHz/m. Nothing about the *peak gradient
-amplitude* distinguishes them; nothing about total acoustic energy does
-either. What distinguishes them is coherent drive at one frequency, which is
-exactly what $A_\text{eq}$ measures.
+same plugin, the same matrix, the same trajectory family — only the shot
+count differs, and with it the readout length. The 48-shot version spreads
+its gradient oscillation across many short readouts and passes comfortably.
+The 4-shot version concentrates it into long readouts whose fundamental lands
+inside a forbidden band, and fails on Gx at 1150 Hz with 132 kHz/m against a
+limit of 123 kHz/m. Nothing about the *peak gradient amplitude* distinguishes
+them; nothing about total acoustic energy does either. What distinguishes
+them is coherent drive at one frequency, which is exactly what $A_\text{eq}$
+measures.
 
 **bSSFP has the largest $A_\text{eq}$ in the table and still passes.** A
 sustained balanced readout drives its TR fundamental hard — 17.5 mT/m of
@@ -246,52 +250,10 @@ system. Amplitude alone is not the verdict; amplitude *at a forbidden
 frequency* is. This is also the sequence family most sensitive to the band
 table: shift the TR and the fundamental walks across the frequency axis.
 
-## Computational efficiency
-
-Cost depends on the complexity of one canonical window. It does not depend on
-sequence duration, on the number of TRs, or on the number of passes.
-
-Three quantities matter:
-
-- **$D$ — unique gradient definitions in the window.** Small even for a
-  complex window: a handful of distinct shapes. Amortised to $O(1)$ per
-  occurrence by the transform cache below.
-- **$M$ — outer repeat count.** Runtime is **independent of $M$**. The number
-  of exact harmonics in a guarded band never scaled with $M$, and the
-  finite-$M$ fold adds a fixed number of extra samples per harmonic, not a
-  growing one.
-- **$N$ — materialised instances of one definition inside the window.** This
-  is the Stage 3 sum length, not $M$. One scale-and-phase accumulate each,
-  against the memoised base transform.
-
-The mechanics that get there:
-
-- **Per-definition memoisation.** $W_k(f)$ is cached per `(def_id,
-  frequency)` for the duration of one spectrum evaluation
-  (`sa_transform_cache` in `pulseg_safety.c`). Occurrences sharing a
-  definition hit the cache instead of repeating the $O(\text{vertices})$
-  integral — which is what makes the extra fractional-frequency samples
-  affordable.
-- **Analytic evaluation.** $N_f$ frequencies over $K$ events costs
-  $O(N_f \cdot K)$, with memoisation collapsing the effective $K$ toward $D$.
-  No waveform is ever built for the verdict.
-- **NEX is $O(1)$ per event**, via the Dirichlet kernel rather than physical
-  enumeration.
-- **Display-only extras are never paid for by the gate.** Two dense arrays
-  exist for plotting — an FFT of the physically NEX-expanded waveform
-  (`spectrum_full_g{x,y,z}`) and a dense analytic envelope
-  (`envelope_amp_g{x,y,z}`) — and both are computed only by
-  `pulseg_calc_mech_resonances`. `pulseg_check_safety`, the path predownload
-  runs, always passes `compute_dense_envelope=0`.
-
-The table above shows the scaling directly: FSE has 69 blocks in its window
-and costs 785 ms; GRE has 8 and costs 25 ms. What the table does *not* show is
-any dependence on scan length — GRE at 64 TRs and GRE at 8192 TRs have the
-same window and the same cost.
-
-For contrast, [the PNS check](pns_safety.md) is the opposite shape of problem:
-it needs a materialised time-domain waveform and so does scale with the window's
-*duration*, at roughly 25× the cost of this analysis on the same sequences.
+The mechanics that make this cheap — per-definition memoisation, analytic
+evaluation, $O(1)$ NEX folding — and its measured scaling against PNS are
+covered in {doc}`../benchmarks`, so a method and its measurement can be read
+independently.
 
 ## Relation to Seginer et al. 2508.03220
 
@@ -312,10 +274,10 @@ exception, folded analytically by its finite count.
 
 `mechres_plots/epi_seginer_reproduction.py` reproduces the paper's Fig. 1 — a
 multi-echo multi-slice EPI train, echo spacing 0.52 ms, ETL 54, 3 TEs,
-6 slices — through the real C engine, with the TE and slice spacing on and off
-the $2\cdot\text{ESP}$ raster:
+6 slices — through the real C engine, with the TE and slice spacing on and
+off the $2\cdot\text{ESP}$ raster:
 
-![EPI Fig.1 reproduction](assets/mechanical_resonance/epi_seginer_fig1_reproduction.png)
+![EPI Fig.1 reproduction](../assets/mechanical_resonance/epi_seginer_fig1_reproduction.png)
 
 As in the paper, on-raster spacing keeps the energy in one dominant peak no
 matter how many echoes or slices are added (the three right-hand panels have
@@ -323,7 +285,7 @@ identical peak height), while a sub-millisecond off-raster shift spreads it
 into a comb of comparable peaks. Because every instance is a real event, the
 engine can also export the phasors that sum to a line:
 
-![Per-event phasor decomposition](assets/mechanical_resonance/epi_seginer_component_decomposition.png)
+![Per-event phasor decomposition](../assets/mechanical_resonance/epi_seginer_component_decomposition.png)
 
 At the comb peak all 18 materialised events (3 TEs × 6 slices) add almost
 perfectly in phase. There is no "TE factor" or "slice factor" anywhere in the
@@ -333,45 +295,47 @@ C code — only 18 event phasors and a running complex sum.
 
 `mechres_plots/aeq_current.py` drives the same compiled engine across the
 five-sequence reference corpus (`gre_2d`, `epi_2d`, `fse_2d`, `mprage_2d`
-PASS; `bssfp_2d` the one genuine FAIL). For context, `docs/_bench/waveform_plots.py`
-draws the same corpus's representative TR — the same window this analysis
-runs on, scoped past each fixture's leading dummy (non-ADC) TRs — so the
-frequency-domain verdict below can be read directly against the waveform that
-produced it; [the PNS page shows the same pairing](pns_safety.md#reading-the-plots)
-for GRE and EPI.
+PASS; `bssfp_2d` the one genuine FAIL). For context,
+`docs/_bench/waveform_plots.py` draws the same corpus's representative TR —
+the same window this analysis runs on, scoped past each fixture's leading
+dummy (non-ADC) TRs — so the frequency-domain verdict below can be read
+directly against the waveform that produced it;
+[the PNS page shows the same pairing](pns.md#reading-the-plots) for GRE and
+EPI.
 
-**GRE**, one isolated readout gradient per TR — the baseline case, comfortably
-inside every band:
+**GRE**, one isolated readout gradient per TR — the baseline case,
+comfortably inside every band:
 
-![GRE representative TR](assets/representative_tr/gre_2d_tr.png)
+![GRE representative TR](../assets/representative_tr/gre_2d_tr.png)
 
-![gre](assets/mechanical_resonance/current_gre.png)
+![gre](../assets/mechanical_resonance/current_gre.png)
 
 **EPI**, a long blipped echo train. Unlike PNS (where EPI is the extreme
 case), mechanical resonance only asks about the readout's own switching
 frequency — one Gx harmonic near 750 Hz standing well clear of the forbidden
 bands, plus the blip train's own fundamental on Gz:
 
-![EPI representative TR](assets/representative_tr/epi_2d_tr.png)
+![EPI representative TR](../assets/representative_tr/epi_2d_tr.png)
 
-![epi](assets/mechanical_resonance/current_epi.png)
+![epi](../assets/mechanical_resonance/current_epi.png)
 
-**bSSFP**, whose sustained balanced readout drives the TR fundamental hardest:
+**bSSFP**, whose sustained balanced readout drives the TR fundamental
+hardest:
 
-![bssfp](assets/mechanical_resonance/current_bssfp.png)
+![bssfp](../assets/mechanical_resonance/current_bssfp.png)
 
 **MPRAGE**, annotated with its window parameters read from the C structure
 descriptor:
 
-![mprage](assets/mechanical_resonance/current_mprage.png)
+![mprage](../assets/mechanical_resonance/current_mprage.png)
 
-In all four: dark stems are $A_\text{eq}$ at exact TR harmonics — stems rather
-than a line, because there is genuinely no content between them. The faint
-curve underneath is the matched analytic envelope: the same closed-form
-$S_\text{ax}(f)$, evaluated on a dense uniform grid. Because the stems are
-that function sampled at the harmonics, the envelope passes exactly through
-every stem tip with no rescaling — unlike an independent FFT of the
-materialised waveform, which uses a different window and normalisation and
-would only be shape-similar. Shaded regions are forbidden bands, the dashed
-line is $\varepsilon$ for that band, dots are guarded-band candidates, and a
-red X is a violation.
+In all four: dark stems are $A_\text{eq}$ at exact TR harmonics — stems
+rather than a line, because there is genuinely no content between them. The
+faint curve underneath is the matched analytic envelope: the same
+closed-form $S_\text{ax}(f)$, evaluated on a dense uniform grid. Because the
+stems are that function sampled at the harmonics, the envelope passes
+exactly through every stem tip with no rescaling — unlike an independent FFT
+of the materialised waveform, which uses a different window and
+normalisation and would only be shape-similar. Shaded regions are forbidden
+bands, the dashed line is $\varepsilon$ for that band, dots are guarded-band
+candidates, and a red X is a violation.

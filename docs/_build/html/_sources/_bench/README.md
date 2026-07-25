@@ -1,10 +1,12 @@
 # Benchmark tooling
 
-Documentation-only. Produces the numbers quoted in
-[`docs/explanations/performance.md`](../explanations/performance.md),
-[`mechanical_resonance_safety.md`](../explanations/mechanical_resonance_safety.md)
-and [`pns_safety.md`](../explanations/pns_safety.md). Nothing here is part of
-the shipped package, and nothing in the package imports it.
+Documentation-only. Produces the numbers and figures quoted in
+[`docs/explanations/benchmarks.md`](../explanations/benchmarks.md),
+[`safety/mechanical_resonance.md`](../explanations/safety/mechanical_resonance.md),
+[`safety/pns.md`](../explanations/safety/pns.md) and
+[`sequence_representation/pulseg.md`](../explanations/sequence_representation/pulseg.md).
+Nothing here is part of the shipped package, and nothing in the package
+imports it.
 
 ## Contents
 
@@ -14,13 +16,23 @@ the shipped package, and nothing in the package imports it.
 | `bench_alloc.c` | Allocator interposition (`-Wl,--wrap=malloc`) so the heap figures cover every allocation path the library uses, not just one. |
 | `bench_zoo.py` | Drives the example plugins at several protocol sizes, times the host-side design and serialisation, then runs `bench_pipeline` on each `.seq`. |
 | `bench_safety.py` | Mechanical resonance and PNS analysis across the zoo, through the same bindings the scanner path uses. |
+| `segment_plots.py` | C-library-inferred maximum-energy segment views for the zoo, including multi-segment cases (MPRAGE, fat-sat EPI). |
+| `waveform_plots.py` | Representative-TR and PNS (chronaxie + SAFE) plots for the safety pages. |
+| `plot_benchmarks.py` | Reproducible download/load scaling plot from `results.json`. |
+| `plot_safety_benchmarks.py` | Reproducible mechanical-resonance-vs-PNS cost plot from `safety.json`. |
+| `seqdesc_diagram.py` | Schematic (non-data) diagram of the SEQDESC event-stream state machine. |
 
 ## Running
 
 ```bash
 bash docs/_bench/build_bench.sh                    # builds bench_pipeline
 python docs/_bench/bench_zoo.py --repeats=3        # -> results.json
+python docs/_bench/plot_benchmarks.py              # -> explanations/assets/benchmarks/
 python docs/_bench/bench_safety.py --esp <table>   # -> safety.json
+python docs/_bench/plot_safety_benchmarks.py       # -> explanations/assets/benchmarks/
+python docs/_bench/segment_plots.py                # -> explanations/assets/segments/
+python docs/_bench/waveform_plots.py               # -> explanations/assets/{representative_tr,pns_safety}/
+python docs/_bench/seqdesc_diagram.py              # -> explanations/assets/reconstruction/
 ```
 
 `bench_zoo.py --c-only` re-times the C stages against `.seq` files a previous

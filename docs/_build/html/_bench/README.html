@@ -191,6 +191,19 @@
     <div class="bd-toc-item navbar-nav active">
         <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting started</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/sequence_representation/pulseq.html">Pulseq: the portable description</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/sequence_representation/pulseg.html">PulSeg: reusable definitions plus instances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/sequence_representation/pulserver.html">Pulserver’s overlay: a TR, for safety’s sake</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/safety/gradient_slew.html">Gradient amplitude and slew</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/safety/mechanical_resonance.html">Mechanical resonance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/safety/pns.html">Peripheral nerve stimulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/benchmarks.html">Benchmarks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction/ismrmrd_session.html">The ISMRMRD session contract</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction/trajectory.html">Pulseq enrichment and automatic trajectory calculation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction/simulator.html">Sequence description and the state-machine simulator extension</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../tutorials.html">Tutorials</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../tutorials/build_a_sequence_plugin.html">Build a sequence plugin with the design toolbox</a></li>
 </ul>
@@ -368,13 +381,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/recon/pulserver.recon.concurrency.html">pulserver.recon.concurrency</a></li>
 </ul>
 </details></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/sequence_representation.html">How a sequence is represented</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/mechanical_resonance_safety.html">Mechanical resonance</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/pns_safety.html">Peripheral nerve stimulation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/performance.html">Runtime and memory</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../more.html">More</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -567,11 +573,13 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="benchmark-tooling">
 <h1>Benchmark tooling<a class="headerlink" href="#benchmark-tooling" title="Link to this heading">#</a></h1>
-<p>Documentation-only. Produces the numbers quoted in
-<a class="reference internal" href="../explanations/performance.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">docs/explanations/performance.md</span></code></span></a>,
-<a class="reference internal" href="../explanations/mechanical_resonance_safety.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">mechanical_resonance_safety.md</span></code></span></a>
-and <a class="reference internal" href="../explanations/pns_safety.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">pns_safety.md</span></code></span></a>. Nothing here is part of
-the shipped package, and nothing in the package imports it.</p>
+<p>Documentation-only. Produces the numbers and figures quoted in
+<a class="reference internal" href="../explanations/benchmarks.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">docs/explanations/benchmarks.md</span></code></span></a>,
+<a class="reference internal" href="../explanations/safety/mechanical_resonance.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">safety/mechanical_resonance.md</span></code></span></a>,
+<a class="reference internal" href="../explanations/safety/pns.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">safety/pns.md</span></code></span></a> and
+<a class="reference internal" href="../explanations/sequence_representation/pulseg.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">sequence_representation/pulseg.md</span></code></span></a>.
+Nothing here is part of the shipped package, and nothing in the package
+imports it.</p>
 <section id="contents">
 <h2>Contents<a class="headerlink" href="#contents" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -593,6 +601,21 @@ the shipped package, and nothing in the package imports it.</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bench_safety.py</span></code></p></td>
 <td><p>Mechanical resonance and PNS analysis across the zoo, through the same bindings the scanner path uses.</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">segment_plots.py</span></code></p></td>
+<td><p>C-library-inferred maximum-energy segment views for the zoo, including multi-segment cases (MPRAGE, fat-sat EPI).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">waveform_plots.py</span></code></p></td>
+<td><p>Representative-TR and PNS (chronaxie + SAFE) plots for the safety pages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plot_benchmarks.py</span></code></p></td>
+<td><p>Reproducible download/load scaling plot from <code class="docutils literal notranslate"><span class="pre">results.json</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">plot_safety_benchmarks.py</span></code></p></td>
+<td><p>Reproducible mechanical-resonance-vs-PNS cost plot from <code class="docutils literal notranslate"><span class="pre">safety.json</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">seqdesc_diagram.py</span></code></p></td>
+<td><p>Schematic (non-data) diagram of the SEQDESC event-stream state machine.</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -601,7 +624,12 @@ the shipped package, and nothing in the package imports it.</p>
 <h2>Running<a class="headerlink" href="#running" title="Link to this heading">#</a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bash<span class="w"> </span>docs/_bench/build_bench.sh<span class="w">                    </span><span class="c1"># builds bench_pipeline</span>
 python<span class="w"> </span>docs/_bench/bench_zoo.py<span class="w"> </span>--repeats<span class="o">=</span><span class="m">3</span><span class="w">        </span><span class="c1"># -&gt; results.json</span>
+python<span class="w"> </span>docs/_bench/plot_benchmarks.py<span class="w">              </span><span class="c1"># -&gt; explanations/assets/benchmarks/</span>
 python<span class="w"> </span>docs/_bench/bench_safety.py<span class="w"> </span>--esp<span class="w"> </span>&lt;table&gt;<span class="w">   </span><span class="c1"># -&gt; safety.json</span>
+python<span class="w"> </span>docs/_bench/plot_safety_benchmarks.py<span class="w">       </span><span class="c1"># -&gt; explanations/assets/benchmarks/</span>
+python<span class="w"> </span>docs/_bench/segment_plots.py<span class="w">                </span><span class="c1"># -&gt; explanations/assets/segments/</span>
+python<span class="w"> </span>docs/_bench/waveform_plots.py<span class="w">               </span><span class="c1"># -&gt; explanations/assets/{representative_tr,pns_safety}/</span>
+python<span class="w"> </span>docs/_bench/seqdesc_diagram.py<span class="w">              </span><span class="c1"># -&gt; explanations/assets/reconstruction/</span>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">bench_zoo.py</span> <span class="pre">--c-only</span></code> re-times the C stages against <code class="docutils literal notranslate"><span class="pre">.seq</span></code> files a previous

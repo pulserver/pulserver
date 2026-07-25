@@ -1,7 +1,7 @@
 """Runtime and memory of the write_sequence pipeline, across the example zoo.
 
 Documentation-only tooling: it produces the tables in
-``docs/explanations/performance.md``. Not part of the shipped package.
+``docs/explanations/benchmarks.md``. Not part of the shipped package.
 
 Run it as::
 

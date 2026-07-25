@@ -726,6 +726,17 @@ extern "C"
     int pulseg_get_num_unique_blocks(const pulseg_collection *coll, int subseq_idx);
 
     /**
+     * @brief Return the number of deduplicated segment definitions for a
+     * subsequence (<= num_prep_segments + num_main_segments +
+     * num_cooldown_segments, which count pre-dedup positions).
+     *
+     * @param[in]  coll        Loaded collection.
+     * @param[in]  subseq_idx  0-based subsequence index.
+     * @return Number of unique segments (>= 0), or negative error code.
+     */
+    int pulseg_get_num_unique_segments(const pulseg_collection *coll, int subseq_idx);
+
+    /**
      * @brief Return the 1-based .seq block ID for the n-th unique block.
      *
      * This is the key into pypulseq's block_events / Pulseq MATLAB toolbox

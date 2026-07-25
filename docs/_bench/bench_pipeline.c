@@ -2,7 +2,7 @@
  * bench_pipeline.c -- runtime and heap footprint of the on-scanner C pipeline.
  *
  * Documentation-only tooling: it produces the tables in
- * docs/explanations/performance.md and is not part of the shipped library.
+ * docs/explanations/benchmarks.md and is not part of the shipped library.
  * Everything it calls is public pulseg/pulseq API, so it doubles as a worked
  * example of driving the pipeline one stage at a time -- pulseg_read() fuses
  * the first three.

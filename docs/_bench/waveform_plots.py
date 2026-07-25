@@ -30,6 +30,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import pulserver.io as pio  # noqa: E402
 import pulserver.pypulseq as pp  # noqa: E402
+from pypulseq.utils.safe_pns_prediction import safe_example_hw  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = REPO_ROOT / "tests" / "utils" / "expected"
@@ -43,6 +44,17 @@ PNS_OPTS = dict(chronaxie_us=360.0, rheobase=4.25e8, alpha=0.333)
 # Same corpus mechres_plots/aeq_current.py uses (gre/epi/fse/mprage PASS,
 # bssfp FAIL), so a reader can line the two sets of figures up TR for TR.
 CORPUS = ["gre_2d", "epi_2d", "fse_2d", "mprage_2d", "bssfp_2d"]
+
+# The SAFE panel is drawn only for this subset -- it needs upstream
+# pypulseq's own SAFE model, which is a separate code path from the
+# chronaxie plots above, and one pairing (GRE, the isolated-event baseline)
+# is enough to show what the model does.
+SAFE_CORPUS = ["gre_2d"]
+
+# Upstream pypulseq's own bundled hardware description, explicitly documented
+# there as "EXAMPLE scanner hardware (not a real scanner)". Not fabricated
+# here, and not any particular system's SAFE coefficients.
+SAFE_HW = safe_example_hw()
 
 
 def first_adc_tr(seq: pp.Sequence, max_tr: int = 64) -> int:
@@ -90,6 +102,22 @@ def plot_pns(name: str, seq: pp.Sequence, tr_index: int) -> Path:
     return out
 
 
+def plot_pns_safe(name: str, seq: pp.Sequence, tr_index: int) -> Path:
+    seq.pns(tr_index=tr_index, model="safe", hardware=SAFE_HW)
+    fig = plt.gcf()
+    fig.suptitle(
+        f"{name}  --  SAFE PNS, TR index {tr_index}  "
+        "(pypulseq example hardware -- not a real scanner)",
+        fontsize=9,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    out = OUT_DIR / "pns_safety" / f"{name}_pns_safe.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=130)
+    plt.close(fig)
+    return out
+
+
 def main() -> None:
     for name in CORPUS:
         seq = load(name)
@@ -98,6 +126,14 @@ def main() -> None:
         pns_out = plot_pns(name, seq, tr_index)
         print(f"{name:12} tr_index={tr_index:3d}  -> {tr_out.relative_to(OUT_DIR.parent)}  "
               f"{pns_out.relative_to(OUT_DIR.parent)}")
+        if name in SAFE_CORPUS:
+            # upstream calculate_pns()'s time_range scoping is unreliable past
+            # TR 0 on some fixtures (a pypulseq limitation, not ours) -- TR 0
+            # is enough to illustrate the model's shape; this is an authoring
+            # visualisation, not a verdict, so it need not be the steady-state
+            # ADC TR the chronaxie plot above uses.
+            safe_out = plot_pns_safe(name, seq, 0)
+            print(f"{'':12} {'':13}    {safe_out.relative_to(OUT_DIR.parent)}")
 
 
 if __name__ == "__main__":

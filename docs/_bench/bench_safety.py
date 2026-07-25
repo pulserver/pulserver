@@ -1,8 +1,9 @@
 """Mechanical-resonance and PNS analysis across the example zoo.
 
 Documentation-only tooling: it produces the tables in
-``docs/explanations/mechanical_resonance_safety.md`` and
-``docs/explanations/pns_safety.md``. Not part of the shipped package.
+``docs/explanations/safety/mechanical_resonance.md``,
+``docs/explanations/safety/pns.md`` and ``docs/explanations/benchmarks.md``.
+Not part of the shipped package.
 
 Run it as::
 

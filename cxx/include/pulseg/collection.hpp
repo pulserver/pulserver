@@ -665,8 +665,15 @@ namespace pulseg
      */
         std::vector<SegmentLayout> segments(int subseq_idx = 0) const
         {
-            pulseg_subseq_info si = subseq_info(subseq_idx);
-            int num_local = si.num_prep_segments + si.num_main_segments + si.num_cooldown_segments;
+            // local_seg_idx below indexes the subsequence's *deduplicated*
+            // segment definitions (see resolve_subseq_local_segment_global_id()
+            // in pulseg_getters.c), not the pre-dedup prep+main+cooldown
+            // position count -- a subsequence with repeated TR positions
+            // (e.g. a partition loop) has strictly fewer unique segments than
+            // positions.
+            int num_local = pulseg_get_num_unique_segments(coll_, subseq_idx);
+            if (num_local < 0)
+                check(num_local);
 
             std::vector<SegmentLayout> out;
             out.reserve(static_cast<size_t>(num_local));

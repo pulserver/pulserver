@@ -191,6 +191,19 @@
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting started</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/sequence_representation/pulseq.html">Pulseq: the portable description</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/sequence_representation/pulseg.html">PulSeg: reusable definitions plus instances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/sequence_representation/pulserver.html">Pulserver’s overlay: a TR, for safety’s sake</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/safety/gradient_slew.html">Gradient amplitude and slew</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/safety/mechanical_resonance.html">Mechanical resonance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/safety/pns.html">Peripheral nerve stimulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/benchmarks.html">Benchmarks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction/ismrmrd_session.html">The ISMRMRD session contract</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction/trajectory.html">Pulseq enrichment and automatic trajectory calculation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction/simulator.html">Sequence description and the state-machine simulator extension</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../tutorials.html">Tutorials</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../tutorials/build_a_sequence_plugin.html">Build a sequence plugin with the design toolbox</a></li>
 </ul>
@@ -368,13 +381,6 @@
 <li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.concurrency.html">pulserver.recon.concurrency</a></li>
 </ul>
 </details></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/sequence_representation.html">How a sequence is represented</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/mechanical_resonance_safety.html">Mechanical resonance</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/pns_safety.html">Peripheral nerve stimulation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/performance.html">Runtime and memory</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../more.html">More</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -1248,7 +1254,7 @@ client.</p>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>TypeError</strong> – If no appropriate writer is found.</p></li>
-<li><p><strong>ValueError</strong> – If the connection is exhausted.</p></li>
+<li><p><strong>ValueError</strong> – If the connection has been closed for sending.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1372,9 +1378,9 @@ GADGET_MESSAGE_CLOSE</p>
 </dl>
 </div></blockquote>
 <dl class="simple">
-<dt>PmcPayload wire layout (52 bytes, little-endian):</dt><dd><p>float32 × 3   shift      — additive translation delta [m] along scanner X/Y/Z
-float32 × 9   rotation   — 3×3 rotation correction matrix (row-major)
-int32         rescan     — non-zero → RTP app requests TR rescan</p>
+<dt>PmcPayload wire layout (52 bytes, little-endian):</dt><dd><p>float32 x 3   shift      - additive translation delta [m] along scanner X/Y/Z
+float32 x 9   rotation   - 3x3 rotation correction matrix (row-major)
+int32         rescan     - non-zero -&gt; RTP app requests TR rescan</p>
 </dd>
 </dl>
 <dl class="py class">
@@ -2413,7 +2419,7 @@ from the args and kwargs arguments, respectively.</p>
 iterative / deep-learning MR reconstructions on a GE Premier/UHP-class server.
 On a 156 GiB VRE box (~142 GiB available), the formula yields 2 slots:</p>
 <blockquote>
-<div><p>max(1, floor(142 × 0.8 / 48)) = 2   → 96 GiB working set</p>
+<div><p>max(1, floor(142 x 0.8 / 48)) = 2 -&gt; 96 GiB working set</p>
 </div></blockquote>
 <p>Both <code class="docutils literal notranslate"><span class="pre">per_recon_gb</span></code> and the overall limit are overridable at runtime via CLI
 flags (<code class="docutils literal notranslate"><span class="pre">--per-recon-gb</span></code>, <code class="docutils literal notranslate"><span class="pre">--max-recon</span></code>) or the environment variables

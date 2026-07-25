@@ -3689,6 +3689,15 @@ int pulseg_get_num_unique_blocks(const pulseg_collection *coll, int subseq_idx)
     return coll->descriptors[subseq_idx].num_unique_blocks;
 }
 
+int pulseg_get_num_unique_segments(const pulseg_collection *coll, int subseq_idx)
+{
+    if (!coll)
+        return PULSEG_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return PULSEG_ERR_INDEX;
+    return coll->descriptors[subseq_idx].num_unique_segments;
+}
+
 int pulseg_get_unique_block_id(const pulseg_collection *coll, int subseq_idx, int blk_def_idx)
 {
     const pulseg_sequence_descriptor *desc;

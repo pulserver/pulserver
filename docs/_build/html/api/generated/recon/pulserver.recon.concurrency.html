@@ -48,7 +48,7 @@
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-    <link rel="next" title="Explanation" href="../../../explanation.html" />
+    <link rel="next" title="More" href="../../../more.html" />
     <link rel="prev" title="pulserver.recon.constants" href="pulserver.recon.constants.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -187,6 +187,19 @@
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting started</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/sequence_representation/pulseq.html">Pulseq: the portable description</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/sequence_representation/pulseg.html">PulSeg: reusable definitions plus instances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/sequence_representation/pulserver.html">Pulserver’s overlay: a TR, for safety’s sake</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety/gradient_slew.html">Gradient amplitude and slew</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety/mechanical_resonance.html">Mechanical resonance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety/pns.html">Peripheral nerve stimulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/benchmarks.html">Benchmarks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction/ismrmrd_session.html">The ISMRMRD session contract</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction/trajectory.html">Pulseq enrichment and automatic trajectory calculation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction/simulator.html">Sequence description and the state-machine simulator extension</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../tutorials.html">Tutorials</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../tutorials/build_a_sequence_plugin.html">Build a sequence plugin with the design toolbox</a></li>
 </ul>
@@ -364,13 +377,6 @@
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">pulserver.recon.concurrency</a></li>
 </ul>
 </details></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanation.html">Explanation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/sequence_representation.html">How a sequence is represented</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/mechanical_resonance_safety.html">Mechanical resonance</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/pns_safety.html">Peripheral nerve stimulation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/performance.html">Runtime and memory</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../more.html">More</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -556,7 +562,7 @@
 iterative / deep-learning MR reconstructions on a GE Premier/UHP-class server.
 On a 156 GiB VRE box (~142 GiB available), the formula yields 2 slots:</p>
 <blockquote>
-<div><p>max(1, floor(142 × 0.8 / 48)) = 2   → 96 GiB working set</p>
+<div><p>max(1, floor(142 x 0.8 / 48)) = 2 -&gt; 96 GiB working set</p>
 </div></blockquote>
 <p>Both <code class="docutils literal notranslate"><span class="pre">per_recon_gb</span></code> and the overall limit are overridable at runtime via CLI
 flags (<code class="docutils literal notranslate"><span class="pre">--per-recon-gb</span></code>, <code class="docutils literal notranslate"><span class="pre">--max-recon</span></code>) or the environment variables
@@ -593,11 +599,11 @@ flags (<code class="docutils literal notranslate"><span class="pre">--per-recon-
       </div>
     </a>
     <a class="right-next"
-       href="../../../explanation.html"
+       href="../../../more.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Explanation</p>
+        <p class="prev-next-title">More</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

@@ -48,8 +48,8 @@
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="How a sequence is represented" href="explanations/sequence_representation.html" />
-    <link rel="prev" title="pulserver.recon.concurrency" href="api/generated/recon/pulserver.recon.concurrency.html" />
+    <link rel="next" title="Pulseq: the portable description" href="explanations/sequence_representation/pulseq.html" />
+    <link rel="prev" title="Getting started" href="getting_started.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -187,6 +187,19 @@
     <div class="bd-toc-item navbar-nav active">
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
+<li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Explanation</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="explanations/sequence_representation/pulseq.html">Pulseq: the portable description</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/sequence_representation/pulseg.html">PulSeg: reusable definitions plus instances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/sequence_representation/pulserver.html">Pulserver’s overlay: a TR, for safety’s sake</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/safety/gradient_slew.html">Gradient amplitude and slew</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/safety/mechanical_resonance.html">Mechanical resonance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/safety/pns.html">Peripheral nerve stimulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/benchmarks.html">Benchmarks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/reconstruction/ismrmrd_session.html">The ISMRMRD session contract</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/reconstruction/trajectory.html">Pulseq enrichment and automatic trajectory calculation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/reconstruction/simulator.html">Sequence description and the state-machine simulator extension</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="tutorials.html">Tutorials</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="tutorials/build_a_sequence_plugin.html">Build a sequence plugin with the design toolbox</a></li>
 </ul>
@@ -364,13 +377,6 @@
 <li class="toctree-l3"><a class="reference internal" href="api/generated/recon/pulserver.recon.concurrency.html">pulserver.recon.concurrency</a></li>
 </ul>
 </details></li>
-</ul>
-</details></li>
-<li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">Explanation</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="explanations/sequence_representation.html">How a sequence is represented</a></li>
-<li class="toctree-l2"><a class="reference internal" href="explanations/mechanical_resonance_safety.html">Mechanical resonance</a></li>
-<li class="toctree-l2"><a class="reference internal" href="explanations/pns_safety.html">Peripheral nerve stimulation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="explanations/performance.html">Runtime and memory</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="more.html">More</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -551,19 +557,38 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="explanation">
 <h1>Explanation<a class="headerlink" href="#explanation" title="Link to this heading">#</a></h1>
-<p>Background reading: what the pieces are for and why they work the way they do.
-None of it is needed to write a sequence, and all of it is worth having before
-a verdict or a runtime figure surprises you.</p>
-<p>For the authoring model itself (<code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code>, scan loops), see
-<a class="reference internal" href="tutorials/build_a_sequence_plugin.html"><span class="doc">the tutorial</span></a> and
-<a class="reference internal" href="how_to.html"><span class="doc">How-to guides</span></a> — this section is the machinery underneath a written sequence,
-and what that machinery costs.</p>
+<p>The implementation choices that turn a Pulseq file into a scanner sequence.
+Each page is deliberately limited to one concern, kept to roughly a page of
+prose plus whatever plots and tables the topic needs. Benchmarks are their
+own section so a method and its measurement can be read independently.</p>
 <div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Sequence representation</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="explanations/sequence_representation.html">How a sequence is represented</a></li>
-<li class="toctree-l1"><a class="reference internal" href="explanations/mechanical_resonance_safety.html">Mechanical resonance</a></li>
-<li class="toctree-l1"><a class="reference internal" href="explanations/pns_safety.html">Peripheral nerve stimulation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="explanations/performance.html">Runtime and memory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="explanations/sequence_representation/pulseq.html">Pulseq: the portable description</a></li>
+<li class="toctree-l1"><a class="reference internal" href="explanations/sequence_representation/pulseg.html">PulSeg: reusable definitions plus instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="explanations/sequence_representation/pulserver.html">Pulserver’s overlay: a TR, for safety’s sake</a></li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Safety</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="explanations/safety/gradient_slew.html">Gradient amplitude and slew</a></li>
+<li class="toctree-l1"><a class="reference internal" href="explanations/safety/mechanical_resonance.html">Mechanical resonance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="explanations/safety/pns.html">Peripheral nerve stimulation</a></li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Benchmarks</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="explanations/benchmarks.html">Benchmarks</a></li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Reconstruction</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="explanations/reconstruction/ismrmrd_session.html">The ISMRMRD session contract</a></li>
+<li class="toctree-l1"><a class="reference internal" href="explanations/reconstruction/trajectory.html">Pulseq enrichment and automatic trajectory calculation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="explanations/reconstruction/simulator.html">Sequence description and the state-machine simulator extension</a></li>
 </ul>
 </div>
 </section>
@@ -580,20 +605,20 @@ and what that machinery costs.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="api/generated/recon/pulserver.recon.concurrency.html"
+       href="getting_started.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pulserver.recon.concurrency</p>
+        <p class="prev-next-title">Getting started</p>
       </div>
     </a>
     <a class="right-next"
-       href="explanations/sequence_representation.html"
+       href="explanations/sequence_representation/pulseq.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">How a sequence is represented</p>
+        <p class="prev-next-title">Pulseq: the portable description</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
