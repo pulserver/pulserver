@@ -4,8 +4,8 @@ from __future__ import annotations
 
 __all__ = ["Segment", "Sequence"]
 
+import copy
 import math
-from copy import deepcopy
 from dataclasses import dataclass
 from types import SimpleNamespace
 
@@ -29,6 +29,9 @@ _RF_USE_CHAR_TO_CODE = {
     "o": 6,
 }
 _RF_USE_CODE_TO_CHAR = {v: k for k, v in _RF_USE_CHAR_TO_CODE.items()}
+
+#: Gradient channel -> its column in a ``block_events`` row.
+_CHANNEL_SLOT = {"x": 2, "y": 3, "z": 4}
 
 
 @dataclass(frozen=True)
@@ -153,6 +156,21 @@ class Sequence(pp.Sequence):
         self._view_cache: dict | None = None
         self._collection_cache: dict | None = None
         self._segment_cache: dict | None = None
+        # Sample-array -> registered shape IDs, keyed by object identity. A
+        # module replays one template thousands of times with different
+        # offsets; the sample arrays are the same objects every time, so
+        # compressing and hashing them once instead of once per shot is what
+        # keeps generation linear in blocks rather than in samples. Each entry
+        # keeps a reference to the arrays it was computed from: that both
+        # pins the id() against reuse and makes the identity check exact.
+        # Valid only because events never have their arrays written into --
+        # see pulserver.design._system.copy_event.
+        self._rf_shape_cache: dict[int, tuple] = {}
+        self._grad_shape_cache: dict[int, tuple] = {}
+        # get_extension_type_ID() is a string lookup with a fallback that can
+        # allocate; the four names used here are fixed, so resolve on demand
+        # and remember.
+        self._ext_type_ids: dict[str, int] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -175,14 +193,7 @@ class Sequence(pp.Sequence):
         in_place:
             If ``True``, deduplicate current instance; otherwise return a copy.
         """
-        if in_place:
-            seq_copy = self
-        else:
-            tmp = (self.block_cache, self._view_cache, self._collection_cache, self._segment_cache)
-            self.block_cache = {}
-            self._view_cache = self._collection_cache = self._segment_cache = None
-            seq_copy = deepcopy(self)
-            (self.block_cache, self._view_cache, self._collection_cache, self._segment_cache) = tmp
+        seq_copy = self if in_place else self._clone_for_dedup()
 
         seq_copy.shape_library, shape_map = seq_copy.shape_library.remove_duplicates(9)
 
@@ -294,6 +305,34 @@ class Sequence(pp.Sequence):
         seq_copy.extensions_library = new_ext_lib
         seq_copy.block_cache.clear()
         return seq_copy
+
+    def _clone_for_dedup(self) -> Sequence:
+        """A private copy holding only the members deduplication rewrites.
+
+        Deduplication replaces every event library outright and rewrites the
+        event IDs on each block row, and the caller then records
+        ``TotalDuration`` in the definitions. Nothing else changes, so nothing
+        else is worth copying: a ``deepcopy`` of the whole sequence would walk
+        every tuple in every library -- some 600k of them for a large 3D scan
+        -- to produce copies that the very next step discards.
+
+        The four libraries listed below are the ones rewritten *in place*
+        (their shape references are remapped before the library itself is
+        replaced), so they are the ones that need their own dicts. Their
+        payloads are immutable, so the dicts can share them.
+        """
+        clone = copy.copy(self)
+        clone.definitions = dict(self.definitions)
+        clone.block_events = {block_id: list(row) for block_id, row in self.block_events.items()}
+        for name in ("arb_library", "grad_library", "rf_library", "adc_library"):
+            setattr(clone, name, _copy_library(getattr(self, name)))
+        clone.block_cache = {}
+        clone._view_cache = None
+        clone._collection_cache = None
+        clone._segment_cache = None
+        clone._rf_shape_cache = {}
+        clone._grad_shape_cache = {}
+        return clone
 
     @property
     def custom_labels(self) -> dict[str, int]:
@@ -870,86 +909,98 @@ class Sequence(pp.Sequence):
     def _fast_set_block(self, block_index: int, *args: SimpleNamespace | float) -> None:
         """Direct-insert block registration: no dedup, no continuity checks, no trace."""
         events = block_to_events(*args)
-        new_block = np.zeros(7, dtype=np.int32)
+        # A plain list, not an int32 array: this runs once per block, so the
+        # array header would be the largest single allocation of the hot loop.
+        # Everything that reads a row -- write(), remove_duplicates() -- indexes
+        # or slices it; the views that need an upstream Sequence re-parse the
+        # payload and build their own.
+        new_block = [0, 0, 0, 0, 0, 0, 0]
         duration = 0
         extensions = []
 
         for event in events:
             if isinstance(event, float):
-                duration = max(duration, event)
+                if event > duration:
+                    duration = event
                 continue
 
-            if event.type == "rf":
+            event_type = event.type
+            if event_type == "rf":
                 rf_id, _ = self._fast_register_rf(event)
                 new_block[1] = rf_id
-                duration = max(duration, event.shape_dur + event.delay + event.ringdown_time)
+                event_duration = event.shape_dur + event.delay + event.ringdown_time
 
-            elif event.type == "grad":
-                channel_num = ["x", "y", "z"].index(event.channel)
+            elif event_type == "grad":
                 grad_id, _ = self._fast_register_grad(event)
-                new_block[2 + channel_num] = grad_id
-                grad_duration = (
+                new_block[_CHANNEL_SLOT[event.channel]] = grad_id
+                event_duration = (
                     event.delay + math.ceil(event.tt[-1] / self.grad_raster_time - 1e-10) * self.grad_raster_time
                 )
-                duration = max(duration, grad_duration)
 
-            elif event.type == "trap":
-                channel_num = ["x", "y", "z"].index(event.channel)
-                new_block[2 + channel_num] = self._fast_register_trap(event)
-                duration = max(duration, event.delay + event.rise_time + event.flat_time + event.fall_time)
+            elif event_type == "trap":
+                new_block[_CHANNEL_SLOT[event.channel]] = self._fast_register_trap(event)
+                event_duration = event.delay + event.rise_time + event.flat_time + event.fall_time
 
-            elif event.type == "adc":
+            elif event_type == "adc":
                 adc_id, _ = self._fast_register_adc(event)
                 new_block[5] = adc_id
-                duration = max(duration, event.delay + event.num_samples * event.dwell + event.dead_time)
+                event_duration = event.delay + event.num_samples * event.dwell + event.dead_time
 
-            elif event.type == "delay":
-                duration = max(duration, event.delay)
+            elif event_type == "delay":
+                event_duration = event.delay
 
-            elif event.type in ("output", "trigger"):
+            elif event_type in ("output", "trigger"):
                 event_id = self._fast_register_control(event)
-                extensions.append({"type": self.get_extension_type_ID("TRIGGERS"), "ref": event_id})
-                duration = max(duration, event.delay + event.duration)
+                extensions.append((self._ext_type_id("TRIGGERS"), event_id))
+                event_duration = event.delay + event.duration
 
-            elif event.type in ("labelset", "labelinc"):
+            elif event_type in ("labelset", "labelinc"):
                 label_id = self._fast_register_label(event)
-                extensions.append({"type": self.get_extension_type_ID(event.type.upper()), "ref": label_id})
+                extensions.append((self._ext_type_id(event_type.upper()), label_id))
+                event_duration = 0
 
-            elif event.type == "soft_delay":
+            elif event_type == "soft_delay":
                 # Soft delays are intentionally ignored in this fast on-scanner path.
                 continue
 
-            elif event.type == "rf_shim":
+            elif event_type == "rf_shim":
                 rf_shim_id = self._fast_register_rf_shim(event)
-                extensions.append({"type": self.get_extension_type_ID("RF_SHIMS"), "ref": rf_shim_id})
+                extensions.append((self._ext_type_id("RF_SHIMS"), rf_shim_id))
+                event_duration = 0
 
-            elif event.type == "rot3D":
+            elif event_type == "rot3D":
                 rot_id = self._fast_register_rotation(event)
-                extensions.append({"type": self.get_extension_type_ID("ROTATIONS"), "ref": rot_id})
+                extensions.append((self._ext_type_id("ROTATIONS"), rot_id))
+                event_duration = 0
 
             else:
-                raise ValueError(f"Unknown event type {event.type} passed to pulserver.pypulseq.Sequence.add_block().")
+                raise ValueError(f"Unknown event type {event_type} passed to pulserver.pypulseq.Sequence.add_block().")
+
+            if event_duration > duration:
+                duration = event_duration
 
         if extensions:
-            sort_idx = np.argsort([e["ref"] for e in extensions])
-            extensions = np.take(extensions, sort_idx)
+            # A block carries a handful of extensions at most, so ordering them
+            # by reference is a list sort, not a numpy round trip.
+            extensions.sort(key=_extension_ref)
+            ext_lib = self.extensions_library
+            ext_find = ext_lib.find
 
             all_found = True
             extension_id = 0
-            for ext in extensions:
-                data = (ext["type"], ext["ref"], extension_id)
-                extension_id, found = self.extensions_library.find(data)
-                all_found = all_found and found
+            for ext_type, ext_ref in extensions:
+                extension_id, found = ext_find((ext_type, ext_ref, extension_id))
                 if not found:
+                    all_found = False
                     break
 
             if not all_found:
                 extension_id = 0
-                for ext in extensions:
-                    data = (ext["type"], ext["ref"], extension_id)
-                    extension_id, found = self.extensions_library.find(data)
+                for ext_type, ext_ref in extensions:
+                    data = (ext_type, ext_ref, extension_id)
+                    extension_id, found = ext_find(data)
                     if not found:
-                        self.extensions_library.insert(extension_id, data)
+                        ext_lib.insert(extension_id, data)
             new_block[6] = extension_id
 
         self.block_events[block_index] = new_block
@@ -959,25 +1010,23 @@ class Sequence(pp.Sequence):
     # Private direct-insert helpers (no find_or_insert, no dedup)
     # ------------------------------------------------------------------
 
-    def _fast_register_rf(self, event: SimpleNamespace):
-        mag = np.abs(event.signal)
-        amplitude = np.max(mag)
-        mag = mag / amplitude
-        mag[np.isnan(mag)] = 0
-        phase = np.angle(event.signal)
-        phase[phase < 0] += 2 * np.pi
-        phase /= 2 * np.pi
+    def _ext_type_id(self, name: str) -> int:
+        """Numeric ID of extension *name*, resolved once per sequence."""
+        type_id = self._ext_type_ids.get(name)
+        if type_id is None:
+            type_id = self.get_extension_type_ID(name)
+            self._ext_type_ids[name] = type_id
+        return type_id
 
-        shape_IDs = [0, 0, 0]
-        mag_shape = compress_shape(mag)
-        shape_IDs[0], _ = self.shape_library.find_or_insert(np.concatenate(([mag_shape.num_samples], mag_shape.data)))
-        phase_shape = compress_shape(phase)
-        shape_IDs[1], _ = self.shape_library.find_or_insert(
-            np.concatenate(([phase_shape.num_samples], phase_shape.data))
-        )
-        if not (np.floor(event.t / self.rf_raster_time) == np.arange(len(event.t))).all():
-            time_shape = compress_shape(event.t / self.rf_raster_time)
-            shape_IDs[2], _ = self.shape_library.find_or_insert([time_shape.num_samples, *time_shape.data])
+    def _fast_register_rf(self, event: SimpleNamespace):
+        signal = event.signal
+        times = event.t
+        cached = self._rf_shape_cache.get(id(signal))
+        if cached is not None and cached[0] is signal and cached[1] is times:
+            amplitude, shape_IDs = cached[2], cached[3]
+        else:
+            amplitude, shape_IDs = self._compress_rf(signal, times)
+            self._rf_shape_cache[id(signal)] = (signal, times, amplitude, shape_IDs)
 
         if not hasattr(event, "use"):
             raise ValueError('Parameter "use" is not optional since v1.5.0')
@@ -996,21 +1045,61 @@ class Sequence(pp.Sequence):
             event.freq_offset,
             event.phase_offset,
         )
-        rf_id = self.rf_library.insert(0, data, use_code)
+        rf_id = _append(self.rf_library, data, use_code)
         return rf_id, shape_IDs
 
     def _fast_register_grad(self, event: SimpleNamespace):
-        amplitude = np.max(np.abs(event.waveform))
+        waveform = event.waveform
+        times = event.tt
+        cached = self._grad_shape_cache.get(id(waveform))
+        if cached is not None and cached[0] is waveform and cached[1] is times:
+            amplitude, shape_IDs = cached[2], cached[3]
+        else:
+            amplitude, shape_IDs = self._compress_grad(waveform, times)
+            self._grad_shape_cache[id(waveform)] = (waveform, times, amplitude, shape_IDs)
+
+        data = (amplitude, event.first, event.last, *shape_IDs, event.delay)
+        arb_id = _append(self.arb_library, data)
+        grad_id = _append(self.grad_library, (arb_id,), "g")
+        return grad_id, shape_IDs
+
+    # -- shape compression, the part that is worth caching -----------------
+
+    def _compress_rf(self, signal, times):
+        """``(amplitude, shape_ids)`` for one RF sample array; see ``_rf_shape_cache``."""
+        mag = np.abs(signal)
+        amplitude = np.max(mag)
+        mag = mag / amplitude
+        mag[np.isnan(mag)] = 0
+        phase = np.angle(signal)
+        phase[phase < 0] += 2 * np.pi
+        phase /= 2 * np.pi
+
+        shape_IDs = [0, 0, 0]
+        mag_shape = compress_shape(mag)
+        shape_IDs[0], _ = self.shape_library.find_or_insert(np.concatenate(([mag_shape.num_samples], mag_shape.data)))
+        phase_shape = compress_shape(phase)
+        shape_IDs[1], _ = self.shape_library.find_or_insert(
+            np.concatenate(([phase_shape.num_samples], phase_shape.data))
+        )
+        if not (np.floor(times / self.rf_raster_time) == np.arange(len(times))).all():
+            time_shape = compress_shape(times / self.rf_raster_time)
+            shape_IDs[2], _ = self.shape_library.find_or_insert([time_shape.num_samples, *time_shape.data])
+        return amplitude, shape_IDs
+
+    def _compress_grad(self, waveform, times):
+        """``(amplitude, shape_ids)`` for one gradient waveform; see ``_grad_shape_cache``."""
+        amplitude = np.max(np.abs(waveform))
         if amplitude > 0:
-            fnz = event.waveform[np.nonzero(event.waveform)[0][0]]
+            fnz = waveform[np.nonzero(waveform)[0][0]]
             amplitude *= np.sign(fnz) if fnz != 0 else 1
 
         shape_IDs = [0, 0]
-        g = event.waveform / amplitude if amplitude != 0 else event.waveform
+        g = waveform / amplitude if amplitude != 0 else waveform
         c_shape = compress_shape(g)
         shape_IDs[0], _ = self.shape_library.find_or_insert(np.concatenate(([c_shape.num_samples], c_shape.data)))
 
-        c_time = compress_shape(event.tt / self.grad_raster_time)
+        c_time = compress_shape(times / self.grad_raster_time)
         t_data = np.concatenate(([c_time.num_samples], c_time.data))
         if len(c_time.data) == 4 and np.allclose(c_time.data, [0.5, 1, 1, c_time.num_samples - 3]):
             pass  # standard raster, shape_IDs[1] stays 0
@@ -1018,16 +1107,12 @@ class Sequence(pp.Sequence):
             shape_IDs[1] = -1
         else:
             shape_IDs[1], _ = self.shape_library.find_or_insert(t_data)
-
-        data = (amplitude, event.first, event.last, *shape_IDs, event.delay)
-        arb_id = self.arb_library.insert(0, data)
-        grad_id = self.grad_library.insert(0, (arb_id,), "g")
-        return grad_id, shape_IDs
+        return amplitude, shape_IDs
 
     def _fast_register_trap(self, event: SimpleNamespace) -> int:
         data = (event.amplitude, event.rise_time, event.flat_time, event.fall_time, event.delay)
-        trap_id = self.trap_library.insert(0, data)
-        return self.grad_library.insert(0, (trap_id,), "t")
+        trap_id = _append(self.trap_library, data)
+        return _append(self.grad_library, (trap_id,), "t")
 
     def _fast_register_adc(self, event: SimpleNamespace):
         shape_id = 0
@@ -1051,14 +1136,14 @@ class Sequence(pp.Sequence):
             shape_id,
             event.dead_time,
         )
-        adc_id = self.adc_library.insert(0, data)
+        adc_id = _append(self.adc_library, data)
         return adc_id, shape_id
 
     def _fast_register_control(self, event: SimpleNamespace) -> int:
         event_type = ["output", "trigger"].index(event.type)
         event_channel = (["osc0", "osc1", "ext1"] if event_type == 0 else ["physio1", "physio2"]).index(event.channel)
         data = (event_type + 1, event_channel + 1, event.delay, event.duration)
-        return self.trigger_library.insert(0, data)
+        return _append(self.trigger_library, data)
 
     def _get_label_idx(self, label: str) -> int:
         """Return 1-based int for *label*, auto-registering unknown strings."""
@@ -1071,16 +1156,67 @@ class Sequence(pp.Sequence):
     def _fast_register_label(self, event: SimpleNamespace) -> int:
         data = (event.value, self._get_label_idx(event.label))
         lib = self.label_set_library if event.type == "labelset" else self.label_inc_library
-        return lib.insert(0, data)
+        return _append(lib, data)
 
     def _fast_register_rf_shim(self, event: SimpleNamespace) -> int:
         data = (np.abs(event.shim_vector), np.angle(event.shim_vector))
         data = np.stack(data, axis=-1).ravel()
-        return self.rf_shim_library.insert(0, tuple(data.tolist()))
+        return _append(self.rf_shim_library, tuple(data.tolist()))
 
     def _fast_register_rotation(self, event: SimpleNamespace) -> int:
         data = tuple(event.rot_quaternion.as_quat(canonical=True, scalar_first=True).tolist())
-        return self.rotation_library.insert(0, data)
+        return _append(self.rotation_library, data)
+
+
+def _extension_ref(extension: tuple[int, int]) -> int:
+    """Reference ID of an ``(extension_type, reference)`` pair."""
+    return extension[1]
+
+
+def _append(lib: EventLibrary, data, data_type: str | int = "") -> int:
+    """Append *data* to *lib* at the next free ID and return that ID.
+
+    ``EventLibrary.insert`` also records the payload in ``lib.keymap`` so the
+    entry can be looked up by value later. This path never does: identical
+    events are collapsed at write time, by rebuilding each library from
+    scratch. Maintaining the reverse index would therefore cost a tuple and a
+    dict slot for every event in the scan -- hundreds of thousands of them for
+    a large 3D protocol -- and nothing would ever read it.
+
+    Collapsing duplicates *here* instead is tempting, and would cut the
+    libraries dramatically: a 512³ MPRAGE holds 917k trapezoid entries drawn
+    from 1531 distinct payloads, and 262k arbitrary-gradient entries drawn from
+    2. It was measured and deliberately not taken -- it renumbers every event
+    ID, which leaves the C-side structure identical but the emitted file
+    slightly *larger* (the rounded write-time pass picks different
+    representatives when it sees fewer instances) and every ``.pge`` truth
+    fixture stale. Whoever revisits it: the key must include ``data_type``,
+    because ``grad_library`` holds a one-field reference into either
+    ``trap_library`` or ``arb_library`` and those number independently, so
+    ``(3,)`` is ambiguous and keying on the payload alone points blocks at the
+    wrong waveform.
+    """
+    key_id = lib.next_free_ID
+    lib.data[key_id] = data
+    if data_type != "":
+        lib.type[key_id] = data_type
+    lib.next_free_ID = key_id + 1
+    return key_id
+
+
+def _copy_library(lib: EventLibrary) -> EventLibrary:
+    """A library that can be rewritten without disturbing *lib*.
+
+    Only the three dicts are duplicated. Payloads are tuples, or arrays
+    ``EventLibrary.insert`` has already marked read-only, and rewriting an
+    entry replaces it rather than editing it -- so the copies can share them.
+    """
+    new_lib = EventLibrary(numpy_data=lib.numpy_data)
+    new_lib.data = dict(lib.data)
+    new_lib.type = dict(lib.type)
+    new_lib.keymap = dict(lib.keymap)
+    new_lib.next_free_ID = lib.next_free_ID
+    return new_lib
 
 
 def _dedup_library_approx(lib: EventLibrary, digits: int | tuple[int, ...]) -> tuple[EventLibrary, dict[int, int]]:
@@ -1093,18 +1229,18 @@ def _dedup_library_approx(lib: EventLibrary, digits: int | tuple[int, ...]) -> t
     if not ids:
         return new_lib, mapping
 
-    if lib.numpy_data:
-        rows = [np.asarray(lib.data[old_id], dtype=float).ravel() for old_id in ids]
-    else:
-        rows = [tuple(lib.data[old_id]) for old_id in ids]
-
-    row_lengths = {len(row) for row in rows}
-    all_numeric = all(all(isinstance(v, int | float | np.integer | np.floating) for v in row) for row in rows)
-
-    if len(row_lengths) != 1 or not all_numeric:
+    # One conversion of the whole library into a float matrix. It doubles as
+    # the validation the loop below used to do element by element: a ragged or
+    # non-numeric library cannot become a 2-D float array, so numpy raises
+    # exactly where a hand-rolled check would have.
+    try:
+        matrix = np.array([lib.data[old_id] for old_id in ids], dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("_dedup_library_approx requires uniform, fully numeric payload rows") from exc
+    if matrix.ndim != 2:
         raise RuntimeError("_dedup_library_approx requires uniform, fully numeric payload rows")
 
-    width = next(iter(row_lengths))
+    width = matrix.shape[1]
     if isinstance(digits, int):
         digits_tuple = tuple([digits] * width)
     else:
@@ -1112,11 +1248,18 @@ def _dedup_library_approx(lib: EventLibrary, digits: int | tuple[int, ...]) -> t
             raise ValueError(f"Rounding profile length {len(digits)} is shorter than payload width {width}")
         digits_tuple = tuple(digits[:width])
 
-    matrix = np.asarray(rows, dtype=float)
     rounded = _round_sig_matrix(matrix, digits_tuple)
 
-    type_ids = np.asarray([type_code.setdefault(lib.type.get(old_id, ""), len(type_code) + 1) for old_id in ids])
-    key_matrix = np.column_stack([type_ids.astype(float), rounded])
+    lib_types = lib.type
+    if lib_types:
+        type_ids = np.asarray(
+            [type_code.setdefault(lib_types.get(old_id, ""), len(type_code) + 1) for old_id in ids], dtype=float
+        )
+    else:
+        # No per-entry types: every row shares one type code, so the column is
+        # a constant and does not need building entry by entry.
+        type_ids = np.ones(len(ids))
+    key_matrix = np.column_stack([type_ids, rounded])
     key_bytes = (
         np.ascontiguousarray(key_matrix)
         .view(np.dtype((np.void, key_matrix.dtype.itemsize * key_matrix.shape[1])))
@@ -1140,10 +1283,7 @@ def _dedup_library_approx(lib: EventLibrary, digits: int | tuple[int, ...]) -> t
         new_lib.insert(new_id, insert_data, type_key)
         uniq_to_new_id[uniq_idx] = new_id
 
-    mapped = uniq_to_new_id[inverse]
-    for i, old_id in enumerate(ids):
-        mapping[old_id] = int(mapped[i])
-
+    mapping.update(zip(ids, uniq_to_new_id[inverse].tolist(), strict=True))
     return new_lib, mapping
 
 

@@ -27,7 +27,7 @@ from dataclasses import dataclass
 import numpy as np
 import pypulseq as pp
 
-from .._system import quantize_readout_timing
+from .._system import copy_event, quantize_readout_timing, scale_grad
 from ._base import Readout
 
 _READOUT_GRAD_MARGIN = 0.95
@@ -62,9 +62,19 @@ def _phase_template(system, channel: str, worst_mag: float, duration_s: float):
 
 
 def _scaled_phase_gradient(template, area: float, worst_mag: float):
-    if abs(area) < 1e-12 or template is None:
+    """``template`` scaled to ``area``, or ``None`` if the axis is not encoded.
+
+    A zero area still emits the gradient, at zero amplitude. Dropping the event
+    instead would make the one shot that lands on the centre line structurally
+    different from every other shot -- and for 3D that is a whole segment (the
+    centre partition), which the C backend rejects outright as non-identical
+    inner-loop repetitions. ``template is None`` is the real "no such axis"
+    case: :func:`_phase_template` returns ``None`` only when the axis has no
+    extent at all.
+    """
+    if template is None:
         return None
-    return pp.scale_grad(template, area / worst_mag)
+    return scale_grad(template, area / worst_mag)
 
 
 def _safe_phase_duration(system, initial_s: float, ky_areas, kz_areas, gz_1, gz_2) -> float:
@@ -255,7 +265,7 @@ class _Bssfp(Readout):
         last_ky, last_kz = self._coordinates(stop - 1)
 
         # alpha/2 preparation: the ONCE label identifies the entry transient.
-        rf_half = copy.deepcopy(self._rf_half)
+        rf_half = copy_event(self._rf_half)
         rf_half.phase_offset = state.phase_offset_rad
         yield tuple(
             event for event in (rf_half, self._gz_1, pp.make_label(type="SET", label="ONCE", value=1)) if event is not None
@@ -265,7 +275,7 @@ class _Bssfp(Readout):
         gz_prep = self._selection_with_partition(self._gz_2, gz_last)
         prep_events = [gz_prep, gy_last, self._gx_prep]
         prep_duration_s = max(self._prep_delay_s, *(_duration(event) for event in prep_events if event is not None))
-        gx_prep = copy.deepcopy(self._gx_prep)
+        gx_prep = copy_event(self._gx_prep)
         gx_prep.delay = prep_duration_s - _duration(gx_prep)
         yield tuple(
             event
@@ -277,8 +287,8 @@ class _Bssfp(Readout):
         for encoded_idx in range(start, stop):
             ky_idx, kz_idx = self._coordinates(encoded_idx)
             gy_prev, gz_prev = self._phase_events(previous_ky, previous_kz, previous=True)
-            rf = copy.deepcopy(self._rf)
-            adc = copy.deepcopy(self._adc)
+            rf = copy_event(self._rf)
+            adc = copy_event(self._adc)
             phase = state.phase_offset_rad + np.pi * (encoded_idx & 1)
             rf.phase_offset = phase
             adc.phase_offset = phase

@@ -130,7 +130,7 @@ class Zte3DPulseqSequence(Sequence):
         seq.set_definition("MissingSamples", zte.num_missing_samples)
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("NumShots", cfg.num_shots)
-        pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
+        pio.write(seq, output=output_path, check_timing=False)
 
 
 class _Config:

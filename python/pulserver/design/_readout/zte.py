@@ -32,7 +32,13 @@ from dataclasses import dataclass
 import numpy as np
 import pypulseq as pp
 
-from .._system import apply_system_derates, ceil_to_raster, quantize_readout_timing, round_to_raster
+from .._system import (
+    apply_system_derates,
+    ceil_to_raster,
+    copy_event,
+    quantize_readout_timing,
+    round_to_raster,
+)
 from ._base import Readout, normalize_rotation
 
 DEFAULT_ZTE_BANDWIDTH_HZ = 62_500.0
@@ -347,8 +353,8 @@ class Zte(Readout):
         blocks.append(tuple(ramp))
 
         for index, gradients in enumerate(self._view_gradients):
-            rf = copy.deepcopy(self._rf)
-            adc = copy.deepcopy(self._adc)
+            rf = copy_event(self._rf)
+            adc = copy_event(self._adc)
             rf.phase_offset += state.phase_offset_rad[index]
             adc.phase_offset = rf.phase_offset
             events = [

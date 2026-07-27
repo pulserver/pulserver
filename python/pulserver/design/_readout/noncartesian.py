@@ -27,7 +27,6 @@ __all__ = [
     "spiral_trajectory",
 ]
 
-import copy
 import math
 from collections import defaultdict
 from dataclasses import dataclass
@@ -35,7 +34,7 @@ from dataclasses import dataclass
 import numpy as np
 import pypulseq as pp
 
-from .._system import DEFAULT_BANDWIDTH_HZ_PX, apply_system_derates, ceil_to_raster
+from .._system import DEFAULT_BANDWIDTH_HZ_PX, apply_system_derates, ceil_to_raster, copy_event, scale_grad
 from .._traj2grad import traj2grad
 from ._base import Readout, normalize_rotation
 
@@ -698,7 +697,7 @@ def _as_event_tuple(events):
 
 
 def _aligned_gradients(events, alignment, system):
-    events = [copy.deepcopy(event) for event in events if event is not None]
+    events = [copy_event(event) for event in events if event is not None]
     if not events:
         return []
     by_channel = defaultdict(list)
@@ -731,7 +730,7 @@ def _aligned_gradients(events, alignment, system):
 
 
 def _scaled_gradient(gradient, scale):
-    return pp.scale_grad(copy.deepcopy(gradient), float(scale))
+    return scale_grad(gradient, float(scale))
 
 
 class _NonCartesianTrain(Readout):
@@ -863,7 +862,7 @@ class _NonCartesianTrain(Readout):
                     *([rotation] if rotation is not None else []),
                 )
 
-            adc = copy.deepcopy(self.readout.adc)
+            adc = copy_event(self.readout.adc)
             adc.phase_offset = float(phase_offset_rad)
             labels = []
             if echo == 0:

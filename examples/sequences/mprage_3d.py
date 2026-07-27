@@ -351,7 +351,7 @@ def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None
     seq.set_definition("PhaseAxis", "y")
     seq.set_definition("RfSpoilingIncDeg", 117.0)
     seq.set_definition("SPSPExcitation", cfg.spsp)
-    pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
+    pio.write(seq, output=output_path, check_timing=False)
 
 
 PLUGIN = Mprage3DPulseqSequence()

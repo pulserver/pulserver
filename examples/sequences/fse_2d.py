@@ -214,7 +214,7 @@ class Fse2DPulseqSequence(Sequence):
         seq.set_definition("Nx", cfg.nx_ro)
         seq.set_definition("Ny", cfg.ny_pe)
         seq.set_definition("NumSlices", cfg.nslices)
-        pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
+        pio.write(seq, output=output_path, check_timing=False)
 
 
 def _segment_loop(cfg: _Config):

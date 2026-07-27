@@ -117,6 +117,8 @@ from .._system import (
     DEFAULT_BANDWIDTH_HZ_PX,
     apply_system_derates,
     ceil_to_raster,
+    copy_event,
+    scale_grad,
     quantize_readout_timing,
     round_to_raster,
 )
@@ -192,7 +194,7 @@ def _scaled_trap(template, axis, area, worst_mag, duration_s, system):
     """
     if template is None:
         return pp.make_trapezoid(channel=axis, area=area, duration=duration_s, system=system)
-    return pp.scale_grad(template, area / worst_mag)
+    return scale_grad(template, area / worst_mag)
 
 
 def _trap_fits(system, axis, area, duration_s):
@@ -598,13 +600,13 @@ class _LineTrain(Readout):
             positive = self._start_pos if self._flyback else ((i % 2 == 0) == self._start_pos)
             if i == 0 and self._echo0_override is not None:
                 gx, adc = self._echo0_override
-                adc = copy.deepcopy(adc)
+                adc = copy_event(adc)
             elif i == self.num_echoes - 1 and self._last_echo_override is not None:
                 gx = self._last_echo_override
-                adc = copy.deepcopy(self._ro.adc)
+                adc = copy_event(self._ro.adc)
             else:
                 gx = self._ro.gx if positive else self._ro.gx_neg
-                adc = copy.deepcopy(self._ro.adc)
+                adc = copy_event(self._ro.adc)
             adc.phase_offset = phase_offset_rad
 
             labels = []

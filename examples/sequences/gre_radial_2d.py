@@ -192,18 +192,30 @@ class GreRadial2DPulseqSequence(Sequence):
         rf_phases = design.make_rf_spoiling_schedule(cfg.num_shots * len(slices) * len(frames))
         phase_idx = 0
 
+        # The frame counter rides on the first block of every TR rather than on
+        # a lead-in block of its own. A block that plays once per frame has no
+        # counterpart in the TRs that follow it, so TR-period detection finds no
+        # period at all and falls back to "the whole frame is one TR" -- which
+        # then costs a waveform buffer proportional to the frame duration.
+        # Re-SETting a counter that already holds the right value is free.
         for frame in range(len(frames)):
             (phase_label,) = frames.labels(frame)
+            frame_labels = (phase_label,)
             if cfg.trigger != TriggerType.NONE:
-                seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
-            else:
-                seq.add_block(phase_label)
+                # A volume-start trigger genuinely is a once-per-frame block, so
+                # mark it as one: ONCE=1 opens the section and the ONCE=0 that
+                # every TR carries closes it, leaving the TRs identical.
+                seq.add_block(
+                    pp.make_trigger(cfg.trigger, duration=1e-3, system=opts),
+                    pp.make_label(type="SET", label="ONCE", value=1),
+                )
+                frame_labels = (phase_label, pp.make_label(type="SET", label="ONCE", value=0))
             for spoke, rotation in enumerate(rotations):
                 for sl, band in enumerate(slices.shots):
                     offset_hz = float(offsets_hz[band[0]]) if offsets_hz is not None else 0.0
                     phase = float(rf_phases[phase_idx])
                     pulse.set_state(freq_offset_hz=offset_hz, phase_offset_rad=phase)
-                    pulse.set_labels(*slices.labels(sl))
+                    pulse.set_labels(*slices.labels(sl), *frame_labels)
                     for block in pulse:
                         seq.add_block(*block)
                     if te_delay is not None:
@@ -231,7 +243,7 @@ class GreRadial2DPulseqSequence(Sequence):
         seq.set_definition("NumSlices", cfg.nslices)
         seq.set_definition("NumFrames", cfg.num_frames)
         seq.set_definition("TriggerType", str(cfg.trigger))
-        pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
+        pio.write(seq, output=output_path, check_timing=False)
 
 
 class _Config:

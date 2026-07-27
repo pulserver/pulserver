@@ -372,7 +372,7 @@ def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None
     seq.set_definition("Trajectory", "radial")
     seq.set_definition("ImagingMode", "2d")
     seq.set_definition("RfSpoilingIncDeg", 117.0)
-    pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
+    pio.write(seq, output=output_path, check_timing=False)
 
 
 PLUGIN = GreMprageRadial2DPulseqSequence()

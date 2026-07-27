@@ -35,6 +35,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ZOO = REPO_ROOT / "examples" / "sequences"
+# An editable install of another pulserver checkout registers redirecting
+# finders in sys.meta_path, and those run before sys.path is consulted -- so
+# without dropping them the benchmark can silently measure a different tree.
+sys.meta_path[:] = [f for f in sys.meta_path if type(f).__name__ != "ScikitBuildRedirectingFinder"]
 sys.path.insert(0, str(REPO_ROOT / "python"))
 
 import numpy as np  # noqa: E402

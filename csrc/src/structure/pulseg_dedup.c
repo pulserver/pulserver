@@ -1584,7 +1584,15 @@ int pulseg__get_unique_blocks(
     const pulseq_file *seq,
     const pulseg_opts *opts)
 {
-    int result, num_blocks, num_unique_rf, num_unique_grad, num_unique_adc;
+    /* `result` is only ever a failure code: it starts as the reason an
+     * allocation-failure jump would give, and the sites that know better
+     * overwrite it before jumping. Helper return values land in `rc` instead,
+     * so a helper that succeeded cannot leave a success code here for a later
+     * `goto fail` to return. Reporting a structural conflict as "allocation
+     * failed" sends the reader hunting a memory problem that is not there. */
+    int result = PULSEG_ERR_ALLOC_FAILED;
+    int rc;
+    int num_blocks, num_unique_rf, num_unique_grad, num_unique_adc;
     int n;
 
     pulseg_rf_definition *tmp_rf_defs = NULL;
@@ -1752,15 +1760,18 @@ int pulseg__get_unique_blocks(
          * bandwidth, bands, b1sq, num_samples/instances) are always computed;
          * the four vendor-specific envelope stats (vendor_stat[4]) are filled
          * only if the caller wired opts.vendor_rf_stats_fn. */
-        result = compute_rf_stats(
+        rc = compute_rf_stats(
             seq,
             tmp_rf_defs,
             num_unique_rf,
             tmp_rf_tab,
             seq->rf_library_size,
             opts);
-        if (PULSEG_FAILED(result))
+        if (PULSEG_FAILED(rc))
+        {
+            result = rc;
             goto fail;
+        }
     }
     if (seq->grad_library_size > 0)
     {
@@ -1769,19 +1780,25 @@ int pulseg__get_unique_blocks(
 
         desc->num_unique_grads = num_unique_grad;
 
-        result = compute_grad_shot_indices(seq, tmp_grad_defs, tmp_grad_tab, num_unique_grad);
-        if (PULSEG_FAILED(result))
+        rc = compute_grad_shot_indices(seq, tmp_grad_defs, tmp_grad_tab, num_unique_grad);
+        if (PULSEG_FAILED(rc))
+        {
+            result = rc;
             goto fail;
+        }
 
-        result = compute_grad_stats(
+        rc = compute_grad_stats(
             seq,
             tmp_grad_defs,
             num_unique_grad,
             tmp_grad_tab,
             seq->grad_library_size,
             opts);
-        if (PULSEG_FAILED(result))
+        if (PULSEG_FAILED(rc))
+        {
+            result = rc;
             goto fail;
+        }
     }
     if (seq->adc_library_size > 0)
     {
@@ -2254,5 +2271,5 @@ fail:
         PULSEG_FREE(unique_defs);
     if (event_table)
         PULSEG_FREE(event_table);
-    return PULSEG_ERR_ALLOC_FAILED;
+    return result;
 }

@@ -43,6 +43,7 @@ class RfModule(SequenceModule):
             raise ValueError("an RF module must contain at least one block")
         self._state = RfState()
         self._block_cache: tuple[Block, ...] | None = None
+        self._scaled_signals: dict[tuple[int, float], tuple] = {}
 
     def set_state(
         self: _ModuleT,
@@ -70,13 +71,15 @@ class RfModule(SequenceModule):
     def _build_blocks(self) -> tuple[Block, ...]:
         blocks: list[Block] = []
         state = self._state
+        scale = state.amplitude_scale
         for template in self._template_blocks:
             block = [copy_event(event) for event in template]
             has_gradient = False
             for event in block:
                 event_type = getattr(event, "type", None)
                 if event_type == "rf":
-                    event.signal = np.asarray(event.signal) * state.amplitude_scale
+                    if scale != 1.0:
+                        event.signal = self._scaled_signal(event.signal, scale)
                     event.freq_offset += state.freq_offset_hz
                     event.phase_offset += state.phase_offset_rad
                 elif event_type in ("grad", "trap"):
@@ -85,6 +88,26 @@ class RfModule(SequenceModule):
                 block.append(copy_event(state.rotation))
             blocks.append(tuple(block))
         return tuple(blocks)
+
+    def _scaled_signal(self, signal, scale: float):
+        """``signal * scale``, handing back the same array for a repeated scale.
+
+        Amplitude schedules revisit a small set of factors -- an echo-train
+        flip schedule, a preparation module -- so keeping one array per factor
+        lets the sequence writer reuse its registered shape rather than
+        recompressing an identical waveform once per shot.
+
+        Unscaled state does not come through here at all: ``* 1.0`` would
+        allocate a copy of the template for no change, and the template array
+        is never written into (see
+        :func:`pulserver.design._system.copy_event`).
+        """
+        key = (id(signal), scale)
+        cached = self._scaled_signals.get(key)
+        if cached is None or cached[0] is not signal:
+            cached = (signal, np.asarray(signal) * scale)
+            self._scaled_signals[key] = cached
+        return cached[1]
 
     def _current_blocks(self) -> tuple[Block, ...]:
         if self._block_cache is None:

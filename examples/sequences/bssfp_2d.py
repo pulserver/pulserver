@@ -109,7 +109,7 @@ class Bssfp2DPulseqSequence(Sequence):
         seq.set_definition("ImagingMode", "2d")
         seq.set_definition("NumFrames", cfg.num_frames)
         seq.set_definition("TriggerType", str(cfg.trigger))
-        pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
+        pio.write(seq, output=output_path, check_timing=False)
 
 
 class _Config:

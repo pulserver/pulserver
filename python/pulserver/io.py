@@ -109,20 +109,31 @@ def write(
     w("# Format of blocks:\n")
     w("# NUM DUR RF  GX  GY  GZ  ADC  EXT\n")
     w("[BLOCKS]\n")
-    id_format_width = "{:" + str(len(str(len(target.block_events)))) + "d}"
-    id_format_str = id_format_width + " {:3d} {:3d} {:3d} {:3d} {:3d} {:2d} {:2d}\n"
-    for block_counter in target.block_events:
-        block_duration = target.block_durations[block_counter] / target.block_duration_raster
-        block_duration_rounded = round(block_duration)
-        assert abs(block_duration_rounded - block_duration) < 1e-6
-        s = id_format_str.format(
-            *(
-                block_counter,
-                block_duration_rounded,
-                *target.block_events[block_counter][1:],
-            )
+    # This is the one section with a row per block, so it is the only one whose
+    # cost scales with the scan rather than with the number of distinct events:
+    # the raster division and its round-trip check are done for the whole
+    # column at once, and each row is emitted with a single %-format.
+    block_events = target.block_events
+    n_blocks = len(block_events)
+    if n_blocks:
+        block_row_fmt = f"%{len(str(n_blocks))}d %3d %3d %3d %3d %3d %2d %2d\n"
+        block_durations = target.block_durations
+        ticks = np.fromiter(
+            (block_durations[block_id] for block_id in block_events),
+            dtype=float,
+            count=n_blocks,
         )
-        w(s)
+        ticks /= target.block_duration_raster
+        rounded = np.rint(ticks)
+        if np.abs(rounded - ticks).max() >= 1e-6:
+            worst = int(np.argmax(np.abs(rounded - ticks)))
+            raise AssertionError(
+                f"block {list(block_events)[worst]} duration is not a multiple of the block "
+                f"duration raster ({ticks[worst] * target.block_duration_raster} s)"
+            )
+        append = chunks.append
+        for block_id, row, tick in zip(block_events, block_events.values(), rounded.astype(np.int64).tolist()):
+            append(block_row_fmt % (block_id, tick, *row[1:]))
     w("\n")
 
     if len(target.rf_library.data) != 0:
@@ -131,18 +142,18 @@ def write(
         w("# ..   Hz      ..       ..            ..     us    us     ppm  rad/MHz   Hz   rad  ..\n")
         w(f"# Field \"use\" is the initial of: {' '.join(get_supported_rf_uses()).strip()}\n")
         w("[RF]\n")
-        id_format_str = "{:.0f} {:12g} {:.0f} {:.0f} {:.0f} {:g} {:g} {:g} {:g} {:g} {:g} {:s}\n"
-        for k in target.rf_library.data:
-            lib_data1 = target.rf_library.data[k][0:4]
-            lib_data2 = target.rf_library.data[k][6:10]
-            center = target.rf_library.data[k][4] * 1e6
-            delay = round(target.rf_library.data[k][5] / target.rf_raster_time) * target.rf_raster_time * 1e6
-            use_type = target.rf_library.type.get(k, "u")
+        rf_fmt = "%.0f %12g %.0f %.0f %.0f %g %g %g %g %g %g %s\n"
+        rf_types = target.rf_library.type
+        rf_raster = target.rf_raster_time
+        append = chunks.append
+        for k, data in target.rf_library.data.items():
+            center = data[4] * 1e6
+            delay = round(data[5] / rf_raster) * rf_raster * 1e6
+            use_type = rf_types.get(k, "u")
             use_char = (
                 _RF_USE_CODE_TO_CHAR.get(int(use_type), "u") if isinstance(use_type, int | np.integer) else use_type
             )
-            s = id_format_str.format(k, *lib_data1, center, delay, *lib_data2, use_char)
-            w(s)
+            append(rf_fmt % (k, *data[0:4], center, delay, *data[6:10], use_char))
         w("\n")
 
     grad_keys = np.array(list(target.grad_library.data.keys()), dtype=int) if target.grad_library.data else np.array([])
@@ -158,12 +169,13 @@ def write(
         w("# id amplitude first last amp_shape_id time_shape_id delay\n")
         w("# ..      Hz/m  Hz/m Hz/m        ..         ..          us\n")
         w("[GRADIENTS]\n")
-        id_format_str = "{:.0f} {:12g} {:12g} {:12g} {:.0f} {:.0f} {:.0f}\n"
-        for k in grad_keys[arb_grad_mask]:
-            arb_id = int(target.grad_library.data[int(k)][0])
-            data = target.arb_library.data[arb_id]
-            s = id_format_str.format(k, *data[:5], round(data[5] * 1e6))
-            w(s)
+        arb_fmt = "%.0f %12g %12g %12g %.0f %.0f %.0f\n"
+        grad_data = target.grad_library.data
+        arb_data = target.arb_library.data
+        append = chunks.append
+        for k in grad_keys[arb_grad_mask].tolist():
+            data = arb_data[int(grad_data[k][0])]
+            append(arb_fmt % (k, *data[:5], round(data[5] * 1e6)))
         w("\n")
 
     if np.any(trap_grad_mask):
@@ -171,13 +183,17 @@ def write(
         w("# id amplitude rise flat fall delay\n")
         w("# ..      Hz/m   us   us   us    us\n")
         w("[TRAP]\n")
-        id_format_str = "{:2.0f} {:12g} {:3.0f} {:4.0f} {:3.0f} {:3.0f}\n"
-        for k in grad_keys[trap_grad_mask]:
-            trap_id = int(target.grad_library.data[int(k)][0])
-            data = np.array(target.trap_library.data[trap_id], dtype=float)
-            data[1:] = np.round(1e6 * data[1:])
-            s = id_format_str.format(k, *data)
-            w(s)
+        # Trapezoids are the bulk of a Cartesian scan's event libraries, so the
+        # seconds -> microseconds conversion is done on the four scalars rather
+        # than by building a numpy array per entry. %.Nf rounds the same way
+        # np.round did, so the text is unchanged.
+        trap_fmt = "%2.0f %12g %3.0f %4.0f %3.0f %3.0f\n"
+        grad_data = target.grad_library.data
+        trap_data = target.trap_library.data
+        append = chunks.append
+        for k in grad_keys[trap_grad_mask].tolist():
+            amplitude, rise, flat, fall, delay = trap_data[int(grad_data[k][0])]
+            append(trap_fmt % (k, amplitude, 1e6 * rise, 1e6 * flat, 1e6 * fall, 1e6 * delay))
         w("\n")
 
     if len(target.adc_library.data) != 0:
@@ -185,11 +201,11 @@ def write(
         w("# id num dwell delay freqPPM phasePPM freq phase phase_id\n")
         w("# ..  ..    ns    us     ppm  rad/MHz   Hz   rad       ..\n")
         w("[ADC]\n")
-        id_format_str = "{:.0f} {:.0f} {:.0f} {:.0f} {:g} {:g} {:g} {:g} {:.0f}\n"
-        for k in target.adc_library.data:
-            data = np.multiply(target.adc_library.data[k][0:8], [1, 1e9, 1e6, 1, 1, 1, 1, 1])
-            s = id_format_str.format(k, *data)
-            w(s)
+        adc_fmt = "%.0f %.0f %.0f %.0f %g %g %g %g %.0f\n"
+        append = chunks.append
+        for k, data in target.adc_library.data.items():
+            num, dwell, delay, freq_ppm, phase_ppm, freq, phase, phase_id = data[0:8]
+            append(adc_fmt % (k, num, 1e9 * dwell, 1e6 * delay, freq_ppm, phase_ppm, freq, phase, phase_id))
         w("\n")
 
     if len(target.extensions_library.data) != 0:
@@ -198,20 +214,21 @@ def write(
         w("# next_id of 0 terminates the list\n")
         w("# Extension list is followed by extension specifications\n")
         w("[EXTENSIONS]\n")
-        id_format_str = "{:.0f} {:.0f} {:.0f} {:.0f}\n"
-        for k in target.extensions_library.data:
-            s = id_format_str.format(k, *np.round(target.extensions_library.data[k]))
-            w(s)
+        ext_fmt = "%.0f %.0f %.0f %.0f\n"
+        append = chunks.append
+        for k, data in target.extensions_library.data.items():
+            append(ext_fmt % (k, *data))
         w("\n")
 
     if len(target.trigger_library.data) != 0:
         w("# Extension specification for digital output and input triggers:\n")
         w("# id type channel delay (us) duration (us)\n")
         w(f"extension TRIGGERS {target.get_extension_type_ID('TRIGGERS')}\n")
-        id_format_str = "{:.0f} {:.0f} {:.0f} {:.0f} {:.0f}\n"
-        for k in target.trigger_library.data:
-            s = id_format_str.format(k, *np.round(target.trigger_library.data[k] * np.array([1, 1, 1e6, 1e6])))
-            w(s)
+        trigger_fmt = "%.0f %.0f %.0f %.0f %.0f\n"
+        append = chunks.append
+        for k, data in target.trigger_library.data.items():
+            event_type, channel, delay, duration = data
+            append(trigger_fmt % (k, event_type, channel, 1e6 * delay, 1e6 * duration))
         w("\n")
 
     if len(target.label_set_library.data) != 0:
@@ -219,13 +236,12 @@ def write(
         w("# id set labelstring\n")
         tid = target.get_extension_type_ID("LABELSET")
         w(f"extension LABELSET {tid}\n")
-        id_format_str = "{:.0f} {:.0f} {}\n"
-        for k in target.label_set_library.data:
-            value = target.label_set_library.data[k][0]
-            label_num = int(target.label_set_library.data[k][1])
-            label_id = target._label_registry_inv.get(label_num, f"CUSTOM_{label_num}")
-            s = id_format_str.format(k, value, label_id)
-            w(s)
+        label_fmt = "%.0f %.0f %s\n"
+        registry = target._label_registry_inv
+        append = chunks.append
+        for k, data in target.label_set_library.data.items():
+            label_num = int(data[1])
+            append(label_fmt % (k, data[0], registry.get(label_num, f"CUSTOM_{label_num}")))
         w("\n")
 
     if len(target.label_inc_library.data) != 0:
@@ -233,13 +249,12 @@ def write(
         w("# id set labelstring\n")
         tid = target.get_extension_type_ID("LABELINC")
         w(f"extension LABELINC {tid}\n")
-        id_format_str = "{:.0f} {:.0f} {}\n"
-        for k in target.label_inc_library.data:
-            value = target.label_inc_library.data[k][0]
-            label_num = int(target.label_inc_library.data[k][1])
-            label_id = target._label_registry_inv.get(label_num, f"CUSTOM_{label_num}")
-            s = id_format_str.format(k, value, label_id)
-            w(s)
+        label_fmt = "%.0f %.0f %s\n"
+        registry = target._label_registry_inv
+        append = chunks.append
+        for k, data in target.label_inc_library.data.items():
+            label_num = int(data[1])
+            append(label_fmt % (k, data[0], registry.get(label_num, f"CUSTOM_{label_num}")))
         w("\n")
 
     if len(target.rf_shim_library.data) != 0:

@@ -251,12 +251,22 @@ class Epi3DPulseqSequence(Sequence):
                 seq.add_block(*block)
             if tr_delay is not None:
                 seq.add_block(tr_delay)
+        # The frame counter rides on the first block of every TR rather than on
+        # a lead-in block of its own. A block that plays once per frame has no
+        # counterpart in the TRs that follow it, so TR-period detection finds no
+        # period at all and falls back to "the whole frame is one TR" -- which
+        # then costs a waveform buffer proportional to the frame duration.
+        # Re-SETting a counter that already holds the right value is free.
         for frame in range(len(frames)):
             (phase_label,) = frames.labels(frame)
+            frame_labels = (phase_label,)
             if ttl is not None:
-                seq.add_block(ttl, phase_label)
-            else:
-                seq.add_block(phase_label)
+                # A volume-start trigger genuinely is a once-per-frame block, so
+                # mark it as one: ONCE=1 opens the section and the ONCE=0 that
+                # every TR carries closes it, leaving the TRs identical.
+                seq.add_block(ttl, pp.make_label(type="SET", label="ONCE", value=1))
+                frame_labels = (phase_label, pp.make_label(type="SET", label="ONCE", value=0))
+            tr_labels = (pp.make_label(type="SET", label="SLC", value=0), *frame_labels)
             for rotation in rotations[:n_directions]:
                 for par_shot in par_loop:
                     for ky_start in shot_starts:
@@ -265,8 +275,7 @@ class Epi3DPulseqSequence(Sequence):
                             for block in diffusion:
                                 seq.add_block(*block)
                         for block_idx, block in enumerate(pulse):
-                            labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
-                            seq.add_block(*block, *labels)
+                            seq.add_block(*block, *(tr_labels if block_idx == 0 else ()))
                         if te_delay is not None:
                             seq.add_block(te_delay)
                         epi.set_state(
@@ -316,7 +325,7 @@ class Epi3DPulseqSequence(Sequence):
         seq.set_definition("SPSPExcitation", cfg.spsp)
         seq.set_definition("EpiPhaseCorrectionNavigator", cfg.phase_correction)
         seq.set_definition("ReversePhaseEncodeReference", cfg.reverse_pe)
-        pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
+        pio.write(seq, output=output_path, check_timing=False)
 
 
 def _n_shots(cfg: _Config) -> int:

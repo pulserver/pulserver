@@ -69,7 +69,6 @@ __all__ = [
     "build_z_crusher",
 ]
 
-import copy
 from dataclasses import dataclass
 from types import SimpleNamespace
 
@@ -82,6 +81,8 @@ from .._system import (
     DEFAULT_BANDWIDTH_HZ_PX,
     apply_system_derates,
     ceil_to_raster,
+    copy_event,
+    scale_grad,
     quantize_readout_timing,
     round_to_raster,
 )
@@ -215,6 +216,7 @@ class _FseTrain(Readout):
         # --- refocusing pulse + fused flat GS4 lobe ------------------------
         self._rf = refoc_rf
         self._flip_scale = _as_schedule(refoc_flip_scale, self.etl, 1.0, "refoc_flip_scale")
+        self._refoc_signals: dict[int, np.ndarray] = {}  # echo index -> scaled RF samples
         self._phase = _as_schedule(refoc_phase_rad, self.etl, CPMG_PHASE_OFFSET_RAD, "refoc_phase_rad")
         self.refoc_center_s = pp.calc_rf_center(self._rf)[0]
         self._ref_amp = refoc_gz.amplitude
@@ -363,8 +365,15 @@ class _FseTrain(Readout):
         return floor
 
     def _scaled_refoc(self, echo_idx, freq_offset):
-        rf = copy.deepcopy(self._rf)
-        rf.signal = rf.signal * self._flip_scale[echo_idx]
+        rf = copy_event(self._rf)
+        # One array per echo of the train, not per shot: the flip schedule is
+        # fixed, so the writer can register each refocusing waveform's shape
+        # once and reuse it for every shot that replays this echo index.
+        scaled = self._refoc_signals.get(echo_idx)
+        if scaled is None:
+            scaled = self._rf.signal * self._flip_scale[echo_idx]
+            self._refoc_signals[echo_idx] = scaled
+        rf.signal = scaled
         rf.freq_offset = freq_offset
         rf.phase_offset = self._phase[echo_idx] - 2.0 * np.pi * freq_offset * self.refoc_center_s
         return rf
@@ -414,7 +423,7 @@ class _FseTrain(Readout):
             pre_block = pp.align(right=[self._gr5, gs5, *pre_extra]) if pre_extra else [self._gr5, gs5]
             post_block = pp.align(left=[self._gr7, gs7, *rew_extra]) if rew_extra else [self._gr7, gs7]
 
-            adc = copy.deepcopy(self._ro.adc)
+            adc = copy_event(self._ro.adc)
             adc.phase_offset = self._phase[i_echo]
             seq.add_block(*pre_block)
             seq.add_block(self._ro.gr6, adc, *labels)
@@ -593,7 +602,7 @@ def _pe_template(system, axis, worst_mag, duration_s, rise_time):
 def _scaled_pe_grad(template, area, worst_mag):
     if template is None:
         return None
-    return pp.scale_grad(template, area / worst_mag)
+    return scale_grad(template, area / worst_mag)
 
 
 def _build_readout(opts, ro_axis, nx, fov_x_m, bandwidth_hz_px, oversamp, pf):

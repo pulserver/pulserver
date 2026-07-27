@@ -257,7 +257,7 @@ class GreMultiEcho2DPulseqSequence(Sequence):
         seq.set_definition("Ny", cfg.ny_pe)
         seq.set_definition("NySampled", len(pe_loop))
         seq.set_definition("NumSlices", cfg.nslices)
-        pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
+        pio.write(seq, output=output_path, check_timing=False)
 
 
 class _Config:

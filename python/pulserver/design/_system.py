@@ -13,7 +13,54 @@ MAX_RASTER_SEARCH_STEPS = 50_000
 MAX_GRAD_DERATE = 0.9
 MAX_SLEW_DERATE = 0.9
 
-copy_event = copy.deepcopy
+def copy_event(event):
+    """Copy a Pulseq event so its scalar fields can be re-pointed independently.
+
+    Shallow on purpose. A module re-emits the same template thousands of times
+    with a different ``phase_offset``, ``freq_offset`` or amplitude, and those
+    are all plain floats -- the only large members are the sample arrays
+    (``signal``, ``waveform``, ``tt``, ``t``), which every caller either leaves
+    alone or *replaces* with a new array rather than writing into. Sharing them
+    is therefore invisible, and it is what lets the shapes be registered once
+    instead of recompressed per shot (see
+    ``pulserver.pypulseq.Sequence._fast_register_rf``).
+
+    The contract that makes this safe, for anything handing events to this
+    function: never write into an event's arrays in place.
+    """
+    clone = type(event).__new__(type(event))
+    clone.__dict__.update(event.__dict__)
+    return clone
+
+
+def scale_grad(gradient, scale: float):
+    """``pypulseq.scale_grad`` without its pass-by-value copy cost.
+
+    Same arithmetic and same fields as upstream (see
+    :func:`pypulseq.scale_grad`); only the copy differs. Upstream's
+    ``copy.copy`` goes through ``__reduce_ex__``, which costs an order of
+    magnitude more than rebinding a namespace's ``__dict__`` -- and this runs
+    once per phase-encode of every shot, which for a large 3D protocol is the
+    single most-called function in the whole design pass.
+
+    The ``system=`` limit checks upstream offers are not reproduced: no caller
+    here passes them, because the templates being scaled were already solved
+    against the system limits at the worst-case area.
+    """
+    scaled = copy_event(gradient)
+    if gradient.type == "trap":
+        scaled.amplitude = gradient.amplitude * scale
+        scaled.flat_area = gradient.flat_area * scale
+    else:
+        scaled.waveform = gradient.waveform * scale
+        scaled.first = gradient.first * scale
+        scaled.last = gradient.last * scale
+    scaled.area = gradient.area * scale
+    # Upstream drops a stale cached library ID; ours never carry one, but a
+    # template handed in from elsewhere might.
+    if hasattr(scaled, "id"):
+        del scaled.id
+    return scaled
 
 
 def apply_system_derates(

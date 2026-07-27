@@ -20,6 +20,13 @@
 /* ================================================================== */
 /*  File-scope constants                                              */
 /* ================================================================== */
+/* Ceiling on what may be accepted as a single TR.  Measured over the whole
+ * span, delays included, not just the active blocks: every downstream
+ * consumer that resamples a TR (pulseg__get_gradient_waveforms_range, and
+ * through it the safety analysis) allocates span/raster samples per axis, so
+ * it is the span -- not the fraction of it that plays something -- that
+ * bounds the cost.  A "single TR" longer than this is a sequence whose real
+ * period was not recognised, and silently accepting it costs gigabytes. */
 #define SINGLE_TR_MAX_DURATION_US 15000000 /* 15 s  */
 
 #define SEGSTATE_SEEKING_FIRST_ADC 0
@@ -888,7 +895,7 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
     int *seq_pat = NULL;
     int *base_pat = NULL;
     int *block_dur = NULL;
-    int active_dur_us;
+    double span_dur_us; /* one pass, delays included; can exceed an int */
     int found, l;
     int mismatch_pos;
     float tr_dur;
@@ -1006,7 +1013,11 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
     }
     pulseg__diag_printf(diag, " candidate TR=%d", l);
 
-    found = (l > 0 && l <= imaging_len) ? 1 : 0;
+    /* l == imaging_len means neither search found a period: the region is its
+     * own shortest repeat.  That is not a discovery, so it must not short
+     * circuit past the fallback chain below -- the single-TR branch there is
+     * where such a region is length-checked before being accepted. */
+    found = (l > 0 && l < imaging_len) ? 1 : 0;
 
     if (found)
     {
@@ -1071,12 +1082,13 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
                 /* Base pattern also non-periodic → genuine single-TR.
              * The main region IS the single TR.  Then compare
              * prep/cooldown to the TR pattern for degeneracy. */
-                active_dur_us = 0;
+                span_dur_us = 0.0;
                 for (n = 0; n < desc->pass_len; ++n)
-                    if (desc->block_table[n].duration_us < 0)
-                        active_dur_us += desc->base_blocks[desc->block_table[n].id].duration_us;
+                    span_dur_us += (double)((desc->block_table[n].duration_us >= 0)
+                                                ? desc->block_table[n].duration_us
+                                                : desc->base_blocks[desc->block_table[n].id].duration_us);
 
-                if (active_dur_us <= SINGLE_TR_MAX_DURATION_US)
+                if (span_dur_us <= (double)SINGLE_TR_MAX_DURATION_US)
                 {
                     l = imaging_len; /* single-TR = entire main region */
                     found = 1;       /* fall through to post-hoc degenerate check */

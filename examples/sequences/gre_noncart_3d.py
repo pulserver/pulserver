@@ -181,19 +181,31 @@ class GreNoncart3DPulseqSequence(Sequence):
         phase_idx = 0
 
         frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+        # The frame counter rides on the first block of every TR rather than on
+        # a lead-in block of its own. A block that plays once per frame has no
+        # counterpart in the TRs that follow it, so TR-period detection finds no
+        # period at all and falls back to "the whole frame is one TR" -- which
+        # then costs a waveform buffer proportional to the frame duration.
+        # Re-SETting a counter that already holds the right value is free.
         for frame in range(len(frames)):
             (phase_label,) = frames.labels(frame)
+            frame_labels = (phase_label,)
             if cfg.trigger != TriggerType.NONE:
-                seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
-            else:
-                seq.add_block(phase_label)
+                # A volume-start trigger genuinely is a once-per-frame block, so
+                # mark it as one: ONCE=1 opens the section and the ONCE=0 that
+                # every TR carries closes it, leaving the TRs identical.
+                seq.add_block(
+                    pp.make_trigger(cfg.trigger, duration=1e-3, system=opts),
+                    pp.make_label(type="SET", label="ONCE", value=1),
+                )
+                frame_labels = (phase_label, pp.make_label(type="SET", label="ONCE", value=0))
+            tr_labels = (pp.make_label(type="SET", label="SLC", value=0), *frame_labels)
             for shot, rotation in enumerate(rotations):
                 for par_shot in par_loop:
                     phase = float(rf_phases[phase_idx])
                     pulse.set_state(phase_offset_rad=phase)
                     for block_idx, block in enumerate(pulse):
-                        labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
-                        seq.add_block(*block, *labels)
+                        seq.add_block(*block, *(tr_labels if block_idx == 0 else ()))
                     if te_delay is not None:
                         seq.add_block(te_delay)
                     readout_module.set_state(
@@ -224,7 +236,7 @@ class GreNoncart3DPulseqSequence(Sequence):
         seq.set_definition("NumPartitions", cfg.npar)
         seq.set_definition("NumFrames", cfg.num_frames)
         seq.set_definition("TriggerType", str(cfg.trigger))
-        pio.write(seq, output=output_path, remove_duplicates=False, check_timing=False)
+        pio.write(seq, output=output_path, check_timing=False)
 
 
 class _Config:

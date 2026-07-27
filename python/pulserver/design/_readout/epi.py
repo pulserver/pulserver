@@ -76,6 +76,8 @@ from .._system import (
     DEFAULT_BANDWIDTH_HZ_PX,
     apply_system_derates,
     ceil_to_raster,
+    copy_event,
+    scale_grad,
     quantize_readout_timing,
     round_to_raster,
 )
@@ -337,7 +339,7 @@ def _prewind_events(system, ro_prewinder, pe, pe_area, pe_template, pe_worst, pa
         if template is None:
             events.append(pp.make_trapezoid(channel=axis.axis, area=merged, system=system))
         else:
-            events.append(pp.scale_grad(template, merged / worst))
+            events.append(scale_grad(template, merged / worst))
     for channel, area in pending.items():
         events.append(pp.make_trapezoid(channel=channel, area=area, system=system))
     return events
@@ -496,7 +498,7 @@ class _EpiTrainBlipped(Readout):
             if d == 0:
                 parts.append(None)
                 continue
-            scaled = pp.scale_grad(template, float(d) / max_delta)
+            scaled = scale_grad(template, float(d) / max_delta)
             parts.append(pp.split_gradient_at(grad=scaled, time_point=blip_duration / 2.0, system=self._opts))
 
         gx_anchor = self._ro.gx_pos
@@ -577,7 +579,7 @@ class _EpiTrainBlipped(Readout):
         for j in range(self.etl):
             positive = (j % 2 == 0) == self._start_pos
             gx = self._ro.gx_pos if positive else self._ro.gx_neg
-            adc = copy.deepcopy(self._ro.adc)
+            adc = copy_event(self._ro.adc)
             line_labels = []
             if self._pe is not None:
                 line_labels.append(pp.make_label(type="SET", label=self._pe.label, value=int(absolute_labels[j, 0])))
@@ -639,7 +641,7 @@ def _flyback_axis_events(opts, axis, deltas, duration_s, n_gaps):
     if max_delta == 0:
         return [None] * n_gaps
     template = pp.make_trapezoid(channel=axis.axis, area=max_delta * axis.delta_k, duration=duration_s, system=opts)
-    return [pp.scale_grad(template, float(d) / max_delta) if d != 0 else None for d in deltas]
+    return [scale_grad(template, float(d) / max_delta) if d != 0 else None for d in deltas]
 
 
 class _EpiTrainFlyback(Readout):
@@ -793,7 +795,7 @@ class _EpiTrainFlyback(Readout):
         seq.add_block(*pre_aligned, rotation) if rotation is not None else seq.add_block(*pre_aligned)
 
         for j in range(self.etl):
-            adc = copy.deepcopy(self._ro.adc)
+            adc = copy_event(self._ro.adc)
             line_labels = []
             if self._pe is not None:
                 line_labels.append(pp.make_label(type="SET", label=self._pe.label, value=int(absolute_labels[j, 0])))

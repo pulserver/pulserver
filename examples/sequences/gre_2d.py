@@ -356,12 +356,7 @@ class GrePulseqSequence(Sequence):
         seq.set_definition("Ny", ny_pe)
         seq.set_definition("NySampled", len(sampling))
         seq.set_definition("NumSlices", nslices)
-        pio.write(
-            seq,
-            output=output_path,
-            remove_duplicates=False,
-            check_timing=False,
-        )
+        pio.write(seq, output=output_path, check_timing=False)
 
 
 def _compute_timing(
