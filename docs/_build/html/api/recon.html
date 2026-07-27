@@ -48,7 +48,7 @@
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="pulserver.recon.linops.deepinverse_multicoil_mri" href="generated/recon/pulserver.recon.linops.deepinverse_multicoil_mri.html" />
+    <link rel="next" title="pulserver.recon.physics.Cartesian2D" href="generated/recon/pulserver.recon.physics.Cartesian2D.html" />
     <link rel="prev" title="pulserver.io.read_asc_bands" href="generated/io/pulserver.io.read_asc_bands.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -343,13 +343,21 @@
 </ul>
 </details></li>
 <li class="toctree-l2 current active has-children"><a class="current reference internal" href="#"><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.linops.deepinverse_multicoil_mri.html">pulserver.recon.linops.deepinverse_multicoil_mri</a></li>
-<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.linops.mrpro_operator.html">pulserver.recon.linops.mrpro_operator</a></li>
-<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.linops.mrinufft_operator.html">pulserver.recon.linops.mrinufft_operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.physics.Cartesian2D.html">pulserver.recon.physics.Cartesian2D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.physics.NonCartesian2D.html">pulserver.recon.physics.NonCartesian2D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.physics.NonCartesian3D.html">pulserver.recon.physics.NonCartesian3D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.physics.Subspace.html">pulserver.recon.physics.Subspace</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.physics.OffResonance.html">pulserver.recon.physics.OffResonance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.physics.Toeplitz.html">pulserver.recon.physics.Toeplitz</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.algorithms.pics.html">pulserver.recon.algorithms.pics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.denoisers.wavelet.html">pulserver.recon.denoisers.wavelet</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.denoisers.tv.html">pulserver.recon.denoisers.tv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.denoisers.tgv.html">pulserver.recon.denoisers.tgv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.cartesian_3d_to_2d.html">pulserver.recon.preprocessing.cartesian_3d_to_2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.remove_readout_oversampling.html">pulserver.recon.preprocessing.remove_readout_oversampling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.coil_compress.html">pulserver.recon.preprocessing.coil_compress</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.noise_prewhiten.html">pulserver.recon.preprocessing.noise_prewhiten</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.linops.available_nufft_backends.html">pulserver.recon.linops.available_nufft_backends</a></li>
-<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.prox.deepinverse_prior.html">pulserver.recon.prox.deepinverse_prior</a></li>
-<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.optimizers.mrpro_optimizer.html">pulserver.recon.optimizers.mrpro_optimizer</a></li>
-<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.optimizers.deepinverse_optimizer.html">pulserver.recon.optimizers.deepinverse_optimizer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.calibration.nlinv_sensitivities.html">pulserver.recon.calibration.nlinv_sensitivities</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.calibration.estimate_sensitivities.html">pulserver.recon.calibration.estimate_sensitivities</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.metadata.MrdMetadata.html">pulserver.recon.metadata.MrdMetadata</a></li>
@@ -366,6 +374,9 @@
 <li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.dicom2mrd.dicom_folder_to_mrd.html">pulserver.recon.dicom2mrd.dicom_folder_to_mrd</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.epi.EpiAcquisitionGroups.html">pulserver.recon.epi.EpiAcquisitionGroups</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.epi.partition_epi_acquisitions.html">pulserver.recon.epi.partition_epi_acquisitions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.epi_ramp_interpolate.html">pulserver.recon.preprocessing.epi_ramp_interpolate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.estimate_epi_eddy_phase.html">pulserver.recon.preprocessing.estimate_epi_eddy_phase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.correct_epi_eddy_currents.html">pulserver.recon.preprocessing.correct_epi_eddy_currents</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.sms.SmsEpiInputs.html">pulserver.recon.sms.SmsEpiInputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.distortion.run_pyhysco.html">pulserver.recon.distortion.run_pyhysco</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/recon/pulserver.recon.connection.Connection.html">pulserver.recon.connection.Connection</a></li>
@@ -560,6 +571,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-primitives">Reconstruction primitives</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gadgetron-style-mrd-helpers">Gadgetron-style MRD helpers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#epi-and-sms-preprocessing">EPI and SMS preprocessing</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gadgetron-integration">Gadgetron integration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#server-submodules">Server submodules</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#submodule-api-reference">Submodule API reference</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#classes">Classes</a></li>
@@ -579,13 +591,11 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="pulserver-recon">
 <h1><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code><a class="headerlink" href="#pulserver-recon" title="Link to this heading">#</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code> combines the Gadgetron-compatible MRD server with a
-Torch-first integration layer. It does not implement imaging operators,
-proximal maps, or solvers: Cartesian/non-Cartesian MRPro operators, DeepInverse
-physics/priors/optimisers, and PyGROG NLINV are selected and composed directly.
-Torch owns CPU/CUDA dispatch, so tensors remain on the caller-selected device.
-mri-nufft remains available with FINUFFT or CUFINUFFT for its established
-backend-specific operators.</p>
+<p><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code> combines the Gadgetron-compatible MRD server with a compact
+Torch-first reconstruction API. Pulserver owns the integration boundary while
+mri-nufft provides non-Cartesian operators and DeepInverse provides linear
+physics, denoisers, CG, and FISTA. Torch owns CPU/CUDA dispatch, so tensors
+remain on the caller-selected device.</p>
 <p>Install <code class="docutils literal notranslate"><span class="pre">pulserver[recon]</span></code> for the server, DICOM, and MRD layers.
 Install <code class="docutils literal notranslate"><span class="pre">pulserver[recon-cpu]</span></code> for FINUFFT, MRPro, and DeepInverse; add
 <code class="docutils literal notranslate"><span class="pre">pulserver[recon-nlinv]</span></code> for PyGROG NLINV calibration or install
@@ -593,42 +603,92 @@ Install <code class="docutils literal notranslate"><span class="pre">pulserver[r
 Install <code class="docutils literal notranslate"><span class="pre">pulserver[recon-distortion]</span></code> only when PyHySCO reverse-polarity
 distortion correction is required. PyHySCO is GPL-3.0-only, so Pulserver does
 not vendor or import it.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.recon</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepinverse_multicoil_mri</span><span class="p">,</span> <span class="n">deepinverse_prior</span>
+<p>The main application surface is one physics factory, optional decorators, one
+denoiser, and <code class="docutils literal notranslate"><span class="pre">pics</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.recon</span><span class="w"> </span><span class="kn">import</span> <span class="n">Cartesian2D</span><span class="p">,</span> <span class="n">NonCartesian3D</span><span class="p">,</span> <span class="n">Subspace</span><span class="p">,</span> <span class="n">pics</span><span class="p">,</span> <span class="n">tv</span>
 
-<span class="n">physics</span> <span class="o">=</span> <span class="n">deepinverse_multicoil_mri</span><span class="p">(</span><span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span> <span class="n">coil_maps</span><span class="o">=</span><span class="n">coil_maps</span><span class="p">)</span>
-<span class="n">image</span> <span class="o">=</span> <span class="n">physics</span><span class="o">.</span><span class="n">A_dagger</span><span class="p">(</span><span class="n">kspace</span><span class="p">)</span>  <span class="c1"># tensors remain on coil_maps.device</span>
-<span class="n">prior</span> <span class="o">=</span> <span class="n">deepinverse_prior</span><span class="p">(</span><span class="s2">&quot;tv&quot;</span><span class="p">)</span>
+<span class="n">cartesian</span> <span class="o">=</span> <span class="n">Cartesian2D</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">coil_maps</span><span class="p">)</span>
+<span class="n">image</span> <span class="o">=</span> <span class="n">pics</span><span class="p">(</span><span class="n">kspace</span><span class="p">,</span> <span class="n">cartesian</span><span class="p">,</span> <span class="n">iterations</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+
+<span class="n">noncartesian</span> <span class="o">=</span> <span class="n">NonCartesian3D</span><span class="p">(</span>
+    <span class="n">trajectory</span><span class="p">,</span>
+    <span class="n">image_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">192</span><span class="p">,</span> <span class="mi">192</span><span class="p">,</span> <span class="mi">128</span><span class="p">),</span>
+    <span class="n">coil_maps</span><span class="o">=</span><span class="n">coil_maps</span><span class="p">,</span>
+    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;cufinufft&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">dynamic</span> <span class="o">=</span> <span class="n">Subspace</span><span class="p">(</span><span class="n">noncartesian</span><span class="p">,</span> <span class="n">basis</span><span class="p">)</span>
+<span class="n">coefficients</span> <span class="o">=</span> <span class="n">pics</span><span class="p">(</span>
+    <span class="n">dynamic_kspace</span><span class="p">,</span>
+    <span class="n">physics</span><span class="o">=</span><span class="n">dynamic</span><span class="p">,</span>
+    <span class="n">denoiser</span><span class="o">=</span><span class="n">tv</span><span class="p">(</span><span class="n">n_it_max</span><span class="o">=</span><span class="mi">20</span><span class="p">),</span>
+    <span class="n">regularization</span><span class="o">=</span><span class="mf">0.02</span><span class="p">,</span>
+    <span class="n">iterations</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 </div>
-<p>For MRD-native Cartesian and non-Cartesian reconstructions, obtain the exact
-MRPro operator class with <code class="docutils literal notranslate"><span class="pre">mrpro_operator(&quot;fourier&quot;)</span></code> and use MRPro’s
-reconstruction algorithms on <code class="docutils literal notranslate"><span class="pre">KData</span></code>. For non-Cartesian mri-nufft workflows,
-<code class="docutils literal notranslate"><span class="pre">mrinufft_operator(&quot;finufft&quot;,</span> <span class="pre">...)</span></code> and <code class="docutils literal notranslate"><span class="pre">mrinufft_operator(&quot;cufinufft&quot;,</span> <span class="pre">...)</span></code>
-return the maintained backend operators.</p>
+<p>With no denoiser, <code class="docutils literal notranslate"><span class="pre">pics</span></code> uses CG and solves
+<code class="docutils literal notranslate"><span class="pre">(AᴴA</span> <span class="pre">+</span> <span class="pre">λI)x</span> <span class="pre">=</span> <span class="pre">Aᴴy</span></code>. With a denoiser it uses plug-and-play FISTA, where
+<code class="docutils literal notranslate"><span class="pre">regularization</span></code> is the denoiser threshold/noise level.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Subspace</span></code>, <code class="docutils literal notranslate"><span class="pre">OffResonance</span></code>, and <code class="docutils literal notranslate"><span class="pre">Toeplitz</span></code> are composable decorators:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.recon</span><span class="w"> </span><span class="kn">import</span> <span class="n">NonCartesian2D</span><span class="p">,</span> <span class="n">OffResonance</span><span class="p">,</span> <span class="n">Subspace</span><span class="p">,</span> <span class="n">Toeplitz</span>
+
+<span class="n">physics</span> <span class="o">=</span> <span class="n">NonCartesian2D</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span> <span class="n">coil_maps</span><span class="o">=</span><span class="n">coil_maps</span><span class="p">)</span>
+<span class="n">physics</span> <span class="o">=</span> <span class="n">OffResonance</span><span class="p">(</span><span class="n">physics</span><span class="p">,</span> <span class="n">field_map</span><span class="p">,</span> <span class="n">readout_time</span><span class="p">)</span>
+<span class="n">physics</span> <span class="o">=</span> <span class="n">Subspace</span><span class="p">(</span><span class="n">physics</span><span class="p">,</span> <span class="n">basis</span><span class="p">)</span>  <span class="c1"># off-resonance must precede subspace</span>
+<span class="n">physics</span> <span class="o">=</span> <span class="n">Toeplitz</span><span class="p">(</span><span class="n">physics</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Base mri-nufft operators use native Toeplitz kernels. Cartesian FFTs are
+already exact. Stacked, subspace, and off-resonance compositions use a correct
+exact normal operation when mri-nufft has no combined Toeplitz kernel.</p>
 <section id="reconstruction-primitives">
 <h2>Reconstruction primitives<a class="headerlink" href="#reconstruction-primitives" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.linops.deepinverse_multicoil_mri.html#pulserver.recon.linops.deepinverse_multicoil_mri" title="pulserver.recon.linops.deepinverse_multicoil_mri"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.linops.deepinverse_multicoil_mri</span></code></a></p></td>
-<td><p>Construct DeepInverse's Torch-native Cartesian parallel-MRI physics.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.physics.Cartesian2D.html#pulserver.recon.physics.Cartesian2D" title="pulserver.recon.physics.Cartesian2D"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.physics.Cartesian2D</span></code></a></p></td>
+<td><p>Create 2D Cartesian SENSE physics.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.linops.mrpro_operator.html#pulserver.recon.linops.mrpro_operator" title="pulserver.recon.linops.mrpro_operator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.linops.mrpro_operator</span></code></a></p></td>
-<td><p>Return a maintained MRPro operator class by role.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.physics.NonCartesian2D.html#pulserver.recon.physics.NonCartesian2D" title="pulserver.recon.physics.NonCartesian2D"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.physics.NonCartesian2D</span></code></a></p></td>
+<td><p>Create 2D non-Cartesian mri-nufft physics.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.linops.mrinufft_operator.html#pulserver.recon.linops.mrinufft_operator" title="pulserver.recon.linops.mrinufft_operator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.linops.mrinufft_operator</span></code></a></p></td>
-<td><p>Create and return an mri-nufft operator with the requested backend.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.physics.NonCartesian3D.html#pulserver.recon.physics.NonCartesian3D" title="pulserver.recon.physics.NonCartesian3D"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.physics.NonCartesian3D</span></code></a></p></td>
+<td><p>Create full-3D or stack-of-trajectories mri-nufft physics.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.linops.available_nufft_backends.html#pulserver.recon.linops.available_nufft_backends" title="pulserver.recon.linops.available_nufft_backends"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.linops.available_nufft_backends</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.physics.Subspace.html#pulserver.recon.physics.Subspace" title="pulserver.recon.physics.Subspace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.physics.Subspace</span></code></a></p></td>
+<td><p>Decorate Cartesian or non-Cartesian physics with a low-rank subspace.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.physics.OffResonance.html#pulserver.recon.physics.OffResonance" title="pulserver.recon.physics.OffResonance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.physics.OffResonance</span></code></a></p></td>
+<td><p>Decorate non-Cartesian physics with mri-nufft off-resonance correction.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.physics.Toeplitz.html#pulserver.recon.physics.Toeplitz" title="pulserver.recon.physics.Toeplitz"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.physics.Toeplitz</span></code></a></p></td>
+<td><p>Enable a Toeplitz normal operator wherever the backend supports it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.algorithms.pics.html#pulserver.recon.algorithms.pics" title="pulserver.recon.algorithms.pics"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.algorithms.pics</span></code></a></p></td>
+<td><p>Reconstruct parallel MRI data with CG or plug-and-play FISTA.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.denoisers.wavelet.html#pulserver.recon.denoisers.wavelet" title="pulserver.recon.denoisers.wavelet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.denoisers.wavelet</span></code></a></p></td>
+<td><p>Create DeepInverse's 2D or 3D orthogonal-wavelet denoiser.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.denoisers.tv.html#pulserver.recon.denoisers.tv" title="pulserver.recon.denoisers.tv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.denoisers.tv</span></code></a></p></td>
+<td><p>Create DeepInverse's spatially 2D/3D-agnostic TV denoiser.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.denoisers.tgv.html#pulserver.recon.denoisers.tgv" title="pulserver.recon.denoisers.tgv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.denoisers.tgv</span></code></a></p></td>
+<td><p>Create DeepInverse's spatially 2D/3D-agnostic TGV denoiser.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.cartesian_3d_to_2d.html#pulserver.recon.preprocessing.cartesian_3d_to_2d" title="pulserver.recon.preprocessing.cartesian_3d_to_2d"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.preprocessing.cartesian_3d_to_2d</span></code></a></p></td>
+<td><p>Convert Cartesian 3D k-space into independent 2D hybrid-space planes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.remove_readout_oversampling.html#pulserver.recon.preprocessing.remove_readout_oversampling" title="pulserver.recon.preprocessing.remove_readout_oversampling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.preprocessing.remove_readout_oversampling</span></code></a></p></td>
+<td><p>Remove readout oversampling by centered image-domain cropping.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.coil_compress.html#pulserver.recon.preprocessing.coil_compress" title="pulserver.recon.preprocessing.coil_compress"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.preprocessing.coil_compress</span></code></a></p></td>
+<td><p>Apply mri-nufft SVD coil compression and return data plus matrix.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.noise_prewhiten.html#pulserver.recon.preprocessing.noise_prewhiten" title="pulserver.recon.preprocessing.noise_prewhiten"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.preprocessing.noise_prewhiten</span></code></a></p></td>
+<td><p>Decorrelate receiver coils using the measured noise covariance.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.linops.available_nufft_backends.html#pulserver.recon.linops.available_nufft_backends" title="pulserver.recon.linops.available_nufft_backends"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.linops.available_nufft_backends</span></code></a></p></td>
 <td><p>Return available mri-nufft backends, or an empty list if it is absent.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.prox.deepinverse_prior.html#pulserver.recon.prox.deepinverse_prior" title="pulserver.recon.prox.deepinverse_prior"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.prox.deepinverse_prior</span></code></a></p></td>
-<td><p>Construct a DeepInverse prior by role.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.optimizers.mrpro_optimizer.html#pulserver.recon.optimizers.mrpro_optimizer" title="pulserver.recon.optimizers.mrpro_optimizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.optimizers.mrpro_optimizer</span></code></a></p></td>
-<td><p>Return an MRPro optimizer function by role.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.optimizers.deepinverse_optimizer.html#pulserver.recon.optimizers.deepinverse_optimizer" title="pulserver.recon.optimizers.deepinverse_optimizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.optimizers.deepinverse_optimizer</span></code></a></p></td>
-<td><p>Construct a DeepInverse optimiser by role.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.calibration.nlinv_sensitivities.html#pulserver.recon.calibration.nlinv_sensitivities" title="pulserver.recon.calibration.nlinv_sensitivities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.calibration.nlinv_sensitivities</span></code></a></p></td>
 <td><p>Estimate sensitivity maps with PyGROG's NLINV calibration.</p></td>
@@ -689,10 +749,14 @@ return the maintained backend operators.</p>
 <p>The EPI zoo can optionally emit a blip-nulled <code class="docutils literal notranslate"><span class="pre">NAV</span></code>/<code class="docutils literal notranslate"><span class="pre">REF</span></code> navigator for
 odd/even phase calibration, a <code class="docutils literal notranslate"><span class="pre">SET=1</span></code> reverse-phase-encode b=0 reference, and
 a single-band <code class="docutils literal notranslate"><span class="pre">REF</span></code> volume for SMS. <code class="docutils literal notranslate"><span class="pre">partition_epi_acquisitions</span></code> turns those
-standard MRD flags and labels into ordered groups; it deliberately does not
-reimplement odd/even phase fitting, Slice-GRAPPA, or distortion estimation.
-Pass the grouped tensors to an EPI-capable upstream backend and use the known
-CAIPI encoding for SMS.</p>
+standard MRD flags and labels into ordered groups.</p>
+<p><code class="docutils literal notranslate"><span class="pre">epi_ramp_interpolate</span></code> moves ramp-sampled readouts to a uniform grid.
+<code class="docutils literal notranslate"><span class="pre">estimate_epi_eddy_phase</span></code> and <code class="docutils literal notranslate"><span class="pre">correct_epi_eddy_currents</span></code> fit and remove the
+smooth odd/even navigator phase. Reconstructed reverse-polarity image pairs
+can be passed to the opt-in <code class="docutils literal notranslate"><span class="pre">run_pyhysco</span></code> wrapper for distortion correction.
+SMS does not need a separate container-level physics type: the known CAIPI
+encoding belongs in the forward model, while the single-band reference is
+preprocessing/calibration input.</p>
 <p>FSE uses its CPMG RF/receiver phase relation and does <strong>not</strong> need EPI’s
 alternating-readout navigator or an opposite-PE distortion pair. A
 phase-sensitive FSE application may still acquire its own phase reference.</p>
@@ -704,15 +768,34 @@ phase-sensitive FSE application may still acquire its own phase reference.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.epi.partition_epi_acquisitions.html#pulserver.recon.epi.partition_epi_acquisitions" title="pulserver.recon.epi.partition_epi_acquisitions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.epi.partition_epi_acquisitions</span></code></a></p></td>
 <td><p>Partition EPI acquisitions using standard MRD flags and <code class="docutils literal notranslate"><span class="pre">idx.set</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.sms.SmsEpiInputs.html#pulserver.recon.sms.SmsEpiInputs" title="pulserver.recon.sms.SmsEpiInputs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.sms.SmsEpiInputs</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.epi_ramp_interpolate.html#pulserver.recon.preprocessing.epi_ramp_interpolate" title="pulserver.recon.preprocessing.epi_ramp_interpolate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.preprocessing.epi_ramp_interpolate</span></code></a></p></td>
+<td><p>Linearly interpolate EPI ramp samples onto a uniform readout grid.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.estimate_epi_eddy_phase.html#pulserver.recon.preprocessing.estimate_epi_eddy_phase" title="pulserver.recon.preprocessing.estimate_epi_eddy_phase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.preprocessing.estimate_epi_eddy_phase</span></code></a></p></td>
+<td><p>Estimate a smooth odd/even EPI phase difference from navigator pairs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.preprocessing.correct_epi_eddy_currents.html#pulserver.recon.preprocessing.correct_epi_eddy_currents" title="pulserver.recon.preprocessing.correct_epi_eddy_currents"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.preprocessing.correct_epi_eddy_currents</span></code></a></p></td>
+<td><p>Apply symmetric odd/even phase correction to EPI readout polarities.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.sms.SmsEpiInputs.html#pulserver.recon.sms.SmsEpiInputs" title="pulserver.recon.sms.SmsEpiInputs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.sms.SmsEpiInputs</span></code></a></p></td>
 <td><p>Inputs required by an SMS-EPI reconstruction backend.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.distortion.run_pyhysco.html#pulserver.recon.distortion.run_pyhysco" title="pulserver.recon.distortion.run_pyhysco"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.distortion.run_pyhysco</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/recon/pulserver.recon.distortion.run_pyhysco.html#pulserver.recon.distortion.run_pyhysco" title="pulserver.recon.distortion.run_pyhysco"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.recon.distortion.run_pyhysco</span></code></a></p></td>
 <td><p>Run the externally installed PyHySCO CLI on an opposite-PE NIfTI pair.</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+</section>
+<section id="gadgetron-integration">
+<h2>Gadgetron integration<a class="headerlink" href="#gadgetron-integration" title="Link to this heading">#</a></h2>
+<p>Numerical operators and preprocessing functions remain array-level callables,
+not subclasses of a particular Gadgetron ABI. A Gadgetron/Pulserver handler
+first uses <code class="docutils literal notranslate"><span class="pre">filter_acquisitions</span></code>, <code class="docutils literal notranslate"><span class="pre">group_by_labels</span></code>, <code class="docutils literal notranslate"><span class="pre">split_on_flag</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">partition_epi_acquisitions</span></code>, converts one complete group to tensors, then
+calls the same preprocessing and <code class="docutils literal notranslate"><span class="pre">pics</span></code> functions. This keeps stateful stream
+grouping at the MRD boundary and makes stateless numerical components directly
+testable and reusable offline.</p>
 <p>Importable runnable examples mirror the zoo layout:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.examples.recon</span><span class="w"> </span><span class="kn">import</span> <span class="n">prepare_epi</span><span class="p">,</span> <span class="n">prepare_sms_epi</span>
 
@@ -807,6 +890,284 @@ Use <code class="docutils literal notranslate"><span class="pre">backend=&quot;f
 <code class="docutils literal notranslate"><span class="pre">fast_fourier</span></code>, <code class="docutils literal notranslate"><span class="pre">fourier</span></code>, <code class="docutils literal notranslate"><span class="pre">nufft</span></code>, or <code class="docutils literal notranslate"><span class="pre">sensitivity</span></code>.  Compose the
 returned MRPro classes directly (for example <code class="docutils literal notranslate"><span class="pre">FourierOp</span> <span class="pre">&#64;</span> <span class="pre">SensitivityOp</span></code>)
 and use MRPro’s reconstruction algorithms with MRPro <code class="docutils literal notranslate"><span class="pre">KData</span></code> objects.</p>
+</dd></dl>
+
+<p>MRI physics factories with a uniform DeepInverse-facing interface.</p>
+<p>The public factories own the mri-nufft/DeepInverse integration boundary.
+Callers never need to construct an mri-nufft autodiff wrapper themselves.
+Subspace, off-resonance, and Toeplitz behavior are composed as decorators so
+that the API does not grow one class for every possible combination.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">Cartesian2D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coil_maps</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">toeplitz</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create 2D Cartesian SENSE physics.</p>
+<p>Leading dimensions are handled by DeepInverse as batch dimensions, so
+slices, contrasts, and dynamic frames are reconstructed independently.
+Cartesian normal operations already use exact FFTs; <code class="docutils literal notranslate"><span class="pre">toeplitz=True</span></code> is
+accepted for API symmetry and reports <code class="docutils literal notranslate"><span class="pre">normal_mode</span> <span class="pre">==</span> <span class="pre">&quot;exact-fft&quot;</span></code>.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">MRIPhysics</span></span></dt>
+<dd><p>A small, transparent facade over a DeepInverse linear physics object.</p>
+<p>The facade records reconstruction-specific metadata and forwards the
+numerical contract (<code class="docutils literal notranslate"><span class="pre">A</span></code>, <code class="docutils literal notranslate"><span class="pre">A_adjoint</span></code>, <code class="docutils literal notranslate"><span class="pre">A_adjoint_A</span></code>, <code class="docutils literal notranslate"><span class="pre">A_dagger</span></code>)
+to DeepInverse. <code class="docutils literal notranslate"><span class="pre">native_operator</span></code> is the underlying mri-nufft operator
+for non-Cartesian acquisitions and is intentionally read-only.</p>
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">A</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Apply the forward encoding operator.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">A_adjoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Apply the adjoint encoding operator.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">A_adjoint_A</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Apply the normal operator, using Toeplitz acceleration when valid.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">A_dagger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Apply the least-squares pseudo-inverse supplied by DeepInverse.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">A_vjp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">v</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Return the vector-Jacobian product required by DeepInverse.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">operator</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">native_operator</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kind</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spatial_ndim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">viewed_as_real</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modifiers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">()</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trajectory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rebuild</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">normal_mode</span></span></dt>
+<dd><p>Return <code class="docutils literal notranslate"><span class="pre">&quot;toeplitz&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;exact-fft&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;exact&quot;</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">rebuild</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trajectory</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Rebuild a non-Cartesian factory for a frame-specific trajectory.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Move the underlying Torch physics object and return <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">NonCartesian2D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trajectory</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_shape</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">coil_maps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'finufft'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_coils</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_batchs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">toeplitz</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">viewed_as_real</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create 2D non-Cartesian mri-nufft physics.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">NonCartesian3D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trajectory</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_shape</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">coil_maps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'finufft'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_coils</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_batchs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stacked</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">z_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">toeplitz</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">viewed_as_real</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create full-3D or stack-of-trajectories mri-nufft physics.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">OffResonance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">physics</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">field_map</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">readout_time</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">r2star_map</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interpolator</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'svd'</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Decorate non-Cartesian physics with mri-nufft off-resonance correction.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">Subspace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">physics</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basis</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Decorate Cartesian or non-Cartesian physics with a low-rank subspace.</p>
+<p><code class="docutils literal notranslate"><span class="pre">basis</span></code> has shape <code class="docutils literal notranslate"><span class="pre">(rank,</span> <span class="pre">frames)</span></code>. Coefficient images use shape
+<code class="docutils literal notranslate"><span class="pre">(batch,</span> <span class="pre">2</span> <span class="pre">*</span> <span class="pre">rank,</span> <span class="pre">*spatial)</span></code> in the default real view, and measurements
+gain a frame dimension at axis 1. If a non-Cartesian trajectory has a
+leading frame dimension, one mri-nufft operator is built per frame.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">Toeplitz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">physics</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Enable a Toeplitz normal operator wherever the backend supports it.</p>
+<p>Base 2D/3D mri-nufft operators use their lazily computed Toeplitz kernel.
+Cartesian FFTs are already exact and fast. Stacked and off-resonance
+compositions retain an exact <code class="docutils literal notranslate"><span class="pre">AᴴA</span></code> because mri-nufft does not currently
+expose a valid combined Toeplitz kernel for those operators.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">cartesian_2d</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coil_maps</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">toeplitz</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create 2D Cartesian SENSE physics.</p>
+<p>Leading dimensions are handled by DeepInverse as batch dimensions, so
+slices, contrasts, and dynamic frames are reconstructed independently.
+Cartesian normal operations already use exact FFTs; <code class="docutils literal notranslate"><span class="pre">toeplitz=True</span></code> is
+accepted for API symmetry and reports <code class="docutils literal notranslate"><span class="pre">normal_mode</span> <span class="pre">==</span> <span class="pre">&quot;exact-fft&quot;</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">noncartesian_2d</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trajectory</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_shape</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">coil_maps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'finufft'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_coils</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_batchs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">toeplitz</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">viewed_as_real</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create 2D non-Cartesian mri-nufft physics.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">noncartesian_3d</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trajectory</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_shape</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">coil_maps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'finufft'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_coils</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_batchs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stacked</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">z_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">toeplitz</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">viewed_as_real</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create full-3D or stack-of-trajectories mri-nufft physics.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">off_resonance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">physics</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">field_map</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">readout_time</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">r2star_map</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interpolator</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'svd'</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Decorate non-Cartesian physics with mri-nufft off-resonance correction.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">subspace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">physics</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basis</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Decorate Cartesian or non-Cartesian physics with a low-rank subspace.</p>
+<p><code class="docutils literal notranslate"><span class="pre">basis</span></code> has shape <code class="docutils literal notranslate"><span class="pre">(rank,</span> <span class="pre">frames)</span></code>. Coefficient images use shape
+<code class="docutils literal notranslate"><span class="pre">(batch,</span> <span class="pre">2</span> <span class="pre">*</span> <span class="pre">rank,</span> <span class="pre">*spatial)</span></code> in the default real view, and measurements
+gain a frame dimension at axis 1. If a non-Cartesian trajectory has a
+leading frame dimension, one mri-nufft operator is built per frame.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.physics.</span></span><span class="sig-name descname"><span class="pre">toeplitz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">physics</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Enable a Toeplitz normal operator wherever the backend supports it.</p>
+<p>Base 2D/3D mri-nufft operators use their lazily computed Toeplitz kernel.
+Cartesian FFTs are already exact and fast. Stacked and off-resonance
+compositions retain an exact <code class="docutils literal notranslate"><span class="pre">AᴴA</span></code> because mri-nufft does not currently
+expose a valid combined Toeplitz kernel for those operators.</p>
+</dd></dl>
+
+<p>DeepInverse denoiser factories used by <code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.recon.pics()</span></code>.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.denoisers.</span></span><span class="sig-name descname"><span class="pre">TGV</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create DeepInverse’s spatially 2D/3D-agnostic TGV denoiser.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.denoisers.</span></span><span class="sig-name descname"><span class="pre">TV</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create DeepInverse’s spatially 2D/3D-agnostic TV denoiser.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.denoisers.</span></span><span class="sig-name descname"><span class="pre">Wavelet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">dimension</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wavelet</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'db8'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">complex_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create DeepInverse’s 2D or 3D orthogonal-wavelet denoiser.</p>
+<p>Batch entries are independent, which makes the same object suitable for
+slices, contrasts, and dynamic frames. <code class="docutils literal notranslate"><span class="pre">dimension</span></code> selects only the
+spatial transform dimensionality.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.denoisers.</span></span><span class="sig-name descname"><span class="pre">denoiser</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create one of the public <code class="docutils literal notranslate"><span class="pre">wavelet</span></code>, <code class="docutils literal notranslate"><span class="pre">tv</span></code>, or <code class="docutils literal notranslate"><span class="pre">tgv</span></code> denoisers.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.denoisers.</span></span><span class="sig-name descname"><span class="pre">tgv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create DeepInverse’s spatially 2D/3D-agnostic TGV denoiser.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.denoisers.</span></span><span class="sig-name descname"><span class="pre">tv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create DeepInverse’s spatially 2D/3D-agnostic TV denoiser.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.denoisers.</span></span><span class="sig-name descname"><span class="pre">wavelet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">dimension</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wavelet</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'db8'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">complex_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Create DeepInverse’s 2D or 3D orthogonal-wavelet denoiser.</p>
+<p>Batch entries are independent, which makes the same object suitable for
+slices, contrasts, and dynamic frames. <code class="docutils literal notranslate"><span class="pre">dimension</span></code> selects only the
+spatial transform dimensionality.</p>
+</dd></dl>
+
+<p>High-level parallel-imaging compressed-sensing reconstruction.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.algorithms.</span></span><span class="sig-name descname"><span class="pre">pics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">physics</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">denoiser</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">regularization</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">init</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Reconstruct parallel MRI data with CG or plug-and-play FISTA.</p>
+<p>With no denoiser, this solves</p>
+<p><code class="docutils literal notranslate"><span class="pre">(AᴴA</span> <span class="pre">+</span> <span class="pre">regularization</span> <span class="pre">I)x</span> <span class="pre">=</span> <span class="pre">Aᴴy</span></code></p>
+<p>by conjugate gradients. With a denoiser, DeepInverse FISTA is used and
+<code class="docutils literal notranslate"><span class="pre">regularization</span></code> becomes the denoiser threshold/noise-level parameter.
+The latter is the natural strength parameter for the exposed wavelet, TV,
+and TGV proximal denoisers.</p>
+</dd></dl>
+
+<p>Array-level MRI preprocessing utilities.</p>
+<p>Functions preserve Torch tensors (including their device) and NumPy arrays.
+MRPro containers are delegated to their maintained methods when applicable.</p>
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.preprocessing.</span></span><span class="sig-name descname"><span class="pre">cartesian_3d_to_2d</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">kspace</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">readout_axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Convert Cartesian 3D k-space into independent 2D hybrid-space planes.</p>
+<p>A centered inverse FFT is applied along readout. The returned readout
+positions can be moved into the batch dimension before constructing
+<code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.recon.Cartesian2D()</span></code> physics.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.preprocessing.</span></span><span class="sig-name descname"><span class="pre">coil_compress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">kspace</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_coils</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">trajectory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calibration_radius</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Apply mri-nufft SVD coil compression and return data plus matrix.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.preprocessing.</span></span><span class="sig-name descname"><span class="pre">correct_epi_eddy_currents</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">positive_readouts</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">negative_readouts</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phase</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">readout_axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">polynomial_order</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Apply symmetric odd/even phase correction to EPI readout polarities.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.preprocessing.</span></span><span class="sig-name descname"><span class="pre">epi_ramp_interpolate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_positions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_positions</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">readout_axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Linearly interpolate EPI ramp samples onto a uniform readout grid.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.preprocessing.</span></span><span class="sig-name descname"><span class="pre">estimate_epi_eddy_phase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">positive_navigator</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">negative_navigator</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">readout_axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">polynomial_order</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Estimate a smooth odd/even EPI phase difference from navigator pairs.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.preprocessing.</span></span><span class="sig-name descname"><span class="pre">noise_prewhiten</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">kspace</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">coil_axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Decorrelate receiver coils using the measured noise covariance.</p>
+<p>MRPro <code class="docutils literal notranslate"><span class="pre">KData</span></code> delegates to <code class="docutils literal notranslate"><span class="pre">KData.prewhiten</span></code>. Raw Torch/NumPy arrays
+are whitened with a Cholesky solve and preserve their input container.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.preprocessing.</span></span><span class="sig-name descname"><span class="pre">remove_readout_oversampling</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">readout_axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em><span class="sig-paren">)</span></dt>
+<dd><p>Remove readout oversampling by centered image-domain cropping.</p>
+<p>MRPro <code class="docutils literal notranslate"><span class="pre">KData</span></code> objects delegate to <code class="docutils literal notranslate"><span class="pre">KData.remove_readout_os()</span></code> and infer
+the target from their header. Raw arrays require <code class="docutils literal notranslate"><span class="pre">target_size</span></code>.</p>
 </dd></dl>
 
 <p>Access DeepInverse priors and proximal operators.</p>
@@ -2524,11 +2885,11 @@ DICOM images via the <code class="docutils literal notranslate"><span class="pre
       </div>
     </a>
     <a class="right-next"
-       href="generated/recon/pulserver.recon.linops.deepinverse_multicoil_mri.html"
+       href="generated/recon/pulserver.recon.physics.Cartesian2D.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pulserver.recon.linops.deepinverse_multicoil_mri</p>
+        <p class="prev-next-title">pulserver.recon.physics.Cartesian2D</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2553,6 +2914,7 @@ DICOM images via the <code class="docutils literal notranslate"><span class="pre
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-primitives">Reconstruction primitives</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gadgetron-style-mrd-helpers">Gadgetron-style MRD helpers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#epi-and-sms-preprocessing">EPI and SMS preprocessing</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#gadgetron-integration">Gadgetron integration</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#server-submodules">Server submodules</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#submodule-api-reference">Submodule API reference</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#classes">Classes</a></li>

@@ -290,7 +290,7 @@ int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *i
 
         for (n = 0; n < desc->exec_stream_len; ++n)
         {
-            bt_idx = desc->exec_stream_block_idx[n];
+            bt_idx = pulseg__exec_block_idx(desc, n);
             bte = &desc->block_table[bt_idx];
             bdef = &desc->base_blocks[bte->id];
 
@@ -299,7 +299,7 @@ int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *i
                 (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
 
             /* Count segment boundaries (transitions) */
-            cur_seg = desc->exec_stream_seg_id[n];
+            cur_seg = pulseg__exec_seg_id(desc, n);
             if (cur_seg >= 0 && cur_seg != prev_seg)
                 info->total_segment_boundaries += 1;
             prev_seg = cur_seg;
@@ -402,7 +402,7 @@ static int pulseg__rf_pulse_at(
     {
         if (st < 0 || st >= desc->exec_stream_len)
             return 0;
-        blk_idx = desc->exec_stream_block_idx[st];
+        blk_idx = pulseg__exec_block_idx(desc, st);
     }
     else
     {
@@ -622,7 +622,7 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
     num_rf = 0;
     for (i = 0; i < count; ++i)
     {
-        int blk_idx = use_exec_stream ? desc->exec_stream_block_idx[start + i] : (start + i);
+        int blk_idx = use_exec_stream ? pulseg__exec_block_idx(desc, start + i) : (start + i);
         bte = &desc->block_table[blk_idx];
         if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size)
         {
@@ -644,7 +644,7 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
     n = 0;
     for (i = 0; i < count; ++i)
     {
-        int blk_idx = use_exec_stream ? desc->exec_stream_block_idx[start + i] : (start + i);
+        int blk_idx = use_exec_stream ? pulseg__exec_block_idx(desc, start + i) : (start + i);
         int rf_def_id;
         float act_amp;
 
@@ -773,7 +773,7 @@ int pulseg_get_rf_event_array(
     num_rf = 0;
     for (i = 0; i < count; ++i)
     {
-        int blk_idx = use_exec_stream ? desc->exec_stream_block_idx[start + i] : (start + i);
+        int blk_idx = use_exec_stream ? pulseg__exec_block_idx(desc, start + i) : (start + i);
         bte = &desc->block_table[blk_idx];
         if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size)
         {
@@ -795,7 +795,7 @@ int pulseg_get_rf_event_array(
     n = 0;
     for (i = 0; i < count; ++i)
     {
-        int blk_idx = use_exec_stream ? desc->exec_stream_block_idx[start + i] : (start + i);
+        int blk_idx = use_exec_stream ? pulseg__exec_block_idx(desc, start + i) : (start + i);
         int rf_def_id;
         float act_amp;
 
@@ -864,7 +864,7 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
         return PULSEG_ERR_INVALID_ARGUMENT;
 
     desc = &coll->descriptors[subseq_idx];
-    if (desc->exec_stream_len <= 0 || !desc->exec_stream_block_idx || !desc->block_table)
+    if (desc->exec_stream_len <= 0 || !desc->exec_runs || !desc->block_table)
         return 0;
 
     /* ---- Pass 1: split the materialized scan table into maximal runs of
@@ -883,7 +883,7 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
         int prev_mid = 0;
         for (i = 0; i < desc->exec_stream_len; ++i)
         {
-            int blk = desc->exec_stream_block_idx[i];
+            int blk = pulseg__exec_block_idx(desc, i);
             int mid = desc->block_table[blk].module_id;
             /* A run also breaks at every main-region TR boundary
              * (exec_stream_tr_start[i]==1), not just on a module_id
@@ -892,7 +892,7 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
              * repeat boundary, since MODULE is sticky and the author
              * never re-SETs it) would silently merge into one giant run
              * instead of being counted as separate occurrences. */
-            int is_tr_start = desc->exec_stream_tr_start && desc->exec_stream_tr_start[i];
+            int is_tr_start = pulseg__exec_tr_start(desc, i);
             if (mid != 0 && (mid != prev_mid || is_tr_start))
             {
                 /* New run starts here. */
@@ -966,7 +966,7 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
                 ref_len = run_len[r];
                 for (i = 0; i < ref_len; ++i)
                 {
-                    int blk = desc->exec_stream_block_idx[run_start[r] + i];
+                    int blk = pulseg__exec_block_idx(desc, run_start[r] + i);
                     one_instance_duration_us +=
                         desc->base_blocks[desc->block_table[blk].id].duration_us;
                 }
@@ -982,8 +982,8 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
                 }
                 for (i = 0; i < ref_len; ++i)
                 {
-                    int ref_blk = desc->exec_stream_block_idx[run_start[ref_run] + i];
-                    int cur_blk = desc->exec_stream_block_idx[run_start[r] + i];
+                    int ref_blk = pulseg__exec_block_idx(desc, run_start[ref_run] + i);
+                    int cur_blk = pulseg__exec_block_idx(desc, run_start[r] + i);
                     int ref_def, ref_adc, cur_def, cur_adc;
 
                     module_block_signature(desc, &ref_def, &ref_adc, ref_blk);
@@ -3021,7 +3021,7 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
     if (pos < 0 || pos >= desc->exec_stream_len)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
-    seg_id = desc->exec_stream_seg_id[pos];
+    seg_id = pulseg__exec_seg_id(desc, pos);
 
     info->subseq_idx = cursor->sequence_index;
     info->scan_pos = pos;
@@ -3043,7 +3043,7 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
      * (detected by counting back to the start of the same-seg_id run). */
     {
         int new_inst;
-        if (pos == 0 || desc->exec_stream_seg_id[pos] != desc->exec_stream_seg_id[pos - 1])
+        if (pos == 0 || pulseg__exec_seg_id(desc, pos) != pulseg__exec_seg_id(desc, pos - 1))
         {
             new_inst = 1;
         }
@@ -3053,7 +3053,7 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
             int run_start = pos;
             if (nb <= 0)
                 nb = 1;
-            while (run_start > 0 && desc->exec_stream_seg_id[run_start - 1] == seg_id)
+            while (run_start > 0 && pulseg__exec_seg_id(desc, run_start - 1) == seg_id)
                 run_start--;
             new_inst = (((pos - run_start) % nb) == 0) ? 1 : 0;
         }
@@ -3066,7 +3066,7 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
     {
         int last_inst;
         if (pos == desc->exec_stream_len - 1 ||
-            desc->exec_stream_seg_id[pos] != desc->exec_stream_seg_id[pos + 1])
+            pulseg__exec_seg_id(desc, pos) != pulseg__exec_seg_id(desc, pos + 1))
         {
             last_inst = 1;
         }
@@ -3076,7 +3076,7 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
             int run_start = pos;
             if (nb <= 0)
                 nb = 1;
-            while (run_start > 0 && desc->exec_stream_seg_id[run_start - 1] == seg_id)
+            while (run_start > 0 && pulseg__exec_seg_id(desc, run_start - 1) == seg_id)
                 run_start--;
             last_inst = ((((pos - run_start) + 1) % nb) == 0) ? 1 : 0;
         }
@@ -3086,7 +3086,7 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
         }
         info->segment_end = last_inst;
     }
-    info->tr_start = desc->exec_stream_tr_start ? desc->exec_stream_tr_start[pos] : 0;
+    info->tr_start = pulseg__exec_tr_start(desc, pos);
     info->pmc = desc->enable_pmc;
 
     /* Segment properties via local segment index */
@@ -3123,7 +3123,7 @@ static int resolve_block_instance(
     if (exec_stream_position < 0 || exec_stream_position >= desc->exec_stream_len)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
-    idx = desc->exec_stream_block_idx[exec_stream_position];
+    idx = pulseg__exec_block_idx(desc, exec_stream_position);
     if (idx < 0 || idx >= desc->num_blocks)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
@@ -3781,7 +3781,7 @@ int pulseg_get_subseq_segment_layout(
     info->start_block = seg->start_block;
     info->max_energy_start_block = seg->max_energy_start_block;
     info->from_max_energy_instance =
-        (seg->max_energy_start_block >= 0 && desc->exec_stream_block_idx != NULL &&
+        (seg->max_energy_start_block >= 0 && desc->exec_runs != NULL &&
          seg->max_energy_start_block + seg->num_blocks <= desc->exec_stream_len)
         ? 1
         : 0;
@@ -3809,12 +3809,12 @@ int pulseg_get_subseq_segment_block_indices(
     desc = &coll->descriptors[subseq_idx];
     seg = &desc->segment_definitions[local_seg_idx];
 
-    from_exec = (seg->max_energy_start_block >= 0 && desc->exec_stream_block_idx != NULL &&
+    from_exec = (seg->max_energy_start_block >= 0 && desc->exec_runs != NULL &&
                  seg->max_energy_start_block + seg->num_blocks <= desc->exec_stream_len);
 
     for (i = 0; i < seg->num_blocks; ++i)
     {
-        blk = from_exec ? desc->exec_stream_block_idx[seg->max_energy_start_block + i]
+        blk = from_exec ? pulseg__exec_block_idx(desc, seg->max_energy_start_block + i)
                          : (seg->start_block + i);
         if (blk < 0 || blk >= desc->num_blocks)
             return 0;

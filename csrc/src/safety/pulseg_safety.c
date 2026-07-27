@@ -2167,7 +2167,7 @@ int pulseg__find_unique_shot_passes(
 
     num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
     pass_size = (num_passes > 0) ? (desc->exec_stream_len / num_passes) : 0;
-    if (num_passes <= 0 || pass_size <= 0 || !desc->exec_stream_block_idx)
+    if (num_passes <= 0 || pass_size <= 0 || !desc->exec_runs)
         return 0;
 
     num_cols = pass_size * 3;
@@ -2198,7 +2198,7 @@ int pulseg__find_unique_shot_passes(
                 rows[p * num_cols + col++] = -1;
                 continue;
             }
-            block_idx = desc->exec_stream_block_idx[bt_pos];
+            block_idx = pulseg__exec_block_idx(desc, bt_pos);
             if (block_idx < 0 || block_idx >= desc->num_blocks)
             {
                 rows[p * num_cols + col++] = -1;
@@ -2936,7 +2936,7 @@ static int check_grad_continuity(
 
         /* read current block */
         {
-            int bt_idx = desc->exec_stream_block_idx[coll->block_cursor.exec_stream_position];
+            int bt_idx = pulseg__exec_block_idx(desc, coll->block_cursor.exec_stream_position);
             bte = &desc->block_table[bt_idx];
         }
         bdef = &desc->base_blocks[bte->id];

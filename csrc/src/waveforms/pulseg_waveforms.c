@@ -171,7 +171,7 @@ static int compute_position_max_amplitudes_filtered(
         pos_max_gz[n] = 0.0f;
     }
 
-    if (use_full_pass_layout && pass_size > 0 && desc->exec_stream_block_idx)
+    if (use_full_pass_layout && pass_size > 0 && desc->exec_runs)
     {
         for (pass_idx = 0; pass_idx < num_passes; ++pass_idx)
         {
@@ -184,7 +184,7 @@ static int compute_position_max_amplitudes_filtered(
                 if (st_pos < 0 || st_pos >= desc->exec_stream_len)
                     continue;
 
-                block_idx = desc->exec_stream_block_idx[st_pos];
+                block_idx = pulseg__exec_block_idx(desc, st_pos);
                 if (block_idx < 0 || block_idx >= desc->num_blocks)
                     continue;
                 bte = &desc->block_table[block_idx];
@@ -380,7 +380,7 @@ int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc)
             psv[pos] = 0;
         }
 
-        /* Walk the scan table.  exec_stream_tr_start[si] == 1 marks the first
+        /* Walk the scan pulseg__exec_tr_start(table, si) == 1 marks the first
          * block of a new TR; we use this to reset the within-TR position.
          * This uses the full expanded scan table rather than the deduplicated
          * block table, so that per-TR gradient amplitude variation (e.g. phase
@@ -389,11 +389,11 @@ int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc)
         for (si = 0; si < desc->exec_stream_len; ++si)
         {
             /* Reset position counter at the start of each new TR */
-            if (desc->exec_stream_tr_start && desc->exec_stream_tr_start[si])
+            if (pulseg__exec_tr_start(desc, si))
                 tr_pos = 0;
 
             {
-                int bt_idx = desc->exec_stream_block_idx[si];
+                int bt_idx = pulseg__exec_block_idx(desc, si);
                 if (tr_pos < tr_size && bt_idx >= 0 && bt_idx < desc->num_blocks)
                 {
                     int axis;
@@ -2102,7 +2102,7 @@ int pulseg_get_tr_waveforms(
      * which only records the first occurrence.  We iterate the scan table once to
      * compute the intra-occurrence offset for every scan-table position, resetting
      * the counter whenever the segment changes OR we've filled num_blocks slots. */
-    if (desc->exec_stream_seg_id && desc->exec_stream_len > 0)
+    if (desc->seg_run_id && desc->exec_stream_len > 0)
     {
         int occ_pos = 0, prev_seg = -1, si;
         scan_blk_in_occ = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
@@ -2110,7 +2110,7 @@ int pulseg_get_tr_waveforms(
             goto alloc_fail;
         for (si = 0; si < desc->exec_stream_len; ++si)
         {
-            int curr_seg = desc->exec_stream_seg_id[si];
+            int curr_seg = pulseg__exec_seg_id(desc, si);
             int seg_nblk = (curr_seg >= 0 && curr_seg < desc->segment_table.num_unique_segments)
                 ? desc->segment_definitions[curr_seg].num_blocks
                 : 1;
@@ -2164,8 +2164,8 @@ int pulseg_get_tr_waveforms(
         {
             int seg_id = -1;
             int scan_pos = (pass_scan_start >= 0) ? (pass_scan_start + n) : block_idx;
-            if (desc->exec_stream_seg_id && scan_pos >= 0 && scan_pos < desc->exec_stream_len)
-                seg_id = desc->exec_stream_seg_id[scan_pos];
+            if (desc->seg_run_id && scan_pos >= 0 && scan_pos < desc->exec_stream_len)
+                seg_id = pulseg__exec_seg_id(desc, scan_pos);
             else
                 seg_id = find_segment_for_block_pos(
                     desc->segment_definitions,

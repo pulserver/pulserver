@@ -886,10 +886,10 @@ static int build_freq_mod_library(
                 int scan_p, found = 0;
                 for (scan_p = 0; scan_p < desc->exec_stream_len; ++scan_p)
                 {
-                    if (desc->exec_stream_block_idx[scan_p] == blk_idx)
+                    if (pulseg__exec_block_idx(desc, scan_p) == blk_idx)
                     {
                         int seg_id =
-                            (desc->exec_stream_seg_id) ? desc->exec_stream_seg_id[scan_p] : -1;
+                            (desc->seg_run_id) ? pulseg__exec_seg_id(desc, scan_p) : -1;
                         if (seg_id >= 0 && seg_id < desc->num_unique_segments)
                         {
                             const pulseg_virtual_segment *seg = &desc->segment_definitions[seg_id];
@@ -952,9 +952,9 @@ static int build_freq_mod_library(
                     int scan_p, found = 0;
                     for (scan_p = 0; scan_p < desc->exec_stream_len; ++scan_p)
                     {
-                        if (desc->exec_stream_block_idx[scan_p] == blk_idx)
+                        if (pulseg__exec_block_idx(desc, scan_p) == blk_idx)
                         {
-                            int seg_id = desc->exec_stream_seg_id[scan_p];
+                            int seg_id = pulseg__exec_seg_id(desc, scan_p);
                             if (seg_id >= 0 && seg_id < desc->num_unique_segments)
                             {
                                 const pulseg_virtual_segment *seg =
@@ -1428,16 +1428,16 @@ static int build_freq_mod_library(
 
         /* Detect multi-segment freq_mod: check how many distinct segments
          * contain freq_mod blocks in the scan table. */
-        if (desc->exec_stream_seg_id && desc->exec_stream_len > 0)
+        if (desc->seg_run_id && desc->exec_stream_len > 0)
         {
             int first_seg = -1;
             int i;
             for (i = 0; i < desc->exec_stream_len; ++i)
             {
-                int bti = desc->exec_stream_block_idx[i];
+                int bti = pulseg__exec_block_idx(desc, i);
                 if (bti >= 0 && bti < desc->num_blocks && blk_to_entry[bti] >= 0)
                 {
-                    int sid = desc->exec_stream_seg_id[i];
+                    int sid = pulseg__exec_seg_id(desc, i);
                     if (first_seg < 0)
                         first_seg = sid;
                     else if (sid != first_seg)
@@ -1452,7 +1452,7 @@ static int build_freq_mod_library(
         scan_count = 0;
         for (i = 0; i < desc->exec_stream_len; ++i)
         {
-            int bti = desc->exec_stream_block_idx[i];
+            int bti = pulseg__exec_block_idx(desc, i);
             if (bti >= 0 && bti < desc->num_blocks && blk_to_entry[bti] >= 0)
                 scan_count++;
         }
@@ -1478,9 +1478,9 @@ static int build_freq_mod_library(
         sc = 0;
         for (i = 0; i < desc->exec_stream_len; ++i)
         {
-            int bti = desc->exec_stream_block_idx[i];
+            int bti = pulseg__exec_block_idx(desc, i);
 
-            if (desc->exec_stream_tr_start && desc->exec_stream_tr_start[i])
+            if (pulseg__exec_tr_start(desc, i))
             {
                 tr_scope_scan_id++;
                 tr_start_scan_pos = i;
@@ -1514,7 +1514,7 @@ static int build_freq_mod_library(
 
                 if (tr_start_scan_pos >= 0 && tr_start_scan_pos < desc->exec_stream_len)
                 {
-                    tr_start_blk_local = desc->exec_stream_block_idx[tr_start_scan_pos];
+                    tr_start_blk_local = pulseg__exec_block_idx(desc, tr_start_scan_pos);
                 }
                 if (tr_start_blk_local < 0)
                 {
@@ -1528,7 +1528,7 @@ static int build_freq_mod_library(
 
                     /* Prefer segment RF-anchor isocenter when available. */
                     {
-                        int seg_id = (desc->exec_stream_seg_id) ? desc->exec_stream_seg_id[i] : -1;
+                        int seg_id = (desc->seg_run_id) ? pulseg__exec_seg_id(desc, i) : -1;
                         if (seg_id >= 0 && seg_id < desc->num_unique_segments)
                         {
                             const pulseg_virtual_segment *seg = &desc->segment_definitions[seg_id];
@@ -1571,7 +1571,7 @@ static int build_freq_mod_library(
                         float adc_dur_us =
                             (float)adef->num_samples * (float)adef->dwell_time * 1e-3f;
                         float ref_time_rel_us = adc_dur_us * 0.5f;
-                        int seg_id = (desc->exec_stream_seg_id) ? desc->exec_stream_seg_id[i] : -1;
+                        int seg_id = (desc->seg_run_id) ? pulseg__exec_seg_id(desc, i) : -1;
 
                         if (seg_id >= 0 && seg_id < desc->num_unique_segments)
                         {
@@ -1727,7 +1727,7 @@ static int build_freq_mod_library(
         sc = 0;
         for (i = 0; i < desc->exec_stream_len; ++i)
         {
-            int bti = desc->exec_stream_block_idx[i];
+            int bti = pulseg__exec_block_idx(desc, i);
             if (bti >= 0 && bti < desc->num_blocks && blk_to_entry[bti] >= 0)
             {
                 lib->scan_to_plan[i] = scan_plan_map[sc];

@@ -270,6 +270,8 @@ static int first_repeating_segment_structural(
  * seg_id column is initialised to -1 (filled later by segment detection).
  */
 
+static int build_exec_runs(pulseg_sequence_descriptor *desc);
+
 int pulseg__build_exec_stream(
     pulseg_sequence_descriptor *desc,
     pulseg_diagnostic *diag,
@@ -435,8 +437,368 @@ int pulseg__build_exec_stream(
         }
     }
 
+    /* Compact mirror of the four arrays just filled. */
+    {
+        int rc = build_exec_runs(desc);
+        if (PULSEG_FAILED(rc))
+        {
+            diag->code = rc;
+            return rc;
+        }
+    }
+
     diag->code = PULSEG_SUCCESS;
     return PULSEG_SUCCESS;
+}
+
+/* ================================================================== */
+/*  Compact execution-stream accessors                                 */
+/* ================================================================== */
+
+/* Locate the run covering stream position @p n.
+ *
+ * scancore is real-time and walks the stream strictly in order, so the
+ * cached hint is checked first: the same run, then its successor. Both are
+ * O(1), which is what the hot path actually sees. Binary search is only the
+ * random-access fallback (safety sweeps, trajectory build). The hint is a
+ * pure cost optimisation -- it can be stale or wrong without affecting the
+ * value returned. */
+static const pulseg_exec_run *find_exec_run(const pulseg_sequence_descriptor *desc, int n)
+{
+    int lo, hi, h;
+    const pulseg_exec_run *runs;
+
+    if (!desc || !desc->exec_runs || desc->num_exec_runs <= 0)
+        return NULL;
+    if (n < 0 || n >= desc->exec_stream_len)
+        return NULL;
+
+    runs = desc->exec_runs;
+    h = desc->exec_run_hint;
+    if (h >= 0 && h < desc->num_exec_runs)
+    {
+        if (n >= runs[h].emit_start && n < runs[h].emit_start + runs[h].length)
+            return &runs[h];
+        if (h + 1 < desc->num_exec_runs && n >= runs[h + 1].emit_start &&
+            n < runs[h + 1].emit_start + runs[h + 1].length)
+        {
+            ((pulseg_sequence_descriptor *)desc)->exec_run_hint = h + 1;
+            return &runs[h + 1];
+        }
+    }
+
+    lo = 0;
+    hi = desc->num_exec_runs - 1;
+    while (lo < hi)
+    {
+        int mid = lo + (hi - lo + 1) / 2;
+        if (runs[mid].emit_start <= n)
+            lo = mid;
+        else
+            hi = mid - 1;
+    }
+    ((pulseg_sequence_descriptor *)desc)->exec_run_hint = lo;
+    return &runs[lo];
+}
+
+int pulseg__exec_block_idx(const pulseg_sequence_descriptor *desc, int n)
+{
+    const pulseg_exec_run *r = find_exec_run(desc, n);
+    return r ? r->block_start + (n - r->emit_start) : -1;
+}
+
+int pulseg__exec_tr_id(const pulseg_sequence_descriptor *desc, int n)
+{
+    const pulseg_exec_run *r = find_exec_run(desc, n);
+    return r ? r->tr_id : -1;
+}
+
+int pulseg__exec_avg_id(const pulseg_sequence_descriptor *desc, int n)
+{
+    const pulseg_exec_run *r = find_exec_run(desc, n);
+    return r ? r->avg_id : 0;
+}
+
+int pulseg__exec_seg_id(const pulseg_sequence_descriptor *desc, int n)
+{
+    const int *start;
+    int lo, hi, h, m;
+
+    if (!desc || !desc->seg_run_start || desc->num_seg_runs <= 0)
+        return -1;
+    if (n < 0 || n >= desc->exec_stream_len)
+        return -1;
+
+    /* Reduce into the stored period. When seg_period == exec_stream_len
+     * (no periodicity verified) this is a no-op and the encoding is plain
+     * RLE, so the division never runs. */
+    m = (desc->seg_period > 0 && desc->seg_period < desc->exec_stream_len) ? (n % desc->seg_period)
+                                                                          : n;
+
+    start = desc->seg_run_start;
+    h = desc->seg_run_hint;
+    if (h >= 0 && h < desc->num_seg_runs && m >= start[h] && m < start[h + 1])
+        return desc->seg_run_id[h];
+    if (h + 1 < desc->num_seg_runs && m >= start[h + 1] && m < start[h + 2])
+    {
+        ((pulseg_sequence_descriptor *)desc)->seg_run_hint = h + 1;
+        return desc->seg_run_id[h + 1];
+    }
+
+    lo = 0;
+    hi = desc->num_seg_runs - 1;
+    while (lo < hi)
+    {
+        int mid = lo + (hi - lo + 1) / 2;
+        if (start[mid] <= m)
+            lo = mid;
+        else
+            hi = mid - 1;
+    }
+    ((pulseg_sequence_descriptor *)desc)->seg_run_hint = lo;
+    return desc->seg_run_id[lo];
+}
+
+/* 1 at the first block of each main-region TR.  Mirrors
+ * pulseg__compute_exec_stream_tr_start: main-region positions are counted
+ * from the first one and every tr_size-th is a TR boundary. */
+int pulseg__exec_tr_start(const pulseg_sequence_descriptor *desc, int n)
+{
+    int tr_size;
+
+    if (!desc || n < 0 || n >= desc->exec_stream_len)
+        return 0;
+    if (desc->tr_start_first < 0 || n < desc->tr_start_first)
+        return 0;
+    if (pulseg__exec_tr_id(desc, n) != desc->tr_start_main_id)
+        return 0;
+
+    tr_size = desc->tr_descriptor.tr_size;
+    if (tr_size <= 0)
+        return 0;
+    return (((n - desc->tr_start_first) % tr_size) == 0) ? 1 : 0;
+}
+
+/* Build exec_runs[] from the same loop structure build_exec_stream uses,
+ * plus the seg_id run-length encoding.  Returns PULSEG_SUCCESS or an
+ * allocation error; the caller keeps the expanded arrays alive so
+ * pulseg__verify_exec_runs can cross-check the two. */
+static int build_exec_runs(pulseg_sequence_descriptor *desc)
+{
+    int n, cap, count;
+    pulseg_exec_run *runs;
+
+    if (!desc || desc->exec_stream_len <= 0)
+        return PULSEG_SUCCESS;
+
+    /* A new run starts whenever the block index is not contiguous with the
+     * previous position, or tr_id / avg_id changes. */
+    cap = 8;
+    runs = (pulseg_exec_run *)PULSEG_ALLOC((size_t)cap * sizeof(pulseg_exec_run));
+    if (!runs)
+        return PULSEG_ERR_ALLOC_FAILED;
+    count = 0;
+
+    for (n = 0; n < desc->exec_stream_len; ++n)
+    {
+        int b = desc->exec_stream_block_idx[n];
+        int t = desc->exec_stream_tr_id[n];
+        int a = desc->exec_stream_avg_id[n];
+        int extend = 0;
+
+        if (count > 0)
+        {
+            pulseg_exec_run *last = &runs[count - 1];
+            extend = (last->tr_id == t && last->avg_id == a &&
+                      last->block_start + last->length == b);
+        }
+        if (extend)
+        {
+            ++runs[count - 1].length;
+            continue;
+        }
+        if (count == cap)
+        {
+            pulseg_exec_run *grown;
+            int newcap = cap * 2;
+            grown = (pulseg_exec_run *)PULSEG_ALLOC((size_t)newcap * sizeof(pulseg_exec_run));
+            if (!grown)
+            {
+                PULSEG_FREE(runs);
+                return PULSEG_ERR_ALLOC_FAILED;
+            }
+            memcpy(grown, runs, (size_t)cap * sizeof(pulseg_exec_run));
+            PULSEG_FREE(runs);
+            runs = grown;
+            cap = newcap;
+        }
+        runs[count].emit_start = n;
+        runs[count].block_start = b;
+        runs[count].length = 1;
+        runs[count].tr_id = t;
+        runs[count].avg_id = a;
+        ++count;
+    }
+
+    if (desc->exec_runs)
+        PULSEG_FREE(desc->exec_runs);
+    desc->exec_runs = runs;
+    desc->exec_run_hint = 0;
+    desc->num_exec_runs = count;
+    return PULSEG_SUCCESS;
+}
+
+/* Run-length encode exec_stream_seg_id. Separate from build_exec_runs
+ * because seg_id is only assigned later, by
+ * pulseg__get_exec_stream_segments. */
+/* Is seg_id[n] == seg_id[n % period] for every position? Verified against
+ * the real data -- nothing about TR topology is taken on faith. */
+static int seg_period_holds(const pulseg_sequence_descriptor *desc, int period)
+{
+    int n, len = desc->exec_stream_len;
+    const int *v = desc->exec_stream_seg_id;
+
+    if (period <= 0 || period >= len)
+        return 0;
+    for (n = period; n < len; ++n)
+        if (v[n] != v[n - period])
+            return 0;
+    return 1;
+}
+
+int pulseg__build_seg_runs(pulseg_sequence_descriptor *desc)
+{
+    int n, count, w, period, cand[2], ci, num_passes;
+    int *starts, *ids;
+
+    if (!desc || desc->exec_stream_len <= 0 || !desc->exec_stream_seg_id)
+        return PULSEG_SUCCESS;
+
+    /* Pick the smallest candidate period that actually verifies. The
+     * candidates are the two structural repeats the converter already
+     * knows about (one imaging TR, one pass); each is CHECKED, and if
+     * neither holds the encoding stays flat. */
+    num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
+    cand[0] = desc->tr_descriptor.tr_size;
+    cand[1] = desc->exec_stream_len / num_passes;
+    if (cand[1] < cand[0])
+    {
+        int t = cand[0];
+        cand[0] = cand[1];
+        cand[1] = t;
+    }
+    period = desc->exec_stream_len;
+    for (ci = 0; ci < 2; ++ci)
+    {
+        if (cand[ci] > 0 && cand[ci] < period && (desc->exec_stream_len % cand[ci]) == 0 &&
+            seg_period_holds(desc, cand[ci]))
+        {
+            period = cand[ci];
+            break;
+        }
+    }
+    desc->seg_period = period;
+
+    count = 0;
+    for (n = 0; n < period; ++n)
+        if (n == 0 || desc->exec_stream_seg_id[n] != desc->exec_stream_seg_id[n - 1])
+            ++count;
+
+    /* One extra start entry so run r spans [start[r], start[r+1]). */
+    starts = (int *)PULSEG_ALLOC((size_t)(count + 1) * sizeof(int));
+    ids = (int *)PULSEG_ALLOC((size_t)count * sizeof(int));
+    if (!starts || !ids)
+    {
+        if (starts)
+            PULSEG_FREE(starts);
+        if (ids)
+            PULSEG_FREE(ids);
+        return PULSEG_ERR_ALLOC_FAILED;
+    }
+
+    w = 0;
+    for (n = 0; n < period; ++n)
+    {
+        if (n == 0 || desc->exec_stream_seg_id[n] != desc->exec_stream_seg_id[n - 1])
+        {
+            starts[w] = n;
+            ids[w] = desc->exec_stream_seg_id[n];
+            ++w;
+        }
+    }
+    starts[count] = period;
+    desc->seg_run_hint = 0;
+
+    if (desc->seg_run_start)
+        PULSEG_FREE(desc->seg_run_start);
+    if (desc->seg_run_id)
+        PULSEG_FREE(desc->seg_run_id);
+    desc->seg_run_start = starts;
+    desc->seg_run_id = ids;
+    desc->num_seg_runs = count;
+    return PULSEG_SUCCESS;
+}
+
+/* Release the per-position scratch arrays once the compact form is built.
+ * They exist only so the builders (and pulseg__verify_exec_runs) can work
+ * position-by-position during conversion; every consumer goes through the
+ * accessors, and a cache load never materialises them at all. */
+void pulseg__free_exec_stream_scratch(pulseg_sequence_descriptor *desc)
+{
+    if (!desc)
+        return;
+    if (desc->exec_stream_block_idx)
+    {
+        PULSEG_FREE(desc->exec_stream_block_idx);
+        desc->exec_stream_block_idx = NULL;
+    }
+    if (desc->exec_stream_tr_id)
+    {
+        PULSEG_FREE(desc->exec_stream_tr_id);
+        desc->exec_stream_tr_id = NULL;
+    }
+    if (desc->exec_stream_seg_id)
+    {
+        PULSEG_FREE(desc->exec_stream_seg_id);
+        desc->exec_stream_seg_id = NULL;
+    }
+    if (desc->exec_stream_avg_id)
+    {
+        PULSEG_FREE(desc->exec_stream_avg_id);
+        desc->exec_stream_avg_id = NULL;
+    }
+    if (desc->exec_stream_tr_start)
+    {
+        PULSEG_FREE(desc->exec_stream_tr_start);
+        desc->exec_stream_tr_start = NULL;
+    }
+}
+
+/* Cross-check the compact form against the expanded arrays at every
+ * position. Returns 0 on full agreement, or the number of mismatches. */
+long pulseg__verify_exec_runs(const pulseg_sequence_descriptor *desc)
+{
+    long bad = 0;
+    int n;
+
+    if (!desc)
+        return 0;
+    for (n = 0; n < desc->exec_stream_len; ++n)
+    {
+        if (desc->exec_stream_block_idx &&
+            pulseg__exec_block_idx(desc, n) != desc->exec_stream_block_idx[n])
+            ++bad;
+        if (desc->exec_stream_tr_id && pulseg__exec_tr_id(desc, n) != desc->exec_stream_tr_id[n])
+            ++bad;
+        if (desc->exec_stream_avg_id && pulseg__exec_avg_id(desc, n) != desc->exec_stream_avg_id[n])
+            ++bad;
+        if (desc->exec_stream_seg_id && pulseg__exec_seg_id(desc, n) != desc->exec_stream_seg_id[n])
+            ++bad;
+        if (desc->exec_stream_tr_start &&
+            pulseg__exec_tr_start(desc, n) != desc->exec_stream_tr_start[n])
+            ++bad;
+    }
+    return bad;
 }
 
 /* ================================================================== */
@@ -457,6 +819,11 @@ void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc)
     int first_main, i, tr_size;
 
     if (!desc || desc->exec_stream_len == 0)
+        return;
+    /* Build-time only: after a cache load (or once the scratch is freed)
+     * the per-position arrays are gone and pulseg__exec_tr_start serves
+     * these flags from the anchor instead. */
+    if (!desc->exec_stream_tr_id)
         return;
 
     /* (Re)allocate */
@@ -480,6 +847,11 @@ void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc)
     else
         main_tr_id = 1;
 
+    /* Anchor for pulseg__exec_tr_start, which recomputes these flags from
+     * tr_id instead of reading the expanded array. */
+    desc->tr_start_main_id = main_tr_id;
+    desc->tr_start_first = -1;
+
     tr_size = desc->tr_descriptor.tr_size;
     if (tr_size <= 0)
         return;
@@ -492,6 +864,7 @@ void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc)
             if (first_main < 0)
             {
                 first_main = i;
+                desc->tr_start_first = i;
                 desc->exec_stream_tr_start[i] = 1;
             }
             else if ((i - first_main) % tr_size == 0)
@@ -1261,9 +1634,8 @@ static void record_adc_label(
 
 int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_file *seq)
 {
-    int num_columns, total_adcs, adcs_per_tr;
-    int imaging_start, cooldown_start, num_trs;
-    int b, rep, entry_idx;
+    int num_columns, total_adcs;
+    int n, b, entry_idx;
     int state[11];
     int *table;
     int *off_table = NULL;
@@ -1276,28 +1648,22 @@ int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_fil
      * the vendor's choice, injected via desc->label_column_map. */
     num_columns = 3;
 
-    imaging_start = desc->num_prep_blocks;
-    cooldown_start = desc->pass_len - desc->num_cooldown_blocks;
-    num_trs = desc->tr_descriptor.num_trs;
-
-    /* Count total ADC occurrences */
+    /* One row per ADC occurrence, indexed by the ordinal of that ADC along
+     * the execution stream -- the same index space pulseg__compute_trajectory
+     * uses for traj_table_entry[], gated on the identical per-instance
+     * block_table[b].adc_id >= 0 test (dummy ADC placeholders carry -1).
+     *
+     * The stream is the only correct domain to walk here: block_table is
+     * already fully expanded over every TR, and the stream additionally
+     * covers all passes and average replays.  Counting per region and
+     * scaling by num_trs (as this did before) double-counted the main
+     * region by num_trs, while a pass_len-bounded walk missed every pass
+     * after the first. */
     total_adcs = 0;
-    adcs_per_tr = 0;
-
-    for (b = 0; b < imaging_start; ++b)
+    for (n = 0; n < desc->exec_stream_len; ++n)
     {
-        if (desc->block_table[b].adc_id >= 0)
-            ++total_adcs;
-    }
-    for (b = imaging_start; b < cooldown_start; ++b)
-    {
-        if (desc->block_table[b].adc_id >= 0)
-            ++adcs_per_tr;
-    }
-    total_adcs += adcs_per_tr * num_trs;
-    for (b = cooldown_start; b < desc->pass_len; ++b)
-    {
-        if (desc->block_table[b].adc_id >= 0)
+        b = pulseg__exec_block_idx(desc, n);
+        if (b >= 0 && b < desc->num_blocks && desc->block_table[b].adc_id >= 0)
             ++total_adcs;
     }
 
@@ -1331,50 +1697,16 @@ int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_fil
     memset(&desc->label_limits, 0, sizeof(desc->label_limits));
     entry_idx = 0;
 
-    /* 1. Prep blocks */
-    for (b = 0; b < imaging_start; ++b)
+    /* Walk the execution stream in playback order.  block_table index ==
+     * raw block index (pulseg__deduplicate_blocks fills block_table[n] from
+     * raw block n), so the stream position maps straight onto the raw block
+     * whose LABELSET/LABELINC directives advance the running state. */
+    for (n = 0; n < desc->exec_stream_len; ++n)
     {
-        pulseq_get_raw_block_content_ids(seq, &raw, b, 1);
-        apply_block_labels(state, seq, &raw);
-        if (desc->block_table[b].adc_id >= 0)
-        {
-            record_adc_label(
-                &table[entry_idx * num_columns],
-                num_columns,
-                &desc->label_limits,
-                state,
-                desc->label_column_map,
-                entry_idx == 0);
-            off_table[entry_idx] = state[10];
-            ++entry_idx;
-        }
-    }
+        b = pulseg__exec_block_idx(desc, n);
+        if (b < 0 || b >= desc->num_blocks)
+            continue;
 
-    /* 2. Main blocks x num_trs */
-    for (rep = 0; rep < num_trs; ++rep)
-    {
-        for (b = imaging_start; b < cooldown_start; ++b)
-        {
-            pulseq_get_raw_block_content_ids(seq, &raw, b, 1);
-            apply_block_labels(state, seq, &raw);
-            if (desc->block_table[b].adc_id >= 0)
-            {
-                record_adc_label(
-                    &table[entry_idx * num_columns],
-                    num_columns,
-                    &desc->label_limits,
-                    state,
-                    desc->label_column_map,
-                    entry_idx == 0);
-                off_table[entry_idx] = state[10];
-                ++entry_idx;
-            }
-        }
-    }
-
-    /* 3. Cooldown blocks */
-    for (b = cooldown_start; b < desc->pass_len; ++b)
-    {
         pulseq_get_raw_block_content_ids(seq, &raw, b, 1);
         apply_block_labels(state, seq, &raw);
         if (desc->block_table[b].adc_id >= 0)
@@ -1865,7 +2197,7 @@ int pulseg__get_exec_stream_segments(
         return 0;
     }
     for (n = 0; n < pass_size; ++n)
-        scan_pat[n] = desc->block_table[desc->exec_stream_block_idx[n]].id;
+        scan_pat[n] = desc->block_table[pulseg__exec_block_idx(desc, n)].id;
 
     raw_segs =
         (pulseg_virtual_segment *)PULSEG_ALLOC((size_t)pass_size * sizeof(pulseg_virtual_segment));
@@ -1989,7 +2321,7 @@ int pulseg__get_exec_stream_segments(
             new_tr_dur = 0.0f;
             for (n = region_start; n < region_start + region_size; ++n)
             {
-                blk_def_id = desc->block_table[desc->exec_stream_block_idx[n]].id;
+                blk_def_id = desc->block_table[pulseg__exec_block_idx(desc, n)].id;
                 new_tr_dur += (float)desc->base_blocks[blk_def_id].duration_us;
             }
             desc->tr_descriptor.tr_size = mult * tr_size;
@@ -2378,7 +2710,7 @@ int pulseg__get_exec_stream_segments(
         desc->segment_definitions[i] = uniq_segs[i];
         /* Convert start_block from scan table pos to block_table index */
         desc->segment_definitions[i].start_block =
-            desc->exec_stream_block_idx[uniq_segs[i].start_block];
+            pulseg__exec_block_idx(desc, uniq_segs[i].start_block);
     }
     PULSEG_FREE(uniq_segs);
     uniq_segs = NULL;
@@ -2454,7 +2786,7 @@ int pulseg__get_exec_stream_segments(
 
         for (b = 0; b < exp_segs[n].num_blocks; ++b)
         {
-            blk_tab_idx = desc->exec_stream_block_idx[exp_segs[n].start_block + b];
+            blk_tab_idx = pulseg__exec_block_idx(desc, exp_segs[n].start_block + b);
             bte = &desc->block_table[blk_tab_idx];
             blk_def_id = bte->id;
             bdef = &desc->base_blocks[blk_def_id];
@@ -2597,6 +2929,16 @@ int pulseg__get_exec_stream_segments(
     PULSEG_FREE(pattern_seg_id);
     pattern_seg_id = NULL;
 
+    /* seg_id is final here -- run-length encode it for pulseg__exec_seg_id. */
+    {
+        int rc = pulseg__build_seg_runs(desc);
+        if (PULSEG_FAILED(rc))
+        {
+            diag->code = rc;
+            goto scan_seg_fail;
+        }
+    }
+
     /* ---- 11c. Rescan full scan table for max-energy per segment ----
      *
      * Step 10 only saw one instance per segment (the first one).
@@ -2609,7 +2951,7 @@ int pulseg__get_exec_stream_segments(
 
     for (n = 0; n < scan_len; /* advance inside */)
     {
-        int seg_id = desc->exec_stream_seg_id[n];
+        int seg_id = pulseg__exec_seg_id(desc, n);
         if (seg_id < 0 || seg_id >= num_unique)
         {
             ++n;
@@ -2628,7 +2970,7 @@ int pulseg__get_exec_stream_segments(
             int ok = 1;
             for (b = 1; b < nb; ++b)
             {
-                if (desc->exec_stream_seg_id[n + b] != seg_id)
+                if (pulseg__exec_seg_id(desc, n + b) != seg_id)
                 {
                     ok = 0;
                     break;
@@ -2645,7 +2987,7 @@ int pulseg__get_exec_stream_segments(
         inst_energy = 0.0f;
         for (b = 0; b < nb; ++b)
         {
-            blk_tab_idx = desc->exec_stream_block_idx[n + b];
+            blk_tab_idx = pulseg__exec_block_idx(desc, n + b);
             bte = &desc->block_table[blk_tab_idx];
             bdef = &desc->base_blocks[bte->id];
 
@@ -2737,7 +3079,7 @@ int pulseg__get_exec_stream_segments(
 
     for (n = 0; n < pass_size; /* advance inside */)
     {
-        int seg_id = desc->exec_stream_seg_id[n];
+        int seg_id = pulseg__exec_seg_id(desc, n);
         if (seg_id < 0 || seg_id >= num_unique)
         {
             ++n;
@@ -2756,7 +3098,7 @@ int pulseg__get_exec_stream_segments(
             int ok = 1;
             for (b = 1; b < nb; ++b)
             {
-                if (desc->exec_stream_seg_id[n + b] != seg_id)
+                if (pulseg__exec_seg_id(desc, n + b) != seg_id)
                 {
                     ok = 0;
                     break;
@@ -2771,7 +3113,7 @@ int pulseg__get_exec_stream_segments(
 
         for (b = 0; b < nb; ++b)
         {
-            bte = &desc->block_table[desc->exec_stream_block_idx[n + b]];
+            bte = &desc->block_table[pulseg__exec_block_idx(desc, n + b)];
             bdef = &desc->base_blocks[bte->id];
 
             /* digitalout / trigger */
@@ -2859,7 +3201,7 @@ int pulseg__get_exec_stream_segments(
                 scan_idx = sd->max_energy_start_block + b;
                 if (scan_idx >= 0 && scan_idx < desc->exec_stream_len)
                 {
-                    bt_idx = desc->exec_stream_block_idx[scan_idx];
+                    bt_idx = pulseg__exec_block_idx(desc, scan_idx);
                     if (bt_idx >= 0 && bt_idx < desc->num_blocks)
                         rep = &desc->block_table[bt_idx];
                 }
@@ -3377,7 +3719,7 @@ int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnos
         {
             int scan_idx = seg->max_energy_start_block + blk;
             if (scan_idx >= 0 && scan_idx < desc->exec_stream_len)
-                block_idx = desc->exec_stream_block_idx[scan_idx];
+                block_idx = pulseg__exec_block_idx(desc, scan_idx);
             else
                 block_idx = seg->start_block + blk;
 
@@ -3446,7 +3788,7 @@ int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnos
         {
             int scan_idx = seg->max_energy_start_block + blk;
             if (scan_idx >= 0 && scan_idx < desc->exec_stream_len)
-                block_idx = desc->exec_stream_block_idx[scan_idx];
+                block_idx = pulseg__exec_block_idx(desc, scan_idx);
             else
                 block_idx = seg->start_block + blk;
 

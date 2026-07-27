@@ -49,24 +49,38 @@ conversion, so a sequence that breaks a rule fails to load at all.
 | RF frequency offset | yes | Slice selection across a multi-slice loop. |
 | Per-block rotation | yes | Radial spokes, rotated interleaves, oblique prescriptions. |
 | Pure-delay duration | yes, with a caveat | TE/TR fill. A duration that changes *monotonically* across TRs breaks the timing period, so TR detection falls back to one large TR — legal, but the analyses lose their small window. |
-| **RF amplitude (variable flip angle)** | **no** | Rejected: `RF amplitude pattern is not periodic across canonical TRs`. |
-| **RF shim weights** | **no** | Rejected by the same rule, on shim id. |
+| **RF amplitude (variable flip angle)** | **yes** (default; `allow_variable_rf_amplitude`) | FSE with individually optimized echo trains. See below for how the worst case is computed. |
+| **RF shim weights** | **no** | Rejected: `RF shim id pattern is not periodic across canonical TRs`. |
 
-The two rejections share one cause. Worst-case RF and SAR limits are
-computed **per canonical TR**; if the RF amplitude pattern is not periodic,
-there is no canonical TR to compute them over — the worst TR is not the one
-that was measured, and no per-instance metadata recovers that, because the
-limit is an integral over a window whose contents changed. The check
-therefore compares every TR instance against the reference TR, block by
-block, and rejects on the first mismatch.
+RF shim weights are still rejected because pTx VOP SAR is a per-pulse
+quadratic form in the shim vector, and no single scalar ordering dominates
+every shim across every instance the way amplitude does — so there is no
+safe envelope to fall back to, and the check fails on the first mismatch.
 
-The workable pattern today is to express a variable-flip-angle acquisition as
-**separate subsequences**, one per distinct RF pattern. Each is internally
-periodic, each gets its own worst-case analysis, and segment deduplication
-(see {doc}`pulseg`) collapses whatever structure they share back into one
-region of instruction memory — so the cost of the split is bookkeeping, not
-memory. Everything in the "yes" column, by contrast, leaves the RF energy of
-a TR unchanged, which is why it is free.
+RF amplitude is different: worst-case RF and SAR limits are computed **per
+canonical TR**, and when the amplitude pattern isn't periodic, Pulserver
+splits the safety array in two instead of rejecting. The **worst-B1rms real
+instance** — the actual TR instance with the highest Σ*A*² over its
+pulses — feeds the time-averaged limits (SAR, amplifier duty cycle), because
+those integrate over a real window and a synthetic "worst everywhere" TR
+would misrepresent it. A **positional-max envelope** (the per-position
+maximum amplitude across all instances) feeds the peak-only limits, because
+that envelope dominates every instance at every position, which a single
+real instance cannot guarantee. For periodic sequences the two coincide with
+the canonical TR, so this is bit-identical to the old behavior; for an FSE
+train with per-instance-optimized refocusing angles the two usually coincide
+with each other too, and only diverge when different instances peak at
+different positions within the TR.
+
+The still-workable fallback — needed only for shim variation, or if a
+sequence needs to bypass the default via `allow_variable_rf_amplitude=0` —
+is to express the acquisition as **separate subsequences**, one per distinct
+RF pattern. Each is internally periodic, each gets its own worst-case
+analysis, and segment deduplication (see {doc}`pulseg`) collapses whatever
+structure they share back into one region of instruction memory — so the
+cost of the split is bookkeeping, not memory. Everything in the "yes"
+column, by contrast, leaves the RF energy of a TR unchanged (or is handled
+by the envelope above), which is why it doesn't need splitting.
 
 ## The cache, and why it has sections
 

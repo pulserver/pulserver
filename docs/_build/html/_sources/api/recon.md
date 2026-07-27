@@ -1,12 +1,10 @@
 # `pulserver.recon`
 
-`pulserver.recon` combines the Gadgetron-compatible MRD server with a
-Torch-first integration layer. It does not implement imaging operators,
-proximal maps, or solvers: Cartesian/non-Cartesian MRPro operators, DeepInverse
-physics/priors/optimisers, and PyGROG NLINV are selected and composed directly.
-Torch owns CPU/CUDA dispatch, so tensors remain on the caller-selected device.
-mri-nufft remains available with FINUFFT or CUFINUFFT for its established
-backend-specific operators.
+`pulserver.recon` combines the Gadgetron-compatible MRD server with a compact
+Torch-first reconstruction API. Pulserver owns the integration boundary while
+mri-nufft provides non-Cartesian operators and DeepInverse provides linear
+physics, denoisers, CG, and FISTA. Torch owns CPU/CUDA dispatch, so tensors
+remain on the caller-selected device.
 
 Install `pulserver[recon]` for the server, DICOM, and MRD layers.
 Install `pulserver[recon-cpu]` for FINUFFT, MRPro, and DeepInverse; add
@@ -16,19 +14,49 @@ Install `pulserver[recon-distortion]` only when PyHySCO reverse-polarity
 distortion correction is required. PyHySCO is GPL-3.0-only, so Pulserver does
 not vendor or import it.
 
-```python
-from pulserver.recon import deepinverse_multicoil_mri, deepinverse_prior
+The main application surface is one physics factory, optional decorators, one
+denoiser, and `pics`:
 
-physics = deepinverse_multicoil_mri(mask=mask, coil_maps=coil_maps)
-image = physics.A_dagger(kspace)  # tensors remain on coil_maps.device
-prior = deepinverse_prior("tv")
+```python
+from pulserver.recon import Cartesian2D, NonCartesian3D, Subspace, pics, tv
+
+cartesian = Cartesian2D(mask, coil_maps)
+image = pics(kspace, cartesian, iterations=30)
+
+noncartesian = NonCartesian3D(
+    trajectory,
+    image_shape=(192, 192, 128),
+    coil_maps=coil_maps,
+    backend="cufinufft",
+)
+dynamic = Subspace(noncartesian, basis)
+coefficients = pics(
+    dynamic_kspace,
+    physics=dynamic,
+    denoiser=tv(n_it_max=20),
+    regularization=0.02,
+    iterations=50,
+)
 ```
 
-For MRD-native Cartesian and non-Cartesian reconstructions, obtain the exact
-MRPro operator class with `mrpro_operator("fourier")` and use MRPro's
-reconstruction algorithms on `KData`. For non-Cartesian mri-nufft workflows,
-`mrinufft_operator("finufft", ...)` and `mrinufft_operator("cufinufft", ...)`
-return the maintained backend operators.
+With no denoiser, `pics` uses CG and solves
+`(AᴴA + λI)x = Aᴴy`. With a denoiser it uses plug-and-play FISTA, where
+`regularization` is the denoiser threshold/noise level.
+
+`Subspace`, `OffResonance`, and `Toeplitz` are composable decorators:
+
+```python
+from pulserver.recon import NonCartesian2D, OffResonance, Subspace, Toeplitz
+
+physics = NonCartesian2D(trajectory, (256, 256), coil_maps=coil_maps)
+physics = OffResonance(physics, field_map, readout_time)
+physics = Subspace(physics, basis)  # off-resonance must precede subspace
+physics = Toeplitz(physics)
+```
+
+Base mri-nufft operators use native Toeplitz kernels. Cartesian FFTs are
+already exact. Stacked, subspace, and off-resonance compositions use a correct
+exact normal operation when mri-nufft has no combined Toeplitz kernel.
 
 ## Reconstruction primitives
 
@@ -37,13 +65,21 @@ return the maintained backend operators.
    :toctree: generated/recon
    :nosignatures:
 
-   pulserver.recon.linops.deepinverse_multicoil_mri
-   pulserver.recon.linops.mrpro_operator
-   pulserver.recon.linops.mrinufft_operator
+   pulserver.recon.physics.Cartesian2D
+   pulserver.recon.physics.NonCartesian2D
+   pulserver.recon.physics.NonCartesian3D
+   pulserver.recon.physics.Subspace
+   pulserver.recon.physics.OffResonance
+   pulserver.recon.physics.Toeplitz
+   pulserver.recon.algorithms.pics
+   pulserver.recon.denoisers.wavelet
+   pulserver.recon.denoisers.tv
+   pulserver.recon.denoisers.tgv
+   pulserver.recon.preprocessing.cartesian_3d_to_2d
+   pulserver.recon.preprocessing.remove_readout_oversampling
+   pulserver.recon.preprocessing.coil_compress
+   pulserver.recon.preprocessing.noise_prewhiten
    pulserver.recon.linops.available_nufft_backends
-   pulserver.recon.prox.deepinverse_prior
-   pulserver.recon.optimizers.mrpro_optimizer
-   pulserver.recon.optimizers.deepinverse_optimizer
    pulserver.recon.calibration.nlinv_sensitivities
    pulserver.recon.calibration.estimate_sensitivities
 ```
@@ -74,10 +110,15 @@ return the maintained backend operators.
 The EPI zoo can optionally emit a blip-nulled `NAV`/`REF` navigator for
 odd/even phase calibration, a `SET=1` reverse-phase-encode b=0 reference, and
 a single-band `REF` volume for SMS. `partition_epi_acquisitions` turns those
-standard MRD flags and labels into ordered groups; it deliberately does not
-reimplement odd/even phase fitting, Slice-GRAPPA, or distortion estimation.
-Pass the grouped tensors to an EPI-capable upstream backend and use the known
-CAIPI encoding for SMS.
+standard MRD flags and labels into ordered groups.
+
+`epi_ramp_interpolate` moves ramp-sampled readouts to a uniform grid.
+`estimate_epi_eddy_phase` and `correct_epi_eddy_currents` fit and remove the
+smooth odd/even navigator phase. Reconstructed reverse-polarity image pairs
+can be passed to the opt-in `run_pyhysco` wrapper for distortion correction.
+SMS does not need a separate container-level physics type: the known CAIPI
+encoding belongs in the forward model, while the single-band reference is
+preprocessing/calibration input.
 
 FSE uses its CPMG RF/receiver phase relation and does **not** need EPI's
 alternating-readout navigator or an opposite-PE distortion pair. A
@@ -90,9 +131,22 @@ phase-sensitive FSE application may still acquire its own phase reference.
 
    pulserver.recon.epi.EpiAcquisitionGroups
    pulserver.recon.epi.partition_epi_acquisitions
+   pulserver.recon.preprocessing.epi_ramp_interpolate
+   pulserver.recon.preprocessing.estimate_epi_eddy_phase
+   pulserver.recon.preprocessing.correct_epi_eddy_currents
    pulserver.recon.sms.SmsEpiInputs
    pulserver.recon.distortion.run_pyhysco
 ```
+
+## Gadgetron integration
+
+Numerical operators and preprocessing functions remain array-level callables,
+not subclasses of a particular Gadgetron ABI. A Gadgetron/Pulserver handler
+first uses `filter_acquisitions`, `group_by_labels`, `split_on_flag`, or
+`partition_epi_acquisitions`, converts one complete group to tensors, then
+calls the same preprocessing and `pics` functions. This keeps stateful stream
+grouping at the MRD boundary and makes stateless numerical components directly
+testable and reusable offline.
 
 Importable runnable examples mirror the zoo layout:
 
@@ -133,6 +187,22 @@ sms_inputs = prepare_sms_epi(
 
 ```{eval-rst}
 .. automodule:: pulserver.recon.linops
+   :members:
+   :no-index:
+
+.. automodule:: pulserver.recon.physics
+   :members:
+   :no-index:
+
+.. automodule:: pulserver.recon.denoisers
+   :members:
+   :no-index:
+
+.. automodule:: pulserver.recon.algorithms
+   :members:
+   :no-index:
+
+.. automodule:: pulserver.recon.preprocessing
    :members:
    :no-index:
 

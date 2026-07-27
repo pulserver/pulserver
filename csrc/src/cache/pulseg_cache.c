@@ -45,7 +45,17 @@
  * COMMON into the new INSTANCES section, COMMON's collection scalars gained
  * total_readouts, and each segment definition gained its frozen per-position
  * initial-state records. */
-#define PULSEG_CACHE_VERSION_REVISION 4
+/* Bumped again for the label-table row-count fix: the table is now one row
+ * per ADC along the execution stream. The on-disk framing is unchanged
+ * (count followed by that many rows), but a stale cache carries a
+ * label_num_entries inflated by num_trs (or, on multi-pass sequences,
+ * truncated to a single pass), so it must be regenerated rather than
+ * loaded and trusted. */
+/* Bumped again for the compact execution stream: SCANLOOP now stores
+ * exec_runs[] + the seg-id RLE (one period) + the tr_start anchor instead
+ * of four int-per-block arrays, so the on-disk SCANLOOP layout changed
+ * outright. */
+#define PULSEG_CACHE_VERSION_REVISION 6
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; DEFINITIONS,
@@ -713,18 +723,46 @@ static int write_instances(FILE *f, const pulseg_sequence_descriptor *d)
 
 static int write_scanloop(FILE *f, const pulseg_sequence_descriptor *d)
 {
-    /* scan table */
+    /* Execution stream, compact form. The four per-position arrays
+     * (block_idx / tr_id / seg_id / avg_id) are build-time scratch and are
+     * never serialized: exec_runs reproduces the first three, the seg RLE
+     * the fourth, and tr_start is derived. See pulseg_exec_run. */
     if (!pulseg__write4(f, &d->exec_stream_len, 1))
         return 0;
     if (d->exec_stream_len > 0)
     {
-        if (!pulseg__write4(f, d->exec_stream_block_idx, d->exec_stream_len))
+        int i;
+        if (!pulseg__write4(f, &d->num_exec_runs, 1))
             return 0;
-        if (!pulseg__write4(f, d->exec_stream_tr_id, d->exec_stream_len))
+        for (i = 0; i < d->num_exec_runs; ++i)
+        {
+            if (!pulseg__write4(f, &d->exec_runs[i].emit_start, 1))
+                return 0;
+            if (!pulseg__write4(f, &d->exec_runs[i].block_start, 1))
+                return 0;
+            if (!pulseg__write4(f, &d->exec_runs[i].length, 1))
+                return 0;
+            if (!pulseg__write4(f, &d->exec_runs[i].tr_id, 1))
+                return 0;
+            if (!pulseg__write4(f, &d->exec_runs[i].avg_id, 1))
+                return 0;
+        }
+        if (!pulseg__write4(f, &d->num_seg_runs, 1))
             return 0;
-        if (!pulseg__write4(f, d->exec_stream_seg_id, d->exec_stream_len))
+        if (!pulseg__write4(f, &d->seg_period, 1))
             return 0;
-        if (!pulseg__write4(f, d->exec_stream_avg_id, d->exec_stream_len))
+        if (d->num_seg_runs > 0)
+        {
+            /* seg_run_start carries num_seg_runs+1 entries (the trailing
+             * bound), seg_run_id carries num_seg_runs. */
+            if (!pulseg__write4(f, d->seg_run_start, d->num_seg_runs + 1))
+                return 0;
+            if (!pulseg__write4(f, d->seg_run_id, d->num_seg_runs))
+                return 0;
+        }
+        if (!pulseg__write4(f, &d->tr_start_main_id, 1))
+            return 0;
+        if (!pulseg__write4(f, &d->tr_start_first, 1))
             return 0;
     }
 
@@ -1551,39 +1589,78 @@ static int read_scanloop(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         pulseg__swap4(&d->exec_stream_len);
     if (d->exec_stream_len > 0)
     {
-        d->exec_stream_block_idx = (int *)PULSEG_ALLOC((size_t)d->exec_stream_len * sizeof(int));
-        d->exec_stream_tr_id = (int *)PULSEG_ALLOC((size_t)d->exec_stream_len * sizeof(int));
-        d->exec_stream_seg_id = (int *)PULSEG_ALLOC((size_t)d->exec_stream_len * sizeof(int));
-        d->exec_stream_avg_id = (int *)PULSEG_ALLOC((size_t)d->exec_stream_len * sizeof(int));
-        if (!d->exec_stream_block_idx || !d->exec_stream_tr_id || !d->exec_stream_seg_id ||
-            !d->exec_stream_avg_id)
+        int i;
+
+        /* Compact form only -- the per-position scratch arrays stay NULL on
+         * a cache load, which is the whole point of the split. */
+        if (!pulseg__read4(f, &d->num_exec_runs, 1))
             return 0;
-        if (fread(d->exec_stream_block_idx, sizeof(int), (size_t)d->exec_stream_len, f) !=
-            (size_t)d->exec_stream_len)
+        if (do_swap)
+            pulseg__swap4(&d->num_exec_runs);
+        if (d->num_exec_runs < 0)
             return 0;
-        if (fread(d->exec_stream_tr_id, sizeof(int), (size_t)d->exec_stream_len, f) !=
-            (size_t)d->exec_stream_len)
+        if (d->num_exec_runs > 0)
+        {
+            d->exec_runs = (pulseg_exec_run *)PULSEG_ALLOC(
+                (size_t)d->num_exec_runs * sizeof(pulseg_exec_run));
+            if (!d->exec_runs)
+                return 0;
+            for (i = 0; i < d->num_exec_runs; ++i)
+            {
+                if (!pulseg__read4(f, &d->exec_runs[i].emit_start, 1))
+                    return 0;
+                if (!pulseg__read4(f, &d->exec_runs[i].block_start, 1))
+                    return 0;
+                if (!pulseg__read4(f, &d->exec_runs[i].length, 1))
+                    return 0;
+                if (!pulseg__read4(f, &d->exec_runs[i].tr_id, 1))
+                    return 0;
+                if (!pulseg__read4(f, &d->exec_runs[i].avg_id, 1))
+                    return 0;
+                if (do_swap)
+                    pulseg__swap4_array(&d->exec_runs[i].emit_start, 5);
+            }
+        }
+
+        if (!pulseg__read4(f, &d->num_seg_runs, 1))
             return 0;
-        if (fread(d->exec_stream_seg_id, sizeof(int), (size_t)d->exec_stream_len, f) !=
-            (size_t)d->exec_stream_len)
-            return 0;
-        if (fread(d->exec_stream_avg_id, sizeof(int), (size_t)d->exec_stream_len, f) !=
-            (size_t)d->exec_stream_len)
+        if (!pulseg__read4(f, &d->seg_period, 1))
             return 0;
         if (do_swap)
         {
-            pulseg__swap4_array(d->exec_stream_block_idx, d->exec_stream_len);
-            pulseg__swap4_array(d->exec_stream_tr_id, d->exec_stream_len);
-            pulseg__swap4_array(d->exec_stream_seg_id, d->exec_stream_len);
-            pulseg__swap4_array(d->exec_stream_avg_id, d->exec_stream_len);
+            pulseg__swap4(&d->num_seg_runs);
+            pulseg__swap4(&d->seg_period);
         }
-    }
-    else
-    {
-        d->exec_stream_block_idx = NULL;
-        d->exec_stream_tr_id = NULL;
-        d->exec_stream_seg_id = NULL;
-        d->exec_stream_avg_id = NULL;
+        if (d->num_seg_runs < 0)
+            return 0;
+        if (d->num_seg_runs > 0)
+        {
+            d->seg_run_start = (int *)PULSEG_ALLOC((size_t)(d->num_seg_runs + 1) * sizeof(int));
+            d->seg_run_id = (int *)PULSEG_ALLOC((size_t)d->num_seg_runs * sizeof(int));
+            if (!d->seg_run_start || !d->seg_run_id)
+                return 0;
+            if (!pulseg__read4(f, d->seg_run_start, d->num_seg_runs + 1))
+                return 0;
+            if (!pulseg__read4(f, d->seg_run_id, d->num_seg_runs))
+                return 0;
+            if (do_swap)
+            {
+                pulseg__swap4_array(d->seg_run_start, d->num_seg_runs + 1);
+                pulseg__swap4_array(d->seg_run_id, d->num_seg_runs);
+            }
+        }
+
+        if (!pulseg__read4(f, &d->tr_start_main_id, 1))
+            return 0;
+        if (!pulseg__read4(f, &d->tr_start_first, 1))
+            return 0;
+        if (do_swap)
+        {
+            pulseg__swap4(&d->tr_start_main_id);
+            pulseg__swap4(&d->tr_start_first);
+        }
+        d->exec_run_hint = 0;
+        d->seg_run_hint = 0;
     }
 
     /* variable grad flags */

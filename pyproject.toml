@@ -20,11 +20,13 @@ recon = ["numpy>=2.0", "ismrmrd>=1.14.1", "pydicom", "h5py", "psutil"]
 # ``recon-cuda`` selects the CUFINUFFT backend on Linux/CUDA hosts.
 recon-cpu = [
   "pulserver[recon]",
-  "torch>=2.3",
+  "torch>=2.12",
   "mri-nufft[finufft]",
   "finufft",
   "mrpro",
-  "deepinv",
+  "deepinv>=0.4",
+  "ptwt",
+  "PyWavelets",
 ]
 recon-cuda = [
   "pulserver[recon-cpu]",

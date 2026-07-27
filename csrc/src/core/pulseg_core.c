@@ -187,6 +187,24 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
         PULSEG_FREE(d->exec_stream_tr_start);
         d->exec_stream_tr_start = NULL;
     }
+    if (d->exec_runs)
+    {
+        PULSEG_FREE(d->exec_runs);
+        d->exec_runs = NULL;
+    }
+    d->num_exec_runs = 0;
+    if (d->seg_run_start)
+    {
+        PULSEG_FREE(d->seg_run_start);
+        d->seg_run_start = NULL;
+    }
+    if (d->seg_run_id)
+    {
+        PULSEG_FREE(d->seg_run_id);
+        d->seg_run_id = NULL;
+    }
+    d->num_seg_runs = 0;
+    d->tr_start_first = -1;
     d->exec_stream_len = 0;
 
     if (d->variable_grad_flags)
@@ -495,8 +513,8 @@ static int check_cross_pass_rf_consistency(
     {
         for (j = 0; j < pass_size; ++j)
         {
-            ref_bt = desc->exec_stream_block_idx[j];
-            chk_bt = desc->exec_stream_block_idx[p * pass_size + j];
+            ref_bt = pulseg__exec_block_idx(desc, j);
+            chk_bt = pulseg__exec_block_idx(desc, p * pass_size + j);
 
             /* RF amplitude */
             ref_amp = get_block_rf_amplitude(desc, ref_bt);
@@ -582,7 +600,7 @@ static int check_exec_stream_segments(
 
     for (n = 0; n < desc->exec_stream_len; ++n)
     {
-        seg_id = desc->exec_stream_seg_id[n];
+        seg_id = pulseg__exec_seg_id(desc, n);
         if (seg_id < 0)
         {
             prev_seg_id = seg_id;
@@ -621,7 +639,7 @@ static int check_exec_stream_segments(
             pos_in_seg = 0;
         }
 
-        bt_idx = desc->exec_stream_block_idx[n];
+        bt_idx = pulseg__exec_block_idx(desc, n);
         bdef_id = desc->block_table[bt_idx].id;
         expected_id = seg->unique_block_indices[pos_in_seg];
 
@@ -691,7 +709,7 @@ static int check_consistency(pulseg_collection *coll, int allow_variable_rf, pul
         /* (a) Scan-table segment consistency: walk the scan table and
          *     verify that each entry's block definition ID matches what
          *     its seg_id expects. */
-        if (desc->exec_stream_len > 0 && desc->exec_stream_seg_id)
+        if (desc->exec_stream_len > 0 && desc->seg_run_id)
         {
             rc = check_exec_stream_segments(desc, diag);
             if (PULSEG_FAILED(rc))
@@ -1349,7 +1367,7 @@ int pulseg_convert_collection(
             int n;
             for (n = 0; n < desc.exec_stream_len; ++n)
             {
-                int bt_idx = desc.exec_stream_block_idx[n];
+                int bt_idx = pulseg__exec_block_idx(&desc, n);
                 const pulseg_block_table_element *bte = &desc.block_table[bt_idx];
                 const pulseg_base_block *bdef = &desc.base_blocks[bte->id];
                 total_dur +=
@@ -1399,6 +1417,11 @@ int pulseg_convert_collection(
             }
         }
 
+        /* Everything that needed the position-indexed scratch arrays has
+         * run; from here on the compact execution stream is the only
+         * representation, exactly as it is after a cache load. */
+        pulseg__free_exec_stream_scratch(&desc);
+
         /* apply offsets */
         if (seg_off > 0)
         {
@@ -1430,7 +1453,7 @@ int pulseg_convert_collection(
             int n;
             for (n = 0; n < desc.exec_stream_len; ++n)
             {
-                int bt_idx = desc.exec_stream_block_idx[n];
+                int bt_idx = pulseg__exec_block_idx(&desc, n);
                 const pulseg_block_table_element *bte = &desc.block_table[bt_idx];
                 const pulseg_base_block *bdef = &desc.base_blocks[bte->id];
                 subseq_dur +=
@@ -1514,12 +1537,13 @@ int pulseg_read(
     /* Try cache */
     if (cache_binary && pulseg__try_read_cache(collection, file_path, opts->cache_ext))
     {
-        /* Segment timing and TR-start flags are derived, not cached */
+        /* Segment timing is derived, not cached. TR-start flags no longer
+         * need recomputing here: pulseg__exec_tr_start derives them from
+         * the (tr_start_main_id, tr_start_first) anchor, which the SCANLOOP
+         * section carries -- and the per-position arrays it used to walk do
+         * not exist after a cache load. */
         for (i = 0; i < collection->num_subsequences; ++i)
-        {
             pulseg__calc_segment_timing(&collection->descriptors[i], NULL);
-            pulseg__compute_exec_stream_tr_start(&collection->descriptors[i]);
-        }
         *out_coll = collection;
         return PULSEG_SUCCESS;
     }

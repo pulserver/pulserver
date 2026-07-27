@@ -87,17 +87,17 @@ parse, convert, cache.
 
 | Sequence | Design | Serialise | Disk | Parse | Convert | Cache write | **Total** |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| GRE 64² × 1 sl | 0.10 s | 0.01 s | 0.4 ms | 3.4 ms | 4.7 ms | 0.3 ms | **0.12 s** |
-| GRE 128² × 16 sl | 1.26 s | 0.24 s | 1.3 ms | 85 ms | 24 ms | 7.4 ms | **1.62 s** |
-| GRE 256² × 32 sl | 4.68 s | 0.97 s | 4.6 ms | 353 ms | 191 ms | 36 ms | **6.24 s** |
-| GRE 3D 128² × 64 par | 4.75 s | 1.04 s | 5.1 ms | 349 ms | 81 ms | 27 ms | **6.25 s** |
-| FSE 256² × 20 sl, ETL 16 | 4.21 s | 0.42 s | 3.8 ms | 177 ms | 110 ms | 22 ms | **4.94 s** |
-| EPI 256² × 20 sl, ETL 16 | 0.77 s | 0.21 s | 1.7 ms | 65 ms | 3 992 ms | 3.1 ms | **5.04 s** |
-| bSSFP 128², 1 frame | 0.11 s | 0.01 s | 0.3 ms | 3.6 ms | 5.3 ms | 0.3 ms | **0.13 s** |
-| bSSFP 128², 64 frames | 5.23 s | 0.47 s | 3.4 ms | 205 ms | 6.4 ms | 8.2 ms | **5.92 s** |
-| MPRAGE 192² × 128 par | 14.53 s | 3.05 s | 15 ms | 1 071 ms | 6 484 ms | 783 ms | **25.94 s** |
-| Spiral, 48 short shots | 1.07 s | 0.07 s | 1.0 ms | 36 ms | 44 ms | 2.9 ms | **1.22 s** |
-| Spiral, 4 long shots | 0.17 s | 0.01 s | 0.4 ms | 8.4 ms | 18 ms | 0.3 ms | **0.21 s** |
+| GRE 64² × 1 sl | 0.10 s | 0.01 s | 0.4 ms | 4.0 ms | 9.7 ms | 0.7 ms | **0.12 s** |
+| GRE 128² × 16 sl | 1.26 s | 0.24 s | 1.3 ms | 94.1 ms | 17.5 ms | 11.2 ms | **1.62 s** |
+| GRE 256² × 32 sl | 4.68 s | 0.97 s | 4.6 ms | 383 ms | 39.0 ms | 31.5 ms | **6.11 s** |
+| GRE 3D 128² × 64 par | 4.75 s | 1.04 s | 5.1 ms | 382 ms | 40.1 ms | 28.3 ms | **6.25 s** |
+| FSE 256² × 20 sl, ETL 16 | 4.21 s | 0.42 s | 3.8 ms | 195 ms | 51.1 ms | 14.6 ms | **4.89 s** |
+| EPI 256² × 20 sl, ETL 16 | 0.77 s | 0.21 s | 1.7 ms | 79.8 ms | 10 238 ms | 4.8 ms | **11.30 s** |
+| bSSFP 128², 1 frame | 0.11 s | 0.01 s | 0.3 ms | 3.5 ms | 12.2 ms | 1.0 ms | **0.14 s** |
+| bSSFP 128², 64 frames | 5.23 s | 0.47 s | 3.4 ms | 239 ms | 25.6 ms | 15.8 ms | **5.98 s** |
+| MPRAGE 192² × 128 par | 14.53 s | 3.05 s | 15 ms | 1 191 ms | 124 ms | 89.8 ms | **19.00 s** |
+| Spiral, 48 short shots | 1.07 s | 0.07 s | 1.0 ms | 34.1 ms | 116 ms | 2.4 ms | **1.29 s** |
+| Spiral, 4 long shots | 0.17 s | 0.01 s | 0.4 ms | 9.5 ms | 52.2 ms | 0.9 ms | **0.24 s** |
 
 Ordinary clinical protocols land between 0.1 s and 6 s. Four observations.
 
@@ -106,17 +106,20 @@ design plus serialisation is 5.6 s of a 6.2 s total — the C library is 9 %
 of the wait. Optimising the C side would be optimising the wrong thing for
 most of this table.
 
-**MPRAGE's design is the exception, and both halves are expensive.** 14.5 s
-of design and 6.5 s of conversion, for 25.9 s end to end. That is the row
-that sets the practical ceiling on prescription size today, and it is worth
-knowing that neither half alone explains it.
+**MPRAGE's cost is now almost entirely its design.** 14.5 s of design and
+3.0 s of serialisation against 124 ms of conversion, for 19.0 s end to end.
+Conversion used to be 6.5 s of a 25.9 s total here; it is now under 1 %.
+This row still sets the practical ceiling on prescription size, but the
+ceiling is Python, not C.
 
-**EPI's convert stage is the other exception, and it is a single number.**
-4.0 s of a 5.0 s total is the C conversion stage alone — 79 % of the wait,
-against 65 ms of parsing the same file. See
+**EPI's convert stage is the one remaining exception, and it is a single
+number.** 10.2 s of an 11.3 s total is the C conversion stage alone — 91 %
+of the wait, against 80 ms of parsing the same file. See
 [Where the C time goes](#where-the-c-time-goes) for why: unlike FSE at the
 same nominal size, EPI's design does not split the scan into one TR per
-shot, so conversion sees one 6 721-block TR instead of 320 small ones.
+shot, so conversion sees one 6 721-block TR instead of 320 small ones. With
+MPRAGE's conversion cost gone, EPI is now the only sequence in the table
+where the C library dominates the operator's wait.
 
 **Serialisation is a consistent 5–20 % of design**, and the disk write is
 never measurable — under 15 ms even for a 19 MB `.seq`. Writing the file is
@@ -124,21 +127,21 @@ not the cost; building it is.
 
 ### Where the C time goes
 
-The C half of the download is 8 ms to 8.3 s, against these block counts:
+The C half of the download is 14 ms to 10.3 s, against these block counts:
 
 | Sequence | Raw blocks | Unique | Parse | Convert | Cache write | **C total** |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| GRE 64² × 1 sl | 512 | 8 | 3.4 ms | 4.7 ms | 0.3 ms | **8.4 ms** |
-| GRE 128² × 16 sl | 14 464 | 8 | 85 ms | 24 ms | 7.4 ms | **117 ms** |
-| GRE 256² × 32 sl | 57 600 | 8 | 353 ms | 191 ms | 36 ms | **579 ms** |
-| GRE 3D 128² × 64 par | 49 280 | 7 | 349 ms | 81 ms | 27 ms | **457 ms** |
-| FSE 256² × 20 sl, ETL 16 | 22 080 | 9 | 177 ms | 110 ms | 22 ms | **309 ms** |
-| EPI 256² × 20 sl, ETL 16 | 6 721 | 9 | 65 ms | 3 992 ms | 3.1 ms | **4 060 ms** |
-| bSSFP 128², 1 frame | 259 | 7 | 3.6 ms | 5.3 ms | 0.3 ms | **9.2 ms** |
-| bSSFP 128², 64 frames | 16 576 | 7 | 205 ms | 6.4 ms | 8.2 ms | **220 ms** |
-| MPRAGE 192² × 128 par | 181 248 | 10 | 1 071 ms | 6 484 ms | 783 ms | **8 338 ms** |
-| Spiral, 48 short shots | 3 889 | 7 | 36 ms | 44 ms | 2.9 ms | **82 ms** |
-| Spiral, 4 long shots | 325 | 7 | 8.4 ms | 18 ms | 0.3 ms | **27 ms** |
+| GRE 64² × 1 sl | 512 | 8 | 4.0 ms | 9.7 ms | 0.7 ms | **14.4 ms** |
+| GRE 128² × 16 sl | 14 464 | 8 | 94.1 ms | 17.5 ms | 11.2 ms | **123 ms** |
+| GRE 256² × 32 sl | 57 600 | 8 | 383 ms | 39.0 ms | 31.5 ms | **454 ms** |
+| GRE 3D 128² × 64 par | 49 280 | 7 | 382 ms | 40.1 ms | 28.3 ms | **451 ms** |
+| FSE 256² × 20 sl | 22 080 | 9 | 195 ms | 51.1 ms | 14.6 ms | **261 ms** |
+| EPI 256² × 20 sl | 6 721 | 9 | 79.8 ms | 10 238 ms | 4.8 ms | **10 322 ms** |
+| bSSFP 128², 1 frame | 259 | 7 | 3.5 ms | 12.2 ms | 1.0 ms | **16.8 ms** |
+| bSSFP 128², 64 frames | 16 576 | 7 | 239 ms | 25.6 ms | 15.8 ms | **281 ms** |
+| MPRAGE 192² × 128 par | 181 248 | 10 | 1 191 ms | 124 ms | 89.8 ms | **1 405 ms** |
+| Spiral, 48 short shots | 3 889 | 7 | 34.1 ms | 116 ms | 2.4 ms | **152 ms** |
+| Spiral, 4 long shots | 325 | 7 | 9.5 ms | 52.2 ms | 0.9 ms | **62.6 ms** |
 
 The Unique column — distinct base-block definitions, before per-instance
 rotation and amplitude scaling — stays in the single digits across every
@@ -178,33 +181,38 @@ need attention first if prescriptions get larger.
 
 | Sequence | Raw model | Collection (live) | Conversion (peak) |
 | --- | ---: | ---: | ---: |
-| GRE 64² × 1 sl | 44 KB | 714 KB | 2.7 MB |
-| GRE 128² × 16 sl | 1.1 MB | 6.0 MB | 13 MB |
-| GRE 256² × 32 sl | 4.4 MB | 39 MB | 47 MB |
-| GRE 3D 128² × 64 par | 4.4 MB | 22 MB | 53 MB |
-| FSE 256² × 20 sl | 2.2 MB | 34 MB | 37 MB |
-| EPI 256² × 20 sl | 887 KB | 1 466 MB | 3 421 MB |
-| bSSFP 128², 64 frames | 2.5 MB | 3.1 MB | 33 MB |
-| MPRAGE 192² × 128 par | 14 MB | 1 176 MB | 1 189 MB |
+| GRE 64² × 1 sl | 44 KB | 642 KB | 3 MB |
+| GRE 128² × 16 sl | 1 MB | 2 MB | 13 MB |
+| GRE 256² × 32 sl | 4 MB | 6 MB | 47 MB |
+| GRE 3D 128² × 64 par | 4 MB | 6 MB | 53 MB |
+| FSE 256² × 20 sl | 2 MB | 9 MB | 30 MB |
+| EPI 256² × 20 sl | 887 KB | 1.4 GB | 3.3 GB |
+| bSSFP 128², 1 frame | 44 KB | 929 KB | 3 MB |
+| bSSFP 128², 64 frames | 3 MB | 3 MB | 33 MB |
+| MPRAGE 192² × 128 par | 14 MB | 20 MB | 158 MB |
 | Spiral, 48 short shots | 393 KB | 18 MB | 42 MB |
+| Spiral, 4 long shots | 73 KB | 7 MB | 17 MB |
 
 Peak is consistently at or above live — 10× for bSSFP, 2.4× for GRE 3D —
 because conversion allocates working structures it then releases. Sizing a
 host allocator against the live figure would be wrong; the peak is what has
 to fit.
 
-The raw parsed model is small next to the collection it produces, which is
-the right way round: the expensive object is the one that carries
-per-instance state for every block of the scan.
+The collection is now the same order of magnitude as the raw model it comes
+from — MPRAGE 14 MB in, 20 MB live — because only genuinely per-occurrence
+data is stored per occurrence. MPRAGE's live collection was 1 176 MB before
+the label table and execution stream were fixed; see
+[the cache section](#the-cache-is-about-the-size-of-the-seq).
 
-**EPI's 3.4 GB peak is the largest figure on this page, nearly 3× MPRAGE's.**
+**EPI's 3.3 GB peak is the largest figure on this page, by more than 20×.**
 Both raw model and unique-block count are unremarkable — 887 KB and 9
-definitions, smaller than FSE's. The 3.4 GB is entirely the
+definitions, smaller than FSE's. The 3.3 GB is entirely the
 gradient-waveform interpolation from the previous section: one TR spanning
 the whole 640 s scan, sampled at 5 µs, on all three axes. A sequence that
 split its shots into per-TR chunks the way FSE does would not pay this;
 that EPI's design does not is the single fact that explains both its
-conversion time and its memory.
+conversion time and its memory. It is now the only outlier left on this
+page, and the clearest candidate for the next piece of work.
 
 ## Scan time: the section split
 
@@ -212,20 +220,21 @@ This is the result the cache's section structure exists to produce.
 
 | Sequence | Cache file | Pulsegen load | Scan-loop load | Memory ratio |
 | --- | ---: | ---: | ---: | ---: |
-| GRE 64² × 1 sl | 111 KB | 10 KB / 0.01 ms | 109 KB / 0.04 ms | 10× |
-| GRE 128² × 16 sl | 4.4 MB | 10 KB / 0.01 ms | 4.4 MB / 1.0 ms | 453× |
-| GRE 256² × 32 sl | 30 MB | 10 KB / 0.02 ms | 30 MB / 8.7 ms | 2 889× |
-| GRE 3D 128² × 64 par | 17 MB | 10 KB / 0.01 ms | 17 MB / 5.2 ms | 1 838× |
-| FSE 256² × 20 sl | 21 MB | 23 KB / 0.02 ms | 21 MB / 5.1 ms | 948× |
-| EPI 256² × 20 sl | 908 KB | 14 KB / 0.02 ms | 905 KB / 0.41 ms | 66× |
-| bSSFP 128², 64 frames | 2.2 MB | 32 KB / 0.02 ms | 2.2 MB / 1.5 ms | 70× |
-| MPRAGE 192² × 128 par | 882 MB | **18 KB / 0.02 ms** | **882 MB / 470 ms** | **50 169×** |
-| Spiral, 48 short shots | 549 KB | 15 KB / 0.02 ms | 548 KB / 0.24 ms | 37× |
-| Spiral, 4 long shots | 89 KB | 43 KB / 0.02 ms | 87 KB / 0.04 ms | 2× |
+| GRE 64² × 1 sl | 53 KB | 10 KB / 0.01 ms | 53 KB / 0.04 ms | 5× |
+| GRE 128² × 16 sl | 1 MB | 10 KB / 0.01 ms | 1 MB / 0.86 ms | 125× |
+| GRE 256² × 32 sl | 5 MB | 11 KB / 0.02 ms | 5 MB / 3.12 ms | 468× |
+| GRE 3D 128² × 64 par | 4 MB | 10 KB / 0.01 ms | 4 MB / 3.07 ms | 474× |
+| FSE 256² × 20 sl | 2 MB | 23 KB / 0.02 ms | 2 MB / 1.52 ms | 96× |
+| EPI 256² × 20 sl | 805 KB | 14 KB / 0.02 ms | 805 KB / 0.75 ms | 58× |
+| bSSFP 128², 1 frame | 66 KB | 32 KB / 0.02 ms | 67 KB / 0.04 ms | 2× |
+| bSSFP 128², 64 frames | 2 MB | 32 KB / 0.02 ms | 2 MB / 1.74 ms | 65× |
+| MPRAGE 192² × 128 par | 15 MB | 18 KB / 0.02 ms | 15 MB / 12.64 ms | 871× |
+| Spiral, 48 short shots | 487 KB | 15 KB / 0.01 ms | 488 KB / 0.27 ms | 33× |
+| Spiral, 4 long shots | 82 KB | 43 KB / 0.02 ms | 82 KB / 0.05 ms | 2× |
 
 The pulse-generation load — `COMMON + SHAPES` — never leaves the tens of
 kilobytes, across a 330× range of `.seq` size, and never takes more than
-0.02 ms. The scan-loop load spans 87 KB to 882 MB over the same range —
+0.02 ms. The scan-loop load spans 53 KB to 15 MB over the same range —
 including EPI, whose 640 s of scan-loop instructions is still under a
 megabyte to load, unlike the gradient-waveform pass it needs at conversion
 time.
@@ -240,34 +249,56 @@ than creating one. Everything that does grow with scan length lives in
 opens them.
 
 MPRAGE is the case that makes it concrete: the phase that runs where memory
-is scarcest reads 18 KB, while the whole collection is 882 MB. Without the
+is scarcest reads 18 KB, while the whole collection is 15 MB. Without the
 split it would read all of it.
 
-### The cache is larger than the `.seq`
+The ratio column is worth reading as a *floor* rather than a headline. It
+was 50 169× for MPRAGE when the scan-loop side carried a label table
+duplicated per TR and four integers per block; shrinking the scan-loop side
+by 57× cut the ratio to 871× without pulse generation changing at all. The
+split is what makes the pulsegen figure flat; it is not what makes the
+scan-loop figure small.
+
+### The cache is about the size of the `.seq`
 
 | Sequence | `.seq` | Cache | Ratio |
 | --- | ---: | ---: | ---: |
-| GRE 128² × 16 sl | 1.4 MB | 4.4 MB | 3.1× |
-| GRE 256² × 32 sl | 5.8 MB | 30 MB | 5.1× |
-| FSE 256² × 20 sl | 3.3 MB | 21 MB | 6.4× |
-| EPI 256² × 20 sl | 1.1 MB | 905 KB | 0.8× |
-| bSSFP 128², 64 frames | 3.6 MB | 2.2 MB | 0.6× |
-| MPRAGE 192² × 128 par | 18 MB | 882 MB | 48× |
-| Spiral, 4 long shots | 165 KB | 87 KB | 0.5× |
+| GRE 64² × 1 sl | 56 KB | 53 KB | 0.9× |
+| GRE 128² × 16 sl | 1 MB | 1 MB | 0.9× |
+| GRE 256² × 32 sl | 6 MB | 5 MB | 0.8× |
+| GRE 3D 128² × 64 par | 6 MB | 4 MB | 0.8× |
+| FSE 256² × 20 sl | 3 MB | 2 MB | 0.7× |
+| EPI 256² × 20 sl | 1 MB | 805 KB | 0.7× |
+| bSSFP 128², 1 frame | 59 KB | 66 KB | 1.1× |
+| bSSFP 128², 64 frames | 4 MB | 2 MB | 0.6× |
+| MPRAGE 192² × 128 par | 18 MB | 15 MB | 0.8× |
+| Spiral, 48 short shots | 608 KB | 487 KB | 0.8× |
+| Spiral, 4 long shots | 165 KB | 82 KB | 0.5× |
 
 The cache is not a compressed `.seq`; it is a *materialised* one. Text that
 says "block 7 again, scaled by 0.31" becomes explicit per-instance rows in
 `INSTANCES` and `ROTATIONS`, plus a derived trajectory and
-frequency-modulation plan. Sequences whose text is already close to fully
-enumerated (bSSFP frames, a short spiral, EPI's single pass) come out at or
-below `.seq` size; ones whose text is compact but whose expansion is not —
-MPRAGE's 3 072 TRs — come out much larger.
+frequency-modulation plan. What keeps that from exploding is that only the
+things which genuinely vary per occurrence are stored per occurrence.
 
-882 MB of cache for an 18 MB `.seq` is worth flagging as a real constraint,
-not a curiosity. It is the same MPRAGE row that costs 6.5 s to convert, and
-the two have one cause: per-instance state for 181 248 blocks. EPI's cache
-ratio being unremarkable (0.8×) is itself worth noting: its cost is entirely
-in conversion-time working memory (the previous section), not in what
+Every sequence in the table now lands between 0.5× and 1.1× of its `.seq`.
+That is a recent result, and MPRAGE is the row that shows why it was not
+always so. It used to produce a 882 MB cache from an 18 MB `.seq` — 48× —
+from two causes, both since removed. The label table was allocated once per
+ADC *per TR* rather than once per ADC, which for 3 072 TRs meant 3 072
+identical copies of the same table. And the execution stream stored four
+integers for every block of the scan, when what it was encoding was
+"positions 0..181 247 play blocks 0..181 247 in order" — one run — plus a
+segment order that repeats every TR.
+
+Both are now stored as what they are: the label table once, and the
+execution stream as runs plus a single period of the segment order (see
+{doc}`sequence_representation/pulseg`). MPRAGE's cache is 15 MB, 0.8× its
+`.seq`.
+
+EPI is the reminder that this section is not the whole story: its cache
+ratio is an unremarkable 0.7×, because its cost is entirely in
+conversion-time working memory (the previous section), not in what
 ultimately gets written to disk.
 
 ## Safety checks
@@ -356,9 +387,9 @@ that is depends on the sequence.
 | GRE 256² × 32 sl | 83 MB | 47 MB | 5.8 MB |
 | GRE 3D 128² × 64 par | 84 MB | 53 MB | 5.8 MB |
 | FSE 256² × 20 sl | 43 MB | 37 MB | 3.3 MB |
-| EPI 256² × 20 sl | 16 MB | 3 422 MB | 1.1 MB |
+| EPI 256² × 20 sl | 16 MB | 3.3 GB | 1.1 MB |
 | bSSFP 128², 64 frames | 48 MB | 33 MB | 3.6 MB |
-| MPRAGE 192² × 128 par | 262 MB | 1 189 MB | 18 MB |
+| MPRAGE 192² × 128 par | 262 MB | 158 MB | 18 MB |
 | Spiral, 48 short shots | 7.6 MB | 42 MB | 608 KB |
 
 The Python peak counts Python objects only (`tracemalloc`), so it
@@ -368,12 +399,13 @@ host's requirement there is set by design, not conversion. Spiral flips
 that — 42 MB of C against 7.6 MB of Python, because a non-Cartesian
 trajectory's per-instance state is built from the gradient waveforms, not
 the module tree. MPRAGE and EPI go further still, in different ways:
-MPRAGE's design is itself expensive (262 MB of Python objects, on top of a
-1.2 GB C peak) and its 25.9 s download is the longest wait on this page;
-EPI's design is cheap (16 MB) but its C peak is 3.4 GB — the largest number
-here by a wide margin, and, per the previous section, entirely attributable
-to interpolating gradient waveforms over its 640 s monolithic TR rather than
-to anything about the sequence's raw size.
+MPRAGE's design is itself expensive (262 MB of Python objects, against a
+158 MB C peak) and its 19.0 s download is the longest wait on this page —
+and it is now Python-bound on both time and memory, where the C peak used to
+be 1.2 GB. EPI's design is cheap (16 MB) but its C peak is 3.3 GB — the
+largest number here by more than 20×, and, per the previous section,
+entirely attributable to interpolating gradient waveforms over its 640 s
+monolithic TR rather than to anything about the sequence's raw size.
 
 ## Reproducing
 

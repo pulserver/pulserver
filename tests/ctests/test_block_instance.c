@@ -24,7 +24,7 @@ static void assert_matches_tables(
     const pulseg_base_block *bdef;
     int idx, i;
 
-    idx = desc->exec_stream_block_idx[pos];
+    idx = pulseg__exec_block_idx(desc, pos);
     mu_assert(idx >= 0 && idx < desc->num_blocks, "exec-stream index out of range");
 
     bte = &desc->block_table[idx];

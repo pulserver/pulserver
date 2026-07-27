@@ -651,7 +651,7 @@ static int pulseg_compute_trajectory(
     num_adc_events = 0;
     for (n = 0; n < desc->exec_stream_len; ++n)
     {
-        b = desc->exec_stream_block_idx[n];
+        b = pulseg__exec_block_idx(desc, n);
         if (desc->block_table[b].adc_id >= 0)
             ++num_adc_events;
     }
@@ -727,7 +727,7 @@ static int pulseg_compute_trajectory(
             int adc_def_idx, adc_nsamples, kzero;
             int kx_id, ky_id, kz_id;
 
-            b = desc->exec_stream_block_idx[n];
+            b = pulseg__exec_block_idx(desc, n);
             bte = &desc->block_table[b];
 
             if (bte->adc_id < 0)
@@ -743,7 +743,7 @@ static int pulseg_compute_trajectory(
              * ADC anchor with matching block offset. */
             kzero = adc_nsamples / 2; /* default: center */
             {
-                int seg_idx = desc->exec_stream_seg_id[n];
+                int seg_idx = pulseg__exec_seg_id(desc, n);
                 if (seg_idx >= 0 && seg_idx < desc->num_unique_segments)
                 {
                     const pulseg_virtual_segment *seg_def = &desc->segment_definitions[seg_idx];
@@ -886,8 +886,8 @@ static int pulseg_compute_trajectory(
 
                     /* Override rep with the actual average (NEX) loop index from
                      * the scan table; the seqfile label table cannot know NEX. */
-                    if (desc->exec_stream_avg_id)
-                        table[adc_idx].rep = desc->exec_stream_avg_id[n];
+                    if (desc->exec_runs)
+                        table[adc_idx].rep = pulseg__exec_avg_id(desc, n);
 
                     /* Map Pulseq boolean flags to ISMRMRD flag bits
                      * Column indices (0-based) match PULSEG__* macros - 1.
