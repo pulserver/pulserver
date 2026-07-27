@@ -508,6 +508,109 @@ def make_spiral_phyllotaxis_tilt(n_spokes, n_interleaves, *, require_fibonacci=T
     return ScanLoop(support, order, None, _DIRECTION_AXES)
 
 
+def make_rotated_segment_tilt(views_per_shot, shots, *, scheme="phyllotaxis", require_fibonacci=True):
+    """Generate one base spoke segment plus the rotations that sweep it over the sphere.
+
+    The other 3D tilt factories hand back every spoke direction as its own
+    position, which is the right answer when each spoke is encoded by its own
+    gradient. A continuous-gradient readout cannot afford that: an interpreter
+    stores one waveform per gradient *definition* and a bounded number of
+    shapes per definition, so a scan of N arbitrary directions asks for N
+    distinct waveforms and is rejected. Here the whole shot is designed once
+    and replayed under a rigid rotation, so the hardware sees a single set of
+    waveforms however many shots are played, and the rotation rides along as a
+    block extension.
+
+    That trade is only sound if the shots really are congruent — every shot
+    must be the base segment moved rigidly, not merely a similar-looking one.
+    Both schemes below rotate about ``z`` alone, so the base polar angles are
+    shared by every shot: the sphere is covered by ``views_per_shot`` polar
+    rings of ``shots`` spokes each, rather than by ``views_per_shot * shots``
+    freely placed directions.
+
+    Parameters
+    ----------
+    views_per_shot : int
+        Spokes in the base segment — the number of views one shot acquires.
+    shots : int
+        Number of rotated replays of that segment.
+    scheme : {'phyllotaxis', 'disk'}, optional
+        ``'phyllotaxis'`` spreads the base over equal-area polar rings with a
+        golden-angle azimuth advance, and rotates by the golden angle. Best
+        sphere uniformity, and the azimuth step stays small — so consecutive
+        views stay close, which is what keeps a continuous-gradient transition
+        slew-feasible — only when ``shots`` is a Fibonacci number.
+        ``'disk'`` makes the base a full great circle in the ``x``-``z`` plane
+        and rotates it about ``z`` over ``[0, pi)``. Consecutive views are then
+        always ``2*pi/views_per_shot`` apart, which is the smoothest ordering
+        available, at the cost of oversampling the poles.
+    require_fibonacci : bool, optional
+        Enforce that ``shots`` is a Fibonacci number for ``'phyllotaxis'``
+        (default True); pass ``False`` to bypass the check knowingly.
+
+    Returns
+    -------
+    base : ScanLoop
+        One shot holding the ``(views_per_shot, 3)`` unit base directions.
+    rotations : numpy.ndarray
+        ``(shots, 3, 3)`` rotation matrices, one per shot.
+
+    Raises
+    ------
+    ValueError
+        If either count is not positive, ``scheme`` is unknown, or
+        ``require_fibonacci`` is set and ``shots`` is not Fibonacci.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pulserver.design._lowlevel import make_rotated_segment_tilt
+    >>> base, rotations = make_rotated_segment_tilt(8, 13)
+    >>> base.positions.shape, rotations.shape
+    ((8, 3), (13, 3, 3))
+
+    Every shot really is the base moved rigidly, which is what lets one
+    waveform set serve them all:
+
+    >>> spokes = np.einsum("sij,vj->svi", rotations, base.positions)
+    >>> bool(np.allclose(np.linalg.norm(spokes, axis=-1), 1.0))
+    True
+
+    See Also
+    --------
+    make_spiral_phyllotaxis_tilt : freely placed interleaves, one waveform per spoke.
+    pulserver.design.make_zte_readout : the readout that consumes the base segment.
+    """
+    views_per_shot, shots = int(views_per_shot), int(shots)
+    if views_per_shot <= 0 or shots <= 0:
+        raise ValueError("views_per_shot and shots must be positive")
+
+    if scheme == "phyllotaxis":
+        if require_fibonacci and not _is_fibonacci(shots):
+            raise ValueError(
+                "shots must be a Fibonacci number so the base segment advances in small azimuth "
+                "steps; pass require_fibonacci=False to bypass"
+            )
+        golden = np.pi * (3.0 - math.sqrt(5.0))
+        index = np.arange(views_per_shot, dtype=float)
+        # Equal-area ring centres: symmetric about the equator, and covering
+        # both poles as closely as views_per_shot allows.
+        z = 1.0 - 2.0 * (index + 0.5) / views_per_shot
+        # Advancing by shots * golden keeps the union of the rotated segments
+        # on the same phyllotaxis lattice a single-shot spiral would trace.
+        base = _directions(z, index * shots * golden)
+        angles = np.arange(shots, dtype=float) * golden
+    elif scheme == "disk":
+        theta = 2.0 * np.pi * np.arange(views_per_shot, dtype=float) / views_per_shot
+        base = np.column_stack((np.cos(theta), np.zeros(views_per_shot), np.sin(theta)))
+        angles = np.pi * np.arange(shots, dtype=float) / shots
+    else:
+        raise ValueError("scheme must be phyllotaxis or disk")
+
+    loop = ScanLoop(base, (np.arange(views_per_shot, dtype=np.intp),), None, _DIRECTION_AXES)
+    return loop, angles_to_rotations(angles)
+
+
 def angles_to_rotations(angles):
     """Return one rotation about ``z`` per in-plane spoke angle (radians)."""
     angles = np.asarray(angles, dtype=float).reshape(-1)

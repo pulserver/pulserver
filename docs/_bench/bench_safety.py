@@ -35,24 +35,18 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ZOO = REPO_ROOT / "examples" / "sequences"
-# An editable install of another pulserver checkout registers redirecting
-# finders in sys.meta_path, and those run before sys.path is consulted -- so
-# without dropping them the benchmark can silently measure a different tree.
-sys.meta_path[:] = [f for f in sys.meta_path if type(f).__name__ != "ScikitBuildRedirectingFinder"]
-sys.path.insert(0, str(REPO_ROOT / "python"))
-
-import numpy as np  # noqa: E402
-import pulserver.pypulseq as pp  # noqa: E402
-from pulserver import UIParam  # noqa: E402
-from pulserver._ext._pulseg_wrapper import (  # noqa: E402
+import numpy as np
+import pulserver.pypulseq as pp
+from pulserver import UIParam
+from pulserver._ext._pulseg_wrapper import (
     _calc_mech_resonances,
     _calc_pns,
     _check_safety,
     _find_tr,
     _PulseqCollection,
 )
-from pulserver.io import read_esp_bands  # noqa: E402
-from pulserver.pypulseq._safety import chronaxie_kernel  # noqa: E402
+from pulserver.io import read_esp_bands
+from pulserver.pypulseq._safety import chronaxie_kernel
 
 MAX_FREQ_HZ = 3000.0
 RESOLUTION_HZ = 5.0

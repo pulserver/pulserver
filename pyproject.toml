@@ -14,7 +14,14 @@ dependencies = []
 
 [project.optional-dependencies]
 sequence = ["pypulseq>=1.5.0", "scipy", "numpy>=2.0", "matplotlib"]
-recon = ["numpy>=2.0", "ismrmrd>=1.14.1", "pydicom", "h5py", "psutil"]
+recon = [
+  "numpy>=2.0",
+  "ismrmrd>=1.14.1",
+  "pydicom",
+  "h5py",
+  "psutil",
+  "SimpleITK>=2.3",
+]
 # The reconstruction primitives use mri-nufft rather than maintaining a
 # second NUFFT implementation.  ``recon-cpu`` is the portable default;
 # ``recon-cuda`` selects the CUFINUFFT backend on Linux/CUDA hosts.

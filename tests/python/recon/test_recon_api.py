@@ -9,6 +9,7 @@ import pytest
 
 import pulserver.recon.algorithms as algorithms
 import pulserver.recon.denoisers as denoisers
+import pulserver.recon.density as density
 import pulserver.recon.physics as physics
 from pulserver.recon.preprocessing import (
     cartesian_3d_to_2d,
@@ -94,6 +95,72 @@ def test_pics_selects_fista_with_a_denoiser(monkeypatch):
     assert calls["prior"] == ("pnp", model)
 
 
+def test_pics_averages_a_sequence_of_denoisers(monkeypatch):
+    calls = {}
+    averaged = object()
+
+    class FISTA:
+        def __init__(self, **kwargs):
+            calls.update(kwargs)
+
+        def __call__(self, *_args, **_kwargs):
+            return "reconstructed"
+
+    models = [object(), object()]
+    monkeypatch.setattr(
+        algorithms,
+        "average",
+        lambda selected: calls.setdefault("models", selected) and averaged,
+    )
+    monkeypatch.setattr(
+        algorithms,
+        "import_module",
+        lambda _name: SimpleNamespace(
+            FISTA=FISTA,
+            L2=lambda: "l2",
+            PnP=lambda model: ("pnp", model),
+        ),
+    )
+    assert (
+        algorithms.pics(
+            object(),
+            _IdentityPhysics(),
+            models,
+            regularization=0.1,
+            iterations=2,
+            stepsize=0.5,
+        )
+        == "reconstructed"
+    )
+    assert calls["models"] is models
+    assert calls["prior"] == ("pnp", averaged)
+
+
+def test_polynomial_preconditioned_fista_uses_the_normal_operator():
+    class CountingPhysics(_IdentityPhysics):
+        def __init__(self):
+            self.normal_calls = 0
+
+        def A_adjoint_A(self, value):
+            self.normal_calls += 1
+            return value
+
+    selected_physics = CountingPhysics()
+    result = algorithms.pics(
+        np.ones(4),
+        selected_physics,
+        lambda value, _sigma: value,
+        regularization=0.1,
+        iterations=3,
+        stepsize=0.5,
+        polynomial_degree=2,
+        init=np.zeros(4),
+    )
+    assert selected_physics.normal_calls == 9
+    assert np.isfinite(result).all()
+    assert np.linalg.norm(result - 1) < 0.1
+
+
 def test_denoiser_factories_hide_deepinverse_class_names(monkeypatch):
     models = SimpleNamespace(
         WaveletDenoiser=lambda **kwargs: ("wavelet", kwargs),
@@ -106,6 +173,113 @@ def test_denoiser_factories_hide_deepinverse_class_names(monkeypatch):
     assert denoisers.tgv(crit=1e-4) == ("tgv", {"crit": 1e-4})
     with pytest.raises(ValueError, match="Unknown denoiser"):
         denoisers.denoiser("invented")
+
+
+def test_average_denoiser_is_a_registered_torch_model(monkeypatch):
+    torch = pytest.importorskip("torch")
+    monkeypatch.setattr(
+        denoisers,
+        "_models",
+        lambda: SimpleNamespace(Denoiser=torch.nn.Module),
+    )
+
+    class Scale(torch.nn.Module):
+        def __init__(self, factor):
+            super().__init__()
+            self.factor = factor
+
+        def forward(self, value, sigma):
+            return self.factor * value + sigma
+
+    model = denoisers.AverageDenoiser([Scale(1), Scale(3)])
+    result = model(torch.ones(2), 0.5)
+    torch.testing.assert_close(result, torch.full((2,), 2.5))
+    assert len(model.models) == 2
+
+
+def test_llr_matches_direct_singular_value_thresholding(monkeypatch):
+    torch = pytest.importorskip("torch")
+    monkeypatch.setattr(
+        denoisers,
+        "_models",
+        lambda: SimpleNamespace(Denoiser=torch.nn.Module),
+    )
+    generator = torch.Generator().manual_seed(8)
+    value = torch.randn(2, 5, 4, 4, generator=generator, dtype=torch.complex64)
+    threshold = torch.tensor([0.1, 0.2])
+    model = denoisers.llr(
+        dimension=2,
+        block_size=4,
+        cycle_spins=False,
+        block_batch_size=1,
+    )
+
+    result = model(value, threshold)
+    matrix = value.reshape(2, 5, -1)
+    u, singular_values, vh = torch.linalg.svd(matrix, full_matrices=False)
+    reference = (
+        u * (singular_values - threshold[:, None]).clamp_min(0).unsqueeze(-2)
+    ) @ vh
+    torch.testing.assert_close(
+        result,
+        reference.reshape_as(value),
+        atol=1e-5,
+        rtol=1e-5,
+    )
+
+
+def test_llr_chunked_3d_cycle_spins_preserve_zero_threshold(monkeypatch):
+    torch = pytest.importorskip("torch")
+    monkeypatch.setattr(
+        denoisers,
+        "_models",
+        lambda: SimpleNamespace(Denoiser=torch.nn.Module),
+    )
+    value = torch.randn(1, 5, 4, 4, 4, dtype=torch.complex64)
+    model = denoisers.LLR(
+        dimension=3,
+        block_size=2,
+        cycle_spins=True,
+        block_batch_size=1,
+    )
+    model(value, 0.0)
+    shifted_result = model(value, 0.0)
+    torch.testing.assert_close(
+        shifted_result,
+        value,
+        atol=1e-5,
+        rtol=1e-5,
+    )
+
+
+def test_pipe_menon_dcf_delegates_to_mrinufft(monkeypatch):
+    calls = {}
+
+    def pipe(trajectory, image_shape, **kwargs):
+        calls["trajectory"] = trajectory
+        calls["image_shape"] = image_shape
+        calls.update(kwargs)
+        return "weights"
+
+    monkeypatch.setattr(
+        density,
+        "import_module",
+        lambda name: SimpleNamespace(pipe=pipe) if name == "mrinufft.density" else None,
+    )
+    trajectory = np.zeros((32, 2))
+    assert (
+        density.pipe_menon_dcf(
+            trajectory,
+            (64, 64),
+            backend="finufft",
+            max_iter=12,
+        )
+        == "weights"
+    )
+    assert calls["trajectory"] is trajectory
+    assert calls["image_shape"] == (64, 64)
+    assert calls["backend"] == "finufft"
+    assert calls["max_iter"] == 12
 
 
 def test_cartesian_factory_returns_uniform_facade(monkeypatch):

@@ -87,6 +87,7 @@ from ._sampling import (  # noqa: F401
     make_epi_sampling,
     make_noncartesian_2d_sampling,
     make_noncartesian_projection_sampling,
+    make_rotated_projection_sampling,
     make_slice_loop,
 )
 from ._schedules import make_phase_cycling_schedule, make_rf_spoiling_schedule, make_traps_schedule  # noqa: F401
@@ -154,6 +155,7 @@ _SAMPLING = {
     "make_epi_sampling",
     "make_noncartesian_2d_sampling",
     "make_noncartesian_projection_sampling",
+    "make_rotated_projection_sampling",
     "make_slice_loop",
 }
 #: Per-repetition RF phase and flip-angle lists.

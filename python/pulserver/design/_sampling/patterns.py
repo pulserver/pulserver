@@ -25,6 +25,7 @@ from .epi import _from_shots, make_skipped_caipi_order
 from .noncartesian import (
     make_golden_means_3d_tilt,
     make_radial_tilt,
+    make_rotated_segment_tilt,
     make_spiral_phyllotaxis_tilt,
 )
 
@@ -33,6 +34,7 @@ __all__ = [
     "make_epi_sampling",
     "make_noncartesian_2d_sampling",
     "make_noncartesian_projection_sampling",
+    "make_rotated_projection_sampling",
 ]
 
 
@@ -481,3 +483,76 @@ def make_noncartesian_projection_sampling(matrix, *, views=None, scheme="golden_
     if scheme == "phyllotaxis":
         return make_spiral_phyllotaxis_tilt(views, int(interleaves))
     raise ValueError("scheme must be golden_means or phyllotaxis")
+
+
+def make_rotated_projection_sampling(matrix, *, shots, views=None, scheme="phyllotaxis", require_fibonacci=True):
+    """Build a 3D projection pattern as one base segment plus per-shot rotations.
+
+    :func:`make_noncartesian_projection_sampling` gives every spoke its own
+    direction, which a readout must encode with its own gradient waveform. A
+    continuous-gradient readout — ZTE above all — cannot pay that: an
+    interpreter holds a bounded number of waveform shapes per gradient
+    definition, so a few thousand freely placed spokes are rejected outright.
+
+    This factory covers the same sphere with a segment that is *designed once*
+    and replayed rigidly rotated, so the waveform count is set by ``views``
+    alone and does not grow with ``shots``. The rotation travels with each
+    block as an extension, which is what the scanner applies at playout.
+
+    Parameters
+    ----------
+    matrix : tuple of int
+        3D image matrix ``(nx, ny, nz)``; sets the default view count only.
+    shots : int
+        Number of rotated replays of the base segment.
+    views : int or None, optional
+        Spokes in the base segment. Defaults to a Nyquist-matched spherical
+        count for ``matrix``, divided among ``shots``.
+    scheme : {'phyllotaxis', 'disk'}, optional
+        Base-segment ordering; see
+        :func:`~pulserver.design._lowlevel.make_rotated_segment_tilt`.
+    require_fibonacci : bool, optional
+        Enforce a Fibonacci ``shots`` for ``'phyllotaxis'`` (default True).
+
+    Returns
+    -------
+    base : ScanLoop
+        One shot holding the ``(views, 3)`` unit base directions, ready to
+        hand to :func:`~pulserver.design.make_zte_readout` as its view order.
+    rotations : numpy.ndarray
+        ``(shots, 3, 3)`` rotation matrices for ``set_state(rotation=...)``.
+
+    Raises
+    ------
+    ValueError
+        If ``matrix`` is not 3D, or either count is not positive.
+
+    Examples
+    --------
+    >>> import pulserver.design as design
+    >>> base, rotations = design.make_rotated_projection_sampling((64, 64, 64), shots=13, views=32)
+    >>> base.positions.shape, rotations.shape
+    ((32, 3), (13, 3, 3))
+
+    The whole scan is then one designed segment and a rotation per shot::
+
+        readout = design.make_zte_readout(system, fov, nx, base.flatten(), excitation, tr_s=tr)
+        for shot, rotation in enumerate(rotations):
+            readout.set_state(lin_idx=shot * len(rotations) + np.arange(readout.num_views),
+                              rotation=rotation).add_to(seq)
+
+    See Also
+    --------
+    make_noncartesian_projection_sampling : one free direction per spoke.
+    """
+    matrix = _matrix(matrix, 3)
+    shots = int(shots)
+    if shots < 1:
+        raise ValueError("shots must be positive")
+    if views is None:
+        total = math.ceil(np.pi * max(matrix) ** 2)
+        views = max(1, -(-total // shots))
+    views = int(views)
+    if views < 1:
+        raise ValueError("views must be positive")
+    return make_rotated_segment_tilt(views, shots, scheme=scheme, require_fibonacci=require_fibonacci)

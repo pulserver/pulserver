@@ -9,12 +9,33 @@ NLINV calibration or use ``pulserver[recon-cuda]`` for the CUFINUFFT backend.
 from .algorithms import pics
 from .calibration import estimate_sensitivities, nlinv_sensitivities
 from .connection import Connection
-from .denoisers import TGV, TV, Wavelet, denoiser, tgv, tv, wavelet
+from .denoisers import (
+    AverageDenoiser,
+    LLR,
+    TGV,
+    TV,
+    Wavelet,
+    average,
+    denoiser,
+    llr,
+    tgv,
+    tv,
+    wavelet,
+)
+from .density import PipeMenonDCF, pipe, pipe_menon_dcf
 from .distortion import run_pyhysco
 from .epi import EpiAcquisitionGroups, partition_epi_acquisitions
+from .gradunwarp import (
+    CoefficientAccessor,
+    GradientCoefficients,
+    Gradunwarp,
+    ImageGeometry,
+    MrdCoefficientAccessor,
+)
 from .grouping import filter_acquisitions, group_by_labels, split_on_flag
 from .linops import available_nufft_backends
 from .metadata import MrdMetadata, acquisition_labels, has_acquisition_flag
+from .optimizers import PolynomialPreconditioner
 from .physics import (
     Cartesian2D,
     MRIPhysics,
@@ -45,15 +66,24 @@ from .server import Server
 from .sms import SmsEpiInputs
 
 __all__ = [
+    "AverageDenoiser",
     "Cartesian2D",
+    "CoefficientAccessor",
     "Connection",
     "EpiAcquisitionGroups",
+    "GradientCoefficients",
+    "Gradunwarp",
+    "ImageGeometry",
+    "LLR",
     "MRIPhysics",
+    "MrdCoefficientAccessor",
     "MrdMetadata",
     "NonCartesian2D",
     "NonCartesian3D",
     "OffResonance",
+    "PipeMenonDCF",
     "PmcPayload",
+    "PolynomialPreconditioner",
     "RtpServer",
     "Server",
     "SmsEpiInputs",
@@ -63,6 +93,7 @@ __all__ = [
     "Toeplitz",
     "Wavelet",
     "acquisition_labels",
+    "average",
     "available_nufft_backends",
     "cartesian_2d",
     "cartesian_3d_to_2d",
@@ -83,6 +114,8 @@ __all__ = [
     "off_resonance",
     "partition_epi_acquisitions",
     "pics",
+    "pipe",
+    "pipe_menon_dcf",
     "remove_readout_oversampling",
     "split_on_flag",
     "subspace",
@@ -90,6 +123,7 @@ __all__ = [
     "toeplitz",
     "tv",
     "run_pyhysco",
+    "llr",
     "wavelet",
     "write_dicom_series",
     "write_pmc_payload",

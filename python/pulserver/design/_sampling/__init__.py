@@ -24,6 +24,7 @@ from .noncartesian import (
     calc_uniform_angles,
     make_golden_means_3d_tilt,
     make_radial_tilt,
+    make_rotated_segment_tilt,
     make_spiral_phyllotaxis_tilt,
 )
 from .ordering import calc_chunk_indices, calc_traversal_order
@@ -32,6 +33,7 @@ from .patterns import (
     make_epi_sampling,
     make_noncartesian_2d_sampling,
     make_noncartesian_projection_sampling,
+    make_rotated_projection_sampling,
 )
 from .slices import make_slice_loop
 
@@ -66,6 +68,8 @@ __all__ = [
     "make_radial_order",
     "make_radial_tilt",
     "make_random_mask",
+    "make_rotated_projection_sampling",
+    "make_rotated_segment_tilt",
     "make_shuffling_order",
     "make_skipped_caipi_order",
     "make_slice_loop",

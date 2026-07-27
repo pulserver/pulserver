@@ -33,6 +33,218 @@ _RF_USE_CODE_TO_CHAR = {v: k for k, v in _RF_USE_CHAR_TO_CODE.items()}
 #: Gradient channel -> its column in a ``block_events`` row.
 _CHANNEL_SLOT = {"x": 2, "y": 3, "z": 4}
 
+#: Libraries the fast path only ever appends to. ``shape_library`` and
+#: ``extensions_library`` are absent on purpose: both are looked up by value
+#: while building (``find_or_insert`` / ``find``), so both need their keymap.
+_APPEND_ONLY_LIBRARIES = (
+    "arb_library",
+    "trap_library",
+    "grad_library",
+    "rf_library",
+    "adc_library",
+    "trigger_library",
+    "label_set_library",
+    "label_inc_library",
+    "rotation_library",
+    "rf_shim_library",
+)
+
+
+class _AppendOnlyLibrary(EventLibrary):
+    """An event library that is only ever appended to, stored as rows not a dict.
+
+    The fast builder's libraries are write-only: nothing reads an entry back
+    until deduplication, which wants the whole library as a matrix anyway, and
+    writing only ever sees the *deduplicated* result. Keeping them as
+    ``{id: payload}`` therefore buys nothing and costs a dict slot per event --
+    three million of them for a large 3D protocol -- so entries live in plain
+    rows and the ID is the position.
+
+    Runs are kept in order and may be Python lists or matrices, which is what a
+    future bulk registration path needs: a range of shots could claim a slab of
+    consecutive entries and fill it column by column, without a Python step per
+    event. Today every entry arrives through :meth:`append`.
+
+    ``data`` and ``type`` still answer as dicts for anything that asks, built on
+    demand, so the class stays a drop-in :class:`EventLibrary`.
+
+    Nothing here maintains ``keymap``, the by-value reverse index
+    ``EventLibrary.insert`` keeps, because nothing looks an entry up by value:
+    identical events are collapsed once, at write time, by rebuilding each
+    library from scratch. Carrying the index would cost a tuple and a dict slot
+    per event in the scan and never be read.
+
+    Collapsing duplicates *here* instead is tempting, and would cut the
+    libraries dramatically: a 512-cubed MPRAGE holds 917k trapezoid entries
+    drawn from 1531 distinct payloads, and 262k arbitrary-gradient entries
+    drawn from 2. It was measured and deliberately not taken -- it renumbers
+    every event ID, which leaves the C-side structure identical but the emitted
+    file slightly *larger* (the rounded write-time pass picks different
+    representatives when it sees fewer instances) and every ``.pge`` truth
+    fixture stale. Whoever revisits it: the key must include the entry type,
+    because ``grad_library`` holds a one-field reference into either
+    ``trap_library`` or ``arb_library`` and those number independently, so
+    ``(3,)`` is ambiguous and keying on the payload alone points blocks at the
+    wrong waveform.
+    """
+
+    def __init__(self, numpy_data: bool = False):
+        # Deliberately not EventLibrary.__init__: it assigns the very names
+        # this class publishes as computed views.
+        self.keymap: dict = {}
+        self.numpy_data = numpy_data
+        #: Ordered runs of entries: a Python list of payload tuples, or a matrix.
+        self._runs: list = [[]]
+        #: Per-run types: a list per Python run, one value or array per matrix.
+        self._type_runs: list = [[]]
+        self._tail: list = self._runs[0]
+        self._typed = False
+        self._count = 0
+        self._data_cache: dict | None = None
+        self._type_cache: dict | None = None
+
+    # -- building ------------------------------------------------------
+
+    def append(self, data, data_type: str | int = "") -> int:
+        """Append one payload and return its ID.
+
+        This runs once per event of the whole scan -- some three million times
+        for a large 3D protocol -- so it stays deliberately thin: a list
+        append, a counter, and one branch untyped libraries never take. The
+        dict views invalidate themselves by length rather than being cleared
+        from here.
+        """
+        self._tail.append(data)
+        self._count = count = self._count + 1
+        if data_type != "" or self._typed:
+            self._push_type(data_type)
+        return count
+
+    def _push_type(self, data_type: str | int) -> None:
+        """Record one per-entry type, backfilling if this is the first typed entry."""
+        tail_types = self._type_runs[-1]
+        if not self._typed:
+            self._typed = True
+            tail_types.extend([""] * (len(self._tail) - 1))
+        tail_types.append(data_type)
+
+    # -- reading -------------------------------------------------------
+
+    def matrix(self) -> np.ndarray:
+        """Every payload as one ``(n_entries, width)`` float matrix."""
+        if not self._count:
+            return np.empty((0, 0))
+        parts = [run if isinstance(run, np.ndarray) else np.array(run, dtype=float) for run in self._runs if len(run)]
+        return parts[0] if len(parts) == 1 else np.concatenate(parts)
+
+    def type_codes(self) -> np.ndarray | None:
+        """Per-entry type as a numeric code, or ``None`` when the library is untyped."""
+        if not self._typed:
+            return None
+        codes: dict = {}
+
+        def code(value):
+            try:
+                return codes.setdefault(value, len(codes) + 1)
+            except TypeError:  # unhashable, e.g. a numpy scalar array
+                return codes.setdefault(str(value), len(codes) + 1)
+
+        out = np.empty(self._count, dtype=float)
+        cursor = 0
+        for run, run_types in zip(self._runs, self._type_runs, strict=True):
+            span = len(run)
+            if not span:
+                continue
+            if isinstance(run, np.ndarray):
+                if isinstance(run_types, np.ndarray):
+                    out[cursor : cursor + span] = [code(value) for value in run_types.tolist()]
+                else:
+                    out[cursor : cursor + span] = code(run_types)
+            else:
+                out[cursor : cursor + span] = [code(value) for value in run_types]
+            cursor += span
+        return out
+
+    def type_at(self, index: int) -> str | int:
+        """Type of the entry at 0-based position ``index``.
+
+        Deduplication needs this only for the handful of entries it keeps, so
+        it walks the runs rather than materialising the whole ``type`` dict.
+        """
+        if not self._typed:
+            return ""
+        cursor = 0
+        for run, run_types in zip(self._runs, self._type_runs, strict=True):
+            span = len(run)
+            if index < cursor + span:
+                if not isinstance(run, np.ndarray):
+                    return run_types[index - cursor]
+                return run_types[index - cursor] if isinstance(run_types, np.ndarray) else run_types
+            cursor += span
+        raise IndexError(index)
+
+    def _iter_rows(self):
+        for run in self._runs:
+            if isinstance(run, np.ndarray):
+                yield from (tuple(row) for row in run.tolist())
+            else:
+                yield from run
+
+    @property
+    def data(self) -> dict:
+        """Payloads as ``{id: payload}``, materialised on first request."""
+        if self._data_cache is None or len(self._data_cache) != self._count:
+            self._data_cache = dict(enumerate(self._iter_rows(), start=1))
+        return self._data_cache
+
+    @property
+    def type(self) -> dict:
+        """Per-entry types as ``{id: type}``, matching ``EventLibrary`` semantics."""
+        cache = self._type_cache
+        if cache is not None and cache[0] == self._count:
+            return cache[1]
+        out: dict = {}
+        if self._typed:
+            cursor = 0
+            for run, run_types in zip(self._runs, self._type_runs, strict=True):
+                span = len(run)
+                if not span:
+                    continue
+                if isinstance(run, np.ndarray) and not isinstance(run_types, np.ndarray):
+                    if run_types != "":
+                        out.update(dict.fromkeys(range(cursor + 1, cursor + span + 1), run_types))
+                else:
+                    for offset, value in enumerate(run_types):
+                        if value != "":
+                            out[cursor + offset + 1] = value
+                cursor += span
+        self._type_cache = (self._count, out)
+        return out
+
+    @property
+    def next_free_ID(self) -> int:
+        """IDs are positions, so the next one is always one past the count."""
+        return self._count + 1
+
+    def insert(self, key_id: int, new_data, data_type: str | int = "") -> int:
+        """Append ``new_data``; ``key_id`` must be the ID it is about to get.
+
+        The upstream signature lets a caller choose the key. Here the key *is*
+        the position, so the only key that can be honoured is the next free one
+        -- and a caller passing anything else expects random-access semantics
+        this library does not have.
+        """
+        key_id = int(key_id)
+        if key_id not in (0, self._count + 1):
+            raise ValueError(
+                f"{type(self).__name__} assigns IDs by position: expected key {self._count + 1}, got {key_id}. "
+                "Use append() to add an entry, or pypulseq.EventLibrary if entries must be keyed freely."
+            )
+        return self.append(new_data if isinstance(new_data, np.ndarray) else tuple(new_data), data_type)
+
+    def __len__(self) -> int:
+        return self._count
+
 
 @dataclass(frozen=True)
 class Segment:
@@ -142,10 +354,11 @@ class Sequence(pp.Sequence):
         use_block_cache: bool = False,
     ):
         super().__init__(system=system, use_block_cache=use_block_cache)
-        self.arb_library = EventLibrary()
-        self.trap_library = EventLibrary()
-        self.rotation_library = EventLibrary()
-        self.rf_shim_library = EventLibrary()
+        # Every library the fast path appends to, in the order write() emits
+        # them. They are write-only until deduplication -- see
+        # _AppendOnlyLibrary -- so none of them is a dict.
+        for name in _APPEND_ONLY_LIBRARIES:
+            setattr(self, name, _AppendOnlyLibrary())
         # Bidirectional label registry; extended automatically for custom labels.
         _builtin = get_supported_labels()
         self._label_registry: dict[str, int] = {lbl: i + 1 for i, lbl in enumerate(_builtin)}
@@ -167,6 +380,11 @@ class Sequence(pp.Sequence):
         # see pulserver.design._system.copy_event.
         self._rf_shape_cache: dict[int, tuple] = {}
         self._grad_shape_cache: dict[int, tuple] = {}
+        # Block table as a matrix, built on demand by _block_row_matrix().
+        # After deduplication it, not the row dicts, holds the current event
+        # IDs; see the block_events property.
+        self._block_rows: np.ndarray | None = None
+        self._block_rows_authoritative = False
         # get_extension_type_ID() is a string lookup with a fallback that can
         # allocate; the four names used here are fixed, so resolve on demand
         # and remember.
@@ -196,50 +414,61 @@ class Sequence(pp.Sequence):
         seq_copy = self if in_place else self._clone_for_dedup()
 
         seq_copy.shape_library, shape_map = seq_copy.shape_library.remove_duplicates(9)
+        shape_lut = _index_lookup(shape_map)
 
-        for arb_id in list(seq_copy.arb_library.data):
-            data = seq_copy.arb_library.data[arb_id]
-            new_data = (*data[0:3], shape_map[data[3]], shape_map[data[4]], data[5])
-            if data != new_data:
-                seq_copy.arb_library.update(arb_id, None, new_data)
-
-        for rf_id in list(seq_copy.rf_library.data):
-            data = seq_copy.rf_library.data[rf_id]
-            new_data = (data[0], shape_map[data[1]], shape_map[data[2]], shape_map[data[3]], *data[4:])
-            if data != new_data:
-                seq_copy.rf_library.update(rf_id, None, new_data, seq_copy.rf_library.type.get(rf_id, "u"))
-
-        for adc_id in list(seq_copy.adc_library.data):
-            data = seq_copy.adc_library.data[adc_id]
-            shape_id = int(data[7])
-            new_data = (*data[0:7], shape_map[shape_id], data[8])
-            if data != new_data:
-                seq_copy.adc_library.update(adc_id, None, new_data)
-
-        seq_copy.arb_library, arb_map = _dedup_library_approx(seq_copy.arb_library, (6, -6, -6, -6, -6, -6))
+        # Every library that embeds shape IDs has them renumbered as part of
+        # its own deduplication pass; see _dedup_library_approx.
+        seq_copy.arb_library, arb_map = _dedup_library_approx(
+            seq_copy.arb_library, (6, -6, -6, -6, -6, -6), remap={3: shape_lut, 4: shape_lut}
+        )
         seq_copy.trap_library, trap_map = _dedup_library_approx(seq_copy.trap_library, (6, -6, -6, -6, -6))
 
-        for grad_id in list(seq_copy.grad_library.data):
-            grad_type = seq_copy.grad_library.type.get(grad_id, "")
-            old_ref = int(seq_copy.grad_library.data[grad_id][0])
-            if grad_type == "g":
-                new_ref = arb_map[old_ref]
-            elif grad_type == "t":
-                new_ref = trap_map[old_ref]
-            else:
-                new_ref = old_ref
-            seq_copy.grad_library.update(grad_id, None, (new_ref,), grad_type)
+        # A gradient entry is one reference into either the arbitrary or the
+        # trapezoid library, and those number independently -- so which lookup
+        # applies is decided by the entry's own type, and the type has to stay
+        # part of the deduplication key.
+        grad_ids = sorted(seq_copy.grad_library.data)
+        if grad_ids:
+            grad_data = seq_copy.grad_library.data
+            grad_types = seq_copy.grad_library.type
+            refs = np.fromiter((grad_data[i][0] for i in grad_ids), dtype=np.int64, count=len(grad_ids))
+            kinds = np.fromiter((grad_types.get(i, "") == "g" for i in grad_ids), dtype=bool, count=len(grad_ids))
+            traps = np.fromiter((grad_types.get(i, "") == "t" for i in grad_ids), dtype=bool, count=len(grad_ids))
+            new_refs = refs.copy()
+            new_refs[kinds] = _index_lookup(arb_map)[refs[kinds]]
+            new_refs[traps] = _index_lookup(trap_map)[refs[traps]]
+            # 1 for arbitrary, 2 for trapezoid, 0 for anything else -- the same
+            # three-way split the per-entry type string gave.
+            type_codes = np.where(kinds, 1.0, np.where(traps, 2.0, 0.0))
+            seq_copy.grad_library, grad_map = _dedup_library_approx(
+                seq_copy.grad_library,
+                (0,),
+                values=new_refs.reshape(-1, 1).astype(float),
+                type_codes=type_codes,
+            )
+        else:
+            seq_copy.grad_library, grad_map = _dedup_library_approx(seq_copy.grad_library, (0,))
 
-        seq_copy.grad_library, grad_map = _dedup_library_approx(seq_copy.grad_library, (0,))
-        seq_copy.rf_library, rf_map = _dedup_library_approx(seq_copy.rf_library, (6, 0, 0, 0, 6, 6, 6, 6, 6, 6))
-        seq_copy.adc_library, adc_map = _dedup_library_approx(seq_copy.adc_library, (0, -9, -6, 6, 6, 6, 6, 6, 6))
+        seq_copy.rf_library, rf_map = _dedup_library_approx(
+            seq_copy.rf_library,
+            (6, 0, 0, 0, 6, 6, 6, 6, 6, 6),
+            remap={1: shape_lut, 2: shape_lut, 3: shape_lut},
+        )
+        seq_copy.adc_library, adc_map = _dedup_library_approx(
+            seq_copy.adc_library, (0, -9, -6, 6, 6, 6, 6, 6, 6), remap={7: shape_lut}
+        )
 
-        for block_id in seq_copy.block_events:
-            seq_copy.block_events[block_id][2] = grad_map[seq_copy.block_events[block_id][2]]
-            seq_copy.block_events[block_id][3] = grad_map[seq_copy.block_events[block_id][3]]
-            seq_copy.block_events[block_id][4] = grad_map[seq_copy.block_events[block_id][4]]
-            seq_copy.block_events[block_id][1] = rf_map[seq_copy.block_events[block_id][1]]
-            seq_copy.block_events[block_id][5] = adc_map[seq_copy.block_events[block_id][5]]
+        # The block table is the one structure whose size is the scan's rather
+        # than the event vocabulary's, so it is renumbered as five column
+        # lookups on one integer matrix instead of five dict reads per block.
+        rows = seq_copy._block_row_matrix()
+        if rows.size:
+            rows[:, 1] = _index_lookup(rf_map)[rows[:, 1]]
+            grad_lut = _index_lookup(grad_map)
+            rows[:, 2] = grad_lut[rows[:, 2]]
+            rows[:, 3] = grad_lut[rows[:, 3]]
+            rows[:, 4] = grad_lut[rows[:, 4]]
+            rows[:, 5] = _index_lookup(adc_map)[rows[:, 5]]
 
         seq_copy.trigger_library, trig_map = _dedup_library_approx(seq_copy.trigger_library, (0, 0, 9, 9))
         seq_copy.label_set_library, label_set_map = _dedup_library_approx(seq_copy.label_set_library, (0, 0))
@@ -259,74 +488,118 @@ class Sequence(pp.Sequence):
         new_ext_lib = EventLibrary()
         node_cache: dict[tuple[int, int, int], int] = {}
 
-        def remap_ext_ref(ext_type_name: str, old_ref: int) -> int:
-            if ext_type_name == "TRIGGERS":
-                return trig_map[old_ref]
-            if ext_type_name == "LABELSET":
-                return label_set_map[old_ref]
-            if ext_type_name == "LABELINC":
-                return label_inc_map[old_ref]
-            if ext_type_name == "DELAYS":
-                return 0
-            if ext_type_name == "ROTATIONS":
-                return rotation_map[old_ref]
-            if ext_type_name == "RF_SHIMS":
-                return rf_shim_map[old_ref]
-            return old_ref
+        ref_maps = {
+            "TRIGGERS": trig_map,
+            "LABELSET": label_set_map,
+            "LABELINC": label_inc_map,
+            "ROTATIONS": rotation_map,
+            "RF_SHIMS": rf_shim_map,
+        }
 
-        for block_id, row in seq_copy.block_events.items():
-            head_id = int(row[6])
-            if head_id == 0:
-                continue
-
-            chain: list[tuple[int, int]] = []
-            cursor = head_id
-            while cursor != 0:
-                ext_data = old_ext_lib.data[cursor]
-                ext_type_id = int(ext_data[0])
-                ext_type_name = seq_copy.get_extension_type_string(ext_type_id)
-                remapped_ref = remap_ext_ref(ext_type_name, int(ext_data[1]))
-                if remapped_ref != 0:
-                    chain.append((ext_type_id, remapped_ref))
-                cursor = int(ext_data[2])
-
-            new_next = 0
-            for ext_type_id, remapped_ref in reversed(chain):
-                key = (ext_type_id, remapped_ref, new_next)
-                if key in node_cache:
-                    node_id = node_cache[key]
+        # An extension chain is canonicalised once per *node*, not once per
+        # block. The chain hanging off a node is determined by that node alone,
+        # so a scan whose every TR carries labels canonicalises its handful of
+        # distinct chains instead of repeating the walk for each of hundreds of
+        # thousands of blocks; the blocks then follow with one column lookup.
+        #
+        # A node's ``next`` is always an earlier node -- chains are built
+        # tail-first -- so ascending ID order visits every tail before its head,
+        # and it is also the order the old per-block walk first reached each
+        # node. New IDs therefore come out in the same order as before.
+        if old_ext_lib.data:
+            new_head = np.zeros(max(old_ext_lib.data) + 1, dtype=np.int64)
+            type_names: dict[int, str] = {}
+            for node_id in sorted(old_ext_lib.data):
+                ext_type_id, old_ref, next_id = (int(value) for value in old_ext_lib.data[node_id][:3])
+                type_name = type_names.get(ext_type_id)
+                if type_name is None:
+                    type_name = seq_copy.get_extension_type_string(ext_type_id)
+                    type_names[ext_type_id] = type_name
+                tail = int(new_head[next_id])
+                if type_name == "DELAYS":
+                    remapped_ref = 0
                 else:
-                    node_id = new_ext_lib.insert(0, key)
-                    node_cache[key] = node_id
-                new_next = node_id
+                    ref_map = ref_maps.get(type_name)
+                    remapped_ref = old_ref if ref_map is None else ref_map[old_ref]
+                if remapped_ref == 0:
+                    new_head[node_id] = tail  # dropped: the block inherits the rest of the chain
+                    continue
+                key = (ext_type_id, remapped_ref, tail)
+                node = node_cache.get(key)
+                if node is None:
+                    node = new_ext_lib.insert(0, key)
+                    node_cache[key] = node
+                new_head[node_id] = node
 
-            seq_copy.block_events[block_id][6] = new_next
+            if rows.size:
+                rows[:, 6] = new_head[rows[:, 6]]
 
         seq_copy.extensions_library = new_ext_lib
+        seq_copy._block_rows_authoritative = True
         seq_copy.block_cache.clear()
         return seq_copy
+
+    @property
+    def block_events(self) -> dict[int, list]:
+        """Block table as ``{block_id: [duration, rf, gx, gy, gz, adc, ext]}``.
+
+        Deduplication renumbers this table in one integer matrix rather than
+        row by row -- rewriting six hundred thousand seven-element lists costs
+        more than the renumbering itself -- so afterwards the matrix is the
+        authoritative copy and the dict is rebuilt from it only if something
+        actually asks for it. Writing does not: it reads the matrix directly.
+        """
+        if self._block_rows_authoritative:
+            self._block_events = dict(zip(self._block_events, self._block_rows.tolist(), strict=True))
+            self._block_rows_authoritative = False
+        return self._block_events
+
+    @block_events.setter
+    def block_events(self, value: dict[int, list]) -> None:
+        self._block_events = value
+        self._block_rows = None
+        self._block_rows_authoritative = False
+
+    def _block_row_matrix(self) -> np.ndarray:
+        """The block table as one editable ``(n_blocks, 7)`` integer matrix.
+
+        Deduplication renumbers five of those seven columns, and writing is the
+        only thing left that reads them, so the table is converted once and
+        carried as an array rather than rewritten row by row. The array is
+        cached, so a ``write`` following a ``remove_duplicates`` costs nothing
+        further; appending a block invalidates it by length.
+        """
+        rows = self._block_rows
+        if rows is None or len(rows) != len(self._block_events):
+            rows = np.fromiter(
+                (value for row in self._block_events.values() for value in row),
+                dtype=np.int64,
+                count=7 * len(self._block_events),
+            ).reshape(-1, 7)
+            self._block_rows = rows
+        return rows
 
     def _clone_for_dedup(self) -> Sequence:
         """A private copy holding only the members deduplication rewrites.
 
-        Deduplication replaces every event library outright and rewrites the
+        Deduplication replaces every event library outright and renumbers the
         event IDs on each block row, and the caller then records
         ``TotalDuration`` in the definitions. Nothing else changes, so nothing
         else is worth copying: a ``deepcopy`` of the whole sequence would walk
-        every tuple in every library -- some 600k of them for a large 3D scan
-        -- to produce copies that the very next step discards.
+        every tuple in every library -- some three million of them for a large
+        3D scan -- to produce copies that the very next step discards.
 
-        The four libraries listed below are the ones rewritten *in place*
-        (their shape references are remapped before the library itself is
-        replaced), so they are the ones that need their own dicts. Their
-        payloads are immutable, so the dicts can share them.
+        Nothing is rewritten *in place* any more: each library is rebuilt by
+        ``_dedup_library_approx`` and the block table is renumbered in a fresh
+        matrix, so the original sequence stays usable and no dict here needs
+        duplicating either.
         """
         clone = copy.copy(self)
         clone.definitions = dict(self.definitions)
-        clone.block_events = {block_id: list(row) for block_id, row in self.block_events.items()}
-        for name in ("arb_library", "grad_library", "rf_library", "adc_library"):
-            setattr(clone, name, _copy_library(getattr(self, name)))
         clone.block_cache = {}
+        clone._block_events = self._block_events
+        clone._block_rows = None
+        clone._block_rows_authoritative = False
         clone._view_cache = None
         clone._collection_cache = None
         clone._segment_cache = None
@@ -1003,7 +1276,7 @@ class Sequence(pp.Sequence):
                         ext_lib.insert(extension_id, data)
             new_block[6] = extension_id
 
-        self.block_events[block_index] = new_block
+        self._block_events[block_index] = new_block
         self.block_durations[block_index] = float(duration)
 
     # ------------------------------------------------------------------
@@ -1045,7 +1318,7 @@ class Sequence(pp.Sequence):
             event.freq_offset,
             event.phase_offset,
         )
-        rf_id = _append(self.rf_library, data, use_code)
+        rf_id = self.rf_library.append(data, use_code)
         return rf_id, shape_IDs
 
     def _fast_register_grad(self, event: SimpleNamespace):
@@ -1059,8 +1332,8 @@ class Sequence(pp.Sequence):
             self._grad_shape_cache[id(waveform)] = (waveform, times, amplitude, shape_IDs)
 
         data = (amplitude, event.first, event.last, *shape_IDs, event.delay)
-        arb_id = _append(self.arb_library, data)
-        grad_id = _append(self.grad_library, (arb_id,), "g")
+        arb_id = self.arb_library.append(data)
+        grad_id = self.grad_library.append((arb_id,), "g")
         return grad_id, shape_IDs
 
     # -- shape compression, the part that is worth caching -----------------
@@ -1111,8 +1384,8 @@ class Sequence(pp.Sequence):
 
     def _fast_register_trap(self, event: SimpleNamespace) -> int:
         data = (event.amplitude, event.rise_time, event.flat_time, event.fall_time, event.delay)
-        trap_id = _append(self.trap_library, data)
-        return _append(self.grad_library, (trap_id,), "t")
+        trap_id = self.trap_library.append(data)
+        return self.grad_library.append((trap_id,), "t")
 
     def _fast_register_adc(self, event: SimpleNamespace):
         shape_id = 0
@@ -1136,14 +1409,14 @@ class Sequence(pp.Sequence):
             shape_id,
             event.dead_time,
         )
-        adc_id = _append(self.adc_library, data)
+        adc_id = self.adc_library.append(data)
         return adc_id, shape_id
 
     def _fast_register_control(self, event: SimpleNamespace) -> int:
         event_type = ["output", "trigger"].index(event.type)
         event_channel = (["osc0", "osc1", "ext1"] if event_type == 0 else ["physio1", "physio2"]).index(event.channel)
         data = (event_type + 1, event_channel + 1, event.delay, event.duration)
-        return _append(self.trigger_library, data)
+        return self.trigger_library.append(data)
 
     def _get_label_idx(self, label: str) -> int:
         """Return 1-based int for *label*, auto-registering unknown strings."""
@@ -1156,16 +1429,16 @@ class Sequence(pp.Sequence):
     def _fast_register_label(self, event: SimpleNamespace) -> int:
         data = (event.value, self._get_label_idx(event.label))
         lib = self.label_set_library if event.type == "labelset" else self.label_inc_library
-        return _append(lib, data)
+        return lib.append(data)
 
     def _fast_register_rf_shim(self, event: SimpleNamespace) -> int:
         data = (np.abs(event.shim_vector), np.angle(event.shim_vector))
         data = np.stack(data, axis=-1).ravel()
-        return _append(self.rf_shim_library, tuple(data.tolist()))
+        return self.rf_shim_library.append(tuple(data.tolist()))
 
     def _fast_register_rotation(self, event: SimpleNamespace) -> int:
         data = tuple(event.rot_quaternion.as_quat(canonical=True, scalar_first=True).tolist())
-        return _append(self.rotation_library, data)
+        return self.rotation_library.append(data)
 
 
 def _extension_ref(extension: tuple[int, int]) -> int:
@@ -1173,72 +1446,68 @@ def _extension_ref(extension: tuple[int, int]) -> int:
     return extension[1]
 
 
-def _append(lib: EventLibrary, data, data_type: str | int = "") -> int:
-    """Append *data* to *lib* at the next free ID and return that ID.
+def _index_lookup(mapping: dict[int, int]) -> np.ndarray:
+    """``mapping`` as an array, so it can be applied to a whole column at once."""
+    if not mapping:
+        return np.zeros(1, dtype=np.int64)
+    lookup = np.zeros(max(mapping) + 1, dtype=np.int64)
+    lookup[list(mapping)] = list(mapping.values())
+    return lookup
 
-    ``EventLibrary.insert`` also records the payload in ``lib.keymap`` so the
-    entry can be looked up by value later. This path never does: identical
-    events are collapsed at write time, by rebuilding each library from
-    scratch. Maintaining the reverse index would therefore cost a tuple and a
-    dict slot for every event in the scan -- hundreds of thousands of them for
-    a large 3D protocol -- and nothing would ever read it.
 
-    Collapsing duplicates *here* instead is tempting, and would cut the
-    libraries dramatically: a 512³ MPRAGE holds 917k trapezoid entries drawn
-    from 1531 distinct payloads, and 262k arbitrary-gradient entries drawn from
-    2. It was measured and deliberately not taken -- it renumbers every event
-    ID, which leaves the C-side structure identical but the emitted file
-    slightly *larger* (the rounded write-time pass picks different
-    representatives when it sees fewer instances) and every ``.pge`` truth
-    fixture stale. Whoever revisits it: the key must include ``data_type``,
-    because ``grad_library`` holds a one-field reference into either
-    ``trap_library`` or ``arb_library`` and those number independently, so
-    ``(3,)`` is ambiguous and keying on the payload alone points blocks at the
-    wrong waveform.
+def _dedup_library_approx(
+    lib: EventLibrary,
+    digits: int | tuple[int, ...],
+    *,
+    remap: dict[int, np.ndarray] | None = None,
+    values: np.ndarray | None = None,
+    type_codes: np.ndarray | None = None,
+) -> tuple[EventLibrary, dict[int, int]]:
+    """Rounded deduplication using hardcoded per-library rounding profiles.
+
+    ``remap`` renumbers whole columns — the shape and waveform references an
+    entry holds — as part of the same pass. Those references used to be
+    rewritten first, one ``EventLibrary.update`` per entry, and the library
+    scanned afterwards; for a large 3D protocol that was a million-iteration
+    Python loop over data this function was about to convert to a matrix
+    anyway. Fusing them is exact rather than approximate: every rounding
+    profile treats a reference column as an integer, so remapping before the
+    rounding cannot change what the rounding produces.
+
+    ``values`` and ``type_codes`` let a caller that has already built those
+    arrays hand them straight over instead of having them rebuilt.
     """
-    key_id = lib.next_free_ID
-    lib.data[key_id] = data
-    if data_type != "":
-        lib.type[key_id] = data_type
-    lib.next_free_ID = key_id + 1
-    return key_id
-
-
-def _copy_library(lib: EventLibrary) -> EventLibrary:
-    """A library that can be rewritten without disturbing *lib*.
-
-    Only the three dicts are duplicated. Payloads are tuples, or arrays
-    ``EventLibrary.insert`` has already marked read-only, and rewriting an
-    entry replaces it rather than editing it -- so the copies can share them.
-    """
-    new_lib = EventLibrary(numpy_data=lib.numpy_data)
-    new_lib.data = dict(lib.data)
-    new_lib.type = dict(lib.type)
-    new_lib.keymap = dict(lib.keymap)
-    new_lib.next_free_ID = lib.next_free_ID
-    return new_lib
-
-
-def _dedup_library_approx(lib: EventLibrary, digits: int | tuple[int, ...]) -> tuple[EventLibrary, dict[int, int]]:
-    """Rounded deduplication using hardcoded per-library rounding profiles."""
     new_lib = EventLibrary(numpy_data=lib.numpy_data)
     mapping: dict[int, int] = {0: 0}
-    type_code: dict[str | int, int] = {}
 
-    ids = sorted(lib.data)
-    if not ids:
+    append_only = isinstance(lib, _AppendOnlyLibrary)
+    # An append-only library numbers its entries by position, so its IDs are
+    # already 1..n in order and asking for the dict would build one for nothing.
+    n_entries = len(lib) if append_only else len(lib.data)
+    if not n_entries:
         return new_lib, mapping
+    ids = range(1, n_entries + 1) if append_only else sorted(lib.data)
 
-    # One conversion of the whole library into a float matrix. It doubles as
-    # the validation the loop below used to do element by element: a ragged or
-    # non-numeric library cannot become a 2-D float array, so numpy raises
-    # exactly where a hand-rolled check would have.
-    try:
-        matrix = np.array([lib.data[old_id] for old_id in ids], dtype=float)
-    except (TypeError, ValueError) as exc:
-        raise RuntimeError("_dedup_library_approx requires uniform, fully numeric payload rows") from exc
+    if values is not None:
+        matrix = values
+    elif append_only:
+        matrix = lib.matrix()
+    else:
+        # One conversion of the whole library into a float matrix. It doubles as
+        # the validation the loop below used to do element by element: a ragged or
+        # non-numeric library cannot become a 2-D float array, so numpy raises
+        # exactly where a hand-rolled check would have.
+        try:
+            matrix = np.array([lib.data[old_id] for old_id in ids], dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("_dedup_library_approx requires uniform, fully numeric payload rows") from exc
     if matrix.ndim != 2:
         raise RuntimeError("_dedup_library_approx requires uniform, fully numeric payload rows")
+
+    if remap:
+        matrix = matrix.copy()
+        for column, lookup in remap.items():
+            matrix[:, column] = lookup[matrix[:, column].astype(np.int64)]
 
     width = matrix.shape[1]
     if isinstance(digits, int):
@@ -1250,8 +1519,13 @@ def _dedup_library_approx(lib: EventLibrary, digits: int | tuple[int, ...]) -> t
 
     rounded = _round_sig_matrix(matrix, digits_tuple)
 
+    if type_codes is None and append_only:
+        type_codes = lib.type_codes()
     lib_types = lib.type
-    if lib_types:
+    if type_codes is not None:
+        type_ids = type_codes
+    elif lib_types:
+        type_code: dict[str | int, int] = {}
         type_ids = np.asarray(
             [type_code.setdefault(lib_types.get(old_id, ""), len(type_code) + 1) for old_id in ids], dtype=float
         )
@@ -1272,8 +1546,7 @@ def _dedup_library_approx(lib: EventLibrary, digits: int | tuple[int, ...]) -> t
     uniq_to_new_id = np.zeros(len(first_idx), dtype=np.int32)
     for new_id, uniq_idx in enumerate(order, start=1):
         row_idx = int(first_idx[uniq_idx])
-        old_id = ids[row_idx]
-        type_key = lib.type.get(old_id, "")
+        type_key = lib.type_at(row_idx) if append_only else lib.type.get(ids[row_idx], "")
         if lib.numpy_data:
             arr = rounded[row_idx].copy()
             arr.flags.writeable = False

@@ -112,6 +112,45 @@ def _schedule(value, length: int, name: str, *, integer: bool) -> tuple:
     return tuple(float(item) for item in floats)
 
 
+def _minimal_rotation(start: np.ndarray, end: np.ndarray):
+    """Smallest rotation carrying unit vector ``start`` onto unit vector ``end``."""
+    from scipy.spatial.transform import Rotation
+
+    cross = np.cross(start, end)
+    sine = float(np.linalg.norm(cross))
+    cosine = float(np.dot(start, end))
+    if sine <= 1e-12:
+        if cosine > 0.0:
+            return Rotation.identity()
+        # Antipodal: any axis perpendicular to start turns it through pi.
+        basis = np.eye(3)[int(np.argmin(np.abs(start)))]
+        axis = np.cross(start, basis)
+        return Rotation.from_rotvec(np.pi * axis / np.linalg.norm(axis))
+    return Rotation.from_rotvec(np.arctan2(sine, cosine) * cross / sine)
+
+
+def _constant_rotation(directions: np.ndarray, tolerance: float = 1e-8):
+    """The single rotation advancing every direction to the next, or ``None``.
+
+    Rotation encoding is only exact when the view order is a *constant-rotation
+    orbit* -- each direction the previous one turned by one fixed rotation --
+    because that is what makes every transition the same waveform seen from a
+    rotated frame. Such an orbit necessarily lies on a circle, which is why
+    ``Zte`` can encode a disk this way but not a freely placed direction set.
+    """
+    from scipy.spatial.transform import Rotation
+
+    # ``directions`` is published read-only, and SciPy's Cython kernels need a
+    # writable buffer, so the check runs on its own copy.
+    directions = np.array(directions, dtype=float, copy=True)
+    if len(directions) < 2:
+        return Rotation.identity()
+    step = _minimal_rotation(directions[0], directions[1])
+    if len(directions) > 2 and not np.allclose(step.apply(directions[:-1]), directions[1:], atol=tolerance):
+        return None
+    return step
+
+
 def _extended_gradients(system, times: np.ndarray, amplitudes: np.ndarray) -> tuple:
     events = []
     for axis, waveform in zip(_CHANNELS, amplitudes.T, strict=True):
@@ -159,6 +198,24 @@ class Zte(Readout):
         transition in the supplied ordering.
     derate : bool
         Apply standard system gradient/slew derates.
+    rotation_encoded : bool, optional
+        Put the view-to-view direction change in a per-block rotation instead
+        of in the waveform. Off by default.
+
+        Left off, each view gets a transition waveform of its own, which is
+        exact for any ordering but costs one gradient shape per view. An
+        interpreter holds a bounded number of shapes per gradient definition
+        (16 for pulseg), and a ZTE segment's transitions all share a definition
+        — same sample count, same delay — so a segment beyond a handful of
+        views is rejected outright.
+
+        Turned on, the segment is described once in view 0's frame and each
+        view carries the rotation that puts it back where it belongs, leaving
+        two gradient shapes for the whole segment no matter how long it is.
+        The cost is that the ordering must be a *constant-rotation orbit* —
+        every direction the previous one turned by the same fixed rotation,
+        which necessarily traces a circle. A planar disk qualifies; a
+        phyllotaxis interleaf does not, and raises.
 
     Attributes
     ----------
@@ -190,6 +247,7 @@ class Zte(Readout):
         dead_time_s=None,
         tr_s=None,
         derate=True,
+        rotation_encoded=False,
     ):
         Readout.__init__(self, system)
         if exc_rf is None or getattr(exc_rf, "type", None) != "rf":
@@ -271,6 +329,21 @@ class Zte(Readout):
             system.grad_raster_time,
         )
 
+        self.rotation_encoded = bool(rotation_encoded)
+        self._step_rotation = None
+        self._block_rotations = None
+        if self.rotation_encoded:
+            step = _constant_rotation(self.directions)
+            if step is None:
+                raise ValueError(
+                    "rotation_encoded=True needs a constant-rotation view order -- each direction the "
+                    "previous one turned by one fixed rotation, which puts them on a circle. The supplied "
+                    f"{self.num_views} directions are not such an orbit, so no single waveform can serve "
+                    "every view; pass rotation_encoded=False to encode each transition in its own waveform"
+                )
+            self._step_rotation = step
+            self._block_rotations = tuple(step**index for index in range(self.num_views))
+
         self.gradient_amplitude = self.delta_k / dwell_s
         endpoints = self.gradient_amplitude * self.directions
         ramp_up_s = ceil_to_raster(self.gradient_amplitude / system.max_slew, system.grad_raster_time)
@@ -304,24 +377,35 @@ class Zte(Readout):
                 )
             block_durations = [self.tr] * self.num_views
 
-        view_gradients = []
-        for index, start in enumerate(endpoints):
-            end = endpoints[index + 1] if index + 1 < self.num_views else np.zeros(3)
-            transition_s = transition_durations[index]
-            transition_end_s = self.view_duration_s + transition_s
+        def view_gradient(start, end, index):
+            transition_end_s = self.view_duration_s + transition_durations[index]
             times = [0.0, self.view_duration_s, transition_end_s]
             amplitudes = [start, start, end]
             if block_durations[index] > transition_end_s + 1e-12:
                 times.append(block_durations[index])
                 amplitudes.append(end)
-            view_gradients.append(
-                _extended_gradients(
-                    system,
-                    np.asarray(times),
-                    np.asarray(amplitudes),
+            return _extended_gradients(system, np.asarray(times), np.asarray(amplitudes))
+
+        if self.rotation_encoded:
+            # Two waveforms serve the whole segment, both written in view 0's
+            # frame: an interior view holding the first endpoint and slewing to
+            # the second, and a closing view slewing to zero instead. Every
+            # other view is one of those two under its own block rotation, so
+            # the shape count is fixed however many views (or shots) are played.
+            first = np.array(self.directions[0], dtype=float, copy=True)
+            canonical_end = self.gradient_amplitude * self._step_rotation.apply(first)
+            interior = view_gradient(endpoints[0], canonical_end, 0) if self.num_views > 1 else ()
+            closing = view_gradient(endpoints[0], np.zeros(3), self.num_views - 1)
+            self._view_gradients = (interior, closing)
+        else:
+            self._view_gradients = tuple(
+                view_gradient(
+                    start,
+                    endpoints[index + 1] if index + 1 < self.num_views else np.zeros(3),
+                    index,
                 )
+                for index, start in enumerate(endpoints)
             )
-        self._view_gradients = tuple(view_gradients)
         self.transition_durations_s = tuple(transition_durations)
         self.block_durations_s = tuple(block_durations)
         self.duration = self.ramp_up_s + sum(self.block_durations_s)
@@ -344,15 +428,30 @@ class Zte(Readout):
         )
         return self
 
+    def _block_rotation_events(self, segment_rotation):
+        """One rotation event per view: the segment's, turned by this view's step."""
+        if not self.rotation_encoded:
+            return None
+        base = segment_rotation.rot_quaternion if segment_rotation is not None else None
+        return tuple(
+            normalize_rotation(step if base is None else base * step) for step in self._block_rotations
+        )
+
     def _build_blocks(self):
         state = self._require_state()
+        rotations = self._block_rotation_events(state.rotation)
+
         blocks = []
         ramp = [*self._ramp_up]
         if state.rotation is not None:
             ramp.append(state.rotation)
         blocks.append(tuple(ramp))
 
-        for index, gradients in enumerate(self._view_gradients):
+        for index in range(self.num_views):
+            if self.rotation_encoded:
+                gradients = self._view_gradients[1 if index == self.num_views - 1 else 0]
+            else:
+                gradients = self._view_gradients[index]
             rf = copy_event(self._rf)
             adc = copy_event(self._adc)
             rf.phase_offset += state.phase_offset_rad[index]
@@ -363,7 +462,9 @@ class Zte(Readout):
                 adc,
                 pp.make_label(type="SET", label="LIN", value=state.lin_idx[index]),
             ]
-            if state.rotation is not None:
+            if rotations is not None:
+                events.append(rotations[index])
+            elif state.rotation is not None:
                 events.append(state.rotation)
             blocks.append(tuple(events))
         return tuple(blocks)

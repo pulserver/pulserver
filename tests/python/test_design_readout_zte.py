@@ -115,6 +115,105 @@ def test_zte_accepts_planar_disk_order_and_rotates_the_complete_disk():
     assert module.get().rotation_library.data
 
 
+def test_rotation_encoded_zte_designs_one_waveform_and_steps_it_with_block_rotations():
+    """A long segment must cost a fixed number of gradient shapes, not one per view.
+
+    Every ZTE transition lands in the same gradient definition (same sample
+    count, same delay), and an interpreter holds a bounded number of shapes per
+    definition, so a segment that encodes each direction change in its own
+    waveform is rejected past a handful of views. Rotation encoding keeps two
+    waveforms however long the segment is.
+    """
+    system = _system()
+    views = 24
+    module = readout.Zte(
+        system,
+        (0.22,) * 3,
+        (32,) * 3,
+        sampling.calc_uniform_angles(views),
+        _hard(system).rf,
+        tr_s=2e-3,
+        rotation_encoded=True,
+    )
+
+    # An interior waveform and a closing one, shared by every view.
+    assert len(module._view_gradients) == 2
+    assert module.num_views == views
+
+    module.set_state(lin_idx=np.arange(views))
+    blocks = module.blocks
+    assert len(blocks) == views + 1  # ramp-up, then one per view
+
+    # Each view carries its own rotation, and they advance by a constant step.
+    quaternions = [
+        next(event.rot_quaternion for event in block if getattr(event, "type", None) == "rot3D")
+        for block in blocks[1:]
+    ]
+    step = quaternions[1]  # view 0 sits in the canonical frame, so its rotation is the identity
+    for index, got in enumerate(quaternions):
+        assert np.allclose(np.abs(got.as_quat() @ (step**index).as_quat()), 1.0)
+
+    # The rotated canonical waveform reproduces the requested directions: view k
+    # holds its own direction, then slews to the next one.
+    for index in range(views - 1):
+        rotation = quaternions[index]
+        held = rotation.apply(_gradient_vector(blocks[index + 1], "first"))
+        assert np.allclose(held / np.linalg.norm(held), module.directions[index], atol=1e-9)
+        arrived = rotation.apply(_gradient_vector(blocks[index + 1], "last"))
+        assert np.allclose(arrived / np.linalg.norm(arrived), module.directions[index + 1], atol=1e-9)
+
+    # ...and the segment still ends at zero, so shots stay independent.
+    assert np.allclose(_gradient_vector(blocks[-1], "last"), 0.0, atol=1e-9)
+
+
+def test_rotation_encoded_zte_composes_the_segment_rotation_with_the_view_step():
+    system = _system()
+    views = 8
+    module = readout.Zte(
+        system, (0.22,) * 3, (32,) * 3, sampling.calc_uniform_angles(views),
+        _hard(system).rf, tr_s=2e-3, rotation_encoded=True,
+    )
+    segment = Rotation.from_euler("x", 37.0, degrees=True)
+    module.set_state(lin_idx=0, rotation=segment)
+
+    quaternions = [
+        next(event.rot_quaternion for event in block if getattr(event, "type", None) == "rot3D")
+        for block in module.blocks[1:]
+    ]
+    for index, rotation in enumerate(quaternions):
+        placed = rotation.apply(np.array(module.directions[0], copy=True))
+        assert np.allclose(placed, segment.apply(np.array(module.directions[index], copy=True)), atol=1e-9)
+
+
+def test_rotation_encoded_zte_rejects_a_view_order_that_is_not_a_constant_rotation_orbit():
+    """Only a circular orbit can be replayed from one waveform; say so rather than mis-encode."""
+    system = _system()
+    base, _ = sampling.make_rotated_projection_sampling((32,) * 3, shots=5, views=12, scheme="phyllotaxis")
+    with pytest.raises(ValueError, match="constant-rotation view order"):
+        readout.Zte(system, (0.22,) * 3, (32,) * 3, base.flatten(), _hard(system).rf,
+                    tr_s=4e-3, rotation_encoded=True)
+
+
+def test_rotated_projection_sampling_shots_are_rigid_copies_of_the_base_segment():
+    base, rotations = sampling.make_rotated_projection_sampling((32,) * 3, shots=13, views=16)
+    assert base.positions.shape == (16, 3)
+    assert rotations.shape == (13, 3, 3)
+    assert np.allclose(np.linalg.norm(base.positions, axis=1), 1.0)
+
+    spokes = np.einsum("sij,vj->svi", rotations, base.positions)
+    assert np.allclose(np.linalg.norm(spokes, axis=-1), 1.0)
+    # Congruence is the whole point: pairwise angles inside a shot are invariant.
+    reference = base.positions @ base.positions.T
+    for shot in spokes:
+        assert np.allclose(shot @ shot.T, reference, atol=1e-9)
+
+    disk, disk_rotations = sampling.make_rotated_projection_sampling((32,) * 3, shots=6, views=10, scheme="disk")
+    assert np.allclose(disk.positions[:, 1], 0.0)  # great circle in xz
+    assert disk_rotations.shape == (6, 3, 3)
+    with pytest.raises(ValueError, match="Fibonacci"):
+        sampling.make_rotated_projection_sampling((32,) * 3, shots=10, views=8)
+
+
 def test_zte_rejects_nonuniform_rf_bandwidth_and_tr_that_cannot_fit_a_transition():
     system = _system()
     with pytest.raises(ValueError, match="too long"):

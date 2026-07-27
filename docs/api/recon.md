@@ -14,6 +14,37 @@ Install `pulserver[recon-distortion]` only when PyHySCO reverse-polarity
 distortion correction is required. PyHySCO is GPL-3.0-only, so Pulserver does
 not vendor or import it.
 
+Gradient nonlinearity correction is included in `pulserver[recon]`. It accepts
+a coefficient-file path, serialized coefficient text, or a keyed string
+parameter from the vendor-neutral MRD XML header. It uses the reconstructed
+matrix rather than the acquired matrix when constructing its physical grid:
+
+```python
+from pulserver.recon import (
+    Gradunwarp,
+    ImageGeometry,
+    MrdCoefficientAccessor,
+)
+
+geometry = ImageGeometry.from_mrd(
+    image_header,
+    shape=reconstructed_volume.shape[-3:],
+)
+correct = Gradunwarp.from_file(
+    MrdCoefficientAccessor(
+        mrd_xml_header,
+        key=coefficient_parameter_key,
+    ),
+    geometry,
+)
+corrected_volume = correct(reconstructed_volume)
+```
+
+The parameter key belongs to the acquisition-client/MRD transport contract and
+is therefore supplied by the caller. Coefficient contents are excluded from
+object representations. Resampling always uses SimpleITK's native cubic
+B-spline implementation in both 2D and 3D.
+
 The main application surface is one physics factory, optional decorators, one
 denoiser, and `pics`:
 
@@ -42,6 +73,49 @@ coefficients = pics(
 With no denoiser, `pics` uses CG and solves
 `(AᴴA + λI)x = Aᴴy`. With a denoiser it uses plug-and-play FISTA, where
 `regularization` is the denoiser threshold/noise level.
+
+LLR treats image channels as contrasts or subspace coefficients and applies
+nuclear soft-thresholding to local 2D or 3D blocks. The implementation stays
+entirely in Torch, uses the small channel-channel Gram matrix when channels
+are fewer than block voxels, and bounds its workspace with
+`block_batch_size`:
+
+```python
+from pulserver.recon import llr, pics, wavelet
+
+regularizers = [
+    llr(dimension=3, block_size=8, block_batch_size=1024),
+    wavelet(dimension=3, level=3, complex_data=True),
+]
+coefficients = pics(
+    dynamic_kspace,
+    physics=Toeplitz(dynamic),
+    denoiser=regularizers,  # equal-weight proximal average
+    regularization=0.02,
+    polynomial_degree=3,
+    iterations=30,
+)
+```
+
+Passing a denoiser sequence is equivalent to wrapping it with
+`AverageDenoiser`. A positive `polynomial_degree` uses the L2-optimal
+polynomial preconditioner for the FISTA gradient. Degree `d` adds `d`
+applications of the normal operator per iteration, making this most useful
+when `AᴴA` is much cheaper than denoising, as with a Toeplitz normal.
+
+Pipe--Menon density compensation delegates to the installed MRI-NUFFT
+backend:
+
+```python
+from pulserver.recon import pipe_menon_dcf
+
+dcf = pipe_menon_dcf(
+    trajectory,
+    image_shape=(256, 256, 192),
+    backend="cufinufft",
+    max_iter=30,
+)
+```
 
 `Subspace`, `OffResonance`, and `Toeplitz` are composable decorators:
 
@@ -72,9 +146,13 @@ exact normal operation when mri-nufft has no combined Toeplitz kernel.
    pulserver.recon.physics.OffResonance
    pulserver.recon.physics.Toeplitz
    pulserver.recon.algorithms.pics
+   pulserver.recon.denoisers.average
+   pulserver.recon.denoisers.llr
    pulserver.recon.denoisers.wavelet
    pulserver.recon.denoisers.tv
    pulserver.recon.denoisers.tgv
+   pulserver.recon.density.pipe_menon_dcf
+   pulserver.recon.optimizers.PolynomialPreconditioner
    pulserver.recon.preprocessing.cartesian_3d_to_2d
    pulserver.recon.preprocessing.remove_readout_oversampling
    pulserver.recon.preprocessing.coil_compress
@@ -136,6 +214,10 @@ phase-sensitive FSE application may still acquire its own phase reference.
    pulserver.recon.preprocessing.correct_epi_eddy_currents
    pulserver.recon.sms.SmsEpiInputs
    pulserver.recon.distortion.run_pyhysco
+   pulserver.recon.gradunwarp.Gradunwarp
+   pulserver.recon.gradunwarp.ImageGeometry
+   pulserver.recon.gradunwarp.GradientCoefficients
+   pulserver.recon.gradunwarp.MrdCoefficientAccessor
 ```
 
 ## Gadgetron integration
@@ -198,6 +280,10 @@ sms_inputs = prepare_sms_epi(
    :members:
    :no-index:
 
+.. automodule:: pulserver.recon.density
+   :members:
+   :no-index:
+
 .. automodule:: pulserver.recon.algorithms
    :members:
    :no-index:
@@ -227,6 +313,10 @@ sms_inputs = prepare_sms_epi(
    :no-index:
 
 .. automodule:: pulserver.recon.distortion
+   :members:
+   :no-index:
+
+.. automodule:: pulserver.recon.gradunwarp
    :members:
    :no-index:
 

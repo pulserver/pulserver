@@ -1509,7 +1509,14 @@ def make_zte_readout(system, fov, matrix, view_order, excitation, **kwargs):
         Non-selective RF module, or the RF event itself.
     **kwargs
         Forwarded to ``Zte``: ``bandwidth_hz_px``, ``oversamp``,
-        ``dead_time_s``, ``tr_s``, ``derate``.
+        ``dead_time_s``, ``tr_s``, ``derate``, ``rotation_encoded``.
+
+        ``rotation_encoded=True`` is what makes a long segment playable: it
+        moves the view-to-view direction change out of the waveform and into a
+        per-block rotation, so the segment costs two gradient shapes instead of
+        one per view. It requires a constant-rotation view order -- see
+        :func:`pulserver.design.make_rotated_projection_sampling`, whose
+        ``'disk'`` scheme produces one.
 
     Returns
     -------

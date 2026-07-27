@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import numpy as np
 import pulserver.recon.calibration as calibration
 import pulserver.recon.epi as epi
 import pulserver.recon.linops as linops
@@ -33,6 +34,28 @@ def test_upstream_selectors_return_the_requested_implementation(monkeypatch):
     assert linops.mrpro_operator("fourier") is object
     assert prox.deepinverse_prior("tv", strength=0.1) == ("tv", {"strength": 0.1})
     assert optimizers.deepinverse_optimizer("fista", max_iter=10) == ("fista", {"max_iter": 10})
+
+
+def test_polynomial_preconditioner_degree_zero_and_call_count():
+    degree_zero = optimizers.PolynomialPreconditioner(
+        lambda value: 2 * value,
+        degree=0,
+    )
+    assert degree_zero(2.0) == pytest.approx(3.0)
+
+    calls = []
+
+    def normal(value):
+        calls.append(value)
+        return 2 * value
+
+    polynomial = optimizers.PolynomialPreconditioner(
+        normal,
+        degree=3,
+        scale=0.5,
+    )
+    assert np.isfinite(polynomial(1.0))
+    assert len(calls) == 3
 
 
 def test_nlinv_preserves_the_torch_like_input_object(monkeypatch):

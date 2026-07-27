@@ -18,6 +18,60 @@ from pulserver.pypulseq._sequence import _RF_USE_CODE_TO_CHAR
 from pulserver.pypulseq._views import build_views
 
 
+def _render_int_rows(matrix: np.ndarray, widths: tuple[int, ...]) -> str | None:
+    """Render a non-negative integer matrix as space-separated right-aligned text.
+
+    ``[BLOCKS]`` is the one section with a row per block rather than per
+    distinct event, so on a large 3D protocol it is most of the file. Formatting
+    it row by row means turning some five million array elements into Python
+    ints first, purely to hand them to ``%``; here the digits are computed with
+    arithmetic on the whole column and the section comes out as one string.
+
+    Returns ``None`` when a value will not fit its field -- ``%3d`` widens
+    rather than truncating, so those rows are not fixed-width and the caller
+    has to fall back to formatting them individually.
+    """
+    rows, columns = matrix.shape
+    if columns != len(widths) or rows == 0 or matrix.min() < 0:
+        return None
+
+    # A field is as wide as its format asks unless the value needs more --
+    # ``%3d`` widens rather than truncating -- so rows are not all the same
+    # length. Each field is laid out at the widest it could be here, and the
+    # padding no row actually printed is dropped in one masked compaction at
+    # the end.
+    maxima = matrix.max(axis=0)
+    spans = [max(width, len(str(int(value)))) for width, value in zip(widths, maxima, strict=True)]
+
+    line_width = sum(spans) + len(spans)  # one separator per field, newline last
+    text = np.full((rows, line_width), 32, dtype=np.uint8)  # spaces
+    keep = np.ones((rows, line_width), dtype=bool)
+
+    cursor = 0
+    for column, (span, width) in enumerate(zip(spans, widths, strict=True)):
+        values = matrix[:, column]
+        field = text[:, cursor : cursor + span]
+        remainder = values
+        for digit in range(span - 1, -1, -1):
+            field[:, digit] = 48 + (remainder % 10)
+            remainder = remainder // 10
+
+        # How many characters %{width}d would have emitted for each value.
+        digits = np.ones(rows, dtype=np.int64)
+        for power in range(1, span):
+            digits += values >= 10**power
+        printed = np.maximum(digits, width)
+        positions = np.arange(span)
+        # Everything left of the first significant digit is padding, not a
+        # zero; of that padding, only what %{width}d would have emitted is kept.
+        field[positions < (span - digits)[:, None]] = 32
+        keep[:, cursor : cursor + span] = positions >= (span - printed)[:, None]
+        cursor += span + 1
+
+    text[:, -1] = 10  # newline
+    return text[keep].tobytes().decode("ascii")
+
+
 def write(
     seq,
     output: str | Path | BinaryIO | None = None,
@@ -40,9 +94,14 @@ def write(
 
     target.set_definition("TotalDuration", sum(target.block_durations.values()))
 
-    if target.block_events:
-        last_block_id = next(reversed(target.block_events))
-        last_row = target.block_events[last_block_id]
+    # Deduplication renumbers the block table in one integer matrix rather than
+    # row by row, so that matrix -- not the row dicts, which still hold the
+    # pre-deduplication IDs -- is what gets written. Reading ``block_events``
+    # here would rebuild those dicts for nothing, so nothing below does.
+    block_rows = target._block_row_matrix()
+
+    if len(block_rows):
+        last_row = block_rows[-1]
         for channel, slot in (("x", 2), ("y", 3), ("z", 4)):
             grad_id = int(last_row[slot])
             if grad_id == 0:
@@ -113,27 +172,31 @@ def write(
     # cost scales with the scan rather than with the number of distinct events:
     # the raster division and its round-trip check are done for the whole
     # column at once, and each row is emitted with a single %-format.
-    block_events = target.block_events
-    n_blocks = len(block_events)
+    n_blocks = len(block_rows)
     if n_blocks:
         block_row_fmt = f"%{len(str(n_blocks))}d %3d %3d %3d %3d %3d %2d %2d\n"
-        block_durations = target.block_durations
-        ticks = np.fromiter(
-            (block_durations[block_id] for block_id in block_events),
-            dtype=float,
-            count=n_blocks,
-        )
+        ticks = np.fromiter(target.block_durations.values(), dtype=float, count=n_blocks)
         ticks /= target.block_duration_raster
         rounded = np.rint(ticks)
         if np.abs(rounded - ticks).max() >= 1e-6:
             worst = int(np.argmax(np.abs(rounded - ticks)))
             raise AssertionError(
-                f"block {list(block_events)[worst]} duration is not a multiple of the block "
+                f"block {list(target.block_durations)[worst]} duration is not a multiple of the block "
                 f"duration raster ({ticks[worst] * target.block_duration_raster} s)"
             )
-        append = chunks.append
-        for block_id, row, tick in zip(block_events, block_events.values(), rounded.astype(np.int64).tolist()):
-            append(block_row_fmt % (block_id, tick, *row[1:]))
+        printed = np.empty((n_blocks, 8), dtype=np.int64)
+        printed[:, 0] = np.fromiter(target.block_durations, dtype=np.int64, count=n_blocks)
+        printed[:, 1] = rounded
+        printed[:, 2:] = block_rows[:, 1:]
+
+        widths = (len(str(n_blocks)), 3, 3, 3, 3, 3, 2, 2)
+        rendered = _render_int_rows(printed, widths)
+        if rendered is not None:
+            w(rendered)
+        else:
+            append = chunks.append
+            for row in printed.tolist():
+                append(block_row_fmt % tuple(row))
     w("\n")
 
     if len(target.rf_library.data) != 0:
