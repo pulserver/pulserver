@@ -176,6 +176,7 @@ reference <../reference/sampling>` for the full model.
    pulserver.design.make_epi_sampling
    pulserver.design.make_noncartesian_2d_sampling
    pulserver.design.make_noncartesian_projection_sampling
+   pulserver.design.make_rotated_projection_sampling
    pulserver.design.make_slice_loop
    pulserver.design.make_counter_loop
    pulserver.design.calc_encoding_scales

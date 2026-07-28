@@ -86,7 +86,7 @@ from .._system import (
     quantize_readout_timing,
     round_to_raster,
 )
-from ._base import Readout
+from ._base import Readout, adopt_waveform, rescale_trap
 
 RF_REFOCUS_TIME_S = 3.0e-3
 RF_REFOCUS_APODIZATION = 0.5
@@ -217,6 +217,7 @@ class _FseTrain(Readout):
         self._rf = refoc_rf
         self._flip_scale = _as_schedule(refoc_flip_scale, self.etl, 1.0, "refoc_flip_scale")
         self._refoc_signals: dict[int, np.ndarray] = {}  # echo index -> scaled RF samples
+        self._partition_cache: dict[int, tuple] = {}  # PAR index -> its two z lobes
         self._phase = _as_schedule(refoc_phase_rad, self.etl, CPMG_PHASE_OFFSET_RAD, "refoc_phase_rad")
         self.refoc_center_s = pp.calc_rf_center(self._rf)[0]
         self._ref_amp = refoc_gz.amplitude
@@ -329,14 +330,71 @@ class _FseTrain(Readout):
     # ------------------------------------------------------------------
     def _build_blocks(self):
         state = self._require_state()
-        return self._collect_blocks(
-            lambda seq: self._run(
-                seq,
-                state.lin_idx,
-                state.par_idx,
-                state.freq_offset_hz,
-            )
+        # Nothing an FSE shot varies is structural: the train length, the
+        # crushers and the readout are fixed by the design, and the encode
+        # moves amplitudes, a slice offset and two counters.
+        return self._retuned_blocks(
+            (),
+            lambda record: self._collect_blocks(
+                lambda seq: self._run(seq, state.lin_idx, state.par_idx, state.freq_offset_hz, record)
+            ),
+            lambda record: self._retune(record, self._require_state()),
         )
+
+    def _retune(self, record, state):
+        """Rewrite this shot's numbers on the events the layout already owns."""
+        freq_offset = state.freq_offset_hz
+        for i_echo, rf in enumerate(record["refoc"]):
+            rf.freq_offset = freq_offset
+            # Spelled exactly as _scaled_refoc spells it: the multiplication
+            # order decides the last bit, and the file is compared on it.
+            rf.phase_offset = self._phase[i_echo] - 2.0 * np.pi * freq_offset * self.refoc_center_s
+
+        if self._pe is not None:
+            lin = self._norm(state.lin_idx, self._pe.label)
+            for i_echo, (pre, rew, label) in enumerate(
+                zip(record["pe_pre"], record["pe_rew"], record["pe_label"], strict=True)
+            ):
+                ky = int(lin[i_echo])
+                area = self._pe.areas[ky]
+                rescale_trap(pre, self._pe_pre_tmpl, area, self._pe_worst)
+                rescale_trap(rew, self._pe_rew_tmpl, -area, self._pe_worst)
+                label.value = ky
+
+        if self._par is not None:
+            par = self._norm(state.par_idx, self._par.label)
+            for i_echo, (gs5, gs7, label) in enumerate(
+                zip(record["gs5"], record["gs7"], record["par_label"], strict=True)
+            ):
+                kz = int(par[i_echo])
+                source_gs5, source_gs7 = self._partition_lobes(kz)
+                adopt_waveform(gs5, source_gs5)
+                adopt_waveform(gs7, source_gs7)
+                label.value = kz
+
+    def _partition_lobes(self, kz: int):
+        """The z lobes for one partition index, solved once per index.
+
+        A partition encode rides the slice crushers rather than a lobe of its
+        own, and two gradients summed on one axis are an arbitrary waveform --
+        the one thing an FSE shot cannot express by rescaling. It depends on
+        ``kz`` alone, though, and a 3D acquisition revisits every partition
+        once per phase encode, so ``nz`` of them cover the whole scan instead
+        of one per echo of every shot.
+        """
+        cached = self._partition_cache.get(kz)
+        if cached is None:
+            area = self._par.areas[kz]
+            cached = (
+                pp.add_gradients(
+                    [self._gs5, _scaled_pe_grad(self._par_pre_tmpl, area, self._par_worst)], system=self._opts
+                ),
+                pp.add_gradients(
+                    [self._gs7, _scaled_pe_grad(self._par_rew_tmpl, -area, self._par_worst)], system=self._opts
+                ),
+            )
+            self._partition_cache[kz] = cached
+        return cached
 
     def _make_axis(self, spec):
         if spec is None:
@@ -386,7 +444,19 @@ class _FseTrain(Readout):
             raise ValueError(f"{label} index must be a scalar or length-{self.etl} array")
         return arr.astype(int)
 
-    def _run(self, seq, lin_idx, par_idx, freq_offset):
+    def _run(self, seq, lin_idx, par_idx, freq_offset, record=None):
+        """Emit one shot's blocks.
+
+        ``record``, when given, is filled with the events whose payload depends
+        on the shot -- the refocusing pulses, the encoding lobes and the
+        encoding labels -- which is what :meth:`_retune` moves for every later
+        shot instead of rebuilding this.
+        """
+        if record is None:
+            record = {}
+        record.setdefault("refoc", [])
+        for name in ("pe_pre", "pe_rew", "pe_label", "gs5", "gs7", "par_label"):
+            record.setdefault(name, [])
         if seq is None:
             import pulserver.pypulseq as _ps
 
@@ -397,7 +467,9 @@ class _FseTrain(Readout):
 
         seq.add_block(self._gr_pre, self._gs_up)
         for i_echo in range(self.etl):
-            seq.add_block(self._gs4, self._scaled_refoc(i_echo, freq_offset))
+            refoc = self._scaled_refoc(i_echo, freq_offset)
+            record["refoc"].append(refoc)
+            seq.add_block(self._gs4, refoc)
 
             gs5, gs7 = self._gs5, self._gs7
             pre_extra, rew_extra, labels = [], [], []
@@ -407,14 +479,15 @@ class _FseTrain(Readout):
                 pre_extra.append(_scaled_pe_grad(self._pe_pre_tmpl, area, self._pe_worst))
                 rew_extra.append(_scaled_pe_grad(self._pe_rew_tmpl, -area, self._pe_worst))
                 labels.append(pp.make_label(type="SET", label=self._pe.label, value=ky))
+                record["pe_label"].append(labels[-1])
             if self._par is not None:
                 kz = int(par[i_echo])
-                kz_area = self._par.areas[kz]
-                gp_par_pre = _scaled_pe_grad(self._par_pre_tmpl, kz_area, self._par_worst)
-                gp_par_rew = _scaled_pe_grad(self._par_rew_tmpl, -kz_area, self._par_worst)
-                gs5 = pp.add_gradients([self._gs5, gp_par_pre], system=self._opts)
-                gs7 = pp.add_gradients([self._gs7, gp_par_rew], system=self._opts)
+                # Copies, because without a pe encode there is no align() below
+                # to make one, and the layout must own an event it can retune
+                # without writing into the memoised lobes themselves.
+                gs5, gs7 = (copy_event(lobe) for lobe in self._partition_lobes(kz))
                 labels.append(pp.make_label(type="SET", label=self._par.label, value=kz))
+                record["par_label"].append(labels[-1])
             if self._multi_echo and i_echo > 0:
                 labels.append(pp.make_label(type="INC", label="ECO", value=1))
 
@@ -422,6 +495,11 @@ class _FseTrain(Readout):
             # abut the readout rather than stretched to fill the segment.
             pre_block = pp.align(right=[self._gr5, gs5, *pre_extra]) if pre_extra else [self._gr5, gs5]
             post_block = pp.align(left=[self._gr7, gs7, *rew_extra]) if rew_extra else [self._gr7, gs7]
+            record["gs5"].append(pre_block[1])
+            record["gs7"].append(post_block[1])
+            if pre_extra:
+                record["pe_pre"].append(pre_block[2])
+                record["pe_rew"].append(post_block[2])
 
             adc = copy_event(self._ro.adc)
             adc.phase_offset = self._phase[i_echo]

@@ -301,7 +301,9 @@ def test_set_state_replaces_offsets_and_scaling_without_mutating_templates(syste
     current_rf = [event for block in module for event in block if getattr(event, "type", None) == "rf"]
 
     assert returned is module
-    assert module.blocks is not before
+    # The snapshot is retuned in place rather than rebuilt -- same events, new
+    # numbers -- so it is the *templates* that must survive, not the blocks.
+    assert module.blocks is before
     assert [event.freq_offset for event in current_rf] == [7250.0, -6750.0, 7250.0, -6750.0]
     assert all(event.phase_offset == pytest.approx(0.3) for event in current_rf)
     assert np.allclose(current_rf[0].signal, 0.4 * template_signal)

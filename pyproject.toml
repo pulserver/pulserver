@@ -40,6 +40,7 @@ recon-cuda = [
   "mri-nufft[cufinufft]; platform_system == 'Linux'",
 ]
 recon-nlinv = ["pulserver[recon-cpu]", "pygrog"]
+recon-sim = ["pulserver[recon]", "torchsim"]
 # PyHySCO is GPL-3.0-only.  It remains an opt-in external executable and is
 # neither imported nor bundled by the MIT-licensed Pulserver package.
 recon-distortion = ["PyHySCO"]

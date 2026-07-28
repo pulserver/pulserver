@@ -182,24 +182,27 @@ class Gre3DPulseqSequence(Sequence):
             len(pe_loop) * len(par_loop), increment=RF_SPOILING_INCREMENT_RAD
         )
 
+        # One call per phase-encode step covers its whole partition loop: the
+        # chronology is the same three items every shot, so only the numbers
+        # differ and they can go in as arrays. See Sequence.add_range.
+        pulse.set_labels(SLC=0)
+        partitions = np.array([int(par_shot[0, 0]) for par_shot in par_loop])
         shot = 0
         for pe_shot in pe_loop:
-            for par_shot in par_loop:
-                phase = float(rf_phases[shot])
-                pulse.set_state(phase_offset_rad=phase)
-                pulse.set_labels(SLC=0)
-                for block in pulse:
-                    seq.add_block(*block)
-                if te_delay is not None:
-                    seq.add_block(te_delay)
-                line.set_state(
-                    lin_idx=int(pe_shot[0, 0]),
-                    par_idx=int(par_shot[0, 0]),
-                    phase_offset_rad=phase,
-                )
-                for block in line:
-                    seq.add_block(*block)
-                shot += 1
+            phases = np.asarray(rf_phases[shot : shot + len(partitions)], dtype=float)
+            seq.add_range(
+                (pulse, {"phase_offset_rad": phases}),
+                te_delay,
+                (
+                    line,
+                    {
+                        "lin_idx": np.full(len(partitions), int(pe_shot[0, 0])),
+                        "par_idx": partitions,
+                        "phase_offset_rad": phases,
+                    },
+                ),
+            )
+            shot += len(partitions)
 
             if tr_delay is not None:
                 seq.add_block(tr_delay)

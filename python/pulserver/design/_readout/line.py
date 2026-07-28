@@ -122,7 +122,7 @@ from .._system import (
     quantize_readout_timing,
     round_to_raster,
 )
-from ._base import Readout, normalize_rotation, normalize_slice_rephasing
+from ._base import Readout, normalize_rotation, normalize_slice_rephasing, rescale_trap
 
 READOUT_GRAD_MARGIN = 0.95  # headroom below max_grad for the readout plateau
 DEFAULT_SPOIL_FACTOR = 1.0  # readout-axis spoiler area as a fraction of k_width
@@ -540,52 +540,92 @@ class _LineTrain(Readout):
 
     def _build_blocks(self):
         state = self._require_state()
-        return self._collect_blocks(
-            lambda seq: self._run(
-                seq,
-                state.pe_idx,
-                state.par_idx,
-                state.phase_offset_rad,
-                state.rotation,
-            )
+        return self._retuned_blocks(
+            # Only a rotation is structural: it adds an event to every gradient
+            # block. Everything else this readout varies is a number.
+            (state.rotation,),
+            lambda record: self._collect_blocks(
+                lambda seq: self._run(
+                    seq,
+                    state.pe_idx,
+                    state.par_idx,
+                    state.phase_offset_rad,
+                    state.rotation,
+                    record,
+                )
+            ),
+            lambda record: self._retune(record, state),
         )
 
-    def _run(self, seq, pe_idx, par_idx, phase_offset_rad, rotation):
+    def _retune(self, record, state):
+        """Rewrite this shot's numbers on the events the layout already owns.
+
+        Everything a Cartesian line readout varies per shot reaches the file as
+        a single number in a single payload field: an encoding trapezoid's
+        amplitude, an ADC's receive phase, a counter's value. The arithmetic is
+        the arithmetic ``_run`` uses -- ``scale_grad`` is a multiply, and it is
+        the same multiply here.
+        """
+        if self._pe is not None:
+            area = self._pe.areas[int(state.pe_idx)]
+            merged = area + self._slice_rephasing.get(self._pe.axis, 0.0)
+            rescale_trap(record["pe_pre"], self._pe_pre_tmpl, merged, self._pe_pre_worst)
+            rescale_trap(record["pe_post"], self._pe_post_tmpl, -area, self._pe.max_area)
+        if self._par is not None:
+            area = self._par.areas[int(state.par_idx)]
+            merged = area + self._slice_rephasing.get(self._par.axis, 0.0)
+            rescale_trap(record["par_pre"], self._par_pre_tmpl, merged, self._par_pre_worst)
+            rescale_trap(record["par_post"], self._par_post_tmpl, -area, self._par.max_area)
+
+        phase_offset_rad = state.phase_offset_rad
+        for adc in record["adc"]:
+            adc.phase_offset = phase_offset_rad
+        if "pe_label" in record:
+            record["pe_label"].value = int(state.pe_idx)
+        if "par_label" in record:
+            record["par_label"].value = int(state.par_idx)
+
+    def _run(self, seq, pe_idx, par_idx, phase_offset_rad, rotation, record=None):
+        """Emit one shot's blocks.
+
+        ``record``, when given, is filled with the events whose payload depends
+        on the shot -- the encoding trapezoids, the ADCs and the encoding
+        labels. That is what :meth:`_retune` needs in order to move a later
+        shot's numbers without rebuilding any of this.
+        """
         if seq is None:
             import pulserver.pypulseq as _ps
 
             seq = _ps.Sequence(self._opts)
 
+        if record is None:
+            record = {}
         pre = [self._gx_pre]
         post = [self._gx_post]
         pending = dict(self._slice_rephasing)
         if self._pe is not None:
             area = self._pe.areas[int(pe_idx)]
             merged = area + pending.pop(self._pe.axis, 0.0)
-            pre.append(
-                _scaled_trap(
-                    self._pe_pre_tmpl, self._pe.axis, merged, self._pe_pre_worst, self.t_prephase_s, self._opts
-                )
+            record["pe_pre"] = _scaled_trap(
+                self._pe_pre_tmpl, self._pe.axis, merged, self._pe_pre_worst, self.t_prephase_s, self._opts
             )
+            pre.append(record["pe_pre"])
             # Only the encoding is unwound: a rephaser is a one-way moment.
-            post.append(
-                _scaled_trap(
-                    self._pe_post_tmpl, self._pe.axis, -area, self._pe.max_area, self.t_postphase_s, self._opts
-                )
+            record["pe_post"] = _scaled_trap(
+                self._pe_post_tmpl, self._pe.axis, -area, self._pe.max_area, self.t_postphase_s, self._opts
             )
+            post.append(record["pe_post"])
         if self._par is not None:
             area = self._par.areas[int(par_idx)]
             merged = area + pending.pop(self._par.axis, 0.0)
-            pre.append(
-                _scaled_trap(
-                    self._par_pre_tmpl, self._par.axis, merged, self._par_pre_worst, self.t_prephase_s, self._opts
-                )
+            record["par_pre"] = _scaled_trap(
+                self._par_pre_tmpl, self._par.axis, merged, self._par_pre_worst, self.t_prephase_s, self._opts
             )
-            post.append(
-                _scaled_trap(
-                    self._par_post_tmpl, self._par.axis, -area, self._par.max_area, self.t_postphase_s, self._opts
-                )
+            pre.append(record["par_pre"])
+            record["par_post"] = _scaled_trap(
+                self._par_post_tmpl, self._par.axis, -area, self._par.max_area, self.t_postphase_s, self._opts
             )
+            post.append(record["par_post"])
         for axis, area in pending.items():
             pre.append(pp.make_trapezoid(channel=axis, area=area, duration=self.t_prephase_s, system=self._opts))
         if rotation is not None:
@@ -608,13 +648,16 @@ class _LineTrain(Readout):
                 gx = self._ro.gx if positive else self._ro.gx_neg
                 adc = copy_event(self._ro.adc)
             adc.phase_offset = phase_offset_rad
+            record.setdefault("adc", []).append(adc)
 
             labels = []
             if i == 0:
                 if self._pe is not None:
-                    labels.append(pp.make_label(type="SET", label=self._pe.label, value=int(pe_idx)))
+                    record["pe_label"] = pp.make_label(type="SET", label=self._pe.label, value=int(pe_idx))
+                    labels.append(record["pe_label"])
                 if self._par is not None:
-                    labels.append(pp.make_label(type="SET", label=self._par.label, value=int(par_idx)))
+                    record["par_label"] = pp.make_label(type="SET", label=self._par.label, value=int(par_idx))
+                    labels.append(record["par_label"])
             if self.num_echoes > 1:
                 labels.append(
                     pp.make_label(type="SET", label="ECO", value=0)

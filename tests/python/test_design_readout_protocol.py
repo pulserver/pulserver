@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from scipy.spatial.transform import Rotation
 
 pp = pytest.importorskip("pypulseq")
 
@@ -47,18 +48,68 @@ def test_line_supports_len_index_slice_iteration_add_to_and_get():
     assert len(standalone.block_events) == len(module)
 
 
-def test_set_state_replaces_cached_block_snapshot():
+def test_set_state_retunes_the_block_snapshot_in_place():
+    """A new state re-points the same events; it does not rebuild them.
+
+    The snapshot is the module's blocks *for its current state*, and a readout
+    keeps one layout across states on purpose: the structure is fixed by the
+    design and only a few payload numbers move, so rebuilding the events would
+    re-solve no gradient and re-register no shape. The consequence a caller can
+    observe is that a snapshot held across ``set_state`` is a live view, not a
+    copy -- read it for the state that produced it.
+    """
     module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
     module.set_state(lin_idx=3, phase_offset_rad=0.1)
     old_blocks = tuple(module)
+    assert all(event.phase_offset == pytest.approx(0.1) for event in _adcs(old_blocks))
 
     module.set_state(lin_idx=4, phase_offset_rad=0.9)
     new_blocks = tuple(module)
 
-    assert new_blocks is not old_blocks
-    assert new_blocks[0] is not old_blocks[0]
-    adc_events = [event for block in new_blocks for event in block if getattr(event, "type", None) == "adc"]
+    # Same events, new numbers -- including on the snapshot taken earlier.
+    assert new_blocks[0] is old_blocks[0]
+    adc_events = _adcs(new_blocks)
     assert adc_events and all(event.phase_offset == pytest.approx(0.9) for event in adc_events)
+    assert all(event.phase_offset == pytest.approx(0.9) for event in _adcs(old_blocks))
+
+
+def test_retuned_snapshot_registers_the_same_blocks_as_a_rebuild():
+    """Retuning is only an optimisation: the emitted sequence cannot tell.
+
+    Two shots played through one module, against the same two shots played
+    through a module that has never seen another state.
+    """
+    from pulserver.pypulseq import Sequence as PulserverSequence
+
+    fov, matrix = (0.22, 0.22), (32, 32)
+    shared = readout.Line2D(_opts(), fov, matrix, spoil_position="none")
+
+    retuned = PulserverSequence(_opts())
+    for lin_idx, phase in ((3, 0.1), (4, 0.9)):
+        shared.set_state(lin_idx=lin_idx, phase_offset_rad=phase).add_to(retuned)
+
+    rebuilt = PulserverSequence(_opts())
+    for lin_idx, phase in ((3, 0.1), (4, 0.9)):
+        fresh = readout.Line2D(_opts(), fov, matrix, spoil_position="none")
+        fresh.set_state(lin_idx=lin_idx, phase_offset_rad=phase).add_to(rebuilt)
+
+    assert retuned.block_events == rebuilt.block_events
+    assert retuned.block_durations == rebuilt.block_durations
+
+
+def test_a_structural_change_rebuilds_rather_than_retunes():
+    """A rotation adds an event to every gradient block, so it cannot be a retune."""
+    module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
+    plain = module.set_state(lin_idx=3).blocks
+    rotated = module.set_state(lin_idx=3, rotation=Rotation.from_euler("z", 30, degrees=True)).blocks
+
+    assert rotated[0] is not plain[0]
+    assert sum(getattr(event, "type", None) == "rot3D" for block in rotated for event in block) > 0
+    assert module.set_state(lin_idx=3).blocks[0] is not rotated[0]
+
+
+def _adcs(blocks):
+    return [event for block in blocks for event in block if getattr(event, "type", None) == "adc"]
 
 
 def test_epi_and_fse_use_the_common_protocol():
@@ -209,3 +260,34 @@ def test_set_triggers_targets_individual_blocks():
     module.set_triggers(block=-1)
     assert sync not in module[-1]
     assert gate in module[0]
+
+
+def test_payloads_report_the_dynamic_fields_of_every_block():
+    """One dict per block, keyed the way a pulseq block is."""
+    module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
+    payloads = module.set_state(lin_idx=3).payloads()
+
+    assert len(payloads) == len(module.blocks)
+    assert all(set(payload) <= {"duration", "rf", "gx", "gy", "gz", "adc", "ext"} for payload in payloads)
+    # Whatever axis carries the phase encode, changing lin_idx has to move the
+    # payload -- that is the whole contract the fast path will rely on.
+    assert payloads != module.set_state(lin_idx=9).payloads()
+
+
+def test_the_peak_cache_survives_a_re_state_and_is_dropped_by_a_rebuild():
+    """Peaks are keyed by sample-array identity, which a retune preserves.
+
+    This is what makes ``payloads`` cheaper than rebuilding each event's
+    library row rather than twice its price -- a module replays the same
+    arrays every shot, so their peaks are derived once, not once per shot.
+    """
+    module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
+    module.set_state(lin_idx=0).payloads()
+    entries = len(module._peak_cache)
+
+    for index in range(1, 32):
+        module.set_state(lin_idx=index).payloads()
+    assert len(module._peak_cache) == entries, "a re-state must not mint new peaks"
+
+    module._invalidate()
+    assert module._peak_cache is None

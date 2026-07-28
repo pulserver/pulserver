@@ -485,7 +485,9 @@ def make_noncartesian_projection_sampling(matrix, *, views=None, scheme="golden_
     raise ValueError("scheme must be golden_means or phyllotaxis")
 
 
-def make_rotated_projection_sampling(matrix, *, shots, views=None, scheme="phyllotaxis", require_fibonacci=True):
+def make_rotated_projection_sampling(
+    matrix, *, shots, views=None, scheme="spiral", step_deg=None, require_fibonacci=True
+):
     """Build a 3D projection pattern as one base segment plus per-shot rotations.
 
     :func:`make_noncartesian_projection_sampling` gives every spoke its own
@@ -508,9 +510,13 @@ def make_rotated_projection_sampling(matrix, *, shots, views=None, scheme="phyll
     views : int or None, optional
         Spokes in the base segment. Defaults to a Nyquist-matched spherical
         count for ``matrix``, divided among ``shots``.
-    scheme : {'phyllotaxis', 'disk'}, optional
+    scheme : {'spiral', 'disk', 'phyllotaxis'}, optional
         Base-segment ordering; see
-        :func:`~pulserver.design._lowlevel.make_rotated_segment_tilt`.
+        :func:`~pulserver.design._lowlevel.make_rotated_segment_tilt`. The
+        first two step by a constant angle and so can be played from a single
+        designed transition; ``'phyllotaxis'`` cannot.
+    step_deg : float, optional
+        Angular step for ``'spiral'``; defaults to the smallest feasible.
     require_fibonacci : bool, optional
         Enforce a Fibonacci ``shots`` for ``'phyllotaxis'`` (default True).
 
@@ -555,4 +561,6 @@ def make_rotated_projection_sampling(matrix, *, shots, views=None, scheme="phyll
     views = int(views)
     if views < 1:
         raise ValueError("views must be positive")
-    return make_rotated_segment_tilt(views, shots, scheme=scheme, require_fibonacci=require_fibonacci)
+    return make_rotated_segment_tilt(
+        views, shots, scheme=scheme, step_deg=step_deg, require_fibonacci=require_fibonacci
+    )

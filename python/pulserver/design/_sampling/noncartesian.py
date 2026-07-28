@@ -508,7 +508,51 @@ def make_spiral_phyllotaxis_tilt(n_spokes, n_interleaves, *, require_fibonacci=T
     return ScanLoop(support, order, None, _DIRECTION_AXES)
 
 
-def make_rotated_segment_tilt(views_per_shot, shots, *, scheme="phyllotaxis", require_fibonacci=True):
+def _constant_step_spiral(views: int, step_deg: float | None) -> np.ndarray:
+    """A pole-to-pole spiral shell whose consecutive views are a constant angle apart.
+
+    The polar ladder is fixed first, at equal-area ring centres, and each
+    azimuth increment is then *solved* rather than chosen, from
+
+    ``cos(step) = cos(t_k) cos(t_k+1) + sin(t_k) sin(t_k+1) cos(dphi)``
+
+    so every consecutive pair subtends exactly ``step``. That is the condition
+    :func:`~pulserver.design._readout.zte._view_rotations` needs, and it is
+    what lets a whole shell be played from one designed transition.
+
+    ``step`` is a genuine knob rather than a detail: it cannot go below the
+    widest polar gap (near the poles, where equal-area rings are furthest apart
+    in angle), and raising it above that trades a longer slew per view for more
+    azimuthal winding. The default takes the smallest feasible value, which is
+    the gentlest on the gradients.
+    """
+    views = int(views)
+    if views == 1:
+        return np.array([[0.0, 0.0, 1.0]])
+    z = 1.0 - 2.0 * (np.arange(views) + 0.5) / views
+    polar = np.arccos(z)
+    widest_gap = float(np.max(np.diff(polar)))
+    if step_deg is None:
+        step = widest_gap
+    else:
+        step = math.radians(float(step_deg))
+        if step < widest_gap - 1e-12:
+            raise ValueError(
+                f"step_deg={step_deg} is below the {math.degrees(widest_gap):.3f} deg polar gap this "
+                f"{views}-view shell already spans; no azimuth increment can make up the difference"
+            )
+    if step >= np.pi:
+        raise ValueError("step_deg must be below 180 degrees")
+
+    numerator = math.cos(step) - np.cos(polar[:-1]) * np.cos(polar[1:])
+    denominator = np.sin(polar[:-1]) * np.sin(polar[1:])
+    azimuth = np.concatenate(([0.0], np.cumsum(np.arccos(np.clip(numerator / denominator, -1.0, 1.0)))))
+    return _directions(z, azimuth)
+
+
+def make_rotated_segment_tilt(
+    views_per_shot, shots, *, scheme="spiral", step_deg=None, require_fibonacci=True
+):
     """Generate one base spoke segment plus the rotations that sweep it over the sphere.
 
     The other 3D tilt factories hand back every spoke direction as its own
@@ -523,10 +567,18 @@ def make_rotated_segment_tilt(views_per_shot, shots, *, scheme="phyllotaxis", re
 
     That trade is only sound if the shots really are congruent — every shot
     must be the base segment moved rigidly, not merely a similar-looking one.
-    Both schemes below rotate about ``z`` alone, so the base polar angles are
+    Every scheme below rotates about ``z`` alone, so the base polar angles are
     shared by every shot: the sphere is covered by ``views_per_shot`` polar
     rings of ``shots`` spokes each, rather than by ``views_per_shot * shots``
-    freely placed directions.
+    freely placed directions. Coverage within a ring is uniform whatever the
+    base does, because the shot rotations are what spread it.
+
+    A second condition applies *inside* the segment, and it is what separates
+    the schemes: replaying one designed transition for every view needs
+    consecutive views to be a **constant angle** apart. That admits far more
+    than a circle — any constant-step walk on the sphere qualifies, a
+    pole-to-pole spiral included — but it does rule out orderings whose step
+    wanders, phyllotaxis among them.
 
     Parameters
     ----------
@@ -534,16 +586,22 @@ def make_rotated_segment_tilt(views_per_shot, shots, *, scheme="phyllotaxis", re
         Spokes in the base segment — the number of views one shot acquires.
     shots : int
         Number of rotated replays of that segment.
-    scheme : {'phyllotaxis', 'disk'}, optional
-        ``'phyllotaxis'`` spreads the base over equal-area polar rings with a
-        golden-angle azimuth advance, and rotates by the golden angle. Best
-        sphere uniformity, and the azimuth step stays small — so consecutive
-        views stay close, which is what keeps a continuous-gradient transition
-        slew-feasible — only when ``shots`` is a Fibonacci number.
+    scheme : {'spiral', 'disk', 'phyllotaxis'}, optional
+        ``'spiral'`` (default) walks a pole-to-pole spiral at a constant
+        angular step: it spans the full polar range like a phyllotaxis
+        interleaf, and being constant-step it can be played from one designed
+        transition however long the shell is.
         ``'disk'`` makes the base a full great circle in the ``x``-``z`` plane
-        and rotates it about ``z`` over ``[0, pi)``. Consecutive views are then
-        always ``2*pi/views_per_shot`` apart, which is the smoothest ordering
-        available, at the cost of oversampling the poles.
+        and rotates it about ``z`` over ``[0, pi)``. Also constant-step, and
+        the simplest, at the cost of oversampling the poles.
+        ``'phyllotaxis'`` deals a Piccini spiral into interleaves. Best
+        uniformity of the three, but its angular step wanders, so it *cannot*
+        be rotation-encoded and a continuous-gradient readout is limited to a
+        short shell by the interpreter's per-definition shape budget.
+    step_deg : float, optional
+        Angular step for ``'spiral'``. Defaults to the smallest feasible value
+        — the widest polar gap of the equal-area ladder — which is the gentlest
+        on the gradients; larger values wind further in azimuth per view.
     require_fibonacci : bool, optional
         Enforce that ``shots`` is a Fibonacci number for ``'phyllotaxis'``
         (default True); pass ``False`` to bypass the check knowingly.
@@ -576,6 +634,13 @@ def make_rotated_segment_tilt(views_per_shot, shots, *, scheme="phyllotaxis", re
     >>> bool(np.allclose(np.linalg.norm(spokes, axis=-1), 1.0))
     True
 
+    ...and inside a shell the step is constant, which is what lets one designed
+    transition serve every view:
+
+    >>> steps = np.arccos(np.clip(np.sum(base.positions[:-1] * base.positions[1:], axis=1), -1, 1))
+    >>> bool(np.ptp(steps) < 1e-9)
+    True
+
     See Also
     --------
     make_spiral_phyllotaxis_tilt : freely placed interleaves, one waveform per spoke.
@@ -585,7 +650,10 @@ def make_rotated_segment_tilt(views_per_shot, shots, *, scheme="phyllotaxis", re
     if views_per_shot <= 0 or shots <= 0:
         raise ValueError("views_per_shot and shots must be positive")
 
-    if scheme == "phyllotaxis":
+    if scheme == "spiral":
+        base = _constant_step_spiral(views_per_shot, step_deg)
+        angles = np.arange(shots, dtype=float) * np.pi * (3.0 - math.sqrt(5.0))
+    elif scheme == "phyllotaxis":
         if require_fibonacci and not _is_fibonacci(shots):
             raise ValueError(
                 "shots must be a Fibonacci number so the base segment advances in small azimuth "
@@ -605,7 +673,7 @@ def make_rotated_segment_tilt(views_per_shot, shots, *, scheme="phyllotaxis", re
         base = np.column_stack((np.cos(theta), np.zeros(views_per_shot), np.sin(theta)))
         angles = np.pi * np.arange(shots, dtype=float) / shots
     else:
-        raise ValueError("scheme must be phyllotaxis or disk")
+        raise ValueError("scheme must be spiral, disk, or phyllotaxis")
 
     loop = ScanLoop(base, (np.arange(views_per_shot, dtype=np.intp),), None, _DIRECTION_AXES)
     return loop, angles_to_rotations(angles)

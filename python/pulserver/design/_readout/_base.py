@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-__all__ = ["Block", "Readout", "normalize_rotation", "normalize_slice_rephasing"]
+__all__ = [
+    "Block",
+    "Readout",
+    "adopt_waveform",
+    "normalize_rotation",
+    "normalize_slice_rephasing",
+    "rescale_trap",
+]
 
 from abc import abstractmethod
 from collections.abc import Iterable
@@ -73,6 +80,38 @@ def normalize_slice_rephasing(events: Any, *, forbidden: Iterable[str] = ()) -> 
     return {channel: area for channel, area in areas.items() if area != 0.0}
 
 
+def rescale_trap(event, template, area, worst_mag) -> None:
+    """Re-point an already-built scaled trapezoid at ``area``.
+
+    The three fields :func:`pulserver.design.scale_grad` moves, moved by the
+    same arithmetic on the same template, so a retuned event is bit-for-bit the
+    event a fresh ``scale_grad`` would have returned. ``template`` is ``None``
+    only when the worst-case area on this axis is ~0, in which case every
+    shot's area is ~0 too and there is nothing to move.
+    """
+    if template is None:
+        return
+    scale = area / worst_mag
+    event.amplitude = template.amplitude * scale
+    event.flat_area = template.flat_area * scale
+    event.area = template.area * scale
+
+
+def adopt_waveform(target, source) -> None:
+    """Give ``target`` every field of ``source`` except the delay it was aligned to.
+
+    For the one thing a shot cannot express by rescaling: two gradients summed
+    on the same axis are an arbitrary waveform, and the sum moves with the
+    encode. The waveform *object* is adopted rather than copied, so a
+    memoised source keeps the sequence writer's shape cache hitting -- and
+    ``delay`` survives because :func:`pypulseq.align` is the only thing that
+    ever set it, and alignment does not depend on the encode.
+    """
+    delay = target.delay
+    target.__dict__.update(source.__dict__)
+    target.delay = delay
+
+
 _State = TypeVar("_State")
 _STATE_UNSET = object()
 
@@ -105,6 +144,8 @@ class Readout(SequenceModule):
 
     def _replace_state(self, state: _State) -> None:
         self._state = state
+        # Only the *snapshot* is invalidated: the layout survives a state
+        # change, which is the whole point of it (see _retuned_blocks).
         self._block_cache = None
 
     def _require_state(self) -> Any:
@@ -128,5 +169,11 @@ class Readout(SequenceModule):
     def _current_blocks(self) -> tuple[Block, ...]:
         self._require_state()
         if self._block_cache is None:
-            self._block_cache = tuple(tuple(block) for block in self._build_blocks())
+            blocks = self._build_blocks()
+            # A readout on the layout path already hands back tuples of tuples
+            # and hands back the *same* ones every state; re-freezing them would
+            # rebuild every block of every shot to change nothing.
+            if type(blocks) is not tuple or any(type(block) is not tuple for block in blocks):
+                blocks = tuple(tuple(block) for block in blocks)
+            self._block_cache = blocks
         return self._block_cache

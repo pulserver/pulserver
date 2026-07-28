@@ -321,21 +321,25 @@ def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None
             seq.add_block(*block)
         if ti_delay is not None:
             seq.add_block(ti_delay)
-        for ky, par in segment:
-            phase = float(phases[phase_idx])
-            timing["pulse"].set_state(phase_offset_rad=phase)
-            for block in timing["pulse"]:
-                seq.add_block(*block)
-            if te_delay is not None:
-                seq.add_block(te_delay)
-            timing["line"].set_state(
-                lin_idx=int(ky), par_idx=int(par), phase_offset_rad=phase
-            )
-            for block in timing["line"]:
-                seq.add_block(*block)
-            if tr_delay is not None:
-                seq.add_block(tr_delay)
-            phase_idx += 1
+        # The whole segment goes in as one call: every view plays the same four
+        # items and only the encoding indices and RF phase change, so they go in
+        # as arrays rather than as a Python loop. See Sequence.add_range.
+        views = np.asarray(segment, dtype=int).reshape(-1, 2)
+        shot_phases = np.asarray(phases[phase_idx : phase_idx + len(views)], dtype=float)
+        seq.add_range(
+            (timing["pulse"], {"phase_offset_rad": shot_phases}),
+            te_delay,
+            (
+                timing["line"],
+                {
+                    "lin_idx": views[:, 0],
+                    "par_idx": views[:, 1],
+                    "phase_offset_rad": shot_phases,
+                },
+            ),
+            tr_delay,
+        )
+        phase_idx += len(views)
         if recovery is not None:
             seq.add_block(recovery)
     seq.set_definition("Name", "mprage_3d")

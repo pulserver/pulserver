@@ -129,26 +129,48 @@ def _minimal_rotation(start: np.ndarray, end: np.ndarray):
     return Rotation.from_rotvec(np.arctan2(sine, cosine) * cross / sine)
 
 
-def _constant_rotation(directions: np.ndarray, tolerance: float = 1e-8):
-    """The single rotation advancing every direction to the next, or ``None``.
+def _pair_frame(first: np.ndarray, second: np.ndarray) -> np.ndarray:
+    """Orthonormal frame of an ordered pair of distinct unit directions."""
+    axis = first / np.linalg.norm(first)
+    normal = np.cross(first, second)
+    normal = normal / np.linalg.norm(normal)
+    return np.column_stack((axis, np.cross(normal, axis), normal))
 
-    Rotation encoding is only exact when the view order is a *constant-rotation
-    orbit* -- each direction the previous one turned by one fixed rotation --
-    because that is what makes every transition the same waveform seen from a
-    rotated frame. Such an orbit necessarily lies on a circle, which is why
-    ``Zte`` can encode a disk this way but not a freely placed direction set.
+
+def _view_rotations(directions: np.ndarray, tolerance: float = 1e-8):
+    """One rotation per view carrying view 0's transition onto view k's, or ``None``.
+
+    Rotation encoding replaces view k's waveform with view 0's under a rotation,
+    so it needs a rotation carrying the *pair* ``(d0, d1)`` onto ``(dk, dk+1)``.
+    Such a rotation exists exactly when the two pairs subtend the same angle --
+    that is, when **consecutive views are a constant angle apart**. Nothing more
+    is required: the orderings that qualify are not just circles but any
+    constant-step walk on the sphere, a pole-to-pole spiral shell included.
+
+    The final view has no successor, and its waveform is a ray from ``d0`` to
+    zero, so any rotation placing ``d0`` on it will do.
     """
     from scipy.spatial.transform import Rotation
 
     # ``directions`` is published read-only, and SciPy's Cython kernels need a
-    # writable buffer, so the check runs on its own copy.
+    # writable buffer, so this works on its own copy.
     directions = np.array(directions, dtype=float, copy=True)
     if len(directions) < 2:
-        return Rotation.identity()
-    step = _minimal_rotation(directions[0], directions[1])
-    if len(directions) > 2 and not np.allclose(step.apply(directions[:-1]), directions[1:], atol=tolerance):
+        return (Rotation.identity(),)
+
+    cosines = np.sum(directions[:-1] * directions[1:], axis=1)
+    if np.ptp(cosines) > tolerance:
         return None
-    return step
+    if np.any(np.abs(cosines) >= 1.0 - 1e-12):
+        return None  # coincident or antipodal consecutive views: no unique pair frame
+
+    reference = _pair_frame(directions[0], directions[1]).T
+    rotations = [
+        Rotation.from_matrix(_pair_frame(directions[index], directions[index + 1]) @ reference)
+        for index in range(len(directions) - 1)
+    ]
+    rotations.append(_minimal_rotation(directions[0], directions[-1]))
+    return tuple(rotations)
 
 
 def _extended_gradients(system, times: np.ndarray, amplitudes: np.ndarray) -> tuple:
@@ -330,19 +352,21 @@ class Zte(Readout):
         )
 
         self.rotation_encoded = bool(rotation_encoded)
-        self._step_rotation = None
         self._block_rotations = None
         if self.rotation_encoded:
-            step = _constant_rotation(self.directions)
-            if step is None:
-                raise ValueError(
-                    "rotation_encoded=True needs a constant-rotation view order -- each direction the "
-                    "previous one turned by one fixed rotation, which puts them on a circle. The supplied "
-                    f"{self.num_views} directions are not such an orbit, so no single waveform can serve "
-                    "every view; pass rotation_encoded=False to encode each transition in its own waveform"
+            rotations = _view_rotations(self.directions)
+            if rotations is None:
+                gaps = np.degrees(
+                    np.arccos(np.clip(np.sum(self.directions[:-1] * self.directions[1:], axis=1), -1.0, 1.0))
                 )
-            self._step_rotation = step
-            self._block_rotations = tuple(step**index for index in range(self.num_views))
+                raise ValueError(
+                    "rotation_encoded=True needs consecutive views a constant angle apart, so that one "
+                    "designed transition can serve every view under a rotation. The supplied "
+                    f"{self.num_views} directions step by {gaps.min():.3f} to {gaps.max():.3f} deg. Use an "
+                    "equal-step ordering (make_rotated_projection_sampling's 'spiral' or 'disk'), or pass "
+                    "rotation_encoded=False to give each transition its own waveform"
+                )
+            self._block_rotations = rotations
 
         self.gradient_amplitude = self.delta_k / dwell_s
         endpoints = self.gradient_amplitude * self.directions
@@ -392,8 +416,7 @@ class Zte(Readout):
             # the second, and a closing view slewing to zero instead. Every
             # other view is one of those two under its own block rotation, so
             # the shape count is fixed however many views (or shots) are played.
-            first = np.array(self.directions[0], dtype=float, copy=True)
-            canonical_end = self.gradient_amplitude * self._step_rotation.apply(first)
+            canonical_end = endpoints[1] if self.num_views > 1 else np.zeros(3)
             interior = view_gradient(endpoints[0], canonical_end, 0) if self.num_views > 1 else ()
             closing = view_gradient(endpoints[0], np.zeros(3), self.num_views - 1)
             self._view_gradients = (interior, closing)

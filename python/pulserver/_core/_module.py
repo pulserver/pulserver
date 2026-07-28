@@ -10,6 +10,24 @@ Block = tuple[Any, ...]
 _ModuleT = TypeVar("_ModuleT", bound="SequenceModule")
 
 
+def _layout_match(previous: tuple, current: tuple) -> bool:
+    """Whether two structure keys describe the same layout.
+
+    Identity first, value equality only for the primitives a key is otherwise
+    made of. A key entry can be a whole event -- a rotation carries a
+    :class:`scipy.spatial.transform.Rotation`, whose ``==`` answers an array --
+    so nothing but a primitive is ever compared by value.
+    """
+    if len(previous) != len(current):
+        return False
+    for old, new in zip(previous, current, strict=True):
+        if old is new:
+            continue
+        if not isinstance(old, int | float | bool | str) or old != new:
+            return False
+    return True
+
+
 class SequenceModule(Sequence[Block], ABC):
     """A reusable group of Pulseq blocks that re-renders itself per shot.
 
@@ -123,6 +141,12 @@ class SequenceModule(Sequence[Block], ABC):
     _labels: tuple[Any, ...] = ()
     _flags: tuple[tuple[str, int, bool], ...] = ()
     _triggers: tuple[tuple[int, tuple[Any, ...]], ...] = ()
+    #: ``(structure key, blocks, record)`` -- see :meth:`_retuned_blocks`.
+    _layout: tuple | None = None
+    #: Memoised label/flag/trigger merge; see :meth:`_rendered_blocks`.
+    _rendered_cache: tuple | None = None
+    #: Sample array -> its signed peak; see :meth:`payloads`.
+    _peak_cache: dict | None = None
 
     def __init__(self, system: Any) -> None:
         self.system = system
@@ -329,10 +353,97 @@ class SequenceModule(Sequence[Block], ABC):
         """Sticky flags currently set on this module, as ``{label: value}``."""
         return {name: value for name, value, _ in self._flags}
 
+    def payloads(self) -> tuple[dict[str, Any], ...]:
+        """One dict per block: every value the current state can have moved.
+
+        Keyed the way a pulseq block is (``duration``, ``rf``, ``gx``, ``gy``,
+        ``gz``, ``adc``, ``ext``), with the *dynamic* fields of each event --
+        the ones that are a number in an event library row rather than a shape
+        or a duration.
+
+        Deliberately exhaustive rather than minimal: it reports every dynamic
+        field of every event, not the subset that happens to differ between two
+        states. Which fields a given module actually moves is its own business
+        and varies from one readout to the next, so a template derived by
+        probing two states would be right only for the states probed.
+
+        The peak of an RF envelope or an arbitrary gradient is the one field
+        here that is not a plain attribute read, so it is cached by sample-array
+        identity -- the same trick, and the same justification, as the sequence
+        writer's shape caches: a module replays the *same* arrays every shot and
+        never writes into them, so a scaled or re-indexed state moves the
+        payload's numbers without producing a new waveform. Measured on a line
+        readout, that cache is the difference between this being cheaper than
+        rebuilding each event's library row and being twice its price; a
+        20,000-shot loop fills three entries.
+        """
+        cache = self._peak_cache
+        if cache is None:
+            cache = self._peak_cache = {}
+        return tuple(_block_payload(block, cache) for block in self._rendered_blocks())
+
+    def _invalidate(self) -> None:
+        """Drop every cached rendering, for a change of *structure* not of state.
+
+        :meth:`set_state` deliberately keeps the layout — that is what makes a
+        re-state cheap. Anything that changes which blocks or events a module
+        emits (a new sampling mask, dropped rephasers) has to come through
+        here instead.
+        """
+        self._layout = None
+        self._rendered_cache = None
+        # A structure change designs new waveforms, so the old peaks describe
+        # arrays this module no longer holds.
+        self._peak_cache = None
+
+    def _retuned_blocks(self, key: tuple, render, retune) -> tuple[Block, ...]:
+        """Structure built once per ``key``; numbers rewritten on every later state.
+
+        A module's block structure is fixed by its *design*: how many blocks,
+        which events, which waveforms. Only a handful of payload numbers move
+        from shot to shot -- an encoding amplitude, a transmit phase, a
+        counter -- and rebuilding the events to change them re-solves no
+        gradient and re-registers no shape.
+
+        ``render`` is therefore called once, with a ``record`` dict to fill
+        with the events it will want back, and ``retune`` writes the current
+        state's numbers into those events. ``key`` names everything that would
+        change the structure rather than a number, so a state that moves one of
+        those rebuilds instead.
+
+        The events are shared across states by construction, which is exactly
+        what lets the sequence writer keep its shape caches: a retuned
+        trapezoid has no waveform to recompress, and a retuned ADC or label is
+        two scalars. A snapshot is read for the state that produced it, which
+        is what this class has always promised.
+        """
+        layout = self._layout
+        if layout is None or not _layout_match(layout[0], key):
+            record: dict = {}
+            blocks = tuple(tuple(block) for block in render(record))
+            self._layout = (key, blocks, record)
+            return blocks
+        retune(layout[2])
+        return layout[1]
+
     def _rendered_blocks(self) -> tuple[Block, ...]:
         blocks = self._current_blocks()
         if not blocks or not (self._labels or self._flags or self._triggers):
             return blocks
+
+        # The merge allocates a list per block and a label event per flag, and
+        # a loop asks for the same snapshot several times per shot (iteration,
+        # len, add_to), so it is worth remembering the last one. Every input is
+        # replaced wholesale rather than mutated, so identity is a sound key.
+        cached = self._rendered_cache
+        if (
+            cached is not None
+            and cached[0] is blocks
+            and cached[1] is self._labels
+            and cached[2] is self._flags
+            and cached[3] is self._triggers
+        ):
+            return cached[4]
 
         from pulserver.pypulseq import make_label
 
@@ -344,7 +455,9 @@ class SequenceModule(Sequence[Block], ABC):
             rendered[-1] += closing
         for index, events in self._triggers:
             rendered[index] += list(events)
-        return tuple(tuple(block) for block in rendered)
+        merged = tuple(tuple(block) for block in rendered)
+        self._rendered_cache = (blocks, self._labels, self._flags, self._triggers, merged)
+        return merged
 
     def __len__(self) -> int:
         return len(self._rendered_blocks())
@@ -363,7 +476,14 @@ class SequenceModule(Sequence[Block], ABC):
 
     @property
     def blocks(self) -> tuple[Block, ...]:
-        """Current immutable block snapshot, labels included."""
+        """Current immutable block snapshot, labels included.
+
+        This is also the module's *structure*: what a plugin hands to
+        :class:`pulserver.pypulseq.Sequence` as one subsequence's TR template.
+        Everything in it a later shot can move is enumerated by
+        :meth:`payloads`; everything else -- waveform shapes, sample counts,
+        dwell times, delays -- is fixed here and never rebuilt.
+        """
         return self._rendered_blocks()
 
     @property
@@ -400,6 +520,41 @@ class SequenceModule(Sequence[Block], ABC):
         for block in self:
             sequence.add_block(*block)
         return sequence
+
+    def add_range(self, sequence, **states):
+        """Append one instance of this module per entry of the state arrays.
+
+        The one-module form of :meth:`pulserver.pypulseq.Sequence.add_range`::
+
+            readout.add_range(seq, lin_idx=np.arange(ny), phase_offset_rad=phases)
+
+        is the loop it replaces, with arrays where the scalars were::
+
+            for ky in range(ny):
+                readout.set_state(lin_idx=ky, phase_offset_rad=phases[ky]).add_to(seq)
+
+        Scalars are broadcast, so only what actually varies has to be an array.
+        Use ``Sequence.add_range`` instead when a shot interleaves several
+        modules — a group has to be batched as a whole, because event IDs are
+        assigned in the order the blocks are visited.
+
+        Parameters
+        ----------
+        sequence : pulserver.pypulseq.Sequence
+            Sequence to append to.
+        **states
+            Arrays (or scalars) forwarded to :meth:`set_state` per shot.
+
+        Returns
+        -------
+        pulserver.pypulseq.Sequence
+            ``sequence``, so calls chain.
+
+        See Also
+        --------
+        add_to : the single-shot form.
+        """
+        return sequence.add_range((self, states))
 
     def get(self):
         """Return a standalone enhanced Pulseq sequence for this module."""
@@ -454,3 +609,92 @@ class SequenceModule(Sequence[Block], ABC):
         for block in self:
             sequence.add_block(*block)
         return sequence.plot(**kwargs)
+
+
+#: Per event type, the payload fields a later shot can move. Everything absent
+#: from here -- shape IDs, sample counts, dwell times, delays, rise/flat/fall --
+#: is structure, owned by the module's constructor and never re-read per shot.
+#: The lists mirror the event library rows in
+#: ``pulserver.pypulseq._sequence.Sequence._bulk_event``; an arbitrary gradient
+#: carries three numbers because ``scale_grad`` moves ``first`` and ``last``
+#: alongside the amplitude, while its normalised shape ID stays put.
+_DYNAMIC_FIELDS: dict[str, tuple[str, ...]] = {
+    "rf": ("freq_offset", "phase_offset", "freq_ppm", "phase_ppm"),
+    "trap": ("amplitude",),
+    "grad": ("first", "last"),
+    "adc": ("freq_offset", "phase_offset", "freq_ppm", "phase_ppm"),
+    "labelset": ("value",),
+    "labelinc": ("value",),
+    "trigger": ("delay", "duration"),
+    "output": ("delay", "duration"),
+}
+
+_CHANNEL_KEY = {"x": "gx", "y": "gy", "z": "gz"}
+
+
+def _peak(samples, cache: dict) -> float:
+    """Signed peak of a waveform: the amplitude its normalised shape is scaled by.
+
+    Keyed by array identity, with the array itself kept alongside the result --
+    which both pins the ``id`` against reuse and makes the hit check exact.
+    """
+    key = id(samples)
+    hit = cache.get(key)
+    if hit is not None and hit[0] is samples:
+        return hit[1]
+
+    import numpy as np
+
+    values = np.asarray(samples)
+    magnitude = float(np.max(np.abs(values))) if values.size else 0.0
+    if magnitude > 0 and not np.iscomplexobj(values):
+        nonzero = np.nonzero(values)[0]
+        if nonzero.size:
+            first = values[nonzero[0]]
+            magnitude *= float(np.sign(first)) if first != 0 else 1.0
+    cache[key] = (samples, magnitude)
+    return magnitude
+
+
+def _block_payload(block: Block, cache: dict) -> dict[str, Any]:
+    """Dynamic values of one block, keyed by pulseq slot."""
+    payload: dict[str, Any] = {}
+    extensions: list[tuple[str, Any]] = []
+    duration = 0.0
+
+    for event in block:
+        kind = getattr(event, "type", None)
+        if kind is None:  # a bare float delay
+            duration = max(duration, float(event))
+            continue
+
+        if kind == "rf":
+            values = {name: getattr(event, name, 0.0) for name in _DYNAMIC_FIELDS["rf"]}
+            # The registered amplitude is the envelope's peak; the shape is
+            # normalised by it, so a flip-angle schedule moves this number only.
+            values["amplitude"] = _peak(event.signal, cache)
+            payload["rf"] = values
+        elif kind == "trap":
+            payload[_CHANNEL_KEY[event.channel]] = {"amplitude": event.amplitude}
+        elif kind == "grad":
+            values = {name: getattr(event, name, 0.0) for name in _DYNAMIC_FIELDS["grad"]}
+            values["amplitude"] = _peak(event.waveform, cache)
+            payload[_CHANNEL_KEY[event.channel]] = values
+        elif kind == "adc":
+            payload["adc"] = {name: getattr(event, name, 0.0) for name in _DYNAMIC_FIELDS["adc"]}
+        elif kind == "rot3D":
+            extensions.append(("rot3D", tuple(
+                event.rot_quaternion.as_quat(canonical=True, scalar_first=True).tolist()
+            )))
+        elif kind == "rf_shim":
+            extensions.append(("rf_shim", tuple(event.shim_vector.tolist())))
+        elif kind in _DYNAMIC_FIELDS:
+            extensions.append((kind, tuple(getattr(event, name, 0) for name in _DYNAMIC_FIELDS[kind])))
+        elif kind in ("delay", "soft_delay"):
+            duration = max(duration, float(getattr(event, "delay", 0.0)))
+
+    if extensions:
+        payload["ext"] = tuple(extensions)
+    if duration:
+        payload["duration"] = duration
+    return payload

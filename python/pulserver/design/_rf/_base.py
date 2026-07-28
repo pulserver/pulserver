@@ -69,25 +69,63 @@ class RfModule(SequenceModule):
         return self
 
     def _build_blocks(self) -> tuple[Block, ...]:
+        state = self._state
+        return self._retuned_blocks(
+            # Only a rotation is structural: it appends an event to every
+            # gradient-bearing block. Frequency, phase and amplitude are all
+            # payload fields of an RF event whose shapes are already registered.
+            (state.rotation,),
+            self._render,
+            lambda record: self._retune(record, self._state),
+        )
+
+    def _render(self, record) -> tuple[Block, ...]:
         blocks: list[Block] = []
         state = self._state
-        scale = state.amplitude_scale
+        pulses: list[tuple] = []
         for template in self._template_blocks:
             block = [copy_event(event) for event in template]
             has_gradient = False
-            for event in block:
+            for source, event in zip(template, block, strict=True):
                 event_type = getattr(event, "type", None)
                 if event_type == "rf":
-                    if scale != 1.0:
-                        event.signal = self._scaled_signal(event.signal, scale)
+                    self._apply_scale(event, source.signal, state.amplitude_scale)
                     event.freq_offset += state.freq_offset_hz
                     event.phase_offset += state.phase_offset_rad
+                    # The template alongside it: a later state is an absolute
+                    # offset from the *template's* value, not a further
+                    # increment on the last one's.
+                    pulses.append((event, source))
                 elif event_type in ("grad", "trap"):
                     has_gradient = True
             if has_gradient and state.rotation is not None:
                 block.append(copy_event(state.rotation))
             blocks.append(tuple(block))
+        record["pulses"] = tuple(pulses)
         return tuple(blocks)
+
+    def _retune(self, record, state) -> None:
+        """Re-point every RF event at this state, without rebuilding a block."""
+        scale = state.amplitude_scale
+        freq_offset_hz = state.freq_offset_hz
+        phase_offset_rad = state.phase_offset_rad
+        for event, source in record["pulses"]:
+            self._apply_scale(event, source.signal, scale)
+            event.freq_offset = source.freq_offset + freq_offset_hz
+            event.phase_offset = source.phase_offset + phase_offset_rad
+
+    def _apply_scale(self, event, template_signal, scale: float) -> None:
+        """Point ``event`` at ``template_signal * scale``, and say where it came from.
+
+        ``signal`` stays the real scaled envelope, because everything that
+        plots or integrates a pulse reads it. ``shape_source`` additionally
+        names the *unscaled* envelope and the factor, which is what lets the
+        sequence writer register one magnitude shape for a whole flip-angle
+        schedule instead of one per distinct flip -- see
+        :meth:`pulserver.pypulseq.Sequence._compress_rf_cached`.
+        """
+        event.signal = template_signal if scale == 1.0 else self._scaled_signal(template_signal, scale)
+        event.shape_source = (template_signal, scale)
 
     def _scaled_signal(self, signal, scale: float):
         """``signal * scale``, handing back the same array for a repeated scale.
@@ -158,4 +196,5 @@ class RfPulse(RfModule):
         clone = copy.copy(self)
         clone._template_blocks = ((self.rf, *self.gradients),)
         clone._block_cache = None
+        clone._invalidate()
         return clone

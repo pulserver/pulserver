@@ -120,6 +120,7 @@ namespace mrdserver
      * ADC params:
      *   params[0] = adc_role (int, AdcRole)
      *   params[1] = phase_offset_rad (float)
+     *   params[2] = echo (int/bool; any instance reaches k-space zero)
      */
     struct SeqEvent
     {
@@ -165,6 +166,10 @@ namespace mrdserver
         float adc_phase_offset_rad() const
         {
             return params[1];
+        }
+        bool adc_is_echo() const
+        {
+            return params[2] != 0.0f;
         }
     };
 

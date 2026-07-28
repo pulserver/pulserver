@@ -22,7 +22,7 @@
  *       RF:    params[0]=rf_def_id, [1]=rf_use, [2]=act_amplitude_hz,
  *              [3]=phase_offset_rad, [4]=freq_offset_hz, [5]=rf_shim_id,
  *              [6]=ss_grad_amp_hz_per_m
- *       ADC:   params[0]=adc_role, [1]=phase_offset_rad, [2..6]=0
+ *       ADC:   params[0]=adc_role, [1]=phase_offset_rad, [2]=echo, [3..6]=0
  *       OTHER: params[0..6]=0
  *
  * [per-subsequence RF-def library, appended after the row table]

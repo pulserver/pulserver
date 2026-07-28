@@ -75,6 +75,62 @@ def _polynomial_fista(
     return x
 
 
+def _host_fista(
+    data: Any,
+    physics: Any,
+    denoiser: Any,
+    *,
+    regularization: float,
+    iterations: int,
+    stepsize: float,
+    init: Any | None,
+) -> Any:
+    """FISTA with CPU-resident iterates and streamed operator/denoiser calls."""
+    rhs = physics.A_adjoint(data)
+    x, z = _initial_fista_iterates(init, data, physics, rhs)
+    if hasattr(x, "device") and x.device.type != "cpu":
+        x = x.to("cpu")
+    if hasattr(z, "device") and z.device.type != "cpu":
+        z = z.to("cpu")
+    for iteration in range(iterations):
+        gradient = physics.A_adjoint_A(z) - rhs
+        next_x = denoiser(z - stepsize * gradient, regularization)
+        momentum = (iteration + 2.0) / (iteration + 3.0)
+        z = next_x + momentum * (next_x - x)
+        x = next_x
+    return x
+
+
+def _host_sqnorm(
+    physics: Any,
+    initial: Any,
+    *,
+    iterations: int,
+    tolerance: float = 1e-3,
+) -> float:
+    """Estimate the normal-operator norm without bypassing streamed staging."""
+    torch = import_module("torch")
+    vector = initial.to("cpu")
+    scale = torch.linalg.vector_norm(vector)
+    if not bool(torch.isfinite(scale)) or float(scale) == 0.0:
+        vector = torch.ones_like(vector)
+        scale = torch.linalg.vector_norm(vector)
+    vector = vector / scale
+    previous = 0.0
+    estimate = 0.0
+    for _ in range(iterations):
+        transformed = physics.A_adjoint_A(vector)
+        norm = torch.linalg.vector_norm(transformed)
+        estimate = float(norm)
+        if not isfinite(estimate) or estimate <= 0.0:
+            break
+        vector = transformed / norm
+        if abs(estimate - previous) <= tolerance * estimate:
+            break
+        previous = estimate
+    return estimate
+
+
 def pics(
     data: Any,
     physics: Any,
@@ -87,6 +143,7 @@ def pics(
     polynomial_degree: int = 0,
     init: Any | None = None,
     verbose: bool = False,
+    streaming: Any | None = None,
 ) -> Any:
     """Reconstruct parallel MRI data with CG or plug-and-play FISTA.
 
@@ -117,6 +174,15 @@ def pics(
     ):
         raise ValueError("polynomial_degree must be a non-negative integer")
     linear = _linear_physics(physics)
+    if streaming is not None:
+        torch = import_module("torch")
+        if not isinstance(data, torch.Tensor):
+            data = torch.as_tensor(data)
+        elif data.device.type != "cpu":
+            data = data.to("cpu")
+        if isinstance(init, torch.Tensor) and init.device.type != "cpu":
+            init = init.to("cpu")
+        streaming.configure_physics(linear)
 
     if denoiser is None:
         if polynomial_degree:
@@ -133,12 +199,18 @@ def pics(
                 "pulserver[recon-cpu] or pulserver[recon-cuda]."
             ) from error
         rhs = linear.A_adjoint(data)
+        if (
+            streaming is not None
+            and hasattr(init, "device")
+            and init.device.type != "cpu"
+        ):
+            init = init.to("cpu")
 
         def normal(x: Any) -> Any:
             result = linear.A_adjoint_A(x)
             return result + regularization * x if regularization else result
 
-        return conjugate_gradient(
+        result = conjugate_gradient(
             normal,
             rhs,
             max_iter=iterations,
@@ -147,28 +219,40 @@ def pics(
             parallel_dim=0,
             verbose=verbose,
         )
+        if streaming is not None and streaming.result_device == "cuda":
+            return result.to(streaming.torch_device, non_blocking=True)
+        return result
 
     if isinstance(denoiser, Sequence):
         denoiser = average(denoiser)
+    if streaming is not None:
+        denoiser = streaming.wrap_denoiser(denoiser)
     if regularization <= 0:
         raise ValueError("regularization must be positive when a denoiser is provided")
 
     if stepsize is None:
         x0 = linear.A_adjoint(data)
-        compute_sqnorm = getattr(linear, "compute_sqnorm", None)
-        if compute_sqnorm is None:
-            operator = getattr(linear, "operator", None)
-            compute_sqnorm = getattr(operator, "compute_sqnorm", None)
-        if compute_sqnorm is None:
-            raise TypeError(
-                "physics cannot estimate its norm; provide an explicit stepsize"
+        if streaming is not None:
+            lipschitz = _host_sqnorm(
+                linear,
+                x0,
+                iterations=min(20, iterations),
             )
-        lipschitz = compute_sqnorm(
-            x0,
-            max_iter=min(20, iterations),
-            tol=1e-3,
-            verbose=False,
-        )
+        else:
+            compute_sqnorm = getattr(linear, "compute_sqnorm", None)
+            if compute_sqnorm is None:
+                operator = getattr(linear, "operator", None)
+                compute_sqnorm = getattr(operator, "compute_sqnorm", None)
+            if compute_sqnorm is None:
+                raise TypeError(
+                    "physics cannot estimate its norm; provide an explicit stepsize"
+                )
+            lipschitz = compute_sqnorm(
+                x0,
+                max_iter=min(20, iterations),
+                tol=1e-3,
+                verbose=False,
+            )
         lipschitz = float(lipschitz)
         if not isfinite(lipschitz) or lipschitz <= 0:
             raise ValueError("physics returned a non-positive norm estimate")
@@ -177,7 +261,7 @@ def pics(
         raise ValueError("stepsize must be positive and finite")
 
     if polynomial_degree:
-        return _polynomial_fista(
+        result = _polynomial_fista(
             data,
             linear,
             denoiser,
@@ -187,6 +271,23 @@ def pics(
             degree=polynomial_degree,
             init=init,
         )
+        if streaming is not None and streaming.result_device == "cuda":
+            return result.to(streaming.torch_device, non_blocking=True)
+        return result
+
+    if streaming is not None:
+        result = _host_fista(
+            data,
+            linear,
+            denoiser,
+            regularization=regularization,
+            iterations=iterations,
+            stepsize=stepsize,
+            init=init,
+        )
+        if streaming.result_device == "cuda":
+            return result.to(streaming.torch_device, non_blocking=True)
+        return result
 
     try:
         optim = import_module("deepinv.optim")

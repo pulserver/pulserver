@@ -8,8 +8,9 @@
  * Emits a compact per-block row table over the full pass (canonical TR).
  * One row per block: RF rows carry rf_def_id, rf_use, act_amplitude,
  * phase_offset, freq_offset, rf_shim_id; ADC rows carry adc_role and
- * phase_offset; OTHER rows are zero-padded.  freq/phase already include
- * ppm terms (folded in at dedup time by pulseg_dedup.c).
+ * phase_offset and the real-instance echo flag; OTHER rows are zero-padded.
+ * freq/phase already include ppm terms (folded in at dedup time by
+ * pulseg_dedup.c).
  */
 
 #include "pulseg_internal.h"
@@ -60,6 +61,7 @@ static int seqdesc__build_adc_anchors_from_canonical(
     const pulseg_collection *coll,
     float **out_kzero,
     int **out_roles,
+    float **out_anchor_kxyz,
     const pulseg_sequence_descriptor *desc,
     int subseq_idx,
     int block_start,
@@ -69,7 +71,11 @@ static int seqdesc__build_adc_anchors_from_canonical(
     pulseg_diagnostic diag;
     float *kzero_us = NULL;
     int *roles = NULL;
+    float *anchor_kxyz = NULL;
     float *krss_vals = NULL;
+    float *kx_vals = NULL;
+    float *ky_vals = NULL;
+    float *kz_vals = NULL;
     int *refocus_samples = NULL;
     int *excite_samples = NULL;
     int n_refocus = 0, n_excite = 0;
@@ -86,6 +92,8 @@ static int seqdesc__build_adc_anchors_from_canonical(
 
     *out_kzero = NULL;
     *out_roles = NULL;
+    if (out_anchor_kxyz)
+        *out_anchor_kxyz = NULL;
 
     pulseg_diagnostic_init(&diag);
 
@@ -117,13 +125,19 @@ static int seqdesc__build_adc_anchors_from_canonical(
     /* Step 2: Allocate output arrays and initialise default roles */
     kzero_us = (float *)PULSEG_ALLOC((size_t)n_walk * sizeof(float));
     roles = (int *)PULSEG_ALLOC((size_t)n_walk * sizeof(int));
-    if (!kzero_us || !roles)
+    if (out_anchor_kxyz)
+        anchor_kxyz =
+            (float *)PULSEG_ALLOC((size_t)n_walk * 3U * sizeof(float));
+    if (!kzero_us || !roles || (out_anchor_kxyz && !anchor_kxyz))
     {
         PULSEG_FREE(kzero_us);
         PULSEG_FREE(roles);
+        PULSEG_FREE(anchor_kxyz);
         pulseg__uniform_grad_waveforms_free(&uw);
         return PULSEG_ERR_ALLOC_FAILED;
     }
+    if (anchor_kxyz)
+        memset(anchor_kxyz, 0, (size_t)n_walk * 3U * sizeof(float));
 
     for (i = 0; i < n_walk; ++i)
     {
@@ -168,6 +182,7 @@ static int seqdesc__build_adc_anchors_from_canonical(
             {
                 PULSEG_FREE(kzero_us);
                 PULSEG_FREE(roles);
+                PULSEG_FREE(anchor_kxyz);
                 pulseg__uniform_grad_waveforms_free(&uw);
                 return PULSEG_ERR_ALLOC_FAILED;
             }
@@ -179,6 +194,7 @@ static int seqdesc__build_adc_anchors_from_canonical(
             {
                 PULSEG_FREE(kzero_us);
                 PULSEG_FREE(roles);
+                PULSEG_FREE(anchor_kxyz);
                 PULSEG_FREE(refocus_samples);
                 pulseg__uniform_grad_waveforms_free(&uw);
                 return PULSEG_ERR_ALLOC_FAILED;
@@ -228,10 +244,21 @@ static int seqdesc__build_adc_anchors_from_canonical(
      * Matches TruthBuilder: integrate forward, then apply RF events at
      * each sample: excitation resets k=0; refocusing negates k. */
     krss_vals = (float *)PULSEG_ALLOC((size_t)n_samples * sizeof(float));
-    if (!krss_vals)
+    if (anchor_kxyz)
+    {
+        kx_vals = (float *)PULSEG_ALLOC((size_t)n_samples * sizeof(float));
+        ky_vals = (float *)PULSEG_ALLOC((size_t)n_samples * sizeof(float));
+        kz_vals = (float *)PULSEG_ALLOC((size_t)n_samples * sizeof(float));
+    }
+    if (!krss_vals || (anchor_kxyz && (!kx_vals || !ky_vals || !kz_vals)))
     {
         PULSEG_FREE(kzero_us);
         PULSEG_FREE(roles);
+        PULSEG_FREE(anchor_kxyz);
+        PULSEG_FREE(krss_vals);
+        PULSEG_FREE(kx_vals);
+        PULSEG_FREE(ky_vals);
+        PULSEG_FREE(kz_vals);
         PULSEG_FREE(refocus_samples);
         PULSEG_FREE(excite_samples);
         pulseg__uniform_grad_waveforms_free(&uw);
@@ -244,6 +271,12 @@ static int seqdesc__build_adc_anchors_from_canonical(
         int ref_cursor = 0;
 
         krss_vals[0] = 0.0f;
+        if (kx_vals)
+        {
+            kx_vals[0] = 0.0f;
+            ky_vals[0] = 0.0f;
+            kz_vals[0] = 0.0f;
+        }
 
         for (j = 1; j < n_samples; ++j)
         {
@@ -270,6 +303,12 @@ static int seqdesc__build_adc_anchors_from_canonical(
             }
 
             krss_vals[j] = (float)sqrt((double)kx * kx + (double)ky * ky + (double)kz * kz);
+            if (kx_vals)
+            {
+                kx_vals[j] = kx;
+                ky_vals[j] = ky;
+                kz_vals[j] = kz;
+            }
         }
     }
 
@@ -321,6 +360,12 @@ static int seqdesc__build_adc_anchors_from_canonical(
                             }
                         }
                         kzero_us[i] = (float)min_idx * dt;
+                        if (anchor_kxyz)
+                        {
+                            anchor_kxyz[i * 3 + 0] = kx_vals[min_idx];
+                            anchor_kxyz[i * 3 + 1] = ky_vals[min_idx];
+                            anchor_kxyz[i * 3 + 2] = kz_vals[min_idx];
+                        }
                     }
                 }
             }
@@ -485,12 +530,342 @@ static int seqdesc__build_adc_anchors_from_canonical(
 
     /* Clean up temporaries */
     PULSEG_FREE(krss_vals);
+    PULSEG_FREE(kx_vals);
+    PULSEG_FREE(ky_vals);
+    PULSEG_FREE(kz_vals);
     PULSEG_FREE(refocus_samples);
     PULSEG_FREE(excite_samples);
     pulseg__uniform_grad_waveforms_free(&uw);
 
     *out_kzero = kzero_us;
     *out_roles = roles;
+    if (out_anchor_kxyz)
+        *out_anchor_kxyz = anchor_kxyz;
+    return PULSEG_SUCCESS;
+}
+
+/*
+ * Determine which canonical ADC positions are true echoes in at least one
+ * real scan-table instance. This is deliberately separate from the ZERO_VAR
+ * canonical-TR analyzer above: a varying gradient being replaced by zero does
+ * not imply that zero is present in the acquired schedule.
+ *
+ * Each actual TR/pass is inspected because shot-index deduplication does not
+ * capture per-instance gradient-amplitude changes. For each instance we
+ * integrate the ACTUAL gradient waveform, including excitation resets and
+ * refocusing sign changes, then reduce the minimum |k| into the canonical ADC
+ * position. The ZERO_VAR path contributes only its numerical k=0 floor; it
+ * never counts as an acquired instance. Rotation need not be applied because
+ * an orthonormal rotation preserves |k|.
+ */
+static int seqdesc__build_adc_echo_flags(
+    int **out_echoes,
+    const pulseg_sequence_descriptor *desc,
+    int block_start,
+    int n_walk,
+    const float *canonical_anchor_kxyz)
+{
+    int *echoes = NULL;
+    float *min_krss_by_position = NULL;
+    float canonical_floor = 1.0e30f;
+    float global_scale = 0.0f;
+    int num_instances;
+    int has_nd_prep;
+    int has_nd_cool;
+    int variant;
+    int i;
+    int rc = PULSEG_SUCCESS;
+
+    if (!out_echoes || !desc)
+        return PULSEG_ERR_NULL_POINTER;
+    *out_echoes = NULL;
+
+    echoes = (int *)PULSEG_ALLOC((size_t)n_walk * sizeof(int));
+    min_krss_by_position =
+        (float *)PULSEG_ALLOC((size_t)n_walk * sizeof(float));
+    if (!echoes || !min_krss_by_position)
+    {
+        PULSEG_FREE(echoes);
+        PULSEG_FREE(min_krss_by_position);
+        return PULSEG_ERR_ALLOC_FAILED;
+    }
+    memset(echoes, 0, (size_t)n_walk * sizeof(int));
+    for (i = 0; i < n_walk; ++i)
+        min_krss_by_position[i] = 1.0e30f;
+
+    has_nd_prep = desc->tr_descriptor.num_prep_blocks > 0 &&
+        !desc->tr_descriptor.degenerate_prep;
+    has_nd_cool = desc->tr_descriptor.num_cooldown_blocks > 0 &&
+        !desc->tr_descriptor.degenerate_cooldown;
+
+    num_instances = (has_nd_prep || has_nd_cool)
+        ? desc->num_passes
+        : desc->tr_descriptor.num_trs;
+    if (num_instances < 1)
+        num_instances = 1;
+
+    for (i = 0; i < n_walk; ++i)
+    {
+        const pulseg_block_table_element *bte =
+            &desc->block_table[block_start + i];
+        if (bte->adc_id >= 0 && !bte->nav_flag)
+        {
+            if (canonical_anchor_kxyz)
+            {
+                double kx = canonical_anchor_kxyz[i * 3 + 0];
+                double ky = canonical_anchor_kxyz[i * 3 + 1];
+                double kz = canonical_anchor_kxyz[i * 3 + 2];
+                float norm = (float)sqrt(kx * kx + ky * ky + kz * kz);
+                if (norm < canonical_floor)
+                    canonical_floor = norm;
+            }
+        }
+    }
+    if (canonical_floor == 1.0e30f)
+        canonical_floor = 0.0f;
+
+    for (variant = 0; variant < num_instances; ++variant)
+    {
+        pulseg__uniform_grad_waveforms uw = PULSEG__UNIFORM_GRAD_WAVEFORMS_INIT;
+        pulseg_diagnostic diag;
+        float *krss = NULL;
+        int *refocus_samples = NULL;
+        int *excite_samples = NULL;
+        int actual_start;
+        int rep_idx;
+        int n_refocus = 0;
+        int n_excite = 0;
+        int n_refocus_cap = 0;
+        int n_excite_cap = 0;
+        int n_samples;
+        float dt;
+        float blk_start_us;
+        float max_krss;
+        int j;
+
+        rep_idx = variant;
+        actual_start = (has_nd_prep || has_nd_cool)
+            ? rep_idx * desc->pass_len
+            : block_start + rep_idx * desc->tr_descriptor.tr_size;
+
+        pulseg_diagnostic_init(&diag);
+        rc = pulseg__get_gradient_waveforms_range(
+            desc,
+            &uw,
+            &diag,
+            actual_start,
+            n_walk,
+            PULSEG_AMP_ACTUAL,
+            NULL,
+            0,
+            NULL);
+        if (rc != PULSEG_SUCCESS)
+            goto echo_variant_done;
+
+        n_samples = uw.num_samples;
+        dt = uw.raster_us;
+        if (n_samples < 2 || dt <= 0.0f)
+        {
+            rc = PULSEG_ERR_INVALID_ARGUMENT;
+            goto echo_variant_done;
+        }
+
+        /* Collect the RF state changes for this actual representative. */
+        for (i = 0; i < n_walk; ++i)
+        {
+            const pulseg_block_table_element *bte =
+                &desc->block_table[actual_start + i];
+            if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size)
+            {
+                int use = desc->rf_table[bte->rf_id].rf_use;
+                if (use == PULSEG_RF_USE_REFOCUSING)
+                    n_refocus_cap++;
+                else if (use == PULSEG_RF_USE_EXCITATION)
+                    n_excite_cap++;
+            }
+        }
+        if (n_refocus_cap > 0)
+            refocus_samples =
+                (int *)PULSEG_ALLOC((size_t)n_refocus_cap * sizeof(int));
+        if (n_excite_cap > 0)
+            excite_samples =
+                (int *)PULSEG_ALLOC((size_t)n_excite_cap * sizeof(int));
+        if ((n_refocus_cap > 0 && !refocus_samples) ||
+            (n_excite_cap > 0 && !excite_samples))
+        {
+            rc = PULSEG_ERR_ALLOC_FAILED;
+            goto echo_variant_done;
+        }
+
+        blk_start_us = 0.0f;
+        for (i = 0; i < n_walk; ++i)
+        {
+            const pulseg_block_table_element *bte =
+                &desc->block_table[actual_start + i];
+            if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size)
+            {
+                const pulseg_rf_table_element *rte =
+                    &desc->rf_table[bte->rf_id];
+                int rf_def_id = rte->id;
+                if (rf_def_id >= 0 && rf_def_id < desc->num_unique_rfs)
+                {
+                    const pulseg_rf_definition *rdef =
+                        &desc->rf_definitions[rf_def_id];
+                    float iso_us = blk_start_us + (float)rdef->delay +
+                        (float)rdef->stats.duration_us -
+                        (float)rdef->stats.isodelay_us;
+                    int iso_sample = (int)(iso_us / dt);
+                    if (iso_sample < 0)
+                        iso_sample = 0;
+                    if (iso_sample >= n_samples)
+                        iso_sample = n_samples - 1;
+                    if (rte->rf_use == PULSEG_RF_USE_REFOCUSING)
+                        refocus_samples[n_refocus++] = iso_sample;
+                    else if (rte->rf_use == PULSEG_RF_USE_EXCITATION)
+                        excite_samples[n_excite++] = iso_sample;
+                }
+            }
+            {
+                int dur = (bte->duration_us >= 0)
+                    ? bte->duration_us
+                    : desc->base_blocks[bte->id].duration_us;
+                blk_start_us += (float)dur;
+            }
+        }
+
+        krss = (float *)PULSEG_ALLOC((size_t)n_samples * sizeof(float));
+        if (!krss)
+        {
+            rc = PULSEG_ERR_ALLOC_FAILED;
+            goto echo_variant_done;
+        }
+
+        {
+            float kx = 0.0f;
+            float ky = 0.0f;
+            float kz = 0.0f;
+            int ex_cursor = 0;
+            int ref_cursor = 0;
+
+            krss[0] = 0.0f;
+            for (j = 1; j < n_samples; ++j)
+            {
+                kx += 0.5f * (uw.gx[j - 1] + uw.gx[j]) * dt;
+                ky += 0.5f * (uw.gy[j - 1] + uw.gy[j]) * dt;
+                kz += 0.5f * (uw.gz[j - 1] + uw.gz[j]) * dt;
+
+                while (ex_cursor < n_excite && excite_samples[ex_cursor] == j)
+                {
+                    kx = 0.0f;
+                    ky = 0.0f;
+                    kz = 0.0f;
+                    ex_cursor++;
+                }
+                while (ref_cursor < n_refocus && refocus_samples[ref_cursor] == j)
+                {
+                    kx = -kx;
+                    ky = -ky;
+                    kz = -kz;
+                    ref_cursor++;
+                }
+                krss[j] =
+                    (float)sqrt((double)kx * kx + (double)ky * ky + (double)kz * kz);
+            }
+        }
+
+        max_krss = 0.0f;
+        for (j = 0; j < n_samples; ++j)
+        {
+            if (krss[j] > max_krss)
+                max_krss = krss[j];
+        }
+        if (max_krss > global_scale)
+            global_scale = max_krss;
+
+        /* Reduce this real variant into the per-position minimum |k|. */
+        blk_start_us = 0.0f;
+        for (i = 0; i < n_walk; ++i)
+        {
+            const pulseg_block_table_element *bte =
+                &desc->block_table[actual_start + i];
+            if (bte->adc_id >= 0 && !bte->nav_flag)
+            {
+                int bdef_id = bte->id;
+                int adc_def_id = (bdef_id >= 0 && bdef_id < desc->num_unique_blocks)
+                    ? desc->base_blocks[bdef_id].adc_id
+                    : -1;
+                if (adc_def_id >= 0 && adc_def_id < desc->num_unique_adcs)
+                {
+                    const pulseg_adc_definition *adef =
+                        &desc->adc_definitions[adc_def_id];
+                    float onset = blk_start_us + (float)adef->delay;
+                    float duration = (float)adef->num_samples *
+                        (float)adef->dwell_time * 1.0e-3f;
+                    int rs = (int)(onset / dt);
+                    int re = (int)((onset + duration) / dt);
+                    float min_krss;
+
+                    if (rs < 0)
+                        rs = 0;
+                    if (re >= n_samples)
+                        re = n_samples - 1;
+                    if (rs <= re)
+                    {
+                        min_krss = krss[rs];
+                        for (j = rs + 1; j <= re; ++j)
+                        {
+                            if (krss[j] < min_krss)
+                                min_krss = krss[j];
+                        }
+                        if (min_krss < min_krss_by_position[i])
+                            min_krss_by_position[i] = min_krss;
+                    }
+                }
+            }
+            {
+                int dur = (bte->duration_us >= 0)
+                    ? bte->duration_us
+                    : desc->base_blocks[bte->id].duration_us;
+                blk_start_us += (float)dur;
+            }
+        }
+
+echo_variant_done:
+        if (krss)
+            PULSEG_FREE(krss);
+        if (refocus_samples)
+            PULSEG_FREE(refocus_samples);
+        if (excite_samples)
+            PULSEG_FREE(excite_samples);
+        pulseg__uniform_grad_waveforms_free(&uw);
+        if (rc != PULSEG_SUCCESS)
+            break;
+    }
+
+    if (rc != PULSEG_SUCCESS)
+    {
+        PULSEG_FREE(echoes);
+        PULSEG_FREE(min_krss_by_position);
+        return rc;
+    }
+
+    {
+        /*
+         * Raster integration rarely lands on mathematical zero exactly.
+         * ZERO_VAR supplies the error floor already accepted by the canonical
+         * anchor calculation; the scale term absorbs accumulated float error
+         * without allowing a finite phase-encoding offset to count as zero.
+         */
+        float threshold =
+            canonical_floor + 1.0e-5f * global_scale + 1.0e-6f;
+        for (i = 0; i < n_walk; ++i)
+        {
+            if (min_krss_by_position[i] <= threshold)
+                echoes[i] = 1;
+        }
+    }
+    PULSEG_FREE(min_krss_by_position);
+    *out_echoes = echoes;
     return PULSEG_SUCCESS;
 }
 
@@ -570,7 +945,9 @@ int pulseg_get_sequence_description(
 
     float *blk_start = NULL;
     float *adc_kzero = NULL;
+    float *adc_anchor_kxyz = NULL;
     int *adc_roles = NULL;
+    int *adc_echoes = NULL;
     int n_walk, start_block, i, rf_def_id, adc_def_id;
     int ret = PULSEG_SUCCESS;
 
@@ -602,6 +979,7 @@ int pulseg_get_sequence_description(
         coll,
         &adc_kzero,
         &adc_roles,
+        &adc_anchor_kxyz,
         desc,
         subseq_idx,
         start_block,
@@ -611,7 +989,17 @@ int pulseg_get_sequence_description(
         goto cleanup;
     }
 
-    /* Step 3: allocate compact row table */
+    /* Step 3: true-echo flags reduced over real scan-table instances. */
+    ret = seqdesc__build_adc_echo_flags(
+        &adc_echoes,
+        desc,
+        start_block,
+        n_walk,
+        adc_anchor_kxyz);
+    if (ret != PULSEG_SUCCESS)
+        goto cleanup;
+
+    /* Step 4: allocate compact row table */
     out->rows = (pulseg_seq_event *)PULSEG_ALLOC((size_t)n_walk * sizeof(pulseg_seq_event));
     if (!out->rows)
     {
@@ -621,7 +1009,7 @@ int pulseg_get_sequence_description(
     memset(out->rows, 0, (size_t)n_walk * sizeof(pulseg_seq_event));
     out->num_rows = n_walk;
 
-    /* Step 4: fill one row per canonical-window block */
+    /* Step 5: fill one row per canonical-window block */
     for (i = 0; i < n_walk; ++i)
     {
         pulseg_seq_event *row = &out->rows[i];
@@ -715,6 +1103,7 @@ int pulseg_get_sequence_description(
             row->timestamp_us = adc_kzero[i];
             row->params[0] = (float)adc_roles[i];
             row->params[1] = adcdef ? desc->adc_table[bte->adc_id].phase_offset : 0.0f;
+            row->params[2] = (float)adc_echoes[i];
         }
         /* ---- OTHER block (delay / gradient only) ---- */
         else
@@ -729,8 +1118,12 @@ cleanup:
         PULSEG_FREE(blk_start);
     if (adc_kzero)
         PULSEG_FREE(adc_kzero);
+    if (adc_anchor_kxyz)
+        PULSEG_FREE(adc_anchor_kxyz);
     if (adc_roles)
         PULSEG_FREE(adc_roles);
+    if (adc_echoes)
+        PULSEG_FREE(adc_echoes);
     if (ret != PULSEG_SUCCESS)
         pulseg_sequence_description_free(out);
 
@@ -779,6 +1172,7 @@ int pulseg_get_sequence_parameters(pulseg_sequence_parameters *out, const pulseg
             coll,
             &adc_kzero,
             &adc_roles,
+            NULL,
             desc,
             ss,
             start_block,

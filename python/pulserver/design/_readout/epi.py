@@ -542,6 +542,7 @@ class _EpiTrainBlipped(Readout):
         new = copy.deepcopy(self)
         new._configure(sampling_mask)
         new._block_cache = None
+        new._invalidate()
         return new
 
     def _build_blocks(self):
@@ -762,6 +763,7 @@ class _EpiTrainFlyback(Readout):
         new = copy.deepcopy(self)
         new._configure(sampling_mask)
         new._block_cache = None
+        new._invalidate()
         return new
 
     def _build_blocks(self):

@@ -20,7 +20,8 @@
 //   [per-subseq]
 //     subseq_idx (int), tr_duration_us (float), num_rows (int)
 //     [rows] type (int), timestamp_us (float), params[7] (float x7)
-//       RF params[6] = ss_grad_amp_hz_per_m (0 if no slice-select grad)
+//       ADC params[2] = echo (1 if any real instance reaches k-space zero)
+//       RF  params[6] = ss_grad_amp_hz_per_m (0 if no slice-select grad)
 //     [RF-def library, appended by pulseg_cache_seqdesc.c's
 //      sd_write_rf_def_library() -- see that file's header comment for the
 //      authoritative byte layout]

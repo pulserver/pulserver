@@ -13,6 +13,8 @@ Install `pulserver[recon-cpu]` for FINUFFT, MRPro, and DeepInverse; add
 Install `pulserver[recon-distortion]` only when PyHySCO reverse-polarity
 distortion correction is required. PyHySCO is GPL-3.0-only, so Pulserver does
 not vendor or import it.
+Install `pulserver[recon-sim]` for the LiveSDK sequence-description decoder
+and TorchSim EPG state-machine simulator.
 
 Gradient nonlinearity correction is included in `pulserver[recon]`. It accepts
 a coefficient-file path, serialized coefficient text, or a keyed string
@@ -125,12 +127,172 @@ from pulserver.recon import NonCartesian2D, OffResonance, Subspace, Toeplitz
 physics = NonCartesian2D(trajectory, (256, 256), coil_maps=coil_maps)
 physics = OffResonance(physics, field_map, readout_time)
 physics = Subspace(physics, basis)  # off-resonance must precede subspace
-physics = Toeplitz(physics)
+physics = Toeplitz(
+    physics,
+    support="radial",
+    radius=1.0,
+    chunk_size=65536,
+    coil_batch_size=1,
+)
 ```
 
 Base mri-nufft operators use native Toeplitz kernels. Cartesian FFTs are
-already exact. Stacked, subspace, and off-resonance compositions use a correct
-exact normal operation when mri-nufft has no combined Toeplitz kernel.
+already exact. Subspace and off-resonance compositions use a Torch-native
+matrix-valued transfer kernel on CPU and CUDA. The transfer stores only its
+Hermitian upper triangle, remains real when the basis permits it, and unpacks
+only a bounded chunk during multiplication. Off-resonance followed by
+subspace uses one combined coefficient/interpolation-segment transfer when
+the spatial interpolation factors are shared.
+
+`support="radial"` (the default) retains the centered circle or sphere in the
+oversampled Fourier grid and assumes matching radial/spherical filtering in
+the reconstruction model. Use `support="full"` for the complete embedding.
+`radius` is normalized to the per-axis Nyquist radius. The compact kernel is
+built lazily by the first `A_adjoint_A` call; its `storage_nbytes`,
+`dense_nbytes`, and `compression_ratio` attributes expose the persistent
+memory footprint. `chunk_size` bounds temporary unpacking memory, while
+`coil_batch_size` trades working memory for throughput.
+
+On CUDA, `cuda_mode="auto"` selects a Julia-style full-residency hot path when
+two complete padded coefficient banks plus a conservative cuFFT work estimate
+fit below `cuda_max_device_fraction` (0.85 by default). That path keeps the
+packed transfer, indices, FFT banks, sensitivity maps, and iterates on the
+device; it uses batched coefficient FFTs and a direct Triton packed matvec
+without support gather/scatter. If the banks do not fit, execution uses the
+one-volume compact path. Set `cuda_mode="resident"` to require the batched path
+and raise `MemoryError` rather than falling back, or `"compact"` to force the
+lower-memory implementation.
+
+For a real transfer, `cuda_transfer_precision="float16"` or `"bfloat16"`
+halves packed-transfer storage while the direct matvec accumulates in FP32.
+The default `"auto"` preserves the constructed transfer dtype because reduced
+storage precision changes the numerical operator.
+
+Stacked NUFFT retains its exact normal operation. For 3D Cartesian data,
+perform the exact 1D FFT along the fully sampled axis and use batched
+Cartesian 2D physics for the resulting slices.
+
+### Host-backed CUDA streaming
+
+Scanner GPUs can execute a reconstruction whose k-space, coefficient images,
+optimizer state, and compact Toeplitz transfer live in CPU RAM. The compact
+transfer still applies all three storage reductions: radial/spherical support,
+Hermitian upper-triangle packing, and real storage for a real basis. It never
+materializes a dense `(K, K, 2Nx, 2Ny, 2Nz)` transfer or all `K` padded
+coefficient volumes. In the faster device-spectrum mode it retains only the
+`K` support-restricted spectra plus one fully padded FFT workspace.
+
+Pass the `CudaStreaming` policy while constructing dynamic non-Cartesian
+physics as well as to `pics`. This lets Pulserver build frame-specific NUFFT
+plans lazily through a bounded LRU instead of creating hundreds of plans
+upfront:
+
+```python
+from pulserver.recon import (
+    CudaStreaming,
+    NonCartesian3D,
+    Subspace,
+    Toeplitz,
+    llr,
+    pics,
+)
+
+execution = CudaStreaming(
+    device="cuda:0",
+    streams=2,
+    transfer_chunk_size=1_048_576,
+    physics_batch_size=1,
+    spectrum_residency="auto",
+    kernel_residency="auto",
+    transfer_precision="auto",
+    frame_cache_size=2,
+    denoiser_slab_size=32,
+    denoiser_halo=8,
+    result_device="cpu",
+)
+noncartesian = NonCartesian3D(
+    trajectory,                       # (frames, shots, samples, 3), on CPU
+    (256, 256, 256),
+    coil_maps=cpu_coil_maps,
+    backend="cufinufft",
+    streaming=execution,
+)
+physics = Toeplitz(
+    Subspace(noncartesian, basis, streaming=execution),
+    support="radial",
+)
+coefficients = pics(
+    cpu_kspace,
+    physics,
+    llr(dimension=3, block_size=8),
+    regularization=0.01,
+    iterations=30,
+    stepsize=estimated_stepsize,
+    streaming=execution,
+)
+```
+
+PICS keeps CG/FISTA iterates on CPU. A subspace adjoint projects each acquired
+frame immediately instead of retaining hundreds of frame images, the forward
+operator emits frame measurements directly into host storage, and
+`frame_cache_size` bounds simultaneously live frame-specific NUFFT plans.
+CUFINUFFT physics still requires a CUDA-capable native operator, but
+Pulserver's facade owns CPU/CUDA staging; no DeepInverse or MRI-NUFFT source
+modification is required.
+
+`spectrum_residency="auto"` keeps support-restricted coefficient spectra on
+the GPU when they fit below `max_device_fraction`, otherwise it falls back to
+host spectra. `kernel_residency="auto"` retains the packed transfer when its
+storage plus the measured cuFFT workspace fit the same limit, otherwise it
+streams fixed preallocated chunks. Set `"host"` or `"device"` to force either
+choice. `transfer_precision="auto"` preserves the kernel dtype. Explicit
+`"float16"` or `"bfloat16"` halves real-transfer storage and bandwidth while
+the fused matvec accumulates in FP32; this changes the numerical operator and
+should be validated for the chosen CG/FISTA tolerance.
+`physics_batch_size` bounds Cartesian slice batches and Toeplitz coil-image
+batches; the two stream slots overlap their pinned transfers and CUDA work.
+
+The optimized CUDA packed matvec requires Triton. Linux PyTorch wheels normally
+install a matching Triton package and do not require `nvcc` or a CUDA toolkit
+on the scanner, but the first call JIT-compiles and caches a device/rank
+specialization. Pulserver raises if Triton is missing or compilation fails; it
+does not silently substitute the slower generic CUDA path. Verify deployment
+with `import torch, triton`, a compatible NVIDIA driver, and a writable Triton
+cache, then warm the reconstruction service once after installation.
+
+On a large GPU, omit `streaming` and keep the image, maps, and compact kernel
+on CUDA. Full offload uses the same fused real or complex Hermitian packed
+matvec and one padded FFT volume rather than materializing `K` padded input,
+spectrum, and output banks.
+
+Non-overlapping LLR is exact when slab boundaries align with its block grid.
+TV, TGV, and wavelet proximal maps have global spatial coupling, so bounded
+slab execution is an overlap approximation. Increase `denoiser_halo` to
+reduce boundary error, or omit `streaming` when an exact full-volume proximal
+fits. One stream minimizes workspace; two streams overlap pinned transfers
+and computation and are normally preferable after CUDA plans and allocators
+are warmed.
+
+## Sequence-description simulation
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
+   pulserver.recon.decode_sequence_description
+   pulserver.recon.TissueProperties
+   pulserver.recon.FSE
+   pulserver.recon.SPGR
+   pulserver.recon.SSFPEcho
+   pulserver.recon.SSFPFID
+   pulserver.recon.BSSFP
+   pulserver.recon.simulate_subspace
+```
+
+See {doc}`../explanations/reconstruction/simulator` for the event contract,
+the independent ADC `echo` attribute, and signal-evolution examples from the
+sequence-zoo policies.
 
 ## Reconstruction primitives
 
@@ -393,6 +555,14 @@ sms_inputs = prepare_sms_epi(
    :no-index:
 
 .. automodule:: pulserver.recon.handlers.savedataonly
+   :members:
+   :no-index:
+
+.. automodule:: pulserver.recon.seqdesc
+   :members:
+   :no-index:
+
+.. automodule:: pulserver.recon.bloch
    :members:
    :no-index:
 ```

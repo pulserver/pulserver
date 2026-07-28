@@ -29,11 +29,15 @@ per gradient definition, so it rejects the sequence outright
 (``PULSEG_ERR_TOO_MANY_GRAD_SHOTS``). With one designed segment the shape
 count is set by the views *per shot* and does not grow with the shot count.
 
-``pulserver.design.make_rotated_projection_sampling`` builds the pair. Two
-orderings are offered, both rotating about ``z``: ``phyllotaxis`` (the
-default — equal-area polar rings, golden-angle azimuth, best uniformity) and
-``disk`` (a full great circle rotated over ``[0, pi)`` — smoothest possible
-view-to-view transition, poles oversampled).
+Rotation encoding goes one level deeper than the shot: the view-to-view step
+*inside* a shell is a per-block rotation too, so the whole shell costs two
+gradient shapes however long it is. That needs consecutive views a constant
+angle apart -- which is not only a circle. ``pulserver.design.make_rotated_projection_sampling``
+offers ``spiral`` (the default: a pole-to-pole shell walked at a constant
+angular step, so it spans the full polar range like a phyllotaxis interleaf),
+``disk`` (a great circle, simplest, poles oversampled), and ``phyllotaxis``
+(best uniformity but a wandering step, so it cannot be rotation-encoded and is
+limited to a short shell).
 
 ``NumShots`` (native GE) is the number of rotated segments and ``ETL`` the
 views per segment, so the scan holds ``NumShots * ETL`` spokes; ``LIN`` still
@@ -75,6 +79,11 @@ ZTE_RF_DURATION_S = 20e-6
 
 USER_SLOT_SCHEME = 0
 
+#: Shell orderings, in protocol-value order. The first two step by a constant
+#: angle and so can be rotation-encoded; phyllotaxis cannot.
+_SCHEMES = ("spiral", "disk", "phyllotaxis")
+_ROTATION_ENCODED = frozenset({"spiral", "disk"})
+
 # Without rotation encoding every view carries its own transition waveform, and
 # they all share one gradient definition (same sample count, same delay), so the
 # interpreter's 16-shapes-per-definition budget is spent about three at a time --
@@ -111,9 +120,9 @@ class Zte3DPulseqSequence(Sequence):
                 options=[64, 128, 160, 256, 512], validate=Validate.NONE,
             ),
             UIParam.SEQUENCE_TYPE: make_enum_param(UIParam.SEQUENCE_TYPE, SequenceType.GRADIENT_ECHO),
-            UIParam.user_name(USER_SLOT_SCHEME): Description(text="Segment ordering (0=disk, 1=phyllotaxis)"),
+            UIParam.user_name(USER_SLOT_SCHEME): Description(text="Shell ordering (0=spiral, 1=disk, 2=phyllotaxis)"),
             UIParam.user_value(USER_SLOT_SCHEME): DropdownFloatParam(
-                value=0.0, min=0.0, max=1.0, incr=1.0, unit="", options=[0.0, 1.0], validate=Validate.NONE,
+                value=0.0, min=0.0, max=2.0, incr=1.0, unit="", options=[0.0, 1.0, 2.0], validate=Validate.NONE,
             ),
         }
         return protocol_to_dict(protocol)
@@ -134,14 +143,15 @@ class Zte3DPulseqSequence(Sequence):
             return {"valid": False, "duration": None, "info": "NumShots must be >= 1"}
         if cfg.views_per_shot < 1:
             return {"valid": False, "duration": None, "info": "ETL (views per shot) must be >= 1"}
-        if cfg.scheme != "disk" and cfg.views_per_shot > MAX_UNROTATED_VIEWS:
+        if cfg.scheme not in _ROTATION_ENCODED and cfg.views_per_shot > MAX_UNROTATED_VIEWS:
             return {
                 "valid": False,
                 "duration": None,
                 "info": (
-                    f"phyllotaxis ordering needs one gradient waveform per view and the interpreter "
-                    f"holds {MAX_UNROTATED_VIEWS} per segment; use the disk ordering for longer "
-                    f"segments, or ETL <= {MAX_UNROTATED_VIEWS}"
+                    f"the {cfg.scheme} ordering steps by a varying angle, so it needs one gradient "
+                    f"waveform per view and the interpreter holds about {MAX_UNROTATED_VIEWS} per "
+                    f"segment; use the spiral or disk ordering for longer shells, or ETL <= "
+                    f"{MAX_UNROTATED_VIEWS}"
                 ),
             }
 
@@ -199,7 +209,8 @@ def _read_protocol(prot: dict) -> _Config:
     cfg.nx_ro = params.param_int(prot, UIParam.NX)
     cfg.num_shots = params.param_int_optional(prot, UIParam.NUM_SHOTS, 13)
     cfg.views_per_shot = params.param_int_optional(prot, UIParam.ETL, 160)
-    cfg.scheme = "phyllotaxis" if params.user_float(prot, USER_SLOT_SCHEME, 0.0) >= 0.5 else "disk"
+    selected = round(params.user_float(prot, USER_SLOT_SCHEME, 0.0))
+    cfg.scheme = _SCHEMES[min(max(selected, 0), len(_SCHEMES) - 1)]
     return cfg
 
 
@@ -237,10 +248,10 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
             base.flatten(),
             excitation,
             tr_s=cfg.tr_s,
-            # Only a circular orbit can be replayed from one waveform, so the
-            # phyllotaxis ordering keeps a waveform per view and is limited to
-            # short segments by the interpreter's shape budget.
-            rotation_encoded=cfg.scheme == "disk",
+            # Replaying one waveform per view needs a constant angular step;
+            # the phyllotaxis ordering does not have one, so it keeps a
+            # waveform per view and is limited by the shape budget.
+            rotation_encoded=cfg.scheme in _ROTATION_ENCODED,
         )
     except ValueError as error:
         if strict and "tr_s=" in str(error):
@@ -282,7 +293,8 @@ _ARG_MAP = [
     ('--nx', UIParam.NX, int, ""),
     ('--num-shots', UIParam.NUM_SHOTS, int, ""),
     ('--views-per-shot', UIParam.ETL, int, ""),
-    ('--ordering', UIParam.user_value(USER_SLOT_SCHEME), {'phyllotaxis': 0.0, 'disk': 1.0}, ""),
+    ('--ordering', UIParam.user_value(USER_SLOT_SCHEME),
+     {name: float(index) for index, name in enumerate(_SCHEMES)}, ""),
 ]
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import math
 
 import numpy as np

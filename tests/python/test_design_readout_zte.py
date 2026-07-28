@@ -185,16 +185,50 @@ def test_rotation_encoded_zte_composes_the_segment_rotation_with_the_view_step()
         assert np.allclose(placed, segment.apply(np.array(module.directions[index], copy=True)), atol=1e-9)
 
 
-def test_rotation_encoded_zte_rejects_a_view_order_that_is_not_a_constant_rotation_orbit():
-    """Only a circular orbit can be replayed from one waveform; say so rather than mis-encode."""
+def test_rotation_encoded_zte_rejects_a_view_order_whose_angular_step_wanders():
+    """The condition is a constant step, not a circle -- say which one failed, and by how much."""
     system = _system()
-    base, _ = sampling.make_rotated_projection_sampling((32,) * 3, shots=5, views=12, scheme="phyllotaxis")
-    with pytest.raises(ValueError, match="constant-rotation view order"):
+    base, _ = sampling.make_rotated_projection_sampling(
+        (32,) * 3, shots=5, views=12, scheme="phyllotaxis", require_fibonacci=False
+    )
+    with pytest.raises(ValueError, match="constant angle apart"):
         readout.Zte(system, (0.22,) * 3, (32,) * 3, base.flatten(), _hard(system).rf,
                     tr_s=4e-3, rotation_encoded=True)
 
 
-def test_rotated_projection_sampling_shots_are_rigid_copies_of_the_base_segment():
+def test_rotation_encoded_zte_accepts_a_non_circular_constant_step_shell():
+    """A pole-to-pole spiral is not a circle, but it steps by a constant angle -- so it encodes.
+
+    This is the case that makes segmented ZTE useful: the shell spans the whole
+    polar range the way a phyllotaxis interleaf does, while still costing the
+    two gradient shapes a circle would.
+    """
+    system = _system()
+    base, _ = sampling.make_rotated_projection_sampling((32,) * 3, shots=8, views=24, scheme="spiral")
+    directions = np.asarray(base.flatten())
+    assert np.ptp(directions[:, 2]) > 1.5  # spans pole to pole, so not a circle about z
+    assert not np.allclose(directions[:, 1], 0.0)  # nor a planar disk
+
+    module = readout.Zte(system, (0.22,) * 3, (32,) * 3, directions, _hard(system).rf,
+                         tr_s=4e-3, rotation_encoded=True)
+    assert len(module._view_gradients) == 2
+
+    module.set_state(lin_idx=np.arange(24))
+    blocks = module.blocks
+    rotations = [
+        next(event.rot_quaternion for event in block if getattr(event, "type", None) == "rot3D")
+        for block in blocks[1:]
+    ]
+    # Not a cyclic R**k orbit -- which is exactly what the disk would have been.
+    step = rotations[1]
+    assert not np.allclose(rotations[2].as_matrix(), (step ** 2).as_matrix())
+    # ...yet every view still lands on its intended direction.
+    for index, rotation in enumerate(rotations):
+        placed = rotation.apply(np.array(directions[0], copy=True))
+        assert np.allclose(placed, directions[index], atol=1e-9)
+
+
+def test_rotated_projection_sampling_shots_are_rigid_copies_stepping_by_a_constant_angle():
     base, rotations = sampling.make_rotated_projection_sampling((32,) * 3, shots=13, views=16)
     assert base.positions.shape == (16, 3)
     assert rotations.shape == (13, 3, 3)
@@ -207,11 +241,19 @@ def test_rotated_projection_sampling_shots_are_rigid_copies_of_the_base_segment(
     for shot in spokes:
         assert np.allclose(shot @ shot.T, reference, atol=1e-9)
 
-    disk, disk_rotations = sampling.make_rotated_projection_sampling((32,) * 3, shots=6, views=10, scheme="disk")
+    for scheme in ("spiral", "disk"):
+        positions = sampling.make_rotated_projection_sampling(
+            (32,) * 3, shots=6, views=10, scheme=scheme
+        )[0].positions
+        steps = np.arccos(np.clip(np.sum(positions[:-1] * positions[1:], axis=1), -1.0, 1.0))
+        assert np.ptp(steps) < 1e-9, scheme
+
+    disk = sampling.make_rotated_projection_sampling((32,) * 3, shots=6, views=10, scheme="disk")[0]
     assert np.allclose(disk.positions[:, 1], 0.0)  # great circle in xz
-    assert disk_rotations.shape == (6, 3, 3)
     with pytest.raises(ValueError, match="Fibonacci"):
-        sampling.make_rotated_projection_sampling((32,) * 3, shots=10, views=8)
+        sampling.make_rotated_projection_sampling((32,) * 3, shots=10, views=8, scheme="phyllotaxis")
+    with pytest.raises(ValueError, match="below the"):
+        sampling.make_rotated_projection_sampling((32,) * 3, shots=6, views=64, scheme="spiral", step_deg=0.5)
 
 
 def test_zte_rejects_nonuniform_rf_bandwidth_and_tr_that_cannot_fit_a_transition():

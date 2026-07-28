@@ -332,6 +332,64 @@ def test_noncartesian_factory_owns_mrinufft_construction(monkeypatch):
     assert calls["squeeze_dims"] is False
 
 
+def test_noncartesian_frame_rebuild_slices_flattened_density(monkeypatch):
+    calls = []
+
+    def constructor(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace()
+
+    mrinufft = SimpleNamespace(get_operator=lambda _backend: constructor)
+    monkeypatch.setattr(physics, "_require_mrinufft", lambda: mrinufft)
+    monkeypatch.setattr(
+        physics,
+        "_native_linear_physics",
+        lambda *_args, **_kwargs: SimpleNamespace(use_toeplitz=False),
+    )
+    trajectory = np.zeros((3, 8, 2), dtype=np.float32)
+    density_weights = np.arange(24, dtype=np.float32)
+    result = physics.NonCartesian2D(
+        trajectory,
+        (32, 32),
+        density=density_weights,
+    )
+
+    result.rebuild(trajectory[1], frame_index=1)
+
+    np.testing.assert_array_equal(calls[-1]["density"], density_weights[8:16])
+
+
+def test_streamed_noncartesian_factory_only_builds_first_dynamic_frame(monkeypatch):
+    calls = []
+
+    def constructor(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace()
+
+    mrinufft = SimpleNamespace(get_operator=lambda _backend: constructor)
+    monkeypatch.setattr(physics, "_require_mrinufft", lambda: mrinufft)
+    monkeypatch.setattr(
+        physics,
+        "_native_linear_physics",
+        lambda *_args, **_kwargs: SimpleNamespace(use_toeplitz=False),
+    )
+    trajectory = np.zeros((5, 3, 8, 2), dtype=np.float32)
+    density_weights = np.ones((5, 3, 8), dtype=np.float32)
+    policy = SimpleNamespace(frame_cache_size=2)
+
+    result = physics.NonCartesian2D(
+        trajectory,
+        (32, 32),
+        density=density_weights,
+        streaming=policy,
+    )
+
+    np.testing.assert_array_equal(calls[0]["samples"], trajectory[0])
+    np.testing.assert_array_equal(calls[0]["density"], density_weights[0])
+    assert result.trajectory is trajectory
+    assert result.streaming_policy is policy
+
+
 def test_epi_ramp_interpolation_handles_complex_batches():
     source = np.array([-1.0, 0.0, 1.0])
     target = np.array([-0.5, 0.5])

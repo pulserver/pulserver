@@ -1166,9 +1166,11 @@ typedef struct pulseg_trajectory
  *
  *   ADC:   [0] adc_role (int)         PULSEG_ADC_ROLE_*
  *          [1] phase_offset_rad (f)   per-instance ADC phase incl. ppm (rad)
- *          [2..5] = 0
+ *          [2] echo (int/bool)         1 when this ADC position reaches
+ *                                      k-space zero for at least one instance
+ *          [3..6] = 0
  *
- *   OTHER: [0..5] = 0
+ *   OTHER: [0..6] = 0
  *
  * The C++ reader (trajectory_cache_reader) dedups the
  * (rf_def_id, rf_shim_id, ss_grad_amp_hz_per_m) triplets over all rows to
