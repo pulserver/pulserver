@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import copy
+from math import isfinite
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TypeVar
 
 import numpy as np
 
-from ..._core._module import Block, SequenceModule
+from ..._core._module import Block, SequenceModule, _block_payload, _peak
 from .._rotation import normalize_rotation
 from .._system import copy_event
 
@@ -36,8 +37,8 @@ class RfModule(SequenceModule):
     inside composite preparations.
     """
 
-    def __init__(self, system, blocks: Sequence[Block]) -> None:
-        super().__init__(system)
+    def __init__(self, system, blocks: Sequence[Block], **declared) -> None:
+        super().__init__(system, **declared)
         self._template_blocks = tuple(tuple(block) for block in blocks if block)
         if not self._template_blocks:
             raise ValueError("an RF module must contain at least one block")
@@ -45,7 +46,7 @@ class RfModule(SequenceModule):
         self._block_cache: tuple[Block, ...] | None = None
         self._scaled_signals: dict[tuple[int, float], tuple] = {}
 
-    def set_state(
+    def _set_state(
         self: _ModuleT,
         *,
         freq_offset_hz: float = 0.0,
@@ -54,8 +55,11 @@ class RfModule(SequenceModule):
         rotation=None,
     ) -> _ModuleT:
         """Replace frequency, phase, amplitude, and explicit rotation state."""
+        # math.isfinite, not np.isfinite: this runs once per shot and the
+        # numpy call builds a scalar array per value to answer a question about
+        # a Python float.
         values = (freq_offset_hz, phase_offset_rad, amplitude_scale)
-        if not all(np.isfinite(value) for value in values):
+        if not all(isfinite(value) for value in values):
             raise ValueError("RF state values must be finite")
         if amplitude_scale < 0:
             raise ValueError("amplitude_scale must be >= 0")
@@ -152,6 +156,56 @@ class RfModule(SequenceModule):
             self._block_cache = self._build_blocks()
         return self._block_cache
 
+    def _direct_payloads(self):
+        """This module's payloads, rewritten in place rather than re-derived.
+
+        An RF module's state moves exactly three numbers, and all three are
+        arithmetic on the *template's* values: the transmit frequency and phase
+        are offsets from it, and the registered amplitude is its envelope's peak
+        times the scale -- the same product
+        ``Sequence._compress_rf_cached`` registers, which is why the peak is
+        taken from the unscaled envelope here rather than from the scaled one.
+        Nothing has to be scaled, copied or re-measured to know any of them.
+
+        A rotation is declined: it appends an event to every gradient block, so
+        it is a change of structure and the generic path owns it.
+        """
+        state = self._state
+        if state.rotation is not None:
+            return None
+
+        cache = self._payload_cache
+        if cache is None:
+            blocks = self._rendered_blocks()
+            payloads, entries = [], []
+            peaks = self._peak_cache = {}
+            for block, template in zip(blocks, self._template_blocks, strict=True):
+                payload = _block_payload(block, peaks)
+                if "rf" in payload:
+                    # The base has to come off the *template* event, the way
+                    # ``_render`` and ``_retune`` take it. Reading it off the
+                    # rendered event instead looks equivalent only because the
+                    # cache is normally built at the zero state: anything that
+                    # drops the cache mid-scan -- naming a new label does --
+                    # would rebuild it against an event this state's
+                    # offsets are already in, and then add them a second time.
+                    # Silent, and a wrong file: doubled RF phase, and doubled
+                    # slice frequency offset on a multi-slice 2D scan.
+                    source = next(event for event in template if getattr(event, "type", None) == "rf")
+                    values = list(payload["rf"])
+                    payload["rf"] = values
+                    entries.append((values, _peak(source.signal, peaks),
+                                    source.freq_offset, source.phase_offset))
+                payloads.append(payload)
+            cache = self._payload_cache = (tuple(payloads), tuple(entries))
+
+        payloads, entries = cache
+        for values, peak, freq, phase in entries:
+            values[0] = peak * state.amplitude_scale
+            values[1] = freq + state.freq_offset_hz
+            values[2] = phase + state.phase_offset_rad
+        return payloads
+
     @property
     def state(self) -> RfState:
         return self._state
@@ -160,14 +214,14 @@ class RfModule(SequenceModule):
 class RfPulse(RfModule):
     """One RF/encoding block followed by zero or more rephasing events."""
 
-    def __init__(self, system, rf, gradients: Sequence = (), rephasers: Sequence = ()) -> None:
+    def __init__(self, system, rf, gradients: Sequence = (), rephasers: Sequence = (), **declared) -> None:
         self.rf = rf
         self.gradients = tuple(gradients)
         self.rephasers = tuple(rephasers)
         blocks: list[Block] = [(rf, *self.gradients)]
         if self.rephasers:
             blocks.append(self.rephasers)
-        super().__init__(system, blocks)
+        super().__init__(system, blocks, **declared)
 
     def without_rephasers(self: _PulseT) -> _PulseT:
         """Return a copy that stops playing its own rephasing block.

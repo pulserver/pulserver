@@ -11,7 +11,7 @@ expected_output_path = Path(__file__).parent / "expected_output"
 
 # Dummy sequence which contains only gaussian pulses with different parameters
 def seq_make_gauss_pulses():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     seq.add_block(pp.make_gauss_pulse(flip_angle=1))
     seq.add_block(pp.make_delay(1))
     seq.add_block(pp.make_gauss_pulse(flip_angle=1, delay=1e-3))
@@ -33,7 +33,7 @@ def seq_make_gauss_pulses():
 
 # Dummy sequence which contains only sinc pulses with different parameters
 def seq_make_sinc_pulses():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     seq.add_block(pp.make_sinc_pulse(flip_angle=1))
     seq.add_block(pp.make_delay(1))
     seq.add_block(pp.make_sinc_pulse(flip_angle=1, delay=1e-3))
@@ -55,7 +55,7 @@ def seq_make_sinc_pulses():
 
 # Dummy sequence which contains only block pulses with different parameters
 def seq_make_block_pulses():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     seq.add_block(pp.make_block_pulse(flip_angle=1, duration=4e-3))
     seq.add_block(pp.make_delay(1))
     seq.add_block(pp.make_block_pulse(flip_angle=1, delay=1e-3, duration=4e-3))
@@ -75,7 +75,7 @@ def seq_make_block_pulses():
 
 # Basic sequence with gradients in all channels, some which are identical after rounding.
 def seq1():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     seq.add_block(pp.make_block_pulse(np.pi / 4, duration=1e-3))
     seq.add_block(pp.make_trapezoid("x", area=1000))
     seq.add_block(pp.make_trapezoid("y", area=-500.00001))
@@ -89,7 +89,7 @@ def seq1():
 
 # Basic spin-echo sequence structure
 def seq2():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     seq.add_block(pp.make_block_pulse(np.pi / 2, duration=1e-3))
     seq.add_block(pp.make_trapezoid("x", area=1000))
     seq.add_block(pp.make_trapezoid("x", area=-1000))
@@ -102,7 +102,7 @@ def seq2():
 
 # Basic GRE sequence with INC labels
 def seq3():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
 
     for i in range(10):
         seq.add_block(pp.make_block_pulse(np.pi / 8, duration=1e-3))
@@ -120,7 +120,7 @@ def seq3():
 
 # Basic GRE sequence with SET labels
 def seq4():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
 
     for i in range(10):
         seq.add_block(pp.make_block_pulse(np.pi / 8, duration=1e-3))
@@ -166,7 +166,7 @@ def seq5():
 
 # Dummy seq ending with [TRAP] section
 def seq_trap_only():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     seq.add_block(pp.make_trapezoid("x", area=1000))
 
     return seq
@@ -174,7 +174,7 @@ def seq_trap_only():
 
 # Dummy seq ending with [ADC] section
 def seq_adc_only():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     seq.add_block(pp.make_adc(num_samples=100, duration=10e-3))
 
     return seq
@@ -182,7 +182,7 @@ def seq_adc_only():
 
 # Dummy seq ending with [EXTENSION] section
 def seq_ext_only():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     seq.add_block(pp.make_adc(num_samples=1000, duration=1e-3), pp.make_label(label="NOISE", type="SET", value=True))
 
     return seq

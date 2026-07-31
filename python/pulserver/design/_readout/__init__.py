@@ -1,7 +1,7 @@
 """Reusable Cartesian and non-Cartesian readout trains.
 
 Set a train's dynamic state with ``set_state()``, then append its sequential
-blocks with ``add_to(seq)`` or standard collection access::
+blocks by iterating them into ``seq.add_block``::
 
     train.set_state(lin_idx=lin_idx)
     for block in train:

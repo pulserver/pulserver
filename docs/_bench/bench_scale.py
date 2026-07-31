@@ -16,20 +16,19 @@ Three things are reported that ``bench_zoo`` does not separate:
 ``us/block``         design seconds per emitted block. Flat across sizes is
                      the property being defended: anything super-linear
                      shows up here long before the wall time looks wrong.
-``rss_delta_mb``     peak resident growth over the pass. The range path
-                     buffers each chunk's payload rows as Python tuples
-                     before converting them, so this is where a chunk size
-                     that is too generous would show.
+``rss_delta_mb``     peak resident growth over the pass. Nothing is collapsed
+                     on the way in, so this is the transient the write-time
+                     pass has to be handed -- the number the TR template trades
+                     the wrong way, and the reason this case exists.
 ``events``           rows in the libraries a *block row* points at, once the
                      design pass ends and before ``remove_duplicates`` runs.
-                     A range collapses these as it registers them, so a plugin
-                     on the range path reports its event *vocabulary* -- a few
-                     thousand -- and one still looping over ``add_block``
-                     reports roughly one row per event in the scan.
+                     One row per TR per template slot, whatever repeats: this
+                     is what write time is asked to collapse, not what survives
+                     it.
 ``ext rows``         rows in the libraries an *extension chain* points at, plus
-                     the chain nodes. These are never collapsed early (it would
-                     reorder chains and change the file), so this is the floor
-                     on what a labelled scan costs to build.
+                     the chain nodes. A block orders its chain by reference ID,
+                     so these can never be shared between passes, and they are
+                     the floor on what a labelled scan costs to build.
 ===================  ======================================================
 
 There are two families of case, and they answer different questions:
@@ -46,6 +45,12 @@ There are two families of case, and they answer different questions:
     512 x 1024 x 512 MPRAGE at ETL 1024, echo trains at 128 and 256, EPI and
     bSSFP and spiral and ZTE at pushed resolution. The chronology of each
     mirrors its plugin; only the numbers are bigger.
+
+    All of them are driven through a TR template, ``fse_3d`` and
+    ``gre_noncart_3d`` included: both sum two gradients on the slice axis, so
+    their samples move with the encode, and both publish every candidate
+    waveform as an inventory their module builds at construction. A payload then
+    names one by index, exactly as it names an amplitude.
 
 Run it as::
 
@@ -86,16 +91,16 @@ from pulserver import UIParam
 #: shared ``Opts`` in place, so these cases carry their own.
 SYSTEM_KW = {"max_grad": 40, "grad_unit": "mT/m", "max_slew": 150, "slew_unit": "T/m/s"}
 
-#: Libraries a *block row* points at, by column. ``add_range`` collapses these
-#: as it registers them, so their size is the sequence's event vocabulary.
+#: Libraries a *block row* points at, by column. Nothing collapses these until
+#: write time, so their size is what the design pass is holding at its peak.
 _EVENT_LIBRARIES = (
     "shape_library", "rf_library", "arb_library", "trap_library", "grad_library", "adc_library",
 )
 
 #: Libraries an *extension chain* points at, plus the chain nodes themselves.
-#: These are deliberately left one entry per event -- a block orders its chain
-#: by reference ID, so collapsing them would reorder chains and change the file
-#: -- and they are consequently the floor on what a large scan costs to build.
+#: These are one entry per event by necessity -- a block orders its chain by
+#: reference ID, so sharing a row between passes would reorder chains and change
+#: the file -- and they are the floor on what a large scan costs to build.
 _EXTENSION_LIBRARIES = (
     "trigger_library", "label_set_library", "label_inc_library",
     "rotation_library", "rf_shim_library", "extensions_library",
@@ -224,18 +229,22 @@ def _gre_3d(scale):
     te_delay, tr_delay = pp.make_delay(2e-3), pp.make_delay(3e-3)
 
     def build():
-        seq = pp.Sequence(system)
-        # One call per phase-encode step covers its partition loop, which is
-        # how the plugin drives it.
-        for start in range(0, ny * nz, nz):
-            stop = start + nz
-            seq.add_range(
-                (pulse, {"phase_offset_rad": phases[start:stop]}),
-                te_delay,
-                (line, {"lin_idx": lin[start:stop], "par_idx": par[start:stop],
-                        "phase_offset_rad": phases[start:stop]}),
-                tr_delay,
+        pulse.set_state(phase_offset_rad=phases[0])
+        line.set_state(lin_idx=int(lin[0]), par_idx=int(par[0]), phase_offset_rad=phases[0])
+        seq = pp.Sequence(
+            system, ny * nz, *pulse.blocks, te_delay, *line.blocks, tr_delay
+        )
+        for shot in range(ny * nz):
+            pulse.set_state(phase_offset_rad=phases[shot])
+            for block in pulse:
+                seq.add_block(*block)
+            seq.add_block(te_delay)
+            line.set_state(
+                lin_idx=int(lin[shot]), par_idx=int(par[shot]), phase_offset_rad=phases[shot]
             )
+            for block in line:
+                seq.add_block(*block)
+            seq.add_block(tr_delay)
         return seq
 
     return f"{nx} x {ny} x {nz}", build
@@ -262,19 +271,29 @@ def _mprage_3d(scale):
     te_delay, tr_delay = pp.make_delay(2e-3), pp.make_delay(3e-3)
 
     def build():
-        seq = pp.Sequence(system)
+        # The whole segment is the template: the preparation is a module like
+        # any other, and the recovery delay owns no row so it may end the pass.
+        pulse.set_state(phase_offset_rad=phases[0])
+        line.set_state(lin_idx=int(lin[0]), par_idx=int(par[0]), phase_offset_rad=phases[0])
+        view = [*pulse.blocks, te_delay, *line.blocks, tr_delay]
+        seq = pp.Sequence(system, shots, inversion, ti_delay, *(etl * view))
         for shot in range(shots):
-            first, last = shot * etl, (shot + 1) * etl
+            first = shot * etl
             for block in inversion:
                 seq.add_block(*block)
             seq.add_block(ti_delay)
-            seq.add_range(
-                (pulse, {"phase_offset_rad": phases[first:last]}),
-                te_delay,
-                (line, {"lin_idx": lin[first:last], "par_idx": par[first:last],
-                        "phase_offset_rad": phases[first:last]}),
-                tr_delay,
-            )
+            for index in range(first, first + etl):
+                pulse.set_state(phase_offset_rad=phases[index])
+                for block in pulse:
+                    seq.add_block(*block)
+                seq.add_block(te_delay)
+                line.set_state(
+                    lin_idx=int(lin[index]), par_idx=int(par[index]),
+                    phase_offset_rad=phases[index],
+                )
+                for block in line:
+                    seq.add_block(*block)
+                seq.add_block(tr_delay)
             seq.add_block(recovery)
         return seq
 
@@ -300,8 +319,20 @@ def _fse_3d(etl):
         fse.set_state(lin_idx=lin[0], par_idx=par[0])
 
         def build():
-            seq = pp.Sequence(system)
-            seq.add_range(excite, (fse, {"lin_idx": lin, "par_idx": par}))
+            # Templated like everything else: the partition lobes are two
+            # gradients summed on the slice axis, so their samples move with the
+            # encode -- and the train publishes every partition's pair as its
+            # waveform inventory, so the shapes are registered and a payload
+            # names one. The train goes in as a *module*, not as its blocks,
+            # because that inventory is reached through the owner.
+            fse.set_state(lin_idx=lin[0], par_idx=par[0])
+            seq = pp.Sequence(system, shots, excite, fse)
+            for shot in range(shots):
+                for block in excite:
+                    seq.add_block(*block)
+                fse.set_state(lin_idx=lin[shot], par_idx=par[shot])
+                for block in fse:
+                    seq.add_block(*block)
             return seq
 
         return f"{nx} x {ny} x {nz}, ETL {train} ({shots} shots)", build
@@ -321,11 +352,14 @@ def _epi_3d(scale):
     epi.set_state(lin_idx=0, par_idx=0)
 
     def build():
-        seq = pp.Sequence(system)
-        seq.add_range(
-            excite,
-            (epi, {"lin_idx": np.zeros(shots, dtype=int), "par_idx": np.arange(nz)}),
-        )
+        epi.set_state(lin_idx=0, par_idx=0)
+        seq = pp.Sequence(system, shots, *excite.blocks, *epi.blocks)
+        for shot in range(shots):
+            for block in excite:
+                seq.add_block(*block)
+            epi.set_state(lin_idx=0, par_idx=shot)
+            for block in epi:
+                seq.add_block(*block)
         return seq
 
     return f"{nx} x {ny} x {nz}, ETL {epi.etl} ({shots} shots)", build
@@ -344,8 +378,12 @@ def _bssfp_3d(scale):
     readout.set_state(segment_idx=0)
 
     def build():
-        seq = pp.Sequence(system)
-        seq.add_range((readout, {"segment_idx": segments}))
+        readout.set_state(segment_idx=0)
+        seq = pp.Sequence(system, len(segments), *readout.blocks)
+        for segment in segments:
+            readout.set_state(segment_idx=int(segment))
+            for block in readout:
+                seq.add_block(*block)
         return seq
 
     return f"{nx} x {ny} x {nz} ({readout.num_segments} segments)", build
@@ -367,14 +405,23 @@ def _gre_noncart_3d(scale):
     phases = np.asarray(design.make_rf_spoiling_schedule(shots, increment=np.deg2rad(117.0)))
 
     def build():
-        seq = pp.Sequence(system)
-        for start in range(0, shots, interleaves):
-            stop = start + interleaves
-            seq.add_range(
-                (pulse, {"phase_offset_rad": phases[start:stop]}),
-                (readout, {"lin_idx": lin[start:stop], "par_idx": par[start:stop],
-                           "phase_offset_rad": phases[start:stop]}),
+        # Templated: the partition lobe and the excitation's rephasing share the
+        # z axis, so their summed moment is an arbitrary waveform that moves per
+        # partition -- and the readout publishes every partition's solve as its
+        # waveform inventory, so there is a registered shape to point at.
+        pulse.set_state(phase_offset_rad=phases[0])
+        readout.set_state(lin_idx=int(lin[0]), par_idx=int(par[0]), phase_offset_rad=phases[0])
+        seq = pp.Sequence(system, shots, pulse, readout)
+        for shot in range(shots):
+            pulse.set_state(phase_offset_rad=phases[shot])
+            for block in pulse:
+                seq.add_block(*block)
+            readout.set_state(
+                lin_idx=int(lin[shot]), par_idx=int(par[shot]),
+                phase_offset_rad=phases[shot],
             )
+            for block in readout:
+                seq.add_block(*block)
         return seq
 
     return f"{nx}, {interleaves} interleaves x {nz} partitions", build
@@ -396,8 +443,12 @@ def _zte_3d(scale):
     readout.set_state(lin_idx=lin[0], rotation=rotations[0])
 
     def build():
-        seq = pp.Sequence(system)
-        seq.add_range((readout, {"lin_idx": lin, "rotation": rotations}))
+        readout.set_state(lin_idx=lin[0], rotation=rotations[0])
+        seq = pp.Sequence(system, shots, *readout.blocks)
+        for shot in range(shots):
+            readout.set_state(lin_idx=lin[shot], rotation=rotations[shot])
+            for block in readout:
+                seq.add_block(*block)
         return seq
 
     return f"{nx}, {shots} shots x {readout.num_views} views", build
@@ -442,7 +493,16 @@ def _peak_rss_mb() -> float:
 
 
 def _library_entries(seq) -> tuple[int, int]:
-    """``(block-referenced, extension-referenced)`` rows after the design pass."""
+    """``(block-referenced, extension-referenced)`` rows after the design pass.
+
+    A sequence built against a TR template holds its rows until they are
+    registered in a batch, so the libraries have to be settled first — reading
+    their lengths straight after the design pass would report a fraction of the
+    truth, and silently flatter the very thing this column exists to show.
+    """
+    settle = getattr(seq, "_block_row_matrix", None)
+    if settle is not None:
+        settle()
     counts = []
     for group in (_EVENT_LIBRARIES, _EXTENSION_LIBRARIES):
         total = 0

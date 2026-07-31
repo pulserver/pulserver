@@ -35,7 +35,7 @@ def gradient(system):
 
 def _build(system, gradient, *, rotate=True, shim=True):
     """Four TRs of excitation + readout + recovery delay."""
-    seq = ps.Sequence(system)
+    seq = ps.Sequence._unstructured(system)
     rf = pp.make_sinc_pulse(flip_angle=np.pi / 6, duration=1e-3, system=system, use="excitation", return_gz=False)
     adc = pp.make_adc(num_samples=64, duration=gradient.flat_time, delay=gradient.rise_time, system=system)
     for i, angle in enumerate(ANGLES):

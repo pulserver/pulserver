@@ -19,13 +19,13 @@ def _make_simple_seq(seq):
 
 
 def test_fast_sequence_disables_positional_set_block():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     with pytest.raises(NotImplementedError):
         seq.set_block(1, pp.make_delay(1e-3))
 
 
 def test_fast_sequence_add_block_without_dedup():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     trap1 = pp.make_trapezoid(channel="x", amplitude=0.5 * seq.system.max_grad, flat_time=1e-3, system=seq.system)
     trap2 = pp.make_trapezoid(channel="x", amplitude=0.5 * seq.system.max_grad, flat_time=1e-3, system=seq.system)
     seq.add_block(trap1)
@@ -36,7 +36,7 @@ def test_fast_sequence_add_block_without_dedup():
 
 
 def test_write_supports_binary_stream_output():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     _make_simple_seq(seq)
 
     stream = BytesIO()
@@ -49,7 +49,7 @@ def test_write_supports_binary_stream_output():
 
 
 def test_write_supports_path_output():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     _make_simple_seq(seq)
 
     with TemporaryDirectory() as tmp:
@@ -64,7 +64,7 @@ def test_write_supports_path_output():
 
 
 def test_get_block_decodes_through_the_plain_view():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     _make_simple_seq(seq)
 
     block = seq.get_block(1)
@@ -73,7 +73,7 @@ def test_get_block_decodes_through_the_plain_view():
 
 
 def test_seq_write_not_implemented_for_fast_builder():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     _make_simple_seq(seq)
 
     with pytest.raises(NotImplementedError):
@@ -81,7 +81,7 @@ def test_seq_write_not_implemented_for_fast_builder():
 
 
 def test_custom_label_registered_on_add_block():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     lbl = ps.make_label(label="MYLAB", type="SET", value=7)
     seq.add_block(lbl)
 
@@ -90,7 +90,7 @@ def test_custom_label_registered_on_add_block():
 
 
 def test_builtin_label_not_in_custom_labels():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     lbl = ps.make_label(label="SLC", type="SET", value=1)
     seq.add_block(lbl)
 
@@ -98,7 +98,7 @@ def test_builtin_label_not_in_custom_labels():
 
 
 def test_custom_label_registered_on_add_block_fast_builder():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     lbl = ps.make_label(label="CUSTLABEL", type="SET", value=42)
     seq.add_block(lbl)
 
@@ -106,7 +106,7 @@ def test_custom_label_registered_on_add_block_fast_builder():
 
 
 def test_rf_shim_extension_registered_in_library():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     shim_event = ps.make_rf_shim([1 + 0j, 0.5 + 0.25j])
     seq.add_block(shim_event)
 
@@ -124,7 +124,7 @@ def test_rotation_extension_registered_in_library():
                 return self._q
             return np.asarray([self._q[1], self._q[2], self._q[3], self._q[0]], dtype=float)
 
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     rot_event = ps.make_rotation(DummyQuat([1.0, 0.0, 0.0, 0.0]))
     seq.add_block(rot_event)
 
@@ -132,7 +132,7 @@ def test_rotation_extension_registered_in_library():
 
 
 def test_trap_event_registered_in_trap_and_grad_libraries():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     trap = pp.make_trapezoid(channel="y", amplitude=0.5 * seq.system.max_grad, flat_time=1e-3, system=seq.system)
     seq.add_block(trap)
 
@@ -154,7 +154,7 @@ def test_remove_duplicates_dedups_extension_libraries_and_chain():
                 return self._q
             return np.asarray([self._q[1], self._q[2], self._q[3], self._q[0]], dtype=float)
 
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     label = ps.make_label("MYLAB", "SET", 3)
     rf_shim = ps.make_rf_shim([1 + 0j, 0.5 + 0.25j])
     rot = ps.make_rotation(DummyQuat([1.0, 0.0, 0.0, 0.0]))
@@ -170,7 +170,7 @@ def test_remove_duplicates_dedups_extension_libraries_and_chain():
 
 
 def test_remove_duplicates_in_place_updates_sequence():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     seq.add_block(ps.make_label("MYLAB", "SET", 1))
     seq.add_block(ps.make_label("MYLAB", "SET", 1))
 
@@ -180,7 +180,7 @@ def test_remove_duplicates_in_place_updates_sequence():
 
 
 def test_remove_duplicates_preserves_rf_use_type():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     seq.shape_library.insert(1, np.asarray([2.0, 0.0, 1.0]))
     seq.shape_library.insert(2, np.asarray([2.0, 0.0, 1.0]))
     seq.shape_library.insert(3, np.asarray([2.0, 0.0, 1.0]))
@@ -194,7 +194,7 @@ def test_remove_duplicates_preserves_rf_use_type():
 
 
 def test_rf_use_stored_as_numeric_code():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     rf, _, _ = pp.make_sinc_pulse(
         flip_angle=np.deg2rad(10.0),
         duration=1e-3,
@@ -211,7 +211,7 @@ def test_rf_use_stored_as_numeric_code():
 
 
 def test_write_with_rf_event_serializes_rf_use_as_char():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     rf, _, _ = pp.make_sinc_pulse(
         flip_angle=np.deg2rad(10.0),
         duration=1e-3,
@@ -243,7 +243,7 @@ def test_write_version_revision_bumped_for_custom_extensions_and_labels():
                 return self._q
             return np.asarray([self._q[1], self._q[2], self._q[3], self._q[0]], dtype=float)
 
-    seq_ext = ps.Sequence()
+    seq_ext = ps.Sequence._unstructured()
     seq_ext.add_block(ps.make_rotation(DummyQuat([1.0, 0.0, 0.0, 0.0])))
     stream_ext = BytesIO()
     pio.write(seq_ext, output=stream_ext, check_timing=False)
@@ -252,7 +252,7 @@ def test_write_version_revision_bumped_for_custom_extensions_and_labels():
     rev_ext = int(rev_line_ext.split()[1])
     assert rev_ext >= 1
 
-    seq_lbl = ps.Sequence()
+    seq_lbl = ps.Sequence._unstructured()
     seq_lbl.add_block(ps.make_label("MY_CUSTOM_LABEL", "SET", 1))
     stream_lbl = BytesIO()
     pio.write(seq_lbl, output=stream_lbl, check_timing=False)
@@ -271,7 +271,7 @@ def test_module_label_registered_and_round_trips():
     the on-disk LABELSET/EXTENSIONS round-trip pulseg_parse.c reads back
     (see external/pulserver/csrc/src/core/pulseg_error.c label_table[]).
     """
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     lbl = ps.make_label(label="MODULE", type="SET", value=1)
     seq.add_block(pp.make_delay(1e-3), lbl)
 
@@ -295,7 +295,7 @@ def test_module_label_registered_and_round_trips():
 
 
 def test_soft_delay_is_ignored_in_fast_path():
-    seq = ps.Sequence()
+    seq = ps.Sequence._unstructured()
     seq.add_block(pp.make_soft_delay(hint="IGNORED_HINT", default_duration=1e-3))
 
     assert len(seq.block_events) == 1

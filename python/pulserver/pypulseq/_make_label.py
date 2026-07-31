@@ -30,7 +30,7 @@ COUNTER_LABELS = (
 #: Flags: sticky booleans (and two sticky ids) describing *how a block is
 #: played or classified*, not where its data belongs. These are what a
 #: :class:`~pulserver.SequenceModule` emits, through
-#: :meth:`~pulserver.SequenceModule.set_flags`.
+#: :meth:`~pulserver.SequenceModule.set_state`.
 FLAG_LABELS = (
     "NAV",
     "REV",
@@ -67,8 +67,9 @@ def get_supported_labels() -> tuple[str, ...]:
     The set splits in two, and the split is the design toolbox's division of
     labour: :data:`COUNTER_LABELS` say *where an acquisition belongs* and come
     from a :class:`~pulserver.ScanLoop` axis;
-    :data:`FLAG_LABELS` say *how a block is played or classified* and come from
-    :meth:`pulserver.SequenceModule.set_flags`.
+    :data:`FLAG_LABELS` say *how a block is played or classified*. Both are
+    written through :meth:`pulserver.SequenceModule.set_state`, which tells them
+    apart by name.
 
     .. list-table:: Counters — one ISMRMRD ``idx`` field each, set by a scan loop
        :header-rows: 1
@@ -138,8 +139,8 @@ def get_supported_labels() -> tuple[str, ...]:
     See Also
     --------
     COUNTER_LABELS, FLAG_LABELS, STICKY_FLAGS : the same split as constants.
-    pulserver.SequenceModule.set_flags : emit flags with the right scope.
-    pulserver.ScanLoop.labels : emit counters from a loop's axes.
+    pulserver.SequenceModule.set_state : emit counters and flags on a module.
+    pulserver.ScanLoop.label_state : the counter values from a loop's axes.
     """
     return _SUPPORTED_LABELS
 
@@ -188,8 +189,10 @@ def make_label(label: str, type: str, value: int | bool | float) -> SimpleNamesp
     A custom label passes through unvalidated, and is retrievable afterwards:
 
     >>> import pulserver.pypulseq as pp
-    >>> seq = pp.Sequence()
-    >>> seq.add_block(pp.make_delay(1e-3), make_label("BIN", "SET", 3))
+    >>> label = make_label("BIN", "SET", 3)
+    >>> delay = pp.make_delay(1e-3)
+    >>> seq = pp.Sequence(pp.Opts(), 1, (delay, label))
+    >>> seq.add_block(delay, label)
     >>> sorted(seq.custom_labels)
     ['BIN']
 

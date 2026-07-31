@@ -41,13 +41,13 @@ def test_zte_accepts_caller_rf_and_keeps_gradient_live_between_ordered_views():
     module.set_state(lin_idx=np.arange(len(directions)), phase_offset_rad=np.arange(len(directions)) * 0.1)
 
     assert len(module) == module.num_views + 1  # one ramp-up + one block per acquired view
-    assert _gradient_vector(module[0], "first") == pytest.approx(np.zeros(3))
-    assert _gradient_vector(module[0], "last") == pytest.approx(
+    assert _gradient_vector(module.blocks[0], "first") == pytest.approx(np.zeros(3))
+    assert _gradient_vector(module.blocks[0], "last") == pytest.approx(
         module.gradient_amplitude * module.directions[0]
     )
 
     for view in range(module.num_views):
-        block = module[view + 1]
+        block = module.blocks[view + 1]
         start = _gradient_vector(block, "first")
         end = _gradient_vector(block, "last")
         expected_end = (
@@ -84,7 +84,7 @@ def test_zte_dead_time_omits_integer_center_samples_without_rescaling_the_grid()
     assert module.gap_s == pytest.approx(module.num_missing_samples * module.adc_dwell_s)
 
     seq = pp.Sequence(system)
-    for block in module:
+    for block in module.blocks:
         seq.add_block(*block)
     assert seq.check_timing()[0]
     k_adc = seq.calculate_kspace()[0]
@@ -106,10 +106,10 @@ def test_zte_accepts_planar_disk_order_and_rotates_the_complete_disk():
     assert np.allclose(module.directions[:, 2], 0.0)  # base disk lies in xy
     rotated_disk = rotation.apply(np.array(module.directions, copy=True))
     assert np.allclose(rotated_disk[:, 1], 0.0, atol=1e-12)  # same disk rotated into xz
-    assert all(any(getattr(event, "type", None) == "rot3D" for event in block) for block in module)
+    assert all(any(getattr(event, "type", None) == "rot3D" for event in block) for block in module.blocks)
     label_values = [
         next(event.value for event in block if getattr(event, "type", None) == "labelset")
-        for block in module[1:]
+        for block in module.blocks[1:]
     ]
     assert label_values == [10] * module.num_views
     assert module.get().rotation_library.data
@@ -278,3 +278,118 @@ def test_zte_validates_isotropy_view_order_and_state_schedules():
     module = readout.Zte(system, 0.22, 64, sampling.calc_uniform_angles(4), excitation.rf)
     with pytest.raises(ValueError, match="length 4"):
         module.set_state(phase_offset_rad=[0.0, 0.1])
+
+
+def _rotation_encoded(system, *, views=8):
+    base, rotations = sampling.make_rotated_projection_sampling(
+        (32,) * 3, shots=4, views=views, scheme="spiral", require_fibonacci=False
+    )
+    module = readout.Zte(
+        system, (0.22,) * 3, (32,) * 3, np.asarray(base.flatten()), _hard(system).rf,
+        tr_s=8e-3, rotation_encoded=True,
+    )
+    return module, rotations
+
+
+def test_a_zte_segment_retunes_rather_than_rebuilding_when_only_the_rotation_moves():
+    """A rotation is a number here, not a structure.
+
+    Every shot of a rotation-encoded ZTE plays the same gradients, the same RF
+    and the same ADC; only the quaternion riding each block moves. Rebuilding
+    the segment to change it is what made this the most expensive module in the
+    zoo, so the layout has to survive a new rotation.
+    """
+    system = _system()
+    module, rotations = _rotation_encoded(system)
+    lin = np.arange(module.num_views)
+
+    first = module.set_state(lin_idx=lin, rotation=rotations[0]).blocks
+    second = module.set_state(lin_idx=lin, rotation=rotations[1]).blocks
+    assert [id(block) for block in first] == [id(block) for block in second]
+
+    # ...but dropping the rotation removes an event from every block, which is
+    # structural, so that one does rebuild.
+    assert module.set_state(lin_idx=lin).blocks[0] is not first[0]
+
+
+def test_a_zte_segment_registers_the_same_blocks_retuned_as_rebuilt():
+    """Retuning and batching the quaternions is an optimisation the file cannot see."""
+    from pulserver.pypulseq import Sequence as PulserverSequence
+
+    system = _system()
+    module, rotations = _rotation_encoded(system)
+    lin = np.arange(module.num_views)
+    shots = ((0, 0.0), (1, 0.3), (2, 1.1))
+
+    retuned = PulserverSequence._unstructured(system)
+    for index, phase in shots:
+        module.set_state(lin_idx=lin, phase_offset_rad=phase, rotation=rotations[index])
+        for _block in module.blocks:
+            retuned.add_block(*_block)
+    rebuilt = PulserverSequence._unstructured(system)
+    for index, phase in shots:
+        fresh, fresh_rotations = _rotation_encoded(system)
+        fresh.set_state(
+            lin_idx=lin, phase_offset_rad=phase, rotation=fresh_rotations[index]
+        )
+        for _block in fresh.blocks:
+            rebuilt.add_block(*_block)
+
+    assert retuned.block_events == rebuilt.block_events
+    assert retuned.block_durations == rebuilt.block_durations
+    assert retuned.rotation_library.data == rebuilt.rotation_library.data
+
+
+def test_a_zte_segments_payloads_say_what_its_events_say():
+    """The payload path and the event path are two readings of one shot.
+
+    ``_direct_payloads`` never composes a per-view rotation object or measures
+    a waveform; it writes the four numbers straight in. That shortcut is only
+    legitimate if it lands on exactly what the events would have produced.
+    """
+    from pulserver._core._module import _block_payload
+
+    system = _system()
+    module, rotations = _rotation_encoded(system)
+    lin = np.arange(module.num_views)
+
+    for index in (0, 2, 1):
+        module.set_state(lin_idx=lin, phase_offset_rad=0.25 * index, rotation=rotations[index])
+        direct = module.payloads()
+        assert module._direct_payloads() is not None, "a ZTE segment owns its payloads"
+        derived = tuple(_block_payload(block, {}) for block in module.blocks)
+        assert _snapshot(direct) == _snapshot(derived)
+
+
+def test_a_zte_segment_without_a_rotation_still_payloads_its_encoding_steps():
+    """Rotation-encoded but unrotated: the steps alone, written once and left alone."""
+    system = _system()
+    module, _ = _rotation_encoded(system)
+    lin = np.arange(module.num_views)
+
+    module.set_state(lin_idx=lin)
+    payloads = module.payloads()
+    quaternions = [
+        dict(payload["ext"])["rot3D"] for payload in payloads[1:]
+    ]
+    assert len(quaternions) == module.num_views
+    # The ramp-up carries no rotation of its own without a segment rotation.
+    assert "ext" not in payloads[0]
+
+    module.set_state(lin_idx=lin, phase_offset_rad=0.7)
+    assert [dict(p["ext"])["rot3D"] for p in module.payloads()[1:]] == quaternions
+
+
+def _snapshot(payloads):
+    """A payload's values, frozen -- they are otherwise a live view."""
+    return tuple(
+        {
+            key: (
+                tuple((name, tuple(values)) for name, values in value)
+                if key == "ext"
+                else tuple(value) if isinstance(value, list | tuple) else value
+            )
+            for key, value in payload.items()
+        }
+        for payload in payloads
+    )

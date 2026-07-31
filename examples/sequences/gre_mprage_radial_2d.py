@@ -274,7 +274,7 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
         if cfg.mt_enable
         else None
     )
-    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse.blocks)
     center = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
     raster = opts.block_duration_raster
     te_delay_s = round(
@@ -284,12 +284,12 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
     if te_delay_s < -1e-9 and strict:
         return None
     te_delay_s = max(0.0, te_delay_s)
-    mt_duration = 0.0 if mt is None else sum(pp.calc_duration(*block) for block in mt)
+    mt_duration = 0.0 if mt is None else sum(pp.calc_duration(*block) for block in mt.blocks)
     min_block_s = mt_duration + d_pulse + te_delay_s + radial.duration
     tr_delay_s = round((cfg.tr_s - min_block_s) / raster) * raster
     if tr_delay_s < -1e-9 and strict:
         return None
-    prep_duration = sum(pp.calc_duration(*block) for block in prep)
+    prep_duration = sum(pp.calc_duration(*block) for block in prep.blocks)
     prep_delay_s = cfg.ti_s - prep_duration if cfg.prep_type == PreparationType.INVERSION else 0.0
     prep_delay_s = round(prep_delay_s / raster) * raster
     if prep_delay_s < -1e-9 and strict:
@@ -320,7 +320,6 @@ def _view_loop(cfg: _Config):
 
 def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None:
     timing = _compute_public(opts, cfg, strict=False)
-    seq = pp.Sequence(opts)
     views = _view_loop(cfg)
     segments = views.shots
     rotations = views.to_rotations()
@@ -335,6 +334,30 @@ def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None
         cfg.nslices, slice_step or cfg.slice_thickness_m, order="sequential"
     )
     offsets_hz = slices.to_frequencies(timing["pulse"].gradients[0].amplitude) if slice_step else None
+
+    # One segment's chronology, handed over once: the preparation, its delay,
+    # then ETL views. The recovery is deliberately outside -- it owns no library
+    # rows, so it can close a pass wherever the segment ends. Labels are set here
+    # because a label is an event the template records.
+    first_offset = float(offsets_hz[slices.shots[0][0]]) if offsets_hz is not None else 0.0
+    timing["pulse"].set_state(
+        freq_offset_hz=first_offset, phase_offset_rad=0.0, **slices.label_state(0)
+    )
+    timing["radial"].set_state(lin_idx=int(segments[0][0]), rotation=rotations[int(segments[0][0])])
+    view = [
+        *([timing["mt"]] if timing["mt"] is not None else []),
+        timing["pulse"],
+        *([te_delay] if te_delay is not None else []),
+        timing["radial"],
+        *([tr_delay] if tr_delay is not None else []),
+    ]
+    tr_struct = [
+        timing["prep"],
+        *([prep_delay] if prep_delay is not None else []),
+        *(len(segments[0]) * view),
+    ]
+    seq = pp.Sequence(opts, len(slices.shots) * len(segments), *tr_struct)
+
     phase_idx = 0
     for sl, band in enumerate(slices.shots):
         offset_hz = float(offsets_hz[band[0]]) if offsets_hz is not None else 0.0
@@ -348,8 +371,9 @@ def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None
                     for block in timing["mt"]:
                         seq.add_block(*block)
                 phase = float(phases[phase_idx])
-                timing["pulse"].set_state(freq_offset_hz=offset_hz, phase_offset_rad=phase)
-                timing["pulse"].set_labels(*slices.labels(sl))
+                timing["pulse"].set_state(
+                    freq_offset_hz=offset_hz, phase_offset_rad=phase, **slices.label_state(sl)
+                )
                 for block in timing["pulse"]:
                     seq.add_block(*block)
                 if te_delay is not None:

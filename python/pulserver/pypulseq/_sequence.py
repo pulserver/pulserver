@@ -5,10 +5,10 @@ from __future__ import annotations
 __all__ = ["Segment", "Sequence"]
 
 import copy
+import contextvars
 import itertools
 import math
-from operator import itemgetter
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
@@ -19,6 +19,7 @@ from pypulseq.compress_shape import compress_shape
 from pypulseq.event_lib import EventLibrary
 from pypulseq.supported_labels_rf_use import get_supported_labels
 
+from .._core._module import _GETTERS, _peak
 from ._safety import bands_to_resonances, chronaxie_pns, read_asc_bands, read_esp_bands
 from ._views import build_views, slice_view, time_bounds
 
@@ -38,6 +39,51 @@ _CHANNEL_SLOT = {"x": 2, "y": 3, "z": 4}
 
 #: Gradient channel -> its key in a module payload.
 _CHANNEL_KEY = {"x": "gx", "y": "gy", "z": "gz"}
+#: Stand-in for a payload with no arbitrary gradients, so the waveform check is
+#: one dict lookup that misses rather than a branch on every block.
+_NO_SHAPES: dict = {}
+
+#: Set only while :meth:`Sequence._unstructured` is constructing one, which is
+#: the single case allowed to build a sequence without declaring its structure.
+#: A ContextVar rather than a plain flag so a parse cannot leak the permission
+#: into anything running alongside it.
+_parsing: contextvars.ContextVar[bool] = contextvars.ContextVar("_parsing", default=False)
+
+
+#: How each event kind yields the values its payload tuple would have carried.
+#: The same order and the same arithmetic ``_block_payload`` uses -- it is the
+#: same numbers, reached without building the dict that would hold them.
+_EVENT_VALUES = {
+    "rf": lambda event, peaks: (_peak(event.signal, peaks), *_GETTERS["rf"](event)),
+    "trap": lambda event, peaks: (event.amplitude,),  # noqa: ARG005 - one signature for all kinds
+    "grad": lambda event, peaks: (_peak(event.waveform, peaks), *_GETTERS["grad"](event)),
+    "adc": lambda event, peaks: _GETTERS["adc"](event),  # noqa: ARG005
+    "labelset": lambda event, peaks: (event.value,),  # noqa: ARG005
+    "labelinc": lambda event, peaks: (event.value,),  # noqa: ARG005
+    "trigger": lambda event, peaks: _GETTERS["trigger"](event),  # noqa: ARG005
+    "output": lambda event, peaks: _GETTERS["output"](event),  # noqa: ARG005
+    "rot3D": lambda event, peaks: tuple(  # noqa: ARG005
+        event.rot_quaternion.as_quat(canonical=True, scalar_first=True).tolist()
+    ),
+    # Magnitude/phase interleaved per channel, matching ``_row_rf_shim``.
+    "rf_shim": lambda event, peaks: tuple(  # noqa: ARG005
+        np.stack((np.abs(event.shim_vector), np.angle(event.shim_vector)), axis=-1).ravel().tolist()
+    ),
+}
+
+
+def _same_waveform(samples, expected) -> bool:
+    """Whether two gradient sample arrays describe the same shape.
+
+    Only reached when they are not the same object, which for a module that
+    replays its designed waveform is never. A module that rebuilds an equal
+    array every shot is wasteful but correct, and this is what tells the two
+    apart from a module that re-solved the waveform into something else.
+    """
+    if samples is None:
+        return False
+    samples, expected = np.asarray(samples), np.asarray(expected)
+    return samples.shape == expected.shape and bool(np.array_equal(samples, expected))
 
 #: Rows buffered across the whole template before IDs are settled. The rounded
 #: index is vectorised, so it wants a batch; buffering the whole scan instead
@@ -83,36 +129,19 @@ _ROUNDING_PROFILES = {
     "rf_shim_library": 9,
 }
 
-#: Libraries collapsed as a range is registered, rather than only at write time.
+#: Libraries a *block row* points at, whose IDs are read by position -- column 1
+#: for RF, 2..4 for the gradient axes, 5 for the ADC. Nothing is ordered by
+#: those IDs, so write-time deduplication may renumber them freely.
 #:
-#: These are exactly the libraries a *block row* points at. Their IDs are read
-#: by position -- column 1 for RF, 2..4 for the gradient axes, 5 for the ADC --
-#: so collapsing them renumbers nothing that is ordered by ID, and the emitted
-#: file is unchanged.
-#:
-#: The five extension-referenced libraries are deliberately absent. A block
+#: The five extension-referenced libraries are deliberately absent, and the
+#: template claims their rows one per block per pass for that reason. A block
 #: orders its extension chain by reference ID (``_fast_set_block`` sorts on it,
-#: mirroring upstream), so today's strictly increasing references make one shot's
-#: chain order every shot's. Collapsing them would leave each shot holding an
-#: arbitrary set of small IDs whose sort order varies shot to shot -- which is a
-#: different chain, and a different file. They stay one entry per event and are
-#: collapsed once, at write time, where the whole scan is visible at once.
-_INSERT_DEDUP_LIBRARIES = ("rf_library", "arb_library", "trap_library", "grad_library", "adc_library")
+#: mirroring upstream), so strictly increasing references make one pass's chain
+#: order every pass's; sharing a row between passes would leave each holding an
+#: arbitrary set of small IDs whose sort order varies pass to pass -- which is a
+#: different chain, and a different file.
+_BLOCK_ROW_LIBRARIES = ("rf_library", "arb_library", "trap_library", "grad_library", "adc_library")
 
-
-#: Shortest range worth batching. Below this the per-call numpy overhead
-#: exceeds what it saves, and the extra runs it leaves in each library make the
-#: later deduplication slower; the measured break-even is around eight shots.
-_MIN_BULK_SHOTS = 8
-
-#: Roughly how many library rows a range holds as Python tuples before
-#: converting them to matrices and committing. The cursor buys its speed by
-#: leaving each shot's payload in a list, and the whole point of a range is
-#: protocols with millions of blocks -- so the buffer is bounded by rows rather
-#: than by shots, and a group with more events per shot commits more often.
-#: Chunking cannot change the emitted file: IDs are positions, so a shot lands
-#: at the same index whether its chunk started at 0 or at 900k.
-_BULK_CHUNK_SHOTS = 1 << 18
 
 #: RF ``use`` strings pypulseq abbreviates to their initial.
 _RF_USES = ("excitation", "refocusing", "inversion", "saturation", "preparation")
@@ -132,55 +161,42 @@ _ROW_BUILDERS = {
 }
 
 
-@dataclass
-class _BulkSlot:
-    """One event's entries in one library, across a whole range of shots.
-
-    ``rows`` collects one payload tuple per shot as the cursor walks them --
-    a list append, not a matrix write, because a row assignment into numpy
-    costs an order of magnitude more than appending to a Python list and this
-    runs once per event of the whole range. The list becomes ``payload``, one
-    ``(n, width)`` matrix, in a single conversion at commit time.
-
-    ``ids`` is filled in once the library has taken the rows and answered with
-    an ID for each -- which is not necessarily one ID per shot, since a library
-    that collapses duplicates hands the same ID back for every shot that
-    repeated a payload. ``column`` names the block-row column that points at
-    this entry (``None`` for a waveform an entry elsewhere refers to), and
-    ``source`` names the slot whose IDs are this one's payload -- how a
-    ``grad_library`` reference finds its trapezoid or arbitrary waveform.
-    """
-
-    library: str
-    width: int
-    rows: list = field(default_factory=list)
-    column: int | None = None
-    data_type: str | int = ""
-    extension: str | None = None
-    source: "_BulkSlot | None" = None
-    block: int = 0
-    kind: str = ""
-    build: Any = None
-    ids: np.ndarray | None = None
-    payload: np.ndarray | None = None
-
-
-#: Per event type: the library it registers into, and where each *dynamic*
-#: payload field lands in that library's row. Everything not named here is
-#: structure -- shape IDs, sample counts, dwell, delays, rise/flat/fall -- and
-#: is read once off the template rather than off an event per shot.
+#: Per event type: the library it registers into, and how the payload's tuple
+#: maps onto that library's row -- ``(row index, payload index)`` pairs.
 #:
-#: The row layouts are the ones the ``_row_*`` builders produce, and the field
-#: names are the ones ``pulserver._core._module._block_payload`` publishes. The
-#: two have to agree; :func:`_template_slot` is where that is checked.
-_TEMPLATE_ROW_FIELDS: dict[str, tuple[str, dict[str, int]]] = {
-    "rf": ("rf_library", {"amplitude": 0, "freq_ppm": 6, "phase_ppm": 7, "freq_offset": 8, "phase_offset": 9}),
-    "trap": ("trap_library", {"amplitude": 0}),
-    "grad": ("arb_library", {"amplitude": 0, "first": 1, "last": 2}),
-    "adc": ("adc_library", {"freq_ppm": 3, "phase_ppm": 4, "freq_offset": 5, "phase_offset": 6}),
-    "labelset": ("label_set_library", {"value": 0}),
-    "labelinc": ("label_inc_library", {"value": 0}),
-    "rot3D": ("rotation_library", {}),
+#: Both orders are fixed and have to agree: the row layouts are the ones the
+#: ``_row_*`` builders produce, and the payload order is
+#: ``pulserver._core._module._DYNAMIC_FIELDS``. Pairs of integers rather than
+#: field names on purpose -- the template already knows which event type sits
+#: at each slot, so looking a name up per event per shot would re-learn
+#: something settled once.
+_TEMPLATE_ROW_FIELDS: dict[str, tuple[str, tuple[tuple[int, int], ...]]] = {
+    # row: amplitude, mag, phase, time, center, delay, freq_ppm, phase_ppm, freq_off, phase_off
+    # payload: amplitude, freq_offset, phase_offset, freq_ppm, phase_ppm
+    "rf": ("rf_library", ((0, 0), (6, 3), (7, 4), (8, 1), (9, 2))),
+    # row: amplitude, rise, flat, fall, delay        payload: amplitude
+    "trap": ("trap_library", ((0, 0),)),
+    # row: amplitude, first, last, shape, time, delay
+    # payload: amplitude, first, last, delay
+    "grad": ("arb_library", ((0, 0), (1, 1), (2, 2), (5, 3))),
+    # row: num, dwell, delay, freq_ppm, phase_ppm, freq_off, phase_off, shape, dead
+    # payload: freq_offset, phase_offset, freq_ppm, phase_ppm
+    "adc": ("adc_library", ((3, 2), (4, 3), (5, 0), (6, 1))),
+    "labelset": ("label_set_library", ((0, 0),)),
+    "labelinc": ("label_inc_library", ((0, 0),)),
+    "rot3D": ("rotation_library", ((0, 0), (1, 1), (2, 2), (3, 3))),
+    # row: kind, channel, delay, duration   payload: delay, duration
+    # Kind and channel are structural -- which trigger this is -- so only the
+    # timing moves. A volume-start trigger plays once per frame and owns a
+    # library row, so it has to be able to live *inside* a template: a block
+    # outside one may own nothing.
+    "trigger": ("trigger_library", ((2, 0), (3, 1))),
+    "output": ("trigger_library", ((2, 0), (3, 1))),
+    # A transmit shim's whole vector moves, and its width is the channel count,
+    # so the mapping is built per event rather than written out here -- see
+    # ``_template_slot``. Like a rotation, only the numbers move: *whether* a
+    # block carries a shim is structural.
+    "rf_shim": ("rf_shim_library", ()),
 }
 
 #: Entry type each event registers under, without rendering its row. ``rf`` is
@@ -188,6 +204,7 @@ _TEMPLATE_ROW_FIELDS: dict[str, tuple[str, dict[str, int]]] = {
 _TEMPLATE_ENTRY_TYPES = {
     "rf": 0, "trap": "t", "grad": "g", "adc": "",
     "labelset": "", "labelinc": "", "rot3D": "",
+    "trigger": "", "output": "", "rf_shim": "",
 }
 
 #: Event types a template block may hold and still take the fast path. A block
@@ -197,9 +214,56 @@ _TEMPLATE_ENTRY_TYPES = {
 _TEMPLATE_FAST_TYPES = frozenset(_TEMPLATE_ROW_FIELDS) | {"delay", "soft_delay"}
 
 
-@dataclass
+class _ShapeInventory:
+    """Every waveform one template slot may play, and the shape IDs they take.
+
+    A module publishes its complete candidate set at construction, so nothing
+    here has to be discovered while the scan is filled: a payload names an
+    index, and this answers with the ``(shape id, time shape id)`` pair the row
+    should point at.
+
+    Entries are compressed **the first time a shot names one**, not all at once
+    up front. That is not laziness for its own sake -- ``shape_library``'s
+    deduplication compacts in *registration* order, so registering the whole
+    inventory at construction would number the shapes differently from a
+    block-by-block build and change the emitted file. Registering on first
+    reference gives exactly the block-by-block order, and costs one compression
+    per distinct waveform for the whole scan rather than one per shot.
+    """
+
+    __slots__ = ("by_identity", "ids", "samples", "times")
+
+    def __init__(self, samples, times):
+        if len(samples) != len(times):
+            raise ValueError(
+                f"waveform inventory has {len(samples)} sample arrays and {len(times)} time arrays"
+            )
+        self.samples = samples
+        self.times = times
+        #: Registered ``(shape id, time id)`` per index; ``None`` until named.
+        self.ids: list = [None] * len(samples)
+        #: ``id(samples[k]) -> k``, so a payload carrying the array rather than
+        #: the index still resolves without comparing samples.
+        self.by_identity = {id(entry): index for index, entry in enumerate(samples)}
+
+    def resolve(self, sequence, index: int):
+        """The ``(shape id, time id)`` for candidate ``index``, registering it once."""
+        pair = self.ids[index]
+        if pair is None:
+            _amplitude, shape_ids = sequence._compress_grad_cached(
+                self.samples[index], self.times[index]
+            )
+            pair = self.ids[index] = tuple(shape_ids)
+        return pair
+
+
+@dataclass(eq=False)
 class _TemplateSlot:
     """One event of one template block: where its row goes and what moves in it.
+
+    Compared by identity: nearly every field is a numpy array or a view into
+    one, so a generated ``__eq__`` would try to broadcast rows of different
+    widths against each other and raise rather than answer.
 
     ``row`` is the whole library row as the template rendered it, so a payload
     that moves nothing still produces a correct row. ``dynamic`` names the
@@ -228,20 +292,50 @@ class _TemplateSlot:
     #: Template block this slot belongs to. With the TR length that is the
     #: block-table stride, so no row has to record where its ID goes.
     block: int = 0
-    #: Where this slot's per-iteration values are collected.
-    buffer: int = -1
-    #: ``operator.itemgetter`` over the dynamic field names, so one C-level
-    #: call lifts a whole iteration's values out of the payload.
-    getter: Any = None
     #: The waveform slot a gradient reference names.
     source: Any = None
-    #: IDs this slot's rows were given by the last flush.
-    ids: Any = None
+    #: Whether a payload can move anything in this slot's row. A slot nothing
+    #: moves is one library row for the whole scan; one that moves is a row per
+    #: TR, which write-time deduplication collapses back down.
+    varies: bool = False
+    #: This slot's row for the first pass, and for every later pass, as ``(k, W)``
+    #: *views into the library's own storage*. Writing a payload is therefore a
+    #: write into the library -- there is nothing held anywhere else, and nothing
+    #: to register afterwards.
+    first_rows: Any = None
+    later_rows: Any = None
+    #: The entry ID of the row for pass 0, and for passes 1.. as an array.
+    first_id: int = 0
+    later_ids: Any = None
+    #: Position of this slot among the block's extensions. A payload lists its
+    #: extensions in event order rather than keyed, so this is how the two are
+    #: matched -- resolved here, not searched for per block.
+    ext_ordinal: int = -1
+    #: For an *arbitrary* gradient, the sample array the template registered a
+    #: shape for -- the shape this slot's claimed rows already point at.
+    #: ``None`` for trapezoids, which have no shape to move. A shot whose
+    #: samples differ registers its own shape and repoints its own row's
+    #: ``shape_columns``; this is only the fast "nothing moved" answer, and the
+    #: TR is still the template either way -- the samples are data, like an
+    #: amplitude or a phase.
+    waveform: Any = None
+    #: This slot's :class:`_ShapeInventory`, when its module published one, or
+    #: ``None`` when the samples are fixed for the whole scan. A slot with an
+    #: inventory can point its row at any candidate; a slot without one and a
+    #: shot that moved the samples is a refusal.
+    shapes: Any = None
+    #: Row columns holding ``(shape id, time shape id)``. ``_row_grad`` lays the
+    #: row out as (amplitude, first, last, shape, time, delay).
+    shape_columns: tuple[int, ...] = (3, 4)
+    #: ``(event, peak_cache) -> values``, the payload tuple this slot would have
+    #: read, taken straight off the event instead. Bound once here so a block
+    #: given as events costs no dict; see ``_EVENT_VALUES``.
+    event_values: Any = None
 
 
-@dataclass
+@dataclass(eq=False)
 class _TemplateBlock:
-    """One block position of the TR template."""
+    """One block position of the TR template; compared by identity, as its slots are."""
 
     slots: tuple[_TemplateSlot, ...]
     #: Slots carrying an extension, in the order the block's events were seen.
@@ -250,6 +344,11 @@ class _TemplateBlock:
     static_duration: float
     fast: bool
     reason: str = ""
+    #: The block's events as ``tr_struct`` gave them. A module keeps its layout
+    #: across states -- that is what makes a re-state cheap -- so a later shot
+    #: hands back these *same objects*, which is how ``add_block(*block)``
+    #: recognises a template block without the caller having to say so.
+    events: tuple = ()
 
 
 class _AppendOnlyLibrary(EventLibrary):
@@ -263,48 +362,23 @@ class _AppendOnlyLibrary(EventLibrary):
     rows and the ID is the position.
 
     Entries are kept as ordered runs, which may be Python lists or matrices:
-    :meth:`append` grows a list one payload at a time, while :meth:`reserve` and
-    :meth:`extend` take a whole range of shots in one matrix, with no Python
-    step per event. IDs are positions either way, so a run boundary is invisible
-    to every reader.
+    :meth:`append` grows a list one payload at a time, while :meth:`reserve`
+    claims a whole matrix at once, with no Python step per event. IDs are
+    positions either way, so a run boundary is invisible to every reader.
 
     ``data`` and ``type`` still answer as dicts for anything that asks, built on
     demand, so the class stays a drop-in :class:`EventLibrary`.
 
     Nothing here maintains ``keymap``, the by-value reverse index
-    ``EventLibrary.insert`` keeps. Nothing looks an entry up by value one call at
-    a time, so carrying it would cost a tuple and a dict slot per event and never
-    be read; what does look entries up -- :meth:`extend` and write-time
-    deduplication -- compares a whole batch of rounded rows at once instead.
-
-    Given a rounding profile, :meth:`extend` additionally collapses duplicates
-    as they arrive, which is what keeps the libraries small rather than merely
-    cheap: a 512-cubed GRE registers 4.5 million entries drawn from some four
-    thousand distinct payloads, and holding all 4.5 million costs about half a
-    gigabyte before write-time deduplication ever runs. Collapsing early is safe
-    because it is a *refinement* of what write time does anyway -- the same
-    rounding profile, the same bitwise tie-break, the same first-occurrence
-    representative -- so the write pass sees fewer rows and reaches the same
-    answer. Two details make that true and are easy to get wrong:
-
-    * The entry *type* is part of the key. ``grad_library`` holds a one-field
-      reference into either ``trap_library`` or ``arb_library`` and those number
-      independently, so ``(3,)`` is ambiguous and keying on the payload alone
-      would point blocks at the wrong waveform.
-    * What is stored is the first occurrence's **original** payload, not its
-      rounded key. Rounding is not quite idempotent across a decade boundary
-      (``9.999...`` rounds up to ``10.0``, which has a different exponent), so
-      storing the rounded value would let the write pass round a second time and
-      land somewhere the single-pass baseline never would.
-
-    :meth:`append`, the per-block path, deliberately does not do this: its
-    callers register one row at a time, and rounding a row in Python costs more
-    than the write-time pass saves. The two paths need not agree -- collapsing
-    any subset of the entries leaves the write pass's grouping and its choice of
-    representative unchanged.
+    ``EventLibrary.insert`` keeps, and nothing here collapses duplicates.
+    Nothing looks an entry up by value one call at a time, so carrying an index
+    would cost a tuple and a dict slot per event and never be read; the one
+    thing that does look entries up -- write-time deduplication -- compares the
+    whole library as a matrix of rounded rows in a single pass, and reaches the
+    same answer whether or not anything was collapsed on the way in.
     """
 
-    def __init__(self, numpy_data: bool = False, dedup_profile: int | tuple[int, ...] | None = None):
+    def __init__(self, numpy_data: bool = False):
         # Deliberately not EventLibrary.__init__: it assigns the very names
         # this class publishes as computed views.
         self.keymap: dict = {}
@@ -319,19 +393,6 @@ class _AppendOnlyLibrary(EventLibrary):
         self._data_cache: dict | None = None
         self._type_cache: dict | None = None
         self._run_starts_cache: tuple | None = None
-        #: Rounding profile for insert-time collapsing, or None to only append.
-        self._dedup_profile = dedup_profile
-        #: Distinct keys registered so far, as rounded rows ordered by hash, with
-        #: the hashes themselves and the entry ID each one resolves to.
-        self._key_rows: np.ndarray | None = None
-        self._key_hashes: np.ndarray | None = None
-        self._key_ids: np.ndarray | None = None
-        #: Entry type -> the numeric code standing in for it in a key row.
-        self._key_type_codes: dict = {}
-        #: Set when a hash collision or a ragged payload makes the index
-        #: untrustworthy; the library then only appends, and write-time
-        #: deduplication -- which never relied on this -- still collapses it.
-        self._dedup_off = False
 
     # -- building ------------------------------------------------------
 
@@ -384,135 +445,32 @@ class _AppendOnlyLibrary(EventLibrary):
         self._count += len(slab)
         return slab, first_id
 
-    def type_key_codes(self, values) -> np.ndarray:
-        """Intern entry types as the numeric codes a key row carries.
+    def truncate(self, count: int) -> None:
+        """Give back every entry past ``count``, which must be a whole run tail.
 
-        Any injective numbering does: a key is only ever compared against
-        another key of this same library, and it has to agree with write-time
-        deduplication only in which rows it keeps *apart*.
+        Rows are claimed before a scan runs and a scan may play less than it
+        claimed, so the unused tail has to go: an entry nothing points at is
+        still an entry in the emitted file.
         """
-        codes = self._key_type_codes
-        return np.array([codes.setdefault(value, len(codes) + 1) for value in values], dtype=float)
-
-    def extend(
-        self,
-        matrix: np.ndarray,
-        data_type="",
-        key_codes: np.ndarray | None = None,
-        tile: int = 1,
-    ) -> np.ndarray:
-        """Register ``matrix``'s rows in order and return one ID per row.
-
-        Rows that repeat one already registered -- at this library's rounding
-        profile, and counting the entry type as part of the payload -- are not
-        stored again; their ID is the first occurrence's. Without a profile, or
-        once the index has been switched off, every row is stored and the IDs
-        run consecutively, exactly as :meth:`reserve` would have given them.
-
-        ``data_type`` is one type for the whole batch, or a sequence of types
-        repeated ``tile`` times over it -- which is the shape a range of shots
-        has, and which lets the types of the handful of rows actually stored be
-        picked out without ever materialising one entry per row.
-        ``key_codes`` is the per-row types already interned by
-        :meth:`type_key_codes`; a caller whose types repeat on a fixed stride
-        can tile that far more cheaply than a row-by-row pass can build it.
-        """
-        count = len(matrix)
-        if not count:
-            return np.zeros(0, dtype=np.int64)
-
-        pattern = None if isinstance(data_type, str | int) else np.asarray(data_type, dtype=object)
-        if pattern is not None and len(pattern) * tile != count:
-            raise ValueError(f"{len(pattern)} types tiled {tile}x cannot cover {count} rows")
-
-        if self._dedup_profile is None or self._dedup_off:
-            slab, first_id = self.reserve(
-                count, matrix.shape[1], data_type if pattern is None else np.tile(pattern, tile)
-            )
-            slab[:] = matrix
-            return first_id + np.arange(count, dtype=np.int64)
-
-        if key_codes is None and pattern is not None:
-            key_codes = np.tile(self.type_key_codes(pattern.tolist()), tile)
-        key = self._dedup_keys(matrix, key_codes)
-        hashes = _row_hashes(key)
-        ids = self._known_ids(key, hashes)
-        if self._dedup_off:  # the lookup found a collision and gave up
-            return self.extend(matrix, data_type, tile=tile)
-
-        new = ids < 0
-        if new.any():
-            (new_rows,) = np.nonzero(new)
-            new_key, new_hashes = key[new_rows], hashes[new_rows]
-            # Group the newcomers among themselves, numbering the groups in the
-            # order they first appear rather than in hash order: the ID a row
-            # gets has to be the one a plain append-everything pass would have
-            # left its first occurrence with.
-            _, first, inverse = np.unique(new_hashes, return_index=True, return_inverse=True)
-            inverse = inverse.reshape(-1)
-            order = np.argsort(first)
-            rank = np.empty(len(first), dtype=np.int64)
-            rank[order] = np.arange(len(first), dtype=np.int64)
-
-            if not _rows_identical(new_key, new_key[first[inverse]]).all():
-                self._dedup_off = True
-                return self.extend(matrix, data_type, tile=tile)
-
-            keep = new_rows[first[order]]
-            stored = data_type if pattern is None else pattern[keep % len(pattern)]
-            slab, first_id = self.reserve(len(keep), matrix.shape[1], stored)
-            slab[:] = matrix[keep]
-            ids[new_rows] = first_id + rank[inverse]
-            self._register_keys(
-                key[keep], hashes[keep], first_id + np.arange(len(keep), dtype=np.int64)
-            )
-        return ids
-
-    def _dedup_keys(self, matrix: np.ndarray, key_codes: np.ndarray | None) -> np.ndarray:
-        """The rows' deduplication keys: the rounded payload, entry type first."""
-        width = matrix.shape[1]
-        profile = self._dedup_profile
-        profile = tuple([profile] * width) if isinstance(profile, int) else tuple(profile[:width])
-        rounded = _round_sig_matrix(np.ascontiguousarray(matrix, dtype=float), profile)
-        if key_codes is None:
-            return rounded
-        return np.column_stack([key_codes, rounded])
-
-    def _known_ids(self, key: np.ndarray, hashes: np.ndarray) -> np.ndarray:
-        """ID of each row already registered; ``-1`` for one that is new."""
-        out = np.full(len(key), -1, dtype=np.int64)
-        known = self._key_hashes
-        if known is None:
-            return out
-        if self._key_rows.shape[1] != key.shape[1]:
-            # A library whose payload width changes cannot share one index; the
-            # rf_shim library is the only one that can, and it is not indexed.
-            self._dedup_off = True
-            return out
-        position = np.searchsorted(known, hashes)
-        np.clip(position, 0, len(known) - 1, out=position)
-        hit = known[position] == hashes
-        if not hit.any():
-            return out
-        rows = self._key_rows[position[hit]]
-        if not _rows_identical(key[hit], rows).all():
-            self._dedup_off = True
-            return out
-        out[hit] = self._key_ids[position[hit]]
-        return out
-
-    def _register_keys(self, key_rows: np.ndarray, hashes: np.ndarray, ids: np.ndarray) -> None:
-        """Add newly registered keys to the index, kept sorted for searchsorted."""
-        if self._key_hashes is None:
-            all_rows, all_hashes, all_ids = key_rows, hashes, ids
-        else:
-            all_rows = np.concatenate([self._key_rows, key_rows])
-            all_hashes = np.concatenate([self._key_hashes, hashes])
-            all_ids = np.concatenate([self._key_ids, ids])
-        order = np.argsort(all_hashes, kind="stable")
-        self._key_rows = np.ascontiguousarray(all_rows[order])
-        self._key_hashes = all_hashes[order]
-        self._key_ids = all_ids[order]
+        count = int(count)
+        if count >= self._count:
+            return
+        while self._count > count:
+            run, types = self._runs[-1], self._type_runs[-1]
+            keep = len(run) - (self._count - count)
+            if keep > 0:
+                self._runs[-1] = run[:keep]
+                if isinstance(types, list | np.ndarray) and len(types) == len(run):
+                    self._type_runs[-1] = types[:keep]
+                self._count = count
+            else:
+                self._runs.pop()
+                self._type_runs.pop()
+                self._count -= len(run)
+        self._tail = None
+        self._data_cache = None
+        self._type_cache = None
+        self._run_starts_cache = None
 
     # -- reading -------------------------------------------------------
 
@@ -589,10 +547,10 @@ class _AppendOnlyLibrary(EventLibrary):
         """
         if not self._typed:
             return ""
-        # A library filled by add_range holds one run per shot -- hundreds of
-        # them -- and deduplication asks this once per distinct payload, so the
-        # run a position falls in is found by bisection rather than by walking
-        # from the start every time.
+        # A library holds one run per claim and one per stretch of appends --
+        # dozens of them -- and deduplication asks this once per distinct
+        # payload, so the run a position falls in is found by bisection rather
+        # than by walking from the start every time.
         starts = self._run_starts()
         run_index = int(np.searchsorted(starts, index, side="right")) - 1
         if run_index < 0 or index >= self._count:
@@ -782,17 +740,16 @@ class Sequence(pp.Sequence):
     def __init__(
         self,
         system: pp.Opts | None = None,
-        use_block_cache: bool = False,
-        tr_struct=None,
         loop_size: int | None = None,
+        *tr_struct,
+        use_block_cache: bool = False,
     ):
         super().__init__(system=system, use_block_cache=use_block_cache)
         # Every library the fast path appends to, in the order write() emits
         # them. They are write-only until deduplication -- see
         # _AppendOnlyLibrary -- so none of them is a dict.
         for name in _APPEND_ONLY_LIBRARIES:
-            profile = _ROUNDING_PROFILES[name] if name in _INSERT_DEDUP_LIBRARIES else None
-            setattr(self, name, _AppendOnlyLibrary(dedup_profile=profile))
+            setattr(self, name, _AppendOnlyLibrary())
         # Bidirectional label registry; extended automatically for custom labels.
         _builtin = get_supported_labels()
         self._label_registry: dict[str, int] = {lbl: i + 1 for i, lbl in enumerate(_builtin)}
@@ -815,8 +772,8 @@ class Sequence(pp.Sequence):
         self._rf_shape_cache: dict[int, tuple] = {}
         self._grad_shape_cache: dict[int, tuple] = {}
         # Block table, held as ordered runs the same way the libraries are:
-        # Python rows from add_block, whole matrices from add_range. The dict
-        # views and the matrix are built from these on demand.
+        # Python rows from a block added on its own, whole matrices claimed by
+        # the TR template. The dict views and the matrix are built on demand.
         self._block_runs: list = [[]]
         self._duration_runs: list = [[]]
         self._block_tail: list = self._block_runs[0]
@@ -833,12 +790,39 @@ class Sequence(pp.Sequence):
         # so a sequence built the ordinary way pays one None check per block.
         self._template: tuple | None = None
         self._template_cursor = 0
+        self._template_pass = 0
+        self._template_gap = False
+        self._template_finished = False
+        self._template_written = 0
+        self._template_run_start = 0
+        self._template_rows: np.ndarray | None = None
+        self._template_block_durations: np.ndarray | None = None
+        #: How to give back rows a short scan claimed but never filled.
+        self._template_claims: list = []
+        self._template_chain_levels: tuple | None = None
         self._loop_size = int(loop_size) if loop_size is not None else None
-        self._slot_rows: list[list] = []
-        self._slot_blocks: list[list] = []
-        self._buffered = 0
-        if tr_struct is not None:
+        #: Waveform peaks by sample-array identity, for blocks handed over as
+        #: events. A module replays the same arrays, so this stays tiny.
+        self._peak_cache: dict = {}
+        if tr_struct:
             self._build_template(tr_struct)
+        elif not _parsing.get():
+            # Building a sequence means declaring its repeating structure. Every
+            # library row is claimed from that structure up front, which is what
+            # makes ``add_block`` a handful of scalar writes -- so there is no
+            # such thing as a sequence without one, and the block-at-a-time
+            # builder is not a public path any more.
+            #
+            # The period need not be the TR: it is whatever actually repeats, and
+            # a scan with a once-only lead-in or tail is one pass over the whole
+            # thing. Reading a ``.seq`` back is the one case with no structure to
+            # declare, and it comes in through ``_for_parsing``.
+            raise TypeError(
+                "Sequence() needs the structure that repeats and how many times it does: "
+                "Sequence(system, num_passes, *modules_or_blocks). Every library row is "
+                "claimed from it up front. If you are reading a file back, use "
+                "pulserver.io.read()."
+            )
 
     # ------------------------------------------------------------------
     # Public API
@@ -847,20 +831,104 @@ class Sequence(pp.Sequence):
     def add_block(self, *args: SimpleNamespace | float | dict) -> None:
         """Append a block assuming strictly sequential insertion.
 
-        Two forms. The ordinary one takes the block's events, exactly as
-        upstream does. The other takes a single **payload dict** from
-        :meth:`pulserver.SequenceModule.payloads` — the numbers this shot moves,
-        keyed the way a pulseq block is — which is only accepted when the
-        sequence was given a ``tr_struct``: the template supplies everything the
-        payload leaves out, so the block costs a few dict reads instead of a
-        walk over its events.
+        Takes the block's events, exactly as upstream does::
+
+            readout.set_state(lin_idx=ky)
+            for block in readout:
+                seq.add_block(*block)
+
+        On a sequence built with a ``tr_struct`` that loop is also the *fast*
+        path, and nothing at the call site says so. A module keeps its event
+        objects across states — re-stating rewrites numbers into the events the
+        layout already owns — so a block whose events are the ones the template
+        recorded **is** that template block, and is taken through it. A
+        preparation, a recovery delay or a hand-built block is made of different
+        objects, so it takes the ordinary path and the template is untouched.
+
+        A single **payload dict** from :meth:`pulserver.SequenceModule.payloads`
+        is also accepted, and is the cheapest form: it skips reading the block's
+        events at all, which for a module that computes its payloads directly is
+        the difference between rewriting a few floats and re-deriving them.
         """
-        if self._template is not None and len(args) == 1 and isinstance(args[0], dict):
-            self._template_set_block(args[0])
-        else:
-            self._template_require_boundary()
-            self._fast_set_block(*args)
+        if len(args) == 1 and isinstance(args[0], dict):
+            payload = args[0]
+            if self._template is not None:
+                self._template_set_block(payload)
+                self.next_free_block_ID += 1
+                return
+            # No TR structure was declared, so the numbers alone are not enough
+            # to build the block -- but a payload carries the events it came
+            # from, which are. The loop at the call site is the same either way.
+            args = getattr(payload, "events", None)
+            if args is None:  # pragma: no cover - guarded by Payload.events
+                raise TypeError(
+                    "add_block() was given a payload dict, but this sequence has no tr_struct "
+                    "and the payload carries no events to build the block from."
+                )
+        elif self._template is not None and (self._template_events(args) or self._template_delay(args)):
+            self.next_free_block_ID += 1
+            return
+        self._template_require_boundary(args)
+        self._fast_set_block(*args)
         self.next_free_block_ID += 1
+
+    def _template_events(self, args) -> bool:
+        """Take a block given as events against the template, if it is one.
+
+        Recognition is by *identity*, which is exact rather than a guess: the
+        template holds the very event objects ``tr_struct`` was built from, and
+        a module hands the same ones back every shot. Two blocks that merely
+        look alike — an inversion pulse against the excitation it precedes —
+        cannot be confused, which a structural match would risk.
+
+        The numbers are then read off those events, so this costs a walk over
+        the block that a payload would have skipped. It is still the template
+        path: no shapes are re-registered, no row is rebuilt from scratch, and
+        the libraries stay the size of the TR rather than the size of the scan.
+        """
+        template = self._template[self._template_cursor]
+        expected = template.events
+        if len(args) == len(expected):
+            # The whole check, for the shape a module actually hands over: same
+            # count, same objects, in order. Nothing is allocated and nothing is
+            # inspected -- a miss costs one comparison.
+            for event, want in zip(args, expected, strict=True):
+                if event is not want:
+                    return False
+        elif not expected or len(args) < len(expected):
+            return False
+        else:
+            # A bare delay written alongside the events pads the block out.
+            index = 0
+            for event in args:
+                if isinstance(event, int | float):
+                    continue
+                if index >= len(expected) or event is not expected[index]:
+                    return False
+                index += 1
+            if index != len(expected):
+                return False
+
+        self._template_set_block(None, args)
+        return True
+
+    def _template_delay(self, args) -> bool:
+        """Take a bare delay against the template, if that is what sits there.
+
+        A TE or TR delay is part of the TR — it belongs in ``tr_struct`` — but it
+        has no payload to speak of, so writing ``add_block({})`` for it at the
+        call site would be noise. A block the template says holds nothing but
+        time can be given as the delay event itself: there are no library rows
+        either way, so the two forms cannot diverge.
+        """
+        template = self._template[self._template_cursor]
+        if template.slots:
+            return False
+        duration = _delay_duration(args)
+        if duration is None:
+            return False  # anything real goes through the ordinary path
+        self._template_set_block({"duration": duration} if duration else {})
+        return True
 
     # ------------------------------------------------------------------
     # TR template
@@ -876,14 +944,40 @@ class Sequence(pp.Sequence):
         shot actually plays would leave rows that are numbered but unreferenced,
         and the emitted file would change.
         """
+        # A module may be given whole, and it is the better way: the sequence
+        # then knows *which* module owns each block, so a block handed back by
+        # ``for block in module`` can be registered from that module's own
+        # prepared payload instead of by reading its events back out. Modules
+        # are expanded here so everything below sees plain blocks.
+        # Each expanded block keeps the inventory its owner published for it, so
+        # a slot whose samples move knows the complete set it may play. Given as
+        # events rather than as a module, there is no owner to ask and a moving
+        # waveform has nowhere to point -- which is refused, loudly, at fill time.
+        expanded: list = []
+        for entry in tr_struct:
+            if hasattr(entry, "payloads") and hasattr(entry, "blocks"):
+                owned = entry.blocks
+                inventory = entry.waveform_inventory() or ((),) * len(owned)
+                if len(inventory) != len(owned):
+                    raise ValueError(
+                        f"{type(entry).__name__}.waveform_inventory() returned "
+                        f"{len(inventory)} entries for {len(owned)} blocks."
+                    )
+                expanded.extend(zip(owned, inventory, strict=True))
+            else:
+                expanded.append((entry, ()))
         blocks = []
-        for block in tr_struct:
+        for block, inventory in expanded:
             slots: list[_TemplateSlot] = []
             ext_slots: list[int] = []
             duration = 0.0
             fast, reason = True, ""
 
-            for event in block_to_events(*block):
+            # A template entry is a block: either the tuple of events a module
+            # publishes, or a single event written inline -- a TE or TR delay is
+            # naturally spelled the second way.
+            events = block_to_events(*block) if isinstance(block, tuple | list) else block_to_events(block)
+            for event in events:
                 if isinstance(event, float):
                     duration = max(duration, float(event))
                     continue
@@ -895,12 +989,13 @@ class Sequence(pp.Sequence):
                     fast, reason = False, f"{kind} events have no payload mapping"
                     continue
 
-                built = self._template_slot(event)
+                built = self._template_slot(event, inventory)
                 for slot in built:
                     slot.block = len(blocks)
-                    if slot.dynamic:
-                        slot.getter = itemgetter(*[name for _, name in slot.dynamic])
+                    if not slot.is_reference:
+                        slot.event_values = _EVENT_VALUES[kind]
                     if slot.extension is not None:
+                        slot.ext_ordinal = len(ext_slots)
                         ext_slots.append(len(slots))
                     slots.append(slot)
                 if len(built) == 2:
@@ -908,67 +1003,223 @@ class Sequence(pp.Sequence):
                 duration = max(duration, self._event_duration(event))
 
             blocks.append(
-                _TemplateBlock(tuple(slots), tuple(ext_slots), duration, fast, reason)
+                _TemplateBlock(
+                    tuple(slots), tuple(ext_slots), duration, fast, reason,
+                    events=tuple(event for event in events if not isinstance(event, float)),
+                )
             )
 
         self._template = tuple(blocks)
-        self._template_cursor = 0
-        # Slots grouped by library, in the order the template visits them --
-        # which is the order the per-block path would have registered them in,
-        # and so the order that decides which occurrence of a repeated payload
-        # is the first one. Every slot that lands in a collapsed library gets a
-        # buffer; the rest are registered the moment they are seen.
-        self._library_slots: dict[str, list] = {}
-        collected = 0
-        for template_block in blocks:
-            for slot in template_block.slots:
-                if slot.library not in _INSERT_DEDUP_LIBRARIES:
-                    continue
-                self._library_slots.setdefault(slot.library, []).append(slot)
-                if not slot.is_reference:
-                    slot.buffer = collected
-                    collected += 1
-        self._slot_values: list[list] = [[] for _ in range(collected)]
-        #: Block index the buffered run starts at, and how many TRs it holds.
-        self._flush_base = 0
-        self._flush_trs = 0
-        # One buffer per *library*, not per slot. Rows land in it in call
-        # order, which is the order the per-block path would have registered
-        # them in -- and therefore the order that decides which occurrence of a
-        # repeated payload is the first one. Buffering per slot instead would
-        # hand each library its rows slot by slot and renumber the whole file.
-        self._buffered = 0
+        self._allocate_template()
 
-    def _template_slot(self, event) -> list[_TemplateSlot]:
+    def _allocate_template(self) -> None:
+        """Give the whole scan its library rows and its block table, up front.
+
+        The TR's structure is known, and with ``loop_size`` so is how many times
+        it plays -- so every row every block will ever point at can be claimed
+        here, and ``add_block`` becomes a write into a row that already exists
+        at an ID that is already settled. Nothing is buffered, nothing is
+        registered later, and no ID is ever decided while the scan is being
+        filled.
+
+        What makes this small rather than merely early is the split a payload
+        already draws: a slot no payload can move holds *one* row for the whole
+        scan, and only a slot something moves gets a row per TR. A Cartesian GRE
+        moves an RF phase and two phase-encode amplitudes; its readout,
+        prewinder, spoiler and ADC are one row each, however many million blocks
+        play them.
+
+        The row order is the one the per-block path would have produced, which
+        is what keeps the file identical: pass 0 claims every slot in visit
+        order, and each later pass claims only the slots that move. The rows
+        that would have been re-registered per TR are exactly the ones write-time
+        deduplication collapses back onto pass 0's, so the first occurrences --
+        which is all the renumbering depends on -- come out in the same order.
+        """
+        length = len(self._template)
+        count = self._loop_size
+        if count is None:
+            raise ValueError(
+                "a Sequence given a TR structure also needs its loop size: "
+                "Sequence(system, loop_size, *tr_struct)."
+            )
+
+        by_library: dict[str, list] = {}
+        for template_block in self._template:
+            for slot in template_block.slots:
+                slot.varies = slot.source.varies if slot.is_reference else bool(slot.dynamic)
+                by_library.setdefault(slot.library, []).append(slot)
+
+        # A gradient reference's row *is* its waveform's ID, so the library
+        # holding the waveform has to have been given its IDs first. One round
+        # of dependency, never two.
+        order = [name for name in by_library if name != "grad_library"]
+        if "grad_library" in by_library:
+            order.append("grad_library")
+        for name in order:
+            if name in _BLOCK_ROW_LIBRARIES:
+                self._claim_collapsed_rows(name, by_library[name], count)
+            else:
+                self._claim_row_per_block(name, by_library[name], count)
+
+        self._template_rows = np.zeros((count * length, 7), dtype=np.int64)
+        self._template_block_durations = np.tile(
+            np.array([block.static_duration for block in self._template], dtype=float), count
+        )
+        for index, template_block in enumerate(self._template):
+            for slot in template_block.slots:
+                if slot.column is None:
+                    continue
+                column = self._template_rows[index::length, slot.column]
+                column[:] = slot.first_id
+                if slot.later_ids is not None:
+                    column[1:] = slot.later_ids
+        self._chain_template_extensions(count, length)
+        #: Blocks of _template_rows filled so far, and where the run that has
+        #: not yet joined the block table begins.
+        self._template_written = 0
+        self._template_run_start = 0
+
+    def _claim_collapsed_rows(self, name: str, slots: list, count: int) -> None:
+        """Claim one library's rows: one per slot, plus one per TR for the movers."""
+        library = getattr(self, name)
+        width = len(slots[0].row)
+        movers = [slot for slot in slots if slot.varies]
+
+        self._template_claims.append(("collapsed", name, library._count + 1, slots, movers))
+        first_rows, first_id = library.reserve(len(slots), width, _row_types(slots))
+        for position, slot in enumerate(slots):
+            first_rows[position] = slot.row
+            slot.first_rows = first_rows[position : position + 1]
+            slot.first_id = first_id + position
+
+        if movers and count > 1:
+            stride = len(movers)
+            later, later_id = library.reserve(
+                (count - 1) * stride, width, _row_types(movers, count - 1)
+            )
+            for position, slot in enumerate(movers):
+                rows = later[position::stride]
+                rows[:] = slot.row
+                slot.later_rows = rows
+                slot.later_ids = later_id + position + stride * np.arange(count - 1)
+
+        for slot in slots:
+            if not slot.is_reference:
+                continue
+            # The reference's whole payload is an ID it now knows, so it is
+            # written here in full and no shot ever touches it again.
+            slot.first_rows[0, 0] = slot.source.first_id
+            if slot.later_rows is not None:
+                slot.later_rows[:, 0] = slot.source.later_ids
+
+    def _claim_row_per_block(self, name: str, slots: list, count: int) -> None:
+        """Claim an extension-referenced library's rows: one per block, per TR.
+
+        These are never deduplicated -- their IDs are written into the file as
+        they stand -- so collapsing a label whose value never moves would
+        renumber every extension after it. One row per block it is, exactly as
+        the per-block path would have appended them.
+        """
+        library = getattr(self, name)
+        width = len(slots[0].row)
+        stride = len(slots)
+        self._template_claims.append(("per_block", name, library._count + 1, slots, ()))
+        rows, first_id = library.reserve(count * stride, width, _row_types(slots, count))
+        for position, slot in enumerate(slots):
+            block_rows = rows[position::stride]
+            block_rows[:] = slot.row
+            slot.first_rows = block_rows[:1]
+            slot.later_rows = block_rows[1:]
+            slot.first_id = first_id + position
+            slot.later_ids = first_id + position + stride * np.arange(1, count)
+
+    def _chain_template_extensions(self, count: int, length: int) -> None:
+        """Build every block's extension chain, for every pass, up front.
+
+        A chain node is ``(type, reference, next)`` and every reference here is
+        this block's own, so no two blocks can share a node and the IDs simply
+        run on. The references are already known, so the whole column is settled
+        before a single payload arrives.
+        """
+        # Chain nodes per pass, cumulated over the template's blocks, so the
+        # nodes a partial last pass never used can be counted back off.
+        levels = [0]
+        for block in self._template:
+            levels.append(levels[-1] + len(block.ext_slots))
+        chained = [
+            (index, block) for index, block in enumerate(self._template) if block.ext_slots
+        ]
+        if not chained:
+            return
+        self._template_chain_levels = (levels, self.extensions_library.next_free_ID)
+        library = self.extensions_library
+        data, keymap = library.data, library.keymap
+        node = library.next_free_ID
+        plans = []
+        for block_index, block in chained:
+            slots = [block.slots[position] for position in block.ext_slots]
+            types = [self._ext_type_id(slot.extension) for slot in slots]
+            # Sorted by reference, as the per-block path sorts them. The order
+            # is taken once: a slot's references advance by the same stride
+            # every pass, so a pair that swapped would have to cross, which is
+            # checked rather than assumed.
+            first = sorted(range(len(slots)), key=lambda i: slots[i].first_id)
+            last = sorted(range(len(slots)), key=lambda i: _slot_id(slots[i], count - 1))
+            if first != last:
+                raise NotImplementedError(
+                    "the extensions of one template block change their reference order "
+                    "between passes, which would renumber the extension chain."
+                )
+            plans.append((block_index, [(types[i], slots[i]) for i in first]))
+
+        for pass_index in range(count):
+            base = pass_index * length
+            for block_index, entries in plans:
+                previous = 0
+                for ext_type, slot in entries:
+                    entry = (ext_type, int(_slot_id(slot, pass_index)), previous)
+                    data[node] = entry
+                    keymap[entry] = node
+                    previous = node
+                    node += 1
+                self._template_rows[base + block_index, 6] = previous
+        library.next_free_ID = node
+
+    def _template_slot(self, event, inventory=()) -> list[_TemplateSlot]:
         """The template slots one event owns, with its row already rendered."""
         kind = event.type
-        library, fields = _TEMPLATE_ROW_FIELDS[kind]
-        # The entry type is read off the event rather than off a rendered row:
-        # rendering registers the event's *shapes*, and shape IDs are handed out
-        # in visit order, so doing it here would number the template's shapes
-        # ahead of any preparation block preceding the first TR.
-        data_type = _TEMPLATE_ENTRY_TYPES[kind]
-        if kind == "rf":
-            use = event.use[0] if getattr(event, "use", None) in _RF_USES else "u"
-            data_type = _RF_USE_CHAR_TO_CODE.get(use, 0)
-        dynamic = tuple(sorted((index, name) for name, index in fields.items()))
-        if kind == "rot3D":
-            # A quaternion is dynamic end to end; there is no static part.
-            dynamic = tuple((index, str(index)) for index in range(4))
-
+        library, dynamic = _TEMPLATE_ROW_FIELDS[kind]
+        # Rendered here, which also registers the event's shapes -- and shape IDs
+        # are handed out in visit order, so this is the one place they can be
+        # numbered as the per-block path would have numbered them. It is also why
+        # a block outside the template may not own library rows.
+        row, data_type, _ = self._event_row(event)
         if kind in ("labelset", "labelinc"):
-            return [_TemplateSlot(library, None, kind.upper(), data_type, event, None, dynamic, "")]
+            return [_TemplateSlot(library, None, kind.upper(), data_type, event, row, dynamic, "")]
         if kind == "rot3D":
-            return [_TemplateSlot(library, None, "ROTATIONS", data_type, event, None, dynamic, "")]
+            return [_TemplateSlot(library, None, "ROTATIONS", data_type, event, row, dynamic, "")]
+        if kind in ("trigger", "output"):
+            return [_TemplateSlot(library, None, "TRIGGERS", data_type, event, row, dynamic, "")]
+        if kind == "rf_shim":
+            # The whole row is the vector, so every column of it moves. The width
+            # is the transmit channel count, fixed for a given pulse.
+            dynamic = tuple((column, column) for column in range(len(row)))
+            return [_TemplateSlot(library, None, "RF_SHIMS", data_type, event, row, dynamic, "")]
         if kind == "rf":
-            return [_TemplateSlot(library, 1, None, data_type, event, None, dynamic, "rf")]
+            return [_TemplateSlot(library, 1, None, data_type, event, row, dynamic, "rf")]
         if kind == "adc":
-            return [_TemplateSlot(library, 5, None, data_type, event, None, dynamic, "adc")]
+            return [_TemplateSlot(library, 5, None, data_type, event, row, dynamic, "adc")]
 
         # A gradient costs two rows: the waveform, then the reference the block
         # column actually points at.
         key = _CHANNEL_KEY[event.channel]
-        waveform = _TemplateSlot(library, None, None, data_type, event, None, dynamic, key)
+        candidates = inventory.get(key) if kind == "grad" and inventory else None
+        waveform = _TemplateSlot(
+            library, None, None, data_type, event, row, dynamic, key,
+            waveform=getattr(event, "waveform", None) if kind == "grad" else None,
+            shapes=_ShapeInventory(*candidates) if candidates else None,
+        )
         reference = _TemplateSlot(
             "grad_library", _CHANNEL_SLOT[event.channel], None, data_type, None, (0.0,), (), "",
             is_reference=True,
@@ -986,111 +1237,231 @@ class Sequence(pp.Sequence):
             return event.delay + math.ceil(event.tt[-1] / self.grad_raster_time - 1e-10) * self.grad_raster_time
         if kind == "adc":
             return event.delay + event.num_samples * event.dwell + event.dead_time
+        if kind in ("trigger", "output"):
+            # A trigger alone in a block is what sets that block's duration, so
+            # this is not cosmetic: without it the block is emitted with
+            # duration zero. Spelled as ``_row_control`` spells it.
+            return event.delay + event.duration
         return 0.0
 
-    def _template_require_boundary(self) -> None:
-        """A non-payload block may only land where a template pass has finished.
+    def _template_require_boundary(self, args=()) -> None:
+        """A block outside the template may own no library row, and must not split a pass.
 
-        A payload cannot be turned back into events -- it carries amplitudes,
-        not shapes -- so there is no recovering from a cursor that has drifted.
-        Refusing loudly at the boundary is the only safe answer; a preparation
-        or a recovery delay between TRs is exactly where one belongs anyway.
+        Every row the template will ever use was claimed when the sequence was
+        built, so a block that registered one of its own now would take an ID
+        the template has already handed out and shift every ID after it. A block
+        that owns no rows -- a pure delay -- cannot, so that is what may sit
+        between TRs, and nothing else.
+
+        It may also end a pass early, which is what a segmented acquisition
+        needs when its train length does not divide the view count: the last,
+        short segment still gets its recovery delay. Only the *last* pass may be
+        short, though -- the rows a half-played pass did not use are trimmed off
+        the end, and there is no trimming a hole out of the middle.
         """
         if self._template is None:
             return
-        if self._template_cursor:
+        if not _is_pure_delay(args):
             raise RuntimeError(
-                f"add_block() with events landed {self._template_cursor} block(s) into the TR "
-                f"template (of {len(self._template)}). Blocks outside the template may only be "
-                "added between complete passes over it; pass this block's payload instead, or "
-                "include it in tr_struct."
+                "add_block() was given a block of its own on a sequence built with a TR "
+                "structure. Every library row is claimed up front, so a block outside the "
+                "template may hold nothing but a delay; put this one in tr_struct."
             )
-        # Events register into the libraries immediately, so anything still
-        # buffered has to be registered first or the IDs interleave in the wrong
-        # order -- a preparation block would take an ID belonging to the TR
-        # before it, and every event ID downstream would shift.
-        if self._buffered:
-            self._flush_template()
+        # This block goes into the table *now*, so the template rows written
+        # since the last boundary have to go in ahead of it. Closing the run
+        # only when a pass is cut short is not enough: a recovery delay
+        # between whole passes is the ordinary case, and skipping it there
+        # leaves every such delay sitting in front of the template's rows.
+        self._close_template_run()
+        if self._template_cursor:
+            # The pass stops here. Its unused rows go when the sequence is
+            # finished; a later template block would land on top of them.
+            self._template_gap = True
+            self._template_cursor = 0
 
-    def _template_set_block(self, payload: dict) -> None:
-        """Register one block from its payload, against the template's structure."""
-        position = self._template_cursor
-        template = self._template[position]
+    def _template_set_block(self, payload: dict | None, events=None) -> None:
+        """Fill in one block of the template: write what moved, where it goes.
+
+        There is no registering left to do. The row exists, its ID is already in
+        the block table, and the only question is which of its columns this pass
+        moves -- so this is a handful of scalar writes into a matrix the library
+        is already holding, and nothing else at all.
+
+        ``events`` is the block as ``add_block(*block)`` received it, already
+        confirmed to be the template's own objects; each slot then reads its own
+        event rather than a payload entry.
+        """
+        if self._template_finished:
+            # Reading the block table gives back every row the scan did not
+            # reach -- the whole point of claiming them up front is that the
+            # unused ones can be counted off the end. A block added now would
+            # write into a row that no longer exists, at an ID something else
+            # has since been given.
+            raise RuntimeError(
+                "the TR template was finished when this sequence's block table was read, and "
+                "its unused rows given back; it cannot be added to afterwards. Build the "
+                "whole sequence before writing or plotting it."
+            )
+        cursor = self._template_cursor
+        template = self._template[cursor]
         if not template.fast:
             raise NotImplementedError(
-                f"TR template block {position} cannot be built from a payload: {template.reason}. "
+                f"TR template block {cursor} cannot be built from a payload: {template.reason}. "
                 "Add this block with its events instead."
             )
+        if cursor == 0:
+            if self._template_gap:
+                raise RuntimeError(
+                    "a TR template pass was ended early by a block outside it, and another pass "
+                    "has started. Only the last pass may be short."
+                )
+            # Counted in template *passes*, not in blocks: a delay the plugin
+            # plays between passes is a block of the sequence but not a block of
+            # the template, so measuring this against the block table would
+            # charge the loop for them and refuse a loop that fits.
+            if self._template_pass >= self._loop_size:
+                raise RuntimeError(
+                    f"TR template loop_size={self._loop_size} allows {self._loop_size} passes over "
+                    f"the TR; pass {self._template_pass + 1} exceeds it."
+                )
 
-        block_index = self._n_blocks
-        if not self._buffered and position == 0:
-            # Where this buffered run starts. Taken here rather than at the end
-            # of the previous flush, because blocks outside the template land
-            # in between and move the table on.
-            self._flush_base = block_index
-        if self._loop_size is not None and block_index >= self._loop_size * len(self._template):
-            raise RuntimeError(
-                f"TR template loop_size={self._loop_size} allows "
-                f"{self._loop_size * len(self._template)} blocks; block {block_index + 1} exceeds it."
+        index = self._template_pass
+        peaks = self._peak_cache
+        if events is None:
+            extensions = payload.get("ext", ())
+            duration = payload.get("duration")
+            if duration is not None and duration > template.static_duration:
+                self._template_block_durations[index * len(self._template) + cursor] = duration
+        else:
+            # A bare delay or a `make_delay` alongside the events sets the
+            # block's duration, exactly as the payload's "duration" key does.
+            extensions = ()
+            duration = _delay_duration(events) or 0.0
+            if duration > template.static_duration:
+                self._template_block_durations[index * len(self._template) + cursor] = duration
+
+        for slot in template.slots:
+            if slot.waveform is not None:
+                chosen = (
+                    slot.event.waveform if events is not None
+                    else payload.get("shape", _NO_SHAPES).get(slot.key)
+                )
+                # An index is the fast, intended form: the module says *which*
+                # of its candidates this shot plays and nothing is compared at
+                # all. Otherwise identity, which is the answer for a module
+                # replaying one designed waveform -- a spiral interleaf under a
+                # rotation pays nothing here -- then value, for a module that
+                # rebuilds an equal array every shot.
+                if isinstance(chosen, (int, np.integer)):
+                    position = int(chosen)
+                elif chosen is slot.waveform or _same_waveform(chosen, slot.waveform):
+                    position = None
+                elif slot.shapes is not None:
+                    position = slot.shapes.by_identity.get(id(chosen))
+                    if position is None:
+                        raise NotImplementedError(
+                            f"TR template block {cursor}: the arbitrary gradient on {slot.key} "
+                            "plays samples that are not in the inventory its module published. "
+                            "Every waveform a shot can play has to be built at construction."
+                        )
+                else:
+                    # The samples moved and there is no inventory, so there is
+                    # no registered shape to point at. Compressing them here
+                    # would re-derive an ID the module could simply have named,
+                    # and emitting the template's shape under this shot's peak
+                    # is a wrong file. So: refused.
+                    raise NotImplementedError(
+                        f"TR template block {cursor}: the arbitrary gradient on {slot.key} has "
+                        "samples this shot changed, but the module published no waveform "
+                        "inventory for that slot, so there is no registered shape to point at. "
+                        "Hand every shot's waveform to the module's constructor."
+                    )
+                if position is not None:
+                    rows, at = (slot.later_rows, index - 1) if index else (slot.first_rows, 0)
+                    for column, shape_id in zip(
+                        slot.shape_columns, slot.shapes.resolve(self, position), strict=True
+                    ):
+                        rows[at, column] = shape_id
+            if not slot.dynamic:
+                # Nothing a payload can move: the row was written once, when the
+                # sequence was built, and every pass points back at it.
+                continue
+            values = (
+                slot.event_values(slot.event, peaks)
+                if events is not None
+                else payload.get(slot.key)
+                if slot.key
+                else _ext_values(extensions, slot.ext_ordinal)
             )
-
-        new_block = [0, 0, 0, 0, 0, 0, 0]
-        duration = template.static_duration
-        if "duration" in payload:
-            duration = max(duration, float(payload["duration"]))
-        extensions = payload.get("ext", ())
-        ext_refs: list[tuple[int, int]] = []
-
-        for index, slot in enumerate(template.slots):
-            if slot.buffer >= 0:
-                # Only the numbers this iteration moves. The rest of the row is
-                # fixed by the template and tiled back on at flush; carrying it
-                # per block would be one constant copied a million times.
-                values = payload.get(slot.key) if slot.key else _ext_values(extensions, template, index)
-                self._slot_values[slot.buffer].append(slot.getter(values))
-                self._buffered += 1
-            elif slot.is_reference:
-                # A gradient reference's payload *is* the waveform's ID, so
-                # there is nothing per-iteration to collect at all.
-                self._buffered += 1
+            if values is None:
+                continue
+            if index:
+                rows, at = slot.later_rows, index - 1
             else:
-                # Extension-referenced libraries are never collapsed on insert,
-                # so their IDs are settled the moment the row is appended --
-                # which is what lets the chain be built here, exactly as
-                # _fast_set_block builds it.
-                if slot.row is None:
-                    slot.row = self._row_builder(slot.event.type)(slot.event)[0]
-                row = list(slot.row)
-                values = _ext_values(extensions, template, index)
-                if values is not None:
-                    for position_in_row, name in slot.dynamic:
-                        if name in values:
-                            row[position_in_row] = values[name]
-                ref = getattr(self, slot.library).append(tuple(row), slot.data_type)
-                ext_refs.append((self._ext_type_id(slot.extension), ref))
+                rows, at = slot.first_rows, 0
+            for column, position in slot.dynamic:
+                rows[at, column] = values[position]
 
-        if ext_refs:
-            ext_refs.sort(key=_extension_ref)
-            new_block[6] = self._chain_extensions(ext_refs)
-
-        tail = self._block_tail
-        if tail is None:
-            tail = self._block_tail = []
-            self._duration_tail = []
-            self._block_runs.append(tail)
-            self._duration_runs.append(self._duration_tail)
-        tail.append(new_block)
-        self._duration_tail.append(float(duration))
+        self._template_written += 1
         self._n_blocks += 1
         self._block_rows = None
+        cursor += 1
+        if cursor == len(self._template):
+            cursor = 0
+            self._template_pass = index + 1
+        self._template_cursor = cursor
 
-        self._template_cursor = (position + 1) % len(self._template)
-        if self._template_cursor == 0:
-            self._flush_trs += 1
-            # Only ever at a TR boundary: the buffered run has to be a whole
-            # number of passes for a slot's block positions to be one stride.
-            if self._buffered >= _TEMPLATE_FLUSH_ROWS:
-                self._flush_template()
+    def _close_template_run(self) -> None:
+        """Hand the block table the template rows filled since it last looked.
+
+        The rows were written when the sequence was built, so this is a slice,
+        not a copy -- what it marks is where a block from outside the template
+        interrupts, so that the two land in the table in the order they were
+        added.
+        """
+        start, stop = self._template_run_start, self._template_written
+        if stop <= start:
+            return
+        self._block_runs.append(self._template_rows[start:stop])
+        self._duration_runs.append(self._template_block_durations[start:stop])
+        self._block_tail = None
+        self._duration_tail = None
+        self._block_rows = None
+        self._template_run_start = stop
+
+    def _finish_template(self) -> None:
+        """Close the template off: hand over its rows, give back what it did not use.
+
+        A scan that plays fewer passes than it claimed -- or whose last pass is
+        short -- leaves rows nothing points at, and an unreferenced row is still
+        a row in the file. They are always a *tail*: rows are claimed in the
+        order the blocks fill them, so giving them back is a truncation.
+        """
+        if self._template is None or self._template_finished:
+            return
+        self._template_finished = True
+        self._close_template_run()
+        length = len(self._template)
+        played = self._template_written
+        # Blocks reached in the first pass, and in the last one.
+        first = min(played, length)
+        full, remainder = divmod(played, length)
+        for kind, name, first_id, slots, movers in self._template_claims:
+            if kind == "collapsed":
+                keep = sum(1 for slot in slots if slot.block < first)
+                if full:
+                    keep += (full - 1) * len(movers)
+                    keep += sum(1 for slot in movers if slot.block < remainder)
+            else:
+                keep = full * len(slots) + sum(1 for slot in slots if slot.block < remainder)
+            getattr(self, name).truncate(first_id - 1 + keep)
+        if self._template_chain_levels:
+            levels, first_node = self._template_chain_levels
+            keep = full * levels[-1] + levels[min(remainder, length)]
+            library = self.extensions_library
+            for node in range(first_node + keep, library.next_free_ID):
+                del library.keymap[library.data.pop(node)]
+            library.next_free_ID = first_node + keep
 
     def _chain_extensions(self, extensions) -> int:
         """Canonical extension chain for one block; the ``_fast_set_block`` logic."""
@@ -1115,210 +1486,6 @@ class Sequence(pp.Sequence):
                 ext_lib.insert(extension_id, data)
         return extension_id
 
-    def _flush_template(self) -> None:
-        """Register every buffered row and patch the block table with its ID.
-
-        Buffering is what lets a row be *collapsed* rather than appended: the
-        rounded index is vectorised and wants a batch. IDs stay in visit order
-        because a buffer is filled in call order and the batches go out in
-        order, so the write-time pass still picks the same representatives.
-
-        Waveforms settle before the gradient references that name them -- a
-        reference's payload *is* an ID -- which is the same single round of
-        dependency ``add_range`` had.
-        """
-        if not self._buffered:
-            return
-        rows = self._raw_block_row_matrix()
-        length = len(self._template)
-        count = self._flush_trs
-        base = self._flush_base
-
-        # Waveforms settle before the references that name them: a reference's
-        # payload is the waveform's ID. One round of dependency, never two.
-        order = [name for name in self._library_slots if name != "grad_library"]
-        if "grad_library" in self._library_slots:
-            order.append("grad_library")
-
-        for name in order:
-            slots = self._library_slots[name]
-            stride = len(slots)
-            matrices = [self._slot_matrix(slot, count) for slot in slots]
-            width = matrices[0].shape[1]
-            batch = matrices[0] if stride == 1 else np.stack(matrices, axis=1).reshape(-1, width)
-
-            library = getattr(self, name)
-            types = [slot.data_type for slot in slots]
-            if any(types):
-                pattern = np.array(types, dtype=object)
-                codes = np.tile(library.type_key_codes(types), count)
-            else:
-                pattern, codes = "", None
-            ids = library.extend(batch, pattern, key_codes=codes, tile=count)
-
-            for position, slot in enumerate(slots):
-                slot_ids = ids[position::stride]
-                slot.ids = slot_ids
-                if slot.column is not None:
-                    # Every iteration puts this slot's block at the same offset
-                    # inside the TR, so where the IDs go is a stride, not a list
-                    # of positions somebody had to record per row.
-                    rows[base + slot.block : base + count * length : length, slot.column] = slot_ids
-
-        # The patched matrix becomes the block table.
-        self._block_runs = [rows]
-        self._block_tail = None
-        self._block_rows = rows
-
-        for held in self._slot_values:
-            held.clear()
-        self._buffered = 0
-        self._flush_trs = 0
-
-    def _slot_matrix(self, slot: _TemplateSlot, count: int) -> np.ndarray:
-        """One slot's rows for the buffered run: the static row, tiled, retuned.
-
-        This is where knowing the structure up front pays. Everything the
-        template fixed -- shape IDs, dwell, delays, rise/flat/fall -- is one row
-        broadcast over the whole run, and only the columns a payload actually
-        moved are written. A gradient reference has no static part at all: its
-        column is the waveform's IDs.
-        """
-        if slot.is_reference:
-            return slot.source.ids.reshape(-1, 1).astype(float)
-
-        if slot.row is None:
-            slot.row = self._row_builder(slot.event.type)(slot.event)[0]
-        matrix = np.tile(np.asarray(slot.row, dtype=float), (count, 1))
-        if slot.buffer >= 0 and slot.dynamic:
-            values = np.asarray(self._slot_values[slot.buffer], dtype=float)
-            if len(slot.dynamic) == 1:
-                matrix[:, slot.dynamic[0][0]] = values
-            else:
-                for position, (column, _) in enumerate(slot.dynamic):
-                    matrix[:, column] = values[:, position]
-        return matrix
-
-    def add_range(self, *items, **states) -> Sequence:
-        """Append a repeating group of blocks for a whole range of shots at once.
-
-        The per-shot loop a plugin writes is a fixed chronology with a few
-        numbers changing::
-
-            for ky in range(ny):
-                excitation.set_state(phase_offset_rad=phases[ky]).add_to(seq)
-                seq.add_block(te_delay)
-                readout.set_state(lin_idx=ky, phase_offset_rad=phases[ky]).add_to(seq)
-                seq.add_block(tr_delay)
-
-        which is the same thing written as one call, with arrays where the
-        scalars were::
-
-            seq.add_range(
-                (excitation, {"phase_offset_rad": phases}),
-                te_delay,
-                (readout, {"lin_idx": np.arange(ny), "phase_offset_rad": phases}),
-                tr_delay,
-            )
-
-        The group is the unit, not the module: events are registered in visit
-        order, so all shots of one module cannot be emitted before the next
-        module's. Order is preserved exactly, and so is the emitted file.
-
-        Parameters
-        ----------
-        *items
-            The chronology of one shot. Each item is a
-            :class:`~pulserver.SequenceModule`, a ``(module, states)`` pair
-            whose ``states`` dict is forwarded to ``set_state``, a plain event
-            or tuple of events, or ``None`` (skipped, so an optional delay
-            needs no branch at the call site).
-        **states
-            Shot-varying values shared by every module item, for the common
-            case of one module in the group.
-
-        Returns
-        -------
-        Sequence
-            ``self``.
-
-        Notes
-        -----
-        The first shot is rendered in full and *is* the group's structure: how
-        many blocks, which events, which library each entry lands in. Every
-        later shot is rendered too, but only its numbers are kept — they are
-        collected as plain rows, with no library insertion, no extension-chain
-        lookup and no per-block Python list. A shot whose structure differs from
-        the first one's abandons the batch and replays the whole group block by
-        block, so the call is always correct and never slower than writing it
-        out by hand.
-
-        The rows a range registers are also collapsed as they go: a scan whose
-        every shot plays the same readout at a different phase-encode amplitude
-        leaves one library entry per distinct amplitude, not one per shot. The
-        tolerances are the ones :meth:`remove_duplicates` would have applied at
-        write time, so this changes how much memory the sequence occupies while
-        it is being built and nothing at all about the file.
-
-        See Also
-        --------
-        add_block : the single-block form this batches.
-        """
-        from ._bulk import expand_states, infer_length
-
-        entries = []
-        for item in items:
-            if item is None:
-                continue
-            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], dict):
-                entries.append((item[0], dict(item[1])))
-            elif hasattr(item, "set_state"):
-                entries.append((item, dict(states)))
-            else:
-                entries.append((item, None))
-
-        length = None
-        for _, item_states in entries:
-            if item_states:
-                length = infer_length(item_states)
-                if length is not None:
-                    break
-        if length is None:
-            length = infer_length(states) or 1
-
-        if length < _MIN_BULK_SHOTS:
-            return self._add_range_by_shot(entries, length)
-
-        expanded = [
-            (module, None if item_states is None else expand_states(length, item_states))
-            for module, item_states in entries
-        ]
-        return self._add_range_bulk(entries, expanded, length)
-
-    def _add_range_by_shot(self, entries, length: int, start: int = 0) -> Sequence:
-        """Fallback: replay the group one shot at a time, exactly as a loop would.
-
-        ``start`` skips shots a bulk chunk already committed, so a group that
-        turns out to move its structure part-way through does not have to undo
-        what was correct.
-        """
-        from ._bulk import expand_states
-
-        expanded = [
-            (module, None if item_states is None else expand_states(length, item_states))
-            for module, item_states in entries
-        ]
-        for index in range(start, length):
-            for module, item_states in expanded:
-                if item_states is None:
-                    events = module if isinstance(module, tuple) else (module,)
-                    self.add_block(*events)
-                    continue
-                module.set_state(**{name: values[index] for name, values in item_states.items()})
-                for block in module:
-                    self.add_block(*block)
-        return self
-
     def remove_duplicates(self, in_place: bool = False) -> Sequence:
         """Remove duplicates with hardcoded rounded profiles per library.
 
@@ -1326,10 +1493,9 @@ class Sequence(pp.Sequence):
         libraries and canonicalizes extension linked lists so identical chains
         are shared across blocks.
 
-        This is the pass that decides the file. :meth:`add_range` has usually
-        collapsed the block-referenced libraries already, at the same tolerances
-        (:data:`_ROUNDING_PROFILES`), but that is an optimisation and this does
-        not assume it: a sequence built entirely through :meth:`add_block`
+        This is the pass that decides the file, and the only one that collapses
+        anything: nothing is deduplicated on the way in, so a sequence built
+        through :meth:`add_block`
         arrives here with one entry per event and comes out the same way as one
         that arrived pre-collapsed.
 
@@ -1338,8 +1504,7 @@ class Sequence(pp.Sequence):
         in_place:
             If ``True``, deduplicate current instance; otherwise return a copy.
         """
-        if self._buffered:
-            self._flush_template()
+        self._finish_template()
         seq_copy = self if in_place else self._clone_for_dedup()
 
         seq_copy.shape_library, shape_map = seq_copy.shape_library.remove_duplicates(9)
@@ -1526,9 +1691,9 @@ class Sequence(pp.Sequence):
     def block_events(self) -> dict[int, list]:
         """Block table as ``{block_id: [duration, rf, gx, gy, gz, adc, ext]}``.
 
-        The table is kept as ordered runs -- Python rows from ``add_block``,
-        whole matrices from :meth:`add_range` -- and this dict is built from
-        them only when something asks. Neither writing nor deduplication does:
+        The table is kept as ordered runs -- Python rows from a block added on
+        its own, whole matrices claimed by the TR template -- and this dict is
+        built from them only when something asks. Neither writing nor deduplication does:
         both read the matrix, and rebuilding six hundred thousand seven-element
         lists costs more than the work they came to do.
         """
@@ -1570,8 +1735,7 @@ class Sequence(pp.Sequence):
         Any rows the template path is still holding are registered first: their
         IDs are the very columns a reader has come for.
         """
-        if self._buffered:
-            self._flush_template()
+        self._finish_template()
         return self._raw_block_row_matrix()
 
     def _raw_block_row_matrix(self) -> np.ndarray:
@@ -1594,6 +1758,7 @@ class Sequence(pp.Sequence):
 
     def _block_duration_array(self) -> np.ndarray:
         """Block durations as one ``(n_blocks,)`` float array."""
+        self._finish_template()
         parts = [
             run if isinstance(run, np.ndarray) else np.array(run, dtype=float)
             for run in self._duration_runs
@@ -2199,6 +2364,35 @@ class Sequence(pp.Sequence):
         del name, create_signature, remove_duplicates, check_timing, v141_compat
         raise NotImplementedError("pulserver.pypulseq.Sequence is a fast builder and does not implement write().")
 
+    @classmethod
+    def _unstructured(cls, system=None) -> "Sequence":
+        """A sequence with no declared structure: the block-at-a-time builder.
+
+        Private, and it has exactly two honest uses.
+
+        **Parsing.** Reading a ``.seq`` back is the one case with nothing to
+        declare: the blocks arrive one at a time in whatever order the file
+        lists them, and there is no period to claim rows from.
+        ``pulserver.io.read`` is the only caller in the package.
+
+        **The reference implementation.** This path registers each event as it
+        is reached, which is what defines the emitted file -- IDs are handed out
+        in visit order and deduplication picks representatives by first
+        occurrence. The template has to match it byte for byte, so the tests
+        that prove it build the same sequence both ways and diff the bytes. That
+        comparison needs this builder, and it is why the code stays rather than
+        being deleted outright.
+
+        What it is *not* is a way to author a sequence. Declaring the structure
+        is what lets every library row be claimed up front, and that is the
+        public contract.
+        """
+        token = _parsing.set(True)
+        try:
+            return cls(system=system)
+        finally:
+            _parsing.reset(token)
+
     def read(self, *_args, **_kwargs) -> None:
         """Fast builder does not support reading/parsing external sequence files."""
         raise NotImplementedError("pulserver.pypulseq.Sequence is a fast builder and does not implement read().")
@@ -2334,271 +2528,6 @@ class Sequence(pp.Sequence):
         self._duration_tail.append(float(duration))
         self._n_blocks += 1
 
-    # ------------------------------------------------------------------
-    # Bulk registration
-    # ------------------------------------------------------------------
-
-    def _add_range_bulk(self, entries, expanded, length: int) -> Sequence:
-        """Register ``length`` shots of a group through the cursor.
-
-        The first shot is rendered and walked by exactly the dispatch
-        :meth:`_fast_set_block` uses, so every payload is built by the code that
-        already works. That walk *is* the structure: it fixes the block count,
-        the event order and which library row each event owns, and it claims one
-        row per shot in each library it touches. Every later shot is rendered too
-        -- there is no declaration of what varies and no module has to publish
-        one -- but the walk over it only appends numbers to those rows.
-
-        The range is committed in chunks of :data:`_BULK_CHUNK_SHOTS`, which is
-        what keeps a 3.7-million-block protocol inside memory: a chunk's rows
-        are Python tuples until it commits, and holding the whole scan's worth
-        of them at once would cost more than the sequence itself. Chunking is
-        invisible in the emitted file because IDs are positions either way --
-        shot ``i`` of a group using ``k`` entries of a library lands at
-        ``base + i * k + j`` whether ``base`` advanced once or a hundred times.
-        """
-        shot = self._render_shot(expanded, 0)
-        if not shot:
-            return self
-
-        blocks_per_shot = len(shot)
-        template = list(self._bulk_slots(shot))
-        chunk_size = max(1, _BULK_CHUNK_SHOTS // max(1, len(template)))
-
-        start = 0
-        while start < length:
-            stop = min(start + chunk_size, length)
-            # A waveform slot is always yielded before the reference pointing at
-            # it, so each chunk's copy of a reference can be re-pointed at this
-            # chunk's copy of its waveform as the list is built.
-            fresh: dict[int, _BulkSlot] = {}
-            slots: list[_BulkSlot] = []
-            for original in template:
-                slot = replace(
-                    original, rows=[], ids=None, payload=None,
-                    source=None if original.source is None else fresh[id(original.source)],
-                )
-                fresh[id(original)] = slot
-                slots.append(slot)
-            # A gradient's block column points at a grad_library entry whose own
-            # payload is the ID of the waveform entry; only the waveform carries
-            # a per-shot row, so only those slots are on the cursor.
-            writers = [slot for slot in slots if slot.source is None]
-
-            durations: list[float] = []
-            for index in range(start, stop):
-                rendered = shot if index == 0 else self._render_shot(expanded, index)
-                if not self._cursor_write(writers, rendered, blocks_per_shot, durations):
-                    # Nothing of this chunk is committed yet, so the shots it
-                    # covers -- and every shot after them -- can still go in
-                    # one at a time, which is where a module that moves its
-                    # structure belongs.
-                    return self._add_range_by_shot(entries, length, start=start)
-            self._commit_bulk(slots, durations, blocks_per_shot, stop - start)
-            start = stop
-        return self
-
-    def _render_shot(self, expanded, index: int) -> list[tuple]:
-        """One shot's blocks: each module re-stated at ``index``, in group order.
-
-        Goes to ``_rendered_blocks`` rather than iterating the module, which is
-        the same snapshot without the iterator protocol in between -- worth it
-        only because this runs once per module per shot.
-        """
-        blocks: list[tuple] = []
-        for module, item_states in expanded:
-            if item_states is None:
-                blocks.append(tuple(module) if isinstance(module, tuple) else (module,))
-                continue
-            module.set_state(**{name: values[index] for name, values in item_states.items()})
-            blocks.extend(module._rendered_blocks())
-        return blocks
-
-    def _cursor_write(self, writers, blocks, blocks_per_shot: int, durations: list) -> bool:
-        """Collect one shot's payloads into the slots the first shot's walk laid out.
-
-        This is the whole per-shot cost of a range: one pass over the events,
-        one list append each. No library insertion (every row of the chunk is
-        registered together, once, by :meth:`_commit_bulk`), no extension-chain
-        lookup (the chain is structural), no per-block row list, no block-ID
-        bookkeeping.
-
-        Returns ``False`` the moment the shot stops matching the first one --
-        a different block count, a different event order, a different RF
-        ``use`` or a payload of a different width -- because a cursor can only
-        move numbers, never structure. Durations are recomputed rather than
-        assumed: they cost one comparison per event here, and assuming them
-        would be the one way a structural change could pass unnoticed.
-        """
-        if len(blocks) != blocks_per_shot:
-            return False
-        position = 0
-        n_writers = len(writers)
-        append_duration = durations.append
-        for block in blocks:
-            duration = 0.0
-            # block_to_events only ever rewrites a one-argument block that is a
-            # whole namespace; anything else it hands straight back, and this
-            # runs once per block of the range.
-            events = block_to_events(*block) if len(block) == 1 else block
-            for event in events:
-                kind = getattr(event, "type", None)
-                if kind is None:  # a bare float delay
-                    if event > duration:
-                        duration = event
-                    continue
-                if kind == "delay":
-                    if event.delay > duration:
-                        duration = event.delay
-                    continue
-                if kind == "soft_delay":
-                    continue
-                if position >= n_writers:
-                    return False
-                slot = writers[position]
-                position += 1
-                if slot.kind != kind:
-                    return False
-                row, data_type, event_duration = slot.build(event)
-                if data_type != slot.data_type or len(row) != slot.width:
-                    return False
-                slot.rows.append(row)
-                if event_duration > duration:
-                    duration = event_duration
-            append_duration(duration)
-        return position == n_writers
-
-    def _commit_bulk(self, slots, durations, blocks_per_shot: int, length: int) -> None:
-        """Register every library's entries and write the finished payloads in.
-
-        Entries are handed to each library one batch per library, interleaved so
-        that a group using ``k`` entries of a library offers slot ``j`` of shot
-        ``i`` as row ``i * k + j`` -- the order the per-shot loop would have
-        registered them in, which is what fixes the IDs that come back.
-
-        A gradient reference's payload *is* an ID, so the library holding the
-        waveform it names has to have spoken first. That is one round of
-        dependency, never two -- a waveform names a shape, and shapes are
-        registered while the shot is being rendered -- so the batches go out in
-        two passes rather than through a general sort.
-        """
-        per_library: dict[str, list[_BulkSlot]] = {}
-        for slot in slots:
-            # One conversion per slot, not one row assignment per shot: the
-            # cursor left every shot's row in a Python list on purpose.
-            slot.payload = (
-                np.zeros((length, 1)) if slot.source is not None else np.array(slot.rows, dtype=float)
-            )
-            per_library.setdefault(slot.library, []).append(slot)
-
-        deferred: dict[str, list[_BulkSlot]] = {}
-        for name, library_slots in per_library.items():
-            if any(slot.source is not None for slot in library_slots):
-                deferred[name] = library_slots
-            else:
-                self._register_slots(name, library_slots, length)
-        for name, library_slots in deferred.items():
-            for slot in library_slots:
-                if slot.source is None:
-                    raise RuntimeError(f"{name} mixes referring and self-contained entries in one range")
-                if slot.source.ids is None:
-                    raise RuntimeError(f"{name} refers to {slot.source.library}, which was registered after it")
-                slot.payload[:, 0] = slot.source.ids
-            self._register_slots(name, library_slots, length)
-
-        rows, block_durations, _ = self._reserve_blocks(length * blocks_per_shot)
-        for slot in slots:
-            if slot.column is not None:
-                rows[slot.block::blocks_per_shot, slot.column] = slot.ids
-        block_durations[:] = durations
-
-        self._bulk_extensions(slots, rows, blocks_per_shot, length)
-
-    def _register_slots(self, name: str, library_slots, length: int) -> None:
-        """Hand one library every row this chunk owes it, and hand back the IDs.
-
-        The rows go out interleaved -- shot 0's entries in slot order, then shot
-        1's -- because that is the order the per-shot path would have registered
-        them in, and therefore the order that decides which occurrence of a
-        repeated payload is the first one.
-        """
-        library = getattr(self, name)
-        stride = len(library_slots)
-        if stride == 1:
-            batch = library_slots[0].payload
-        else:
-            width = library_slots[0].payload.shape[1]
-            batch = np.stack([slot.payload for slot in library_slots], axis=1).reshape(-1, width)
-
-        types = [slot.data_type for slot in library_slots]
-        if any(types):
-            # One shot's types are every shot's, so both the stored types and
-            # the key's type column are that one pattern tiled, never a value
-            # looked up per row.
-            pattern = np.array(types, dtype=object)
-            codes = np.tile(library.type_key_codes(types), length)
-        else:
-            pattern, codes = "", None
-
-        ids = library.extend(batch, pattern, key_codes=codes, tile=length)
-        for offset, slot in enumerate(library_slots):
-            slot.ids = ids[offset::stride]
-
-    def _bulk_slots(self, blocks):
-        """Yield one slot per registered event, in the order add_block visits them.
-
-        The first shot is walked here for its *shape* -- the row width and the
-        entry type each event needs -- which is also what pins the shapes into
-        the writer's caches before any shot is written.
-        """
-        for block_index, block in enumerate(blocks):
-            for event in block_to_events(*block):
-                if isinstance(event, float) or event.type in ("delay", "soft_delay"):
-                    continue
-                build = self._row_builder(event.type)
-                row, data_type, _ = build(event)
-                for slot in self._bulk_event(event, len(row), data_type):
-                    slot.block = block_index
-                    slot.build = build
-                    yield slot
-
-    def _bulk_event(self, event, width: int, data_type) -> list[_BulkSlot]:
-        """One event -> the (empty) library entries it will register per shot.
-
-        Structure only: which library, how wide a row, which block column or
-        extension points at it. Every shot's actual row, the first one's
-        included, arrives later through :meth:`_cursor_write`.
-        """
-        kind = event.type
-
-        if kind == "rf":
-            return [_BulkSlot("rf_library", width, column=1, data_type=data_type, kind=kind)]
-
-        if kind in ("trap", "grad"):
-            waveform = _BulkSlot(
-                "trap_library" if kind == "trap" else "arb_library", width, data_type=data_type, kind=kind
-            )
-            # A gradient costs two entries: the waveform, then the reference to
-            # it that the block row actually points at.
-            reference = _BulkSlot("grad_library", 1, column=_CHANNEL_SLOT[event.channel],
-                                  data_type=data_type, source=waveform, kind=kind)
-            return [waveform, reference]
-
-        if kind == "adc":
-            return [_BulkSlot("adc_library", width, column=5, kind=kind)]
-
-        if kind in ("labelset", "labelinc"):
-            name = "label_set_library" if kind == "labelset" else "label_inc_library"
-            return [_BulkSlot(name, width, extension=kind.upper(), kind=kind)]
-
-        if kind in ("output", "trigger"):
-            return [_BulkSlot("trigger_library", width, extension="TRIGGERS", kind=kind)]
-
-        if kind == "rot3D":
-            return [_BulkSlot("rotation_library", width, extension="ROTATIONS", kind=kind)]
-
-        return [_BulkSlot("rf_shim_library", width, extension="RF_SHIMS", kind=kind)]
-
     # -- per-event library rows -------------------------------------------
     #
     # Each builder answers ``(row, entry type, duration claimed)`` for one
@@ -2627,7 +2556,7 @@ class Sequence(pp.Sequence):
         return row, "t", event.delay + event.rise_time + event.flat_time + event.fall_time
 
     def _row_grad(self, event):
-        amplitude, shape_ids = self._compress_grad_cached(event)
+        amplitude, shape_ids = self._compress_grad_cached(event.waveform, event.tt)
         row = (amplitude, event.first, event.last, *shape_ids, event.delay)
         duration = event.delay + math.ceil(event.tt[-1] / self.grad_raster_time - 1e-10) * self.grad_raster_time
         return row, "g", duration
@@ -2656,60 +2585,12 @@ class Sequence(pp.Sequence):
             return getattr(self, _ROW_BUILDERS[kind])
         except KeyError:
             raise ValueError(
-                f"Unknown event type {kind} passed to pulserver.pypulseq.Sequence.add_range()."
+                f"Unknown event type {kind} passed to pulserver.pypulseq.Sequence.add_block()."
             ) from None
 
     def _event_row(self, event) -> tuple[tuple, str | int, float]:
         """``(row, entry type, duration)`` for one event, dispatched by type."""
         return self._row_builder(event.type)(event)
-
-    def _bulk_extensions(self, slots, rows, blocks_per_shot: int, length: int) -> None:
-        """Build every shot's extension chains, in the order add_block would.
-
-        A chain node is ``(type, reference, next)``, and the reference is a
-        fresh library entry for every shot -- this path never collapses
-        identical events -- so no two shots can share a node and the IDs run
-        consecutively without a lookup. They do *not* run consecutively per
-        level, though: a shot finishes all its chains before the next shot
-        starts, so with ``levels`` nodes per shot the node for shot ``i`` at
-        chain position ``offset`` is ``first + i * levels + offset``. Getting
-        that stride wrong renumbers the extension column and changes the file.
-        """
-        per_block: dict[int, list[_BulkSlot]] = {}
-        for slot in slots:
-            if slot.extension is not None:
-                per_block.setdefault(slot.block, []).append(slot)
-        if not per_block:
-            return
-
-        library = self.extensions_library
-        first_id = library.next_free_ID
-        shot_index = np.arange(length, dtype=np.int64)
-        # Ordering a block's extensions by reference is what add_block does;
-        # every slot advances by the same stride, so one shot's order is every
-        # shot's order.
-        chains = [(block, sorted(block_slots, key=lambda slot: int(slot.ids[0])))
-                  for block, block_slots in sorted(per_block.items())]
-        levels = sum(len(block_slots) for _, block_slots in chains)
-
-        payloads: list[list[tuple]] = [[] for _ in range(length)]
-        offset = 0
-        for block_index, block_slots in chains:
-            chain = np.zeros(length, dtype=np.int64)
-            for slot in block_slots:
-                node_ids = first_id + shot_index * levels + offset
-                type_id = float(self._ext_type_id(slot.extension))
-                for shot, (ref, nxt) in enumerate(zip(slot.ids.tolist(), chain.tolist(), strict=True)):
-                    payloads[shot].append((type_id, float(ref), float(nxt)))
-                chain = node_ids
-                offset += 1
-            rows[block_index::blocks_per_shot, 6] = chain
-
-        ordered = [row for shot_rows in payloads for row in shot_rows]
-        keys = range(first_id, first_id + len(ordered))
-        library.data.update(zip(keys, ordered, strict=True))
-        library.keymap.update(zip(ordered, keys, strict=True))
-        library.next_free_ID = first_id + len(ordered)
 
     # ------------------------------------------------------------------
     # Private direct-insert helpers (no find_or_insert, no dedup)
@@ -2757,10 +2638,14 @@ class Sequence(pp.Sequence):
         self._rf_shape_cache[id(signal)] = (signal, times, amplitude, shape_IDs)
         return amplitude * scale, shape_IDs
 
-    def _compress_grad_cached(self, event: SimpleNamespace):
-        """``(amplitude, shape_ids)`` for an arbitrary gradient; see above."""
-        waveform = event.waveform
-        times = event.tt
+    def _compress_grad_cached(self, waveform, times):
+        """``(amplitude, shape_ids)`` for an arbitrary gradient; see above.
+
+        Takes the samples rather than the event: a slot whose waveform moves
+        resolves its shape from a :class:`_ShapeInventory` entry, which is a
+        ``(samples, times)`` pair its module built at construction and never an
+        event.
+        """
         cached = self._grad_shape_cache.get(id(waveform))
         if cached is not None and cached[0] is waveform and cached[1] is times:
             return cached[2], cached[3]
@@ -2790,7 +2675,7 @@ class Sequence(pp.Sequence):
         return rf_id, shape_IDs
 
     def _fast_register_grad(self, event: SimpleNamespace):
-        amplitude, shape_IDs = self._compress_grad_cached(event)
+        amplitude, shape_IDs = self._compress_grad_cached(event.waveform, event.tt)
         data = (amplitude, event.first, event.last, *shape_IDs, event.delay)
         arb_id = self.arb_library.append(data)
         grad_id = self.grad_library.append((arb_id,), "g")
@@ -2919,22 +2804,53 @@ _EXT_PAYLOAD_FIELDS = {
 }
 
 
-def _ext_values(extensions, template: _TemplateBlock, slot_index: int) -> dict | None:
-    """The payload entry belonging to one extension slot, as ``{name: value}``.
+def _ext_values(extensions, ordinal: int):
+    """The payload entry belonging to one extension slot: its values tuple.
 
     A payload lists its extensions in block-event order rather than keyed, and
-    the template's ``ext_slots`` were recorded in that same order, so the two
-    line up by position.
+    the template recorded each slot's position in that order, so the two line up
+    without searching.
     """
     try:
-        ordinal = template.ext_slots.index(slot_index)
-        kind, values = extensions[ordinal]
-    except (ValueError, IndexError):
+        return extensions[ordinal][1]
+    except IndexError:
         return None
-    names = _EXT_PAYLOAD_FIELDS.get(kind)
-    if names is None or len(names) != len(values):
-        return None
-    return dict(zip(names, values, strict=True))
+
+
+def _row_types(slots, tile: int = 1):
+    """Per-row entry types for a claimed run, or ``""`` when nothing is typed."""
+    types = [slot.data_type for slot in slots]
+    if not any(types):
+        return ""
+    return np.array(types * tile, dtype=object)
+
+
+def _slot_id(slot, pass_index: int) -> int:
+    """The entry ID this slot's row has on one pass."""
+    return slot.first_id if pass_index == 0 else int(slot.later_ids[pass_index - 1])
+
+
+def _delay_duration(args) -> float | None:
+    """How long a block of nothing but time lasts, or ``None`` if it holds more.
+
+    A block written as a bare number, a ``make_delay`` or both owns no library
+    row, which is what lets the template treat it differently from every other
+    block: it can neither be misnumbered nor renumber anything else.
+    """
+    duration = 0.0
+    for event in args:
+        if isinstance(event, int | float):
+            duration = max(duration, float(event))
+        elif getattr(event, "type", None) in ("delay", "soft_delay"):
+            duration = max(duration, float(getattr(event, "delay", 0.0)))
+        else:
+            return None
+    return duration
+
+
+def _is_pure_delay(args) -> bool:
+    """Whether a block is nothing but time; see :func:`_delay_duration`."""
+    return _delay_duration(args) is not None
 
 
 def _index_lookup(mapping: dict[int, int]) -> np.ndarray:

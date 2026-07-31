@@ -53,15 +53,15 @@ sampling = design.make_cartesian_sampling((256, 128), acceleration=2)
 
 shot   = sampling[0]        # absolute (ky[, kz]) -> lin_idx / par_idx
 scale  = sampling.to_scales()  # [-1, 1) -> pp.scale_grad(gy, ...)
-labels = sampling.labels(0)    # the SET LIN event for shot 0
+labels = sampling.label_state(0)   # {"LIN": 0} -- the counter value for shot 0
 ```
 
-`labels(shot)` returns one `SET <label>` event per axis. Pass it to
-`SequenceModule.set_labels` for every loop the readout does *not* consume
-through `set_state`:
+`label_state(shot)` returns `{counter: value}`, one entry per axis. Spread it
+into `SequenceModule.set_state` for every loop the readout does *not* consume
+itself:
 
 ```python
-excitation.set_labels(*frames.labels(f), *slices.labels(s))
+excitation.set_state(freq_offset_hz=offsets[s], **frames.label_state(f), **slices.label_state(s))
 ```
 
 **Emitting them is what makes the MRD `FIRST_IN_*` / `LAST_IN_*` flags
@@ -153,8 +153,7 @@ slices = design.make_slice_loop(48, spacing_m=3e-3, order="interleaved", sms_fac
 offsets = slices.to_frequencies(excitation.gradients[0].amplitude)
 
 for s, slice_shot in enumerate(slices.shots):
-    excitation.set_state(freq_offset_hz=float(offsets[slice_shot[0]]))
-    excitation.set_labels(*slices.labels(s))
+    excitation.set_state(freq_offset_hz=float(offsets[slice_shot[0]]), **slices.label_state(s))
     for shot in sampling:
         ...
 ```
@@ -183,11 +182,13 @@ instead of one per physics:
 ```python
 for f in range(len(frames)):
     for c in range(len(inversions)):
-        inversion.set_state().set_labels(*frames.labels(f), *inversions.labels(c))
-        inversion.add_to(seq)
+        inversion.set_state(**frames.label_state(f), **inversions.label_state(c))
+        for block in inversion:
+            seq.add_block(*block)
         seq.add_block(pp.make_delay(float(inversions[c][0, 0])))
         for shot in sampling:
-            readout.set_state(lin_idx=int(shot[0, 0])).add_to(seq)
+            for block in readout.set_state(lin_idx=int(shot[0, 0])):
+                seq.add_block(*block)
 ```
 
 `order=` reorders the *visits* without renumbering the data — the counter
@@ -222,8 +223,12 @@ readouts = [
 for f in range(len(frames)):
     for shot, readout in enumerate(readouts):
         start = epi3d[shot][0]
-        readout.set_state(lin_idx=int(start[0]), par_idx=int(start[1]), labels=epi3d[shot])
-        readout.set_labels(*frames.labels(f))
+        readout.set_state(
+            lin_idx=int(start[0]),
+            par_idx=int(start[1]),
+            labels=epi3d[shot],
+            **frames.label_state(f),
+        )
         for block in readout:
             seq.add_block(*block)
 ```
@@ -247,8 +252,12 @@ rotations = iter(tilt.to_rotations())          # continuous across the whole sca
 for f in range(len(frames)):
     for s, slice_shot in enumerate(slices.shots):
         for view in range(n_views):
-            readout.set_state(lin_idx=view, rotation=next(rotations))
-            readout.set_labels(*frames.labels(f), *slices.labels(s))
+            readout.set_state(
+                lin_idx=view,
+                rotation=next(rotations),
+                **frames.label_state(f),
+                **slices.label_state(s),
+            )
             for block in readout:
                 seq.add_block(*block)
 ```

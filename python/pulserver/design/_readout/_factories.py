@@ -6,7 +6,9 @@ inferred from the length of ``matrix``, so the same call builds the 2D or the
 3D member of a family. Design once outside the loop, then re-index per shot::
 
     readout = make_line_readout(system, (0.22, 0.22), (128, 128))
-    seq = Sequence(system)
+    # One shot of this readout, played 128 times: the sequence claims every
+    # library row from that up front.
+    seq = Sequence(system, 128, readout.set_state(lin_idx=0))
     for ky in range(128):
         readout.set_state(lin_idx=ky)
         for block in readout:

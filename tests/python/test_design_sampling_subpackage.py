@@ -154,13 +154,13 @@ def test_line_and_epi_emit_absolute_labels_from_sampling_plan():
     pp = pytest.importorskip("pypulseq")
     opts = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
     line = readout.Line3D(opts, (0.22, 0.22, 0.22), (16, 16, 16), spoil_position="none")
-    blocks = tuple(line.set_state(lin_idx=3, par_idx=7))
+    blocks = line.set_state(lin_idx=3, par_idx=7).blocks
     assert _labels(blocks, "LIN") == [("labelset", 3)]
     assert _labels(blocks, "PAR") == [("labelset", 7)]
 
     plan = sampling.ScanLoop.from_relative_shifts([[4]], [[0], [2], [1]], shape=(16,))
     epi = readout.Epi2D(opts, (0.22, 0.22), (16, 16), 1, plan.relative(0))
-    blocks = tuple(epi.set_state(lin_idx=4, labels=plan[0]))
+    blocks = epi.set_state(lin_idx=4, labels=plan[0]).blocks
     assert _labels(blocks, "LIN") == [("labelset", 4), ("labelset", 6), ("labelset", 5)]
     with pytest.raises(IndexError, match="LIN labels"):
         tuple(epi.set_state(lin_idx=4, labels=[4, 16, 5]))

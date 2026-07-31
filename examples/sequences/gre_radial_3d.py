@@ -180,8 +180,6 @@ class GreRadial3DPulseqSequence(Sequence):
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
-        seq = pp.Sequence(opts)
-
         rotations = design.make_noncartesian_2d_sampling(
             (cfg.nx_ro, cfg.nx_ro), views=cfg.num_shots, scheme=cfg.order_mode
         ).to_rotations()
@@ -190,6 +188,45 @@ class GreRadial3DPulseqSequence(Sequence):
         shot = 0
 
         frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+
+        # The TR is the pass. A volume-start trigger is the one exception: it
+        # plays once per frame and owns a library row, and a block outside the
+        # template may own nothing at all -- so when there is one, the *frame*
+        # becomes the pass and the trigger sits at its head. Without one the
+        # TR-sized template stands, which is the whole point: a template the size
+        # of the scan pays the per-block cost twice, once building it and once
+        # filling it.
+        trigger_event = (
+            pp.make_trigger(cfg.trigger, duration=1e-3, system=opts)
+            if cfg.trigger != TriggerType.NONE
+            else None
+        )
+        once_open = pp.make_label(type="SET", label="ONCE", value=1)
+        # ONCE is declared here or not at all: a flag is an event, and the
+        # template records the events the excitation carries. It then keeps the
+        # value the excitation was primed with, so no TR has to restate it.
+        pulse.set_state(
+            phase_offset_rad=0.0,
+            SLC=0,
+            **frames.label_state(0),
+            once=0 if trigger_event is not None else None,
+        )
+        radial.set_state(lin_idx=0, par_idx=0, rotation=rotations[0])
+        view = [pulse, *([te_delay] if te_delay is not None else []), radial]
+        spoke = [
+            *(len(par_loop) * view),
+            *([tr_delay] if tr_delay is not None else []),
+        ]
+        if trigger_event is not None:
+            tr_struct = [(trigger_event, once_open), *(len(rotations) * spoke)]
+            passes = len(frames)
+        else:
+            # The TR delay closes each spoke, so with a TR-sized pass it lands
+            # between complete passes -- which is exactly where a block that
+            # owns no library row is allowed to be.
+            tr_struct = view
+            passes = len(frames) * len(rotations) * len(par_loop)
+        seq = pp.Sequence(opts, passes, *tr_struct)
         # The frame counter rides on the first block of every TR rather than on
         # a lead-in block of its own. A block that plays once per frame has no
         # counterpart in the TRs that follow it, so TR-period detection finds no
@@ -197,24 +234,22 @@ class GreRadial3DPulseqSequence(Sequence):
         # then costs a waveform buffer proportional to the frame duration.
         # Re-SETting a counter that already holds the right value is free.
         for frame in range(len(frames)):
-            (phase_label,) = frames.labels(frame)
-            frame_labels = (phase_label,)
-            if cfg.trigger != TriggerType.NONE:
+            if trigger_event is not None:
                 # A volume-start trigger genuinely is a once-per-frame block, so
                 # mark it as one: ONCE=1 opens the section and the ONCE=0 that
                 # every TR carries closes it, leaving the TRs identical.
-                seq.add_block(
-                    pp.make_trigger(cfg.trigger, duration=1e-3, system=opts),
-                    pp.make_label(type="SET", label="ONCE", value=1),
-                )
-                frame_labels = (phase_label, pp.make_label(type="SET", label="ONCE", value=0))
-            tr_labels = (pp.make_label(type="SET", label="SLC", value=0), *frame_labels)
+                seq.add_block(trigger_event, once_open)
+            # The loop's own counter goes on the module rather than at the call
+            # site: set_state writes it into the label event the excitation's
+            # first block already carries, so it reaches the file through the
+            # module's payload.
+            pulse.set_state(**frames.label_state(frame))
             for spoke, rotation in enumerate(rotations):
                 for par_shot in par_loop:
                     phase = float(rf_phases[shot])
                     pulse.set_state(phase_offset_rad=phase)
-                    for block_idx, block in enumerate(pulse):
-                        seq.add_block(*block, *(tr_labels if block_idx == 0 else ()))
+                    for block in pulse:
+                        seq.add_block(*block)
                     if te_delay is not None:
                         seq.add_block(te_delay)
                     radial.set_state(
@@ -307,7 +342,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | No
     # twice and every shot ends with a net selection moment.
     pulse = pulse.without_rephasers()
 
-    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse.blocks)
     rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
     min_te_s = (d_pulse - rf_center_s) + radial.t_prephase_s + 0.5 * radial.readout.read_duration
     raster = opts.block_duration_raster

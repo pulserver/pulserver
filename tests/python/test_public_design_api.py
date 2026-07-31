@@ -143,8 +143,6 @@ def test_root_exports_the_abstract_authoring_types() -> None:
     # k-space and slices are one type: a loop is a table of positions plus a
     # grouping of them into shots, whatever the positions mean.
     assert {"SamplingPattern", "SliceSchedule", "SliceGroup"}.isdisjoint(pulserver.__all__)
-    # The KSFoundation-style flattened plan is gone: outer loops are the
-    # sequence's own, not a type the toolbox owns.
     assert {"Acquisition", "AcquisitionPlan"}.isdisjoint(pulserver.__all__)
     assert not hasattr(pp, "AcquisitionPlan")
 
@@ -178,7 +176,7 @@ def test_every_counter_can_drive_a_scan_loop() -> None:
     for label in pp.COUNTER_LABELS:
         loop = design.make_counter_loop(3, label=label)
         assert isinstance(loop, ScanLoop)
-        assert [event.label for event in loop.labels(1)] == [label]
+        assert list(loop.label_state(1)) == [label]
 
 
 def test_root_namespace_excludes_waveform_authoring_helpers() -> None:

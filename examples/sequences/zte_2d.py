@@ -130,9 +130,12 @@ class Zte2DPulseqSequence(Sequence):
         timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
 
         zte = timing["readout"]
-        seq = pp.Sequence(opts)
-        zte.set_state(lin_idx=np.arange(cfg.num_shots)).add_to(seq)
-
+        # The whole spoke set is one designed segment played once, so the
+        # segment is the template and it makes a single pass over it.
+        zte.set_state(lin_idx=np.arange(cfg.num_shots))
+        seq = pp.Sequence(opts, 1, zte)
+        for _block in zte:
+            seq.add_block(*_block)
         seq.set_definition("Name", "zte_2d")
         seq.set_definition("FOV", [cfg.fov_m, cfg.fov_m, cfg.fov_m])
         seq.set_definition("Flip", cfg.flip_deg)

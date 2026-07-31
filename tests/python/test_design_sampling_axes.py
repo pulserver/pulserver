@@ -13,8 +13,6 @@ import pulserver.pypulseq as pp
 from pulserver import EncodingAxis, ScanLoop
 
 
-def _pairs(events):
-    return [(event.label, event.type, event.value) for event in events]
 
 
 def test_encoding_axis_declares_columns_and_rejects_nonsense():
@@ -91,22 +89,22 @@ def test_converters_refuse_a_loop_whose_kind_cannot_mean_that():
 
 def test_labels_are_the_position_value_on_an_index_axis_and_the_index_elsewhere():
     cartesian = design.make_cartesian_sampling((64, 8), acceleration=2)
-    assert _pairs(cartesian.labels(2)) == [("LIN", "labelset", 4)]
+    assert cartesian.label_state(2) == {"LIN": 4}
 
     # Metres, angles and inversion times are not counters, but their order is.
     slices = design.make_slice_loop(6, 3e-3)
     assert [int(shot[0]) for shot in slices.shots] == [0, 2, 4, 1, 3, 5]
-    assert _pairs(slices.labels(1)) == [("SLC", "labelset", 2)]
+    assert slices.label_state(1) == {"SLC": 2}
 
     views = design.make_noncartesian_2d_sampling((64, 64), views=8)
-    assert _pairs(views.labels(3)) == [("LIN", "labelset", 3)]
+    assert views.label_state(3) == {"LIN": 3}
 
 
 def test_sms_shot_labels_its_first_band_by_default():
     sms = design.make_slice_loop(6, 3e-3, sms_factor=2)
     assert sms.shot_lengths == (2, 2, 2)
-    assert _pairs(sms.labels(0)) == [("SLC", "labelset", 0)]
-    assert _pairs(sms.labels(0, position=1)) == [("SLC", "labelset", 3)]
+    assert sms.label_state(0) == {"SLC": 0}
+    assert sms.label_state(0, position=1) == {"SLC": 3}
 
 
 def test_label_limits_predict_where_the_first_last_flags_will_fire():
@@ -128,7 +126,7 @@ def test_with_axes_retargets_the_counter_without_touching_the_positions():
     views = design.make_noncartesian_2d_sampling((64, 64), views=8)
     phases = views.with_axes(EncodingAxis("PHS", kind="angle"))
 
-    assert _pairs(phases.labels(3)) == [("PHS", "labelset", 3)]
+    assert phases.label_state(3) == {"PHS": 3}
     assert np.array_equal(phases.positions, views.positions)
     assert phases.shots == views.shots
     assert views.axes[0].label == "LIN"  # unchanged
@@ -139,12 +137,12 @@ def test_counter_loop_covers_frames_contrasts_and_averages():
     assert isinstance(frames, pulserver.ScanLoop)
     assert len(frames) == 40
     assert frames.shot_lengths == (1,) * 40
-    assert _pairs(frames.labels(7)) == [("REP", "labelset", 7)]
+    assert frames.label_state(7) == {"REP": 7}
     assert frames.label_limits() == {"REP": (0, 39)}
 
     inversions = design.make_counter_loop([0.1, 0.3, 1.0, 2.5], label="SET")
     assert float(inversions[2][0, 0]) == 1.0
-    assert _pairs(inversions.labels(2)) == [("SET", "labelset", 2)]
+    assert inversions.label_state(2) == {"SET": 2}
     assert inversions.axes[0].kind == "value"
 
 
@@ -153,7 +151,7 @@ def test_counter_loop_reorders_the_visits_without_renumbering_the_data():
     visited = [int(shot[0]) for shot in ordered.shots]
     assert visited == [2, 3, 1, 4, 0, 5]
     # The counter follows the position, so shot 0 is still average 2.
-    assert _pairs(ordered.labels(0)) == [("AVG", "labelset", 2)]
+    assert ordered.label_state(0) == {"AVG": 2}
     assert sorted(visited) == list(range(6))
 
 
@@ -185,9 +183,9 @@ def test_a_module_consumes_the_labels_the_loops_hand_it():
         (32, 32),
         spoil_position="none",
     )
-    module.set_state(lin_idx=7).set_labels(*frames.labels(2), *slices.labels(1))
+    module.set_state(lin_idx=7, **frames.label_state(2), **slices.label_state(1))
 
-    emitted = {event.label: event.value for event in module[0] if getattr(event, "type", "") == "labelset"}
+    emitted = {event.label: event.value for event in module.blocks[0] if getattr(event, "type", "") == "labelset"}
     assert emitted == {"REP": 2, "SLC": 2}
     # ...and the readout keeps emitting the counter it owns itself.
-    assert any(getattr(event, "label", None) == "LIN" and event.value == 7 for block in module for event in block)
+    assert any(getattr(event, "label", None) == "LIN" and event.value == 7 for block in module.blocks for event in block)

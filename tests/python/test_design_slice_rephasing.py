@@ -32,12 +32,12 @@ def _slice_moment_after_isocentre(excitation, readout):
     the slice; everything after it counts in full.
     """
     total = 0.0
-    for block_index, block in enumerate(excitation):
+    for block_index, block in enumerate(excitation.blocks):
         for event in block:
             if getattr(event, "channel", None) != "z" or getattr(event, "type", None) != "trap":
                 continue
             total += 0.5 * event.area if block_index == 0 else event.area
-    for block in readout:
+    for block in readout.blocks:
         for event in block:
             if getattr(event, "channel", None) != "z":
                 continue
@@ -126,7 +126,7 @@ def test_a_shared_axis_merges_rather_than_collides(system, par_idx):
     residual = _slice_moment_after_isocentre(stripped, folded) - kz_encode
     assert residual == pytest.approx(0.0, abs=1e-6)
 
-    prewind_channels = [event.channel for event in folded[0] if getattr(event, "channel", None)]
+    prewind_channels = [event.channel for event in folded.blocks[0] if getattr(event, "channel", None)]
     assert sorted(prewind_channels) == ["x", "y", "z"], "one gradient per channel in the prewind block"
 
 

@@ -122,6 +122,7 @@ from .._system import (
     quantize_readout_timing,
     round_to_raster,
 )
+from ..._core._module import _block_payload, _locate_payload
 from ._base import Readout, normalize_rotation, normalize_slice_rephasing, rescale_trap
 
 READOUT_GRAD_MARGIN = 0.95  # headroom below max_grad for the readout plateau
@@ -318,8 +319,9 @@ class _LineTrain(Readout):
         ro_axis="x",
         slice_rephasing=None,
         derate=True,
+        **declared,
     ):
-        Readout.__init__(self, system)
+        Readout.__init__(self, system, **declared)
         if int(num_echoes) < 1:
             raise ValueError(f"num_echoes must be >= 1, got {num_echoes}")
         if spoil_position not in SPOIL_POSITIONS:
@@ -585,6 +587,62 @@ class _LineTrain(Readout):
         if "par_label" in record:
             record["par_label"].value = int(state.par_idx)
 
+    def _direct_payloads(self):
+        """This shot's payloads, rewritten in place rather than re-derived.
+
+        The same arithmetic :meth:`_retune` does -- ``scale_grad`` is a multiply
+        -- but applied to the payload entries instead of to event objects. The
+        encoding trapezoids are never rescaled, the ADC is never touched and no
+        block is rebuilt: a shot costs a handful of float writes.
+
+        The layout is captured once, on the first call, by locating each event
+        :meth:`_retune` would have moved inside the payloads built from the
+        rendered blocks. A rotation is declined -- it appends an event to every
+        gradient block, so it changes the structure rather than a number.
+        """
+        state = self._state
+        if state is None or state.rotation is not None:
+            return None
+
+        cache = self._payload_cache
+        if cache is None:
+            blocks = self._rendered_blocks()
+            record = self._layout[2] if self._layout else {}
+            peaks = self._peak_cache = {}
+            payloads = [_block_payload(block, peaks) for block in blocks]
+            targets = {
+                name: _locate_payload(blocks, payloads, record[name], "value" if "label" in name else "amplitude")
+                for name in ("pe_pre", "pe_post", "par_pre", "par_post", "pe_label", "par_label")
+                if name in record
+            }
+            targets["adc"] = [
+                _locate_payload(blocks, payloads, adc, "phase_offset") for adc in record.get("adc", ())
+            ]
+            cache = self._payload_cache = (tuple(payloads), targets)
+
+        payloads, targets = cache
+        if self._pe is not None:
+            area = self._pe.areas[int(state.pe_idx)]
+            merged = area + self._slice_rephasing.get(self._pe.axis, 0.0)
+            _write(targets.get("pe_pre"), self._pe_pre_tmpl, merged, self._pe_pre_worst)
+            _write(targets.get("pe_post"), self._pe_post_tmpl, -area, self._pe.max_area)
+        if self._par is not None:
+            area = self._par.areas[int(state.par_idx)]
+            merged = area + self._slice_rephasing.get(self._par.axis, 0.0)
+            _write(targets.get("par_pre"), self._par_pre_tmpl, merged, self._par_pre_worst)
+            _write(targets.get("par_post"), self._par_post_tmpl, -area, self._par.max_area)
+
+        phase_offset_rad = state.phase_offset_rad
+        for values, index in targets["adc"]:
+            values[index] = phase_offset_rad
+        if "pe_label" in targets:
+            values, index = targets["pe_label"]
+            values[index] = int(state.pe_idx)
+        if "par_label" in targets:
+            values, index = targets["par_label"]
+            values[index] = int(state.par_idx)
+        return payloads
+
     def _run(self, seq, pe_idx, par_idx, phase_offset_rad, rotation, record=None):
         """Emit one shot's blocks.
 
@@ -593,11 +651,6 @@ class _LineTrain(Readout):
         labels. That is what :meth:`_retune` needs in order to move a later
         shot's numbers without rebuilding any of this.
         """
-        if seq is None:
-            import pulserver.pypulseq as _ps
-
-            seq = _ps.Sequence(self._opts)
-
         if record is None:
             record = {}
         pre = [self._gx_pre]
@@ -754,7 +807,7 @@ class Line2D(_LineTrain):
         self.pe_axis = pe_axis
         self.fov_y_m, self.ny = float(fov[1]), int(matrix[1])
 
-    def set_state(self, lin_idx=0, phase_offset_rad=0.0, rotation=None):
+    def _set_state(self, lin_idx=0, phase_offset_rad=0.0, rotation=None):
         """Set the complete dynamic state for one 2D line readout."""
         self._replace_state(
             _LineState(
@@ -788,7 +841,7 @@ class Line3D(_LineTrain):
         self.fov_y_m, self.ny = float(fov[1]), int(matrix[1])
         self.fov_z_m, self.nz = float(fov[2]), int(matrix[2])
 
-    def set_state(self, lin_idx=0, par_idx=0, phase_offset_rad=0.0, rotation=None):
+    def _set_state(self, lin_idx=0, par_idx=0, phase_offset_rad=0.0, rotation=None):
         """Set the complete dynamic state for one 3D line readout."""
         self._replace_state(
             _LineState(
@@ -799,3 +852,11 @@ class Line3D(_LineTrain):
             )
         )
         return self
+
+
+def _write(target, template, area, worst_mag) -> None:
+    """The amplitude ``rescale_trap`` would have written, into the payload."""
+    if target is None or template is None:
+        return
+    values, index = target
+    values[index] = template.amplitude * (area / worst_mag)

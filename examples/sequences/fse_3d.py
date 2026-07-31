@@ -181,8 +181,7 @@ class Fse3DPulseqSequence(Sequence):
         prot = dict_to_protocol(protocol)
         cfg = _read_protocol(prot)
 
-        seq = pp.Sequence(opts)
-        n_shots, n_directions = _build_public(seq, opts, cfg)
+        seq, n_shots, n_directions = _build_public(opts, cfg)
 
         seq.set_definition("Name", "fse_3d")
         seq.set_definition("FOV", [cfg.fov_ro_m, cfg.fov_pe_m, cfg.slice_spacing_m * cfg.npar])
@@ -301,7 +300,7 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
         except ValueError:
             if strict:
                 return None
-    d_exc = sum(pp.calc_duration(*block) for block in excitation_pulse)
+    d_exc = sum(pp.calc_duration(*block) for block in excitation_pulse.blocks)
     center = pp.calc_rf_center(excitation_pulse.rf)[0] + excitation_pulse.rf.delay
     gap_s = max(0.0, train.t_exc_center_to_train_start - (d_exc - center))
     raster = opts.block_duration_raster
@@ -321,7 +320,7 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
     }
 
 
-def _build_public(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
+def _build_public(opts: pp.Opts, cfg: _Config):
     timing = _compute_public(opts, cfg, strict=False)
     excitation_pulse = timing["excitation"]
     train = timing["train"]
@@ -336,6 +335,26 @@ def _build_public(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
         if diffusion is not None
         else [None]
     )
+    # One shot's chronology, handed over once: the optional diffusion
+    # preparation, the excitation, the gap, then the whole echo train. The TR
+    # delay stays outside so it lands between complete passes.
+    #
+    # The train is handed over as a *module*, not as its blocks: its partition
+    # lobes are two gradients summed on the slice axis, so the samples move with
+    # the encode, and the sequence finds the candidate set through the module's
+    # waveform_inventory().
+    first = np.resize(segments[0].astype(int), (cfg.etl, 2))
+    if diffusion is not None:
+        diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotations[0])
+    train.set_state(lin_idx=first[:, 0], par_idx=first[:, 1])
+    tr_struct = [
+        *([diffusion] if diffusion is not None else []),
+        excitation_pulse,
+        *([gap] if gap is not None else []),
+        train,
+    ]
+    seq = pp.Sequence(opts, len(rotations) * len(segments), *tr_struct)
+
     for rotation in rotations:
         for segment in segments:
             indices = np.resize(segment.astype(int), (cfg.etl, 2))
@@ -352,7 +371,7 @@ def _build_public(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
                 seq.add_block(*block)
             if tr_delay is not None:
                 seq.add_block(tr_delay)
-    return len(segments), len(rotations)
+    return seq, len(segments), len(rotations)
 
 
 PLUGIN = Fse3DPulseqSequence()

@@ -36,6 +36,7 @@ import pypulseq as pp
 
 from .._system import DEFAULT_BANDWIDTH_HZ_PX, apply_system_derates, ceil_to_raster, copy_event, scale_grad
 from .._traj2grad import traj2grad
+from ..._core._module import _CHANNEL_KEY
 from ._base import Readout, normalize_rotation
 
 _AXES = ("x", "y", "z")
@@ -745,10 +746,11 @@ class _NonCartesianTrain(Readout):
         phase_fov_m=None,
         phase_steps=None,
         phase_label="PAR",
+        **declared,
     ):
         if not isinstance(readout, NonCartesianGradient):
             raise TypeError("readout must be a NonCartesianGradient")
-        Readout.__init__(self, readout.system)
+        Readout.__init__(self, readout.system, **declared)
         if int(num_echoes) < 1:
             raise ValueError("num_echoes must be >= 1")
         self.readout = readout
@@ -760,6 +762,9 @@ class _NonCartesianTrain(Readout):
         self._phase_axis = phase_axis
         self._phase_template = None
         self._phase_areas = None
+        #: Solved prewinder/rewinder events, by partition; see _prewinder_block.
+        self._prewinder_cache: dict = {}
+        self._rewinder_cache: dict = {}
 
         if phase_axis is not None:
             if phase_axis not in _AXES:
@@ -825,39 +830,147 @@ class _NonCartesianTrain(Readout):
             )
         )
 
-    def _phase_events(self, phase_idx):
+    def waveform_inventory(self):
+        """Every partition's prewinder and rewinder, so a TR template can hold them.
+
+        Aligning the trajectory's prewinders against a phase-encoding lobe is a
+        gradient *solve* whenever the two share an axis -- a stack-of-spirals
+        with the excitation's rephasing folded in hits that on every shot -- so
+        the summed moment is an arbitrary waveform that moves with the partition.
+        It depends on the partition index alone, and the partition count is fixed
+        at construction, so the complete candidate set is stated here instead of
+        being discovered per shot. See :meth:`_prewinder_block`.
+
+        This is what lets a stack of trajectories be templated. Without it the
+        writer has no registered shape for a later partition to point at.
+        """
         if self._phase_axis is None:
-            return [], []
+            return None
+        # Taken first: rendering is what puts the cached solve results into the
+        # blocks, and it is those very objects that are matched below.
+        blocks = self.blocks
+        current = self._phase_index(self._require_state().phase_idx)
+        steps = range(self.phase_steps)
+
+        # Where each event of the current partition's solve sits, so the same
+        # position can be read out of every other partition's.
+        origin: dict[int, tuple] = {}
+        for with_rephasing in (True, False):
+            for position, event in enumerate(self._prewinder_block(current, with_rephasing)):
+                origin[id(event)] = ("pre", with_rephasing, position)
+        for position, event in enumerate(self._rewinder_block(current)):
+            origin[id(event)] = ("rew", None, position)
+
+        def candidates(kind, with_rephasing, position):
+            solved = []
+            for step in steps:
+                events = (
+                    self._prewinder_block(step, with_rephasing) if kind == "pre"
+                    else self._rewinder_block(step)
+                )
+                if position >= len(events):
+                    # A partition that solves into a different number of events
+                    # is a change of *structure*, not of samples, and no shape
+                    # inventory can express it.
+                    return None
+                event = events[position]
+                if getattr(event, "type", None) != "grad":
+                    # Likewise a partition whose solve collapses to a trapezoid
+                    # -- a zero area, say. A different event *type* is not a
+                    # waveform this slot can be pointed at.
+                    return None
+                solved.append(event)
+            return solved
+
+        inventory = []
+        for block in blocks:
+            entry: dict[str, tuple] = {}
+            for event in block:
+                if getattr(event, "type", None) != "grad":
+                    continue  # a trapezoid carries no shape; its amplitude moves
+                placed = origin.get(id(event))
+                if placed is None:
+                    continue  # the trajectory itself: one designed waveform
+                solved = candidates(*placed)
+                if solved is None:
+                    continue  # refused later, with the block that owns it named
+                entry[_CHANNEL_KEY[event.channel]] = (
+                    tuple(source.waveform for source in solved),
+                    tuple(source.tt for source in solved),
+                )
+            inventory.append(entry)
+        return tuple(inventory)
+
+    def _phase_index(self, phase_idx):
+        """Validated partition index, or ``None`` when there is no phase axis."""
+        if self._phase_axis is None:
+            return None
         phase_idx = int(phase_idx)
         if not 0 <= phase_idx < self.phase_steps:
             raise IndexError(f"phase_idx must be in [0, {self.phase_steps}), got {phase_idx}")
+        return phase_idx
+
+    def _phase_events(self, phase_idx):
+        if self._phase_axis is None:
+            return [], []
+        phase_idx = self._phase_index(phase_idx)
         area = float(self._phase_areas[phase_idx])
-        if self._phase_template is None or area == 0.0:
+        if self._phase_template is None:
             return [], []
         scale = area / abs(self._phase_template.area)
         return [_scaled_gradient(self._phase_template, scale)], [_scaled_gradient(self._phase_template, -scale)]
 
-    def _run(self, seq, rotation, rotation_idx, phase_idx, phase_offset_rad):
-        if seq is None:
-            from pulserver.pypulseq import Sequence
+    def _prewinder_block(self, phase_idx, with_rephasing):
+        """The prewinder events for one partition, solved once instead of per shot.
 
-            seq = Sequence(self._opts)
+        Aligning the trajectory's prewinders against a phase-encoding lobe is a
+        gradient *solve* whenever the two share an axis: their summed moment is
+        an arbitrary waveform, and :func:`_aligned_gradients` re-solves it
+        rather than stacking two coincident max-slew ramps. A stack-of-spirals
+        with the excitation's rephasing folded in hits that on every shot, and
+        it is the single most expensive thing such a shot does.
+
+        It depends on the partition index and on whether the rephasing rides
+        along -- both fixed by *where* the shot is, not by the shot -- so
+        ``phase_steps`` of them cover the whole scan. The events are shared
+        across shots from then on, which is also what lets the sequence writer
+        keep its shape cache hitting on the solved waveform.
+        """
+        key = (phase_idx, with_rephasing)
+        cached = self._prewinder_cache.get(key)
+        if cached is None:
+            extra = list(self._phase_events(phase_idx)[0])
+            if with_rephasing:
+                extra.extend(self.slice_rephasing)
+            events = _aligned_gradients([*self.readout.prewinders, *extra], "right", self._opts)
+            if self.t_prephase_s > 0.0:
+                duration = max((pp.calc_duration(event) for event in events), default=0.0)
+                shift = self.t_prephase_s - duration
+                if shift > 0.0:
+                    for event in events:
+                        event.delay += shift
+            cached = self._prewinder_cache[key] = tuple(events)
+        return cached
+
+    def _rewinder_block(self, phase_idx):
+        """The rewinder events for one partition; see :meth:`_prewinder_block`."""
+        cached = self._rewinder_cache.get(phase_idx)
+        if cached is None:
+            cached = self._rewinder_cache[phase_idx] = tuple(
+                _aligned_gradients(
+                    [*self.readout.rewinders, *self._phase_events(phase_idx)[1]], "left", self._opts
+                )
+            )
+        return cached
+
+    def _run(self, seq, rotation, rotation_idx, phase_idx, phase_offset_rad):
         rotation = normalize_rotation(rotation)
-        phase_pre, phase_post = self._phase_events(phase_idx)
+        phase_idx = self._phase_index(phase_idx)
 
         for echo in range(self.num_echoes):
-            pre_extra = list(phase_pre)
-            if echo == 0:
-                pre_extra.extend(self.slice_rephasing)
-            pre = _aligned_gradients([*self.readout.prewinders, *pre_extra], "right", self._opts)
             if self.t_prephase_s > 0.0:
-                pre_duration = max((pp.calc_duration(event) for event in pre), default=0.0)
-                shift = self.t_prephase_s - pre_duration
-                if shift > 0.0:
-                    for event in pre:
-                        event.delay += shift
                 seq.add_block(
-                    *pre,
+                    *self._prewinder_block(phase_idx, echo == 0),
                     pp.make_delay(self.t_prephase_s),
                     *([rotation] if rotation is not None else []),
                 )
@@ -882,10 +995,9 @@ class _NonCartesianTrain(Readout):
                 *([rotation] if rotation is not None else []),
             )
 
-            post = _aligned_gradients([*self.readout.rewinders, *phase_post], "left", self._opts)
             if self.t_postphase_s > 0.0:
                 seq.add_block(
-                    *post,
+                    *self._rewinder_block(phase_idx),
                     pp.make_delay(self.t_postphase_s),
                     *([rotation] if rotation is not None else []),
                 )
@@ -895,15 +1007,16 @@ class _NonCartesianTrain(Readout):
 class NonCartesian2D(_NonCartesianTrain):
     """Planar readout; optional slice rephasing is right-aligned to its prewinder."""
 
-    def __init__(self, readout, *, slice_rephasing=None, num_echoes=1, rotation_label="LIN"):
+    def __init__(self, readout, *, slice_rephasing=None, num_echoes=1, rotation_label="LIN", **declared):
         super().__init__(
             readout,
             slice_rephasing=slice_rephasing,
             num_echoes=num_echoes,
             rotation_label=rotation_label,
+            **declared,
         )
 
-    def set_state(self, lin_idx=0, phase_offset_rad=0.0, rotation=None):
+    def _set_state(self, lin_idx=0, phase_offset_rad=0.0, rotation=None):
         """Set rotation label, receiver phase, and rotation for one shot."""
         self._replace_state(
             _NonCartesianState(
@@ -930,12 +1043,14 @@ class StackOfTrajectories(_NonCartesianTrain):
         num_echoes=1,
         rotation_label="LIN",
         phase_label="PAR",
+        **declared,
     ):
         super().__init__(
             readout,
             slice_rephasing=slice_rephasing,
             num_echoes=num_echoes,
             rotation_label=rotation_label,
+            **declared,
             phase_axis=phase_axis,
             phase_fov_m=fov_z_m,
             phase_steps=nz,
@@ -943,7 +1058,7 @@ class StackOfTrajectories(_NonCartesianTrain):
         )
         self.nz = int(nz)
 
-    def set_state(self, lin_idx=0, par_idx=0, phase_offset_rad=0.0, rotation=None):
+    def _set_state(self, lin_idx=0, par_idx=0, phase_offset_rad=0.0, rotation=None):
         """Set rotation/partition labels, receiver phase, and rotation."""
         self._replace_state(
             _NonCartesianState(
@@ -963,10 +1078,10 @@ class Projection(NonCartesian2D):
 class NonCartesian3D(NonCartesian2D):
     """Native 3D trajectory readout; the canonical shot may contain x/y/z gradients."""
 
-    def __init__(self, readout, *, num_echoes=1, rotation_label="LIN"):
+    def __init__(self, readout, *, num_echoes=1, rotation_label="LIN", **declared):
         if readout.trajectory.ndim != 2 or readout.trajectory.shape[1] != 3:
             raise ValueError("NonCartesian3D requires a trajectory with three columns")
-        super().__init__(readout, num_echoes=num_echoes, rotation_label=rotation_label)
+        super().__init__(readout, num_echoes=num_echoes, rotation_label=rotation_label, **declared)
 
 
 # Descriptive aliases retained alongside the concise class names.

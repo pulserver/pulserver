@@ -52,9 +52,12 @@ def make_rf_spoiling_schedule(
 
         phases = make_rf_spoiling_schedule(n_reps)
         for phase in phases:
-            excitation.set_state(phase_offset_rad=phase).add_to(seq)
-            readout.set_state(lin_idx=ky, phase_offset_rad=phase).add_to(seq)
-
+            excitation.set_state(phase_offset_rad=phase)
+            for _block in excitation:
+                seq.add_block(*_block)
+            readout.set_state(lin_idx=ky, phase_offset_rad=phase)
+            for _block in readout:
+                seq.add_block(*_block)
     .. plot::
        :include-source: false
 

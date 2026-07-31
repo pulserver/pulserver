@@ -6,8 +6,10 @@ import for the whole event layer::
 
     import pulserver.pypulseq as pp
 
-    seq = pp.Sequence()
     delay = pp.make_delay(1e-3)
+    # A Sequence is built from the structure that repeats and how often, so its
+    # every library row can be claimed before the first block is added.
+    seq = pp.Sequence(pp.Opts(), 1, delay)
 
 Only the objects listed in :data:`OVERRIDES` differ from upstream; everything
 else *is* upstream, imported here so that ``import pypulseq`` alongside this

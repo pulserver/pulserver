@@ -94,7 +94,9 @@ def test_spiral_variants_have_expected_winders_and_refocus(variant, has_pre, has
         assert arm.n_samples == 64
 
     seq = pp.Sequence(opts)
-    readout.NonCartesian2D(arm).set_state(lin_idx=3).add_to(seq)
+    _module = readout.NonCartesian2D(arm).set_state(lin_idx=3)
+    for _block in _module.blocks:
+        seq.add_block(*_block)
     _, k_full, *_ = seq.calculate_kspace()
     assert np.allclose(k_full[:, -1], 0.0, atol=1e-6)
     assert seq.check_timing()[0]
@@ -107,7 +109,9 @@ def test_radial_has_both_winders_and_nyquist_shot_count():
     assert spoke.has_prewinder and spoke.has_rewinder
     assert spoke.recommended_rotations == int(np.ceil(np.pi * 64 / 2))
     seq = pp.Sequence(opts)
-    readout.NonCartesian2D(spoke).set_state().add_to(seq)
+    _module = readout.NonCartesian2D(spoke).set_state()
+    for _block in _module.blocks:
+        seq.add_block(*_block)
     _, k_full, *_ = seq.calculate_kspace()
     assert np.allclose(k_full[:, -1], 0.0, atol=1e-6)
     assert seq.check_timing()[0]
@@ -128,7 +132,9 @@ def test_rosette_has_no_winders_and_derives_adc_sampling():
     assert np.max(acquired_steps) <= 1.0 / 0.22 + 1e-9
 
     seq = pp.Sequence(arm.system)
-    readout.NonCartesian2D(arm).set_state(lin_idx=2).add_to(seq)
+    _module = readout.NonCartesian2D(arm).set_state(lin_idx=2)
+    for _block in _module.blocks:
+        seq.add_block(*_block)
     assert seq.check_timing()[0]
     assert all(abs(gradient.area) < 1e-9 for gradient in arm.gradients)
     _, k_full, *_ = seq.calculate_kspace()
@@ -173,7 +179,9 @@ def test_slice_rephasing_is_right_aligned_with_prewinder():
     arm = readout.Spiral(opts, 0.22, 32, 8, variant="inward", num_points=256)
     gz = pp.make_trapezoid(channel="z", area=-30.0, system=opts)
     seq = pp.Sequence(opts)
-    readout.NonCartesian2D(arm, slice_rephasing=gz).set_state().add_to(seq)
+    _module = readout.NonCartesian2D(arm, slice_rephasing=gz).set_state()
+    for _block in _module.blocks:
+        seq.add_block(*_block)
     block = seq.get_block(1)
     duration = pp.calc_duration(block)
     assert pp.calc_duration(block.gz) == pytest.approx(duration)
@@ -184,7 +192,9 @@ def test_multiecho_labels_set_then_increment():
     opts = _opts()
     arm = readout.Radial(opts, 0.22, 32)
     seq = pp.Sequence(opts)
-    readout.NonCartesian2D(arm, num_echoes=3).set_state().add_to(seq)
+    _module = readout.NonCartesian2D(arm, num_echoes=3).set_state()
+    for _block in _module.blocks:
+        seq.add_block(*_block)
     assert _labels(seq, "ECO") == [("labelset", 0), ("labelinc", 1), ("labelinc", 1)]
 
 
@@ -201,7 +211,9 @@ def test_stack_generates_full_phase_template_and_labels_indices():
     )
     assert stack._phase_template is not None
     seq = pp.Sequence(opts)
-    stack.set_state(lin_idx=5, par_idx=2).add_to(seq)
+    stack.set_state(lin_idx=5, par_idx=2)
+    for _block in stack.blocks:
+        seq.add_block(*_block)
     assert seq.check_timing()[0]
     assert seq.duration()[0] == pytest.approx(stack.duration)
     assert _labels(seq, "LIN") == [("labelset", 5)]
@@ -212,7 +224,7 @@ def test_stack_generates_full_phase_template_and_labels_indices():
     # rephasing moment remains in this isolated readout-train test.
     assert np.allclose(k_full[:, -1], [0.0, 0.0, gz_reph.area], atol=1e-6)
     with pytest.raises(IndexError):
-        stack.set_state(par_idx=8).add_to(pp.Sequence(opts))
+        list(stack.set_state(par_idx=8))
 
 
 def test_projection_accepts_matrix_rotation_with_fast_sequence():
@@ -228,8 +240,78 @@ def test_arbitrary_native_3d_path():
     shot = readout.Arbitrary(opts, path, matrix=32)
     train = readout.NonCartesian3D(shot)
     seq = pp.Sequence(opts)
-    train.set_state(lin_idx=1).add_to(seq)
+    train.set_state(lin_idx=1)
+    for _block in train.blocks:
+        seq.add_block(*_block)
     assert shot.gz is not None
     assert seq.check_timing()[0]
     _, k_full, *_ = seq.calculate_kspace()
     assert np.allclose(k_full[:, -1], 0.0, atol=1e-6)
+
+
+def _stack(opts, nz=8):
+    arm = readout.Spiral(opts, 0.22, 32, 8, variant="in_out", num_points=256)
+    gz_reph = pp.make_trapezoid(channel="z", area=-20.0, system=opts)
+    return readout.StackOfTrajectories(arm, fov_z_m=0.16, nz=nz, slice_rephasing=gz_reph)
+
+
+def test_a_stacks_winders_are_solved_once_per_partition_not_once_per_shot():
+    """The single most expensive thing a stack-of-spirals shot used to do.
+
+    A partition lobe and the excitation's rephasing share the z axis, so their
+    summed moment is an arbitrary waveform and ``_aligned_gradients`` re-solves
+    it. That solve depends on the partition and on whether the rephasing rides
+    along -- never on the shot -- so a scan pays ``nz`` of them, not one per
+    interleaf.
+    """
+    opts = _opts()
+    stack = _stack(opts, nz=4)
+
+    for lin_idx in range(6):
+        for par_idx in range(4):
+            assert stack.set_state(lin_idx=lin_idx, par_idx=par_idx).blocks
+    assert len(stack._prewinder_cache) == 4, "one per partition, not one per shot"
+    assert len(stack._rewinder_cache) == 4
+
+    # ...and the solved events are shared from then on, which is what keeps the
+    # sequence writer's shape cache hitting on them.
+    first = stack.set_state(lin_idx=0, par_idx=2).blocks
+    again = stack.set_state(lin_idx=7, par_idx=2).blocks
+    assert first[0][0] is again[0][0]
+
+
+def test_a_stack_registers_the_same_blocks_cached_as_freshly_solved():
+    """Solving a partition once is an optimisation the emitted file cannot see."""
+    import pulserver.io as pio
+    from pulserver.pypulseq import Sequence as PulserverSequence
+
+    opts = _opts()
+    shots = ((0, 0), (3, 2), (1, 2), (4, 7))
+
+    cached = PulserverSequence._unstructured(opts)
+    shared = _stack(opts)
+    for lin_idx, par_idx in shots:
+        shared.set_state(lin_idx=lin_idx, par_idx=par_idx, phase_offset_rad=0.1 * lin_idx)
+        for _block in shared.blocks:
+            cached.add_block(*_block)
+    fresh = PulserverSequence._unstructured(opts)
+    for lin_idx, par_idx in shots:
+        _module = _stack(opts).set_state(
+            lin_idx=lin_idx, par_idx=par_idx, phase_offset_rad=0.1 * lin_idx
+        )
+        for _block in _module.blocks:
+            fresh.add_block(*_block)
+
+    assert cached.block_events == fresh.block_events
+    assert cached.block_durations == fresh.block_durations
+    # The bytes themselves, which is the constraint that actually binds: a
+    # shared solved waveform must register the same shape as a fresh one.
+    assert pio.write(cached, output=None) == pio.write(fresh, output=None)
+
+
+def test_a_stack_still_rejects_an_out_of_range_partition_on_a_cache_hit():
+    """The cache must not become a hole in the validation."""
+    stack = _stack(_opts(), nz=4)
+    assert stack.set_state(lin_idx=0, par_idx=2).blocks
+    with pytest.raises(IndexError, match="phase_idx"):
+        stack.set_state(lin_idx=0, par_idx=9).blocks  # noqa: B018 - the access is the trigger

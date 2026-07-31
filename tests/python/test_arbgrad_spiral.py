@@ -126,7 +126,7 @@ def test_base_waveform_consumable_by_fast_sequence_with_rotation():
     grad_si = arbgrad.to_gradient_tesla_per_meter(wf, FOV_M, N_PIX, GAMMA_HZ_PER_T)
     angles = arbgrad.shot_angles(wf.n_shots, mode="golden")
 
-    seq = Sequence(opts)
+    seq = Sequence._unstructured(opts)
     for angle in angles[:3]:
         gx = pp.make_arbitrary_grad(channel="x", waveform=np.ascontiguousarray(grad_si[:, 0]), system=opts)
         gy = pp.make_arbitrary_grad(channel="y", waveform=np.ascontiguousarray(grad_si[:, 1]), system=opts)

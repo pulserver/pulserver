@@ -113,8 +113,9 @@ class _Bssfp(Readout):
         excitation_rephaser,
         segments: int,
         bandwidth_hz_px: float,
+        **declared,
     ) -> None:
-        super().__init__(system)
+        super().__init__(system, **declared)
         self._opts = system
         self.fov = tuple(float(value) for value in fov)
         self.matrix = tuple(int(value) for value in matrix)
@@ -237,7 +238,7 @@ class _Bssfp(Readout):
 
         self.set_state()
 
-    def set_state(self, segment_idx: int = 0, phase_offset_rad: float = 0.0):
+    def _set_state(self, segment_idx: int = 0, phase_offset_rad: float = 0.0):
         segment_idx = int(segment_idx)
         if not 0 <= segment_idx < self.num_segments:
             raise IndexError(f"segment_idx must be in [0, {self.num_segments}), got {segment_idx}")

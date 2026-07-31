@@ -50,8 +50,9 @@ class PulseqSequence(ABC):
     ...         tr_ms = params.param_float(protocol, UIParam.TR)
     ...         return {"valid": tr_ms >= 10.0, "duration": None, "info": None}
     ...     def make_sequence(self, opts, protocol, output_path):
-    ...         seq = pp.Sequence(opts)
-    ...         seq.add_block(pp.make_delay(1e-3))
+    ...         delay = pp.make_delay(1e-3)
+    ...         seq = pp.Sequence(opts, 1, delay)
+    ...         seq.add_block(delay)
     ...         seq.write(output_path)
     >>> plugin = DemoSequence()
     >>> plugin.get_default_protocol(pp.Opts())[UIParam.TR].value

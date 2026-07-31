@@ -496,7 +496,7 @@ def read(source: str | Path | bytes, *, system=None):
     definitions = _parse_definitions(payload)
     system = _system_from_definitions(definitions, system)
 
-    seq = Sequence(system=system)
+    seq = Sequence._unstructured(system=system)
     plain, plotting, extensions = build_views(seq, payload)
 
     for block_index in plain.block_events:

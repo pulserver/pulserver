@@ -13,8 +13,12 @@ a few of its objects:
 ```python
 import pulserver.pypulseq as pp
 
-seq = pp.Sequence()
-seq.add_block(pp.make_delay(1e-3))
+delay = pp.make_delay(1e-3)
+# `Sequence` always takes the structure that repeats and how often: one block,
+# played once. That is what lets it claim every library row before the first
+# `add_block`.
+seq = pp.Sequence(pp.Opts(), 1, delay)
+seq.add_block(delay)
 ```
 
 `pulserver.design` is the toolbox on top of it: one factory per RF pulse,
@@ -31,7 +35,12 @@ excitation = design.make_slice_selective_pulse(0.35, 5e-3, system=system)
 readout = design.make_line_readout(system, (0.22, 0.22), (128, 128))
 loop = design.make_cartesian_sampling((128, 128), acceleration=2)
 
-seq = pp.Sequence(system)
+# A Sequence is built from the structure that repeats and how many times it
+# repeats -- here one excitation plus one readout, once per loop entry. Every
+# library row is claimed from that up front, so the loop below only writes the
+# numbers that move.
+readout.set_state(lin_idx=0)
+seq = pp.Sequence(system, len(loop), excitation, readout)
 for shot in loop:
     for block in excitation:
         seq.add_block(*block)

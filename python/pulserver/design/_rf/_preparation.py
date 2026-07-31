@@ -21,8 +21,8 @@ FAT_SHIFT_PPM = -3.45
 #: FOV-transform exemptions every magnetization preparation carries: the
 #: pulse takes its frequency offset and orientation from its own design, so
 #: the interpreter must not reposition or rotate it with the imaging FOV.
-#: Emitted through :meth:`~pulserver.SequenceModule.set_flags`, which scopes
-#: them to the module and resets them on its last block.
+#: Declared as module flags at construction, which scopes them to the module
+#: and resets them on its last block.
 FOV_EXEMPT_FLAGS = ("NOPOS", "NOROT")
 
 
@@ -42,8 +42,7 @@ class FatSaturationPulse(RfModule):
         self.labels_on = labels_on
         self.labels_off = labels_off
         self.duration = duration
-        super().__init__(system, ((rf,), spoiler))
-        self.set_flags(**dict.fromkeys(FOV_EXEMPT_FLAGS, 1))
+        super().__init__(system, ((rf,), spoiler), flags=dict.fromkeys(FOV_EXEMPT_FLAGS, 1))
 
 
 def make_fat_saturation_pulse(
@@ -803,10 +802,9 @@ class DiffusionPrepPulse(RfModule):
         gradient_block_indices.append(len(blocks))
         blocks.extend(((self.gradient,), (self.rf90_up,), self.spoiler))
         self._diffusion_gradient_block_indices = tuple(gradient_block_indices)
-        super().__init__(system, blocks)
-        self.set_flags(**dict.fromkeys(FOV_EXEMPT_FLAGS, 1))
+        super().__init__(system, blocks, flags=dict.fromkeys(FOV_EXEMPT_FLAGS, 1))
 
-    def set_state(
+    def _set_state(
         self,
         *,
         b_value: float | None = None,
@@ -818,7 +816,7 @@ class DiffusionPrepPulse(RfModule):
         """Set requested b-value/direction and optional RF offsets for this use."""
         self._requested_b_value = self.b_value if b_value is None else float(b_value)
         self.gradient_scale(self._requested_b_value)
-        return super().set_state(
+        return super()._set_state(
             rotation=rotation,
             freq_offset_hz=freq_offset_hz,
             phase_offset_rad=phase_offset_rad,

@@ -93,8 +93,8 @@ def calc_traversal_order(n: int, order: str = "sequential", *, seed: int = 0) ->
         for par in _lowlevel.calc_traversal_order(nz, "center_out"):
             for view in range(nviews):
                 readout.set_state(lin_idx=view, par_idx=int(par), rotation=next(rotations))
-                readout.add_to(seq)
-
+                for _block in readout:
+                    seq.add_block(*_block)
     See Also
     --------
     pulserver.design.make_slice_loop : slice/SMS grouping built on this.

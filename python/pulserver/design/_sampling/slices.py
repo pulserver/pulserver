@@ -69,10 +69,9 @@ def make_slice_loop(num_slices, spacing_m, *, order="interleaved", sms_factor=1)
 
         offsets = slices.to_frequencies(excitation.gradients[0].amplitude)
         for shot in slices.shots:
-            excitation.set_state(freq_offset_hz=float(offsets[shot[0]]))
-            excitation.set_labels(pp.make_label(type="SET", label="SLC", value=int(shot[0])))
-            excitation.add_to(seq)
-
+            excitation.set_state(freq_offset_hz=float(offsets[shot[0]]), SLC=int(shot[0]))
+            for _block in excitation:
+                seq.add_block(*_block)
     Pass the whole row instead of ``[0]`` for an SMS multiband pulse.
 
     The slice loop is deliberately independent of the k-space loop: nest them

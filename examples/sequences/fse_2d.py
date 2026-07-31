@@ -188,8 +188,7 @@ class Fse2DPulseqSequence(Sequence):
         prot = dict_to_protocol(protocol)
         cfg = _read_protocol(prot)
 
-        seq = pp.Sequence(opts)
-        n_shots, n_directions = _build_public(seq, opts, cfg)
+        seq, n_shots, n_directions = _build_public(opts, cfg)
 
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
         seq.set_definition("Name", "fse_2d")
@@ -303,7 +302,7 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
             if strict:
                 return None
 
-    d_exc = sum(pp.calc_duration(*block) for block in excitation_pulse)
+    d_exc = sum(pp.calc_duration(*block) for block in excitation_pulse.blocks)
     center = pp.calc_rf_center(excitation_pulse.rf)[0] + excitation_pulse.rf.delay
     gap_s = max(0.0, train.t_exc_center_to_train_start - (d_exc - center))
     raster = opts.block_duration_raster
@@ -323,7 +322,7 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
     }
 
 
-def _build_public(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
+def _build_public(opts: pp.Opts, cfg: _Config):
     timing = _compute_public(opts, cfg, strict=False)
     excitation_pulse = timing["excitation"]
     train = timing["train"]
@@ -343,6 +342,22 @@ def _build_public(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
         cfg.nslices, slice_step or cfg.slice_thickness_m, order="sequential"
     )
     offsets_hz = slices.to_frequencies(excitation_pulse.gradients[0].amplitude) if slice_step else None
+    # One shot's chronology, handed over once; the TR delay stays outside so it
+    # lands between complete passes. The train goes in as a *module* so the
+    # sequence can reach its waveform inventory.
+    first_freq = float(offsets_hz[slices.shots[0][0]]) if offsets_hz is not None else 0.0
+    if diffusion is not None:
+        diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotations[0])
+    excitation_pulse.set_state(freq_offset_hz=first_freq, **slices.label_state(0))
+    train.set_state(lin_idx=np.resize(segments[0][:, 0].astype(int), cfg.etl), freq_offset_hz=first_freq)
+    tr_struct = [
+        *([diffusion] if diffusion is not None else []),
+        excitation_pulse,
+        *([gap] if gap is not None else []),
+        train,
+    ]
+    seq = pp.Sequence(opts, len(rotations) * len(slices.shots) * len(segments), *tr_struct)
+
     for rotation in rotations:
         for sl, band in enumerate(slices.shots):
             freq = float(offsets_hz[band[0]]) if offsets_hz is not None else 0.0
@@ -352,8 +367,7 @@ def _build_public(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
                     diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotation)
                     for block in diffusion:
                         seq.add_block(*block)
-                excitation_pulse.set_state(freq_offset_hz=freq)
-                excitation_pulse.set_labels(*slices.labels(sl))
+                excitation_pulse.set_state(freq_offset_hz=freq, **slices.label_state(sl))
                 for block in excitation_pulse:
                     seq.add_block(*block)
                 if gap is not None:
@@ -363,7 +377,7 @@ def _build_public(seq, opts: pp.Opts, cfg: _Config) -> tuple[int, int]:
                     seq.add_block(*block)
                 if tr_delay is not None:
                     seq.add_block(tr_delay)
-    return len(segments), len(rotations)
+    return seq, len(segments), len(rotations)
 
 
 PLUGIN = Fse2DPulseqSequence()

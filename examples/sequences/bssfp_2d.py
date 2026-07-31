@@ -76,7 +76,7 @@ class Bssfp2DPulseqSequence(Sequence):
             return {"valid": False, "duration": None, "info": "NUM_FRAMES must be >= 1"}
         try:
             train = _make_train(opts, cfg)
-            duration = sum(pp.calc_duration(*block) for block in train) * cfg.num_frames
+            duration = sum(pp.calc_duration(*block) for block in train.blocks) * cfg.num_frames
             if cfg.trigger != TriggerType.NONE:
                 duration += 1e-3 * cfg.num_frames
         except (TypeError, ValueError) as error:
@@ -90,17 +90,50 @@ class Bssfp2DPulseqSequence(Sequence):
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
         cfg = _read_protocol(dict_to_protocol(protocol))
         train = _make_train(opts, cfg)
-        seq = pp.Sequence(opts)
         frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+
+        # The *frame* is the pass, not the train: a volume-start trigger plays
+        # once per frame and owns a library row, so it has to be inside the
+        # template -- a block outside it may own nothing. One trigger plus one
+        # train is therefore the repeating unit, and every pass is identical.
+        # Built once and replayed: the template recognises its own blocks by
+        # event *identity*, so a trigger re-made per frame would not be the
+        # template's trigger and would be refused as a foreign block.
+        trigger_event = (
+            pp.make_trigger(cfg.trigger, duration=1e-3, system=opts)
+            if cfg.trigger != TriggerType.NONE
+            else None
+        )
+        # Its counter is one event whose *value* moves, for the same reason:
+        # a label re-made per frame is a different object and the block would
+        # stop being the template's.
+        trigger_label = (
+            pp.make_label(type="SET", label=frames.axes[0].label, value=0)
+            if trigger_event is not None
+            else None
+        )
+        trigger_block = (
+            (trigger_event, trigger_label) if trigger_event is not None else None
+        )
+        train.set_state(
+            phase_offset_rad=0.0,
+            **({} if trigger_block is not None else frames.label_state(0)),
+        )
+        seq = pp.Sequence(
+            opts, len(frames), *([trigger_block] if trigger_block is not None else []), train
+        )
         for frame in range(len(frames)):
-            (phase_label,) = frames.labels(frame)
-            if cfg.trigger != TriggerType.NONE:
-                seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
-                phase_label = None
-            train.set_state(phase_offset_rad=0.0)
-            for block_idx, block in enumerate(train):
-                labels = (phase_label,) if block_idx == 0 and phase_label is not None else ()
-                seq.add_block(*block, *labels)
+            counters = frames.label_state(frame)
+            if trigger_event is not None:
+                trigger_label.value = counters[frames.axes[0].label]
+                seq.add_block(trigger_event, trigger_label)
+                counters = {}
+            # The frame counter goes on the module: set_state writes it into the
+            # label event on its first block, so it reaches the file through
+            # that block's payload.
+            train.set_state(phase_offset_rad=0.0, **counters)
+            for block in train:
+                seq.add_block(*block)
         seq.set_definition("Name", "bssfp_2d")
         seq.set_definition("FOV", [cfg.fov_x_m, cfg.fov_y_m, cfg.slice_thickness_m])
         seq.set_definition("TE", train.te_s)

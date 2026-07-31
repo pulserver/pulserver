@@ -173,14 +173,21 @@ class Zte3DPulseqSequence(Sequence):
         timing = _compute_timing(opts=opts, cfg=cfg, strict=False)
 
         zte = timing["readout"]
-        seq = pp.Sequence(opts)
         # One designed segment, replayed under one rotation per shot. The
         # spoke label stays global, so the reconstruction still sees a flat
         # 0..num_spokes-1 LIN counter.
+        #
+        # The segment *is* the TR, so it is handed over once and each shot
+        # supplies only its spoke indices and its rotation quaternion -- a
+        # rotation is one event whose numbers move, not a change of structure.
         views = np.arange(zte.num_views)
-        for shot, rotation in enumerate(timing["rotations"]):
-            zte.set_state(lin_idx=shot * zte.num_views + views, rotation=rotation).add_to(seq)
-
+        rotations = timing["rotations"]
+        zte.set_state(lin_idx=views, rotation=rotations[0])
+        seq = pp.Sequence(opts, len(rotations), zte)
+        for shot, rotation in enumerate(rotations):
+            zte.set_state(lin_idx=shot * zte.num_views + views, rotation=rotation)
+            for _block in zte:
+                seq.add_block(*_block)
         seq.set_definition("Name", "zte_3d")
         seq.set_definition("FOV", [cfg.fov_m, cfg.fov_m, cfg.fov_m])
         seq.set_definition("Flip", cfg.flip_deg)

@@ -94,7 +94,7 @@ class Bssfp3DPulseqSequence(Sequence):
             return {"valid": False, "duration": None, "info": "NUM_FRAMES must be >= 1"}
         try:
             train = _make_train(opts, cfg)
-            one_segment = sum(pp.calc_duration(*block) for block in train)
+            one_segment = sum(pp.calc_duration(*block) for block in train.blocks)
         except (TypeError, ValueError) as error:
             return {"valid": False, "duration": None, "info": str(error)}
         duration = one_segment * train.num_segments * cfg.num_frames
@@ -109,22 +109,35 @@ class Bssfp3DPulseqSequence(Sequence):
     def make_sequence(self, opts: pp.Opts, protocol: dict[str, dict], output_path: str) -> None:
         cfg = _read_protocol(dict_to_protocol(protocol))
         train = _make_train(opts, cfg)
-        seq = pp.Sequence(opts)
         frames = design.make_counter_loop(cfg.num_frames, label="PHS")
+
+        # One segment is the TR, so it is handed over once and each pass supplies
+        # only the numbers that move. The frame counter is re-SET on every
+        # segment rather than only the first: re-setting a counter that already
+        # holds the right value is free, and it keeps every pass over the
+        # template structurally identical, which is what lets there be a
+        # template at all.
+        train.set_state(
+            segment_idx=0,
+            phase_offset_rad=0.0,
+            **({} if cfg.trigger != TriggerType.NONE else frames.label_state(0)),
+        )
+        seq = pp.Sequence(opts, len(frames) * train.num_segments, train)
         for frame in range(len(frames)):
-            (phase_label,) = frames.labels(frame)
+            counters = frames.label_state(frame)
             if cfg.trigger != TriggerType.NONE:
-                seq.add_block(pp.make_trigger(cfg.trigger, duration=1e-3, system=opts), phase_label)
-                phase_label = None
+                # With a trigger the counter rides the trigger's own block, so
+                # the segments carry none.
+                name, value = next(iter(counters.items()))
+                seq.add_block(
+                    pp.make_trigger(cfg.trigger, duration=1e-3, system=opts),
+                    pp.make_label(type="SET", label=name, value=value),
+                )
+                counters = {}
             for segment_idx in range(train.num_segments):
-                train.set_state(segment_idx=segment_idx, phase_offset_rad=0.0)
-                for block_idx, block in enumerate(train):
-                    labels = (
-                        (phase_label,)
-                        if segment_idx == 0 and block_idx == 0 and phase_label is not None
-                        else ()
-                    )
-                    seq.add_block(*block, *labels)
+                train.set_state(segment_idx=segment_idx, phase_offset_rad=0.0, **counters)
+                for block in train:
+                    seq.add_block(*block)
         seq.set_definition("Name", "bssfp_3d")
         seq.set_definition("FOV", [cfg.fov_x_m, cfg.fov_y_m, cfg.fov_z_m])
         seq.set_definition("TE", train.te_s)

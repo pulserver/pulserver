@@ -296,8 +296,6 @@ class GrePulseqSequence(Sequence):
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
-        seq = pp.Sequence(opts)
-
         sampling = design.make_cartesian_sampling((nx_ro, ny_pe), acceleration=ry, calibration=acs_lines)
         slice_step_m = slice_spacing_m if nslices > 1 else 0.0
         slices = design.make_slice_loop(nslices, slice_step_m or slice_thickness_m, order="sequential")
@@ -308,6 +306,26 @@ class GrePulseqSequence(Sequence):
         )
         phase_index = 0
 
+        # One shot's chronology, handed over once: excitation, TE delay, readout,
+        # slice spoiler. The loop below supplies only the numbers that move. The
+        # TR delay is deliberately outside it -- this plugin plays one per
+        # phase-encode step, after every slice, so it falls between complete
+        # passes over the template rather than inside one.
+        #
+        # Any valid state will do: the template takes the *structure* -- which
+        # blocks, which events, which shapes -- so the numbers standing in here
+        # are the ones the first shot overwrites. The labels have to be set now
+        # too, because a label is an event and the template records it.
+        pulse.set_state(freq_offset_hz=0.0, phase_offset_rad=0.0, **slices.label_state(0), LIN=0)
+        line.set_state(lin_idx=0)
+        tr_struct = [
+            pulse,
+            *([te_delay] if te_delay is not None else []),
+            line,
+            gz_spoil,
+        ]
+        seq = pp.Sequence(opts, len(sampling) * len(slices), *tr_struct)
+
         # PE-outer / SLC-inner loop order: fftrecon reshapes as [cha, RO, PE, SLC]
         # assuming slice is the fast (innermost) dimension.  LABELSET SLC and LIN
         # are required so pulserverlib writes correct slc/lin entries into the
@@ -315,14 +333,17 @@ class GrePulseqSequence(Sequence):
         # reconstruction silently collapses to a single image.
         for shot in sampling:
             ky = int(shot[0, 0])
-            label_lin = pp.make_label(type="SET", label="LIN", value=ky)
 
             for sl, band in enumerate(slices.shots):
                 offset_hz = float(slice_offsets_hz[band[0]]) if slice_offsets_hz is not None else 0.0
 
                 rf_phase = float(rf_phases[phase_index])
-                pulse.set_state(freq_offset_hz=offset_hz, phase_offset_rad=rf_phase)
-                pulse.set_labels(*slices.labels(sl), label_lin)
+                pulse.set_state(
+                    freq_offset_hz=offset_hz,
+                    phase_offset_rad=rf_phase,
+                    **slices.label_state(sl),
+                    LIN=ky,
+                )
                 for block in pulse:
                     seq.add_block(*block)
                 if te_delay is not None:
@@ -398,7 +419,7 @@ def _compute_timing(
         voxel_size=slice_thickness_m,
     )
 
-    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse.blocks)
     rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
     min_te_s = (d_pulse - rf_center_s) + line.t_first_echo_s
     block_raster_s = opts.block_duration_raster

@@ -16,9 +16,18 @@ on the toolbox.
 **Nothing here replaces the way you already write PyPulseq.** `seq` is still a
 `Sequence`, blocks still go in with `seq.add_block`, and the loop nesting is
 still your own `for` statements — which is what keeps a preparation, a trigger
-or a dummy TR insertable at any level. Two things change: the events you would
-have built and mutated by hand come pre-assembled as modules, and the index
-bookkeeping comes from a loop object instead of `range()`.
+or a dummy TR insertable at any level. Three things change: the events you would
+have built and mutated by hand come pre-assembled as modules, the index
+bookkeeping comes from a loop object instead of `range()`, and the `Sequence` is
+handed the structure that repeats and how many times it repeats when you build
+it — `Sequence(system, num_passes, *modules_or_blocks)`.
+
+That last one is what makes the writer fast rather than merely tidy. Every event
+library row the scan can want is claimed from the declared structure up front, so
+`add_block` stops interning events and becomes a handful of scalar writes into a
+row that already exists at an ID already settled. The period need not be the TR:
+it is whatever actually repeats — a frame, if a trigger plays once per frame; the
+whole scan, if there is a once-only navigator or reference pass at either end.
 
 | Object | Answers | Replaces |
 | --- | --- | --- |
@@ -183,8 +192,7 @@ for lin_idx in sampling.flatten()[:, 0].astype(int):
         phase = float(phases[i])
         i += 1
 
-        excitation.set_state(freq_offset_hz=float(offsets_hz[s]), phase_offset_rad=phase)
-        excitation.set_labels(SLC=s)
+        excitation.set_state(freq_offset_hz=float(offsets_hz[s]), phase_offset_rad=phase, SLC=s)
         for block in excitation:
             seq.add_block(*block)
 
@@ -215,23 +223,26 @@ Three things differ from PyPulseq, and each buys something:
   out reverts to its default. PyPulseq's `rf.freq_offset = ...` mutates an
   object that survives the iteration, so a value set three shots ago can still
   be in effect; `set_state` makes that impossible.
-- **`set_labels` writes the counters the *loop* owns** — `SLC` here, and `REP`,
-  `SET`, `PHS`, `AVG` when those loops exist. It is the module-level spelling
-  of `seq.add_block(..., pp.make_label(type="SET", label="SLC", value=s))`,
-  and it exists because the label has to land on the module's *first* block,
-  which you would otherwise have to unpack the snapshot to reach. The keyword
-  form above is the short one; `set_labels(*slices.labels(s))` is the same
-  thing sourced from the loop, which is what you want as soon as the slice
-  order is not `sequential`.
+- **An UPPERCASE keyword is a counter the *loop* owns** — `SLC` here, and
+  `REP`, `SET`, `PHS`, `AVG` when those loops exist. It is the module-level
+  spelling of `seq.add_block(..., pp.make_label(type="SET", label="SLC",
+  value=s))`, and it goes through the module because the label has to land on
+  its *first* block, which you would otherwise have to unpack the snapshot to
+  reach. The literal above is the short form; `**slices.label_state(s)` is the
+  same thing sourced from the loop, which is what you want as soon as the slice
+  order is not `sequential`. Unlike the numbers, a counter *persists* until
+  something changes it: the event carrying it is part of the module's structure
+  from the moment you first name it.
 - **`lin_idx` doubles as the `LIN` label.** The readout emits `SET LIN` from
   the index you pass, so the reconstruction sees exactly what was played and
   you never write a `LIN` label yourself.
 
-When a module needs no per-block handling, `add_to` collapses its two lines
-into one:
+`set_state` returns the module, so a shot with nothing else to do is one
+statement:
 
 ```python
-readout.set_state(lin_idx=lin_idx, phase_offset_rad=phase).add_to(seq)
+for block in readout.set_state(lin_idx=lin_idx, phase_offset_rad=phase):
+    seq.add_block(*block)
 ```
 
 Modules are deliberately **not** callable. `set_state` then iterate is the only
@@ -263,8 +274,8 @@ when `sms_factor > 1` puts several bands in one shot:
 
 ```python
 for s, band in enumerate(slices.shots):
-    excitation.set_state(freq_offset_hz=offsets_hz[band])   # one entry, or one per band
-    excitation.set_labels(*slices.labels(s))
+    # one offset, or one per band
+    excitation.set_state(freq_offset_hz=offsets_hz[band], **slices.label_state(s))
 ```
 
 **`iter()` / `next()` instead of an index.** `phases[i]` above needs you to
@@ -279,8 +290,10 @@ rotations = iter(design.make_noncartesian_2d_sampling(matrix, views=total_shots)
 
 for frame in range(n_frames):
     for s in range(len(slices)):
-        excitation.set_state(phase_offset_rad=float(next(phases))).add_to(seq)
-        readout.set_state(lin_idx=s, rotation=next(rotations)).add_to(seq)
+        for block in excitation.set_state(phase_offset_rad=float(next(phases))):
+            seq.add_block(*block)
+        for block in readout.set_state(lin_idx=s, rotation=next(rotations)):
+            seq.add_block(*block)
 ```
 
 Re-`iter()` inside a loop instead, and each outer position replays the same
@@ -463,21 +476,44 @@ class GreSequence(Sequence):
             len(sampling) * len(slices), increment=RF_SPOIL_INCREMENT_RAD
         )
 
-        seq = pp.Sequence(opts)
+        # One shot's chronology, declared once: excitation, TE delay, readout.
+        # A `Sequence` is always built from the structure that repeats and how
+        # many times it repeats, because that is what lets it claim every library
+        # row before the first block is added -- `add_block` then writes the
+        # handful of numbers that move into a row that already exists.
+        #
+        # The TR delay is deliberately outside it: one is played per phase-encode
+        # step, after every slice, so it falls *between* complete passes over the
+        # template. A block outside the template may own no library row, which a
+        # pure delay does not.
+        excitation.set_state(freq_offset_hz=float(offsets_hz[0]), phase_offset_rad=0.0, SLC=0)
+        readout.set_state(lin_idx=0)
+        seq = pp.Sequence(
+            opts,
+            len(sampling) * len(slices),
+            excitation,
+            *([te_delay] if te_delay is not None else []),
+            readout,
+        )
+
         i = 0
         for lin_idx in sampling.flatten()[:, 0].astype(int):
             for s in range(len(slices)):
                 phase = float(phases[i])
                 i += 1
 
-                excitation.set_state(freq_offset_hz=float(offsets_hz[s]), phase_offset_rad=phase)
-                excitation.set_labels(SLC=s)
-                excitation.add_to(seq)
+                excitation.set_state(
+                    freq_offset_hz=float(offsets_hz[s]), phase_offset_rad=phase, SLC=s
+                )
+                for block in excitation:
+                    seq.add_block(*block)
 
                 if te_delay is not None:
                     seq.add_block(te_delay)
 
-                readout.set_state(lin_idx=int(lin_idx), phase_offset_rad=phase).add_to(seq)
+                readout.set_state(lin_idx=int(lin_idx), phase_offset_rad=phase)
+                for block in readout:
+                    seq.add_block(*block)
 
             if tr_delay is not None:
                 seq.add_block(tr_delay)

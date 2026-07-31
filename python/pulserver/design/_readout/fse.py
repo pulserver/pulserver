@@ -86,6 +86,7 @@ from .._system import (
     quantize_readout_timing,
     round_to_raster,
 )
+from ..._core._module import _CHANNEL_KEY
 from ._base import Readout, adopt_waveform, rescale_trap
 
 RF_REFOCUS_TIME_S = 3.0e-3
@@ -194,8 +195,9 @@ class _FseTrain(Readout):
         z_spoil_factor=DEFAULT_Z_SPOIL_FACTOR,
         ro_axis="x",
         derate=True,
+        **declared,
     ):
-        Readout.__init__(self, system)
+        Readout.__init__(self, system, **declared)
         if etl < 1:
             raise ValueError(f"etl must be >= 1, got {etl}")
         if refoc_rf is None or refoc_gz is None:
@@ -341,6 +343,55 @@ class _FseTrain(Readout):
             lambda record: self._retune(record, self._require_state()),
         )
 
+    def waveform_inventory(self):
+        """Every partition's z lobes, so a TR template can move the samples.
+
+        A partition encode rides the slice crushers, and two gradients summed on
+        one axis are an arbitrary waveform that moves with the encode -- the one
+        thing this train cannot express by rescaling a trapezoid. It depends on
+        ``kz`` alone, though, and the partition count is fixed at construction,
+        so the complete candidate set is ``nz`` waveforms per lobe and it can be
+        stated here rather than discovered per shot.
+
+        This is what lets an FSE 3D train be templated at all. Without it the
+        writer has no registered shape for a later partition to point at, and
+        the choice would be between compressing samples inside ``add_block`` and
+        emitting partition 0's shape under partition 3's amplitude.
+        """
+        if self._par is None:
+            return None
+        # Taken first: the layout record is built by rendering, and it is what
+        # names the two lobes whose samples move.
+        blocks = self.blocks
+        record = self._layout[2] if self._layout else {}
+        pre_events, rew_events = record.get("gs5") or (), record.get("gs7") or ()
+        if not pre_events and not rew_events:
+            return None
+
+        # Solved once per partition, which is what _partition_cache is for; the
+        # waveform *object* is shared with the shot that adopts it, so a block
+        # naming its samples resolves by identity and never compares arrays.
+        lobes = [self._partition_lobes(kz) for kz in range(len(self._par.areas))]
+        sources: dict[int, tuple] = {}
+        for event in pre_events:
+            sources[id(event)] = tuple(pair[0] for pair in lobes)
+        for event in rew_events:
+            sources[id(event)] = tuple(pair[1] for pair in lobes)
+
+        inventory = []
+        for block in blocks:
+            entry: dict[str, tuple] = {}
+            for event in block:
+                candidates = sources.get(id(event))
+                if candidates is None:
+                    continue
+                entry[_CHANNEL_KEY[event.channel]] = (
+                    tuple(source.waveform for source in candidates),
+                    tuple(source.tt for source in candidates),
+                )
+            inventory.append(entry)
+        return tuple(inventory)
+
     def _retune(self, record, state):
         """Rewrite this shot's numbers on the events the layout already owns."""
         freq_offset = state.freq_offset_hz
@@ -457,11 +508,6 @@ class _FseTrain(Readout):
         record.setdefault("refoc", [])
         for name in ("pe_pre", "pe_rew", "pe_label", "gs5", "gs7", "par_label"):
             record.setdefault(name, [])
-        if seq is None:
-            import pulserver.pypulseq as _ps
-
-            seq = _ps.Sequence(self._opts)
-
         lin = self._norm(lin_idx, self._pe.label) if self._pe is not None else None
         par = self._norm(par_idx, self._par.label) if self._par is not None else None
 
@@ -523,7 +569,7 @@ class MultiEchoSE(_FseTrain):
     def __init__(self, system, fov_x_m, nx, etl, refoc_rf, refoc_gz, **kw):
         super().__init__(system, fov_x_m, nx, etl, refoc_rf, refoc_gz, multi_echo=True, **kw)
 
-    def set_state(self, freq_offset_hz=0.0):
+    def _set_state(self, freq_offset_hz=0.0):
         """Set the slice frequency offset for one multi-echo train."""
         self._replace_state(_FseState(None, None, float(freq_offset_hz)))
         return self
@@ -583,7 +629,7 @@ class Fse2D(_FseTrain):
         self.pe_axis = pe_axis
         self.fov_y_m, self.ny = float(fov[1]), int(matrix[1])
 
-    def set_state(self, lin_idx=0, freq_offset_hz=0.0):
+    def _set_state(self, lin_idx=0, freq_offset_hz=0.0):
         """Set line indices and slice frequency offset for one FSE shot."""
         self._replace_state(
             _FseState(
@@ -616,7 +662,7 @@ class Fse3D(_FseTrain):
         self.fov_y_m, self.ny = float(fov[1]), int(matrix[1])
         self.fov_z_m, self.nz = float(fov[2]), int(matrix[2])
 
-    def set_state(self, lin_idx=0, par_idx=0):
+    def _set_state(self, lin_idx=0, par_idx=0):
         """Set line and partition index schedules for one FSE shot."""
         self._replace_state(
             _FseState(

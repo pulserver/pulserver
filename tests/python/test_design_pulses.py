@@ -34,7 +34,7 @@ def test_fat_saturation_block_roundtrip(tmp_path) -> None:
 
     opts = pp.Opts()
     fs = pulses.fat_saturation(opts, freq_offset_hz=-441.0, voxel_size_m=3e-3)
-    seq = ps.Sequence(opts)
+    seq = ps.Sequence._unstructured(opts)
     seq.add_block(fs.rf, *fs.labels)
     seq.add_block(*fs.spoiler)
     out = tmp_path / "fatsat.seq"

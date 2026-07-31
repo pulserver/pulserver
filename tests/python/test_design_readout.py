@@ -151,7 +151,9 @@ def test_multiecho_z_crusher_has_no_echo_parity_residual() -> None:
     train = readout.MultiEchoSE(opts, fov_x_m=0.22, nx=128, etl=etl, refoc_rf=rf, refoc_gz=gz)
 
     seq = pp.Sequence(opts)
-    train.set_state().add_to(seq)
+    train.set_state()
+    for _block in train.blocks:
+        seq.add_block(*_block)
     k_traj_adc = seq.calculate_kspace()[0]
 
     kz_echoes = [k_traj_adc[2, e * train.n_samples + train.echo_sample] for e in range(etl)]
@@ -167,7 +169,9 @@ def test_fse3d_kz_offset_is_uniform_across_echo_parity() -> None:
     par_idx = np.arange(etl) % nz
     lin_idx = np.full(etl, nz // 2)
     seq = pp.Sequence(opts)
-    train.set_state(lin_idx=lin_idx, par_idx=par_idx).add_to(seq)
+    train.set_state(lin_idx=lin_idx, par_idx=par_idx)
+    for _block in train.blocks:
+        seq.add_block(*_block)
     k_traj_adc = seq.calculate_kspace()[0]
 
     kz_echoes = np.array([k_traj_adc[2, e * train.n_samples + train.echo_sample] for e in range(etl)])

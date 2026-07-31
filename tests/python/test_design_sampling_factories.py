@@ -173,15 +173,20 @@ def test_a_full_2d_multislice_loop_needs_only_two_scan_loops():
     phases = iter(design.make_rf_spoiling_schedule(2 * len(slices) * len(sampling)))
 
     offsets = slices.to_frequencies(excitation.gradients[0].amplitude)
-    seq = pp.Sequence(system)
+    seq = pp.Sequence._unstructured(system)
     for _frame in range(2):
         for slice_shot in slices.shots:
             for shot in sampling:
                 phase = float(next(phases))
-                excitation.set_state(freq_offset_hz=float(offsets[slice_shot[0]]), phase_offset_rad=phase)
-                excitation.set_labels(pp.make_label(type="SET", label="SLC", value=int(slice_shot[0])))
-                excitation.add_to(seq)
-                readout.set_state(lin_idx=int(shot[0, 0]), phase_offset_rad=phase).add_to(seq)
-
+                excitation.set_state(
+                    freq_offset_hz=float(offsets[slice_shot[0]]),
+                    phase_offset_rad=phase,
+                    SLC=int(slice_shot[0]),
+                )
+                for _block in excitation:
+                    seq.add_block(*_block)
+                readout.set_state(lin_idx=int(shot[0, 0]), phase_offset_rad=phase)
+                for _block in readout:
+                    seq.add_block(*_block)
     expected_shots = 2 * len(slices) * len(sampling)
     assert len(seq.block_events) == expected_shots * (excitation.num_blocks + readout.num_blocks)

@@ -197,8 +197,6 @@ class GreMultiEcho2DPulseqSequence(Sequence):
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
-        seq = pp.Sequence(opts)
-
         pe_loop = _phase_encode_loop(cfg)
 
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
@@ -209,16 +207,29 @@ class GreMultiEcho2DPulseqSequence(Sequence):
         rf_phases = design.make_rf_spoiling_schedule(len(pe_loop) * len(slices))
         shot = 0
 
+        # One shot's chronology, handed over once; the loop supplies only the
+        # numbers that move. The TR delay stays outside it -- one is played per
+        # phase-encode step, after every slice -- so it falls between complete
+        # passes. Labels are set here because a label is an event the template
+        # records.
+        pulse.set_state(freq_offset_hz=0.0, phase_offset_rad=0.0, **slices.label_state(0), LIN=0)
+        line.set_state(lin_idx=0)
+        tr_struct = [pulse, *([te_delay] if te_delay is not None else []), line]
+        seq = pp.Sequence(opts, len(pe_loop) * len(slices), *tr_struct)
+
         for pe_shot in pe_loop:
             ky = int(pe_shot[0, 0])
-            label_lin = pp.make_label(type="SET", label="LIN", value=ky)
 
             for sl, band in enumerate(slices.shots):
                 offset_hz = float(slice_offsets_hz[band[0]]) if slice_offsets_hz is not None else 0.0
 
                 phase = float(rf_phases[shot])
-                pulse.set_state(freq_offset_hz=offset_hz, phase_offset_rad=phase)
-                pulse.set_labels(*slices.labels(sl), label_lin)
+                pulse.set_state(
+                    freq_offset_hz=offset_hz,
+                    phase_offset_rad=phase,
+                    **slices.label_state(sl),
+                    LIN=ky,
+                )
                 for block in pulse:
                     seq.add_block(*block)
                 if te_delay is not None:
@@ -334,7 +345,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | No
         spoil_position="post",
         spoil_cycles=1.0,
     )
-    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse.blocks)
     rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
     min_te_s = (d_pulse - rf_center_s) + line.t_first_echo_s
     raster = opts.block_duration_raster

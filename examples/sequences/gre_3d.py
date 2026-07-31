@@ -174,35 +174,42 @@ class Gre3DPulseqSequence(Sequence):
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
-        seq = pp.Sequence(opts)
-
         pe_loop = _phase_encode_loop(cfg)
         par_loop = _partition_loop(cfg)
         rf_phases = design.make_rf_spoiling_schedule(
             len(pe_loop) * len(par_loop), increment=RF_SPOILING_INCREMENT_RAD
         )
 
-        # One call per phase-encode step covers its whole partition loop: the
-        # chronology is the same three items every shot, so only the numbers
-        # differ and they can go in as arrays. See Sequence.add_range.
-        pulse.set_labels(SLC=0)
+        pulse.set_state(SLC=0)
         partitions = np.array([int(par_shot[0, 0]) for par_shot in par_loop])
+
+        # Every shot plays the same chronology -- excitation, TE delay, readout
+        # -- so it is handed to the sequence once, up front, and the loop below
+        # supplies only the numbers that move. The TR delay is deliberately
+        # *not* part of it: this plugin plays one per phase-encode step rather
+        # than one per shot, so it lands between complete passes over the
+        # template rather than inside one.
+        # Any valid state will do: the template takes the *structure* -- which
+        # blocks, which events, which shapes -- and never registers a row, so
+        # the numbers standing in here are the ones the first shot overwrites.
+        line.set_state(lin_idx=0, par_idx=0)
+        tr_struct = [pulse, *([te_delay] if te_delay is not None else []), line]
+        seq = pp.Sequence(opts, len(pe_loop) * len(partitions), *tr_struct)
+
         shot = 0
         for pe_shot in pe_loop:
-            phases = np.asarray(rf_phases[shot : shot + len(partitions)], dtype=float)
-            seq.add_range(
-                (pulse, {"phase_offset_rad": phases}),
-                te_delay,
-                (
-                    line,
-                    {
-                        "lin_idx": np.full(len(partitions), int(pe_shot[0, 0])),
-                        "par_idx": partitions,
-                        "phase_offset_rad": phases,
-                    },
-                ),
-            )
-            shot += len(partitions)
+            lin_idx = int(pe_shot[0, 0])
+            for par_idx in partitions:
+                phase = float(rf_phases[shot])
+                pulse.set_state(phase_offset_rad=phase)
+                for block in pulse:
+                    seq.add_block(*block)
+                if te_delay is not None:
+                    seq.add_block(te_delay)
+                line.set_state(lin_idx=lin_idx, par_idx=int(par_idx), phase_offset_rad=phase)
+                for block in line:
+                    seq.add_block(*block)
+                shot += 1
 
             if tr_delay is not None:
                 seq.add_block(tr_delay)
@@ -306,7 +313,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool, n_inner: int | No
         spoil_position="post",
         spoil_cycles=1.0,
     )
-    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse.blocks)
     rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
     min_te_s = (d_pulse - rf_center_s) + line.t_first_echo_s
     raster = opts.block_duration_raster

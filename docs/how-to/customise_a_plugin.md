@@ -56,11 +56,14 @@ inversion = design.make_inversion_pulse(system=opts, duration=6e-3)
 sampling = design.make_cartesian_sampling(matrix, train_length=16, ordering="centric")
 
 for shot in sampling:
-    inversion.set_state().add_to(seq)
+    for block in inversion.set_state():
+        seq.add_block(*block)
     seq.add_block(pp.make_delay(ti_s))
     for ky in shot[:, 0]:
-        excitation.set_state().add_to(seq)
-        readout.set_state(lin_idx=int(ky)).add_to(seq)
+        for block in excitation.set_state():
+            seq.add_block(*block)
+        for block in readout.set_state(lin_idx=int(ky)):
+            seq.add_block(*block)
 ```
 
 Once per TR, for fat saturation:
@@ -69,9 +72,12 @@ Once per TR, for fat saturation:
 fatsat = design.make_fat_saturation_pulse(b0=3.0, voxel_size=thickness_m, system=opts)
 
 for shot in sampling:
-    fatsat.set_state().add_to(seq)
-    excitation.set_state().add_to(seq)
-    readout.set_state(lin_idx=int(shot[0, 0])).add_to(seq)
+    for block in fatsat.set_state():
+        seq.add_block(*block)
+    for block in excitation.set_state():
+        seq.add_block(*block)
+    for block in readout.set_state(lin_idx=int(shot[0, 0])):
+        seq.add_block(*block)
 ```
 
 Once per frame, for a trigger — the frame loop is a `ScanLoop` like any other,
@@ -84,7 +90,7 @@ for f in range(len(frames)):
     seq.add_block(pp.make_trigger("physio1", duration=100e-6))
     for s, slice_shot in enumerate(slices.shots):
         for shot in sampling:
-            excitation.set_labels(*frames.labels(f), *slices.labels(s))
+            excitation.set_state(**frames.label_state(f), **slices.label_state(s))
             ...
 ```
 
@@ -94,7 +100,8 @@ ordinary `if`:
 ```python
 for index, shot in enumerate(sampling):
     if index % 32 == 0:
-        navigator.set_state().add_to(seq)
+        for block in navigator.set_state():
+            seq.add_block(*block)
     ...
 ```
 
@@ -146,8 +153,10 @@ readout = design.make_radial_readout(opts, fov_m, nx)
 tilt = design.make_noncartesian_2d_sampling(matrix, views=n_views, scheme="golden")
 
 for view, rotation in enumerate(tilt.to_rotations()):
-    excitation.set_state().add_to(seq)
-    readout.set_state(lin_idx=view, rotation=rotation).add_to(seq)
+    for block in excitation.set_state():
+        seq.add_block(*block)
+    for block in readout.set_state(lin_idx=view, rotation=rotation):
+        seq.add_block(*block)
 ```
 
 `lin_idx` is still the label — for a non-Cartesian acquisition it is the view
@@ -163,7 +172,8 @@ outer position, re-`iter()` inside:
 rotations = iter(design.make_noncartesian_2d_sampling(matrix, views=n_frames * n_views).to_rotations())
 for frame in range(n_frames):
     for view in range(n_views):
-        readout.set_state(lin_idx=view, rotation=next(rotations)).add_to(seq)
+        for block in readout.set_state(lin_idx=view, rotation=next(rotations)):
+            seq.add_block(*block)
 ```
 
 ## Vary the flip angle across a train
@@ -177,7 +187,8 @@ peak = float(np.max(flips))
 excitation = design.make_slice_selective_pulse(peak, thickness_m, system=opts)
 
 for flip in flips:
-    excitation.set_state(amplitude_scale=float(flip) / peak).add_to(seq)
+    for block in excitation.set_state(amplitude_scale=float(flip) / peak):
+        seq.add_block(*block)
 ```
 
 Designing at the peak matters: scaling *up* past the designed amplitude can
@@ -210,7 +221,7 @@ frames = design.make_counter_loop(n_frames, label="REP")
 
 for f in range(len(frames)):
     for shot in sampling:
-        excitation.set_labels(*frames.labels(f))
+        excitation.set_state(**frames.label_state(f))
         ...
 ```
 
@@ -221,7 +232,8 @@ what they drive — a delay here, an amplitude or a frequency offset elsewhere:
 inversions = design.make_counter_loop([0.1, 0.3, 1.0, 2.5], label="SET")
 
 for c in range(len(inversions)):
-    inversion.set_state().set_labels(*inversions.labels(c)).add_to(seq)
+    for block in inversion.set_state(**inversions.label_state(c)):
+        seq.add_block(*block)
     seq.add_block(pp.make_delay(float(inversions[c][0, 0])))
     ...
 ```
@@ -237,21 +249,24 @@ averages = design.make_counter_loop(4, label="AVG", order="interleaved")
 
 Modules emit the counters they own: a readout emits `LIN`, `PAR` and `ECO`
 because it knows them. Everything an outer loop knows — `SLC`, `REP`, `SET`,
-`PHS`, `AVG`, `SEG` — goes through `set_labels`, which merges into the module's
-first block. Take them from the loop rather than writing them by hand:
+`PHS`, `AVG`, `SEG` — is an UPPERCASE keyword to `set_state`, which merges it
+into the module's first block. Take them from the loop rather than writing them
+by hand:
 
 ```python
-excitation.set_labels(*frames.labels(f), *slices.labels(s))
+excitation.set_state(**frames.label_state(f), **slices.label_state(s))
 ```
 
-The keyword form spells the same thing when there is no loop object:
+The literal form spells the same thing when there is no loop object:
 
 ```python
-excitation.set_labels(SLC=3, REP=frame)
+excitation.set_state(SLC=3, REP=frame)
 ```
 
-`set_labels` replaces the whole counter state, exactly like `set_state`; call
-it with no arguments to clear. Emit one for every loop you write — the MRD
+Counters do *not* revert the way the numbers do: naming one makes the label
+event part of the module's structure, and later calls move its value. Pass `0`
+to clear it, and note that a call naming only counters leaves the numbers alone.
+Emit one for every loop you write — the MRD
 `FIRST_IN_*` / `LAST_IN_*` flags are derived downstream from each counter's
 observed range, so an unlabelled dimension collapses to a single index and both
 its flags fire on every acquisition.
@@ -259,57 +274,64 @@ its flags fire on every acquisition.
 ## Flag a module: prescan, dummy TRs, FOV exemption
 
 Flags are the other half of the label set: not *where an acquisition belongs*
-but *how these blocks are played or classified*. They go through `set_flags`,
-which is independent of `set_labels` — replacing the per-shot counters never
-disturbs them.
+but *how these blocks are played or classified*. They are UPPERCASE keywords
+too, and `set_state` tells them apart from the counters by name.
 
 Play an ADC but discard its data, as a prescan or a dummy readout does:
 
 ```python
-readout.set_state(lin_idx=0).set_flags(OFF=1).add_to(seq)
+for block in readout.set_state(lin_idx=0, adc_flag=False):
+    seq.add_block(*block)
 ```
+
+`adc_flag=False` is `OFF=1` spelled the way a loop reads; `once=` is `ONCE`.
 
 Mark leading dummy TRs as a preparation section, so the interpreter knows they
 are played once rather than repeated:
 
 ```python
 for _ in range(n_dummies):
-    excitation.set_state(phase_offset_rad=phase).set_flags(ONCE=1).add_to(seq)
-    readout.set_state(lin_idx=0).set_flags(ONCE=1, OFF=1).add_to(seq)
+    for block in excitation.set_state(phase_offset_rad=phase, once=1):
+        seq.add_block(*block)
+    for block in readout.set_state(lin_idx=0, once=1, adc_flag=False):
+        seq.add_block(*block)
 ```
 
 Group consecutive modules under one id so the safety model treats them as a
 unit:
 
 ```python
-fatsat.set_flags(MODULE=1)
-excitation.set_flags(MODULE=2)
+fatsat.set_state(MODULE=1)
+excitation.set_state(MODULE=2)
 ```
 
-Pulseq labels are sticky, so `set_flags` scopes them by default: the value goes
-on the module's first block and `0` on its last, and it cannot leak into
-whatever follows. `ONCE`, `MODULE` and `TRID` are exempt — they deliberately
-span modules, which is why `ONCE=1` above stays set across both the excitation
-and the readout while `OFF` clears at the end of the readout it belongs to.
-Override per call with `scope="sticky"` or `scope="module"`.
+Pulseq labels are sticky, so flags are scoped by default: the value goes on the
+module's first block and `0` on its last, and it cannot leak into whatever
+follows. `ONCE`, `MODULE` and `TRID` are exempt — they deliberately span
+modules, which is why `once=1` above stays set across both the excitation and
+the readout while `OFF` clears at the end of the readout it belongs to. Override
+with `flag_scope="sticky"` or `flag_scope="module"` at construction.
 
-Preparation modules already carry their own FOV exemptions (`NOPOS`, `NOROT`)
+Preparation modules already declare their own FOV exemptions (`NOPOS`, `NOROT`)
 this way, so `make_fat_saturation_pulse` and `make_diffusion_prep` need nothing
-from you; calling `set_flags` on one *replaces* that default rather than adding
-to it.
+from you; setting one later moves its value rather than replacing the set.
 
 ## Add a trigger or a digital output
 
 Triggers and digital output pulses are ordinary block events, but which block
-they belong on is a property of the module, so `set_triggers` puts them there:
+they belong on is a property of the module's *design*, so they are declared with
+it rather than set per shot:
 
 ```python
-excitation.set_triggers(pp.make_trigger("physio1", duration=100e-6))
-readout.set_triggers(pp.make_digital_output_pulse("osc0", duration=100e-6), block=-1)
+readout = design.make_line_readout(
+    system, fov, matrix,
+    triggers=(pp.make_trigger("physio1", duration=100e-6),),                    # first block
+    # or {-1: (pp.make_digital_output_pulse("osc0", duration=100e-6),)} for the last
+)
 ```
 
-Each call replaces only the block it names, so arming several blocks is several
-calls; passing no events clears that block. When the trigger belongs to the
+Every `make_*_readout` factory forwards `labels=`, `flags=`, `flag_scope=` and
+`triggers=` to the module. When the trigger belongs to the
 *sequence* rather than to a module — once per frame, before anything is played
 — it stays a plain event:
 

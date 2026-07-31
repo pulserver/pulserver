@@ -132,13 +132,13 @@ class Readout(SequenceModule):
     """A stateful readout exposed as an immutable sequence of Pulseq blocks.
 
     Concrete readouts replace their complete dynamic state through
-    ``set_state()`` and implement ``_build_blocks()``.  The first collection
+    ``_set_state()`` and implement ``_build_blocks()``.  The first collection
     operation materializes one block snapshot; later ``len()``, indexing,
     slicing and iteration all reuse that same snapshot until the state changes.
     """
 
-    def __init__(self, system: Any) -> None:
-        super().__init__(system)
+    def __init__(self, system: Any, **declared: Any) -> None:
+        super().__init__(system, **declared)
         self._state: Any = _STATE_UNSET
         self._block_cache: tuple[Block, ...] | None = None
 
@@ -152,10 +152,6 @@ class Readout(SequenceModule):
         if self._state is _STATE_UNSET:
             raise RuntimeError("set_state() must be called before accessing readout blocks")
         return self._state
-
-    @abstractmethod
-    def set_state(self, *args: Any, **kwargs: Any) -> Readout:
-        """Replace the complete dynamic state and return ``self``."""
 
     @abstractmethod
     def _build_blocks(self) -> Iterable[Block]:

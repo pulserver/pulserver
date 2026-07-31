@@ -58,8 +58,10 @@ class ScanLoop(Sequence[np.ndarray]):
     derived from, plus the counters that let the reconstruction find the data
     again:
 
-    - **Counters.** :meth:`labels` returns the ``SET <label>`` events for one
-      shot, one per axis. Emitting them is not optional bookkeeping: the
+    - **Counters.** :meth:`label_state` returns ``{counter: value}`` for one
+      shot, one per axis, ready to spread into
+      :meth:`pulserver.SequenceModule.set_state`. Emitting them is not
+      optional bookkeeping: the
       interpreter derives every ``FIRST_IN_*``/``LAST_IN_*`` MRD flag from the
       *observed range* of each counter, so a dimension that is looped but
       never labelled collapses to a single index and its flags fire on every
@@ -126,8 +128,8 @@ class ScanLoop(Sequence[np.ndarray]):
     >>> import pulserver.design as design
     >>> from pulserver.design import _lowlevel
     >>> frames = design.make_counter_loop(40, label="REP")
-    >>> [event.label for event in frames.labels(7)], frames.labels(7)[0].value
-    (['REP'], 7)
+    >>> frames.label_state(7)
+    {'REP': 7}
 
     Relative steps for a blipped train, instead of absolute positions:
 
@@ -221,10 +223,10 @@ class ScanLoop(Sequence[np.ndarray]):
         >>> import pulserver.design as design
         >>> from pulserver.design import _lowlevel
         >>> import pulserver.pypulseq as pp
-        >>> from pulserver.pypulseq import EncodingAxis
+        >>> from pulserver import EncodingAxis
         >>> views = design.make_noncartesian_2d_sampling((64, 64), views=8)
-        >>> views.with_axes(EncodingAxis("PHS", kind="angle")).labels(3)[0].label
-        'PHS'
+        >>> views.with_axes(EncodingAxis("PHS", kind="angle")).label_state(3)
+        {'PHS': 3}
         """
         return replace(self, axes=tuple(axes))
 
@@ -258,17 +260,16 @@ class ScanLoop(Sequence[np.ndarray]):
             column += axis.columns
         return tuple(values)
 
-    def labels(self, shot: int, *, position: int = 0) -> tuple:
-        """Return the ``SET`` label events for one shot, one per axis.
+    def label_state(self, shot: int, *, position: int = 0) -> dict[str, int]:
+        """Return ``{counter: value}`` for one shot, one entry per axis.
 
-        This is how a loop reaches the reconstruction. Pass the result to
-        :meth:`pulserver.SequenceModule.set_labels` — or spread it into
-        ``seq.add_block`` — for every loop the readout does *not* consume
-        through ``set_state``:
+        This is how a loop reaches the reconstruction: spread it straight into
+        :meth:`pulserver.SequenceModule.set_state`, alongside whatever numbers
+        the shot moves, for every loop the readout does *not* consume itself:
 
         .. code-block:: python
 
-            excitation.set_labels(*slices.labels(s), *frames.labels(f))
+            excitation.set_state(freq_offset_hz=offsets[s], **slices.label_state(s))
 
         Emitting them is what makes the ``FIRST_IN_*``/``LAST_IN_*`` MRD flags
         correct. Those flags are not written by the sequence: the interpreter
@@ -288,8 +289,8 @@ class ScanLoop(Sequence[np.ndarray]):
 
         Returns
         -------
-        tuple
-            Label events from :func:`~pulserver.pypulseq.make_label`.
+        dict
+            ``{label: value}``, in axis order.
 
         Examples
         --------
@@ -297,27 +298,25 @@ class ScanLoop(Sequence[np.ndarray]):
         >>> from pulserver.design import _lowlevel
         >>> import pulserver.pypulseq as pp
         >>> slices = design.make_slice_loop(6, 3e-3)
-        >>> [(e.label, e.value) for e in slices.labels(1)]
-        [('SLC', 2)]
+        >>> slices.label_state(1)
+        {'SLC': 2}
 
-        Every counter a scan varies gets one line in the loop body::
+        Every counter a scan varies gets one keyword in the loop body::
 
             for f in range(len(frames)):
                 for s in range(len(slices)):
-                    excitation.set_labels(*frames.labels(f), *slices.labels(s))
-                    excitation.add_to(seq)
-
+                    excitation.set_state(**frames.label_state(f), **slices.label_state(s))
+                    for _block in excitation:
+                        seq.add_block(*_block)
         See Also
         --------
         label_limits : the ranges those flags are derived from.
-        pulserver.SequenceModule.set_labels : where the events go.
+        pulserver.SequenceModule.set_state : where the values go.
         """
-        from ...pypulseq._make_label import make_label
-
-        return tuple(
-            make_label(label=axis.label, type="SET", value=value)
+        return {
+            axis.label: int(value)
             for axis, value in zip(self.axes, self.label_value(shot, position=position), strict=True)
-        )
+        }
 
     def label_limits(self) -> dict[str, tuple[int, int]]:
         """Return ``{label: (min, max)}`` over every position the loop visits.
@@ -623,7 +622,9 @@ class ScanLoop(Sequence[np.ndarray]):
         also its ``LIN`` label::
 
             for view, rotation in enumerate(_lowlevel.make_golden_means_3d_tilt(1000).to_rotations()):
-                readout.set_state(lin_idx=view, rotation=rotation).add_to(seq)
+                readout.set_state(lin_idx=view, rotation=rotation)
+                for _block in readout:
+                    seq.add_block(*_block)
         """
         from .noncartesian import angles_to_rotations, directions_to_rotations
 
@@ -674,10 +675,9 @@ class ScanLoop(Sequence[np.ndarray]):
 
             offsets = slices.to_frequencies(excitation.gradients[0].amplitude)
             for shot in slices.shots:
-                excitation.set_state(freq_offset_hz=float(offsets[shot[0]]))
-                excitation.set_labels(pp.make_label(type="SET", label="SLC", value=int(shot[0])))
-                excitation.add_to(seq)
-
+                excitation.set_state(freq_offset_hz=float(offsets[shot[0]]), SLC=int(shot[0]))
+                for _block in excitation:
+                    seq.add_block(*_block)
         See Also
         --------
         pulserver.design.make_slice_loop : builds the loop these offsets select.

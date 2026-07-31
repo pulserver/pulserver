@@ -267,7 +267,7 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
         spoil_position="post",
         spoil_cycles=1.0,
     )
-    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse.blocks)
     rf_center = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
     raster = opts.block_duration_raster
     te_delay_s = round((cfg.te_s - (d_pulse - rf_center) - line.t_first_echo_s) / raster) * raster
@@ -278,7 +278,7 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
     tr_delay_s = round((cfg.tr_s - min_block_s) / raster) * raster
     if tr_delay_s < -1e-9 and strict:
         return None
-    inversion_duration = sum(pp.calc_duration(*block) for block in inversion)
+    inversion_duration = sum(pp.calc_duration(*block) for block in inversion.blocks)
     ti_delay_s = round((cfg.ti_s - inversion_duration) / raster) * raster
     if ti_delay_s < -1e-9 and strict:
         return None
@@ -307,7 +307,6 @@ def _segment_loop(cfg: _Config):
 
 def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None:
     timing = _compute_public(opts, cfg, strict=False)
-    seq = pp.Sequence(opts)
     segments = _segment_loop(cfg)
     phases = design.make_rf_spoiling_schedule(segments.n_positions)
     te_delay = pp.make_delay(timing["te_delay_s"]) if timing["te_delay_s"] > 0 else None
@@ -315,31 +314,50 @@ def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None
     ti_delay = pp.make_delay(timing["ti_delay_s"]) if timing["ti_delay_s"] > 0 else None
     recovery_s = round(cfg.trecovery_s / opts.block_duration_raster) * opts.block_duration_raster
     recovery = pp.make_delay(recovery_s) if recovery_s > 0 else None
+
+    pulse, line = timing["pulse"], timing["line"]
+    # One *segment* is the repeating unit, so that is what the sequence is told:
+    # the inversion and its TI delay, then ETL views of excitation / TE delay /
+    # readout / TR delay. Declaring the readout train alone and leaving the
+    # preparation outside would work, but only the train would take the fast
+    # path -- and the inversion is a module like any other.
+    line.set_state(lin_idx=0, par_idx=0)
+    view = [
+        pulse,
+        *([te_delay] if te_delay is not None else []),
+        line,
+        *([tr_delay] if tr_delay is not None else []),
+    ]
+    tr_struct = [
+        timing["inversion"],
+        *([ti_delay] if ti_delay is not None else []),
+        *(cfg.etl * view),
+    ]
+    # The recovery is deliberately *not* part of it. ETL need not divide the
+    # view count, so the last segment can be short -- and a segment that stops
+    # part way through the template is ended by the recovery, which owns no
+    # library rows and so can close a pass wherever it lands.
+    seq = pp.Sequence(opts, len(segments), *tr_struct)
+
     phase_idx = 0
     for segment in segments:
         for block in timing["inversion"]:
             seq.add_block(*block)
         if ti_delay is not None:
             seq.add_block(ti_delay)
-        # The whole segment goes in as one call: every view plays the same four
-        # items and only the encoding indices and RF phase change, so they go in
-        # as arrays rather than as a Python loop. See Sequence.add_range.
-        views = np.asarray(segment, dtype=int).reshape(-1, 2)
-        shot_phases = np.asarray(phases[phase_idx : phase_idx + len(views)], dtype=float)
-        seq.add_range(
-            (timing["pulse"], {"phase_offset_rad": shot_phases}),
-            te_delay,
-            (
-                timing["line"],
-                {
-                    "lin_idx": views[:, 0],
-                    "par_idx": views[:, 1],
-                    "phase_offset_rad": shot_phases,
-                },
-            ),
-            tr_delay,
-        )
-        phase_idx += len(views)
+        for lin_idx, par_idx in np.asarray(segment, dtype=int).reshape(-1, 2):
+            phase = float(phases[phase_idx])
+            pulse.set_state(phase_offset_rad=phase)
+            for block in pulse:
+                seq.add_block(*block)
+            if te_delay is not None:
+                seq.add_block(te_delay)
+            line.set_state(lin_idx=int(lin_idx), par_idx=int(par_idx), phase_offset_rad=phase)
+            for block in line:
+                seq.add_block(*block)
+            if tr_delay is not None:
+                seq.add_block(tr_delay)
+            phase_idx += 1
         if recovery is not None:
             seq.add_block(recovery)
     seq.set_definition("Name", "mprage_3d")

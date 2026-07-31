@@ -160,8 +160,9 @@ def make_cartesian_sampling(
         for frame in range(n_frames):
             for group in slices:
                 for shot in sampling:
-                    readout.set_state(lin_idx=int(shot[0, 0])).add_to(seq)
-
+                    readout.set_state(lin_idx=int(shot[0, 0]))
+                    for _block in readout:
+                        seq.add_block(*_block)
     .. plot::
        :include-source: false
 
@@ -262,8 +263,9 @@ def make_epi_sampling(matrix, *, acceleration=1, segments=1, caipi_shift=0):
         for frame in range(n_frames):
             for shot, readout in enumerate(readouts):
                 start = sampling[shot][0]
-                readout.set_state(lin_idx=int(start[0]), par_idx=int(start[1])).add_to(seq)
-
+                readout.set_state(lin_idx=int(start[0]), par_idx=int(start[1]))
+                for _block in readout:
+                    seq.add_block(*_block)
     Each interleave is a path through the shared lattice. Left is a 2D pattern
     at ``Ry=2`` with 2 segments — it has no kz to grid against, so its
     segments are drawn one per row; right is the 3D skipped-CAIPI traversal
@@ -379,8 +381,9 @@ def make_noncartesian_2d_sampling(
         for frame in range(n_frames):
             for group in slices:
                 for view in range(n_views):
-                    readout.set_state(lin_idx=view, rotation=next(rotations)).add_to(seq)
-
+                    readout.set_state(lin_idx=view, rotation=next(rotations))
+                    for _block in readout:
+                        seq.add_block(*_block)
     Replaying the same angular set at every slice instead is the same loop
     with ``rotations`` rebuilt inside it.
 
@@ -545,7 +548,9 @@ def make_rotated_projection_sampling(
         readout = design.make_zte_readout(system, fov, nx, base.flatten(), excitation, tr_s=tr)
         for shot, rotation in enumerate(rotations):
             readout.set_state(lin_idx=shot * len(rotations) + np.arange(readout.num_views),
-                              rotation=rotation).add_to(seq)
+                              rotation=rotation)
+            for block in readout:
+                seq.add_block(*block)
 
     See Also
     --------

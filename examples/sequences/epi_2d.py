@@ -249,8 +249,6 @@ class Epi2DPulseqSequence(Sequence):
         reference_te_delay = pp.make_delay(reference_te_delay_s) if reference_te_delay_s > 0.0 else None
         reference_tr_delay = pp.make_delay(reference_tr_delay_s) if reference_tr_delay_s > 0.0 else None
 
-        seq = pp.Sequence(opts)
-
         slice_step_m = cfg.slice_spacing_m if cfg.nslices > 1 else 0.0
         shot_starts = list(range(0, cfg.ny_pe, cfg.etl))
         n_directions = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
@@ -267,20 +265,114 @@ class Epi2DPulseqSequence(Sequence):
         image_labels = (pp.make_label(type="SET", label="SET", value=0),)
         sms_label = (pp.make_label(type="SET", label="SMS", value=1),) if cfg.multiband > 1 else ()
 
-        if cfg.phase_correction:
-            navigator_labels = (
-                pp.make_label(type="SET", label="NAV", value=1),
-                pp.make_label(type="SET", label="REF", value=1),
-                *sms_label,
+        once_open = pp.make_label(type="SET", label="ONCE", value=1)
+        reference_adc_labels = (pp.make_label(type="SET", label="REF", value=1),)
+        navigator_labels = (
+            pp.make_label(type="SET", label="NAV", value=1),
+            pp.make_label(type="SET", label="REF", value=1),
+            *sms_label,
+        )
+        reverse_adc_labels = (pp.make_label(type="SET", label="SET", value=1), *sms_label)
+
+
+        # The template is the largest *genuine* period of this scan. It is not the
+        # TR: each slice group has its own excitation module, so the smallest
+        # repeating unit is a whole sweep over the groups. A TTL plays once per
+        # frame and a navigator, an SMS reference pass or a reverse-PE pass once
+        # per scan -- and each of those owns a library row, which a block outside
+        # the template may not. So the period is chosen, smallest first, because a
+        # template the size of the scan pays the per-block cost twice.
+        #
+        # Every label and the TTL are built once and replayed: the template
+        # recognises its own blocks by event *identity*.
+        if diffusion is not None:
+            diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotations[0])
+        epi.set_state(lin_idx=0, adc_labels=(*image_labels, *sms_label))
+        for group in range(cfg.n_slice_groups):
+            offset_m = (group - 0.5 * (cfg.n_slice_groups - 1)) * slice_step_m
+            if cfg.multiband == 1:
+                pulses[group].set_state(
+                    freq_offset_hz=pulses[group].gradients[0].amplitude * offset_m
+                )
+            # The counters an excitation carries are declared here, with the
+            # structure: the template records the label events its first block
+            # holds, and later shots only move their values.
+            pulses[group].set_state(
+                SLC=group,
+                **frames.label_state(0),
+                once=0 if ttl is not None else None,
             )
+
+        def _imaging_tr(module):
+            return [
+                *([fat_sat] if fat_sat is not None else []),
+                *([diffusion] if diffusion is not None else []),
+                module,
+                *([te_delay] if te_delay is not None else []),
+                epi,
+                *([tr_delay] if tr_delay is not None else []),
+            ]
+
+        frame_body = [*([(ttl, once_open)] if ttl is not None else [])]
+        for _direction in range(n_directions):
+            for group in range(cfg.n_slice_groups):
+                for _shot in shot_starts:
+                    frame_body.extend(_imaging_tr(pulses[group]))
+
+        if cfg.phase_correction or cfg.sms_reference or cfg.reverse_pe:
+            # A once-per-scan lead-in or tail has no period of its own, so the
+            # whole scan is the period and the template makes a single pass.
+            lead_in = []
+            if cfg.phase_correction:
+                navigator.set_state(lin_idx=0, adc_labels=navigator_labels)
+                for group in range(cfg.n_slice_groups):
+                    lead_in.extend([
+                        pulses[group],
+                        *([te_delay] if te_delay is not None else []),
+                        navigator,
+                        *([tr_delay] if tr_delay is not None else []),
+                    ])
+            if cfg.sms_reference:
+                epi.set_state(lin_idx=0, adc_labels=reference_adc_labels)
+                for _slice_index in range(cfg.nslices):
+                    for _shot in shot_starts:
+                        lead_in.extend([
+                            reference_pulse,
+                            *([reference_te_delay] if reference_te_delay is not None else []),
+                            epi,
+                            *([reference_tr_delay] if reference_tr_delay is not None else []),
+                        ])
+            tail = []
+            if cfg.reverse_pe:
+                reverse_epi.set_state(lin_idx=0, adc_labels=reverse_adc_labels)
+                for group in range(cfg.n_slice_groups):
+                    for _shot in shot_starts:
+                        tail.extend([
+                            pulses[group],
+                            *([te_delay] if te_delay is not None else []),
+                            reverse_epi,
+                            *([tr_delay] if tr_delay is not None else []),
+                        ])
+            tr_struct = [*lead_in, *(len(frames) * frame_body), *tail]
+            passes = 1
+        else:
+            tr_struct = frame_body
+            passes = len(frames)
+        seq = pp.Sequence(opts, passes, *tr_struct)
+
+        if cfg.phase_correction:
             for group in range(cfg.n_slice_groups):
                 pulse = pulses[group]
                 if cfg.multiband == 1:
                     slice_offset_m = (group - 0.5 * (cfg.n_slice_groups - 1)) * slice_step_m
                     pulse.set_state(freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m)
-                for block_idx, block in enumerate(pulse):
-                    labels = (pp.make_label(type="SET", label="SLC", value=group),) if block_idx == 0 else ()
-                    seq.add_block(*block, *labels)
+                # The loop's counters go on the module: set_state writes them
+                # into the label events on its first block, so they reach the
+                # file through its payload. A lead-in belongs to no frame, so it
+                # reports the first.
+                pulse.set_state(SLC=group, **frames.label_state(0))
+                for block in pulse:
+                    seq.add_block(*block)
                 if te_delay is not None:
                     seq.add_block(te_delay)
                 navigator.set_state(lin_idx=0, adc_labels=navigator_labels)
@@ -295,16 +387,13 @@ class Epi2DPulseqSequence(Sequence):
                 reference_pulse.set_state(
                     freq_offset_hz=reference_pulse.gradients[0].amplitude * slice_offset_m
                 )
+                reference_pulse.set_state(SLC=slice_index)
                 for ky_start in shot_starts:
-                    for block_idx, block in enumerate(reference_pulse):
-                        labels = (pp.make_label(type="SET", label="SLC", value=slice_index),) if block_idx == 0 else ()
-                        seq.add_block(*block, *labels)
+                    for block in reference_pulse:
+                        seq.add_block(*block)
                     if reference_te_delay is not None:
                         seq.add_block(reference_te_delay)
-                    epi.set_state(
-                        lin_idx=ky_start,
-                        adc_labels=(pp.make_label(type="SET", label="REF", value=1),),
-                    )
+                    epi.set_state(lin_idx=ky_start, adc_labels=reference_adc_labels)
                     for block in epi:
                         seq.add_block(*block)
                     if reference_tr_delay is not None:
@@ -316,20 +405,17 @@ class Epi2DPulseqSequence(Sequence):
         # period at all and falls back to "the whole frame is one TR" -- which
         # then costs a waveform buffer proportional to the frame duration.
         # Re-SETting a counter that already holds the right value is free.
+
         for frame in range(len(frames)):
-            (phase_label,) = frames.labels(frame)
-            frame_labels = (phase_label,)
             if ttl is not None:
                 # A volume-start trigger genuinely is a once-per-frame block, so
                 # mark it as one: ONCE=1 opens the section and the ONCE=0 that
                 # every TR carries closes it, leaving the TRs identical.
-                seq.add_block(ttl, pp.make_label(type="SET", label="ONCE", value=1))
-                frame_labels = (phase_label, pp.make_label(type="SET", label="ONCE", value=0))
+                seq.add_block(ttl, once_open)
             for rotation in rotations[:n_directions]:
                 for group in range(cfg.n_slice_groups):
                     slice_offset_m = (group - 0.5 * (cfg.n_slice_groups - 1)) * slice_step_m
                     pulse = pulses[group]
-                    tr_labels = (pp.make_label(type="SET", label="SLC", value=group), *frame_labels)
 
                     for ky_start in shot_starts:
                         if fat_sat is not None:
@@ -343,8 +429,9 @@ class Epi2DPulseqSequence(Sequence):
                             pulse.set_state(
                                 freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m
                             )
-                        for block_idx, block in enumerate(pulse):
-                            seq.add_block(*block, *(tr_labels if block_idx == 0 else ()))
+                        pulse.set_state(SLC=group, **frames.label_state(frame))
+                        for block in pulse:
+                            seq.add_block(*block)
                         if te_delay is not None:
                             seq.add_block(te_delay)
                         epi.set_state(lin_idx=ky_start, adc_labels=(*image_labels, *sms_label))
@@ -355,16 +442,17 @@ class Epi2DPulseqSequence(Sequence):
                             seq.add_block(tr_delay)
 
         if cfg.reverse_pe:
-            reverse_labels = (pp.make_label(type="SET", label="SET", value=1), *sms_label)
+            reverse_labels = reverse_adc_labels
             for group in range(cfg.n_slice_groups):
                 slice_offset_m = (group - 0.5 * (cfg.n_slice_groups - 1)) * slice_step_m
                 pulse = pulses[group]
                 if cfg.multiband == 1:
                     pulse.set_state(freq_offset_hz=pulse.gradients[0].amplitude * slice_offset_m)
+                # A tail belongs to no frame either.
+                pulse.set_state(SLC=group, **frames.label_state(0))
                 for ky_start in shot_starts:
-                    for block_idx, block in enumerate(pulse):
-                        labels = (pp.make_label(type="SET", label="SLC", value=group),) if block_idx == 0 else ()
-                        seq.add_block(*block, *labels)
+                    for block in pulse:
+                        seq.add_block(*block)
                     if te_delay is not None:
                         seq.add_block(te_delay)
                     reverse_epi.set_state(lin_idx=ky_start, adc_labels=reverse_labels)
@@ -545,7 +633,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
         else None
     )
 
-    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse.blocks)
     rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
     first_echo_s = epi.duration - (epi.etl - 0.5) * epi.esp
     raster = opts.block_duration_raster
@@ -561,7 +649,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
     if tr_delay_s < 0.0:
         tr_delay_s = 0.0
 
-    d_reference = sum(pp.calc_duration(*block) for block in reference_pulse)
+    d_reference = sum(pp.calc_duration(*block) for block in reference_pulse.blocks)
     reference_center_s = pp.calc_rf_center(reference_pulse.rf)[0] + reference_pulse.rf.delay
     reference_te_delay_s = round((cfg.te_s - (d_reference - reference_center_s) - first_echo_s) / raster) * raster
     if reference_te_delay_s < -1e-9 and strict:

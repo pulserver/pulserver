@@ -23,25 +23,26 @@ def test_collection_access_requires_state():
     with pytest.raises(RuntimeError, match=r"set_state\(\)"):
         len(module)
     with pytest.raises(RuntimeError, match=r"set_state\(\)"):
-        module[0]
+        module.blocks[0]
     with pytest.raises(RuntimeError, match=r"set_state\(\)"):
-        list(module)
+        list(module.blocks)
 
 
-def test_line_supports_len_index_slice_iteration_add_to_and_get():
+def test_line_supports_len_index_slice_iteration_and_get():
     opts = _opts()
     module = readout.Line2D(opts, (0.22, 0.22), (32, 32), spoil_position="none")
     assert isinstance(module.set_state(lin_idx=7, phase_offset_rad=0.25), readout.Readout)
 
-    blocks = tuple(module)
+    blocks = tuple(module.blocks)
     assert len(module) == module.num_blocks == len(blocks) == 3
-    assert module[0] is blocks[0]
-    assert module[-1] is blocks[-1]
-    assert module[:] == blocks
+    assert module.blocks[0] is blocks[0]
+    assert module.blocks[-1] is blocks[-1]
+    assert module.blocks[:] == blocks
     assert all(isinstance(block, tuple) and block for block in blocks)
 
     seq = pp.Sequence(opts)
-    assert module.add_to(seq) is seq
+    for block in module.blocks:
+        seq.add_block(*block)
     assert len(seq.block_events) == len(module)
 
     standalone = module.get()
@@ -60,11 +61,11 @@ def test_set_state_retunes_the_block_snapshot_in_place():
     """
     module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
     module.set_state(lin_idx=3, phase_offset_rad=0.1)
-    old_blocks = tuple(module)
+    old_blocks = tuple(module.blocks)
     assert all(event.phase_offset == pytest.approx(0.1) for event in _adcs(old_blocks))
 
     module.set_state(lin_idx=4, phase_offset_rad=0.9)
-    new_blocks = tuple(module)
+    new_blocks = tuple(module.blocks)
 
     # Same events, new numbers -- including on the snapshot taken earlier.
     assert new_blocks[0] is old_blocks[0]
@@ -84,15 +85,17 @@ def test_retuned_snapshot_registers_the_same_blocks_as_a_rebuild():
     fov, matrix = (0.22, 0.22), (32, 32)
     shared = readout.Line2D(_opts(), fov, matrix, spoil_position="none")
 
-    retuned = PulserverSequence(_opts())
+    retuned = PulserverSequence._unstructured(_opts())
     for lin_idx, phase in ((3, 0.1), (4, 0.9)):
-        shared.set_state(lin_idx=lin_idx, phase_offset_rad=phase).add_to(retuned)
-
-    rebuilt = PulserverSequence(_opts())
+        shared.set_state(lin_idx=lin_idx, phase_offset_rad=phase)
+        for _block in shared.blocks:
+            retuned.add_block(*_block)
+    rebuilt = PulserverSequence._unstructured(_opts())
     for lin_idx, phase in ((3, 0.1), (4, 0.9)):
         fresh = readout.Line2D(_opts(), fov, matrix, spoil_position="none")
-        fresh.set_state(lin_idx=lin_idx, phase_offset_rad=phase).add_to(rebuilt)
-
+        fresh.set_state(lin_idx=lin_idx, phase_offset_rad=phase)
+        for _block in fresh.blocks:
+            rebuilt.add_block(*_block)
     assert retuned.block_events == rebuilt.block_events
     assert retuned.block_durations == rebuilt.block_durations
 
@@ -145,19 +148,36 @@ def test_modules_are_not_callable():
         module(pe_idx=5)
 
 
-def test_set_labels_merges_into_the_first_block_only():
+def test_a_counter_merges_into_the_first_block_only():
     module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
     module.set_state(lin_idx=7)
     plain = module.num_blocks
 
-    slc = pp.make_label(type="SET", label="SLC", value=3)
-    assert module.set_labels(slc) is module
+    assert module.set_state(SLC=3) is module
     assert module.num_blocks == plain
-    assert module[0][-1] is slc
-    assert all(slc not in block for block in module[1:])
+    slc = module.blocks[0][-1]
+    assert (slc.type, slc.label, slc.value) == ("labelset", "SLC", 3)
+    assert all(slc not in block for block in module.blocks[1:])
 
-    module.set_labels()
-    assert slc not in module[0]
+
+def test_a_counter_keeps_the_event_it_was_declared_with():
+    """A counter is structure once named, and only its value moves after that.
+
+    This is what lets a TR template recognise the block as its own: the module
+    hands back the *same* label object every shot, so the block the template
+    recorded stays the block the loop adds.
+    """
+    module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
+    module.set_state(lin_idx=7, SLC=3)
+    declared = module.blocks[0][-1]
+
+    module.set_state(lin_idx=8, SLC=4)
+    assert module.blocks[0][-1] is declared
+    assert declared.value == 4
+    # ...and a shot that does not mention it leaves it where it was.
+    module.set_state(lin_idx=9)
+    assert module.blocks[0][-1] is declared
+    assert declared.value == 4
 
 
 def test_duration_is_the_snapshot_duration():
@@ -167,7 +187,7 @@ def test_duration_is_the_snapshot_duration():
 
     # Line readouts publish an exact analytic duration; it must agree with the
     # blocks actually emitted.
-    assert module.duration == pytest.approx(sum(pp.calc_duration(*block) for block in module))
+    assert module.duration == pytest.approx(sum(pp.calc_duration(*block) for block in module.blocks))
 
     # A module that publishes nothing falls back to summing its snapshot.
     rf, _ = readout.build_refocusing_pulse(opts, thickness_m=5e-3)
@@ -183,83 +203,127 @@ def _label_pairs(block, name):
     ]
 
 
-def test_set_labels_accepts_counter_keywords_alongside_events():
+def test_counters_and_numbers_travel_in_one_call():
     module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
-    module.set_state(lin_idx=7)
+    module.set_state(lin_idx=7, REP=2, SLC=3, PHS=1)
 
-    rep = pp.make_label(type="SET", label="REP", value=2)
-    module.set_labels(rep, SLC=3, PHS=1)
-
-    assert _label_pairs(module[0], "REP") == [("labelset", 2)]
-    assert _label_pairs(module[0], "SLC") == [("labelset", 3)]
-    assert _label_pairs(module[0], "PHS") == [("labelset", 1)]
+    assert _label_pairs(module.blocks[0], "REP") == [("labelset", 2)]
+    assert _label_pairs(module.blocks[0], "SLC") == [("labelset", 3)]
+    assert _label_pairs(module.blocks[0], "PHS") == [("labelset", 1)]
 
 
-def test_set_flags_scopes_module_flags_and_leaves_sticky_ones_open():
+def test_flags_are_scoped_to_the_module_and_sticky_ones_left_open():
     module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
     module.set_state(lin_idx=7)
     plain = module.num_blocks
 
-    assert module.set_flags(OFF=1, NAV=True, ONCE=1, MODULE=4) is module
+    assert module.set_state(OFF=1, NAV=True, ONCE=1, MODULE=4) is module
     assert module.num_blocks == plain
     assert module.flags == {"OFF": 1, "NAV": 1, "ONCE": 1, "MODULE": 4}
 
     # Scoped flags open on the first block and reset on the last, so they
     # cannot leak into whatever the sequence plays next...
     for name in ("OFF", "NAV"):
-        assert _label_pairs(module[0], name) == [("labelset", 1)]
-        assert _label_pairs(module[-1], name) == [("labelset", 0)]
+        assert _label_pairs(module.blocks[0], name) == [("labelset", 1)]
+        assert _label_pairs(module.blocks[-1], name) == [("labelset", 0)]
     # ...while ONCE (a whole prep section) and MODULE (a group id) stay set.
-    assert _label_pairs(module[0], "ONCE") == [("labelset", 1)]
-    assert _label_pairs(module[0], "MODULE") == [("labelset", 4)]
-    assert _label_pairs(module[-1], "ONCE") == _label_pairs(module[-1], "MODULE") == []
+    assert _label_pairs(module.blocks[0], "ONCE") == [("labelset", 1)]
+    assert _label_pairs(module.blocks[0], "MODULE") == [("labelset", 4)]
+    assert _label_pairs(module.blocks[-1], "ONCE") == _label_pairs(module.blocks[-1], "MODULE") == []
 
-    module.set_flags()
-    assert module.flags == {}
-    assert all(not _label_pairs(block, "OFF") for block in module)
+    # Clearing a flag is setting it to zero: the event stays, because it is
+    # part of the structure the template recorded.
+    module.set_state(OFF=0)
+    assert module.flags["OFF"] == 0
+    assert _label_pairs(module.blocks[0], "OFF") == [("labelset", 0)]
 
 
-def test_set_flags_scope_override_and_validation():
+def test_adc_flag_is_the_off_flag_spelled_the_way_a_loop_reads():
     module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
-    module.set_state(lin_idx=7)
+    module.set_state(lin_idx=7, adc_flag=False)
+    assert _label_pairs(module.blocks[0], "OFF") == [("labelset", 1)]
+    assert _label_pairs(module.blocks[-1], "OFF") == [("labelset", 0)]
 
-    module.set_flags(NOROT=1, scope="sticky")
-    assert _label_pairs(module[-1], "NOROT") == []
+    module.set_state(lin_idx=7, adc_flag=True)
+    assert _label_pairs(module.blocks[0], "OFF") == [("labelset", 0)]
 
-    module.set_flags(ONCE=1, scope="module")
-    assert _label_pairs(module[-1], "ONCE") == [("labelset", 0)]
+    # None means "leave it as it is", so a loop can pass the same keyword
+    # whether or not this shot has an opinion about it.
+    module.set_state(lin_idx=7, adc_flag=None, once=None)
+    assert _label_pairs(module.blocks[0], "OFF") == [("labelset", 0)]
+    assert module.flags == {"OFF": 0}
 
-    with pytest.raises(ValueError, match="scope"):
-        module.set_flags(NOROT=1, scope="block")
+
+def test_flag_scope_is_declared_with_the_flag():
+    module = readout.Line2D(
+        _opts(), (0.22, 0.22), (32, 32), spoil_position="none",
+        flags=("NOROT",), flag_scope="sticky",
+    )
+    module.set_state(lin_idx=7, NOROT=1)
+    assert _label_pairs(module.blocks[-1], "NOROT") == []
+
+    scoped = readout.Line2D(
+        _opts(), (0.22, 0.22), (32, 32), spoil_position="none",
+        flags={"ONCE": 1}, flag_scope="module",
+    )
+    scoped.set_state(lin_idx=7)
+    assert _label_pairs(scoped.blocks[-1], "ONCE") == [("labelset", 0)]
+
+    with pytest.raises(ValueError, match="flag_scope"):
+        readout.Line2D(
+            _opts(), (0.22, 0.22), (32, 32), spoil_position="none",
+            flags=("NOROT",), flag_scope="block",
+        )
 
 
-def test_set_flags_and_set_labels_are_independent_states():
+def test_flags_and_counters_are_independent_states():
     module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
-    module.set_state(lin_idx=7).set_flags(OFF=1).set_labels(SLC=2)
+    module.set_state(lin_idx=7, OFF=1, SLC=2)
 
-    # Replacing the per-shot counters must not disturb the sticky flags.
-    module.set_labels(SLC=5)
-    assert _label_pairs(module[0], "OFF") == [("labelset", 1)]
-    assert _label_pairs(module[0], "SLC") == [("labelset", 5)]
+    # Moving a counter must not disturb a sticky flag.
+    module.set_state(SLC=5)
+    assert _label_pairs(module.blocks[0], "OFF") == [("labelset", 1)]
+    assert _label_pairs(module.blocks[0], "SLC") == [("labelset", 5)]
 
 
-def test_set_triggers_targets_individual_blocks():
+def test_labels_are_emitted_in_the_order_they_were_declared():
+    """The file a module writes follows its declarations, not an internal split.
+
+    A flag and a counter are the same kind of event to Pulseq, and the order
+    they appear in decides the bytes, so it must be the order the module was
+    told about them -- not "flags first" or any other rule the caller cannot
+    see.
+    """
     module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
-    module.set_state(lin_idx=7)
-    plain = module.num_blocks
+    module.set_state(lin_idx=7, SLC=1, ONCE=0, REP=2)
+    assert [
+        event.label for event in module.blocks[0] if getattr(event, "type", "") == "labelset"
+    ] == ["SLC", "ONCE", "REP"]
 
+
+def test_triggers_are_declared_with_the_module():
     gate = pp.make_trigger("physio1", duration=100e-6)
     sync = pp.make_digital_output_pulse("osc0", duration=100e-6)
-    assert module.set_triggers(gate) is module
-    module.set_triggers(sync, block=-1)
+    plain = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
+    plain.set_state(lin_idx=7)
 
-    assert module.num_blocks == plain
-    assert gate in module[0] and sync not in module[0]
-    assert sync in module[-1] and gate not in module[-1]
+    module = readout.Line2D(
+        _opts(), (0.22, 0.22), (32, 32), spoil_position="none",
+        triggers={0: (gate,), -1: (sync,)},
+    )
+    module.set_state(lin_idx=7)
 
-    module.set_triggers(block=-1)
-    assert sync not in module[-1]
-    assert gate in module[0]
+    assert module.num_blocks == plain.num_blocks
+    assert gate in module.blocks[0] and sync not in module.blocks[0]
+    assert sync in module.blocks[-1] and gate not in module.blocks[-1]
+
+    # A flat sequence of events arms the first block, which is where a gating
+    # trigger belongs.
+    first = readout.Line2D(
+        _opts(), (0.22, 0.22), (32, 32), spoil_position="none", triggers=(gate,)
+    )
+    first.set_state(lin_idx=7)
+    assert gate in first.blocks[0]
 
 
 def test_payloads_report_the_dynamic_fields_of_every_block():
@@ -270,8 +334,34 @@ def test_payloads_report_the_dynamic_fields_of_every_block():
     assert len(payloads) == len(module.blocks)
     assert all(set(payload) <= {"duration", "rf", "gx", "gy", "gz", "adc", "ext"} for payload in payloads)
     # Whatever axis carries the phase encode, changing lin_idx has to move the
-    # payload -- that is the whole contract the fast path will rely on.
-    assert payloads != module.set_state(lin_idx=9).payloads()
+    # payload -- that is the whole contract the fast path relies on. Snapshotted
+    # because a module rewrites its payloads in place; see the test below.
+    before = _snapshot(payloads)
+    assert before != _snapshot(module.set_state(lin_idx=9).payloads())
+
+
+def _snapshot(payloads):
+    """A payload's values, frozen -- they are otherwise a live view."""
+    return tuple(
+        {key: (tuple(value) if isinstance(value, list | tuple) else value) for key, value in payload.items()}
+        for payload in payloads
+    )
+
+
+def test_payloads_are_rewritten_in_place_not_rebuilt():
+    """A module hands back the same payload objects every shot, by design.
+
+    Rebuilding a dict per block per shot is the cost the whole fast path exists
+    to avoid, so ``set_state`` rewrites the entries that moved and hands the
+    same objects back. Anything that keeps a payload must copy it --
+    :meth:`pulserver.pypulseq.Sequence._template_set_block` does.
+    """
+    module = readout.Line2D(_opts(), (0.22, 0.22), (32, 32), spoil_position="none")
+    first = module.set_state(lin_idx=3).payloads()
+    second = module.set_state(lin_idx=9).payloads()
+
+    assert [id(p) for p in first] == [id(p) for p in second]
+    assert _snapshot(first) == _snapshot(second), "the same objects, so the same values"
 
 
 def test_the_peak_cache_survives_a_re_state_and_is_dropped_by_a_rebuild():

@@ -35,7 +35,7 @@ def _labels(sequence, name: str):
 
 def _as_sequence(train):
     sequence = upstream.Sequence(train.system)
-    for block in train:
+    for block in train.blocks:
         sequence.add_block(*block)
     return sequence
 
@@ -54,7 +54,7 @@ def test_2d_bssfp_is_an_rf_owned_continuous_trufi_train() -> None:
     assert train._rf.signal == pytest.approx(excitation.rf.signal)
     assert _labels(_as_sequence(train), "ONCE") == [("labelset", 1), ("labelset", 0), ("labelset", 2)]
 
-    adc_phases = [event.phase_offset for block in train for event in block if event.type == "adc"]
+    adc_phases = [event.phase_offset for block in train.blocks for event in block if event.type == "adc"]
     assert adc_phases == pytest.approx([0.0, np.pi] * 4)
     assert _labels(_as_sequence(train), "LIN") == [("labelset", value) for value in range(8)]
     assert _as_sequence(train).check_timing()[0]
@@ -79,10 +79,10 @@ def test_3d_bssfp_segments_cover_kspace_with_identical_shot_structure() -> None:
 
     train.set_state(segment_idx=0)
     segment_zero = _as_sequence(train)
-    zero_structure = [tuple(event.type for event in block) for block in train]
+    zero_structure = [tuple(event.type for event in block) for block in train.blocks]
     train.set_state(segment_idx=1)
     segment_one = _as_sequence(train)
-    one_structure = [tuple(event.type for event in block) for block in train]
+    one_structure = [tuple(event.type for event in block) for block in train.blocks]
 
     assert len(segment_zero.block_events) == len(segment_one.block_events)
     assert zero_structure == one_structure

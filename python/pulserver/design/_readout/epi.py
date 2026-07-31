@@ -393,8 +393,9 @@ class _EpiTrainBlipped(Readout):
         ro_axis="x",
         slice_rephasing=None,
         derate=True,
+        **declared,
     ):
-        Readout.__init__(self, system)
+        Readout.__init__(self, system, **declared)
         if derate:
             apply_system_derates(system)
         self._opts = system
@@ -552,11 +553,6 @@ class _EpiTrainBlipped(Readout):
         )
 
     def _run(self, seq, pe_start, rotation, labels=None, adc_labels=()):
-        if seq is None:
-            import pulserver.pypulseq as _ps
-
-            seq = _ps.Sequence(self._opts)
-
         pe_idx, par_idx = _norm_pe_start(pe_start, self._par is not None)
         absolute_labels = _absolute_labels(labels, pe_start, self._mask_pe, self._mask_par)
         _validate_coordinates(pe_idx, par_idx, self._mask_pe, self._mask_par, absolute_labels, self._pe, self._par)
@@ -672,8 +668,9 @@ class _EpiTrainFlyback(Readout):
         ro_axis="x",
         slice_rephasing=None,
         derate=True,
+        **declared,
     ):
-        Readout.__init__(self, system)
+        Readout.__init__(self, system, **declared)
         if derate:
             apply_system_derates(system)
         self._opts = system
@@ -771,11 +768,6 @@ class _EpiTrainFlyback(Readout):
         return self._collect_blocks(lambda seq: self._run(seq, state.pe_start, state.rotation, state.labels))
 
     def _run(self, seq, pe_start, rotation, labels=None):
-        if seq is None:
-            import pulserver.pypulseq as _ps
-
-            seq = _ps.Sequence(self._opts)
-
         pe_idx, par_idx = _norm_pe_start(pe_start, self._par is not None)
         absolute_labels = _absolute_labels(labels, pe_start, self._mask_pe, self._mask_par)
         _validate_coordinates(pe_idx, par_idx, self._mask_pe, self._mask_par, absolute_labels, self._pe, self._par)
@@ -895,7 +887,7 @@ class Epi2D(_EpiTrainBlipped):
         self.pe_axis = pe_axis
         self.fov_y_m, self.ny = float(fov[1]), int(matrix[1])
 
-    def set_state(self, lin_idx=0, rotation=None, *, labels=None, adc_labels=()):
+    def _set_state(self, lin_idx=0, rotation=None, *, labels=None, adc_labels=()):
         """Set one shot; append ``adc_labels`` (for example ``NAV``/``REF``) to every ADC line."""
         labels = _absolute_labels(labels, int(lin_idx), self._mask_pe, self._mask_par)
         self._replace_state(
@@ -930,7 +922,7 @@ class Epi3D(_EpiTrainBlipped):
         self.fov_y_m, self.ny = float(fov[1]), int(matrix[1])
         self.fov_z_m, self.nz = float(fov[2]), int(matrix[2])
 
-    def set_state(self, lin_idx=0, par_idx=0, rotation=None, *, labels=None, adc_labels=()):
+    def _set_state(self, lin_idx=0, par_idx=0, rotation=None, *, labels=None, adc_labels=()):
         """Set one shot; append ``adc_labels`` (for example ``NAV``/``REF``) to every ADC line."""
         self._replace_state(
             _EpiState(
@@ -963,7 +955,7 @@ class Epi2DFlyback(_EpiTrainFlyback):
         self.pe_axis = pe_axis
         self.fov_y_m, self.ny = float(fov[1]), int(matrix[1])
 
-    def set_state(self, lin_idx=0, rotation=None, *, labels=None):
+    def _set_state(self, lin_idx=0, rotation=None, *, labels=None):
         """Set the phase-encode offset and rotation for one flyback EPI shot."""
         labels = _absolute_labels(labels, int(lin_idx), self._mask_pe, self._mask_par)
         self._replace_state(_EpiState(pe_start=int(lin_idx), rotation=normalize_rotation(rotation), labels=labels))
@@ -991,7 +983,7 @@ class Epi3DFlyback(_EpiTrainFlyback):
         self.fov_y_m, self.ny = float(fov[1]), int(matrix[1])
         self.fov_z_m, self.nz = float(fov[2]), int(matrix[2])
 
-    def set_state(self, lin_idx=0, par_idx=0, rotation=None, *, labels=None):
+    def _set_state(self, lin_idx=0, par_idx=0, rotation=None, *, labels=None):
         """Set the phase/partition offsets and rotation for one flyback EPI shot."""
         self._replace_state(
             _EpiState(

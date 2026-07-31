@@ -19,7 +19,11 @@ above it::
     readout = design.make_line_readout(system, (0.22, 0.22), (128, 128))
     loop = design.make_cartesian_sampling((128, 128))
 
-    seq = pp.Sequence(system)
+    # The sequence is told what repeats and how often, up front: one shot of
+    # this readout, once per entry of the loop. Every library row is claimed from
+    # that, so the loop below writes numbers into rows that already exist.
+    readout.set_state(lin_idx=0)
+    seq = pp.Sequence(system, len(loop), readout)
     for shot in loop:
         readout.set_state(lin_idx=shot.lin[0])
         for block in readout:

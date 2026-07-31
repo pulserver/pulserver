@@ -304,7 +304,7 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
     # twice and every shot ends with a net selection moment.
     pulse = pulse.without_rephasers()
 
-    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse.blocks)
     center = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
     raster = opts.block_duration_raster
     te_delay_s = round(
@@ -314,12 +314,12 @@ def _compute_public(opts: pp.Opts, cfg: _Config, strict: bool):
     if te_delay_s < -1e-9 and strict:
         return None
     te_delay_s = max(0.0, te_delay_s)
-    mt_duration = 0.0 if mt is None else sum(pp.calc_duration(*block) for block in mt)
+    mt_duration = 0.0 if mt is None else sum(pp.calc_duration(*block) for block in mt.blocks)
     min_block_s = mt_duration + d_pulse + te_delay_s + radial.duration
     tr_delay_s = round((cfg.tr_s - min_block_s) / raster) * raster
     if tr_delay_s < -1e-9 and strict:
         return None
-    prep_duration = sum(pp.calc_duration(*block) for block in prep)
+    prep_duration = sum(pp.calc_duration(*block) for block in prep.blocks)
     prep_delay_s = cfg.ti_s - prep_duration if cfg.prep_type == PreparationType.INVERSION else 0.0
     prep_delay_s = round(prep_delay_s / raster) * raster
     if prep_delay_s < -1e-9 and strict:
@@ -350,7 +350,6 @@ def _view_loop(cfg: _Config):
 
 def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None:
     timing = _compute_public(opts, cfg, strict=False)
-    seq = pp.Sequence(opts)
     views = _view_loop(cfg)
     segments = views.shots
     rotations = views.to_rotations()
@@ -361,6 +360,26 @@ def _make_public_sequence(opts: pp.Opts, cfg: _Config, output_path: str) -> None
     prep_delay = pp.make_delay(timing["prep_delay_s"]) if timing["prep_delay_s"] > 0 else None
     recovery_s = round(cfg.trecovery_s / opts.block_duration_raster) * opts.block_duration_raster
     recovery = pp.make_delay(recovery_s) if recovery_s > 0 else None
+
+    # One segment's chronology, handed over once: the preparation, its delay,
+    # then ETL views. The recovery is deliberately outside -- it owns no library
+    # rows, so it can close a pass wherever the segment ends.
+    timing["pulse"].set_state(phase_offset_rad=0.0)
+    timing["radial"].set_state(lin_idx=int(segments[0][0]), par_idx=0, rotation=rotations[int(segments[0][0])])
+    view = [
+        *([timing["mt"]] if timing["mt"] is not None else []),
+        timing["pulse"],
+        *([te_delay] if te_delay is not None else []),
+        timing["radial"],
+        *([tr_delay] if tr_delay is not None else []),
+    ]
+    tr_struct = [
+        timing["prep"],
+        *([prep_delay] if prep_delay is not None else []),
+        *(len(segments[0]) * view),
+    ]
+    seq = pp.Sequence(opts, len(par_loop) * len(segments), *tr_struct)
+
     phase_idx = 0
     for par_shot in par_loop:
         for segment in segments:

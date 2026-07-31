@@ -90,13 +90,12 @@ allocation and inflates the timings it would otherwise be gathered alongside.
 
 `bench_scale.py`'s `events` column is the number of rows the block-referenced
 libraries still hold when the design pass finishes, before `remove_duplicates`
-runs. `Sequence.add_range` collapses repeats as it registers them, so a plugin
-on that path reports roughly the size of its event *vocabulary* — a few
-thousand — while one still looping over `add_block` reports roughly one row per
-event in the scan. A case whose `events` is close to its `blocks` is not on the
-range path.
+runs. Nothing is collapsed on the way in — a TR template claims one row per TR
+per slot and assumes any of them may move — so this is roughly one row per
+event in the scan, and it is what the write-time pass is asked to collapse
+rather than what survives it. It is a memory figure, not a vocabulary size.
 
 `ext rows` counts the libraries an extension chain points at, plus the chain
-nodes. Those are never collapsed early — a block orders its chain by reference
-ID, so sharing IDs across shots would reorder chains and change the emitted
-file — which makes them the floor on what a labelled scan costs to build.
+nodes. Those can never be shared between passes — a block orders its chain by
+reference ID, so sharing IDs would reorder chains and change the emitted file —
+which makes them the floor on what a labelled scan costs to build.

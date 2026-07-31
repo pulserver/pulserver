@@ -3,11 +3,31 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from operator import attrgetter
 from collections.abc import Iterator, Sequence
 from typing import Any, TypeVar, overload
 
 Block = tuple[Any, ...]
 _ModuleT = TypeVar("_ModuleT", bound="SequenceModule")
+
+#: Lowercase :meth:`SequenceModule.set_state` keywords that name a label rather
+#: than a number the waveforms are rebuilt from. Everything else uppercase is
+#: taken as a label name directly, so this is only for the two spellings that
+#: read better in a loop than their label does.
+_LABEL_ALIASES = {"once": "ONCE"}
+
+
+def _name_values(declared: Any) -> dict[str, int]:
+    """Normalise a ``labels=``/``flags=`` declaration to ``{name: value}``.
+
+    A bare name declares the label at zero, which is what a counter a loop is
+    about to write, or a flag that is off until something turns it on, wants.
+    """
+    if hasattr(declared, "items"):
+        return {str(name): int(value) for name, value in declared.items()}
+    if isinstance(declared, str):
+        declared = (declared,)
+    return {str(name): 0 for name in declared}
 
 
 def _layout_match(previous: tuple, current: tuple) -> bool:
@@ -55,9 +75,9 @@ class SequenceModule(Sequence[Block], ABC):
 
     Subclass this only to implement a *new* reusable RF, preparation,
     encoding or readout module — the shipped factories cover the standard
-    families. A subclass provides ``set_state`` and ``_current_blocks``; the
-    collection protocol, labels, flags, triggers, duration, plotting and
-    ``add_to`` come free.
+    families. A subclass provides ``_set_state`` and ``_current_blocks``; the
+    public :meth:`set_state`, the collection protocol, labels, flags,
+    triggers, duration and plotting come free.
 
     State keywords are shared vocabulary across every shipped module, so the
     same quantity is always spelled the same way:
@@ -73,23 +93,33 @@ class SequenceModule(Sequence[Block], ABC):
     ``rotation``                 rotation applied to every gradient block
     ============================ =========================================
 
-    Four setters, four separate concerns, each replacing its own state and
-    none of them touching the others:
+    Labels and flags are state too, and they go through the same call —
+    uppercase keywords are label names, lowercase ones are numbers::
 
-    ==================== ====================================================
-    :meth:`set_state`    the numbers that re-render the waveforms
-    :meth:`set_labels`   per-shot **counters** — where this data belongs
-                         (``SLC``, ``REP``, ``SET``, ``PHS``, ``AVG``)
-    :meth:`set_flags`    sticky **flags** — how these blocks are played or
-                         classified (``NOROT``, ``NOPOS``, ``OFF``,
-                         ``ONCE``, ``MODULE``, ``NAV``, ``PMC``)
-    :meth:`set_triggers` trigger and digital-output events, per block
-    ==================== ====================================================
+        readout.set_state(lin_idx=ky, phase_offset_rad=phase, SLC=s, REP=f)
+
+    so one line per shot sets everything that moves. See :meth:`set_state`.
 
     Parameters
     ----------
     system : pypulseq.Opts
         System limits the module was designed against.
+    labels : sequence of str or mapping, optional
+        Counters this module emits on its first block, in order. Names, or
+        ``{name: initial value}``. A counter may also be introduced by naming
+        it in :meth:`set_state`; declaring it here is how a module built by a
+        factory arrives already carrying it.
+    flags : sequence of str or mapping, optional
+        Sticky flags this module carries — see :meth:`set_state` for the
+        scoping rules.
+    flag_scope : {'module', 'sticky'}, optional
+        Override the per-flag default scope for every flag in ``flags``.
+    triggers : optional
+        Trigger and digital-output events. A flat sequence of events arms the
+        module's first block; a ``{block index: events}`` mapping arms any
+        block, with negative indices counting from the end. Which block a
+        trigger belongs on is a property of the module's design, which is why
+        this is a construction argument and not part of ``set_state``.
 
     Attributes
     ----------
@@ -122,170 +152,162 @@ class SequenceModule(Sequence[Block], ABC):
             for block in readout:
                 seq.add_block(*block)
 
-    ``add_to`` collapses each of those two-line loops into one when the module
-    needs no per-block handling::
-
-        excitation.set_state(phase_offset_rad=phases[ky]).add_to(seq)
-        readout.set_state(lin_idx=ky, phase_offset_rad=phases[ky]).add_to(seq)
-
     See Also
     --------
-    SequenceModule.set_labels : attach per-shot counters to the first block.
-    SequenceModule.set_flags : attach sticky flags, scoped to this module.
-    SequenceModule.set_triggers : attach triggers and digital outputs.
+    SequenceModule.set_state : the one setter — numbers, counters and flags.
     pulserver.ScanLoop : the encoding indices to feed ``set_state``.
     """
 
     #: Set through the ``duration`` setter by modules that know their timing.
     _duration: float | None = None
-    _labels: tuple[Any, ...] = ()
-    _flags: tuple[tuple[str, int, bool], ...] = ()
+    #: Every counter and flag this module carries, as ``(name, is flag, opening
+    #: event, closing event or None)``, **in declaration order** -- which is the
+    #: order they are emitted in, so the file a module writes is fixed by how it
+    #: was declared and not by an internal split. The events are the *same*
+    #: objects every shot -- ``set_state`` writes their ``value`` -- so a TR
+    #: template recognises them as its own and a payload cache survives a change
+    #: of counter. See :meth:`set_state`.
+    _labels: tuple[tuple[str, bool, Any, Any], ...] = ()
     _triggers: tuple[tuple[int, tuple[Any, ...]], ...] = ()
+    #: ``name -> (is flag, opening, closing)`` over :attr:`_labels`; built with
+    #: the tuple it indexes.
+    _label_index: dict[str, Any] | None = None
+    #: ``(payloads, ((event, values, index), ...))`` -- where each declared
+    #: label's value sits in the payloads a subclass computes directly. See
+    #: :meth:`payloads`.
+    _label_slots: tuple | None = None
     #: ``(structure key, blocks, record)`` -- see :meth:`_retuned_blocks`.
     _layout: tuple | None = None
     #: Memoised label/flag/trigger merge; see :meth:`_rendered_blocks`.
     _rendered_cache: tuple | None = None
     #: Sample array -> its signed peak; see :meth:`payloads`.
     _peak_cache: dict | None = None
+    #: Payloads a subclass builds once and rewrites in place; see
+    #: :meth:`_direct_payloads`. Cleared by anything that changes what the
+    #: blocks *are* rather than what the numbers in them are -- a structural
+    #: change, or a new set of labels, flags or triggers, since those add
+    #: entries the payload has to carry.
+    _payload_cache: Any = None
 
-    def __init__(self, system: Any) -> None:
+    def __init__(
+        self,
+        system: Any,
+        *,
+        labels: Any = (),
+        flags: Any = (),
+        flag_scope: str | None = None,
+        triggers: Any = (),
+    ) -> None:
         self.system = system
+        if labels:
+            for name, value in _name_values(labels).items():
+                self._declare_label(name, value, False, None)
+        if flags:
+            for name, value in _name_values(flags).items():
+                self._declare_label(name, value, True, flag_scope)
+        elif flag_scope is not None:
+            raise ValueError("flag_scope was given without any flags to scope")
+        if triggers:
+            self._declare_triggers(triggers)
 
-    @abstractmethod
     def set_state(self: _ModuleT, *args: Any, **kwargs: Any) -> _ModuleT:
-        """Replace the complete dynamic state and return ``self``."""
+        """Set everything this shot moves — numbers, counters and flags.
 
-    @abstractmethod
-    def _current_blocks(self) -> tuple[Block, ...]:
-        """Return the immutable block snapshot for the current state."""
+        The module's only setter, and the only public method besides iteration.
+        Two kinds of keyword, told apart by their spelling:
 
-    def set_labels(self: _ModuleT, *labels: Any, **counters: int) -> _ModuleT:
-        """Replace the counters merged into the first block, and return ``self``.
+        - **lowercase** names are the numbers the blocks are re-rendered from
+          — ``lin_idx``, ``phase_offset_rad``, ``rotation``. Which ones a
+          module takes is its own business and is documented on the module;
+          they are passed straight through, and like any state they are
+          *replaced* wholesale, so an omitted one falls back to its default.
+        - **UPPERCASE** names are labels: a counter (``SLC``, ``REP``,
+          ``SET``, ``PHS``, ``AVG``, ``SEG``) saying where this acquisition
+          belongs, or a flag (``NOROT``, ``NOPOS``, ``OFF``, ``ONCE``,
+          ``NAV``, ``PMC``, ``MODULE``) saying how these blocks are played.
+          Unlike the numbers these **persist**: a label keeps its value until
+          another call changes it, because the event carrying it is part of
+          the module's structure from the moment it is first named. Pass
+          ``0`` to clear one.
 
-        Modules emit the counters they own — a readout knows its own ``LIN``,
-        ``PAR`` and ``ECO``. Everything an outer *loop* owns (``SLC``,
-        ``REP``, ``SET``, ``PHS``, ``AVG``, ``SEG``) belongs to the caller,
-        and this is where it goes, so the loop never has to unpack the
-        snapshot by hand to reach block 0.
+        Any uppercase name is accepted, not only the built-in set, because a
+        sequence is allowed its own bookkeeping — a bin index, a preparation
+        state — without abusing a built-in counter (see
+        :func:`pulserver.pypulseq.make_label`). The cost of that is that a
+        misspelled counter becomes a custom label rather than an error;
+        :attr:`pulserver.pypulseq.Sequence.custom_labels` is where they show up.
 
-        Counters may be passed as ready-made label events — normally straight
-        from :meth:`pulserver.ScanLoop.labels`, which is what makes the
-        ``FIRST_IN_*``/``LAST_IN_*`` MRD flags come out right — or as keyword
-        arguments, which build the equivalent ``SET`` events for you.
+        Two lowercase spellings are label sugar, because they read better in a
+        loop than the label does: ``once=`` is ``ONCE``, and ``adc_flag=False``
+        is ``OFF=1`` — an ADC that is still played, so timing is unchanged, but
+        whose data is dropped. Either may be passed ``None`` to mean "leave it
+        as it is".
 
-        Like :meth:`set_state`, this replaces the complete counter state; call
-        it with no arguments to clear. Flags set through :meth:`set_flags`
-        are *not* affected, because they describe the module rather than the
-        shot.
+        A call naming **only** labels leaves the numbers alone, so a counter
+        can be updated without restating the shot::
+
+            excitation.set_state(SLC=s)          # counter only, state kept
+            excitation.set_state(freq_offset_hz=offsets[s], SLC=s)
+
+        A bare ``set_state()`` is not that case: it replaces the state with
+        its defaults, as it always has.
+
+        Flags are sticky in the Pulseq file — a value set at one block holds
+        until some later block sets it again — so a flag is *scoped* to the
+        module that sets it. ``'module'`` scope (the default for most) emits
+        the value on the first block and ``0`` on the last, so a fat-sat's
+        ``NOPOS`` cannot escape into the readout that follows; ``'sticky'``
+        scope (the default for ``ONCE``, ``MODULE`` and ``TRID``) emits it
+        once and never resets, because those deliberately span more than one
+        module. Pass ``flag_scope=`` at construction to override.
 
         Parameters
         ----------
-        *labels
-            Label events from :func:`pulserver.pypulseq.make_label`, or
-            whole tuples from :meth:`pulserver.ScanLoop.labels`.
-        **counters
-            ``LABEL=value`` pairs, each turned into a ``SET`` label event.
+        *args, **kwargs
+            Lowercase keywords and positional arguments go to the module's own
+            state; uppercase keywords are label values.
 
         Returns
         -------
         SequenceModule
-            ``self``, so it chains with :meth:`set_state` and :meth:`add_to`.
-
-        Examples
-        --------
-        Tag every shot of a multi-slice, multi-frame loop::
-
-            for f in range(len(frames)):
-                for s in range(len(slices)):
-                    excitation.set_state(freq_offset_hz=offsets[s])
-                    excitation.set_labels(*frames.labels(f), *slices.labels(s))
-                    excitation.add_to(seq)
-
-        The keyword form spells the same thing without a loop object::
-
-            excitation.set_labels(SLC=3, REP=frame)
-
-        See Also
-        --------
-        set_flags : the sticky half of the label set.
-        pulserver.ScanLoop.labels : where the events normally come from.
-        """
-        from pulserver.pypulseq import make_label
-
-        events = list(labels)
-        events += [make_label(label=name, type="SET", value=value) for name, value in counters.items()]
-        self._labels = tuple(events)
-        return self
-
-    def set_flags(self: _ModuleT, *, scope: str | None = None, **flags: int) -> _ModuleT:
-        """Replace the sticky flags this module carries, and return ``self``.
-
-        Flags are the other half of the Pulseq label set: not *where an
-        acquisition belongs* (that is :meth:`set_labels`) but *how these
-        blocks are played or classified*. ``NOROT``/``NOPOS``/``NOSCL``
-        exempt a preparation from the FOV transform, ``NAV`` routes a
-        navigator to its own encoding space, ``OFF`` plays an ADC but drops
-        its data, ``ONCE`` marks a preparation or cooldown TR, ``MODULE``
-        groups blocks under one safety id, ``PMC`` requests motion
-        correction. See :func:`pulserver.pypulseq.get_supported_labels` for
-        the full table.
-
-        Pulseq labels are sticky — a value set at one block persists until
-        some later block sets it again — so a flag has to be *scoped* or it
-        leaks into whatever the sequence plays next. Two scopes, chosen per
-        flag by :data:`pulserver.pypulseq.STICKY_FLAGS`:
-
-        - ``'module'`` (the default for everything else) emits the value on
-          the module's first block and ``0`` on its last, so a fat-sat's
-          ``NOPOS`` cannot escape into the readout that follows. This needs
-          at least two blocks; a single-block module emits the opening value
-          only, and the caller owns the reset.
-        - ``'sticky'`` (the default for ``ONCE``, ``MODULE`` and ``TRID``)
-          emits the value once and never resets it, because those three
-          deliberately span more than one module: ``ONCE`` delimits a whole
-          preparation or cooldown *section*, ``MODULE`` groups consecutive
-          modules, ``TRID`` names a repeating TR.
-
-        Like :meth:`set_state`, this replaces the complete flag state; call
-        it with no arguments to clear.
-
-        Parameters
-        ----------
-        scope : {'module', 'sticky'}, optional
-            Override the per-flag default for every flag in this call.
-        **flags
-            ``LABEL=value`` pairs; values are coerced to ``int``, so
-            ``NAV=True`` works.
-
-        Returns
-        -------
-        SequenceModule
-            ``self``.
+            ``self``, so a shot is one expression.
 
         Raises
         ------
         ValueError
-            If ``scope`` is neither ``'module'`` nor ``'sticky'``.
+            If an uppercase keyword names a flag whose scope has already been
+            fixed differently, or a label value is not an integer.
 
         Examples
         --------
-        Play the readout but discard its data, as a prescan TR does:
+        Play the readout but discard its data, as a dummy TR does:
 
         >>> import pulserver.design as design
         >>> import pulserver.pypulseq as pp
         >>> readout = design.make_line_readout(pp.Opts(), (0.22, 0.22), (64, 64))
-        >>> blocks = readout.set_state(lin_idx=0).set_flags(OFF=1).blocks
+        >>> blocks = readout.set_state(lin_idx=0, adc_flag=False).blocks
         >>> [(e.label, e.value) for e in blocks[0] if getattr(e, "type", "") == "labelset"]
         [('OFF', 1)]
         >>> [(e.label, e.value) for e in blocks[-1] if getattr(e, "type", "") == "labelset"]
         [('OFF', 0)]
 
-        Mark the leading dummy TRs of a steady-state sequence as preparation,
-        and group a whole preparation train under one safety module id::
+        Tag every shot of a multi-slice, multi-frame loop::
+
+            for f in range(len(frames)):
+                for s in range(len(slices)):
+                    excitation.set_state(
+                        freq_offset_hz=offsets[s],
+                        **frames.label_state(f),
+                        **slices.label_state(s),
+                    )
+                    for _block in excitation:
+                        seq.add_block(*_block)
+
+        Mark the leading dummy TRs of a steady-state sequence as preparation::
 
             for _ in range(n_dummies):
-                excitation.set_flags(ONCE=1).add_to(seq)
-                readout.set_state(lin_idx=0).set_flags(ONCE=1, OFF=1).add_to(seq)
+                excitation.set_state(once=1)
+                readout.set_state(lin_idx=0, once=1, adc_flag=False)
 
         ``ONCE`` stays set across both modules — that is the point, since the
         interpreter reads it as one contiguous prep *section* — while ``OFF``
@@ -293,65 +315,95 @@ class SequenceModule(Sequence[Block], ABC):
 
         See Also
         --------
-        set_labels : the per-shot counters.
-        pulserver.pypulseq.get_supported_labels : every flag and what it means.
+        pulserver.ScanLoop.label_state : the counter values, straight from a loop.
+        pulserver.pypulseq.get_supported_labels : every counter and flag.
         """
-        from pulserver.pypulseq import STICKY_FLAGS
+        state: dict[str, Any] = {}
+        labels: dict[str, Any] = {}
+        for key, value in kwargs.items():
+            name = _LABEL_ALIASES.get(key)
+            if name is not None:
+                labels[name] = value
+            elif key == "adc_flag":
+                labels["OFF"] = None if value is None else int(not value)
+            elif key.isupper():
+                labels[key] = value
+            else:
+                state[key] = value
+
+        # Only a call that names nothing *but* labels leaves the numbers alone;
+        # a bare set_state() still means "back to the defaults".
+        if args or state or not labels:
+            self._set_state(*args, **state)
+        for name, value in labels.items():
+            if value is not None:
+                self._set_label(name, value)
+        return self
+
+    @abstractmethod
+    def _set_state(self: _ModuleT, *args: Any, **kwargs: Any) -> Any:
+        """Replace the complete dynamic state.
+
+        What :meth:`set_state` delegates the *numbers* to, once it has taken
+        the labels out. A subclass names the state it accepts here; the return
+        value is ignored, so it need not hand back ``self``.
+        """
+
+    @abstractmethod
+    def _current_blocks(self) -> tuple[Block, ...]:
+        """Return the immutable block snapshot for the current state."""
+
+    def _set_label(self, name: str, value: Any) -> None:
+        """Write one label's value, declaring the event that carries it if new."""
+        from pulserver.pypulseq import FLAG_LABELS
+
+        declared = self._label_index
+        if declared is not None and name in declared:
+            # The event object is part of the structure and stays put; only its
+            # number moves, which is what keeps a TR template and a payload
+            # cache valid across a change of counter.
+            declared[name][2].value = int(value)
+        else:
+            self._declare_label(name, value, name in FLAG_LABELS, None)
+
+    def _declare_label(self, name: str, value: Any, is_flag: bool, scope: str | None) -> None:
+        from pulserver.pypulseq import STICKY_FLAGS, make_label
 
         if scope not in (None, "module", "sticky"):
-            raise ValueError("scope must be 'module' or 'sticky'")
-        self._flags = tuple(
-            (name, int(value), (name in STICKY_FLAGS) if scope is None else scope == "sticky")
-            for name, value in flags.items()
-        )
-        return self
+            raise ValueError("flag_scope must be 'module' or 'sticky'")
+        opening = make_label(label=name, type="SET", value=int(value))
+        closing = None
+        if is_flag:
+            sticky = (name in STICKY_FLAGS) if scope is None else scope == "sticky"
+            closing = None if sticky else make_label(label=name, type="SET", value=0)
+        entry = (name, is_flag, opening, closing)
+        self._labels = (*self._labels, entry)
+        self._label_index = {**(self._label_index or {}), name: entry}
+        self._declared()
 
-    def set_triggers(self: _ModuleT, *events: Any, block: int = 0) -> _ModuleT:
-        """Replace the trigger / digital-output events on one block.
+    def _declare_triggers(self, triggers: Any) -> None:
+        items = triggers.items() if hasattr(triggers, "items") else ((0, triggers),)
+        for block, events in items:
+            events = tuple(events) if isinstance(events, list | tuple) else (events,)
+            remaining = tuple(item for item in self._triggers if item[0] != block)
+            self._triggers = (*remaining, (int(block), events)) if events else remaining
+        self._declared()
 
-        Physiological triggers (:func:`pypulseq.make_trigger`) and digital
-        output pulses (:func:`pypulseq.make_digital_output_pulse`) are
-        ordinary block events, but which block they belong on is a property
-        of the *module*: a cardiac trigger gates the excitation that opens a
-        shot, a scope sync pulse marks the readout that must be captured.
-
-        Call it repeatedly to arm several blocks — each call replaces only
-        the events on the block it names. Call it with no events to clear
-        that block, or :meth:`set_triggers` with ``block`` omitted and no
-        events to clear block 0.
-
-        Parameters
-        ----------
-        *events
-            Trigger or digital-output events.
-        block : int, optional
-            Block index within the module; negative indices count from the
-            end, so ``block=-1`` is its last block.
-
-        Returns
-        -------
-        SequenceModule
-            ``self``.
-
-        Examples
-        --------
-        Gate every shot on the ECG and pulse the scope on the readout::
-
-            excitation.set_triggers(pp.make_trigger("physio1", duration=100e-6))
-            readout.set_triggers(pp.make_digital_output_pulse("osc0", duration=100e-6))
-
-        See Also
-        --------
-        set_flags : ``TRID``, the label that names a repeating TR block.
-        """
-        remaining = tuple(item for item in self._triggers if item[0] != block)
-        self._triggers = (*remaining, (block, tuple(events))) if events else remaining
-        return self
+    def _declared(self) -> None:
+        """A label, flag or trigger event was added: the blocks are now different."""
+        self._rendered_cache = None
+        self._payload_cache = None
+        self._label_slots = None
 
     @property
     def flags(self) -> dict[str, int]:
         """Sticky flags currently set on this module, as ``{label: value}``."""
-        return {name: value for name, value, _ in self._flags}
+        return {name: opening.value for name, is_flag, opening, _ in self._labels if is_flag}
+
+    @property
+    def labels(self) -> dict[str, int]:
+        """Counters currently set on this module, as ``{label: value}``."""
+        return {name: opening.value for name, is_flag, opening, _ in self._labels if not is_flag}
 
     def payloads(self) -> tuple[dict[str, Any], ...]:
         """One dict per block: every value the current state can have moved.
@@ -377,10 +429,93 @@ class SequenceModule(Sequence[Block], ABC):
         rebuilding each event's library row and being twice its price; a
         20,000-shot loop fills three entries.
         """
-        cache = self._peak_cache
-        if cache is None:
-            cache = self._peak_cache = {}
-        return tuple(_block_payload(block, cache) for block in self._rendered_blocks())
+        direct = self._direct_payloads()
+        if direct is None:
+            cache = self._peak_cache
+            if cache is None:
+                cache = self._peak_cache = {}
+            direct = tuple(_block_payload(block, cache) for block in self._rendered_blocks())
+        elif self._labels:
+            # A subclass that computes its payloads directly builds them once
+            # and rewrites numbers in place, so a counter set after that build
+            # would otherwise be reported at the value it was built with. Find
+            # each label's slot once and write the live values through it --
+            # the same bridge a retuned amplitude uses.
+            self._write_label_payloads(direct)
+        # Bound once -- a module hands back the same payload objects every shot
+        # -- so that ``payload.events`` can find its way back to this block.
+        if getattr(direct[0], "_owner", None) is not self if direct else False:
+            for index, payload in enumerate(direct):
+                payload._owner, payload._index = self, index
+        return direct
+
+    def _write_label_payloads(self, payloads: tuple) -> None:
+        """Publish the current label values into directly-computed payloads."""
+        slots = self._label_slots
+        if slots is None or slots[0] is not payloads:
+            blocks = self._rendered_blocks()
+            entries: list[tuple[Any, list, int]] = []
+            # The closing half of a module-scoped flag is a constant zero, so
+            # only the opening events are worth a slot.
+            for event in (opening for _, _, opening, _ in self._labels):
+                entries += [
+                    (event, values, index)
+                    for values, index in _locate_payloads(blocks, payloads, event, "value")
+                ]
+            slots = self._label_slots = (payloads, tuple(entries))
+        for event, values, index in slots[1]:
+            values[index] = event.value
+
+    def waveform_inventory(self) -> tuple[dict[str, Any], ...] | None:
+        """Every candidate waveform this module's arbitrary gradients can play.
+
+        ``None`` -- the default -- means "the samples never move", which is true
+        of every module that replays one designed waveform under an amplitude, a
+        phase or a rotation.
+
+        A module whose samples *do* move returns one entry per block of
+        :attr:`blocks`, each a ``{channel: (samples, times)}`` mapping whose
+        values are the **ordered, complete** set of candidates for that channel:
+        ``samples[k]`` and ``times[k]`` are the waveform this block plays when
+        the state selects index ``k``. Waveforms are built at construction, so
+        this costs nothing to answer.
+
+        That is the whole of what a moving waveform needs. The sequence registers
+        each entry as a shape and a payload then names one **by index**, exactly
+        as it names an amplitude -- there is no compressing samples inside
+        ``add_block`` to recover an ID the module already knew. What varies per
+        shot is a number; the TR is still the template.
+
+        Returns
+        -------
+        tuple of dict or None
+            Per block, ``{channel: (samples, times)}``, or ``None``.
+
+        See Also
+        --------
+        _direct_payloads : where the selected index is published per shot.
+        """
+        return None
+
+    def _direct_payloads(self) -> tuple[dict[str, Any], ...] | None:
+        """Payloads computed from state, or ``None`` to derive them from events.
+
+        The default is ``None``: derive. A module that overrides this stops
+        paying for the round trip the default makes -- ``set_state`` rewrites
+        numbers into event objects and :meth:`payloads` reads them straight back
+        out, and rescaling a waveform to learn its new peak is the expensive
+        half of that. A module knows ``lin_idx -> gradient amplitude`` and
+        ``phase_offset_rad -> phase`` directly, so it can build its payload
+        dicts **once**, at construction, and have ``set_state`` rewrite only the
+        handful of entries that actually move.
+
+        Returning the *same* dicts every call is not only allowed, it is the
+        point; the sequence writer copies what it keeps
+        (``Sequence._template_set_block``). Return ``None`` for any state the
+        override does not cover -- a rotation, say, which changes the block
+        structure rather than a number -- and the generic path takes over.
+        """
+        return None
 
     def _invalidate(self) -> None:
         """Drop every cached rendering, for a change of *structure* not of state.
@@ -395,6 +530,7 @@ class SequenceModule(Sequence[Block], ABC):
         # A structure change designs new waveforms, so the old peaks describe
         # arrays this module no longer holds.
         self._peak_cache = None
+        self._payload_cache = None
 
     def _retuned_blocks(self, key: tuple, render, retune) -> tuple[Block, ...]:
         """Structure built once per ``key``; numbers rewritten on every later state.
@@ -422,41 +558,43 @@ class SequenceModule(Sequence[Block], ABC):
             record: dict = {}
             blocks = tuple(tuple(block) for block in render(record))
             self._layout = (key, blocks, record)
+            # A payload slot located by a _direct_payloads override points into
+            # payloads built from the blocks that were just replaced, and the
+            # peaks describe their waveforms. Neither survives a rebuild.
+            self._payload_cache = None
+            self._peak_cache = None
             return blocks
         retune(layout[2])
         return layout[1]
 
     def _rendered_blocks(self) -> tuple[Block, ...]:
         blocks = self._current_blocks()
-        if not blocks or not (self._labels or self._flags or self._triggers):
+        if not blocks or not (self._labels or self._triggers):
             return blocks
 
-        # The merge allocates a list per block and a label event per flag, and
-        # a loop asks for the same snapshot several times per shot (iteration,
-        # len, add_to), so it is worth remembering the last one. Every input is
-        # replaced wholesale rather than mutated, so identity is a sound key.
+        # The merge allocates a list per block, and a loop asks for the same
+        # snapshot several times per shot (iteration, len, payloads), so it is
+        # worth remembering the last one. Identity is a sound key because a
+        # declaration replaces these tuples wholesale, and a change of *value*
+        # is written into an event the merged blocks already hold.
         cached = self._rendered_cache
         if (
             cached is not None
             and cached[0] is blocks
             and cached[1] is self._labels
-            and cached[2] is self._flags
-            and cached[3] is self._triggers
+            and cached[2] is self._triggers
         ):
-            return cached[4]
+            return cached[3]
 
-        from pulserver.pypulseq import make_label
-
-        opening = [make_label(label=name, type="SET", value=value) for name, value, _ in self._flags]
-        closing = [make_label(label=name, type="SET", value=0) for name, _, sticky in self._flags if not sticky]
+        closing = [event for _, _, _, event in self._labels if event is not None]
         rendered = [list(block) for block in blocks]
-        rendered[0] += [*opening, *self._labels]
+        rendered[0] += [entry[2] for entry in self._labels]
         if closing and len(rendered) > 1:
             rendered[-1] += closing
         for index, events in self._triggers:
             rendered[index] += list(events)
         merged = tuple(tuple(block) for block in rendered)
-        self._rendered_cache = (blocks, self._labels, self._flags, self._triggers, merged)
+        self._rendered_cache = (blocks, self._labels, self._triggers, merged)
         return merged
 
     def __len__(self) -> int:
@@ -469,10 +607,29 @@ class SequenceModule(Sequence[Block], ABC):
     def __getitem__(self, index: slice) -> tuple[Block, ...]: ...
 
     def __getitem__(self, index: int | slice) -> Block | tuple[Block, ...]:
-        return self._rendered_blocks()[index]
+        return self._payload_blocks()[index]
 
     def __iter__(self) -> Iterator[Block]:
-        return iter(self._rendered_blocks())
+        return iter(self._payload_blocks())
+
+    def _payload_blocks(self) -> tuple[Block, ...]:
+        """What iterating a module yields: one ``add_block`` call per block.
+
+        Each item is the argument tuple for one block, so the loop reads the way
+        it always has::
+
+            for block in module:
+                seq.add_block(*block)
+
+        and what crosses is that block's :class:`Payload` -- only the numbers
+        this shot moves. Everything else about the block is fixed by the design,
+        and a sequence given the TR structure up front already holds it.
+
+        Use :attr:`blocks` to look at the *events* -- plotting, timing, any
+        inspection. That is the structural view and it is what ``tr_struct``
+        wants; this is the per-shot one.
+        """
+        return tuple((payload,) for payload in self.payloads())
 
     @property
     def blocks(self) -> tuple[Block, ...]:
@@ -504,63 +661,26 @@ class SequenceModule(Sequence[Block], ABC):
             return self._duration
         from pypulseq import calc_duration
 
-        return float(sum(calc_duration(*block) for block in self))
+        return float(sum(calc_duration(*block) for block in self.blocks))
 
     @duration.setter
     def duration(self, value: float) -> None:
         self._duration = float(value)
 
-    def add_to(self, sequence):
-        """Append the current block snapshot and return ``sequence``.
+    def get(self):
+        """Return a standalone enhanced Pulseq sequence holding just this module.
 
-        The one-line form of the canonical loop. Use the explicit
-        ``for block in module: seq.add_block(*block)`` instead whenever a
-        block needs individual handling.
+        The module *is* the structure, played once, so that is what the sequence
+        is told: a sequence is always built from the pattern that repeats and how
+        many times it repeats, and here the pattern is this module and the count
+        is one.
         """
+        from pulserver.pypulseq import Sequence as PulseqSequence
+
+        sequence = PulseqSequence(self.system, 1, self)
         for block in self:
             sequence.add_block(*block)
         return sequence
-
-    def add_range(self, sequence, **states):
-        """Append one instance of this module per entry of the state arrays.
-
-        The one-module form of :meth:`pulserver.pypulseq.Sequence.add_range`::
-
-            readout.add_range(seq, lin_idx=np.arange(ny), phase_offset_rad=phases)
-
-        is the loop it replaces, with arrays where the scalars were::
-
-            for ky in range(ny):
-                readout.set_state(lin_idx=ky, phase_offset_rad=phases[ky]).add_to(seq)
-
-        Scalars are broadcast, so only what actually varies has to be an array.
-        Use ``Sequence.add_range`` instead when a shot interleaves several
-        modules — a group has to be batched as a whole, because event IDs are
-        assigned in the order the blocks are visited.
-
-        Parameters
-        ----------
-        sequence : pulserver.pypulseq.Sequence
-            Sequence to append to.
-        **states
-            Arrays (or scalars) forwarded to :meth:`set_state` per shot.
-
-        Returns
-        -------
-        pulserver.pypulseq.Sequence
-            ``sequence``, so calls chain.
-
-        See Also
-        --------
-        add_to : the single-shot form.
-        """
-        return sequence.add_range((self, states))
-
-    def get(self):
-        """Return a standalone enhanced Pulseq sequence for this module."""
-        from pulserver.pypulseq import Sequence as PulseqSequence
-
-        return self.add_to(PulseqSequence(self.system))
 
     def plot(self, **kwargs):
         """Plot this module alone, as a one-module sequence diagram.
@@ -606,27 +726,42 @@ class SequenceModule(Sequence[Block], ABC):
             # the default state is already the full-amplitude one.
             self.set_state()
         sequence = pypulseq.Sequence(system=self.system)
-        for block in self:
+        for block in self.blocks:
             sequence.add_block(*block)
         return sequence.plot(**kwargs)
 
 
-#: Per event type, the payload fields a later shot can move. Everything absent
-#: from here -- shape IDs, sample counts, dwell times, delays, rise/flat/fall --
-#: is structure, owned by the module's constructor and never re-read per shot.
-#: The lists mirror the event library rows in
-#: ``pulserver.pypulseq._sequence.Sequence._bulk_event``; an arbitrary gradient
-#: carries three numbers because ``scale_grad`` moves ``first`` and ``last``
-#: alongside the amplitude, while its normalised shape ID stays put.
+#: Per event type, the payload fields a later shot can move, **in order**.
+#: A payload's value is a tuple in exactly this order, not a mapping: the
+#: consumer knows which event type sits at each slot of its template, so a name
+#: would be looked up per event per shot to learn something already fixed.
+#: Everything absent from here -- shape IDs, sample counts, dwell times, delays,
+#: rise/flat/fall -- is structure, owned by the module's constructor and never
+#: re-read per shot.
 _DYNAMIC_FIELDS: dict[str, tuple[str, ...]] = {
-    "rf": ("freq_offset", "phase_offset", "freq_ppm", "phase_ppm"),
+    "rf": ("amplitude", "freq_offset", "phase_offset", "freq_ppm", "phase_ppm"),
     "trap": ("amplitude",),
-    "grad": ("first", "last"),
+    # ``delay`` moves whenever pypulseq.align right- or left-aligns a solved
+    # waveform into a fixed-duration segment, which is per-partition for a
+    # stack-of-trajectories prewinder. Without it the template would keep
+    # emitting the delay it was built at.
+    "grad": ("amplitude", "first", "last", "delay"),
     "adc": ("freq_offset", "phase_offset", "freq_ppm", "phase_ppm"),
     "labelset": ("value",),
     "labelinc": ("value",),
     "trigger": ("delay", "duration"),
     "output": ("delay", "duration"),
+}
+
+#: One C-level call per event instead of a getattr per field. ``amplitude`` is
+#: absent from these: it is the waveform's peak, which is derived rather than
+#: read, and is prepended by hand.
+_GETTERS = {
+    "rf": attrgetter("freq_offset", "phase_offset", "freq_ppm", "phase_ppm"),
+    "grad": attrgetter("first", "last", "delay"),
+    "adc": attrgetter("freq_offset", "phase_offset", "freq_ppm", "phase_ppm"),
+    "trigger": attrgetter("delay", "duration"),
+    "output": attrgetter("delay", "duration"),
 }
 
 _CHANNEL_KEY = {"x": "gx", "y": "gy", "z": "gz"}
@@ -656,9 +791,41 @@ def _peak(samples, cache: dict) -> float:
     return magnitude
 
 
-def _block_payload(block: Block, cache: dict) -> dict[str, Any]:
-    """Dynamic values of one block, keyed by pulseq slot."""
-    payload: dict[str, Any] = {}
+class Payload(dict):
+    """One block's dynamic numbers, keyed the way a pulseq block is.
+
+    What a module iterates. It carries only what ``set_state`` moves --
+    amplitudes, phases, counters, a duration -- because everything else about
+    the block is fixed by the design and a sequence given the TR structure
+    up front already holds it.
+
+    ``events`` is the block it describes, so a sequence *without* that
+    structure can still take it: there is one way to write the loop, and it
+    works either way.
+
+    That attribute is deliberately **lazy**. A module that computes its
+    payloads directly never writes the numbers into its events -- not doing so
+    is the whole point -- so the events are only brought up to date if somebody
+    asks for them. A sequence that was given the TR structure never does.
+    """
+
+    __slots__ = ("_index", "_owner")
+
+    @property
+    def events(self) -> Block:
+        """The block this payload describes, retuned to the state it belongs to."""
+        owner = getattr(self, "_owner", None)
+        if owner is None:
+            raise AttributeError(
+                "this payload was not published by a module, so it has no events; "
+                "give the sequence a tr_struct so the block can be built from the payload"
+            )
+        return owner._rendered_blocks()[self._index]
+
+
+def _block_payload(block: Block, cache: dict) -> Payload:
+    """Dynamic values of one block, keyed by pulseq slot, each a tuple."""
+    payload: Payload = Payload()
     extensions: list[tuple[str, Any]] = []
     duration = 0.0
 
@@ -669,27 +836,47 @@ def _block_payload(block: Block, cache: dict) -> dict[str, Any]:
             continue
 
         if kind == "rf":
-            values = {name: getattr(event, name, 0.0) for name in _DYNAMIC_FIELDS["rf"]}
             # The registered amplitude is the envelope's peak; the shape is
             # normalised by it, so a flip-angle schedule moves this number only.
-            values["amplitude"] = _peak(event.signal, cache)
-            payload["rf"] = values
+            payload["rf"] = (_peak(event.signal, cache), *_GETTERS["rf"](event))
         elif kind == "trap":
-            payload[_CHANNEL_KEY[event.channel]] = {"amplitude": event.amplitude}
+            payload[_CHANNEL_KEY[event.channel]] = (event.amplitude,)
         elif kind == "grad":
-            values = {name: getattr(event, name, 0.0) for name in _DYNAMIC_FIELDS["grad"]}
-            values["amplitude"] = _peak(event.waveform, cache)
-            payload[_CHANNEL_KEY[event.channel]] = values
+            channel = _CHANNEL_KEY[event.channel]
+            payload[channel] = (_peak(event.waveform, cache), *_GETTERS["grad"](event))
+            # An arbitrary gradient's samples travel with it so the sequence
+            # can tell "still the shape the template registered" from "this
+            # shot re-solved the waveform". Only the answer matters, not the
+            # samples: a module is handed every shot's waveform at
+            # construction, so the shape is registered there and a payload
+            # names it rather than carrying it. Trapezoids have no shape and
+            # never take this branch.
+            shapes = payload.get("shape")
+            if shapes is None:
+                shapes = payload["shape"] = {}
+            shapes[channel] = event.waveform
         elif kind == "adc":
-            payload["adc"] = {name: getattr(event, name, 0.0) for name in _DYNAMIC_FIELDS["adc"]}
+            payload["adc"] = _GETTERS["adc"](event)
         elif kind == "rot3D":
             extensions.append(("rot3D", tuple(
                 event.rot_quaternion.as_quat(canonical=True, scalar_first=True).tolist()
             )))
         elif kind == "rf_shim":
-            extensions.append(("rf_shim", tuple(event.shim_vector.tolist())))
-        elif kind in _DYNAMIC_FIELDS:
-            extensions.append((kind, tuple(getattr(event, name, 0) for name in _DYNAMIC_FIELDS[kind])))
+            # Laid out as the library row is -- magnitude and phase interleaved
+            # per channel -- so a shim is a payload like any other and a TR
+            # template can write it straight into its claimed row. A complex
+            # vector would have to be unpacked again on the way in.
+            import numpy as _np
+
+            vector = _np.asarray(event.shim_vector)
+            extensions.append((
+                "rf_shim",
+                tuple(_np.stack((_np.abs(vector), _np.angle(vector)), axis=-1).ravel().tolist()),
+            ))
+        elif kind in ("labelset", "labelinc"):
+            extensions.append((kind, (event.value,)))
+        elif kind in _GETTERS:
+            extensions.append((kind, _GETTERS[kind](event)))
         elif kind in ("delay", "soft_delay"):
             duration = max(duration, float(getattr(event, "delay", 0.0)))
 
@@ -698,3 +885,63 @@ def _block_payload(block: Block, cache: dict) -> dict[str, Any]:
     if duration:
         payload["duration"] = duration
     return payload
+
+
+#: Where each dynamic field sits inside its payload tuple. ``_DYNAMIC_FIELDS``
+#: already spells the payload layout -- ``_block_payload`` builds every tuple in
+#: that order -- so the position is the field's index in it.
+_FIELD_INDEX = {
+    kind: {name: index for index, name in enumerate(fields)}
+    for kind, fields in _DYNAMIC_FIELDS.items()
+}
+
+#: Event kinds that reach a block through its extension chain rather than a
+#: slot of its own, in the order ``_block_payload`` appends them.
+_EXTENSION_TYPES = ("labelset", "labelinc", "trigger", "output", "rot3D", "rf_shim")
+
+
+def _locate_payloads(blocks, payloads, target, field="amplitude"):
+    """Every place one event's dynamic ``field`` sits: a list of ``(values, index)``.
+
+    The bridge a :meth:`SequenceModule._direct_payloads` override is built on:
+    it names the events it would otherwise have retuned, and gets back the
+    position of each one's number so a later shot is a float write. Payload
+    values arrive as tuples; the entry an event owns is swapped for a list, in
+    place, so nothing has to be rebuilt to move it.
+
+    An event may be played by more than one block -- one rotation shared by a
+    whole segment, say -- and each of those blocks carries its own copy of the
+    number, so every one of them is returned and every one has to be written.
+
+    ``field`` is ignored for an extension whose whole value moves together --
+    a rotation's quaternion, a shim's vector -- which is written as
+    ``values[:] = ...`` against the returned index of 0.
+    """
+    kind = target.type
+    found = []
+    for block, payload in zip(blocks, payloads, strict=True):
+        ordinal = -1
+        for event in block:
+            if getattr(event, "type", None) in _EXTENSION_TYPES:
+                ordinal += 1
+            if event is not target:
+                continue
+            if kind in _EXTENSION_TYPES:
+                extensions = list(payload["ext"])
+                name, values = extensions[ordinal]
+                values = list(values)
+                extensions[ordinal] = (name, values)
+                payload["ext"] = tuple(extensions)
+                found.append((values, _FIELD_INDEX.get(kind, {}).get(field, 0)))
+            else:
+                key = _CHANNEL_KEY[event.channel] if kind in ("trap", "grad") else kind
+                values = payload[key] = list(payload[key])
+                found.append((values, _FIELD_INDEX[kind][field]))
+    if not found:
+        raise RuntimeError(f"a retuned {kind} event is not in this module's own blocks")
+    return found
+
+
+def _locate_payload(blocks, payloads, target, field="amplitude"):
+    """:func:`_locate_payloads` for an event only one block plays."""
+    return _locate_payloads(blocks, payloads, target, field)[0]

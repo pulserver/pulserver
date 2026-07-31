@@ -217,8 +217,6 @@ class Epi3DPulseqSequence(Sequence):
         te_delay = pp.make_delay(te_delay_s) if te_delay_s > 0.0 else None
         tr_delay = pp.make_delay(tr_delay_s) if tr_delay_s > 0.0 else None
 
-        seq = pp.Sequence(opts)
-
         shot_starts = list(range(0, cfg.ny_pe, cfg.etl))
         par_loop = design.make_cartesian_sampling((cfg.nx_ro, cfg.npar), acceleration=cfg.rz)
         n_directions = cfg.n_directions if cfg.b_value_s_mm2 > 0.0 else 1
@@ -233,10 +231,94 @@ class Epi3DPulseqSequence(Sequence):
         ttl = pp.make_digital_output_pulse("ext1", duration=1e-3, system=opts) if cfg.ttl_output else None
         frames = design.make_counter_loop(cfg.num_frames, label="PHS")
         image_labels = (pp.make_label(type="SET", label="SET", value=0),)
+
+        # The template is the largest *genuine* period of this scan, which is not
+        # always the TR: a TTL plays once per frame and a phase-correction
+        # navigator or a reverse-PE pass once per scan, and every one of those
+        # owns a library row -- a block outside the template may own nothing at
+        # all. So the period is chosen rather than assumed, smallest first,
+        # because a template the size of the scan pays the per-block cost twice:
+        # once building it and once filling it.
+        #
+        # Labels and the TTL are built once and replayed: the template
+        # recognises its own blocks by event *identity*, so a label remade per
+        # frame would be a different object and be refused as foreign.
+        once_open = pp.make_label(type="SET", label="ONCE", value=1)
+        # The counters the excitation carries are declared here, with the
+        # structure: the template records the label events its first block holds,
+        # and later shots only move their values.
+        pulse.set_state(
+            SLC=0,
+            **frames.label_state(0),
+            once=0 if ttl is not None else None,
+        )
+        if diffusion is not None:
+            diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotations[0])
+        epi.set_state(lin_idx=0, par_idx=0, adc_labels=image_labels)
+        imaging_tr = [
+            *([diffusion] if diffusion is not None else []),
+            pulse,
+            *([te_delay] if te_delay is not None else []),
+            epi,
+            *([tr_delay] if tr_delay is not None else []),
+        ]
+        n_imaging = n_directions * len(par_loop) * len(shot_starts)
+
+        if cfg.phase_correction or cfg.reverse_pe:
+            # A once-per-scan lead-in or tail has no period of its own, so the
+            # whole scan is the period and the template makes a single pass.
+            navigator.set_state(
+                lin_idx=0,
+                par_idx=0,
+                adc_labels=(
+                    pp.make_label(type="SET", label="NAV", value=1),
+                    pp.make_label(type="SET", label="REF", value=1),
+                ),
+            )
+            reverse_tr = []
+            if cfg.reverse_pe:
+                reverse_epi.set_state(
+                    lin_idx=0, par_idx=0,
+                    adc_labels=(pp.make_label(type="SET", label="SET", value=1),),
+                )
+                reverse_tr = [
+                    pulse,
+                    *([te_delay] if te_delay is not None else []),
+                    reverse_epi,
+                    *([tr_delay] if tr_delay is not None else []),
+                ]
+            frame_body = [
+                *([(ttl, once_open)] if ttl is not None else []),
+                *(n_imaging * imaging_tr),
+            ]
+            tr_struct = [
+                *(
+                    [
+                        pulse,
+                        *([te_delay] if te_delay is not None else []),
+                        navigator,
+                        *([tr_delay] if tr_delay is not None else []),
+                    ]
+                    if cfg.phase_correction
+                    else []
+                ),
+                *(len(frames) * frame_body),
+                *(len(par_loop) * len(shot_starts) * reverse_tr),
+            ]
+            passes = 1
+        elif ttl is not None:
+            tr_struct = [(ttl, once_open), *(n_imaging * imaging_tr)]
+            passes = len(frames)
+        else:
+            tr_struct = imaging_tr
+            passes = len(frames) * n_imaging
+        seq = pp.Sequence(opts, passes, *tr_struct)
+
         if cfg.phase_correction:
-            for block_idx, block in enumerate(pulse):
-                labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
-                seq.add_block(*block, *labels)
+            # A lead-in belongs to no frame, so it reports the first.
+            pulse.set_state(**frames.label_state(0))
+            for block in pulse:
+                seq.add_block(*block)
             if te_delay is not None:
                 seq.add_block(te_delay)
             navigator.set_state(
@@ -258,15 +340,11 @@ class Epi3DPulseqSequence(Sequence):
         # then costs a waveform buffer proportional to the frame duration.
         # Re-SETting a counter that already holds the right value is free.
         for frame in range(len(frames)):
-            (phase_label,) = frames.labels(frame)
-            frame_labels = (phase_label,)
             if ttl is not None:
                 # A volume-start trigger genuinely is a once-per-frame block, so
                 # mark it as one: ONCE=1 opens the section and the ONCE=0 that
                 # every TR carries closes it, leaving the TRs identical.
-                seq.add_block(ttl, pp.make_label(type="SET", label="ONCE", value=1))
-                frame_labels = (phase_label, pp.make_label(type="SET", label="ONCE", value=0))
-            tr_labels = (pp.make_label(type="SET", label="SLC", value=0), *frame_labels)
+                seq.add_block(ttl, once_open)
             for rotation in rotations[:n_directions]:
                 for par_shot in par_loop:
                     for ky_start in shot_starts:
@@ -274,8 +352,9 @@ class Epi3DPulseqSequence(Sequence):
                             diffusion.set_state(b_value=cfg.b_value_s_mm2, rotation=rotation)
                             for block in diffusion:
                                 seq.add_block(*block)
-                        for block_idx, block in enumerate(pulse):
-                            seq.add_block(*block, *(tr_labels if block_idx == 0 else ()))
+                        pulse.set_state(**frames.label_state(frame))
+                        for block in pulse:
+                            seq.add_block(*block)
                         if te_delay is not None:
                             seq.add_block(te_delay)
                         epi.set_state(
@@ -291,9 +370,10 @@ class Epi3DPulseqSequence(Sequence):
             reverse_labels = (pp.make_label(type="SET", label="SET", value=1),)
             for par_shot in par_loop:
                 for ky_start in shot_starts:
-                    for block_idx, block in enumerate(pulse):
-                        labels = (pp.make_label(type="SET", label="SLC", value=0),) if block_idx == 0 else ()
-                        seq.add_block(*block, *labels)
+                    # A tail belongs to no frame either.
+                    pulse.set_state(SLC=0, **frames.label_state(0))
+                    for block in pulse:
+                        seq.add_block(*block)
                     if te_delay is not None:
                         seq.add_block(te_delay)
                     reverse_epi.set_state(
@@ -439,7 +519,7 @@ def _compute_timing(opts: pp.Opts, cfg: _Config, strict: bool):
             if strict:
                 return None
 
-    d_pulse = sum(pp.calc_duration(*block) for block in pulse)
+    d_pulse = sum(pp.calc_duration(*block) for block in pulse.blocks)
     rf_center_s = pp.calc_rf_center(pulse.rf)[0] + pulse.rf.delay
     first_echo_s = epi.duration - (epi.etl - 0.5) * epi.esp
     raster = opts.block_duration_raster

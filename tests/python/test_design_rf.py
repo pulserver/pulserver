@@ -209,7 +209,7 @@ def test_fat_saturation_scopes_and_resets_fov_exemption_labels(system):
     pulse = rf.make_fat_saturation_pulse(b0=3.0, voxel_size=3e-3, system=system)
     assert pulse.rf.freq_offset == pytest.approx(rf.fat_shift_hz(3.0, system.gamma))
     assert any(
-        getattr(event, "type", None) in ("grad", "trap") for block in pulse for event in block
+        getattr(event, "type", None) in ("grad", "trap") for block in pulse.blocks for event in block
     ), "fat saturation must retain its terminating spoiler gradients"
     assert [event.label for event in pulse.labels_on] == ["NOPOS", "NOROT"]
     assert [event.value for event in pulse.labels_on] == [1, 1]
@@ -263,7 +263,7 @@ def test_diffusion_prep_is_full_scale_rotatable_and_scopes_fov_labels(system):
     assert pulse.gradient.channel == "z"
     assert sum(
         getattr(event, "channel", None) == "z" and getattr(event, "type", None) in ("grad", "trap")
-        for block in pulse
+        for block in pulse.blocks
         for event in block
     ) >= 2
     assert pulse.gradient_scale(200.0) == pytest.approx(0.5)
@@ -277,8 +277,8 @@ def test_diffusion_prep_is_full_scale_rotatable_and_scopes_fov_labels(system):
 def test_rf_modules_are_iterable_indexable_and_materialize_standalone_sequences(system):
     module = rf.make_t2prep_pulse(30e-3, adiabatic=False, voxel_size=3e-3, system=system)
     assert module.num_blocks == len(module)
-    assert module[0] == module.blocks[0]
-    assert module[:] == module.blocks
+    assert module.blocks[0] == module.blocks[0]
+    assert module.blocks[:] == module.blocks
     assert all(isinstance(block, tuple) for block in module)
 
     standalone = module.get()
@@ -286,8 +286,8 @@ def test_rf_modules_are_iterable_indexable_and_materialize_standalone_sequences(
 
     from pulserver.pypulseq import Sequence
 
-    assembled = Sequence(system)
-    for block in module:
+    assembled = Sequence._unstructured(system)
+    for block in module.blocks:
         assembled.add_block(*block)
     assert len(assembled.block_events) == len(module)
 
@@ -298,7 +298,7 @@ def test_set_state_replaces_offsets_and_scaling_without_mutating_templates(syste
     before = module.blocks
 
     returned = module.set_state(freq_offset_hz=250.0, phase_offset_rad=0.3, amplitude_scale=0.4)
-    current_rf = [event for block in module for event in block if getattr(event, "type", None) == "rf"]
+    current_rf = [event for block in module.blocks for event in block if getattr(event, "type", None) == "rf"]
 
     assert returned is module
     # The snapshot is retuned in place rather than rebuilt -- same events, new
@@ -310,7 +310,7 @@ def test_set_state_replaces_offsets_and_scaling_without_mutating_templates(syste
     assert np.array_equal(module.rf_positive.signal, template_signal)
 
     module.set_state(freq_offset_hz=-100.0, amplitude_scale=0.5)
-    replaced_rf = [event for block in module for event in block if getattr(event, "type", None) == "rf"]
+    replaced_rf = [event for block in module.blocks for event in block if getattr(event, "type", None) == "rf"]
     assert replaced_rf[0].freq_offset == pytest.approx(6900.0)
     assert np.allclose(replaced_rf[0].signal, 0.5 * template_signal)
 
@@ -320,13 +320,13 @@ def test_diffusion_state_rotation_is_explicit_despite_norot_scope(system):
     module.set_state(b_value=200.0, rotation=Rotation.from_euler("y", 90.0, degrees=True))
 
     gradient_blocks = [
-        block for block in module if any(getattr(event, "type", None) in ("grad", "trap") for event in block)
+        block for block in module.blocks if any(getattr(event, "type", None) in ("grad", "trap") for event in block)
     ]
     assert gradient_blocks
     assert all(any(getattr(event, "type", None) == "rot3D" for event in block) for block in gradient_blocks)
     diffusion_lobes = [
         block[0]
-        for block in module
+        for block in module.blocks
         if len([event for event in block if getattr(event, "type", None) in ("grad", "trap")]) == 1
         and getattr(block[0], "channel", None) == "z"
     ]

@@ -60,12 +60,12 @@ rotations, and nothing about that restricts it to k-space: a Cartesian echo
 train, a non-Cartesian view list, an SMS slice group, a dynamic frame and an
 inversion-time series are the same table under different axis declarations.
 The axis fixes which converter applies (`to_scales`, `to_rotations`,
-`to_frequencies`) and which counter `labels()` emits.
+`to_frequencies`) and which counter `label_state()` reports.
 
-A module answers to four independent setters: `set_state` (the numbers that
-re-render its waveforms), `set_labels` (per-shot counters), `set_flags`
-(sticky block properties, scoped to the module) and `set_triggers` (trigger
-and digital-output events, per block).
+A module has one setter, `set_state`: the numbers that re-render its waveforms
+(lowercase keywords) plus the per-shot counters and sticky flags (uppercase
+ones). Triggers and digital outputs are declared with the module, because which
+block they belong on is a property of its design.
 
 Neither type owns the loop itself. How frames, slices, contrasts and shots
 nest is plain `for` statements in the plugin, which is what keeps a

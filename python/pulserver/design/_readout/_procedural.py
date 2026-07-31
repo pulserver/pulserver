@@ -237,7 +237,7 @@ def add_echo_train_blocks(seq, echo: dict, num_echoes: int, flyback: bool, rf_ph
     >>> from pulserver.design import _readout as readout
     >>> opts = pp.Opts()
     >>> echo = readout.line(opts, 0.22, 64, bandwidth_hz_px=125000.0)
-    >>> seq = ps.Sequence(opts)
+    >>> seq = ps.Sequence._unstructured(opts)  # helper appends blocks one at a time
     >>> readout.add_echo_train_blocks(seq, echo, 1, True, 0.0)
     """
     gx_echo = echo["gx_echo"]
@@ -414,7 +414,7 @@ def add_epi_train_blocks(seq, gx_pos, gx_neg, gy_blip, adc, n_lines, start_polar
     >>> opts = pp.Opts()
     >>> gx_pos, gx_neg, adc = readout.build_epi_readout(opts, "x", 64, 0.22, 125000.0, False)
     >>> blip = readout.build_pe_blip(opts, "y", 0.22)
-    >>> seq = ps.Sequence(opts)
+    >>> seq = ps.Sequence._unstructured(opts)  # helper appends blocks one at a time
     >>> readout.add_epi_train_blocks(seq, gx_pos, gx_neg, blip, adc, 4)
     """
     for i in range(n_lines):

@@ -7,8 +7,12 @@ re-exported unchanged, so this import covers the whole event layer and
 ```python
 import pulserver.pypulseq as pp
 
-seq = pp.Sequence(pp.Opts())
-seq.add_block(pp.make_delay(1e-3))
+delay = pp.make_delay(1e-3)
+# `Sequence` is one of the replacements: it takes the structure that repeats and
+# how many times it repeats, so it can claim every library row before the first
+# block is added. Here that is one block, played once.
+seq = pp.Sequence(pp.Opts(), 1, delay)
+seq.add_block(delay)
 ```
 
 Everything upstream documents is available here under the same name and with
@@ -67,10 +71,10 @@ events: pass them to `seq.add_block` like any other.
 ## Label constants
 
 The Pulseq label set splits in two. **Counters** say where an acquisition
-belongs and come from a scan loop's axes — {meth}`~pulserver.ScanLoop.labels`
-builds the events, {meth}`~pulserver.SequenceModule.set_labels` places them.
+belongs and come from a scan loop's axes — {meth}`~pulserver.ScanLoop.label_state`
+reports the values, {meth}`~pulserver.SequenceModule.set_state` emits them.
 **Flags** say how a block is played or classified and come from
-{meth}`~pulserver.SequenceModule.set_flags`, which scopes them to the module
+{meth}`~pulserver.SequenceModule.set_state`, which scopes them to the module
 unless they are in `STICKY_FLAGS`.
 
 `COUNTER_LABELS`, `FLAG_LABELS` and `STICKY_FLAGS` are that split as module

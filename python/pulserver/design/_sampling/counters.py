@@ -83,19 +83,21 @@ def make_counter_loop(values, *, label, order="sequential", kind=None, size=None
 
     >>> import pulserver.design as design
     >>> ti = design.make_counter_loop([0.1, 0.3, 1.0, 2.5], label="SET")
-    >>> float(ti[2][0, 0]), [(e.label, e.value) for e in ti.labels(2)]
-    (1.0, [('SET', 2)])
+    >>> float(ti[2][0, 0]), ti.label_state(2)
+    (1.0, {'SET': 2})
 
     Nest it like any other loop — the counter is emitted once per shot, and
     the readout keeps emitting its own ``LIN``/``PAR``/``ECO``::
 
         for f in range(len(frames)):
             for c in range(len(contrasts)):
-                inversion.set_state(...).set_labels(*frames.labels(f), *contrasts.labels(c))
-                inversion.add_to(seq)
+                inversion.set_state(**frames.label_state(f), **contrasts.label_state(c))
+                for _block in inversion:
+                    seq.add_block(*_block)
                 for shot in sampling:
-                    readout.set_state(lin_idx=int(shot[0, 0])).add_to(seq)
-
+                    readout.set_state(lin_idx=int(shot[0, 0]))
+                    for _block in readout:
+                        seq.add_block(*_block)
     See Also
     --------
     pulserver.design.make_slice_loop : the same object for the slice axis.

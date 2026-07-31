@@ -42,47 +42,74 @@ leading underscores and are not public import locations.
 The Pulseq label set splits in two, and the split is the toolbox's division of
 labour.
 
+Both halves go through the module's one setter, `set_state`, which tells them
+apart by name: **UPPERCASE** keywords are labels, lowercase ones are the numbers
+the waveforms are rebuilt from.
+
 **Counters** — `LIN`, `PAR`, `SLC`, `ECO`, `PHS`, `REP`, `SET`, `AVG`, `SEG`,
 `ACQ` — say *where an acquisition belongs*. They are one ISMRMRD
 `EncodingCounters` field each, and they come from a scan loop's `EncodingAxis`:
-`loop.labels(shot)` returns the events, `SequenceModule.set_labels` merges them
-into the module's first block. `LIN`/`PAR` reach the readout as `lin_idx`/
-`par_idx` and it emits them itself; `ECO` is the readout's own, because a
-multiecho train's echoes are blocks of one shot rather than iterations of a
-loop.
+`loop.label_state(shot)` returns `{counter: value}`, ready to spread into
+`set_state`. `LIN`/`PAR` reach the readout as `lin_idx`/`par_idx` and it emits
+them itself; `ECO` is the readout's own, because a multiecho train's echoes are
+blocks of one shot rather than iterations of a loop.
+
+```python
+excitation.set_state(freq_offset_hz=offsets[s], **slices.label_state(s), **frames.label_state(f))
+```
 
 **Flags** — `NOROT`, `NOPOS`, `NOSCL`, `PMC`, `NAV`, `REV`, `SMS`, `REF`,
 `IMA`, `NOISE`, `OFF`, `ONCE`, `TRID`, `MODULE` — say *how a block is played or
-classified*. They come from `SequenceModule.set_flags`, because they describe
-the module, not the shot:
+classified*:
 
 ```python
-readout.set_flags(OFF=1)                 # play the ADC, discard the data
-excitation.set_flags(ONCE=1, MODULE=2)   # a preparation TR, in safety group 2
-fatsat.set_flags(NOPOS=1, NOROT=1)       # exempt from the FOV transform
+readout.set_state(lin_idx=ky, adc_flag=False)   # play the ADC, discard the data
+excitation.set_state(once=1, MODULE=2)          # a preparation TR, in safety group 2
+fatsat.set_state(NOPOS=1, NOROT=1)              # exempt from the FOV transform
 ```
+
+`adc_flag=False` is `OFF=1` and `once=` is `ONCE`, spelled the way a loop reads.
 
 Pulseq labels are sticky — a value set at one block persists until some later
 block sets it again — so a flag has to be *scoped* or it leaks into whatever
-the sequence plays next. `set_flags` scopes by default: the value is emitted on
-the module's first block and `0` on its last. The three flags that deliberately
+the sequence plays next. Scoping is by default: the value is emitted on the
+module's first block and `0` on its last. The three flags that deliberately
 outlive their module are exempt, and listed in `STICKY_FLAGS`: `ONCE` delimits
 a whole preparation or cooldown *section*, `MODULE` groups consecutive modules
-under one safety id, `TRID` names a repeating TR. Pass `scope="sticky"` or
-`scope="module"` to override per call.
+under one safety id, `TRID` names a repeating TR. Pass `flag_scope="sticky"` or
+`flag_scope="module"` at construction to override.
 
-`set_labels`, `set_flags`, `set_triggers` and `set_state` are four independent
-states; each replaces its own and touches none of the others.
-
-**Triggers and digital outputs** are ordinary block events, but which block
-they belong on is a property of the module — a cardiac trigger gates the
-excitation that opens a shot, a scope sync pulse marks the readout that must be
-captured:
+A label is **structure** from the moment it is first named: the event carrying
+it is built once and only its value moves afterwards, which is what lets a TR
+template recognise the block as its own. So label values *persist* across
+`set_state` calls — pass `0` to clear one, and a call naming only labels leaves
+the numbers alone. They are emitted in the order they were declared. Declare
+them with the module to have them there from the start:
 
 ```python
-excitation.set_triggers(pp.make_trigger("physio1", duration=100e-6))
-readout.set_triggers(pp.make_digital_output_pulse("osc0", duration=100e-6), block=-1)
+readout = design.make_line_readout(system, fov, matrix, labels=("SLC", "REP"))
 ```
+
+**Triggers and digital outputs** are ordinary block events, but which block
+they belong on is a property of the module's *design* — a cardiac trigger gates
+the excitation that opens a shot, a scope sync pulse marks the readout that must
+be captured — so they are declared with it rather than set per shot:
+
+```python
+readout = design.make_line_readout(
+    system, fov, matrix,
+    triggers=(pp.make_trigger("physio1", duration=100e-6),),           # first block
+)
+scoped = design.make_line_readout(
+    system, fov, matrix,
+    triggers={-1: (pp.make_digital_output_pulse("osc0", duration=100e-6),)},   # last block
+)
+```
+
+`labels=`, `flags=`, `flag_scope=` and `triggers=` reach a readout through any
+`make_*_readout` factory. The RF and preparation factories do not forward them
+yet — declare counters and flags on those with `set_state` before the sequence
+is built, which is where the template records them.
 
 ### First/last-in-axis MRD flags
 

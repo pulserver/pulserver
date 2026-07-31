@@ -39,6 +39,7 @@ from .._system import (
     quantize_readout_timing,
     round_to_raster,
 )
+from ..._core._module import _block_payload, _locate_payload, _locate_payloads
 from ._base import Readout, normalize_rotation
 
 DEFAULT_ZTE_BANDWIDTH_HZ = 62_500.0
@@ -270,8 +271,9 @@ class Zte(Readout):
         tr_s=None,
         derate=True,
         rotation_encoded=False,
+        **declared,
     ):
-        Readout.__init__(self, system)
+        Readout.__init__(self, system, **declared)
         if exc_rf is None or getattr(exc_rf, "type", None) != "rf":
             raise ValueError("exc_rf must be a caller-supplied pypulseq RF event")
         if not np.isfinite(bandwidth_hz_px) or bandwidth_hz_px <= 0.0:
@@ -353,6 +355,8 @@ class Zte(Readout):
 
         self.rotation_encoded = bool(rotation_encoded)
         self._block_rotations = None
+        #: The encoding steps as one stacked rotation; see _turned_quaternions.
+        self._rotation_orbit = None
         if self.rotation_encoded:
             rotations = _view_rotations(self.directions)
             if rotations is None:
@@ -433,7 +437,7 @@ class Zte(Readout):
         self.block_durations_s = tuple(block_durations)
         self.duration = self.ramp_up_s + sum(self.block_durations_s)
 
-    def set_state(self, lin_idx=0, phase_offset_rad=0.0, rotation=None):
+    def _set_state(self, lin_idx=0, phase_offset_rad=0.0, rotation=None):
         """Set per-view labels/phases and one rigid rotation for the segment.
 
         The rotation acts on the complete caller-defined direction set, such
@@ -451,23 +455,192 @@ class Zte(Readout):
         )
         return self
 
-    def _block_rotation_events(self, segment_rotation):
-        """One rotation event per view: the segment's, turned by this view's step."""
-        if not self.rotation_encoded:
+    def _view_rotation_events(self, segment_rotation, record):
+        """The rotation event each view block is played under, or ``None``.
+
+        Rotation-encoded, that is the segment's rotation turned by the view's
+        own constant step -- one event per view, and the step is what
+        :meth:`_retune` re-applies when the segment moves. Otherwise every view
+        shares the segment's rotation, so it is a single event and there is
+        nothing per-view to turn.
+        """
+        if self.rotation_encoded:
+            base = segment_rotation.rot_quaternion if segment_rotation is not None else None
+            events = tuple(
+                normalize_rotation(step if base is None else base * step)
+                for step in self._block_rotations
+            )
+            record["rot"].extend(zip(events, self._block_rotations, strict=True))
+            return events
+        if segment_rotation is None:
             return None
-        base = segment_rotation.rot_quaternion if segment_rotation is not None else None
-        return tuple(
-            normalize_rotation(step if base is None else base * step) for step in self._block_rotations
-        )
+        shared = normalize_rotation(segment_rotation.rot_quaternion)
+        record["rot"].append((shared, None))
+        return (shared,) * self.num_views
+
+    def _direct_payloads(self):
+        """This segment's payloads, rewritten in place rather than re-derived.
+
+        Everything a ZTE shot varies reaches the file as a number: two phases
+        and a counter per view, and the four components of the quaternion each
+        block is played under. None of it needs an event, so none of it builds
+        one -- a shot is a few dozen float writes and, when the segment is
+        rotation-encoded, a single quaternion composition.
+
+        That composition is the one thing worth batching. Turning the segment's
+        rotation by each view's step one view at a time is a SciPy call per
+        view and another to read the quaternion back; composing the whole orbit
+        at once is one of each, and gives the same bits -- the stacked and the
+        scalar forms run the same kernel.
+        """
+        state = self._state
+        if not isinstance(state, _ZteState):
+            return None
+
+        cache = self._payload_cache
+        structure = state.rotation is None
+        if cache is None or cache[0] != structure:
+            blocks = self._rendered_blocks()
+            record = self._layout[2] if self._layout else {}
+            peaks = self._peak_cache = {}
+            payloads = [_block_payload(block, peaks) for block in blocks]
+            targets = (
+                [_locate_payload(blocks, payloads, event, "phase_offset") for event in record["rf"]],
+                [_locate_payload(blocks, payloads, event, "phase_offset") for event in record["adc"]],
+                [_locate_payload(blocks, payloads, event, "value") for event in record["label"]],
+                # A rotation the whole segment shares is one event in many
+                # blocks, and every block carries its own copy of the numbers.
+                [
+                    (_locate_payloads(blocks, payloads, event), step)
+                    for event, step in record["rot"]
+                ],
+            )
+            cache = self._payload_cache = (structure, tuple(payloads), targets)
+
+        _structure, payloads, (rf_slots, adc_slots, label_slots, rot_slots) = cache
+        base_phase = self._rf.phase_offset
+        phases = state.phase_offset_rad
+        lin_idx = state.lin_idx
+        for index, (rf, adc, label) in enumerate(zip(rf_slots, adc_slots, label_slots, strict=True)):
+            phase = base_phase + phases[index]
+            rf[0][rf[1]] = phase
+            adc[0][adc[1]] = phase
+            label[0][label[1]] = lin_idx[index]
+
+        if state.rotation is not None:
+            base = state.rotation.rot_quaternion
+            turned = self._turned_quaternions(base)
+            segment = None
+            for position, (slots, step) in enumerate(rot_slots):
+                if step is None:
+                    if segment is None:
+                        segment = base.as_quat(canonical=True, scalar_first=True).tolist()
+                    quaternion = segment
+                else:
+                    quaternion = turned[position]
+                for values, _index in slots:
+                    values[:] = quaternion
+        return payloads
+
+    def _turned_rotations(self, base):
+        """Every view's rotation, composed in one call rather than one per view.
+
+        ``record["rot"]`` is ordered as ``_render`` filled it -- the views
+        first, then the segment's own event -- so a straight index into this
+        answers each view slot, and the trailing segment entry carries no step
+        and is not looked up here.
+        """
+        if not self.rotation_encoded:
+            return ()
+        orbit = self._rotation_orbit
+        if orbit is None:
+            from scipy.spatial.transform import Rotation
+
+            orbit = self._rotation_orbit = Rotation.concatenate(list(self._block_rotations))
+        return base * orbit
+
+    def _turned_quaternions(self, base):
+        """:meth:`_turned_rotations` read straight out as quaternions.
+
+        The payload path never needs the rotation *objects*, only their four
+        numbers, so it pays one composition and one read for the whole orbit
+        instead of two SciPy calls per view.
+        """
+        if not self.rotation_encoded:
+            return ()
+        return self._turned_rotations(base).as_quat(canonical=True, scalar_first=True).tolist()
 
     def _build_blocks(self):
         state = self._require_state()
-        rotations = self._block_rotation_events(state.rotation)
+        return self._retuned_blocks(
+            # A rotation is a *number* here, not a structure: the segment plays
+            # the same gradients, the same RF and the same ADC whichever way it
+            # is turned, and only the quaternion riding each block moves.
+            # Whether there is a rotation event at all is the structural half,
+            # and that is what the key carries.
+            (state.rotation is None,),
+            lambda record: self._render(record, state),
+            lambda record: self._retune(record, self._require_state()),
+        )
+
+    def _retune(self, record, state):
+        """Rewrite this shot's numbers on the events the layout already owns.
+
+        A ZTE segment varies four things and every one of them is a number on
+        an event that already exists: the transmit and receive phase of each
+        view, its ``LIN`` counter, and the quaternion of the rotation the block
+        is played under. Nothing is copied, no label is built and no gradient is
+        touched -- the plateau waveforms are the same objects for every shot,
+        which is also what keeps the sequence writer's shape cache hitting.
+        """
+        # ``_render`` spells this ``rf.phase_offset += ...`` on a fresh copy of
+        # the template, which is the template's value plus this view's; the sum
+        # is spelled the same way here because the file is compared on it.
+        base_phase = self._rf.phase_offset
+        phases = state.phase_offset_rad
+        lin_idx = state.lin_idx
+        for index, (rf, adc, label) in enumerate(
+            zip(record["rf"], record["adc"], record["label"], strict=True)
+        ):
+            phase = base_phase + phases[index]
+            rf.phase_offset = phase
+            adc.phase_offset = phase
+            label.value = lin_idx[index]
+
+        if state.rotation is None:
+            # Without a segment rotation the per-view quaternions are the fixed
+            # encoding steps, which ``_render`` already wrote once.
+            return
+        base = state.rotation.rot_quaternion
+        # Composed as one stacked rotation rather than one call per view: SciPy
+        # charges more for entering a Rotation product than for the product,
+        # and the stacked and scalar forms run the same kernel on the same
+        # bits. The payload path skips the objects altogether -- see
+        # :meth:`_direct_payloads` -- but the event path needs them back.
+        turned = self._turned_rotations(base)
+        for position, (event, step) in enumerate(record["rot"]):
+            event.rot_quaternion = base if step is None else turned[position]
+
+    def _render(self, record, state):
+        """Build the segment once, recording the events :meth:`_retune` moves."""
+        for name in ("rf", "adc", "label", "rot"):
+            record.setdefault(name, [])
+        rotations = self._view_rotation_events(state.rotation, record)
 
         blocks = []
         ramp = [*self._ramp_up]
         if state.rotation is not None:
-            ramp.append(state.rotation)
+            if self.rotation_encoded:
+                # This module's own event rather than the caller's: a later shot
+                # rewrites the quaternion on it, and the event handed to
+                # ``set_state`` is not ours to move.
+                segment = normalize_rotation(state.rotation.rot_quaternion)
+                record["rot"].append((segment, None))
+            else:
+                # One event for the whole segment, ramp included, exactly as a
+                # single shared rotation was passed through before.
+                segment = rotations[0]
+            ramp.append(segment)
         blocks.append(tuple(ramp))
 
         for index in range(self.num_views):
@@ -479,15 +652,12 @@ class Zte(Readout):
             adc = copy_event(self._adc)
             rf.phase_offset += state.phase_offset_rad[index]
             adc.phase_offset = rf.phase_offset
-            events = [
-                *gradients,
-                rf,
-                adc,
-                pp.make_label(type="SET", label="LIN", value=state.lin_idx[index]),
-            ]
+            label = pp.make_label(type="SET", label="LIN", value=state.lin_idx[index])
+            record["rf"].append(rf)
+            record["adc"].append(adc)
+            record["label"].append(label)
+            events = [*gradients, rf, adc, label]
             if rotations is not None:
                 events.append(rotations[index])
-            elif state.rotation is not None:
-                events.append(state.rotation)
             blocks.append(tuple(events))
         return tuple(blocks)
