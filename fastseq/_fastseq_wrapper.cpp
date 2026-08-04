@@ -735,7 +735,15 @@ PyObject* checked_bytearray(const py::object& source, const char* what) {
 
 class BlockWriter {
  public:
-  explicit BlockWriter(py::object owner) : owner_(std::move(owner)) {
+  // `owner` is read here and not kept. It used to be a member, along with its
+  // instance dict, purely so that `cursor` could be written back into it after
+  // every block -- and that back-reference made the sequence immortal: the
+  // sequence holds this writer, this writer held the sequence, and a pybind11
+  // class has no `tp_traverse`, so Python's cycle collector cannot see through
+  // it to break the loop. A large scan then leaks its dense tables, about a
+  // gigabyte of them, on every build. `cursor` is read back out of this object
+  // instead, which is both cheaper and severable.
+  explicit BlockWriter(const py::object& owner) {
     py::module_ modules = py::module_::import("fastseq.modules");
     no_slot_ = modules.attr("_no_slot");
     no_extension_ = modules.attr("_no_extension");
@@ -747,58 +755,44 @@ class BlockWriter {
     label_id_ = modules.attr("LABEL_ID");
     rf_shim_row_ = modules.attr("rf_shim_row");
 
-    cursor_ = py::cast<int64_t>(owner_.attr("cursor"));
-    num_blocks_ = py::cast<int64_t>(owner_.attr("num_blocks"));
-    num_period_blocks_ = py::cast<int64_t>(owner_.attr("num_period_blocks"));
-    loop_size_ = py::cast<int64_t>(owner_.attr("loop_size"));
-    tag_ = py::cast<int64_t>(owner_.attr("_tag"));
-    ext_stride_ = py::cast<int>(owner_.attr("_ext_stride"));
+    cursor_ = py::cast<int64_t>(owner.attr("cursor"));
+    num_blocks_ = py::cast<int64_t>(owner.attr("num_blocks"));
+    num_period_blocks_ = py::cast<int64_t>(owner.attr("num_period_blocks"));
+    loop_size_ = py::cast<int64_t>(owner.attr("loop_size"));
+    tag_ = py::cast<int64_t>(owner.attr("_tag"));
+    ext_stride_ = py::cast<int>(owner.attr("_ext_stride"));
 
-    slots_ = static_cast<const int32_t*>(hold(owner_.attr("_slots"), 'i', "_slots").data);
+    slots_ = static_cast<const int32_t*>(hold(owner.attr("_slots"), 'i', "_slots").data);
     slots_ext_ =
-        static_cast<const int32_t*>(hold(owner_.attr("_slots_ext"), 'i', "_slots_ext").data);
-    rf_ = static_cast<double*>(hold(owner_.attr("_rf"), 'd', "_rf").data);
-    trap_ = static_cast<double*>(hold(owner_.attr("_trap"), 'd', "_trap").data);
-    arb_ = static_cast<double*>(hold(owner_.attr("_arb"), 'd', "_arb").data);
-    adc_ = static_cast<double*>(hold(owner_.attr("_adc"), 'd', "_adc").data);
+        static_cast<const int32_t*>(hold(owner.attr("_slots_ext"), 'i', "_slots_ext").data);
+    rf_ = static_cast<double*>(hold(owner.attr("_rf"), 'd', "_rf").data);
+    trap_ = static_cast<double*>(hold(owner.attr("_trap"), 'd', "_trap").data);
+    arb_ = static_cast<double*>(hold(owner.attr("_arb"), 'd', "_arb").data);
+    adc_ = static_cast<double*>(hold(owner.attr("_adc"), 'd', "_adc").data);
     durations_ =
-        static_cast<double*>(hold(owner_.attr("_durations"), 'd', "_durations").data);
+        static_cast<double*>(hold(owner.attr("_durations"), 'd', "_durations").data);
 
-    on_ = checked_bytearray(keep(owner_.attr("_on")), "_on");
+    on_ = checked_bytearray(keep(owner.attr("_on")), "_on");
 
-    // `cursor` stays an ordinary attribute of the sequence rather than becoming
-    // a property that asks this object: everything else on the Python side
-    // reads it, the pure-Python `_add_block_py` writes it, and having one place
-    // it lives is worth the forty nanoseconds a write-back costs here.
-    owner_dict_ = keep(py::reinterpret_borrow<py::object>(
-        PyObject_GetAttrString(owner_.ptr(), "__dict__")));
-    if (owner_dict_.ptr() == nullptr || !PyDict_Check(owner_dict_.ptr())) {
-      throw std::invalid_argument("BlockWriter: the sequence has no instance dict");
-    }
-    cursor_key_ = Names::intern("cursor");
-
-    for (auto column : owner_.attr("_ext_column")) {
+    for (auto column : owner.attr("_ext_column")) {
       ext_column_.push_back(py::cast<int>(column));
     }
-    for (auto width : owner_.attr("_ext_widths")) {
+    for (auto width : owner.attr("_ext_widths")) {
       ext_widths_.push_back(py::cast<int>(width));
     }
-    for (auto table : owner_.attr("_ext_tables")) {
+    for (auto table : owner.attr("_ext_tables")) {
       py::object held = py::reinterpret_borrow<py::object>(table);
       ext_tables_.push_back(
           static_cast<double*>(hold(held, 'd', "_ext_tables entry").data));
     }
-    for (auto switches : owner_.attr("_ext_switch")) {
+    for (auto switches : owner.attr("_ext_switch")) {
       py::object held = py::reinterpret_borrow<py::object>(switches);
       ext_switch_.push_back(checked_bytearray(keep(held), "_ext_switch entry"));
     }
   }
 
   int64_t cursor() const { return cursor_; }
-  void set_cursor(int64_t value) {
-    cursor_ = value;
-    publish_cursor();
-  }
+  void set_cursor(int64_t value) { cursor_ = value; }
 
   void add_block(py::args args);
 
@@ -814,14 +808,6 @@ class BlockWriter {
     return flat;
   }
 
-  void publish_cursor() {
-    py::object value = py::reinterpret_steal<py::object>(PyLong_FromLongLong(cursor_));
-    if (value.ptr() == nullptr ||
-        PyDict_SetItem(owner_dict_.ptr(), cursor_key_.ptr(), value.ptr()) < 0) {
-      throw py::error_already_set();
-    }
-  }
-
   // Raise through the Python helper, which owns the wording. It always raises;
   // the throw after it is there so that no caller can fall through if it ever
   // stops doing so.
@@ -830,9 +816,6 @@ class BlockWriter {
     throw std::runtime_error("fastseq: a refusal helper returned instead of raising");
   }
 
-  py::object owner_;
-  py::object owner_dict_;
-  py::object cursor_key_;
   std::vector<py::object> alive_;
 
   py::object no_slot_, no_extension_, stale_copy_, wrong_shim_, adopt_;
@@ -1104,7 +1087,6 @@ void BlockWriter::add_block(py::args args) {
   // Last, not first: a block that was refused half-way through is a block the
   // caller can fix and hand back, rather than one silently skipped.
   cursor_ = i + 1;
-  publish_cursor();
 }
 
 PYBIND11_MODULE(_fastseq_wrapper, m) {

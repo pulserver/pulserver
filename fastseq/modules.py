@@ -21,7 +21,14 @@ import pypulseq as pp
 from pypulseq.compress_shape import compress_shape
 from pypulseq.utils.seq_plot import SeqPlot
 
-from fastseq.sequence import LABEL_ID, Sequence, rf_shim_row
+# Reached both ways: `import fastseq.modules`, where these are siblings inside a
+# package, and `cd fastseq; import modules`, where they are top-level modules on
+# their own. The relative form raises when there is no package to be relative
+# to, which is what picks between them.
+try:
+    from .sequence import LABEL_ID, Sequence, rf_shim_row
+except ImportError:
+    from sequence import LABEL_ID, Sequence, rf_shim_row
 
 try:
     #: The loop and the deduplication kernels in C++. Optional on purpose:
@@ -29,7 +36,10 @@ try:
     #: checkout stays importable with nothing but NumPy and PyPulseq. Three
     #: places notice -- `_rounded`, `_unique_rows`, and `PeriodicSequence`,
     #: which binds `add_block` to the compiled writer when there is one.
-    from fastseq import _fastseq_wrapper as _accel
+    try:
+        from . import _fastseq_wrapper as _accel
+    except ImportError:
+        import _fastseq_wrapper as _accel
 except ImportError:  # pragma: no cover - depends on whether the wheel was built
     _accel = None
 
@@ -1932,7 +1942,7 @@ class PeriodicSequence(SeqPlotMixin):
         self._seq = seq
         self.tr = seq.duration()[0]
         self._writer = None
-        self.cursor = 0
+        self._cursor = 0
         self._views = None
         self._views_at = -1
 
@@ -1948,6 +1958,29 @@ class PeriodicSequence(SeqPlotMixin):
             # tests compare against.
             self._writer = _accel.BlockWriter(self)
             self.add_block = self._writer.add_block
+
+    @property
+    def cursor(self) -> int:
+        """How many blocks the loop has filled.
+
+        Kept by whichever `add_block` is in use, and read from there, so that
+        the compiled writer needs no reference back to this object. It used to
+        keep one and write the count into this instance after every block --
+        which cost a dictionary store per block, and, because a pybind11 class
+        has no `tp_traverse`, made the pair of them a cycle Python could not
+        collect: every sequence built this way stayed in memory for the life of
+        the process, dense tables and all.
+        """
+        writer = self._writer
+        return self._cursor if writer is None else writer.cursor
+
+    @cursor.setter
+    def cursor(self, value: int) -> None:
+        writer = self._writer
+        if writer is None:
+            self._cursor = value
+        else:
+            writer.cursor = value
 
     def _build_event_libraries(self) -> None:
         """Unroll the period's events into one row per occurrence per period.
@@ -2632,7 +2665,12 @@ class PeriodicSequence(SeqPlotMixin):
                 # sequence keeps its own index of them.
                 seq.soft_delay_hints = {row[3]: int(row[0]) for row in table}
         if compact.chains is not None:
-            _fill_library(seq.extensions_library, compact.chains)
+            # Handed over rather than filled in, for the same reason the block
+            # table is: half a million chain rows on a 3D scan, and writing a
+            # file wants them back as columns. `defer_chains` builds the library
+            # on the first ask, which is what decoding a block does and what
+            # writing one does not.
+            seq.defer_chains(compact.chains)
 
         # Handed over as the two arrays deduplication produced rather than as
         # the dicts Pulseq keeps, because writing a file wants the columns back
@@ -2662,9 +2700,18 @@ class PeriodicSequence(SeqPlotMixin):
             self._output = self.build()
         return self._output
 
-    def write(self, path, **kwargs) -> None:
-        """Write the scan as a .seq file."""
-        self.seq.write(path, **kwargs)
+    def write(self, path=None, **kwargs):
+        """Write the scan as a .seq file, or return its bytes when `path` is None.
+
+        This is the direct route it looks like: `seq` no longer builds anything
+        much -- deduplication produces the tables, and what it hands to the
+        sequence it hands over rather than transcribing -- so writing goes from
+        the deduplicated arrays to the file with a few microseconds of Pulseq
+        bookkeeping in between. The sequence stays available afterwards, which
+        is what `plot`, `calculate_kspace` and `get_block` need; they are the
+        only things that pay to have the libraries built as dictionaries.
+        """
+        return self.seq.write(path, **kwargs)
 
     def rebased_events(self, module: SequenceModule) -> SimpleNamespace:
         """`module.events`, addressing this sequence's libraries.
@@ -2786,7 +2833,20 @@ class PeriodicSequence(SeqPlotMixin):
         self._slots_ext = _flat(slots)
 
 # %% example
-def make_mprage():
+def make_mprage(path=None):
+    """A 512x1024x512 MPRAGE, designed and serialized.
+
+    Ends by writing rather than by handing back a sequence, so that timing this
+    function times the whole job: composing the period, two million blocks
+    through the loop, deduplicating them, and eighty-four megabytes of Pulseq.
+    `path` may be a filename, or None to serialize and drop the bytes, which is
+    the same work without the disk in it.
+
+    The `PeriodicSequence` comes back either way. Nothing has been spent on
+    making it comfortable to inspect -- its libraries are still the arrays
+    deduplication produced -- and asking it for `seq.plot()` or
+    `seq.calculate_kspace()` is what pays for that, once.
+    """
     # Hardcoded params
     txrx_raster = 2e-6
     grad_raster = 4e-6
@@ -2914,14 +2974,16 @@ def make_mprage():
             rf_phase = divmod(rf_phase + rf_inc, 360.0)[1]
         mprage.add_block(wait_tr)
 
-    # The loop is over, so the scan is decided, and this is where it stops being
-    # a set of dense tables and becomes an ordinary Pulseq sequence: libraries
-    # deduplicated, unplayed rows dropped, one block table. From here on it is
-    # `seq.write(...)`, `seq.plot(...)`, `seq.calculate_kspace()` -- PyPulseq
-    # all the way down, with no idea it was not built a block at a time.
-    seq = mprage.seq
+    # The loop is over, so the scan is decided: libraries deduplicated, unplayed
+    # rows dropped, one block table. That is the expensive half, and it happens
+    # here, on the way to the file -- the tables go to `write` as they come out
+    # of it, and nothing is built into dictionaries that only a reader would
+    # want. What comes back is a sequence PyPulseq cannot tell from one written
+    # a block at a time, and `plot`, `calculate_kspace` and `get_block` all work
+    # on it; they are simply what pays for the dictionaries, and only if asked.
+    mprage.write(path)
 
-    return seq
+    return mprage
 
 
 # %% example: a trajectory that is *not* one base shot plus a rotation

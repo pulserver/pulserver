@@ -48,8 +48,14 @@ from pypulseq.scale_grad import scale_grad
 from pypulseq.supported_labels_rf_use import get_supported_labels, get_supported_rf_uses
 
 try:
-    from fastseq import _fastseq_wrapper as _accel
-except ImportError:  # a source checkout with nothing built
+    #: The compiled kernels, on the same terms as in `fastseq.modules`: optional,
+    #: with a NumPy twin beside every one of them, and reached whether this
+    #: module was imported as part of a package or on its own.
+    try:
+        from . import _fastseq_wrapper as _accel
+    except ImportError:
+        import _fastseq_wrapper as _accel
+except ImportError:  # pragma: no cover - depends on whether the wheel was built
     _accel = None
 
 
@@ -235,7 +241,7 @@ _BLOCK_FREE = frozenset({
     'system', 'definitions', 'rf_raster_time', 'adc_raster_time',
     'grad_raster_time', 'block_duration_raster', 'version_major',
     'version_minor', 'version_revision', 'rf_library', 'grad_library',
-    'adc_library', 'shape_library', 'extensions_library', 'trigger_library',
+    'adc_library', 'shape_library', 'trigger_library',
     'label_set_library', 'label_inc_library', 'soft_delay_library',
     'soft_delay_hints', 'extension_string_idx', 'extension_numeric_idx',
     'set_definition', 'get_definition', 'set_extension_string_ID',
@@ -258,6 +264,7 @@ class Sequence:
         object.__setattr__(self, '_seq', seq if seq is not None else pp.Sequence(system=system))
         object.__setattr__(self, '_native_seq', None)
         object.__setattr__(self, '_deferred', None)
+        object.__setattr__(self, '_deferred_chains', None)
         object.__setattr__(self, 'rotation_library', EventLibrary())
         object.__setattr__(self, 'rf_shim_library', EventLibrary())
 
@@ -280,8 +287,33 @@ class Sequence:
         object.__setattr__(self, '_deferred', (table, durations))
         self._seq.next_free_block_ID = table.shape[0] + 1
 
+    def defer_chains(self, table: np.ndarray) -> None:
+        """Hold the extension chains as an array, on the same terms as the blocks.
+
+        A block carrying two labels needs a chain row of its own, so a 3D scan
+        has one per phase-encode pair -- half a million of them on an MPRAGE,
+        against a couple of thousand rows in every other library put together.
+        Building that dictionary, and its keymap of tuples, is the whole cost of
+        turning deduplicated tables into a Pulseq sequence; writing a file wants
+        the columns back again.
+
+        So it is kept as the array deduplication produced. `extensions_library`
+        builds the real thing on the first ask, which is what plotting or
+        decoding a block does and what writing one never does.
+        """
+        object.__setattr__(self, '_deferred_chains', table)
+
     def materialize(self) -> None:
-        """Build the block dicts now, if they are still being deferred."""
+        """Build the deferred libraries now, if they are still being deferred."""
+        chains = self._deferred_chains
+        if chains is not None:
+            object.__setattr__(self, '_deferred_chains', None)
+            rows = list(map(tuple, chains.tolist()))
+            library = self._seq.extensions_library
+            library.data = dict(enumerate(rows, start=1))
+            library.keymap = dict(zip(rows, range(1, len(rows) + 1)))
+            library.next_free_ID = len(rows) + 1
+
         deferred = self._deferred
         if deferred is None:
             return
@@ -290,6 +322,16 @@ class Sequence:
         numbers = range(1, table.shape[0] + 1)
         self._seq.block_events = dict(zip(numbers, table))
         self._seq.block_durations = dict(zip(numbers, durations.tolist()))
+
+    @property
+    def extensions_library(self):
+        self.materialize()
+        return self._seq.extensions_library
+
+    @extensions_library.setter
+    def extensions_library(self, value) -> None:
+        object.__setattr__(self, '_deferred_chains', None)
+        self._seq.extensions_library = value
 
     @property
     def block_events(self) -> dict:
@@ -318,7 +360,10 @@ class Sequence:
         if name.startswith('__'):
             raise AttributeError(name)
         seq = object.__getattribute__(self, '_seq')
-        if name not in _BLOCK_FREE and object.__getattribute__(self, '_deferred') is not None:
+        if name not in _BLOCK_FREE and (
+            object.__getattribute__(self, '_deferred') is not None
+            or object.__getattribute__(self, '_deferred_chains') is not None
+        ):
             # Whatever this is, it may be a `pp.Sequence` method that reads the
             # block table off `_seq` without coming back through the wrapper.
             self.materialize()
@@ -784,34 +829,43 @@ def write(seq, output=None, *, create_signature: bool = False, check_timing: boo
             w(adc_fmt % (k, num, 1e9 * dwell, 1e6 * delay, freq_ppm, phase_ppm, freq, phase, phase_id))
         w('\n')
 
-    if len(plain.extensions_library.data) != 0:
+    # The other section that grows with the scan rather than with the number of
+    # distinct events: a block carrying two labels needs a chain of its own, so
+    # a 3D scan has one row here per phase-encode pair. A sequence a
+    # `PeriodicSequence` built still holds them as the array deduplication
+    # produced and hands it over untouched, so the library is never built.
+    deferred_chains = getattr(seq, '_deferred_chains', None)
+    if deferred_chains is not None:
+        chain_count = deferred_chains.shape[0]
+    else:
+        chain_count = len(plain.extensions_library.data)
+
+    if chain_count != 0:
         w('# Format of extension lists:\n')
         w('# id type ref next_id\n')
         w('# next_id of 0 terminates the list\n')
         w('# Extension list is followed by extension specifications\n')
         w('[EXTENSIONS]\n')
-        # The other section that grows with the scan rather than with the number
-        # of distinct events: a block carrying two labels needs a chain of its
-        # own, so a 3D scan has one row here per phase-encode pair.
-        chains = plain.extensions_library.data
-        rendered = None
-        if len(chains) > 1024:
-            numbers = np.fromiter(chains, dtype=np.int64, count=len(chains))
-            rows = np.empty((numbers.size, 4), dtype=np.int64)
-            rows[:, 0] = numbers
+        rows = np.empty((chain_count, 4), dtype=np.int64)
+        rows[:, 0] = np.arange(1, chain_count + 1, dtype=np.int64)
+        if deferred_chains is not None:
+            rows[:, 1:] = deferred_chains
+        else:
+            chains = plain.extensions_library.data
+            rows[:, 0] = np.fromiter(chains, dtype=np.int64, count=chain_count)
             rows[:, 1:] = np.rint(
                 np.fromiter(
                     itertools.chain.from_iterable(chains.values()),
-                    dtype=np.float64, count=numbers.size * 3,
+                    dtype=np.float64, count=chain_count * 3,
                 ).reshape(-1, 3)
             )
-            rendered = _render_int_rows(rows, (1, 1, 1, 1))
+        rendered = _render_int_rows(rows, (1, 1, 1, 1))
         if rendered is not None:
             w(rendered)
         else:
             ext_fmt = '%.0f %.0f %.0f %.0f\n'
-            for k, data in chains.items():
-                w(ext_fmt % (k, *data))
+            for row in rows.tolist():
+                w(ext_fmt % tuple(row))
         w('\n')
 
     if len(plain.trigger_library.data) != 0:
