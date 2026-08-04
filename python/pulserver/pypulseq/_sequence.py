@@ -2223,6 +2223,191 @@ class Sequence(pp.Sequence):
             **kwargs,
         )
 
+    def mech_resonances(
+        self,
+        *,
+        canonical_tr_idx: int = 0,
+        bands: list | None = None,
+        esp_file=None,
+        asc_file=None,
+        max_frequency: float | None = None,
+        resolution: float | None = None,
+        compress_trains: bool = True,
+        plot: bool = True,
+    ):
+        """A_eq mechanical-resonance lines, straight from the C safety core.
+
+        Unlike :meth:`grad_spectrum`, which draws pypulseq's own spectrogram
+        with the bands shaded on top, this runs the compiled structural
+        analysis and returns the very lines the headless predownload gate
+        decides on — ``candidate_freqs``, ``candidate_grad_amps`` and
+        ``candidate_violations`` are the arrays `pulseg_check_safety`
+        thresholds. There is no separate Python re-implementation.
+
+        Parameters
+        ----------
+        canonical_tr_idx : int, default 0
+            Which canonical TR to analyse.
+        bands : list of tuple, optional
+            Forbidden bands as
+            ``(freq_min_hz, freq_max_hz, max_amplitude_mT_per_m[, channel])``.
+            Defaults to ``system.forbidden_bands``.
+        esp_file : str or pathlib.Path, optional
+            Read the bands from a GE ESP lockout table instead.
+        asc_file : str or pathlib.Path, optional
+            Read the bands from a Siemens ``.asc`` file instead.
+        max_frequency, resolution : float, optional
+            Analysis window. Both default to the same rule the headless gate
+            applies, so the plot matches what the scanner computes.
+        compress_trains : bool, default True
+            Evaluate equally-spaced occurrence trains in compressed form,
+            exactly as the headless gate does. Set ``False`` to get the
+            uncompressed reference evaluation of the same math — a debugging
+            aid, and the only mode in which a ``component_*`` term maps to a
+            single materialised occurrence rather than to a whole train.
+        plot : bool, default True
+            Draw the spectrum, the analytic envelope, the TR-harmonic stems
+            and the candidate markers.
+
+        Returns
+        -------
+        dict
+            The full spectra record: ``spectrum_full_g*`` (kissfft continuous
+            spectrum), ``envelope_*`` (dense analytic A_eq), ``analytical_peak_*``
+            (A_eq at every TR harmonic), ``candidate_*`` (the verdict lines) and
+            ``component_*`` (per-term breakdown).
+        """
+        from pulserver._ext._pulseg_wrapper import _calc_mech_resonances
+
+        if esp_file is not None and asc_file is not None:
+            raise ValueError("Pass either esp_file or asc_file, not both.")
+        if esp_file is not None:
+            bands = read_esp_bands(esp_file)
+        elif asc_file is not None:
+            bands = read_asc_bands(asc_file)
+        elif bands is None:
+            bands = list(getattr(self.system, "forbidden_bands", []) or [])
+        if not bands:
+            raise ValueError(
+                "No forbidden bands. Pass bands=, esp_file= or asc_file=, or set forbidden_bands "
+                "on the sequence's pulserver.pypulseq.Opts."
+            )
+
+        # mT/m -> Hz/m, the unit the C core works in.
+        to_hz_per_m = float(self.system.gamma) * 1e-3
+        c_bands = [
+            (float(b[0]), float(b[1]), float(b[2]) * to_hz_per_m if float(b[2]) > 0 else float(b[2]))
+            for b in bands
+        ]
+
+        # Mirror pulseg_check_safety's own window rule so the displayed
+        # spectrum has the resolution the gate ran at. The candidate lines
+        # themselves do not depend on either value -- they are the TR
+        # harmonics inside each guarded band -- so they match regardless.
+        widths = [hi - lo for lo, hi, *_ in c_bands if hi > lo]
+        if resolution is None:
+            resolution = min(max(min(widths) / 4.0, 1.0), 5.0) if widths else 1.0
+        if max_frequency is None:
+            max_frequency = max(1.2 * max(hi for _, hi, *_ in c_bands), 3000.0)
+
+        record = _calc_mech_resonances(
+            self._collection(),
+            subsequence_idx=0,
+            canonical_tr_idx=canonical_tr_idx,
+            target_resolution_hz=float(resolution),
+            max_freq_hz=float(max_frequency),
+            forbidden_bands=c_bands,
+            peak_log10_threshold=None,
+            peak_norm_scale=None,
+            peak_eps=None,
+            peak_prominence=None,
+            compress_trains=bool(compress_trains),
+        )
+        if plot:
+            # eps per band, mirroring sa_eps_for_band(): a nonzero vendor
+            # limit is trusted as-is, a zero-tolerance band falls back to
+            # SA_AEQ_K_GMAX * G_max.
+            eps = [b[2] if b[2] > 0 else 0.08 * float(self.system.max_grad) for b in c_bands]
+            self._plot_mech_resonances(record, c_bands, eps)
+        return record
+
+    @staticmethod
+    def _plot_mech_resonances(record: dict, bands, eps) -> None:
+        """Continuous spectrum, analytic envelope, TR-harmonic stems and the
+        candidate lines the headless gate thresholds."""
+        import matplotlib.pyplot as plt
+
+        axes = ("gx", "gy", "gz")
+        cand_f = np.asarray(record.get("candidate_freqs") or [], dtype=float)
+        viol = np.asarray(record.get("candidate_violations") or [], dtype=int)
+        cand_a = np.asarray(record.get("candidate_grad_amps") or [], dtype=float)
+
+        fig, axs = plt.subplots(4, 1, figsize=(11, 11), sharex=True)
+
+        # Row 0 -- the verdict itself. candidate_grad_amps is the quantity the
+        # gate thresholds: the max over axes AND over the finite-outer-repeat
+        # sidelobe probes around each harmonic. It is therefore >= any single
+        # axis's coarse value below, which is why the pass/fail marking lives
+        # here and not on the per-axis rows.
+        vax = axs[0]
+        for (lo, hi, *_), lim in zip(bands, eps):
+            vax.axvspan(lo, hi, color="C3", alpha=0.10, linewidth=0)
+            vax.hlines(lim, lo, hi, color="C3", linestyle="--", linewidth=1.4, label="_eps")
+        if cand_f.size:
+            bad = (viol != 0) if viol.size == cand_f.size else np.zeros(cand_f.shape, bool)
+            vax.vlines(cand_f, 0.0, cand_a, color="0.75", linewidth=0.8)
+            vax.plot(cand_f[~bad], cand_a[~bad], "o", ms=4.0, color="C2", label="candidate (pass)")
+            if bad.any():
+                vax.plot(cand_f[bad], cand_a[bad], "o", ms=7.0, color="C3", label="VIOLATION")
+        vax.set_ylabel("verdict\n$A_{eq}$ (Hz/m)")
+        vax.grid(True, alpha=0.3)
+        vax.legend(loc="upper right", fontsize=8)
+
+        for row, name in enumerate(axes):
+            ax = axs[row + 1]
+            for (lo, hi, *_), lim in zip(bands, eps):
+                ax.axvspan(lo, hi, color="C3", alpha=0.10, linewidth=0)
+                ax.hlines(lim, lo, hi, color="C3", linestyle="--", linewidth=1.2)
+
+            env_f = np.asarray(record.get("envelope_freqs_hz") or [], dtype=float)
+            env_a = np.asarray(record.get(f"envelope_amp_{name}") or [], dtype=float)
+            if env_f.size and env_a.size:
+                ax.plot(env_f, env_a, color="0.55", linewidth=1.0, label="analytic envelope")
+
+            peak_f = np.asarray(record.get("analytical_peak_freqs") or [], dtype=float)
+            peak_a = np.asarray(record.get(f"analytical_peak_amp_{name}") or [], dtype=float)
+            if peak_f.size and peak_a.size:
+                ax.vlines(peak_f, 0.0, peak_a, color="C0", linewidth=0.6, alpha=0.55, label="TR harmonics")
+
+            # Coarse per-axis A_eq at the in-band harmonics: context for WHICH
+            # axis drives row 0, not a verdict in itself (it excludes the
+            # sidelobe probes that row 0's maximum may come from).
+            axis_a = np.asarray(record.get(f"candidate_grad_amps_{name}") or [], dtype=float)
+            if cand_f.size and axis_a.size:
+                ax.plot(cand_f, axis_a, "o", ms=3.5, color="C2", label="in-band harmonic")
+
+            ax.set_ylabel(f"{name}   $A_{{eq}}$ (Hz/m)")
+            ax.grid(True, alpha=0.3)
+            if row == 0:
+                ax.legend(loc="upper right", fontsize=8)
+
+        axs[-1].set_xlabel("Frequency (Hz)")
+        # Candidates are enumerated per band, so a harmonic inside two
+        # overlapping bands (a vendor ESP table repeating the same row for X
+        # and Y is the usual cause) appears more than once. The duplicates
+        # carry identical values, so counting DISTINCT lines is what the
+        # caption should say.
+        uniq = np.unique(np.round(cand_f, 6)) if cand_f.size else cand_f
+        n_viol_uniq = (
+            np.unique(np.round(cand_f[viol != 0], 6)).size if viol.size == cand_f.size else 0
+        )
+        peak = float(cand_a.max()) if cand_a.size else 0.0
+        axs[0].set_title(
+            f"Mechanical resonance — {uniq.size} candidate lines, "
+            f"{n_viol_uniq} violating, max $A_{{eq}}$ {peak:.4g} Hz/m"
+        )
+        fig.tight_layout()
+
     def pns(
         self,
         *,

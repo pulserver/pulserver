@@ -32,3 +32,18 @@ cc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200112L \
     -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc -Wl,--wrap=free
 
 echo "Built $BENCH_DIR/bench_pipeline"
+
+# Runtime-only companion: no malloc interposition, so this is the binary to
+# use when deciding whether a C stage needs optimization. Heap fields are zero
+# and heap_accounting is false in its JSON output.
+cc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200112L -DBENCH_ALLOC_DISABLED \
+    -I"$REPO_ROOT/csrc/include" \
+    -I"$REPO_ROOT/csrc/include/pulseg" \
+    -I"$REPO_ROOT/csrc/include/pulseq" \
+    -I"$REPO_ROOT/csrc/src" \
+    -I"$BENCH_DIR" \
+    -o "$BENCH_DIR/bench_pipeline_timing" \
+    "$BENCH_DIR/bench_pipeline.c" "$BENCH_DIR/bench_alloc.c" \
+    "$LIB_DIR/libpulseg.a" "$LIB_DIR/libpulseq.a" -lm
+
+echo "Built $BENCH_DIR/bench_pipeline_timing"

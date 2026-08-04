@@ -2420,6 +2420,7 @@ int pulseg_load_cache(pulseg_collection *coll, const char *path, int source_size
 static int load_cache_from_seq_path(
     pulseg_collection **out_coll,
     const char *seq_path,
+    const char *cache_ext,
     const int *section_ids,
     const payload_reader_fn *readers,
     int n_req,
@@ -2440,7 +2441,7 @@ static int load_cache_from_seq_path(
         return PULSEG_ERR_ALLOC_FAILED;
     memset(coll, 0, sizeof(*coll));
 
-    cache_path = pulseg__make_cache_path(seq_path, NULL);
+    cache_path = pulseg__make_cache_path(seq_path, cache_ext);
     if (!cache_path)
     {
         PULSEG_FREE(coll);
@@ -2481,16 +2482,24 @@ static int load_cache_from_seq_path(
  * frozen into the segment definitions' initial-state records at parse time
  * (pulseg_structure.c step 11e). SHAPES is required both for the waveforms
  * themselves and for pulseg__build_segment_remap()'s content comparison. */
-int pulseg_load_geninstructions_cache(pulseg_collection **out_coll, const char *seq_path)
+int pulseg__load_geninstructions_cache_ext(
+    pulseg_collection **out_coll,
+    const char *seq_path,
+    const char *cache_ext)
 {
     static const int ids[2] = {PULSEG_CACHE_SECTION_COMMON, PULSEG_CACHE_SECTION_SHAPES};
     static const payload_reader_fn readers[2] = {read_common_payload, read_shapes_payload};
-    int rc = load_cache_from_seq_path(out_coll, seq_path, ids, readers, 2, 0);
+    int rc = load_cache_from_seq_path(out_coll, seq_path, cache_ext, ids, readers, 2, 0);
     /* Rebuild the cross-subsequence segment dedup remap so the global segment
      * ids the pulsegen loop builds match those the scan cursor emits. */
     if (rc == PULSEG_SUCCESS && out_coll && *out_coll)
         pulseg__build_segment_remap(*out_coll);
     return rc;
+}
+
+int pulseg_load_geninstructions_cache(pulseg_collection **out_coll, const char *seq_path)
+{
+    return pulseg__load_geninstructions_cache_ext(out_coll, seq_path, NULL);
 }
 
 /* Scan: COMMON + INSTANCES + ROTATIONS + SHAPES + SCANLOOP.  INSTANCES and
@@ -2499,7 +2508,10 @@ int pulseg_load_geninstructions_cache(pulseg_collection **out_coll, const char *
  * pulseg__build_segment_remap() recomputes the SAME cross-subsequence segment
  * deduplication the pulsegen path computed — otherwise the cursor's global
  * segment ids would not match the built buffers. */
-int pulseg_load_scanloop_cache(pulseg_collection **out_coll, const char *seq_path)
+int pulseg__load_scanloop_cache_ext(
+    pulseg_collection **out_coll,
+    const char *seq_path,
+    const char *cache_ext)
 {
     static const int ids[5] = {
         PULSEG_CACHE_SECTION_COMMON,
@@ -2513,10 +2525,15 @@ int pulseg_load_scanloop_cache(pulseg_collection **out_coll, const char *seq_pat
         read_rotations_payload,
         read_shapes_payload,
         read_scanloop_payload};
-    int rc = load_cache_from_seq_path(out_coll, seq_path, ids, readers, 5, 0);
+    int rc = load_cache_from_seq_path(out_coll, seq_path, cache_ext, ids, readers, 5, 0);
     if (rc == PULSEG_SUCCESS && out_coll && *out_coll)
         pulseg__build_segment_remap(*out_coll);
     return rc;
+}
+
+int pulseg_load_scanloop_cache(pulseg_collection **out_coll, const char *seq_path)
+{
+    return pulseg__load_scanloop_cache_ext(out_coll, seq_path, NULL);
 }
 
 int pulseg_clear_cache(const char *seq_path)

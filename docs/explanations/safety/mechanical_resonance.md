@@ -272,10 +272,10 @@ every echo and every slice instance is one materialised event, and the combs
 emerge from the sum. The outermost repetition (Stage 4) is the single
 exception, folded analytically by its finite count.
 
-`mechres_plots/epi_seginer_reproduction.py` reproduces the paper's Fig. 1 — a
-multi-echo multi-slice EPI train, echo spacing 0.52 ms, ETL 54, 3 TEs,
-6 slices — through the real C engine, with the TE and slice spacing on and
-off the $2\cdot\text{ESP}$ raster:
+The figures below reproduce the paper's Fig. 1 — a multi-echo multi-slice
+EPI train, echo spacing 0.52 ms, ETL 54, 3 TEs, 6 slices — through the real
+C engine, with the TE and slice spacing on and off the $2\cdot\text{ESP}$
+raster:
 
 ![EPI Fig.1 reproduction](../assets/mechanical_resonance/epi_seginer_fig1_reproduction.png)
 
@@ -291,11 +291,43 @@ At the comb peak all 18 materialised events (3 TEs × 6 slices) add almost
 perfectly in phase. There is no "TE factor" or "slice factor" anywhere in the
 C code — only 18 event phasors and a running complex sum.
 
+This *phasor breakdown* is the one product affected by
+`compress_trains`. Occurrence-train compression is exact, so every
+$A_\text{eq}$ value, every candidate frequency and every verdict above is
+bit-for-bit the same question either way. But the `component_*` arrays
+export one term per event, and with compression on those 18 equally-spaced
+occurrences are a single train event evaluated by one closed-form geometric
+sum — so the export lists 1 term instead of 18. Pass `compress_trains=False`
+when you want the individual phasors; nothing else changes.
+
 ## Reading the plots
 
-`mechres_plots/aeq_current.py` drives the same compiled engine across the
+`docs/_bench/mechres_plots.py` drives the same compiled engine across the
 five-sequence reference corpus (`gre_2d`, `epi_2d`, `fse_2d`, `mprage_2d`
-PASS; `bssfp_2d` the one genuine FAIL). For context,
+PASS; `bssfp_2d` the one genuine FAIL):
+
+```bash
+<venv>/bin/python docs/_bench/mechres_plots.py --esp <vendor_esp_table>.dat
+```
+
+It goes through {meth}`pulserver.pypulseq.Sequence.mech_resonances`, which
+calls `pulseg_calc_mech_resonances` with `compress_trains=True` — the same
+occurrence-train compression `pulseg_check_safety` uses. The candidate lines
+and pass/fail markers below are therefore the ones the scanner decides on,
+not a parallel Python calculation.
+
+Compression is exact, so `compress_trains=False` produces the same lines and
+the same verdicts (identical candidate frequencies, $A_\text{eq}$ agreeing
+to float precision). It exists as a cross-check, and because it is the only
+mode in which a `component_*` term maps to a single materialised occurrence
+rather than to a whole train.
+
+Note {meth}`~pulserver.pypulseq.Sequence.grad_spectrum` is a *different*
+thing: pypulseq's own spectrogram with the bands shaded on top, useful for
+eyeballing the waveform but not the verdict. Only `mech_resonances` returns
+$A_\text{eq}$.
+
+For context,
 `docs/_bench/waveform_plots.py` draws the same corpus's representative TR —
 the same window this analysis runs on, scoped past each fixture's leading
 dummy (non-ADC) TRs — so the frequency-domain verdict below can be read
@@ -329,13 +361,29 @@ descriptor:
 
 ![mprage](../assets/mechanical_resonance/current_mprage.png)
 
-In all four: dark stems are $A_\text{eq}$ at exact TR harmonics — stems
-rather than a line, because there is genuinely no content between them. The
-faint curve underneath is the matched analytic envelope: the same
-closed-form $S_\text{ax}(f)$, evaluated on a dense uniform grid. Because the
-stems are that function sampled at the harmonics, the envelope passes
-exactly through every stem tip with no rescaling — unlike an independent FFT
-of the materialised waveform, which uses a different window and
-normalisation and would only be shape-similar. Shaded regions are forbidden
-bands, the dashed line is $\varepsilon$ for that band, dots are guarded-band
-candidates, and a red X is a violation.
+Each figure has four rows. The top row is **the verdict**: it plots
+`candidate_grad_amps`, the quantity actually compared against
+$\varepsilon$, with green dots passing and red dots violating. That value is
+the maximum over the three axes *and* over the finite-outer-repeat sidelobe
+probes around each harmonic, so it can exceed every per-axis value shown
+below it — which is why the pass/fail marking lives on its own row rather
+than being attributed to one axis.
+
+The three rows underneath are per-axis context. Blue stems are
+$A_\text{eq}$ at exact TR harmonics — stems rather than a line, because
+there is genuinely no content between them. The grey curve underneath is the
+matched analytic envelope: the same closed-form $S_\text{ax}(f)$, evaluated
+on a dense uniform grid. Because the stems are that function sampled at the
+harmonics, the envelope passes exactly through every stem tip with no
+rescaling — unlike an independent FFT of the materialised waveform, which
+uses a different window and normalisation and would only be shape-similar.
+Green dots are that axis's coarse $A_\text{eq}$ at the guarded-band
+harmonics. Shaded regions are forbidden bands and the dashed line is
+$\varepsilon$ for that band: the vendor limit, or the $0.08\,G_\text{max}$
+floor when the table specifies zero tolerance.
+
+Candidates are enumerated per band, so a harmonic falling inside two
+overlapping bands is listed once per band. A vendor ESP table that repeats
+the same rows for X and Y — the common case — therefore yields duplicate
+candidate entries with identical values. The verdict is unaffected (the
+duplicates agree), but the captions count *distinct* lines.

@@ -20,6 +20,24 @@
 
 #include "bench_alloc.h"
 
+#ifdef BENCH_ALLOC_DISABLED
+
+size_t bench_heap_live(void)
+{
+    return 0;
+}
+
+size_t bench_heap_peak(void)
+{
+    return 0;
+}
+
+void bench_heap_reset_peak(void)
+{
+}
+
+#else
+
 void *__real_malloc(size_t size);
 void *__real_calloc(size_t nmemb, size_t size);
 void *__real_realloc(void *ptr, size_t size);
@@ -84,3 +102,5 @@ void bench_heap_reset_peak(void)
 {
     g_peak = g_live;
 }
+
+#endif /* BENCH_ALLOC_DISABLED */

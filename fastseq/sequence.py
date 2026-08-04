@@ -594,7 +594,7 @@ def _multichannel(rf: SimpleNamespace, weights: np.ndarray) -> SimpleNamespace:
 # =============================================================================
 
 
-def _render_int_rows(matrix: np.ndarray, widths: tuple) -> str | None:
+def _render_int_rows(matrix: np.ndarray, widths: tuple) -> bytes | None:
     """Render a non-negative integer matrix as space-separated right-aligned text.
 
     `[BLOCKS]` is the one section with a row per block rather than per distinct
@@ -605,6 +605,11 @@ def _render_int_rows(matrix: np.ndarray, widths: tuple) -> str | None:
     into the output buffer. `_render_int_rows_py` below is the NumPy version it
     has to agree with character for character, and what runs when the extension
     was not built.
+
+    Comes back as bytes, which is what the file wants: this section is ASCII and
+    most of a large sequence, so handing it over as text would cost a decode
+    here and an encode again at the end, two passes over eighty megabytes to
+    arrive back at the same characters.
 
     Returns `None` when a value will not fit its field -- `%3d` widens rather
     than truncating, so those rows are not fixed-width and the caller has to
@@ -657,7 +662,7 @@ def _render_int_rows_py(matrix: np.ndarray, widths: tuple) -> str | None:
         cursor += span + 1
 
     text[:, -1] = 10  # newline
-    return text[keep].tobytes().decode('ascii')
+    return text[keep].tobytes()
 
 
 def _label_string(number: int) -> str:
@@ -718,8 +723,15 @@ def write(seq, output=None, *, create_signature: bool = False, check_timing: boo
     elif has_rotations or has_shims:
         revision = max(revision, 1)
 
-    chunks: list[str] = []
-    w = chunks.append
+    # Text as it is written, except for the two sections rendered wholesale,
+    # which arrive as bytes already. Everything is joined as bytes at the end:
+    # the file is ASCII, and the alternative is to decode eighty megabytes into
+    # a string in order to encode it again.
+    chunks: list[bytes] = []
+    encode = str.encode
+
+    def w(piece):
+        chunks.append(piece if type(piece) is bytes else encode(piece))
 
     w('# Pulseq sequence file\n')
     w('# Created by PyPulseq\n\n')
@@ -927,27 +939,26 @@ def write(seq, output=None, *, create_signature: bool = False, check_timing: boo
             w(('{:.9g}\n' * len(shape[1:])).format(*shape[1:]))
             w('\n')
 
-    body = ''.join(chunks)
+    payload = b''.join(chunks)
     signature = None
     if create_signature:
-        signature = hashlib.md5(body.encode('utf-8')).hexdigest()
-        body += (
+        signature = hashlib.md5(payload).hexdigest()
+        payload += (
             '\n[SIGNATURE]\n'
             '# This is the hash of the Pulseq file, calculated right before the [SIGNATURE] section was added\n'
             '# It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]\n'
             '# The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)\n'
             'Type md5\n'
             f'Hash {signature}\n'
-        )
+        ).encode('utf-8')
 
-    payload = body.encode('utf-8')
     if output is None:
         return payload
     if hasattr(output, 'write'):
         try:
             output.write(payload)
         except TypeError:
-            output.write(body)
+            output.write(payload.decode('utf-8'))
         return signature
 
     path = Path(output)

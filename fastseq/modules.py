@@ -1457,6 +1457,8 @@ def _dense_rows(library, template_ids: np.ndarray, width: int, loop_size: int) -
     period = np.zeros((template_ids.size, width), dtype=float)
     for n, template_id in enumerate(template_ids):
         period[n] = library.data[template_id]
+    if _accel is not None:
+        return _accel.tile_rows(period, loop_size)
     return np.tile(period.ravel(), loop_size).reshape(-1, width)
 
 
@@ -1477,13 +1479,26 @@ def _offsets(present: np.ndarray, width: int, loop_size: int) -> np.ndarray:
     one whole table-length further along, so a block's row is a rank times a row
     width -- which is why `add_block` can find it with one array read and no
     lookup at all.
+
+    Only the period is reasoned about elementwise; the scan-length part is one
+    broadcast into the destination width. Tiling the period and then repeating a
+    per-period shift beside it would build four scan-length temporaries in the
+    64 bits `arange` and `cumsum` default to, to fill a table that is declared
+    `int32` -- and on a scan of two million blocks that arithmetic is entirely
+    memory, so the width it is carried in is most of the cost.
     """
     rank = np.cumsum(present) - 1
     period = np.where(present, rank * width + 1, 0)
-    offsets = np.tile(period, loop_size)
     stride = int(present.sum()) * width
-    shift = np.repeat(np.arange(loop_size, dtype=np.int64), present.size) * stride
-    return np.where(offsets > 0, offsets + shift, 0)
+
+    offsets = np.empty((loop_size, period.size), dtype=np.int32)
+    offsets[:] = np.arange(loop_size, dtype=np.int64).reshape(-1, 1) * stride
+    offsets += period.astype(np.int32)
+    # A block with no such event holds zero rather than an offset, and zero has
+    # to survive the shift -- so it is stamped back in afterwards, by column,
+    # which is a period's worth of decisions rather than a scan's.
+    offsets[:, period == 0] = 0
+    return offsets.reshape(-1)
 
 
 # =============================================================================
@@ -1655,6 +1670,32 @@ def _collapse_gathered_py(table: np.ndarray, take: np.ndarray, digits, extra=Non
     return _unique_rows(keyed)
 
 
+def _block_columns_py(slots, on, rf_width, adc_width, trap_width, arb_width):
+    """`block_columns` in NumPy alone -- the reference the kernel is checked against."""
+    played = np.frombuffer(on, dtype=np.uint8).reshape(-1, _SLOT_COLUMNS)
+
+    rf_column = ((slots[:, 0] - 1) // rf_width + 1).astype(np.int32) * played[:, 0]
+    adc_column = ((slots[:, 4] - 1) // adc_width + 1).astype(np.int32) * played[:, 4]
+
+    offsets = np.ascontiguousarray(slots[:, 1:4]).ravel()
+    here = offsets != 0
+    sounding = here & np.ascontiguousarray(played[:, 1:4]).ravel().astype(bool)
+    ranks = np.cumsum(here, dtype=np.int32)
+    grad_column = ranks * sounding
+
+    picked = offsets[sounding]
+    arbitrary = picked < 0                           # _TRAP is +, _ARB is -
+    index = np.empty((picked.size, 2), dtype=np.int32)
+    index[:, 0] = arbitrary
+    magnitude = np.abs(picked, out=picked)
+    magnitude -= 1
+    column = index[:, 1]
+    np.floor_divide(magnitude, trap_width, out=column)
+    if arbitrary.any():
+        column[arbitrary] = magnitude[arbitrary] // arb_width
+    return rf_column, grad_column, adc_column, index
+
+
 def _factorize(names: list) -> tuple[list, np.ndarray]:
     """The distinct strings in sorted order, and each entry's index into them.
 
@@ -1706,10 +1747,16 @@ def _collapse_chains(chains: np.ndarray, heads: np.ndarray, refs: dict):
 
     # Rewrite the references into the specification libraries first: they sit
     # below the chains and have already been collapsed.
-    new_ref = np.zeros(ref.size, dtype=np.int64)
-    for type_id, mapping in refs.items():
-        mine = types == type_id
-        new_ref[mine] = mapping[ref[mine]]
+    if len(refs) == 1:
+        # One type, so every row is that type: a gather rather than a mask, a
+        # gather under it and a scatter back.
+        (mapping,) = refs.values()
+        new_ref = mapping[ref]
+    else:
+        new_ref = np.zeros(ref.size, dtype=np.int64)
+        for type_id, mapping in refs.items():
+            mine = types == type_id
+            new_ref[mine] = mapping[ref[mine]]
 
     new_id = np.zeros(chains.shape[0] + 1, dtype=np.int64)   # 1-based, 0 stays 0
     resolved = np.zeros(chains.shape[0], dtype=bool)
@@ -1957,7 +2004,11 @@ class PeriodicSequence(SeqPlotMixin):
             # Python one stays reachable as `_add_block_py`, and is what the
             # tests compare against.
             self._writer = _accel.BlockWriter(self)
-            self.add_block = self._writer.add_block
+            # `bind` rather than the writer's own method: the same code, reached
+            # through CPython's vectorcall instead of pybind11's dispatcher,
+            # which is about two hundred nanoseconds a block that a method
+            # taking `*args` and returning nothing has no use for.
+            self.add_block = self._writer.bind()
 
     @property
     def cursor(self) -> int:
@@ -2007,7 +2058,12 @@ class PeriodicSequence(SeqPlotMixin):
         rf_ids = period[:, _BLOCK_RF]
         rf_here = rf_ids > 0
         self.rf_library = _dense_rows(seq.rf_library, rf_ids[rf_here], _RF_WIDTH, loop_size)
-        self.rf_use = loop_size * [seq.rf_library.type[rf_id] for rf_id in rf_ids[rf_here]]
+        # One period's worth, not the scan's. What an RF pulse is *for* is a
+        # property of the template -- an excitation stays an excitation however
+        # many times it is played -- so the list is the period's and the codes
+        # deduplication needs are tiled from it, rather than a million short
+        # strings being sorted into a handful of distinct ones.
+        self.rf_use_period = [seq.rf_library.type[rf_id] for rf_id in rf_ids[rf_here]]
 
         # -- Gradients ------------------------------------------------------
         # Pulseq keeps trapezoids and arbitrary waveforms in one ragged library.
@@ -2071,8 +2127,19 @@ class PeriodicSequence(SeqPlotMixin):
         because this iteration left it out. The row behind it still exists --
         that is what makes leaving it out free -- and pruning drops the ones
         nothing points at.
+
+        Assembled here rather than kept, because the table is what a *reader*
+        wants: everything on the way to a file works from the columns it is made
+        of, and gathering seven of them into one seven-wide table only to slice
+        them apart again is two strided passes over the length of the scan.
         """
-        return self._rebuild_views()[0]
+        rf_column, grad_column, adc_column, _ = self._rebuild_views()
+        events = np.zeros((self.num_blocks, 7), dtype=np.int32)
+        events[:, _BLOCK_RF] = rf_column
+        events[:, _BLOCK_GRAD] = grad_column.reshape(-1, 3)
+        events[:, _BLOCK_ADC] = adc_column
+        events[:, _BLOCK_EXT] = self._extension_tally(played=True)
+        return events
 
     @property
     def block_slots(self) -> np.ndarray:
@@ -2080,69 +2147,59 @@ class PeriodicSequence(SeqPlotMixin):
 
         This is the sequence at its widest: every row every block could use. It
         is what the template promised; `block_events` is what the loop took up.
+
+        Derived on every ask rather than cached beside the played columns,
+        because nothing in the path from a loop to a file wants it -- it answers
+        "what did the template promise", which is a question about the design,
+        not about the scan -- and on a scan of two million blocks it is sixty
+        megabytes to build and sixty more to keep.
         """
-        return self._rebuild_views()[1]
+        slots = self.block_slot_offsets
+        allocated = np.zeros((self.num_blocks, 7), dtype=np.int32)
+        allocated[:, _BLOCK_RF] = (slots[:, 0] - 1) // _RF_WIDTH + 1
+        allocated[:, _BLOCK_ADC] = (slots[:, 4] - 1) // _ADC_WIDTH + 1
+        here = slots[:, 1:4].ravel() != 0
+        ranks = np.cumsum(here, dtype=np.int32)
+        ranks *= here
+        allocated[:, _BLOCK_GRAD] = ranks.reshape(-1, 3)
+        allocated[:, _BLOCK_EXT] = self._extension_tally()
+        return allocated
 
     @property
     def grad_library(self) -> np.ndarray:
-        """The `(kind, row)` index the gradient column of a block points into."""
-        return self._rebuild_views()[2]
+        """The `(kind, row)` each played gradient slot names, in block order.
+
+        One row per slot the loop switched on -- not per slot the template
+        allocated -- because that is the order deduplication reads them in.
+        """
+        return self._rebuild_views()[3]
 
     def _rebuild_views(self):
-        """Derive the block tables and gradient index from the slots and the switches.
+        """The played block columns, and the gradient index, from the slots and switches.
 
-        None of them is maintained during the loop -- they are a function of
-        what has been added, so keeping them current would be work done twice.
-        They are rebuilt when asked for, and only if the loop has moved since.
+        None of them is maintained during the loop -- they are a function of what
+        has been added, so keeping them current would be work done twice. They
+        are rebuilt when asked for, and only if the loop has moved since.
+
+        Columns rather than a block table: the RF, gradient and ADC columns are
+        each dense and separate here, and only a caller that wants the Pulseq
+        table pays to gather them into one.
         """
         if self._views is not None and self._views_at == self.cursor:
             return self._views
 
-        slots = self.block_slot_offsets
-        on = np.frombuffer(self._on, dtype=np.uint8).reshape(-1, _SLOT_COLUMNS)
+        if _accel is not None:
+            views = _accel.block_columns(
+                self.block_slot_offsets, self._on,
+                _RF_WIDTH, _ADC_WIDTH, _TRAP_WIDTH, _ARB_WIDTH,
+            )
+        else:
+            views = _block_columns_py(
+                self.block_slot_offsets, self._on,
+                _RF_WIDTH, _ADC_WIDTH, _TRAP_WIDTH, _ARB_WIDTH,
+            )
 
-        allocated = np.zeros((self.num_blocks, 7), dtype=np.int32)
-        # Offsets are dense and ordered, so a row's ID is just its rank.
-        allocated[:, _BLOCK_RF] = (slots[:, 0] - 1) // _RF_WIDTH + 1
-        allocated[:, _BLOCK_ADC] = (slots[:, 4] - 1) // _ADC_WIDTH + 1
-
-        grads = slots[:, 1:4].ravel()
-        here = grads != 0
-        # A running count in 32 bits rather than the 64 a boolean cumulative sum
-        # would promote to: there is a gradient slot per axis per block, so this
-        # column is three times the length of the scan and the width it is
-        # carried in is felt.
-        ranks = np.cumsum(here, dtype=np.int32)
-        ranks *= here
-        allocated[:, _BLOCK_GRAD] = ranks.reshape(-1, 3)
-
-        # The extension column of these two views is a count, not the chain ID a
-        # real Pulseq block table holds: the chain does not exist yet -- it is
-        # assembled from the switches in `deduplicate_events`, because which
-        # instances a block carries is the last thing to be decided.
-        allocated_ext, played_ext = self._extension_tally()
-        allocated[:, _BLOCK_EXT] = allocated_ext
-
-        events = allocated.copy()
-        events[:, _BLOCK_RF:_BLOCK_EXT] *= on
-        events[:, _BLOCK_EXT] = played_ext
-
-        # One gather rather than two, and the two widths applied where each
-        # belongs rather than both everywhere: a scan is usually all trapezoids
-        # or all waveforms, so `np.where` would compute a whole second column to
-        # throw it away.
-        picked = grads[here]
-        arb_here = picked < 0                        # _TRAP is +, _ARB is -
-        index = np.empty((picked.size, 2), dtype=np.int32)
-        index[:, 0] = arb_here
-        offsets = np.abs(picked, out=picked)
-        offsets -= 1
-        column = index[:, 1]
-        np.floor_divide(offsets, _TRAP_WIDTH, out=column)
-        if arb_here.any():
-            column[arb_here] = offsets[arb_here] // _ARB_WIDTH
-
-        self._views = (events, allocated, index)
+        self._views = views
         self._views_at = self.cursor
         return self._views
 
@@ -2400,15 +2457,16 @@ class PeriodicSequence(SeqPlotMixin):
                 'deduplicating now would freeze whatever the untouched blocks '
                 'happen to hold'
             )
-        blocks = self.block_events
+        played_rf, played_grad, played_adc, pointed = self._rebuild_views()
 
         # -- RF -------------------------------------------------------------
         # `use` decides identity but is stored beside the data, so it is keyed
         # on and then split back off.
-        uses, use_code = _factorize(self.rf_use)
+        uses, period_code = _factorize(self.rf_use_period)
+        use_code = np.empty((self.loop_size, period_code.size))
+        use_code[:] = period_code
         rf, rf_column, rf_uses = _collapse(
-            self.rf_library, blocks[:, _BLOCK_RF], _RF_DIGITS,
-            extra=use_code.astype(float),
+            self.rf_library, played_rf, _RF_DIGITS, extra=use_code.reshape(-1),
         )
         rf_type = [str(uses[int(code)]) for code in rf_uses[:, 0]] if rf.size else []
 
@@ -2418,30 +2476,51 @@ class PeriodicSequence(SeqPlotMixin):
         # share one library and one numbering, as Pulseq expects. The numbering
         # follows first appearance across both, so the result reads like a
         # sequence somebody wrote block by block.
-        grad_column = blocks[:, _BLOCK_GRAD].ravel()
-        played = grad_column > 0
-        index = self.grad_library[grad_column[played] - 1]
+        played = played_grad > 0
+        index = pointed                  # already one row per played slot, in order
         is_arb = index[:, 0] == _ARB
+        # Almost every scan is all trapezoids or all waveforms, and when it is,
+        # splitting costs two boolean gathers, two more to say where each half
+        # came from, and a merge -- five passes over every gradient slot in the
+        # scan, to arrive back at the order it started in.
+        arbitrary = int(is_arb.sum())
+        one_kind = is_arb.size and arbitrary in (0, is_arb.size)
 
-        arb, arb_code = _collapse_gathered(self.arb_library, index[is_arb, 1], _GRAD_DIGITS)
-        trap, trap_code = _collapse_gathered(self.trap_library, index[~is_arb, 1], _GRAD_DIGITS)
+        empty_arb = (np.zeros((0, _ARB_WIDTH)), np.zeros(0, dtype=np.int64))
+        empty_trap = (np.zeros((0, _TRAP_WIDTH)), np.zeros(0, dtype=np.int64))
+        if one_kind and arbitrary:
+            (arb, arb_code), (trap, trap_code) = (
+                _collapse_gathered(self.arb_library, index[:, 1], _GRAD_DIGITS), empty_trap)
+            appearance = _first_appearance(arb_code, arb.shape[0])
+        elif one_kind:
+            (arb, arb_code), (trap, trap_code) = (
+                empty_arb, _collapse_gathered(self.trap_library, index[:, 1], _GRAD_DIGITS))
+            appearance = _first_appearance(trap_code, trap.shape[0])
+        else:
+            arb, arb_code = _collapse_gathered(
+                self.arb_library, index[is_arb, 1], _GRAD_DIGITS)
+            trap, trap_code = _collapse_gathered(
+                self.trap_library, index[~is_arb, 1], _GRAD_DIGITS)
+            appearance = np.concatenate([
+                np.flatnonzero(is_arb)[_first_appearance(arb_code, arb.shape[0])],
+                np.flatnonzero(~is_arb)[_first_appearance(trap_code, trap.shape[0])],
+            ])
 
-        appearance = np.concatenate([
-            np.flatnonzero(is_arb)[_first_appearance(arb_code, arb.shape[0])],
-            np.flatnonzero(~is_arb)[_first_appearance(trap_code, trap.shape[0])],
-        ])
         grad_id = np.empty(appearance.size, dtype=np.int64)
         grad_id[np.argsort(appearance, kind='stable')] = np.arange(appearance.size) + 1
         arb_id, trap_id = grad_id[: arb.shape[0]], grad_id[arb.shape[0] :]
 
-        renumbered = np.empty(index.shape[0], dtype=np.int64)
-        renumbered[is_arb] = arb_id[arb_code]
-        renumbered[~is_arb] = trap_id[trap_code]
-        new_grad_column = np.zeros(grad_column.size, dtype=np.int32)
+        if one_kind:
+            renumbered = arb_id[arb_code] if arbitrary else trap_id[trap_code]
+        else:
+            renumbered = np.empty(index.shape[0], dtype=np.int64)
+            renumbered[is_arb] = arb_id[arb_code]
+            renumbered[~is_arb] = trap_id[trap_code]
+        new_grad_column = np.zeros(played_grad.size, dtype=np.int32)
         new_grad_column[played] = renumbered
 
         # -- ADC ------------------------------------------------------------
-        adc, adc_column, _ = _collapse(self.adc_library, blocks[:, _BLOCK_ADC], _ADC_DIGITS)
+        adc, adc_column, _ = _collapse(self.adc_library, played_adc, _ADC_DIGITS)
 
         # -- Shapes ---------------------------------------------------------
         shape_map, shapes = self._collapse_shapes(rf, arb, adc)
@@ -2527,10 +2606,24 @@ class PeriodicSequence(SeqPlotMixin):
         starts = self._ext_slots[:, 0::2].astype(np.int64).ravel()
         counts = self._ext_slots[:, 1::2].astype(np.int64).ravel()
 
-        cell = np.repeat(np.arange(counts.size, dtype=np.int64), counts)
+        # Only the cells that hold anything. Most blocks of most scans carry no
+        # extension at all, and every array below is as long as the cells it is
+        # built from -- so enumerating from the occupied ones costs a pass to
+        # find them and saves several over the length of the scan.
+        occupied = np.flatnonzero(counts)
+        held = counts[occupied]
+        cell = np.repeat(occupied, held)
         block, column = np.divmod(cell, n_ext)
-        within = np.arange(cell.size, dtype=np.int64) - (np.cumsum(counts) - counts)[cell]
+        within = np.arange(cell.size, dtype=np.int64) - np.repeat(
+            np.cumsum(held) - held, held)
         row = starts[cell] + within
+
+        if n_ext == 1:
+            # One type of extension, which is what a scan that only labels its
+            # readouts has. Every instance is that type, so there is nothing to
+            # separate and the switches can be read straight through.
+            switch = np.frombuffer(self._ext_switch[0], dtype=np.uint8)
+            return block, column, row, switch[row] != 0
 
         alive = np.zeros(cell.size, dtype=bool)
         for j in range(n_ext):
@@ -2539,27 +2632,32 @@ class PeriodicSequence(SeqPlotMixin):
             alive[mine] = switch[row[mine]] != 0
         return block, column, row, alive
 
-    def _extension_tally(self):
-        """Per block: how many extension instances it was built with, and played.
+    def _extension_tally(self, played: bool = False):
+        """Per block: how many extension instances it was built with, or played.
 
         A running sum over each type's switches answers the second question in
         one pass per type, which is what keeps the block-table views from
         costing an enumeration of every instance in the scan.
+
+        The two are asked for separately because they are wanted separately:
+        writing a file needs only what was played, and computing the other
+        alongside it would be a scan-length column built for nobody.
         """
         blocks = self.num_blocks
         if not self._ext_present:
-            zeros = np.zeros(blocks, dtype=np.int32)
-            return zeros, zeros
+            return np.zeros(blocks, dtype=np.int32)
 
-        allocated = self._ext_slots[:, 1::2].sum(axis=1).astype(np.int32)
-        played = np.zeros(blocks, dtype=np.int64)
+        if not played:
+            return self._ext_slots[:, 1::2].sum(axis=1).astype(np.int32)
+
+        total = np.zeros(blocks, dtype=np.int32)
         for j in range(len(self._ext_present)):
             start = self._ext_slots[:, 2 * j].astype(np.int64)
             count = self._ext_slots[:, 2 * j + 1].astype(np.int64)
             switch = np.frombuffer(self._ext_switch[j], dtype=np.uint8)
-            running = np.concatenate(([0], np.cumsum(switch, dtype=np.int64)))
-            played += running[start + count] - running[start]
-        return allocated, played.astype(np.int32)
+            running = np.concatenate(([0], np.cumsum(switch, dtype=np.int32)))
+            total += running[start + count] - running[start]
+        return total
 
     def _collapse_extension_specs(self):
         """Deduplicate each extension type's own specification library.
@@ -2825,9 +2923,16 @@ class PeriodicSequence(SeqPlotMixin):
         starts = np.cumsum(per_block, axis=0) - per_block
         slots = np.zeros((self.loop_size * period_blocks, 2 * n_ext), dtype=np.int32)
         if n_ext:
-            offset = np.repeat(np.arange(loop_size, dtype=np.int64), period_blocks)
-            slots[:, 0::2] = np.tile(starts, (loop_size, 1)) + offset[:, None] * totals
-            slots[:, 1::2] = np.tile(per_block, (loop_size, 1))
+            # The period broadcast into the scan's shape, rather than tiled and
+            # then added to a per-period offset repeated beside it: the same
+            # answer without three scan-length temporaries in the 64 bits
+            # `arange` and `cumsum` default to, for a table declared `int32`.
+            unrolled = np.empty((loop_size, period_blocks, n_ext), dtype=np.int32)
+            unrolled[:] = starts
+            unrolled += np.arange(loop_size, dtype=np.int64)[:, None, None] * totals
+            slots[:, 0::2] = unrolled.reshape(-1, n_ext)
+            unrolled[:] = per_block
+            slots[:, 1::2] = unrolled.reshape(-1, n_ext)
         self._ext_slots = slots
         self._ext_stride = 2 * n_ext
         self._slots_ext = _flat(slots)

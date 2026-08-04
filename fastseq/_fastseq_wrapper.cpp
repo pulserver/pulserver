@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 namespace py = pybind11;
@@ -136,6 +137,44 @@ void rounding_plan(py::ssize_t cols, const std::vector<int>& digits,
   }
 }
 
+// How many threads to split `n` rows across.
+//
+// Deduplicating and rendering are the two places left where a large scan spends
+// real time on arithmetic rather than on memory, and both divide cleanly by
+// rows. Splitting is worth a thread only when there is enough to divide, hence
+// the floor; the ceiling is because what the chunks produce still has to be put
+// back together in order, and they contend for the same memory long before
+// twenty of them are useful. A short table -- which is every table in a
+// sequence but these two -- takes the single-threaded path and spawns nothing.
+unsigned split_threads(py::ssize_t n) {
+  constexpr py::ssize_t least = 1 << 16;
+  if (n < 2 * least) {
+    return 1;
+  }
+  const unsigned cores = std::thread::hardware_concurrency();
+  const unsigned wanted = static_cast<unsigned>(std::min<py::ssize_t>(n / least, 8));
+  return std::max(1u, std::min(cores ? cores : 1u, wanted));
+}
+
+// Run `work(t)` for every chunk, this thread taking the first. Called with the
+// GIL released and given work that never touches Python.
+template <typename Work>
+void run_split(unsigned threads, const Work& work) {
+  if (threads <= 1) {
+    work(0u);
+    return;
+  }
+  std::vector<std::thread> pool;
+  pool.reserve(threads - 1);
+  for (unsigned t = 1; t < threads; ++t) {
+    pool.emplace_back(work, t);
+  }
+  work(0u);
+  for (std::thread& worker : pool) {
+    worker.join();
+  }
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -227,47 +266,99 @@ static py::tuple unique_rows(py::array rows) {
   const uint64_t* words = static_cast<const uint64_t*>(info.ptr);
   int64_t* codes = code.mutable_data();
 
+  const auto digest = [&](const uint64_t* row) {
+    uint64_t h = 0xcbf29ce484222325ULL;
+    for (py::ssize_t c = 0; c < m; ++c) {
+      h ^= row[c];
+      h *= 0x100000001b3ULL;
+    }
+    h ^= h >> 33;
+    h *= 0xff51afd7ed558ccdULL;
+    h ^= h >> 33;
+    return h;
+  };
+
+  // Add a row to a table of distinct ones, keyed by what it holds, and say
+  // which one it is. `first` indexes into the table being deduplicated, so a row
+  // is never copied to be compared.
+  const auto claim = [&](std::vector<int64_t>& slot, size_t mask,
+                         std::vector<py::ssize_t>& first, py::ssize_t r) {
+    const uint64_t* row = words + r * m;
+    size_t at = static_cast<size_t>(digest(row)) & mask;
+    for (;;) {
+      const int64_t held = slot[at];
+      if (held < 0) {
+        const int64_t issued = static_cast<int64_t>(first.size());
+        slot[at] = issued;
+        first.push_back(r);
+        return issued;
+      }
+      const uint64_t* candidate = words + first[static_cast<size_t>(held)] * m;
+      if (std::memcmp(candidate, row, static_cast<size_t>(m) * 8) == 0) {
+        return held;
+      }
+      at = (at + 1) & mask;
+    }
+  };
+
   // Load factor one half, so probing stays short even when every row is unique.
-  size_t capacity = 16;
-  while (capacity < static_cast<size_t>(n) * 2) {
-    capacity <<= 1;
-  }
-  const size_t mask = capacity - 1;
+  const auto sized_for = [](py::ssize_t span) {
+    size_t capacity = 16;
+    while (capacity < static_cast<size_t>(span) * 2) {
+      capacity <<= 1;
+    }
+    return capacity;
+  };
 
-  std::vector<int64_t> slot(capacity, -1);
+  // A chunk's distinct rows, as indices into the whole table, with the codes it
+  // wrote being local to it. Everything is the same as one pass would do except
+  // that the codes have to be translated once the chunks are merged.
+  const auto distinct_within = [&](py::ssize_t from, py::ssize_t upto,
+                                   std::vector<py::ssize_t>& first) {
+    const size_t capacity = sized_for(upto - from);
+    std::vector<int64_t> slot(capacity, -1);
+    first.reserve(static_cast<size_t>(upto - from) / 8 + 16);
+    for (py::ssize_t r = from; r < upto; ++r) {
+      codes[r] = claim(slot, capacity - 1, first, r);
+    }
+  };
+
   std::vector<py::ssize_t> first;
-  first.reserve(static_cast<size_t>(n) / 8 + 16);
-
+  const unsigned threads = split_threads(n);
   {
     py::gil_scoped_release unlocked;
-    for (py::ssize_t r = 0; r < n; ++r) {
-      const uint64_t* row = words + r * m;
-
-      uint64_t h = 0xcbf29ce484222325ULL;
-      for (py::ssize_t c = 0; c < m; ++c) {
-        h ^= row[c];
-        h *= 0x100000001b3ULL;
+    if (threads == 1) {
+      distinct_within(0, n, first);
+    } else {
+      std::vector<py::ssize_t> edge(threads + 1);
+      for (unsigned t = 0; t <= threads; ++t) {
+        edge[t] = n * t / threads;
       }
-      h ^= h >> 33;
-      h *= 0xff51afd7ed558ccdULL;
-      h ^= h >> 33;
 
-      size_t at = static_cast<size_t>(h) & mask;
-      for (;;) {
-        const int64_t held = slot[at];
-        if (held < 0) {
-          slot[at] = static_cast<int64_t>(first.size());
-          codes[r] = static_cast<int64_t>(first.size());
-          first.push_back(r);
-          break;
+      std::vector<std::vector<py::ssize_t>> found(threads);
+      run_split(threads, [&](unsigned t) {
+        distinct_within(edge[t], edge[t + 1], found[t]);
+      });
+
+      // Merged in chunk order, so a row's code is decided by where it first
+      // turns up in the whole table -- which is what a single pass would have
+      // said, and why the answer does not depend on how many threads ran.
+      const size_t capacity = sized_for(n);
+      std::vector<int64_t> slot(capacity, -1);
+      std::vector<std::vector<int64_t>> renumber(threads);
+      for (unsigned t = 0; t < threads; ++t) {
+        renumber[t].reserve(found[t].size());
+        for (py::ssize_t candidate : found[t]) {
+          renumber[t].push_back(claim(slot, capacity - 1, first, candidate));
         }
-        const uint64_t* candidate = words + first[static_cast<size_t>(held)] * m;
-        if (std::memcmp(candidate, row, static_cast<size_t>(m) * 8) == 0) {
-          codes[r] = held;
-          break;
-        }
-        at = (at + 1) & mask;
       }
+
+      run_split(threads, [&](unsigned t) {
+        const int64_t* mapping = renumber[t].data();
+        for (py::ssize_t r = edge[t]; r < edge[t + 1]; ++r) {
+          codes[r] = mapping[codes[r]];
+        }
+      });
     }
   }
 
@@ -385,6 +476,52 @@ void collapse_kernel(const double* table, py::ssize_t cols, const int64_t* take,
   }
 }
 
+// An open-addressed index over a table of already-rounded rows, which hands out
+// an ID per distinct row in the order it first sees one. The same table and the
+// same hashing as `collapse_kernel`, without the rounding: this is for merging
+// results that have already been through it.
+struct RowIndex {
+  py::ssize_t width;
+  std::vector<double>* rows;
+  std::vector<int64_t> slot = std::vector<int64_t>(1024, -1);
+  size_t mask = 1023;
+
+  int64_t insert(const double* key) {
+    size_t at = static_cast<size_t>(hash_words(reinterpret_cast<const uint64_t*>(key),
+                                               width)) & mask;
+    while (slot[at] >= 0) {
+      if (std::memcmp(rows->data() + slot[at] * width, key,
+                      static_cast<size_t>(width) * 8) == 0) {
+        return slot[at];
+      }
+      at = (at + 1) & mask;
+    }
+    const int64_t issued =
+        static_cast<int64_t>(rows->size() / static_cast<size_t>(width));
+    rows->insert(rows->end(), key, key + width);
+    slot[at] = issued;
+    if ((rows->size() / static_cast<size_t>(width)) * 2 > slot.size()) {
+      std::vector<int64_t> grown(slot.size() * 2, -1);
+      const size_t grown_mask = grown.size() - 1;
+      const py::ssize_t kept =
+          static_cast<py::ssize_t>(rows->size() / static_cast<size_t>(width));
+      for (py::ssize_t u = 0; u < kept; ++u) {
+        const double* row = rows->data() + u * width;
+        size_t to = static_cast<size_t>(
+                        hash_words(reinterpret_cast<const uint64_t*>(row), width)) &
+                    grown_mask;
+        while (grown[to] >= 0) {
+          to = (to + 1) & grown_mask;
+        }
+        grown[to] = u;
+      }
+      slot.swap(grown);
+      mask = grown_mask;
+    }
+    return issued;
+  }
+};
+
 }  // namespace
 
 static py::tuple collapse_rows(
@@ -432,12 +569,55 @@ static py::tuple collapse_rows(
   std::vector<double> scale;
   rounding_plan(cols, digits, mode, scale);
 
+  const double* values = static_cast<const double*>(info.ptr);
+  int64_t* codes = code.mutable_data();
+  const unsigned threads = split_threads(n);
+
   Collapsed out;
   out.width = width;
   {
     py::gil_scoped_release unlocked;
-    collapse_kernel(static_cast<const double*>(info.ptr), cols, picked, n, mode.data(),
-                    scale.data(), power_table(), extra, width, out, code.mutable_data());
+    if (threads == 1) {
+      collapse_kernel(values, cols, picked, n, mode.data(), scale.data(), power_table(),
+                      extra, width, out, codes);
+    } else {
+      // Each chunk collapses against a table of its own, so the codes it writes
+      // are local to it and have to be translated afterwards.
+      std::vector<py::ssize_t> edge(threads + 1);
+      for (unsigned t = 0; t <= threads; ++t) {
+        edge[t] = n * t / threads;
+      }
+
+      std::vector<Collapsed> found(threads);
+      run_split(threads, [&](unsigned t) {
+        found[t].width = width;
+        collapse_kernel(values, cols, picked + edge[t], edge[t + 1] - edge[t],
+                        mode.data(), scale.data(), power_table(), extra, width,
+                        found[t], codes + edge[t]);
+      });
+
+      // Merged in chunk order, so a row's ID is decided by where it first turns
+      // up in the whole selection -- which is what a single pass would have
+      // said, and why the answer does not depend on how many threads ran.
+      RowIndex index{width, &out.unique};
+      std::vector<std::vector<int64_t>> renumber(threads);
+      for (unsigned t = 0; t < threads; ++t) {
+        const py::ssize_t mine =
+            static_cast<py::ssize_t>(found[t].unique.size() / static_cast<size_t>(width));
+        renumber[t].reserve(static_cast<size_t>(mine));
+        for (py::ssize_t u = 0; u < mine; ++u) {
+          renumber[t].push_back(index.insert(found[t].unique.data() + u * width));
+        }
+        std::vector<double>().swap(found[t].unique);
+      }
+
+      run_split(threads, [&](unsigned t) {
+        const int64_t* mapping = renumber[t].data();
+        for (py::ssize_t r = edge[t]; r < edge[t + 1]; ++r) {
+          codes[r] = mapping[codes[r]];
+        }
+      });
+    }
   }
 
   const py::ssize_t kept =
@@ -482,23 +662,50 @@ static py::object render_int_rows(py::array matrix, const std::vector<int>& widt
 
   const int64_t* values = static_cast<const int64_t*>(info.ptr);
 
+  // Rows are independent, so both passes below are split the same way. The
+  // chunks are contiguous and rendered into buffers of their own, which is what
+  // makes them independent -- a row's rendered length depends on its digits, so
+  // there is no way to know where a row lands without rendering everything
+  // before it.
+  const unsigned threads = split_threads(n);
+  std::vector<py::ssize_t> edge(threads + 1);
+  for (unsigned t = 0; t <= threads; ++t) {
+    edge[t] = n * t / threads;
+  }
+
   // The widest each column gets, which is what bounds the buffer. A negative
   // anywhere means this cannot be rendered at a fixed width at all.
   std::vector<int> span(static_cast<size_t>(m));
   {
     py::gil_scoped_release unlocked;
+    std::vector<std::vector<int64_t>> found(threads);
+    const auto scan = [&](unsigned t) {
+      std::vector<int64_t>& maxima = found[t];
+      maxima.assign(static_cast<size_t>(m), 0);
+      for (py::ssize_t r = edge[t]; r < edge[t + 1]; ++r) {
+        const int64_t* row = values + r * m;
+        for (py::ssize_t c = 0; c < m; ++c) {
+          if (row[c] < 0) {
+            maxima[0] = -1;
+            return;
+          }
+          if (row[c] > maxima[static_cast<size_t>(c)]) {
+            maxima[static_cast<size_t>(c)] = row[c];
+          }
+        }
+      }
+    };
+    run_split(threads, scan);
+
     std::vector<int64_t> maxima(static_cast<size_t>(m), 0);
-    for (py::ssize_t r = 0; r < n; ++r) {
-      const int64_t* row = values + r * m;
+    for (unsigned t = 0; t < threads; ++t) {
+      if (found[t][0] < 0) {
+        maxima[0] = -1;
+        break;
+      }
       for (py::ssize_t c = 0; c < m; ++c) {
-        if (row[c] < 0) {
-          maxima[0] = -1;
-          r = n;  // stop both loops
-          break;
-        }
-        if (row[c] > maxima[static_cast<size_t>(c)]) {
-          maxima[static_cast<size_t>(c)] = row[c];
-        }
+        maxima[static_cast<size_t>(c)] =
+            std::max(maxima[static_cast<size_t>(c)], found[t][static_cast<size_t>(c)]);
       }
     }
     if (maxima[0] < 0) {
@@ -523,33 +730,212 @@ static py::object render_int_rows(py::array matrix, const std::vector<int>& widt
   }
 
   std::string out;
-  out.resize(static_cast<size_t>(n) * line);  // an upper bound: shorter rows shrink it
-  size_t used = 0;
   {
     py::gil_scoped_release unlocked;
-    char* buffer = out.data();
-    char digits[24];
-    for (py::ssize_t r = 0; r < n; ++r) {
-      const int64_t* row = values + r * m;
-      for (py::ssize_t c = 0; c < m; ++c) {
-        int64_t value = row[c];
-        int count = 0;
-        do {
-          digits[count++] = static_cast<char>('0' + value % 10);
-          value /= 10;
-        } while (value != 0);
-        for (int pad = widths[static_cast<size_t>(c)] - count; pad > 0; --pad) {
-          buffer[used++] = ' ';
+    std::vector<std::string> part(threads);
+    const auto render = [&](unsigned t) {
+      std::string& buffer = part[t];
+      // An upper bound: rows whose values are narrower than the column shrink
+      // it, which is what the resize at the end of the chunk settles.
+      buffer.resize(static_cast<size_t>(edge[t + 1] - edge[t]) * line);
+      char* at = buffer.data();
+      size_t used = 0;
+      char digits[24];
+      for (py::ssize_t r = edge[t]; r < edge[t + 1]; ++r) {
+        const int64_t* row = values + r * m;
+        for (py::ssize_t c = 0; c < m; ++c) {
+          int64_t value = row[c];
+          int count = 0;
+          do {
+            digits[count++] = static_cast<char>('0' + value % 10);
+            value /= 10;
+          } while (value != 0);
+          for (int pad = widths[static_cast<size_t>(c)] - count; pad > 0; --pad) {
+            at[used++] = ' ';
+          }
+          while (count > 0) {
+            at[used++] = digits[--count];
+          }
+          at[used++] = (c + 1 == m) ? '\n' : ' ';
         }
-        while (count > 0) {
-          buffer[used++] = digits[--count];
-        }
-        buffer[used++] = (c + 1 == m) ? '\n' : ' ';
+      }
+      buffer.resize(used);
+    };
+    run_split(threads, render);
+
+    if (threads == 1) {
+      out.swap(part[0]);
+    } else {
+      size_t total = 0;
+      std::vector<size_t> start(threads);
+      for (unsigned t = 0; t < threads; ++t) {
+        start[t] = total;
+        total += part[t].size();
+      }
+      out.resize(total);
+      char* buffer = out.data();
+      run_split(threads, [&](unsigned t) {
+        std::memcpy(buffer + start[t], part[t].data(), part[t].size());
+      });
+    }
+  }
+  // Bytes rather than text: this is ASCII on its way to a file, and handing it
+  // back as `str` costs a decode here and an encode again at the end -- two
+  // passes over most of a large .seq file, to arrive at the bytes we had.
+  return py::bytes(out);
+}
+
+// ---------------------------------------------------------------------------
+// tile_rows
+// ---------------------------------------------------------------------------
+
+// `period` laid out `loop_size` times, end to end.
+//
+// What `np.tile` does, on threads. The period is a few thousand rows and stays
+// in cache; the destination is the whole scan -- eighty megabytes of trapezoid
+// rows on a large 3D protocol -- so this is a pure streaming write, and a
+// streaming write is bounded by how much memory traffic one core can ask for
+// rather than by anything it computes.
+py::array_t<double> tile_rows(py::array_t<double, py::array::c_style> period,
+                              py::ssize_t loop_size) {
+  py::buffer_info info = period.request();
+  if (info.ndim != 2) {
+    throw std::invalid_argument("tile_rows expects a two-dimensional table");
+  }
+  if (loop_size < 0) {
+    throw std::invalid_argument("tile_rows expects a non-negative repeat count");
+  }
+  const py::ssize_t rows = info.shape[0];
+  const py::ssize_t cols = info.shape[1];
+
+  py::array_t<double> out({rows * loop_size, cols});
+  if (rows == 0 || cols == 0 || loop_size == 0) {
+    return out;
+  }
+
+  const double* source = static_cast<const double*>(info.ptr);
+  double* target = out.mutable_data();
+  const size_t span = static_cast<size_t>(rows) * static_cast<size_t>(cols);
+  {
+    py::gil_scoped_release unlocked;
+    const unsigned threads = split_threads(rows * loop_size);
+    run_split(threads, [&](unsigned t) {
+      const py::ssize_t from = loop_size * t / threads;
+      const py::ssize_t upto = loop_size * (t + 1) / threads;
+      for (py::ssize_t copy = from; copy < upto; ++copy) {
+        std::memcpy(target + static_cast<size_t>(copy) * span, source, span * sizeof(double));
+      }
+    });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Block columns
+// ---------------------------------------------------------------------------
+
+// Turn the loop's slot offsets and switches into the columns a block table is
+// made of, plus the index its gradient column points through.
+//
+// Every one of these is a rank: the dense tables are laid out in block order, so
+// a row's library ID is just how many rows of its kind come before it, and a
+// slot that was allocated but never switched on contributes a rank that nothing
+// refers to -- which is exactly what lets pruning drop it later.
+//
+// Done here rather than in NumPy because there it is six separate passes over
+// arrays three times the length of the scan -- a running sum, two comparisons, a
+// gather and two strided writes into a seven-column table -- each of them
+// reading and writing tens of megabytes to carry a few bits of state forward.
+// The whole derivation is one sequential walk with one counter in it, and that
+// is what this is. `_block_columns_py` in `fastseq/modules.py` is the same
+// derivation in NumPy, and the two are compared row for row in the tests.
+py::tuple block_columns(py::array_t<int32_t, py::array::c_style> slots, py::object on,
+                        int rf_width, int adc_width, int trap_width, int arb_width) {
+  py::buffer_info info = slots.request();
+  if (info.ndim != 2 || info.shape[1] != 5) {
+    throw std::invalid_argument("block_columns expects a five-column slot table");
+  }
+  if (!PyByteArray_Check(on.ptr())) {
+    throw std::invalid_argument("block_columns expects the switches as a bytearray");
+  }
+  const py::ssize_t blocks = info.shape[0];
+  if (PyByteArray_GET_SIZE(on.ptr()) != 5 * blocks) {
+    throw std::invalid_argument("block_columns: the switches do not match the slot table");
+  }
+
+  const int32_t* slot = static_cast<const int32_t*>(info.ptr);
+  const unsigned char* switches =
+      reinterpret_cast<const unsigned char*>(PyByteArray_AS_STRING(on.ptr()));
+
+  // How many gradient slots were played, which is how many rows the index has.
+  // Counting first costs one sequential read and saves either a guess at the
+  // size or a copy out of a vector that grew to three times the scan.
+  py::ssize_t sounding = 0;
+  {
+    py::gil_scoped_release unlocked;
+    for (py::ssize_t i = 0; i < blocks; ++i) {
+      const int32_t* here = slot + 5 * i;
+      const unsigned char* played = switches + 5 * i;
+      for (int axis = 0; axis < 3; ++axis) {
+        sounding += (here[1 + axis] != 0) && played[1 + axis];
       }
     }
   }
-  out.resize(used);
-  return py::str(out);
+
+  py::array_t<int32_t> rf_column(blocks);
+  py::array_t<int32_t> adc_column(blocks);
+  py::array_t<int32_t> grad_column(3 * blocks);
+  py::array_t<int32_t> index({sounding, py::ssize_t{2}});
+
+  int32_t* rf = rf_column.mutable_data();
+  int32_t* adc = adc_column.mutable_data();
+  int32_t* grad = grad_column.mutable_data();
+  int32_t* pointed = index.mutable_data();
+
+  {
+    py::gil_scoped_release unlocked;
+    int32_t rank = 0;
+    py::ssize_t at = 0;
+    for (py::ssize_t i = 0; i < blocks; ++i) {
+      const int32_t* here = slot + 5 * i;
+      const unsigned char* played = switches + 5 * i;
+
+      // A slot of zero is "no such event" and stays zero. Saying so costs a
+      // branch and buys agreement with the NumPy twin, which arrives at the
+      // same answer by flooring a negative division rather than by asking.
+      rf[i] = (played[0] && here[0] != 0) ? (here[0] - 1) / rf_width + 1 : 0;
+      adc[i] = (played[4] && here[4] != 0) ? (here[4] - 1) / adc_width + 1 : 0;
+
+      for (int axis = 0; axis < 3; ++axis) {
+        const int32_t offset = here[1 + axis];
+        if (offset == 0) {
+          grad[3 * i + axis] = 0;
+          continue;
+        }
+        // The rank advances whether or not the block played it: it numbers the
+        // rows that exist, which is what makes a skipped one free.
+        ++rank;
+        if (!played[1 + axis]) {
+          grad[3 * i + axis] = 0;
+          continue;
+        }
+        grad[3 * i + axis] = rank;
+
+        // Only what was played is indexed. Deduplication reads these rows
+        // straight through, in this order, so indexing every allocated slot
+        // instead would mean gathering the played ones back out of it -- a
+        // scan-length pass to arrive at the order they were already in.
+        // The sign of the offset is which of the two tables it points into:
+        // positive is a trapezoid, negative an arbitrary waveform.
+        const bool arbitrary = offset < 0;
+        pointed[2 * at] = arbitrary;
+        pointed[2 * at + 1] =
+            ((arbitrary ? -offset : offset) - 1) / (arbitrary ? arb_width : trap_width);
+        ++at;
+      }
+    }
+  }
+  return py::make_tuple(rf_column, grad_column, adc_column, index);
 }
 
 // ---------------------------------------------------------------------------
@@ -744,7 +1130,15 @@ class BlockWriter {
   // gigabyte of them, on every build. `cursor` is read back out of this object
   // instead, which is both cheaper and severable.
   explicit BlockWriter(const py::object& owner) {
-    py::module_ modules = py::module_::import("fastseq.modules");
+    // The module the sequence's own class came from, rather than a name spelled
+    // out here. It is reached on the same terms as everything else in this
+    // package -- as part of `fastseq` when there is one, and on its own when the
+    // directory itself is what is on the path, which is what
+    // `cd fastseq; import modules` gives -- and asking the owner is how this
+    // side finds out which of the two happened. The refusal helpers and the
+    // label tables live over there either way.
+    py::module_ modules = py::module_::import(
+        py::cast<std::string>(py::getattr(owner, "__module__")).c_str());
     no_slot_ = modules.attr("_no_slot");
     no_extension_ = modules.attr("_no_extension");
     stale_copy_ = modules.attr("_stale_copy");
@@ -794,7 +1188,23 @@ class BlockWriter {
   int64_t cursor() const { return cursor_; }
   void set_cursor(int64_t value) { cursor_ = value; }
 
-  void add_block(py::args args);
+  // Takes the arguments as CPython hands them to a vectorcall, so that the raw
+  // entry point below can pass them straight through. `add_block` is the same
+  // method reached the ordinary way, and the two must not diverge.
+  void write_block(PyObject* const* args, py::ssize_t nargs);
+
+  // The same method reached through pybind11's ordinary dispatch. Kept as a
+  // second way in, for anything holding the writer itself; the loop uses the
+  // raw entry point, which is where the argument tuple this has to unpack is
+  // never built in the first place.
+  void add_block(py::args args) {
+    const py::ssize_t given = PyTuple_GET_SIZE(args.ptr());
+    std::vector<PyObject*> items(static_cast<size_t>(given));
+    for (py::ssize_t n = 0; n < given; ++n) {
+      items[static_cast<size_t>(n)] = PyTuple_GET_ITEM(args.ptr(), n);
+    }
+    write_block(items.data(), given);
+  }
 
  private:
   py::object keep(py::object held) {
@@ -843,7 +1253,7 @@ class BlockWriter {
   std::vector<PyObject*> ext_switch_;
 };
 
-void BlockWriter::add_block(py::args args) {
+void BlockWriter::write_block(PyObject* const* args, py::ssize_t count) {
   const int64_t i = cursor_;
   if (i >= num_blocks_) {
     throw py::index_error(
@@ -859,9 +1269,8 @@ void BlockWriter::add_block(py::args args) {
   // has taken so far.
   uint64_t seen = 0;
 
-  const py::ssize_t count = PyTuple_GET_SIZE(args.ptr());
   for (py::ssize_t n = 0; n < count; ++n) {
-    PyObject* arg = PyTuple_GET_ITEM(args.ptr(), n);
+    PyObject* arg = args[n];
 
     // Subtracting the tag is the ownership check: an event this sequence
     // stamped lands in 1..15, anything else outside it. Adopting is what
@@ -1089,6 +1498,77 @@ void BlockWriter::add_block(py::args args) {
   cursor_ = i + 1;
 }
 
+namespace {
+
+// `add_block` as a plain CPython vectorcall, bypassing pybind11's dispatcher.
+//
+// That dispatcher is what makes a pybind11 binding pleasant everywhere else:
+// it walks the overload chain, packs the arguments into a tuple, builds a call
+// record and unpacks it again. It costs around two hundred nanoseconds, which
+// is nothing at all until it is paid two million times -- on a large 3D scan it
+// is most of a second, and more than the work of writing the blocks. A method
+// taking `*args` and returning nothing needs none of it: CPython already has
+// the arguments in an array, and `METH_FASTCALL` is how a C function says it
+// will take them that way.
+//
+// The writer is reached through a capsule rather than through the pybind11
+// object because a raw entry point gets whatever `self` it was created with,
+// and a capsule can carry both the pointer and a reference that keeps it valid.
+// The reference goes one way only -- the writer holds nothing back -- so the
+// two of them do not form the kind of cycle that once made these sequences
+// immortal (see the `BlockWriter` constructor).
+struct FastBinding {
+  BlockWriter* writer;
+  py::object owner;
+};
+
+void release_binding(PyObject* capsule) {
+  delete static_cast<FastBinding*>(PyCapsule_GetPointer(capsule, nullptr));
+}
+
+PyObject* fast_add_block(PyObject* self, PyObject* const* args, py::ssize_t nargs) {
+  // An unnamed capsule, so this is a pointer read and two branches rather than
+  // the string compare a named one would do on every block.
+  auto* binding = static_cast<FastBinding*>(PyCapsule_GetPointer(self, nullptr));
+  if (binding == nullptr) {
+    return nullptr;
+  }
+  try {
+    binding->writer->write_block(args, nargs);
+  } catch (py::error_already_set& raised) {
+    raised.restore();
+    return nullptr;
+  } catch (const py::builtin_exception& raised) {
+    raised.set_error();
+    return nullptr;
+  } catch (const std::exception& raised) {
+    PyErr_SetString(PyExc_RuntimeError, raised.what());
+    return nullptr;
+  }
+  Py_RETURN_NONE;
+}
+
+PyMethodDef fast_add_block_def = {
+    "add_block", reinterpret_cast<PyCFunction>(reinterpret_cast<void*>(fast_add_block)),
+    METH_FASTCALL, "Write one block of the unrolled scan, then advance the cursor."};
+
+py::object bind_add_block(py::object self) {
+  auto* binding = new FastBinding{py::cast<BlockWriter*>(self), std::move(self)};
+  PyObject* capsule = PyCapsule_New(binding, nullptr, release_binding);
+  if (capsule == nullptr) {
+    delete binding;
+    throw py::error_already_set();
+  }
+  py::object held = py::reinterpret_steal<py::object>(capsule);
+  PyObject* bound = PyCFunction_New(&fast_add_block_def, capsule);
+  if (bound == nullptr) {
+    throw py::error_already_set();
+  }
+  return py::reinterpret_steal<py::object>(bound);
+}
+
+}  // namespace
+
 PYBIND11_MODULE(_fastseq_wrapper, m) {
   m.doc() = "Loop and deduplication accelerators for fastseq.";
   m.def("round_rows", &round_rows, py::arg("table"), py::arg("digits"),
@@ -1100,10 +1580,18 @@ PYBIND11_MODULE(_fastseq_wrapper, m) {
         "Round and deduplicate the selected rows of a table without gathering them.");
   m.def("render_int_rows", &render_int_rows, py::arg("matrix"), py::arg("widths"),
         "A non-negative integer table as right-aligned space-separated lines.");
+  m.def("tile_rows", &tile_rows, py::arg("period"), py::arg("loop_size"),
+        "A table laid out end to end a number of times, as `np.tile` would.");
+  m.def("block_columns", &block_columns, py::arg("slots"), py::arg("on"),
+        py::arg("rf_width"), py::arg("adc_width"), py::arg("trap_width"),
+        py::arg("arb_width"),
+        "The block table's columns, and the index its gradient column points through.");
 
   py::class_<BlockWriter>(m, "BlockWriter")
       .def(py::init<py::object>(), py::arg("sequence"))
       .def_property("cursor", &BlockWriter::cursor, &BlockWriter::set_cursor)
       .def("add_block", &BlockWriter::add_block,
-           "Write one block of the unrolled scan, then advance the cursor.");
+           "Write one block of the unrolled scan, then advance the cursor.")
+      .def("bind", &bind_add_block,
+           "`add_block` as a callable that CPython can reach without pybind11's dispatcher.");
 }

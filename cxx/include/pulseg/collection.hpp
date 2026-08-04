@@ -417,7 +417,8 @@ namespace pulseg
             float peak_log10_threshold = std::numeric_limits<float>::quiet_NaN(),
             float peak_norm_scale = std::numeric_limits<float>::quiet_NaN(),
             float peak_eps = std::numeric_limits<float>::quiet_NaN(),
-            float peak_prominence = std::numeric_limits<float>::quiet_NaN()) const
+            float peak_prominence = std::numeric_limits<float>::quiet_NaN(),
+            bool compress_trains = true) const
         {
             std::vector<pulseg_forbidden_band> cbands(bands.size());
             for (size_t i = 0; i < bands.size(); ++i)
@@ -446,7 +447,8 @@ namespace pulseg
                 target_resolution_hz,
                 max_freq_hz,
                 static_cast<int>(cbands.size()),
-                cbands.empty() ? nullptr : cbands.data());
+                cbands.empty() ? nullptr : cbands.data(),
+                compress_trains ? 1 : 0);
             check(code, diag);
 
             MechResonancesSpectra a;

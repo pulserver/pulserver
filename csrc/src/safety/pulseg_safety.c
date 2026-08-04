@@ -290,6 +290,22 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
  *  what the sa_eval_pwl_transform memoization below amortizes. */
 #define SA_MECHRES_MAX_DM_SUBDIV 16
 
+/** Segments between exact sin/cos re-anchors of the uniform-raster phase
+ *  recurrence in sa_eval_pwl_transform(). Bounds accumulated rotation drift
+ *  to a fixed budget no matter how many samples an arbitrary waveform has,
+ *  at a cost of 2 transcendentals per this many segments (< 1% of the
+ *  general path's 4-per-segment). */
+#define SA_PWL_REANCHOR 256
+
+/** Largest number of occurrences-per-repeat that sa_compress_axis_events()
+ *  will try when looking for interleaved equally-spaced trains of one
+ *  gradient definition (e.g. 2 for a prephaser/rewinder pair sharing a
+ *  definition, or an echo-train length for a definition reused once per
+ *  echo). Only bounds how much compression is FOUND -- never correctness:
+ *  a structure wider than this simply falls back to consecutive run-length
+ *  encoding. The search is O(occurrences * this) once per axis. */
+#define SA_MAX_TRAIN_STRIDE 32
+
 /**
  * A gradient event within the canonical TR.
  * Each event is a single waveform (or sub-event from decomposed arbitrary)
@@ -299,13 +315,23 @@ typedef struct
 {
     int def_id;                              /**< gradient definition id                */
     int def_index;                           /**< index into grad_definitions[]         */
-    float start_time_us;                     /**< event start time within the TR (us)   */
+    double start_time_us;                    /**< event start time within the TR (us)   */
     float amplitude;                         /**< worst-case positional amplitude (Hz/m), signed */
     int pwl_num_vertices;                    /**< >0 -> use piecewise-linear W(f)       */
     float pwl_times_us[SA_MAX_PWL_VERTICES]; /**< vertex times (us from event start) */
     float pwl_values[SA_MAX_PWL_VERTICES];   /**< vertex amplitudes (normalised)     */
     int num_reps;                            /**< repetition count (1=once, N=imaging repeat) */
-    float rep_period_us;                     /**< repetition period in us (0 if num_reps==1) */
+    double rep_period_us;                    /**< repetition period in us (0 if num_reps==1) */
+    /* Occurrence-train compression (sa_compress_axis_events).  A train stands
+     * for train_len occurrences of the SAME definition at start_time_us +
+     * j*train_period_us, j = 0..train_len-1.  train_len == 1 is a plain
+     * single occurrence and every field below is inert. */
+    int train_len;          /**< occurrences fused into this event (1 = none)  */
+    double train_period_us; /**< uniform spacing of the train (0 if len == 1)  */
+    float *train_amps;      /**< [train_len] per-occurrence amplitudes, or NULL
+                                 when every occurrence has `amplitude` (the
+                                 constant-amplitude case, evaluated in closed
+                                 form instead of term by term) */
     /* Raw-sample model (for many-sample arb without sub-period): the true
      * complex event transform is evaluated by direct demodulation of the
      * samples at cell centres.  arb_num_samples == 0 -> use the PWL model. */
@@ -402,6 +428,8 @@ static void sa_free_structural_events(sa_structural_events *se)
                     PULSEG_FREE(se->axes[ax].events[k].arb_samples);
                 if (se->axes[ax].events[k].arb_times_us)
                     PULSEG_FREE(se->axes[ax].events[k].arb_times_us);
+                if (se->axes[ax].events[k].train_amps)
+                    PULSEG_FREE(se->axes[ax].events[k].train_amps);
             }
             PULSEG_FREE(se->axes[ax].events);
         }
@@ -426,7 +454,7 @@ typedef struct
 {
     int def_id;
     int def_index;
-    float start_time_us;
+    double start_time_us;
     float amplitude;
 } sa_raw_occurrence;
 
@@ -438,7 +466,14 @@ static int sa_extract_raw_occurrences(
     int axis)
 {
     int i, n, cap;
-    float time_us;
+    /* Accumulated in double, not float: block durations are whole
+     * microseconds, so a double running sum is EXACT across a hyper-TR of
+     * millions of us, whereas a float sum quantises to 0.5 us past ~7 s and
+     * jitters the event start times. Exactness matters twice over -- it
+     * removes that jitter from the e^{-j 2 pi f t} phase, and it lets
+     * sa_compress_axis_events() recognise a constant occurrence spacing by
+     * near-exact comparison instead of a loose tolerance. */
+    double time_us;
     sa_raw_occurrence *occ;
 
     cap = (block_count > 0) ? block_count : 16;
@@ -446,14 +481,14 @@ static int sa_extract_raw_occurrences(
     if (!occ)
         return -1;
     n = 0;
-    time_us = 0.0f;
+    time_us = 0.0;
 
     for (i = 0; i < block_count; ++i)
     {
         const struct pulseg_block_table_element *bte = &desc->block_table[start_block + i];
         const struct pulseg_base_block *bdef = &desc->base_blocks[bte->id];
         int grad_table_idx;
-        float blk_dur;
+        double blk_dur;
 
         switch (axis)
         {
@@ -495,7 +530,7 @@ static int sa_extract_raw_occurrences(
             ++n;
         }
 
-        blk_dur = (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
+        blk_dur = (bte->duration_us >= 0) ? (double)bte->duration_us : (double)bdef->duration_us;
         time_us += blk_dur;
     }
 
@@ -749,8 +784,11 @@ static int sa_build_axis_events(
                 }
                 ae->events[n_events].def_id = did;
                 ae->events[n_events].def_index = occ[j].def_index;
-                ae->events[n_events].start_time_us = occ[j].start_time_us + (float)gdef->delay;
+                ae->events[n_events].start_time_us = occ[j].start_time_us + (double)gdef->delay;
                 ae->events[n_events].amplitude = occ[j].amplitude;
+                ae->events[n_events].train_len = 1;
+                ae->events[n_events].train_period_us = 0.0;
+                ae->events[n_events].train_amps = NULL;
                 if (use_arb && shared_arb_samples && shared_arb_times)
                 {
                     float *smp_copy = (float *)PULSEG_ALLOC((size_t)shared_arb_n * sizeof(float));
@@ -812,6 +850,269 @@ static int sa_build_axis_events(
     ae->num_events = n_events;
     PULSEG_FREE(unique_ids);
     return PULSEG_SUCCESS;
+}
+
+/* ================================================================== */
+/*  Structural acoustic analysis — occurrence-train compression       */
+/* ================================================================== */
+
+/**
+ * May occurrences @p a and @p b belong to the same compressed train?
+ *
+ * Same definition (hence same base waveform and same W_d(f)) and same outer
+ * repetition tagging.  Including the (num_reps, rep_period_us) pair in the
+ * key is what stops a train from straddling the prep / imaging / cooldown
+ * regions that the NEX tagging distinguishes: events in different regions
+ * carry different tags and therefore never fuse.
+ */
+static int sa_train_compatible(const sa_event *a, const sa_event *b)
+{
+    return a->def_id == b->def_id && a->def_index == b->def_index &&
+           a->num_reps == b->num_reps && a->rep_period_us == b->rep_period_us &&
+           a->train_len == 1 && b->train_len == 1;
+}
+
+/**
+ * Fuse runs of equally-spaced occurrences of one definition into single
+ * "train" events.
+ *
+ * The A_eq sum over one axis is
+ *   S_ax(f) = sum_k A_k W_{d(k)}(f) e^{-j 2 pi f t_k},
+ * and W_d(f) is already memoized per definition (sa_transform_cache).  What
+ * is left, and what dominates for any sequence with many repeats, is one
+ * e^{-j 2 pi f t_k} -- a sin/cos pair -- per occurrence per frequency.  This
+ * pass attacks that term structurally.
+ *
+ * Method: take each definition's occurrences in time order, differentiate to
+ * get the spacings, and describe them as interleaved arithmetic progressions.
+ * A train of length L starting at t_0 with spacing D contributes
+ *   W_d(f) e^{-j 2 pi f t_0} * sum_{j<L} A_j z^j,   z = e^{-j 2 pi f D},
+ * which sa_eval_event_spectrum() evaluates in closed form (constant A: a
+ * Dirichlet/geometric sum, O(1)) or by Horner (varying A: L complex
+ * multiply-adds and a SINGLE transcendental, instead of L of them).
+ *
+ * Consecutive differencing alone is not enough, because a definition used
+ * more than once per repeat interleaves its occurrences: a gy prephaser and
+ * its rewinder are usually the SAME definition at two different amplitudes,
+ * so the spacing alternates short/long and no run longer than 2 exists.  The
+ * scan therefore tries strides m = 1..SA_MAX_TRAIN_STRIDE and takes the
+ * smallest m for which the occurrence list splits into m subsequences that
+ * each have constant stride-m spacing -- i.e. m occurrences per repeat.  m
+ * is discovered, never assumed; the repeat period is whatever the spacing
+ * turns out to be, and each emitted train is an exact arithmetic
+ * progression, so a wrong guess cannot produce a wrong answer, only a
+ * missed compression.
+ *
+ * Nothing about the TR's internal layout is assumed -- no period is named,
+ * no nesting is detected, no shape is special-cased.  An irregular order
+ * such as [0,1,2,3,1,2,3] or [0,1,1,2,3,1,1,2,3] compresses as well as a
+ * regular one, because what is scanned is the per-DEFINITION spacing, whose
+ * entropy is far below that of the block sequence.  A pathological TR in
+ * which no definition's occurrences are equally spaced at any stride falls
+ * back to consecutive run-length encoding and, failing that, to trains of
+ * length 1 -- i.e. exactly the pre-compression event list, at the cost of
+ * one bounded scan.
+ *
+ * Only ever applied when the caller wants no display products: the
+ * per-event component export reports one term per materialised occurrence,
+ * which a train deliberately no longer is.
+ */
+/**
+ * Does [beg,end) split into @p m interleaved arithmetic progressions, taken
+ * with stride @p m?  Requires at least two occurrences per progression, so a
+ * "split" always describes strictly fewer trains than occurrences.
+ */
+static int sa_stride_splits(const sa_event *ev, int beg, int end, int m)
+{
+    int total = end - beg;
+    int phase;
+
+    if (m < 1 || total < 2 * m || (total % m) != 0)
+        return 0;
+
+    for (phase = 0; phase < m; ++phase)
+    {
+        int first = beg + phase;
+        double dt = ev[first + m].start_time_us - ev[first].start_time_us;
+        double tol;
+        int q;
+
+        if (!(dt > 0.0))
+            return 0;
+        tol = 1.0e-9 * dt;
+        for (q = first + m; q + m < end; q += m)
+        {
+            double d = ev[q + m].start_time_us - ev[q].start_time_us;
+            if (fabs(d - dt) > tol)
+                return 0;
+        }
+    }
+    return 1;
+}
+
+/**
+ * Emit one train covering occurrences beg, beg+stride, ... (@p len of them).
+ * Returns 0 on allocation failure, leaving @p out untouched.
+ */
+static int sa_emit_train(
+    sa_event *out,
+    const sa_event *ev,
+    int beg,
+    int stride,
+    int len)
+{
+    int j, varying = 0;
+
+    /* Shallow copy: the head occurrence keeps ownership of its arb arrays. */
+    *out = ev[beg];
+    if (len <= 1)
+        return 1;
+
+    for (j = 1; j < len; ++j)
+        if (ev[beg + j * stride].amplitude != ev[beg].amplitude)
+        {
+            varying = 1;
+            break;
+        }
+
+    out->train_len = len;
+    out->train_period_us = ev[beg + stride].start_time_us - ev[beg].start_time_us;
+    if (varying)
+    {
+        float *amps = (float *)PULSEG_ALLOC((size_t)len * sizeof(float));
+        if (!amps)
+            return 0;
+        for (j = 0; j < len; ++j)
+            amps[j] = ev[beg + j * stride].amplitude;
+        out->train_amps = amps;
+    }
+    return 1;
+}
+
+static int sa_compress_axis_events(sa_axis_events *ae)
+{
+    int i, j, n_out;
+    sa_event *out;
+    char *absorbed;
+
+    if (!ae->events || ae->num_events < 2)
+        return PULSEG_SUCCESS;
+
+    out = (sa_event *)PULSEG_ALLOC((size_t)ae->num_events * sizeof(sa_event));
+    absorbed = (char *)PULSEG_ALLOC((size_t)ae->num_events);
+    if (!out || !absorbed)
+    {
+        if (out)
+            PULSEG_FREE(out);
+        if (absorbed)
+            PULSEG_FREE(absorbed);
+        return PULSEG_ERR_ALLOC_FAILED;
+    }
+    memset(absorbed, 0, (size_t)ae->num_events);
+
+    n_out = 0;
+    i = 0;
+    while (i < ae->num_events)
+    {
+        /* Maximal class of occurrences that may share a train at all. */
+        int cls_end = i + 1;
+        int m, m_best;
+
+        while (cls_end < ae->num_events &&
+               sa_train_compatible(&ae->events[i], &ae->events[cls_end]))
+            ++cls_end;
+
+        /* Smallest stride that describes the whole class as m interleaved
+         * arithmetic progressions (m = occurrences of this definition per
+         * repeat).  m == 1 is the plain equally-spaced case. */
+        m_best = 0;
+        for (m = 1; m <= SA_MAX_TRAIN_STRIDE && 2 * m <= cls_end - i; ++m)
+            if (sa_stride_splits(ae->events, i, cls_end, m))
+            {
+                m_best = m;
+                break;
+            }
+
+        if (m_best > 0)
+        {
+            int len = (cls_end - i) / m_best;
+            for (m = 0; m < m_best; ++m)
+            {
+                if (!sa_emit_train(&out[n_out], ae->events, i + m, m_best, len))
+                    goto oom;
+                n_out++;
+            }
+            /* Heads are i .. i+m_best-1; everything after them is folded in. */
+            for (j = i + m_best; j < cls_end; ++j)
+                absorbed[j] = 1;
+            i = cls_end;
+            continue;
+        }
+
+        /* No stride describes the whole class: fall back to run-length
+         * encoding of consecutive equally-spaced occurrences within it. */
+        {
+            int run_end = i + 1;
+
+            if (i + 1 < cls_end)
+            {
+                double dt = ae->events[i + 1].start_time_us - ae->events[i].start_time_us;
+                if (dt > 0.0)
+                {
+                    /* Near-exact: start times are exact double sums of
+                     * whole-us block durations, so a genuine constant spacing
+                     * compares bit-equal.  The relative slack only absorbs
+                     * the last-bit noise a non-integral block duration could
+                     * introduce; it is ~1e-5 us at MPRAGE scale, orders of
+                     * magnitude below the 1 us pulseq time quantum, so it can
+                     * never fuse occurrences that are really unequally
+                     * spaced. */
+                    double tol = 1.0e-9 * dt;
+                    run_end = i + 2;
+                    while (run_end < cls_end &&
+                           fabs((ae->events[run_end].start_time_us -
+                                 ae->events[run_end - 1].start_time_us) -
+                                dt) <= tol)
+                        ++run_end;
+                }
+            }
+
+            if (!sa_emit_train(&out[n_out], ae->events, i, 1, run_end - i))
+                goto oom;
+            n_out++;
+            for (j = i + 1; j < run_end; ++j)
+                absorbed[j] = 1;
+            i = run_end;
+        }
+    }
+
+    /* Every absorbed occurrence carried its own duplicate of the definition's
+     * arb samples/times; the train keeps the head's copy and drops the rest. */
+    for (j = 0; j < ae->num_events; ++j)
+    {
+        if (!absorbed[j])
+            continue;
+        if (ae->events[j].arb_samples)
+            PULSEG_FREE(ae->events[j].arb_samples);
+        if (ae->events[j].arb_times_us)
+            PULSEG_FREE(ae->events[j].arb_times_us);
+    }
+
+    PULSEG_FREE(absorbed);
+    PULSEG_FREE(ae->events);
+    ae->events = out;
+    ae->num_events = n_out;
+    return PULSEG_SUCCESS;
+
+oom:
+    /* Fail closed, leaving `ae` exactly as it was found: no arb array is
+     * released until the whole compressed list has been built. */
+    for (j = 0; j < n_out; ++j)
+        if (out[j].train_amps)
+            PULSEG_FREE(out[j].train_amps);
+    PULSEG_FREE(out);
+    PULSEG_FREE(absorbed);
+    return PULSEG_ERR_ALLOC_FAILED;
 }
 
 /**
@@ -905,6 +1206,92 @@ static void sa_eval_pwl_transform(
         return;
     }
 
+    /* --- Uniform-raster fast path ---------------------------------------
+     * An arbitrary gradient sampled on the gradient raster (the common case:
+     * sa_build_axis_events() synthesises cell-centre times as
+     * 0.5*raster + m*raster whenever the definition carries no time shape)
+     * has a CONSTANT segment length Tk. Two consequences, both exact:
+     *   1. cos/sin(omega*Tk) and hence the c0/c1 segment integrals are the
+     *      same for every segment -- hoist them out of the loop.
+     *   2. tk is an arithmetic progression, so e^{-j omega tk} advances by a
+     *      constant rotation e^{-j omega dt} per segment -- a complex
+     *      multiply instead of a sin/cos pair.
+     * That takes the inner loop from 4 transcendentals per segment to none,
+     * which is what makes long arbitrary waveforms (spiral/rosette readouts,
+     * thousands of samples per shot, re-evaluated at every candidate
+     * frequency) affordable. The recurrence is re-anchored to an exact
+     * sin/cos every SA_PWL_REANCHOR steps so accumulated rotation drift
+     * stays bounded regardless of sample count.
+     * Detection is a plain scan for constant spacing -- no assumption about
+     * the waveform's content. The tolerance absorbs the float representation
+     * error of the stored times while staying far below the 1 us pulseq time
+     * quantum, so it can never merge two genuinely different rasters.
+     * Non-uniform (explicit time-shape) definitions fall through to the
+     * general loop below, unchanged. */
+    if (n_vtx > 2)
+    {
+        double dt0 = (double)(t_us[1] - t_us[0]);
+        double tol = 1.0e-4 * fabs(dt0) + 1.0e-6 * fabs((double)t_us[n_vtx - 1]);
+        int uniform = (dt0 > 1.0e-12);
+
+        for (k = 1; uniform && k < n_vtx - 1; ++k)
+        {
+            double d = (double)(t_us[k + 1] - t_us[k]);
+            if (fabs(d - dt0) > tol)
+                uniform = 0;
+        }
+
+        if (uniform)
+        {
+            double wT = omega * dt0;
+            double cos_wT = cos(wT);
+            double sin_wT = sin(wT);
+            double inv_dt = 1.0 / dt0;
+            double c0_re = sin_wT / omega;
+            double c0_im = (cos_wT - 1.0) / omega;
+            double I0mT_re = c0_re - dt0 * cos_wT;
+            double I0mT_im = c0_im + dt0 * sin_wT;
+            double c1_re = I0mT_im / omega;
+            double c1_im = -I0mT_re / omega;
+            double t0 = (double)t_us[0];
+            double cos_ph = cos(omega * t0);
+            double sin_ph = sin(omega * t0);
+            int since_anchor = 0;
+
+            for (k = 0; k < n_vtx - 1; ++k)
+            {
+                double ak = (double)v[k];
+                double bk = ((double)v[k + 1] - ak) * inv_dt;
+                double x_re = ak * c0_re + bk * c1_re;
+                double x_im = ak * c0_im + bk * c1_im;
+
+                /* multiply by e^{-j omega tk} */
+                g_re += x_re * cos_ph + x_im * sin_ph;
+                g_im += x_im * cos_ph - x_re * sin_ph;
+
+                /* advance to t_{k+1} = t_k + dt0 */
+                if (++since_anchor >= SA_PWL_REANCHOR)
+                {
+                    double tt = omega * (t0 + (double)(k + 1) * dt0);
+                    cos_ph = cos(tt);
+                    sin_ph = sin(tt);
+                    since_anchor = 0;
+                }
+                else
+                {
+                    double nc = cos_ph * cos_wT - sin_ph * sin_wT;
+                    double ns = sin_ph * cos_wT + cos_ph * sin_wT;
+                    cos_ph = nc;
+                    sin_ph = ns;
+                }
+            }
+
+            *out_re = (float)g_re;
+            *out_im = (float)g_im;
+            return;
+        }
+    }
+
     for (k = 0; k < n_vtx - 1; ++k)
     {
         double tk = (double)t_us[k];
@@ -993,10 +1380,49 @@ static void sa_eval_event_transform(
 }
 
 /**
+ * Geometric (Dirichlet) sum of N unit phasors spaced by @p phi radians:
+ *   sum_{n=0}^{N-1} e^{j n phi}
+ *     = e^{j (N-1) phi/2} * sin(N phi/2) / sin(phi/2).
+ * The removable singularity at phi = 2 pi m (all phasors aligned) has the
+ * limit N.
+ */
+static void sa_geometric_sum(double *out_re, double *out_im, double phi, int N)
+{
+    double half = phi * 0.5;
+    double sin_half = sin(half);
+    double ratio, center;
+
+    if (N <= 1)
+    {
+        *out_re = (N < 1) ? 0.0 : 1.0;
+        *out_im = 0.0;
+        return;
+    }
+    if (fabs(sin_half) < 1.0e-12)
+    {
+        *out_re = (double)N;
+        *out_im = 0.0;
+        return;
+    }
+    ratio = sin((double)N * half) / sin_half;
+    center = (double)(N - 1) * half;
+    *out_re = ratio * cos(center);
+    *out_im = ratio * sin(center);
+}
+
+/**
  * Complex spectral contribution of one event at frequency f, in true units:
  *   a_k(f) = A_k * T_k(f) * 1e-6 * e^{-j 2 pi f t_k}   (Hz/m * s),
  * where A_k is the event amplitude (Hz/m), T_k the base-waveform transform
  * (in [normalised]*us, hence the 1e-6 us->s), and t_k the event start time.
+ *
+ * For a compressed train (train_len L > 1, spacing D — see
+ * sa_compress_axis_events) the event stands for L occurrences and this
+ * returns their coherent sum,
+ *   T_k(f) * 1e-6 * e^{-j 2 pi f t_0} * sum_{j<L} A_j z^j,  z = e^{-j 2 pi f D},
+ * evaluated in closed form when the amplitudes are constant and by Horner
+ * when they are not.  Either way the transcendental count is independent of
+ * L: one sin/cos pair for z plus one for the common start-time phase.
  */
 static void sa_eval_event_spectrum(
     const sa_event *ev,
@@ -1005,20 +1431,55 @@ static void sa_eval_event_spectrum(
     float f_hz,
     sa_transform_cache *cache)
 {
-    float tr_re, tr_im, scale, base_re, base_im;
+    float tr_re, tr_im;
+    double sum_re, sum_im, base_re, base_im;
     double phase, cos_ph, sin_ph;
 
     sa_eval_event_transform(ev, &tr_re, &tr_im, f_hz, cache);
-    scale = ev->amplitude * 1.0e-6f;
-    base_re = scale * tr_re;
-    base_im = scale * tr_im;
 
-    phase = -2.0 * M_PI * (double)f_hz * (double)ev->start_time_us * 1.0e-6;
+    /* sum_{j<L} A_j z^j -- the amplitude-weighted train sum, still relative
+     * to the train's own start time. */
+    if (ev->train_len > 1)
+    {
+        double phi = -2.0 * M_PI * (double)f_hz * ev->train_period_us * 1.0e-6;
+        if (ev->train_amps)
+        {
+            double zr = cos(phi);
+            double zi = sin(phi);
+            int j;
+            sum_re = (double)ev->train_amps[ev->train_len - 1];
+            sum_im = 0.0;
+            for (j = ev->train_len - 2; j >= 0; --j)
+            {
+                double nr = sum_re * zr - sum_im * zi + (double)ev->train_amps[j];
+                double ni = sum_re * zi + sum_im * zr;
+                sum_re = nr;
+                sum_im = ni;
+            }
+        }
+        else
+        {
+            sa_geometric_sum(&sum_re, &sum_im, phi, ev->train_len);
+            sum_re *= (double)ev->amplitude;
+            sum_im *= (double)ev->amplitude;
+        }
+    }
+    else
+    {
+        sum_re = (double)ev->amplitude;
+        sum_im = 0.0;
+    }
+
+    /* times the base-waveform transform, in Hz/m * s */
+    base_re = (sum_re * (double)tr_re - sum_im * (double)tr_im) * 1.0e-6;
+    base_im = (sum_re * (double)tr_im + sum_im * (double)tr_re) * 1.0e-6;
+
+    phase = -2.0 * M_PI * (double)f_hz * ev->start_time_us * 1.0e-6;
     cos_ph = cos(phase);
     sin_ph = sin(phase);
 
-    *out_re = (float)((double)base_re * cos_ph - (double)base_im * sin_ph);
-    *out_im = (float)((double)base_re * sin_ph + (double)base_im * cos_ph);
+    *out_re = (float)(base_re * cos_ph - base_im * sin_ph);
+    *out_im = (float)(base_re * sin_ph + base_im * cos_ph);
 }
 
 /**
@@ -1028,6 +1489,11 @@ static void sa_eval_event_spectrum(
  *   D_N(f,T)  = sum_{n=0}^{N-1} e^{-j 2 pi f n T}
  *             = e^{-j(N-1)phi/2} sin(N phi/2)/sin(phi/2),  phi = -2 pi f T.
  * (N==1 -> D_1 = 1.)
+ *
+ * This is the OUTER (NEX / num_averages) repeat.  When the event is also a
+ * compressed intra-TR train, sa_eval_event_spectrum() has already applied
+ * that train's own sum; the two kernels simply multiply, since the train
+ * lies wholly inside the imaging block that NEX repeats.
  */
 static void sa_eval_event_line(
     const sa_event *ev,
@@ -1043,25 +1509,12 @@ static void sa_eval_event_line(
 
     sa_eval_event_spectrum(ev, &d_re, &d_im, f_hz, cache);
 
-    if (N > 1 && ev->rep_period_us > 0.0f)
+    if (N > 1 && ev->rep_period_us > 0.0)
     {
-        double phi = -2.0 * M_PI * (double)f_hz * (double)ev->rep_period_us * 1.0e-6;
-        double half_phi = phi * 0.5;
-        double sin_half = sin(half_phi);
+        double phi = -2.0 * M_PI * (double)f_hz * ev->rep_period_us * 1.0e-6;
         double dk_re, dk_im, new_re, new_im;
 
-        if (fabs(sin_half) < 1.0e-12)
-        {
-            dk_re = (double)N;
-            dk_im = 0.0;
-        }
-        else
-        {
-            double ratio = sin((double)N * half_phi) / sin_half;
-            double center = (double)(N - 1) * half_phi;
-            dk_re = ratio * cos(center);
-            dk_im = ratio * sin(center);
-        }
+        sa_geometric_sum(&dk_re, &dk_im, phi, N);
 
         new_re = (double)d_re * dk_re - (double)d_im * dk_im;
         new_im = (double)d_re * dk_im + (double)d_im * dk_re;
@@ -1086,7 +1539,12 @@ static void sa_eval_axis_spectrum(
     float *out_im,
     float f_hz)
 {
-    float sum_re, sum_im;
+    /* double: the per-axis sum is a coherent sum of many oppositely-signed
+     * contributions, so it routinely lands deep in cancellation. A float
+     * accumulator loses the low bits of the survivors and is the dominant
+     * error term there -- costs nothing to carry the running sum in double
+     * and only narrow it on the way out. */
+    double sum_re, sum_im;
     int k;
     sa_transform_cache cache;
     sa_transform_cache_entry *cache_entries = NULL;
@@ -1114,21 +1572,21 @@ static void sa_eval_axis_spectrum(
         }
     }
 
-    sum_re = 0.0f;
-    sum_im = 0.0f;
+    sum_re = 0.0;
+    sum_im = 0.0;
     for (k = 0; k < ae->num_events; ++k)
     {
         float d_re, d_im;
         sa_eval_event_line(&ae->events[k], &d_re, &d_im, f_hz, &cache);
-        sum_re += d_re;
-        sum_im += d_im;
+        sum_re += (double)d_re;
+        sum_im += (double)d_im;
     }
 
     if (cache_entries)
         PULSEG_FREE(cache_entries);
 
-    *out_re = sum_re;
-    *out_im = sum_im;
+    *out_re = (float)sum_re;
+    *out_im = (float)sum_im;
 }
 
 /* ================================================================== */
@@ -1217,7 +1675,9 @@ static int sa_check_structural_violations(
     float peak_prominence,
     int num_avgs,
     float g_max_hz_per_m,
-    int compute_dense_envelope)
+    int compute_dense_envelope,
+    int compute_display_products,
+    int compress_trains)
 {
     sa_structural_events se;
     int result, ax, i, b, k, ci;
@@ -1303,9 +1763,12 @@ static int sa_check_structural_violations(
         const struct pulseg_tr_descriptor *trd = &desc->tr_descriptor;
         int prep_blk = trd->num_prep_blocks;
         int img_len = trd->num_trs * trd->tr_size;
-        float prep_dur_us = 0.0f;
-        float img_dur_us = 0.0f;
-        float img_end_us;
+        /* double, to match the exact whole-us accumulation in
+         * sa_extract_raw_occurrences() -- these bounds are compared against
+         * event start times, and the cooldown shift below is added to them. */
+        double prep_dur_us = 0.0;
+        double img_dur_us = 0.0;
+        double img_end_us;
         int bi;
 
         for (bi = 0; bi < prep_blk; ++bi)
@@ -1314,7 +1777,7 @@ static int sa_check_structural_violations(
             const struct pulseg_block_table_element *bte = &desc->block_table[idx];
             const struct pulseg_base_block *bdef = &desc->base_blocks[bte->id];
             prep_dur_us +=
-                (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
+                (bte->duration_us >= 0) ? (double)bte->duration_us : (double)bdef->duration_us;
         }
         for (bi = 0; bi < img_len; ++bi)
         {
@@ -1322,7 +1785,7 @@ static int sa_check_structural_violations(
             const struct pulseg_block_table_element *bte = &desc->block_table[idx];
             const struct pulseg_base_block *bdef = &desc->base_blocks[bte->id];
             img_dur_us +=
-                (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
+                (bte->duration_us >= 0) ? (double)bte->duration_us : (double)bdef->duration_us;
         }
         img_end_us = prep_dur_us + img_dur_us;
 
@@ -1339,14 +1802,14 @@ static int sa_check_structural_violations(
                 }
                 else if (ev->start_time_us >= img_end_us)
                 {
-                    ev->start_time_us += (float)(num_avgs - 1) * img_dur_us;
+                    ev->start_time_us += (double)(num_avgs - 1) * img_dur_us;
                     ev->num_reps = 1;
-                    ev->rep_period_us = 0.0f;
+                    ev->rep_period_us = 0.0;
                 }
                 else
                 {
                     ev->num_reps = 1;
-                    ev->rep_period_us = 0.0f;
+                    ev->rep_period_us = 0.0;
                 }
             }
         }
@@ -1359,7 +1822,32 @@ static int sa_check_structural_violations(
             for (k = 0; k < se.axes[ax].num_events; ++k)
             {
                 se.axes[ax].events[k].num_reps = 1;
-                se.axes[ax].events[k].rep_period_us = 0.0f;
+                se.axes[ax].events[k].rep_period_us = 0.0;
+            }
+        }
+    }
+
+    /* --- Compress equally-spaced occurrence trains ---
+     * Runs AFTER the NEX tagging above, so the (num_reps, rep_period_us)
+     * pair is part of the fusion key and no train can straddle the prep /
+     * imaging / cooldown boundary the tagging just drew.
+     *
+     * Independent of compute_display_products, so the plotting API can draw
+     * exactly the lines the headless gate decides on (the default) while a
+     * caller chasing a discrepancy can turn compression off and get the
+     * uncompressed reference evaluation of the same math.  The one visible
+     * difference is the component export: with compression on, a component
+     * term covers a whole equally-spaced train rather than one materialised
+     * occurrence. */
+    if (compress_trains)
+    {
+        for (ax = 0; ax < 3; ++ax)
+        {
+            result = sa_compress_axis_events(&se.axes[ax]);
+            if (PULSEG_FAILED(result))
+            {
+                sa_free_structural_events(&se);
+                return result;
             }
         }
     }
@@ -1392,10 +1880,17 @@ static int sa_check_structural_violations(
 
     /* =====================================================================
      * (A) Analytical display grid — A_eq at each TR harmonic up to freq_max.
-     *     Display-only (never the verdict); skipped when no display grid was
-     *     requested (freq_max == 0, i.e. target_resolution_hz <= 0).
+     *     Display-only (never the verdict, which comes from (B) alone):
+     *     analytical_peak_* is read by the plotting API and by nothing on the
+     *     PSD predownload path. Skipped when no display grid was requested
+     *     (freq_max == 0, i.e. target_resolution_hz <= 0) and, regardless of
+     *     resolution, whenever the caller asked for no display products
+     *     (pulseg_check_safety) — for a long TR this grid is freq_max*T_TR
+     *     harmonics (~21k for a 7 s MPRAGE hyper-TR at 3 kHz), each a full
+     *     three-axis sa_eval_axis_spectrum, and the scanner must not pay for
+     *     an array it immediately frees.
      * ===================================================================== */
-    m_max = (freq_max > 0.0f) ? (int)((double)freq_max / f1_hz) : 0;
+    m_max = (compute_display_products && freq_max > 0.0f) ? (int)((double)freq_max / f1_hz) : 0;
     if (m_max > 0)
     {
         ana_freqs = (float *)PULSEG_ALLOC((size_t)m_max * sizeof(float));
@@ -1508,8 +2003,12 @@ static int sa_check_structural_violations(
                 goto alloc_fail;
         }
 
-        /* component-term export sizing (bounded) */
-        for (ax = 0; ax < 3; ++ax)
+        /* component-term export sizing (bounded). Display-only, like (A):
+         * the per-event breakdown of each candidate line is consumed by the
+         * plotting/report tooling, never by the verdict, so a caller that
+         * asked for no display products allocates none and the export loop
+         * below short-circuits on its first bounds check. */
+        for (ax = 0; compute_display_products && ax < 3; ++ax)
             max_component_terms += se.axes[ax].num_events;
         if (max_component_terms > 0)
             max_component_terms *= cand_cap;
@@ -1936,7 +2435,9 @@ static int calc_mech_resonances_from_uniform(
     int block_count,
     int num_avgs,
     float g_max_hz_per_m,
-    int compute_dense_envelope)
+    int compute_dense_envelope,
+    int compute_display_products,
+    int compress_trains)
 {
     pulseg_diagnostic local_diag;
     int max_samples, result;
@@ -1974,13 +2475,14 @@ static int calc_mech_resonances_from_uniform(
     spectra->num_freq_bins = 0;
     spectra->num_instances = num_trs;
 
-    /* Full-TR magnitude spectrum. Only computed when the caller requests it
-     * via target_spectral_resolution_hz > 0. The plotting path always
-     * requests it; the safety-check path (pulseg_check_safety) requests it
-     * too whenever forbidden bands are configured (band-derived resolution
-     * and max frequency — F1 Option B) and skips it (passes 0.0f) only when
-     * there are no bands to check. */
-    compute_full_spectrum = (target_spectral_resolution_hz > 0.0f);
+    /* Full-TR magnitude spectrum (kissfft over the uniform waveform).
+     * Display-only: spectrum_full_* is a plotting product, and the A_eq
+     * verdict below is computed from the structural event model, not from
+     * this FFT. Requires BOTH a real resolution and a caller that wants
+     * display products — the plotting path (pulseg_calc_mech_resonances)
+     * wants them, the headless PSD predownload gate (pulseg_check_safety)
+     * does not and must not pay for a spectrum it never reads. */
+    compute_full_spectrum = (target_spectral_resolution_hz > 0.0f) && compute_display_products;
     if (compute_full_spectrum)
     {
         /* First pass: determine output bin count + frequency resolution. */
@@ -2081,7 +2583,9 @@ static int calc_mech_resonances_from_uniform(
             peak_prominence,
             num_avgs,
             g_max_hz_per_m,
-            compute_dense_envelope);
+            compute_dense_envelope,
+            compute_display_products,
+            compress_trains);
         if (PULSEG_FAILED(result))
         {
             pulseg_mech_resonances_spectra_free(spectra);
@@ -2308,7 +2812,8 @@ int pulseg_calc_mech_resonances(
     float target_resolution_hz,
     float max_freq_hz,
     int num_forbidden_bands,
-    const pulseg_forbidden_band *forbidden_bands)
+    const pulseg_forbidden_band *forbidden_bands,
+    int compress_trains)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *trd;
@@ -2423,10 +2928,19 @@ int pulseg_calc_mech_resonances(
                                            peak_log10_threshold, peak_norm_scale, peak_eps,
                                            peak_prominence,
                                            desc, sa_start_block, sa_block_count, num_avgs,
-                                           0.0f /* g_max: display path uses band limit only */,
-                                           (target_resolution_hz > 0.0f) ? 1 : 0
+                                           /* Real G_max, not 0: sa_eps_for_band() falls back to
+                                            * SA_AEQ_K_GMAX * G_max for a zero-tolerance band, and
+                                            * a 0 here collapsed that floor to 0, so every
+                                            * candidate of a zero-tolerance band came back flagged.
+                                            * Vendor ESP tables are exactly that shape (amplitude
+                                            * column 0.0), so the plotting API could not reproduce
+                                            * the headless verdict for any real lockout table. */
+                                           (opts ? opts->max_grad_hz_per_m : 0.0f),
+                                           (target_resolution_hz > 0.0f) ? 1 : 0,
                                            /* dense envelope: plotting API only, see
-                                            * calc_mech_resonances_from_uniform doc */);
+                                            * calc_mech_resonances_from_uniform doc */
+                                           1 /* display products: this IS the plotting API */,
+                                           compress_trains);
     pulseg__uniform_grad_waveforms_free(&uw);
     if (block_order)
         PULSEG_FREE(block_order);
@@ -3233,14 +3747,16 @@ static int collection_has_gradient(const pulseg_collection *coll)
 /* ================================================================== */
 /*  Safety check                                                      */
 /* ================================================================== */
-int pulseg_check_safety(
+int pulseg__check_safety_profiled(
     pulseg_collection *coll,
     pulseg_diagnostic *diag,
     const pulseg_opts *opts,
     int num_forbidden_bands,
     const pulseg_forbidden_band *forbidden_bands,
     const pulseg_pns_model *pns_model,
-    float pns_threshold_percent)
+    float pns_threshold_percent,
+    pulseg__safety_profile_fn profile_fn,
+    void *profile_ctx)
 {
     int rc, s, u, i;
     int ci, b;
@@ -3280,21 +3796,38 @@ int pulseg_check_safety(
      * PNS entirely rather than running them over a silent waveform that
      * may span the full sequence duration (RF/SAR safety is evaluated
      * separately and is unaffected by this skip). */
-    if (!collection_has_gradient(coll))
+    if (profile_fn)
+        profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_GRAD_PRESENCE, 1);
+    rc = collection_has_gradient(coll);
+    if (profile_fn)
+        profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_GRAD_PRESENCE, 0);
+    if (!rc)
         return PULSEG_SUCCESS;
 
     /* ---- 1. max gradient amplitude ---- */
+    if (profile_fn)
+        profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MAX_GRAD, 1);
     rc = check_max_grad(coll, diag, opts);
+    if (profile_fn)
+        profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MAX_GRAD, 0);
     if (PULSEG_FAILED(rc))
         return rc;
 
     /* ---- 2. gradient continuity ---- */
+    if (profile_fn)
+        profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_CONTINUITY, 1);
     rc = check_grad_continuity(coll, diag, opts);
+    if (profile_fn)
+        profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_CONTINUITY, 0);
     if (PULSEG_FAILED(rc))
         return rc;
 
     /* ---- 3. max slew rate ---- */
+    if (profile_fn)
+        profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MAX_SLEW, 1);
     rc = check_max_slew(coll, diag, opts);
+    if (profile_fn)
+        profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MAX_SLEW, 0);
     if (PULSEG_FAILED(rc))
         return rc;
 
@@ -3404,6 +3937,8 @@ int pulseg_check_safety(
         for (u = 0; u < num_unique_trs; ++u)
         {
             memset(&uw, 0, sizeof(uw));
+            if (profile_fn)
+                profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_WAVEFORM_EXTRACT, 1);
             rc = pulseg__get_gradient_waveforms_range(
                 desc,
                 &uw,
@@ -3414,6 +3949,8 @@ int pulseg_check_safety(
                 tr_group_labels,
                 u,
                 block_order);
+            if (profile_fn)
+                profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_WAVEFORM_EXTRACT, 0);
             if (PULSEG_FAILED(rc))
             {
                 if (unique_tr_indices)
@@ -3427,15 +3964,21 @@ int pulseg_check_safety(
 
             if (num_forbidden_bands > 0)
             {
-                /* Run the A_eq analysis with a real display resolution/max
-                 * frequency (>= SA_MIN_ANALYSIS_FREQ_HZ) so the full-spectrum
-                 * and analytical display arrays are populated; the verdict
-                 * itself comes only from the in-guarded-band TR-harmonic lines.
-                 * Covered by test_safety_grad.c Suite D.
-                 * compute_dense_envelope=0: the dense analytic envelope is a
-                 * plotting-only aid (see pulseg_calc_mech_resonances / the
-                 * python mechres_plots tooling); this is the real PSD
-                 * predownload safety-check path and must never pay for it. */
+                if (profile_fn)
+                    profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MECH_RESONANCE, 1);
+                /* Headless A_eq analysis. The verdict comes only from the
+                 * in-guarded-band TR-harmonic lines (candidate_*), which this
+                 * call still computes in full at the band-derived resolution/
+                 * max frequency (>= SA_MIN_ANALYSIS_FREQ_HZ). Covered by
+                 * test_safety_grad.c Suite D.
+                 * Both display flags are 0: the dense analytic envelope, the
+                 * full-TR FFT, the analytical TR-harmonic grid and the
+                 * per-event component export are plotting products (see
+                 * pulseg_calc_mech_resonances / the python mechres_plots
+                 * tooling), and nothing downstream of this call reads them —
+                 * the loop below touches only spectra.candidate_*. This is
+                 * the real PSD predownload path and must never pay for
+                 * arrays it immediately frees. */
                 memset(&spectra, 0, sizeof(spectra));
                 rc = calc_mech_resonances_from_uniform(
                     &spectra,
@@ -3456,7 +3999,9 @@ int pulseg_check_safety(
                     sa_block_count,
                     num_avgs,
                     opts->max_grad_hz_per_m,
-                    0 /* compute_dense_envelope: never on the PSD path */);
+                    0 /* compute_dense_envelope: never on the PSD path */,
+                    0 /* compute_display_products: never on the PSD path */,
+                    1 /* compress_trains: this is the path being optimised */);
 
                 /* Safety path: fail fast on first violating candidate.
                  * Pattern: for each candidate, scan union of all bands. */
@@ -3522,6 +4067,8 @@ int pulseg_check_safety(
                 }
 
                 pulseg_mech_resonances_spectra_free(&spectra);
+                if (profile_fn)
+                    profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MECH_RESONANCE, 0);
                 if (PULSEG_FAILED(rc))
                 {
                     pulseg__uniform_grad_waveforms_free(&uw);
@@ -3537,6 +4084,8 @@ int pulseg_check_safety(
 
             if (pns_model)
             {
+                if (profile_fn)
+                    profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, 1);
                 memset(&pns_result, 0, sizeof(pns_result));
                 rc = calc_pns_from_uniform(&pns_result, diag, opts->gamma_hz_per_t, &uw, pns_model);
                 if (!PULSEG_FAILED(rc) && pns_result.num_samples > 0)
@@ -3562,6 +4111,8 @@ int pulseg_check_safety(
                         rc = PULSEG_ERR_PNS_THRESHOLD_EXCEEDED;
                 }
                 pulseg_pns_result_free(&pns_result);
+                if (profile_fn)
+                    profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, 0);
                 if (PULSEG_FAILED(rc))
                 {
                     pulseg__uniform_grad_waveforms_free(&uw);
@@ -3587,4 +4138,25 @@ int pulseg_check_safety(
     }
 
     return PULSEG_SUCCESS;
+}
+
+int pulseg_check_safety(
+    pulseg_collection *coll,
+    pulseg_diagnostic *diag,
+    const pulseg_opts *opts,
+    int num_forbidden_bands,
+    const pulseg_forbidden_band *forbidden_bands,
+    const pulseg_pns_model *pns_model,
+    float pns_threshold_percent)
+{
+    return pulseg__check_safety_profiled(
+        coll,
+        diag,
+        opts,
+        num_forbidden_bands,
+        forbidden_bands,
+        pns_model,
+        pns_threshold_percent,
+        NULL,
+        NULL);
 }

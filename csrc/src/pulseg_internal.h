@@ -847,9 +847,50 @@ int pulseg__find_unique_shot_passes(
     int **out_unique_pass_indices,
     int **out_pass_group_labels);
 
+/* --- pulseg_safety.c ---
+ * Optional internal observer used by the documentation benchmark.  Keeping
+ * the clock outside libpulseg means the production build remains free of OS
+ * timing APIs while the benchmark can measure the real headless
+ * pulseg_check_safety path rather than composing plotting-oriented calls. */
+enum pulseg__safety_profile_stage
+{
+    PULSEG__SAFETY_PROFILE_GRAD_PRESENCE = 0,
+    PULSEG__SAFETY_PROFILE_MAX_GRAD,
+    PULSEG__SAFETY_PROFILE_CONTINUITY,
+    PULSEG__SAFETY_PROFILE_MAX_SLEW,
+    PULSEG__SAFETY_PROFILE_WAVEFORM_EXTRACT,
+    PULSEG__SAFETY_PROFILE_MECH_RESONANCE,
+    PULSEG__SAFETY_PROFILE_PNS,
+    PULSEG__SAFETY_PROFILE_STAGE_COUNT
+};
+
+typedef void (*pulseg__safety_profile_fn)(
+    void *ctx,
+    enum pulseg__safety_profile_stage stage,
+    int entering);
+
+int pulseg__check_safety_profiled(
+    pulseg_collection *coll,
+    pulseg_diagnostic *diag,
+    const pulseg_opts *opts,
+    int num_forbidden_bands,
+    const pulseg_forbidden_band *forbidden_bands,
+    const pulseg_pns_model *pns_model,
+    float pns_threshold_percent,
+    pulseg__safety_profile_fn profile_fn,
+    void *profile_ctx);
+
 /* --- pulseg_cache.c --- */
 int pulseg__try_read_cache(pulseg_collection *coll, const char *seq_path, const char *cache_ext);
 int pulseg__write_cache(pulseg_collection *seq_coll, const char *seq_path, const pulseg_opts *opts);
+int pulseg__load_geninstructions_cache_ext(
+    pulseg_collection **out_coll,
+    const char *seq_path,
+    const char *cache_ext);
+int pulseg__load_scanloop_cache_ext(
+    pulseg_collection **out_coll,
+    const char *seq_path,
+    const char *cache_ext);
 
 /* --- Helper to locate segment/block in collection --- */
 

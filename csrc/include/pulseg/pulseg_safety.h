@@ -96,6 +96,17 @@ extern "C"
      * @param[in]  max_freq_hz              Max frequency to report (0 = auto).
      * @param[in]  num_forbidden_bands      Number of forbidden bands.
      * @param[in]  forbidden_bands          Array of forbidden bands.
+     * @param[in]  compress_trains          Nonzero to evaluate equally-spaced
+     *                                       occurrence trains in compressed
+     *                                       form, exactly as pulseg_check_safety
+     *                                       does — pass 1 for plots that must
+     *                                       show the lines the headless gate
+     *                                       actually decides on.  Pass 0 for the
+     *                                       uncompressed reference evaluation of
+     *                                       the same math (a debugging aid, and
+     *                                       the only mode in which a component
+     *                                       term maps to a single materialised
+     *                                       occurrence rather than a train).
      * @return PULSEG_SUCCESS on success, negative error code on failure.
      */
     int pulseg_calc_mech_resonances(
@@ -108,7 +119,8 @@ extern "C"
         float target_resolution_hz,
         float max_freq_hz,
         int num_forbidden_bands,
-        const pulseg_forbidden_band *forbidden_bands);
+        const pulseg_forbidden_band *forbidden_bands,
+        int compress_trains);
 
     /** @brief Free arrays inside a pulseg_mech_resonances_spectra. */
     void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s);

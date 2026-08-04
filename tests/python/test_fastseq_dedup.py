@@ -117,6 +117,28 @@ def test_unique_rows_matches_numpy(distinct):
     same_partition(rows, _unique_rows(rows), _unique_rows_py(rows))
 
 
+@pytest.mark.parametrize('distinct', [1, 900, 300000])
+def test_unique_rows_over_the_threshold_that_splits_it(distinct):
+    """Long enough to be deduplicated on threads, which is a different code path.
+
+    The chunks each collapse against a table of their own and are merged in
+    order afterwards, so the codes and the order of first appearance have to
+    come out as a single pass would have written them -- whatever the machine
+    running this decided about how many threads to use.
+    """
+    rng = np.random.default_rng(23)
+    base = rng.normal(0.0, 1e3, (distinct, 4))
+    rows = np.ascontiguousarray(base[rng.integers(0, distinct, 300000)])
+    same_partition(rows, _unique_rows(rows), _unique_rows_py(rows))
+
+
+def test_unique_rows_split_when_almost_every_row_is_distinct():
+    """The case where merging the chunks has as much to do as collapsing them."""
+    rng = np.random.default_rng(29)
+    rows = np.ascontiguousarray(rng.integers(0, 1 << 62, (200000, 2)).astype(np.int64))
+    same_partition(rows, _unique_rows(rows), _unique_rows_py(rows))
+
+
 def test_unique_rows_on_integer_keys():
     # The extension chain table is int64, not float: a chain is a type, a
     # reference and a successor.
@@ -193,6 +215,27 @@ def test_collapse_rows_matches_the_two_steps_it_replaces(digits):
     collapse_agrees(table, take, digits)
 
 
+@pytest.mark.parametrize('distinct', [3, 400000])
+def test_collapse_rows_over_the_threshold_that_splits_it(distinct):
+    """Long enough to be collapsed on threads, merged back in chunk order.
+
+    The second case is the awkward one: nearly every row is its own, so the
+    merge has as much to do as the chunks did, and a scan whose events really
+    are all different is exactly when that has to stay correct.
+    """
+    rng = np.random.default_rng(24)
+    table = rng.normal(scale=1e4, size=(distinct, 5))
+    take = rng.integers(0, distinct, size=400000)
+    collapse_agrees(table, take, (6, -6, -6, 0, 6))
+
+
+def test_collapse_rows_split_with_an_extra_key_column():
+    rng = np.random.default_rng(25)
+    table = rng.normal(size=(700, 3))
+    take = rng.integers(0, 700, size=250000)
+    collapse_agrees(table, take, (6, 6, 6), rng.integers(0, 4, size=700).astype(float))
+
+
 def test_collapse_rows_keys_on_the_extra_column_without_rounding_it():
     """An RF pulse's `use` decides identity but is not part of its data."""
     rng = np.random.default_rng(22)
@@ -265,6 +308,136 @@ def test_render_int_rows_on_an_empty_table():
     matrix = np.zeros((0, 3), dtype=np.int64)
     assert _render_int_rows(matrix, (1, 2, 3)) is None
     assert _render_int_rows_py(matrix, (1, 2, 3)) is None
+
+
+# ---------------------------------------------------------------------------
+# tile_rows
+# ---------------------------------------------------------------------------
+#
+# The dense per-occurrence libraries, which is one seeded copy of the period per
+# iteration. `np.tile` is the reference and the fallback.
+
+
+def tiled_agrees(period, loop_size):
+    mine = M._accel.tile_rows(period, loop_size)
+    theirs = np.tile(period, (loop_size, 1))
+    assert mine.shape == theirs.shape
+    assert identical(mine, theirs)
+
+
+@pytest.mark.parametrize('loop_size', [0, 1, 2, 37])
+def test_tile_rows_matches_numpy(loop_size):
+    rng = np.random.default_rng(17)
+    tiled_agrees(rng.normal(size=(9, 4)), loop_size)
+
+
+def test_tile_rows_over_the_threshold_that_splits_it():
+    """Long enough to be laid out on threads, which is a different code path."""
+    rng = np.random.default_rng(19)
+    tiled_agrees(rng.normal(size=(701, 5)), 500)
+
+
+@pytest.mark.parametrize('shape', [(0, 4), (5, 0), (0, 0)])
+def test_tile_rows_degenerate_shapes(shape):
+    tiled_agrees(np.zeros(shape), 6)
+
+
+def test_tile_rows_refuses_a_negative_repeat():
+    with pytest.raises(ValueError):
+        M._accel.tile_rows(np.zeros((2, 2)), -1)
+
+
+# ---------------------------------------------------------------------------
+# block_columns
+# ---------------------------------------------------------------------------
+#
+# What the loop's slot offsets and switches say the block table is. Every number
+# here is a library ID, so a kernel that miscounts by one does not produce a
+# wrong waveform -- it produces a different one, out of the same file.
+
+
+def random_slots(rng, blocks):
+    """A slot table shaped the way the constructor lays one out.
+
+    Offsets are one-based and dense per kind, in block order, and a gradient's
+    is signed: positive into the trapezoid table, negative into the arbitrary
+    one. Some blocks get an event and some do not, which is the whole point --
+    a zero column is what the template never gave that block.
+    """
+    slots = np.zeros((blocks, 5), dtype=np.int32)
+    taken = {'rf': 0, 'adc': 0, 'trap': 0, 'arb': 0}
+    for block in range(blocks):
+        if rng.random() < 0.6:
+            taken['rf'] += 1
+            slots[block, 0] = (taken['rf'] - 1) * M._RF_WIDTH + 1
+        if rng.random() < 0.5:
+            taken['adc'] += 1
+            slots[block, 4] = (taken['adc'] - 1) * M._ADC_WIDTH + 1
+        for axis in range(3):
+            draw = rng.random()
+            if draw < 0.4:
+                taken['trap'] += 1
+                slots[block, 1 + axis] = (taken['trap'] - 1) * M._TRAP_WIDTH + 1
+            elif draw < 0.7:
+                taken['arb'] += 1
+                slots[block, 1 + axis] = -((taken['arb'] - 1) * M._ARB_WIDTH + 1)
+    return slots
+
+
+def columns_agree(slots, on):
+    widths = (M._RF_WIDTH, M._ADC_WIDTH, M._TRAP_WIDTH, M._ARB_WIDTH)
+    fast = M._accel.block_columns(slots, on, *widths)
+    slow = M._block_columns_py(slots, on, *widths)
+    assert len(fast) == len(slow) == 4
+    for mine, theirs in zip(fast, slow):
+        assert identical(mine, theirs)
+    return fast
+
+
+def test_block_columns_matches_numpy():
+    rng = np.random.default_rng(101)
+    for _ in range(60):
+        slots = random_slots(rng, int(rng.integers(1, 90)))
+        on = bytearray(bytes(rng.integers(0, 2, size=slots.size, dtype=np.uint8)))
+        columns_agree(slots, on)
+
+
+@pytest.mark.parametrize('switch', [0, 1])
+def test_block_columns_with_everything_off_and_everything_on(switch):
+    """Off is a scan that played nothing; on is one that played every slot it had.
+
+    The second is the interesting one: a switch set where no slot exists must
+    still read as no event, rather than as row zero of a table.
+    """
+    slots = random_slots(np.random.default_rng(5), 40)
+    columns_agree(slots, bytearray([switch]) * slots.size)
+
+
+def test_block_columns_ranks_allocated_rows_but_indexes_played_ones():
+    """The two halves of the bargain, and they count differently.
+
+    A slot the loop skipped still consumes its rank -- the row behind it exists,
+    which is what makes skipping it free, and pruning is what drops it. The
+    index is the other way round: it is what deduplication reads, so it holds
+    only the slots that were played.
+    """
+    slots = np.array([[0, 1, 0, 0, 0], [0, 6, 0, 0, 0], [0, 11, 0, 0, 0]], dtype=np.int32)
+    on = bytearray(5 * 3)
+    on[5 * 2 + 1] = 1                       # only the third block plays its gx
+    _, grad, _, index = columns_agree(slots, on)
+    assert grad.tolist() == [0, 0, 0, 0, 0, 0, 3, 0, 0]
+    assert index.shape == (1, 2)
+    assert index[0].tolist() == [0, 2]      # a trapezoid, the third row of its table
+
+
+def test_block_columns_on_an_empty_scan():
+    columns_agree(np.zeros((0, 5), dtype=np.int32), bytearray())
+
+
+def test_block_columns_refuses_a_mismatched_switch_table():
+    slots = np.zeros((4, 5), dtype=np.int32)
+    with pytest.raises(ValueError):
+        M._accel.block_columns(slots, bytearray(3), 1, 1, 1, 1)
 
 
 # ---------------------------------------------------------------------------

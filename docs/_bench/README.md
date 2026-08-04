@@ -12,7 +12,7 @@ imports it.
 
 | File | What it measures |
 | --- | --- |
-| `bench_pipeline.c` | The on-scanner C pipeline, stage by stage: parse, convert, cache write, and the three cache loads. Wall time and exact heap. |
+| `bench_pipeline.c` | The on-scanner C pipeline, stage by stage: parse, convert, cache write, headless safety, and the three cache loads. Wall time and exact heap. |
 | `bench_alloc.c` | Allocator interposition (`-Wl,--wrap=malloc`) so the heap figures cover every allocation path the library uses, not just one. |
 | `bench_zoo.py` | Drives the example plugins at several protocol sizes, times the host-side design and serialisation, then runs `bench_pipeline` on each `.seq`. |
 | `bench_scale.py` | The other end of the range: millions of blocks, reporting design cost *per block*, peak resident growth, and how many library entries the design pass still holds. Two families — each plugin at its largest *validating* protocol, and the design modules driven straight past those caps (512×1024×512 MPRAGE at ETL 1024, echo trains at 128/256, EPI, bSSFP, spiral and ZTE at pushed resolution). |
@@ -35,6 +35,7 @@ imports it.
 ```bash
 python docs/_bench/gate_bytes.py check             # 35 .seq payloads, byte-identical
 bash docs/_bench/build_bench.sh                    # builds bench_pipeline
+docs/_bench/bench_pipeline_timing scan.seq 5 .pge  # runtime, no heap hooks
 python docs/_bench/bench_zoo.py --repeats=3        # -> results.json
 python docs/_bench/bench_scale.py --scale=0.25     # edge protocols, sanity size
 python docs/_bench/bench_scale.py                  # edge protocols, full size (~16 GB)
@@ -78,6 +79,13 @@ because every `.pge` truth fixture is downstream of those bytes.
 Timings are the **minimum** of the repeat count, not the mean: scheduler noise
 only ever adds, so the minimum is the better estimate of the work actually
 required.
+
+Use `bench_pipeline_timing` for optimization decisions: it does not interpose
+the allocator and reports `"heap_accounting": false` (its heap fields are
+zero). Use `bench_pipeline` for the memory columns; its exact allocation
+accounting can perturb runtime when a stage makes many small allocations. The
+optional third argument selects the cache extension, for example `.pge` in the
+GE integration.
 
 Heap figures from `bench_pipeline` are live bytes attributable to the library,
 with allocator rounding included — what the process holds, not what it asked

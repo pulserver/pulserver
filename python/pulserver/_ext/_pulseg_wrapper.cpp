@@ -154,7 +154,8 @@ static py::dict _calc_mech_resonances(
     py::object peak_log10_threshold,
     py::object peak_norm_scale,
     py::object peak_eps,
-    py::object peak_prominence)
+    py::object peak_prominence,
+    bool compress_trains)
 {
     std::vector<pulseg::ForbiddenBand> bands;
     for (auto item : py_bands)
@@ -190,7 +191,8 @@ static py::dict _calc_mech_resonances(
         peak_log10_threshold_val,
         peak_norm_scale_val,
         peak_eps_val,
-        peak_prominence_val);
+        peak_prominence_val,
+        compress_trains);
 
     py::dict out;
     out["freq_min_hz"] = sp.freq_min_hz;
@@ -401,7 +403,8 @@ PYBIND11_MODULE(_pulseg_wrapper, m)
         py::arg("peak_log10_threshold") = py::none(),
         py::arg("peak_norm_scale") = py::none(),
         py::arg("peak_eps") = py::none(),
-        py::arg("peak_prominence") = py::none());
+        py::arg("peak_prominence") = py::none(),
+        py::arg("compress_trains") = true);
 
     m.def(
         "_calc_pns",
