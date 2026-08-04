@@ -113,6 +113,20 @@ file(GLOB SAMPLING_WRAPPERS
 install(FILES ${SAMPLING_WRAPPERS}
     DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/_ext)
 
+# _fastseq_wrapper: the fastseq block-writing loop plus its rounding and row
+# deduplication kernels. Optional at import time -- `fastseq.modules` falls back
+# to its pure-Python reference implementations when this is not present, so a
+# source checkout stays usable without a build.
+add_pybind_module(_fastseq_wrapper ""
+    SOURCES
+        "${CMAKE_SOURCE_DIR}/fastseq/_fastseq_wrapper.cpp"
+)
+
+file(GLOB FASTSEQ_WRAPPERS
+    "${CMAKE_CURRENT_BINARY_DIR}/fastseq/_fastseq_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+install(FILES ${FASTSEQ_WRAPPERS}
+    DESTINATION ${CMAKE_SOURCE_DIR}/fastseq)
+
 option(PULSERVER_BUILD_CPP_TESTS "Build lightweight C++ unit tests" OFF)
 if(PULSERVER_BUILD_CPP_TESTS)
     enable_testing()
