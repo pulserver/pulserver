@@ -568,6 +568,241 @@ MU_TEST_SUITE(suite_mech_resonances_safety)
     MU_RUN_TEST(test_epi_guard_catches_edge_line_weak_harmonic_passes);
 }
 
+
+/* ================================================================== */
+/*  Suite E - Memoized PNS equivalence                                */
+/* ================================================================== */
+
+/*
+ * A model that publishes its kernel (pulseg_pns_model::kernel) lets the
+ * safety core assemble the response from one convolution per distinct
+ * gradient shape instead of one transform over the whole canonical window
+ * (pulseg_pns_memo.c). The two routes must agree: that is the entire
+ * contract, and it is what these tests pin down.
+ *
+ * They cannot agree bit for bit. The memoized route factors each block's
+ * amplitude out of its shape, so it computes a_i * (unit sample) where the
+ * exact route stores (a_i * unit) -- a difference of up to an ulp per
+ * sample. The tolerance below is a few hundred times float epsilon on the
+ * peak, which is the number the gate actually compares against a threshold;
+ * measured agreement across the zoo sits near 5e-7 relative.
+ */
+
+#define PNS_MEMO_TEST_RTOL 1e-5
+
+typedef struct
+{
+    float chronaxie_us;
+    float rheobase;
+    float alpha;
+} pns_test_ctx;
+
+static int pns_test_build_kernel(const pns_test_ctx* c, float dt_us, float** out, int* len)
+{
+    float c_s, dt_s, s_min, *k;
+    int i, n;
+
+    if (!c || dt_us <= 0.0f || c->chronaxie_us <= 0.0f || c->rheobase <= 0.0f || c->alpha <= 0.0f)
+        return PULSEG_ERR_PNS_INVALID_PARAMS;
+    c_s = c->chronaxie_us * 1e-6f;
+    dt_s = dt_us * 1e-6f;
+    s_min = c->rheobase / c->alpha;
+    n = (int)(20.0f * c_s / dt_s) + 1;
+    k = (float*)PULSEG_ALLOC((size_t)n * sizeof(float));
+    if (!k)
+        return PULSEG_ERR_ALLOC_FAILED;
+    for (i = 0; i < n; ++i) {
+        float tau = (float)i * dt_s;
+        float den = (c_s + tau) * (c_s + tau);
+        k[i] = (dt_s / s_min) * (c_s / den);
+    }
+    *out = k;
+    *len = n;
+    return PULSEG_SUCCESS;
+}
+
+static int pns_test_required_padding(void* ctx, float dt_us)
+{
+    float* k = NULL;
+    int n = 0;
+    int rc = pns_test_build_kernel((const pns_test_ctx*)ctx, dt_us, &k, &n);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    PULSEG_FREE(k);
+    return n;
+}
+
+static int pns_test_evaluate(void* ctx,
+                             const float* dx, const float* dy, const float* dz,
+                             int n, float dt_us,
+                             float* ox, float* oy, float* oz)
+{
+    float* k = NULL;
+    int kl = 0, i, rc;
+
+    rc = pns_test_build_kernel((const pns_test_ctx*)ctx, dt_us, &k, &kl);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    rc = pulseg__calc_convolution_fft(ox, dx, n, k, kl);
+    if (!PULSEG_FAILED(rc))
+        rc = pulseg__calc_convolution_fft(oy, dy, n, k, kl);
+    if (!PULSEG_FAILED(rc))
+        rc = pulseg__calc_convolution_fft(oz, dz, n, k, kl);
+    if (!PULSEG_FAILED(rc))
+        for (i = 0; i < n; ++i) {
+            ox[i] *= 100.0f;
+            oy[i] *= 100.0f;
+            oz[i] *= 100.0f;
+        }
+    PULSEG_FREE(k);
+    return rc;
+}
+
+static int pns_test_kernel(void* ctx, float dt_us, float** k, int* len, float* scale)
+{
+    int rc = pns_test_build_kernel((const pns_test_ctx*)ctx, dt_us, k, len);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    *scale = 100.0f;
+    return PULSEG_SUCCESS;
+}
+
+/* Peak combined PNS over a result, i.e. what the gate thresholds. */
+static double pns_peak(const pulseg_pns_result* r)
+{
+    double best = 0.0, v;
+    int i;
+
+    for (i = 0; i < r->num_samples; ++i) {
+        v = sqrt((double)r->slew_x_hz_per_m_per_s[i] * r->slew_x_hz_per_m_per_s[i] +
+                 (double)r->slew_y_hz_per_m_per_s[i] * r->slew_y_hz_per_m_per_s[i] +
+                 (double)r->slew_z_hz_per_m_per_s[i] * r->slew_z_hz_per_m_per_s[i]);
+        if (v > best)
+            best = v;
+    }
+    return best;
+}
+
+/* Run both routes over one fixture and compare. */
+static void run_pns_memo_equivalence(const char* filename)
+{
+    pns_test_ctx ctx = {360.0f, 4.25e8f, 0.333f};
+    pulseg_pns_model exact_model = {&ctx, pns_test_required_padding, pns_test_evaluate, NULL};
+    pulseg_pns_model memo_model = {&ctx, pns_test_required_padding, pns_test_evaluate,
+                                   pns_test_kernel};
+    pulseg_collection* coll = NULL;
+    pulseg_pns_result exact, memo;
+    double peak_exact, peak_memo;
+    int rc;
+
+    rc = load_seq(&coll, filename, &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed for PNS memo test");
+
+    memset(&exact, 0, sizeof(exact));
+    memset(&memo, 0, sizeof(memo));
+
+    pulseg_diagnostic_init(&s_diag);
+    rc = pulseg_calc_pns(coll, &exact, &s_diag, 0, 0, &s_opts, &exact_model);
+    mu_assert(PULSEG_SUCCEEDED(rc), "exact PNS evaluation failed");
+
+    pulseg_diagnostic_init(&s_diag);
+    rc = pulseg_calc_pns(coll, &memo, &s_diag, 0, 0, &s_opts, &memo_model);
+    mu_assert(PULSEG_SUCCEEDED(rc), "memoized PNS evaluation failed");
+
+    mu_assert_int_eq(exact.num_samples, memo.num_samples);
+    mu_assert(exact.num_samples > 0, "PNS produced no samples");
+
+    peak_exact = pns_peak(&exact);
+    peak_memo = pns_peak(&memo);
+    mu_assert(peak_exact > 0.0, "exact PNS peak is zero: fixture exercises nothing");
+    mu_assert(fabs(peak_exact - peak_memo) <= PNS_MEMO_TEST_RTOL * peak_exact,
+              "memoized PNS peak disagrees with the exact peak");
+
+    pulseg_pns_result_free(&exact);
+    pulseg_pns_result_free(&memo);
+    pulseg_collection_free(coll);
+}
+
+MU_TEST(test_pns_memo_matches_exact_gre)
+{
+    gre_opts_init(&s_opts);
+    run_pns_memo_equivalence("gre_2d_3sl_3avg.seq");
+}
+
+MU_TEST(test_pns_memo_matches_exact_epi)
+{
+    mech_resonances_opts_init(&s_opts);
+    run_pns_memo_equivalence("epi_2d_3sl_1avg.seq");
+}
+
+MU_TEST(test_pns_memo_matches_exact_fse)
+{
+    mech_resonances_opts_init(&s_opts);
+    run_pns_memo_equivalence("fse_2d_1sl_1avg.seq");
+}
+
+MU_TEST(test_pns_memo_matches_exact_mprage)
+{
+    mech_resonances_opts_init(&s_opts);
+    run_pns_memo_equivalence("mprage_2d_1sl_1avg.seq");
+}
+
+/* Arbitrary (uniformly rastered) gradients rather than trapezoids: the
+ * templates come from shape samples, not corner points. */
+MU_TEST(test_pns_memo_matches_exact_noncart)
+{
+    mech_resonances_opts_init(&s_opts);
+    run_pns_memo_equivalence("mprage_noncart_3d_1sl_1avg_userotext0.seq");
+}
+
+/* A model that does not publish a kernel must never take the memoized
+ * route -- it may not be a linear filter at all. Exercised implicitly by
+ * every other PNS test here, and explicitly by comparing a no-kernel model
+ * against itself for byte equality. */
+MU_TEST(test_pns_no_kernel_is_deterministic_exact_path)
+{
+    pns_test_ctx ctx = {360.0f, 4.25e8f, 0.333f};
+    pulseg_pns_model model = {&ctx, pns_test_required_padding, pns_test_evaluate, NULL};
+    pulseg_collection* coll = NULL;
+    pulseg_pns_result a, b;
+    int rc, i, differing = 0;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_seq(&coll, "epi_2d_3sl_1avg.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
+
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+    pulseg_diagnostic_init(&s_diag);
+    rc = pulseg_calc_pns(coll, &a, &s_diag, 0, 0, &s_opts, &model);
+    mu_assert(PULSEG_SUCCEEDED(rc), "first exact PNS evaluation failed");
+    pulseg_diagnostic_init(&s_diag);
+    rc = pulseg_calc_pns(coll, &b, &s_diag, 0, 0, &s_opts, &model);
+    mu_assert(PULSEG_SUCCEEDED(rc), "second exact PNS evaluation failed");
+
+    mu_assert_int_eq(a.num_samples, b.num_samples);
+    for (i = 0; i < a.num_samples; ++i)
+        if (a.slew_x_hz_per_m_per_s[i] != b.slew_x_hz_per_m_per_s[i] ||
+            a.slew_y_hz_per_m_per_s[i] != b.slew_y_hz_per_m_per_s[i] ||
+            a.slew_z_hz_per_m_per_s[i] != b.slew_z_hz_per_m_per_s[i])
+            differing++;
+    mu_assert_int_eq(0, differing);
+
+    pulseg_pns_result_free(&a);
+    pulseg_pns_result_free(&b);
+    pulseg_collection_free(coll);
+}
+
+MU_TEST_SUITE(suite_pns_memoization)
+{
+    MU_RUN_TEST(test_pns_memo_matches_exact_gre);
+    MU_RUN_TEST(test_pns_memo_matches_exact_epi);
+    MU_RUN_TEST(test_pns_memo_matches_exact_fse);
+    MU_RUN_TEST(test_pns_memo_matches_exact_mprage);
+    MU_RUN_TEST(test_pns_memo_matches_exact_noncart);
+    MU_RUN_TEST(test_pns_no_kernel_is_deterministic_exact_path);
+}
+
 /* ================================================================== */
 /*  Entry point                                                       */
 /* ================================================================== */
@@ -585,6 +820,7 @@ int test_safety_grad_main(void)
     MU_RUN_SUITE(suite_grad_continuity);
     MU_RUN_SUITE(suite_grad_canonical_sequence);
     MU_RUN_SUITE(suite_mech_resonances_safety);
+    MU_RUN_SUITE(suite_pns_memoization);
     MU_REPORT();
     return MU_EXIT_CODE;
 }

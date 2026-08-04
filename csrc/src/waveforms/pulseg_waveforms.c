@@ -66,7 +66,7 @@ void pulseg__uniform_grad_waveforms_free(pulseg__uniform_grad_waveforms *w)
 /*  Gradient sample counting                                           */
 /* ================================================================== */
 
-static int count_grad_samples_for_block(
+int pulseg__count_grad_samples_for_block(
     const pulseg_sequence_descriptor *desc,
     const pulseg_grad_definition *gdef,
     float block_duration_us)
@@ -583,7 +583,7 @@ int pulseg__find_unique_shot_trs(
 /*  Fill waveform for a single block                                  */
 /* ================================================================== */
 
-static int fill_grad_waveform_for_block(
+int pulseg__fill_grad_waveform_for_block(
     const pulseg_sequence_descriptor *desc,
     float *time,
     float *waveform,
@@ -757,7 +757,7 @@ static int fill_grad_waveform_for_block(
 /*  Interpolate to uniform raster                                     */
 /* ================================================================== */
 
-static int interpolate_to_uniform(
+int pulseg__interpolate_to_uniform(
     float **time,
     float **waveform,
     int *num_samples,
@@ -992,9 +992,9 @@ int pulseg__get_gradient_waveforms_range(
             ? &desc->grad_definitions[desc->grad_table[gz_raw].id]
             : NULL;
 
-        total_gx += count_grad_samples_for_block(desc, gx_def, block_dur_us);
-        total_gy += count_grad_samples_for_block(desc, gy_def, block_dur_us);
-        total_gz += count_grad_samples_for_block(desc, gz_def, block_dur_us);
+        total_gx += pulseg__count_grad_samples_for_block(desc, gx_def, block_dur_us);
+        total_gy += pulseg__count_grad_samples_for_block(desc, gy_def, block_dur_us);
+        total_gz += pulseg__count_grad_samples_for_block(desc, gz_def, block_dur_us);
     }
 
     /* ---- allocate (local time arrays + output waveform arrays) ---- */
@@ -1061,7 +1061,7 @@ int pulseg__get_gradient_waveforms_range(
 
         if (amplitude_mode == PULSEG_AMP_MAX_POS || amplitude_mode == PULSEG_AMP_ZERO_VAR)
         {
-            idx_gx += fill_grad_waveform_for_block(
+            idx_gx += pulseg__fill_grad_waveform_for_block(
                 desc,
                 time_gx,
                 wf_gx,
@@ -1071,7 +1071,7 @@ int pulseg__get_gradient_waveforms_range(
                 t0,
                 &pos_max_gx[n * PULSEG_MAX_GRAD_SHOTS],
                 block_dur_us);
-            idx_gy += fill_grad_waveform_for_block(
+            idx_gy += pulseg__fill_grad_waveform_for_block(
                 desc,
                 time_gy,
                 wf_gy,
@@ -1081,7 +1081,7 @@ int pulseg__get_gradient_waveforms_range(
                 t0,
                 &pos_max_gy[n * PULSEG_MAX_GRAD_SHOTS],
                 block_dur_us);
-            idx_gz += fill_grad_waveform_for_block(
+            idx_gz += pulseg__fill_grad_waveform_for_block(
                 desc,
                 time_gz,
                 wf_gz,
@@ -1104,7 +1104,7 @@ int pulseg__get_gradient_waveforms_range(
                     actual_amp[k] = gx_tab->amplitude;
                 }
             }
-            idx_gx += fill_grad_waveform_for_block(
+            idx_gx += pulseg__fill_grad_waveform_for_block(
                 desc,
                 time_gx,
                 wf_gx,
@@ -1125,7 +1125,7 @@ int pulseg__get_gradient_waveforms_range(
                     actual_amp[k] = gy_tab->amplitude;
                 }
             }
-            idx_gy += fill_grad_waveform_for_block(
+            idx_gy += pulseg__fill_grad_waveform_for_block(
                 desc,
                 time_gy,
                 wf_gy,
@@ -1146,7 +1146,7 @@ int pulseg__get_gradient_waveforms_range(
                     actual_amp[k] = gz_tab->amplitude;
                 }
             }
-            idx_gz += fill_grad_waveform_for_block(
+            idx_gz += pulseg__fill_grad_waveform_for_block(
                 desc,
                 time_gz,
                 wf_gz,
@@ -1175,7 +1175,7 @@ int pulseg__get_gradient_waveforms_range(
     /* interpolate each axis to uniform raster (half gradient raster) */
     target_raster_us = 0.5f * desc->grad_raster_us;
 
-    result = interpolate_to_uniform(&time_gx, &wf_gx, &num_gx, target_raster_us);
+    result = pulseg__interpolate_to_uniform(&time_gx, &wf_gx, &num_gx, target_raster_us);
     if (PULSEG_FAILED(result))
     {
         if (time_gx)
@@ -1193,7 +1193,7 @@ int pulseg__get_gradient_waveforms_range(
         diag->code = result;
         return result;
     }
-    result = interpolate_to_uniform(&time_gy, &wf_gy, &num_gy, target_raster_us);
+    result = pulseg__interpolate_to_uniform(&time_gy, &wf_gy, &num_gy, target_raster_us);
     if (PULSEG_FAILED(result))
     {
         if (time_gx)
@@ -1211,7 +1211,7 @@ int pulseg__get_gradient_waveforms_range(
         diag->code = result;
         return result;
     }
-    result = interpolate_to_uniform(&time_gz, &wf_gz, &num_gz, target_raster_us);
+    result = pulseg__interpolate_to_uniform(&time_gz, &wf_gz, &num_gz, target_raster_us);
     if (PULSEG_FAILED(result))
     {
         if (time_gx)
@@ -2047,9 +2047,9 @@ int pulseg_get_tr_waveforms(
             ? &desc->grad_definitions[desc->grad_table[gz_raw].id]
             : NULL;
 
-        total_gx += count_grad_samples_for_block(desc, gx_def, block_dur_us);
-        total_gy += count_grad_samples_for_block(desc, gy_def, block_dur_us);
-        total_gz += count_grad_samples_for_block(desc, gz_def, block_dur_us);
+        total_gx += pulseg__count_grad_samples_for_block(desc, gx_def, block_dur_us);
+        total_gy += pulseg__count_grad_samples_for_block(desc, gy_def, block_dur_us);
+        total_gz += pulseg__count_grad_samples_for_block(desc, gz_def, block_dur_us);
         total_rf += count_rf_samples_for_flat_block(desc, block_idx);
 
         if (amplitude_mode == PULSEG_AMP_ACTUAL)
@@ -2288,7 +2288,7 @@ int pulseg_get_tr_waveforms(
 
         if (pos_max_gx)
         {
-            idx_gx += fill_grad_waveform_for_block(
+            idx_gx += pulseg__fill_grad_waveform_for_block(
                 desc,
                 out->gx.time_us,
                 out->gx.amplitude,
@@ -2298,7 +2298,7 @@ int pulseg_get_tr_waveforms(
                 t0,
                 &pos_max_gx[n * PULSEG_MAX_GRAD_SHOTS],
                 block_dur_us);
-            idx_gy += fill_grad_waveform_for_block(
+            idx_gy += pulseg__fill_grad_waveform_for_block(
                 desc,
                 out->gy.time_us,
                 out->gy.amplitude,
@@ -2308,7 +2308,7 @@ int pulseg_get_tr_waveforms(
                 t0,
                 &pos_max_gy[n * PULSEG_MAX_GRAD_SHOTS],
                 block_dur_us);
-            idx_gz += fill_grad_waveform_for_block(
+            idx_gz += pulseg__fill_grad_waveform_for_block(
                 desc,
                 out->gz.time_us,
                 out->gz.amplitude,
@@ -2332,7 +2332,7 @@ int pulseg_get_tr_waveforms(
                     actual_amp[k] = gx_tab->amplitude;
                 }
             }
-            idx_gx += fill_grad_waveform_for_block(
+            idx_gx += pulseg__fill_grad_waveform_for_block(
                 desc,
                 out->gx.time_us,
                 out->gx.amplitude,
@@ -2353,7 +2353,7 @@ int pulseg_get_tr_waveforms(
                     actual_amp[k] = gy_tab->amplitude;
                 }
             }
-            idx_gy += fill_grad_waveform_for_block(
+            idx_gy += pulseg__fill_grad_waveform_for_block(
                 desc,
                 out->gy.time_us,
                 out->gy.amplitude,
@@ -2374,7 +2374,7 @@ int pulseg_get_tr_waveforms(
                     actual_amp[k] = gz_tab->amplitude;
                 }
             }
-            idx_gz += fill_grad_waveform_for_block(
+            idx_gz += pulseg__fill_grad_waveform_for_block(
                 desc,
                 out->gz.time_us,
                 out->gz.amplitude,
@@ -2457,21 +2457,21 @@ int pulseg_get_tr_waveforms(
         target_raster_us = 0.5f * desc->grad_raster_us;
 
         interp_result =
-            interpolate_to_uniform(&out->gx.time_us, &out->gx.amplitude, &num_gx, target_raster_us);
+            pulseg__interpolate_to_uniform(&out->gx.time_us, &out->gx.amplitude, &num_gx, target_raster_us);
         if (PULSEG_FAILED(interp_result))
         {
             diag->code = interp_result;
             return interp_result;
         }
         interp_result =
-            interpolate_to_uniform(&out->gy.time_us, &out->gy.amplitude, &num_gy, target_raster_us);
+            pulseg__interpolate_to_uniform(&out->gy.time_us, &out->gy.amplitude, &num_gy, target_raster_us);
         if (PULSEG_FAILED(interp_result))
         {
             diag->code = interp_result;
             return interp_result;
         }
         interp_result =
-            interpolate_to_uniform(&out->gz.time_us, &out->gz.amplitude, &num_gz, target_raster_us);
+            pulseg__interpolate_to_uniform(&out->gz.time_us, &out->gz.amplitude, &num_gz, target_raster_us);
         if (PULSEG_FAILED(interp_result))
         {
             diag->code = interp_result;

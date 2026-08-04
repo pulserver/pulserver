@@ -2996,12 +2996,20 @@ static void build_padded_dgdt(
     compute_slew_rate(dgdt_out, padded_scratch, padded_len, grad_raster_us, gamma_hz_per_tesla);
 }
 
+/* `desc` + the block window are optional: pass them and, when the model
+ * exposes a kernel, the response is assembled from per-shape convolutions
+ * instead of one transform over the whole window (pulseg_pns_memo.c). Pass
+ * NULL and the exact full-waveform path always runs. */
 static int calc_pns_from_uniform(
     pulseg_pns_result *result,
     pulseg_diagnostic *diag,
     float gamma_hz_per_tesla,
     const pulseg__uniform_grad_waveforms *waveforms,
-    const pulseg_pns_model *model)
+    const pulseg_pns_model *model,
+    const pulseg_sequence_descriptor *desc,
+    int block_start,
+    int block_count,
+    const int *block_order)
 {
     pulseg_diagnostic local_diag;
     int max_samples, pad, n;
@@ -3012,6 +3020,9 @@ static int calc_pns_from_uniform(
     float *out_x;
     float *out_y;
     float *out_z;
+    float *memo_kernel;
+    int memo_kernel_len, memo_applied;
+    float memo_scale;
     int rc;
 
     padded_scratch = NULL;
@@ -3021,6 +3032,10 @@ static int calc_pns_from_uniform(
     out_x = NULL;
     out_y = NULL;
     out_z = NULL;
+    memo_kernel = NULL;
+    memo_kernel_len = 0;
+    memo_applied = 0;
+    memo_scale = 1.0f;
     rc = PULSEG_SUCCESS;
 
     if (!diag)
@@ -3056,14 +3071,63 @@ static int calc_pns_from_uniform(
     }
     n = max_samples + pad - 1;
 
+    out_x = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    out_y = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    out_z = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    if (!out_x || !out_y || !out_z)
+    {
+        rc = PULSEG_ERR_ALLOC_FAILED;
+        goto fail;
+    }
+
+    /* Fast path: a model that publishes its kernel is asserting it is a
+     * linear filter, which lets the response be assembled from one
+     * convolution per distinct gradient shape rather than one transform
+     * over the whole window. The builder validates its own preconditions
+     * against `waveforms` and reports memo_applied == 0 if they do not
+     * hold, in which case the exact path below runs unchanged. */
+    if (desc && model->kernel && block_count > 0)
+    {
+        rc = model->kernel(
+            model->ctx, waveforms->raster_us, &memo_kernel, &memo_kernel_len, &memo_scale);
+        if (PULSEG_FAILED(rc))
+        {
+            diag->code = rc;
+            goto fail;
+        }
+        rc = pulseg__calc_pns_memoized(
+            out_x,
+            out_y,
+            out_z,
+            n,
+            &memo_applied,
+            desc,
+            block_start,
+            block_count,
+            block_order,
+            waveforms,
+            gamma_hz_per_tesla,
+            memo_kernel,
+            memo_kernel_len,
+            memo_scale,
+            pad);
+        PULSEG_FREE(memo_kernel);
+        memo_kernel = NULL;
+        if (PULSEG_FAILED(rc))
+        {
+            diag->code = rc;
+            goto fail;
+        }
+    }
+
+    if (memo_applied)
+        goto emit;
+
     padded_scratch = (float *)PULSEG_ALLOC((size_t)(max_samples + pad) * sizeof(float));
     dgdt_x = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
     dgdt_y = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
     dgdt_z = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
-    out_x = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
-    out_y = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
-    out_z = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
-    if (!padded_scratch || !dgdt_x || !dgdt_y || !dgdt_z || !out_x || !out_y || !out_z)
+    if (!padded_scratch || !dgdt_x || !dgdt_y || !dgdt_z)
     {
         rc = PULSEG_ERR_ALLOC_FAILED;
         goto fail;
@@ -3110,6 +3174,7 @@ static int calc_pns_from_uniform(
         goto fail;
     }
 
+emit:
     result->num_samples = n;
     result->slew_x_hz_per_m_per_s = out_x;
     out_x = NULL;
@@ -3122,6 +3187,8 @@ static int calc_pns_from_uniform(
     diag->code = rc;
 
 fail:
+    if (memo_kernel)
+        PULSEG_FREE(memo_kernel);
     if (padded_scratch)
         PULSEG_FREE(padded_scratch);
     if (dgdt_x)
@@ -3231,7 +3298,8 @@ int pulseg_calc_pns(
             PULSEG_FREE(block_order);
         return rc;
     }
-    rc = calc_pns_from_uniform(result, diag, opts->gamma_hz_per_t, &uw, model);
+    rc = calc_pns_from_uniform(
+        result, diag, opts->gamma_hz_per_t, &uw, model, desc, start_block, block_count, block_order);
     pulseg__uniform_grad_waveforms_free(&uw);
     if (block_order)
         PULSEG_FREE(block_order);
@@ -4087,7 +4155,16 @@ int pulseg__check_safety_profiled(
                 if (profile_fn)
                     profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, 1);
                 memset(&pns_result, 0, sizeof(pns_result));
-                rc = calc_pns_from_uniform(&pns_result, diag, opts->gamma_hz_per_t, &uw, pns_model);
+                rc = calc_pns_from_uniform(
+                    &pns_result,
+                    diag,
+                    opts->gamma_hz_per_t,
+                    &uw,
+                    pns_model,
+                    desc,
+                    start_block,
+                    block_count,
+                    block_order);
                 if (!PULSEG_FAILED(rc) && pns_result.num_samples > 0)
                 {
                     max_pns = 0.0f;

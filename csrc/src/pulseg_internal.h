@@ -763,6 +763,26 @@ int pulseg__calc_convolution_fft(
     const float *kernel,
     int kernel_len);
 
+/* Reusable FFT-convolution plan. Holds the transform setup, the scratch
+ * buffers and the already-transformed kernel, so a caller convolving
+ * several equal-length signals against one kernel -- the three gradient
+ * axes of a PNS evaluation -- transforms the kernel once and allocates
+ * the kiss_fft twiddle tables once instead of once per signal.
+ * pulseg__calc_convolution_fft() is create/apply/free around it and is
+ * numerically identical. */
+typedef struct pulseg__conv_fft_plan pulseg__conv_fft_plan;
+
+int pulseg__conv_fft_plan_create(
+    pulseg__conv_fft_plan **out_plan,
+    int signal_len,
+    const float *kernel,
+    int kernel_len);
+int pulseg__conv_fft_plan_apply(
+    pulseg__conv_fft_plan *plan,
+    float *output,
+    const float *signal);
+void pulseg__conv_fft_plan_free(pulseg__conv_fft_plan *plan);
+
 /* pulseg_parse.c's public entry points (pulseq_read family,
  * accessors, pulseq_decompress_shape, etc.) are declared in the
  * public header pulseg_io.h, included above. */
@@ -819,6 +839,57 @@ int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc);
 
 /* Free uniform waveforms. */
 void pulseg__uniform_grad_waveforms_free(pulseg__uniform_grad_waveforms *w);
+
+/* Per-block gradient rendering primitives. Exposed (rather than static)
+ * so the PNS template builder in pulseg_pns_memo.c renders a definition's
+ * unit-amplitude waveform through the very same code the full-window
+ * extraction uses, and the two cannot drift apart. */
+int pulseg__count_grad_samples_for_block(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_grad_definition *gdef,
+    float block_duration_us);
+int pulseg__fill_grad_waveform_for_block(
+    const pulseg_sequence_descriptor *desc,
+    float *time,
+    float *waveform,
+    int start_idx,
+    const pulseg_grad_definition *gdef,
+    const pulseg_grad_table_element *gte,
+    float t0,
+    const float *pos_max_amp,
+    float block_duration_us);
+/* Resample a (time, amplitude) point list onto a uniform grid in place;
+ * reallocates *time / *waveform and updates *num_samples. */
+int pulseg__interpolate_to_uniform(
+    float **time,
+    float **waveform,
+    int *num_samples,
+    float target_raster_us);
+
+/* --- pulseg_pns_memo.c --- */
+
+/* Assemble a linear PNS model's response from one convolution per distinct
+ * gradient shape instead of one transform over the whole canonical window.
+ * Writes n samples per axis and sets *applied to 1 on success. Sets
+ * *applied to 0 (returning PULSEG_SUCCESS) when the decomposition does not
+ * apply -- an off-grid block boundary, too little repetition, a window too
+ * short to be worth it -- and the caller must then run the exact path. */
+int pulseg__calc_pns_memoized(
+    float *out_x,
+    float *out_y,
+    float *out_z,
+    int n,
+    int *applied,
+    const pulseg_sequence_descriptor *desc,
+    int block_start,
+    int block_count,
+    const int *block_order,
+    const pulseg__uniform_grad_waveforms *uw,
+    float gamma_hz_per_tesla,
+    const float *kernel,
+    int kernel_len,
+    float out_scale,
+    int pad);
 
 /* Extract gradient waveforms for an arbitrary block range,
  * interpolated to uniform raster (half gradient raster). */

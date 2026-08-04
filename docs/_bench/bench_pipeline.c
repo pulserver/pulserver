@@ -223,6 +223,17 @@ static int benchmark_pns_required_padding(void *ctx, float dt_us)
     return n;
 }
 
+static int benchmark_pns_kernel(
+    void *ctx, float dt_us, float **out_kernel, int *out_len, float *out_scale)
+{
+    int rc = benchmark_pns_build_kernel(
+        (const benchmark_pns_ctx *)ctx, dt_us, out_kernel, out_len);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    *out_scale = 100.0f;
+    return PULSEG_SUCCESS;
+}
+
 static int benchmark_pns_evaluate(
     void *ctx,
     const float *dgdt_x,
@@ -235,16 +246,20 @@ static int benchmark_pns_evaluate(
     float *out_z)
 {
     float *kernel = NULL;
+    pulseg__conv_fft_plan *plan = NULL;
     int kernel_len = 0, i, rc;
     rc = benchmark_pns_build_kernel(
         (const benchmark_pns_ctx *)ctx, dt_us, &kernel, &kernel_len);
     if (PULSEG_FAILED(rc))
         return rc;
-    rc = pulseg__calc_convolution_fft(out_x, dgdt_x, n, kernel, kernel_len);
+    /* One plan for all three axes, matching pulserver_ge_pns.c. */
+    rc = pulseg__conv_fft_plan_create(&plan, n, kernel, kernel_len);
     if (!PULSEG_FAILED(rc))
-        rc = pulseg__calc_convolution_fft(out_y, dgdt_y, n, kernel, kernel_len);
+        rc = pulseg__conv_fft_plan_apply(plan, out_x, dgdt_x);
     if (!PULSEG_FAILED(rc))
-        rc = pulseg__calc_convolution_fft(out_z, dgdt_z, n, kernel, kernel_len);
+        rc = pulseg__conv_fft_plan_apply(plan, out_y, dgdt_y);
+    if (!PULSEG_FAILED(rc))
+        rc = pulseg__conv_fft_plan_apply(plan, out_z, dgdt_z);
     if (!PULSEG_FAILED(rc))
         for (i = 0; i < n; ++i)
         {
@@ -252,6 +267,7 @@ static int benchmark_pns_evaluate(
             out_y[i] *= 100.0f;
             out_z[i] *= 100.0f;
         }
+    pulseg__conv_fft_plan_free(plan);
     PULSEG_FREE(kernel);
     return rc;
 }
@@ -413,7 +429,7 @@ int main(int argc, char **argv)
         {1180.0f, 1260.0f, FLT_MAX}};
     benchmark_pns_ctx pns_ctx = {360.0f, 4.25e8f, 0.333f};
     pulseg_pns_model pns_model = {
-        &pns_ctx, benchmark_pns_required_padding, benchmark_pns_evaluate};
+        &pns_ctx, benchmark_pns_required_padding, benchmark_pns_evaluate, benchmark_pns_kernel};
     long seq_bytes, cache_bytes;
     stages st;
 

@@ -633,10 +633,51 @@ typedef struct pulseg_pns_model
         float *out_x,
         float *out_y,
         float *out_z);
+
+    /**
+     * @brief Optional: expose this model as a linear time-invariant
+     * filter by handing back its impulse response.
+     *
+     * Setting this field is a claim about the model, not just a
+     * convenience: it asserts that @c evaluate is exactly the discrete
+     * convolution of each dG/dt axis with the returned kernel, followed
+     * by a per-sample scaling this call reports in @c out_scale. A model
+     * with any nonlinearity after the filter (thresholding, rectifying,
+     * cross-axis coupling) must leave this NULL.
+     *
+     * When it is set, the safety core may take a faster route to the
+     * same numbers: because convolution is linear, it can convolve each
+     * distinct gradient shape in the sequence once and then accumulate
+     * scaled, time-shifted copies, instead of convolving a waveform that
+     * spans the whole canonical TR. On a long TR built from a handful of
+     * repeated shapes that is one to two orders of magnitude cheaper.
+     * Leaving this NULL is always safe -- the core falls back to
+     * @c evaluate over the full waveform.
+     *
+     * The kernel stays vendor-owned: the core treats it as opaque data
+     * and never inspects its shape or the constants behind it.
+     *
+     * @param ctx         Opaque model state.
+     * @param dt_us       Gradient raster period (us).
+     * @param out_kernel  Receives a newly allocated kernel; the core
+     *                    frees it with PULSEG_FREE.
+     * @param out_len     Receives the kernel length (> 0).
+     * @param out_scale   Receives the per-sample output scaling
+     *                    @c evaluate applies after convolving (1.0 if
+     *                    none) -- e.g. 100 for a model reporting
+     *                    percent-of-threshold.
+     * @return PULSEG_SUCCESS on success, negative error code on failure.
+     */
+    int (*kernel)(
+        void *ctx,
+        float dt_us,
+        float **out_kernel,
+        int *out_len,
+        float *out_scale);
 } pulseg_pns_model;
 
 /* clang-format off */
-#define PULSEG_PNS_MODEL_INIT {NULL, NULL, NULL}
+#define PULSEG_PNS_MODEL_INIT {NULL, NULL, NULL, NULL}
 /* clang-format on */
 
 /* ================================================================== */

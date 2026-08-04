@@ -357,67 +357,108 @@ size_t pulseg__next_pow2(size_t x)
 #include "external_kiss_fft.h"
 #include "external_kiss_fftr.h"
 
-int pulseg__calc_convolution_fft(
-    float *output,
-    const float *signal,
+struct pulseg__conv_fft_plan
+{
+    int signal_len;
+    int nfft;
+    int nfreq;
+    kiss_fftr_cfg fwd;
+    kiss_fftr_cfg inv;
+    kiss_fft_cpx *kern_fft; /* [nfreq] transformed kernel, reused */
+    float *pad_sig;         /* [nfft]  scratch */
+    kiss_fft_cpx *sig_fft;  /* [nfreq] scratch */
+    float *conv;            /* [nfft]  scratch */
+};
+
+int pulseg__conv_fft_plan_create(
+    pulseg__conv_fft_plan **out_plan,
     int signal_len,
     const float *kernel,
     int kernel_len)
 {
-    int nfft, nfreq, i;
-    kiss_fftr_cfg fwd;
-    kiss_fftr_cfg inv;
-    float *pad_sig;
-    float *pad_kern;
-    kiss_fft_cpx *sig_fft;
-    kiss_fft_cpx *kern_fft;
-    float *conv;
-    float re, im, scale;
-    int result;
+    pulseg__conv_fft_plan *p;
+    int i, result;
 
-    result = PULSEG_SUCCESS;
-    fwd = NULL;
-    inv = NULL;
-    pad_sig = NULL;
-    pad_kern = NULL;
-    sig_fft = NULL;
-    kern_fft = NULL;
-    conv = NULL;
+    if (!out_plan)
+        return PULSEG_ERR_NULL_POINTER;
+    *out_plan = NULL;
+    if (!kernel || signal_len <= 0 || kernel_len <= 0)
+        return PULSEG_ERR_NULL_POINTER;
 
-    nfft = (int)pulseg__next_pow2((size_t)(signal_len + kernel_len - 1));
-    nfreq = nfft / 2 + 1;
+    p = (pulseg__conv_fft_plan *)PULSEG_ALLOC(sizeof(*p));
+    if (!p)
+        return PULSEG_ERR_ALLOC_FAILED;
+    /* Set every pointer before the first goto: free() walks all of them. */
+    p->fwd = NULL;
+    p->inv = NULL;
+    p->kern_fft = NULL;
+    p->pad_sig = NULL;
+    p->sig_fft = NULL;
+    p->conv = NULL;
 
-    pad_sig = (float *)PULSEG_ALLOC((size_t)nfft * sizeof(float));
-    pad_kern = (float *)PULSEG_ALLOC((size_t)nfft * sizeof(float));
-    sig_fft = (kiss_fft_cpx *)PULSEG_ALLOC((size_t)nfreq * sizeof(kiss_fft_cpx));
-    kern_fft = (kiss_fft_cpx *)PULSEG_ALLOC((size_t)nfreq * sizeof(kiss_fft_cpx));
-    conv = (float *)PULSEG_ALLOC((size_t)nfft * sizeof(float));
-    if (!pad_sig || !pad_kern || !sig_fft || !kern_fft || !conv)
+    p->signal_len = signal_len;
+    p->nfft = (int)pulseg__next_pow2((size_t)(signal_len + kernel_len - 1));
+    p->nfreq = p->nfft / 2 + 1;
+
+    p->pad_sig = (float *)PULSEG_ALLOC((size_t)p->nfft * sizeof(float));
+    p->conv = (float *)PULSEG_ALLOC((size_t)p->nfft * sizeof(float));
+    p->sig_fft = (kiss_fft_cpx *)PULSEG_ALLOC((size_t)p->nfreq * sizeof(kiss_fft_cpx));
+    p->kern_fft = (kiss_fft_cpx *)PULSEG_ALLOC((size_t)p->nfreq * sizeof(kiss_fft_cpx));
+    if (!p->pad_sig || !p->conv || !p->sig_fft || !p->kern_fft)
     {
         result = PULSEG_ERR_ALLOC_FAILED;
         goto fail;
     }
 
-    for (i = 0; i < signal_len; ++i)
-        pad_sig[i] = signal[i];
-    for (i = signal_len; i < nfft; ++i)
-        pad_sig[i] = 0.0f;
-
-    for (i = 0; i < kernel_len; ++i)
-        pad_kern[i] = kernel[i];
-    for (i = kernel_len; i < nfft; ++i)
-        pad_kern[i] = 0.0f;
-
-    fwd = kiss_fftr_alloc(nfft, 0, NULL, NULL);
-    inv = kiss_fftr_alloc(nfft, 1, NULL, NULL);
-    if (!fwd || !inv)
+    p->fwd = kiss_fftr_alloc(p->nfft, 0, NULL, NULL);
+    p->inv = kiss_fftr_alloc(p->nfft, 1, NULL, NULL);
+    if (!p->fwd || !p->inv)
     {
         result = PULSEG_ERR_PNS_FFT_FAILED;
         goto fail;
     }
 
-    kiss_fftr(fwd, pad_sig, sig_fft);
-    kiss_fftr(fwd, pad_kern, kern_fft);
+    /* Transform the kernel once, through the signal scratch buffer --
+     * apply() overwrites it on every call anyway. */
+    for (i = 0; i < kernel_len; ++i)
+        p->pad_sig[i] = kernel[i];
+    for (i = kernel_len; i < p->nfft; ++i)
+        p->pad_sig[i] = 0.0f;
+    kiss_fftr(p->fwd, p->pad_sig, p->kern_fft);
+
+    *out_plan = p;
+    return PULSEG_SUCCESS;
+
+fail:
+    pulseg__conv_fft_plan_free(p);
+    return result;
+}
+
+int pulseg__conv_fft_plan_apply(
+    pulseg__conv_fft_plan *plan,
+    float *output,
+    const float *signal)
+{
+    int i, nfft, nfreq, signal_len;
+    kiss_fft_cpx *sig_fft;
+    const kiss_fft_cpx *kern_fft;
+    float re, im, scale;
+
+    if (!plan || !output || !signal)
+        return PULSEG_ERR_NULL_POINTER;
+
+    nfft = plan->nfft;
+    nfreq = plan->nfreq;
+    signal_len = plan->signal_len;
+    sig_fft = plan->sig_fft;
+    kern_fft = plan->kern_fft;
+
+    for (i = 0; i < signal_len; ++i)
+        plan->pad_sig[i] = signal[i];
+    for (i = signal_len; i < nfft; ++i)
+        plan->pad_sig[i] = 0.0f;
+
+    kiss_fftr(plan->fwd, plan->pad_sig, sig_fft);
 
     for (i = 0; i < nfreq; ++i)
     {
@@ -427,25 +468,49 @@ int pulseg__calc_convolution_fft(
         sig_fft[i].i = im;
     }
 
-    kiss_fftri(inv, sig_fft, conv);
+    kiss_fftri(plan->inv, sig_fft, plan->conv);
     scale = 1.0f / (float)nfft;
     for (i = 0; i < signal_len; ++i)
-        output[i] = conv[i] * scale;
+        output[i] = plan->conv[i] * scale;
 
-fail:
-    if (pad_sig)
-        PULSEG_FREE(pad_sig);
-    if (pad_kern)
-        PULSEG_FREE(pad_kern);
-    if (sig_fft)
-        PULSEG_FREE(sig_fft);
-    if (kern_fft)
-        PULSEG_FREE(kern_fft);
-    if (conv)
-        PULSEG_FREE(conv);
-    if (fwd)
-        kiss_fftr_free(fwd);
-    if (inv)
-        kiss_fftr_free(inv);
+    return PULSEG_SUCCESS;
+}
+
+void pulseg__conv_fft_plan_free(pulseg__conv_fft_plan *plan)
+{
+    if (!plan)
+        return;
+    if (plan->pad_sig)
+        PULSEG_FREE(plan->pad_sig);
+    if (plan->conv)
+        PULSEG_FREE(plan->conv);
+    if (plan->sig_fft)
+        PULSEG_FREE(plan->sig_fft);
+    if (plan->kern_fft)
+        PULSEG_FREE(plan->kern_fft);
+    if (plan->fwd)
+        kiss_fftr_free(plan->fwd);
+    if (plan->inv)
+        kiss_fftr_free(plan->inv);
+    PULSEG_FREE(plan);
+}
+
+int pulseg__calc_convolution_fft(
+    float *output,
+    const float *signal,
+    int signal_len,
+    const float *kernel,
+    int kernel_len)
+{
+    pulseg__conv_fft_plan *plan;
+    int result;
+
+    plan = NULL;
+    result = pulseg__conv_fft_plan_create(&plan, signal_len, kernel, kernel_len);
+    if (PULSEG_FAILED(result))
+        return result;
+
+    result = pulseg__conv_fft_plan_apply(plan, output, signal);
+    pulseg__conv_fft_plan_free(plan);
     return result;
 }
