@@ -11,7 +11,8 @@ set(PULSEQ_SOURCES
 )
 
 set(MD5_SOURCES     src/vendor/external_md5.c)
-set(KISSFFT_SOURCES src/vendor/external_kiss_fft.c src/vendor/external_kiss_fftr.c)
+set(KISSFFT_SOURCES src/vendor/external_kiss_fft.c src/vendor/external_kiss_fftr.c
+                    src/vendor/external_kiss_fft_double.c)
 
 add_library(pulseq STATIC ${PULSEQ_SOURCES} ${MD5_SOURCES})
 target_include_directories(pulseq PUBLIC

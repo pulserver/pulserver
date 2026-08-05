@@ -22,6 +22,7 @@ int test_module_labels_main(void);
 int test_block_instance_main(void);
 int test_pulsegen_cache_main(void);
 int test_pulseq_binary_main(void);
+int test_czt_main(void);
 
 int main(void)
 {
@@ -56,6 +57,9 @@ int main(void)
 
     printf("\n==== test_pulseq_binary ====\n");
     failed += test_pulseq_binary_main();
+
+    printf("\n==== test_czt ====\n");
+    failed += test_czt_main();
 
     // printf("\n==== test_io ====\n");
     // failed += test_io_main();

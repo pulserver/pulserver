@@ -615,93 +615,48 @@ static int write_shapes(FILE *f, const pulseg_sequence_descriptor *d)
  * loads this; pulsegen resolves per-position state from the segment
  * definitions' initial-state records in COMMON. */
 
+/* Each of the four tables below is an array of structs whose members are all
+ * 4 bytes wide and declared in exactly the order they are serialized, so the
+ * struct's own storage IS the record layout: no padding can appear between
+ * members, and writing the array whole emits byte-for-byte what a member-at-a-
+ * time loop emitted. It matters because the block table is the one part of the
+ * cache that scales with the scan -- at a couple of million blocks that is
+ * some 36M one-word fwrite() calls the long way round, and glibc's per-call
+ * locking and buffer arithmetic, not the disk, is then what the predownload
+ * waits on.
+ * PULSEG_ASSERT_PACKED (below) is what keeps the premise true: adding a member
+ * of another width, or reordering one, breaks the build rather than the file
+ * format. read_instances() reads them back the same way. */
+PULSEG_ASSERT_PACKED(pulseg_block_table_element, 17);
+PULSEG_ASSERT_PACKED(pulseg_rf_table_element, 5);
+PULSEG_ASSERT_PACKED(pulseg_grad_table_element, 3);
+PULSEG_ASSERT_PACKED(pulseg_adc_table_element, 3);
+
 static int write_instances(FILE *f, const pulseg_sequence_descriptor *d)
 {
-    int i;
-
     /* block table */
     if (!pulseg__write4(f, &d->num_blocks, 1))
         return 0;
-    for (i = 0; i < d->num_blocks; ++i)
-    {
-        if (!pulseg__write4(f, &d->block_table[i].id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].duration_us, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].rf_id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].gx_id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].gy_id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].gz_id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].adc_id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].digitalout_id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].rotation_id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].once_flag, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].norot_flag, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].nopos_flag, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].pmc_flag, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].nav_flag, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].freq_mod_id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].rf_shim_id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->block_table[i].module_id, 1))
-            return 0;
-    }
+    if (d->num_blocks > 0 && !pulseg__write4(f, d->block_table, d->num_blocks * 17))
+        return 0;
 
     /* RF table */
     if (!pulseg__write4(f, &d->rf_table_size, 1))
         return 0;
-    for (i = 0; i < d->rf_table_size; ++i)
-    {
-        if (!pulseg__write4(f, &d->rf_table[i].id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->rf_table[i].amplitude, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->rf_table[i].freq_offset, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->rf_table[i].phase_offset, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->rf_table[i].rf_use, 1))
-            return 0;
-    }
+    if (d->rf_table_size > 0 && !pulseg__write4(f, d->rf_table, d->rf_table_size * 5))
+        return 0;
 
     /* gradient table */
     if (!pulseg__write4(f, &d->grad_table_size, 1))
         return 0;
-    for (i = 0; i < d->grad_table_size; ++i)
-    {
-        if (!pulseg__write4(f, &d->grad_table[i].id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->grad_table[i].shot_index, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->grad_table[i].amplitude, 1))
-            return 0;
-    }
+    if (d->grad_table_size > 0 && !pulseg__write4(f, d->grad_table, d->grad_table_size * 3))
+        return 0;
 
     /* ADC table */
     if (!pulseg__write4(f, &d->adc_table_size, 1))
         return 0;
-    for (i = 0; i < d->adc_table_size; ++i)
-    {
-        if (!pulseg__write4(f, &d->adc_table[i].id, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->adc_table[i].freq_offset, 1))
-            return 0;
-        if (!pulseg__write4(f, &d->adc_table[i].phase_offset, 1))
-            return 0;
-    }
+    if (d->adc_table_size > 0 && !pulseg__write4(f, d->adc_table, d->adc_table_size * 3))
+        return 0;
 
     /* label table */
     fwrite(&d->label_num_columns, sizeof(int), 1, f);
@@ -1322,9 +1277,9 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
 
 static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
 {
-    int i;
-
-    /* block table */
+    /* block table. One read for the whole array, and one swap pass over it --
+     * see the PULSEG_ASSERT_PACKED block above write_instances for why the
+     * struct's storage is the record layout. */
     if (!pulseg__read4(f, &d->num_blocks, 1))
         return 0;
     if (do_swap)
@@ -1333,12 +1288,12 @@ static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         (size_t)d->num_blocks * sizeof(pulseg_block_table_element));
     if (!d->block_table)
         return 0;
-    for (i = 0; i < d->num_blocks; ++i)
+    if (d->num_blocks > 0)
     {
-        if (!pulseg__read4(f, &d->block_table[i].id, 17))
+        if (!pulseg__read4(f, d->block_table, d->num_blocks * 17))
             return 0;
         if (do_swap)
-            pulseg__swap4_array(&d->block_table[i].id, 17);
+            pulseg__swap4_array(d->block_table, d->num_blocks * 17);
     }
 
     /* RF table */
@@ -1350,16 +1305,12 @@ static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         (size_t)d->rf_table_size * sizeof(pulseg_rf_table_element));
     if (!d->rf_table)
         return 0;
-    for (i = 0; i < d->rf_table_size; ++i)
+    if (d->rf_table_size > 0)
     {
-        if (!pulseg__read4(f, &d->rf_table[i].id, 4))
+        if (!pulseg__read4(f, d->rf_table, d->rf_table_size * 5))
             return 0;
         if (do_swap)
-            pulseg__swap4_array(&d->rf_table[i].id, 4);
-        if (!pulseg__read4(f, &d->rf_table[i].rf_use, 1))
-            return 0;
-        if (do_swap)
-            pulseg__swap4(&d->rf_table[i].rf_use);
+            pulseg__swap4_array(d->rf_table, d->rf_table_size * 5);
     }
 
     /* gradient table */
@@ -1371,12 +1322,12 @@ static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         (size_t)d->grad_table_size * sizeof(pulseg_grad_table_element));
     if (!d->grad_table)
         return 0;
-    for (i = 0; i < d->grad_table_size; ++i)
+    if (d->grad_table_size > 0)
     {
-        if (!pulseg__read4(f, &d->grad_table[i].id, 3))
+        if (!pulseg__read4(f, d->grad_table, d->grad_table_size * 3))
             return 0;
         if (do_swap)
-            pulseg__swap4_array(&d->grad_table[i].id, 3);
+            pulseg__swap4_array(d->grad_table, d->grad_table_size * 3);
     }
 
     /* ADC table */
@@ -1388,12 +1339,12 @@ static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         (size_t)d->adc_table_size * sizeof(pulseg_adc_table_element));
     if (!d->adc_table)
         return 0;
-    for (i = 0; i < d->adc_table_size; ++i)
+    if (d->adc_table_size > 0)
     {
-        if (!pulseg__read4(f, &d->adc_table[i].id, 3))
+        if (!pulseg__read4(f, d->adc_table, d->adc_table_size * 3))
             return 0;
         if (do_swap)
-            pulseg__swap4_array(&d->adc_table[i].id, 3);
+            pulseg__swap4_array(d->adc_table, d->adc_table_size * 3);
     }
 
     /* label table.

@@ -244,6 +244,16 @@ void pulseg_freq_mod_collection_free(struct pulseg_freq_mod_collection *fmc);
 /* ================================================================== */
 /*  Base blocks and block table                                      */
 /* ================================================================== */
+
+/* Compile-time claim that `type` is exactly `nwords` 4-byte members with no
+ * padding, so an array of it can be serialized in one call and read back the
+ * same way (see write_instances/read_instances). C89, hence a negative array
+ * bound rather than a static assertion: a member of another width, or one
+ * added without updating the count, fails the build instead of silently
+ * changing the cache layout. */
+#define PULSEG_ASSERT_PACKED(type, nwords) \
+    typedef char pulseg__packed_check_##type[(sizeof(type) == (nwords)*4) ? 1 : -1]
+
 typedef struct pulseg_base_block
 {
     int id;
@@ -748,6 +758,47 @@ void pulseg__interp1_linear_complex(
     const float *fp_im,
     int nxp);
 void pulseg__fftshift_complex(float *re, float *im, int n);
+
+/* Double-precision complex FFT: the vendored kissfft compiled a second time
+ * (src/vendor/external_kiss_fft_double.c), because the copy the display path
+ * uses is float and these sums are carried in double on purpose. Buffers are
+ * interleaved (re, im) doubles; `cfg` is opaque. Sizes need not be powers of
+ * two -- ask pulseg__fft_double_size for the cheapest one that fits. */
+int pulseg__fft_double_size(int at_least);
+void *pulseg__fft_double_alloc(int nfft, int inverse);
+void pulseg__fft_double_run(void *cfg, const double *in_interleaved, double *out_interleaved);
+void pulseg__fft_double_free(void *cfg);
+
+/* Chirp-z: P_j = sum_{k<n} a[k] * e^{i k (theta0 + j*dtheta)} for j < m.
+ *
+ * Evaluates a real-coefficient polynomial at `m` points spaced evenly in
+ * angle on the unit circle, in O((n+m) log(n+m)) rather than O(n*m). Used
+ * where one waveform definition has to be transformed at many frequencies
+ * that happen to form an arithmetic progression. */
+int pulseg__czt_unit(
+    double *out_re,
+    double *out_im,
+    const float *a,
+    int n,
+    double theta0,
+    double dtheta,
+    int m);
+
+/* The same transform with the geometry held, for a caller evaluating several
+ * `theta0` over one (n, m, dtheta) -- which is every caller that walks a
+ * frequency comb, since the offsets within it share a spacing. Holding the
+ * plan keeps the chirp, the transformed kernel and the FFT setup, leaving
+ * two transforms per apply. */
+typedef struct pulseg__czt_plan pulseg__czt_plan;
+
+int pulseg__czt_plan_create(pulseg__czt_plan **out_plan, int n, int m, double dtheta);
+int pulseg__czt_plan_apply(
+    pulseg__czt_plan *plan,
+    double *out_re,
+    double *out_im,
+    const float *a,
+    double theta0);
+void pulseg__czt_plan_free(pulseg__czt_plan *plan);
 float pulseg__get_spectrum_flank(
     const float *x,
     const float *re,

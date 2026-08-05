@@ -8,6 +8,7 @@
  */
 
 #include <math.h>
+#include <string.h>
 
 #include "pulseg_internal.h"
 
@@ -512,5 +513,233 @@ int pulseg__calc_convolution_fft(
 
     result = pulseg__conv_fft_plan_apply(plan, output, signal);
     pulseg__conv_fft_plan_free(plan);
+    return result;
+}
+
+/* ================================================================== */
+/*  Chirp-z transform (double precision)                              */
+/* ================================================================== */
+/* The FFT underneath is the vendored kissfft compiled a second time in
+ * double (src/vendor/external_kiss_fft_double.c); see the note there for
+ * why the float copy beside it will not do. */
+
+/* Chirp phases e^{i*h*k^2} for k = 0..count-1.
+ *
+ * By the recurrence h*(k+1)^2 = h*k^2 + h*(2k+1), whose increment is itself
+ * an arithmetic progression -- so the angle is accumulated rather than
+ * formed as h*k*k, which for large k would be a big number whose sin/cos
+ * loses exactly the low bits this transform exists to keep. The running
+ * angle is folded back into [-pi, pi] every step, which bounds it no matter
+ * how many samples the waveform has. */
+static void pulseg__chirp_phases(double *cr, double *ci, double h, int count)
+{
+    double angle = 0.0;
+    double delta = h;
+    int k;
+
+    for (k = 0; k < count; ++k)
+    {
+        cr[k] = cos(angle);
+        ci[k] = sin(angle);
+        angle += delta;
+        delta += 2.0 * h;
+        if (angle > M_PI || angle < -M_PI)
+            angle -= 2.0 * M_PI * floor((angle + M_PI) / (2.0 * M_PI));
+    }
+}
+
+/* A reusable chirp-z setup.
+ *
+ * Everything except the samples and the starting angle depends only on
+ * (n, m, dtheta): the chirp phases, the transformed convolution kernel, the
+ * FFT plans and the scratch. The caller that motivated this evaluates the
+ * same definition at seventeen offsets from the same comb, which share a
+ * dtheta and differ only in theta0 -- so held this way, each extra offset
+ * costs two transforms instead of three plus a full setup. */
+struct pulseg__czt_plan
+{
+    int n;
+    int m;
+    int size;
+    double dtheta;
+    void *fwd;
+    void *inv;
+    double *chr; /* [max(n,m)] cos(h k^2) */
+    double *chi; /* [max(n,m)] sin(h k^2) */
+    double *kernel_f; /* [2*size] FFT of the chirp kernel */
+    double *work;     /* [2*size] */
+    double *spectrum; /* [2*size] */
+};
+
+void pulseg__czt_plan_free(pulseg__czt_plan *plan)
+{
+    if (!plan)
+        return;
+    if (plan->chr)
+        PULSEG_FREE(plan->chr);
+    if (plan->chi)
+        PULSEG_FREE(plan->chi);
+    if (plan->kernel_f)
+        PULSEG_FREE(plan->kernel_f);
+    if (plan->work)
+        PULSEG_FREE(plan->work);
+    if (plan->spectrum)
+        PULSEG_FREE(plan->spectrum);
+    pulseg__fft_double_free(plan->fwd);
+    pulseg__fft_double_free(plan->inv);
+    PULSEG_FREE(plan);
+}
+
+int pulseg__czt_plan_create(pulseg__czt_plan **out_plan, int n, int m, double dtheta)
+{
+    pulseg__czt_plan *plan;
+    double h = 0.5 * dtheta;
+    int longest, i;
+
+    if (!out_plan || n < 1 || m < 1)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    *out_plan = NULL;
+
+    plan = (pulseg__czt_plan *)PULSEG_ALLOC(sizeof(pulseg__czt_plan));
+    if (!plan)
+        return PULSEG_ERR_ALLOC_FAILED;
+    memset(plan, 0, sizeof(*plan));
+
+    plan->n = n;
+    plan->m = m;
+    plan->dtheta = dtheta;
+    /* Not rounded up to a power of two: kissfft is mixed-radix, and the
+     * cheapest size it likes that still holds the linear convolution is
+     * often far below the next power of two (9375 against 16384 for a long
+     * definition against a whole band). */
+    plan->size = pulseg__fft_double_size(n + m - 1);
+    longest = (n > m) ? n : m;
+
+    plan->chr = (double *)PULSEG_ALLOC((size_t)longest * sizeof(double));
+    plan->chi = (double *)PULSEG_ALLOC((size_t)longest * sizeof(double));
+    plan->kernel_f = (double *)PULSEG_ALLOC((size_t)plan->size * 2 * sizeof(double));
+    plan->work = (double *)PULSEG_ALLOC((size_t)plan->size * 2 * sizeof(double));
+    plan->spectrum = (double *)PULSEG_ALLOC((size_t)plan->size * 2 * sizeof(double));
+    plan->fwd = pulseg__fft_double_alloc(plan->size, 0);
+    plan->inv = pulseg__fft_double_alloc(plan->size, 1);
+    if (!plan->chr || !plan->chi || !plan->kernel_f || !plan->work || !plan->spectrum ||
+        !plan->fwd || !plan->inv)
+    {
+        pulseg__czt_plan_free(plan);
+        return PULSEG_ERR_ALLOC_FAILED;
+    }
+
+    pulseg__chirp_phases(plan->chr, plan->chi, h, longest);
+
+    /* kernel[t] = e^{-i h t^2}, with the negative lags wrapped to the top of
+     * the buffer so the cyclic convolution reproduces the linear one. */
+    for (i = 0; i < plan->size * 2; ++i)
+        plan->work[i] = 0.0;
+    for (i = 0; i < m; ++i)
+    {
+        plan->work[2 * i] = plan->chr[i];
+        plan->work[2 * i + 1] = -plan->chi[i];
+    }
+    for (i = 1; i < n; ++i)
+    {
+        plan->work[2 * (plan->size - i)] = plan->chr[i];
+        plan->work[2 * (plan->size - i) + 1] = -plan->chi[i];
+    }
+    pulseg__fft_double_run(plan->fwd, plan->work, plan->kernel_f);
+
+    *out_plan = plan;
+    return PULSEG_SUCCESS;
+}
+
+int pulseg__czt_plan_apply(
+    pulseg__czt_plan *plan,
+    double *out_re,
+    double *out_im,
+    const float *a,
+    double theta0)
+{
+    int i, size, n, m;
+    double scale;
+
+    if (!plan || !out_re || !out_im || !a)
+        return PULSEG_ERR_NULL_POINTER;
+
+    size = plan->size;
+    n = plan->n;
+    m = plan->m;
+
+    for (i = 0; i < size * 2; ++i)
+        plan->work[i] = 0.0;
+
+    /* f[k] = a[k] * e^{i k theta0} * e^{i h k^2} */
+    {
+        double pr = 1.0, pi = 0.0; /* e^{i k theta0} */
+        double sr = cos(theta0), si = sin(theta0);
+        for (i = 0; i < n; ++i)
+        {
+            double ar = (double)a[i] * pr;
+            double ai = (double)a[i] * pi;
+            double npr;
+            plan->work[2 * i] = ar * plan->chr[i] - ai * plan->chi[i];
+            plan->work[2 * i + 1] = ar * plan->chi[i] + ai * plan->chr[i];
+            npr = pr * sr - pi * si;
+            pi = pr * si + pi * sr;
+            pr = npr;
+        }
+    }
+
+    pulseg__fft_double_run(plan->fwd, plan->work, plan->spectrum);
+    for (i = 0; i < size; ++i)
+    {
+        double xr = plan->spectrum[2 * i] * plan->kernel_f[2 * i] -
+                    plan->spectrum[2 * i + 1] * plan->kernel_f[2 * i + 1];
+        double xi = plan->spectrum[2 * i] * plan->kernel_f[2 * i + 1] +
+                    plan->spectrum[2 * i + 1] * plan->kernel_f[2 * i];
+        plan->spectrum[2 * i] = xr;
+        plan->spectrum[2 * i + 1] = xi;
+    }
+    pulseg__fft_double_run(plan->inv, plan->spectrum, plan->work);
+
+    /* kissfft's inverse is unscaled, so 1/size rides along with the outgoing
+     * chirp. */
+    scale = 1.0 / (double)size;
+    for (i = 0; i < m; ++i)
+    {
+        double cr = plan->chr[i] * scale;
+        double ci = plan->chi[i] * scale;
+        out_re[i] = plan->work[2 * i] * cr - plan->work[2 * i + 1] * ci;
+        out_im[i] = plan->work[2 * i] * ci + plan->work[2 * i + 1] * cr;
+    }
+    return PULSEG_SUCCESS;
+}
+
+int pulseg__czt_unit(
+    double *out_re,
+    double *out_im,
+    const float *a,
+    int n,
+    double theta0,
+    double dtheta,
+    int m)
+{
+    /* P_j = sum_{k<n} a[k] e^{i k (theta0 + j dtheta)}, j < m.
+     *
+     * Bluestein: k*j = (k^2 + j^2 - (j-k)^2)/2 turns the evaluation into one
+     * convolution, so all m outputs cost O((n+m) log(n+m)) instead of the
+     * O(n*m) of evaluating them one at a time. Every point lies on the unit
+     * circle here (the frequencies are real and the samples are a real
+     * waveform), which is why the geometry is given as two angles rather
+     * than as complex ratios.
+     *
+     * One-shot form; a caller with several theta0 over the same geometry
+     * should hold a plan instead. */
+    pulseg__czt_plan *plan = NULL;
+    int result;
+
+    result = pulseg__czt_plan_create(&plan, n, m, dtheta);
+    if (PULSEG_FAILED(result))
+        return result;
+    result = pulseg__czt_plan_apply(plan, out_re, out_im, a, theta0);
+    pulseg__czt_plan_free(plan);
     return result;
 }

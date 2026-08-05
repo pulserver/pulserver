@@ -205,6 +205,62 @@ def _shapes(library) -> list:
     return out
 
 
+def _fixed_records(library, prefix_second=None) -> bytes:
+    """`id [, count] , f64 payload` for every row of a same-width library.
+
+    These are the two extension libraries that can be as long as the scan
+    rather than as long as the design: a rotation or a shim that changes every
+    block deduplicates to nothing, and then there is one record per readout.
+    Packing them a float at a time costs a `struct.pack` call and a list cell
+    each -- a couple of million of both on a scan that turns every shot -- so
+    the rows are laid out as one array and the whole section is one buffer.
+    Byte-for-byte what the loop emitted: the same little-endian fields in the
+    same order, with no padding between records.
+
+    Deduplication produced these rows as an array and `_fill_library` keeps it
+    on the library, so the usual case never rebuilds one. A library assembled
+    some other way (or a ragged one, which the format permits and this does
+    not) still has `data`, and takes the general path.
+
+    `prefix_second` supplies the second int field where the format has one
+    (RF shims carry their channel count); rotations have no such field.
+    """
+    data = library.data
+    n = len(data)
+    if n == 0:
+        return b''
+
+    values = getattr(library, 'rows_array', None)
+    if values is None or len(values) != n:
+        try:
+            values = np.asarray(list(data.values()), dtype='<f8')
+        except ValueError:
+            values = None
+    if values is None or values.ndim != 2:
+        out = []
+        for k, d in data.items():
+            out.append(_I32.pack(int(k)))
+            if prefix_second is not None:
+                out.append(_I32.pack(int(prefix_second(d))))
+            out.extend(_F64.pack(float(v)) for v in d)
+        return b''.join(out)
+
+    values = np.ascontiguousarray(values, dtype='<f8')
+    width = values.shape[1]
+    head = 8 if prefix_second is not None else 4
+    stride = head + 8 * width
+    record = np.empty((n, stride), dtype=np.uint8)
+
+    keys = np.fromiter(data.keys(), dtype='<i4', count=n)
+    record[:, 0:4] = keys.view(np.uint8).reshape(n, 4)
+    if prefix_second is not None:
+        record[:, 4:8] = np.full(n, width // 2, dtype='<i4').view(
+            np.uint8).reshape(n, 4)
+
+    record[:, head:stride] = values.view(np.uint8).reshape(n, 8 * width)
+    return record.tobytes()
+
+
 def _extension_chains(rows: np.ndarray) -> bytes:
     """The extension list: id, type, ref, next_id -- the other per-scan section."""
     n = rows.shape[0]
@@ -337,17 +393,13 @@ def write_binary(seq, output=None, *, check_timing: bool = False):
         section('rfshims')
         chunks.append(_I32.pack(int(plain.get_extension_type_ID('RF_SHIMS'))))
         chunks.append(_I64.pack(len(shims.data)))
-        for k, d in shims.data.items():
-            chunks.append(_I32.pack(int(k)) + _I32.pack(len(d) // 2))
-            chunks.extend(_F64.pack(float(v)) for v in d)
+        chunks.append(_fixed_records(shims, prefix_second=True))
 
     if has_rotations:
         section('rotations')
         chunks.append(_I32.pack(int(plain.get_extension_type_ID('ROTATIONS'))))
         chunks.append(_I64.pack(len(rotations.data)))
-        for k, d in rotations.data.items():
-            chunks.append(_I32.pack(int(k)))
-            chunks.extend(_F64.pack(float(v)) for v in d)
+        chunks.append(_fixed_records(rotations))
 
     payload = b''.join(chunks)
 

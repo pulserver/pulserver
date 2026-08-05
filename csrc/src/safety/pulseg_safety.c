@@ -290,12 +290,26 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
  *  what the sa_eval_pwl_transform memoization below amortizes. */
 #define SA_MECHRES_MAX_DM_SUBDIV 16
 
+/** Interleaved Horner chains used to evaluate a compressed train's
+ *  amplitude-weighted sum (sa_eval_event_spectrum). Power of two. A single
+ *  chain runs at the latency of one complex multiply-add (~12 cycles per
+ *  term) however much the core could otherwise retire; 8 lanes bring a
+ *  1024-term train to under a cycle per term, and past that the returns are
+ *  small while the fixed recombination cost keeps growing for trains too
+ *  short to fill the lanes. */
+#define SA_HORNER_LANES 8
+
 /** Segments between exact sin/cos re-anchors of the uniform-raster phase
  *  recurrence in sa_eval_pwl_transform(). Bounds accumulated rotation drift
  *  to a fixed budget no matter how many samples an arbitrary waveform has,
  *  at a cost of 2 transcendentals per this many segments (< 1% of the
  *  general path's 4-per-segment). */
 #define SA_PWL_REANCHOR 256
+
+/** Interleaved copies of that recurrence in sa_eval_pwl_transform's uniform
+ *  fast path. Power of two, and must divide SA_PWL_REANCHOR so the re-anchor
+ *  budget stays one exact sin/cos pair per SA_PWL_REANCHOR segments. */
+#define SA_PWL_LANES 8
 
 /** Largest number of occurrences-per-repeat that sa_compress_axis_events()
  *  will try when looking for interleaved equally-spaced trains of one
@@ -1254,36 +1268,97 @@ static void sa_eval_pwl_transform(
             double c1_re = I0mT_im / omega;
             double c1_im = -I0mT_re / omega;
             double t0 = (double)t_us[0];
-            double cos_ph = cos(omega * t0);
-            double sin_ph = sin(omega * t0);
+            /* SA_PWL_LANES interleaved copies of the recurrence, lane m taking
+             * segments m, m+LANES, m+2*LANES, ... Both the phase rotation and
+             * the accumulator are serial dependency chains of complex
+             * multiply-adds, so one copy runs at their latency (~5 cycles a
+             * segment) whatever the core could otherwise retire.
+             *
+             * This loop is the gate's cost centre whenever a definition has
+             * many vertices: it is O(n_vtx) and runs once per definition per
+             * candidate frequency, so total gate cost tracks the vertex count
+             * of the widest definitions and not the length of the scan. A
+             * definition of a few thousand samples therefore costs more here
+             * than a scan of millions of blocks made of trapezoids.
+             * Cf. SA_HORNER_LANES, the same fix on the other term. */
+            double lane_gr[SA_PWL_LANES], lane_gi[SA_PWL_LANES];
+            double lane_cos[SA_PWL_LANES], lane_sin[SA_PWL_LANES];
+            double wKT = wT * (double)SA_PWL_LANES;
+            double cos_wKT = cos(wKT);
+            double sin_wKT = sin(wKT);
+            int nseg = n_vtx - 1;
             int since_anchor = 0;
+            int base, m;
 
-            for (k = 0; k < n_vtx - 1; ++k)
+            for (m = 0; m < SA_PWL_LANES; ++m)
             {
-                double ak = (double)v[k];
-                double bk = ((double)v[k + 1] - ak) * inv_dt;
-                double x_re = ak * c0_re + bk * c1_re;
-                double x_im = ak * c0_im + bk * c1_im;
+                double tm = omega * (t0 + (double)m * dt0);
+                lane_cos[m] = cos(tm);
+                lane_sin[m] = sin(tm);
+                lane_gr[m] = 0.0;
+                lane_gi[m] = 0.0;
+            }
 
-                /* multiply by e^{-j omega tk} */
-                g_re += x_re * cos_ph + x_im * sin_ph;
-                g_im += x_im * cos_ph - x_re * sin_ph;
-
-                /* advance to t_{k+1} = t_k + dt0 */
-                if (++since_anchor >= SA_PWL_REANCHOR)
+            for (base = 0; base + SA_PWL_LANES <= nseg; base += SA_PWL_LANES)
+            {
+                for (m = 0; m < SA_PWL_LANES; ++m)
                 {
-                    double tt = omega * (t0 + (double)(k + 1) * dt0);
-                    cos_ph = cos(tt);
-                    sin_ph = sin(tt);
+                    int kk = base + m;
+                    double ak = (double)v[kk];
+                    double bk = ((double)v[kk + 1] - ak) * inv_dt;
+                    double x_re = ak * c0_re + bk * c1_re;
+                    double x_im = ak * c0_im + bk * c1_im;
+
+                    /* multiply by e^{-j omega tk} */
+                    lane_gr[m] += x_re * lane_cos[m] + x_im * lane_sin[m];
+                    lane_gi[m] += x_im * lane_cos[m] - x_re * lane_sin[m];
+                }
+
+                /* advance every lane one stride, to t + LANES*dt0. Re-anchored
+                 * on the same segment budget as the single chain was, so the
+                 * drift bound is unchanged: LANES lanes re-anchoring every
+                 * SA_PWL_REANCHOR/LANES strides is one exact sin/cos per
+                 * SA_PWL_REANCHOR segments either way. */
+                if (++since_anchor >= SA_PWL_REANCHOR / SA_PWL_LANES)
+                {
+                    for (m = 0; m < SA_PWL_LANES; ++m)
+                    {
+                        double tt = omega * (t0 + (double)(base + SA_PWL_LANES + m) * dt0);
+                        lane_cos[m] = cos(tt);
+                        lane_sin[m] = sin(tt);
+                    }
                     since_anchor = 0;
                 }
                 else
                 {
-                    double nc = cos_ph * cos_wT - sin_ph * sin_wT;
-                    double ns = sin_ph * cos_wT + cos_ph * sin_wT;
-                    cos_ph = nc;
-                    sin_ph = ns;
+                    for (m = 0; m < SA_PWL_LANES; ++m)
+                    {
+                        double nc = lane_cos[m] * cos_wKT - lane_sin[m] * sin_wKT;
+                        lane_sin[m] = lane_sin[m] * cos_wKT + lane_cos[m] * sin_wKT;
+                        lane_cos[m] = nc;
+                    }
                 }
+            }
+
+            /* Tail: fewer than LANES segments left, and lane m still holds the
+             * phase of segment base+m, so they are taken in lane order. */
+            for (k = base; k < nseg; ++k)
+            {
+                m = k - base;
+                {
+                    double ak = (double)v[k];
+                    double bk = ((double)v[k + 1] - ak) * inv_dt;
+                    double x_re = ak * c0_re + bk * c1_re;
+                    double x_im = ak * c0_im + bk * c1_im;
+                    lane_gr[m] += x_re * lane_cos[m] + x_im * lane_sin[m];
+                    lane_gi[m] += x_im * lane_cos[m] - x_re * lane_sin[m];
+                }
+            }
+
+            for (m = 0; m < SA_PWL_LANES; ++m)
+            {
+                g_re += lane_gr[m];
+                g_im += lane_gi[m];
             }
 
             *out_re = (float)g_re;
@@ -1336,6 +1411,362 @@ static void sa_eval_pwl_transform(
     *out_im = (float)g_im;
 }
 
+/* ================================================================== */
+/*  Tabulated base-waveform transform (chirp-z)                       */
+/* ================================================================== */
+/*
+ * sa_eval_pwl_transform() costs O(vertices) and is called once per gradient
+ * definition per evaluated frequency, so a definition of a few thousand
+ * samples dominates the whole gate -- and it does so no matter how short the
+ * scan is, because neither factor involves the block count.
+ *
+ * The frequencies it is asked for are not arbitrary. Within one forbidden
+ * band the candidates are consecutive TR harmonics, and each is probed at
+ * the same fixed set of offsets, so every evaluation sits at
+ * (k + offset) / T_TR with k running over an integer range. On that comb the
+ * uniform-raster transform reduces to one polynomial evaluated at points
+ * spaced evenly in angle:
+ *
+ *   W(w) = e^{-i w t0} [ A(w) (P - v[n-1] q^{n-1}) + B(w) q^{-1} (P - v[0]) ]
+ *
+ * with q = e^{-i w dt}, P(q) = sum_k v[k] q^k, and A, B the same segment
+ * integrals the direct loop forms (A = c0 - c1/dt, B = c1/dt). P is the only
+ * term that costs anything, and a chirp-z transform produces it at every
+ * candidate in the band at once -- O((n+m) log(n+m)) against the O(n*m) of
+ * asking one frequency at a time.
+ *
+ * This is a change of summation order, not of model: the same integral of
+ * the same sample interpolant, to the same double precision. It is worth
+ * doing only where the vertex count is large (SA_CZT_MIN_VERTICES); a
+ * trapezoid has four, and for those the direct loop is cheaper than the
+ * table, so they never take this path and their results are untouched.
+ */
+
+/** Below this many vertices the direct integral is cheaper than tabulating
+ *  it, and the tabulation is skipped. A trapezoid is four vertices, so no
+ *  sequence built from them ever reaches this path. */
+#define SA_CZT_MIN_VERTICES 64
+
+/** One definition's transform, tabulated over (offset, candidate). */
+typedef struct
+{
+    int def_id;
+    double *re; /* [num_offsets * num_points] */
+    double *im;
+} sa_w_series;
+
+/** The tabulated transforms for one axis over one forbidden band. */
+typedef struct
+{
+    int num_series;
+    sa_w_series *series;
+    int num_offsets;
+    int num_points;
+} sa_w_table;
+
+/** Where in a table to look: which offset from the harmonic, and which
+ *  candidate. Bundled rather than passed as three arguments because the
+ *  chain that carries it down to the transform is the hot path of the whole
+ *  gate, and three more registers on it cost more than the lookup saves on
+ *  a sequence that tabulates nothing. NULL means "no table". */
+typedef struct
+{
+    const sa_w_table *table;
+    int offset_slot;
+    int point;
+} sa_w_query;
+
+static void sa_w_table_free(sa_w_table *table)
+{
+    int i;
+    if (!table || !table->series)
+        return;
+    for (i = 0; i < table->num_series; ++i)
+    {
+        if (table->series[i].re)
+            PULSEG_FREE(table->series[i].re);
+        if (table->series[i].im)
+            PULSEG_FREE(table->series[i].im);
+    }
+    PULSEG_FREE(table->series);
+    table->series = NULL;
+    table->num_series = 0;
+}
+
+/** The tabulated value, or 0 if this definition is not in the table. */
+static int sa_w_table_lookup(const sa_w_query *q, int def_id, float *out_re, float *out_im)
+{
+    const sa_w_table *table = q->table;
+    int i;
+
+    if (q->offset_slot < 0 || q->point < 0)
+        return 0;
+    if (q->offset_slot >= table->num_offsets || q->point >= table->num_points)
+        return 0;
+    for (i = 0; i < table->num_series; ++i)
+    {
+        if (table->series[i].def_id == def_id)
+        {
+            int at = q->offset_slot * table->num_points + q->point;
+            *out_re = (float)table->series[i].re[at];
+            *out_im = (float)table->series[i].im[at];
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/** The vertices an event's transform is taken over, or NULL if it has none
+ *  on a uniform raster this can exploit. Mirrors the detection in
+ *  sa_eval_pwl_transform() exactly, including its tolerance. */
+static const float *sa_event_uniform_vertices(
+    const sa_event *ev,
+    const float **out_times,
+    int *out_n,
+    double *out_dt)
+{
+    const float *t_us;
+    const float *v;
+    int n, k;
+    double dt0, tol;
+
+    if (ev->arb_num_samples >= 2)
+    {
+        t_us = ev->arb_times_us;
+        v = ev->arb_samples;
+        n = ev->arb_num_samples;
+    }
+    else if (ev->pwl_num_vertices >= 2)
+    {
+        t_us = ev->pwl_times_us;
+        v = ev->pwl_values;
+        n = ev->pwl_num_vertices;
+    }
+    else
+    {
+        return NULL;
+    }
+
+    if (n < SA_CZT_MIN_VERTICES)
+        return NULL;
+
+    dt0 = (double)(t_us[1] - t_us[0]);
+    if (dt0 <= 1.0e-12)
+        return NULL;
+    tol = 1.0e-4 * fabs(dt0) + 1.0e-6 * fabs((double)t_us[n - 1]);
+    for (k = 1; k < n - 1; ++k)
+    {
+        double d = (double)(t_us[k + 1] - t_us[k]);
+        if (fabs(d - dt0) > tol)
+            return NULL;
+    }
+
+    *out_times = t_us;
+    *out_n = n;
+    *out_dt = dt0;
+    return v;
+}
+
+/** P(q) -> W(w), the rest of the segment integral, for one frequency. */
+static void sa_w_from_poly(
+    double *out_re,
+    double *out_im,
+    double p_re,
+    double p_im,
+    double omega,
+    double dt0,
+    double t0,
+    double v_first,
+    double v_last,
+    int n)
+{
+    double wT = omega * dt0;
+    double cos_wT = cos(wT);
+    double sin_wT = sin(wT);
+    double c0_re = sin_wT / omega;
+    double c0_im = (cos_wT - 1.0) / omega;
+    double I0mT_re = c0_re - dt0 * cos_wT;
+    double I0mT_im = c0_im + dt0 * sin_wT;
+    double c1_re = I0mT_im / omega;
+    double c1_im = -I0mT_re / omega;
+    double inv_dt = 1.0 / dt0;
+    double a_re = c0_re - c1_re * inv_dt;
+    double a_im = c0_im - c1_im * inv_dt;
+    double b_re = c1_re * inv_dt;
+    double b_im = c1_im * inv_dt;
+    /* q = e^{-i w dt}; the sums run to n-2, so the first and last samples
+     * are corrected off the full polynomial. */
+    double theta = -omega * dt0;
+    double qn_re = cos(theta * (double)(n - 1));
+    double qn_im = sin(theta * (double)(n - 1));
+    double qi_re = cos(-theta);
+    double qi_im = sin(-theta);
+    double s0_re = p_re - v_last * qn_re;
+    double s0_im = p_im - v_last * qn_im;
+    double t_re = p_re - v_first;
+    double t_im = p_im;
+    double s1_re = t_re * qi_re - t_im * qi_im;
+    double s1_im = t_re * qi_im + t_im * qi_re;
+    double g_re = a_re * s0_re - a_im * s0_im + b_re * s1_re - b_im * s1_im;
+    double g_im = a_re * s0_im + a_im * s0_re + b_re * s1_im + b_im * s1_re;
+    double ph = -omega * t0;
+    double cp = cos(ph);
+    double sp = sin(ph);
+
+    *out_re = g_re * cp - g_im * sp;
+    *out_im = g_re * sp + g_im * cp;
+}
+
+/** Total offsets a candidate is probed at: the exact harmonic, plus the
+ *  sidelobe probes on either side of it. */
+#define SA_MAX_OFFSETS (1 + SA_MECHRES_MAX_DM_SUBDIV)
+
+/** The offsets from a candidate harmonic that the loop below evaluates, in
+ *  the order it evaluates them -- slot 0 the harmonic itself, then
+ *  side 0 outward, then side 1. Kept here so the table is built over exactly
+ *  the frequencies that will be asked for; the arithmetic mirrors the
+ *  sub-point loop and must move with it. */
+static void sa_build_offsets(double *offsets, int *num_offsets, int num_instances)
+{
+    int npts_per_side = SA_MECHRES_MAX_DM_SUBDIV / 2;
+    int side, p, at;
+
+    offsets[0] = 0.0;
+    if (num_instances <= 1)
+    {
+        *num_offsets = 1;
+        return;
+    }
+    at = 1;
+    for (side = 0; side < 2; ++side)
+    {
+        for (p = 0; p < npts_per_side; ++p)
+        {
+            double delta = (0.5 / (double)num_instances) * pow(2.0, (double)p);
+            if (delta >= 0.5)
+                delta = 0.5 - 1e-6;
+            offsets[at++] = (side == 0) ? delta : (1.0 - delta);
+        }
+    }
+    *num_offsets = at;
+}
+
+/** Tabulate every wide definition on one axis over one band of candidates.
+ *
+ * Failure is not an error: the table is an accelerator, so a definition that
+ * cannot be tabulated (ragged raster, too few vertices, no memory) is simply
+ * left out and its transform is taken the direct way, as before. */
+static int sa_build_w_table(
+    sa_w_table *table,
+    const sa_axis_events *ae,
+    int klo,
+    int num_points,
+    const double *offsets,
+    int num_offsets,
+    double f1_hz)
+{
+    int k, i, o, j;
+    int capacity;
+
+    memset(table, 0, sizeof(*table));
+    if (!ae || ae->num_events == 0 || num_points < 1)
+        return PULSEG_SUCCESS;
+
+    capacity = ae->num_events;
+    table->series = (sa_w_series *)PULSEG_ALLOC((size_t)capacity * sizeof(sa_w_series));
+    if (!table->series)
+        return PULSEG_SUCCESS;
+    memset(table->series, 0, (size_t)capacity * sizeof(sa_w_series));
+    table->num_offsets = num_offsets;
+    table->num_points = num_points;
+
+    for (k = 0; k < ae->num_events; ++k)
+    {
+        const sa_event *ev = &ae->events[k];
+        const float *t_us = NULL;
+        const float *v;
+        int n = 0;
+        double dt0 = 0.0;
+        double dtheta;
+        pulseg__czt_plan *plan = NULL;
+        double *pr = NULL, *pi = NULL;
+        int already = 0;
+
+        for (i = 0; i < table->num_series; ++i)
+            if (table->series[i].def_id == ev->def_id)
+                already = 1;
+        if (already)
+            continue;
+
+        v = sa_event_uniform_vertices(ev, &t_us, &n, &dt0);
+        if (!v)
+            continue;
+
+        /* q advances by this much between adjacent candidates, whatever the
+         * offset -- which is why one plan serves every offset. */
+        dtheta = -2.0 * M_PI * f1_hz * 1.0e-6 * dt0;
+        if (PULSEG_FAILED(pulseg__czt_plan_create(&plan, n, num_points, dtheta)))
+            continue;
+
+        pr = (double *)PULSEG_ALLOC((size_t)num_points * sizeof(double));
+        pi = (double *)PULSEG_ALLOC((size_t)num_points * sizeof(double));
+        table->series[table->num_series].re =
+            (double *)PULSEG_ALLOC((size_t)num_offsets * num_points * sizeof(double));
+        table->series[table->num_series].im =
+            (double *)PULSEG_ALLOC((size_t)num_offsets * num_points * sizeof(double));
+        if (!pr || !pi || !table->series[table->num_series].re ||
+            !table->series[table->num_series].im)
+        {
+            if (pr)
+                PULSEG_FREE(pr);
+            if (pi)
+                PULSEG_FREE(pi);
+            if (table->series[table->num_series].re)
+                PULSEG_FREE(table->series[table->num_series].re);
+            if (table->series[table->num_series].im)
+                PULSEG_FREE(table->series[table->num_series].im);
+            table->series[table->num_series].re = NULL;
+            table->series[table->num_series].im = NULL;
+            pulseg__czt_plan_free(plan);
+            continue;
+        }
+
+        for (o = 0; o < num_offsets; ++o)
+        {
+            double theta0 = -2.0 * M_PI * ((double)klo + offsets[o]) * f1_hz * 1.0e-6 * dt0;
+            pulseg__czt_plan_apply(plan, pr, pi, v, theta0);
+            for (j = 0; j < num_points; ++j)
+            {
+                double f_hz = ((double)(klo + j) + offsets[o]) * f1_hz;
+                double omega = 2.0 * M_PI * f_hz * 1.0e-6;
+                double w_re, w_im;
+                sa_w_from_poly(
+                    &w_re,
+                    &w_im,
+                    pr[j],
+                    pi[j],
+                    omega,
+                    dt0,
+                    (double)t_us[0],
+                    (double)v[0],
+                    (double)v[n - 1],
+                    n);
+                table->series[table->num_series].re[o * num_points + j] = w_re;
+                table->series[table->num_series].im[o * num_points + j] = w_im;
+            }
+        }
+
+        table->series[table->num_series].def_id = ev->def_id;
+        table->num_series++;
+
+        PULSEG_FREE(pr);
+        PULSEG_FREE(pi);
+        pulseg__czt_plan_free(plan);
+    }
+
+    return PULSEG_SUCCESS;
+}
+
 /**
  * True complex transform of one event's base waveform at frequency f (no
  * amplitude scaling, no start-time phase — the caller adds those):
@@ -1349,8 +1780,21 @@ static void sa_eval_event_transform(
     float *out_re,
     float *out_im,
     float f_hz,
-    sa_transform_cache *cache)
+    sa_transform_cache *cache,
+    const sa_w_query *query)
 {
+    /* The table, when there is one, already holds this definition's
+     * transform at this exact frequency -- see the note above it. It is
+     * consulted before the per-frequency memo because it is the cheaper of
+     * the two and covers whole bands rather than a single frequency.
+     *
+     * The null test is deliberately here rather than inside the lookup: a
+     * sequence whose definitions are all narrow tabulates nothing, and then
+     * this must cost one predictable branch on a path taken hundreds of
+     * thousands of times, not a call. */
+    if (query && sa_w_table_lookup(query, ev->def_id, out_re, out_im))
+        return;
+
     if (sa_transform_cache_lookup(cache, out_re, out_im, ev->def_id))
         return;
 
@@ -1429,13 +1873,14 @@ static void sa_eval_event_spectrum(
     float *out_re,
     float *out_im,
     float f_hz,
-    sa_transform_cache *cache)
+    sa_transform_cache *cache,
+    const sa_w_query *query)
 {
     float tr_re, tr_im;
     double sum_re, sum_im, base_re, base_im;
     double phase, cos_ph, sin_ph;
 
-    sa_eval_event_transform(ev, &tr_re, &tr_im, f_hz, cache);
+    sa_eval_event_transform(ev, &tr_re, &tr_im, f_hz, cache, query);
 
     /* sum_{j<L} A_j z^j -- the amplitude-weighted train sum, still relative
      * to the train's own start time. */
@@ -1444,17 +1889,74 @@ static void sa_eval_event_spectrum(
         double phi = -2.0 * M_PI * (double)f_hz * ev->train_period_us * 1.0e-6;
         if (ev->train_amps)
         {
+            /* Horner over the train, split into SA_HORNER_LANES independent
+             * chains: P(z) = sum_m z^m * P_m(z^L), P_m collecting the terms
+             * with j = m (mod LANES). One chain is a serial dependency of
+             * complex multiply-adds, so a plain Horner runs at the latency of
+             * that chain (~4 cycles/term) no matter how much arithmetic the
+             * core could retire; interleaved chains fill it. A train fused by
+             * sa_compress_axis_events() out of a long run of equally spaced
+             * occurrences is one event of as many terms as the run was long,
+             * re-evaluated at every candidate frequency, so this is where the
+             * gate's cost sits when the amplitudes vary per occurrence; lanes
+             * buy back most of the stall.
+             *
+             * Reassociation only: the terms and their coefficients are
+             * unchanged, and the sum is carried in double throughout, so this
+             * moves results by last-bit rounding at most. */
             double zr = cos(phi);
             double zi = sin(phi);
-            int j;
-            sum_re = (double)ev->train_amps[ev->train_len - 1];
-            sum_im = 0.0;
-            for (j = ev->train_len - 2; j >= 0; --j)
+            double lane_re[SA_HORNER_LANES], lane_im[SA_HORNER_LANES];
+            double zlr, zli, npr;
+            const float *amps = ev->train_amps;
+            int L = ev->train_len;
+            int m, q, nq, base;
+
+            /* z^LANES, by repeated squaring (LANES is a power of two). */
+            zlr = zr;
+            zli = zi;
+            for (m = 1; m < SA_HORNER_LANES; m <<= 1)
             {
-                double nr = sum_re * zr - sum_im * zi + (double)ev->train_amps[j];
-                double ni = sum_re * zi + sum_im * zr;
-                sum_re = nr;
-                sum_im = ni;
+                double t = zlr * zlr - zli * zli;
+                zli = 2.0 * zlr * zli;
+                zlr = t;
+            }
+
+            /* Leading group. The polynomial is padded up to a whole number of
+             * groups with zero coefficients, which a Horner chain started at
+             * zero absorbs exactly -- so the loop below needs no bounds test. */
+            nq = (L + SA_HORNER_LANES - 1) / SA_HORNER_LANES;
+            base = (nq - 1) * SA_HORNER_LANES;
+            for (m = 0; m < SA_HORNER_LANES; ++m)
+            {
+                lane_re[m] = (base + m < L) ? (double)amps[base + m] : 0.0;
+                lane_im[m] = 0.0;
+            }
+
+            /* All lanes advance together: the LANES chains are independent, so
+             * their multiply-adds interleave in the pipeline instead of each
+             * waiting on the one before it. Running the lanes one after another
+             * would be the same instruction count and exactly as slow as the
+             * single chain it replaced. */
+            for (q = nq - 2; q >= 0; --q)
+            {
+                base = q * SA_HORNER_LANES;
+                for (m = 0; m < SA_HORNER_LANES; ++m)
+                {
+                    double nr = lane_re[m] * zlr - lane_im[m] * zli + (double)amps[base + m];
+                    lane_im[m] = lane_re[m] * zli + lane_im[m] * zlr;
+                    lane_re[m] = nr;
+                }
+            }
+
+            /* recombine: sum_m z^m * P_m, Horner again over the LANES lanes. */
+            sum_re = lane_re[SA_HORNER_LANES - 1];
+            sum_im = lane_im[SA_HORNER_LANES - 1];
+            for (m = SA_HORNER_LANES - 2; m >= 0; --m)
+            {
+                npr = sum_re * zr - sum_im * zi + lane_re[m];
+                sum_im = sum_re * zi + sum_im * zr + lane_im[m];
+                sum_re = npr;
             }
         }
         else
@@ -1500,14 +2002,15 @@ static void sa_eval_event_line(
     float *out_re,
     float *out_im,
     float f_hz,
-    sa_transform_cache *cache)
+    sa_transform_cache *cache,
+    const sa_w_query *query)
 {
     float d_re, d_im;
     int N = ev->num_reps;
     if (N < 1)
         N = 1;
 
-    sa_eval_event_spectrum(ev, &d_re, &d_im, f_hz, cache);
+    sa_eval_event_spectrum(ev, &d_re, &d_im, f_hz, cache, query);
 
     if (N > 1 && ev->rep_period_us > 0.0)
     {
@@ -1537,7 +2040,8 @@ static void sa_eval_axis_spectrum(
     const sa_axis_events *ae,
     float *out_re,
     float *out_im,
-    float f_hz)
+    float f_hz,
+    const sa_w_query *query)
 {
     /* double: the per-axis sum is a coherent sum of many oppositely-signed
      * contributions, so it routinely lands deep in cancellation. A float
@@ -1577,7 +2081,7 @@ static void sa_eval_axis_spectrum(
     for (k = 0; k < ae->num_events; ++k)
     {
         float d_re, d_im;
-        sa_eval_event_line(&ae->events[k], &d_re, &d_im, f_hz, &cache);
+        sa_eval_event_line(&ae->events[k], &d_re, &d_im, f_hz, &cache, query);
         sum_re += (double)d_re;
         sum_im += (double)d_im;
     }
@@ -1712,6 +2216,14 @@ static int sa_check_structural_violations(
     float *env_freqs;
     float *env_amps[3];
 
+    /* Tabulated base-waveform transforms, rebuilt per band. Empty unless a
+     * definition is wide enough to be worth it. */
+    sa_w_table w_tables[3];
+    sa_w_query coarse_query;
+    sa_w_query sub_query;
+    double offsets[SA_MAX_OFFSETS];
+    int num_offsets = 1;
+
     (void)peak_log10_threshold;
     (void)peak_norm_scale;
     (void)peak_eps;
@@ -1741,6 +2253,7 @@ static int sa_check_structural_violations(
     env_freqs = NULL;
     for (ax = 0; ax < 3; ++ax)
     {
+        memset(&w_tables[ax], 0, sizeof(w_tables[ax]));
         ana_amps[ax] = NULL;
         ana_phases[ax] = NULL;
         env_amps[ax] = NULL;
@@ -1921,7 +2434,7 @@ static int sa_check_structural_violations(
                     ana_phases[ax][i] = 0.0f;
                     continue;
                 }
-                sa_eval_axis_spectrum(&se.axes[ax], &sre, &sim, f_hz);
+                sa_eval_axis_spectrum(&se.axes[ax], &sre, &sim, f_hz, NULL);
                 ana_amps[ax][i] = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)));
                 ana_phases[ax][i] = (float)atan2((double)sim, (double)sre);
             }
@@ -1964,7 +2477,7 @@ static int sa_check_structural_violations(
                     env_amps[ax][i] = 0.0f;
                     continue;
                 }
-                sa_eval_axis_spectrum(&se.axes[ax], &sre, &sim, f_hz);
+                sa_eval_axis_spectrum(&se.axes[ax], &sre, &sim, f_hz, NULL);
                 env_amps[ax][i] = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)));
             }
         }
@@ -2048,9 +2561,30 @@ static int sa_check_structural_violations(
                 fwhm = 1.2067091288032284f * ((float)f1_hz / (float)num_instances);
             else
                 fwhm = (float)f1_hz;
+
+            /* Tabulate the wide definitions over this band before walking it.
+             * Nothing below changes behaviour: an axis with no such
+             * definition gets an empty table and every lookup misses, which
+             * is the direct path unchanged. */
+            sa_build_offsets(offsets, &num_offsets, num_instances);
+            for (ax = 0; ax < 3; ++ax)
+            {
+                sa_w_table_free(&w_tables[ax]);
+                if (khi >= klo)
+                    (void)sa_build_w_table(
+                        &w_tables[ax],
+                        &se.axes[ax],
+                        klo,
+                        khi - klo + 1,
+                        offsets,
+                        num_offsets,
+                        f1_hz);
+            }
+
             for (kk = klo; kk <= khi; ++kk)
             {
                 float f_hz = (float)((double)kk * f1_hz);
+                int point = kk - klo;
                 float max_ga = 0.0f;
                 cand_freqs[ci] = f_hz;
                 surviving_freqs_hz[ci] = f_hz;
@@ -2063,7 +2597,15 @@ static int sa_check_structural_violations(
                         cand_grad_amps_ax[ax][ci] = 0.0f;
                         continue;
                     }
-                    sa_eval_axis_spectrum(&se.axes[ax], &sre, &sim, f_hz);
+                    coarse_query.table = &w_tables[ax];
+                    coarse_query.offset_slot = 0;
+                    coarse_query.point = point;
+                    sa_eval_axis_spectrum(
+                        &se.axes[ax],
+                        &sre,
+                        &sim,
+                        f_hz,
+                        w_tables[ax].num_series ? &coarse_query : NULL);
                     aeq = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)));
                     cand_amps[ax][ci] = aeq;
                     cand_grad_amps_ax[ax][ci] = aeq;
@@ -2075,7 +2617,7 @@ static int sa_check_structural_violations(
                         float lre, lim;
                         if (num_component_terms >= max_component_terms)
                             break;
-                        sa_eval_event_line(&se.axes[ax].events[k], &lre, &lim, f_hz, NULL);
+                        sa_eval_event_line(&se.axes[ax].events[k], &lre, &lim, f_hz, NULL, NULL);
                         component_freqs_hz[num_component_terms] = f_hz;
                         component_amps[num_component_terms] =
                             (float)(2.0 / T_s * sqrt((double)(lre * lre + lim * lim)));
@@ -2154,7 +2696,15 @@ static int sa_check_structural_violations(
                                 float sre, sim, aeq_sub;
                                 if (se.axes[ax].num_events == 0)
                                     continue;
-                                sa_eval_axis_spectrum(&se.axes[ax], &sre, &sim, f_sub_hz);
+                                sub_query.table = &w_tables[ax];
+                                sub_query.offset_slot = 1 + side * npts_per_side + p;
+                                sub_query.point = point;
+                                sa_eval_axis_spectrum(
+                                    &se.axes[ax],
+                                    &sre,
+                                    &sim,
+                                    f_sub_hz,
+                                    w_tables[ax].num_series ? &sub_query : NULL);
                                 aeq_sub =
                                     (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)) * ratio);
                                 if (aeq_sub > max_ga)
@@ -2243,6 +2793,8 @@ static int sa_check_structural_violations(
     spectra->envelope_amp_gz = env_amps[2];
     env_amps[2] = NULL;
 
+    for (ax = 0; ax < 3; ++ax)
+        sa_w_table_free(&w_tables[ax]);
     sa_free_structural_events(&se);
     return PULSEG_SUCCESS;
 
@@ -2290,6 +2842,8 @@ alloc_fail:
         PULSEG_FREE(component_contrib_ids);
     if (component_run_ids)
         PULSEG_FREE(component_run_ids);
+    for (ax = 0; ax < 3; ++ax)
+        sa_w_table_free(&w_tables[ax]);
     sa_free_structural_events(&se);
     return PULSEG_ERR_ALLOC_FAILED;
 }

@@ -1810,6 +1810,13 @@ def _fill_library(library, table, types=None) -> None:
     library.next_free_ID = len(rows) + 1
     if types is not None:
         library.type = dict(enumerate(types, start=1))
+    # The array these rows came from, kept beside the dict rather than instead
+    # of it: `data` is what Pulseq reads and nothing here changes that, but a
+    # writer that wants the whole library as one buffer would otherwise rebuild
+    # this array out of the dict it was just unpacked into. Only meaningful for
+    # the libraries a scan can make as long as itself; see
+    # `binary._fixed_records`.
+    library.rows_array = None if isinstance(table, list) else table
 
 
 def _no_slot(cursor: int, at: int, what: str) -> None:
