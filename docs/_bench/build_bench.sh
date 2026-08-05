@@ -8,14 +8,18 @@ set -euo pipefail
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$BENCH_DIR/../.." && pwd)"
-BUILD_DIR="$REPO_ROOT/tests/ctests/build"
+# Dedicated build dir. This used to share tests/ctests/build, but
+# scripts/build_ctests.sh configures that dir as Debug -- so any bench run
+# after a test run silently measured Debug libraries (parse and safety both
+# read ~1.5-2x slower, peak RSS ~30% higher) while still reporting itself as
+# the timing binary. Owning the dir keeps the build type under our control.
+BUILD_DIR="$REPO_ROOT/tests/ctests/build-bench"
 LIB_DIR="$BUILD_DIR/csrc_build"
 
-if [ ! -f "$LIB_DIR/libpulseg.a" ] || [ "${1:-}" = "--rebuild-libs" ]; then
-    echo "Building libpulseg/libpulseq..."
-    cmake -S "$REPO_ROOT/tests/ctests" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
-    cmake --build "$BUILD_DIR" --target pulseg pulseq -j"$(nproc)" >/dev/null
-fi
+# Configure every time: cheap when the cache is already Release, and it is the
+# only thing standing between a stale build type and a wrong benchmark.
+cmake -S "$REPO_ROOT/tests/ctests" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
+cmake --build "$BUILD_DIR" --target pulseg pulseq -j"$(nproc)" >/dev/null
 
 # --wrap routes every allocation the static libraries make through
 # bench_alloc.c, so the reported heap is what the process really holds rather

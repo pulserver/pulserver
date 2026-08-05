@@ -48,12 +48,41 @@ extern "C"
     /* ============================================================== */
 
     /**
-     * @brief Parse a .seq file from disk into a raw pulseq model.
+     * @brief Parse a Pulseq sequence file from disk into a raw pulseq model.
+     *
+     * Dispatches on content, not on file name: a file opening with the
+     * binary magic (0x01 "pulseq" 0x02) is read by the binary reader, and
+     * anything else is read as text.  Callers do not need to know which.
+     *
      * @param[out] seq        Must have been pulseq_file_init'd.
-     * @param[in]  file_path  Path to the .seq file.
+     * @param[in]  file_path  Path to the .seq (text) or .bin (binary) file.
      * @return PULSEQ_SUCCESS on success, negative PULSEQ_ERR_* on failure.
      */
     int pulseq_read(pulseq_file *seq, const char *file_path);
+
+    /**
+     * @brief Does @p file_path start with the Pulseq binary magic?
+     * @return 1 for a binary file, 0 for text / unreadable.
+     */
+    int pulseq_file_is_binary(const char *file_path);
+
+    /**
+     * @brief Parse a *binary* Pulseq file, bypassing content detection.
+     *
+     * The upstream binary format (see writeBinary.m / readBinary.m).  Both
+     * byte orders are read; the header is self-describing enough to tell
+     * which.  Produces exactly the pulseq_file the text reader produces, in
+     * the same units -- but not necessarily bit-identical floats, since the
+     * binary format carries float64 amplitudes and picosecond times where
+     * the text format carries decimal-rounded values.
+     */
+    int pulseq_read_binary(pulseq_file *seq, const char *file_path);
+
+    /** @brief Binary counterpart of pulseq_read_from_buffer(). */
+    int pulseq_read_binary_from_buffer(pulseq_file *seq, FILE *f);
+
+    /** @brief Binary counterpart of pulseq_read_definitions_only(). */
+    int pulseq_read_binary_definitions_only(pulseq_file *seq, const char *file_path);
 
     /**
      * @brief Parse a .seq file already open on a FILE* (e.g. a tmpfile()
@@ -76,10 +105,14 @@ extern "C"
     int pulseq_verify_signature(const char *file_path);
 
     /**
-     * @brief Parse only the [DEFINITIONS] section of a .seq file.
+     * @brief Parse only the definitions of a Pulseq sequence file.
      *
      * Enough to read TotalDuration, the rasters, and the "next sequence"
-     * chain link without decoding any library.  Free with pulseq_file_free().
+     * chain link without decoding any library -- this is what backs
+     * pulseg_peek_scan_time() and the chain walk.  Dispatches on content
+     * exactly as pulseq_read() does, so it is equally cheap on a binary
+     * file: definitions are the first section, and the reader stops as soon
+     * as it has them.  Free with pulseq_file_free().
      */
     int pulseq_read_definitions_only(pulseq_file *seq, const char *file_path);
 

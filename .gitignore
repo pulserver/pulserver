@@ -1,6 +1,7 @@
 *.npy
 *.so
 build/
+build-bench/
 dist/
 3p/
 *.egg-info/
@@ -40,3 +41,4 @@ docs/_bench/work/
 docs/_bench/results.json
 docs/_bench/safety.json
 fastseq/*.pge
+fastseq/*.pseg

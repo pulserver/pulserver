@@ -564,6 +564,15 @@ class Sequence:
         """Write a Pulseq 1.5.1 file. See `fastseq.sequence.write`."""
         return write(self, path, **kwargs)
 
+    def write_binary(self, path=None, **kwargs):
+        """Write the same sequence in Pulseq's binary format.
+
+        See `fastseq.binary.write_binary`. Upstream names these files `.bin`.
+        """
+        from .binary import write_binary as _write_binary
+
+        return _write_binary(self, path, **kwargs)
+
     @classmethod
     def read(cls, source, system=None) -> 'Sequence':
         """Read a `.seq` file, 1.5.0 or 1.5.1. See `fastseq.sequence.read`."""
@@ -670,6 +679,26 @@ def _label_string(number: int) -> str:
     return LABEL_NAME.get(int(number), f'CUSTOM_{int(number)}')
 
 
+def required_revision(plain, has_rotations: bool, has_shims: bool) -> int:
+    """The Pulseq 1.5.x revision this sequence actually needs.
+
+    Rotations and RF shims are 1.5.1; a label outside Pulseq's built-in set is
+    1.5.2. Shared by both writers, so a sequence does not claim one revision
+    as text and another as binary.
+    """
+    label_numbers = {
+        int(data[1])
+        for library in (plain.label_set_library, plain.label_inc_library)
+        for data in library.data.values()
+    }
+    revision = int(plain.version_revision)
+    if any(number > len(_BUILTIN_LABELS) for number in label_numbers):
+        return max(revision, 2)
+    if has_rotations or has_shims:
+        return max(revision, 1)
+    return revision
+
+
 def write(seq, output=None, *, create_signature: bool = False, check_timing: bool = False):
     """Write a sequence as a Pulseq file, at the revision it actually needs.
 
@@ -710,18 +739,7 @@ def write(seq, output=None, *, create_signature: bool = False, check_timing: boo
 
     has_rotations = rotations is not None and len(rotations.data) != 0
     has_shims = shims is not None and len(shims.data) != 0
-    label_numbers = {
-        int(data[1])
-        for library in (plain.label_set_library, plain.label_inc_library)
-        for data in library.data.values()
-    }
-    has_custom_labels = any(number > len(_BUILTIN_LABELS) for number in label_numbers)
-
-    revision = int(plain.version_revision)
-    if has_custom_labels:
-        revision = max(revision, 2)
-    elif has_rotations or has_shims:
-        revision = max(revision, 1)
+    revision = required_revision(plain, has_rotations, has_shims)
 
     # Text as it is written, except for the two sections rendered wholesale,
     # which arrive as bytes already. Everything is joined as bytes at the end:

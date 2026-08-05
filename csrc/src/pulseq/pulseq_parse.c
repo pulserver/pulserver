@@ -29,6 +29,114 @@
     } while (0)
 
 /* ================================================================== */
+/*  Numeric field scanning (static)                                   */
+/* ================================================================== */
+
+/*
+ * The library sections are the whole cost of reading a large .seq: a
+ * two-million-block scan is two million [BLOCKS] rows of seven fields each,
+ * plus one [EXTENSIONS] row per labelled block.  Every one of those fields
+ * used to go through sscanf, which re-parses its format string and consults
+ * the locale on each call; that alone was six sevenths of the parse.
+ *
+ * These two scanners read a field and advance the cursor past it, and are
+ * the only thing the hot loops call.
+ */
+
+/** Read a decimal integer. Sets *ok to 0 (leaving the cursor put) if the
+ *  cursor is not on one. */
+static long scan_long(char **cursor, int *ok)
+{
+    char *p = *cursor;
+    long value = 0;
+    int negative = 0;
+    int digits = 0;
+
+    while (*p == ' ' || *p == '\t')
+        p++;
+    if (*p == '-')
+    {
+        negative = 1;
+        p++;
+    }
+    else if (*p == '+')
+        p++;
+    while (*p >= '0' && *p <= '9')
+    {
+        value = value * 10 + (*p - '0');
+        p++;
+        digits++;
+    }
+    if (digits == 0)
+    {
+        *ok = 0;
+        return 0;
+    }
+    *cursor = p;
+    *ok = 1;
+    return negative ? -value : value;
+}
+
+/*
+ * Read a float.
+ *
+ * Whole numbers -- which is every field of [BLOCKS], of [EXTENSIONS] and of the
+ * label libraries, so all of the hot ones -- are accumulated as an integer and
+ * converted. That conversion rounds to nearest, which for a value the decimal
+ * names exactly is the same float sscanf produced, so the fast path is
+ * bit-identical by construction rather than by measurement.
+ *
+ * Everything else -- a fraction, an exponent, a special form, or a run of
+ * digits long enough to overflow the accumulator -- goes to sscanf, the same
+ * call the reader has always made. Keeping the fallback on sscanf rather than
+ * on strtod is deliberate: strtod would round the decimal to a double and then
+ * to a float, and double rounding is not always the same answer. Shape samples
+ * are the only fields that reach it in practice.
+ */
+static float scan_float(char **cursor, int *ok)
+{
+    char *p = *cursor;
+    char *start;
+    long value = 0;
+    int negative = 0;
+    int digits = 0;
+    int consumed = 0;
+    float parsed;
+
+    while (*p == ' ' || *p == '\t')
+        p++;
+    start = p;
+    if (*p == '-')
+    {
+        negative = 1;
+        p++;
+    }
+    else if (*p == '+')
+        p++;
+    while (*p >= '0' && *p <= '9')
+    {
+        value = value * 10 + (*p - '0');
+        p++;
+        digits++;
+    }
+    if (digits > 0 && digits <= 18 && *p != '.' && *p != 'e' && *p != 'E')
+    {
+        *cursor = p;
+        *ok = 1;
+        return negative ? -(float)value : (float)value;
+    }
+
+    if (sscanf(start, "%f%n", &parsed, &consumed) != 1)
+    {
+        *ok = 0;
+        return 0.0f;
+    }
+    *cursor = start + consumed;
+    *ok = 1;
+    return parsed;
+}
+
+/* ================================================================== */
 /*  Path helpers (static)                                             */
 /* ================================================================== */
 
@@ -162,7 +270,9 @@ void pulseq_file_init(pulseq_file *seq, const pulseq_raster *raster)
     seq_file_set_defaults(seq);
 }
 
-static void seq_file_reset(pulseq_file *seq)
+/* Not static: the binary reader resets the same way, both on entry and when
+ * a partially built file has to be thrown away. */
+void pulseq__file_reset(pulseq_file *seq)
 {
     int i, j;
     if (!seq)
@@ -227,7 +337,7 @@ void pulseq_file_free(pulseq_file *seq)
 {
     if (!seq)
         return;
-    seq_file_reset(seq);
+    pulseq__file_reset(seq);
     if (seq->file_path)
     {
         PULSEQ_FREE(seq->file_path);
@@ -245,7 +355,7 @@ void pulseq_file_set_free(pulseq_file_set *coll)
     {
         for (i = 0; i < coll->num_sequences; ++i)
         {
-            seq_file_reset(&coll->sequences[i]);
+            pulseq__file_reset(&coll->sequences[i]);
             if (coll->sequences[i].file_path)
             {
                 PULSEQ_FREE(coll->sequences[i].file_path);
@@ -275,7 +385,7 @@ static int init_standard_library(
 {
     char line[PULSEQ_MAX_LINE_LENGTH];
     int max_idx = -1;
-    int sec, idx, i;
+    int sec, idx, i, ok;
     char *p;
     float *arr;
 
@@ -298,7 +408,8 @@ static int init_standard_library(
                 break;
             if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#')
                 continue;
-            if (sscanf(p, "%d", &idx) == 1 && idx > max_idx)
+            idx = (int)scan_long(&p, &ok);
+            if (ok && idx > max_idx)
                 max_idx = idx;
         }
     }
@@ -367,7 +478,7 @@ static int init_shapes_library(pulseq_shape **target, int *target_count, FILE *f
 {
     char line[PULSEQ_MAX_LINE_LENGTH];
     int max_idx = -1;
-    int n, i, j, idx = 0;
+    int n, i, j, idx = 0, ok;
     char *p;
     pulseq_shape *shapes;
 
@@ -390,7 +501,9 @@ static int init_shapes_library(pulseq_shape **target, int *target_count, FILE *f
             continue;
         if (strncmp(p, "shape_id", 8) == 0)
         {
-            if (sscanf(p + 8, "%d", &idx) == 1 && idx > max_idx)
+            p += 8;
+            idx = (int)scan_long(&p, &ok);
+            if (ok && idx > max_idx)
                 max_idx = idx;
         }
     }
@@ -431,7 +544,9 @@ static int init_shapes_library(pulseq_shape **target, int *target_count, FILE *f
             continue;
         if (strncmp(p, "shape_id", 8) == 0)
         {
-            if (sscanf(p + 8, "%d", &idx) == 1)
+            p += 8;
+            idx = (int)scan_long(&p, &ok);
+            if (ok)
             {
                 shapes[idx - 1].num_samples = 0;
                 shapes[idx - 1].num_uncompressed_samples = 0;
@@ -440,7 +555,9 @@ static int init_shapes_library(pulseq_shape **target, int *target_count, FILE *f
         }
         else if (strncmp(p, "num_samples", 11) == 0)
         {
-            if (sscanf(p + 11, "%d", &n) == 1)
+            p += 11;
+            n = (int)scan_long(&p, &ok);
+            if (ok)
                 shapes[idx - 1].num_uncompressed_samples = n;
         }
         else
@@ -534,7 +651,7 @@ static int read_standard_library(
     int flag)
 {
     char line[PULSEQ_MAX_LINE_LENGTH];
-    int idx, parsed, consumed, col, offset_col;
+    int idx, parsed, col, offset_col, ok;
     float vals[PULSEQ_MAX_SCALE_SIZE];
     char *scan_ptr;
     char *p;
@@ -559,7 +676,8 @@ static int read_standard_library(
             break;
         if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#')
             continue;
-        if (sscanf(p, "%d", &idx) != 1)
+        idx = (int)scan_long(&p, &ok);
+        if (!ok)
             continue;
         if (idx <= 0 || idx > target_count)
             continue;
@@ -573,11 +691,10 @@ static int read_standard_library(
         scan_ptr = p;
         for (col = 0; col < scale.size; col++)
         {
-            consumed = 0;
-            if (sscanf(scan_ptr, "%f%n", &v, &consumed) != 1)
+            v = scan_float(&scan_ptr, &ok);
+            if (!ok)
                 break;
             vals[col] = v;
-            scan_ptr += consumed;
             while (*scan_ptr == ' ' || *scan_ptr == '\t')
                 scan_ptr++;
             parsed++;
@@ -594,7 +711,15 @@ static int read_standard_library(
     return 0;
 }
 
-static void get_section_offsets(pulseq_file *seq, FILE *f)
+/*
+ * Scan the file for its section headers.
+ *
+ * `definitions_only` stops the scan once [DEFINITIONS] has been read and the
+ * next section begins: a caller that wants nothing but the definitions -- the
+ * chain walk, and pulseg's option setup -- has no reason to walk eighty
+ * megabytes of block rows to find headers it will not use.
+ */
+static void get_section_offsets(pulseq_file *seq, FILE *f, int definitions_only)
 {
     char line[PULSEQ_MAX_LINE_LENGTH];
     char *p;
@@ -605,37 +730,41 @@ static void get_section_offsets(pulseq_file *seq, FILE *f)
     if (fseek(f, 0L, SEEK_SET) != 0)
         return;
 
+    /* The line start is tracked rather than derived from ftell(), which is a
+     * library call per line and was measurable on its own at this size. */
+    pos = 0;
     while (fgets(line, sizeof(line), f))
     {
-        pos = ftell(f);
-        if (pos < 0)
-            break;
+        long line_start = pos;
+        pos += (long)strlen(line);
         p = line;
         while (*p == ' ' || *p == '\t')
             p++;
 
         if (*p == '[')
         {
+            if (definitions_only && seq->offsets.definitions >= 0)
+                break;
             if (strncmp(p, "[VERSION]", 9) == 0)
-                seq->offsets.version = pos - (long)strlen(line);
+                seq->offsets.version = line_start;
             else if (strncmp(p, "[DEFINITIONS]", 13) == 0)
-                seq->offsets.definitions = pos - (long)strlen(line);
+                seq->offsets.definitions = line_start;
             else if (strncmp(p, "[BLOCKS]", 8) == 0)
-                seq->offsets.blocks = pos - (long)strlen(line);
+                seq->offsets.blocks = line_start;
             else if (strncmp(p, "[RF]", 4) == 0)
-                seq->offsets.rf = pos - (long)strlen(line);
+                seq->offsets.rf = line_start;
             else if (strncmp(p, "[GRADIENTS]", 11) == 0)
-                seq->offsets.grad = pos - (long)strlen(line);
+                seq->offsets.grad = line_start;
             else if (strncmp(p, "[TRAP]", 6) == 0)
-                seq->offsets.trap = pos - (long)strlen(line);
+                seq->offsets.trap = line_start;
             else if (strncmp(p, "[ADC]", 5) == 0)
-                seq->offsets.adc = pos - (long)strlen(line);
+                seq->offsets.adc = line_start;
             else if (strncmp(p, "[EXTENSIONS]", 12) == 0)
-                seq->offsets.extensions = pos - (long)strlen(line);
+                seq->offsets.extensions = line_start;
             else if (strncmp(p, "[SHAPES]", 8) == 0)
-                seq->offsets.shapes = pos - (long)strlen(line);
+                seq->offsets.shapes = line_start;
             else if (strncmp(p, "[SIGNATURE]", 11) == 0)
-                seq->offsets.signature = pos - (long)strlen(line);
+                seq->offsets.signature = line_start;
         }
         else if (strncmp(p, "extension", 9) == 0 && (*(p + 9) == ' ' || *(p + 9) == '\t'))
         {
@@ -658,22 +787,22 @@ static void get_section_offsets(pulseq_file *seq, FILE *f)
                 switch (ext_enum)
                 {
                 case PULSEQ_EXT_TRIGGER:
-                    seq->offsets.triggers = pos - (long)strlen(line);
+                    seq->offsets.triggers = line_start;
                     break;
                 case PULSEQ_EXT_ROTATION:
-                    seq->offsets.rotations = pos - (long)strlen(line);
+                    seq->offsets.rotations = line_start;
                     break;
                 case PULSEQ_EXT_LABELSET:
-                    seq->offsets.labelset = pos - (long)strlen(line);
+                    seq->offsets.labelset = line_start;
                     break;
                 case PULSEQ_EXT_LABELINC:
-                    seq->offsets.labelinc = pos - (long)strlen(line);
+                    seq->offsets.labelinc = line_start;
                     break;
                 case PULSEQ_EXT_RF_SHIM:
-                    seq->offsets.rfshim = pos - (long)strlen(line);
+                    seq->offsets.rfshim = line_start;
                     break;
                 case PULSEQ_EXT_DELAY:
-                    seq->offsets.delays = pos - (long)strlen(line);
+                    seq->offsets.delays = line_start;
                     break;
                 default:
                     break;
@@ -801,7 +930,9 @@ static void read_definitions_library(pulseq_file *seq, FILE *f)
     seq->is_definitions_library_parsed = 1;
 }
 
-static void read_definitions(pulseq_file *seq)
+/* Not static: the binary reader (pulseq_binary.c) builds the same generic
+ * definitions library and then needs the same reserved-key extraction. */
+void pulseq__read_definitions(pulseq_file *seq)
 {
     int i;
     int nvals;
@@ -1177,7 +1308,7 @@ static void read_adc_library(pulseq_file *seq, FILE *f)
 
 static void read_shapes_library(pulseq_file *seq, FILE *f)
 {
-    int ret;
+    int ret, ok;
     char line[PULSEQ_MAX_LINE_LENGTH];
     int shape_index = 0, sample_index = 0;
     char *p;
@@ -1215,7 +1346,9 @@ static void read_shapes_library(pulseq_file *seq, FILE *f)
             break;
         if (strncmp(p, "shape_id", 8) == 0)
         {
-            if (sscanf(p + 8, "%d", &shape_index) == 1)
+            p += 8;
+            shape_index = (int)scan_long(&p, &ok);
+            if (ok)
                 sample_index = 0;
             continue;
         }
@@ -1223,7 +1356,8 @@ static void read_shapes_library(pulseq_file *seq, FILE *f)
             continue;
         if (shape_index > 0 && shape_index <= seq->shapes_library_size)
         {
-            if (sscanf(p, "%f", &val) == 1)
+            val = scan_float(&p, &ok);
+            if (ok)
             {
                 if (sample_index < seq->shapes_library[shape_index - 1].num_samples)
                     seq->shapes_library[shape_index - 1].samples[sample_index++] = val;
@@ -1692,21 +1826,33 @@ int pulseq_decompress_shape(pulseq_shape *result, const pulseq_shape *encoded, f
 
 int pulseq_read_from_buffer(pulseq_file *seq, FILE *f)
 {
+    unsigned char magic[8];
+    size_t got;
+
     if (!seq || !f)
         return PULSEQ_ERR_NULL_POINTER;
-    seq_file_reset(seq);
+    pulseq__file_reset(seq);
     if (seq->file_path)
     {
         PULSEQ_FREE(seq->file_path);
         seq->file_path = NULL;
     }
 
-    get_section_offsets(seq, f);
+    /* Same content-based dispatch as pulseq_read(), for the in-memory case:
+     * a caller holding a buffer knows even less about its format than one
+     * holding a path. */
+    got = fread(magic, 1, 8, f);
+    if (fseek(f, 0L, SEEK_SET) != 0)
+        return PULSEQ_ERR_FILE_READ_FAILED;
+    if (got == 8 && magic[0] == 0x01 && magic[7] == 0x02 && memcmp(magic + 1, "pulseq", 6) == 0)
+        return pulseq_read_binary_from_buffer(seq, f);
+
+    get_section_offsets(seq, f, /*definitions_only=*/0);
     read_version(seq, f);
     if (seq->version_combined < 1005000)
         return PULSEQ_ERR_UNSUPPORTED_VERSION;
     read_definitions_library(seq, f);
-    read_definitions(seq);
+    pulseq__read_definitions(seq);
     read_block_library(seq, f);
     read_rf_library(seq, f);
     read_grad_library(seq, f);
@@ -1722,6 +1868,11 @@ int pulseq_read(pulseq_file *seq, const char *file_path)
     int code;
     if (!seq || !file_path)
         return PULSEQ_ERR_INVALID_ARGUMENT;
+    /* Format is decided by what the file starts with, not by its extension:
+     * a .seq that happens to hold binary still reads, and a caller that has
+     * only a path never has to ask. */
+    if (pulseq_file_is_binary(file_path))
+        return pulseq_read_binary(seq, file_path);
     f = fopen(file_path, "r");
     if (!f)
         return PULSEQ_ERR_FILE_NOT_FOUND;
@@ -1756,11 +1907,15 @@ static int count_sequences_in_chain(const char *first_path, const pulseq_raster 
 
     while (current_path && current_path[0] != '\0' && count < max_count)
     {
+        /* Only NextSequence decides the chain, and it is a definition. Reading
+         * the libraries here would parse every file twice -- once to learn how
+         * many there are, once for real -- which on a two-million-block scan is
+         * a second or two spent building tables that are thrown away. */
         pulseq_file_init(&temp, raster);
-        result = pulseq_read(&temp, current_path);
+        result = pulseq_read_definitions_only(&temp, current_path);
         if (PULSEQ_FAILED(result))
         {
-            seq_file_reset(&temp);
+            pulseq__file_reset(&temp);
             PULSEQ_FREE(current_path);
             PULSEQ_FREE(base_path);
             return -1;
@@ -1774,12 +1929,12 @@ static int count_sequences_in_chain(const char *first_path, const pulseq_raster 
                 pulseq_path_join(base_path, temp.reserved_definitions_library.next_sequence);
             if (!current_path)
             {
-                seq_file_reset(&temp);
+                pulseq__file_reset(&temp);
                 PULSEQ_FREE(base_path);
                 return -1;
             }
         }
-        seq_file_reset(&temp);
+        pulseq__file_reset(&temp);
     }
     PULSEQ_FREE(base_path);
     if (count >= max_count)
@@ -1837,7 +1992,7 @@ int pulseq_file_set_read(
         if (PULSEQ_FAILED(result))
         {
             for (j = 0; j < i; ++j)
-                seq_file_reset(&set->sequences[j]);
+                pulseq__file_reset(&set->sequences[j]);
             PULSEQ_FREE(set->sequences);
             PULSEQ_FREE(current_path);
             PULSEQ_FREE(set->base_path);
@@ -1858,7 +2013,7 @@ int pulseq_file_set_read(
             if (!current_path)
             {
                 for (j = 0; j <= i; ++j)
-                    seq_file_reset(&set->sequences[j]);
+                    pulseq__file_reset(&set->sequences[j]);
                 PULSEQ_FREE(set->sequences);
                 PULSEQ_FREE(set->base_path);
                 set->sequences = NULL;
@@ -2259,11 +2414,13 @@ int pulseq_read_definitions_only(pulseq_file *seq, const char *path)
     FILE *f;
     if (!seq || !path)
         return PULSEQ_ERR_INVALID_ARGUMENT;
+    if (pulseq_file_is_binary(path))
+        return pulseq_read_binary_definitions_only(seq, path);
     f = fopen(path, "r");
     if (!f)
         return PULSEQ_ERR_FILE_NOT_FOUND;
 
-    get_section_offsets(seq, f);
+    get_section_offsets(seq, f, /*definitions_only=*/1);
     read_version(seq, f);
     if (seq->version_combined < 1005000)
     {
@@ -2271,7 +2428,7 @@ int pulseq_read_definitions_only(pulseq_file *seq, const char *path)
         return PULSEQ_ERR_UNSUPPORTED_VERSION;
     }
     read_definitions_library(seq, f);
-    read_definitions(seq);
+    pulseq__read_definitions(seq);
     fclose(f);
     return PULSEQ_SUCCESS;
 }

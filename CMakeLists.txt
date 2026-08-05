@@ -44,6 +44,7 @@ endfunction()
 # _pulseg_wrapper: pulserver.analysis C extension (needs full pulseg + seqdesc + cache)
 set(PULSEG_C_SOURCES
     "${CMAKE_SOURCE_DIR}/csrc/src/pulseq/pulseq_parse.c"
+    "${CMAKE_SOURCE_DIR}/csrc/src/pulseq/pulseq_binary.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/pulseq/pulseq_names.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_error.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_math.c"

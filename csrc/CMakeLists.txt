@@ -6,6 +6,7 @@
 # ---------------------------------------------------------------------------
 set(PULSEQ_SOURCES
     src/pulseq/pulseq_parse.c
+    src/pulseq/pulseq_binary.c
     src/pulseq/pulseq_names.c
 )
 

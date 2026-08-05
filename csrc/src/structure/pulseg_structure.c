@@ -1353,10 +1353,24 @@ static int nav_split_merge(
  *
  * Must be called after unique blocks are resolved.
  */
+/* One row of the first-seen key table freq-mod ids are assigned from.  Row i
+ * carries the key of the block that first got freq_mod_id == i. */
+typedef struct
+{
+    int rf_id;
+    int adc_def_id;
+    int gx_id;
+    int gy_id;
+    int gz_id;
+    int duration_us;
+} freq_mod_key;
+
 int pulseg__build_freq_mod_flags(pulseg_sequence_descriptor *desc)
 {
     int n;
     int num_defs = 0;
+    int cap = 0;
+    freq_mod_key *keys = NULL;
 
     if (!desc)
         return PULSEG_SUCCESS;
@@ -1374,36 +1388,27 @@ int pulseg__build_freq_mod_flags(pulseg_sequence_descriptor *desc)
 
         if ((has_rf || has_adc) && has_grad)
         {
-            int adc_def_id = has_adc ? desc->adc_table[bte->adc_id].id : -1;
-            int effective_duration_us = bdef->duration_us;
+            freq_mod_key key;
             int m, found = -1;
 
-            for (m = 0; m < n; ++m)
+            key.rf_id = bdef->rf_id;
+            key.adc_def_id = has_adc ? desc->adc_table[bte->adc_id].id : -1;
+            key.gx_id = bdef->gx_id;
+            key.gy_id = bdef->gy_id;
+            key.gz_id = bdef->gz_id;
+            key.duration_us = bdef->duration_us;
+
+            /* Ids are handed out in first-seen key order and every block
+             * sharing a key shares its id, so scanning the key table is the
+             * same search as scanning every preceding block — without the
+             * quadratic walk. */
+            for (m = 0; m < num_defs; ++m)
             {
-                const pulseg_block_table_element *pbte = &desc->block_table[m];
-                const pulseg_base_block *pbdef;
-                int phas_rf, phas_adc, phas_grad;
-                int padc_def_id;
-                int peffective_duration_us;
-
-                if (pbte->freq_mod_id < 0)
-                    continue;
-
-                pbdef = &desc->base_blocks[pbte->id];
-                phas_rf = (pbdef->rf_id >= 0);
-                phas_adc = (pbte->adc_id >= 0 && pbte->adc_id < desc->adc_table_size);
-                phas_grad = (pbdef->gx_id >= 0 || pbdef->gy_id >= 0 || pbdef->gz_id >= 0);
-                if (!(phas_rf || phas_adc) || !phas_grad)
-                    continue;
-
-                padc_def_id = phas_adc ? desc->adc_table[pbte->adc_id].id : -1;
-                peffective_duration_us = pbdef->duration_us;
-
-                if (pbdef->rf_id == bdef->rf_id && padc_def_id == adc_def_id &&
-                    pbdef->gx_id == bdef->gx_id && pbdef->gy_id == bdef->gy_id &&
-                    pbdef->gz_id == bdef->gz_id && peffective_duration_us == effective_duration_us)
+                if (keys[m].rf_id == key.rf_id && keys[m].adc_def_id == key.adc_def_id &&
+                    keys[m].gx_id == key.gx_id && keys[m].gy_id == key.gy_id &&
+                    keys[m].gz_id == key.gz_id && keys[m].duration_us == key.duration_us)
                 {
-                    found = pbte->freq_mod_id;
+                    found = m;
                     break;
                 }
             }
@@ -1414,6 +1419,28 @@ int pulseg__build_freq_mod_flags(pulseg_sequence_descriptor *desc)
             }
             else
             {
+                if (num_defs == cap)
+                {
+                    int new_cap = cap ? cap * 2 : 16;
+                    freq_mod_key *grown;
+                    if (new_cap <= 0 || (size_t)new_cap > (size_t)-1 / sizeof(freq_mod_key))
+                    {
+                        PULSEG_FREE(keys);
+                        return PULSEG_ERR_ALLOC_FAILED;
+                    }
+                    grown = (freq_mod_key *)PULSEG_ALLOC((size_t)new_cap * sizeof(freq_mod_key));
+                    if (!grown)
+                    {
+                        PULSEG_FREE(keys);
+                        return PULSEG_ERR_ALLOC_FAILED;
+                    }
+                    for (m = 0; m < num_defs; ++m)
+                        grown[m] = keys[m];
+                    PULSEG_FREE(keys);
+                    keys = grown;
+                    cap = new_cap;
+                }
+                keys[num_defs] = key;
                 desc->block_table[n].freq_mod_id = num_defs;
                 num_defs++;
             }
@@ -1424,6 +1451,7 @@ int pulseg__build_freq_mod_flags(pulseg_sequence_descriptor *desc)
         }
     }
 
+    PULSEG_FREE(keys);
     desc->num_freq_mod_defs = num_defs;
 
     return PULSEG_SUCCESS;

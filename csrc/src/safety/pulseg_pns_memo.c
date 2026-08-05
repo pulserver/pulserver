@@ -46,6 +46,7 @@
  * sample, which moves the rounding by up to an ulp per sample.
  */
 
+#include <limits.h>
 #include <math.h>
 
 #include "pulseg_internal.h"
@@ -67,20 +68,28 @@
 /* Rough operation count of the exact route: three axes, three real
  * transforms each (signal, kernel, inverse), each ~n*log2(nfft) butterflies.
  * Only the ratio against the assembly cost matters, so the constant just has
- * to be in the right ballpark. */
-static long long pns_memo_transform_ops(int n, int kernel_len)
+ * to be in the right ballpark.
+ *
+ * Counted as a double rather than a wide integer: the library builds as C89,
+ * where `long long` does not exist and `long` is only 32 bits on the scanner's
+ * PPC target -- too narrow, since 9*n*bits passes two billion on a window of a
+ * few million samples. A double holds every integer up to 2^53 exactly, which
+ * is far beyond any count this can produce, and both operands of the
+ * comparison this feeds are magnitudes rather than exact quantities. */
+static double pns_memo_transform_ops(int n, int kernel_len)
 {
-    long long nfft = 1;
+    double nfft = 1.0;
+    double target = (double)n + (double)kernel_len - 1.0;
     int bits = 0;
 
-    while (nfft < (long long)n + kernel_len - 1)
+    while (nfft < target)
     {
-        nfft <<= 1;
+        nfft *= 2.0;
         bits++;
     }
     if (bits < 1)
         bits = 1;
-    return 9LL * n * bits;
+    return 9.0 * (double)n * (double)bits;
 }
 
 typedef struct
@@ -124,35 +133,52 @@ static int pns_memo_block_offsets(
     int *offsets,
     int *lengths)
 {
-    int n, block_idx, dur_us, raster_halves;
-    long long t_us;
+    int n, block_idx, dur_us, raster_halves, dur_halves, t_samples;
     const pulseg_block_table_element *bte;
     const pulseg_base_block *bdef;
 
-    /* Whole microseconds throughout: block durations are integers, and a
+    /* Exact integer arithmetic throughout: block durations are integers, and a
      * float accumulator loses microsecond resolution once the window runs
      * into the millions of microseconds a 3D shot spans. The raster is
      * counted in half-microseconds so the half-gradient-raster grid the
-     * extraction uses stays an integer too. */
+     * extraction uses stays an integer too.
+     *
+     * The running position is accumulated in *samples*, not microseconds. Once
+     * a block's duration is known to be a whole number of samples, the sum of
+     * those lengths is the same offset that dividing a running microsecond
+     * total would give -- and it stays inside an int, because the loop rejects
+     * any window whose samples overrun the extraction. That is what lets this
+     * hold to C89, where `long long` does not exist and the 32-bit `long` of
+     * the scanner's PPC target would overflow on a long window. It also drops
+     * a modulo per block: a running total of on-grid durations is on-grid, so
+     * the old check against it could never fire on its own. */
     raster_halves = (int)(raster_us * 2.0f + 0.5f);
     if (raster_halves <= 0 || (float)fabs((double)raster_us * 2.0 - raster_halves) > 1e-4)
         return 0;
 
-    t_us = 0;
+    t_samples = 0;
     for (n = 0; n < block_count; ++n)
     {
         block_idx = block_order ? block_order[n] : block_start + n;
         bte = &desc->block_table[block_idx];
         bdef = &desc->base_blocks[bte->id];
         dur_us = (bte->duration_us >= 0) ? bte->duration_us : bdef->duration_us;
-        if (dur_us <= 0)
+        /* The upper bound keeps the doubling below in range; a block that long
+         * could not fit the window the caller is offering anyway. */
+        if (dur_us <= 0 || dur_us > INT_MAX / 2)
             return 0;
 
-        if ((t_us * 2) % raster_halves != 0 || (dur_us * 2LL) % raster_halves != 0)
+        dur_halves = dur_us * 2;
+        if (dur_halves % raster_halves != 0)
             return 0;
-        offsets[n] = (int)((t_us * 2) / raster_halves);
-        lengths[n] = (int)((dur_us * 2LL) / raster_halves);
-        t_us += dur_us;
+        offsets[n] = t_samples;
+        lengths[n] = dur_halves / raster_halves;
+        /* Lengths are strictly positive, so the running total only grows: once
+         * it overruns the window it can never come back to the exact total the
+         * final check demands, and stopping here bounds the accumulator. */
+        t_samples += lengths[n];
+        if (t_samples > num_uniform_samples)
+            return 0;
     }
 
     if (offsets[block_count - 1] + lengths[block_count - 1] != num_uniform_samples - 1)
@@ -346,7 +372,7 @@ int pulseg__calc_pns_memoized(
     int num_templates, num_occurrences, cap;
     int n_uniform, axis, i, t, block_idx, def_id, shot_idx, dur_us, pivot;
     int rc, max_len, len, off;
-    long long assembly_ops;
+    double assembly_ops;
     float inv_gamma, dt_s, scale, pivot_v;
     const pulseg_block_table_element *bte;
     const pulseg_base_block *bdef;
@@ -466,9 +492,9 @@ int pulseg__calc_pns_memoized(
      * has samples, and gains nothing. */
     if (num_templates == 0)
         goto done;
-    assembly_ops = 0;
+    assembly_ops = 0.0;
     for (i = 0; i < num_occurrences; ++i)
-        assembly_ops += templates[occurrences[i].tmpl].resp_len;
+        assembly_ops += (double)templates[occurrences[i].tmpl].resp_len;
     if (assembly_ops * PNS_MEMO_MIN_SPEEDUP > pns_memo_transform_ops(n, kernel_len))
         goto done;
 

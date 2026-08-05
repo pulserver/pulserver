@@ -1821,6 +1821,8 @@ int pulseg__get_unique_blocks(
     nav_flag = 0;
     once_counter = 0;
     module_id = 0;
+    has_prep = 0;
+    has_cooldown = 0;
 
     for (n = 0; n < num_blocks; ++n)
     {
@@ -1859,6 +1861,13 @@ int pulseg__get_unique_blocks(
             once_flag = (ext.flag.once >= 0) ? ext.flag.once : once_flag;
             if (ext.flag.once > 0)
                 ++once_counter;
+            /* Step 6 below needs to know only whether a prep and/or a cooldown
+             * marker exists anywhere; every block's extension is already in
+             * hand here, so record it now rather than rescanning the file. */
+            if (ext.flag.once == 1)
+                has_prep = 1;
+            else if (ext.flag.once == 2)
+                has_cooldown = 1;
             /* MODULE: sticky (pulseq LABEL semantics) -- SET at a block
              * persists until the next SET, exactly like norot/nopos/pmc/nav
              * above. 0 = ungrouped (no MODULE label seen yet). Lives on the
@@ -1948,19 +1957,35 @@ int pulseg__get_unique_blocks(
         } \
     } while (0)
 
+/* The four per-occurrence tables were allocated at exactly their final length
+ * (one entry per library entry, one per block), so the descriptor takes the
+ * temp buffer over rather than paying a second allocation and a full copy --
+ * on a 2.1M-block scan the block table alone is a 126 MB memcpy, and holding
+ * both copies at once is what set the peak. The definition arrays below are
+ * over-allocated at library size and genuinely do shrink, so they are copied.
+ * Adoption cannot fail, so it runs after every copy that can. */
+#define ADOPT_ARRAY(dst, src) \
+    do \
+    { \
+        (dst) = (src); \
+        (src) = NULL; \
+    } while (0)
+
     COPY_ARRAY(desc->rf_definitions, tmp_rf_defs, desc->num_unique_rfs, pulseg_rf_definition);
-    COPY_ARRAY(desc->rf_table, tmp_rf_tab, desc->rf_table_size, pulseg_rf_table_element);
     COPY_ARRAY(
         desc->grad_definitions,
         tmp_grad_defs,
         desc->num_unique_grads,
         pulseg_grad_definition);
-    COPY_ARRAY(desc->grad_table, tmp_grad_tab, desc->grad_table_size, pulseg_grad_table_element);
     COPY_ARRAY(desc->adc_definitions, tmp_adc_defs, desc->num_unique_adcs, pulseg_adc_definition);
-    COPY_ARRAY(desc->adc_table, tmp_adc_tab, desc->adc_table_size, pulseg_adc_table_element);
     COPY_ARRAY(desc->base_blocks, tmp_blk_defs, desc->num_unique_blocks, pulseg_base_block);
-    COPY_ARRAY(desc->block_table, tmp_blk_tab, num_blocks, pulseg_block_table_element);
 
+    ADOPT_ARRAY(desc->rf_table, tmp_rf_tab);
+    ADOPT_ARRAY(desc->grad_table, tmp_grad_tab);
+    ADOPT_ARRAY(desc->adc_table, tmp_adc_tab);
+    ADOPT_ARRAY(desc->block_table, tmp_blk_tab);
+
+#undef ADOPT_ARRAY
 #undef COPY_ARRAY
 
     /* PULSEG_FREE temps - done with them */
@@ -2032,20 +2057,7 @@ int pulseg__get_unique_blocks(
     }
 
     /* ---- step 6: prep/cooldown ---- */
-    has_prep = 0;
-    has_cooldown = 0;
-    for (n = 0; n < num_blocks; ++n)
-    {
-        pulseq_get_raw_block_content_ids(seq, &raw, n, 1);
-        if (raw.ext_count > 0)
-        {
-            pulseq_get_raw_extension(seq, &ext, &raw);
-            if (ext.flag.once == 1)
-                has_prep = 1;
-            else if (ext.flag.once == 2)
-                has_cooldown = 1;
-        }
-    }
+    /* has_prep / has_cooldown were accumulated during the step-2 block scan. */
     if (!has_prep && !has_cooldown)
     {
         desc->pass_len = desc->num_blocks;

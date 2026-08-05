@@ -2811,6 +2811,14 @@ class PeriodicSequence(SeqPlotMixin):
         """
         return self.seq.write(path, **kwargs)
 
+    def write_binary(self, path=None, **kwargs):
+        """Write the scan in Pulseq's binary format, or return its bytes.
+
+        Same route as `write`, into the other container. See
+        `fastseq.binary.write_binary`.
+        """
+        return self.seq.write_binary(path, **kwargs)
+
     def rebased_events(self, module: SequenceModule) -> SimpleNamespace:
         """`module.events`, addressing this sequence's libraries.
 
@@ -2938,14 +2946,21 @@ class PeriodicSequence(SeqPlotMixin):
         self._slots_ext = _flat(slots)
 
 # %% example
-def make_mprage(path=None):
+def make_mprage(path=None, binary=True):
     """A 512x1024x512 MPRAGE, designed and serialized.
 
     Ends by writing rather than by handing back a sequence, so that timing this
     function times the whole job: composing the period, two million blocks
-    through the loop, deduplicating them, and eighty-four megabytes of Pulseq.
+    through the loop, deduplicating them, and the Pulseq file itself.
     `path` may be a filename, or None to serialize and drop the bytes, which is
     the same work without the disk in it.
+
+    Writes Pulseq's native *binary* format by default, which is what the C
+    reader wants: the same scan parses in about a tenth of the time, because
+    every section carries its own entry count and nothing has to be tokenized.
+    Pass ``binary=False`` for the text `.seq`. A path is given the matching
+    suffix either way, so `make_mprage('mprage')` writes `mprage.bin` here and
+    `mprage.seq` there.
 
     The `PeriodicSequence` comes back either way. Nothing has been spent on
     making it comfortable to inspect -- its libraries are still the arrays
@@ -3086,7 +3101,10 @@ def make_mprage(path=None):
     # want. What comes back is a sequence PyPulseq cannot tell from one written
     # a block at a time, and `plot`, `calculate_kspace` and `get_block` all work
     # on it; they are simply what pays for the dictionaries, and only if asked.
-    mprage.write(path)
+    if binary:
+        mprage.write_binary(path)
+    else:
+        mprage.write(path)
 
     return mprage
 
