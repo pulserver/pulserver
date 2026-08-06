@@ -6,16 +6,19 @@ __all__ = ["read", "read_asc_bands", "read_esp_bands", "write"]
 
 import hashlib
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import BinaryIO
 from warnings import warn
 
 import numpy as np
-import pypulseq as pp
 from pypulseq.supported_labels_rf_use import get_supported_rf_uses
 
 from pulserver.pypulseq._safety import read_asc_bands, read_esp_bands
-from pulserver.pypulseq._sequence import _RF_USE_CODE_TO_CHAR
-from pulserver.pypulseq._views import build_views
+
+#: Pulseq's numeric RF ``use`` codes and the initial each one is written as:
+#: undefined, excitation, refocusing, inversion, saturation, preparation,
+#: other.
+_RF_USE_CODE_TO_CHAR = {0: "u", 1: "e", 2: "r", 3: "i", 4: "s", 5: "p", 6: "o"}
 
 
 def _render_int_rows(matrix: np.ndarray, widths: tuple[int, ...]) -> str | None:
@@ -434,47 +437,14 @@ def _system_from_definitions(definitions: dict, system):
     return Opts(**overrides)
 
 
-def _extension_events(ext, seq) -> list:
-    """Rebuild the event objects for one block's extensions."""
-    from scipy.spatial.transform import Rotation
-
-    from pulserver.pypulseq._make_label import make_label
-    from pulserver.pypulseq._make_rf_shim import make_rf_shim
-    from pulserver.pypulseq._make_rotation import make_rotation
-
-    del seq
-    events = []
-    for label, value in ext.label_sets:
-        events.append(make_label(label, "SET", value))
-    for label, value in ext.label_incs:
-        events.append(make_label(label, "INC", value))
-    for kind, channel, delay, duration in ext.triggers:
-        if kind == "output":
-            events.append(pp.make_digital_output_pulse(channel=channel, delay=delay, duration=duration))
-        else:
-            events.append(pp.make_trigger(channel=channel, delay=delay, duration=duration))
-    if ext.rf_shim is not None:
-        events.append(make_rf_shim(ext.rf_shim))
-    if ext.rotation is not None:
-        events.append(make_rotation(Rotation.from_matrix(ext.rotation)))
-    return events
-
-
 def read(source: str | Path | bytes, *, system=None):
-    """Read a ``.seq`` file back into a :class:`pulserver.pypulseq.Sequence`.
-
-    Upstream PyPulseq 1.5.0 cannot decode the two extensions Pulserver relies
-    on — block rotations and pTx shim vectors — nor label strings outside its
-    built-in set. So the ordinary events are read through upstream and the
-    extensions are parsed alongside, then both are replayed into a fresh
-    Pulserver sequence. The result round-trips through :func:`write` and
-    arrives with its inspection views already built, so plotting it costs
-    nothing further.
+    """Read a Pulseq file back into a :class:`pulserver.pypulseq.Sequence`.
 
     Parameters
     ----------
     source : str, pathlib.Path or bytes
-        Path to a ``.seq`` file, or the payload itself.
+        Path to a ``.seq`` text file or a binary Pulseq file, or the payload
+        itself. Which format it is is decided by the leading bytes.
     system : pypulseq.Opts, optional
         System limits to attach. By default the raster times recorded in
         ``[DEFINITIONS]`` are used, on top of Pulserver's vendor-neutral
@@ -483,45 +453,29 @@ def read(source: str | Path | bytes, *, system=None):
     Returns
     -------
     pulserver.pypulseq.Sequence
-        With ``_seq``, ``_seqplot`` and the extension map already populated.
+        The sequence, blocks and libraries and all.
 
     See Also
     --------
     write : the inverse.
+
+    Notes
+    -----
+    Block rotations, pTx shim vectors and label strings outside Pulseq's
+    built-in set are decoded natively, which upstream PyPulseq 1.5.0 cannot
+    do. Nothing is replayed through it.
     """
     from pulserver.pypulseq._sequence import Sequence
 
     payload = source if isinstance(source, bytes) else Path(source).read_bytes()
+    system = _system_from_definitions(_parse_definitions(payload), system)
 
-    definitions = _parse_definitions(payload)
-    system = _system_from_definitions(definitions, system)
-
-    seq = Sequence._unstructured(system=system)
-    plain, plotting, extensions = build_views(seq, payload)
-
-    for block_index in plain.block_events:
-        block = plain.get_block(block_index)
-        events = []
-        for name in ("rf", "gx", "gy", "gz", "adc"):
-            event = getattr(block, name, None)
-            if event is not None:
-                events.append(event)
-        ext = extensions.get(block_index)
-        if ext is not None:
-            events.extend(_extension_events(ext, seq))
-        duration = plain.block_durations[block_index]
-        if duration > 0:
-            events.append(pp.make_delay(duration))
-        seq.add_block(*events)
-        seq.block_durations[block_index] = duration
-
-    for key, value in plain.definitions.items():
-        seq.set_definition(key, value)
-
-    seq._view_cache = {
-        "n_blocks": seq.next_free_block_ID - 1,
-        "plain": plain,
-        "plot": plotting,
-        "extensions": extensions,
-    }
+    seq = Sequence(system=system)
+    if isinstance(source, bytes):
+        with NamedTemporaryFile(suffix=".seq") as handle:
+            handle.write(payload)
+            handle.flush()
+            seq.read(handle.name)
+    else:
+        seq.read(source)
     return seq

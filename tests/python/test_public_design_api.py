@@ -35,8 +35,17 @@ def test_enhanced_pypulseq_contains_complete_upstream_namespace() -> None:
     assert upstream_names <= set(pp.__all__)
     assert all(hasattr(pp, name) for name in upstream_names)
     assert all(not hasattr(pp, name) for name in withheld)
-    assert issubclass(pp.Sequence, upstream.Sequence)
-    assert pp.make_delay is upstream.make_delay
+    # Sequence is a drop-in by surface, not by inheritance: it holds the C++
+    # sequence rather than extending upstream's Python one.
+    assert not issubclass(pp.Sequence, upstream.Sequence)
+    assert all(
+        hasattr(pp.Sequence, name)
+        for name in ("add_block", "set_block", "get_block", "read", "write", "plot",
+                     "duration", "check_timing", "calculate_kspace", "waveforms")
+    )
+    # The factories are upstream's, wrapped; the event they build differs.
+    assert pp.make_delay is not upstream.make_delay
+    assert pp.make_delay.__wrapped__ is upstream.make_delay
     assert callable(design.traj2grad)
 
 

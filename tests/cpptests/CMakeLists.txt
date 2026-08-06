@@ -85,10 +85,32 @@ target_compile_definitions(test_pulseq_file PRIVATE
     PULSEQ_FILE_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../utils/expected")
 target_link_libraries(test_pulseq_file PRIVATE pulseq GTest::gtest_main)
 
+# ------------------------------------------------------------------
+# pulseqpp -- the standalone C++ Pulseq sequence library (cxx/pulseq).
+# ------------------------------------------------------------------
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../cxx/pulseq
+                 ${CMAKE_CURRENT_BINARY_DIR}/pulseqpp_build)
+
+add_executable(test_pulseq_sequence test_pulseq_sequence.cpp)
+target_link_libraries(test_pulseq_sequence PRIVATE pulseqpp GTest::gtest_main)
+
+add_executable(test_pulseq_dedup test_pulseq_dedup.cpp)
+target_compile_definitions(test_pulseq_dedup PRIVATE
+    PULSEQ_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../utils/expected")
+target_link_libraries(test_pulseq_dedup PRIVATE pulseqpp GTest::gtest_main)
+
+add_executable(test_pulseq_roundtrip test_pulseq_roundtrip.cpp)
+target_compile_definitions(test_pulseq_roundtrip PRIVATE
+    PULSEQ_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../utils/expected")
+target_link_libraries(test_pulseq_roundtrip PRIVATE pulseqpp GTest::gtest_main)
+
 include(GoogleTest)
 gtest_discover_tests(test_trajectory_cache_loader)
 gtest_discover_tests(test_seq_desc_truth)
 gtest_discover_tests(test_pulseq_file)
+gtest_discover_tests(test_pulseq_sequence)
+gtest_discover_tests(test_pulseq_dedup)
+gtest_discover_tests(test_pulseq_roundtrip)
 
 # ------------------------------------------------------------------
 # Stage 4 (recon-cache-to-C) Step 0: golden-dump CLI tool. Dumps every

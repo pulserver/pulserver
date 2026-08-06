@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import pypulseq as _pypulseq
 
+from . import _events
 from ._make_label import COUNTER_LABELS, FLAG_LABELS, STICKY_FLAGS  # noqa: F401
 from ._make_label import get_supported_labels as _get_supported_labels
 from ._make_label import make_label as _make_label
@@ -60,6 +61,16 @@ make_label = _make_label
 make_rf_shim = _make_rf_shim
 make_rotation = _make_rotation
 
+#: Upstream's factories, wrapped so the event they build comes back with its
+#: fields in slots rather than in a dictionary.  Same validation, same
+#: defaults, same bug fixes when upstream ships them -- see
+#: :mod:`pulserver.pypulseq._events`.
+SLOTTED = frozenset(_events.__all__) - _EXCLUDED_UPSTREAM
+
+for _name in SLOTTED:
+    globals()[_name] = getattr(_events, _name)
+del _name
+
 #: Everything in this namespace that is *not* upstream PyPulseq: Pulserver's
 #: replacements for upstream objects, plus the extension events upstream has
 #: no equivalent for.  This set is the single source of truth for both the
@@ -75,10 +86,15 @@ OVERRIDES = frozenset(
         "make_label",
         "make_rf_shim",
         "make_rotation",
+        *SLOTTED,
     }
 )
 
 #: The upstream names re-exported verbatim.
-UPSTREAM = frozenset({_name for _name in dir(_pypulseq) if not _name.startswith("_")} - _EXCLUDED_UPSTREAM)
+UPSTREAM = (
+    frozenset({_name for _name in dir(_pypulseq) if not _name.startswith("_")})
+    - _EXCLUDED_UPSTREAM
+    - OVERRIDES
+)
 
 __all__ = sorted(UPSTREAM | OVERRIDES)

@@ -46,6 +46,43 @@
 #endif
 
 /* ================================================================== */
+/*  Sequence-data numeric type                                        */
+/* ================================================================== */
+
+/*
+ * The type every library row, shape sample and raster time is stored in.
+ *
+ * It is `float` by default, and that is what the scanner builds: the raw model
+ * of a two-million-block scan is tens of megabytes of library rows, and the
+ * PSD carries them on a 32-bit target where halving that matters more than the
+ * digits do.
+ *
+ * The host reader wants the digits.  A .seq file writes shape samples to nine
+ * significant figures and the binary format carries float64 amplitudes and
+ * picosecond times -- neither survives a float32 round trip -- so
+ * cxx/pulseq/read_double.cpp builds a second instance of these sources with
+ * PULSEQ_DOUBLE_PRECISION, inside a namespace of its own.  Both instances
+ * exist in the same process and never meet: the type is part of pulseq_file's
+ * layout, so a translation unit gets whichever one it compiled against and no
+ * header declares a function taking the other.
+ *
+ * Define PULSEQ_DOUBLE_PRECISION to select it; it switches the scanf
+ * conversion alongside the type, which is the only other thing that has to
+ * agree.
+ */
+/* PULSEQ_REAL_FMT is the scanf conversion that matches PULSEQ_REAL.  Every
+ * sscanf reading a sequence value must use it rather than a literal "%f":
+ * passing a double* to "%f" is undefined behaviour, and it is the one mistake
+ * this typedef makes easy to write and impossible to see. */
+#ifdef PULSEQ_DOUBLE_PRECISION
+#define PULSEQ_REAL double
+#define PULSEQ_REAL_FMT "%lf"
+#else
+#define PULSEQ_REAL float
+#define PULSEQ_REAL_FMT "%f"
+#endif
+
+/* ================================================================== */
 /*  Status / error codes                                              */
 /* ================================================================== */
 

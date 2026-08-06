@@ -8,10 +8,7 @@ re-exported unchanged, so this import covers the whole event layer and
 import pulserver.pypulseq as pp
 
 delay = pp.make_delay(1e-3)
-# `Sequence` is one of the replacements: it takes the structure that repeats and
-# how many times it repeats, so it can claim every library row before the first
-# block is added. Here that is one block, played once.
-seq = pp.Sequence(pp.Opts(), 1, delay)
+seq = pp.Sequence(pp.Opts())
 seq.add_block(delay)
 ```
 
@@ -35,11 +32,13 @@ need to reach the shape codec directly.
 
 ## Replaced objects
 
-`Sequence` subclasses upstream's with a lower per-block overhead. `Opts` uses
-zero dead/ringdown times and vendor-neutral 2 us RF/ADC and 10 us
-gradient/block rasters — scanner-specific code should still pass explicit
-limits. `make_label` accepts user-defined label strings the upstream set does
-not cover, and `get_supported_labels` documents every label and what it means.
+`Sequence` keeps its libraries, block table and file formats in C++, and reads
+and writes Pulseq 1.5.2 including the rotation, shim and custom-label
+extensions upstream cannot decode. `Opts` uses zero dead/ringdown times and
+vendor-neutral 2 us RF/ADC and 10 us gradient/block rasters — scanner-specific
+code should still pass explicit limits. `make_label` accepts user-defined
+label strings the upstream set does not cover, and `get_supported_labels`
+documents every label and what it means.
 
 ```{eval-rst}
 .. autosummary::
@@ -53,6 +52,42 @@ not cover, and `get_supported_labels` documents every label and what it means.
 ```
 
 Timing is validated with `Sequence.check_timing()`.
+
+## Event factories
+
+Upstream's factories, wrapped. Each calls upstream unchanged — same
+validation, same defaults, same bug fixes when upstream ships them — and
+returns the event with its fields in slots rather than in a dictionary, which
+is what a scan of a few million blocks needs.
+
+They quack like the `SimpleNamespace` they replace: `rf.signal` is the complex
+waveform at its real amplitude, `grad.waveform` the scaled samples. Underneath,
+an RF pulse is a normalised magnitude and phase beside one scalar amplitude, so
+`rf.amplitude *= 0.5` is a single write and leaves the registered shape valid —
+a variable flip angle train is one magnitude shape at many amplitudes.
+
+Setters do not re-validate: `make_*` checked the event when it built it, and a
+loop moving a phase encode from one line to the next is not making a new claim
+about the hardware.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/pypulseq
+   :nosignatures:
+
+   pulserver.pypulseq.make_adc
+   pulserver.pypulseq.make_arbitrary_grad
+   pulserver.pypulseq.make_arbitrary_rf
+   pulserver.pypulseq.make_block_pulse
+   pulserver.pypulseq.make_delay
+   pulserver.pypulseq.make_digital_output_pulse
+   pulserver.pypulseq.make_extended_trapezoid
+   pulserver.pypulseq.make_gauss_pulse
+   pulserver.pypulseq.make_sinc_pulse
+   pulserver.pypulseq.make_soft_delay
+   pulserver.pypulseq.make_trapezoid
+   pulserver.pypulseq.make_trigger
+```
 
 ## Extension events
 

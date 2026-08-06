@@ -78,22 +78,24 @@ static long scan_long(char **cursor, int *ok)
 }
 
 /*
- * Read a float.
+ * Read one numeric field.
  *
  * Whole numbers -- which is every field of [BLOCKS], of [EXTENSIONS] and of the
  * label libraries, so all of the hot ones -- are accumulated as an integer and
  * converted. That conversion rounds to nearest, which for a value the decimal
- * names exactly is the same float sscanf produced, so the fast path is
+ * names exactly is the same value sscanf produced, so the fast path is
  * bit-identical by construction rather than by measurement.
  *
  * Everything else -- a fraction, an exponent, a special form, or a run of
  * digits long enough to overflow the accumulator -- goes to sscanf, the same
  * call the reader has always made. Keeping the fallback on sscanf rather than
- * on strtod is deliberate: strtod would round the decimal to a double and then
- * to a float, and double rounding is not always the same answer. Shape samples
- * are the only fields that reach it in practice.
+ * on strtod is deliberate: in the float build strtod would round the decimal to
+ * a double and then to a float, and double rounding is not always the same
+ * answer. Shape samples are the only fields that reach it in practice, and they
+ * are exactly the ones the double build exists to keep: a .seq writes them to
+ * nine significant figures, which is more than a float can hold.
  */
-static float scan_float(char **cursor, int *ok)
+static PULSEQ_REAL scan_float(char **cursor, int *ok)
 {
     char *p = *cursor;
     char *start;
@@ -101,7 +103,7 @@ static float scan_float(char **cursor, int *ok)
     int negative = 0;
     int digits = 0;
     int consumed = 0;
-    float parsed;
+    PULSEQ_REAL parsed;
 
     while (*p == ' ' || *p == '\t')
         p++;
@@ -123,13 +125,13 @@ static float scan_float(char **cursor, int *ok)
     {
         *cursor = p;
         *ok = 1;
-        return negative ? -(float)value : (float)value;
+        return negative ? -(PULSEQ_REAL)value : (PULSEQ_REAL)value;
     }
 
-    if (sscanf(start, "%f%n", &parsed, &consumed) != 1)
+    if (sscanf(start, PULSEQ_REAL_FMT "%n", &parsed, &consumed) != 1)
     {
         *ok = 0;
-        return 0.0f;
+        return (PULSEQ_REAL)0.0;
     }
     *cursor = start + consumed;
     *ok = 1;
@@ -237,7 +239,7 @@ static void seq_file_set_defaults(pulseq_file *seq)
     INIT_LIBRARY(seq, rotation_matrix_library, rotation_library_size, is_extensions_library_parsed);
     INIT_LIBRARY(seq, labelset_library, labelset_library_size, is_extensions_library_parsed);
     INIT_LIBRARY(seq, labelinc_library, labelinc_library_size, is_extensions_library_parsed);
-    for (i = 0; i < 22; i++)
+    for (i = 0; i < PULSEQ_LABEL_ID_MAX; i++)
         seq->is_label_defined[i] = 0;
     memset(&seq->label_limits, 0, sizeof(seq->label_limits));
     for (i = 0; i < 8; i++)
@@ -387,7 +389,7 @@ static int init_standard_library(
     int max_idx = -1;
     int sec, idx, i, ok;
     char *p;
-    float *arr;
+    PULSEQ_REAL *arr;
 
     if (!f)
         return 1;
@@ -419,7 +421,7 @@ static int init_standard_library(
         *target_count = 0;
         return 0;
     }
-    arr = (float *)PULSEQ_ALLOC(sizeof(float) * n * max_idx);
+    arr = (PULSEQ_REAL *)PULSEQ_ALLOC(sizeof(PULSEQ_REAL) * n * max_idx);
     if (!arr)
         return 1;
     for (i = 0; i < max_idx * n; i++)
@@ -572,7 +574,7 @@ static int init_shapes_library(pulseq_shape **target, int *target_count, FILE *f
         n = shapes[i].num_samples;
         if (n > 0)
         {
-            shapes[i].samples = (float *)PULSEQ_ALLOC(sizeof(float) * n);
+            shapes[i].samples = (PULSEQ_REAL *)PULSEQ_ALLOC(sizeof(PULSEQ_REAL) * n);
             if (!shapes[i].samples)
             {
                 for (j = 0; j < i; j++)
@@ -652,11 +654,11 @@ static int read_standard_library(
 {
     char line[PULSEQ_MAX_LINE_LENGTH];
     int idx, parsed, col, offset_col, ok;
-    float vals[PULSEQ_MAX_SCALE_SIZE];
+    PULSEQ_REAL vals[PULSEQ_MAX_SCALE_SIZE];
     char *scan_ptr;
     char *p;
-    float v;
-    float *arr = (float *)target;
+    PULSEQ_REAL v;
+    PULSEQ_REAL *arr = (PULSEQ_REAL *)target;
 
     if (!f)
         return 1;
@@ -706,7 +708,7 @@ static int read_standard_library(
         for (col = 0; col < scale.size; col++)
             arr[(idx - 1) * n + col + offset_col] = vals[col] * scale.values[col];
         if (flag >= 0)
-            arr[(idx - 1) * n + 0] = (float)flag;
+            arr[(idx - 1) * n + 0] = (PULSEQ_REAL)flag;
     }
     return 0;
 }
@@ -938,7 +940,7 @@ void pulseq__read_definitions(pulseq_file *seq)
     int nvals;
     char *key;
     char *value;
-    float temp[3];
+    PULSEQ_REAL temp[3];
 
     for (i = 0; i < seq->num_definitions; i++)
     {
@@ -957,20 +959,20 @@ void pulseq__read_definitions(pulseq_file *seq)
 
         if (strcmp(key, "GradientRasterTime") == 0)
         {
-            seq->reserved_definitions_library.gradient_raster_time = (float)(atof(value) * 1e6);
+            seq->reserved_definitions_library.gradient_raster_time = (PULSEQ_REAL)(atof(value) * 1e6);
         }
         else if (strcmp(key, "RadiofrequencyRasterTime") == 0)
         {
             seq->reserved_definitions_library.radiofrequency_raster_time =
-                (float)(atof(value) * 1e6);
+                (PULSEQ_REAL)(atof(value) * 1e6);
         }
         else if (strcmp(key, "AdcRasterTime") == 0)
         {
-            seq->reserved_definitions_library.adc_raster_time = (float)(atof(value) * 1e6);
+            seq->reserved_definitions_library.adc_raster_time = (PULSEQ_REAL)(atof(value) * 1e6);
         }
         else if (strcmp(key, "BlockDurationRaster") == 0)
         {
-            seq->reserved_definitions_library.block_duration_raster = (float)(atof(value) * 1e6);
+            seq->reserved_definitions_library.block_duration_raster = (PULSEQ_REAL)(atof(value) * 1e6);
         }
         else if (strcmp(key, "Name") == 0)
         {
@@ -985,9 +987,9 @@ void pulseq__read_definitions(pulseq_file *seq)
         {
             if (nvals >= 3)
             {
-                temp[0] = (float)atof(seq->definitions_library[i].value[0]);
-                temp[1] = (float)atof(seq->definitions_library[i].value[1]);
-                temp[2] = (float)atof(seq->definitions_library[i].value[2]);
+                temp[0] = (PULSEQ_REAL)atof(seq->definitions_library[i].value[0]);
+                temp[1] = (PULSEQ_REAL)atof(seq->definitions_library[i].value[1]);
+                temp[2] = (PULSEQ_REAL)atof(seq->definitions_library[i].value[2]);
                 seq->reserved_definitions_library.fov[0] = temp[0] * 100.0f;
                 seq->reserved_definitions_library.fov[1] = temp[1] * 100.0f;
                 seq->reserved_definitions_library.fov[2] = temp[2] * 100.0f;
@@ -998,11 +1000,11 @@ void pulseq__read_definitions(pulseq_file *seq)
             if (nvals >= 3)
             {
                 seq->reserved_definitions_library.matrix[0] =
-                    (float)atof(seq->definitions_library[i].value[0]);
+                    (PULSEQ_REAL)atof(seq->definitions_library[i].value[0]);
                 seq->reserved_definitions_library.matrix[1] =
-                    (float)atof(seq->definitions_library[i].value[1]);
+                    (PULSEQ_REAL)atof(seq->definitions_library[i].value[1]);
                 seq->reserved_definitions_library.matrix[2] =
-                    (float)atof(seq->definitions_library[i].value[2]);
+                    (PULSEQ_REAL)atof(seq->definitions_library[i].value[2]);
             }
         }
         else if (strcmp(key, "NavFOV") == 0)
@@ -1010,11 +1012,11 @@ void pulseq__read_definitions(pulseq_file *seq)
             if (nvals >= 3)
             {
                 seq->reserved_definitions_library.nav_fov[0] =
-                    (float)atof(seq->definitions_library[i].value[0]) * 100.0f;
+                    (PULSEQ_REAL)atof(seq->definitions_library[i].value[0]) * 100.0f;
                 seq->reserved_definitions_library.nav_fov[1] =
-                    (float)atof(seq->definitions_library[i].value[1]) * 100.0f;
+                    (PULSEQ_REAL)atof(seq->definitions_library[i].value[1]) * 100.0f;
                 seq->reserved_definitions_library.nav_fov[2] =
-                    (float)atof(seq->definitions_library[i].value[2]) * 100.0f;
+                    (PULSEQ_REAL)atof(seq->definitions_library[i].value[2]) * 100.0f;
             }
         }
         else if (strcmp(key, "NavMatrix") == 0)
@@ -1022,16 +1024,16 @@ void pulseq__read_definitions(pulseq_file *seq)
             if (nvals >= 3)
             {
                 seq->reserved_definitions_library.nav_matrix[0] =
-                    (float)atof(seq->definitions_library[i].value[0]);
+                    (PULSEQ_REAL)atof(seq->definitions_library[i].value[0]);
                 seq->reserved_definitions_library.nav_matrix[1] =
-                    (float)atof(seq->definitions_library[i].value[1]);
+                    (PULSEQ_REAL)atof(seq->definitions_library[i].value[1]);
                 seq->reserved_definitions_library.nav_matrix[2] =
-                    (float)atof(seq->definitions_library[i].value[2]);
+                    (PULSEQ_REAL)atof(seq->definitions_library[i].value[2]);
             }
         }
         else if (strcmp(key, "TotalDuration") == 0)
         {
-            seq->reserved_definitions_library.total_duration = (float)atof(value);
+            seq->reserved_definitions_library.total_duration = (PULSEQ_REAL)atof(value);
         }
         else if (strcmp(key, "NextSequence") == 0)
         {
@@ -1068,7 +1070,7 @@ void pulseq__read_definitions(pulseq_file *seq)
 static void read_block_library(pulseq_file *seq, FILE *f)
 {
     int ret;
-    float block_vals[7] = {1, 1, 1, 1, 1, 1, 1};
+    PULSEQ_REAL block_vals[7] = {1, 1, 1, 1, 1, 1, 1};
     pulseq_scale s;
     s.size = 7;
     s.values = block_vals;
@@ -1105,7 +1107,7 @@ static void read_block_library(pulseq_file *seq, FILE *f)
 static void read_rf_library(pulseq_file *seq, FILE *f)
 {
     int ret;
-    float rf_vals[10] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    PULSEQ_REAL rf_vals[10] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
     pulseq_scale s;
     s.size = 10;
     s.values = rf_vals;
@@ -1155,7 +1157,7 @@ static void read_rf_library(pulseq_file *seq, FILE *f)
                 {
                     char *up = use_line;
                     int use_idx;
-                    float dummy;
+                    PULSEQ_REAL dummy;
                     int col, consumed;
                     char *scan_p;
                     while (*up == ' ' || *up == '\t')
@@ -1171,12 +1173,12 @@ static void read_rf_library(pulseq_file *seq, FILE *f)
                         up++;
                     while (*up == ' ' || *up == '\t')
                         up++;
-                    /* skip 10 float columns */
+                    /* skip 10 numeric columns */
                     scan_p = up;
                     for (col = 0; col < 10; ++col)
                     {
                         consumed = 0;
-                        if (sscanf(scan_p, "%f%n", &dummy, &consumed) != 1)
+                        if (sscanf(scan_p, PULSEQ_REAL_FMT "%n", &dummy, &consumed) != 1)
                             break;
                         scan_p += consumed;
                         while (*scan_p == ' ' || *scan_p == '\t')
@@ -1195,6 +1197,10 @@ static void read_rf_library(pulseq_file *seq, FILE *f)
                             use_val = PULSEQ_RF_USE_INVERSION;
                         else if (tag == 's')
                             use_val = PULSEQ_RF_USE_SATURATION;
+                        else if (tag == 'p')
+                            use_val = PULSEQ_RF_USE_PREPARATION;
+                        else if (tag == 'o')
+                            use_val = PULSEQ_RF_USE_OTHER;
                         seq->rf_use_tags[use_idx - 1] = use_val;
                     }
                 }
@@ -1208,14 +1214,14 @@ static void read_grad_library(pulseq_file *seq, FILE *f)
     int ret;
     long offsets[2];
     int num_sections = 0;
-    static const float grad_vals[6] = {1, 1, 1, 1, 1, 1};
-    static const float trap_vals[5] = {1, 1, 1, 1, 1};
+    static const PULSEQ_REAL grad_vals[6] = {1, 1, 1, 1, 1, 1};
+    static const PULSEQ_REAL trap_vals[5] = {1, 1, 1, 1, 1};
     pulseq_scale grad_s, trap_s;
 
     grad_s.size = 6;
-    grad_s.values = (float *)grad_vals;
+    grad_s.values = (PULSEQ_REAL *)grad_vals;
     trap_s.size = 5;
-    trap_s.values = (float *)trap_vals;
+    trap_s.values = (PULSEQ_REAL *)trap_vals;
 
     if (seq->is_grad_library_parsed)
         return;
@@ -1272,10 +1278,10 @@ static void read_grad_library(pulseq_file *seq, FILE *f)
 static void read_adc_library(pulseq_file *seq, FILE *f)
 {
     int ret;
-    static const float adc_vals[8] = {1, 1, 1, 1, 1, 1, 1, 1};
+    static const PULSEQ_REAL adc_vals[8] = {1, 1, 1, 1, 1, 1, 1, 1};
     pulseq_scale s;
     s.size = 8;
-    s.values = (float *)adc_vals;
+    s.values = (PULSEQ_REAL *)adc_vals;
 
     if (seq->is_adc_library_parsed)
         return;
@@ -1312,7 +1318,7 @@ static void read_shapes_library(pulseq_file *seq, FILE *f)
     char line[PULSEQ_MAX_LINE_LENGTH];
     int shape_index = 0, sample_index = 0;
     char *p;
-    float val;
+    PULSEQ_REAL val;
 
     if (seq->is_shapes_library_parsed)
         return;
@@ -1378,9 +1384,9 @@ static int read_label_library(
     char line[PULSEQ_MAX_LINE_LENGTH];
     char *p;
     int idx, label_code;
-    float val;
+    PULSEQ_REAL val;
     char label[PULSEQ_LABEL_NAME_LENGTH];
-    float *arr = (float *)target;
+    PULSEQ_REAL *arr = (PULSEQ_REAL *)target;
 
     if (!f || offset < 0)
         return 1;
@@ -1398,15 +1404,19 @@ static int read_label_library(
             break;
         if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#')
             continue;
-        if (sscanf(p, "%d %f %31s", &idx, &val, label) != 3)
+        if (sscanf(p, "%d " PULSEQ_REAL_FMT " %31s", &idx, &val, label) != 3)
             continue;
         if (idx <= 0 || idx > target_count)
             continue;
-        label_code = pulseq_label_id_for_name(label);
-        if (label_code > 0)
+        /* Registering rather than looking up is what keeps a label name the
+         * file defines for itself: it gets an id past the built-in list, which
+         * nothing downstream switches on, and the name can be read back off
+         * that id when the sequence is written out again. */
+        label_code = pulseq_label_register_name(label);
+        if (label_code > 0 && label_code <= PULSEQ_LABEL_ID_MAX)
             is_label_defined[label_code - 1] = 1;
         arr[(idx - 1) * n + 0] = val;
-        arr[(idx - 1) * n + 1] = (float)label_code;
+        arr[(idx - 1) * n + 1] = (PULSEQ_REAL)label_code;
     }
     return 0;
 }
@@ -1422,9 +1432,9 @@ static int read_delay_library(
     char line[PULSEQ_MAX_LINE_LENGTH];
     char *p;
     int idx, hint_code;
-    float num_id, offset_val, scale_val;
+    PULSEQ_REAL num_id, offset_val, scale_val;
     char hint[PULSEQ_SOFT_DELAY_HINT_LENGTH];
-    float *arr = (float *)target;
+    PULSEQ_REAL *arr = (PULSEQ_REAL *)target;
 
     if (!f || offset < 0)
         return 1;
@@ -1442,7 +1452,7 @@ static int read_delay_library(
             break;
         if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#')
             continue;
-        if (sscanf(p, "%d %f %f %f %31s", &idx, &num_id, &offset_val, &scale_val, hint) != 5)
+        if (sscanf(p, "%d " PULSEQ_REAL_FMT " " PULSEQ_REAL_FMT " " PULSEQ_REAL_FMT " %31s", &idx, &num_id, &offset_val, &scale_val, hint) != 5)
             continue;
         if (idx <= 0 || idx > target_count)
             continue;
@@ -1452,7 +1462,7 @@ static int read_delay_library(
         arr[(idx - 1) * n + 0] = num_id;
         arr[(idx - 1) * n + 1] = offset_val;
         arr[(idx - 1) * n + 2] = scale_val;
-        arr[(idx - 1) * n + 3] = (float)hint_code;
+        arr[(idx - 1) * n + 3] = (PULSEQ_REAL)hint_code;
     }
     return 0;
 }
@@ -1466,7 +1476,7 @@ static int read_rf_shim_library(
     char line[PULSEQ_MAX_LINE_LENGTH];
     char *p;
     int idx, n_ch, i, consumed;
-    float val;
+    PULSEQ_REAL val;
 
     if (!f || !target)
         return 1;
@@ -1504,7 +1514,7 @@ static int read_rf_shim_library(
         for (i = 0; i < 2 * n_ch; i++)
         {
             consumed = 0;
-            if (sscanf(p, "%f%n", &val, &consumed) != 1)
+            if (sscanf(p, PULSEQ_REAL_FMT "%n", &val, &consumed) != 1)
                 break;
             target[idx - 1].values[i] = val;
             p += consumed;
@@ -1517,19 +1527,18 @@ static int read_rf_shim_library(
 
 static void read_extensions_library(pulseq_file *seq, FILE *f)
 {
-    int ret, n, k;
-    float qn;
-    static const float ext_vals[3] = {1, 1, 1};
-    static const float trig_vals[4] = {1, 1, 1, 1};
-    static const float rot_vals[4] = {1, 1, 1, 1};
+    int ret, n;
+    static const PULSEQ_REAL ext_vals[3] = {1, 1, 1};
+    static const PULSEQ_REAL trig_vals[4] = {1, 1, 1, 1};
+    static const PULSEQ_REAL rot_vals[4] = {1, 1, 1, 1};
     pulseq_scale ext_s, trig_s, rot_s;
 
     ext_s.size = 3;
-    ext_s.values = (float *)ext_vals;
+    ext_s.values = (PULSEQ_REAL *)ext_vals;
     trig_s.size = 4;
-    trig_s.values = (float *)trig_vals;
+    trig_s.values = (PULSEQ_REAL *)trig_vals;
     rot_s.size = 4;
-    rot_s.values = (float *)rot_vals;
+    rot_s.values = (PULSEQ_REAL *)rot_vals;
 
     if (seq->is_extensions_library_parsed)
         return;
@@ -1659,23 +1668,19 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             -1);
         if (ret != 0)
             return;
-        /* Normalize quaternions */
-        for (k = 1; k < seq->rotation_library_size; k++)
-        {
-            qn = (float)sqrt(
-                (double)seq->rotation_quaternion_library[k][0] *
-                    seq->rotation_quaternion_library[k][0] +
-                (double)seq->rotation_quaternion_library[k][1] *
-                    seq->rotation_quaternion_library[k][1] +
-                (double)seq->rotation_quaternion_library[k][2] *
-                    seq->rotation_quaternion_library[k][2] +
-                (double)seq->rotation_quaternion_library[k][3] *
-                    seq->rotation_quaternion_library[k][3]);
-            seq->rotation_quaternion_library[k][0] /= qn;
-            seq->rotation_quaternion_library[k][1] /= qn;
-            seq->rotation_quaternion_library[k][2] /= qn;
-            seq->rotation_quaternion_library[k][3] /= qn;
-        }
+        /* The quaternion is kept exactly as the file wrote it.
+         *
+         * It used to be normalized here, which was both lossy and inconsistent:
+         * lossy because a sequence read and written again no longer carried the
+         * numbers it arrived with, and inconsistent because the loop started at
+         * row 1, so the first rotation in every file was left alone while the
+         * rest were rewritten.
+         *
+         * Nothing needed it.  The one consumer of this library,
+         * copy_rotation_library() in pulseg_dedup.c, hands each row to
+         * pulseg__quaternion_to_matrix(), which normalizes internally before
+         * building the matrix -- so the rotation the scanner plays is unchanged
+         * either way. */
     }
 
     if (seq->offsets.labelset >= 0)
@@ -1748,14 +1753,14 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
 /*  Shape decompression (cross-file)                                  */
 /* ================================================================== */
 
-int pulseq_decompress_shape(pulseq_shape *result, const pulseq_shape *encoded, float scale)
+int pulseq_decompress_shape(pulseq_shape *result, const pulseq_shape *encoded, PULSEQ_REAL scale)
 {
     int i, rep;
-    const float *packed;
+    const PULSEQ_REAL *packed;
     int num_packed, num_samples;
     int count_pack = 1;
     int count_unpack = 1;
-    float *unpacked;
+    PULSEQ_REAL *unpacked;
 
     if (!encoded || !result)
         return 0;
@@ -1769,7 +1774,7 @@ int pulseq_decompress_shape(pulseq_shape *result, const pulseq_shape *encoded, f
     {
         result->num_samples = encoded->num_samples;
         result->num_uncompressed_samples = encoded->num_uncompressed_samples;
-        result->samples = (float *)PULSEQ_ALLOC(sizeof(float) * encoded->num_samples);
+        result->samples = (PULSEQ_REAL *)PULSEQ_ALLOC(sizeof(PULSEQ_REAL) * encoded->num_samples);
         if (!result->samples)
             return 0;
         for (i = 0; i < encoded->num_samples; ++i)
@@ -1777,7 +1782,7 @@ int pulseq_decompress_shape(pulseq_shape *result, const pulseq_shape *encoded, f
         return 1;
     }
 
-    unpacked = (float *)PULSEQ_ALLOC(sizeof(float) * num_samples);
+    unpacked = (PULSEQ_REAL *)PULSEQ_ALLOC(sizeof(PULSEQ_REAL) * num_samples);
     if (!unpacked)
         return 0;
 
@@ -1792,7 +1797,7 @@ int pulseq_decompress_shape(pulseq_shape *result, const pulseq_shape *encoded, f
         else
         {
             rep = (int)(packed[count_pack + 1]) + 2;
-            if (fabs(packed[count_pack + 1] + 2 - (float)rep) > 1e-6f)
+            if (fabs(packed[count_pack + 1] + 2 - (PULSEQ_REAL)rep) > 1e-6f)
             {
                 PULSEQ_FREE(unpacked);
                 return 0;
@@ -2038,8 +2043,8 @@ int pulseq_get_raw_block_content_ids(
     int parse_extensions)
 {
     int next_ext_id, ext_count;
-    float *ev;
-    float *ext_data;
+    PULSEQ_REAL *ev;
+    PULSEQ_REAL *ext_data;
 
     if (!seq || !block || block_index < 0 || block_index >= seq->num_blocks)
         return 0;

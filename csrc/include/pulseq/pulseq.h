@@ -17,7 +17,13 @@
 #include "pulseq_config.h"
 #include "pulseq_types.h"
 
-#ifdef __cplusplus
+/* A C++ translation unit that wants a *second*, differently-typed instance of
+ * this reader compiles the .c sources inside a namespace of its own (see
+ * cxx/pulseq/read_double.cpp, which builds them with PULSEQ_REAL=double).  C
+ * language linkage would defeat that: the symbols would come out unmangled and
+ * collide with the ordinary build.  Defining PULSEQ_NO_EXTERN_C keeps them
+ * scoped to the enclosing namespace.  Nothing else may define it. */
+#if defined(__cplusplus) && !defined(PULSEQ_NO_EXTERN_C)
 extern "C"
 {
 #endif
@@ -164,7 +170,7 @@ extern "C"
      * @param[in]  scale    Multiplier applied to every decompressed sample.
      * @return 1 on success, 0 on failure.
      */
-    int pulseq_decompress_shape(pulseq_shape *result, const pulseq_shape *encoded, float scale);
+    int pulseq_decompress_shape(pulseq_shape *result, const pulseq_shape *encoded, PULSEQ_REAL scale);
 
     /* ============================================================== */
     /*  Name tables                                                   */
@@ -184,13 +190,47 @@ extern "C"
     int pulseq_label_id_for_name(const char *name);
 
     /**
+     * @brief Id for @p name, allocating one past the built-in list if the
+     * name is not a Pulseq label.
+     *
+     * Idempotent: a name already known, built-in or not, keeps its id.  This
+     * is what lets a file define its own label names and still round-trip --
+     * see pulseq_label_name_for_id().  Returns -1 if the custom table is full
+     * (PULSEQ_MAX_CUSTOM_LABELS) or @p name will not fit, which is the same
+     * answer an unrecognized name gave before custom labels existed.
+     *
+     * The table is process-wide, append-only, and not safe to grow from two
+     * threads at once.
+     */
+    int pulseq_label_register_name(const char *name);
+
+    /**
+     * @brief The name an id was registered under, built-in or custom.
+     * @return Borrowed pointer, valid for the life of the process, or NULL if
+     *         @p id names no label.
+     */
+    const char *pulseq_label_name_for_id(int id);
+
+    /**
      * @brief Map a soft-delay hint name (e.g. "TE", "TR", "TI") to the numeric
      * hint id used in pulseq_file.soft_delay_library raw rows (column 3).
      * @return The numeric id, or -1 if @p name is not a recognized hint.
      */
     int pulseq_hint_id_for_name(const char *name);
 
-#ifdef __cplusplus
+    /**
+     * @brief The soft-delay hint name an id was parsed from.
+     *
+     * The inverse of pulseq_hint_id_for_name(), so a sequence read back can be
+     * written out with the hint it arrived with -- the file carries the name,
+     * not the number.
+     *
+     * @return Borrowed pointer, valid for the life of the process, or NULL if
+     *         @p id names no hint.
+     */
+    const char *pulseq_hint_name_for_id(int id);
+
+#if defined(__cplusplus) && !defined(PULSEQ_NO_EXTERN_C)
 }
 #endif
 

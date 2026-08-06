@@ -38,6 +38,12 @@
 #define PULSEQ_RF_USE_REFOCUSING 2
 #define PULSEQ_RF_USE_INVERSION 3
 #define PULSEQ_RF_USE_SATURATION 4
+/* Pulseq defines these two as well.  Nothing in the interpreter treats them
+ * specially -- they classify a pulse, they do not change how it is played --
+ * but a file that uses one has to read back as the same file, so they are
+ * carried rather than flattened to UNKNOWN. */
+#define PULSEQ_RF_USE_PREPARATION 5
+#define PULSEQ_RF_USE_OTHER 6
 
 /* ================================================================== */
 /*  Extension type codes for a block's extension chain, and for any    */
@@ -88,6 +94,15 @@
 #define PULSEQ_LABEL_OFF 23
 #define PULSEQ_LABEL_MODULE 24
 
+/* Ids above the built-in list are handed out by pulseq_label_register_name()
+ * to names the file uses and Pulseq does not define.  Nothing switches on
+ * them -- an interpreter ignores a label it does not know, which is all a
+ * custom label can ever mean -- but the name survives the round trip, so a
+ * writer can put back what it read. */
+#define PULSEQ_LABEL_BUILTIN_COUNT 24
+#define PULSEQ_MAX_CUSTOM_LABELS 40
+#define PULSEQ_LABEL_ID_MAX (PULSEQ_LABEL_BUILTIN_COUNT + PULSEQ_MAX_CUSTOM_LABELS)
+
 /* ================================================================== */
 /*  Soft-delay hint ids (soft_delay_library column 3)                 */
 /* ================================================================== */
@@ -131,7 +146,7 @@ typedef struct pulseq_shape
 {
     int num_uncompressed_samples;
     int num_samples;
-    float *samples;
+    PULSEQ_REAL *samples;
 } pulseq_shape;
 
 /* clang-format off */
@@ -271,16 +286,16 @@ typedef struct pulseq_definition
 /** @brief Reserved (well-known) [DEFINITIONS] keys, parsed eagerly. */
 typedef struct pulseq_reserved_definitions
 {
-    float gradient_raster_time;
-    float radiofrequency_raster_time;
-    float adc_raster_time;
-    float block_duration_raster;
+    PULSEQ_REAL gradient_raster_time;
+    PULSEQ_REAL radiofrequency_raster_time;
+    PULSEQ_REAL adc_raster_time;
+    PULSEQ_REAL block_duration_raster;
     char name[PULSEQ_SEQUENCE_NAME_LENGTH];
-    float fov[3];
-    float matrix[3];
-    float nav_fov[3];
-    float nav_matrix[3];
-    float total_duration;
+    PULSEQ_REAL fov[3];
+    PULSEQ_REAL matrix[3];
+    PULSEQ_REAL nav_fov[3];
+    PULSEQ_REAL nav_matrix[3];
+    PULSEQ_REAL total_duration;
     char next_sequence[PULSEQ_SEQUENCE_FILENAME_LENGTH];
     int ignore_fov_shift;
     int enable_pmc;
@@ -292,7 +307,7 @@ typedef struct pulseq_reserved_definitions
 typedef struct pulseq_rf_shim_entry
 {
     int num_channels;
-    float values[2 * PULSEQ_MAX_RF_SHIM_CHANNELS];
+    PULSEQ_REAL values[2 * PULSEQ_MAX_RF_SHIM_CHANNELS];
 } pulseq_rf_shim_entry;
 
 /**
@@ -315,9 +330,9 @@ typedef struct pulseq_rf_shim_entry
  */
 typedef struct pulseq_raster
 {
-    float rf_us;    /**< RF sample raster (us)       */
-    float grad_us;  /**< gradient sample raster (us) */
-    float block_us; /**< block duration raster (us)  */
+    PULSEQ_REAL rf_us;    /**< RF sample raster (us)       */
+    PULSEQ_REAL grad_us;  /**< gradient sample raster (us) */
+    PULSEQ_REAL block_us; /**< block duration raster (us)  */
 } pulseq_raster;
 
 /**
@@ -349,35 +364,35 @@ typedef struct pulseq_file
     pulseq_reserved_definitions reserved_definitions_library;
     int is_block_library_parsed;
     int num_blocks;
-    float (*block_library)[7];
+    PULSEQ_REAL (*block_library)[7];
     int *block_ids;
     int is_rf_library_parsed;
     int rf_library_size;
-    float (*rf_library)[10];
+    PULSEQ_REAL (*rf_library)[10];
     int *rf_use_tags; /* per-RF-event use tag (parsed from .seq) */
     int is_grad_library_parsed;
     int grad_library_size;
-    float (*grad_library)[7];
+    PULSEQ_REAL (*grad_library)[7];
     int is_adc_library_parsed;
     int adc_library_size;
-    float (*adc_library)[8];
+    PULSEQ_REAL (*adc_library)[8];
     int is_extensions_library_parsed;
     int extensions_library_size;
-    float (*extensions_library)[3];
+    PULSEQ_REAL (*extensions_library)[3];
     int trigger_library_size;
-    float (*trigger_library)[4];
+    PULSEQ_REAL (*trigger_library)[4];
     int rotation_library_size;
-    float (*rotation_quaternion_library)[4];
-    float (*rotation_matrix_library)[9];
-    int is_label_defined[22];
+    PULSEQ_REAL (*rotation_quaternion_library)[4];
+    PULSEQ_REAL (*rotation_matrix_library)[9];
+    int is_label_defined[PULSEQ_LABEL_ID_MAX];
     int labelset_library_size;
-    float (*labelset_library)[2];
+    PULSEQ_REAL (*labelset_library)[2];
     int labelinc_library_size;
-    float (*labelinc_library)[2];
+    PULSEQ_REAL (*labelinc_library)[2];
     pulseq_label_limit label_limits;
     int is_delay_defined[8];
     int soft_delay_library_size;
-    float (*soft_delay_library)[4];
+    PULSEQ_REAL (*soft_delay_library)[4];
     int rf_shim_library_size;
     pulseq_rf_shim_entry *rf_shim_library;
     int extension_map[8];

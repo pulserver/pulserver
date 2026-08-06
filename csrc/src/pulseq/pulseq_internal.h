@@ -24,7 +24,7 @@ typedef struct pulseq_table_entry
 typedef struct pulseq_scale
 {
     int size;
-    float *values;
+    PULSEQ_REAL *values;
 } pulseq_scale;
 
 /**

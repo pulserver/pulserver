@@ -8,6 +8,10 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 find_package(pybind11 CONFIG REQUIRED)
 find_package(Python COMPONENTS Development.Module REQUIRED)
 
+# The standalone C++ Pulseq library.  Built before the extension modules
+# because _pulseqpp_wrapper links it.
+add_subdirectory(${CMAKE_SOURCE_DIR}/cxx/pulseq ${CMAKE_BINARY_DIR}/pulseqpp_build)
+
 function(add_pybind_module module_name output_subdir)
     set(options)
     set(oneValueArgs)
@@ -65,6 +69,9 @@ set(PULSEG_C_SOURCES
     "${CMAKE_SOURCE_DIR}/csrc/src/bridge/pulseg_bridge.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/vendor/external_kiss_fft.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/vendor/external_kiss_fftr.c"
+    # The same kissfft a second time, in double precision, for the mechanical
+    # resonance chirp-z. See csrc/CMakeLists.txt, which has always had it.
+    "${CMAKE_SOURCE_DIR}/csrc/src/vendor/external_kiss_fft_double.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/vendor/external_md5.c"
 )
 
@@ -85,6 +92,23 @@ add_pybind_module(_pulseg_wrapper ""
 file(GLOB PULSEG_WRAPPERS
     "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/_ext/_pulseg_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
 install(FILES ${PULSEG_WRAPPERS}
+    DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/_ext)
+
+# _pulseqpp_wrapper: the binding for pulseq::Sequence (cxx/pulseq). Thin --
+# the public API, its docstrings and its type hints are Python-side, in
+# pulserver/pypulseq/_sequence.py.
+add_pybind_module(_pulseqpp_wrapper ""
+    SOURCES
+        "${CMAKE_SOURCE_DIR}/python/pulserver/_ext/_pulseqpp_wrapper.cpp"
+        "${CMAKE_SOURCE_DIR}/python/pulserver/_ext/_pulseqpp_eventtypes.cpp"
+    INCLUDES
+        ${CMAKE_SOURCE_DIR}/cxx/include
+)
+target_link_libraries(_pulseqpp_wrapper PRIVATE pulseqpp)
+
+file(GLOB PULSEQPP_WRAPPERS
+    "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/_ext/_pulseqpp_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
+install(FILES ${PULSEQPP_WRAPPERS}
     DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/_ext)
 
 # _arbgrad_wrapper: pulserver.arbgrad C++ extension (vendored MRArbGrad core;

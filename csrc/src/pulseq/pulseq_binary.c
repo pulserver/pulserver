@@ -87,7 +87,7 @@ typedef struct
 {
     FILE *f;
     int file_is_big;  /**< byte order of the file itself */
-    int reverse_real; /**< file and host disagree, so float bytes need flipping */
+    int reverse_real; /**< file and host disagree, so IEEE real bytes need flipping */
 } bin_reader;
 
 static int host_is_big_endian(void)
@@ -173,7 +173,10 @@ static double dec_f64(const unsigned char *p, int reverse)
     return out;
 }
 
-static float dec_f32(const unsigned char *p, int reverse)
+/* `float` here is the *wire* type, not the storage type: this field is four
+ * bytes in the file whichever precision PULSEQ_REAL happens to be, so it is
+ * decoded at its own width and widened on return. */
+static PULSEQ_REAL dec_f32(const unsigned char *p, int reverse)
 {
     unsigned char tmp[4];
     float out;
@@ -251,24 +254,24 @@ static int rd_f64(bin_reader *r, double *out)
 }
 
 /** @brief Read an int64 picosecond time as microseconds. */
-static int rd_ps_as_us(bin_reader *r, float *out)
+static int rd_ps_as_us(bin_reader *r, PULSEQ_REAL *out)
 {
     bin_i64 raw;
     int rc = rd_i64(r, &raw);
     if (PULSEQ_FAILED(rc))
         return rc;
-    *out = (float)(i64_to_double(raw) * 1e-6);
+    *out = (PULSEQ_REAL)(i64_to_double(raw) * 1e-6);
     return PULSEQ_SUCCESS;
 }
 
 /** @brief Read an int64 picosecond time as nanoseconds (ADC dwell). */
-static int rd_ps_as_ns(bin_reader *r, float *out)
+static int rd_ps_as_ns(bin_reader *r, PULSEQ_REAL *out)
 {
     bin_i64 raw;
     int rc = rd_i64(r, &raw);
     if (PULSEQ_FAILED(rc))
         return rc;
-    *out = (float)(i64_to_double(raw) * 1e-3);
+    *out = (PULSEQ_REAL)(i64_to_double(raw) * 1e-3);
     return PULSEQ_SUCCESS;
 }
 
@@ -285,9 +288,9 @@ static int rd_ps_as_ns(bin_reader *r, float *out)
  *
  * Capacity is tracked separately from size; see lib_reserve for why.
  */
-static int lib_reserve(float **rows, int *cap, int *size, int cols, int needed)
+static int lib_reserve(PULSEQ_REAL **rows, int *cap, int *size, int cols, int needed)
 {
-    float *grown;
+    PULSEQ_REAL *grown;
     int new_cap, i;
 
     /* A caller starting from cap 0 on a library that already has rows is a
@@ -311,17 +314,17 @@ static int lib_reserve(float **rows, int *cap, int *size, int cols, int needed)
     new_cap = (*cap > 0) ? *cap * 2 : 64;
     if (new_cap < needed)
         new_cap = needed;
-    if (new_cap <= 0 || (size_t)new_cap > (size_t)-1 / ((size_t)cols * sizeof(float)))
+    if (new_cap <= 0 || (size_t)new_cap > (size_t)-1 / ((size_t)cols * sizeof(PULSEQ_REAL)))
         return PULSEQ_ERR_ALLOC_FAILED;
 
-    grown = (float *)PULSEQ_ALLOC((size_t)new_cap * (size_t)cols * sizeof(float));
+    grown = (PULSEQ_REAL *)PULSEQ_ALLOC((size_t)new_cap * (size_t)cols * sizeof(PULSEQ_REAL));
     if (!grown)
         return PULSEQ_ERR_ALLOC_FAILED;
     for (i = 0; i < new_cap * cols; ++i)
         grown[i] = 0.0f;
     if (*rows)
     {
-        memcpy(grown, *rows, (size_t)(*cap) * (size_t)cols * sizeof(float));
+        memcpy(grown, *rows, (size_t)(*cap) * (size_t)cols * sizeof(PULSEQ_REAL));
         PULSEQ_FREE(*rows);
     }
     *rows = grown;
@@ -344,7 +347,8 @@ static int lib_reserve(float **rows, int *cap, int *size, int cols, int needed)
  * definition, so the same sequence yields the same definition strings (and
  * so the same cache bytes) whichever format it was stored in.  Nothing is
  * lost by it -- every consumer of these strings runs them through atof() into
- * a *float*, which holds about 7 significant digits.
+ * a PULSEQ_REAL, which holds at least the seven significant digits a float
+ * does and, in the double build, more than the nine printed here.
  */
 #define PULSEQ_BIN_DEFINITION_FORMAT "%.9g"
 
@@ -539,7 +543,7 @@ static int read_binary_blocks(bin_reader *r, pulseq_file *seq)
     unsigned char batch[PULSEQ_BIN_BLOCK_STRIDE * PULSEQ_BIN_BLOCK_BATCH];
     long count, done;
     int rc, big = r->file_is_big;
-    float(*rows)[7];
+    PULSEQ_REAL(*rows)[7];
 
     rc = rd_count(r, &count);
     if (PULSEQ_FAILED(rc))
@@ -549,7 +553,7 @@ static int read_binary_blocks(bin_reader *r, pulseq_file *seq)
     if (count == 0)
         return PULSEQ_SUCCESS;
 
-    rows = (float(*)[7])PULSEQ_ALLOC((size_t)count * 7 * sizeof(float));
+    rows = (PULSEQ_REAL(*)[7])PULSEQ_ALLOC((size_t)count * 7 * sizeof(PULSEQ_REAL));
     if (!rows)
         return PULSEQ_ERR_ALLOC_FAILED;
     seq->block_library = rows;
@@ -568,16 +572,16 @@ static int read_binary_blocks(bin_reader *r, pulseq_file *seq)
         for (k = 0; k < n; ++k)
         {
             const unsigned char *p = batch + k * PULSEQ_BIN_BLOCK_STRIDE;
-            float *row = rows[done + k];
+            PULSEQ_REAL *row = rows[done + k];
             bin_i64 dur;
             dec_i64(p, big, &dur);
-            row[0] = (float)i64_to_double(dur);
-            row[1] = (float)dec_i32(p + 8, big);
-            row[2] = (float)dec_i32(p + 12, big);
-            row[3] = (float)dec_i32(p + 16, big);
-            row[4] = (float)dec_i32(p + 20, big);
-            row[5] = (float)dec_i32(p + 24, big);
-            row[6] = (float)dec_i32(p + 28, big);
+            row[0] = (PULSEQ_REAL)i64_to_double(dur);
+            row[1] = (PULSEQ_REAL)dec_i32(p + 8, big);
+            row[2] = (PULSEQ_REAL)dec_i32(p + 12, big);
+            row[3] = (PULSEQ_REAL)dec_i32(p + 16, big);
+            row[4] = (PULSEQ_REAL)dec_i32(p + 20, big);
+            row[5] = (PULSEQ_REAL)dec_i32(p + 24, big);
+            row[6] = (PULSEQ_REAL)dec_i32(p + 28, big);
         }
         done += n;
     }
@@ -629,7 +633,7 @@ static int read_binary_rf(bin_reader *r, pulseq_file *seq)
     seq->is_rf_library_parsed = 1;
 
     /* Dense ids are the norm, so one allocation covers the section. */
-    rc = lib_reserve((float **)&seq->rf_library, &cap, &seq->rf_library_size, 10, (int)count);
+    rc = lib_reserve((PULSEQ_REAL **)&seq->rf_library, &cap, &seq->rf_library_size, 10, (int)count);
     if (PULSEQ_FAILED(rc))
         return rc;
 
@@ -637,9 +641,9 @@ static int read_binary_rf(bin_reader *r, pulseq_file *seq)
     {
         int id, mag_id, phase_id, time_id;
         double amp, fppm, pppm, freq, phase;
-        float center_us, delay_us;
+        PULSEQ_REAL center_us, delay_us;
         unsigned char use;
-        float *row;
+        PULSEQ_REAL *row;
 
         rc = rd_i32(r, &id);
         if (PULSEQ_FAILED(rc))
@@ -680,20 +684,20 @@ static int read_binary_rf(bin_reader *r, pulseq_file *seq)
         if (PULSEQ_FAILED(rc))
             return rc;
 
-        rc = lib_reserve((float **)&seq->rf_library, &cap, &seq->rf_library_size, 10, id);
+        rc = lib_reserve((PULSEQ_REAL **)&seq->rf_library, &cap, &seq->rf_library_size, 10, id);
         if (PULSEQ_FAILED(rc))
             return rc;
-        row = &((float *)seq->rf_library)[(id - 1) * 10];
-        row[0] = (float)amp;
-        row[1] = (float)mag_id;
-        row[2] = (float)phase_id;
-        row[3] = (float)time_id;
+        row = &((PULSEQ_REAL *)seq->rf_library)[(id - 1) * 10];
+        row[0] = (PULSEQ_REAL)amp;
+        row[1] = (PULSEQ_REAL)mag_id;
+        row[2] = (PULSEQ_REAL)phase_id;
+        row[3] = (PULSEQ_REAL)time_id;
         row[4] = center_us;
         row[5] = delay_us;
-        row[6] = (float)fppm;
-        row[7] = (float)pppm;
-        row[8] = (float)freq;
-        row[9] = (float)phase;
+        row[6] = (PULSEQ_REAL)fppm;
+        row[7] = (PULSEQ_REAL)pppm;
+        row[8] = (PULSEQ_REAL)freq;
+        row[9] = (PULSEQ_REAL)phase;
 
         rc = tags_reserve(&seq->rf_use_tags, &tags_size, seq->rf_library_size);
         if (PULSEQ_FAILED(rc))
@@ -702,6 +706,8 @@ static int read_binary_rf(bin_reader *r, pulseq_file *seq)
             : (use == 'r')                      ? PULSEQ_RF_USE_REFOCUSING
             : (use == 'i')                      ? PULSEQ_RF_USE_INVERSION
             : (use == 's')                      ? PULSEQ_RF_USE_SATURATION
+            : (use == 'p')                      ? PULSEQ_RF_USE_PREPARATION
+            : (use == 'o')                      ? PULSEQ_RF_USE_OTHER
                                                 : PULSEQ_RF_USE_UNKNOWN;
     }
     /* A sparse [RF] section can leave the library longer than the last id
@@ -723,7 +729,7 @@ static int read_binary_arb_grad(bin_reader *r, pulseq_file *seq)
     seq->is_grad_library_parsed = 1;
 
     /* Dense ids are the norm, so one allocation covers the section. */
-    rc = lib_reserve((float **)&seq->grad_library, &cap, &seq->grad_library_size, 7, (int)count);
+    rc = lib_reserve((PULSEQ_REAL **)&seq->grad_library, &cap, &seq->grad_library_size, 7, (int)count);
     if (PULSEQ_FAILED(rc))
         return rc;
 
@@ -731,8 +737,8 @@ static int read_binary_arb_grad(bin_reader *r, pulseq_file *seq)
     {
         int id, amp_shape, time_shape;
         double amp, first, last;
-        float delay_us;
-        float *row;
+        PULSEQ_REAL delay_us;
+        PULSEQ_REAL *row;
 
         rc = rd_i32(r, &id);
         if (PULSEQ_FAILED(rc))
@@ -758,16 +764,16 @@ static int read_binary_arb_grad(bin_reader *r, pulseq_file *seq)
         if (PULSEQ_FAILED(rc))
             return rc;
 
-        rc = lib_reserve((float **)&seq->grad_library, &cap, &seq->grad_library_size, 7, id);
+        rc = lib_reserve((PULSEQ_REAL **)&seq->grad_library, &cap, &seq->grad_library_size, 7, id);
         if (PULSEQ_FAILED(rc))
             return rc;
-        row = &((float *)seq->grad_library)[(id - 1) * 7];
+        row = &((PULSEQ_REAL *)seq->grad_library)[(id - 1) * 7];
         row[0] = 1.0f; /* text reader's discriminator: 1 = arbitrary, 0 = trapezoid */
-        row[1] = (float)amp;
-        row[2] = (float)first;
-        row[3] = (float)last;
-        row[4] = (float)amp_shape;
-        row[5] = (float)time_shape;
+        row[1] = (PULSEQ_REAL)amp;
+        row[2] = (PULSEQ_REAL)first;
+        row[3] = (PULSEQ_REAL)last;
+        row[4] = (PULSEQ_REAL)amp_shape;
+        row[5] = (PULSEQ_REAL)time_shape;
         row[6] = delay_us;
     }
     return PULSEQ_SUCCESS;
@@ -785,7 +791,7 @@ static int read_binary_trap_grad(bin_reader *r, pulseq_file *seq)
     seq->is_grad_library_parsed = 1;
 
     /* Dense ids are the norm, so one allocation covers the section. */
-    rc = lib_reserve((float **)&seq->grad_library, &cap, &seq->grad_library_size, 7, (int)count);
+    rc = lib_reserve((PULSEQ_REAL **)&seq->grad_library, &cap, &seq->grad_library_size, 7, (int)count);
     if (PULSEQ_FAILED(rc))
         return rc;
 
@@ -793,8 +799,8 @@ static int read_binary_trap_grad(bin_reader *r, pulseq_file *seq)
     {
         int id;
         double amp;
-        float rise, flat, fall, delay;
-        float *row;
+        PULSEQ_REAL rise, flat, fall, delay;
+        PULSEQ_REAL *row;
 
         rc = rd_i32(r, &id);
         if (PULSEQ_FAILED(rc))
@@ -817,12 +823,12 @@ static int read_binary_trap_grad(bin_reader *r, pulseq_file *seq)
         if (PULSEQ_FAILED(rc))
             return rc;
 
-        rc = lib_reserve((float **)&seq->grad_library, &cap, &seq->grad_library_size, 7, id);
+        rc = lib_reserve((PULSEQ_REAL **)&seq->grad_library, &cap, &seq->grad_library_size, 7, id);
         if (PULSEQ_FAILED(rc))
             return rc;
-        row = &((float *)seq->grad_library)[(id - 1) * 7];
+        row = &((PULSEQ_REAL *)seq->grad_library)[(id - 1) * 7];
         row[0] = 0.0f; /* text reader's flag: 0 = trapezoid */
-        row[1] = (float)amp;
+        row[1] = (PULSEQ_REAL)amp;
         row[2] = rise;
         row[3] = flat;
         row[4] = fall;
@@ -844,7 +850,7 @@ static int read_binary_adc(bin_reader *r, pulseq_file *seq)
     seq->is_adc_library_parsed = 1;
 
     /* Dense ids are the norm, so one allocation covers the section. */
-    rc = lib_reserve((float **)&seq->adc_library, &cap, &seq->adc_library_size, 8, (int)count);
+    rc = lib_reserve((PULSEQ_REAL **)&seq->adc_library, &cap, &seq->adc_library_size, 8, (int)count);
     if (PULSEQ_FAILED(rc))
         return rc;
 
@@ -853,8 +859,8 @@ static int read_binary_adc(bin_reader *r, pulseq_file *seq)
         int id, phase_id;
         bin_i64 num;
         double fppm, pppm, freq, phase;
-        float dwell_ns, delay_us;
-        float *row;
+        PULSEQ_REAL dwell_ns, delay_us;
+        PULSEQ_REAL *row;
 
         rc = rd_i32(r, &id);
         if (PULSEQ_FAILED(rc))
@@ -886,24 +892,24 @@ static int read_binary_adc(bin_reader *r, pulseq_file *seq)
         if (PULSEQ_FAILED(rc))
             return rc;
 
-        rc = lib_reserve((float **)&seq->adc_library, &cap, &seq->adc_library_size, 8, id);
+        rc = lib_reserve((PULSEQ_REAL **)&seq->adc_library, &cap, &seq->adc_library_size, 8, id);
         if (PULSEQ_FAILED(rc))
             return rc;
-        row = &((float *)seq->adc_library)[(id - 1) * 8];
-        row[0] = (float)i64_to_double(num);
+        row = &((PULSEQ_REAL *)seq->adc_library)[(id - 1) * 8];
+        row[0] = (PULSEQ_REAL)i64_to_double(num);
         row[1] = dwell_ns;
         row[2] = delay_us;
-        row[3] = (float)fppm;
-        row[4] = (float)pppm;
-        row[5] = (float)freq;
-        row[6] = (float)phase;
-        row[7] = (float)phase_id;
+        row[3] = (PULSEQ_REAL)fppm;
+        row[4] = (PULSEQ_REAL)pppm;
+        row[5] = (PULSEQ_REAL)freq;
+        row[6] = (PULSEQ_REAL)phase;
+        row[7] = (PULSEQ_REAL)phase_id;
     }
     return PULSEQ_SUCCESS;
 }
 
 /* Same capacity-vs-size split as lib_reserve, for the two libraries whose
- * rows are structs rather than float tuples. */
+ * rows are structs rather than numeric tuples. */
 static int shapes_reserve(pulseq_file *seq, int *cap, int needed)
 {
     pulseq_shape *grown;
@@ -989,7 +995,7 @@ static int read_binary_shapes(bin_reader *r, pulseq_file *seq)
         int id;
         long n_uncompressed, n_compressed, j;
         pulseq_shape *slot;
-        float *samples = NULL;
+        PULSEQ_REAL *samples = NULL;
 
         rc = rd_i32(r, &id);
         if (PULSEQ_FAILED(rc))
@@ -1010,7 +1016,7 @@ static int read_binary_shapes(bin_reader *r, pulseq_file *seq)
         if (n_compressed > 0)
         {
             unsigned char buf[4];
-            samples = (float *)PULSEQ_ALLOC((size_t)n_compressed * sizeof(float));
+            samples = (PULSEQ_REAL *)PULSEQ_ALLOC((size_t)n_compressed * sizeof(PULSEQ_REAL));
             if (!samples)
                 return PULSEQ_ERR_ALLOC_FAILED;
             for (j = 0; j < n_compressed; ++j)
@@ -1047,7 +1053,7 @@ static int read_binary_extension_list(bin_reader *r, pulseq_file *seq)
 
     /* Dense ids are the norm, so one allocation covers the section. */
     rc = lib_reserve(
-        (float **)&seq->extensions_library,
+        (PULSEQ_REAL **)&seq->extensions_library,
         &cap,
         &seq->extensions_library_size,
         3,
@@ -1072,22 +1078,22 @@ static int read_binary_extension_list(bin_reader *r, pulseq_file *seq)
         {
             const unsigned char *p = batch + k * PULSEQ_BIN_EXT_STRIDE;
             int id = dec_i32(p, big);
-            float *row;
+            PULSEQ_REAL *row;
 
             if (id <= 0)
                 return PULSEQ_ERR_FILE_READ_FAILED;
             rc = lib_reserve(
-                (float **)&seq->extensions_library,
+                (PULSEQ_REAL **)&seq->extensions_library,
                 &cap,
                 &seq->extensions_library_size,
                 3,
                 id);
             if (PULSEQ_FAILED(rc))
                 return rc;
-            row = &((float *)seq->extensions_library)[(id - 1) * 3];
-            row[0] = (float)dec_i32(p + 4, big);
-            row[1] = (float)dec_i32(p + 8, big);
-            row[2] = (float)dec_i32(p + 12, big);
+            row = &((PULSEQ_REAL *)seq->extensions_library)[(id - 1) * 3];
+            row[0] = (PULSEQ_REAL)dec_i32(p + 4, big);
+            row[1] = (PULSEQ_REAL)dec_i32(p + 8, big);
+            row[2] = (PULSEQ_REAL)dec_i32(p + 12, big);
         }
         done += n;
     }
@@ -1110,7 +1116,7 @@ static int read_binary_triggers(bin_reader *r, pulseq_file *seq)
 
     /* Dense ids are the norm, so one allocation covers the section. */
     rc = lib_reserve(
-        (float **)&seq->trigger_library,
+        (PULSEQ_REAL **)&seq->trigger_library,
         &cap,
         &seq->trigger_library_size,
         4,
@@ -1121,7 +1127,7 @@ static int read_binary_triggers(bin_reader *r, pulseq_file *seq)
     for (i = 0; i < count; ++i)
     {
         int id, type, channel;
-        float delay_us, duration_us, *row;
+        PULSEQ_REAL delay_us, duration_us, *row;
 
         rc = rd_i32(r, &id);
         if (PULSEQ_FAILED(rc))
@@ -1141,12 +1147,12 @@ static int read_binary_triggers(bin_reader *r, pulseq_file *seq)
         if (PULSEQ_FAILED(rc))
             return rc;
 
-        rc = lib_reserve((float **)&seq->trigger_library, &cap, &seq->trigger_library_size, 4, id);
+        rc = lib_reserve((PULSEQ_REAL **)&seq->trigger_library, &cap, &seq->trigger_library_size, 4, id);
         if (PULSEQ_FAILED(rc))
             return rc;
-        row = &((float *)seq->trigger_library)[(id - 1) * 4];
-        row[0] = (float)type;
-        row[1] = (float)channel;
+        row = &((PULSEQ_REAL *)seq->trigger_library)[(id - 1) * 4];
+        row[0] = (PULSEQ_REAL)type;
+        row[1] = (PULSEQ_REAL)channel;
         row[2] = delay_us;
         row[3] = duration_us;
     }
@@ -1158,7 +1164,7 @@ static int read_binary_labels(bin_reader *r, pulseq_file *seq, int is_inc)
     long count, i;
     int rc, ext_id;
     int cap = 0;
-    float **rows = is_inc ? (float **)&seq->labelinc_library : (float **)&seq->labelset_library;
+    PULSEQ_REAL **rows = is_inc ? (PULSEQ_REAL **)&seq->labelinc_library : (PULSEQ_REAL **)&seq->labelset_library;
     int *size = is_inc ? &seq->labelinc_library_size : &seq->labelset_library_size;
 
     rc = rd_i32(r, &ext_id);
@@ -1177,7 +1183,7 @@ static int read_binary_labels(bin_reader *r, pulseq_file *seq, int is_inc)
     for (i = 0; i < count; ++i)
     {
         int id, value, label_index;
-        float *row;
+        PULSEQ_REAL *row;
 
         rc = rd_i32(r, &id);
         if (PULSEQ_FAILED(rc))
@@ -1195,9 +1201,9 @@ static int read_binary_labels(bin_reader *r, pulseq_file *seq, int is_inc)
         if (PULSEQ_FAILED(rc))
             return rc;
         row = &(*rows)[(id - 1) * 2];
-        row[0] = (float)value;
-        row[1] = (float)label_index;
-        if (label_index > 0 && label_index <= 22)
+        row[0] = (PULSEQ_REAL)value;
+        row[1] = (PULSEQ_REAL)label_index;
+        if (label_index > 0 && label_index <= PULSEQ_LABEL_ID_MAX)
             seq->is_label_defined[label_index - 1] = 1;
     }
     return PULSEQ_SUCCESS;
@@ -1219,7 +1225,7 @@ static int read_binary_soft_delays(bin_reader *r, pulseq_file *seq)
 
     /* Dense ids are the norm, so one allocation covers the section. */
     rc = lib_reserve(
-        (float **)&seq->soft_delay_library,
+        (PULSEQ_REAL **)&seq->soft_delay_library,
         &cap,
         &seq->soft_delay_library_size,
         4,
@@ -1231,7 +1237,7 @@ static int read_binary_soft_delays(bin_reader *r, pulseq_file *seq)
     {
         int id, num, hint_len, hint_code;
         double factor;
-        float offset_us, *row;
+        PULSEQ_REAL offset_us, *row;
         char hint[PULSEQ_SOFT_DELAY_HINT_LENGTH];
 
         rc = rd_i32(r, &id);
@@ -1279,18 +1285,18 @@ static int read_binary_soft_delays(bin_reader *r, pulseq_file *seq)
             seq->is_delay_defined[hint_code - 1] = 1;
 
         rc = lib_reserve(
-            (float **)&seq->soft_delay_library,
+            (PULSEQ_REAL **)&seq->soft_delay_library,
             &cap,
             &seq->soft_delay_library_size,
             4,
             id);
         if (PULSEQ_FAILED(rc))
             return rc;
-        row = &((float *)seq->soft_delay_library)[(id - 1) * 4];
-        row[0] = (float)num;
+        row = &((PULSEQ_REAL *)seq->soft_delay_library)[(id - 1) * 4];
+        row[0] = (PULSEQ_REAL)num;
         row[1] = offset_us;
-        row[2] = (float)factor;
-        row[3] = (float)hint_code;
+        row[2] = (PULSEQ_REAL)factor;
+        row[3] = (PULSEQ_REAL)hint_code;
     }
     return PULSEQ_SUCCESS;
 }
@@ -1335,7 +1341,7 @@ static int read_binary_rf_shims(bin_reader *r, pulseq_file *seq)
             rc = rd_f64(r, &v);
             if (PULSEQ_FAILED(rc))
                 return rc;
-            seq->rf_shim_library[id - 1].values[j] = (float)v;
+            seq->rf_shim_library[id - 1].values[j] = (PULSEQ_REAL)v;
         }
     }
     return PULSEQ_SUCCESS;
@@ -1344,7 +1350,7 @@ static int read_binary_rf_shims(bin_reader *r, pulseq_file *seq)
 static int read_binary_rotations(bin_reader *r, pulseq_file *seq)
 {
     long count, i;
-    int rc, ext_id, k;
+    int rc, ext_id;
     int cap = 0;
 
     rc = rd_i32(r, &ext_id);
@@ -1357,7 +1363,7 @@ static int read_binary_rotations(bin_reader *r, pulseq_file *seq)
 
     /* Dense ids are the norm, so one allocation covers the section. */
     rc = lib_reserve(
-        (float **)&seq->rotation_quaternion_library,
+        (PULSEQ_REAL **)&seq->rotation_quaternion_library,
         &cap,
         &seq->rotation_library_size,
         4,
@@ -1369,7 +1375,7 @@ static int read_binary_rotations(bin_reader *r, pulseq_file *seq)
     {
         int id, j;
         double q[4];
-        float *row;
+        PULSEQ_REAL *row;
 
         rc = rd_i32(r, &id);
         if (PULSEQ_FAILED(rc))
@@ -1383,36 +1389,21 @@ static int read_binary_rotations(bin_reader *r, pulseq_file *seq)
                 return rc;
         }
         rc = lib_reserve(
-            (float **)&seq->rotation_quaternion_library,
+            (PULSEQ_REAL **)&seq->rotation_quaternion_library,
             &cap,
             &seq->rotation_library_size,
             4,
             id);
         if (PULSEQ_FAILED(rc))
             return rc;
-        row = &((float *)seq->rotation_quaternion_library)[(id - 1) * 4];
+        row = &((PULSEQ_REAL *)seq->rotation_quaternion_library)[(id - 1) * 4];
         for (j = 0; j < 4; ++j)
-            row[j] = (float)q[j];
+            row[j] = (PULSEQ_REAL)q[j];
     }
 
-    /* Normalization matches the text reader exactly, including that it starts
-     * at row 1 rather than row 0 -- see read_extensions_library().  Diverging
-     * here would make the same sequence read differently depending on which
-     * format it was stored in, which is worse than the quirk itself. */
-    for (k = 1; k < seq->rotation_library_size; ++k)
-    {
-        float *row = &((float *)seq->rotation_quaternion_library)[k * 4];
-        float qn = (float)sqrt(
-            (double)row[0] * row[0] + (double)row[1] * row[1] + (double)row[2] * row[2] +
-            (double)row[3] * row[3]);
-        if (qn > 0.0f)
-        {
-            row[0] /= qn;
-            row[1] /= qn;
-            row[2] /= qn;
-            row[3] /= qn;
-        }
-    }
+    /* Quaternions are kept as written, matching the text reader -- which no
+     * longer normalizes either.  See the note in read_extensions_library()
+     * (pulseq_parse.c) for why that eager normalization went away. */
     return PULSEQ_SUCCESS;
 }
 
