@@ -97,6 +97,10 @@ const char *pulseg_get_error_message(int code)
         return "TR does not end with zero gradient amplitude";
     case PULSEG_ERR_SEG_NO_SEGMENTS_FOUND:
         return "No segment boundaries could be identified in TR";
+    case PULSEG_ERR_CHUNK_INFEASIBLE:
+        return "No chunk split satisfies both the waveform memory budget and the playout rate";
+    case PULSEG_ERR_SEG_ROTATION_MID_GRADIENT:
+        return "Rotation state changes across a live gradient (no zero-gradient junction)";
     case PULSEG_ERR_MECH_RESONANCES_NO_WAVEFORM:
         return "No waveform data for mechanical resonance analysis";
     case PULSEG_ERR_MECH_RESONANCES_VIOLATION:

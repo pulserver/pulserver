@@ -25,7 +25,7 @@
  * error via the return code, never a silent degrade. Do not add tolerance
  * for an absent SEQDESC; a cache lacking it is a fixture/writer bug.
  *
- * Section 5 (FREQMOD / off-isocenter shift) is intentionally NOT parsed:
+ * Section 5 (retired; was FREQMOD) is not parsed:
  * frequency modulation is applied PSD-side, so data arriving at recon are
  * already centered -- this is a permanent design choice, not a workaround
  * for section-write ordering. See tests/utils/SCHEMA.md.

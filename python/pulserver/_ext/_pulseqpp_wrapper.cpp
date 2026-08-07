@@ -27,6 +27,7 @@
 
 #include "pulseq/read.hpp"
 #include "pulseq/sequence.hpp"
+#include "pulseq/trajectory.hpp"
 #include "pulseq/write.hpp"
 
 #include <cstring>
@@ -519,7 +520,69 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
              })
         .def("write_binary",
              [](Sequence& self) { return py::bytes(pulseq::write_binary(self)); })
-        .def("required_revision", [](const Sequence& s) { return pulseq::required_revision(s); });
+        .def("required_revision", [](const Sequence& s) { return pulseq::required_revision(s); })
+
+        /* -- FOV positioning -------------------------------------------- */
+        //
+        // The shift is in LOGICAL coordinates, which is what lets it ignore
+        // rotation entirely: `dr . k` is invariant when both are rotated.  The
+        // caller converts a prescribed physical offset once, with
+        // `dr_logical = R.T @ dr_physical`.
+        .def(
+            "apply_fov_shift",
+            [](Sequence& self, double dx, double dy, double dz, bool bake_adc) {
+                pulseq::apply_fov_shift(self, {dx, dy, dz},
+                                        bake_adc ? pulseq::FovShiftScope::RfAndAdc
+                                                 : pulseq::FovShiftScope::RfOnly);
+            },
+            py::arg("dx"), py::arg("dy"), py::arg("dz"), py::arg("bake_adc") = true,
+            py::call_guard<py::gil_scoped_release>())
+
+        // Server mode: store each readout's base trajectory in its ADC's
+        // phase_modulation, for a consumer of ours to rescale and rotate.
+        .def(
+            "attach_base_trajectory",
+            [](Sequence& self) { pulseq::attach_base_trajectory(self); },
+            py::call_guard<py::gil_scoped_release>())
+        .def("has_base_trajectory",
+             [](const Sequence& s) { return pulseq::has_base_trajectory(s); })
+
+        .def("block_k_origins",
+             [](const Sequence& s) {
+                 const std::vector<std::array<double, 3>> origins = pulseq::block_k_origins(s);
+                 py::array_t<double> out({static_cast<int>(origins.size()), 3});
+                 double* dst = static_cast<double*>(out.request().ptr);
+                 for (size_t b = 0; b < origins.size(); ++b)
+                     for (int a = 0; a < 3; ++a)
+                         dst[b * 3 + static_cast<size_t>(a)] = origins[b][static_cast<size_t>(a)];
+                 return out;
+             })
+
+        // (3, num_samples) absolute k for one readout, or None where the block
+        // has no ADC.  Axes the block does not drive come back as zeros.
+        .def("absolute_trajectory",
+             [](const Sequence& s, int block_index, double kx, double ky, double kz)
+                 -> py::object {
+                 const std::array<std::vector<double>, 3> k =
+                     pulseq::absolute_trajectory(s, block_index, {kx, ky, kz});
+
+                 size_t n = 0;
+                 for (int a = 0; a < 3; ++a)
+                     n = std::max(n, k[static_cast<size_t>(a)].size());
+                 if (n == 0)
+                     return py::none();
+
+                 py::array_t<double> out({3, static_cast<int>(n)});
+                 double* dst = static_cast<double*>(out.request().ptr);
+                 std::fill(dst, dst + 3 * n, 0.0);
+                 for (int a = 0; a < 3; ++a)
+                 {
+                     const std::vector<double>& src = k[static_cast<size_t>(a)];
+                     for (size_t i = 0; i < src.size(); ++i)
+                         dst[static_cast<size_t>(a) * n + i] = src[i];
+                 }
+                 return out;
+             });
 
     m.def(
         "read_file",

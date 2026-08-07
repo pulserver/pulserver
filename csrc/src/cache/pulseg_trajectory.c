@@ -2,10 +2,14 @@
  * @file pulseg_trajectory.c
  * @brief K-space trajectory derivation and the TRAJECTORY cache section.
  *
- * Integrates the canonical gradient waveforms into k-space, slices out the
- * ADC-sampled window around each readout's k-zero anchor, and deduplicates
- * the result into a library of unique per-axis shots plus a per-ADC table of
- * shot ids, amplitudes, rotations and labels.
+ * Integrates the canonical gradient waveforms into k-space, slices out each
+ * readout's ADC-sampled window, and deduplicates the result into a library of
+ * unique per-axis shots plus a per-ADC table of shot ids, amplitudes,
+ * rotations and labels.
+ *
+ * The shots hold ABSOLUTE k: the canonical array carries its own k=0 from the
+ * excitation reset, and nothing here re-centres it.  See
+ * traj_slice_canonical_axis below.
  *
  * Recon reads this back from the cache file alone -- it never has the .seq --
  * so the section is self-contained, rotation library included.
@@ -98,12 +102,10 @@ static float sample_grad_axis_at(
 {
     const pulseg_grad_definition *gd;
     float amp, ti;
-    int shot_idx;
 
     if (grad_event_id < 0 || grad_event_id >= desc->grad_table_size)
         return 0.0f;
     amp = desc->grad_table[grad_event_id].amplitude;
-    shot_idx = desc->grad_table[grad_event_id].shot_index;
     gd = &desc->grad_definitions[desc->grad_table[grad_event_id].id];
     ti = t_us - (float)gd->delay;
 
@@ -124,7 +126,6 @@ static float sample_grad_axis_at(
     }
     /* ARB: caller pre-decompressed shape into (arb_xp, arb_fp).  Linear
      * interp with zero outside [arb_xp[0], arb_xp[n-1]]. */
-    (void)shot_idx;
     if (!arb_xp || !arb_fp || arb_n < 2)
         return 0.0f;
     if (t_us < arb_xp[0] || t_us > arb_xp[arb_n - 1])
@@ -166,7 +167,7 @@ static int decompress_block_arb(
     pulseq_shape decomp = {0, 0, NULL};
     pulseq_shape decomp_t = {0, 0, NULL};
     float amp;
-    int shot_idx, sid_one_based, sid;
+    int sid_one_based, sid;
     float *xp = NULL, *fp = NULL;
     int nsrc, i, rc = 0;
 
@@ -179,10 +180,7 @@ static int decompress_block_arb(
     if (gd->type == 0)
         return 0;
     amp = desc->grad_table[grad_event_id].amplitude;
-    shot_idx = desc->grad_table[grad_event_id].shot_index;
-    if (shot_idx < 0 || shot_idx >= PULSEG_MAX_GRAD_SHOTS)
-        return 0;
-    sid_one_based = gd->shot_shape_ids[shot_idx];
+    sid_one_based = desc->grad_table[grad_event_id].shape_id;
     if (sid_one_based <= 0)
         return 0;
     sid = sid_one_based - 1;
@@ -255,7 +253,11 @@ fail:
  * 2. Integrate to get k-space trajectory
  * 3. Crop to ADC window
  * 4. Resample to ADC dwell time
- * 5. Center to k-zero anchor
+ *
+ * There is deliberately no re-centering step: k=0 comes from the excitation
+ * reset baked into the canonical array, so the result is absolute.  The
+ * kzero_index argument survives only as the memo key (a second occurrence of
+ * the same block under a different anchor must not reuse the cached shot).
  *
  * Returns per-axis k-space arrays of length adc_num_samples.
  */

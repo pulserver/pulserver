@@ -224,27 +224,6 @@ extern "C"
     int pulseg_get_num_rf_shims(const pulseg_collection *coll, int subseq_idx);
 
     /**
-     * @brief Check if a block needs frequency modulation.
-     *
-     * Returns 1 if the block requires freq-mod: the block must have RF or ADC,
-     * must NOT have the nopos flag set, and at least one gradient axis must have
-     * nonzero amplitude within the RF or ADC temporal window (overlap check).
-     *
-     * For trapezoid gradients the flat region is tested; for arbitrary gradients
-     * the decompressed waveform samples within the window are checked.
-     *
-     * If @p num_samples is non-NULL and the function returns 1, the number of
-     * freq-mod samples (block_duration / raster) is written.  The raster used
-     * is rf_raster_us when triggered by an RF overlap, or adc_raster_us when
-     * triggered by an ADC overlap.
-     */
-    int pulseg_block_needs_freq_mod(
-        const pulseg_collection *coll,
-        int *num_samples,
-        int seg_idx,
-        int blk_idx);
-
-    /**
      * @brief Return the RF isocenter time (us) relative to segment start.
      *
      * Looks up the segment timing RF anchor matching @p blk_idx.
@@ -548,7 +527,7 @@ extern "C"
         int axis);
 
     /** @brief Return initial shot ID for a gradient event. */
-    int pulseg_get_grad_initial_shot_id(
+    int pulseg_get_grad_initial_shape_id(
         const pulseg_collection *coll,
         int seg_idx,
         int blk_idx,
@@ -694,23 +673,6 @@ extern "C"
      * @return PULSEG_SUCCESS on success.
      */
     int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *info);
-
-    /* ================================================================== */
-    /*  Frequency modulation collection                                   */
-    /* ================================================================== */
-
-    /**
-     * @brief Count RF+ADC events across the entire sequence.
-     */
-    int pulseg_get_freq_mod_count(const pulseg_collection *coll);
-
-    /**
-     * @brief Count RF+ADC events in a specific TR region.
-     *
-     * @param tr_type   PULSEG_TR_REGION_PREP / _MAIN / _COOLDOWN.
-     * @param tr_index  0-based TR instance (ignored for PREP/COOLDOWN).
-     */
-    int pulseg_get_freq_mod_count_tr(const pulseg_collection *coll, int tr_type, int tr_index);
 
     /* ================================================================== */
     /*  Unique-block and segment-block getters                            */

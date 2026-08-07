@@ -33,6 +33,21 @@ namespace pulseq
      */
     std::vector<double> compress_shape(const double* samples, int count);
 
+    /**
+     * The inverse: @p count encoded samples back to @p num_uncompressed of
+     * them.
+     *
+     * A port of `pulseq_decompress_shape` (csrc/src/pulseq/pulseq_parse.c) and
+     * kept in step with it, so a shape read by the C reader and one decoded
+     * here agree sample for sample.  When the two counts are equal the entry
+     * was never compressed -- compress_shape's "keep the original if it is no
+     * longer" rule -- and the samples are copied through unchanged.
+     *
+     * Throws std::runtime_error on a malformed run length, which is the only
+     * way the encoding can be inconsistent with itself.
+     */
+    std::vector<double> decompress_shape(const double* samples, int count, int num_uncompressed);
+
 }  // namespace pulseq
 
 #endif /* PULSEQ_CXX_SHAPE_HPP */

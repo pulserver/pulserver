@@ -214,6 +214,57 @@ class TrajectoryCacheFixture : public ::testing::TestWithParam<fs::path>
 {
 };
 
+/*
+ * The on-demand path reproduces the resident one, sample for sample.
+ *
+ * Planning a space as non-resident is the difference between holding a
+ * scan's whole k-space and rebuilding a readout at a time, so the two had
+ * better agree.  A budget of zero forces every space onto the streamed path
+ * without needing a fixture large enough to trip the real one.
+ */
+TEST_P(TrajectoryCacheFixture, StreamedReadoutsMatchResidentOnes)
+{
+    const std::string cache_path = GetParam();
+    mrdserver::SequenceCache cache;
+    ASSERT_NO_THROW({ cache = mrdserver::read_sequence_cache(cache_path); }) << cache_path;
+
+    auto resident = mrdserver::pre_compute_trajectories(cache);
+    auto streamed = mrdserver::pre_compute_trajectories(cache, 0);
+    ASSERT_EQ(resident.size(), streamed.size());
+
+    int checked = 0;
+    for (size_t es = 0; es < resident.size(); ++es)
+    {
+        const auto& r = resident[es];
+        const auto& t = streamed[es];
+        if (r.ndim <= 0)
+            continue;
+
+        EXPECT_EQ(r.ndim, t.ndim) << "es=" << es;
+        EXPECT_EQ(r.num_samples, t.num_samples) << "es=" << es;
+        EXPECT_EQ(r.num_readouts, t.num_readouts) << "es=" << es;
+        EXPECT_TRUE(r.resident);
+        EXPECT_FALSE(t.resident) << "a zero budget still went resident";
+        EXPECT_TRUE(t.data.empty()) << "a non-resident space still holds data";
+
+        const size_t stride = static_cast<size_t>(r.ndim) * r.num_samples;
+        std::vector<float> a(stride), b(stride);
+        for (int ro = 0; ro < r.num_readouts; ++ro)
+        {
+            ASSERT_TRUE(mrdserver::materialize_readout(
+                cache, r, static_cast<int>(es), ro, a.data()));
+            ASSERT_TRUE(mrdserver::materialize_readout(
+                cache, t, static_cast<int>(es), ro, b.data()));
+            for (size_t i = 0; i < stride; ++i)
+                ASSERT_FLOAT_EQ(a[i], b[i])
+                    << "es=" << es << " readout=" << ro << " i=" << i;
+            ++checked;
+        }
+    }
+    if (checked == 0)
+        GTEST_SKIP() << "cache has no non-Cartesian encoding space";
+}
+
 TEST_P(TrajectoryCacheFixture, LoadsAndPreComputesCleanly)
 {
     const fs::path &cache_path = GetParam();

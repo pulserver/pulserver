@@ -24,9 +24,10 @@
  * malformed. There is no "optional SEQDESC" tolerance: a cache lacking it
  * is a fixture/writer bug, not a degrade case.
  *
- * Section 5 (FREQMOD / off-isocenter shift) is intentionally NOT parsed:
- * frequency modulation is applied PSD-side, so data arriving at the
- * recon are already centered. See tests/utils/SCHEMA.md.
+ * Section 5 is retired (it was FREQMOD). Off-isocentre shift is no longer
+ * synthesised as a modulation waveform on the spectrometer: it is a phase,
+ * `dr . k`, applied to the RF at design time and to the received data here,
+ * by demodulate_fov_shift() below. See tests/utils/SCHEMA.md.
  */
 
 #ifndef TRAJECTORY_CACHE_READER_H
@@ -279,8 +280,46 @@ namespace mrdserver
         int ndim = 0;        /**< 0=Cartesian, 2 or 3 */
         int num_samples = 0; /**< ADC samples per readout */
         int num_readouts = 0;
-        std::vector<float> data; /**< [num_readouts × num_samples × ndim] */
+
+        /**
+         * [num_readouts x num_samples x ndim], or EMPTY when `resident` is
+         * false.  See below.
+         */
+        std::vector<float> data;
+
+        /**
+         * Whether `data` holds the whole encoding space.
+         *
+         * The same choice the interpreter makes for gradient waveforms, for
+         * the same reason.  Most scans are a handful of base trajectories
+         * replayed at different rotations, and holding them all costs
+         * nothing -- so they are held, and a consumer reads `data` directly.
+         *
+         * An individually optimised trajectory is different: one distinct
+         * readout per acquisition, at which point this array is the whole
+         * k-space of the scan and can run to gigabytes.  Then `data` is left
+         * empty and a consumer asks for one readout at a time with
+         * @ref materialize_readout, which rebuilds it from the kshot library
+         * at the cost of a copy.
+         *
+         * Nothing else about the struct changes, so a consumer that always
+         * calls materialize_readout is correct in both modes.
+         */
+        bool resident = true;
+
+        /**
+         * Which of x, y, z this space packs, decided over EVERY readout.
+         *
+         * Not derivable from one readout: a readout whose rotation leaves an
+         * axis silent would pack one axis fewer and shift every sample after
+         * it.  Carried so the on-demand path packs identically to the
+         * resident one.
+         */
+        bool axis_active[3] = {false, false, false};
     };
+
+    /** Floats a single encoding space may hold before it stops being resident. */
+    constexpr size_t DEFAULT_TRAJECTORY_BUDGET_FLOATS = 64u * 1024u * 1024u; /* 256 MB */
 
     /**
      * @brief Read trajectory data from a pulseg binary cache file.
@@ -302,7 +341,29 @@ namespace mrdserver
      * @param cache  Populated SequenceCache (from read_sequence_cache).
      * @return Vector of PrecomputedTrajectory, indexed by encoding_space_ref.
      */
-    std::vector<PrecomputedTrajectory> pre_compute_trajectories(const SequenceCache& cache);
+    std::vector<PrecomputedTrajectory> pre_compute_trajectories(
+        const SequenceCache& cache,
+        size_t budget_floats = DEFAULT_TRAJECTORY_BUDGET_FLOATS);
+
+    /**
+     * @brief Build one readout's trajectory, whether or not it is resident.
+     *
+     * Writes `ndim * num_samples` interleaved floats to @p out.  When the
+     * encoding space is resident this copies out of `data`; when it is not,
+     * it rebuilds the readout from the kshot library -- the same arithmetic
+     * pre_compute_trajectories would have done, deferred.
+     *
+     * @param es_index  encoding-space index, matching the vector returned by
+     *                  pre_compute_trajectories.
+     * @return false when the space has no trajectory (Cartesian) or the
+     *         readout is out of range, in which case @p out is untouched.
+     */
+    bool materialize_readout(
+        const SequenceCache& cache,
+        const PrecomputedTrajectory& traj,
+        int es_index,
+        int readout,
+        float* out);
 
     /**
      * @brief Enrich an ISMRMRD header with Pulseq sequence parameters and
@@ -392,6 +453,39 @@ namespace mrdserver
         const std::vector<PrecomputedTrajectory>& trajectories,
         const std::vector<int>& readout_index_in_es,
         const uint32_t* physio_stamps = nullptr);
+
+    /**
+     * @brief Apply an off-isocentre FOV shift to an acquisition's data.
+     *
+     * A shift is a phase, `exp(+i 2*pi * dr . k)`, and this is where the
+     * receive side of it happens. The spectrometer no longer synthesises a
+     * modulation waveform for it: computing that required the physical-frame
+     * gradient, which is what forced the interpreter to undo rotation
+     * extensions and NOROT before it could produce anything.
+     *
+     * Call **after** enrich_ismrmrd_acquisition(), which is what puts the
+     * trajectory on @p acq. The trajectory is in the LOGICAL frame, so
+     * @p shift_m must be too -- and that is the point: `dr . k` is invariant
+     * when both are rotated, so neither side needs to know the prescribed
+     * orientation, any rotation extension, or PMC rotation.
+     *
+     * The sign matches what pulseq::apply_fov_shift bakes into a native-mode
+     * `.seq`, so a sequence shifted here and one shifted at design time
+     * reconstruct identically. Changing one without the other silently
+     * mirrors the offset.
+     *
+     * Axes beyond the acquisition's trajectory dimensionality are ignored:
+     * an axis that carries no k has no shift to contribute, and a Cartesian
+     * phase-encode offset arrives through the encoding counters instead.
+     *
+     * No-op when @p shift_m is all zero, when @p acq carries no trajectory,
+     * or when its trajectory length disagrees with its sample count.
+     *
+     * @param acq      Acquisition to modify in place, all channels.
+     * @param shift_m  (dx, dy, dz) along the logical readout/phase/slice
+     *                 axes, in metres.
+     */
+    void demodulate_fov_shift(ISMRMRD::Acquisition& acq, const float shift_m[3]);
 
     /**
      * @brief Add WaveformInformation entries to an ISMRMRD header for the

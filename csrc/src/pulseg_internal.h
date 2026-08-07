@@ -101,6 +101,79 @@ typedef struct pulseg_rf_shim_definition
 /* ================================================================== */
 /*  Gradient definitions and table                                    */
 /* ================================================================== */
+
+/*
+ * One representative instance of a gradient definition.
+ *
+ * A definition is played many times, at different amplitudes and -- for an
+ * arbitrary gradient -- with different waveforms.  Enumerating them all in the
+ * definition is what imposed the old 16-shot ceiling; the per-instance shape
+ * id lives in the grad table (and so in the exec stream) instead, and what the
+ * definition keeps is the instances safety actually has to look at.
+ *
+ * ### Why two, and why these two
+ *
+ * Both are moments of the same quantity.  Write the per-axis spectrum of an
+ * instance as G(f); the rotation-invariant object is
+ *
+ *     S(f) = |Gx(f)|^2 + |Gy(f)|^2 + |Gz(f)|^2
+ *
+ * -- invariant because a rotation sends G to RG and R preserves norms, which
+ * is exactly why it can rank instances without the rotation confounding the
+ * comparison.  The two representatives are its zeroth and second moments,
+ * and Parseval turns both into time-domain integrals that need no FFT:
+ *
+ *     heat      integral of g^2 dt        -- gradient heating, duty cycle
+ *     spectral  integral of (dg/dt)^2 dt  -- PNS, mechanical resonance, SPL
+ *
+ * Selection is per definition, i.e. per axis, and S is additive over axes, so
+ * maximising each axis independently bounds the maximum of the sum.  That is
+ * conservative, which is the direction a safety gate has to err in.
+ *
+ * The honest limit: the second moment is broadband, and mechanical resonance
+ * is not.  A shape with the largest total slew energy is not necessarily the
+ * worst inside a narrow resonance band, so `spectral` is a proxy there and the
+ * band-resolved check still runs on the materialised waveform.
+ */
+typedef struct pulseg_grad_representative
+{
+    int shape_id;      /* pulseq shape id; 0 for a trapezoid            */
+    float amplitude;   /* |amplitude| of the instance that won, Hz/m    */
+    float slew_rate;   /* of the normalised waveform, 1/s               */
+    float energy;      /* integral of w^2 over the event, s             */
+    float first_value; /* normalised waveform at the event's start      */
+    float last_value;  /* ... and at its end                            */
+    float score;       /* the moment this instance maximised            */
+} pulseg_grad_representative;
+
+/* clang-format off */
+#define PULSEG_GRAD_REPRESENTATIVE_INIT {0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f}
+/* clang-format on */
+
+/*
+ * Bounds over every instance of a definition, for the questions a
+ * representative structurally cannot answer.
+ *
+ * A representative is the *worst* instance by some functional.  Some checks
+ * are not of that shape: "is the gradient at zero across this junction" has to
+ * hold for all of them, and a peak-slew ceiling has to be an upper bound, not
+ * the slew of whichever instance happened to carry the most energy.  Kept as
+ * one struct so the cache writes it by sizeof and no repeated field count can
+ * drift out of step with it.
+ */
+typedef struct pulseg_grad_aggregate
+{
+    float max_amplitude;  /* largest |amplitude| any instance reaches  */
+    float min_amplitude;  /* smallest                                  */
+    float max_abs_first;  /* largest |w[0]| over the shapes used        */
+    float max_abs_last;   /* largest |w[n-1]|                          */
+    float max_slew_rate;  /* largest normalised slew, 1/s              */
+} pulseg_grad_aggregate;
+
+/* clang-format off */
+#define PULSEG_GRAD_AGGREGATE_INIT {0.0f, 0.0f, 0.0f, 0.0f, 0.0f}
+/* clang-format on */
+
 typedef struct pulseg_grad_definition
 {
     int id;
@@ -110,20 +183,15 @@ typedef struct pulseg_grad_definition
     int fall_time_or_num_uncompressed_samples;
     int unused_or_time_shape_id;
     int delay;
-    int num_shots;
-    int shot_shape_ids[PULSEG_MAX_GRAD_SHOTS];
-    float max_amplitude[PULSEG_MAX_GRAD_SHOTS];
-    float min_amplitude[PULSEG_MAX_GRAD_SHOTS];
-    float slew_rate[PULSEG_MAX_GRAD_SHOTS];
-    float energy[PULSEG_MAX_GRAD_SHOTS];
-    float first_value[PULSEG_MAX_GRAD_SHOTS];
-    float last_value[PULSEG_MAX_GRAD_SHOTS];
+    pulseg_grad_aggregate any;
+    pulseg_grad_representative heat;
+    pulseg_grad_representative spectral;
 } pulseg_grad_definition;
 
 typedef struct pulseg_grad_table_element
 {
     int id;
-    int shot_index;
+    int shape_id; /* pulseq shape id of THIS instance; 0 for a trapezoid */
     float amplitude;
 } pulseg_grad_table_element;
 
@@ -146,100 +214,8 @@ typedef struct pulseg_adc_table_element
 } pulseg_adc_table_element;
 
 /* ================================================================== */
-/*  Frequency modulation definitions                                  */
-/* ================================================================== */
-typedef struct pulseg_freq_mod_definition
-{
-    int id;
-    int num_samples;       /* samples per axis (uniform raster) */
-    float raster_us;       /* sample spacing in us */
-    float duration_us;     /* active region duration */
-    float *waveform_gx;    /* [num_samples] peak-normalized gradient, x */
-    float *waveform_gy;    /* [num_samples] peak-normalized gradient, y */
-    float *waveform_gz;    /* [num_samples] peak-normalized gradient, z */
-    float ref_integral[3]; /* integral from start to reference point
-                               * (gx, gy, gz) in [rad/Hz], pre-multiplied
-                               * by 2*pi so that phase = ref_integral * freq */
-    float ref_time_us;     /* reference time relative to active region
-                               * start (isodelay for RF, kzero for ADC) */
-} pulseg_freq_mod_definition;
-
-/* ================================================================== */
-/*  Frequency modulation library (internal per-subsequence struct)     */
-/* ================================================================== */
-
-/*
- * Per-subsequence library of precomputed frequency modulators.
- *
- * Contains amplitude-scaled 3-channel gradient waveforms (entries) and
- * shift-resolved 1D plan waveforms.  Built internally by
- * pulseg_build_freq_mod_collection(); queried via
- * pulseg_freq_mod_collection_get() using subsequence index and
- * scan-table position.
- *
- * For PMC-enabled subsequences the 3-channel entries are kept so that
- * update() can recompute plan waveforms with a new shift.  For
- * non-PMC subsequences they are freed after the initial plan build.
- */
-typedef struct pulseg_freq_mod_library
-{
-    /* --- Deduped 3-channel entries (shift-independent) --- */
-    int num_entries;        /* unique (base_shape, eff_amp) combos     */
-    int max_samples;        /* longest entry waveform (zero-padded)    */
-    float raster_us;        /* common time raster (us)                 */
-    int *entry_num_samples; /* [num_entries]                           */
-
-    /* Planar layout: 3ch[e * max_samples * 3 + ch * max_samples + s].
-     * NULL after construction for non-PMC subsequences.               */
-    float *entry_waveform_3ch; /* [num_entries * max_samples * 3] or NULL */
-    float *entry_ref_3ch;      /* [num_entries * 3]               or NULL */
-
-    /* Deep-copy rotation matrices from descriptor. */
-    int num_rotations;
-    float (*rotations)[9]; /* [num_rotations][9]                      */
-
-    /* --- Plan instances (deduped on entry_idx x rotation_idx) --- */
-    int num_plan_instances;
-    int *pi_entry_idx;    /* [num_plan_instances]                    */
-    int *pi_rotation_idx; /* [num_plan_instances]                    */
-
-    /* Precomputed 1D waveforms (shift-dependent). */
-    float *plan_waveform_data; /* flat [num_plan_instances * max_samples] */
-    float **plan_waveforms;    /* [num_plan_instances] row pointers       */
-    int *plan_num_samples;     /* [num_plan_instances] actual length      */
-    float *plan_phase;         /* [num_plan_instances] phase comp (rad)
-                                 * from all 3 channels                     */
-
-    /* Hardware-format waveforms: short DAC units with WEOS_BIT on last.
-     * Conversion: sample = (int16)(Hz / (4 * TARDIS_FREQ_RES))          */
-    short *plan_hw_data;       /* flat [num_plan_instances * max_samples] */
-    short **plan_hw_waveforms; /* [num_plan_instances] row pointers       */
-
-    /* O(1) accessor by scan-table position. */
-    int exec_stream_len;
-    int *scan_to_plan; /* [exec_stream_len] -> plan instance, -1   */
-
-    /* Optional cache fields retained for backward cache compatibility. */
-    float *scan_inactive_area_3ch; /* [exec_stream_len * 3]  or NULL */
-    float *scan_phase_extra;       /* [exec_stream_len]      or NULL */
-} pulseg_freq_mod_library;
-
-/* ================================================================== */
 /*  Frequency modulation collection (opaque from public API)          */
 /* ================================================================== */
-
-/*
- * Wraps per-subsequence freq-mod libraries into a single object.
- * The public opaque type pulseg_freq_mod_collection points here.
- */
-struct pulseg_freq_mod_collection
-{
-    int num_subsequences;
-    pulseg_freq_mod_library **libs; /* [num_subsequences] (owned) */
-};
-
-/* Free a freq-mod collection (used by pulseg_collection_free). */
-void pulseg_freq_mod_collection_free(struct pulseg_freq_mod_collection *fmc);
 
 /* ================================================================== */
 /*  Base blocks and block table                                      */
@@ -285,7 +261,6 @@ typedef struct pulseg_block_table_element
     int nopos_flag;
     int pmc_flag;
     int nav_flag;
-    int freq_mod_id; /* boolean: >= 0 if block needs freq-mod, -1 otherwise */
     int rf_shim_id;  /* index into rf_shim_definitions, or -1 */
     int module_id;   /* sticky MODULE label id, 0 = ungrouped (default) */
 } pulseg_block_table_element;
@@ -338,24 +313,44 @@ typedef struct pulseg_segment_timing
  *
  * Fallback values match the pre-computation behaviour when no representative
  * instance existed: rf_amplitude_hz = the RF definition's base amplitude,
- * grad_amplitude_hz_per_m = 1.0, grad_shot_index = 0, ids = -1. */
+ * grad_amplitude_hz_per_m = 1.0, grad_shape_id = 0, ids = -1. */
 typedef struct pulseg_block_initial_state
 {
     int base_block_id;  /* base_blocks index at the representative instance, -1 */
     int digitalout_id;  /* trigger_events index at this position, -1 = none     */
     int grad_def_id[3]; /* grad_definitions index per axis, -1 = no gradient    */
-    int grad_shot_index[3];
+    int grad_shape_id[3];
     float rf_amplitude_hz;
     float grad_amplitude_hz_per_m[3];
+
+    /* Can this excitation be moved by a frequency offset alone?
+     *
+     * Set when the position has RF, has at least one accompanying gradient,
+     * and every accompanying gradient is FLAT across the RF's active window
+     * -- so the whole pulse sees one gradient vector G, and translating what
+     * it excites by dr is exactly a carrier offset of G.dr.  That is the one
+     * case where prospective motion correction can move a *selective*
+     * excitation at run time, which the interpreter otherwise cannot do: the
+     * RF waveform is fixed at design time.
+     *
+     * AND-reduced over every instance of the position, and 0 when the block
+     * carries a rotation extension -- the rotated gradient is still flat, but
+     * it is no longer the vector recorded here, and a wrong G moves the slab
+     * to the wrong place rather than failing.
+     *
+     * rf_grad_level is the NORMALISED level over that window, per axis; the
+     * physical gradient is grad_amplitude_hz_per_m (per instance) times it. */
+    int rf_grad_constant;
+    float rf_grad_level[3];
 } pulseg_block_initial_state;
 
 /* clang-format off */
 #define PULSEG_BLOCK_INITIAL_STATE_INIT \
-    {-1, -1, {-1, -1, -1}, {0, 0, 0}, 0.0f, {1.0f, 1.0f, 1.0f}}
+    {-1, -1, {-1, -1, -1}, {0, 0, 0}, 0.0f, {1.0f, 1.0f, 1.0f}, 0, {0.0f, 0.0f, 0.0f}}
 /* clang-format on */
 
 /* Number of 4-byte words in pulseg_block_initial_state (cache serialization). */
-#define PULSEG_BLOCK_INITIAL_STATE_WORDS 12
+#define PULSEG_BLOCK_INITIAL_STATE_WORDS 16
 
 /* ================================================================== */
 /*  Virtual segment                                                   */
@@ -369,7 +364,6 @@ typedef struct pulseg_virtual_segment
     int *has_rotation;
     int *norot_flag;
     int *nopos_flag;
-    int *has_freq_mod;
     int *has_adc;          /* OR-reduced: 1 if at least one segment instance has an ADC
                               event at this block position, 0 otherwise          */
     int *is_dynamic_delay; /* OR-reduced: 1 if this block position is an adjustable
@@ -484,13 +478,29 @@ typedef struct pulseg_sequence_descriptor
     int grad_table_size;
     pulseg_grad_table_element *grad_table;
 
+    /* Per-SHAPE endpoint values of the normalised waveform, indexed by pulseq
+     * shape id - 1; `num_grad_shape_stats` is the shape library's size.
+     *
+     * These live here rather than on the definition because they are
+     * properties of the shape alone -- w[0] and w[n-1] do not depend on the
+     * time shape, the amplitude, or which definition happens to reference it
+     * -- and because the question they answer is per instance, not worst
+     * case: "is the gradient at zero across this junction" has to be asked of
+     * the instance that actually plays there.  A definition's representatives
+     * cannot answer it, and the fixed per-definition array that used to is
+     * exactly what capped a definition at 16 shapes.
+     *
+     * A trapezoid has no shape id and no entry; its endpoints are zero by
+     * construction. */
+    int num_grad_shape_stats;
+    float *grad_shape_first;
+    float *grad_shape_last;
+
     int num_unique_adcs;
     pulseg_adc_definition *adc_definitions;
     int adc_table_size;
     pulseg_adc_table_element *adc_table;
 
-    int num_freq_mod_defs;
-    pulseg_freq_mod_definition *freq_mod_definitions;
 
     int num_rf_shims;
     pulseg_rf_shim_definition *rf_shim_definitions;
@@ -603,8 +613,8 @@ typedef struct pulseg_sequence_descriptor
     { \
     0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 1, 0, 1, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
     0}, {0, 0, 0}, {0, 0, 0}, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, /* rf_amplitude_variable */ \
-    0, NULL, 0, NULL, 0, \
-    NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, \
+    0, NULL, 0, NULL, /* grad shape stats */ 0, NULL, NULL, \
+    0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, \
     PULSEG_TR_DESCRIPTOR_INIT, 0, NULL, PULSEG_SEGMENT_TABLE_RESULT_INIT, 0, NULL, NULL, \
     NULL, NULL, NULL, /* exec_runs */ 0, NULL, /* seg runs */ 0, 0, NULL, NULL, \
     /* hints */ 0, 0, /* tr_start anchor */ 0, -1, NULL, 0, 0, NULL, \
@@ -657,7 +667,6 @@ struct pulseg_collection
                            assembly (the tables it derives from are not
                            loaded on the pulsegen cache path) */
     float total_duration_us;
-    struct pulseg_freq_mod_collection *freq_mod; /* owned, may be NULL */
 
     /* Cross-subsequence segment deduplication remap (DERIVED state; rebuilt
      * by pulseg__build_segment_remap() after assembly and after cache load,
@@ -715,7 +724,7 @@ typedef struct pulseg__uniform_grad_waveforms
 void pulseg__diag_printf(pulseg_diagnostic *diag, const char *fmt, ...);
 
 /* --- pulseg_cache.c: binary-cache IO primitives shared by every .pge
- * section writer/reader (cache, cache_seqdesc, trajectory, freqmod).
+ * section writer/reader (cache, cache_seqdesc, trajectory).
  * All cache words are 4 bytes; swap on an endianness mismatch. --- */
 void pulseg__swap4(void *p);
 void pulseg__swap4_array(void *p, int count);
@@ -727,6 +736,25 @@ char *pulseg__make_cache_path(const char *seq_path, const char *ext);
 
 /* --- Shared block-definition predicates (pulseg_structure.c) --- */
 int pulseg__block_def_is_pure_delay(const pulseg_base_block *b);
+
+/* Worst-case gradient magnitude at the start / end of the instance held in
+ * grad table row @p raw_id, in Hz/m.
+ *
+ * Exact on the shape -- the row names the shape the instance actually plays --
+ * and worst case on the amplitude, since the definition's largest amplitude
+ * bounds every instance that shares the shape.  Used by the zero-gradient
+ * junction tests, where the question is whether anything can be live across a
+ * boundary, so erring high is the safe direction.  A trapezoid has no shape
+ * and returns 0: it starts and ends at zero by construction. */
+float pulseg__grad_boundary_first(const pulseg_sequence_descriptor *desc, int raw_id);
+float pulseg__grad_boundary_last(const pulseg_sequence_descriptor *desc, int raw_id);
+
+/* Signed endpoint values of the NORMALISED waveform of pulseq shape @p
+ * shape_id, or 0 when there is no such shape (a trapezoid, notably, which
+ * starts and ends at zero by construction).  Multiply by an instance's own
+ * amplitude for the value that instance actually plays. */
+float pulseg__grad_shape_first(const pulseg_sequence_descriptor *desc, int shape_id);
+float pulseg__grad_shape_last(const pulseg_sequence_descriptor *desc, int shape_id);
 int pulseg__block_defs_structurally_equal(
     const pulseg_sequence_descriptor *desc,
     int id_a,
@@ -860,7 +888,6 @@ int pulseg__get_exec_stream_segments(
     pulseg_sequence_descriptor *desc,
     pulseg_diagnostic *diag,
     const pulseg_opts *opts);
-int pulseg__build_freq_mod_flags(pulseg_sequence_descriptor *desc);
 void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc);
 
 /* Compact execution stream: O(log num_exec_runs) equivalents of the
@@ -955,19 +982,7 @@ int pulseg__get_gradient_waveforms_range(
     int target_group,
     const int *block_order);
 
-/* Find unique shot-index TR variants (multi-shot, degenerate prep/cooldown).
- * Returns count of unique groups; caller frees both output arrays. */
-int pulseg__find_unique_shot_trs(
-    const pulseg_sequence_descriptor *desc,
-    int **out_unique_tr_indices,
-    int **out_tr_group_labels);
 
-/* Find unique shot-index pass patterns (non-degenerate prep/cooldown, e.g. MPRAGE).
- * Returns count of unique pass patterns; caller frees both output arrays. */
-int pulseg__find_unique_shot_passes(
-    const pulseg_sequence_descriptor *desc,
-    int **out_unique_pass_indices,
-    int **out_pass_group_labels);
 
 /* --- pulseg_safety.c ---
  * Optional internal observer used by the documentation benchmark.  Keeping
@@ -1029,20 +1044,7 @@ int pulseg__build_segment_remap(pulseg_collection *coll);
 /* --- pulseg_cache.c / pulseg_cache_seqdesc.c: .pge section writers --- *
  * Plumbing of pulseg_save_cache(); each appends one section to the cache
  * file already on disk and patches the section index. */
-int pulseg__save_freq_mod_section(const pulseg_collection *coll, const char *seq_path);
 int pulseg__save_seqdesc_cache_section(const pulseg_collection *coll, const char *seq_path);
 int pulseg__save_trajectory_cache_section(const pulseg_collection *coll, const char *seq_path);
-int pulseg__save_freq_mod_cache_section(pulseg_collection *coll, const char *seq_path);
-
-/* --- pulseg_freqmod.c: FREQMOD payload codec on an already-open cache --- *
- * do_swap is non-zero when the cache file's endianness differs from the
- * reader's; every 4-byte word of the payload is swapped after reading. */
-int pulseg__freq_mod_collection_write_f(const pulseg_freq_mod_collection *fmc, FILE *f);
-int pulseg__freq_mod_collection_read_f(
-    pulseg_freq_mod_collection **out_fmc,
-    FILE *f,
-    const pulseg_collection *coll,
-    const float *shift_m,
-    int do_swap);
 
 #endif /* PULSEG_INTERNAL_H */

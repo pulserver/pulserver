@@ -104,6 +104,12 @@ target_compile_definitions(test_pulseq_roundtrip PRIVATE
     PULSEQ_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../utils/expected")
 target_link_libraries(test_pulseq_roundtrip PRIVATE pulseqpp GTest::gtest_main)
 
+add_executable(test_pulseq_trajectory test_pulseq_trajectory.cpp)
+target_link_libraries(test_pulseq_trajectory PRIVATE pulseqpp GTest::gtest_main)
+
+add_executable(test_pulseq_shape test_pulseq_shape.cpp)
+target_link_libraries(test_pulseq_shape PRIVATE pulseqpp GTest::gtest_main)
+
 include(GoogleTest)
 gtest_discover_tests(test_trajectory_cache_loader)
 gtest_discover_tests(test_seq_desc_truth)
@@ -111,6 +117,8 @@ gtest_discover_tests(test_pulseq_file)
 gtest_discover_tests(test_pulseq_sequence)
 gtest_discover_tests(test_pulseq_dedup)
 gtest_discover_tests(test_pulseq_roundtrip)
+gtest_discover_tests(test_pulseq_trajectory)
+gtest_discover_tests(test_pulseq_shape)
 
 # ------------------------------------------------------------------
 # Stage 4 (recon-cache-to-C) Step 0: golden-dump CLI tool. Dumps every

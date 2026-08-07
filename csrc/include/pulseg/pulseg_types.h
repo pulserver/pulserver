@@ -69,7 +69,6 @@
 /* ================================================================== */
 /*  Max-size constants                                                */
 /* ================================================================== */
-#define PULSEG_MAX_GRAD_SHOTS 16
 #define PULSEG_DIAG_MSG_LEN 256
 
 /* ================================================================== */
@@ -299,19 +298,6 @@ typedef struct pulseg_module
 /* ================================================================== */
 /*  Frequency modulation collection                                   */
 /* ================================================================== */
-
-/**
- * @brief Opaque handle to frequency modulation data for all subsequences.
- *
- * Wraps per-subsequence libraries into a single object.  The entire
- * collection is built, cached, and freed as a unit.
- *
- * Created by pulseg_build_freq_mod_collection() or
- * pulseg_freq_mod_collection_read_cache(), queried via
- * pulseg_freq_mod_collection_get(), freed by
- * pulseg_freq_mod_collection_free().
- */
-typedef struct pulseg_freq_mod_collection pulseg_freq_mod_collection;
 
 /* ================================================================== */
 /*  Opaque collection handle                                          */
@@ -750,9 +736,9 @@ typedef struct pulseg_block_instance
     float gx_amp_hz_per_m; /**< GX amplitude (Hz / m)             */
     float gy_amp_hz_per_m; /**< GY amplitude (Hz / m)             */
     float gz_amp_hz_per_m; /**< GZ amplitude (Hz / m)             */
-    int gx_shot_idx;       /**< GX multi-shot index               */
-    int gy_shot_idx;       /**< GY multi-shot index               */
-    int gz_shot_idx;       /**< GZ multi-shot index               */
+    int gx_shape_id;       /**< GX pulseq shape id, 0 = trapezoid */
+    int gy_shape_id;       /**< GY pulseq shape id, 0 = trapezoid */
+    int gz_shape_id;       /**< GZ pulseq shape id, 0 = trapezoid */
     int gx_variable;       /**< 1 if GX amplitude varies across TRs */
     int gy_variable;       /**< 1 if GY amplitude varies across TRs */
     int gz_variable;       /**< 1 if GZ amplitude varies across TRs */
@@ -796,7 +782,8 @@ typedef struct pulseg_block_instance
 typedef struct pulseg_cursor_info
 {
     int subseq_idx;    /**< current subsequence index                     */
-    int scan_pos;      /**< scan-table position (for freq-mod lookup)     */
+    int scan_pos;      /**< exec-stream position; indexes a chunk plan's
+                            position_wave[] to find this block's waveform */
     int segment_id;    /**< current segment ID (global)                   */
     int segment_start; /**< 1 if first block of current segment           */
     int segment_end;   /**< 1 if last block of current segment            */
@@ -1015,18 +1002,26 @@ typedef struct pulseg_block_info
     int has_rotation;      /**< 1 if rotation event present       */
     int norot_flag;        /**< 1 if no-rotation override         */
     int nopos_flag;        /**< 1 if no-position override         */
-    int has_freq_mod;      /**< 1 if frequency modulation present */
     int is_variable_delay; /**< 1 if a pure-delay block (no RF/grad/ADC): its
                             *   duration is runtime-adjustable via setperiod, so
                             *   two segments differing only in such a block's
                             *   duration share one segment definition. */
+    int rf_grad_constant;  /**< 1 if RF is present, at least one gradient accompanies
+                            *   it, and every accompanying gradient is flat across the
+                            *   RF's active window -- the excitation can then be moved
+                            *   at run time by a carrier offset alone.  0 when the
+                            *   block carries a rotation extension.  See
+                            *   pulseg_block_instance::rf_grad_constant. */
+    float rf_grad_level[3]; /**< normalised gradient level over that window, per axis;
+                             *   multiply by the instance amplitude for the physical
+                             *   gradient.  Meaningless when rf_grad_constant is 0. */
 } pulseg_block_info;
 
 /* clang-format off */
 #define PULSEG_BLOCK_INFO_INIT \
     { \
     0, 0, {0, 0, 0}, {0, 0, 0}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, 0, -1, -1, -1, \
-    -1, 0, 0, 0, -1, -1, 0, -1, -1, -1, 0, 0, 0, 0, 0 \
+    -1, 0, 0, 0, -1, -1, 0, -1, -1, -1, 0, 0, 0, 0, 0, {0.0f, 0.0f, 0.0f} \
     }
 /* clang-format on */
 
@@ -1095,7 +1090,11 @@ typedef struct pulseg_rf_event
 /*  K-space trajectory types                                          */
 /* ================================================================== */
 
-/** @brief Single k-space shot (one axis, ADC-sampled, k-zero centred). */
+/** @brief Single k-space shot: one axis, ADC-sampled, ABSOLUTE k.
+ *
+ * Not centred on the echo -- k=0 is where the excitation reset put it, so the
+ * samples carry their own DC.  Anything that needs the echo position reads
+ * pulseg_traj_table_entry::center_sample instead. */
 typedef struct pulseg_kshot
 {
     int num_samples;

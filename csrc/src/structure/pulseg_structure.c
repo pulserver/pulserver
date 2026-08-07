@@ -1339,125 +1339,6 @@ static int nav_split_merge(
 }
 
 /* ================================================================== */
-/*  Frequency modulation flags                                        */
-/* ================================================================== */
-
-/*
- * Set freq_mod_id in each block_table entry:
- *   >= 0  unique frequency-modulation definition id
- *   -1    block does not need frequency modulation
- *
- * Definition IDs are deduplicated in first-seen order across keys:
- *   (rf_def_id, adc_def_id, gx_def_id, gy_def_id, gz_def_id,
- *    effective_block_duration_us).
- *
- * Must be called after unique blocks are resolved.
- */
-/* One row of the first-seen key table freq-mod ids are assigned from.  Row i
- * carries the key of the block that first got freq_mod_id == i. */
-typedef struct
-{
-    int rf_id;
-    int adc_def_id;
-    int gx_id;
-    int gy_id;
-    int gz_id;
-    int duration_us;
-} freq_mod_key;
-
-int pulseg__build_freq_mod_flags(pulseg_sequence_descriptor *desc)
-{
-    int n;
-    int num_defs = 0;
-    int cap = 0;
-    freq_mod_key *keys = NULL;
-
-    if (!desc)
-        return PULSEG_SUCCESS;
-
-    desc->num_freq_mod_defs = 0;
-    desc->freq_mod_definitions = NULL;
-
-    for (n = 0; n < desc->num_blocks; ++n)
-    {
-        const pulseg_block_table_element *bte = &desc->block_table[n];
-        const pulseg_base_block *bdef = &desc->base_blocks[bte->id];
-        int has_rf = (bdef->rf_id >= 0);
-        int has_adc = (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size);
-        int has_grad = (bdef->gx_id >= 0 || bdef->gy_id >= 0 || bdef->gz_id >= 0);
-
-        if ((has_rf || has_adc) && has_grad)
-        {
-            freq_mod_key key;
-            int m, found = -1;
-
-            key.rf_id = bdef->rf_id;
-            key.adc_def_id = has_adc ? desc->adc_table[bte->adc_id].id : -1;
-            key.gx_id = bdef->gx_id;
-            key.gy_id = bdef->gy_id;
-            key.gz_id = bdef->gz_id;
-            key.duration_us = bdef->duration_us;
-
-            /* Ids are handed out in first-seen key order and every block
-             * sharing a key shares its id, so scanning the key table is the
-             * same search as scanning every preceding block — without the
-             * quadratic walk. */
-            for (m = 0; m < num_defs; ++m)
-            {
-                if (keys[m].rf_id == key.rf_id && keys[m].adc_def_id == key.adc_def_id &&
-                    keys[m].gx_id == key.gx_id && keys[m].gy_id == key.gy_id &&
-                    keys[m].gz_id == key.gz_id && keys[m].duration_us == key.duration_us)
-                {
-                    found = m;
-                    break;
-                }
-            }
-
-            if (found >= 0)
-            {
-                desc->block_table[n].freq_mod_id = found;
-            }
-            else
-            {
-                if (num_defs == cap)
-                {
-                    int new_cap = cap ? cap * 2 : 16;
-                    freq_mod_key *grown;
-                    if (new_cap <= 0 || (size_t)new_cap > (size_t)-1 / sizeof(freq_mod_key))
-                    {
-                        PULSEG_FREE(keys);
-                        return PULSEG_ERR_ALLOC_FAILED;
-                    }
-                    grown = (freq_mod_key *)PULSEG_ALLOC((size_t)new_cap * sizeof(freq_mod_key));
-                    if (!grown)
-                    {
-                        PULSEG_FREE(keys);
-                        return PULSEG_ERR_ALLOC_FAILED;
-                    }
-                    for (m = 0; m < num_defs; ++m)
-                        grown[m] = keys[m];
-                    PULSEG_FREE(keys);
-                    keys = grown;
-                    cap = new_cap;
-                }
-                keys[num_defs] = key;
-                desc->block_table[n].freq_mod_id = num_defs;
-                num_defs++;
-            }
-        }
-        else
-        {
-            desc->block_table[n].freq_mod_id = -1;
-        }
-    }
-
-    PULSEG_FREE(keys);
-    desc->num_freq_mod_defs = num_defs;
-
-    return PULSEG_SUCCESS;
-}
-
-/* ================================================================== */
 /*  Label table dry-run                                               */
 /* ================================================================== */
 
@@ -1775,6 +1656,282 @@ int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_fil
 /*  Scan-table-aware segment state machine                            */
 /* ================================================================== */
 
+/* See pulseg_internal.h. */
+static float grad_boundary_value(
+    const pulseg_sequence_descriptor *desc, int raw_id, int want_last)
+{
+    const pulseg_grad_table_element *gte;
+    const pulseg_grad_definition *gdef;
+    float normalised;
+
+    if (!desc || raw_id < 0 || raw_id >= desc->grad_table_size)
+        return 0.0f;
+    gte = &desc->grad_table[raw_id];
+    if (gte->shape_id <= 0 || gte->shape_id > desc->num_grad_shape_stats)
+        return 0.0f; /* trapezoid, or a shape with no recorded endpoints */
+    if (!desc->grad_shape_first || !desc->grad_shape_last)
+        return 0.0f;
+
+    normalised = want_last ? pulseg__grad_shape_last(desc, gte->shape_id)
+                           : pulseg__grad_shape_first(desc, gte->shape_id);
+    gdef = &desc->grad_definitions[gte->id];
+    return normalised * gdef->any.max_amplitude;
+}
+
+float pulseg__grad_shape_first(const pulseg_sequence_descriptor *desc, int shape_id)
+{
+    if (!desc || !desc->grad_shape_first || shape_id <= 0 ||
+        shape_id > desc->num_grad_shape_stats)
+        return 0.0f;
+    return desc->grad_shape_first[shape_id - 1];
+}
+
+float pulseg__grad_shape_last(const pulseg_sequence_descriptor *desc, int shape_id)
+{
+    if (!desc || !desc->grad_shape_last || shape_id <= 0 ||
+        shape_id > desc->num_grad_shape_stats)
+        return 0.0f;
+    return desc->grad_shape_last[shape_id - 1];
+}
+
+float pulseg__grad_boundary_first(const pulseg_sequence_descriptor *desc, int raw_id)
+{
+    return grad_boundary_value(desc, raw_id, 0);
+}
+
+float pulseg__grad_boundary_last(const pulseg_sequence_descriptor *desc, int raw_id)
+{
+    return grad_boundary_value(desc, raw_id, 1);
+}
+
+/* Normalised waveform values are in [-1, 1], so a plain absolute tolerance is
+ * a relative one.  Loose enough to absorb the float32 round trip through the
+ * shape codec, tight enough that a real ramp -- which crosses the whole range
+ * over a few tens of microseconds -- never reads as flat. */
+#define PULSEG_GRAD_FLAT_TOL 1e-5f
+
+/*
+ * Is the gradient that grad-table row @p raw_id plays FLAT across the window
+ * [@p t0_us, @p t1_us], both measured from the start of the block playing it?
+ *
+ * Flat means the normalised waveform does not change over the window, so the
+ * physical gradient during it is one vector rather than a function of time.
+ * That is the entire premise of moving a selective excitation with a carrier
+ * offset: with a single G, translating the excited slab by dr is exactly a
+ * frequency shift of G.dr, and with a time-varying G it is not a frequency
+ * shift at all.
+ *
+ * A window that runs off either end of the event is deliberately NOT flat.
+ * Outside its support the gradient is zero, which is constant but is not the
+ * gradient the window is asking about; accepting it would silently sweep the
+ * ramps into the answer.
+ *
+ * Returns 1 and writes the signed normalised level to *level_out, else 0.
+ */
+static int grad_flat_over_window(
+    const pulseg_sequence_descriptor *desc,
+    int raw_id,
+    float t0_us,
+    float t1_us,
+    float *level_out)
+{
+    const pulseg_grad_table_element *gte;
+    const pulseg_grad_definition *gdef;
+    pulseq_shape wave, tshape;
+    float delay_us, rise_us, flat_us;
+    float grad_raster_us, level;
+    int num_samples, has_time_shape, i, i0, i1, flat;
+
+    if (!desc || !level_out || raw_id < 0 || raw_id >= desc->grad_table_size)
+        return 0;
+    gte = &desc->grad_table[raw_id];
+    if (gte->id < 0 || gte->id >= desc->num_unique_grads)
+        return 0;
+    gdef = &desc->grad_definitions[gte->id];
+    delay_us = (float)gdef->delay;
+
+    if (gdef->type == 0)
+    {
+        /* Trapezoid: the only flat stretch is the plateau, and it is flat by
+         * construction -- no shape to inspect, just the timing. */
+        rise_us = (float)gdef->rise_time_or_unused;
+        flat_us = (float)gdef->flat_time_or_unused;
+        if (flat_us <= 0.0f)
+            return 0;
+        if (t0_us < delay_us + rise_us || t1_us > delay_us + rise_us + flat_us)
+            return 0;
+        *level_out = 1.0f;
+        return 1;
+    }
+
+    /* Arbitrary: walk the samples the window spans.  The times must match
+     * pulseg__render_grad_block exactly, or the window lands on the wrong
+     * samples -- hence the same time-shape / half-raster split. */
+    num_samples = gdef->fall_time_or_num_uncompressed_samples;
+    if (num_samples <= 0 || gte->shape_id <= 0 || gte->shape_id > desc->num_shapes)
+        return 0;
+
+    wave.samples = NULL;
+    tshape.samples = NULL;
+    if (!pulseq_decompress_shape(&wave, &desc->shapes[gte->shape_id - 1], 1.0f))
+        return 0;
+    if (wave.num_uncompressed_samples < num_samples)
+    {
+        PULSEG_FREE(wave.samples);
+        return 0;
+    }
+
+    grad_raster_us = desc->grad_raster_us;
+    has_time_shape = 0;
+    if (gdef->unused_or_time_shape_id > 0 && gdef->unused_or_time_shape_id <= desc->num_shapes)
+    {
+        if (pulseq_decompress_shape(
+                &tshape, &desc->shapes[gdef->unused_or_time_shape_id - 1], grad_raster_us) &&
+            tshape.num_uncompressed_samples >= num_samples)
+            has_time_shape = 1;
+    }
+
+    /* Bracket the window: the last sample at or before t0, the first at or
+     * after t1.  Interpolation runs between samples, so both brackets have to
+     * be inside the event and every sample between them has to agree. */
+    i0 = -1;
+    i1 = -1;
+    for (i = 0; i < num_samples; ++i)
+    {
+        float t = has_time_shape
+            ? delay_us + (float)tshape.samples[i]
+            : delay_us + 0.5f * grad_raster_us + (float)i * grad_raster_us;
+        if (t <= t0_us)
+            i0 = i;
+        if (t >= t1_us && i1 < 0)
+            i1 = i;
+    }
+
+    flat = 0;
+    if (i0 >= 0 && i1 >= i0)
+    {
+        level = (float)wave.samples[i0];
+        flat = 1;
+        for (i = i0 + 1; i <= i1; ++i)
+        {
+            float d = (float)wave.samples[i] - level;
+            if (d < -PULSEG_GRAD_FLAT_TOL || d > PULSEG_GRAD_FLAT_TOL)
+            {
+                flat = 0;
+                break;
+            }
+        }
+        if (flat)
+            *level_out = level;
+    }
+
+    PULSEG_FREE(wave.samples);
+    if (tshape.samples)
+        PULSEG_FREE(tshape.samples);
+    return flat;
+}
+
+/*
+ * Can the excitation in block-table row @p bt_idx be moved by a carrier
+ * offset alone?  See pulseg_block_initial_state::rf_grad_constant.
+ *
+ * Writes the per-axis normalised level on success.  Answers for ONE instance;
+ * the caller AND-reduces over the instances of the position, because a
+ * position that is flat in some instances and not in others has no single
+ * gradient to offset against.
+ */
+static int rf_grad_constant_at(
+    const pulseg_sequence_descriptor *desc, int bt_idx, float level_out[3])
+{
+    const pulseg_block_table_element *bte;
+    const pulseg_rf_definition *rdef;
+    int ax_raw[3];
+    float t0_us, t1_us;
+    int ax, rf_def_id, have_grad;
+
+    level_out[0] = 0.0f;
+    level_out[1] = 0.0f;
+    level_out[2] = 0.0f;
+
+    if (!desc || bt_idx < 0 || bt_idx >= desc->num_blocks)
+        return 0;
+    bte = &desc->block_table[bt_idx];
+
+    /* A rotation extension rotates the trajectory inside the logical frame,
+     * so the gradient this block actually plays is R times the one recorded
+     * here.  Still flat -- R of a constant vector is constant -- but no longer
+     * this vector, and an excitation moved with the wrong G lands in the wrong
+     * place silently.  Refuse rather than guess. */
+    if (bte->rotation_id != -1 && bte->rotation_id < desc->num_rotations &&
+        !pulseg__is_identity3(desc->rotation_matrices[bte->rotation_id]))
+        return 0;
+
+    if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
+        return 0;
+    rf_def_id = desc->rf_table[bte->rf_id].id;
+    if (rf_def_id < 0 || rf_def_id >= desc->num_unique_rfs)
+        return 0;
+    rdef = &desc->rf_definitions[rf_def_id];
+
+    /* The RF's active window, from the start of the block.  Nominal duration,
+     * not the support of |B1| > 0: a pulse whose tails are zero still has to
+     * see the same gradient there, because the window is what the offset is
+     * claimed to be valid over. */
+    t0_us = (float)rdef->delay;
+    t1_us = (float)rdef->delay + rdef->stats.duration_us;
+    if (t1_us <= t0_us)
+        return 0;
+
+    ax_raw[0] = bte->gx_id;
+    ax_raw[1] = bte->gy_id;
+    ax_raw[2] = bte->gz_id;
+
+    have_grad = 0;
+    for (ax = 0; ax < 3; ++ax)
+    {
+        if (ax_raw[ax] < 0 || ax_raw[ax] >= desc->grad_table_size)
+            continue; /* no gradient on this axis: flat at zero, nothing to add */
+        if (!grad_flat_over_window(desc, ax_raw[ax], t0_us, t1_us, &level_out[ax]))
+            return 0;
+        have_grad = 1;
+    }
+
+    /* No accompanying gradient at all is a nonselective pulse: nothing to
+     * offset, and the caller has no correction to apply. */
+    return have_grad;
+}
+
+/*
+ * Does the matrix the interpreter has to program differ between two blocks?
+ *
+ * The interpreter's rotation is the *prescription* -- the FOV rotation, times
+ * whatever prospective motion correction contributes.  Two per-block flags
+ * change it:
+ *
+ *   - norot_flag    the block opts out of the prescribed FOV rotation
+ *   - pmc_flag      the block opts out of motion correction
+ *
+ * `rotation_id` is deliberately NOT here.  A ROTATIONS extension rotates the
+ * trajectory *within* the logical frame, so it is a property of the waveform
+ * and not of the prescription.  It stays an event all the way through: the
+ * `.seq` carries it, this collection carries it, and the `.pge` cache carries
+ * it.  Each consumer materialises what it needs when it loads that cache --
+ * the PSD the rotated gradient waveform, the recon the rotated trajectory and
+ * phase modulation -- so a spoke that points elsewhere costs a wave pointer,
+ * not a segment.  Splitting on it would put every radial spoke in a segment of
+ * its own for nothing.
+ *
+ * PMC is here even though it looks static in the file, because its matrix
+ * arrives from the tracking system during the scan: a segment mixing PMC-on
+ * and PMC-off blocks has no single matrix it could be programmed with.
+ */
+static int rotation_state_differs(
+    const pulseg_block_table_element *a,
+    const pulseg_block_table_element *b)
+{
+    return a->norot_flag != b->norot_flag || a->pmc_flag != b->pmc_flag;
+}
+
 /*
  * Like find_segments_internal but resolves blocks through scan table
  * indirection.  scan_block_idx[pat_start + i] gives the block_table
@@ -1796,8 +1953,7 @@ static int find_segments_on_exec_stream(
     int grad_ids[3];
     float phys_first, phys_last;
     float grad_last_cur[3], grad_first_next[3];
-    const pulseg_grad_definition *gdef;
-    int shot_idx, bt_idx, prev_bt;
+    int bt_idx, prev_bt;
     int *seg_starts = NULL;
     int *seg_sizes = NULL;
     int num_seg, seg_start;
@@ -1831,9 +1987,7 @@ static int find_segments_on_exec_stream(
     {
         if (grad_ids[i] < 0)
             continue;
-        gdef = &desc->grad_definitions[desc->grad_table[grad_ids[i]].id];
-        shot_idx = desc->grad_table[grad_ids[i]].shot_index;
-        phys_first = gdef->first_value[shot_idx] * gdef->max_amplitude[shot_idx];
+        phys_first = pulseg__grad_boundary_first(desc, grad_ids[i]);
         if ((float)fabs(phys_first) > max_allowed)
         {
             if (diag)
@@ -1857,9 +2011,7 @@ static int find_segments_on_exec_stream(
     {
         if (grad_ids[i] < 0)
             continue;
-        gdef = &desc->grad_definitions[desc->grad_table[grad_ids[i]].id];
-        shot_idx = desc->grad_table[grad_ids[i]].shot_index;
-        phys_last = gdef->last_value[shot_idx] * gdef->max_amplitude[shot_idx];
+        phys_last = pulseg__grad_boundary_last(desc, grad_ids[i]);
         if ((float)fabs(phys_last) > max_allowed)
         {
             if (diag)
@@ -1898,11 +2050,7 @@ static int find_segments_on_exec_stream(
             {
                 grad_last_cur[i] = 0.0f;
                 if (grad_ids[i] >= 0)
-                {
-                    gdef = &desc->grad_definitions[desc->grad_table[grad_ids[i]].id];
-                    shot_idx = desc->grad_table[grad_ids[i]].shot_index;
-                    grad_last_cur[i] = gdef->last_value[shot_idx] * gdef->max_amplitude[shot_idx];
-                }
+                    grad_last_cur[i] = pulseg__grad_boundary_last(desc, grad_ids[i]);
             }
 
             grad_ids[0] = desc->block_table[bt_idx].gx_id;
@@ -1912,12 +2060,7 @@ static int find_segments_on_exec_stream(
             {
                 grad_first_next[i] = 0.0f;
                 if (grad_ids[i] >= 0)
-                {
-                    gdef = &desc->grad_definitions[desc->grad_table[grad_ids[i]].id];
-                    shot_idx = desc->grad_table[grad_ids[i]].shot_index;
-                    grad_first_next[i] =
-                        gdef->first_value[shot_idx] * gdef->max_amplitude[shot_idx];
-                }
+                    grad_first_next[i] = pulseg__grad_boundary_first(desc, grad_ids[i]);
             }
 
             for (i = 0; i < 3; ++i)
@@ -1929,6 +2072,50 @@ static int find_segments_on_exec_stream(
                     break;
                 }
             }
+        }
+
+        /* A rotation change forces a boundary.
+         *
+         * The interpreter programs one rotation matrix per segment, at its
+         * start, so the segment is the granularity at which rotation can
+         * change at all.  Splitting here is what makes that true, and is why
+         * no mid-segment rotation update is needed: everything that used to
+         * be committed block by block now falls on a segment start.
+         *
+         * The join still has to be at zero gradient -- a rotation remaps the
+         * axes and cannot take effect under a live waveform.  A change that
+         * lands anywhere else is a design error, and is reported rather than
+         * absorbed by letting the block play in its predecessor's frame,
+         * which is silently the wrong image.
+         */
+        if (n > pat_start &&
+            rotation_state_differs(&desc->block_table[scan_block_idx[n - 1]],
+                                   &desc->block_table[bt_idx]))
+        {
+            if (!is_cand)
+            {
+                if (diag)
+                {
+                    diag->code = PULSEG_ERR_SEG_ROTATION_MID_GRADIENT;
+                    pulseg__diag_printf(diag, " scan_pos=%d block=%d", n, bt_idx);
+                    pulseg__diag_printf(diag, " prev_block=%d", scan_block_idx[n - 1]);
+                }
+                PULSEG_FREE(seg_starts);
+                PULSEG_FREE(seg_sizes);
+                return 0;
+            }
+            if (n > seg_start)
+            {
+                seg_starts[num_seg] = seg_start;
+                seg_sizes[num_seg] = n - seg_start;
+                num_seg++;
+                seg_start = n;
+            }
+            /* The candidates found so far belong to the segment just closed. */
+            state = SEGSTATE_SEEKING_FIRST_ADC;
+            cand_before_rf = -1;
+            saved_cand = -1;
+            has_saved_cand = 0;
         }
 
         has_rf = (desc->base_blocks[desc->block_table[bt_idx].id].rf_id >= 0);
@@ -2106,9 +2293,8 @@ static int scan_boundary_gradients_ok(
     int last_scan_pos,
     float max_allowed)
 {
-    int ch, gid, si, bt;
+    int ch, gid, bt;
     float pv;
-    const pulseg_grad_definition *gdef;
 
     bt = scan_block_idx[first_scan_pos];
     for (ch = 0; ch < 3; ++ch)
@@ -2118,9 +2304,7 @@ static int scan_boundary_gradients_ok(
                         : desc->block_table[bt].gz_id;
         if (gid < 0)
             continue;
-        si = desc->grad_table[gid].shot_index;
-        gdef = &desc->grad_definitions[desc->grad_table[gid].id];
-        pv = gdef->first_value[si] * gdef->max_amplitude[si];
+        pv = pulseg__grad_boundary_first(desc, gid);
         if ((float)fabs(pv) > max_allowed)
             return 0;
     }
@@ -2133,9 +2317,7 @@ static int scan_boundary_gradients_ok(
                         : desc->block_table[bt].gz_id;
         if (gid < 0)
             continue;
-        si = desc->grad_table[gid].shot_index;
-        gdef = &desc->grad_definitions[desc->grad_table[gid].id];
-        pv = gdef->last_value[si] * gdef->max_amplitude[si];
+        pv = pulseg__grad_boundary_last(desc, gid);
         if ((float)fabs(pv) > max_allowed)
             return 0;
     }
@@ -2167,7 +2349,7 @@ int pulseg__get_exec_stream_segments(
     int n, b, i, found, offset;
     int num_raw_alloc, num_exp_alloc;
     int seg_result, max_expanded;
-    int nb, unique_idx, blk_tab_idx, blk_def_id, shot_idx;
+    int nb, unique_idx, blk_tab_idx, blk_def_id;
     int ax_grad_ids[3], ax_def_ids[3], ax;
     float inst_energy, e, amp;
     const pulseg_block_table_element *bte;
@@ -2763,7 +2945,6 @@ int pulseg__get_exec_stream_segments(
         desc->segment_definitions[i].has_rotation = (int *)PULSEG_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].norot_flag = (int *)PULSEG_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].nopos_flag = (int *)PULSEG_ALLOC(nb * sizeof(int));
-        desc->segment_definitions[i].has_freq_mod = (int *)PULSEG_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].has_adc = (int *)PULSEG_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].is_dynamic_delay = (int *)PULSEG_ALLOC(nb * sizeof(int));
         desc->segment_definitions[i].initial_states = (pulseg_block_initial_state *)PULSEG_ALLOC(
@@ -2771,7 +2952,7 @@ int pulseg__get_exec_stream_segments(
         if (!desc->segment_definitions[i].has_digitalout ||
             !desc->segment_definitions[i].has_rotation ||
             !desc->segment_definitions[i].norot_flag || !desc->segment_definitions[i].nopos_flag ||
-            !desc->segment_definitions[i].has_freq_mod || !desc->segment_definitions[i].has_adc ||
+            !desc->segment_definitions[i].has_adc ||
             !desc->segment_definitions[i].is_dynamic_delay ||
             !desc->segment_definitions[i].initial_states)
         {
@@ -2784,7 +2965,6 @@ int pulseg__get_exec_stream_segments(
             desc->segment_definitions[i].has_rotation[n] = 0;
             desc->segment_definitions[i].norot_flag[n] = 0;
             desc->segment_definitions[i].nopos_flag[n] = 0;
-            desc->segment_definitions[i].has_freq_mod[n] = 0;
             desc->segment_definitions[i].has_adc[n] = 0;
             desc->segment_definitions[i].is_dynamic_delay[n] = 0;
             {
@@ -2872,8 +3052,9 @@ int pulseg__get_exec_stream_segments(
                     ax_def_ids[ax] >= 0 && ax_def_ids[ax] < desc->num_unique_grads)
                 {
                     amp = desc->grad_table[ax_grad_ids[ax]].amplitude;
-                    shot_idx = desc->grad_table[ax_grad_ids[ax]].shot_index;
-                    e = desc->grad_definitions[ax_def_ids[ax]].energy[shot_idx];
+                    /* The definition's own worst instance by energy; see
+                     * pulseg_grad_representative. */
+                    e = desc->grad_definitions[ax_def_ids[ax]].heat.energy;
                     inst_energy += e * amp * amp;
                 }
             }
@@ -3044,8 +3225,9 @@ int pulseg__get_exec_stream_segments(
                     ax_def_ids[ax] >= 0 && ax_def_ids[ax] < desc->num_unique_grads)
                 {
                     amp = desc->grad_table[ax_grad_ids[ax]].amplitude;
-                    shot_idx = desc->grad_table[ax_grad_ids[ax]].shot_index;
-                    e = desc->grad_definitions[ax_def_ids[ax]].energy[shot_idx];
+                    /* The definition's own worst instance by energy; see
+                     * pulseg_grad_representative. */
+                    e = desc->grad_definitions[ax_def_ids[ax]].heat.energy;
                     inst_energy += e * amp * amp;
                 }
             }
@@ -3068,9 +3250,8 @@ int pulseg__get_exec_stream_segments(
      *
      * Step 10 only populated flags from the first expanded instance of
      * each segment.  Flags like has_digitalout, has_rotation, norot,
-     * nopos, and has_freq_mod must reflect ANY instance (e.g. ADC
-     * only appears in main TRs, not dummies, so freq_mod would be
-     * missed if only the dummy instance was scanned).
+     * and nopos must reflect ANY instance, not just the first one
+     * that happened to be expanded.
      *
      * Repetitions (num_averages > 1) share the same block_table
      * entries.  For multi-pass sequences the pass dimension is the
@@ -3086,9 +3267,10 @@ int pulseg__get_exec_stream_segments(
             desc->segment_definitions[i].has_rotation[n] = 0;
             desc->segment_definitions[i].norot_flag[n] = 0;
             desc->segment_definitions[i].nopos_flag[n] = 0;
-            desc->segment_definitions[i].has_freq_mod[n] = 0;
             desc->segment_definitions[i].has_adc[n] = 0;
             desc->segment_definitions[i].is_dynamic_delay[n] = 0;
+            /* -1 = no instance seen yet; the walk below AND-reduces onto it. */
+            desc->segment_definitions[i].initial_states[n].rf_grad_constant = -1;
         }
         desc->segment_definitions[i].trigger_id = -1;
     }
@@ -3179,16 +3361,6 @@ int pulseg__get_exec_stream_segments(
             if (bte->nopos_flag)
                 desc->segment_definitions[seg_id].nopos_flag[b] = 1;
 
-            /* freq_mod: computed inline because build_freq_mod_flags
-             * has not run yet at this point in the pipeline.         */
-            {
-                int has_rf_b = (bdef->rf_id >= 0);
-                int has_adc_b = (bte->adc_id >= 0);
-                int has_grad_b = (bdef->gx_id >= 0 || bdef->gy_id >= 0 || bdef->gz_id >= 0);
-                if ((has_rf_b || has_adc_b) && has_grad_b)
-                    desc->segment_definitions[seg_id].has_freq_mod[b] = 1;
-            }
-
             /* has_adc: OR-reduce — true if any instance at this position has ADC */
             if (bte->adc_id >= 0)
                 desc->segment_definitions[seg_id].has_adc[b] = 1;
@@ -3205,9 +3377,55 @@ int pulseg__get_exec_stream_segments(
                 else if (delay_baseline[seg_id][b] != bte->duration_us)
                     desc->segment_definitions[seg_id].is_dynamic_delay[b] = 1;
             }
+
+            /* rf_grad_constant: AND-reduce, and the level has to agree too.
+             * A position whose instances disagree -- flat in one, ramping in
+             * another, or flat at different levels -- has no single gradient
+             * for the interpreter to offset against, so it gets nothing. */
+            {
+                pulseg_block_initial_state *st =
+                    &desc->segment_definitions[seg_id].initial_states[b];
+                float lvl[3];
+                int ok = rf_grad_constant_at(desc, pulseg__exec_block_idx(desc, n + b), lvl);
+
+                if (st->rf_grad_constant == -1)
+                {
+                    st->rf_grad_constant = ok;
+                    st->rf_grad_level[0] = lvl[0];
+                    st->rf_grad_level[1] = lvl[1];
+                    st->rf_grad_level[2] = lvl[2];
+                }
+                else if (!ok)
+                {
+                    st->rf_grad_constant = 0;
+                }
+                else if (st->rf_grad_constant)
+                {
+                    int ax;
+                    for (ax = 0; ax < 3; ++ax)
+                    {
+                        float d = lvl[ax] - st->rf_grad_level[ax];
+                        if (d < -PULSEG_GRAD_FLAT_TOL || d > PULSEG_GRAD_FLAT_TOL)
+                        {
+                            st->rf_grad_constant = 0;
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         n += nb;
+    }
+
+    /* Positions no instance of the walk reached keep the "unseen" sentinel;
+     * the field is public from here on, so settle it to 0. */
+    for (i = 0; i < num_unique; ++i)
+    {
+        nb = desc->segment_definitions[i].num_blocks;
+        for (n = 0; n < nb; ++n)
+            if (desc->segment_definitions[i].initial_states[n].rf_grad_constant < 0)
+                desc->segment_definitions[i].initial_states[n].rf_grad_constant = 0;
     }
 
     for (i = 0; i < num_unique; ++i)
@@ -3288,7 +3506,7 @@ int pulseg__get_exec_stream_segments(
                     if (def_id < 0 || def_id >= desc->num_unique_grads)
                         continue;
                     st->grad_def_id[ax] = def_id;
-                    st->grad_shot_index[ax] = desc->grad_table[raw].shot_index;
+                    st->grad_shape_id[ax] = desc->grad_table[raw].shape_id;
                     st->grad_amplitude_hz_per_m[ax] = desc->grad_table[raw].amplitude;
                 }
             }

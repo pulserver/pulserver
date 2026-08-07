@@ -431,63 +431,37 @@ static int deduplicate_adc_library(
 /* ================================================================== */
 /*  Gradient shot indices                                             */
 /* ================================================================== */
+/*  Per-instance shape ids                                            */
+/* ================================================================== */
 
-static int compute_grad_shot_indices(
+/*
+ * Record the pulseq shape each gradient instance plays.
+ *
+ * This used to also build a per-definition table of the distinct shapes and
+ * hand each instance an ordinal into it, which is what capped a definition at
+ * PULSEG_MAX_GRAD_SHOTS.  The id is carried directly now: the definition needs
+ * no list, and nothing counts.
+ */
+static int record_grad_shape_ids(
     const pulseq_file *seq,
-    pulseg_grad_definition *grad_defs,
+    const pulseg_grad_definition *grad_defs,
     pulseg_grad_table_element *grad_table,
     int num_unique_grads)
 {
     int num_rows = seq->grad_library_size;
-    int def_idx, i, j;
-    int shape_id, found, shot_count;
+    int i;
 
     if (num_rows <= 0 || num_unique_grads <= 0)
         return PULSEG_SUCCESS;
 
-    for (def_idx = 0; def_idx < num_unique_grads; ++def_idx)
+    for (i = 0; i < num_rows; ++i)
     {
-        int grad_type = grad_defs[def_idx].type;
-
-        for (j = 0; j < PULSEG_MAX_GRAD_SHOTS; ++j)
-            grad_defs[def_idx].shot_shape_ids[j] = 0;
-
-        if (grad_type == 0)
-        {
-            grad_defs[def_idx].num_shots = 1;
-            for (i = 0; i < num_rows; ++i)
-                if (grad_table[i].id == def_idx)
-                    grad_table[i].shot_index = 0;
+        int def_idx = grad_table[i].id;
+        if (def_idx < 0 || def_idx >= num_unique_grads)
             continue;
-        }
-
-        shot_count = 0;
-        for (i = 0; i < num_rows; ++i)
-        {
-            if (grad_table[i].id != def_idx)
-                continue;
-            shape_id = (int)seq->grad_library[i][4];
-
-            found = 0;
-            for (j = 0; j < shot_count; ++j)
-            {
-                if (grad_defs[def_idx].shot_shape_ids[j] == shape_id)
-                {
-                    found = 1;
-                    grad_table[i].shot_index = j;
-                    break;
-                }
-            }
-            if (!found)
-            {
-                if (shot_count >= PULSEG_MAX_GRAD_SHOTS)
-                    return PULSEG_ERR_TOO_MANY_GRAD_SHOTS;
-                grad_table[i].shot_index = shot_count;
-                grad_defs[def_idx].shot_shape_ids[shot_count] = shape_id;
-                shot_count++;
-            }
-        }
-        grad_defs[def_idx].num_shots = shot_count > 0 ? shot_count : 1;
+        /* A trapezoid is described by its corner times and has no shape. */
+        grad_table[i].shape_id =
+            (grad_defs[def_idx].type == 0) ? 0 : (int)seq->grad_library[i][4];
     }
     return PULSEG_SUCCESS;
 }
@@ -538,22 +512,67 @@ static void compute_trapezoid_stats(
     *energy = rise_s / 3.0f + flat_s + fall_s / 3.0f;
 }
 
+
+/*
+ * Integral of (dw/dt)^2 over a piecewise-linear normalised waveform -- the
+ * second moment of S(f), by Parseval, and so the quantity that ranks
+ * instances for PNS / mechanical resonance / SPL.  Exact for the
+ * piecewise-linear reading the rest of this file uses: on each interval the
+ * derivative is constant, so the integral is sum (dw)^2 / dt.
+ *
+ * @p time_us may be NULL, in which case the samples sit on a uniform raster.
+ * Returned in 1/s (the waveform is dimensionless, the times are seconds).
+ */
+static float grad_slew_energy(const float *w, const float *time_us, int n, float raster_us)
+{
+    float total = 0.0f;
+    float dt, dw;
+    int i;
+
+    if (!w || n < 2)
+        return 0.0f;
+
+    for (i = 1; i < n; ++i)
+    {
+        dt = (time_us ? (time_us[i] - time_us[i - 1]) : raster_us) * 1e-6f;
+        if (dt <= 0.0f)
+            continue;
+        dw = w[i] - w[i - 1];
+        total += dw * dw / dt;
+    }
+    return total;
+}
+
+/*
+ * Keep @p cand if it scores higher than what @p best already holds.
+ */
+static void grad_keep_best(
+    pulseg_grad_representative *best,
+    const pulseg_grad_representative *cand)
+{
+    if (cand->score > best->score)
+        *best = *cand;
+}
+
 /* ================================================================== */
 /*  Gradient statistics                                               */
 /* ================================================================== */
 
 static int compute_grad_stats(
     const pulseq_file *seq,
+    pulseg_sequence_descriptor *desc,
     pulseg_grad_definition *grad_defs,
     int num_unique,
     const pulseg_grad_table_element *grad_table,
     int grad_table_size,
     const pulseg_opts *opts)
 {
-    int def_idx, i, shot_idx, num_samples, has_time;
+    int def_idx, i, row, num_samples, has_time;
     int grad_type, time_id, shape_id;
     float rise_us, flat_us, fall_us, abs_amp;
     float grad_raster_us;
+    float slew_energy, amp2;
+    pulseg_grad_representative cand;
     pulseq_shape decomp_wave, decomp_time;
     float *waveform = NULL;
     float *sq_wave = NULL;
@@ -568,6 +587,25 @@ static int compute_grad_stats(
     else
         grad_raster_us = opts->grad_raster_us;
 
+    /* Per-shape endpoints, filled as the shapes are visited below.  Sized by
+     * the shape library rather than by anything per definition, which is what
+     * makes it uncapped. */
+    if (desc && seq->shapes_library_size > 0)
+    {
+        desc->num_grad_shape_stats = seq->shapes_library_size;
+        desc->grad_shape_first =
+            (float *)PULSEG_ALLOC((size_t)seq->shapes_library_size * sizeof(float));
+        desc->grad_shape_last =
+            (float *)PULSEG_ALLOC((size_t)seq->shapes_library_size * sizeof(float));
+        if (!desc->grad_shape_first || !desc->grad_shape_last)
+            return PULSEG_ERR_ALLOC_FAILED;
+        for (i = 0; i < seq->shapes_library_size; ++i)
+        {
+            desc->grad_shape_first[i] = 0.0f;
+            desc->grad_shape_last[i] = 0.0f;
+        }
+    }
+
     decomp_wave.num_samples = 0;
     decomp_wave.num_uncompressed_samples = 0;
     decomp_wave.samples = NULL;
@@ -580,48 +618,35 @@ static int compute_grad_stats(
         gd = &grad_defs[def_idx];
         grad_type = gd->type;
 
-        for (i = 0; i < PULSEG_MAX_GRAD_SHOTS; ++i)
         {
-            gd->max_amplitude[i] = 0.0f;
-            gd->min_amplitude[i] = 1e30f;
-            gd->slew_rate[i] = 0.0f;
-            gd->energy[i] = 0.0f;
-            gd->first_value[i] = 0.0f;
-            gd->last_value[i] = 0.0f;
+            pulseg_grad_representative empty = PULSEG_GRAD_REPRESENTATIVE_INIT;
+            gd->heat = empty;
+            gd->spectral = empty;
+        }
+        {
+            pulseg_grad_aggregate zero = PULSEG_GRAD_AGGREGATE_INIT;
+            gd->any = zero;
         }
 
-        /* max amplitude and min amplitude per shot from table. */
+        /* Amplitude bounds over every instance of this definition. */
+        gd->any.min_amplitude = 1e30f;
         if (grad_table && grad_table_size > 0)
         {
             for (i = 0; i < grad_table_size; ++i)
             {
-                if (grad_table[i].id == def_idx)
-                {
-                    shot_idx = grad_table[i].shot_index;
-                    if (shot_idx >= 0 && shot_idx < PULSEG_MAX_GRAD_SHOTS)
-                    {
-                        abs_amp = grad_table[i].amplitude;
-                        if (abs_amp < 0.0f)
-                            abs_amp = -abs_amp;
-                        if (abs_amp > gd->max_amplitude[shot_idx])
-                            gd->max_amplitude[shot_idx] = abs_amp;
-                        if (abs_amp < gd->min_amplitude[shot_idx])
-                        {
-                            gd->min_amplitude[shot_idx] = abs_amp;
-                        }
-                    }
-                }
+                if (grad_table[i].id != def_idx)
+                    continue;
+                abs_amp = grad_table[i].amplitude;
+                if (abs_amp < 0.0f)
+                    abs_amp = -abs_amp;
+                if (abs_amp > gd->any.max_amplitude)
+                    gd->any.max_amplitude = abs_amp;
+                if (abs_amp < gd->any.min_amplitude)
+                    gd->any.min_amplitude = abs_amp;
             }
         }
-
-        /* clamp sentinel: if no table entry touched a shot, min stays 0 */
-        for (i = 0; i < PULSEG_MAX_GRAD_SHOTS; ++i)
-        {
-            if (gd->min_amplitude[i] > 1e29f)
-            {
-                gd->min_amplitude[i] = 0.0f;
-            }
-        }
+        if (gd->any.min_amplitude > 1e29f)
+            gd->any.min_amplitude = 0.0f;
 
         if (grad_type == 0)
         {
@@ -629,13 +654,29 @@ static int compute_grad_stats(
             flat_us = (float)gd->flat_time_or_unused;
             fall_us = (float)gd->fall_time_or_num_uncompressed_samples;
             compute_trapezoid_stats(
-                &gd->slew_rate[0],
-                &gd->energy[0],
-                &gd->first_value[0],
-                &gd->last_value[0],
-                rise_us,
-                flat_us,
-                fall_us);
+                &cand.slew_rate, &cand.energy, &cand.first_value, &cand.last_value,
+                rise_us, flat_us, fall_us);
+
+            /* A trapezoid has one shape, so both representatives are it.
+             * Its slew energy is closed form: the derivative is 1/rise on the
+             * ramp up and 1/fall on the ramp down, so the integral of its
+             * square is 1/rise + 1/fall. */
+            slew_energy = 0.0f;
+            if (rise_us > 0.0f)
+                slew_energy += 1.0f / (rise_us * 1e-6f);
+            if (fall_us > 0.0f)
+                slew_energy += 1.0f / (fall_us * 1e-6f);
+
+            cand.shape_id = 0;
+            cand.amplitude = gd->any.max_amplitude;
+            amp2 = cand.amplitude * cand.amplitude;
+            if (cand.slew_rate > gd->any.max_slew_rate)
+                gd->any.max_slew_rate = cand.slew_rate;
+
+            cand.score = amp2 * cand.energy;
+            grad_keep_best(&gd->heat, &cand);
+            cand.score = amp2 * slew_energy;
+            grad_keep_best(&gd->spectral, &cand);
         }
         else
         {
@@ -660,10 +701,26 @@ static int compute_grad_stats(
                 decomp_time.samples = NULL;
             }
 
-            for (shot_idx = 0; shot_idx < gd->num_shots; ++shot_idx)
+            /* Enumerate this definition's distinct shapes straight from the
+             * instance table: with no per-definition list there is nothing to
+             * cap, and a shape seen twice is skipped by the scan below. */
+            for (row = 0; row < grad_table_size; ++row)
             {
-                shape_id = gd->shot_shape_ids[shot_idx];
+                int seen, prev;
+
+                if (!grad_table || grad_table[row].id != def_idx)
+                    continue;
+                shape_id = grad_table[row].shape_id;
                 if (shape_id <= 0 || shape_id > seq->shapes_library_size)
+                    continue;
+                seen = 0;
+                for (prev = 0; prev < row; ++prev)
+                    if (grad_table[prev].id == def_idx && grad_table[prev].shape_id == shape_id)
+                    {
+                        seen = 1;
+                        break;
+                    }
+                if (seen)
                     continue;
 
                 if (!pulseq_decompress_shape(
@@ -685,25 +742,52 @@ static int compute_grad_stats(
                 for (i = 0; i < num_samples; ++i)
                     sq_wave[i] = waveform[i] * waveform[i];
 
-                gd->first_value[shot_idx] = waveform[0];
-                gd->last_value[shot_idx] = waveform[num_samples - 1];
+                cand.first_value = waveform[0];
+                cand.last_value = waveform[num_samples - 1];
+                if (desc && desc->grad_shape_first && shape_id <= desc->num_grad_shape_stats)
+                {
+                    desc->grad_shape_first[shape_id - 1] = waveform[0];
+                    desc->grad_shape_last[shape_id - 1] = waveform[num_samples - 1];
+                }
+                {
+                    float fv = cand.first_value < 0.0f ? -cand.first_value : cand.first_value;
+                    float lv = cand.last_value < 0.0f ? -cand.last_value : cand.last_value;
+                    if (fv > gd->any.max_abs_first)
+                        gd->any.max_abs_first = fv;
+                    if (lv > gd->any.max_abs_last)
+                        gd->any.max_abs_last = lv;
+                }
 
                 if (has_time && time_us)
                 {
-                    gd->slew_rate[shot_idx] =
+                    cand.slew_rate =
                         pulseg__max_slew_real_nonuniform(waveform, time_us, num_samples);
-                    gd->energy[shot_idx] =
+                    cand.energy =
                         pulseg__trapz_real_nonuniform(sq_wave, time_us, num_samples);
                 }
                 else
                 {
-                    gd->slew_rate[shot_idx] =
+                    cand.slew_rate =
                         pulseg__max_slew_real_uniform(waveform, num_samples, grad_raster_us);
-                    gd->energy[shot_idx] =
+                    cand.energy =
                         pulseg__trapz_real_uniform(sq_wave, num_samples, grad_raster_us);
                 }
-                gd->slew_rate[shot_idx] *= 1e6f;
-                gd->energy[shot_idx] *= 1e-6f;
+                cand.slew_rate *= 1e6f;
+                cand.energy *= 1e-6f;
+                if (cand.slew_rate > gd->any.max_slew_rate)
+                    gd->any.max_slew_rate = cand.slew_rate;
+
+                slew_energy = grad_slew_energy(
+                    waveform, has_time ? time_us : NULL, num_samples, grad_raster_us);
+
+                cand.shape_id = shape_id;
+                cand.amplitude = gd->any.max_amplitude;
+                amp2 = cand.amplitude * cand.amplitude;
+
+                cand.score = amp2 * cand.energy;
+                grad_keep_best(&gd->heat, &cand);
+                cand.score = amp2 * slew_energy;
+                grad_keep_best(&gd->spectral, &cand);
 
                 PULSEG_FREE(waveform);
                 waveform = NULL;
@@ -719,6 +803,7 @@ static int compute_grad_stats(
                 time_us = NULL;
             }
         }
+
     }
     return PULSEG_SUCCESS;
 
@@ -1780,7 +1865,7 @@ int pulseg__get_unique_blocks(
 
         desc->num_unique_grads = num_unique_grad;
 
-        rc = compute_grad_shot_indices(seq, tmp_grad_defs, tmp_grad_tab, num_unique_grad);
+        rc = record_grad_shape_ids(seq, tmp_grad_defs, tmp_grad_tab, num_unique_grad);
         if (PULSEG_FAILED(rc))
         {
             result = rc;
@@ -1789,6 +1874,7 @@ int pulseg__get_unique_blocks(
 
         rc = compute_grad_stats(
             seq,
+            desc,
             tmp_grad_defs,
             num_unique_grad,
             tmp_grad_tab,

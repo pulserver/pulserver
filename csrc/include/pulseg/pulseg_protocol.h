@@ -142,7 +142,21 @@ extern "C"
 #define PULSEG_PARAM_USER17_NAME 88
 #define PULSEG_PARAM_USER18_NAME 89
 #define PULSEG_PARAM_USER19_NAME 90
-#define PULSEG_PARAM_COUNT 91 /* sentinel */
+/* --- FOV offset ---
+ * The prescribed off-isocentre translation, in MILLIMETRES, in the LOGICAL
+ * (design) frame -- which is the frame GE's xloc/yloc/zloc are already in, so
+ * no rotation is undone anywhere along the way.
+ *
+ * It reaches the design side because that is where the shift is applied now:
+ * a shift is a phase on RF and ADC, `dr . k`, and expressing it in the same
+ * frame as the gradients makes it invariant under every rotation the sequence
+ * or the prescription can apply.  The interpreter used to reconstruct this at
+ * scan time from physical-frame gradients, which is what forced it to undo
+ * rotation extensions and NOROT before it could compute anything. */
+#define PULSEG_PARAM_FOV_OFFSET_X 91
+#define PULSEG_PARAM_FOV_OFFSET_Y 92
+#define PULSEG_PARAM_FOV_OFFSET_Z 93
+#define PULSEG_PARAM_COUNT 94 /* sentinel */
 
     /* ================================================================== */
     /*  Parameter types                                                   */

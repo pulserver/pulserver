@@ -14,6 +14,7 @@
 #include "pulseq/sequence.hpp"
 
 #include <cmath>
+#include <stdexcept>
 #include <vector>
 
 namespace pulseq
@@ -76,6 +77,61 @@ namespace pulseq
         if (n > out.size())
             return out;
         return std::vector<double>(samples, samples + count);
+    }
+
+    std::vector<double> decompress_shape(const double* samples, int count, int num_uncompressed)
+    {
+        // Equal counts mean compress_shape kept the original, so there is no
+        // derivative to sum and nothing to expand.
+        if (count == num_uncompressed)
+            return std::vector<double>(samples, samples + count);
+
+        if (num_uncompressed <= 0 || count <= 0)
+            return std::vector<double>();
+
+        std::vector<double> out(static_cast<size_t>(num_uncompressed), 0.0);
+
+        // A run is the value twice followed by the count less two, so a pair of
+        // equal neighbours is what says to read a third number.
+        int packed = 1;
+        int unpacked = 1;
+        while (packed < count)
+        {
+            if (samples[packed - 1] != samples[packed])
+            {
+                out[static_cast<size_t>(unpacked) - 1] = samples[packed - 1];
+                ++packed;
+                ++unpacked;
+                continue;
+            }
+
+            if (packed + 1 >= count)
+                throw std::runtime_error("decompress_shape: run length past the end of the shape");
+
+            const double encoded = samples[packed + 1];
+            const int repeats = static_cast<int>(encoded) + 2;
+            if (std::fabs(encoded + 2.0 - static_cast<double>(repeats)) > 1e-6)
+                throw std::runtime_error("decompress_shape: run length is not a whole number");
+            if (repeats < 2 || unpacked - 1 + repeats > num_uncompressed)
+                throw std::runtime_error("decompress_shape: run overruns the sample count");
+
+            for (int i = unpacked - 1; i <= unpacked + repeats - 2; ++i)
+                out[static_cast<size_t>(i)] = samples[packed - 1];
+            packed += 3;
+            unpacked += repeats;
+        }
+        if (packed == count)
+        {
+            if (unpacked - 1 >= num_uncompressed)
+                throw std::runtime_error("decompress_shape: trailing sample overruns the count");
+            out[static_cast<size_t>(unpacked) - 1] = samples[packed - 1];
+        }
+
+        // The encoding is of the derivative.
+        for (int i = 1; i < num_uncompressed; ++i)
+            out[static_cast<size_t>(i)] += out[static_cast<size_t>(i) - 1];
+
+        return out;
     }
 
     /* ================================================================== */

@@ -125,17 +125,22 @@ int pulseg__count_grad_samples_for_block(
     return count;
 }
 
+
 /* ================================================================== */
 /*  Position-specific max amplitudes (filtered by TR group)           */
 /* ================================================================== */
 
 /*
- * Computes per-position worst-case amplitude for each shot index,
- * preserving the sign of the instance with the largest absolute value.
- * Considering only TR instances whose group label matches target_group.
- * If tr_group_labels is NULL, all TRs are included (unfiltered).
+ * Computes the per-position worst-case amplitude, preserving the sign of the
+ * instance with the largest absolute value.  Considering only TR instances
+ * whose group label matches target_group; if tr_group_labels is NULL, all TRs
+ * are included.
  *
- * Output arrays must be pre-allocated to tr_size * PULSEG_MAX_GRAD_SHOTS.
+ * One value per position, not one per shape.  Which waveform that amplitude
+ * belongs to is the definition's business -- it names its own worst instance
+ * (pulseg_grad_representative) -- and a position plays one definition.
+ *
+ * Output arrays must be pre-allocated to block_count entries.
  */
 static int compute_position_max_amplitudes_filtered(
     const pulseg_sequence_descriptor *desc,
@@ -153,8 +158,7 @@ static int compute_position_max_amplitudes_filtered(
     int use_full_pass_layout, num_passes, pass_size, pass_idx, st_pos;
     const pulseg_block_table_element *bte;
     const pulseg_grad_table_element *gte;
-    float abs_amp;
-    int raw_id, shot_idx, arr_idx, n;
+    int raw_id, n;
 
     tr = &desc->tr_descriptor;
     tr_size = tr->tr_size;
@@ -164,7 +168,7 @@ static int compute_position_max_amplitudes_filtered(
     num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
     pass_size = (num_passes > 0) ? (desc->exec_stream_len / num_passes) : 0;
 
-    for (n = 0; n < block_count * PULSEG_MAX_GRAD_SHOTS; ++n)
+    for (n = 0; n < block_count; ++n)
     {
         pos_max_gx[n] = 0.0f;
         pos_max_gy[n] = 0.0f;
@@ -193,48 +197,24 @@ static int compute_position_max_amplitudes_filtered(
                 if (raw_id >= 0 && raw_id < desc->grad_table_size)
                 {
                     gte = &desc->grad_table[raw_id];
-                    shot_idx = gte->shot_index;
-                    if (shot_idx >= 0 && shot_idx < PULSEG_MAX_GRAD_SHOTS)
-                    {
-                        abs_amp = gte->amplitude;
-                        if (abs_amp < 0.0f)
-                            abs_amp = -abs_amp;
-                        arr_idx = pos * PULSEG_MAX_GRAD_SHOTS + shot_idx;
-                        if (abs_amp > (float)fabs((double)pos_max_gx[arr_idx]))
-                            pos_max_gx[arr_idx] = gte->amplitude;
-                    }
+                    if ((float)fabs((double)gte->amplitude) > (float)fabs((double)pos_max_gx[pos]))
+                        pos_max_gx[pos] = gte->amplitude;
                 }
 
                 raw_id = bte->gy_id;
                 if (raw_id >= 0 && raw_id < desc->grad_table_size)
                 {
                     gte = &desc->grad_table[raw_id];
-                    shot_idx = gte->shot_index;
-                    if (shot_idx >= 0 && shot_idx < PULSEG_MAX_GRAD_SHOTS)
-                    {
-                        abs_amp = gte->amplitude;
-                        if (abs_amp < 0.0f)
-                            abs_amp = -abs_amp;
-                        arr_idx = pos * PULSEG_MAX_GRAD_SHOTS + shot_idx;
-                        if (abs_amp > (float)fabs((double)pos_max_gy[arr_idx]))
-                            pos_max_gy[arr_idx] = gte->amplitude;
-                    }
+                    if ((float)fabs((double)gte->amplitude) > (float)fabs((double)pos_max_gy[pos]))
+                        pos_max_gy[pos] = gte->amplitude;
                 }
 
                 raw_id = bte->gz_id;
                 if (raw_id >= 0 && raw_id < desc->grad_table_size)
                 {
                     gte = &desc->grad_table[raw_id];
-                    shot_idx = gte->shot_index;
-                    if (shot_idx >= 0 && shot_idx < PULSEG_MAX_GRAD_SHOTS)
-                    {
-                        abs_amp = gte->amplitude;
-                        if (abs_amp < 0.0f)
-                            abs_amp = -abs_amp;
-                        arr_idx = pos * PULSEG_MAX_GRAD_SHOTS + shot_idx;
-                        if (abs_amp > (float)fabs((double)pos_max_gz[arr_idx]))
-                            pos_max_gz[arr_idx] = gte->amplitude;
-                    }
+                    if ((float)fabs((double)gte->amplitude) > (float)fabs((double)pos_max_gz[pos]))
+                        pos_max_gz[pos] = gte->amplitude;
                 }
             }
         }
@@ -258,16 +238,8 @@ static int compute_position_max_amplitudes_filtered(
             if (raw_id >= 0 && raw_id < desc->grad_table_size)
             {
                 gte = &desc->grad_table[raw_id];
-                shot_idx = gte->shot_index;
-                if (shot_idx >= 0 && shot_idx < PULSEG_MAX_GRAD_SHOTS)
-                {
-                    abs_amp = gte->amplitude;
-                    if (abs_amp < 0.0f)
-                        abs_amp = -abs_amp;
-                    arr_idx = pos * PULSEG_MAX_GRAD_SHOTS + shot_idx;
-                    if (abs_amp > (float)fabs((double)pos_max_gx[arr_idx]))
-                        pos_max_gx[arr_idx] = gte->amplitude;
-                }
+                if ((float)fabs((double)gte->amplitude) > (float)fabs((double)pos_max_gx[pos]))
+                    pos_max_gx[pos] = gte->amplitude;
             }
 
             /* Gy */
@@ -275,16 +247,8 @@ static int compute_position_max_amplitudes_filtered(
             if (raw_id >= 0 && raw_id < desc->grad_table_size)
             {
                 gte = &desc->grad_table[raw_id];
-                shot_idx = gte->shot_index;
-                if (shot_idx >= 0 && shot_idx < PULSEG_MAX_GRAD_SHOTS)
-                {
-                    abs_amp = gte->amplitude;
-                    if (abs_amp < 0.0f)
-                        abs_amp = -abs_amp;
-                    arr_idx = pos * PULSEG_MAX_GRAD_SHOTS + shot_idx;
-                    if (abs_amp > (float)fabs((double)pos_max_gy[arr_idx]))
-                        pos_max_gy[arr_idx] = gte->amplitude;
-                }
+                if ((float)fabs((double)gte->amplitude) > (float)fabs((double)pos_max_gy[pos]))
+                    pos_max_gy[pos] = gte->amplitude;
             }
 
             /* Gz */
@@ -292,16 +256,8 @@ static int compute_position_max_amplitudes_filtered(
             if (raw_id >= 0 && raw_id < desc->grad_table_size)
             {
                 gte = &desc->grad_table[raw_id];
-                shot_idx = gte->shot_index;
-                if (shot_idx >= 0 && shot_idx < PULSEG_MAX_GRAD_SHOTS)
-                {
-                    abs_amp = gte->amplitude;
-                    if (abs_amp < 0.0f)
-                        abs_amp = -abs_amp;
-                    arr_idx = pos * PULSEG_MAX_GRAD_SHOTS + shot_idx;
-                    if (abs_amp > (float)fabs((double)pos_max_gz[arr_idx]))
-                        pos_max_gz[arr_idx] = gte->amplitude;
-                }
+                if ((float)fabs((double)gte->amplitude) > (float)fabs((double)pos_max_gz[pos]))
+                    pos_max_gz[pos] = gte->amplitude;
             }
         }
     }
@@ -443,141 +399,6 @@ int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc)
 /*  Find unique shot-index TR variants                                */
 /* ================================================================== */
 
-/*
- * For multi-shot sequences, different TR instances may use different
- * shot indices, producing different waveform shapes.  This function
- * identifies the unique shot-index fingerprints across TR instances
- * and returns:
- *   - return value: number of unique patterns (0 on failure)
- *   - *out_unique_tr_indices: representative TR index per group
- *   - *out_tr_group_labels:  group label (0..num_unique-1) per TR
- *
- * Caller must free *out_unique_tr_indices and *out_tr_group_labels.
- */
-int pulseg__find_unique_shot_trs(
-    const pulseg_sequence_descriptor *desc,
-    int **out_unique_tr_indices,
-    int **out_tr_group_labels)
-{
-    const pulseg_tr_descriptor *tr;
-    int tr_size, num_trs, num_cols;
-    int *int_rows;
-    int *unique_defs;
-    int *event_table;
-    int *result_indices;
-    int num_unique;
-    int tr_idx, pos, col, block_idx, raw_id;
-    const pulseg_block_table_element *bte;
-    const pulseg_grad_table_element *gte;
-
-    *out_unique_tr_indices = NULL;
-    *out_tr_group_labels = NULL;
-
-    tr = &desc->tr_descriptor;
-    tr_size = tr->tr_size;
-    num_trs = tr->num_trs;
-
-    if (num_trs <= 0 || tr_size <= 0)
-        return 0;
-
-    /* Each row: tr_size * 3 ints = (gx_shot, gy_shot, gz_shot) per position */
-    num_cols = tr_size * 3;
-
-    int_rows = (int *)PULSEG_ALLOC((size_t)num_trs * (size_t)num_cols * sizeof(int));
-    unique_defs = (int *)PULSEG_ALLOC((size_t)num_trs * sizeof(int));
-    event_table = (int *)PULSEG_ALLOC((size_t)num_trs * sizeof(int));
-    if (!int_rows || !unique_defs || !event_table)
-    {
-        if (int_rows)
-            PULSEG_FREE(int_rows);
-        if (unique_defs)
-            PULSEG_FREE(unique_defs);
-        if (event_table)
-            PULSEG_FREE(event_table);
-        return 0;
-    }
-
-    /* Build the fingerprint matrix */
-    for (tr_idx = 0; tr_idx < num_trs; ++tr_idx)
-    {
-        col = 0;
-        for (pos = 0; pos < tr_size; ++pos)
-        {
-            block_idx = tr->num_prep_blocks + tr->imaging_tr_start + tr_idx * tr_size + pos;
-            bte = &desc->block_table[block_idx];
-
-            /* Gx shot index */
-            raw_id = bte->gx_id;
-            if (raw_id >= 0 && raw_id < desc->grad_table_size)
-            {
-                gte = &desc->grad_table[raw_id];
-                int_rows[tr_idx * num_cols + col] = gte->shot_index;
-            }
-            else
-            {
-                int_rows[tr_idx * num_cols + col] = -1;
-            }
-            col++;
-
-            /* Gy shot index */
-            raw_id = bte->gy_id;
-            if (raw_id >= 0 && raw_id < desc->grad_table_size)
-            {
-                gte = &desc->grad_table[raw_id];
-                int_rows[tr_idx * num_cols + col] = gte->shot_index;
-            }
-            else
-            {
-                int_rows[tr_idx * num_cols + col] = -1;
-            }
-            col++;
-
-            /* Gz shot index */
-            raw_id = bte->gz_id;
-            if (raw_id >= 0 && raw_id < desc->grad_table_size)
-            {
-                gte = &desc->grad_table[raw_id];
-                int_rows[tr_idx * num_cols + col] = gte->shot_index;
-            }
-            else
-            {
-                int_rows[tr_idx * num_cols + col] = -1;
-            }
-            col++;
-        }
-    }
-
-    /* Deduplicate */
-    num_unique =
-        pulseg__deduplicate_int_rows(unique_defs, event_table, int_rows, num_trs, num_cols);
-
-    PULSEG_FREE(int_rows);
-
-    if (num_unique <= 0)
-    {
-        PULSEG_FREE(unique_defs);
-        PULSEG_FREE(event_table);
-        return 0;
-    }
-
-    /* Copy representative TR indices into right-sized array */
-    result_indices = (int *)PULSEG_ALLOC((size_t)num_unique * sizeof(int));
-    if (!result_indices)
-    {
-        PULSEG_FREE(unique_defs);
-        PULSEG_FREE(event_table);
-        return 0;
-    }
-    for (tr_idx = 0; tr_idx < num_unique; ++tr_idx)
-    {
-        result_indices[tr_idx] = unique_defs[tr_idx];
-    }
-    PULSEG_FREE(unique_defs);
-
-    *out_unique_tr_indices = result_indices;
-    *out_tr_group_labels = event_table;
-    return num_unique;
-}
 
 /* ================================================================== */
 /*  Fill waveform for a single block                                  */
@@ -597,7 +418,7 @@ int pulseg__fill_grad_waveform_for_block(
     int i, idx;
     float sign, max_amp;
     float delay_us, t_sample;
-    int shape_id, time_shape_id, shot_idx, num_samples;
+    int shape_id, time_shape_id, num_samples;
     float rise_us, flat_us, fall_us;
     float grad_raster_us, block_end_us;
     float rel_end_us;
@@ -621,8 +442,7 @@ int pulseg__fill_grad_waveform_for_block(
         return idx - start_idx;
     }
 
-    shot_idx = gte->shot_index;
-    max_amp = pos_max_amp[shot_idx];
+    max_amp = *pos_max_amp;
     sign = (max_amp >= 0.0f) ? 1.0f : -1.0f;
     if (max_amp < 0.0f)
         max_amp = -max_amp;
@@ -688,7 +508,11 @@ int pulseg__fill_grad_waveform_for_block(
     {
         num_samples = gdef->fall_time_or_num_uncompressed_samples;
         time_shape_id = gdef->unused_or_time_shape_id;
-        shape_id = gdef->shot_shape_ids[shot_idx];
+        /* The shape THIS instance plays.  Identical to the old
+         * shot_shape_ids[gte->shot_index] -- the ordinal was only ever a
+         * per-definition alias for the id the grad table now carries
+         * directly. */
+        shape_id = gte->shape_id;
 
         if (shape_id <= 0 || shape_id > desc->num_shapes)
             return 0;
@@ -853,8 +677,7 @@ int pulseg__get_gradient_waveforms_range(
     float *pos_max_gx;
     float *pos_max_gy;
     float *pos_max_gz;
-    float actual_amp[PULSEG_MAX_GRAD_SHOTS];
-    int k;
+    float actual_amp[1];
     float *time_gx;
     float *time_gy;
     float *time_gz;
@@ -916,11 +739,11 @@ int pulseg__get_gradient_waveforms_range(
     if (amplitude_mode == PULSEG_AMP_MAX_POS || amplitude_mode == PULSEG_AMP_ZERO_VAR)
     {
         pos_max_gx =
-            (float *)PULSEG_ALLOC((size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
+            (float *)PULSEG_ALLOC((size_t)block_count * sizeof(float));
         pos_max_gy =
-            (float *)PULSEG_ALLOC((size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
+            (float *)PULSEG_ALLOC((size_t)block_count * sizeof(float));
         pos_max_gz =
-            (float *)PULSEG_ALLOC((size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
+            (float *)PULSEG_ALLOC((size_t)block_count * sizeof(float));
         if (!pos_max_gx || !pos_max_gy || !pos_max_gz)
         {
             if (pos_max_gx)
@@ -949,14 +772,11 @@ int pulseg__get_gradient_waveforms_range(
             for (vp = 0; vp < block_count && vp < desc->tr_descriptor.tr_size; ++vp)
             {
                 if (desc->variable_grad_flags[vp * 3 + 0])
-                    for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
-                        pos_max_gx[vp * PULSEG_MAX_GRAD_SHOTS + k] = 0.0f;
+                    pos_max_gx[vp] = 0.0f;
                 if (desc->variable_grad_flags[vp * 3 + 1])
-                    for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
-                        pos_max_gy[vp * PULSEG_MAX_GRAD_SHOTS + k] = 0.0f;
+                    pos_max_gy[vp] = 0.0f;
                 if (desc->variable_grad_flags[vp * 3 + 2])
-                    for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
-                        pos_max_gz[vp * PULSEG_MAX_GRAD_SHOTS + k] = 0.0f;
+                    pos_max_gz[vp] = 0.0f;
             }
         }
     }
@@ -1069,7 +889,7 @@ int pulseg__get_gradient_waveforms_range(
                 gx_def,
                 gx_tab,
                 t0,
-                &pos_max_gx[n * PULSEG_MAX_GRAD_SHOTS],
+                &pos_max_gx[n],
                 block_dur_us);
             idx_gy += pulseg__fill_grad_waveform_for_block(
                 desc,
@@ -1079,7 +899,7 @@ int pulseg__get_gradient_waveforms_range(
                 gy_def,
                 gy_tab,
                 t0,
-                &pos_max_gy[n * PULSEG_MAX_GRAD_SHOTS],
+                &pos_max_gy[n],
                 block_dur_us);
             idx_gz += pulseg__fill_grad_waveform_for_block(
                 desc,
@@ -1089,21 +909,12 @@ int pulseg__get_gradient_waveforms_range(
                 gz_def,
                 gz_tab,
                 t0,
-                &pos_max_gz[n * PULSEG_MAX_GRAD_SHOTS],
+                &pos_max_gz[n],
                 block_dur_us);
         }
         else
         {
-            for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
-                actual_amp[k] = 0.0f;
-            if (gx_tab)
-            {
-                k = gx_tab->shot_index;
-                if (k >= 0 && k < PULSEG_MAX_GRAD_SHOTS)
-                {
-                    actual_amp[k] = gx_tab->amplitude;
-                }
-            }
+            actual_amp[0] = gx_tab ? gx_tab->amplitude : 0.0f;
             idx_gx += pulseg__fill_grad_waveform_for_block(
                 desc,
                 time_gx,
@@ -1115,16 +926,7 @@ int pulseg__get_gradient_waveforms_range(
                 actual_amp,
                 block_dur_us);
 
-            for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
-                actual_amp[k] = 0.0f;
-            if (gy_tab)
-            {
-                k = gy_tab->shot_index;
-                if (k >= 0 && k < PULSEG_MAX_GRAD_SHOTS)
-                {
-                    actual_amp[k] = gy_tab->amplitude;
-                }
-            }
+            actual_amp[0] = gy_tab ? gy_tab->amplitude : 0.0f;
             idx_gy += pulseg__fill_grad_waveform_for_block(
                 desc,
                 time_gy,
@@ -1136,16 +938,7 @@ int pulseg__get_gradient_waveforms_range(
                 actual_amp,
                 block_dur_us);
 
-            for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
-                actual_amp[k] = 0.0f;
-            if (gz_tab)
-            {
-                k = gz_tab->shot_index;
-                if (k >= 0 && k < PULSEG_MAX_GRAD_SHOTS)
-                {
-                    actual_amp[k] = gz_tab->amplitude;
-                }
-            }
+            actual_amp[0] = gz_tab ? gz_tab->amplitude : 0.0f;
             idx_gz += pulseg__fill_grad_waveform_for_block(
                 desc,
                 time_gz,
@@ -1257,8 +1050,6 @@ int pulseg_get_tr_gradient_waveforms(
 {
     const pulseg_sequence_descriptor *desc;
     pulseg__uniform_grad_waveforms uw;
-    int *unique_indices = NULL;
-    int *group_labels = NULL;
     int num_unique;
     int has_nd_prep, has_nd_cool;
     int rep_idx;
@@ -1287,32 +1078,20 @@ int pulseg_get_tr_gradient_waveforms(
 
     if (has_nd_prep || has_nd_cool)
     {
-        /* Non-degenerate (e.g. MPRAGE): one canonical TR per unique pass
-         * pattern.  Use find_unique_shot_passes to discover how many
-         * distinct passes exist and pick the representative for this index. */
-        num_unique = pulseg__find_unique_shot_passes(desc, &unique_indices, &group_labels);
-        if (num_unique <= 0)
+        /* Exactly one canonical TR.  A definition names its own worst
+         * instance (pulseg_grad_representative), so shot combinations are no
+         * longer enumerated and there is nothing to index past. */
+        num_unique = 1;
+        if (canonical_tr_idx >= num_unique)
         {
-            num_unique = 1;
-            rep_idx = 0;
-        }
-        else
-        {
-            if (canonical_tr_idx >= num_unique)
+            if (diag)
             {
-                PULSEG_FREE(unique_indices);
-                PULSEG_FREE(group_labels);
-                if (diag)
-                {
-                    pulseg_diagnostic_init(diag);
-                    diag->code = PULSEG_ERR_INVALID_ARGUMENT;
-                }
-                return PULSEG_ERR_INVALID_ARGUMENT;
+                pulseg_diagnostic_init(diag);
+                diag->code = PULSEG_ERR_INVALID_ARGUMENT;
             }
-            rep_idx = unique_indices[canonical_tr_idx];
-            PULSEG_FREE(unique_indices);
-            PULSEG_FREE(group_labels);
+            return PULSEG_ERR_INVALID_ARGUMENT;
         }
+        rep_idx = 0;
         /* Render the representative pass with average expansion:
          * prep + num_averages * imaging + cooldown. */
         {
@@ -1350,31 +1129,20 @@ int pulseg_get_tr_gradient_waveforms(
     }
     else
     {
-        /* Degenerate (e.g. GRE): one canonical TR per unique shot pattern
-         * within the imaging region. */
-        num_unique = pulseg__find_unique_shot_trs(desc, &unique_indices, &group_labels);
-        if (num_unique <= 0)
+        /* Exactly one canonical TR.  A definition names its own worst
+         * instance (pulseg_grad_representative), so shot combinations are no
+         * longer enumerated and there is nothing to index past. */
+        num_unique = 1;
+        if (canonical_tr_idx >= num_unique)
         {
-            num_unique = 1;
-            rep_idx = 0;
-        }
-        else
-        {
-            if (canonical_tr_idx >= num_unique)
+            if (diag)
             {
-                PULSEG_FREE(unique_indices);
-                PULSEG_FREE(group_labels);
-                if (diag)
-                {
-                    pulseg_diagnostic_init(diag);
-                    diag->code = PULSEG_ERR_INVALID_ARGUMENT;
-                }
-                return PULSEG_ERR_INVALID_ARGUMENT;
+                pulseg_diagnostic_init(diag);
+                diag->code = PULSEG_ERR_INVALID_ARGUMENT;
             }
-            rep_idx = unique_indices[canonical_tr_idx];
-            PULSEG_FREE(unique_indices);
-            PULSEG_FREE(group_labels);
+            return PULSEG_ERR_INVALID_ARGUMENT;
         }
+        rep_idx = 0;
         start_block = desc->tr_descriptor.num_prep_blocks + desc->tr_descriptor.imaging_tr_start +
             rep_idx * desc->tr_descriptor.tr_size;
         block_count = desc->tr_descriptor.tr_size;
@@ -1678,7 +1446,7 @@ int pulseg_get_tr_waveforms(
     float *pos_max_gx;
     float *pos_max_gy;
     float *pos_max_gz;
-    float actual_amp[PULSEG_MAX_GRAD_SHOTS];
+    float actual_amp[1];
     /* rotation post-pass variables */
     int interp_result, n_uniform, blk_n, rot_id, s;
     float target_raster_us, blk_end, t_sample_rot, vec[3], rot_out[3];
@@ -1824,13 +1592,11 @@ int pulseg_get_tr_waveforms(
          */
         if (has_nd_prep || has_nd_cool)
         {
-            num_canonical =
-                pulseg__find_unique_shot_passes(desc, &can_unique_indices, &can_group_labels);
+            num_canonical = 0 /* one canonical TR; representatives carry the worst case */;
         }
         else
         {
-            num_canonical =
-                pulseg__find_unique_shot_trs(desc, &can_unique_indices, &can_group_labels);
+            num_canonical = 0 /* one canonical TR; representatives carry the worst case */;
         }
 
         if (num_canonical > 0 && tr_index >= 0 && tr_index < num_canonical && can_unique_indices)
@@ -1935,11 +1701,11 @@ int pulseg_get_tr_waveforms(
         int num_canonical = 0;
 
         pos_max_gx =
-            (float *)PULSEG_ALLOC((size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
+            (float *)PULSEG_ALLOC((size_t)block_count * sizeof(float));
         pos_max_gy =
-            (float *)PULSEG_ALLOC((size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
+            (float *)PULSEG_ALLOC((size_t)block_count * sizeof(float));
         pos_max_gz =
-            (float *)PULSEG_ALLOC((size_t)block_count * PULSEG_MAX_GRAD_SHOTS * sizeof(float));
+            (float *)PULSEG_ALLOC((size_t)block_count * sizeof(float));
         if (!pos_max_gx || !pos_max_gy || !pos_max_gz)
             goto alloc_fail;
 
@@ -1948,13 +1714,11 @@ int pulseg_get_tr_waveforms(
         {
             if (has_nd_prep || has_nd_cool)
             {
-                num_canonical =
-                    pulseg__find_unique_shot_passes(desc, &can_unique_indices, &can_group_labels);
+                num_canonical = 0 /* one canonical TR; representatives carry the worst case */;
             }
             else
             {
-                num_canonical =
-                    pulseg__find_unique_shot_trs(desc, &can_unique_indices, &can_group_labels);
+                num_canonical = 0 /* one canonical TR; representatives carry the worst case */;
             }
         }
 
@@ -2003,14 +1767,11 @@ int pulseg_get_tr_waveforms(
                 local_pos = vp % tr->tr_size;
                 abs_pos = zv_prep + vp;
                 if (desc->variable_grad_flags[local_pos * 3 + 0])
-                    for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
-                        pos_max_gx[abs_pos * PULSEG_MAX_GRAD_SHOTS + k] = 0.0f;
+                    pos_max_gx[abs_pos] = 0.0f;
                 if (desc->variable_grad_flags[local_pos * 3 + 1])
-                    for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
-                        pos_max_gy[abs_pos * PULSEG_MAX_GRAD_SHOTS + k] = 0.0f;
+                    pos_max_gy[abs_pos] = 0.0f;
                 if (desc->variable_grad_flags[local_pos * 3 + 2])
-                    for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
-                        pos_max_gz[abs_pos * PULSEG_MAX_GRAD_SHOTS + k] = 0.0f;
+                    pos_max_gz[abs_pos] = 0.0f;
             }
         }
     }
@@ -2296,7 +2057,7 @@ int pulseg_get_tr_waveforms(
                 gx_def,
                 gx_tab,
                 t0,
-                &pos_max_gx[n * PULSEG_MAX_GRAD_SHOTS],
+                &pos_max_gx[n],
                 block_dur_us);
             idx_gy += pulseg__fill_grad_waveform_for_block(
                 desc,
@@ -2306,7 +2067,7 @@ int pulseg_get_tr_waveforms(
                 gy_def,
                 gy_tab,
                 t0,
-                &pos_max_gy[n * PULSEG_MAX_GRAD_SHOTS],
+                &pos_max_gy[n],
                 block_dur_us);
             idx_gz += pulseg__fill_grad_waveform_for_block(
                 desc,
@@ -2316,22 +2077,13 @@ int pulseg_get_tr_waveforms(
                 gz_def,
                 gz_tab,
                 t0,
-                &pos_max_gz[n * PULSEG_MAX_GRAD_SHOTS],
+                &pos_max_gz[n],
                 block_dur_us);
         }
         else
         {
             /* PULSEG_AMP_ACTUAL: use per-instance amplitude */
-            for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
-                actual_amp[k] = 0.0f;
-            if (gx_tab)
-            {
-                k = gx_tab->shot_index;
-                if (k >= 0 && k < PULSEG_MAX_GRAD_SHOTS)
-                {
-                    actual_amp[k] = gx_tab->amplitude;
-                }
-            }
+            actual_amp[0] = gx_tab ? gx_tab->amplitude : 0.0f;
             idx_gx += pulseg__fill_grad_waveform_for_block(
                 desc,
                 out->gx.time_us,
@@ -2343,16 +2095,7 @@ int pulseg_get_tr_waveforms(
                 actual_amp,
                 block_dur_us);
 
-            for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
-                actual_amp[k] = 0.0f;
-            if (gy_tab)
-            {
-                k = gy_tab->shot_index;
-                if (k >= 0 && k < PULSEG_MAX_GRAD_SHOTS)
-                {
-                    actual_amp[k] = gy_tab->amplitude;
-                }
-            }
+            actual_amp[0] = gy_tab ? gy_tab->amplitude : 0.0f;
             idx_gy += pulseg__fill_grad_waveform_for_block(
                 desc,
                 out->gy.time_us,
@@ -2364,16 +2107,7 @@ int pulseg_get_tr_waveforms(
                 actual_amp,
                 block_dur_us);
 
-            for (k = 0; k < PULSEG_MAX_GRAD_SHOTS; ++k)
-                actual_amp[k] = 0.0f;
-            if (gz_tab)
-            {
-                k = gz_tab->shot_index;
-                if (k >= 0 && k < PULSEG_MAX_GRAD_SHOTS)
-                {
-                    actual_amp[k] = gz_tab->amplitude;
-                }
-            }
+            actual_amp[0] = gz_tab ? gz_tab->amplitude : 0.0f;
             idx_gz += pulseg__fill_grad_waveform_for_block(
                 desc,
                 out->gz.time_us,

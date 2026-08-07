@@ -249,6 +249,13 @@ class FloatKey(StrEnum):
     SLICE_THICKNESS = "slice_thickness"
     SLICE_SPACING = "slice_spacing"
 
+    # Off-isocentre translation, mm, along the LOGICAL readout/phase/slice
+    # axes -- the frame the sequence is designed in, and the frame the
+    # scanner already prescribes them in, so nothing is rotated on the way.
+    FOV_OFFSET_X = "fov_offset_x"
+    FOV_OFFSET_Y = "fov_offset_y"
+    FOV_OFFSET_Z = "fov_offset_z"
+
     RY = "Ry"
     RZ = "Rz"
     COMPRESSED_SENSING = "compressed_sensing"
@@ -354,6 +361,9 @@ class UIParam:
     PHASE_FOV = FloatKey.PHASE_FOV
     SLICE_THICKNESS = FloatKey.SLICE_THICKNESS
     SLICE_SPACING = FloatKey.SLICE_SPACING
+    FOV_OFFSET_X = FloatKey.FOV_OFFSET_X
+    FOV_OFFSET_Y = FloatKey.FOV_OFFSET_Y
+    FOV_OFFSET_Z = FloatKey.FOV_OFFSET_Z
     RY = FloatKey.RY
     RZ = FloatKey.RZ
     COMPRESSED_SENSING = FloatKey.COMPRESSED_SENSING
@@ -830,6 +840,9 @@ _PARAM_KINDS: dict[str, ParamKind] = {
     UIParam.PHASE_FOV.value: ParamKind.FLOAT,
     UIParam.SLICE_THICKNESS.value: ParamKind.FLOAT,
     UIParam.SLICE_SPACING.value: ParamKind.FLOAT,
+    UIParam.FOV_OFFSET_X.value: ParamKind.FLOAT,
+    UIParam.FOV_OFFSET_Y.value: ParamKind.FLOAT,
+    UIParam.FOV_OFFSET_Z.value: ParamKind.FLOAT,
     IntKey.NX.value: ParamKind.INT,
     IntKey.NY.value: ParamKind.INT,
     IntKey.NSLICES.value: ParamKind.INT,

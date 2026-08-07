@@ -97,25 +97,6 @@ static int resolve_block(
     return 1;
 }
 
-/* ================================================================== */
-/*  Axis helper                                                       */
-/* ================================================================== */
-
-static int get_grad_id_by_axis(const pulseg_base_block *bdef, int axis)
-{
-    switch (axis)
-    {
-    case PULSEG_GRAD_AXIS_X:
-        return bdef->gx_id;
-    case PULSEG_GRAD_AXIS_Y:
-        return bdef->gy_id;
-    case PULSEG_GRAD_AXIS_Z:
-        return bdef->gz_id;
-    default:
-        return -1;
-    }
-}
-
 /* The per-(segment, block-position) record frozen at parse time from the
  * segment's representative (max-energy) scan instance -- see
  * pulseg_structure.c step 11e.  NULL when the descriptor predates the record
@@ -2114,10 +2095,12 @@ static int get_grad_num_samples(const pulseg_collection *coll, int seg_idx, int 
         return (gdef->flat_time_or_unused > 0) ? 4 : 3;
     }
 
-    /* arbitrary: get from first shot shape */
-    if (gdef->num_shots > 0 && gdef->shot_shape_ids[0] > 0)
+    /* arbitrary: every shape a definition plays has the same sample count,
+     * that being part of what makes them one definition, so any of them
+     * answers this. */
+    if (gdef->spectral.shape_id > 0)
     {
-        shape_idx = gdef->shot_shape_ids[0] - 1;
+        shape_idx = gdef->spectral.shape_id - 1;
         if (shape_idx >= 0 && shape_idx < desc->num_shapes)
         {
             shape = &desc->shapes[shape_idx];
@@ -2143,7 +2126,8 @@ static int get_grad_num_shots(const pulseg_collection *coll, int seg_idx, int bl
     if (grad_id == -1)
         return -1;
 
-    return desc->grad_definitions[grad_id].num_shots;
+    (void)grad_id;
+    return 1; /* one waveform per definition; instances swap it */
 }
 
 static int get_grad_delay_us(const pulseg_collection *coll, int seg_idx, int blk_idx, int axis)
@@ -2209,11 +2193,11 @@ float **pulseg_get_grad_amplitude(
         return NULL;
     gdef = &desc->grad_definitions[grad_id];
 
-    waveforms = (float **)PULSEG_ALLOC(gdef->num_shots * sizeof(float *));
+    waveforms = (float **)PULSEG_ALLOC(sizeof(float *));
     if (!waveforms)
         return NULL;
 
-    *num_shots = gdef->num_shots;
+    *num_shots = 1;
 
     if (gdef->type == 0)
     {
@@ -2221,7 +2205,7 @@ float **pulseg_get_grad_amplitude(
         samples_per_shot = (flat_time > 0) ? 4 : 3;
         *num_samples = samples_per_shot;
 
-        for (shot = 0; shot < gdef->num_shots; ++shot)
+        for (shot = 0; shot < 1; ++shot)
         {
             trap_waveform = (float *)PULSEG_ALLOC(samples_per_shot * sizeof(float));
             if (!trap_waveform)
@@ -2251,15 +2235,20 @@ float **pulseg_get_grad_amplitude(
     }
     else
     {
-        for (shot = 0; shot < gdef->num_shots; ++shot)
+        for (shot = 0; shot < 1; ++shot)
         {
-            if (gdef->shot_shape_ids[shot] <= 0)
+            /* The shape the representative (max-energy) instance plays -- the
+             * same one the initial state names, and the one pulsegen binds.
+             * NOT a safety representative: those answer "what is the worst
+             * case", and this answers "what does this block actually play". */
+            int init_shape = pulseg_get_grad_initial_shape_id(coll, seg_idx, blk_idx, axis);
+            if (init_shape <= 0)
             {
                 waveforms[shot] = NULL;
                 continue;
             }
 
-            shape_idx = gdef->shot_shape_ids[shot] - 1;
+            shape_idx = init_shape - 1;
             if (shape_idx < 0 || shape_idx >= desc->num_shapes)
             {
                 waveforms[shot] = NULL;
@@ -2308,7 +2297,7 @@ float pulseg_get_grad_initial_amplitude_hz_per_m(
     return st->grad_amplitude_hz_per_m[axis];
 }
 
-int pulseg_get_grad_initial_shot_id(
+int pulseg_get_grad_initial_shape_id(
     const pulseg_collection *coll,
     int seg_idx,
     int blk_idx,
@@ -2328,7 +2317,7 @@ int pulseg_get_grad_initial_shot_id(
     if (!st)
         return 0;
 
-    return st->grad_shot_index[axis];
+    return st->grad_shape_id[axis];
 }
 
 float pulseg_get_grad_max_amplitude_hz_per_m(
@@ -2665,18 +2654,6 @@ static int segment_is_nav(const pulseg_collection *coll, int seg_idx)
     return desc->segment_definitions[local_seg].is_nav;
 }
 
-static int block_has_freq_mod(const pulseg_collection *coll, int seg_idx, int blk_idx)
-{
-    const pulseg_sequence_descriptor *desc;
-    const pulseg_virtual_segment *seg;
-    int local_blk;
-
-    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
-        return 0;
-
-    return seg->has_freq_mod[local_blk];
-}
-
 static int block_has_rotation(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
@@ -2713,214 +2690,20 @@ static int block_has_nopos(const pulseg_collection *coll, int seg_idx, int blk_i
     return seg->nopos_flag[local_blk];
 }
 
-/* ================================================================== */
-/*  pulseg_block_needs_freq_mod — precise overlap + nopos check    */
-/* ================================================================== */
-
-/*
- * Check whether a trapezoid gradient's flat region overlaps [win_start, win_end].
- * All times in us, relative to block start.
- */
-static int trap_overlaps_window(const pulseg_grad_definition *gdef, float win_start, float win_end)
-{
-    float flat_start = (float)gdef->delay + (float)gdef->rise_time_or_unused;
-    float flat_end = flat_start + (float)gdef->flat_time_or_unused;
-    return (flat_start < win_end) && (flat_end > win_start);
-}
-
-/*
- * Check whether an arbitrary gradient waveform has any nonzero sample
- * within [win_start, win_end].  Times in us, relative to block start.
- */
-static int arb_nonzero_in_window(
-    const pulseg_sequence_descriptor *desc,
-    const pulseg_grad_definition *gdef,
-    float win_start,
-    float win_end)
-{
-    int shape_idx, i, ns;
-    float raster, local_start, local_end;
-    int idx_lo, idx_hi;
-    pulseq_shape decomp;
-
-    if (gdef->num_shots < 1 || gdef->shot_shape_ids[0] <= 0)
-        return 0;
-
-    shape_idx = gdef->shot_shape_ids[0] - 1;
-    if (shape_idx < 0 || shape_idx >= desc->num_shapes)
-        return 0;
-
-    decomp.num_samples = 0;
-    decomp.num_uncompressed_samples = 0;
-    decomp.samples = NULL;
-    if (!pulseq_decompress_shape(&decomp, &desc->shapes[shape_idx], 1.0f))
-        return 0;
-
-    ns = decomp.num_samples;
-
-    /* If the gradient has a non-uniform time shape, use actual sample times
-     * instead of assuming uniform raster.  Uniform-raster index arithmetic
-     * fails for compressed time-shaped gradients: the amplitude shape may
-     * have far fewer samples than block_duration / grad_raster, so the
-     * index computed from win_start/raster exceeds ns-1 and the loop body
-     * never executes.
-     *
-     * Each time-shaped sample i represents a step (hold) from t[i] to
-     * t[i+1] (or to the end of the last defined sample for i=ns-1).
-     * A sample i with nonzero amplitude contributes within the window if
-     * its hold interval [t[i], t[i+1]) overlaps [win_start, win_end].    */
-    if (gdef->unused_or_time_shape_id > 0)
-    {
-        int ts_idx = gdef->unused_or_time_shape_id - 1;
-        if (ts_idx >= 0 && ts_idx < desc->num_shapes)
-        {
-            pulseq_shape decomp_time;
-            decomp_time.num_samples = 0;
-            decomp_time.num_uncompressed_samples = 0;
-            decomp_time.samples = NULL;
-            if (pulseq_decompress_shape(&decomp_time, &desc->shapes[ts_idx], desc->grad_raster_us))
-            {
-                int found = 0;
-                int tns = decomp_time.num_samples;
-                for (i = 0; i < ns && i < tns; ++i)
-                {
-                    float t_start = (float)gdef->delay + decomp_time.samples[i];
-                    /* Each sample holds until the next sample (or is the last) */
-                    float t_end = (i + 1 < tns) ? ((float)gdef->delay + decomp_time.samples[i + 1])
-                                                : t_start + desc->grad_raster_us;
-                    /* Interval [t_start, t_end) overlaps (win_start, win_end] */
-                    if (t_end > win_start && t_start <= win_end && decomp.samples[i] != 0.0f)
-                    {
-                        found = 1;
-                        break;
-                    }
-                }
-                PULSEG_FREE(decomp_time.samples);
-                PULSEG_FREE(decomp.samples);
-                return found;
-            }
-        }
-    }
-
-    /* Uniform raster: convert window to sample-index range */
-    raster = desc->grad_raster_us;
-    local_start = win_start - (float)gdef->delay;
-    local_end = win_end - (float)gdef->delay;
-
-    idx_lo = (int)(local_start / raster);
-    if (idx_lo < 0)
-        idx_lo = 0;
-    idx_hi = (int)(local_end / raster);
-    if (idx_hi >= ns)
-        idx_hi = ns - 1;
-
-    for (i = idx_lo; i <= idx_hi; ++i)
-    {
-        if (decomp.samples[i] != 0.0f)
-        {
-            PULSEG_FREE(decomp.samples);
-            return 1;
-        }
-    }
-
-    PULSEG_FREE(decomp.samples);
-    return 0;
-}
-
-/*
- * Check whether any gradient axis has nonzero amplitude within the
- * given temporal window (us, relative to block start).
- */
-static int any_grad_overlaps_window(
-    const pulseg_sequence_descriptor *desc,
-    const pulseg_base_block *bdef,
-    float win_start,
-    float win_end)
-{
-    int axis, grad_id;
-
-    for (axis = 0; axis < 3; ++axis)
-    {
-        grad_id = get_grad_id_by_axis(bdef, axis);
-        if (grad_id < 0)
-            continue;
-
-        if (desc->grad_definitions[grad_id].type == 0)
-        {
-            /* trapezoid */
-            if (trap_overlaps_window(&desc->grad_definitions[grad_id], win_start, win_end))
-                return 1;
-        }
-        else
-        {
-            /* arbitrary */
-            if (arb_nonzero_in_window(desc, &desc->grad_definitions[grad_id], win_start, win_end))
-                return 1;
-        }
-    }
-    return 0;
-}
-
-int pulseg_block_needs_freq_mod(
-    const pulseg_collection *coll,
-    int *num_samples,
-    int seg_idx,
-    int blk_idx)
+/* The frozen per-position record (pulseg_block_initial_state), or NULL. */
+static const pulseg_block_initial_state *block_initial_state(
+    const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_virtual_segment *seg;
     int local_blk;
-    const pulseg_base_block *bdef;
-    int has_rf, has_adc, nopos;
-
-    if (num_samples)
-        *num_samples = 0;
 
     if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
-        return 0;
+        return NULL;
+    if (!seg->initial_states)
+        return NULL;
 
-    nopos = seg->nopos_flag[local_blk];
-    if (nopos)
-        return 0;
-
-    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
-    has_rf = (bdef->rf_id >= 0);
-    /* Use OR-reduced has_adc: true if any instance at this position has ADC */
-    has_adc = (seg->has_adc && seg->has_adc[local_blk]) ? 1 : (bdef->adc_id >= 0);
-    if (!has_rf && !has_adc)
-        return 0;
-
-    /* Check RF window overlap */
-    if (has_rf)
-    {
-        const pulseg_rf_definition *rdef = &desc->rf_definitions[bdef->rf_id];
-        float rf_start = (float)rdef->delay;
-        float rf_end = rf_start + rdef->stats.duration_us;
-
-        if (any_grad_overlaps_window(desc, bdef, rf_start, rf_end))
-        {
-            if (num_samples)
-                *num_samples = (int)((float)bdef->duration_us / desc->rf_raster_us);
-            return 1;
-        }
-    }
-
-    /* Check ADC window overlap */
-    if (has_adc)
-    {
-        const pulseg_adc_definition *adef = &desc->adc_definitions[bdef->adc_id];
-        float adc_start = (float)adef->delay;
-        float adc_end = adc_start + (float)adef->num_samples * (float)adef->dwell_time * 1e-3f;
-
-        if (any_grad_overlaps_window(desc, bdef, adc_start, adc_end))
-        {
-            if (num_samples)
-                *num_samples = (int)((float)bdef->duration_us / desc->adc_raster_us);
-            return 1;
-        }
-    }
-
-    return 0;
+    return &seg->initial_states[local_blk];
 }
 
 int pulseg_cursor_next(pulseg_collection *coll)
@@ -3151,32 +2934,32 @@ static int resolve_block_instance(
     if (bte->gx_id >= 0 && bte->gx_id < desc->grad_table_size)
     {
         inst->gx_amp_hz_per_m = desc->grad_table[bte->gx_id].amplitude;
-        inst->gx_shot_idx = desc->grad_table[bte->gx_id].shot_index;
+        inst->gx_shape_id = desc->grad_table[bte->gx_id].shape_id;
     }
     else
     {
         inst->gx_amp_hz_per_m = 0.0f;
-        inst->gx_shot_idx = 0;
+        inst->gx_shape_id = 0;
     }
     if (bte->gy_id >= 0 && bte->gy_id < desc->grad_table_size)
     {
         inst->gy_amp_hz_per_m = desc->grad_table[bte->gy_id].amplitude;
-        inst->gy_shot_idx = desc->grad_table[bte->gy_id].shot_index;
+        inst->gy_shape_id = desc->grad_table[bte->gy_id].shape_id;
     }
     else
     {
         inst->gy_amp_hz_per_m = 0.0f;
-        inst->gy_shot_idx = 0;
+        inst->gy_shape_id = 0;
     }
     if (bte->gz_id >= 0 && bte->gz_id < desc->grad_table_size)
     {
         inst->gz_amp_hz_per_m = desc->grad_table[bte->gz_id].amplitude;
-        inst->gz_shot_idx = desc->grad_table[bte->gz_id].shot_index;
+        inst->gz_shape_id = desc->grad_table[bte->gz_id].shape_id;
     }
     else
     {
         inst->gz_amp_hz_per_m = 0.0f;
-        inst->gz_shot_idx = 0;
+        inst->gz_shape_id = 0;
     }
 
     /* Rotation */
@@ -3284,85 +3067,6 @@ int pulseg_get_block_instance_at(
         return PULSEG_ERR_INVALID_ARGUMENT;
 
     return resolve_block_instance(&coll->descriptors[subseq_idx], inst, exec_stream_position);
-}
-
-/* ================================================================== */
-/*  Frequency modulation plan                                         */
-/* ================================================================== */
-
-/* --- helper: block range for a TR region --- */
-static int get_block_range(
-    const pulseg_sequence_descriptor *desc,
-    int *out_start,
-    int *out_count,
-    int tr_type,
-    int tr_index)
-{
-    const pulseg_tr_descriptor *tr = &desc->tr_descriptor;
-
-    switch (tr_type)
-    {
-    case PULSEG_TR_REGION_PREP:
-        *out_start = 0;
-        *out_count = desc->num_prep_blocks;
-        return 1;
-    case PULSEG_TR_REGION_MAIN:
-        if (tr->tr_size <= 0 || tr_index < 0 || tr_index >= tr->num_trs)
-            return 0;
-        *out_start = desc->num_prep_blocks + tr_index * tr->tr_size;
-        *out_count = tr->tr_size;
-        return 1;
-    case PULSEG_TR_REGION_COOLDOWN:
-        *out_start = desc->pass_len - desc->num_cooldown_blocks;
-        *out_count = desc->num_cooldown_blocks;
-        return 1;
-    case PULSEG_TR_REGION_ALL:
-        *out_start = 0;
-        *out_count = desc->pass_len;
-        return 1;
-    default:
-        return 0;
-    }
-}
-
-/* --- helper: count RF+ADC events in a block range --- */
-static int count_fm_events_range(
-    const pulseg_sequence_descriptor *desc,
-    int blk_start,
-    int blk_count)
-{
-    int n, count;
-    count = 0;
-    for (n = blk_start; n < blk_start + blk_count && n < desc->num_blocks; ++n)
-    {
-        if (desc->block_table[n].freq_mod_id >= 0)
-            ++count;
-    }
-    return count;
-}
-
-int pulseg_get_freq_mod_count(const pulseg_collection *coll)
-{
-    int i, total;
-    if (!coll)
-        return 0;
-    total = 0;
-    for (i = 0; i < coll->num_subsequences; ++i)
-        total += count_fm_events_range(&coll->descriptors[i], 0, coll->descriptors[i].num_blocks);
-    return total;
-}
-
-int pulseg_get_freq_mod_count_tr(const pulseg_collection *coll, int tr_type, int tr_index)
-{
-    int blk_start, blk_count;
-    const pulseg_sequence_descriptor *desc;
-
-    if (!coll || coll->num_subsequences < 1)
-        return 0;
-    desc = &coll->descriptors[0];
-    if (!get_block_range(desc, &blk_start, &blk_count, tr_type, tr_index))
-        return 0;
-    return count_fm_events_range(desc, blk_start, blk_count);
 }
 
 /* ================================================================== */
@@ -3486,11 +3190,11 @@ int pulseg_get_subseq_info(const pulseg_collection *coll, pulseg_subseq_info *in
         int nc;
         if (has_nd_p || has_nd_c)
         {
-            nc = pulseg__find_unique_shot_passes(d, &can_idx, &can_lbl);
+            nc = 0 /* one canonical TR; representatives carry the worst case */;
         }
         else
         {
-            nc = pulseg__find_unique_shot_trs(d, &can_idx, &can_lbl);
+            nc = 0 /* one canonical TR; representatives carry the worst case */;
         }
         info->num_canonical_trs = (nc > 0) ? nc : 1;
         if (can_idx)
@@ -3601,7 +3305,6 @@ int pulseg_get_block_info(
     info->has_rotation = block_has_rotation(coll, seg_idx, blk_idx);
     info->norot_flag = block_has_norot(coll, seg_idx, blk_idx);
     info->nopos_flag = block_has_nopos(coll, seg_idx, blk_idx);
-    info->has_freq_mod = block_has_freq_mod(coll, seg_idx, blk_idx);
 
     /* Pure-delay block: no RF/gradient/ADC waveform AND no digital-output
      * trigger or rotation -- literally only a duration -- so it CAN be played
@@ -3620,6 +3323,19 @@ int pulseg_get_block_info(
          block_is_dynamic_delay(coll, seg_idx, blk_idx))
         ? 1
         : 0;
+
+    /* Frozen at structure-build time, where the gradient shapes still exist:
+     * scan loads no SHAPES section and could not re-derive this. */
+    {
+        const pulseg_block_initial_state *st = block_initial_state(coll, seg_idx, blk_idx);
+        if (st)
+        {
+            info->rf_grad_constant = st->rf_grad_constant;
+            info->rf_grad_level[0] = st->rf_grad_level[0];
+            info->rf_grad_level[1] = st->rf_grad_level[1];
+            info->rf_grad_level[2] = st->rf_grad_level[2];
+        }
+    }
 
     return PULSEG_SUCCESS;
 }

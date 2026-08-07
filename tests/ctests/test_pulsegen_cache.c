@@ -54,7 +54,6 @@ static void assert_pulsegen_view_equal(
         {
             pulseg_block_info bi_full = PULSEG_BLOCK_INFO_INIT;
             pulseg_block_info bi_cache = PULSEG_BLOCK_INFO_INIT;
-            int fm_full, fm_cache, ns_full, ns_cache;
 
             mu_assert(
                 PULSEG_SUCCEEDED(pulseg_get_block_info(full, &bi_full, seg, blk)),
@@ -71,11 +70,6 @@ static void assert_pulsegen_view_equal(
                 pulseg_get_rf_initial_amplitude_hz(full, seg, blk),
                 pulseg_get_rf_initial_amplitude_hz(cached, seg, blk),
                 0.0f);
-
-            fm_full = pulseg_block_needs_freq_mod(full, &ns_full, seg, blk);
-            fm_cache = pulseg_block_needs_freq_mod(cached, &ns_cache, seg, blk);
-            mu_assert_int_eq(fm_full, fm_cache);
-            mu_assert_int_eq(ns_full, ns_cache);
 
             if (bi_full.has_adc)
             {
@@ -94,8 +88,8 @@ static void assert_pulsegen_view_equal(
             for (axis = 0; axis < 3; ++axis)
             {
                 mu_assert_int_eq(
-                    pulseg_get_grad_initial_shot_id(full, seg, blk, axis),
-                    pulseg_get_grad_initial_shot_id(cached, seg, blk, axis));
+                    pulseg_get_grad_initial_shape_id(full, seg, blk, axis),
+                    pulseg_get_grad_initial_shape_id(cached, seg, blk, axis));
                 mu_assert_float_near(
                     "grad initial amplitude",
                     pulseg_get_grad_initial_amplitude_hz_per_m(full, seg, blk, axis),

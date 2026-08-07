@@ -39,9 +39,9 @@ set(PULSEG_SOURCES
     src/structure/pulseg_getters.c
     src/structure/pulseg_seqdesc.c
     src/waveforms/pulseg_waveforms.c
+    src/waveforms/pulseg_chunk.c
     src/safety/pulseg_safety.c
     src/safety/pulseg_pns_memo.c
-    src/freqmod/pulseg_freqmod.c
     src/cache/pulseg_cache.c
     src/cache/pulseg_cache_seqdesc.c
     src/cache/pulseg_trajectory.c

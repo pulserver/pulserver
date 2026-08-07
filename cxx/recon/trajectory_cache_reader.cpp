@@ -24,15 +24,18 @@
  * anymore; a cache lacking it is a fixture/writer bug, not a case to
  * degrade past silently.
  *
- * Section 5 (FREQMOD) is intentionally NOT parsed; off-isocenter shifts are
- * applied PSD-side and data arriving at the recon are already centered.
- * See tests/utils/SCHEMA.md for the wire format.
+ * Section 5 is retired (it was FREQMOD). Off-isocentre shift is a phase,
+ * dr . k, applied to the RF at design time and to the received data by
+ * demodulate_fov_shift() below -- the spectrometer no longer synthesises a
+ * modulation waveform for it. See tests/utils/SCHEMA.md for the wire format.
  */
 
 #include "trajectory_cache_reader.h"
 
 #include <fstream>
 #include <stdexcept>
+#include <cmath>
+#include <complex>
 #include <cstring>
 #include <ctime>
 #include <cstdlib>
@@ -262,7 +265,63 @@ namespace mrdserver
         return cache;
     }
 
-    std::vector<PrecomputedTrajectory> pre_compute_trajectories(const SequenceCache& cache)
+    namespace
+    {
+        /* The three logical-frame k rows of one table entry, unpacked from the
+         * kshot library.
+         *
+         * kshot already holds the full-amplitude k-space waveform in 1/m
+         * (compute_block_kspace integrates g_amp*shape*dt).  Do NOT multiply
+         * by entry.g*_amplitude again -- that would scale by the gradient
+         * amplitude a second time and yield ~10^4x too-large k-values for
+         * noncartesian fixtures.  The amplitude field is retained in the
+         * table only as a trivial-shot indicator.
+         *
+         * Per-ADC rotation (entry.rotation_id) is intentionally NOT applied:
+         * the cache stores k in the LOGICAL gradient frame and rotation is
+         * composed downstream by livesdk, which is what keeps this agreeing
+         * with TruthBuilder.exportTrajectory.
+         */
+        void compose_entry_rows(
+            const SequenceCache& cache, const TrajTableEntry& entry, int nsamples,
+            float* px, float* py, float* pz)
+        {
+            auto compose = [&](int shot_id, float* dst)
+            {
+                for (int i = 0; i < nsamples; ++i)
+                    dst[i] = 0.0f;
+                if (shot_id >= 0 && shot_id < static_cast<int>(cache.kshots.size()))
+                {
+                    const auto& sk = cache.kshots[shot_id].k;
+                    for (int i = 0; i < std::min(nsamples, static_cast<int>(sk.size())); ++i)
+                        dst[i] = sk[i];
+                }
+            };
+            compose(entry.kx_shot_id, px);
+            compose(entry.ky_shot_id, py);
+            compose(entry.kz_shot_id, pz);
+        }
+
+        /* Interleave the active axes of one readout into `dst`. */
+        void pack_readout(
+            const float* kx, const float* ky, const float* kz, int nsamples, int ndim,
+            bool has_x, bool has_y, bool has_z, float* dst)
+        {
+            for (int s = 0; s < nsamples; ++s)
+            {
+                int d = 0;
+                if (has_x)
+                    dst[s * ndim + d++] = kx[s];
+                if (has_y)
+                    dst[s * ndim + d++] = ky[s];
+                if (has_z)
+                    dst[s * ndim + d++] = kz[s];
+            }
+        }
+    }  // namespace
+
+    std::vector<PrecomputedTrajectory> pre_compute_trajectories(
+        const SequenceCache& cache, size_t budget_floats)
     {
         const int num_es = static_cast<int>(cache.encoding_spaces.size());
         std::vector<PrecomputedTrajectory> result(static_cast<size_t>(num_es));
@@ -311,35 +370,7 @@ namespace mrdserver
                 float* py = &ky_all[static_cast<size_t>(r) * nsamples];
                 float* pz = &kz_all[static_cast<size_t>(r) * nsamples];
 
-                /* kshot already holds the full-amplitude k-space waveform
-                 * in 1/m (compute_block_kspace integrates g_amp*shape*dt).
-                 * Do NOT multiply by entry.g*_amplitude again — that would
-                 * scale by the gradient amplitude a second time and yield
-                 * ~10^4× too-large k-values for noncartesian fixtures. The
-                 * amplitude field is retained in the table only as a
-                 * trivial-shot indicator.
-                 */
-                auto compose = [&](int shot_id, float* dst)
-                {
-                    if (shot_id >= 0 && shot_id < static_cast<int>(cache.kshots.size()))
-                    {
-                        const auto& sk = cache.kshots[shot_id].k;
-                        for (int i = 0; i < std::min(nsamples, static_cast<int>(sk.size())); ++i)
-                            dst[i] = sk[i];
-                    }
-                };
-                compose(entry.kx_shot_id, px);
-                compose(entry.ky_shot_id, py);
-                compose(entry.kz_shot_id, pz);
-
-                /* NOTE: per-ADC rotation (entry.rotation_id) is intentionally
-                 * NOT applied here.  The cache stores k samples in the
-                 * LOGICAL gradient frame; rotation (block extension and
-                 * base_rot) is composed downstream by livesdk when building
-                 * the full physical trajectory.  Applying rotation here would
-                 * make this routine's output disagree with the LOGICAL-frame
-                 * truth produced by TruthBuilder.exportTrajectory.
-                 */
+                compose_entry_rows(cache, entry, nsamples, px, py, pz);
             }
 
             auto is_zero = [](const std::vector<float>& v)
@@ -360,30 +391,95 @@ namespace mrdserver
             pt.ndim = ndim;
             pt.num_samples = nsamples;
             pt.num_readouts = num_ro;
-            pt.data.resize(static_cast<size_t>(ndim) * nsamples * num_ro);
+            pt.axis_active[0] = has_x;
+            pt.axis_active[1] = has_y;
+            pt.axis_active[2] = has_z;
+
+            /* Hold the whole space only when it fits.  Past the budget this
+             * array IS the scan's k-space -- one distinct readout per
+             * acquisition for an individually optimised trajectory -- so it
+             * is left empty and rebuilt a readout at a time on demand.  The
+             * axis-activity decision above still stands: it was taken over
+             * every readout, which is what makes ndim stable between the two
+             * modes. */
+            const size_t total = static_cast<size_t>(ndim) *
+                static_cast<size_t>(nsamples) * static_cast<size_t>(num_ro);
+            pt.resident = (total <= budget_floats);
+            if (!pt.resident)
+                continue;
+
+            pt.data.resize(total);
 
             // Pack active axes: interleaved [ax0_s0, ax1_s0, ..., ax0_s1, ...]
             for (int r = 0; r < num_ro; ++r)
             {
-                const float* axes[3] = {
-                    has_x ? &kx_all[static_cast<size_t>(r) * nsamples] : nullptr,
-                    has_y ? &ky_all[static_cast<size_t>(r) * nsamples] : nullptr,
-                    has_z ? &kz_all[static_cast<size_t>(r) * nsamples] : nullptr};
-                float* dst = &pt.data[static_cast<size_t>(r) * ndim * nsamples];
-                for (int s = 0; s < nsamples; ++s)
-                {
-                    int d = 0;
-                    if (has_x)
-                        dst[s * ndim + d++] = axes[0][s];
-                    if (has_y)
-                        dst[s * ndim + d++] = axes[1][s];
-                    if (has_z)
-                        dst[s * ndim + d++] = axes[2][s];
-                }
+                pack_readout(
+                    &kx_all[static_cast<size_t>(r) * nsamples],
+                    &ky_all[static_cast<size_t>(r) * nsamples],
+                    &kz_all[static_cast<size_t>(r) * nsamples],
+                    nsamples, ndim, has_x, has_y, has_z,
+                    &pt.data[static_cast<size_t>(r) * ndim * nsamples]);
             }
         }
 
         return result;
+    }
+
+    bool materialize_readout(
+        const SequenceCache& cache,
+        const PrecomputedTrajectory& traj,
+        int es_index,
+        int readout,
+        float* out)
+    {
+        if (!out || traj.ndim <= 0 || traj.num_samples <= 0)
+            return false;
+        if (readout < 0 || readout >= traj.num_readouts)
+            return false;
+
+        const size_t stride =
+            static_cast<size_t>(traj.ndim) * static_cast<size_t>(traj.num_samples);
+
+        if (traj.resident)
+        {
+            if (traj.data.size() < (static_cast<size_t>(readout) + 1) * stride)
+                return false;
+            std::memcpy(
+                out, &traj.data[static_cast<size_t>(readout) * stride],
+                stride * sizeof(float));
+            return true;
+        }
+
+        /* Not resident: find this encoding space's readout-th table entry and
+         * rebuild it.  The scan is walked rather than indexed because the
+         * table interleaves encoding spaces, and the resident path counted
+         * them the same way. */
+        int seen = 0;
+        const TrajTableEntry* entry = nullptr;
+        for (const auto& e : cache.table)
+        {
+            if (e.encoding_space_ref != es_index)
+                continue;
+            if (seen == readout)
+            {
+                entry = &e;
+                break;
+            }
+            ++seen;
+        }
+        if (!entry)
+            return false;
+
+        std::vector<float> kx(static_cast<size_t>(traj.num_samples));
+        std::vector<float> ky(static_cast<size_t>(traj.num_samples));
+        std::vector<float> kz(static_cast<size_t>(traj.num_samples));
+        compose_entry_rows(cache, *entry, traj.num_samples, kx.data(), ky.data(), kz.data());
+
+        /* The mask decided over every readout, not one inferred here. */
+        pack_readout(
+            kx.data(), ky.data(), kz.data(), traj.num_samples, traj.ndim,
+            traj.axis_active[0], traj.axis_active[1], traj.axis_active[2], out);
+        return true;
     }
 
     namespace
@@ -763,6 +859,48 @@ namespace mrdserver
                             dst[s * effective_ndim + d] = src[s * pt.ndim + d];
                 }
             }
+        }
+    }
+
+    void demodulate_fov_shift(ISMRMRD::Acquisition& acq, const float shift_m[3])
+    {
+        if (shift_m == nullptr)
+            return;
+        if (shift_m[0] == 0.0f && shift_m[1] == 0.0f && shift_m[2] == 0.0f)
+            return;
+
+        const int ndim = static_cast<int>(acq.trajectory_dimensions());
+        const int nsamples = static_cast<int>(acq.number_of_samples());
+        const int nchannels = static_cast<int>(acq.active_channels());
+        if (ndim <= 0 || nsamples <= 0 || nchannels <= 0)
+            return;
+
+        const float* k = acq.getTrajPtr();
+        if (k == nullptr)
+            return;
+
+        // Trailing all-zero axes were trimmed when the trajectory was attached,
+        // so a shift along an axis this readout does not traverse simply has no
+        // k to multiply -- which is correct, not a dropped term: a constant
+        // gradient's contribution reaches the recon through the encoding
+        // counters, not through the trajectory.
+        const int axes = std::min(ndim, 3);
+
+        static constexpr double kTwoPi = 6.283185307179586476925286766559;
+
+        for (int s = 0; s < nsamples; ++s)
+        {
+            double cycles = 0.0;
+            for (int d = 0; d < axes; ++d)
+                cycles += static_cast<double>(shift_m[d]) *
+                          static_cast<double>(k[static_cast<size_t>(s) * ndim + d]);
+
+            const double phi = kTwoPi * cycles;
+            const std::complex<float> rotor(
+                static_cast<float>(std::cos(phi)), static_cast<float>(std::sin(phi)));
+
+            for (int c = 0; c < nchannels; ++c)
+                acq.data(s, c) *= rotor;
         }
     }
 

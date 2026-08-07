@@ -89,14 +89,6 @@ extern "C"
     /* ================================================================== */
 
     /**
-     * @brief Load freq-mod data from the collection cache (FREQMOD section).
-     *
-     * On success, populates coll->freq_mod.  Returns an error code if the
-     * freq-mod section is absent or empty.
-     */
-    int pulseg_load_freq_mod_cache(pulseg_collection *coll, const char *seq_path);
-
-    /**
      * @brief Append an opaque vendor blob as the VENDOR section.
      *
      * Invokes @p opts->vendor_section_write_fn(opts->vendor_section_ctx, &buf,

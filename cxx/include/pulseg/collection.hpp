@@ -284,9 +284,9 @@ namespace pulseg
         {
             return pulseg_get_grad_initial_amplitude_hz_per_m(coll_, seg, blk, axis);
         }
-        int grad_initial_shot_id(int seg, int blk, int axis) const
+        int grad_initial_shape_id(int seg, int blk, int axis) const
         {
-            return pulseg_get_grad_initial_shot_id(coll_, seg, blk, axis);
+            return pulseg_get_grad_initial_shape_id(coll_, seg, blk, axis);
         }
 
         // ── Label queries ────────────────────────────────────────────
@@ -709,17 +709,6 @@ namespace pulseg
                 out.push_back(std::move(entry));
             }
             return out;
-        }
-
-        // ── Frequency modulation ─────────────────────────────────────
-
-        int freq_mod_count() const
-        {
-            return pulseg_get_freq_mod_count(coll_);
-        }
-        int freq_mod_count_tr(int tr_type, int tr_index) const
-        {
-            return pulseg_get_freq_mod_count_tr(coll_, tr_type, tr_index);
         }
 
     private:

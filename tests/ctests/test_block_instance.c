@@ -64,7 +64,7 @@ static void assert_matches_tables(
             desc->grad_table[bte->gx_id].amplitude,
             inst->gx_amp_hz_per_m,
             0.0f);
-        mu_assert_int_eq(desc->grad_table[bte->gx_id].shot_index, inst->gx_shot_idx);
+        mu_assert_int_eq(desc->grad_table[bte->gx_id].shape_id, inst->gx_shape_id);
     }
     if (bte->gy_id >= 0 && bte->gy_id < desc->grad_table_size)
     {
@@ -73,7 +73,7 @@ static void assert_matches_tables(
             desc->grad_table[bte->gy_id].amplitude,
             inst->gy_amp_hz_per_m,
             0.0f);
-        mu_assert_int_eq(desc->grad_table[bte->gy_id].shot_index, inst->gy_shot_idx);
+        mu_assert_int_eq(desc->grad_table[bte->gy_id].shape_id, inst->gy_shape_id);
     }
     if (bte->gz_id >= 0 && bte->gz_id < desc->grad_table_size)
     {
@@ -82,7 +82,7 @@ static void assert_matches_tables(
             desc->grad_table[bte->gz_id].amplitude,
             inst->gz_amp_hz_per_m,
             0.0f);
-        mu_assert_int_eq(desc->grad_table[bte->gz_id].shot_index, inst->gz_shot_idx);
+        mu_assert_int_eq(desc->grad_table[bte->gz_id].shape_id, inst->gz_shape_id);
     }
 
     if (bte->rotation_id >= 0 && bte->rotation_id < desc->num_rotations)

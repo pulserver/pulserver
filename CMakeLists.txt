@@ -61,7 +61,6 @@ set(PULSEG_C_SOURCES
     "${CMAKE_SOURCE_DIR}/csrc/src/safety/pulseg_safety.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/safety/pulseg_pns_memo.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/structure/pulseg_getters.c"
-    "${CMAKE_SOURCE_DIR}/csrc/src/freqmod/pulseg_freqmod.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/io/pulseg_protocol.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/cache/pulseg_trajectory.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/structure/pulseg_seqdesc.c"

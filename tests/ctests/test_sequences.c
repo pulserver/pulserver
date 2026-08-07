@@ -750,12 +750,11 @@ MU_TEST_SUITE(suite_sequences_uieval)
 /*  segment definition produced by export_segment_def in MATLAB.      */
 /*  For each segment/block we check:                                   */
 /*    - flags  (has_rf, has_grad[3], has_adc, has_rotation,           */
-/*              has_digital_out, has_freq_mod)                         */
+/*              has_digital_out)                                       */
 /*    - RF     (delay, amp, num_samples, waveform shape, time array)   */
 /*    - Grads  (delay, amp, num_samples, waveform shape, time array)   */
 /*    - ADC    (delay, adc_def_id)                                     */
 /*    - Digitalout (delay, duration)                                   */
-/*    - Freq-mod  (num_samples, freq_mod_def_id consistency)           */
 /*    - Anchors (rf_isocenter_us, adc_kzero_us)                        */
 /*  Per segment:                                                       */
 /*    - Segment-level gaps (rf_adc_gap_us, adc_adc_gap_us) vs truth    */
@@ -820,11 +819,8 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
         {
             const seg_block_def *ref_blk = &ref.blocks[s][b];
             pulseg_block_info bi = PULSEG_BLOCK_INFO_INIT;
-            int need_ns = 0;
-            int need;
             rc = pulseg_get_block_info(coll, &bi, s, b);
             mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_block_info failed");
-            need = pulseg_block_needs_freq_mod(coll, &need_ns, s, b);
 
             /* --- Flags -------------------------------------------- */
             mu_assert_int_eq(ref_blk->has_rf, bi.has_rf);
@@ -833,7 +829,6 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
             mu_assert_int_eq(ref_blk->has_adc, bi.has_adc);
             mu_assert_int_eq(ref_blk->has_rotation, bi.has_rotation);
             mu_assert_int_eq(ref_blk->has_digital_out, bi.has_digitalout);
-            mu_assert_int_eq(ref_blk->has_freq_mod, need);
 
             /* --- RF ----------------------------------------------- */
             if (ref_blk->has_rf)
@@ -953,31 +948,34 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
                     mu_assert(amps != NULL, "pulseg_get_grad_amplitude returned NULL");
                     mu_assert_int_eq(ref_blk->grad_n[ax], num_samples);
 
-                    /* The initial shot is the one from the max-energy
-                       segment instance.  Compare that shot's waveform
-                       against the MATLAB truth (which was extracted from
-                       the same max-energy instance). */
-                    init_shot = pulseg_get_grad_initial_shot_id(coll, s, b, ax);
-                    mu_assert(
-                        init_shot >= 0 && init_shot < num_shots,
-                        "initial shot id out of range");
+                    /* The shape the max-energy segment instance plays --
+                       a pulseq shape id now, not an ordinal into a
+                       per-definition table, so it is bounded by the shape
+                       library rather than by a shot count.  0 means the
+                       gradient is a trapezoid. */
+                    init_shot = pulseg_get_grad_initial_shape_id(coll, s, b, ax);
+                    mu_assert(init_shot >= 0, "initial shape id out of range");
+                    /* One waveform per definition now -- the representative
+                     * one -- so it is amps[0].  init_shot is a pulseq shape
+                     * id and would index far past the end. */
+                    mu_assert_int_eq(1, num_shots);
                     for (i = 0; i < num_samples; ++i)
                     {
-                        if (!GENI_AMP_NEAR(ref_blk->grad_wave[ax][i], amps[init_shot][i]))
+                        if (!GENI_AMP_NEAR(ref_blk->grad_wave[ax][i], amps[0][i]))
                             fprintf(
                                 stderr,
                                 "[geninstr][%s] seg%d blk%d ax%d wave@%d: ref=%.4g  lib=%.4g "
-                                "(shot=%d)\n",
+                                "(shape=%d)\n",
                                 tc->name,
                                 s,
                                 b,
                                 ax,
                                 i,
                                 ref_blk->grad_wave[ax][i],
-                                amps[init_shot][i],
+                                amps[0][i],
                                 init_shot);
                         mu_assert(
-                            GENI_AMP_NEAR(ref_blk->grad_wave[ax][i], amps[init_shot][i]),
+                            GENI_AMP_NEAR(ref_blk->grad_wave[ax][i], amps[0][i]),
                             "grad waveform shape mismatch");
                     }
 
@@ -1073,15 +1071,6 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
                     "digital-out duration mismatch");
             }
 
-            /* --- Freq-mod ----------------------------------------- */
-            if (ref_blk->has_freq_mod)
-            {
-                int raster_us =
-                    2; /* vendor raster, matches MATLAB sys.rfRasterTime/adcRasterTime */
-                int lib_num_samples = bi.duration_us / raster_us;
-                mu_assert_int_eq(ref_blk->freq_mod_num_samples, lib_num_samples);
-            }
-
             /* --- Pure-delay segment-def duration canonicalization -- */
             /* Only single-block pure-delay segments have their duration
              * canonicalized to one block raster at geninstruction time.
@@ -1092,27 +1081,6 @@ static void run_sequences_geninstructions_case(const seq_case *tc)
             {
                 int expected_delay_us = (int)(opts.block_raster_us + 0.5f);
                 mu_assert_int_eq(expected_delay_us, bi.duration_us);
-            }
-
-            /* --- Freq-mod (overlap API) --------------------------- */
-            {
-                mu_assert_int_eq(ref_blk->has_freq_mod, need);
-                if (ref_blk->has_freq_mod)
-                {
-                    mu_assert_int_eq(ref_blk->freq_mod_num_samples, need_ns);
-                }
-            }
-
-            /* --- Freq-mod definition ID consistency --------------- */
-            if (ref_blk->has_freq_mod)
-            {
-                mu_assert(
-                    ref_blk->freq_mod_def_id >= 0,
-                    "freq_mod_def_id should be >= 0 when has_freq_mod");
-            }
-            else
-            {
-                mu_assert_int_eq(-1, ref_blk->freq_mod_def_id);
             }
 
             /* --- Anchors ------------------------------------------ */
@@ -1451,514 +1419,6 @@ MU_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_3avg)
     run_sequences_geninstructions_case(&kMprageNavCases[3]);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Phase 4: Frequency-modulation definition waveforms                */
-/* ------------------------------------------------------------------ */
-
-static void check_fmod_shift(
-    const pulseg_collection *coll,
-    const seg_meta *meta,
-    const fmod_def_file *ref,
-    const fmod_plan_file *plan,
-    const exec_stream_file *scan,
-    const float *shift,
-    int probe_idx,
-    const float *fov_rotation,
-    const char *label)
-{
-    pulseg_freq_mod_collection *fmc = NULL;
-    int rc;
-    int pos;
-    int seen_defs[MAX_FMOD_DEFS] = {0};
-    int used_plan_count = 0;
-    int tr_scope_id = -1;
-    pulseg_freq_mod_library *lib;
-    int *used_plan;
-    int trkey_count = 0;
-    int plan_seen[MAX_FMOD_PLAN_ENTRIES] = {0};
-    int plan_first_def[MAX_FMOD_PLAN_ENTRIES] = {0};
-    int plan_first_tr_scope[MAX_FMOD_PLAN_ENTRIES] = {0};
-    float plan_first_rot[MAX_FMOD_PLAN_ENTRIES][9];
-    struct
-    {
-        int def_id;
-        int tr_scope_id;
-        int plan_idx;
-        float rotmat[9];
-    } trkey_rows[MAX_SCAN_TABLE_ENTRIES];
-
-    rc = pulseg_build_freq_mod_collection(&fmc, coll, shift, fov_rotation);
-    mu_assert(PULSEG_SUCCEEDED(rc), label);
-
-    lib = fmc->libs[0];
-    mu_assert(lib != NULL, "freq_mod lib missing for subsequence 0");
-    mu_assert_int_eq(scan->num_entries, lib->exec_stream_len);
-    if (plan && plan->num_plans >= 0)
-        mu_assert(lib->num_plan_instances >= 0, "invalid lib num_plan_instances");
-    if (meta && meta->fmod_build_mode_tr_scoped)
-        mu_assert(
-            lib->num_plan_instances >= ref->num_defs,
-            "tr_scoped mode should not collapse below def count");
-    used_plan = (int *)calloc((size_t)lib->num_plan_instances, sizeof(int));
-    mu_assert(used_plan != NULL, "alloc failed for used_plan flags");
-
-    for (pos = 0; pos < scan->num_entries; ++pos)
-    {
-        const exec_stream_entry *se = &scan->entries[pos];
-        const short *waveform = NULL;
-        int ns = 0, s;
-        float phase_rad = 0.0f;
-        int has;
-
-        if (se->tr_start_flag)
-            tr_scope_id++;
-
-        has = pulseg_freq_mod_collection_get(fmc, &waveform, &ns, &phase_rad, 0, pos);
-
-        if (se->freq_mod_id <= 0)
-        {
-            mu_assert(!has, "unexpected freq_mod at scan position");
-            continue;
-        }
-
-        {
-            const fmod_def *fd;
-            int def_idx = se->freq_mod_id - 1;
-            int plan_idx = lib->scan_to_plan[pos];
-            int ref_plan_idx = (plan && pos < plan->scan_len) ? plan->scan_to_plan[pos] : -1;
-
-            mu_assert(
-                def_idx >= 0 && def_idx < ref->num_defs,
-                "invalid expected freq_mod_id in scan table");
-            fd = &ref->defs[def_idx];
-
-            mu_assert(has, "missing freq_mod at expected scan position");
-
-            mu_assert(
-                plan_idx >= 0 && plan_idx < lib->num_plan_instances,
-                "invalid scan_to_plan mapping");
-            if (!used_plan[plan_idx])
-            {
-                used_plan[plan_idx] = 1;
-                used_plan_count++;
-            }
-
-            mu_assert_int_eq(fd->num_samples, ns);
-
-            /* Compute effective shift after applying plan rotation (R^T @ shift).
-             * rotmat is stored row-major: R[ri][ci] = rotmat[ri*3+ci].
-             * (R^T @ v)[ri] = sum_ci R[ci][ri] * v[ci] = sum_ci rotmat[ci*3+ri] * v[ci]. */
-            {
-                float u[3] = {shift[0], shift[1], shift[2]};
-                if (plan && ref_plan_idx >= 0 && ref_plan_idx < plan->num_plans)
-                {
-                    const float *rm = plan->plans[ref_plan_idx].rotmat;
-                    int ri, ci;
-                    float rot_u[3] = {0.0f, 0.0f, 0.0f};
-                    for (ri = 0; ri < 3; ri++)
-                        for (ci = 0; ci < 3; ci++)
-                            rot_u[ri] += rm[ci * 3 + ri] * shift[ci];
-                    u[0] = rot_u[0];
-                    u[1] = rot_u[1];
-                    u[2] = rot_u[2];
-                }
-
-                /* API returns short DAC units (OMEGA_SCALE = 1/(4*FREQ_CONVERSION)).
-                 * With the default FREQ_CONVERSION = 0.25, OMEGA_SCALE = 1.0 so
-                 * short values ≈ round(expected_hz).  Allow ±1 for rounding. */
-                for (s = 0; s < ns; ++s)
-                {
-                    float expected = fd->waveform_gx[s] * u[0] + fd->waveform_gy[s] * u[1] +
-                        fd->waveform_gz[s] * u[2];
-                    int expected_hw = (int)(expected + 0.5f);
-                    int actual_hw = (int)waveform[s];
-                    mu_assert(
-                        abs(actual_hw - expected_hw) <= 1,
-                        "freq_mod waveform sample mismatch");
-                }
-            }
-
-            if (plan && plan->num_plans > 0 && ref_plan_idx >= 0)
-            {
-                const fmod_plan_entry *pe;
-                float proj_phase;
-                float proj_tol;
-                float alpha;
-                mu_assert(
-                    ref_plan_idx >= 0 && ref_plan_idx < plan->num_plans,
-                    "invalid supplemental plan index");
-                pe = &plan->plans[ref_plan_idx];
-                mu_assert_int_eq(se->freq_mod_id, pe->def_id);
-
-                /* Truth plan waveforms are projected with unit probe
-                 * directions; the C library projects with the physical
-                 * shift vector.  Scale truth by alpha = dot(shift, probe)
-                 * to match the C library output. */
-                alpha = 0.0f;
-                if (probe_idx >= 0 && probe_idx < plan->num_probes)
-                {
-                    int k;
-                    for (k = 0; k < 3; ++k)
-                        alpha += shift[k] * plan->probes[probe_idx][k];
-                }
-
-                for (s = 0; s < ns; ++s)
-                {
-                    float pexp = pe->waveforms[probe_idx][s] * alpha;
-                    int pexp_hw = (int)(pexp + 0.5f);
-                    int act_hw = (int)waveform[s];
-                    mu_assert(
-                        abs(act_hw - pexp_hw) <= 1,
-                        "supplemental projected waveform mismatch");
-                }
-
-                proj_phase = pe->phase_total[probe_idx] * alpha;
-                proj_tol = (float)fabs(proj_phase) * 1e-4f;
-                if (proj_tol < 1e-8f)
-                    proj_tol = 1e-8f;
-                if ((float)fabs(phase_rad - proj_phase) > proj_tol)
-                {
-                    float lib_phase_base = (plan_idx >= 0 && plan_idx < lib->num_plan_instances)
-                        ? lib->plan_phase[plan_idx]
-                        : 0.0f;
-                    float lib_phase_extra =
-                        (pos >= 0 && pos < lib->exec_stream_len && lib->scan_phase_extra)
-                        ? lib->scan_phase_extra[pos]
-                        : 0.0f;
-                    float iax =
-                        (pos >= 0 && pos < lib->exec_stream_len && lib->scan_inactive_area_3ch)
-                        ? lib->scan_inactive_area_3ch[pos * 3 + 0]
-                        : 0.0f;
-                    float iay =
-                        (pos >= 0 && pos < lib->exec_stream_len && lib->scan_inactive_area_3ch)
-                        ? lib->scan_inactive_area_3ch[pos * 3 + 1]
-                        : 0.0f;
-                    float iaz =
-                        (pos >= 0 && pos < lib->exec_stream_len && lib->scan_inactive_area_3ch)
-                        ? lib->scan_inactive_area_3ch[pos * 3 + 2]
-                        : 0.0f;
-                    fprintf(
-                        stderr,
-                        "[fmod_phase_dbg][%s] pos=%d def=%d plan=%d lib=(tot=%g base=%g extra=%g) "
-                        "truth=%g ia=[%g %g %g] alpha=%g\n",
-                        label,
-                        pos,
-                        se->freq_mod_id,
-                        plan_idx,
-                        (double)phase_rad,
-                        (double)lib_phase_base,
-                        (double)lib_phase_extra,
-                        (double)proj_phase,
-                        (double)iax,
-                        (double)iay,
-                        (double)iaz,
-                        (double)alpha);
-                }
-                mu_assert(
-                    (float)fabs(phase_rad - proj_phase) <= proj_tol,
-                    "supplemental projected phase mismatch");
-            }
-
-            /* Plan-key consistency checks (all modes):
-             *  - same (def_id, key_scope, rotmat) must map to one lib plan
-             *  - one lib plan must not represent multiple such keys
-             * key_scope is TR index only in tr_scoped mode, otherwise 0. */
-            {
-                int key_scope = (meta && meta->fmod_build_mode_tr_scoped) ? tr_scope_id : 0;
-                int k, found = -1;
-                for (k = 0; k < trkey_count; ++k)
-                {
-                    int r;
-                    int same_rot = 1;
-                    if (trkey_rows[k].def_id != se->freq_mod_id ||
-                        trkey_rows[k].tr_scope_id != key_scope)
-                        continue;
-                    for (r = 0; r < 9; ++r)
-                    {
-                        if (fabsf(trkey_rows[k].rotmat[r] - se->rotmat[r]) > 1e-6f)
-                        {
-                            same_rot = 0;
-                            break;
-                        }
-                    }
-                    if (same_rot)
-                    {
-                        found = k;
-                        break;
-                    }
-                }
-
-                if (found >= 0)
-                {
-                    mu_assert_int_eq(trkey_rows[found].plan_idx, plan_idx);
-                }
-                else if (trkey_count < MAX_SCAN_TABLE_ENTRIES)
-                {
-                    int r;
-                    trkey_rows[trkey_count].def_id = se->freq_mod_id;
-                    trkey_rows[trkey_count].tr_scope_id = key_scope;
-                    trkey_rows[trkey_count].plan_idx = plan_idx;
-                    for (r = 0; r < 9; ++r)
-                        trkey_rows[trkey_count].rotmat[r] = se->rotmat[r];
-                    trkey_count++;
-                }
-
-                if (plan_idx >= 0 && plan_idx < MAX_FMOD_PLAN_ENTRIES)
-                {
-                    int r;
-                    if (!plan_seen[plan_idx])
-                    {
-                        plan_seen[plan_idx] = 1;
-                        plan_first_def[plan_idx] = se->freq_mod_id;
-                        plan_first_tr_scope[plan_idx] = key_scope;
-                        for (r = 0; r < 9; ++r)
-                            plan_first_rot[plan_idx][r] = se->rotmat[r];
-                    }
-                    else
-                    {
-                        int same_rot = 1;
-                        for (r = 0; r < 9; ++r)
-                        {
-                            if (fabsf(plan_first_rot[plan_idx][r] - se->rotmat[r]) > 1e-6f)
-                            {
-                                same_rot = 0;
-                                break;
-                            }
-                        }
-                        mu_assert_int_eq(plan_first_def[plan_idx], se->freq_mod_id);
-                        mu_assert_int_eq(plan_first_tr_scope[plan_idx], key_scope);
-                        mu_assert(same_rot, "single lib plan spans multiple rotation keys");
-                    }
-                }
-            }
-
-            seen_defs[def_idx] = 1;
-        }
-    }
-
-    {
-        int d;
-        for (d = 0; d < ref->num_defs; ++d)
-        {
-            mu_assert(seen_defs[d], "expected freq_mod definition not referenced");
-        }
-
-        /* Each ground-truth def maps to one or more plan instances
-         * (e.g. nav orientations share a def but have different
-         * gradient amplitudes, creating separate plan instances). */
-        mu_assert(
-            used_plan_count >= ref->num_defs,
-            "fewer plan instances than expected freq_mod defs");
-    }
-
-    free(used_plan);
-
-    pulseg_freq_mod_collection_free(fmc);
-}
-
-static void run_freq_mod_definitions_case(const seq_case *tc)
-{
-    pulseg_opts opts;
-    pulseg_collection *coll = NULL;
-    static seg_meta meta = SEG_META_INIT;
-    static fmod_def_file ref = FMOD_DEF_FILE_INIT;
-    static fmod_plan_file plan = FMOD_PLAN_FILE_INIT;
-    static exec_stream_file scan = SCAN_TABLE_FILE_INIT;
-    char meta_path[512];
-    char fmod_path[512];
-    char fmod_plan_path[512];
-    char scan_path[512];
-    int rc, ok, t;
-
-    /* Three orthogonal shifts + one combined shift */
-    float shifts[4][3] = {
-        {1.0e-3f, 0.0f, 0.0f},      /* X only */
-        {0.0f, 2.0e-3f, 0.0f},      /* Y only */
-        {0.0f, 0.0f, 3.0e-3f},      /* Z only */
-        {1.0e-3f, 2.0e-3f, 3.0e-3f} /* combined */
-    };
-
-    /* Three representative FOV rotations (ax, cor, sag) +
-     * identity.  For blocks WITHOUT norot flag the rotation
-     * has no effect — we verify invariance. */
-    float rotations[4][9] = {
-        {1, 0, 0, 0, 1, 0, 0, 0, 1},             /* identity (axial) */
-        {1, 0, 0, 0, 0, 1, 0, -1, 0},            /* coronal:  y->z, z->-y */
-        {0, 0, -1, 0, 1, 0, 1, 0, 0},            /* sagittal: x->-z, z->x */
-        {0.6f, 0.8f, 0, -0.8f, 0.6f, 0, 0, 0, 1} /* oblique 53° */
-    };
-
-    gre_opts_init(&opts);
-    rc = load_seq_with_averages(&coll, tc->seq_file, &opts, tc->num_averages);
-    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
-
-    build_case_path(meta_path, sizeof(meta_path), tc, "_meta.txt");
-    ok = parse_meta(meta_path, &meta);
-    mu_assert(ok, "failed to parse meta.txt");
-
-    build_case_path(fmod_path, sizeof(fmod_path), tc, "_freqmod_def.truth");
-    ok = parse_fmod_defs(fmod_path, &ref);
-    mu_assert(ok, "failed to parse freqmod_def.truth");
-    mu_assert(ref.num_defs >= 1, "expected at least 1 freq_mod def");
-
-    build_case_path(fmod_plan_path, sizeof(fmod_plan_path), tc, "_freqmod_plan.truth");
-    ok = parse_fmod_plan(fmod_plan_path, &plan);
-    mu_assert(ok, "failed to parse freqmod_plan.truth");
-    mu_assert(plan.num_probes >= 4, "freqmod plan must include x/y/z/oblique probes");
-
-    /* Parse scan table to get total position span for robust freq-mod search. */
-    build_case_path(scan_path, sizeof(scan_path), tc, "_scan_table.truth");
-    ok = parse_exec_stream(scan_path, &scan);
-    mu_assert(ok, "failed to parse scan_table.truth for freqmod positions");
-    mu_assert(scan.num_entries > 0, "exec_stream has no entries for freqmod search");
-
-    /* For each shift, test all rotations — results must be identical
-     * because this sequence has no rotation events / norot blocks. */
-    for (t = 0; t < 4; ++t)
-    {
-        int r;
-        for (r = 0; r < 4; ++r)
-        {
-            check_fmod_shift(coll, &meta, &ref, &plan, &scan, shifts[t], t, rotations[r], tc->name);
-        }
-    }
-
-    pulseg_collection_free(coll);
-}
-
-MU_TEST(test_freq_mod_definitions_gre_2d_1sl_1avg)
-{
-    run_freq_mod_definitions_case(&kGreCases[0]);
-}
-MU_TEST(test_freq_mod_definitions_gre_2d_1sl_3avg)
-{
-    run_freq_mod_definitions_case(&kGreCases[1]);
-}
-MU_TEST(test_freq_mod_definitions_gre_2d_3sl_1avg)
-{
-    run_freq_mod_definitions_case(&kGreCases[2]);
-}
-MU_TEST(test_freq_mod_definitions_gre_2d_3sl_3avg)
-{
-    run_freq_mod_definitions_case(&kGreCases[3]);
-}
-
-MU_TEST(test_freq_mod_definitions_mprage_2d_1sl_1avg)
-{
-    run_freq_mod_definitions_case(&kMprageCases[0]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_2d_1sl_3avg)
-{
-    run_freq_mod_definitions_case(&kMprageCases[1]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_2d_3sl_1avg)
-{
-    run_freq_mod_definitions_case(&kMprageCases[2]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_2d_3sl_3avg)
-{
-    run_freq_mod_definitions_case(&kMprageCases[3]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_1avg)
-{
-    run_freq_mod_definitions_case(&kMprageNoncartCases[0]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_3avg_userotext0)
-{
-    run_freq_mod_definitions_case(&kMprageNoncartCases[1]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_nc_3sl_1avg_userotext0)
-{
-    run_freq_mod_definitions_case(&kMprageNoncartCases[2]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_nc_3sl_3avg_userotext0)
-{
-    run_freq_mod_definitions_case(&kMprageNoncartCases[3]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_1avg_userotext1)
-{
-    run_freq_mod_definitions_case(&kMprageNoncartCases[4]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_nc_1sl_3avg_userotext1)
-{
-    run_freq_mod_definitions_case(&kMprageNoncartCases[5]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_nc_3sl_1avg_userotext1)
-{
-    run_freq_mod_definitions_case(&kMprageNoncartCases[6]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_nc_3sl_3avg_userotext1)
-{
-    run_freq_mod_definitions_case(&kMprageNoncartCases[7]);
-}
-
-MU_TEST(test_freq_mod_definitions_bssfp_2d_1sl_1avg)
-{
-    run_freq_mod_definitions_case(&kBssfpCases[0]);
-}
-MU_TEST(test_freq_mod_definitions_bssfp_2d_1sl_3avg)
-{
-    run_freq_mod_definitions_case(&kBssfpCases[1]);
-}
-MU_TEST(test_freq_mod_definitions_bssfp_2d_3sl_1avg)
-{
-    run_freq_mod_definitions_case(&kBssfpCases[2]);
-}
-MU_TEST(test_freq_mod_definitions_bssfp_2d_3sl_3avg)
-{
-    run_freq_mod_definitions_case(&kBssfpCases[3]);
-}
-
-MU_TEST(test_freq_mod_definitions_fse_2d_1sl_1avg)
-{
-    run_freq_mod_definitions_case(&kFseCases[0]);
-}
-MU_TEST(test_freq_mod_definitions_fse_2d_1sl_3avg)
-{
-    run_freq_mod_definitions_case(&kFseCases[1]);
-}
-MU_TEST(test_freq_mod_definitions_fse_2d_3sl_1avg)
-{
-    run_freq_mod_definitions_case(&kFseCases[2]);
-}
-MU_TEST(test_freq_mod_definitions_fse_2d_3sl_3avg)
-{
-    run_freq_mod_definitions_case(&kFseCases[3]);
-}
-
-MU_TEST(test_freq_mod_definitions_qalas_nc_3d_1sl_1avg_userotext1)
-{
-    run_freq_mod_definitions_case(&kQalasNoncartCases[0]);
-}
-MU_TEST(test_freq_mod_definitions_qalas_nc_3d_1sl_3avg_userotext1)
-{
-    run_freq_mod_definitions_case(&kQalasNoncartCases[1]);
-}
-MU_TEST(test_freq_mod_definitions_qalas_nc_3d_3sl_1avg_userotext1)
-{
-    run_freq_mod_definitions_case(&kQalasNoncartCases[2]);
-}
-MU_TEST(test_freq_mod_definitions_qalas_nc_3d_3sl_3avg_userotext1)
-{
-    run_freq_mod_definitions_case(&kQalasNoncartCases[3]);
-}
-
-MU_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_1avg)
-{
-    run_freq_mod_definitions_case(&kMprageNavCases[0]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_3avg)
-{
-    run_freq_mod_definitions_case(&kMprageNavCases[1]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_1avg)
-{
-    run_freq_mod_definitions_case(&kMprageNavCases[2]);
-}
-MU_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_3avg)
-{
-    run_freq_mod_definitions_case(&kMprageNavCases[3]);
-}
 
 MU_TEST_SUITE(suite_sequences_geninstructions)
 {
@@ -1994,38 +1454,6 @@ MU_TEST_SUITE(suite_sequences_geninstructions)
     MU_RUN_TEST(test_sequences_geninstructions_mprage_nav_2d_1sl_3avg);
     MU_RUN_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_1avg);
     MU_RUN_TEST(test_sequences_geninstructions_mprage_nav_2d_3sl_3avg);
-    MU_RUN_TEST(test_freq_mod_definitions_gre_2d_1sl_1avg);
-    MU_RUN_TEST(test_freq_mod_definitions_gre_2d_1sl_3avg);
-    MU_RUN_TEST(test_freq_mod_definitions_gre_2d_3sl_1avg);
-    MU_RUN_TEST(test_freq_mod_definitions_gre_2d_3sl_3avg);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_2d_1sl_1avg);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_2d_1sl_3avg);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_2d_3sl_1avg);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_2d_3sl_3avg);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_nc_1sl_1avg);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_nc_1sl_3avg_userotext0);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_nc_3sl_1avg_userotext0);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_nc_3sl_3avg_userotext0);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_nc_1sl_1avg_userotext1);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_nc_1sl_3avg_userotext1);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_nc_3sl_1avg_userotext1);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_nc_3sl_3avg_userotext1);
-    MU_RUN_TEST(test_freq_mod_definitions_bssfp_2d_1sl_1avg);
-    MU_RUN_TEST(test_freq_mod_definitions_bssfp_2d_1sl_3avg);
-    MU_RUN_TEST(test_freq_mod_definitions_bssfp_2d_3sl_1avg);
-    MU_RUN_TEST(test_freq_mod_definitions_bssfp_2d_3sl_3avg);
-    MU_RUN_TEST(test_freq_mod_definitions_fse_2d_1sl_1avg);
-    MU_RUN_TEST(test_freq_mod_definitions_fse_2d_1sl_3avg);
-    MU_RUN_TEST(test_freq_mod_definitions_fse_2d_3sl_1avg);
-    MU_RUN_TEST(test_freq_mod_definitions_fse_2d_3sl_3avg);
-    MU_RUN_TEST(test_freq_mod_definitions_qalas_nc_3d_1sl_1avg_userotext1);
-    MU_RUN_TEST(test_freq_mod_definitions_qalas_nc_3d_1sl_3avg_userotext1);
-    MU_RUN_TEST(test_freq_mod_definitions_qalas_nc_3d_3sl_1avg_userotext1);
-    MU_RUN_TEST(test_freq_mod_definitions_qalas_nc_3d_3sl_3avg_userotext1);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_1avg);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_nav_2d_1sl_3avg);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_1avg);
-    MU_RUN_TEST(test_freq_mod_definitions_mprage_nav_2d_3sl_3avg);
 }
 
 /* ------------------------------------------------------------------ */
@@ -2057,11 +1485,9 @@ static void run_exec_stream_case(const seq_case *tc)
     int subseq_seg_end[16];
     int total_readout_count = 0;
     int seg_trigger_seen[MAX_SEGMENTS];
-    int seg_fmod_seen[MAX_SEGMENTS];
 
     memset(pure_inst_durations, 0, sizeof(pure_inst_durations));
     memset(seg_trigger_seen, 0, sizeof(seg_trigger_seen));
-    memset(seg_fmod_seen, 0, sizeof(seg_fmod_seen));
     memset(pattern_len, 0, sizeof(pattern_len));
     memset(pattern_pos, 0, sizeof(pattern_pos));
     memset(subseq_seg_start, 0, sizeof(subseq_seg_start));
@@ -2382,13 +1808,6 @@ static void run_exec_stream_case(const seq_case *tc)
             mu_assert(ci.has_trigger, "cursor has_trigger should be set when truth trigger_flag=1");
             if (ci.segment_id >= 0 && ci.segment_id < MAX_SEGMENTS)
                 seg_trigger_seen[ci.segment_id] = 1;
-        }
-
-        /* ---- Freq-mod ID consistency ----------------------------- */
-        if (e->freq_mod_id > 0)
-        {
-            if (ci.segment_id >= 0 && ci.segment_id < MAX_SEGMENTS)
-                seg_fmod_seen[ci.segment_id] = 1;
         }
 
         /* Count ADC readouts */

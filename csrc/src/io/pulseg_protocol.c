@@ -29,6 +29,10 @@ static const pulseg_param_entry g_param_table[] = {
     {"phase_fov", PULSEG_PARAM_PHASE_FOV, PULSEG_PTYPE_FLOAT},
     {"slice_thickness", PULSEG_PARAM_SLICE_THICKNESS, PULSEG_PTYPE_FLOAT},
     {"slice_spacing", PULSEG_PARAM_SLICE_SPACING, PULSEG_PTYPE_FLOAT},
+    /* Off-isocentre translation, mm, in the LOGICAL frame (see the header). */
+    {"fov_offset_x", PULSEG_PARAM_FOV_OFFSET_X, PULSEG_PTYPE_FLOAT},
+    {"fov_offset_y", PULSEG_PARAM_FOV_OFFSET_Y, PULSEG_PTYPE_FLOAT},
+    {"fov_offset_z", PULSEG_PARAM_FOV_OFFSET_Z, PULSEG_PTYPE_FLOAT},
     {"nslices", PULSEG_PARAM_NSLICES, PULSEG_PTYPE_INT},
     {"nx", PULSEG_PARAM_MATRIX, PULSEG_PTYPE_INT},
     {"ny", PULSEG_PARAM_NY, PULSEG_PTYPE_INT},

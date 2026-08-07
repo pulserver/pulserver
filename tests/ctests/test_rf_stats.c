@@ -509,7 +509,6 @@ static int build_divergent_variable_rf_collection(pulseg_collection *coll, pulse
         blocks[i].adc_id = -1;
         blocks[i].digitalout_id = -1;
         blocks[i].rotation_id = -1;
-        blocks[i].freq_mod_id = -1;
         blocks[i].rf_shim_id = -1;
         blocks[i].module_id = 0;
     }

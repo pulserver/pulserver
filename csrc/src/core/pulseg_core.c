@@ -86,12 +86,6 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
     }
     d->adc_table_size = 0;
 
-    if (d->freq_mod_definitions)
-    {
-        PULSEG_FREE(d->freq_mod_definitions);
-        d->freq_mod_definitions = NULL;
-    }
-    d->num_freq_mod_defs = 0;
 
     if (d->rf_shim_definitions)
     {
@@ -112,6 +106,18 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
         d->trigger_events = NULL;
     }
     d->num_triggers = 0;
+
+    if (d->grad_shape_first)
+    {
+        PULSEG_FREE(d->grad_shape_first);
+        d->grad_shape_first = NULL;
+    }
+    if (d->grad_shape_last)
+    {
+        PULSEG_FREE(d->grad_shape_last);
+        d->grad_shape_last = NULL;
+    }
+    d->num_grad_shape_stats = 0;
 
     if (d->shapes)
     {
@@ -141,8 +147,6 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
                 PULSEG_FREE(d->segment_definitions[i].norot_flag);
             if (d->segment_definitions[i].nopos_flag)
                 PULSEG_FREE(d->segment_definitions[i].nopos_flag);
-            if (d->segment_definitions[i].has_freq_mod)
-                PULSEG_FREE(d->segment_definitions[i].has_freq_mod);
             if (d->segment_definitions[i].has_adc)
                 PULSEG_FREE(d->segment_definitions[i].has_adc);
             if (d->segment_definitions[i].is_dynamic_delay)
@@ -268,11 +272,6 @@ void pulseg_collection_free(pulseg_collection *c)
     int i;
     if (!c)
         return;
-    if (c->freq_mod)
-    {
-        pulseg_freq_mod_collection_free(c->freq_mod);
-        c->freq_mod = NULL;
-    }
     if (c->descriptors)
     {
         for (i = 0; i < c->num_subsequences; ++i)
@@ -938,7 +937,6 @@ static int seg_grad_def_equal(
 {
     const pulseg_grad_definition *ga;
     const pulseg_grad_definition *gb;
-    int s;
 
     if (gid_a < 0 || gid_a >= da->num_unique_grads)
         return 0;
@@ -961,16 +959,18 @@ static int seg_grad_def_equal(
             ga->fall_time_or_num_uncompressed_samples == gb->fall_time_or_num_uncompressed_samples);
     }
 
-    /* arbitrary: sample count, time shape, and every shot's shape */
+    /* Arbitrary: sample count and time shape.
+     *
+     * Deliberately NOT the set of amplitude shapes.  What makes two segments
+     * the same segment is their structure -- the timings: delays, durations,
+     * sample counts, the time shape.  Which waveform an instance plays at a
+     * position is per instance, carried by the exec stream and swapped in at
+     * playout, so two definitions that differ only in that are the same
+     * definition as far as the materialised segment is concerned. */
     if (ga->fall_time_or_num_uncompressed_samples != gb->fall_time_or_num_uncompressed_samples)
-        return 0;
-    if (ga->num_shots != gb->num_shots)
         return 0;
     if (!seg_shape_equal(da, ga->unused_or_time_shape_id, db, gb->unused_or_time_shape_id))
         return 0;
-    for (s = 0; s < ga->num_shots; ++s)
-        if (!seg_shape_equal(da, ga->shot_shape_ids[s], db, gb->shot_shape_ids[s]))
-            return 0;
     return 1;
 }
 
@@ -1152,8 +1152,6 @@ static int segments_content_equal(
         if (sa->has_rotation[b] != sb->has_rotation[b])
             return 0;
         if (sa->has_digitalout[b] != sb->has_digitalout[b])
-            return 0;
-        if (sa->has_freq_mod[b] != sb->has_freq_mod[b])
             return 0;
         if (sa->has_adc[b] != sb->has_adc[b])
             return 0;
@@ -1399,13 +1397,6 @@ int pulseg_convert_collection(
         }
 
         pulseg__compute_exec_stream_tr_start(&desc);
-
-        result = pulseg__build_freq_mod_flags(&desc);
-        if (PULSEG_FAILED(result))
-        {
-            diag->code = result;
-            goto fail;
-        }
 
         if (parse_labels)
         {

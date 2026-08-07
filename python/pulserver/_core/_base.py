@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 
 import pypulseq as pp
 
-from ._params import Protocol
+from ._params import Protocol, UIParam
 
 
 class PulseqSequence(ABC):
@@ -117,6 +117,9 @@ class PulseqSequence(ABC):
     def make_sequence(self, opts: pp.Opts, protocol: Protocol, output_path: str) -> None:
         """Build the full sequence and write it to disk.
 
+        Implementations should finish by calling :meth:`finalize` rather than
+        writing directly, so that FOV positioning is applied in one place.
+
         Parameters
         ----------
         opts : pypulseq.Opts
@@ -127,3 +130,50 @@ class PulseqSequence(ABC):
             Destination path for the generated ``.seq`` file.
         """
         ...
+
+    # -- shared tail ------------------------------------------------------
+
+    def finalize(
+        self,
+        seq,
+        protocol: Protocol,
+        output_path: str,
+        *,
+        mode: str = "server",
+        create_signature: bool = True,
+    ) -> None:
+        """Position the FOV and write the sequence out.
+
+        The single place FOV positioning happens. A shift is a phase,
+        ``dr . k``, and expressed in the logical frame it is invariant under
+        every rotation the sequence or the prescription applies -- so it can be
+        applied once, here, to a finished sequence, without any plugin knowing
+        about orientation, rotation extensions or ``NOROT``.
+
+        Parameters
+        ----------
+        seq : pulserver.pulseq.Sequence
+            The finished sequence.
+        protocol : Protocol
+            The protocol it was built from; the offsets are read out of it.
+        output_path : str
+            Where to write.
+        mode : {"server", "native"}, default "server"
+            ``"server"`` stores each readout's base k-space trajectory for our
+            own consumer to apply, keeping one shape per distinct trajectory.
+            ``"native"`` bakes the ADC phase into the file, for a ``.seq``
+            shared with another toolbox.
+        create_signature : bool, default True
+            Append the ``[SIGNATURE]`` section.
+        """
+        from . import _params as params
+
+        offset_mm = (
+            params.param_float_optional(protocol, UIParam.FOV_OFFSET_X, 0.0),
+            params.param_float_optional(protocol, UIParam.FOV_OFFSET_Y, 0.0),
+            params.param_float_optional(protocol, UIParam.FOV_OFFSET_Z, 0.0),
+        )
+        if any(offset_mm):
+            seq.transform_fov(offset_mm, mode=mode)
+
+        seq.write(output_path, create_signature=create_signature)

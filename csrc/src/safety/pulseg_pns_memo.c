@@ -95,7 +95,7 @@ static double pns_memo_transform_ops(int n, int kernel_len)
 typedef struct
 {
     int def_id;    /* index into desc->grad_definitions */
-    int shot_idx;  /* shot slot within the definition */
+    int shape_id;  /* pulseq shape this instance plays */
     int dur_us;    /* block duration: type-1 shapes hold to the block end */
     int axis;      /* 0 = x, 1 = y, 2 = z */
     int first;     /* block position whose slice defines the shape */
@@ -199,21 +199,21 @@ static void pns_memo_axis_key(
     const pulseg_block_table_element *bte,
     int axis,
     int *def_id,
-    int *shot_idx)
+    int *shape_id)
 {
     int raw;
     const pulseg_grad_table_element *tab;
 
     raw = (axis == 0) ? bte->gx_id : (axis == 1) ? bte->gy_id : bte->gz_id;
     *def_id = -1;
-    *shot_idx = 0;
+    *shape_id = 0;
     if (raw < 0 || raw >= desc->grad_table_size)
         return;
     tab = &desc->grad_table[raw];
     if (tab->id < 0 || tab->id >= desc->num_unique_grads)
         return;
     *def_id = tab->id;
-    *shot_idx = tab->shot_index;
+    *shape_id = tab->shape_id;
 }
 
 /* Doubly zero-extended forward difference of one block's slice: len+1
@@ -370,7 +370,7 @@ int pulseg__calc_pns_memoized(
     pns_memo_occurrence *occurrences;
     float *scratch;
     int num_templates, num_occurrences, cap;
-    int n_uniform, axis, i, t, block_idx, def_id, shot_idx, dur_us, pivot;
+    int n_uniform, axis, i, t, block_idx, def_id, shape_id, dur_us, pivot;
     int rc, max_len, len, off;
     double assembly_ops;
     float inv_gamma, dt_s, scale, pivot_v;
@@ -441,14 +441,14 @@ int pulseg__calc_pns_memoized(
                 continue; /* silent slice: contributes nothing at all */
             pivot_v = axis_wave[axis][offsets[i] + pivot];
 
-            pns_memo_axis_key(desc, bte, axis, &def_id, &shot_idx);
+            pns_memo_axis_key(desc, bte, axis, &def_id, &shape_id);
             if (def_id < 0)
                 goto done; /* non-silent slice with no definition: bail out */
 
             scale = 1.0f;
             for (t = 0; t < num_templates; ++t)
             {
-                if (templates[t].def_id != def_id || templates[t].shot_idx != shot_idx ||
+                if (templates[t].def_id != def_id || templates[t].shape_id != shape_id ||
                     templates[t].dur_us != dur_us || templates[t].axis != axis ||
                     templates[t].pivot != pivot || lengths[templates[t].first] != lengths[i])
                     continue;
@@ -466,7 +466,7 @@ int pulseg__calc_pns_memoized(
             if (t == num_templates)
             {
                 templates[t].def_id = def_id;
-                templates[t].shot_idx = shot_idx;
+                templates[t].shape_id = shape_id;
                 templates[t].dur_us = dur_us;
                 templates[t].axis = axis;
                 templates[t].first = i;

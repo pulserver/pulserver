@@ -293,6 +293,52 @@ class Sequence:
         self._touch()
         self._native.remove_duplicates()
 
+    # -- FOV positioning --------------------------------------------------
+
+    def transform_fov(
+        self,
+        offset_mm: tuple[float, float, float],
+        *,
+        mode: str = "native",
+    ) -> None:
+        """Move the field of view by ``offset_mm``, in **logical** coordinates.
+
+        A shift is a phase, ``dr . k``. Written in the same frame as the
+        gradients it is invariant under any rotation applied to both, so it
+        needs no knowledge of the prescribed orientation, of rotation
+        extensions, or of ``NOROT``. That invariance is why this belongs here
+        and not in an interpreter: computing the same phase in the physical
+        frame forces every rotation to be undone first.
+
+        Parameters
+        ----------
+        offset_mm : tuple of float
+            ``(dx, dy, dz)`` along the logical readout, phase and slice axes.
+            Millimetres, matching how a prescription states them.
+        mode : {"native", "server"}, default "native"
+            ``"native"`` bakes the shift into both RF and ADC, so the file
+            needs nothing downstream -- what to write when sharing a ``.seq``
+            with another toolbox. ``"server"`` bakes only the RF and instead
+            stores each readout's base k-space trajectory, leaving the ADC
+            side to a consumer of ours; that keeps one shape per distinct
+            trajectory rather than one per readout, which is what makes a
+            large non-Cartesian scan affordable.
+
+        Notes
+        -----
+        Applied where it stands: call it once, on a finished sequence, before
+        writing. Calling it twice applies the shift twice.
+        """
+        if mode not in ("native", "server"):
+            raise ValueError(f"transform_fov(): mode must be 'native' or 'server', got {mode!r}")
+
+        dx, dy, dz = (float(v) * 1e-3 for v in offset_mm)
+
+        self._touch()
+        self._native.apply_fov_shift(dx, dy, dz, bake_adc=(mode == "native"))
+        if mode == "server":
+            self._native.attach_base_trajectory()
+
     # -- files -----------------------------------------------------------
 
     def write(

@@ -386,9 +386,9 @@ namespace pulseg
         float gx_amp = 0.0f;
         float gy_amp = 0.0f;
         float gz_amp = 0.0f;
-        int gx_shot_idx = 0;
-        int gy_shot_idx = 0;
-        int gz_shot_idx = 0;
+        int gx_shape_id = 0;
+        int gy_shape_id = 0;
+        int gz_shape_id = 0;
         float rotmat[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
         int norot_flag = 0;
         int nopos_flag = 0;
@@ -408,9 +408,9 @@ namespace pulseg
             b.gx_amp = c.gx_amp_hz_per_m;
             b.gy_amp = c.gy_amp_hz_per_m;
             b.gz_amp = c.gz_amp_hz_per_m;
-            b.gx_shot_idx = c.gx_shot_idx;
-            b.gy_shot_idx = c.gy_shot_idx;
-            b.gz_shot_idx = c.gz_shot_idx;
+            b.gx_shape_id = c.gx_shape_id;
+            b.gy_shape_id = c.gy_shape_id;
+            b.gz_shape_id = c.gz_shape_id;
             for (int i = 0; i < 9; ++i)
                 b.rotmat[i] = c.rotmat[i];
             b.norot_flag = c.norot_flag;
