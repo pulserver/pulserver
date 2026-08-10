@@ -195,6 +195,28 @@ namespace pulseqpp_types
     {
         PyObject_HEAD
         T event;
+
+        /**
+         * Where `event.id` and `event.shape_IDs` live.
+         *
+         * PyPulseq scripts write these: `gx.id = seq.register_grad_event(gx)`
+         * is how upstream tells its own `add_block` that an event is already
+         * in the libraries.  Nothing here reads them -- the shape memoization
+         * is `Event::registered` and the array-identity cache -- but a script
+         * being run against this package unchanged has to be able to make the
+         * assignment, so the attributes are real and store what they are given.
+         *
+         * They come *after* `event`, so `EVENT_OFFSET` and every
+         * `PULSEQPP_FIELD` offset are exactly what they were.
+         *
+         * Null until assigned, and reading one that has never been set raises
+         * AttributeError rather than returning a default.  That is not
+         * fussiness: upstream's own `register_grad_event` branches on
+         * `hasattr(event, 'shape_IDs')` and would believe ids belonging to a
+         * different sequence's libraries if the attribute always existed.
+         */
+        PyObject* compat_id;
+        PyObject* compat_shape_ids;
     };
 
 /* Every event derives from Event, so none of them is standard-layout and
@@ -212,6 +234,25 @@ namespace pulseqpp_types
     /** A field's offset from the head of the instance. */
 #define PULSEQPP_FIELD(EventType, member) \
     (static_cast<Py_ssize_t>(offsetof(Holder<EventType>, event) + offsetof(EventType, member)))
+
+    /** The same, for a field of the holder rather than of the event. */
+#define PULSEQPP_HOLDER_FIELD(EventType, member) \
+    (static_cast<Py_ssize_t>(offsetof(Holder<EventType>, member)))
+
+/**
+ * `id` and `shape_IDs`, the two attributes PyPulseq's `register_*_event`
+ * protocol assigns to an event.  `Py_T_OBJECT_EX` is what gives them
+ * ordinary attribute behaviour: unset reads raise AttributeError, so
+ * `hasattr` answers False until something assigns, which is what upstream's
+ * own registration branches on.
+ */
+#define PULSEQPP_COMPAT_MEMBERS(EventType)                                             \
+    {"id", Py_T_OBJECT_EX, PULSEQPP_HOLDER_FIELD(EventType, compat_id), 0,             \
+     PyDoc_STR("Set by PyPulseq's register_*_event protocol; not read here.")},        \
+    {                                                                                  \
+        "shape_IDs", Py_T_OBJECT_EX, PULSEQPP_HOLDER_FIELD(EventType, compat_shape_ids), 0, \
+            PyDoc_STR("Set by PyPulseq's register_*_event protocol; not read here.")   \
+    }
 
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop

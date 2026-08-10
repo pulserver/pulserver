@@ -51,7 +51,31 @@ documents every label and what it means.
    pulserver.pypulseq.make_label
 ```
 
-Timing is validated with `Sequence.check_timing()`.
+`Sequence` carries upstream's full method surface, but the analysis half of
+it — `plot`, `calculate_kspace`, `waveforms`, `check_timing`, `test_report`,
+`calculate_pns` and the rest — is not ported yet and raises
+`NotImplementedError` with upstream's signature. The scan structure those
+rest on belongs to the module and scan-loop layer above this one.
+
+## Positioning the volume
+
+`TransformFOV` moves, turns and resizes the imaging volume of a sequence that
+has already been designed — a port of MATLAB Pulseq's `mr.TransformFOV`, which
+upstream PyPulseq has no equivalent of. A translation becomes phase on the RF
+and ADC, computed in C++ from absolute k; a rotation is attached as a
+`ROTATIONS` extension rather than baked into new waveforms, so one waveform
+still serves every orientation; a scale multiplies the amplitude a gradient
+row carries and leaves its shape alone. `NOSCL`, `NOPOS` and `NOROT` exempt
+the blocks that carry them, and a block range confines the whole thing to one
+module. `Sequence.transform_fov()` is the shorthand for its commonest use.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/pypulseq
+   :nosignatures:
+
+   pulserver.pypulseq.TransformFOV
+```
 
 ## Event factories
 

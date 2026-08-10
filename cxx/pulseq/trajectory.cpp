@@ -473,15 +473,20 @@ namespace pulseq
     }  // namespace
 
     void apply_fov_shift(Sequence& seq, const std::array<double, 3>& shift_m,
-                         FovShiftScope scope)
+                         FovShiftScope scope, int first, int last)
     {
         if (shift_m[0] == 0.0 && shift_m[1] == 0.0 && shift_m[2] == 0.0)
             return;
 
+        /* Absolute k is accumulated over the whole sequence even when only
+         * part of it is being shifted -- see the header. */
         const std::vector<std::array<double, 3>> origins = block_k_origins(seq);
         const int blocks = seq.num_blocks();
 
-        for (int b = 1; b <= blocks; ++b)
+        const int from = std::max(first, 1);
+        const int to = (last <= 0) ? blocks : std::min(last, blocks);
+
+        for (int b = from; b <= to; ++b)
         {
             Block block = seq.get_block(b);
             if (block.rf <= 0 && block.adc <= 0)
@@ -604,6 +609,73 @@ namespace pulseq
                     seq.set_block(b, block);
                 }
             }
+        }
+    }
+
+    /* ================================================================== */
+    /*  FOV scale                                                         */
+    /* ================================================================== */
+
+    void apply_fov_scale(Sequence& seq, const std::array<double, 3>& scale, int first, int last)
+    {
+        if (scale[0] == 1.0 && scale[1] == 1.0 && scale[2] == 1.0)
+            return;
+
+        const int blocks = seq.num_blocks();
+        const int from = std::max(first, 1);
+        const int to = (last <= 0) ? blocks : std::min(last, blocks);
+
+        for (int b = from; b <= to; ++b)
+        {
+            Block block = seq.get_block(b);
+            int32_t* axes[3] = {&block.gx, &block.gy, &block.gz};
+
+            bool changed = false;
+            for (int a = 0; a < 3; ++a)
+            {
+                const double factor = scale[static_cast<size_t>(a)];
+                const int32_t id = *axes[a];
+                if (factor == 1.0 || id <= 0)
+                    continue;
+
+                const int row_index = seq.grad_row(static_cast<int>(id));
+                switch (seq.grad_kind(static_cast<int>(id)))
+                {
+                case GradKind::Trap:
+                {
+                    double row[TRAP_WIDTH];
+                    const double* existing = seq.trap_library().row(row_index);
+                    for (int c = 0; c < TRAP_WIDTH; ++c)
+                        row[c] = existing[c];
+                    row[0] *= factor;  // amplitude; the timings are untouched
+                    *axes[a] = static_cast<int32_t>(seq.register_trap(row));
+                    changed = true;
+                    break;
+                }
+                case GradKind::Arbitrary:
+                {
+                    double row[ARB_WIDTH];
+                    const double* existing = seq.arb_library().row(row_index);
+                    for (int c = 0; c < ARB_WIDTH; ++c)
+                        row[c] = existing[c];
+                    /* Amplitude and the two endpoint values, which are stored
+                     * absolute rather than normalised.  The shape ids in
+                     * columns 3 and 4 are carried over untouched -- that is
+                     * the whole point of scaling here. */
+                    row[0] *= factor;
+                    row[1] *= factor;
+                    row[2] *= factor;
+                    *axes[a] = static_cast<int32_t>(seq.register_arbitrary(row));
+                    changed = true;
+                    break;
+                }
+                case GradKind::None:
+                    break;
+                }
+            }
+
+            if (changed)
+                seq.set_block(b, block);
         }
     }
 

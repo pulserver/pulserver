@@ -53,6 +53,12 @@ namespace
         b.duration = 100e-6 + flat + 100e-6;
         return seq.add_block(b);
     }
+
+    /* The trapezoid row block 1's gx points at. */
+    int seq_first_trap(const Sequence& seq)
+    {
+        return seq.grad_row(seq.get_block(1).gx);
+    }
 }  // namespace
 
 /* ================================================================== */
@@ -660,6 +666,168 @@ TEST(PulseqFovShift, ShiftAlongAnAxisWithNoGradientDoesNothing)
     const double* row = seq.adc_library().row(seq.get_block(blk).adc);
     EXPECT_DOUBLE_EQ(row[5], 0.0);
     EXPECT_DOUBLE_EQ(row[6], 0.0);
+}
+
+/* ================================================================== */
+/*  The block range                                                    */
+/* ================================================================== */
+
+TEST(PulseqFovShift, ABlockRangeLeavesTheBlocksOutsideItAlone)
+{
+    Sequence seq;
+    const int first = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    const int second = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    const int third = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    const int32_t before = seq.get_block(third).adc;
+
+    pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfAndAdc, second,
+                            second);
+
+    /* The one asked for moved; neither of its neighbours did, and they still
+     * point at the row they always did. */
+    EXPECT_NE(seq.adc_library().row(seq.get_block(second).adc)[5], 0.0);
+    EXPECT_EQ(seq.get_block(third).adc, before);
+    EXPECT_DOUBLE_EQ(seq.adc_library().row(seq.get_block(first).adc)[5], 0.0);
+    EXPECT_DOUBLE_EQ(seq.adc_library().row(seq.get_block(third).adc)[5], 0.0);
+}
+
+TEST(PulseqFovShift, ARangedShiftGivesTheSamePhaseAsShiftingEverything)
+{
+    /* The point of accumulating k from block 1 regardless of the range: a
+     * readout's phase must not depend on where the caller drew the boundary. */
+    const auto phase_of = [](int first, int last) {
+        Sequence seq;
+        add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+        const int probe = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+        pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfAndAdc, first,
+                                last);
+        return seq.adc_library().row(seq.get_block(probe).adc)[6];
+    };
+
+    EXPECT_DOUBLE_EQ(phase_of(2, 2), phase_of(1, 0));
+}
+
+TEST(PulseqFovShift, LastOfZeroMeansToTheEnd)
+{
+    Sequence seq;
+    add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    const int last_block = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+
+    pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfAndAdc, 2, 0);
+
+    EXPECT_NE(seq.adc_library().row(seq.get_block(last_block).adc)[5], 0.0);
+}
+
+/* ================================================================== */
+/*  FOV scale                                                          */
+/* ================================================================== */
+
+TEST(PulseqFovScale, ScalesTheAmplitudeAndRegistersNoShape)
+{
+    Sequence seq;
+    const int blk = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    const int shapes_before = seq.shape_library().size();
+
+    pulseq::apply_fov_scale(seq, {0.5, 1.0, 1.0});
+
+    const double* row = seq.trap_library().row(seq.grad_row(seq.get_block(blk).gx));
+    EXPECT_DOUBLE_EQ(row[0], 25000.0);
+    /* The timings are untouched -- a scaled gradient is the same shape. */
+    EXPECT_DOUBLE_EQ(row[1], 100e-6);
+    EXPECT_DOUBLE_EQ(row[2], 640e-6);
+    EXPECT_DOUBLE_EQ(row[3], 100e-6);
+    EXPECT_EQ(seq.shape_library().size(), shapes_before);
+}
+
+TEST(PulseqFovScale, ScalesAnArbitraryGradientWithoutTouchingItsWaveform)
+{
+    Sequence seq;
+    const std::vector<double> wave{0.0, 0.5, 1.0, 0.5, 0.0};
+    const int shape = seq.register_shape(static_cast<int>(wave.size()), wave.data(),
+                                         static_cast<int>(wave.size()));
+    /* amplitude, first, last, amp_shape, time_shape, delay */
+    const std::array<double, pulseq::ARB_WIDTH> arb{10000.0, 100.0, 200.0,
+                                                    static_cast<double>(shape), 0.0, 0.0};
+    Block b;
+    b.gx = seq.register_arbitrary(arb.data());
+    b.duration = 50e-6;
+    const int blk = seq.add_block(b);
+
+    pulseq::apply_fov_scale(seq, {2.0, 1.0, 1.0});
+
+    const double* row = seq.arb_library().row(seq.grad_row(seq.get_block(blk).gx));
+    EXPECT_DOUBLE_EQ(row[0], 20000.0);
+    /* `first` and `last` are absolute, so they scale with the amplitude. */
+    EXPECT_DOUBLE_EQ(row[1], 200.0);
+    EXPECT_DOUBLE_EQ(row[2], 400.0);
+    /* The waveform is shared, not copied. */
+    EXPECT_EQ(static_cast<int>(row[3]), shape);
+}
+
+TEST(PulseqFovScale, ZeroFlattensAnAxisAndOtherAxesAreUntouched)
+{
+    Sequence seq;
+    const auto g = trap(50000.0, 640e-6);
+    Block b;
+    b.gx = seq.register_trap(g.data());
+    b.gy = seq.register_trap(g.data());
+    b.duration = 840e-6;
+    const int blk = seq.add_block(b);
+
+    pulseq::apply_fov_scale(seq, {0.0, 1.0, 1.0});
+
+    const Block after = seq.get_block(blk);
+    EXPECT_DOUBLE_EQ(seq.trap_library().row(seq.grad_row(after.gx))[0], 0.0);
+    EXPECT_DOUBLE_EQ(seq.trap_library().row(seq.grad_row(after.gy))[0], 50000.0);
+}
+
+TEST(PulseqFovScale, HonoursTheBlockRangeAndUnitScaleIsANoOp)
+{
+    Sequence seq;
+    const int first = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    const int second = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    const int32_t untouched = seq.get_block(first).gx;
+
+    pulseq::apply_fov_scale(seq, {0.5, 1.0, 1.0}, second, second);
+
+    EXPECT_EQ(seq.get_block(first).gx, untouched);
+    EXPECT_DOUBLE_EQ(seq.trap_library().row(seq.grad_row(seq.get_block(first).gx))[0], 50000.0);
+    EXPECT_DOUBLE_EQ(seq.trap_library().row(seq.grad_row(seq.get_block(second).gx))[0], 25000.0);
+
+    const int32_t before = seq.get_block(second).gx;
+    pulseq::apply_fov_scale(seq, {1.0, 1.0, 1.0});
+    EXPECT_EQ(seq.get_block(second).gx, before);
+}
+
+/* ================================================================== */
+/*  Copying                                                            */
+/* ================================================================== */
+
+TEST(PulseqSequenceCopy, TheCopyAndTheOriginalDivergeIndependently)
+{
+    Sequence original;
+    add_readout(original, 50000.0, 640e-6, 10e-6, 64);
+    original.set_definition("Name", pulseq::Definition(std::string("original")));
+
+    Sequence copy = original;
+
+    EXPECT_EQ(copy.num_blocks(), 1);
+    EXPECT_EQ(copy.definition("Name")->text(), "original");
+
+    /* Growing one leaves the other where it was ... */
+    add_readout(copy, 50000.0, 640e-6, 10e-6, 64);
+    EXPECT_EQ(copy.num_blocks(), 2);
+    EXPECT_EQ(original.num_blocks(), 1);
+
+    add_readout(original, 50000.0, 640e-6, 10e-6, 64);
+    add_readout(original, 50000.0, 640e-6, 10e-6, 64);
+    EXPECT_EQ(original.num_blocks(), 3);
+    EXPECT_EQ(copy.num_blocks(), 2);
+
+    /* ... and so does transforming it. */
+    pulseq::apply_fov_scale(copy, {0.5, 1.0, 1.0});
+    EXPECT_DOUBLE_EQ(copy.trap_library().row(seq_first_trap(copy))[0], 25000.0);
+    EXPECT_DOUBLE_EQ(original.trap_library().row(seq_first_trap(original))[0], 50000.0);
 }
 
 /* ================================================================== */

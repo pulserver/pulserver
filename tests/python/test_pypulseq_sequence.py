@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 import matplotlib
 import numpy as np
 import pulserver.pypulseq as pp
@@ -99,37 +101,19 @@ def test_deduplication_leaves_the_columns_at_the_precision_the_file_writes(seq, 
     assert seq.num_blocks == 16
 
 
-def test_a_rotation_is_resolved_into_the_gradients_of_a_window(seq):
-    window = seq._decode_window(11, 11)  # third repetition, rotated 60 degrees
-    rotated = window.get_block(1)
-    # A rotated trapezoid is no longer a trapezoid, and it now has a y component.
-    assert rotated.gx.type == "grad"
-    assert rotated.gy is not None
+def test_the_version_is_the_one_the_writers_emit(seq):
+    assert (seq.version_major, seq.version_minor, seq.version_revision) == (1, 5, 0)
 
 
-def test_a_time_range_picks_the_blocks_that_overlap_it(seq):
-    first, last = seq.block_range_of(time_range=(0.0, 0.01))
-    assert first == 1
-    edges = np.concatenate(([0.0], np.cumsum(seq.block_durations)))
-    assert edges[last - 1] < 0.01  # the last block starts inside the interval
+def test_a_clone_and_its_source_diverge_independently(seq):
+    copy = seq._clone()
+    assert copy.num_blocks == seq.num_blocks
 
+    seq.add_block(pp.make_delay(1e-3))
+    assert copy.num_blocks == 16 and seq.num_blocks == 17
 
-def test_a_window_can_only_be_asked_for_one_way(seq):
-    with pytest.raises(ValueError, match="one of tr_index"):
-        seq.block_range_of(time_range=(0.0, 0.01), block_range=(1, 2))
-    with pytest.raises(ValueError, match=r"outside 1\.\.16"):
-        seq.block_range_of(block_range=(1, 99))
-
-
-def test_the_analysis_methods_run_on_the_window_they_are_given(seq):
-    at_adc, whole, *_ = seq.calculate_kspace(block_range=(3, 3))
-    assert at_adc.shape == (3, 128)
-    assert whole.shape[0] == 3 and whole.shape[1] > at_adc.shape[1]
-    assert len(seq.waveforms(block_range=(1, 4))) == 3
-    assert seq.test_report(block_range=(1, 4)).startswith("Number of blocks: 4")
-    passed, report = seq.check_timing(block_range=(1, 2))
-    assert passed is (len(report) == 0)
-    seq.plot(block_range=(1, 4))
+    copy.set_definition("Name", "the copy")
+    assert seq.get_definition("Name") is None
 
 
 def test_a_written_sequence_reads_back_to_the_same_bytes(seq, tmp_path):
@@ -204,24 +188,162 @@ def test_scaling_an_rf_amplitude_costs_no_extra_shape(system):
 
 
 @pytest.mark.parametrize(
-    "name", ["payload", "tr_info", "num_trs", "tr_duration", "segments", "_collection"]
-)
-def test_the_scan_structure_properties_say_they_are_not_here_yet(seq, name):
-    with pytest.raises(NotImplementedError, match="scan structure"):
-        getattr(seq, name)
-
-
-@pytest.mark.parametrize(
-    ("name", "args"),
+    "name",
     [
-        ("tr_block_range", (0,)),
-        ("segment", (0,)),
-        ("pns", ()),
-        ("mech_resonances", ()),
-        ("grad_spectrum", ()),
-        ("plot_kspace", ()),
+        "payload",
+        "tr_info",
+        "num_trs",
+        "tr_duration",
+        "tr_block_range",
+        "segments",
+        "segment",
+        "pns",
+        "mech_resonances",
+        "grad_spectrum",
+        "plot_kspace",
+        "block_range_of",
+        "_collection",
     ],
 )
-def test_the_scan_structure_methods_say_they_are_not_here_yet(seq, name, args):
-    with pytest.raises(NotImplementedError, match="scan structure"):
-        getattr(seq, name)(*args)
+def test_the_scan_structure_placeholders_are_gone_rather_than_stubbed(name):
+    """They belong to the layer above; this class does not stand in for it."""
+    assert not hasattr(pp.Sequence, name)
+
+
+#: Every method that carries upstream's signature but not its implementation
+#: yet, with arguments named the way upstream names them -- so the call itself
+#: proves the signature matches, and the exception proves it is still a stub.
+_NOT_PORTED = [
+    ("plot", (), {"label": "LIN", "time_range": (0, 1), "time_disp": "ms"}),
+    ("calculate_kspace", (), {"trajectory_delay": 0.0, "gradient_offset": 0.0}),
+    ("waveforms", (), {"append_RF": True, "time_range": [0.0, 1.0]}),
+    ("waveforms_and_times", (), {"append_RF": False, "time_range": None}),
+    ("check_timing", (), {"print_errors": True}),
+    ("test_report", (), {}),
+    ("calculate_pns", (None,), {"time_range": None, "do_plots": False}),
+    ("calculate_gradient_spectrum", (), {"max_frequency": 1000.0, "combine_mode": "sos"}),
+    ("evaluate_labels", (), {"init": None, "evolution": "adc"}),
+    ("apply_soft_delay", (), {"TE": 40e-3}),
+    ("flip_grad_axis", ("x",), {}),
+    ("mod_grad_axis", (), {"axis": "y", "modifier": 0.5}),
+    ("find_block_by_time", (), {"t": 0.01}),
+]
+
+
+@pytest.mark.parametrize(("name", "args", "kwargs"), _NOT_PORTED, ids=[n for n, _, _ in _NOT_PORTED])
+def test_the_unported_methods_take_upstreams_arguments_and_say_they_are_stubs(
+    seq, name, args, kwargs
+):
+    with pytest.raises(NotImplementedError, match="no implementation"):
+        getattr(seq, name)(*args, **kwargs)
+
+
+@pytest.mark.parametrize("name", [name for name, _, _ in _NOT_PORTED])
+def test_the_unported_methods_have_upstreams_signature_exactly(name):
+    ours = inspect.signature(getattr(pp.Sequence, name))
+    theirs = inspect.signature(getattr(upstream.Sequence, name))
+    assert [(p.name, p.default) for p in ours.parameters.values()] == [
+        (p.name, p.default) for p in theirs.parameters.values()
+    ]
+
+
+# %% upstream's register_*_event protocol
+
+
+def test_the_upstream_registration_idiom_runs_unchanged(system, events):
+    """`gx.id = seq.register_grad_event(gx)` -- writeGradientEcho3D.m's opening."""
+    built = pp.Sequence(system=system)
+    gx, gy, rf, adc = events["gx"], events["gy"], events["rf"], events["adc"]
+
+    gx.id = built.register_grad_event(gx)
+    gy.id = built.register_grad_event(gy)
+    _, rf.shape_IDs = built.register_rf_event(rf)
+    adc.id = built.register_adc_event(adc)
+
+    built.add_block(gx, gy, adc)
+    assert built.num_blocks == 1
+
+
+@pytest.mark.parametrize("name", ["id", "shape_IDs"])
+def test_the_registration_attributes_are_absent_until_assigned(events, name):
+    """`hasattr` must answer False: upstream's own registration branches on it,
+    and would otherwise trust shape ids belonging to another sequence."""
+    event = events["gx"]
+    assert not hasattr(event, name)
+
+    setattr(event, name, [3, 4])
+    assert getattr(event, name) == [3, 4]  # and reads back what was set
+
+    delattr(event, name)
+    assert not hasattr(event, name)
+
+
+def test_pre_registering_registers_the_shape_exactly_once(system, events):
+    """The point: the block loop must not register the waveform a second time."""
+    built = pp.Sequence(system=system)
+    gy = events["gy"]
+
+    _, shapes = built.register_grad_event(gy)
+    after_registering = built._native.num_shapes()
+    assert shapes[0] > 0  # a real shape id, not a placeholder
+
+    for _ in range(4):
+        built.add_block(gy)
+    assert built._native.num_shapes() == after_registering
+
+
+def test_pre_registering_does_not_change_the_sequence(system, events):
+    """Ids are issued in a different order; nothing a block plays moves."""
+
+    def build(preregister):
+        built = pp.Sequence(system=system)
+        gx, gy, rf, adc = events["gx"], events["gy"], events["rf"], events["adc"]
+        if preregister:
+            gx.id = built.register_grad_event(gx)
+            _, rf.shape_IDs = built.register_rf_event(rf)
+        for _ in range(3):
+            built.add_block(rf)
+            built.add_block(gx, gy, adc)
+        built.remove_duplicates()
+        return built
+
+    plain, pre = build(False), build(True)
+    assert (plain.num_blocks, plain._native.num_shapes()) == (
+        pre.num_blocks,
+        pre._native.num_shapes(),
+    )
+    for index in range(1, plain.num_blocks + 1):
+        one, other = plain.get_block(index), pre.get_block(index)
+        assert one.block_duration == other.block_duration
+        np.testing.assert_allclose(one.gy.waveform if one.gy else 0, other.gy.waveform if other.gy else 0)
+        assert (one.rf is None) == (other.rf is None)
+        if one.rf is not None:
+            np.testing.assert_allclose(one.rf.signal, other.rf.signal, rtol=1e-12)
+
+
+def test_a_trapezoid_and_a_label_have_no_shape_to_register(system, events):
+    built = pp.Sequence(system=system)
+    assert built.register_grad_event(events["gx"]) == 0  # trapezoid: bare id
+    assert built.register_label_event(pp.make_label(type="SET", label="LIN", value=0)) == 0
+    assert built._native.num_shapes() == 0
+
+
+def test_an_upstream_namespace_event_can_be_pre_registered_too(system):
+    """The other event flavour: memoized on the identity of its array."""
+    built = pp.Sequence(system=system)
+    plain = upstream.make_arbitrary_grad(
+        channel="y", waveform=np.sin(np.linspace(0, np.pi, 64)) * 1e5, system=system
+    )
+
+    _, shapes = built.register_grad_event(plain)
+    assert shapes[0] > 0
+    registered = built._native.num_shapes()
+
+    built.add_block(plain)
+    assert built._native.num_shapes() == registered
+
+
+def test_calculate_kspace_pp_is_deprecated_outright(seq):
+    """Upstream warns and forwards; here the deprecated spelling is an error."""
+    with pytest.raises(DeprecationWarning, match="use calculate_kspace instead"):
+        seq.calculate_kspacePP()

@@ -442,40 +442,45 @@ namespace pulseqpp_events
     /*  The fast path: events that are already unpacked                   */
     /* ================================================================== */
 
+    /** Register a typed RF event's shapes, unless this sequence already has them. */
+    inline void warm_rf(BoundSequence& seq, pulseq::RfEvent& e)
+    {
+        if (e.registered.known_to(seq.serial))
+            return;
+
+        const int count = static_cast<int>(e.magnitude.size());
+        const int32_t magnitude =
+            static_cast<int32_t>(seq.register_raw_shape(e.magnitude.data(), count));
+        e.phase_shape = static_cast<int32_t>(
+            seq.register_raw_shape(e.phase.data(), static_cast<int>(e.phase.size())));
+
+        int32_t time_shape = 0;
+        if (!e.t.empty())
+        {
+            const double raster = seq.rf_raster_time();
+            bool on_raster = static_cast<int>(e.t.size()) == count;
+            for (int i = 0; on_raster && i < count; ++i)
+            {
+                if (std::floor(e.t[static_cast<size_t>(i)] / raster) != static_cast<double>(i))
+                    on_raster = false;
+            }
+            if (!on_raster)
+            {
+                std::vector<double> ticks(e.t.size());
+                for (size_t i = 0; i < e.t.size(); ++i)
+                    ticks[i] = e.t[i] / raster;
+                time_shape = static_cast<int32_t>(
+                    seq.register_raw_shape(ticks.data(), static_cast<int>(ticks.size())));
+            }
+        }
+        e.registered.note(seq.serial, magnitude, time_shape);
+    }
+
     /** Register a typed RF event, reusing its shapes if this sequence made them. */
     inline void take_rf(BoundSequence& seq, pulseq::RfEvent& e, pulseq::Block& block,
                         double& duration)
     {
-        if (!e.registered.known_to(seq.serial))
-        {
-            const int count = static_cast<int>(e.magnitude.size());
-            const int32_t magnitude =
-                static_cast<int32_t>(seq.register_raw_shape(e.magnitude.data(), count));
-            e.phase_shape = static_cast<int32_t>(
-                seq.register_raw_shape(e.phase.data(), static_cast<int>(e.phase.size())));
-
-            int32_t time_shape = 0;
-            if (!e.t.empty())
-            {
-                const double raster = seq.rf_raster_time();
-                bool on_raster = static_cast<int>(e.t.size()) == count;
-                for (int i = 0; on_raster && i < count; ++i)
-                {
-                    if (std::floor(e.t[static_cast<size_t>(i)] / raster) !=
-                        static_cast<double>(i))
-                        on_raster = false;
-                }
-                if (!on_raster)
-                {
-                    std::vector<double> ticks(e.t.size());
-                    for (size_t i = 0; i < e.t.size(); ++i)
-                        ticks[i] = e.t[i] / raster;
-                    time_shape = static_cast<int32_t>(
-                        seq.register_raw_shape(ticks.data(), static_cast<int>(ticks.size())));
-                }
-            }
-            e.registered.note(seq.serial, magnitude, time_shape);
-        }
+        warm_rf(seq, e);
 
         const double row[pulseq::RF_WIDTH] = {
             e.amplitude,
@@ -492,46 +497,52 @@ namespace pulseqpp_events
         duration = std::max(duration, e.duration());
     }
 
+    /** Register a typed gradient's shapes, unless this sequence already has them. */
+    inline void warm_grad(BoundSequence& seq, pulseq::GradEvent& e)
+    {
+        if (e.registered.known_to(seq.serial))
+            return;
+
+        const int count = static_cast<int>(e.waveform.size());
+        const int32_t shape =
+            static_cast<int32_t>(seq.register_raw_shape(e.waveform.data(), count));
+
+        // 0 is the standard raster, -1 the half-raster variant, and only
+        // a grid that is neither becomes a shape of its own.
+        int32_t time_shape = 0;
+        if (!e.tt.empty())
+        {
+            const double raster = seq.grad_raster_time();
+            bool standard = static_cast<int>(e.tt.size()) == count;
+            bool half = standard;
+            for (int i = 0; (standard || half) && i < count; ++i)
+            {
+                const double ticks = e.tt[static_cast<size_t>(i)] / raster;
+                if (std::fabs(ticks - (i + 0.5)) > 1e-9)
+                    standard = false;
+                if (std::fabs(ticks - 0.5 * (i + 1)) > 1e-9)
+                    half = false;
+            }
+            if (half)
+            {
+                time_shape = -1;
+            }
+            else if (!standard)
+            {
+                std::vector<double> ticks(e.tt.size());
+                for (size_t i = 0; i < e.tt.size(); ++i)
+                    ticks[i] = e.tt[i] / raster;
+                time_shape = static_cast<int32_t>(
+                    seq.register_raw_shape(ticks.data(), static_cast<int>(ticks.size())));
+            }
+        }
+        e.registered.note(seq.serial, shape, time_shape);
+    }
+
     inline void take_grad(BoundSequence& seq, pulseq::GradEvent& e, pulseq::Block& block,
                           double& duration)
     {
-        if (!e.registered.known_to(seq.serial))
-        {
-            const int count = static_cast<int>(e.waveform.size());
-            const int32_t shape =
-                static_cast<int32_t>(seq.register_raw_shape(e.waveform.data(), count));
-
-            // 0 is the standard raster, -1 the half-raster variant, and only
-            // a grid that is neither becomes a shape of its own.
-            int32_t time_shape = 0;
-            if (!e.tt.empty())
-            {
-                const double raster = seq.grad_raster_time();
-                bool standard = static_cast<int>(e.tt.size()) == count;
-                bool half = standard;
-                for (int i = 0; (standard || half) && i < count; ++i)
-                {
-                    const double ticks = e.tt[static_cast<size_t>(i)] / raster;
-                    if (std::fabs(ticks - (i + 0.5)) > 1e-9)
-                        standard = false;
-                    if (std::fabs(ticks - 0.5 * (i + 1)) > 1e-9)
-                        half = false;
-                }
-                if (half)
-                {
-                    time_shape = -1;
-                }
-                else if (!standard)
-                {
-                    std::vector<double> ticks(e.tt.size());
-                    for (size_t i = 0; i < e.tt.size(); ++i)
-                        ticks[i] = e.tt[i] / raster;
-                    time_shape = static_cast<int32_t>(
-                        seq.register_raw_shape(ticks.data(), static_cast<int>(ticks.size())));
-                }
-            }
-            e.registered.note(seq.serial, shape, time_shape);
-        }
+        warm_grad(seq, e);
 
         const double row[pulseq::ARB_WIDTH] = {
             e.amplitude,
@@ -552,15 +563,20 @@ namespace pulseqpp_events
                                           seq.grad_raster_time());
     }
 
+    /** Register a typed ADC's phase-modulation shape, if it has one. */
+    inline void warm_adc(BoundSequence& seq, pulseq::AdcEvent& e)
+    {
+        if (e.phase_modulation.empty() || e.registered.known_to(seq.serial))
+            return;
+        const int32_t shape = static_cast<int32_t>(seq.register_raw_shape(
+            e.phase_modulation.data(), static_cast<int>(e.phase_modulation.size())));
+        e.registered.note(seq.serial, shape, 0);
+    }
+
     inline void take_adc(BoundSequence& seq, pulseq::AdcEvent& e, pulseq::Block& block,
                          double& duration)
     {
-        if (!e.phase_modulation.empty() && !e.registered.known_to(seq.serial))
-        {
-            const int32_t shape = static_cast<int32_t>(seq.register_raw_shape(
-                e.phase_modulation.data(), static_cast<int>(e.phase_modulation.size())));
-            e.registered.note(seq.serial, shape, 0);
-        }
+        warm_adc(seq, e);
         const double row[pulseq::ADC_WIDTH] = {
             e.num_samples,
             e.dwell,
@@ -963,6 +979,81 @@ namespace pulseqpp_events
             duration = std::ceil(duration / block_raster - 1e-12) * block_raster;
         block.duration = duration;
         return block;
+    }
+
+    /* ================================================================== */
+    /*  Pre-registration -- upstream's register_*_event                    */
+    /* ================================================================== */
+
+    /**
+     * Register one event's *shapes* into @p seq without adding a block, and
+     * report the ids.
+     *
+     * This is the half of upstream's `register_*_event` that means something
+     * here.  The other half -- an event-library row id -- is deliberately not
+     * produced: rows are appended per block and renumbered by
+     * `remove_duplicates`, so there is no id to hand out that would still be
+     * true afterwards.
+     *
+     * Doing it early is not a saving on its own; the same shapes would be
+     * registered by the first `add_block` and memoized identically.  What it
+     * buys is what upstream's API is for -- the cost lands here rather than on
+     * whichever loop iteration happened to come first.
+     *
+     * Works for both event flavours: a slotted event memoizes on itself
+     * (`Event::registered`, keyed by this sequence's serial), a namespace one
+     * on the identity of the array behind it (`BoundSequence::shape_ids`).
+     */
+    inline std::vector<int32_t> warm_event(BoundSequence& seq, const py::handle& event)
+    {
+        if (pulseqpp_types::is_event(event.ptr()))
+        {
+            pulseq::Event* base = pulseqpp_types::event_of(event.ptr());
+            switch (base->kind)
+            {
+                case pulseq::EventKind::Rf:
+                {
+                    auto& e = *static_cast<pulseq::RfEvent*>(base);
+                    warm_rf(seq, e);
+                    return {e.registered.shape, e.phase_shape, e.registered.time_shape};
+                }
+                case pulseq::EventKind::Grad:
+                {
+                    auto& e = *static_cast<pulseq::GradEvent*>(base);
+                    warm_grad(seq, e);
+                    return {e.registered.shape, e.registered.time_shape};
+                }
+                case pulseq::EventKind::Adc:
+                {
+                    auto& e = *static_cast<pulseq::AdcEvent*>(base);
+                    warm_adc(seq, e);
+                    return {e.registered.shape};
+                }
+                default:
+                    // A trapezoid, label, trigger, rotation or delay carries no
+                    // waveform, so there is nothing to warm.
+                    return {};
+            }
+        }
+
+        // A namespace event: which shapes it has is told by which fields it has.
+        const Names& n = names();
+        const py::object holder = fields(event);
+        PyObject* dict = holder.ptr();
+
+        if (field(dict, n.signal))
+        {
+            int32_t shapes[3] = {0, 0, 0};
+            register_rf_shapes(seq, dict, seq.rf_raster_time(), shapes);
+            return {shapes[0], shapes[1], shapes[2]};
+        }
+        if (field(dict, n.waveform))
+        {
+            int32_t shapes[2] = {0, 0};
+            register_grad_shapes(seq, dict, seq.grad_raster_time(), shapes);
+            return {shapes[0], shapes[1]};
+        }
+        return {};
     }
 
 }  // namespace pulseqpp_events

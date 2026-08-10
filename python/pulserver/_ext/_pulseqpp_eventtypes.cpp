@@ -23,6 +23,7 @@
 #define Py_T_DOUBLE T_DOUBLE
 #define Py_T_INT T_INT
 #define Py_T_BOOL T_BOOL
+#define Py_T_OBJECT_EX T_OBJECT_EX
 #endif
 
 namespace pulseqpp_types
@@ -142,14 +143,22 @@ namespace pulseqpp_types
             PyObject* self = type->tp_alloc(type, 0);
             if (!self)
                 return nullptr;
-            new (&reinterpret_cast<Holder<T>*>(self)->event) T();
+            Holder<T>* holder = reinterpret_cast<Holder<T>*>(self);
+            new (&holder->event) T();
+            // tp_alloc zeroes, but say it: Py_T_OBJECT_EX reads null as
+            // "no such attribute", so this is what makes hasattr False.
+            holder->compat_id = nullptr;
+            holder->compat_shape_ids = nullptr;
             return self;
         }
 
         template <typename T>
         void generic_dealloc(PyObject* self)
         {
-            reinterpret_cast<Holder<T>*>(self)->event.~T();
+            Holder<T>* holder = reinterpret_cast<Holder<T>*>(self);
+            Py_CLEAR(holder->compat_id);
+            Py_CLEAR(holder->compat_shape_ids);
+            holder->event.~T();
             Py_TYPE(self)->tp_free(self);
         }
 
@@ -232,6 +241,7 @@ namespace pulseqpp_types
             {"phase_ppm", Py_T_DOUBLE, PULSEQPP_FIELD(RfEvent, phase_ppm), 0, nullptr},
             {"dead_time", Py_T_DOUBLE, PULSEQPP_FIELD(RfEvent, dead_time), 0, nullptr},
             {"ringdown_time", Py_T_DOUBLE, PULSEQPP_FIELD(RfEvent, ringdown_time), 0, nullptr},
+            PULSEQPP_COMPAT_MEMBERS(RfEvent),
             {nullptr, 0, 0, 0, nullptr}};
 
         PyGetSetDef rf_getset[] = {
@@ -287,6 +297,7 @@ namespace pulseqpp_types
             {"flat_time", Py_T_DOUBLE, PULSEQPP_FIELD(TrapEvent, flat_time), 0, nullptr},
             {"fall_time", Py_T_DOUBLE, PULSEQPP_FIELD(TrapEvent, fall_time), 0, nullptr},
             {"delay", Py_T_DOUBLE, PULSEQPP_FIELD(TrapEvent, delay), 0, nullptr},
+            PULSEQPP_COMPAT_MEMBERS(TrapEvent),
             {nullptr, 0, 0, 0, nullptr}};
 
         PyGetSetDef trap_getset[] = {
@@ -364,6 +375,7 @@ namespace pulseqpp_types
             {"first", Py_T_DOUBLE, PULSEQPP_FIELD(GradEvent, first), 0, nullptr},
             {"last", Py_T_DOUBLE, PULSEQPP_FIELD(GradEvent, last), 0, nullptr},
             {"delay", Py_T_DOUBLE, PULSEQPP_FIELD(GradEvent, delay), 0, nullptr},
+            PULSEQPP_COMPAT_MEMBERS(GradEvent),
             {nullptr, 0, 0, 0, nullptr}};
 
         PyGetSetDef grad_getset[] = {
@@ -412,6 +424,7 @@ namespace pulseqpp_types
             {"freq_ppm", Py_T_DOUBLE, PULSEQPP_FIELD(AdcEvent, freq_ppm), 0, nullptr},
             {"phase_ppm", Py_T_DOUBLE, PULSEQPP_FIELD(AdcEvent, phase_ppm), 0, nullptr},
             {"dead_time", Py_T_DOUBLE, PULSEQPP_FIELD(AdcEvent, dead_time), 0, nullptr},
+            PULSEQPP_COMPAT_MEMBERS(AdcEvent),
             {nullptr, 0, 0, 0, nullptr}};
 
         PyGetSetDef adc_getset[] = {
@@ -451,6 +464,7 @@ namespace pulseqpp_types
         PyMemberDef label_members[] = {
             {"value", Py_T_INT, PULSEQPP_FIELD(LabelEvent, value), 0, nullptr},
             {"setting", Py_T_BOOL, PULSEQPP_FIELD(LabelEvent, setting), 0, nullptr},
+            PULSEQPP_COMPAT_MEMBERS(LabelEvent),
             {nullptr, 0, 0, 0, nullptr}};
 
         PyGetSetDef label_getset[] = {
@@ -475,6 +489,7 @@ namespace pulseqpp_types
             {"channel_code", Py_T_DOUBLE, PULSEQPP_FIELD(TriggerEvent, channel), 0, nullptr},
             {"delay", Py_T_DOUBLE, PULSEQPP_FIELD(TriggerEvent, delay), 0, nullptr},
             {"duration", Py_T_DOUBLE, PULSEQPP_FIELD(TriggerEvent, duration_s), 0, nullptr},
+            PULSEQPP_COMPAT_MEMBERS(TriggerEvent),
             {nullptr, 0, 0, 0, nullptr}};
 
         PyGetSetDef trigger_getset[] = {{"type", trigger_type, nullptr, nullptr, nullptr},
@@ -502,6 +517,9 @@ namespace pulseqpp_types
                 unwrap<RotationEvent>(self).quaternion = unit_quaternion(given);
             });
         }
+
+        PyMemberDef rotation_members[] = {PULSEQPP_COMPAT_MEMBERS(RotationEvent),
+                                          {nullptr, 0, 0, 0, nullptr}};
 
         PyGetSetDef rotation_getset[] = {
             {"type", rotation_type, nullptr, nullptr, nullptr},
@@ -537,6 +555,7 @@ namespace pulseqpp_types
             {"factor", Py_T_DOUBLE, PULSEQPP_FIELD(SoftDelayEvent, factor), 0, nullptr},
             {"default_duration", Py_T_DOUBLE, PULSEQPP_FIELD(SoftDelayEvent, default_duration), 0,
              nullptr},
+            PULSEQPP_COMPAT_MEMBERS(SoftDelayEvent),
             {nullptr, 0, 0, 0, nullptr}};
 
         PyGetSetDef soft_delay_getset[] = {
@@ -556,6 +575,7 @@ namespace pulseqpp_types
 
         PyMemberDef delay_members[] = {
             {"delay", Py_T_DOUBLE, PULSEQPP_FIELD(DelayEvent, delay), 0, nullptr},
+            PULSEQPP_COMPAT_MEMBERS(DelayEvent),
             {nullptr, 0, 0, 0, nullptr}};
 
         PyGetSetDef delay_getset[] = {{"type", delay_type, nullptr, nullptr, nullptr},
@@ -652,7 +672,7 @@ namespace pulseqpp_types
         ready<TriggerEvent>(m, TriggerType, "pulserver._ext._pulseqpp_wrapper.TriggerEvent",
                             trigger_members, trigger_getset);
         ready<RotationEvent>(m, RotationType, "pulserver._ext._pulseqpp_wrapper.RotationEvent",
-                             nullptr, rotation_getset);
+                             rotation_members, rotation_getset);
         ready<SoftDelayEvent>(m, SoftDelayType, "pulserver._ext._pulseqpp_wrapper.SoftDelayEvent",
                               soft_delay_members, soft_delay_getset);
         ready<DelayEvent>(m, DelayType, "pulserver._ext._pulseqpp_wrapper.DelayEvent",

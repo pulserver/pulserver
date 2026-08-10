@@ -221,9 +221,45 @@ namespace pulseq
      * Blocks flagged `NOROT` are not handled here; a rotation-exempt block
      * needs its gradients counter-rotated at design time, which is a
      * transform on the block, not on the shift.
+     *
+     * ### The block range
+     *
+     * @p first and @p last are 1-based and inclusive, and bound only which
+     * blocks are *modified*; `0` for @p last means "to the end".  Absolute k
+     * is still accumulated from block 1 regardless, because where k stands at
+     * the start of the range is a fact about everything played before it.  A
+     * caller shifting part of a scan -- the label-gated sub-ranges a
+     * `NOPOS` flag carves out, a module with its own prescription -- gets the
+     * same phase for those blocks as it would have from shifting the whole
+     * thing, which is the only way a partial shift is meaningful.
      */
     void apply_fov_shift(Sequence& seq, const std::array<double, 3>& shift_m,
-                         FovShiftScope scope);
+                         FovShiftScope scope, int first = 1, int last = 0);
+
+    /* ================================================================== */
+    /*  FOV scale                                                         */
+    /* ================================================================== */
+
+    /**
+     * Scale the gradients of blocks @p first..@p last (1-based, inclusive;
+     * `0` for @p last means "to the end") by @p scale, per logical axis.
+     *
+     * The vector scales the *gradient*, so the field of view along an axis is
+     * divided by it -- Pulseq's convention, and `mr.scaleGrad`'s.  A factor of
+     * zero flattens that axis, which is how a prescription disables an
+     * encoding direction.
+     *
+     * Cheap by construction: a gradient is stored as a normalised shape beside
+     * a scalar amplitude (see the file comment above), so this multiplies the
+     * amplitude and leaves the waveform alone.  No shape is registered, no
+     * samples are touched, and two gradients that differed only in amplitude
+     * before still share their shape afterwards.
+     *
+     * Unlike the shift this needs no notion of absolute k, so blocks outside
+     * the range are not read at all.
+     */
+    void apply_fov_scale(Sequence& seq, const std::array<double, 3>& scale,
+                         int first = 1, int last = 0);
 
     /* ================================================================== */
     /*  Carrying the base trajectory in a .seq                            */

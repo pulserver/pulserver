@@ -37,6 +37,7 @@ from ._make_rf_shim import make_rf_shim as _make_rf_shim
 from ._make_rotation import make_rotation as _make_rotation
 from ._opts import Opts as _Opts
 from ._sequence import Sequence as _Sequence
+from ._transform_fov import TransformFOV as _TransformFOV
 
 #: Upstream names Pulserver deliberately does not re-export: the adiabatic
 #: factory (the preparation modules design their own), and the three shape
@@ -55,6 +56,7 @@ for _name in dir(_pypulseq):
 del _name
 
 Sequence = _Sequence
+TransformFOV = _TransformFOV
 Opts = _Opts
 get_supported_labels = _get_supported_labels
 make_label = _make_label
@@ -82,6 +84,7 @@ OVERRIDES = frozenset(
         "STICKY_FLAGS",
         "Opts",
         "Sequence",
+        "TransformFOV",
         "get_supported_labels",
         "make_label",
         "make_rf_shim",

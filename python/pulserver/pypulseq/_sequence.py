@@ -23,17 +23,37 @@ into its gradients and RF shims expanded across transmit channels, so what it
 describes is what the scanner plays rather than the base waveform the file
 stores.
 
-Not everything the older Pulserver sequence offered is here yet. The scan
-structure -- repetition times, segments, the safety analyses that rest on
-them -- is declared and raises :exc:`NotImplementedError` until the module and
-scan-loop layer above this one is rebuilt on it.
+**Registering an event by hand is not needed here, but it works.** Upstream's
+``seq.register_grad_event(g)`` / ``seq.register_rf_event(rf)`` exist so a
+caller can pre-register a large, repeatedly-used waveform once and reuse its
+id -- without that, every ``add_block`` would re-hash and re-store the
+samples. This class never does that re-hashing: an event carries the shape ids
+this sequence issued for it, and a waveform is remembered by the identity of
+the array behind it rather than by its contents, so building a gradient once
+and passing the same object to :meth:`Sequence.add_block` a million times
+registers it on the first call only.
+
+The ``register_*_event`` methods are still here, and still do something --
+they move that first registration off whichever loop iteration happened to
+come first, which is what the upstream call is for -- so a PyPulseq script
+runs unchanged, ``event.id = seq.register_grad_event(event)`` included. What
+they do not hand back is an event-library row id: rows are appended per block
+and renumbered by :meth:`Sequence.remove_duplicates`, so there is no number
+that would still be true by the time the file is written.
+
+**The scan structure -- repetition times, segments, the safety analyses that
+rest on them -- is not here yet.** It is the module and scan-loop layer's to
+supply, and this class does not stand in for it with placeholders. What *is*
+here matches upstream PyPulseq's :class:`~pypulseq.Sequence.sequence.Sequence`
+method for method, including several whose implementation is not built yet
+(:meth:`plot`, :meth:`calculate_kspace`, :meth:`calculate_pns`, and others
+below) -- each raises :exc:`NotImplementedError` with upstream's exact
+signature, so the class's *shape* already matches what it will grow into.
 """
 
 from __future__ import annotations
 
 __all__ = ["Sequence"]
-
-import warnings
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -41,10 +61,8 @@ from types import SimpleNamespace
 import numpy as np
 import pypulseq as pp
 
-from scipy.spatial.transform import Rotation
-
 from .._ext import _pulseqpp_wrapper as _cxx
-from ._rotate3d import rotate3D
+from ._transform_fov import TransformFOV
 
 #: Definitions written for every sequence, taken from the system it was built
 #: with. A caller's own value for one of these wins.
@@ -61,14 +79,12 @@ _TRIGGER_CHANNELS = {
     2.0: {1.0: "physio1", 2.0: "physio2"},
 }
 
-#: How many decoded windows to keep before the oldest is dropped.
-_WINDOW_CACHE = 8
-
-#: What every method waiting on the scan-structure layer says.
-_PENDING = (
-    "Sequence.{what} needs the scan structure, which this class does not carry yet -- "
-    "it is the module and scan-loop layer's to supply. Build the sequence and write "
-    "it; the analysis surface returns when that layer is rebuilt on this class."
+#: What every method whose implementation isn't ported yet says. The
+#: signature above each of these already matches upstream PyPulseq's; only
+#: the body is missing.
+_NOT_PORTED = (
+    "Sequence.{what} has upstream PyPulseq's signature but no implementation "
+    "yet. See the module docstring."
 )
 
 
@@ -115,8 +131,23 @@ class Sequence:
             float(self.system.block_duration_raster),
         )
         self._definitions: dict[str, object] = {}
-        self._windows: dict[tuple[int, int], pp.Sequence] = {}
-        self._starts: np.ndarray | None = None
+
+    # -- version -----------------------------------------------------------
+
+    @property
+    def version_major(self) -> int:
+        """int : The Pulseq file version's major number."""
+        return self._native.version_major
+
+    @property
+    def version_minor(self) -> int:
+        """int : The Pulseq file version's minor number."""
+        return self._native.version_minor
+
+    @property
+    def version_revision(self) -> int:
+        """int : The Pulseq file version's revision number."""
+        return self._native.version_revision
 
     # -- what is in it ---------------------------------------------------
 
@@ -223,7 +254,6 @@ class Sequence:
         the block duration raster -- which is what PyPulseq computes, and what
         a caller passing a bare delay is asking for directly.
         """
-        self._touch()
         return self._native.add_block_events(*events)
 
     def set_block(self, index: int, *events: object) -> None:
@@ -242,7 +272,6 @@ class Sequence:
         shared with other blocks, and what survives is
         :meth:`remove_duplicates`' decision rather than this one's.
         """
-        self._touch()
         self._native.set_block_events(index, *events)
 
     def get_block(self, index: int) -> SimpleNamespace:
@@ -284,13 +313,72 @@ class Sequence:
         _decode_extensions(self._native, ext_id, block)
         return block
 
+    # -- pre-registration --------------------------------------------------
+    #
+    # PyPulseq's `register_*_event` protocol, so a script written against
+    # upstream runs here unchanged. Upstream needs these because its
+    # `add_block` would otherwise re-hash a waveform on every use; this class
+    # never does that -- an event carries the shape ids this sequence issued
+    # for it, and a waveform reused across a scan is registered once whether
+    # or not anything calls these.
+    #
+    # So they are not a no-op, but what they do is move that first
+    # registration off whichever loop iteration happened to come first, which
+    # is the intent of the upstream call. The shape ids they return are real.
+    # An event-library *row* id is not returned, because there is none to
+    # give: rows are appended per block and renumbered by
+    # :meth:`remove_duplicates`, so any number handed out here would be a
+    # different row by the time the file is written. `0` stands in it, and
+    # nothing here reads it back.
+
+    def register_rf_event(self, event: object) -> tuple[int, list[int]]:
+        """Register ``event``'s shapes ahead of the blocks that play it.
+
+        Returns
+        -------
+        tuple
+            ``(0, shape_ids)`` -- the magnitude, phase and time shape ids.
+        """
+        return 0, list(self._native.warm_event(event))
+
+    def register_grad_event(self, event: object) -> int | tuple[int, list[int]]:
+        """Register ``event``'s shapes ahead of the blocks that play it.
+
+        Returns
+        -------
+        int or tuple
+            ``0`` for a trapezoid, which has no shape; ``(0, shape_ids)`` for
+            an arbitrary gradient, matching upstream.
+        """
+        shapes = list(self._native.warm_event(event))
+        return (0, shapes) if shapes else 0
+
+    def register_adc_event(self, event: object) -> tuple[int, int]:
+        """Register ``event``'s phase-modulation shape, if it has one.
+
+        Returns
+        -------
+        tuple
+            ``(0, shape_id)``; the shape id is ``0`` when there is no
+            modulation to store.
+        """
+        shapes = list(self._native.warm_event(event))
+        return 0, (shapes[0] if shapes else 0)
+
+    def register_label_event(self, event: object) -> int:  # noqa: ARG002 - upstream's signature
+        """Accepted for upstream compatibility; a label carries no shape."""
+        return 0
+
+    def register_soft_delay_event(self, event: object) -> int:  # noqa: ARG002 - upstream's signature
+        """Accepted for upstream compatibility; a soft delay carries no shape."""
+        return 0
+
     def remove_duplicates(self) -> None:
         """Collapse every library to its distinct rows and renumber the blocks.
 
         Rows are compared at the precision the file writes them, so two events
         that would serialise identically become one. Idempotent.
         """
-        self._touch()
         self._native.remove_duplicates()
 
     # -- FOV positioning --------------------------------------------------
@@ -328,16 +416,19 @@ class Sequence:
         -----
         Applied where it stands: call it once, on a finished sequence, before
         writing. Calling it twice applies the shift twice.
+
+        See Also
+        --------
+        TransformFOV : the whole transformation -- scale and rotation too,
+            over a block range, honouring ``NOSCL``/``NOPOS``/``NOROT``. This
+            is the shorthand for its commonest use.
         """
         if mode not in ("native", "server"):
             raise ValueError(f"transform_fov(): mode must be 'native' or 'server', got {mode!r}")
 
-        dx, dy, dz = (float(v) * 1e-3 for v in offset_mm)
-
-        self._touch()
-        self._native.apply_fov_shift(dx, dy, dz, bake_adc=(mode == "native"))
-        if mode == "server":
-            self._native.attach_base_trajectory()
+        TransformFOV(translation=offset_mm, server_mode=(mode == "server")).apply_to_sequence(
+            self, in_place=True
+        )
 
     # -- files -----------------------------------------------------------
 
@@ -407,219 +498,144 @@ class Sequence:
         adopted by the C++ sequence, since they are what its blocks were laid
         out on.
         """
-        self._touch()
         self._native = _cxx.read_file(str(Path(path)))
         self._definitions = dict(self._native.definitions())
 
-    # -- looking at it ---------------------------------------------------
+    # -- looking at it -----------------------------------------------------
+    #
+    # Everything below has upstream PyPulseq's exact signature and raises
+    # NotImplementedError. See the module docstring for why: the scan
+    # structure these need (or, for plot/calculate_kspace/etc., used to get
+    # from decoding a throwaway window) isn't carried by this class yet.
 
-    def plot(self, **kwargs: object):
-        """Plot a window of the sequence through PyPulseq.
-
-        Parameters
-        ----------
-        tr_index, time_range, block_range
-            Which blocks to draw; see :meth:`block_range_of`. The whole
-            sequence is drawn when none is given.
-        **kwargs
-            Forwarded to :meth:`pypulseq.Sequence.plot`.
-        """
-        return self._window(kwargs).plot(**kwargs)
-
-    def calculate_kspace(self, **kwargs: object):
-        """The k-space trajectory of a window, through PyPulseq.
-
-        Parameters
-        ----------
-        tr_index, time_range, block_range
-            Which blocks to compute over; see :meth:`block_range_of`.
-        **kwargs
-            Forwarded to :meth:`pypulseq.Sequence.calculate_kspace`.
-
-        Returns
-        -------
-        tuple of numpy.ndarray
-            Whatever upstream returns: the trajectory at the ADC samples, the
-            whole trajectory, and the excitation, refocusing and ADC instants.
-        """
-        return self._window(kwargs).calculate_kspace(**kwargs)
-
-    def waveforms(self, **kwargs: object):
-        """The played waveforms of a window, through PyPulseq.
-
-        Parameters
-        ----------
-        tr_index, time_range, block_range
-            Which blocks to gather; see :meth:`block_range_of`.
-        **kwargs
-            Forwarded to :meth:`pypulseq.Sequence.waveforms`.
-        """
-        return self._window(kwargs).waveforms(**kwargs)
-
-    def waveforms_and_times(self, **kwargs: object):
-        """The played waveforms of a window, with their time axes.
-
-        Parameters
-        ----------
-        tr_index, time_range, block_range
-            Which blocks to gather; see :meth:`block_range_of`.
-        **kwargs
-            Forwarded to :meth:`pypulseq.Sequence.waveforms_and_times`.
-        """
-        return self._window(kwargs).waveforms_and_times(**kwargs)
-
-    def check_timing(self, **kwargs: object):
-        """Check a window's block timing against the raster, through PyPulseq.
-
-        Parameters
-        ----------
-        tr_index, time_range, block_range
-            Which blocks to check; see :meth:`block_range_of`.
-        **kwargs
-            Forwarded to :meth:`pypulseq.Sequence.check_timing`.
-
-        Returns
-        -------
-        tuple
-            ``(passed, report)``.
-        """
-        return self._window(kwargs).check_timing(**kwargs)
-
-    def test_report(self, **kwargs: object) -> str:
-        """PyPulseq's report on a window of the sequence.
-
-        Parameters
-        ----------
-        tr_index, time_range, block_range
-            Which blocks to report on; see :meth:`block_range_of`.
-        **kwargs
-            Forwarded to :meth:`pypulseq.Sequence.test_report`.
-
-        Returns
-        -------
-        str
-            The report.
-        """
-        return self._window(kwargs).test_report(**kwargs)
-
-    def block_range_of(
+    def plot(
         self,
-        *,
-        tr_index: int | None = None,
-        time_range: tuple[float, float] | None = None,
-        block_range: tuple[int, int] | None = None,
-    ) -> tuple[int, int]:
-        """Resolve a window specification to an inclusive block range.
+        label: str = "",
+        show_blocks: bool = False,
+        save: bool = False,
+        time_range=(0, np.inf),
+        time_disp: str = "s",
+        grad_disp: str = "kHz/m",
+        plot_now: bool = True,
+        clear: bool = True,
+        overlay: object = None,
+        stacked: bool = False,
+        show_guides: bool = False,
+    ):
+        """Plot the sequence. Not ported yet; see upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.plot`."""
+        raise NotImplementedError(_NOT_PORTED.format(what="plot"))
 
-        Parameters
-        ----------
-        tr_index : int, optional
-            One repetition, counted from zero. Needs the scan structure, which
-            this class does not carry yet.
-        time_range : tuple of float, optional
-            ``(start, stop)`` in seconds. Every block overlapping the interval
-            is included, so a window always starts and ends on a block edge.
-        block_range : tuple of int, optional
-            ``(first, last)``, 1-based and inclusive.
+    def calculate_kspace(
+        self,
+        trajectory_delay: float | list[float] | np.ndarray = 0.0,
+        gradient_offset: float | list[float] | np.ndarray = 0.0,
+    ):
+        """The k-space trajectory of the sequence. Not ported yet; see
+        upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.calculate_kspace`."""
+        raise NotImplementedError(_NOT_PORTED.format(what="calculate_kspace"))
 
-        Returns
-        -------
-        tuple of int
-            ``(first, last)``, 1-based and inclusive; the whole sequence when
-            nothing was asked for.
+    def calculate_kspacePP(
+        self,
+        # Present only so the signature matches upstream's; nothing reads them.
+        trajectory_delay: float | list[float] | np.ndarray = 0,  # noqa: ARG002
+        gradient_offset: float | list[float] | np.ndarray = 0,  # noqa: ARG002
+    ):
+        """Deprecated upstream; raises instead of forwarding."""
+        raise DeprecationWarning(
+            "Sequence.calculate_kspacePP has been deprecated, use calculate_kspace instead"
+        )
 
-        Raises
-        ------
-        ValueError
-            If more than one of the three was given, or a range falls outside
-            the sequence.
-        """
-        asked = [
-            name
-            for name, value in (
-                ("tr_index", tr_index),
-                ("time_range", time_range),
-                ("block_range", block_range),
-            )
-            if value is not None
-        ]
-        if len(asked) > 1:
-            raise ValueError(f"a window is one of tr_index, time_range or block_range; got {asked}")
+    def waveforms(self, append_RF: bool = False, time_range: list[float] | None = None):
+        """The sequence's gradient waveforms. Not ported yet; see upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.waveforms`."""
+        raise NotImplementedError(_NOT_PORTED.format(what="waveforms"))
 
-        count = self._native.num_blocks()
-        if tr_index is not None:
-            return self.tr_block_range(tr_index)
-        if block_range is not None:
-            first, last = (int(value) for value in block_range)
-            if not 1 <= first <= last <= count:
-                raise ValueError(f"block range {(first, last)} is outside 1..{count}")
-            return first, last
-        if time_range is not None:
-            return self._blocks_over(*time_range)
-        return (1, count) if count else (1, 0)
+    def waveforms_and_times(self, append_RF: bool = False, time_range: list[float] | None = None):
+        """The sequence's waveforms with their time axes. Not ported yet; see
+        upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.waveforms_and_times`."""
+        raise NotImplementedError(_NOT_PORTED.format(what="waveforms_and_times"))
 
-    # -- the scan structure, once there is one ---------------------------
+    def check_timing(self, print_errors: bool = False):
+        """Check every block's timing against the raster. Not ported yet;
+        see upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.check_timing`."""
+        raise NotImplementedError(_NOT_PORTED.format(what="check_timing"))
 
-    @property
-    def payload(self) -> bytes:
-        """bytes : The serialised sequence a plugin hands back. Not implemented yet."""
-        raise NotImplementedError(_PENDING.format(what="payload"))
+    def test_report(self) -> str:
+        """A text report on the sequence. Not ported yet; see upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.test_report`."""
+        raise NotImplementedError(_NOT_PORTED.format(what="test_report"))
 
-    @property
-    def _collection(self):
-        """The subsequence collection behind a composed scan. Not implemented yet."""
-        raise NotImplementedError(_PENDING.format(what="_collection"))
+    def calculate_pns(self, hardware: object, time_range: list[float] | None = None, do_plots: bool = True):
+        """Peripheral nerve stimulation, SAFE model. Not ported yet; see
+        upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.calculate_pns`. This
+        project's own PNS visualisation uses a different (Irnich) model --
+        see ``pulserver._safety.chronaxie_pns``; the real gate is the C
+        safety core, not this class."""
+        raise NotImplementedError(_NOT_PORTED.format(what="calculate_pns"))
 
-    @property
-    def tr_info(self) -> dict:
-        """dict : What one repetition is made of. Not implemented yet."""
-        raise NotImplementedError(_PENDING.format(what="tr_info"))
+    def calculate_gradient_spectrum(
+        self,
+        max_frequency: float = 2000.0,
+        window_width: float = 0.05,
+        frequency_oversampling: float = 3.0,
+        time_range: list[float] | None = None,
+        plot: bool = True,
+        combine_mode: str = "max",
+        use_derivative: bool = False,
+        acoustic_resonances: list[dict] | None = None,
+    ):
+        """The sequence's gradient spectrum. Not ported yet; see upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.calculate_gradient_spectrum`."""
+        raise NotImplementedError(_NOT_PORTED.format(what="calculate_gradient_spectrum"))
 
-    @property
-    def num_trs(self) -> int:
-        """int : How many repetitions the scan plays. Not implemented yet."""
-        raise NotImplementedError(_PENDING.format(what="num_trs"))
+    def evaluate_labels(self, init: dict | None = None, evolution: str = "none") -> dict:
+        """Label values through the sequence. Not ported yet; see upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.evaluate_labels`."""
+        raise NotImplementedError(_NOT_PORTED.format(what="evaluate_labels"))
 
-    @property
-    def tr_duration(self) -> float:
-        """float : How long one repetition lasts. Not implemented yet."""
-        raise NotImplementedError(_PENDING.format(what="tr_duration"))
+    def apply_soft_delay(self, **kwargs: object) -> None:
+        """Apply soft-delay values to block durations. Not ported yet; see
+        upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.apply_soft_delay`."""
+        raise NotImplementedError(_NOT_PORTED.format(what="apply_soft_delay"))
 
-    def tr_block_range(self, tr_index: int) -> tuple[int, int]:
-        """The blocks one repetition spans. Not implemented yet."""
-        raise NotImplementedError(_PENDING.format(what="tr_block_range"))
+    def flip_grad_axis(self, axis: str) -> None:
+        """Invert every gradient on ``axis``. Not ported yet; see upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.flip_grad_axis`."""
+        raise NotImplementedError(_NOT_PORTED.format(what="flip_grad_axis"))
 
-    @property
-    def segments(self) -> tuple:
-        """tuple : The scan's segments. Not implemented yet."""
-        raise NotImplementedError(_PENDING.format(what="segments"))
+    def mod_grad_axis(self, axis: str, modifier: float) -> None:
+        """Scale every gradient on ``axis``. Not ported yet; see upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.mod_grad_axis`."""
+        raise NotImplementedError(_NOT_PORTED.format(what="mod_grad_axis"))
 
-    def segment(self, index: int):
-        """One segment of the scan. Not implemented yet."""
-        raise NotImplementedError(_PENDING.format(what="segment"))
-
-    def pns(self, **kwargs: object):
-        """Peripheral nerve stimulation over the scan. Not implemented yet."""
-        raise NotImplementedError(_PENDING.format(what="pns"))
-
-    def mech_resonances(self, **kwargs: object):
-        """Mechanical resonance exposure over the scan. Not implemented yet."""
-        raise NotImplementedError(_PENDING.format(what="mech_resonances"))
-
-    def grad_spectrum(self, **kwargs: object):
-        """The gradient spectrum over the scan. Not implemented yet."""
-        raise NotImplementedError(_PENDING.format(what="grad_spectrum"))
-
-    def plot_kspace(self, **kwargs: object):
-        """Draw the k-space trajectory. Not implemented yet."""
-        raise NotImplementedError(_PENDING.format(what="plot_kspace"))
+    def find_block_by_time(self, t: float) -> int:
+        """The index of the block containing time ``t``. Not ported yet; see
+        upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.find_block_by_time`."""
+        raise NotImplementedError(_NOT_PORTED.format(what="find_block_by_time"))
 
     # -- internals -------------------------------------------------------
 
-    def _touch(self) -> None:
-        """Forget what was derived from the blocks, because they just changed."""
-        self._windows.clear()
-        self._starts = None
+    def _clone(self) -> Sequence:
+        """An independent copy: same blocks and libraries, nothing shared.
+
+        The libraries are copied in C++, where they are flat arrays, so this
+        costs one allocation and one memcpy each rather than a walk over
+        millions of Python objects. What the copy does *not* inherit is the
+        event path's shape-identity cache -- see the binding -- so an event
+        reused against both sequences registers its waveform once in each.
+        """
+        made = Sequence.__new__(Sequence)
+        made.system = self.system
+        made._native = self._native.copy()
+        made._definitions = dict(self._definitions)
+        return made
 
     def _publish_definitions(self) -> None:
         """Hand the definitions across, rasters and total duration included."""
@@ -643,74 +659,8 @@ class Sequence:
             )
             self._native.set_definition_numbers(key, [float(item) for item in numbers], whole)
 
-    def _window(self, kwargs: dict) -> pp.Sequence:
-        """The decoded window ``kwargs`` asks for, consuming the window keys."""
-        first, last = self.block_range_of(
-            tr_index=kwargs.pop("tr_index", None),
-            time_range=kwargs.pop("time_range", None),
-            block_range=kwargs.pop("block_range", None),
-        )
-        window = self._windows.get((first, last))
-        if window is None:
-            window = self._decode_window(first, last)
-            if len(self._windows) >= _WINDOW_CACHE:
-                self._windows.pop(next(iter(self._windows)))
-            self._windows[(first, last)] = window
-        return window
-
-    def _decode_window(self, first: int, last: int) -> pp.Sequence:
-        """Blocks ``first..last`` as a standalone :class:`pypulseq.Sequence`.
-
-        Built against a system with no gradient or slew ceiling, so any range
-        can be looked at: a window starting mid-ramp is a legitimate thing to
-        want to see, and upstream can only reject it because it cannot know a
-        preceding block exists.
-        """
-        window = pp.Sequence(system=_unbounded(self.system))
-        for index in range(first, last + 1):
-            block = self.get_block(index)
-            events = _playable(block, window.system)
-            if block.block_duration > 0:
-                events.append(pp.make_delay(block.block_duration))
-            _append(window, events, index)
-        return window
-
-    def _blocks_over(self, start: float, stop: float) -> tuple[int, int]:
-        """The blocks overlapping ``start..stop`` seconds, 1-based inclusive."""
-        if self._starts is None:
-            self._starts = np.concatenate(([0.0], np.cumsum(self._native.block_durations())))
-        edges = self._starts
-        count = edges.size - 1
-        if count == 0:
-            return 1, 0
-        first = min(max(int(np.searchsorted(edges, start, side="right")) - 1, 0), count - 1)
-        last = min(max(int(np.searchsorted(edges, stop, side="left")) - 1, first), count - 1)
-        return first + 1, last + 1
-
 
 # %% local subroutines
-
-
-def _unbounded(system: pp.Opts) -> pp.Opts:
-    """``system`` with no gradient or slew ceiling.
-
-    A decoded window holds waveforms that were checked when they were built.
-    Checking them again against a limit they were designed for gains nothing,
-    and rejects any window that does not happen to start at zero gradient.
-    """
-    return pp.Opts(
-        max_grad=np.inf,
-        max_slew=np.inf,
-        rf_dead_time=system.rf_dead_time,
-        rf_ringdown_time=system.rf_ringdown_time,
-        adc_dead_time=system.adc_dead_time,
-        rf_raster_time=system.rf_raster_time,
-        grad_raster_time=system.grad_raster_time,
-        adc_raster_time=system.adc_raster_time,
-        block_duration_raster=system.block_duration_raster,
-        gamma=system.gamma,
-        B0=system.B0,
-    )
 
 
 def _decompress(num_samples: int, samples: np.ndarray) -> np.ndarray:
@@ -871,63 +821,3 @@ def _decode_extensions(native, head: int, block: SimpleNamespace) -> None:
             )
 
 
-def _playable(block: SimpleNamespace, system: pp.Opts) -> list:
-    """A decoded block's events, with rotation and RF shim resolved into them.
-
-    What comes back is what the scanner plays rather than what the file
-    stores: the gradients are rotated, and the RF is spread across the
-    transmit channels its shim weights.
-
-    Labels and soft delays are left out. They describe how a console drives
-    the sequence, not what it emits, and none of the analyses this window
-    feeds reads them.
-    """
-    events = []
-    if block.rf is not None:
-        events.append(_shimmed(block.rf, block.rf_shim) if block.rf_shim is not None else block.rf)
-
-    gradients = [axis for axis in (block.gx, block.gy, block.gz) if axis is not None]
-    if gradients and block.rotation is not None:
-        matrix = Rotation.from_quat(block.rotation, scalar_first=True).as_matrix()
-        gradients = rotate3D(*gradients, rotation_matrix=matrix, system=system)
-    events.extend(gradients)
-
-    if block.adc is not None:
-        events.append(block.adc)
-    events.extend(block.triggers)
-    return events
-
-
-def _shimmed(rf: SimpleNamespace, shim: np.ndarray) -> SimpleNamespace:
-    """``rf`` replicated across transmit channels, weighted by ``shim``.
-
-    The per-channel time axes are concatenated rather than offset, so every
-    channel is drawn over the same interval and upstream needs no pTx
-    awareness to plot it.
-    """
-    weights = np.asarray(shim, dtype=complex).ravel()
-    if weights.size == 0:
-        return rf
-    signal = np.asarray(rf.signal).ravel()
-    spread = dict(vars(rf))
-    spread["signal"] = (weights[:, None] * signal[None, :]).ravel()
-    spread["t"] = np.tile(np.asarray(rf.t, dtype=float).ravel(), weights.size)
-    return SimpleNamespace(**spread)
-
-
-def _append(window: pp.Sequence, events: list, index: int) -> None:
-    """Add one decoded block to ``window``, saying so if its leading edge moved."""
-    try:
-        window.add_block(*events)
-    except (RuntimeError, ValueError) as raised:
-        if "first block has to start at 0" not in str(raised):
-            raise
-        warnings.warn(
-            f"Block {index} starts on a non-zero gradient; its leading edge was zeroed so "
-            "the window could be built. Amplitudes elsewhere are unaffected.",
-            stacklevel=4,
-        )
-        for event in events:
-            if getattr(event, "type", None) == "grad":
-                event.first = 0.0
-        window.add_block(*events)

@@ -318,6 +318,23 @@ namespace pulseq
     public:
         Sequence();
 
+        /**
+         * Copyable by value, and deliberately so.
+         *
+         * Every member below is a plain container, so the compiler's copy is
+         * both correct and about as cheap as a copy of this much data can
+         * be -- one allocation and one memcpy per library.  That is what lets
+         * a transform offer "give me the result, leave the original alone"
+         * without a bespoke clone that would have to be kept in step with
+         * every field added here.  Anything added to this class that owns a
+         * resource by raw pointer would silently break that guarantee, which
+         * is why these are spelled out rather than left implicit.
+         */
+        Sequence(const Sequence&) = default;
+        Sequence& operator=(const Sequence&) = default;
+        Sequence(Sequence&&) noexcept = default;
+        Sequence& operator=(Sequence&&) noexcept = default;
+
         /* -- version ---------------------------------------------------- */
 
         int version_major() const { return version_major_; }

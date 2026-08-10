@@ -31,6 +31,7 @@
 #include "pulseq/write.hpp"
 
 #include <cstring>
+#include <memory>
 #include <stdexcept>
 
 namespace py = pybind11;
@@ -122,6 +123,26 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
 
     py::class_<Sequence>(m, "Sequence")
         .def(py::init<>())
+
+        /* -- copying ---------------------------------------------------- */
+        //
+        // Everything the sequence proper holds is a plain container, so this
+        // is one allocation and one memcpy per library (see sequence.hpp).
+        //
+        // What is NOT copied is the event path's caches: the new object gets
+        // a fresh `serial` and empty `shape_ids`/`quaternions`.  Those are
+        // memoized by the identity of a Python object, and an event carrying
+        // shape ids issued to the original must not have them believed here --
+        // `remove_duplicates()` renumbers, so the two sequences' ids diverge
+        // the moment either is deduplicated.  A copy re-registers on first
+        // use, which costs a pass over a waveform and cannot be wrong.
+        .def("copy",
+             [](const Sequence& self) {
+                 auto made = std::make_unique<Sequence>();
+                 static_cast<pulseq::Sequence&>(*made) =
+                     static_cast<const pulseq::Sequence&>(self);
+                 return made;
+             })
 
         /* -- version and rasters -------------------------------------- */
         .def_property_readonly("version_major", &Sequence::version_major)
@@ -377,6 +398,13 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
              [](Sequence& self, int index, const py::args& events) {
                  self.set_block(index, pulseqpp_events::build_block(self, events));
              })
+        // Register one event's shapes without adding a block; returns the
+        // shape ids.  Backs Sequence.register_*_event -- see _pulseqpp_events.h.
+        .def("warm_event",
+             [](Sequence& self, const py::handle& event) {
+                 return pulseqpp_events::warm_event(self, event);
+             })
+
         // Measurement only: the same call signature as add_block_events with
         // none of the work, so the difference is exactly what unpacking the
         // event objects costs.
@@ -528,15 +556,32 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
         // rotation entirely: `dr . k` is invariant when both are rotated.  The
         // caller converts a prescribed physical offset once, with
         // `dr_logical = R.T @ dr_physical`.
+        // `first`/`last` are 1-based inclusive and bound only which blocks are
+        // modified; `last=0` means "to the end".  Absolute k is accumulated
+        // from block 1 either way.
         .def(
             "apply_fov_shift",
-            [](Sequence& self, double dx, double dy, double dz, bool bake_adc) {
+            [](Sequence& self, double dx, double dy, double dz, bool bake_adc, int first,
+               int last) {
                 pulseq::apply_fov_shift(self, {dx, dy, dz},
                                         bake_adc ? pulseq::FovShiftScope::RfAndAdc
-                                                 : pulseq::FovShiftScope::RfOnly);
+                                                 : pulseq::FovShiftScope::RfOnly,
+                                        first, last);
             },
             py::arg("dx"), py::arg("dy"), py::arg("dz"), py::arg("bake_adc") = true,
+            py::arg("first") = 1, py::arg("last") = 0,
             py::call_guard<py::gil_scoped_release>())
+
+        // Per-axis gradient scaling over a block range.  Multiplies the
+        // amplitude a gradient row carries; the shape it points at is left
+        // alone, so this registers no shapes.
+        .def(
+            "apply_fov_scale",
+            [](Sequence& self, double sx, double sy, double sz, int first, int last) {
+                pulseq::apply_fov_scale(self, {sx, sy, sz}, first, last);
+            },
+            py::arg("sx"), py::arg("sy"), py::arg("sz"), py::arg("first") = 1,
+            py::arg("last") = 0, py::call_guard<py::gil_scoped_release>())
 
         // Server mode: store each readout's base trajectory in its ADC's
         // phase_modulation, for a consumer of ours to rescale and rotate.
