@@ -17,11 +17,17 @@ quadratic in the thing that is already the largest.
 **Analysis decodes a window, not a scan.** PyPulseq's plotting, k-space and
 waveform code is upstream's and worth keeping, so it is given a real
 :class:`pypulseq.Sequence` -- built out of the blocks the caller actually asked
-about. ``seq.calculate_kspace(time_range=(0.2, 0.3))`` costs a tenth of a
-second of blocks, not the whole protocol. The window has rotations resolved
-into its gradients and RF shims expanded across transmit channels, so what it
-describes is what the scanner plays rather than the base waveform the file
-stores.
+about. ``seq.plot(time_range=(0.2, 0.3))`` costs a tenth of a second of blocks,
+not the whole protocol. The window has rotations resolved into its gradients
+and RF shims expanded across transmit channels, so what it describes is what
+the scanner plays rather than the base waveform the file stores.
+
+Building that window is a **bulk copy, not a replay**. A Pulseq 1.5 library row
+is exactly what PyPulseq keeps in ``rf_library.data[id]``, so the rows cross as
+they stand, under the ids they already have -- see
+:func:`~._pulseqpp.to_upstream`. Only a block carrying a rotation or an RF shim
+is decoded and re-added one at a time, because that is the one case where the
+row is not what should be looked at.
 
 **Registering an event by hand is not needed here, but it works.** Upstream's
 ``seq.register_grad_event(g)`` / ``seq.register_rf_event(rf)`` exist so a
@@ -46,22 +52,26 @@ rest on them -- is not here yet.** It is the module and scan-loop layer's to
 supply, and this class does not stand in for it with placeholders. What *is*
 here matches upstream PyPulseq's :class:`~pypulseq.Sequence.sequence.Sequence`
 method for method, including several whose implementation is not built yet
-(:meth:`plot`, :meth:`calculate_kspace`, :meth:`calculate_pns`, and others
-below) -- each raises :exc:`NotImplementedError` with upstream's exact
-signature, so the class's *shape* already matches what it will grow into.
+(:meth:`calculate_kspace`, :meth:`calculate_pns`, and others below) -- each
+raises :exc:`NotImplementedError` with upstream's exact signature, so the
+class's *shape* already matches what it will grow into.
 """
 
 from __future__ import annotations
 
 __all__ = ["Sequence"]
 
+import warnings
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pypulseq as pp
+from scipy.spatial.transform import Rotation
 
 from .._ext import _pulseqpp_wrapper as _cxx
+from ._pulseqpp import to_upstream
+from ._rotate3d import rotate3D
 from ._transform_fov import TransformFOV
 
 #: Definitions written for every sequence, taken from the system it was built
@@ -86,6 +96,11 @@ _NOT_PORTED = (
     "Sequence.{what} has upstream PyPulseq's signature but no implementation "
     "yet. See the module docstring."
 )
+
+#: Blocks past which looking at a whole sequence is said out loud rather than
+#: simply attempted. Drawing this many is minutes of Matplotlib, and the caller
+#: who did not pass a ``time_range`` almost certainly did not mean to.
+_LOUD_ABOVE = 50_000
 
 
 class Sequence:
@@ -522,9 +537,90 @@ class Sequence:
         stacked: bool = False,
         show_guides: bool = False,
     ):
-        """Plot the sequence. Not ported yet; see upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.plot`."""
-        raise NotImplementedError(_NOT_PORTED.format(what="plot"))
+        """Draw the sequence: ADC, RF magnitude and phase, and the three gradients.
+
+        Parameters
+        ----------
+        label : str, default ""
+            Labels whose value to mark at each ADC, as a comma-separated list --
+            ``"LIN,REP"``, say.
+        show_blocks : bool, default False
+            Tick the axes at the block boundaries.
+        save : bool, default False
+            Write the figure out as a JPEG beside the working directory.
+        time_range : tuple of float, default (0, inf)
+            The seconds to draw. Only the blocks this touches are decoded, so
+            asking for a tenth of a second of a long protocol costs a tenth of a
+            second of blocks -- and the axis still reads in time from the start
+            of the sequence.
+        time_disp : {"s", "ms", "us"}, default "s"
+            The time unit on the axis.
+        grad_disp : {"kHz/m", "mT/m"}, default "kHz/m"
+            The gradient unit.
+        plot_now : bool, default True
+            Show the figure before returning, blocking until it is closed. When
+            False, it is drawn but left for ``plt.show()``.
+        clear : bool, default True
+            Clear the figure first rather than drawing over what is on it.
+        overlay : SeqPlot, optional
+            Draw on the figure of an earlier plot, to compare two sequences.
+        stacked : bool, default False
+            Put all six channels in one column, PyPulseq's stacked style.
+        show_guides : bool, default False
+            Follow the cursor with a vertical hairline across every panel.
+            Needs ``mplcursors``; ignored when it is not installed.
+
+        Returns
+        -------
+        pypulseq.utils.seq_plot.SeqPlot
+            The plot, whose ``fig1``/``fig2`` and ``ax1``/``ax2`` are upstream's.
+
+        Notes
+        -----
+        Drawing is upstream PyPulseq's, over a :class:`pypulseq.Sequence` holding
+        the blocks asked for. Rotations are resolved into the gradients and RF
+        shims spread across the transmit channels first, so what is drawn is
+        what the scanner plays rather than the base waveform the file stores.
+
+        Unstacked, the two panels PyPulseq would open in separate windows are
+        laid out as **one figure, three rows by two columns**, sharing their time
+        axis; ``fig1`` and ``fig2`` are then the same figure. ``save=True``
+        writes that one window as ``seq_plot.jpg`` rather than upstream's pair.
+        """
+        first, last = self._blocks_over(*_span(time_range))
+        if last - first + 1 > _LOUD_ABOVE:
+            warnings.warn(
+                f"Plotting {last - first + 1} blocks. Matplotlib will take a long time over "
+                "this; pass time_range=(start, stop) to draw a part of the sequence.",
+                stacklevel=2,
+            )
+
+        window = self._upstream_window(first, last)
+        merging = not stacked
+        if merging and _is_merged(overlay):
+            _split_columns(overlay)
+
+        plot = window.plot(
+            label=label,
+            show_blocks=show_blocks,
+            save=save and not merging,
+            time_range=time_range,
+            time_disp=time_disp,
+            grad_disp=grad_disp,
+            plot_now=False,
+            clear=clear,
+            overlay=overlay,
+            stacked=stacked,
+            show_guides=show_guides and not merging,
+        )
+
+        if merging:
+            _merge_columns(plot, show_guides=show_guides)
+            if save:
+                plot.fig1.savefig("seq_plot.jpg")
+        if plot_now:
+            plot.show()
+        return plot
 
     def calculate_kspace(
         self,
@@ -622,6 +718,68 @@ class Sequence:
 
     # -- internals -------------------------------------------------------
 
+    def _blocks_over(self, start: float, stop: float) -> tuple[int, int]:
+        """The blocks overlapping ``start..stop`` seconds, 1-based inclusive."""
+        edges = np.concatenate(([0.0], np.cumsum(self._native.block_durations())))
+        count = edges.size - 1
+        if count == 0:
+            return 1, 0
+        first = min(max(int(np.searchsorted(edges, start, side="right")) - 1, 0), count - 1)
+        last = min(max(int(np.searchsorted(edges, stop, side="left")) - 1, first), count - 1)
+        return first + 1, last + 1
+
+    def _upstream_window(self, first: int, last: int) -> pp.Sequence:
+        """Blocks ``first..last`` as a :class:`pypulseq.Sequence` upstream can read.
+
+        The transfer itself is :func:`~._pulseqpp.to_upstream`, a bulk copy of
+        the rows the window names. What happens here first is the part upstream
+        has no vocabulary for: a block carrying a rotation or an RF shim is
+        replayed with that resolved into its events, because PyPulseq's
+        ``get_block`` raises on an extension it does not know, and because the
+        resolved form is the one worth looking at.
+
+        Materialising costs a decode and a re-add per block, so it is done only
+        for a window that needs it -- and into a sequence of *this* class, whose
+        ``add_block`` is the C++ one, rather than through PyPulseq's.
+        """
+        if not self._rotated_or_shimmed(first, last):
+            return to_upstream(self, first=first, last=last)
+
+        edges = np.cumsum(self._native.block_durations())
+        played = Sequence(system=self.system)
+        for index in range(first, last + 1):
+            block = self.get_block(index)
+            events = _playable(block, self.system)
+            if block.block_duration > 0:
+                events.append(pp.make_delay(block.block_duration))
+            played.add_block(*events)
+
+        return to_upstream(
+            played,
+            numbers=np.arange(first, last + 1),
+            lead_in=float(edges[first - 2]) if first > 1 else 0.0,
+        )
+
+    def _rotated_or_shimmed(self, first: int, last: int) -> bool:
+        """Whether blocks ``first..last`` carry a rotation or an RF shim.
+
+        The libraries answer for the whole sequence in one look, and for almost
+        every sequence they answer no. Only when one of them holds something
+        does this walk the window's own chains, and then only the distinct ones:
+        deduplication leaves a scan sharing a handful of them.
+        """
+        if not (self._native.num_rotations() or self._native.num_rf_shims()):
+            return False
+
+        heads = np.unique(self._native.block_events()[first - 1 : last, 5])
+        for head in heads[heads > 0].tolist():
+            node = head
+            while node:
+                type_id, _, node = self._native.extension_row(node)
+                if self._native.extension_type_name(type_id) in ("ROTATIONS", "RF_SHIMS"):
+                    return True
+        return False
+
     def _clone(self) -> Sequence:
         """An independent copy: same blocks and libraries, nothing shared.
 
@@ -661,6 +819,60 @@ class Sequence:
 
 
 # %% local subroutines
+
+
+def _span(time_range) -> tuple[float, float]:
+    """``time_range`` as a pair of seconds, checked the way upstream checks it."""
+    bounds = tuple(time_range)
+    if len(bounds) != 2:
+        raise ValueError("time_range must hold two elements")
+    start, stop = float(bounds[0]), float(bounds[1])
+    if start > stop:
+        raise ValueError("time_range must end after it begins")
+    return start, stop
+
+
+def _playable(block: SimpleNamespace, system: pp.Opts) -> list:
+    """A decoded block's events, with rotation and RF shim resolved into them.
+
+    What comes back is what the scanner plays rather than what the file stores:
+    the gradients are rotated, and the RF is spread across the transmit channels
+    its shim weights.
+
+    Labels and soft delays are left out. They describe how a console drives the
+    sequence, not what it emits, and the block keeps its duration either way.
+    """
+    events = []
+    if block.rf is not None:
+        events.append(_shimmed(block.rf, block.rf_shim) if block.rf_shim is not None else block.rf)
+
+    gradients = [axis for axis in (block.gx, block.gy, block.gz) if axis is not None]
+    if gradients and block.rotation is not None:
+        matrix = Rotation.from_quat(block.rotation, scalar_first=True).as_matrix()
+        gradients = rotate3D(*gradients, rotation_matrix=matrix, system=system)
+    events.extend(gradients)
+
+    if block.adc is not None:
+        events.append(block.adc)
+    events.extend(block.triggers)
+    return events
+
+
+def _shimmed(rf: SimpleNamespace, shim: np.ndarray) -> SimpleNamespace:
+    """``rf`` replicated across transmit channels, weighted by ``shim``.
+
+    The per-channel time axes are concatenated rather than offset, so every
+    channel is drawn over the same interval and upstream needs no pTx awareness
+    to plot it.
+    """
+    weights = np.asarray(shim, dtype=complex).ravel()
+    if weights.size == 0:
+        return rf
+    signal = np.asarray(rf.signal).ravel()
+    spread = dict(vars(rf))
+    spread["signal"] = (weights[:, None] * signal[None, :]).ravel()
+    spread["t"] = np.tile(np.asarray(rf.t, dtype=float).ravel(), weights.size)
+    return SimpleNamespace(**spread)
 
 
 def _decompress(num_samples: int, samples: np.ndarray) -> np.ndarray:
@@ -819,5 +1031,122 @@ def _decode_extensions(native, head: int, block: SimpleNamespace) -> None:
             block.soft_delay = SimpleNamespace(
                 type="soft_delay", numID=num, offset=offset, factor=factor, hint=hint
             )
+
+
+# %% one window instead of two
+#
+# Unstacked, upstream draws RF/ADC on one figure and the gradients on another,
+# and opens them as two windows. Reading a sequence means reading the two
+# together, so they are laid out side by side instead -- by moving the axes
+# upstream made onto a figure of ours, which leaves its plotting code untouched
+# and its `SeqPlot` handles pointing at real axes.
+
+
+def _is_merged(plot: object) -> bool:
+    """Whether ``plot`` is one of ours, already laid out in two columns."""
+    figure = getattr(plot, "fig1", None)
+    return figure is not None and figure is getattr(plot, "fig2", None) and not getattr(plot, "stacked", False)
+
+
+def _adopt(axis, figure, spec) -> None:
+    """Move ``axis`` onto ``figure``, at the grid position ``spec``."""
+    axis.remove()
+    axis.figure = figure
+    figure.add_axes(axis)
+    axis.set_subplotspec(spec)
+
+
+def _merge_columns(plot, *, show_guides: bool = False) -> None:
+    """Lay ``plot``'s two figures out as one, three rows by two columns.
+
+    Sharing the time axis has to be re-established by hand: moving an axis
+    between figures drops it out of the shared group, silently -- panning one
+    column would otherwise leave the other where it was.
+    """
+    from matplotlib import pyplot as plt
+
+    columns = (tuple(plot.ax1), tuple(plot.ax2))
+    sources = (plot.fig1, plot.fig2)
+    merged = plt.figure(figsize=(14, 7))
+    grid = merged.add_gridspec(3, 2)
+
+    for column, axes in enumerate(columns):
+        for row, axis in enumerate(axes):
+            _adopt(axis, merged, grid[row, column])
+
+    leader = columns[0][0]
+    for axis in (*columns[0][1:], *columns[1]):
+        axis.sharex(leader)
+
+    for figure in sources:
+        if figure is not None:
+            plt.close(figure)
+
+    merged._seq_t_factor = getattr(sources[0], "_seq_t_factor", 1.0)
+    merged.tight_layout()
+
+    plot.fig1 = plot.fig2 = merged
+    plot.ax1, plot.ax2 = columns
+    if show_guides:
+        _install_guides(plot)
+
+
+def _split_columns(plot) -> None:
+    """Undo :func:`_merge_columns`, so upstream can draw over ``plot`` again.
+
+    An overlay is upstream's way of comparing two sequences, and it reuses the
+    figures of an earlier plot by taking the first three axes of each. Handed
+    one merged figure it would take the same three twice and draw both panels
+    into the left column, so the columns go back to being two figures for the
+    length of the call.
+    """
+    from matplotlib import pyplot as plt
+
+    merged = plot.fig1
+    columns = (tuple(plot.ax1), tuple(plot.ax2))
+    figures = []
+    for axes in columns:
+        figure = plt.figure()
+        grid = figure.add_gridspec(3, 1)
+        for row, axis in enumerate(axes):
+            _adopt(axis, figure, grid[row, 0])
+        figure._seq_t_factor = getattr(merged, "_seq_t_factor", 1.0)
+        figures.append(figure)
+
+    plt.close(merged)
+    plot.fig1, plot.fig2 = figures
+    plot.ax1, plot.ax2 = columns
+
+
+def _install_guides(plot) -> None:
+    """Follow the cursor with a hairline across every panel of ``plot``.
+
+    Upstream sets these up too, but binds them to the canvases of the figures it
+    made -- which this one replaced. Rebinding is cheaper and less surprising
+    than persuading it to draw somewhere else.
+    """
+    try:
+        import mplcursors  # noqa: F401
+    except ImportError:
+        return
+
+    figure = plot.fig1
+    axes = list(dict.fromkeys((*plot.ax1, *plot.ax2)))
+    lines = {
+        axis: axis.axvline(0.0, color="r", linestyle="--", linewidth=1.0, visible=False, zorder=1000)
+        for axis in axes
+    }
+
+    def _follow(event) -> None:
+        inside = event.inaxes in axes and event.xdata is not None
+        for line in lines.values():
+            line.set_visible(inside)
+            if inside:
+                line.set_xdata([event.xdata])
+        figure.canvas.draw_idle()
+
+    plot._vlines = lines
+    plot._show_guides = True
+    plot._guide_cids = [(figure.canvas, figure.canvas.mpl_connect("motion_notify_event", _follow))]
 
 

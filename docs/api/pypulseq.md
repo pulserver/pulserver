@@ -51,11 +51,20 @@ documents every label and what it means.
    pulserver.pypulseq.make_label
 ```
 
-`Sequence` carries upstream's full method surface, but the analysis half of
-it — `plot`, `calculate_kspace`, `waveforms`, `check_timing`, `test_report`,
-`calculate_pns` and the rest — is not ported yet and raises
-`NotImplementedError` with upstream's signature. The scan structure those
-rest on belongs to the module and scan-loop layer above this one.
+`Sequence` carries upstream's full method surface. `plot` is upstream's own,
+drawn over the blocks a `time_range` actually touches — so looking at a tenth
+of a second of a long protocol costs a tenth of a second of blocks, and the
+axis still reads in time from the start of the sequence. Rotations are
+resolved into the gradients and RF shims spread across the transmit channels
+first, so what is drawn is what the scanner plays. Unstacked, its two panels
+are laid out as one window of three rows by two columns rather than opened as
+two.
+
+The rest of the analysis half — `calculate_kspace`, `waveforms`,
+`check_timing`, `test_report`, `calculate_pns` and the others — is not ported
+yet and raises `NotImplementedError` with upstream's signature. The scan
+structure those rest on belongs to the module and scan-loop layer above this
+one.
 
 ## Positioning the volume
 

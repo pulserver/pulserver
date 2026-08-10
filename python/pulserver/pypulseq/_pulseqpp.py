@@ -1,24 +1,35 @@
-"""Moving a PyPulseq-shaped sequence into the C++ :class:`pulseq::Sequence`.
+"""Moving a sequence between the C++ :class:`pulseq::Sequence` and PyPulseq.
 
 The C++ library owns the file formats, deduplication and the block table; what
-it does not own is the vocabulary a design script builds a sequence out of.
-This module is the seam: it takes anything shaped like a ``pp.Sequence`` --
-event libraries keyed by id, a block table, a definitions dict -- and loads it
-into the C++ object one library at a time.
+it does not own is the vocabulary a design script builds a sequence out of, nor
+the analyses PyPulseq already implements. This module is the seam in both
+directions.
 
-Two shapes are accepted for the block table and the extension chains, because a
-composed scan holds them as arrays and an ordinary sequence holds them as
-dicts. Arrays are handed straight over; dicts are gathered first. That is the
-whole reason the transfer is written in terms of columns: on a large 3D
-protocol the block table is millions of rows, and rebuilding it row by row on
-the way across would cost more than everything else here put together.
+:func:`to_native` takes anything shaped like a ``pp.Sequence`` -- event
+libraries keyed by id, a block table, a definitions dict -- and loads it into
+the C++ object one library at a time. Two shapes are accepted for the block
+table and the extension chains, because a composed scan holds them as arrays
+and an ordinary sequence holds them as dicts. Arrays are handed straight over;
+dicts are gathered first. That is the whole reason the transfer is written in
+terms of columns: on a large 3D protocol the block table is millions of rows,
+and rebuilding it row by row on the way across would cost more than everything
+else here put together.
+
+:func:`to_upstream` goes the other way, over a range of blocks, and is what the
+analysis methods are built on. It is a bulk copy rather than a replay because
+the two sides store the same numbers: a Pulseq 1.5 library row *is* what
+PyPulseq keeps in ``rf_library.data[id]``, so the rows cross as they stand and
+their ids cross with them.
 """
 
 from __future__ import annotations
 
-__all__ = ["to_native"]
+__all__ = ["to_native", "to_upstream"]
+
+from collections.abc import Mapping
 
 import numpy as np
+import pypulseq as pp
 
 from .._ext import _pulseqpp_wrapper as _cxx
 
@@ -345,3 +356,308 @@ def _label_name(label_id: int, registry=None) -> str:
     if 1 <= label_id <= len(builtin):
         return builtin[label_id - 1]
     return f"CUSTOM_{label_id}"
+
+
+# %% the other direction: a range of blocks as a PyPulseq sequence
+
+
+#: The extension sections PyPulseq's ``get_block`` can decode. A node of any
+#: other kind makes it raise, and two of ours are of another kind: ``ROTATIONS``
+#: and ``RF_SHIMS`` postdate what upstream reads. Chains are rebuilt without
+#: them, and what they describe is resolved into the events instead.
+_UPSTREAM_SECTIONS = ("TRIGGERS", "LABELSET", "LABELINC", "DELAYS")
+
+
+def to_upstream(seq, *, first: int = 1, last: int | None = None, numbers=None, lead_in=None):
+    """Blocks ``first..last`` of ``seq`` as a real :class:`pypulseq.Sequence`.
+
+    Parameters
+    ----------
+    seq : pulserver.pypulseq.Sequence
+        The sequence to read. Its rotations and RF shims are *not* resolved
+        here -- a window carrying either should be materialised first.
+    first, last : int
+        The block range, 1-based inclusive. ``last`` defaults to the last block.
+    numbers : sequence of int, optional
+        What to call the blocks in the sequence that comes back. Defaults to
+        their own indices, which is what makes a window report the block
+        numbers the caller would recognise. A materialised window passes the
+        numbers of the blocks it stands for.
+    lead_in : float, optional
+        Seconds of silence to put in front, as a single delay block numbered
+        ``0``. Defaults to the time elapsed before ``first``, which is what
+        places the window at its true time on a plot's axis.
+
+    Returns
+    -------
+    pypulseq.Sequence
+        Holding the same rows, under the same library ids.
+
+    Notes
+    -----
+    The libraries cross as they stand: a Pulseq 1.5 row is what PyPulseq keeps
+    in ``data[id]``, and its libraries are id-keyed dicts, so nothing has to be
+    renumbered and nothing is decoded on the way. Only the rows the window
+    actually names are copied.
+    """
+    native = seq._native
+    total = native.num_blocks()
+    first = max(int(first), 1)
+    last = total if last is None else min(int(last), total)
+
+    events = np.asarray(native.block_events())
+    durations = np.asarray(native.block_durations())
+    window = events[first - 1 : last]
+    spans = durations[first - 1 : last]
+
+    if numbers is None:
+        numbers = np.arange(first, last + 1)
+    if lead_in is None:
+        lead_in = float(durations[: first - 1].sum())
+
+    upstream = pp.Sequence(system=seq.system)
+    # The rasters the blocks were laid out on, which after a read are the
+    # file's rather than the system's.
+    upstream.rf_raster_time = native.rf_raster_time
+    upstream.grad_raster_time = native.grad_raster_time
+    upstream.adc_raster_time = native.adc_raster_time
+    upstream.block_duration_raster = native.block_duration_raster
+    upstream.definitions.update(seq.definitions)
+
+    shapes: set[int] = set()
+    _take_rf(native, upstream, _referenced(window[:, 0]), shapes)
+    _take_gradients(native, upstream, _referenced(window[:, 1:4]), shapes)
+    _take_adc(native, upstream, _referenced(window[:, 4]), shapes)
+    _take_shapes(native, upstream, shapes)
+    heads = _take_extensions(native, upstream, _referenced(window[:, 5]))
+
+    # PyPulseq's block row is seven wide: its leading column is Pulseq's legacy
+    # delay id, which a 1.4-or-later sequence leaves at zero.
+    table = np.zeros((len(window), 7), dtype=np.int64)
+    table[:, 1:] = window
+    table[:, 6] = _remapped(window[:, 5], heads)
+
+    numbers = np.asarray(numbers, dtype=np.int64)
+    if lead_in > 0:
+        # A block numbered zero, holding the time before the window as a bare
+        # delay. Upstream accumulates its time axis out of block durations, so
+        # this is what puts a window at the time it is really played at.
+        numbers = np.concatenate(([0], numbers))
+        table = np.concatenate((np.zeros((1, 7), dtype=table.dtype), table))
+        spans = np.concatenate(([float(lead_in)], spans))
+
+    upstream.block_events = _ByBlock(numbers, table)
+    upstream.block_durations = _ByBlock(numbers, np.ascontiguousarray(spans, dtype=np.float64))
+    upstream.next_free_block_ID = (int(numbers[-1]) + 1) if numbers.size else 1
+    return upstream
+
+
+class _ByBlock(Mapping):
+    """A block-numbered view on one array, with no dictionary behind it.
+
+    PyPulseq keeps the block table and the block durations as dicts of a
+    million entries each, holding a million one-row arrays and a million
+    boxed floats. Building those from the two arrays the C++ sequence already
+    has costs about a microsecond a block and half a gigabyte on a large 3D
+    protocol -- to be read once, in order, by whichever analysis asked.
+
+    So the arrays stay as they are and this maps block numbers onto rows of
+    them. Everything upstream does with these -- index one, iterate them,
+    ``len``, ``in``, ``.values()``, ``sorted(.items())`` -- is what a
+    :class:`~collections.abc.Mapping` provides.
+
+    Read-only, deliberately: it belongs to a window built for analysis, and an
+    assignment to it would be a caller thinking they were editing a sequence.
+    """
+
+    __slots__ = ("_at", "_base", "_numbers", "_values")
+
+    def __init__(self, numbers: np.ndarray, values: np.ndarray) -> None:
+        self._numbers = numbers
+        self._values = values
+        # Block numbers run consecutively unless a lead-in delay was put in
+        # front, and consecutive means a subtraction rather than a lookup --
+        # which is the whole point on the sequence-sized case, the one with no
+        # lead-in. Anything else builds the index it needs, once.
+        consecutive = numbers.size > 0 and int(numbers[-1]) - int(numbers[0]) + 1 == numbers.size
+        self._base = int(numbers[0]) if consecutive else 0
+        self._at = None if consecutive else {int(n): i for i, n in enumerate(numbers.tolist())}
+
+    def _position(self, key: object) -> int:
+        try:
+            number = int(key)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            raise KeyError(key) from None
+        if self._at is not None:
+            position = self._at.get(number, -1)
+        else:
+            position = number - self._base
+        if not 0 <= position < self._numbers.size:
+            raise KeyError(key)
+        return position
+
+    def __getitem__(self, key: object):
+        return self._values[self._position(key)]
+
+    def __iter__(self):
+        return iter(self._numbers.tolist())
+
+    def __len__(self) -> int:
+        return int(self._numbers.size)
+
+    def __contains__(self, key: object) -> bool:
+        try:
+            self._position(key)
+        except KeyError:
+            return False
+        return True
+
+
+def _referenced(column) -> np.ndarray:
+    """The distinct non-zero ids a block-table column names."""
+    ids = np.unique(np.asarray(column))
+    return ids[ids > 0]
+
+
+def _remapped(heads: np.ndarray, rebuilt: dict[int, int]) -> np.ndarray:
+    """``heads`` with each chain head replaced by the one rebuilt for it."""
+    if heads.size == 0 or not heads.any():
+        return np.zeros(heads.size, dtype=np.int64)
+    lookup = np.zeros(int(heads.max()) + 1, dtype=np.int64)
+    for source, target in rebuilt.items():
+        lookup[source] = target
+    return lookup[heads]
+
+
+def _finish(library) -> None:
+    """Point a filled library at the id after its last."""
+    library.next_free_ID = (max(library.data) + 1) if library.data else 1
+
+
+def _take_rf(native, upstream, ids: np.ndarray, shapes: set[int]) -> None:
+    """Copy the RF rows ``ids`` names, noting the shapes they refer to."""
+    library = upstream.rf_library
+    for rf_id in ids.tolist():
+        row = native.rf_row(rf_id)
+        library.data[rf_id] = row
+        library.type[rf_id] = native.rf_use(rf_id)
+        shapes.update(int(row[column]) for column in (1, 2, 3) if row[column] > 0)
+    _finish(library)
+
+
+def _take_gradients(native, upstream, ids: np.ndarray, shapes: set[int]) -> None:
+    """Copy the gradient rows ``ids`` names, trapezoid or arbitrary.
+
+    The two kinds live in separate tables here and in one library upstream,
+    told apart by the ``'t'``/``'g'`` tag beside each row.
+    """
+    library = upstream.grad_library
+    for grad_id in ids.tolist():
+        row = native.grad_row(grad_id)
+        trapezoid = native.grad_kind(grad_id) == "trap"
+        library.data[grad_id] = row
+        library.type[grad_id] = "t" if trapezoid else "g"
+        if not trapezoid:
+            shapes.update(int(row[column]) for column in (3, 4) if row[column] > 0)
+    _finish(library)
+
+
+def _take_adc(native, upstream, ids: np.ndarray, shapes: set[int]) -> None:
+    """Copy the ADC rows ``ids`` names, noting any phase-modulation shape."""
+    library = upstream.adc_library
+    for adc_id in ids.tolist():
+        row = native.adc_row(adc_id)
+        library.data[adc_id] = row
+        if row[7] > 0:
+            shapes.add(int(row[7]))
+    _finish(library)
+
+
+def _take_shapes(native, upstream, ids: set[int]) -> None:
+    """Copy the shapes ``ids`` names, in the form upstream decompresses.
+
+    A row is its uncompressed length followed by its stored samples --
+    ``decompress_shape`` short-circuits when the two lengths agree, so a shape
+    that was never compressed crosses unchanged.
+    """
+    library = upstream.shape_library
+    for shape_id in sorted(ids):
+        num_samples, samples = native.shape_row(shape_id)
+        library.data[shape_id] = np.concatenate(([float(num_samples)], samples))
+    _finish(library)
+
+
+def _take_extensions(native, upstream, heads: np.ndarray) -> dict[int, int]:
+    """Rebuild the chains ``heads`` starts, dropping what upstream cannot read.
+
+    Returns the map from each original head onto the one rebuilt for it, which
+    is what the block table is rewritten through. Chains are shared -- after
+    deduplication a whole scan may run on a handful of them -- so each is
+    rebuilt once however many blocks name it.
+    """
+    rebuilt: dict[int, int] = {}
+    if heads.size == 0:
+        return rebuilt
+
+    sections: dict[str, int] = {}
+    for head in heads.tolist():
+        kept: list[tuple[str, int]] = []
+        node = head
+        while node:
+            type_id, reference, node = native.extension_row(node)
+            name = native.extension_type_name(type_id)
+            if name not in _UPSTREAM_SECTIONS:
+                continue
+            if not _take_extension_row(native, upstream, name, reference):
+                continue
+            if name not in sections:
+                sections[name] = len(sections) + 1
+                upstream.set_extension_string_ID(name, sections[name])
+            kept.append((name, reference))
+
+        # Written back to front, because each node has to know the id of the
+        # one after it.
+        following = 0
+        for name, reference in reversed(kept):
+            node_id = len(upstream.extensions_library.data) + 1
+            upstream.extensions_library.data[node_id] = np.array(
+                [sections[name], reference, following], dtype=float
+            )
+            following = node_id
+        rebuilt[head] = following
+
+    _finish(upstream.extensions_library)
+    for library in (
+        upstream.trigger_library,
+        upstream.label_set_library,
+        upstream.label_inc_library,
+        upstream.soft_delay_library,
+    ):
+        _finish(library)
+    return rebuilt
+
+
+def _take_extension_row(native, upstream, name: str, reference: int) -> bool:
+    """Copy one extension node's payload; say whether upstream can hold it.
+
+    The one it cannot is a label this project defined and Pulseq did not:
+    upstream resolves a label id by indexing its own fixed list of names, so a
+    custom id would come back as some unrelated label or as an ``IndexError``.
+    Dropping the node is the honest answer -- the label is a console
+    instruction, and nothing the window feeds reads it.
+    """
+    if name == "TRIGGERS":
+        upstream.trigger_library.data[reference] = native.trigger_row(reference)
+        return True
+    if name == "DELAYS":
+        number, offset, factor, hint = native.soft_delay_row(reference)
+        upstream.soft_delay_library.data[reference] = [number, offset, factor, hint]
+        return True
+
+    read = native.label_set_row if name == "LABELSET" else native.label_inc_row
+    value, label_id = read(reference)
+    if native.is_custom_label(label_id):
+        return False
+    library = upstream.label_set_library if name == "LABELSET" else upstream.label_inc_library
+    library.data[reference] = np.array([value, label_id], dtype=float)
+    return True
