@@ -8,6 +8,7 @@ import pulserver.pypulseq as pp
 import pypulseq as upstream
 import pytest
 from matplotlib import pyplot as plt
+from pulserver.pypulseq import _safety
 from pulserver.pypulseq import _sequence as sequence_module
 from pulserver.pypulseq._pulseqpp import to_upstream
 from pulserver.pypulseq._rotate3d import rotate3D
@@ -314,3 +315,283 @@ def test_drawing_a_whole_long_sequence_says_so_first(plain, monkeypatch):
 def test_a_time_range_that_ends_before_it_begins_is_refused(plain):
     with pytest.raises(ValueError, match="end after it begins"):
         plain.plot(plot_now=False, time_range=(0.02, 0.01))
+
+
+# %% the canonical TR
+#
+# The claim under test throughout is one claim: what is drawn under `tr` is
+# what the C safety core built, not something rebuilt here that resembles it.
+# So these compare the picture against the core's own arrays rather than
+# against a fixture -- if the viewer and the interpreter could disagree, they
+# would disagree here.
+
+NUM_INSTANCES = 16
+
+
+@pytest.fixture
+def encoded(system):
+    """A phase-encoded gradient echo: one structural TR, a varying gradient.
+
+    The phase encode sweeps through zero, so no instance is the envelope over
+    them and ``zero_variable`` has something to zero. Readout and RF are
+    constant, which is what makes the three canonical views tell apart.
+    """
+    built = pp.Sequence(system=system)
+    rf = pp.make_block_pulse(flip_angle=np.pi / 6, duration=1e-3, system=system)
+    gx = pp.make_trapezoid(channel="x", area=2000, system=system)
+    adc = pp.make_adc(
+        num_samples=128, duration=gx.flat_time, delay=gx.rise_time, system=system
+    )
+    for index in range(NUM_INSTANCES):
+        gy = pp.make_trapezoid(
+            channel="y", area=-1000 + 125 * index, duration=1e-3, system=system
+        )
+        built.add_block(rf)
+        built.add_block(gy)
+        built.add_block(gx, adc)
+        built.add_block(pp.make_delay(5e-3))
+    built.remove_duplicates()
+    return built
+
+
+def _drawn(axis) -> np.ndarray:
+    """Every point on ``axis``, as one ``(N, 2)`` array of x against y."""
+    points = [np.stack(line.get_data(), axis=-1) for line in axis.get_lines()]
+    return np.concatenate(points) if points else np.zeros((0, 2))
+
+
+def _panels(plot) -> dict:
+    """The six panels of a merged plot, by the channel each one carries."""
+    return dict(
+        zip(("adc", "rf_mag", "rf_phase", "gx", "gy", "gz"), plot.fig1.axes, strict=True)
+    )
+
+
+@pytest.mark.parametrize("tr", ["worst_case", "zero_variable", 0], ids=str)
+def test_a_canonical_tr_is_drawn_whole_rather_than_gradients_only(encoded, tr):
+    """RF, ADC and gradients all arrive: the core reports them in one call.
+
+    The binding used to hand back the three gradient axes and drop everything
+    else, which would have left three of the six panels empty however the TR
+    was asked for.
+    """
+    panels = _panels(encoded.plot(plot_now=False, tr=tr))
+
+    assert len(_drawn(panels["adc"])), "no ADC was drawn"
+    assert len(_drawn(panels["rf_mag"])), "no RF magnitude was drawn"
+    assert len(_drawn(panels["gx"])), "no readout gradient was drawn"
+
+
+@pytest.mark.parametrize("tr", ["worst_case", "zero_variable", 0, NUM_INSTANCES - 1], ids=str)
+def test_what_is_drawn_is_the_waveform_the_safety_core_handed_over(encoded, tr):
+    """The viewer and the analyses read the same array, to the sample.
+
+    ``calculate_pns(tr=...)`` and ``calculate_gradient_spectrum(tr=...)`` reach
+    their waveform through ``TRSequence.waveforms()``; the plot reaches it
+    through ``get_block``. This says the two cuts of it agree, which is what
+    stops a picture and a predownload verdict from disagreeing.
+    """
+    panels = _panels(encoded.plot(plot_now=False, tr=tr))
+    extracted = encoded._structure_for("test").waveform(tr)
+
+    for axis, channel in zip("xyz", extracted.waveforms(), strict=True):
+        times, amplitudes = channel
+        carries = np.any(amplitudes)
+        points = _drawn(panels[f"g{axis}"])
+        if not carries:
+            assert not len(points), f"g{axis} carries nothing but was drawn"
+            continue
+        # kHz/m is upstream's default gradient unit; the time axis is seconds.
+        drawn = points[np.argsort(points[:, 0])]
+        wanted = np.interp(drawn[:, 0], times, amplitudes) * 1e-3
+        assert np.allclose(drawn[:, 1], wanted, atol=1e-6), f"g{axis}"
+
+
+def test_the_worst_case_tr_drawn_bounds_every_instance_drawn(encoded):
+    """The claim ``worst_case`` exists to make, read off the picture.
+
+    Its gradient at each position is the largest any instance reaches there,
+    so no instance can be drawn outside it.
+    """
+    structure = encoded._structure_for("test")
+    envelope = [channel[1] for channel in structure.waveform("worst_case").waveforms()]
+
+    for index in range(NUM_INSTANCES):
+        played = structure.waveform(index).waveforms()
+        for axis, bound, channel in zip("xyz", envelope, played, strict=True):
+            assert np.all(np.abs(channel[1]) <= np.abs(bound) + 1e-3), f"tr={index} g{axis}"
+
+
+def test_zeroing_the_variable_gradients_keeps_the_constant_ones(encoded):
+    """``zero_variable`` is the structure the constant gradients make.
+
+    The readout is the same in every instance and survives; the phase encode
+    differs between them and goes.
+    """
+    panels = _panels(encoded.plot(plot_now=False, tr="zero_variable"))
+
+    assert len(_drawn(panels["gx"])), "the constant readout was zeroed too"
+    assert not len(_drawn(panels["gy"])), "the varying phase encode survived"
+
+
+def test_an_instance_is_drawn_as_it_really_plays(encoded):
+    """Signed amplitudes and all -- which is what makes it a check on the envelope.
+
+    The phase encode sweeps through zero, so one instance has no gradient at
+    all and the ones either side of it are drawn with opposite signs.
+    """
+    structure = encoded._structure_for("test")
+    encodes = [structure.waveform(index).waveforms()[1][1] for index in range(NUM_INSTANCES)]
+    extremes = [channel[np.argmax(np.abs(channel))] for channel in encodes]
+
+    assert min(extremes) < 0 < max(extremes)
+    assert not np.any(_drawn(_panels(encoded.plot(plot_now=False, tr=8))["gy"])[:, 1])
+
+
+def test_the_blocks_drawn_are_the_blocks_the_core_reported(encoded):
+    """Not blocks recovered from the timeline: the core's own descriptors.
+
+    Their durations have to sum to the TR the same core reports, or the
+    picture is a different length from the thing being analysed.
+    """
+    extracted = encoded._structure_for("test").waveform("worst_case")
+
+    assert len(extracted.block_events) == len(extracted.block_durations) > 1
+    assert sum(extracted.block_durations.values()) == pytest.approx(
+        encoded._structure_for("test").tr_duration
+    )
+
+
+def test_a_tr_is_drawn_from_its_own_clock(encoded):
+    """A TR is not on the timeline, so its axis starts where the TR does."""
+    plot = encoded.plot(plot_now=False, tr="worst_case")
+    duration = encoded._structure_for("test").tr_duration
+
+    assert plot.ax1[0].get_xlim() == pytest.approx((0.0, duration))
+
+
+def test_a_time_range_zooms_into_the_tr(encoded):
+    """Zooming works under `tr` too; it just means time within the TR."""
+    plot = encoded.plot(plot_now=False, tr="worst_case", time_range=(0.002, 0.004))
+
+    assert plot.ax1[0].get_xlim() == pytest.approx((0.002, 0.004))
+
+
+def test_the_timeline_is_still_drawn_when_no_tr_is_asked_for(encoded):
+    """`tr=None` is untouched: the whole sequence, not one repetition of it."""
+    plot = encoded.plot(plot_now=False)
+    structure = encoded._structure_for("test")
+
+    assert plot.ax1[0].get_xlim()[1] == pytest.approx(
+        structure.tr_duration * NUM_INSTANCES
+    )
+
+
+# %% what cannot be asked for
+
+
+def test_a_label_cannot_be_marked_on_a_canonical_tr(encoded):
+    """The core builds the TR out of waveforms and carries no label values."""
+    with pytest.raises(ValueError, match="carries none"):
+        encoded.plot(plot_now=False, tr="worst_case", label="LIN")
+
+
+def test_an_instance_past_the_last_one_is_refused(encoded):
+    with pytest.raises(ValueError, match="out of range"):
+        encoded.plot(plot_now=False, tr=NUM_INSTANCES)
+
+
+def test_a_tr_named_something_the_core_has_no_mode_for_is_refused(encoded):
+    with pytest.raises(ValueError, match="worst_case"):
+        encoded.plot(plot_now=False, tr="steady_state")
+
+
+def test_every_instance_the_core_indexes_can_be_asked_for(encoded):
+    """The bound is the core's own, not the count of structural TRs."""
+    structure = encoded._structure_for("test")
+
+    assert structure.num_instances == NUM_INSTANCES
+    structure.resolve(NUM_INSTANCES - 1)  # would raise if the bound were short
+
+
+# %% many transmit channels
+#
+# The core writes a block's RF channel-major *within the block*, repeating the
+# time base once per channel, so a pTx TR's time array runs backwards at every
+# channel boundary and cannot be searched -- only bucketed by block and then
+# cut into equal parts. These pin that down directly, because the shimmed
+# sequences reachable from here come back single-channel and would not
+# exercise it.
+
+RF_RASTER = 1e-6
+
+
+def _two_channel_tr(system, num_channels=3):
+    """A two-block TR whose second block transmits on ``num_channels``."""
+    samples = 8
+    times = (np.arange(samples) + 0.5) * RF_RASTER + 0.002
+    return _safety.TRSequence(
+        system,
+        [np.zeros((2, 2)) for _ in range(3)],
+        duration=0.004,
+        blocks=[
+            {"start": 0.0, "duration": 0.002, "segment": 0},
+            {"start": 0.002, "duration": 0.002, "segment": 0},
+        ],
+        rf=(
+            np.tile(times, num_channels),
+            np.concatenate([np.full(samples, 10.0 * (c + 1)) for c in range(num_channels)]),
+            np.concatenate([np.full(samples, 0.5 * c) for c in range(num_channels)]),
+        ),
+        num_rf_channels=num_channels,
+    )
+
+
+def test_a_ptx_block_is_cut_into_one_pulse_per_transmit_channel(system):
+    """Read off the repeated time base, not off the TR-wide channel count."""
+    channels = _two_channel_tr(system).rf_over(2)
+
+    assert len(channels) == 3
+    for index, (times, magnitudes, phases) in enumerate(channels):
+        assert times.size == magnitudes.size == phases.size == 8
+        assert np.allclose(magnitudes, 10.0 * (index + 1))
+        assert np.allclose(phases, 0.5 * index)
+    # Every channel transmits over the same interval, which is the point.
+    assert all(np.array_equal(channels[0][0], other[0]) for other in channels[1:])
+
+
+def test_a_block_that_does_not_transmit_reports_no_rf(system):
+    assert _two_channel_tr(system).rf_over(1) == []
+    assert _two_channel_tr(system).get_block(1).rf is None
+
+
+def test_the_block_drawn_by_upstream_is_the_channel_that_was_asked_for(system):
+    """Upstream's block model has one RF event, so one channel goes through it."""
+    tr = _two_channel_tr(system)
+
+    tr.rf_channel = 2
+    assert np.allclose(np.abs(tr.get_block(2).rf.signal), 30.0)
+    tr.rf_channel = 0
+    assert np.allclose(np.abs(tr.get_block(2).rf.signal), 10.0)
+
+
+def test_the_remaining_transmit_channels_are_added_to_the_panels(system):
+    """The two upstream drew nothing on, drawn from the same arrays."""
+    tr = _two_channel_tr(system)
+    _, (magnitude, phase) = plt.subplots(2)
+
+    _safety.overlay_rf_channels(tr, magnitude, phase, time_factor=1.0)
+
+    assert len(magnitude.get_lines()) == len(phase.get_lines()) == 2
+    assert sorted(float(line.get_ydata()[0]) for line in magnitude.get_lines()) == [20.0, 30.0]
+    assert [text.get_text() for text in magnitude.get_legend().get_texts()] == ["Tx1", "Tx2"]
+
+
+def test_a_single_transmit_tr_is_left_exactly_as_upstream_drew_it(system):
+    """The overlay is a pTx affordance and must not touch the ordinary case."""
+    tr = _two_channel_tr(system, num_channels=1)
+    _, (magnitude, phase) = plt.subplots(2)
+
+    _safety.overlay_rf_channels(tr, magnitude, phase, time_factor=1.0)
+
+    assert magnitude.get_lines() == [] and magnitude.get_legend() is None

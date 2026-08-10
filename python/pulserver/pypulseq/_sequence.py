@@ -48,13 +48,13 @@ and renumbered by :meth:`Sequence.remove_duplicates`, so there is no number
 that would still be true by the time the file is written.
 
 **The scan structure -- repetition times, segments -- is derived on demand,
-not carried.** :meth:`Sequence.calculate_pns` and
-:meth:`Sequence.calculate_gradient_spectrum` can be asked about a repetition
-time rather than about a stretch of the timeline, and when they are, the C
-safety library recovers the TR from the serialised sequence and the answer
-comes from the same code the scanner runs at predownload. That structure is
-cached behind a revision counter and rebuilt whenever the sequence changes,
-so it can never describe blocks that are gone.
+not carried.** :meth:`Sequence.calculate_pns`,
+:meth:`Sequence.calculate_gradient_spectrum` and :meth:`Sequence.plot` can be
+asked about a repetition time rather than about a stretch of the timeline,
+and when they are, the C safety library recovers the TR from the serialised
+sequence and the answer comes from the same code the scanner runs at
+predownload. That structure is cached behind a revision counter and rebuilt
+whenever the sequence changes, so it can never describe blocks that are gone.
 
 The two questions are genuinely different and the class does not blur them.
 Upstream's methods analyse the timeline: a window of blocks, played once,
@@ -63,6 +63,10 @@ per-sample maximum over every instance of it -- a waveform that appears
 nowhere on the timeline -- and evaluates it periodically. So ``tr=None``, the
 default, is upstream PyPulseq to the bit, and the other answer has to be
 asked for by name.
+
+``plot`` takes the same ``tr`` for the same reason the other two do, and gets
+its picture from the same call: whichever canonical TR the checks were run
+against is the one that can be looked at, gradients, RF and ADC together.
 
 What is here matches upstream PyPulseq's
 :class:`~pypulseq.Sequence.sequence.Sequence` method for method, including
@@ -607,14 +611,17 @@ class Sequence:
         overlay: object = None,
         stacked: bool = False,
         show_guides: bool = False,
+        *,
+        tr: str | int | None = None,
+        rf_channel: int = 0,
     ):
-        """Draw the sequence: ADC, RF magnitude and phase, and the three gradients.
+        """Draw the sequence, or one canonical TR: ADC, RF, and the three gradients.
 
         Parameters
         ----------
         label : str, default ""
             Labels whose value to mark at each ADC, as a comma-separated list --
-            ``"LIN,REP"``, say.
+            ``"LIN,REP"``, say. Not available under ``tr``.
         show_blocks : bool, default False
             Tick the axes at the block boundaries.
         save : bool, default False
@@ -623,7 +630,8 @@ class Sequence:
             The seconds to draw. Only the blocks this touches are decoded, so
             asking for a tenth of a second of a long protocol costs a tenth of a
             second of blocks -- and the axis still reads in time from the start
-            of the sequence.
+            of the sequence. Under ``tr`` it is a zoom into the TR, whose clock
+            starts at zero.
         time_disp : {"s", "ms", "us"}, default "s"
             The time unit on the axis.
         grad_disp : {"kHz/m", "mT/m"}, default "kHz/m"
@@ -640,33 +648,82 @@ class Sequence:
         show_guides : bool, default False
             Follow the cursor with a vertical hairline across every panel.
             Needs ``mplcursors``; ignored when it is not installed.
+        tr : {"worst_case", "zero_variable"} or int, optional
+            Draw one canonical TR rather than the timeline.
+
+            ``None``, the default, is upstream PyPulseq exactly: the blocks
+            ``time_range`` covers, as the file stores them.
+
+            ``"worst_case"`` is the TR ``pulseg_check_safety`` judges -- **not**
+            any TR the scanner plays, but the one whose gradient at each
+            position is the largest any instance reaches. Where a block's
+            gradient varies between instances, this is what the PNS,
+            mechanical-resonance and gradient-heating checks are run against.
+
+            ``"zero_variable"`` is the same canonical TR with those varying
+            gradients zeroed instead, leaving the structure the constant ones
+            make -- the skeleton the k-space and timing analyses work from.
+
+            An integer is one instance as it really plays, signed amplitudes
+            and all. Its use is checking the claim ``"worst_case"`` rests on:
+            that no instance exceeds the envelope.
+        rf_channel : int, default 0
+            For a pTx TR, which transmit channel upstream draws. The rest are
+            added to the same two panels afterwards. Read only under ``tr``.
 
         Returns
         -------
         pypulseq.utils.seq_plot.SeqPlot
             The plot, whose ``fig1``/``fig2`` and ``ax1``/``ax2`` are upstream's.
 
+        Raises
+        ------
+        ValueError
+            If ``label`` is asked for under ``tr``. A canonical TR is built by
+            the C core out of waveforms, and the core does not carry label
+            values through it, so there is nothing truthful to mark.
+
         Notes
         -----
-        Drawing is upstream PyPulseq's, over a :class:`pypulseq.Sequence` holding
-        the blocks asked for. Rotations are resolved into the gradients and RF
+        Drawing is upstream PyPulseq's either way; what changes is the sequence
+        it is handed.
+
+        Under ``tr=None`` that is a :class:`pypulseq.Sequence` holding the
+        blocks asked for, with rotations resolved into the gradients and RF
         shims spread across the transmit channels first, so what is drawn is
         what the scanner plays rather than the base waveform the file stores.
+
+        Under ``tr`` it is the TR the **C safety core** built --- one
+        ``pulseg_get_tr_waveforms`` call, giving gradients, RF magnitude and
+        phase, ADC events and block boundaries together --- wrapped in a
+        :class:`~._safety.TRSequence` so upstream's plotter can walk it. None
+        of it is reconstructed here, so the picture is the waveform the
+        interpreter's checks were run on, down to which instance's gradient
+        won at each position.
 
         Unstacked, the two panels PyPulseq would open in separate windows are
         laid out as **one figure, three rows by two columns**, sharing their time
         axis; ``fig1`` and ``fig2`` are then the same figure. ``save=True``
         writes that one window as ``seq_plot.jpg`` rather than upstream's pair.
         """
-        first, last = self._blocks_over(*_span(time_range))
-        if last - first + 1 > _LOUD_ABOVE:
-            warnings.warn(
-                f"Plotting {last - first + 1} blocks. Matplotlib will take a long time over "
-                "this; pass time_range=(start, stop) to draw a part of the sequence.",
-                stacklevel=2,
-            )
+        if tr is None:
+            first, last = self._blocks_over(*_span(time_range))
+            if last - first + 1 > _LOUD_ABOVE:
+                warnings.warn(
+                    f"Plotting {last - first + 1} blocks. Matplotlib will take a long time over "
+                    "this; pass time_range=(start, stop) to draw a part of the sequence.",
+                    stacklevel=2,
+                )
+            window = self._upstream_window(first, last)
+        else:
+            if label:
+                raise ValueError(
+                    "plot(): label reads values off the timeline and tr draws the canonical TR "
+                    "the safety core builds out of waveforms, which carries none -- pass one "
+                    "or the other"
+                )
+            window = self._structure_for("plot").waveform(tr, rf_channel=rf_channel)
 
-        window = self._upstream_window(first, last)
         merging = not stacked
         if merging and _is_merged(overlay):
             _split_columns(overlay)
@@ -684,6 +741,17 @@ class Sequence:
             stacked=stacked,
             show_guides=show_guides and not merging,
         )
+
+        if tr is not None:
+            # Upstream's block model carries one RF event, so it drew one
+            # transmit channel. The rest go on the same two panels, in the
+            # display unit it chose.
+            _safety.overlay_rf_channels(
+                window,
+                plot.ax1[1],
+                plot.ax1[2],
+                getattr(plot.fig1, "_seq_t_factor", 1.0),
+            )
 
         if merging:
             _merge_columns(plot, show_guides=show_guides)
@@ -1273,8 +1341,40 @@ class _Structure:
 
     @property
     def num_trs(self) -> int:
-        """int : How many TR instances the sequence holds."""
+        """int : How many structural TRs the repeating region holds."""
         return int(self.tr["num_trs"])
+
+    @property
+    def folded_prep_or_cooldown(self) -> bool:
+        """bool : Whether a leading or trailing section is *not* just another TR.
+
+        A prep or cooldown region that repeats the TR pattern is folded away
+        by the C core -- its blocks are TR instances like any other, merely
+        discarded downstream. Only a genuinely different one survives here,
+        and when it does the core's unit of analysis stops being the TR and
+        becomes the whole pass it sits in.
+        """
+        return bool(self.tr["num_prep_blocks"] and not self.tr["degenerate_prep"]) or bool(
+            self.tr["num_cooldown_blocks"] and not self.tr["degenerate_cooldown"]
+        )
+
+    @property
+    def num_instances(self) -> int:
+        """int : How many things ``tr=<int>`` can name.
+
+        Passes when a non-degenerate section folds prep and cooldown into the
+        unit of analysis (see :attr:`folded_prep_or_cooldown`), and otherwise
+        every TR the scanner plays -- the prep and cooldown TRs included, and
+        counted once per average, which is how the C core indexes them.
+        """
+        if self.folded_prep_or_cooldown:
+            return max(int(self.tr["num_passes"]), 1)
+        averages = max(int(self.tr["num_averages"]), 1)
+        return (
+            int(self.tr["num_prep_trs"])
+            + averages * self.num_trs
+            + int(self.tr["num_cooldown_trs"])
+        )
 
     @property
     def segments(self) -> list:
@@ -1291,22 +1391,33 @@ class _Structure:
             self._segments = _get_segments(self.collection, 0)
         return self._segments
 
-    def waveform(self, tr) -> _safety.TRSequence:
-        """The gradient waveform ``tr`` names, as a sequence upstream can read.
+    def waveform(self, tr, *, rf_channel: int = 0) -> _safety.TRSequence:
+        """The TR ``tr`` names, as a sequence upstream can read.
+
+        Everything in it -- gradients, RF magnitude and phase, ADC events,
+        block boundaries -- comes out of one ``pulseg_get_tr_waveforms`` call,
+        so what is returned is the canonical TR the C core itself constructs
+        rather than one rebuilt from the timeline.
 
         Parameters
         ----------
-        tr : {"worst_case"} or int
+        tr : {"worst_case", "zero_variable"} or int
             ``"worst_case"`` for the per-sample maximum over every instance --
             the waveform ``pulseg_check_safety`` judges, which is not any one
-            TR the scanner plays. An integer for that instance as it really
-            plays, signed amplitudes and all.
+            TR the scanner plays. ``"zero_variable"`` for the same TR with the
+            gradients that vary between instances zeroed, leaving the
+            structure the constant ones make. An integer for that instance as
+            it really plays, signed amplitudes and all.
+        rf_channel : int, default 0
+            Which transmit channel the returned blocks report, for a pTx TR.
         """
         from .._ext._pulseg_wrapper import _get_tr_waveforms
 
         mode, index = self.resolve(tr)
         return _safety.TRSequence.from_c(
-            _get_tr_waveforms(self.collection, 0, mode, index), self.system
+            _get_tr_waveforms(self.collection, 0, mode, index),
+            self.system,
+            rf_channel=rf_channel,
         )
 
     def resolve(self, tr) -> tuple[int, int]:
@@ -1319,9 +1430,13 @@ class _Structure:
             return _safety.AMPLITUDE_MODES[tr], 0
 
         index = int(tr)
-        if not 0 <= index < self.num_trs:
+        # The core's own bound, which is passes when prep or cooldown is
+        # folded into the unit of analysis and TR instances otherwise --
+        # not num_trs, which counts only the structural repeat.
+        if not 0 <= index < self.num_instances:
+            named = "passes" if self.folded_prep_or_cooldown else "TR instances"
             raise ValueError(
-                f"tr={index} is out of range; the sequence holds {self.num_trs} TR instances"
+                f"tr={index} is out of range; the sequence holds {self.num_instances} {named}"
             )
         return _safety.AMPLITUDE_MODES["actual"], index
 

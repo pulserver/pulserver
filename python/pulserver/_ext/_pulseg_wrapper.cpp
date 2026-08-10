@@ -317,17 +317,29 @@ static py::dict _calc_pns_safe(
 // ─── TR waveforms ──────────────────────────────────────────────────
 
 /**
- * Native-timing gradient waveforms of one TR, as (time_us, amplitude)
- * breakpoint pairs per axis. `amplitude_mode` is PULSEG_AMP_MAX_POS (0),
- * _ZERO_VAR (1) or _ACTUAL (2); `tr_index` is read only by _ACTUAL.
+ * Native-timing waveforms of one TR: gradients, RF magnitude and phase, ADC
+ * event descriptors and per-block metadata, all on one TR-relative time base.
+ * `amplitude_mode` is PULSEG_AMP_MAX_POS (0), _ZERO_VAR (1) or _ACTUAL (2);
+ * `tr_index` is read only by _ACTUAL.
+ *
+ * Everything pulseg_get_tr_waveforms fills is handed across, so that a viewer
+ * draws the same canonical TR the safety checks judge rather than one rebuilt
+ * from the timeline. RF is channel-major when num_rf_channels > 1.
  */
 static py::dict _get_tr_waveforms(
     _PulseqCollection& pc,
     int subsequence_idx,
     int amplitude_mode,
-    int tr_index)
+    int tr_index,
+    bool collapse_delays,
+    int num_averages)
 {
-    const auto w = pc.coll().get_tr_waveforms(subsequence_idx, amplitude_mode, tr_index);
+    const auto w = pc.coll().get_tr_waveforms(
+        subsequence_idx,
+        amplitude_mode,
+        tr_index,
+        collapse_delays,
+        num_averages);
 
     auto axis = [](const pulseg::ChannelWaveform& ch)
     {
@@ -337,10 +349,39 @@ static py::dict _get_tr_waveforms(
         return d;
     };
 
+    py::list adc_events;
+    for (const auto& a : w.adc_events)
+    {
+        py::dict d;
+        d["onset_us"] = a.onset_us;
+        d["duration_us"] = a.duration_us;
+        d["num_samples"] = a.num_samples;
+        d["freq_offset_hz"] = a.freq_offset_hz;
+        d["phase_offset_rad"] = a.phase_offset_rad;
+        adc_events.append(d);
+    }
+
+    py::list blocks;
+    for (const auto& b : w.blocks)
+    {
+        py::dict d;
+        d["start_us"] = b.start_us;
+        d["duration_us"] = b.duration_us;
+        d["segment_idx"] = b.segment_idx;
+        d["rf_isocenter_us"] = b.rf_isocenter_us;
+        d["adc_kzero_us"] = b.adc_kzero_us;
+        blocks.append(d);
+    }
+
     py::dict out;
     out["gx"] = axis(w.gx);
     out["gy"] = axis(w.gy);
     out["gz"] = axis(w.gz);
+    out["num_rf_channels"] = w.num_rf_channels;
+    out["rf_mag"] = axis(w.rf_mag);
+    out["rf_phase"] = axis(w.rf_phase);
+    out["adc_events"] = adc_events;
+    out["blocks"] = blocks;
     out["total_duration_us"] = w.total_duration_us;
     return out;
 }
@@ -507,7 +548,9 @@ PYBIND11_MODULE(_pulseg_wrapper, m)
         py::arg("collection"),
         py::arg("subsequence_idx") = 0,
         py::arg("amplitude_mode") = 0,
-        py::arg("tr_index") = 0);
+        py::arg("tr_index") = 0,
+        py::arg("collapse_delays") = false,
+        py::arg("num_averages") = 0);
 
     m.def("_check_consistency", &_check_consistency, py::arg("collection"));
 
