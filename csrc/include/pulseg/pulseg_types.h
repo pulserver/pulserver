@@ -598,10 +598,16 @@ typedef struct pulseg_pns_model
 
     /**
      * @brief Evaluate the model on uniform-raster dG/dt waveforms.
+     *
+     * dG/dt arrives in T/m/s, not Hz/m/s: the core divides the Hz/m
+     * gradient waveform by gamma before differentiating it (see
+     * compute_slew_rate in pulseg_safety.c), so a model receives the
+     * same units the vendor tables state their limits in.
+     *
      * @param ctx     Opaque model state.
-     * @param dgdt_x  Per-axis dG/dt, X (Hz/m/s), length n.
-     * @param dgdt_y  Per-axis dG/dt, Y (Hz/m/s), length n.
-     * @param dgdt_z  Per-axis dG/dt, Z (Hz/m/s), length n.
+     * @param dgdt_x  Per-axis dG/dt, X (T/m/s), length n.
+     * @param dgdt_y  Per-axis dG/dt, Y (T/m/s), length n.
+     * @param dgdt_z  Per-axis dG/dt, Z (T/m/s), length n.
      * @param n       Number of samples (same length for all in/out arrays).
      * @param dt_us   Gradient raster period (us).
      * @param out_x   Receives per-axis result, X (% of threshold), length n.

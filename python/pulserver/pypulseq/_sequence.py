@@ -47,14 +47,29 @@ they do not hand back is an event-library row id: rows are appended per block
 and renumbered by :meth:`Sequence.remove_duplicates`, so there is no number
 that would still be true by the time the file is written.
 
-**The scan structure -- repetition times, segments, the safety analyses that
-rest on them -- is not here yet.** It is the module and scan-loop layer's to
-supply, and this class does not stand in for it with placeholders. What *is*
-here matches upstream PyPulseq's :class:`~pypulseq.Sequence.sequence.Sequence`
-method for method, including several whose implementation is not built yet
-(:meth:`calculate_kspace`, :meth:`calculate_pns`, and others below) -- each
-raises :exc:`NotImplementedError` with upstream's exact signature, so the
-class's *shape* already matches what it will grow into.
+**The scan structure -- repetition times, segments -- is derived on demand,
+not carried.** :meth:`Sequence.calculate_pns` and
+:meth:`Sequence.calculate_gradient_spectrum` can be asked about a repetition
+time rather than about a stretch of the timeline, and when they are, the C
+safety library recovers the TR from the serialised sequence and the answer
+comes from the same code the scanner runs at predownload. That structure is
+cached behind a revision counter and rebuilt whenever the sequence changes,
+so it can never describe blocks that are gone.
+
+The two questions are genuinely different and the class does not blur them.
+Upstream's methods analyse the timeline: a window of blocks, played once,
+from rest. The safety core analyses one canonical TR whose amplitudes are the
+per-sample maximum over every instance of it -- a waveform that appears
+nowhere on the timeline -- and evaluates it periodically. So ``tr=None``, the
+default, is upstream PyPulseq to the bit, and the other answer has to be
+asked for by name.
+
+What is here matches upstream PyPulseq's
+:class:`~pypulseq.Sequence.sequence.Sequence` method for method, including
+several whose implementation is not built yet (:meth:`calculate_kspace`,
+:meth:`waveforms`, and others below) -- each raises
+:exc:`NotImplementedError` with upstream's exact signature, so the class's
+*shape* already matches what it will grow into.
 """
 
 from __future__ import annotations
@@ -70,6 +85,7 @@ import pypulseq as pp
 from scipy.spatial.transform import Rotation
 
 from .._ext import _pulseqpp_wrapper as _cxx
+from . import _safety
 from ._pulseqpp import to_upstream
 from ._rotate3d import rotate3D
 from ._transform_fov import TransformFOV
@@ -96,6 +112,11 @@ _NOT_PORTED = (
     "Sequence.{what} has upstream PyPulseq's signature but no implementation "
     "yet. See the module docstring."
 )
+
+#: Upstream's default gradient-spectrum window, in seconds. Needed only to
+#: tell a caller who chose a window from one who left it alone, since under
+#: ``tr`` the window is the repetition time and nothing else.
+_UPSTREAM_WINDOW_WIDTH = 0.05
 
 #: Blocks past which looking at a whole sequence is said out loud rather than
 #: simply attempted. Drawing this many is minutes of Matplotlib, and the caller
@@ -146,6 +167,23 @@ class Sequence:
             float(self.system.block_duration_raster),
         )
         self._definitions: dict[str, object] = {}
+        # Scan structure -- the repetition time and the C collection the
+        # safety analyses run on -- is derived on demand and thrown away
+        # whenever the sequence changes underneath it. See _structure().
+        self._structure: _Structure | None = None
+        self._revision = 0
+
+    def _touch(self) -> None:
+        """Note that the blocks or libraries changed.
+
+        Anything derived from the sequence as a whole -- currently the scan
+        structure behind :meth:`calculate_pns` and
+        :meth:`calculate_gradient_spectrum` -- is keyed by this counter, so a
+        cache built before the change is never mistaken for one built after
+        it. Cheaper than invalidating explicitly from a dozen call sites and,
+        more to the point, impossible to half-do.
+        """
+        self._revision += 1
 
     # -- version -----------------------------------------------------------
 
@@ -210,6 +248,7 @@ class Sequence:
             numbers; floats, NumPy ones included, are written as reals even
             when they hold a whole number.
         """
+        self._touch()
         self._definitions[key] = value
 
     def get_definition(self, key: str) -> object | None:
@@ -269,6 +308,7 @@ class Sequence:
         the block duration raster -- which is what PyPulseq computes, and what
         a caller passing a bare delay is asking for directly.
         """
+        self._revision += 1
         return self._native.add_block_events(*events)
 
     def set_block(self, index: int, *events: object) -> None:
@@ -287,6 +327,7 @@ class Sequence:
         shared with other blocks, and what survives is
         :meth:`remove_duplicates`' decision rather than this one's.
         """
+        self._touch()
         self._native.set_block_events(index, *events)
 
     def get_block(self, index: int) -> SimpleNamespace:
@@ -354,6 +395,7 @@ class Sequence:
         tuple
             ``(0, shape_ids)`` -- the magnitude, phase and time shape ids.
         """
+        self._touch()
         return 0, list(self._native.warm_event(event))
 
     def register_grad_event(self, event: object) -> int | tuple[int, list[int]]:
@@ -365,6 +407,7 @@ class Sequence:
             ``0`` for a trapezoid, which has no shape; ``(0, shape_ids)`` for
             an arbitrary gradient, matching upstream.
         """
+        self._touch()
         shapes = list(self._native.warm_event(event))
         return (0, shapes) if shapes else 0
 
@@ -377,6 +420,7 @@ class Sequence:
             ``(0, shape_id)``; the shape id is ``0`` when there is no
             modulation to store.
         """
+        self._touch()
         shapes = list(self._native.warm_event(event))
         return 0, (shapes[0] if shapes else 0)
 
@@ -394,6 +438,7 @@ class Sequence:
         Rows are compared at the precision the file writes them, so two events
         that would serialise identically become one. Idempotent.
         """
+        self._touch()
         self._native.remove_duplicates()
 
     # -- FOV positioning --------------------------------------------------
@@ -441,50 +486,59 @@ class Sequence:
         if mode not in ("native", "server"):
             raise ValueError(f"transform_fov(): mode must be 'native' or 'server', got {mode!r}")
 
+        self._touch()
         TransformFOV(translation=offset_mm, server_mode=(mode == "server")).apply_to_sequence(
             self, in_place=True
         )
 
     # -- files -----------------------------------------------------------
 
-    def write(
-        self,
-        path: str | Path,
-        *,
-        binary: bool | None = None,
-        create_signature: bool = True,
-    ) -> None:
-        """Write the sequence to ``path``.
+    def write(self, path: str | Path, create_signature: bool = True) -> None:
+        """Write the sequence as a ``.seq`` file.
 
         Parameters
         ----------
         path : str or pathlib.Path
             Where to write.
-        binary : bool, optional
-            Write the binary Pulseq format rather than ``.seq`` text. Defaults
-            to whether ``path`` ends in ``.bin``.
         create_signature : bool, default True
-            Append the ``[SIGNATURE]`` section. Text format only.
-        """
-        path = Path(path)
-        if binary is None:
-            binary = path.suffix.lower() == ".bin"
-        path.write_bytes(self.serialize(binary=binary, create_signature=create_signature))
+            Append the ``[SIGNATURE]`` section.
 
-    def serialize(self, *, binary: bool = False, create_signature: bool = True) -> bytes:
-        """The sequence as a Pulseq file, in memory.
+        See Also
+        --------
+        write_binary : the same sequence in the binary Pulseq format.
+
+        Notes
+        -----
+        Text, to a file, always -- the reference toolbox's ``write``. The
+        binary format has its own method, and it is the only one of the two
+        that will write anywhere but a file.
+        """
+        Path(path).write_bytes(self._to_text(create_signature=create_signature))
+
+    def write_binary(self, target: str | Path | object) -> None:
+        """Write the sequence in the binary Pulseq format.
 
         Parameters
         ----------
-        binary : bool, default False
-            Write the binary format rather than ``.seq`` text.
-        create_signature : bool, default True
-            Append the ``[SIGNATURE]`` section. Text format only.
+        target : str or pathlib.Path or file object
+            A path to write, or an already-open binary stream to write into.
+            The reference toolbox takes only a filename; a stream is allowed
+            here because the binary format is the one worth handing to another
+            process without going through the filesystem first.
 
-        Returns
-        -------
-        bytes
-            The whole file.
+        See Also
+        --------
+        write : the same sequence as ``.seq`` text.
+        """
+        payload = self._to_binary()
+        writer = getattr(target, "write", None)
+        if callable(writer):
+            writer(payload)
+            return
+        Path(target).write_bytes(payload)
+
+    def _to_text(self, *, create_signature: bool = True) -> bytes:
+        """The sequence as a ``.seq`` file, in memory.
 
         Notes
         -----
@@ -494,9 +548,21 @@ class Sequence:
         """
         self._native.compress_shapes()
         self._publish_definitions()
-        if binary:
-            return self._native.write_binary()
         return self._native.write_text(create_signature)
+
+    def _to_binary(self) -> bytes:
+        """The sequence as a binary Pulseq file, in memory.
+
+        The form to hand anything that is going to parse it back rather than
+        read it: the writer skips number formatting and the reader skips
+        ``sscanf``, so a round trip through this costs a fraction of what the
+        text format does and loses none of the precision the text format
+        rounds away. It is what :meth:`_structure_for` feeds the C safety
+        library.
+        """
+        self._native.compress_shapes()
+        self._publish_definitions()
+        return self._native.write_binary()
 
     def read(self, path: str | Path) -> None:
         """Replace the sequence's contents with the file at ``path``.
@@ -513,15 +579,20 @@ class Sequence:
         adopted by the C++ sequence, since they are what its blocks were laid
         out on.
         """
+        self._touch()
         self._native = _cxx.read_file(str(Path(path)))
         self._definitions = dict(self._native.definitions())
 
     # -- looking at it -----------------------------------------------------
     #
-    # Everything below has upstream PyPulseq's exact signature and raises
-    # NotImplementedError. See the module docstring for why: the scan
-    # structure these need (or, for plot/calculate_kspace/etc., used to get
-    # from decoding a throwaway window) isn't carried by this class yet.
+    # Everything below takes upstream PyPulseq's arguments, in upstream's
+    # order, with upstream's defaults -- a test asserts it. The implemented
+    # ones hand the work to upstream's own code over a window of blocks; the
+    # rest still raise NotImplementedError.
+    #
+    # calculate_pns and calculate_gradient_spectrum take more than upstream
+    # does, keyword-only and after every one of upstream's, because they can
+    # also answer about a repetition time. See the module docstring.
 
     def plot(
         self,
@@ -665,14 +736,152 @@ class Sequence:
         :meth:`pypulseq.Sequence.sequence.Sequence.test_report`."""
         raise NotImplementedError(_NOT_PORTED.format(what="test_report"))
 
-    def calculate_pns(self, hardware: object, time_range: list[float] | None = None, do_plots: bool = True):
-        """Peripheral nerve stimulation, SAFE model. Not ported yet; see
-        upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.calculate_pns`. This
-        project's own PNS visualisation uses a different (Irnich) model --
-        see ``pulserver._safety.chronaxie_pns``; the real gate is the C
-        safety core, not this class."""
-        raise NotImplementedError(_NOT_PORTED.format(what="calculate_pns"))
+    def calculate_pns(
+        self,
+        hardware: object,
+        time_range: list[float] | None = None,
+        do_plots: bool = True,
+        *,
+        tr: str | int | None = None,
+    ):
+        """Peripheral nerve stimulation over the sequence, or over one TR.
+
+        Parameters
+        ----------
+        hardware : str or pathlib.Path or types.SimpleNamespace or dict
+            Which nerve model to use, and its coefficients. A Siemens ``.asc``
+            path or a per-axis namespace of the kind
+            :func:`pypulseq.utils.safe_pns_prediction.safe_example_hw`
+            returns selects **SAFE**, upstream's model. A mapping carrying
+            ``chronaxie`` (seconds) and ``rheobase`` (Hz/m/s) selects the
+            **Irnich** rheobase/chronaxie model, which is what the GE gate
+            applies.
+        time_range : list of float, optional
+            Two timepoints in seconds bounding what to look at. Only with
+            ``tr=None``.
+        do_plots : bool, default True
+            Draw the gradient waveform and the PNS response. The response
+            panel is marked at 100 % of the stimulation threshold and at the
+            80 % margin, whichever nerve model produced it -- upstream draws
+            neither, only the peak the sequence happened to reach.
+        tr : {"worst_case"} or int, optional
+            Analyse one repetition time rather than the timeline.
+
+            ``None``, the default, is upstream PyPulseq exactly: the sequence
+            as written, played once from rest, zero-padded.
+
+            ``"worst_case"`` is the waveform ``pulseg_check_safety`` judges --
+            **not** any TR the scanner plays, but the per-sample maximum over
+            every instance of one -- evaluated periodically, with the history
+            wrapped round from the end of the TR so the nerve model is warmed
+            up rather than starting from rest. This is the number the
+            interpreter gates on.
+
+            An integer is that TR instance as it really plays, signed
+            amplitudes and all, evaluated the same periodic way. Its use is
+            checking the claim ``"worst_case"`` rests on: that no instance
+            exceeds the envelope.
+
+        Returns
+        -------
+        ok : bool
+            Whether peak PNS stays under the threshold everywhere.
+        pns_norm : numpy.ndarray
+            ``(N,)`` PNS over all axes, normalised to 1.
+        pns_components : numpy.ndarray
+            ``(N, 3)`` PNS per gradient axis, normalised to 1.
+        t_pns : numpy.ndarray
+            ``(N,)`` the time axis, in seconds.
+
+        Notes
+        -----
+        Under ``tr=None`` this is upstream's
+        :func:`pypulseq.Sequence.calc_pns.calc_pns` called on the blocks
+        asked for, so a PyPulseq script gets PyPulseq's numbers.
+
+        Under ``tr=``, the response comes from the same C code the scanner
+        runs, and the returned arrays run past one TR: the circularly wrapped
+        history the model needed is reported rather than trimmed away, which
+        is what makes ``ok`` here the gate's own verdict.
+        """
+        if tr is None:
+            from pypulseq.Sequence.calc_pns import calc_pns
+
+            first, last = self._blocks_over(*_span(time_range if time_range else (0.0, np.inf)))
+            answer = calc_pns(
+                self._upstream_window(first, last),
+                hardware,
+                time_range=time_range,
+                do_plots=do_plots,
+            )
+            if do_plots:
+                # Upstream draws through pyplot and leaves its PNS panel
+                # current, so the thresholds go on afterwards rather than
+                # forking its plotting.
+                _safety.overlay_pns_thresholds()
+            return answer
+
+        if time_range is not None:
+            raise ValueError(
+                "calculate_pns(): time_range selects part of the timeline and tr selects a "
+                "repetition time, which is not on it -- pass one or the other"
+            )
+
+        structure = self._structure_for("calculate_pns")
+        mode, index = structure.resolve(tr)
+        result = self._native_pns(structure, hardware, mode, index)
+
+        # The C core reports per-axis percentage of threshold; upstream
+        # normalises to 1. Same quantity, hundredfold apart.
+        components = 0.01 * np.stack(
+            [np.asarray(result[f"slew_{axis}"], dtype=float) for axis in "xyz"], axis=-1
+        )
+        norm = np.sqrt((components**2).sum(axis=1))
+        raster = _safety.SAFETY_RASTER_FRACTION * float(self.system.grad_raster_time)
+        times = np.arange(components.shape[0]) * raster
+
+        if do_plots:
+            self._plot_pns(structure.waveform(tr), components, raster)
+
+        return bool(np.all(norm < 1)), norm, components, times
+
+    @staticmethod
+    def _native_pns(structure: _Structure, hardware: object, mode: int, index: int) -> dict:
+        """One TR's PNS response, straight out of the C safety core."""
+        from .._ext._pulseg_wrapper import _calc_pns, _calc_pns_safe
+
+        if mode != _safety.AMPLITUDE_MODES["actual"]:
+            index = 0
+
+        if _safety.is_safe_hardware(hardware):
+            gx, gy, gz = _safety.safe_coefficients(hardware)
+            return _calc_pns_safe(structure.collection, 0, index, gx, gy, gz)
+
+        chronaxie_us, rheobase, alpha = _safety.irnich_coefficients(hardware)
+        return _calc_pns(structure.collection, 0, index, chronaxie_us, rheobase, alpha)
+
+    @staticmethod
+    def _plot_pns(waveform: _safety.TRSequence, components: np.ndarray, raster: float) -> None:
+        """Upstream's two PNS figures, drawn over a TR waveform.
+
+        The same pair :func:`pypulseq.Sequence.calc_pns.calc_pns` draws, from
+        the same two calls -- the gradient trace off the PPoly upstream itself
+        built, and ``safe_plot`` on the components -- plus the thresholds,
+        which upstream draws in neither mode. ``raster`` is the safety core's,
+        half the gradient raster, not the sequence's.
+        """
+        import matplotlib.pyplot as plt
+        from pypulseq.utils.safe_pns_prediction import safe_plot
+
+        plt.figure()
+        for gradient in waveform.get_gradients():
+            if gradient is not None:
+                plt.plot(gradient.x[1:-1], gradient.c[1, :-1])
+        plt.title("gradient wave form, in Hz/m")
+
+        plt.figure()
+        safe_plot(components * 100, raster)
+        _safety.overlay_pns_thresholds()
 
     def calculate_gradient_spectrum(
         self,
@@ -684,10 +893,195 @@ class Sequence:
         combine_mode: str = "max",
         use_derivative: bool = False,
         acoustic_resonances: list[dict] | None = None,
+        *,
+        tr: str | int | None = None,
+        resonance_lines: bool = False,
+        bands: list | None = None,
     ):
-        """The sequence's gradient spectrum. Not ported yet; see upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.calculate_gradient_spectrum`."""
-        raise NotImplementedError(_NOT_PORTED.format(what="calculate_gradient_spectrum"))
+        """The gradient spectrum of the sequence, or of one TR.
+
+        Parameters
+        ----------
+        max_frequency : float, default 2000.0
+            Highest frequency to report, in Hz.
+        window_width : float, default 0.05
+            Length of each transformed window, in seconds. **Ignored under
+            ``tr``**, where the window is the repetition time, so that what
+            comes back is one spectrum rather than a spectrogram. Passing a
+            value there warns rather than being quietly overridden.
+        frequency_oversampling : float, default 3.0
+            Zero-padding factor along frequency; higher is smoother.
+        time_range : list of float, optional
+            Two timepoints in seconds bounding what to look at. Only with
+            ``tr=None``.
+        plot : bool, default True
+            Draw the spectrograms.
+        combine_mode : {"max", "mean", "rss", "none"}, default "max"
+            How to collapse the windows into one spectrogram. Under ``tr``
+            there is only ever one window, so this decides nothing except
+            whether the single column is kept ( ``"none"`` ) or dropped.
+        use_derivative : bool, default False
+            Transform the slew rate rather than the gradient.
+        acoustic_resonances : list of dict, optional
+            Resonances to mark, as ``{'frequency': ..., 'bandwidth': ...}``.
+            See :func:`~._safety.bands_to_resonances`.
+        tr : {"worst_case"} or int, optional
+            Analyse one repetition time rather than the timeline. ``None``,
+            the default, is upstream PyPulseq exactly. ``"worst_case"`` is the
+            per-sample maximum over every TR instance -- the waveform
+            ``pulseg_check_safety`` judges. An integer is that instance as it
+            really plays. See :meth:`calculate_pns` for the full account.
+        resonance_lines : bool, default False
+            Also compute the C safety core's acoustic line spectrum, draw it
+            over the spectrogram, and return it. Needs ``tr``.
+        bands : list of tuple, optional
+            Forbidden bands as ``(freq_min_hz, freq_max_hz,
+            max_amplitude_hz_per_m)``, which decide which lines count as
+            violations. Read only when ``resonance_lines`` is set; defaults
+            to whatever ``acoustic_resonances`` describes, or to nothing.
+
+        Returns
+        -------
+        spectrograms : list of numpy.ndarray
+            One per gradient axis.
+        spectrogram_rss : numpy.ndarray
+            The axes combined in root-sum-square.
+        frequencies : numpy.ndarray
+            The frequency axis, in Hz.
+        times : numpy.ndarray
+            The time axis, meaningful only for ``combine_mode="none"``.
+        resonances : ~._safety.MechResonances
+            **Only when ``resonance_lines`` is set**, appended as a fifth
+            element: the line spectrum at the TR harmonics ``k / T_TR``, in
+            equivalent-drive units, and which of them violate a band.
+
+        Notes
+        -----
+        The transform is always upstream PyPulseq's -- under ``tr`` it is
+        upstream's own code run over the waveform the C core extracted, so
+        what changes is which waveform is transformed and over what window,
+        never how.
+
+        **Under ``tr`` this is a spectrum, not a spectrogram.** A repetition
+        time is transformed in one window because it is periodic, and a
+        periodic waveform has no time-varying spectrum to chart: it has
+        energy only at multiples of ``1 / T_TR``. Cutting it into shorter
+        windows would only smear neighbouring harmonics into each other.
+
+        Those harmonics are what ``resonance_lines`` draws over the result,
+        on **its own vertical axis** -- see
+        :class:`~._safety.MechResonances` for why the two scales must not be
+        shared.
+        """
+        from pypulseq.Sequence.calc_grad_spectrum import calculate_gradient_spectrum
+
+        if acoustic_resonances is None:
+            acoustic_resonances = []
+
+        if tr is None:
+            if resonance_lines:
+                raise ValueError(
+                    "calculate_gradient_spectrum(): resonance_lines needs tr -- a line "
+                    "spectrum exists only for a repetition time, not for a stretch of timeline"
+                )
+            first, last = self._blocks_over(*_span(time_range if time_range else (0.0, np.inf)))
+            return calculate_gradient_spectrum(
+                self._upstream_window(first, last),
+                max_frequency=max_frequency,
+                window_width=window_width,
+                frequency_oversampling=frequency_oversampling,
+                time_range=time_range,
+                plot=plot,
+                combine_mode=combine_mode,
+                use_derivative=use_derivative,
+                acoustic_resonances=acoustic_resonances,
+            )
+
+        if time_range is not None:
+            raise ValueError(
+                "calculate_gradient_spectrum(): time_range selects part of the timeline and "
+                "tr selects a repetition time, which is not on it -- pass one or the other"
+            )
+
+        structure = self._structure_for("calculate_gradient_spectrum")
+        waveform = structure.waveform(tr)
+
+        if window_width != _UPSTREAM_WINDOW_WIDTH:
+            warnings.warn(
+                f"calculate_gradient_spectrum(): window_width={window_width} is ignored under "
+                "tr -- a repetition time is transformed whole, in one window",
+                stacklevel=2,
+            )
+
+        spectrum = calculate_gradient_spectrum(
+            waveform,
+            max_frequency=max_frequency,
+            # The window IS the TR, so this is one spectrum rather than a
+            # spectrogram. A periodic waveform has energy only at multiples
+            # of 1/T_TR, and it is the transform over exactly one period that
+            # resolves them; a shorter window would smear neighbouring
+            # harmonics together and a longer one does not exist to cut.
+            window_width=structure.tr_duration,
+            frequency_oversampling=frequency_oversampling,
+            time_range=None,
+            plot=plot,
+            combine_mode=combine_mode,
+            use_derivative=use_derivative,
+            acoustic_resonances=acoustic_resonances,
+        )
+        if not resonance_lines:
+            return spectrum
+
+        if bands is None:
+            bands = [
+                (
+                    resonance["frequency"] - 0.5 * resonance["bandwidth"],
+                    resonance["frequency"] + 0.5 * resonance["bandwidth"],
+                    0.0,
+                )
+                for resonance in acoustic_resonances
+            ]
+        resonances = self._resonance_lines(structure, tr, max_frequency, bands)
+
+        if plot and combine_mode != "none":
+            _safety.overlay_resonance_lines(resonances, max_frequency=max_frequency)
+
+        return (*spectrum, resonances)
+
+    def _resonance_lines(
+        self, structure: _Structure, tr, max_frequency: float, bands: list
+    ) -> _safety.MechResonances:
+        """The C safety core's acoustic line spectrum for one TR."""
+        from .._ext._pulseg_wrapper import _calc_mech_resonances
+
+        _, index = structure.resolve(tr)
+        spectra = _calc_mech_resonances(
+            structure.collection,
+            0,
+            index,
+            # A resolution fine enough that the harmonic grid the core
+            # tabulates reaches max_frequency; the lines themselves land at
+            # k / T_TR regardless of what is asked for here.
+            target_resolution_hz=1.0 / structure.tr_duration,
+            max_freq_hz=float(max_frequency),
+            forbidden_bands=[tuple(float(value) for value in band[:3]) for band in bands],
+        )
+        return _safety.MechResonances.from_spectra(spectra, structure.tr_duration, bands)
+
+    def _structure_for(self, what: str) -> _Structure:
+        """The scan structure, derived once and reused until the sequence changes.
+
+        Parameters
+        ----------
+        what : str
+            The calling method, named in the error when there is nothing to
+            analyse.
+        """
+        if self.num_blocks == 0:
+            raise ValueError(f"{what}(): the sequence holds no blocks")
+        if self._structure is None or self._structure.revision != self._revision:
+            self._structure = _Structure(self)
+        return self._structure
 
     def evaluate_labels(self, init: dict | None = None, evolution: str = "none") -> dict:
         """Label values through the sequence. Not ported yet; see upstream
@@ -793,6 +1187,10 @@ class Sequence:
         made.system = self.system
         made._native = self._native.copy()
         made._definitions = dict(self._definitions)
+        # Not inherited: a structure cache belongs to the sequence it was
+        # derived from, and the copy is free to diverge from it immediately.
+        made._structure = None
+        made._revision = 0
         return made
 
     def _publish_definitions(self) -> None:
@@ -819,6 +1217,113 @@ class Sequence:
 
 
 # %% local subroutines
+
+
+class _Structure:
+    """The scan structure of one sequence, as the C safety core sees it.
+
+    Building this is the expensive half of every TR-based analysis: the
+    sequence is serialised, parsed back by the C library, and its repetition
+    time and segmentation recovered. Everything after that -- extracting a TR
+    waveform, the acoustic line spectrum, PNS -- is comparatively cheap and
+    runs against the collection held here, so the cost is paid once per
+    sequence rather than once per question asked about it.
+
+    Held by :class:`Sequence` behind a revision number, and rebuilt rather
+    than updated when the sequence changes. A structure that has silently
+    outlived its sequence would answer about blocks that no longer exist.
+    """
+
+    def __init__(self, sequence: Sequence) -> None:
+        from .._ext._pulseg_wrapper import _find_tr, _PulseqCollection
+
+        self.system = sequence.system
+        system = self.system
+        # Binary, not text: this is written only to be parsed straight back,
+        # so the number formatting and the sscanf that the text format would
+        # spend on both ends are pure waste -- and the six significant digits
+        # `%12g` rounds a gradient amplitude to would be a needless loss on
+        # the way into a safety analysis.
+        #
+        # Serialising compresses shapes and republishes definitions, which
+        # touches the C++ sequence -- so read the revision after it, not
+        # before, or the cache is stale the moment it is built.
+        written = sequence._to_binary()
+        self.revision = sequence._revision
+        self.collection = _PulseqCollection(
+            [written],
+            float(system.gamma),
+            float(system.B0),
+            float(system.max_grad),
+            float(system.max_slew),
+            float(system.rf_raster_time),
+            float(system.grad_raster_time),
+            float(system.adc_raster_time),
+            float(system.block_duration_raster),
+            True,
+            1,
+        )
+        self.tr = _find_tr(self.collection)
+        self._segments: list | None = None
+
+    @property
+    def tr_duration(self) -> float:
+        """float : The canonical TR, in seconds."""
+        return float(self.tr["tr_duration_us"]) * 1e-6
+
+    @property
+    def num_trs(self) -> int:
+        """int : How many TR instances the sequence holds."""
+        return int(self.tr["num_trs"])
+
+    @property
+    def segments(self) -> list:
+        """list : The segment layout, resolved to each segment's max-energy instance.
+
+        Reporting only. Neither the acoustic nor the PNS analysis selects a
+        segment instance -- both run on the per-sample maximum over every TR
+        instance -- so this says which blocks a reader should look at, not
+        which blocks were analysed.
+        """
+        if self._segments is None:
+            from .._ext._pulseg_wrapper import _get_segments
+
+            self._segments = _get_segments(self.collection, 0)
+        return self._segments
+
+    def waveform(self, tr) -> _safety.TRSequence:
+        """The gradient waveform ``tr`` names, as a sequence upstream can read.
+
+        Parameters
+        ----------
+        tr : {"worst_case"} or int
+            ``"worst_case"`` for the per-sample maximum over every instance --
+            the waveform ``pulseg_check_safety`` judges, which is not any one
+            TR the scanner plays. An integer for that instance as it really
+            plays, signed amplitudes and all.
+        """
+        from .._ext._pulseg_wrapper import _get_tr_waveforms
+
+        mode, index = self.resolve(tr)
+        return _safety.TRSequence.from_c(
+            _get_tr_waveforms(self.collection, 0, mode, index), self.system
+        )
+
+    def resolve(self, tr) -> tuple[int, int]:
+        """``tr`` as the ``(amplitude_mode, tr_index)`` pair the binding takes."""
+        if isinstance(tr, str):
+            if tr not in _safety.AMPLITUDE_MODES:
+                raise ValueError(
+                    f"tr must be an integer or one of {sorted(_safety.AMPLITUDE_MODES)}, got {tr!r}"
+                )
+            return _safety.AMPLITUDE_MODES[tr], 0
+
+        index = int(tr)
+        if not 0 <= index < self.num_trs:
+            raise ValueError(
+                f"tr={index} is out of range; the sequence holds {self.num_trs} TR instances"
+            )
+        return _safety.AMPLITUDE_MODES["actual"], index
 
 
 def _span(time_range) -> tuple[float, float]:

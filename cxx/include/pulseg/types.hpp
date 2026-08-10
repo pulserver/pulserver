@@ -96,6 +96,12 @@ namespace pulseg
             m.ctx = const_cast<PnsParams*>(this);
             m.required_padding = &PnsParams::required_padding_cb;
             m.evaluate = &PnsParams::evaluate_cb;
+            /* Must be set: pulseg_pns_model is a plain C struct, so `m` is
+             * uninitialised here, and calc_pns_from_uniform branches on
+             * model->kernel -- leaving it would read (and potentially call)
+             * whatever was on the stack. This model publishes no kernel, so
+             * the core takes its exact full-waveform path. */
+            m.kernel = NULL;
             return m;
         }
 
@@ -159,6 +165,158 @@ namespace pulseg
             convolve_causal(out_x, dgdt_x, n, kernel);
             convolve_causal(out_y, dgdt_y, n, kernel);
             convolve_causal(out_z, dgdt_z, n, kernel);
+            return 0; /* PULSEG_SUCCESS */
+        }
+    };
+
+    // ── SAFE PNS parameters (Siemens' three-branch model) ───────────────
+    //
+    // The second vendor-neutral convenience model beside PnsParams above, and
+    // header-only for the same reason. SAFE is Hebrank & Gebhardt's published
+    // abstract (ISMRM 2000, No. 2007), coded by Witzel and Szczepankiewicz and
+    // shipped in PyPulseq as safe_pns_prediction.py; only the per-scanner
+    // coefficients below are proprietary, and none are distributed here.
+    //
+    // Deliberately leaves pulseg_pns_model::kernel NULL. Publishing a kernel
+    // asserts the model is exactly a convolution, and this one is not: the
+    // first and third branches rectify *after* their lowpass and the second
+    // rectifies *before* it, so pulseg_pns_memo.c's per-shape assembly would
+    // be wrong rather than merely slow. The core then always takes its exact
+    // full-waveform path, which costs roughly what PnsParams costs before
+    // memoization -- an order of magnitude more than the memoized Irnich
+    // model on a long canonical TR.
+    struct SafeParams
+    {
+        // Per-axis coefficients, in the units the .asc tables state them:
+        // time constants in ms, stim_limit in T/m/s, a1..a3 and g_scale
+        // dimensionless.
+        struct Axis
+        {
+            float a1 = 0.0f;
+            float a2 = 0.0f;
+            float a3 = 0.0f;
+            float tau1_ms = 0.0f;
+            float tau2_ms = 0.0f;
+            float tau3_ms = 0.0f;
+            float stim_limit = 0.0f;
+            float g_scale = 0.0f;
+        };
+
+        Axis x;
+        Axis y;
+        Axis z;
+
+        /** Build a pulseg_pns_model view onto this instance (borrows *this; keep alive
+     *  for the duration of the calc_pns/check_safety call). */
+        pulseg_pns_model to_c() const
+        {
+            pulseg_pns_model m;
+            m.ctx = const_cast<SafeParams*>(this);
+            m.required_padding = &SafeParams::required_padding_cb;
+            m.evaluate = &SafeParams::evaluate_cb;
+            m.kernel = NULL; /* not LTI -- see the comment above */
+            return m;
+        }
+
+    private:
+        /* safe_gwf_to_pns pads by 4x the longest time constant before the
+         * waveform and 4x after it; the core only appends, and only needs
+         * enough history for the slowest branch to have settled. */
+        static constexpr float kPaddingTimeConstants = 4.0f;
+
+        float longest_tau_ms() const
+        {
+            float longest = x.tau1_ms;
+            const float taus[9] = {
+                x.tau1_ms, x.tau2_ms, x.tau3_ms,
+                y.tau1_ms, y.tau2_ms, y.tau3_ms,
+                z.tau1_ms, z.tau2_ms, z.tau3_ms};
+            for (int i = 0; i < 9; ++i)
+                if (taus[i] > longest)
+                    longest = taus[i];
+            return longest;
+        }
+
+        /* One-pole RC lowpass, tau and dt in the same unit. Mirrors
+         * safe_tau_lowpass: the leading alpha applies to the first sample
+         * too, which is the 230206 correction upstream carries. */
+        static void lowpass(
+            std::vector<float>& out,
+            const float* signal,
+            int n,
+            float tau,
+            float dt)
+        {
+            const float alpha = dt / (tau + dt);
+            float state = 0.0f;
+            out.resize(static_cast<size_t>(n));
+            for (int i = 0; i < n; ++i)
+            {
+                state = alpha * signal[i] + (1.0f - alpha) * state;
+                out[static_cast<size_t>(i)] = state;
+            }
+        }
+
+        /* stim = (a1|LP(s,tau1)| + a2 LP(|s|,tau2) + a3|LP(s,tau3)|)
+         *        / stim_limit * g_scale * 100, s in T/m/s. */
+        static void evaluate_axis(
+            float* out,
+            const float* dgdt,
+            int n,
+            const Axis& axis,
+            float dt_ms)
+        {
+            std::vector<float> rectified(static_cast<size_t>(n));
+            std::vector<float> branch;
+            int i;
+
+            for (i = 0; i < n; ++i)
+                rectified[static_cast<size_t>(i)] = std::fabs(dgdt[i]);
+
+            lowpass(branch, dgdt, n, axis.tau1_ms, dt_ms);
+            for (i = 0; i < n; ++i)
+                out[i] = axis.a1 * std::fabs(branch[static_cast<size_t>(i)]);
+
+            lowpass(branch, rectified.data(), n, axis.tau2_ms, dt_ms);
+            for (i = 0; i < n; ++i)
+                out[i] += axis.a2 * branch[static_cast<size_t>(i)];
+
+            lowpass(branch, dgdt, n, axis.tau3_ms, dt_ms);
+            for (i = 0; i < n; ++i)
+                out[i] += axis.a3 * std::fabs(branch[static_cast<size_t>(i)]);
+
+            const float scale = (axis.stim_limit > 0.0f)
+                                    ? (axis.g_scale * 100.0f / axis.stim_limit)
+                                    : 0.0f;
+            for (i = 0; i < n; ++i)
+                out[i] *= scale;
+        }
+
+        static int required_padding_cb(void* ctx, float dt_us)
+        {
+            const SafeParams* self = static_cast<const SafeParams*>(ctx);
+            const float dt_ms = dt_us * 1e-3f;
+            if (dt_ms <= 0.0f)
+                return 0;
+            return static_cast<int>(kPaddingTimeConstants * self->longest_tau_ms() / dt_ms) + 1;
+        }
+
+        static int evaluate_cb(
+            void* ctx,
+            const float* dgdt_x,
+            const float* dgdt_y,
+            const float* dgdt_z,
+            int n,
+            float dt_us,
+            float* out_x,
+            float* out_y,
+            float* out_z)
+        {
+            const SafeParams* self = static_cast<const SafeParams*>(ctx);
+            const float dt_ms = dt_us * 1e-3f;
+            evaluate_axis(out_x, dgdt_x, n, self->x, dt_ms);
+            evaluate_axis(out_y, dgdt_y, n, self->y, dt_ms);
+            evaluate_axis(out_z, dgdt_z, n, self->z, dt_ms);
             return 0; /* PULSEG_SUCCESS */
         }
     };

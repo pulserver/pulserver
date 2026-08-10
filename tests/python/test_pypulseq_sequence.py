@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import io
 
 import matplotlib
 import numpy as np
@@ -120,24 +121,33 @@ def test_a_written_sequence_reads_back_to_the_same_bytes(seq, tmp_path):
     seq.remove_duplicates()
     seq.set_definition("Name", "round_trip")
     seq.set_definition("FOV", [0.22, 0.22, 0.005])
-    text = seq.serialize()
 
     path = tmp_path / "sequence.seq"
     seq.write(path)
-    assert path.read_bytes() == text
+    text = path.read_bytes()
 
     back = pp.Sequence(system=seq.system)
     back.read(path)
     assert back.num_blocks == seq.num_blocks
     assert back.get_definition("Name") == "round_trip"
-    assert back.serialize() == text
+
+    again = tmp_path / "again.seq"
+    back.write(again)
+    assert again.read_bytes() == text
+
+
+def test_write_is_text_whatever_the_file_is_called(seq, tmp_path):
+    """The reference toolbox's write writes .seq text; the suffix decides nothing."""
+    seq.remove_duplicates()
+    path = tmp_path / "misleading.bin"
+    seq.write(path)
+    assert path.read_bytes().lstrip().startswith(b"# Pulseq sequence file")
 
 
 def test_the_binary_format_carries_the_same_sequence(seq, tmp_path):
     seq.remove_duplicates()
     path = tmp_path / "sequence.bin"
-    seq.write(path)
-    assert path.read_bytes() == seq.serialize(binary=True)
+    seq.write_binary(path)
 
     back = pp.Sequence(system=seq.system)
     back.read(path)
@@ -145,11 +155,27 @@ def test_the_binary_format_carries_the_same_sequence(seq, tmp_path):
     np.testing.assert_allclose(back.block_durations, seq.block_durations, rtol=1e-12)
 
 
+def test_only_the_binary_writer_takes_a_stream(seq, tmp_path):
+    """It is the format meant to be handed on without touching the filesystem."""
+    seq.remove_duplicates()
+    path = tmp_path / "sequence.bin"
+    seq.write_binary(path)
+
+    stream = io.BytesIO()
+    seq.write_binary(stream)
+    assert stream.getvalue() == path.read_bytes()
+
+    with pytest.raises(TypeError):
+        seq.write(io.BytesIO())
+
+
 def test_upstream_pypulseq_reads_what_was_written(seq, tmp_path):
     # Once ROTATIONS is stripped: upstream 1.5.0 has no reader for it.
     seq.remove_duplicates()
+    written = tmp_path / "written.seq"
+    seq.write(written)
     path = tmp_path / "plain.seq"
-    path.write_bytes(strip_extensions(seq.serialize()))
+    path.write_bytes(strip_extensions(written.read_bytes()))
     native = upstream.Sequence(system=seq.system)
     native.read(str(path))
     assert len(native.block_events) == seq.num_blocks
@@ -166,7 +192,7 @@ def test_a_slotted_and_a_namespace_event_describe_the_same_block(system):
     plain = pp.Sequence(system=system)
     slotted.add_block(pp.make_trapezoid(channel="x", area=1000, system=system))
     plain.add_block(upstream.make_trapezoid(channel="x", area=1000, system=system))
-    assert slotted.serialize(create_signature=False) == plain.serialize(create_signature=False)
+    assert slotted._to_text(create_signature=False) == plain._to_text(create_signature=False)
 
 
 def test_scaling_an_rf_amplitude_costs_no_extra_shape(system):
@@ -219,8 +245,6 @@ _NOT_PORTED = [
     ("waveforms_and_times", (), {"append_RF": False, "time_range": None}),
     ("check_timing", (), {"print_errors": True}),
     ("test_report", (), {}),
-    ("calculate_pns", (None,), {"time_range": None, "do_plots": False}),
-    ("calculate_gradient_spectrum", (), {"max_frequency": 1000.0, "combine_mode": "sos"}),
     ("evaluate_labels", (), {"init": None, "evolution": "adc"}),
     ("apply_soft_delay", (), {"TE": 40e-3}),
     ("flip_grad_axis", ("x",), {}),
@@ -240,16 +264,28 @@ def test_the_unported_methods_take_upstreams_arguments_and_say_they_are_stubs(
 #: Methods that *are* implemented, and still have to answer to upstream's
 #: signature -- a PyPulseq script has to run here unchanged whether or not the
 #: body underneath it is ours.
-_PORTED = ["plot"]
+_PORTED = ["plot", "calculate_pns", "calculate_gradient_spectrum"]
 
 
 @pytest.mark.parametrize("name", [name for name, _, _ in _NOT_PORTED] + _PORTED)
-def test_the_methods_have_upstreams_signature_exactly(name):
-    ours = inspect.signature(getattr(pp.Sequence, name))
-    theirs = inspect.signature(getattr(upstream.Sequence, name))
-    assert [(p.name, p.default) for p in ours.parameters.values()] == [
-        (p.name, p.default) for p in theirs.parameters.values()
+def test_the_methods_take_upstreams_arguments_the_way_upstream_takes_them(name):
+    """Upstream's parameters, in order, with upstream's defaults, and first.
+
+    A method may take *more* than upstream's -- ``calculate_pns`` grows a
+    ``tr`` -- but only keyword-only, only after every one of upstream's, and
+    without disturbing a single name or default before it. That is what makes
+    an unchanged PyPulseq call reach an unchanged PyPulseq meaning, whichever
+    way it was written: positionally or by keyword.
+    """
+    ours = list(inspect.signature(getattr(pp.Sequence, name)).parameters.values())
+    theirs = list(inspect.signature(getattr(upstream.Sequence, name)).parameters.values())
+
+    assert [(p.name, p.default) for p in ours[: len(theirs)]] == [
+        (p.name, p.default) for p in theirs
     ]
+    assert all(p.kind is inspect.Parameter.KEYWORD_ONLY for p in ours[len(theirs) :])
+    # An added parameter has to be optional, or upstream's own call breaks.
+    assert all(p.default is not inspect.Parameter.empty for p in ours[len(theirs) :])
 
 
 # %% upstream's register_*_event protocol

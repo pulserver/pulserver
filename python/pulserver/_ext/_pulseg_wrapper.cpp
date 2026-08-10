@@ -270,6 +270,81 @@ static py::dict _calc_pns(
     return out;
 }
 
+/** One axis of a SAFE hardware table, as (a1, a2, a3, tau1, tau2, tau3,
+ *  stim_limit, g_scale) -- the order pypulseq's asc_to_hw reports them. */
+static pulseg::SafeParams::Axis _safe_axis(const py::sequence& coeffs, const char* name)
+{
+    if (py::len(coeffs) != 8)
+        throw std::invalid_argument(
+            std::string("SAFE axis '") + name +
+            "' needs 8 coefficients (a1, a2, a3, tau1_ms, tau2_ms, tau3_ms, stim_limit, g_scale)");
+
+    pulseg::SafeParams::Axis axis;
+    axis.a1 = coeffs[0].cast<float>();
+    axis.a2 = coeffs[1].cast<float>();
+    axis.a3 = coeffs[2].cast<float>();
+    axis.tau1_ms = coeffs[3].cast<float>();
+    axis.tau2_ms = coeffs[4].cast<float>();
+    axis.tau3_ms = coeffs[5].cast<float>();
+    axis.stim_limit = coeffs[6].cast<float>();
+    axis.g_scale = coeffs[7].cast<float>();
+    return axis;
+}
+
+static py::dict _calc_pns_safe(
+    _PulseqCollection& pc,
+    int subsequence_idx,
+    int canonical_tr_idx,
+    const py::sequence& gx,
+    const py::sequence& gy,
+    const py::sequence& gz)
+{
+    pulseg::SafeParams params;
+    params.x = _safe_axis(gx, "x");
+    params.y = _safe_axis(gy, "y");
+    params.z = _safe_axis(gz, "z");
+
+    auto r = pc.coll().calc_pns(subsequence_idx, canonical_tr_idx, params);
+
+    py::dict out;
+    out["num_samples"] = r.num_samples;
+    out["slew_x"] = r.slew_x;
+    out["slew_y"] = r.slew_y;
+    out["slew_z"] = r.slew_z;
+    return out;
+}
+
+// ─── TR waveforms ──────────────────────────────────────────────────
+
+/**
+ * Native-timing gradient waveforms of one TR, as (time_us, amplitude)
+ * breakpoint pairs per axis. `amplitude_mode` is PULSEG_AMP_MAX_POS (0),
+ * _ZERO_VAR (1) or _ACTUAL (2); `tr_index` is read only by _ACTUAL.
+ */
+static py::dict _get_tr_waveforms(
+    _PulseqCollection& pc,
+    int subsequence_idx,
+    int amplitude_mode,
+    int tr_index)
+{
+    const auto w = pc.coll().get_tr_waveforms(subsequence_idx, amplitude_mode, tr_index);
+
+    auto axis = [](const pulseg::ChannelWaveform& ch)
+    {
+        py::dict d;
+        d["time_us"] = ch.time_us;
+        d["amplitude"] = ch.amplitude;
+        return d;
+    };
+
+    py::dict out;
+    out["gx"] = axis(w.gx);
+    out["gy"] = axis(w.gy);
+    out["gz"] = axis(w.gz);
+    out["total_duration_us"] = w.total_duration_us;
+    return out;
+}
+
 // ─── Check functions ────────────────────────────────────────────────
 
 static void _check_consistency(_PulseqCollection& pc)
@@ -415,6 +490,24 @@ PYBIND11_MODULE(_pulseg_wrapper, m)
         py::arg("chronaxie_us"),
         py::arg("rheobase"),
         py::arg("alpha"));
+
+    m.def(
+        "_calc_pns_safe",
+        &_calc_pns_safe,
+        py::arg("collection"),
+        py::arg("subsequence_idx") = 0,
+        py::arg("canonical_tr_idx") = 0,
+        py::arg("gx"),
+        py::arg("gy"),
+        py::arg("gz"));
+
+    m.def(
+        "_get_tr_waveforms",
+        &_get_tr_waveforms,
+        py::arg("collection"),
+        py::arg("subsequence_idx") = 0,
+        py::arg("amplitude_mode") = 0,
+        py::arg("tr_index") = 0);
 
     m.def("_check_consistency", &_check_consistency, py::arg("collection"));
 

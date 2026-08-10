@@ -530,7 +530,12 @@ namespace pulseg
 
         // ── PNS computation ──────────────────────────────────────────
 
-        PnsResult calc_pns(int ss, int canonical_tr_idx, const PnsParams& params) const
+        /* Templated on the model rather than overloaded per model: the body
+         * only ever calls params.to_c(), so any type publishing that -- the
+         * Irnich PnsParams, the SAFE SafeParams, or a vendor's own -- goes
+         * through unchanged. */
+        template <typename Model>
+        PnsResult calc_pns(int ss, int canonical_tr_idx, const Model& params) const
         {
             pulseg_pns_model cp = params.to_c();
             pulseg_pns_result cr = PULSEG_PNS_RESULT_INIT;
