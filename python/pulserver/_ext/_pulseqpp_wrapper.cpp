@@ -26,6 +26,7 @@
 #include "_pulseqpp_events.h"
 
 #include "pulseq/autolabel.hpp"
+#include "pulseq/expand.hpp"
 #include "pulseq/kspace.hpp"
 #include "pulseq/read.hpp"
 #include "pulseq/sequence.hpp"
@@ -543,6 +544,32 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
         .def("remove_duplicates", &Sequence::remove_duplicates,
              py::call_guard<py::gil_scoped_release>())
 
+        // Repetitions resolved into the block table.  Scan-length like the
+        // pass above it, and touching Python no more than that one does.
+        .def("expand_repeats",
+             [](Sequence& self, int repeats, const std::string& label, bool strip_once,
+                bool set_ignore_averages) {
+                 pulseq::ExpandOptions options;
+                 options.label = label;
+                 options.strip_once = strip_once;
+                 options.set_ignore_averages = set_ignore_averages;
+
+                 pulseq::ExpandResult r;
+                 {
+                     py::gil_scoped_release unlocked;
+                     r = pulseq::expand_repeats(self, repeats, options);
+                 }
+
+                 py::dict out;
+                 out["repeats"] = r.repeats;
+                 out["blocks_before"] = r.blocks_before;
+                 out["blocks_after"] = r.blocks_after;
+                 out["prep_blocks"] = r.prep_blocks;
+                 out["body_blocks"] = r.body_blocks;
+                 out["cooldown_blocks"] = r.cooldown_blocks;
+                 return out;
+             })
+
         /* -- files ------------------------------------------------------ */
         .def("write_text",
              [](Sequence& self, bool create_signature) {
@@ -746,7 +773,8 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
              [](Sequence& self, int first_block, int last_block,
                 std::array<bool, 3> reflect, std::array<int, 3> reorder,
                 std::array<double, 3> trajectory_delay, bool apply,
-                const std::vector<std::pair<std::string, int>>& repeat_dims) {
+                const std::vector<std::pair<std::string, int>>& repeat_dims,
+                const std::vector<std::string>& skip) {
                  pulseq::AutoLabelOptions options;
                  options.first_block = first_block;
                  options.last_block = last_block;
@@ -760,6 +788,7 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
                      d.size = dim.second;
                      options.repeat_dims.push_back(d);
                  }
+                 options.skip = skip;
 
                  pulseq::AutoLabelResult r;
                  {

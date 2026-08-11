@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
+__all__ = ["PolynomialPreconditioner", "pics"]
+
 from collections.abc import Sequence
 from importlib import import_module
 from math import isfinite
 from typing import Any
 
-from .denoisers import AverageDenoiser
 from .optimizers import PolynomialPreconditioner
 from .physics import MRIPhysics
-
-__all__ = ["PolynomialPreconditioner", "pics"]
 
 
 def _linear_physics(physics: Any) -> Any:
@@ -144,6 +143,7 @@ def pics(
     init: Any | None = None,
     verbose: bool = False,
     streaming: Any | None = None,
+    preconditioner: Any | None = None,
 ) -> Any:
     """Reconstruct parallel MRI data with CG or plug-and-play FISTA.
 
@@ -151,10 +151,10 @@ def pics(
 
     ``(AᴴA + regularization I)x = Aᴴy``
 
-    by conjugate gradients. With one denoiser, DeepInverse FISTA is used and
-    ``regularization`` becomes its threshold/noise-level parameter. Passing a
-    sequence of denoisers applies their equal-weight average at every proximal
-    step.
+    by implicitly differentiated conjugate gradients. With one denoiser,
+    Pulserver's DeepInverse FISTA subclass is used and ``regularization``
+    becomes its threshold/noise-level parameter. Use ``recon.optim.PDHG`` or
+    ``recon.optim.ADMM`` with ``StackedPrior`` for simultaneous regularizers.
 
     A positive ``polynomial_degree`` selects polynomial-preconditioned FISTA.
     Its degree-``d`` gradient step applies ``AᴴA`` ``d + 1`` times, using the
@@ -189,15 +189,6 @@ def pics(
             raise ValueError(
                 "polynomial_degree is only available for denoiser-based FISTA"
             )
-        try:
-            conjugate_gradient = import_module(
-                "deepinv.optim.linear"
-            ).conjugate_gradient
-        except ImportError as error:
-            raise ImportError(
-                "PICS reconstruction requires DeepInverse; install "
-                "pulserver[recon-cpu] or pulserver[recon-cuda]."
-            ) from error
         rhs = linear.A_adjoint(data)
         if (
             streaming is not None
@@ -210,21 +201,30 @@ def pics(
             result = linear.A_adjoint_A(x)
             return result + regularization * x if regularization else result
 
-        result = conjugate_gradient(
+        if init is None:
+            init = import_module("torch").zeros_like(rhs)
+        solver = _optim_class("ConjugateGradient")(
+            max_iter=iterations,
+            rtol=tolerance,
+            batch_dim=0 if rhs.ndim > 1 else None,
+            preconditioner=preconditioner,
+        )
+        result = solver(
             normal,
             rhs,
-            max_iter=iterations,
-            tol=tolerance,
             init=init,
-            parallel_dim=0,
-            verbose=verbose,
         )
         if streaming is not None and streaming.result_device == "cuda":
             return result.to(streaming.torch_device, non_blocking=True)
         return result
 
     if isinstance(denoiser, Sequence):
-        denoiser = AverageDenoiser(denoiser)
+        raise TypeError(
+            "pics accepts one denoiser; use optim.StackedPrior with PDHG or "
+            "ADMM for simultaneous regularizers"
+        )
+    if preconditioner is not None:
+        raise ValueError("preconditioner is only available for CG reconstruction")
     if streaming is not None:
         denoiser = streaming.wrap_denoiser(denoiser)
     if regularization <= 0:
@@ -297,7 +297,7 @@ def pics(
             "pulserver[recon-cpu] or pulserver[recon-cuda]."
         ) from error
 
-    model = optim.FISTA(
+    model = _optim_class("FISTA")(
         data_fidelity=optim.L2(),
         prior=optim.PnP(denoiser),
         # PnP ignores the explicit lambda/gamma product and consumes g_param
@@ -308,6 +308,21 @@ def pics(
         stepsize=stepsize,
         max_iter=iterations,
         early_stop=False,
+        verbose=verbose,
     )
     call_kwargs = {"init": init} if init is not None else {}
     return model(data, linear, **call_kwargs)
+
+
+# %% private module subroutines
+
+
+def _optim_class(name: str) -> type[Any]:
+    try:
+        module = import_module(f"{__package__}.optim")
+    except ImportError as error:
+        raise ImportError(
+            "PICS reconstruction requires DeepInverse and Torch; install "
+            "pulserver[recon-cpu] or pulserver[recon-cuda]."
+        ) from error
+    return getattr(module, name)

@@ -460,6 +460,110 @@ class Sequence:
         self._touch()
         self._native.remove_duplicates()
 
+    def expand_repeats(
+        self,
+        repeats: int,
+        *,
+        label: str = "AVG",
+        strip_once: bool = True,
+        ignore_averages: bool = True,
+    ) -> dict[str, int]:
+        """Play the sequence ``repeats`` times, written into the block table.
+
+        A ``.seq`` describes one pass; playing it several times is normally
+        left to the interpreter, which takes the count from outside the file
+        (on a GE scanner, ``opnex``) and uses the ``ONCE`` flag to decide what
+        belongs to a single pass:
+
+        =========  ======================================================
+        ``ONCE``   plays
+        =========  ======================================================
+        ``1``      on the first repetition only — preparation, a startup
+                   transient
+        ``0``      on every repetition — the body of the scan
+        ``2``      on the last repetition only — cooldown, a ramp-down
+        =========  ======================================================
+
+        This resolves that here instead. Afterwards the block table *is* the
+        scan: every repetition is present in the order it plays, and nothing
+        downstream has to be told how many times to read it.
+
+        Only the block table grows. A repetition plays the *same* events, so
+        every library is untouched and deduplication has nothing left to find
+        — a 100 000-block scan repeated three times is 300 000 rows of six
+        integers and a duration, and not one extra gradient.
+
+        Call it like :meth:`remove_duplicates`: once, on a finished sequence,
+        before writing.
+
+        Parameters
+        ----------
+        repeats : int
+            How many times the body plays, at least 1. ``1`` is not a no-op:
+            it resolves the flags and writes ``IgnoreAverages``, leaving a
+            file that says a single pass is all there is.
+        label : str, default "AVG"
+            Counter stamped with the repetition index, or ``""`` for none.
+            ``AVG`` because the repetition an interpreter adds is a signal
+            average — the same acquisition, sampled again. ``REP`` is the
+            frame counter of a dynamic series and means something else. Set
+            where it changes, so it costs one extension per repetition.
+        strip_once : bool, default True
+            Drop the ``ONCE`` labels once resolved — they now describe a
+            table they no longer fit, which is what a foreign interpreter
+            needs. Against Pulserver's own interpreter, keeping them costs
+            nothing at playback and preserves the preparation/cooldown split
+            that ``pulseg`` hands to its TR descriptor.
+        ignore_averages : bool, default True
+            Write ``IgnoreAverages 1`` into ``[DEFINITIONS]``, so a Pulserver
+            interpreter does not repeat what is already written out.
+
+        Returns
+        -------
+        dict
+            ``repeats``, ``blocks_before``, ``blocks_after`` and the per-pass
+            ``prep_blocks``/``body_blocks``/``cooldown_blocks`` counts.
+
+        Raises
+        ------
+        ValueError
+            If ``repeats`` is below 1.
+        RuntimeError
+            If a block carries an ``ONCE`` value outside ``{0, 1, 2}``, if
+            ``repeats`` exceeds 1 with every block marked ``ONCE`` (there is
+            no body to repeat), or if the sequence already writes ``label``
+            — two meanings on one counter is not resolved quietly.
+
+        Examples
+        --------
+        >>> import pulserver.pypulseq as pp
+        >>> seq = pp.Sequence(pp.Opts())
+        >>> seq.add_block(pp.make_delay(1e-3), pp.make_label("ONCE", "SET", 1))
+        1
+        >>> seq.add_block(pp.make_delay(2e-3), pp.make_label("ONCE", "SET", 0))
+        2
+        >>> report = seq.expand_repeats(3)
+        >>> report["blocks_before"], report["blocks_after"]
+        (2, 4)
+        >>> report["prep_blocks"], report["body_blocks"]
+        (1, 1)
+
+        See Also
+        --------
+        remove_duplicates : the other whole-sequence pass, run before writing.
+        auto_label : the encoding counters, derived rather than materialised.
+        """
+        if repeats < 1:
+            raise ValueError(f"expand_repeats(): repeats must be at least 1, got {repeats}")
+        self._touch()
+        report = self._native.expand_repeats(int(repeats), label, strip_once, ignore_averages)
+        if ignore_averages:
+            # Mirrored, not duplicated work: the C++ side writes it so a
+            # non-Python caller gets it too, and this is what makes it show up
+            # in `definitions` rather than only in the written file.
+            self._definitions["IgnoreAverages"] = 1
+        return report
+
     # -- FOV positioning --------------------------------------------------
 
     def transform_fov(
@@ -826,15 +930,36 @@ class Sequence:
             mri-nufft all sample at the midpoint and matching them is what
             makes the answer comparable. Turn it on for a gridder.
         dense : bool, optional
-            Also build ``k_traj``, k at every gradient breakpoint across the
-            range -- what a plot draws. It is the one output whose size grows
-            with the duration of the scan rather than with the acquisition, so
-            pass ``False`` when only the ADC samples are wanted.
+            Also build ``k_traj``. It is the one output whose size grows with
+            the duration of the scan rather than with the acquisition, and the
+            only one computed by upstream rather than here -- see the note
+            below. Pass ``False`` to skip it and get an empty array back.
 
         Returns
         -------
         tuple
             ``(k_traj_adc, k_traj, t_excitation, t_refocusing, t_adc)``.
+
+        Notes
+        -----
+        **``k_traj`` comes from upstream PyPulseq, the other four from the C
+        core.** The dense trajectory is a picture of the sequence -- what a
+        plot draws -- and being able to hand it to code written against
+        upstream matters more than computing it quickly. The C core's own
+        answer is on the gradient *breakpoint* grid, which describes the same
+        curve in five to ten times fewer points; that is the better
+        representation and the wrong one to return from a function whose
+        contract is upstream's. It is still available through
+        :meth:`_kspace`, together with its time base ``t_ktraj``, which this
+        tuple has nowhere to put.
+
+        Nothing a reconstruction needs is on that path: ``k_traj_adc`` is
+        where the samples actually are, and it is the C core's, agreeing with
+        upstream to 2e-13 on a GRE and 2e-12 on an EPI.
+
+        Sequences upstream cannot read -- anything carrying rotation or RF-shim
+        extensions -- have no ``k_traj``, and ask for one raises rather than
+        quietly returning the breakpoint grid in its place.
 
         See Also
         --------
@@ -846,11 +971,33 @@ class Sequence:
             block_range=block_range,
             frame=frame,
             sample_window_average=sample_window_average,
-            dense=dense,
+            dense=False,
         )
+
+        k_traj = np.zeros((3, 0))
+        if dense:
+            # to_upstream does not resolve rotation or RF-shim extensions, so
+            # for a sequence carrying either it would hand back a logical-frame
+            # k_traj beside a physical-frame k_traj_adc -- two frames in one
+            # tuple, and nothing to say which is which. Refuse instead.
+            if self._native.num_rotations() > 0 or self._native.num_rf_shims() > 0:
+                raise NotImplementedError(
+                    "calculate_kspace: k_traj comes from upstream PyPulseq, which cannot "
+                    "read the rotation or RF-shim extensions this sequence carries -- it "
+                    "would come back in the logical frame beside a physical-frame "
+                    "k_traj_adc. Use dense=False for the ADC samples, or _kspace() for "
+                    "the breakpoint-grid trajectory, which does resolve them."
+                )
+            first, last = self._block_range(block_range)
+            upstream = to_upstream(self, first=first, last=(None if last == 0 else last))
+            k_traj = upstream.calculate_kspace(
+                trajectory_delay=trajectory_delay,
+                gradient_offset=gradient_offset,
+            )[1]
+
         return (
             result["k_adc"],
-            result["k_traj"],
+            k_traj,
             result["t_excitation"],
             result["t_refocusing"],
             result["t_adc"],
@@ -893,7 +1040,8 @@ class Sequence:
         reflect: list[int] | None = None,
         reorder: list[int] | None = None,
         trajectory_delay: float | list[float] | np.ndarray = 0.0,
-        repeat_dims: list[tuple[str, int]] | None = None,
+        repeat_dims: list[str | tuple[str, int]] | None = None,
+        skip: list[str] | None = None,
         skip_apply: bool = False,
     ) -> tuple[dict, dict]:
         """Recover the encoding counters from the sequence's own trajectory.
@@ -920,22 +1068,39 @@ class Sequence:
             x and y.
         trajectory_delay : float or array-like, optional
             As for :meth:`calculate_kspace`.
-        repeat_dims : sequence of (str, int), optional
+        repeat_dims : sequence of str, optional
             The dimensions the repetition counter is standing in for, named
-            by you and ordered **fastest-varying first**.
+            by you, **outermost loop first** -- ``["REP", "ECO"]``.
 
             Where a readout sits in k says which line, partition and slice it
             is. It cannot say which echo of a train, which frame of a time
             series or which saturation state it is, because all of those
             revisit the same k-space position -- so by default they are
-            counted together as ``REP``. ``[("ECO", 2), ("REP", 10)]`` says a
-            position was visited twice per repetition and there were ten
-            repetitions, and splits the count accordingly.
+            counted together as ``REP``.
 
-            ``0`` as the size of the *last* entry means "however many there
-            turn out to be", for a series that runs until it is stopped.
-            Sizes that cannot account for the repeats actually found are an
-            error, not something to wrap around.
+            Only the names are needed. How large each dimension is, is
+            written in the acquisition order and read back from it: a
+            dimension nested inside the k-space loop brings a position back
+            after a short gap, one outside it only after a whole pass. Pass
+            ``("ECO", 2)`` in place of a name to pin a size, and it is
+            checked against what was read rather than believed.
+
+            Repeats that are not a rectangle -- some positions revisited and
+            others not, as with an EPI's navigators -- have no nest to read
+            and raise. A single name never does: it takes the whole count,
+            which is ``REP`` under a name that means something.
+        skip : list of str, optional
+            Counters to leave alone -- derived neither into the answer nor
+            onto the sequence.
+
+            For a sequence that labelled some of its own axes as it was
+            built and wants the geometric ones filled in around them.
+            Labels this does not derive at all (``ECO``, ``SET``, ``AVG``,
+            anything custom) already survive an ``auto_label`` pass
+            untouched and need no mention. ``REP`` is the one that does:
+            it is derived by default, so a design loop that separated its
+            own contrasts or frames should pass ``skip=["REP"]`` or its own
+            labelling is overwritten by a bare repeat count.
         skip_apply : bool, optional
             Return the counters without writing them onto the sequence. By
             default they are written, as ``SET`` label extensions on each ADC
@@ -958,7 +1123,9 @@ class Sequence:
             If the readouts do not share a direction. These are Cartesian
             encoding counters, and a non-Cartesian trajectory has no honest
             value for them -- which is what MATLAB's ``autoLabel`` also says.
-            Also if ``repeat_dims`` cannot account for the repeats found.
+            Also if the repeats do not form a rectangle that ``repeat_dims``
+            can name, or if a size you pinned contradicts the acquisition
+            order.
 
         Notes
         -----
@@ -985,11 +1152,18 @@ class Sequence:
 
         dims = []
         for entry in repeat_dims or ():
+            # A bare name is the ordinary case; a (name, size) pair pins one
+            # down. Strings are iterable, so they have to be caught first --
+            # unpacking "AB" would otherwise succeed and mean nothing.
+            if isinstance(entry, str):
+                dims.append((entry, 0))
+                continue
             try:
                 name, size = entry
             except (TypeError, ValueError):
                 raise ValueError(
-                    f"repeat_dims entries are (name, size) pairs, got {entry!r}"
+                    f"repeat_dims entries are names, or (name, size) pairs to pin a size, "
+                    f"got {entry!r}"
                 ) from None
             dims.append((str(name), int(size)))
 
@@ -1001,6 +1175,7 @@ class Sequence:
             _per_axis(trajectory_delay, "trajectory_delay"),
             not skip_apply,
             dims,
+            [str(name) for name in (skip or ())],
         )
         aux = result["aux"]
         if not skip_apply:

@@ -123,7 +123,7 @@ def test_the_repeat_memo_fires_on_a_repeating_scan(gre):
     assert 0 < result["key_groups"] < len(result["readout_block"])
 
 
-def test_the_dense_trajectory_is_optional_and_sized_by_breakpoints(gre):
+def test_the_dense_trajectory_is_optional(gre):
     """It is the one output that grows with the scan rather than the acquisition."""
     with_dense = gre.calculate_kspace(dense=True)
     without = gre.calculate_kspace(dense=False)
@@ -132,9 +132,48 @@ def test_the_dense_trajectory_is_optional_and_sized_by_breakpoints(gre):
     assert without[1].shape[1] == 0
     # Same ADC samples either way: the dense grid is an extra, not a mode.
     assert np.array_equal(with_dense[0], without[0])
-    # Breakpoints, not the raster: a flat top costs two points, not five
-    # hundred, which is what keeps the dense grid affordable at all.
-    assert with_dense[1].shape[1] < gre.duration()[0] / gre.system.grad_raster_time
+
+
+def test_the_whole_tuple_matches_upstream(gre):
+    """Every element, not just the ADC samples -- this is the drop-in claim.
+
+    ``k_traj`` is upstream's own, computed by upstream, because the tuple's
+    contract is upstream's and the C core's breakpoint grid is a different
+    (better, sparser) representation of the same curve. The other four come
+    from the C core and agree to ~1e-13.
+    """
+    pp = pytest.importorskip("pypulseq")
+    theirs_seq = pp.Sequence()
+    theirs_seq.read(str(FIXTURES / "gre_2d_3sl_3avg.seq"))
+
+    for name, ours, theirs in zip(
+        ("k_traj_adc", "k_traj", "t_excitation", "t_refocusing", "t_adc"),
+        gre.calculate_kspace(),
+        theirs_seq.calculate_kspace(),
+    ):
+        ours = np.atleast_1d(np.asarray(ours, dtype=float))
+        theirs = np.atleast_1d(np.asarray(theirs, dtype=float))
+        assert ours.shape == theirs.shape, name
+        if not theirs.size:
+            continue
+        # Upstream marks excitation boundaries in k_traj with NaN, so the
+        # gaps have to line up before the numbers between them can be
+        # compared at all.
+        assert np.array_equal(np.isnan(ours), np.isnan(theirs)), name
+        finite = ~np.isnan(theirs)
+        if not finite.any():
+            continue
+        scale = max(float(np.abs(theirs[finite]).max()), 1e-12)
+        assert float(np.abs(ours[finite] - theirs[finite]).max()) / scale < 1e-9, name
+
+
+def test_the_dense_trajectory_is_refused_where_upstream_cannot_read_the_sequence():
+    """A rotation extension would come back in the wrong frame, silently."""
+    seq = load("mprage_noncart_3d_3sl_3avg_userotext1")
+    with pytest.raises(NotImplementedError, match="rotation or RF-shim"):
+        seq.calculate_kspace()
+    # The ADC samples are still available, and they do resolve the rotation.
+    assert seq.calculate_kspace(dense=False)[0].shape[1] > 0
 
 
 def test_the_logical_frame_leaves_rotations_out():
@@ -257,31 +296,119 @@ def test_the_epi_echo_index_is_quoted_after_mirroring():
     assert np.array_equal(np.where(rev, samples - 1 - echo, echo), np.full(echo.shape, 64))
 
 
-def test_named_repeat_dimensions_split_the_repeat_count():
-    """The trajectory counts visits; only the caller knows what they were."""
+def test_a_single_named_dimension_takes_the_repeat_count():
+    """One name is always safe: there is nothing to work out."""
     seq = load("epi_2d_1sl_1avg")
     plain, _ = seq.auto_label(skip_apply=True)
 
-    named, _ = seq.auto_label(repeat_dims=[("SET", 4)], skip_apply=True)
+    named, _ = seq.auto_label(repeat_dims=["SET"], skip_apply=True)
     assert "REP" not in named
     assert np.array_equal(named["SET"], plain["REP"])
 
-    # Two of them, fastest first: visits 0..3 become (SET, ECO) = (0,0),
-    # (1,0), (0,1), (1,1).
-    split, _ = seq.auto_label(repeat_dims=[("SET", 2), ("ECO", 0)], skip_apply=True)
-    assert list(split["SET"][:3]) == [0, 1, 0]
-    assert list(split["ECO"][:3]) == [0, 0, 1]
+
+def test_ragged_repeats_are_refused_rather_than_split_anyway():
+    """The EPI's navigators revisit one line; the other 127 are acquired once.
+
+    That is not a dimension, and splitting it into two would put different
+    acquisitions in one slot with every surrounding label looking ordinary.
+    """
+    seq = load("epi_2d_1sl_1avg")
+    with pytest.raises(RuntimeError, match="not a rectangle"):
+        seq.auto_label(repeat_dims=["REP", "ECO"], skip_apply=True)
+
+    # Declared outright it is arithmetic again, and goes through.
+    split, _ = seq.auto_label(repeat_dims=[("REP", 2), ("ECO", 2)], skip_apply=True)
+    assert list(split["REP"][:3]) == [0, 0, 1]
+    assert list(split["ECO"][:3]) == [0, 1, 0]
 
 
-def test_repeat_dimensions_that_cannot_hold_the_scan_are_refused():
-    """Wrapping the counter round would put two acquisitions in one slot."""
+def test_repeat_dimensions_that_contradict_the_scan_are_refused():
     seq = load("epi_2d_1sl_1avg")
     with pytest.raises(RuntimeError, match="were found"):
         seq.auto_label(repeat_dims=[("SET", 3)], skip_apply=True)
     with pytest.raises(RuntimeError, match="derived from the trajectory"):
-        seq.auto_label(repeat_dims=[("LIN", 3)], skip_apply=True)
-    with pytest.raises(ValueError, match=r"\(name, size\) pairs"):
-        seq.auto_label(repeat_dims=["SET"], skip_apply=True)
+        seq.auto_label(repeat_dims=["LIN"], skip_apply=True)
+    with pytest.raises(ValueError, match="names, or"):
+        seq.auto_label(repeat_dims=[("SET", 2, 1)], skip_apply=True)
+
+
+def _stamp_label(seq, name, value_of):
+    """Attach a LABELSET to every ADC block, the way a design loop would."""
+    native = seq._native
+    labelset = native.extension_type_id("LABELSET")
+    label = native.label_id(name)
+    count = 0
+    for block in range(1, native.num_blocks() + 1):
+        rf, gx, gy, gz, adc, ext, duration = native.get_block(block)
+        if adc == 0:
+            continue
+        row = native.register_label_set(int(value_of(count)), label)
+        native.set_block(
+            block, rf, gx, gy, gz, adc, native.chain_extension(labelset, row, ext), duration
+        )
+        count += 1
+    seq._touch()
+    return count
+
+
+def _replay_labels(seq):
+    """What a reader sees at each ADC: the running LABELSET state."""
+    native = seq._native
+    labelset = native.find_extension_type_id("LABELSET")
+    state = {
+        native.label_name(int(native.label_set_row(i)[1])): 0
+        for i in range(1, native.num_label_set() + 1)
+    }
+    out = {}
+    for block in range(1, native.num_blocks() + 1):
+        _, _, _, _, adc, ext, _ = native.get_block(block)
+        link = ext
+        while link:
+            row = native.extension_row(link)
+            if labelset and int(row[0]) == labelset and int(row[1]):
+                entry = native.label_set_row(int(row[1]))
+                state[native.label_name(int(entry[1]))] = int(entry[0])
+            link = int(row[2])
+        if adc:
+            for name, value in state.items():
+                out.setdefault(name, []).append(value)
+    return {name: np.asarray(values) for name, values in out.items()}
+
+
+def test_labels_the_sequence_already_carries_survive_an_auto_label_pass():
+    """Stamp the axes only the design loop knows, then fill in the rest.
+
+    A label ``auto_label`` never derives comes through untouched with nothing
+    asked for. ``REP`` is the exception -- it *is* derived by default -- so a
+    loop that separated its own repeats has to hand it back with ``skip``.
+    """
+    seq = load("gre_2d_3sl_3avg")
+    n = _stamp_label(seq, "ECO", lambda i: i % 2)
+    seq.auto_label()
+
+    replayed = _replay_labels(seq)
+    assert np.array_equal(replayed["ECO"], np.array([i % 2 for i in range(n)]))
+    assert "SLC" in replayed and "LIN" in replayed
+
+
+def test_skip_hands_a_derived_counter_back_to_the_sequence():
+    seq = load("epi_2d_1sl_1avg")
+    n = _stamp_label(seq, "REP", lambda i: i // 40)
+    want = np.array([i // 40 for i in range(n)])
+
+    derived, _ = seq.auto_label(skip=["REP"])
+
+    assert "REP" not in derived
+    assert "LIN" in derived and "REV" in derived
+    assert np.array_equal(_replay_labels(seq)["REP"], want)
+
+
+def test_skipping_something_not_derived_is_refused(gre):
+    """It reads as protection, and it is not -- so it must not look accepted."""
+    with pytest.raises(RuntimeError, match="not a counter this derives"):
+        gre.auto_label(skip=["ECO"], skip_apply=True)
+    with pytest.raises(RuntimeError, match="either yours or mine"):
+        gre.auto_label(skip=["REP"], repeat_dims=["REP"], skip_apply=True)
 
 
 def test_a_non_cartesian_sequence_is_refused():

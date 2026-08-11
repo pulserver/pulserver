@@ -314,76 +314,216 @@ TEST(PulseqAutoLabel, TheEpiEchoIndexIsQuotedAfterMirroring)
 }
 
 /*
- * Dimensions the trajectory cannot see are named by the caller, and the count
- * splits between them.
+ * A single named dimension takes the repeat count, whatever shape it has.
  *
- * The EPI's three leading navigators visit one line three times, so the
- * trajectory can say they are three visits and nothing more.  What they *are*
- * -- three echoes, three saturation states, three frames -- is not written
- * anywhere in k, and the only honest source is whoever built the sequence.
+ * The EPI's three leading navigators visit one line three times, and the image
+ * line through the centre visits it a fourth. The trajectory can say they are
+ * four visits and nothing more; what they *are* is not written anywhere in k,
+ * and the only source is whoever built the sequence. One name is always safe
+ * here because there is nothing to work out -- it is the number REP would have
+ * carried, under a name that means something.
  */
-TEST(PulseqAutoLabel, DeclaredRepeatDimensionsSplitTheRepeatCount)
+TEST(PulseqAutoLabel, OneNamedDimensionTakesTheRepeatCount)
 {
     pulseq::Sequence seq = load("epi_2d_1sl_1avg");
 
-    /* Undeclared: one counter running 0, 1, 2, as MATLAB produces. */
     const pulseq::AutoLabelResult plain = pulseq::auto_label(seq, {}, false);
     ASSERT_GE(plain.labels.rep.size(), 3u);
     EXPECT_EQ(plain.labels.rep[0], 0);
     EXPECT_EQ(plain.labels.rep[1], 1);
     EXPECT_EQ(plain.labels.rep[2], 2);
 
-    /* Named: the same numbers, under the name they were given, and REP is no
-     * longer standing in for something it is not. */
+    /* A bare name: no size, nothing inferred, REP renamed. */
+    pulseq::AutoLabelOptions options;
+    options.repeat_dims.push_back({"SET", 0});
+    const pulseq::AutoLabelResult r = pulseq::auto_label(seq, options, false);
+    EXPECT_TRUE(r.labels.rep.empty());
+    ASSERT_EQ(r.labels.named.size(), 1u);
+    EXPECT_EQ(r.labels.named[0].first, "SET");
+    EXPECT_EQ(r.labels.named[0].second, plain.labels.rep);
+
+    /* And it reaches the sequence under that name. */
+    pulseq::Sequence writable = load("epi_2d_1sl_1avg");
+    pulseq::auto_label(writable, options, true);
+    const std::map<std::string, std::vector<int>> replayed = replay_labels(writable);
+    ASSERT_EQ(replayed.count("SET"), 1u) << "SET was never written";
+    EXPECT_EQ(replayed.find("SET")->second, plain.labels.rep);
+    EXPECT_EQ(replayed.count("REP"), 0u) << "REP was written as well as SET";
+}
+
+/*
+ * Two named dimensions, with their sizes read out of the acquisition order.
+ *
+ * Four lines, two echoes inside each TR, three frames over the whole scan --
+ * so every line is acquired six times and nothing in k-space distinguishes
+ * those six. What *does* distinguish them is when they happened: the two
+ * echoes are consecutive acquisitions and the next frame is four lines away.
+ * That is the whole signal, and it is enough to say which of the six each one
+ * is without the caller counting anything.
+ *
+ * Built rather than read from a file so the answer is known from the
+ * prescription: ECO must cycle 0,1 within a TR and REP must step once per
+ * pass over the four lines.
+ */
+TEST(PulseqAutoLabel, RepeatDimensionSizesAreReadFromTheAcquisitionOrder)
+{
+    const int kLines = 4;
+    const int kEchoes = 2;
+    const int kFrames = 3;
+    const int kSamples = 16;
+    const double kReadout = 1e5;     /* Hz/m */
+    const double kSliceSelect = 2e5; /* Hz/m */
+    /* Every 100/100/100 us trapezoid integrates to amplitude * 200 us. */
+    const double kArea = 200e-6;
+    /* The readout is 100/200/100 us at kReadout, so k advances 13 /m between
+     * the start of that block and the centre of the ADC window; the prewinder
+     * cancels exactly that, putting the echo on sample 8 of 16.  After the
+     * readout k has advanced 30 /m in all, so the gradient between two echoes
+     * has to take back 30 for the second to repeat the first. */
+    const double kPrewindArea = -13.0;
+    const double kRewindArea = -30.0;
+
+    pulseq::Sequence seq;
+    seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
+
+    std::vector<double> magnitude(100, 1.0);
+    const int mag_shape = seq.register_raw_shape(magnitude.data(), 100);
+    const double rf[pulseq::RF_WIDTH] = {1000.0, static_cast<double>(mag_shape), 0.0, 0.0,
+                                         50e-6,  50e-6,                          0.0, 0.0,
+                                         0.0,    0.0};
+    const int excitation = seq.register_rf(rf, 'e');
+
+    const double slice_grad[pulseq::TRAP_WIDTH] = {kSliceSelect, 100e-6, 100e-6, 100e-6, 0.0};
+    const double read[pulseq::TRAP_WIDTH] = {kReadout, 100e-6, 200e-6, 100e-6, 0.0};
+    const double prewind[pulseq::TRAP_WIDTH] = {kPrewindArea / kArea, 100e-6, 100e-6, 100e-6,
+                                                0.0};
+    /* Between echoes: take the readout back, so both echoes of a TR sit on
+     * the same k-space position and are indistinguishable by trajectory. */
+    const double rewind[pulseq::TRAP_WIDTH] = {kRewindArea / kArea, 100e-6, 100e-6, 100e-6, 0.0};
+    const int gz_slice = seq.register_trap(slice_grad);
+    const int gx_read = seq.register_trap(read);
+    const int gx_prewind = seq.register_trap(prewind);
+    const int gx_rewind = seq.register_trap(rewind);
+
+    const double adc[pulseq::ADC_WIDTH] = {static_cast<double>(kSamples), 10e-6, 100e-6,
+                                           0.0, 0.0, 0.0, 0.0, 0.0};
+    const int adc_id = seq.register_adc(adc);
+
+    for (int frame = 0; frame < kFrames; ++frame)
     {
-        pulseq::AutoLabelOptions options;
-        options.repeat_dims.push_back({"SET", 4});
-        const pulseq::AutoLabelResult r = pulseq::auto_label(seq, options, false);
-        EXPECT_TRUE(r.labels.rep.empty());
-        ASSERT_EQ(r.labels.named.size(), 1u);
-        EXPECT_EQ(r.labels.named[0].first, "SET");
-        EXPECT_EQ(r.labels.named[0].second, plain.labels.rep);
+        for (int line = 0; line < kLines; ++line)
+        {
+            pulseq::Block excite;
+            excite.rf = excitation;
+            excite.gz = gz_slice;
+            excite.duration = 300e-6;
+            seq.add_block(excite);
+
+            const double gy[pulseq::TRAP_WIDTH] = {(line - kLines / 2) / kArea, 100e-6, 100e-6,
+                                                   100e-6, 0.0};
+            pulseq::Block encode;
+            encode.gx = gx_prewind;
+            encode.gy = seq.register_trap(gy);
+            encode.duration = 300e-6;
+            seq.add_block(encode);
+
+            for (int echo = 0; echo < kEchoes; ++echo)
+            {
+                if (echo > 0)
+                {
+                    pulseq::Block between;
+                    between.gx = gx_rewind;
+                    between.duration = 300e-6;
+                    seq.add_block(between);
+                }
+                pulseq::Block readout;
+                readout.gx = gx_read;
+                readout.adc = adc_id;
+                readout.duration = 400e-6;
+                seq.add_block(readout);
+            }
+        }
     }
 
-    /* Two of them, fastest first: three visits split as (SET, ECO) =
-     * (0,0), (1,0), (0,1) -- mixed radix, exactly as declared. */
+    /* Undeclared: one counter running 0..5, which is arithmetic. */
+    const pulseq::AutoLabelResult plain = pulseq::auto_label(seq, {}, false);
+    ASSERT_EQ(plain.labels.rep.size(), static_cast<size_t>(kFrames * kLines * kEchoes));
+    for (int i = 0; i < kFrames * kLines * kEchoes; ++i)
+        EXPECT_EQ(plain.labels.rep[static_cast<size_t>(i)],
+                  (i / (kLines * kEchoes)) * kEchoes + (i % kEchoes))
+            << "acquisition " << i;
+
+    /* Named, outermost first, with no sizes given at all. */
+    pulseq::AutoLabelOptions options;
+    options.repeat_dims.push_back({"REP", 0});
+    options.repeat_dims.push_back({"ECO", 0});
+    const pulseq::AutoLabelResult r = pulseq::auto_label(seq, options, false);
+
+    EXPECT_TRUE(r.labels.rep.empty());
+    ASSERT_EQ(r.labels.named.size(), 2u);
+    EXPECT_EQ(r.labels.named[0].first, "REP");
+    EXPECT_EQ(r.labels.named[1].first, "ECO");
+
+    for (int i = 0; i < kFrames * kLines * kEchoes; ++i)
     {
-        pulseq::AutoLabelOptions options;
-        options.repeat_dims.push_back({"SET", 2});
-        options.repeat_dims.push_back({"ECO", 0}); /* open-ended */
-        const pulseq::AutoLabelResult r = pulseq::auto_label(seq, options, false);
-        ASSERT_EQ(r.labels.named.size(), 2u);
-        EXPECT_EQ(r.labels.named[0].first, "SET");
-        EXPECT_EQ(r.labels.named[1].first, "ECO");
-        EXPECT_EQ(r.labels.named[0].second[0], 0);
-        EXPECT_EQ(r.labels.named[0].second[1], 1);
-        EXPECT_EQ(r.labels.named[0].second[2], 0);
-        EXPECT_EQ(r.labels.named[1].second[0], 0);
-        EXPECT_EQ(r.labels.named[1].second[1], 0);
-        EXPECT_EQ(r.labels.named[1].second[2], 1);
+        EXPECT_EQ(r.labels.named[0].second[static_cast<size_t>(i)], i / (kLines * kEchoes))
+            << "REP at acquisition " << i;
+        EXPECT_EQ(r.labels.named[1].second[static_cast<size_t>(i)], i % kEchoes)
+            << "ECO at acquisition " << i;
     }
 
-    /* And they end up on the sequence under those names. */
-    {
-        pulseq::Sequence writable = load("epi_2d_1sl_1avg");
-        pulseq::AutoLabelOptions options;
-        options.repeat_dims.push_back({"SET", 4});
-        pulseq::auto_label(writable, options, true);
-        const std::map<std::string, std::vector<int>> replayed = replay_labels(writable);
-        ASSERT_TRUE(replayed.count("SET") == 1) << "SET was never written";
-        EXPECT_EQ(replayed.find("SET")->second, plain.labels.rep);
-        EXPECT_EQ(replayed.count("REP"), 0u) << "REP was written as well as SET";
-    }
+    /* Saying the sizes out loud agrees, and saying a wrong one is caught. */
+    pulseq::AutoLabelOptions pinned;
+    pinned.repeat_dims.push_back({"REP", kFrames});
+    pinned.repeat_dims.push_back({"ECO", kEchoes});
+    const pulseq::AutoLabelResult same = pulseq::auto_label(seq, pinned, false);
+    EXPECT_EQ(same.labels.named[0].second, r.labels.named[0].second);
+    EXPECT_EQ(same.labels.named[1].second, r.labels.named[1].second);
+
+    pulseq::AutoLabelOptions wrong;
+    wrong.repeat_dims.push_back({"REP", 0});
+    wrong.repeat_dims.push_back({"ECO", 3});
+    EXPECT_THROW(pulseq::auto_label(seq, wrong, false), std::runtime_error);
+}
+
+/*
+ * Repeats that are not a rectangle have no nest in them, and say so.
+ *
+ * The EPI is the case: 127 of its 128 lines are acquired once and one is
+ * acquired four times, because three of those are navigators. Splitting that
+ * into two dimensions would put two different acquisitions in one slot, and a
+ * reconstruction would average them together with every surrounding label
+ * looking perfectly ordinary. So it raises, and the caller who knows better
+ * than the evidence can still give the sizes outright.
+ */
+TEST(PulseqAutoLabel, RaggedRepeatsAreRefusedRatherThanSplitAnyway)
+{
+    pulseq::Sequence seq = load("epi_2d_1sl_1avg");
+
+    pulseq::AutoLabelOptions two;
+    two.repeat_dims.push_back({"REP", 0});
+    two.repeat_dims.push_back({"ECO", 0});
+    EXPECT_THROW(pulseq::auto_label(seq, two, false), std::runtime_error);
+
+    /* Declared outright, it is arithmetic again and goes through. */
+    pulseq::AutoLabelOptions declared;
+    declared.repeat_dims.push_back({"REP", 2});
+    declared.repeat_dims.push_back({"ECO", 2});
+    const pulseq::AutoLabelResult r = pulseq::auto_label(seq, declared, false);
+    ASSERT_EQ(r.labels.named.size(), 2u);
+    EXPECT_EQ(r.labels.named[0].second[0], 0);
+    EXPECT_EQ(r.labels.named[1].second[0], 0);
+    EXPECT_EQ(r.labels.named[0].second[1], 0);
+    EXPECT_EQ(r.labels.named[1].second[1], 1);
+    EXPECT_EQ(r.labels.named[0].second[2], 1);
+    EXPECT_EQ(r.labels.named[1].second[2], 0);
 }
 
 /*
  * A declaration that cannot hold the repeats found is an error.
  *
- * Two declared slots and three acquisitions of one k-space position means
- * either the scan is not what was declared or a dimension was left out.
  * Wrapping the counter round with a modulo would produce labels that look
- * perfectly ordinary and put two different acquisitions in the same slot,
- * which a reconstruction would then average together.
+ * perfectly ordinary and put two different acquisitions in the same slot.
  */
 TEST(PulseqAutoLabel, RepeatDimensionsThatCannotHoldTheScanAreRefused)
 {
@@ -403,16 +543,115 @@ TEST(PulseqAutoLabel, RepeatDimensionsThatCannotHoldTheScanAreRefused)
     twice.repeat_dims.push_back({"SET", 3});
     EXPECT_THROW(pulseq::auto_label(seq, twice, false), std::runtime_error);
 
-    /* Open-ended anywhere but last: a dimension of unknown size cannot have a
-     * faster one nested inside it, because there is no stride to divide by. */
-    pulseq::AutoLabelOptions unbounded_first;
-    unbounded_first.repeat_dims.push_back({"SET", 0});
-    unbounded_first.repeat_dims.push_back({"ECO", 3});
-    EXPECT_THROW(pulseq::auto_label(seq, unbounded_first, false), std::runtime_error);
+    pulseq::AutoLabelOptions negative;
+    negative.repeat_dims.push_back({"SET", -1});
+    EXPECT_THROW(pulseq::auto_label(seq, negative, false), std::runtime_error);
 
     pulseq::AutoLabelOptions nameless;
     nameless.repeat_dims.push_back({"", 3});
     EXPECT_THROW(pulseq::auto_label(seq, nameless, false), std::runtime_error);
+}
+
+/*
+ * Labels the sequence set for itself survive, and REP can be left to it.
+ *
+ * The workflow this serves: a design loop stamps the axes only it knows --
+ * which contrast, which frame, which saturation state -- and then one
+ * auto_label pass fills in the geometric ones around them.
+ *
+ * Two halves. Labels this never derives (ECO here, and SET, AVG, anything
+ * custom) come through an apply pass untouched already, because the extension
+ * chain is rebuilt keeping every link that is not one of ours. REP is the
+ * exception and the reason `skip` exists: it *is* derived by default, so a
+ * loop that separated its own repeats would have that separation overwritten
+ * by a bare count of revisits.
+ */
+TEST(PulseqAutoLabel, LabelsTheSequenceAlreadyCarriesSurviveAnAutoLabelPass)
+{
+    const int eco = 7;
+
+    /* -- a label auto_label never derives: nothing to ask for -- */
+    {
+        pulseq::Sequence seq = load("gre_2d_3sl_3avg");
+        const int labelset = seq.extension_type_id("LABELSET");
+        const int eco_id = seq.label_id("ECO");
+        for (int b = 1; b <= seq.num_blocks(); ++b)
+        {
+            pulseq::Block block = seq.get_block(b);
+            if (block.adc == 0)
+                continue;
+            block.ext = static_cast<int32_t>(seq.chain_extension(
+                labelset,
+                static_cast<int32_t>(seq.register_label_set(eco, eco_id)),
+                block.ext));
+            seq.set_block(b, block);
+        }
+
+        pulseq::auto_label(seq, {}, true);
+
+        const std::map<std::string, std::vector<int>> replayed = replay_labels(seq);
+        ASSERT_EQ(replayed.count("ECO"), 1u) << "the sequence's own label was dropped";
+        for (size_t i = 0; i < replayed.find("ECO")->second.size(); ++i)
+            EXPECT_EQ(replayed.find("ECO")->second[i], eco);
+        /* And the geometric ones were filled in around it. */
+        EXPECT_EQ(replayed.count("SLC"), 1u);
+        EXPECT_EQ(replayed.count("LIN"), 1u);
+    }
+
+    /* -- REP: derived by default, so it has to be handed back -- */
+    {
+        pulseq::Sequence seq = load("epi_2d_1sl_1avg");
+        const int labelset = seq.extension_type_id("LABELSET");
+        const int rep_id = seq.label_id("REP");
+        const int mine = 3;
+        for (int b = 1; b <= seq.num_blocks(); ++b)
+        {
+            pulseq::Block block = seq.get_block(b);
+            if (block.adc == 0)
+                continue;
+            block.ext = static_cast<int32_t>(seq.chain_extension(
+                labelset,
+                static_cast<int32_t>(seq.register_label_set(mine, rep_id)),
+                block.ext));
+            seq.set_block(b, block);
+        }
+
+        pulseq::AutoLabelOptions options;
+        options.skip.push_back("REP");
+        const pulseq::AutoLabelResult r = pulseq::auto_label(seq, options, true);
+
+        EXPECT_TRUE(r.labels.rep.empty()) << "REP was derived despite being skipped";
+        EXPECT_FALSE(r.labels.lin.empty()) << "the geometric counters still come";
+
+        const std::map<std::string, std::vector<int>> replayed = replay_labels(seq);
+        ASSERT_EQ(replayed.count("REP"), 1u);
+        for (size_t i = 0; i < replayed.find("REP")->second.size(); ++i)
+            EXPECT_EQ(replayed.find("REP")->second[i], mine)
+                << "the sequence's own REP was overwritten at acquisition " << i;
+    }
+}
+
+/*
+ * A skip that names something this does not derive is a typo, not a no-op.
+ *
+ * `skip={"ECO"}` reads as "leave my ECO alone", which is already true and
+ * always was; accepting it silently would teach a caller that the list is
+ * what protects their labels, and the day they misspell one of the six that
+ * are derived they would get no warning at all.
+ */
+TEST(PulseqAutoLabel, SkippingSomethingNotDerivedIsRefused)
+{
+    pulseq::Sequence seq = load("gre_2d_3sl_3avg");
+
+    pulseq::AutoLabelOptions not_ours;
+    not_ours.skip.push_back("ECO");
+    EXPECT_THROW(pulseq::auto_label(seq, not_ours, false), std::runtime_error);
+
+    /* REP cannot be both handed back and named as a dimension to split. */
+    pulseq::AutoLabelOptions both;
+    both.skip.push_back("REP");
+    both.repeat_dims.push_back({"REP", 0});
+    EXPECT_THROW(pulseq::auto_label(seq, both, false), std::runtime_error);
 }
 
 /*

@@ -192,6 +192,185 @@ namespace pulseq
             return bandwidth;
         }
 
+        /**
+         * The shape of the repeat nest, read from when each k-space position
+         * came back.
+         *
+         * @param visits  per k-space position, the acquisition indices that
+         *                landed on it, in order.
+         * @param levels  how many dimensions the caller named.
+         * @return        their sizes, outermost first, with product equal to
+         *                the number of visits.
+         *
+         * ### What is being read
+         *
+         * A dimension nested *inside* the k-space loop brings a position back
+         * almost immediately -- the two echoes of a multi-echo train are
+         * consecutive acquisitions.  One *outside* it brings the position back
+         * only after a whole pass over k-space.  So the gaps between a
+         * position's successive visits fall into as many distinct sizes as
+         * there are levels, and the run lengths between the large ones give
+         * the sizes: `1, 1, L, 1, 1, L, ...` is two echoes inside, three
+         * frames outside.
+         *
+         * The gaps are compared by *rank*, not by value.  What identifies a
+         * level is that its gap is larger than the one below, and turning the
+         * gaps into rank indices makes the comparison across positions
+         * meaningful without assuming the passes are equally long.
+         *
+         * ### What it refuses, and why it refuses so much
+         *
+         * A wrong split is not a degraded answer.  It puts two different
+         * acquisitions into one slot, which a reconstruction then averages
+         * together -- and every label around it still looks ordinary.  So this
+         * only answers when the evidence is unambiguous:
+         *
+         *  - every position visited the same number of times.  Three
+         *    navigators on one line of an EPI are not a dimension: 127
+         *    positions seen once and one seen four times is a ragged shape
+         *    with no nest in it;
+         *  - every position showing the *same* rank pattern, so the nest is
+         *    one nest rather than a different one per line;
+         *  - the run lengths dividing the visits exactly, and there being as
+         *    many levels as were named.
+         *
+         * Anything else throws.  A caller who knows better than the evidence
+         * can still say so by giving the sizes outright.
+         */
+        std::vector<int> infer_repeat_sizes(const std::vector<std::vector<int>>& visits,
+                                            size_t levels)
+        {
+            if (levels == 0)
+                return std::vector<int>();
+
+            /*
+             * One name takes the whole count, and there is nothing to read --
+             * so nothing to refuse either.  This is deliberately ahead of the
+             * rectangle check: an EPI's three navigators on one line are not a
+             * nest, but calling them `SET` is still a perfectly good thing to
+             * ask for, and it is the same number `REP` would have carried.
+             */
+            if (levels == 1)
+            {
+                size_t most = 0;
+                for (size_t p = 0; p < visits.size(); ++p)
+                    most = std::max(most, visits[p].size());
+                return std::vector<int>(1, static_cast<int>(std::max<size_t>(most, 1)));
+            }
+
+            size_t count = 0;
+            for (size_t p = 0; p < visits.size(); ++p)
+            {
+                if (p == 0)
+                    count = visits[p].size();
+                else if (visits[p].size() != count)
+                    throw std::runtime_error(
+                        "auto_label: the repeats are not a rectangle -- one k-space position "
+                        "was acquired " + std::to_string(count) + " time(s) and another " +
+                        std::to_string(visits[p].size()) +
+                        ", so there is no nest of dimensions to read out of them. Give the "
+                        "sizes explicitly if you know what they are.");
+            }
+            if (count == 0 || count == 1)
+                return std::vector<int>(levels, 1);
+
+            /* Gaps as rank indices, and the same ranks for every position. */
+            std::vector<int> ranks;
+            for (size_t p = 0; p < visits.size(); ++p)
+            {
+                std::vector<long> gaps;
+                gaps.reserve(count - 1);
+                for (size_t j = 1; j < visits[p].size(); ++j)
+                    gaps.push_back(static_cast<long>(visits[p][j]) -
+                                   static_cast<long>(visits[p][j - 1]));
+
+                std::vector<long> distinct = gaps;
+                std::sort(distinct.begin(), distinct.end());
+                distinct.erase(std::unique(distinct.begin(), distinct.end()), distinct.end());
+
+                std::vector<int> here(gaps.size(), 0);
+                for (size_t j = 0; j < gaps.size(); ++j)
+                    here[j] = static_cast<int>(
+                        std::lower_bound(distinct.begin(), distinct.end(), gaps[j]) -
+                        distinct.begin());
+
+                if (p == 0)
+                    ranks = here;
+                else if (here != ranks)
+                    throw std::runtime_error(
+                        "auto_label: the k-space positions are not all revisited in the same "
+                        "pattern, so the repeats do not form one nest of dimensions. Give the "
+                        "sizes explicitly if you know what they are.");
+            }
+
+            /*
+             * Peel the nest from the inside out.  The innermost dimension is
+             * the leading run of rank-0 gaps plus one; dropping those visits
+             * leaves the gaps at the next level up, and the same rule applies
+             * again.
+             */
+            std::vector<int> inner_first;
+            size_t remaining = count;
+            std::vector<int> level = ranks;
+            for (size_t d = 0; d < levels; ++d)
+            {
+                if (d + 1 == levels)
+                {
+                    inner_first.push_back(static_cast<int>(remaining));
+                    remaining = 1;
+                    break;
+                }
+
+                size_t run = 0;
+                while (run < level.size() && level[run] == level[0])
+                    ++run;
+                const size_t size = run + 1;
+
+                if (size < 1 || remaining % size != 0)
+                    throw std::runtime_error(
+                        "auto_label: the repeat pattern does not divide into the " +
+                        std::to_string(levels) + " dimensions named -- read a size of " +
+                        std::to_string(size) + " out of " + std::to_string(remaining) +
+                        " visits, which is not a whole number of them.");
+
+                inner_first.push_back(static_cast<int>(size));
+                remaining /= size;
+
+                /* The gaps that survive are the ones between groups. */
+                std::vector<int> next;
+                for (size_t j = size - 1; j < level.size(); j += size)
+                    next.push_back(level[j]);
+                level = next;
+            }
+
+            if (remaining != 1)
+                throw std::runtime_error(
+                    "auto_label: the " + std::to_string(levels) +
+                    " dimensions named account for fewer repeats than were found.");
+
+            std::vector<int> out(inner_first.rbegin(), inner_first.rend());
+            long product = 1;
+            for (size_t d = 0; d < out.size(); ++d)
+                product *= out[d];
+            if (product != static_cast<long>(count))
+                throw std::runtime_error(
+                    "auto_label: read repeat dimensions whose product is " +
+                    std::to_string(product) + ", but each k-space position was acquired " +
+                    std::to_string(count) + " times.");
+            return out;
+        }
+
+        /** Whether the caller asked for this counter to be left alone. */
+        bool skipped(const AutoLabelOptions& options, const char* name)
+        {
+            for (size_t i = 0; i < options.skip.size(); ++i)
+            {
+                if (options.skip[i] == name)
+                    return true;
+            }
+            return false;
+        }
+
         /** MATLAB's `any(x ~= 0)`: whether a counter is ever set. */
         bool any_nonzero(const std::vector<int>& v)
         {
@@ -254,6 +433,23 @@ namespace pulseq
             }
         }
 
+        /* The counters to leave alone.  A name that is not one of them cannot
+         * be honoured and is far more likely a typo than a request, so it is
+         * refused rather than quietly ignored. */
+        {
+            for (size_t s = 0; s < options.skip.size(); ++s)
+            {
+                const std::string& name = options.skip[s];
+                if (name != "NOISE" && name != "SLC" && name != "REV" && name != "LIN" &&
+                    name != "PAR" && name != "REP")
+                    throw std::runtime_error(
+                        "auto_label: " + name +
+                        " is not a counter this derives, so there is nothing to skip. It is "
+                        "left alone already -- only NOISE, SLC, REV, LIN, PAR and REP are "
+                        "written here.");
+            }
+        }
+
         /* The declared dimensions, checked before anything is computed: a
          * declaration that cannot be honoured is the caller's mistake, and
          * saying so before the work is done is cheaper for both of us. */
@@ -276,16 +472,20 @@ namespace pulseq
                         throw std::runtime_error("auto_label: repeat dimension " + name +
                                                  " is declared twice");
                 }
+                /* 0 means "read it from the acquisition order"; a negative
+                 * number is not a size at all. */
                 if (dims[d].size < 0)
                     throw std::runtime_error("auto_label: repeat dimension " + name +
                                              " has a negative size");
-                if (dims[d].size == 0 && d + 1 != dims.size())
-                    throw std::runtime_error(
-                        "auto_label: only the last repeat dimension may be open-ended, and " +
-                        name + " is not it -- a dimension of unknown size cannot have a faster "
-                               "one nested inside it");
             }
         }
+
+        const bool skip_noise = skipped(options, "NOISE");
+        const bool skip_slc = skipped(options, "SLC");
+        const bool skip_rev = skipped(options, "REV");
+        const bool skip_lin = skipped(options, "LIN");
+        const bool skip_par = skipped(options, "PAR");
+        const bool skip_rep = skipped(options, "REP");
 
         AutoLabelResult result;
         result.key_groups = ks.key_groups;
@@ -342,7 +542,7 @@ namespace pulseq
         std::vector<int> noise(static_cast<size_t>(n_adc), 0);
         for (int i = 0; i < first_signal; ++i)
             noise[static_cast<size_t>(i)] = 1;
-        if (first_signal > 0)
+        if (first_signal > 0 && !skip_noise)
             result.labels.noise = noise;
         if (n_signal <= 0)
             return result;
@@ -726,6 +926,10 @@ namespace pulseq
          * property of the readouts.
          */
         std::vector<int> rep(static_cast<size_t>(n_adc), 0);
+        /* The visits themselves, kept because reading the shape of the repeat
+         * nest needs to know *when* a position came back, not just how often;
+         * see infer_repeat_sizes(). */
+        std::vector<std::vector<int>> visits;
         {
             std::map<std::vector<int>, int> seen;
             std::vector<int> key(axes.size() + 1, 0);
@@ -734,9 +938,17 @@ namespace pulseq
                 key[0] = slice_of_adc[static_cast<size_t>(i)];
                 for (size_t ax = 0; ax < axes.size(); ++ax)
                     key[ax + 1] = index[ax][static_cast<size_t>(i)];
-                int& count = seen[key];
-                rep[static_cast<size_t>(i)] = count;
-                ++count;
+
+                std::map<std::vector<int>, int>::iterator it = seen.find(key);
+                if (it == seen.end())
+                {
+                    it = seen.emplace(key, static_cast<int>(visits.size())).first;
+                    visits.push_back(std::vector<int>());
+                }
+                rep[static_cast<size_t>(i)] = static_cast<int>(visits[static_cast<size_t>(
+                                                                   it->second)]
+                                                                   .size());
+                visits[static_cast<size_t>(it->second)].push_back(i);
             }
         }
 
@@ -749,13 +961,13 @@ namespace pulseq
         for (int i = first_signal; i < n_adc; ++i)
             rev[static_cast<size_t>(i)] = (sign_readout[static_cast<size_t>(i)] < 0) ? 1 : 0;
 
-        if (any_nonzero(slc))
+        if (any_nonzero(slc) && !skip_slc)
             result.labels.slc = slc;
-        if (any_nonzero(rev))
+        if (any_nonzero(rev) && !skip_rev)
             result.labels.rev = rev;
-        if (any_nonzero(lin))
+        if (any_nonzero(lin) && !skip_lin)
             result.labels.lin = lin;
-        if (any_nonzero(par))
+        if (any_nonzero(par) && !skip_par)
             result.labels.par = par;
 
         /* -- splitting the repeat count into the declared dimensions ------- */
@@ -771,7 +983,16 @@ namespace pulseq
          * that look perfectly ordinary and put two different acquisitions in
          * the same slot, so it raises instead.
          */
-        if (options.repeat_dims.empty())
+        if (skip_rep)
+        {
+            /* Nothing derived and nothing named: the sequence said it already
+             * and whatever it said is better than a bare repeat count. */
+            if (!options.repeat_dims.empty())
+                throw std::runtime_error(
+                    "auto_label: REP cannot be both skipped and named in repeat_dims -- "
+                    "the repeat count is either yours or mine.");
+        }
+        else if (options.repeat_dims.empty())
         {
             if (any_nonzero(rep))
                 result.labels.rep = rep;
@@ -779,43 +1000,69 @@ namespace pulseq
         else
         {
             const std::vector<RepeatDim>& dims = options.repeat_dims;
-            std::vector<std::vector<int>> split(dims.size(),
-                                                std::vector<int>(static_cast<size_t>(n_adc), 0));
 
-            long capacity = 1;
-            bool bounded = true;
+            /*
+             * Sizes, outermost first.  Read from the acquisition order unless
+             * every one was given; a size that was given is *checked* against
+             * what was read rather than trusted, because the two disagreeing
+             * means one of them is wrong and picking either in silence is the
+             * failure this is here to avoid.
+             */
+            bool all_given = true;
             for (size_t d = 0; d < dims.size(); ++d)
             {
                 if (dims[d].size <= 0)
-                    bounded = false;
-                else
-                    capacity *= dims[d].size;
+                    all_given = false;
             }
 
+            std::vector<int> sizes;
+            if (all_given)
+            {
+                for (size_t d = 0; d < dims.size(); ++d)
+                    sizes.push_back(dims[d].size);
+            }
+            else
+            {
+                sizes = infer_repeat_sizes(visits, dims.size());
+                for (size_t d = 0; d < dims.size(); ++d)
+                {
+                    if (dims[d].size > 0 && dims[d].size != sizes[d])
+                        throw std::runtime_error(
+                            "auto_label: " + dims[d].name + " was declared with size " +
+                            std::to_string(dims[d].size) +
+                            ", but the acquisition order says it is " +
+                            std::to_string(sizes[d]) + ".");
+                }
+            }
+
+            long capacity = 1;
+            for (size_t d = 0; d < sizes.size(); ++d)
+                capacity *= (sizes[d] > 0) ? sizes[d] : 1;
+
+            std::vector<std::vector<int>> split(dims.size(),
+                                                std::vector<int>(static_cast<size_t>(n_adc), 0));
+
+            /*
+             * Mixed-radix digits, extracted from the innermost dimension --
+             * the last of the list, since the caller writes the outermost
+             * first -- because that is the one that varies between one repeat
+             * and the next.
+             */
             for (int i = first_signal; i < n_adc; ++i)
             {
                 int remaining = rep[static_cast<size_t>(i)];
-                if (bounded && remaining >= capacity)
+                if (remaining >= capacity)
                     throw std::runtime_error(
-                        "auto_label: the declared repeat dimensions hold " +
-                        std::to_string(capacity) + " acquisitions of one k-space position, but " +
+                        "auto_label: the repeat dimensions hold " + std::to_string(capacity) +
+                        " acquisitions of one k-space position, but " +
                         std::to_string(remaining + 1) + " were found (readout at block " +
                         std::to_string(ks.readouts[static_cast<size_t>(i)].block_index) + ")");
 
-                for (size_t d = 0; d < dims.size(); ++d)
+                for (size_t d = dims.size(); d-- > 0;)
                 {
-                    const int size = dims[d].size;
-                    if (size > 0)
-                    {
-                        split[d][static_cast<size_t>(i)] = remaining % size;
-                        remaining /= size;
-                    }
-                    else
-                    {
-                        /* The open-ended last one takes the rest. */
-                        split[d][static_cast<size_t>(i)] = remaining;
-                        remaining = 0;
-                    }
+                    const int size = (sizes[d] > 0) ? sizes[d] : 1;
+                    split[d][static_cast<size_t>(i)] = remaining % size;
+                    remaining /= size;
                 }
             }
 

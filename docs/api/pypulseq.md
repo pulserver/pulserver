@@ -68,14 +68,28 @@ and scan-loop layer above this one.
 ## K-space and encoding counters
 
 `Sequence.calculate_kspace()` returns upstream's five-tuple, `(k_traj_adc,
-k_traj, t_excitation, t_refocusing, t_adc)`, and agrees with upstream PyPulseq
-to about 1e-12 relative on the sequences where the two compute the same thing.
-The arithmetic is the C library's — `csrc/src/pulseq/pulseq_ktraj.c`, the same
-code the interpreter links — rather than a second implementation in Python. It
-integrates each distinct gradient *shape* once instead of each block, so the
-cost follows the number of distinct gradients rather than the length of the
-scan, and it memoizes per readout on the block's event-id tuple, so a scan
-that plays one readout a hundred thousand times pays for it once.
+k_traj, t_excitation, t_refocusing, t_adc)`, and is a drop-in for upstream's:
+all five elements match it to 1e-9 or better, and the extra parameters are
+keyword-only after upstream's own.
+
+`k_traj_adc` — the one a reconstruction needs — comes from the C library,
+`csrc/src/pulseq/pulseq_ktraj.c`, the same code the interpreter links, rather
+than from a second implementation in Python. It integrates each distinct
+gradient *shape* once instead of each block, so the cost follows the number of
+distinct gradients rather than the length of the scan, and it memoizes per
+readout on the block's event-id tuple, so a scan that plays one readout a
+hundred thousand times pays for it once. Agreement with upstream is 2e-13 on a
+GRE and 2e-12 on an EPI.
+
+`k_traj`, the dense trajectory, is **computed by upstream**. It is a picture of
+the sequence rather than an input to a reconstruction, and being able to hand
+it to code written against upstream matters more than computing it quickly.
+The C core's own answer is on the gradient breakpoint grid — the same curve in
+five to ten times fewer points — and is available through `_kspace()` together
+with its time base, which upstream's tuple has nowhere to put. Pass
+`dense=False` to skip it. Sequences upstream cannot read, meaning anything
+carrying rotation or RF-shim extensions, raise rather than returning a
+logical-frame `k_traj` beside a physical-frame `k_traj_adc`.
 
 Two things upstream does not compute come with it. Rotation extensions are
 resolved into the answer by default (`frame="logical"` leaves them out, which
@@ -118,9 +132,73 @@ reconstructed data lives in.
 Dimensions the trajectory cannot see are named, not guessed. Which echo of a
 train, which frame of a time series and which saturation state all revisit the
 same k-space position, so by default they are counted together as `REP`.
-`repeat_dims=[("ECO", 2), ("REP", 10)]` — ordered fastest-varying first — says
-what those visits were and splits the count between them; a declaration the
-scan does not fit raises rather than wrapping around.
+`repeat_dims=["REP", "ECO"]` — outermost loop first — says what those visits
+were and splits the count between them.
+
+Only the names are needed. How large each dimension is, is written in the
+acquisition order and read back from it: a dimension nested inside the k-space
+loop brings a position back after a short gap, one outside it only after a
+whole pass. Passing `("ECO", 2)` in place of a name pins a size, and it is
+then checked against what was read rather than believed.
+
+The reading is narrow on purpose, because a wrong split puts two different
+acquisitions in one slot and every label around it still looks ordinary. It
+requires the repeats to form a rectangle — every k-space position visited the
+same number of times, in the same pattern. Repeats that are ragged, as an
+EPI's navigators are, raise instead. A single name never does: it takes the
+whole count, which is `REP` under a name that means something.
+
+The other way round works too: label the axes only your design loop knows as
+you build, then run one `auto_label()` pass to fill in the geometric ones
+around them. Labels it does not derive — `ECO`, `SET`, `AVG`, anything custom
+— survive that pass untouched, because the extension chain is rebuilt keeping
+every link that is not one of its own. `REP` is the exception, since it *is*
+derived by default: pass `skip=["REP"]` to hand it back, or your own
+separation of contrasts and frames is overwritten by a bare count of revisits.
+
+## Repetitions
+
+A `.seq` describes one pass. Playing it several times is normally left to the
+interpreter, which takes the count from outside the file — on a GE scanner,
+the `opnex` knob — and uses the `ONCE` flag to work out what belongs to a
+single pass: `1` plays on the first repetition only, `2` on the last only, `0`
+on all of them.
+
+`Sequence.expand_repeats(n)` does that arithmetic here instead and writes the
+answer down. Afterwards the block table *is* the scan: every repetition is
+present in the order it plays, and nothing downstream has to be told how many
+times to read it. Call it like `remove_duplicates` — once, on a finished
+sequence, before writing.
+
+Only the block table grows. A repetition plays the *same* events, so every
+library is untouched and deduplication has nothing left to find: a
+100 000-block scan repeated three times is 300 000 rows of six integers and a
+duration, and not one extra gradient.
+
+What it buys is that the file stops depending on a number that is not in it. A
+sequence written this way plays identically under any interpreter, including
+one that has never heard of `ONCE`, and the average index becomes a label a
+reconstruction can sort by rather than something the interpreter synthesises
+on the way past. `IgnoreAverages 1` goes into `[DEFINITIONS]` to say the
+expansion has already happened, so a console-side count cannot multiply it a
+second time.
+
+The repetition index is stamped as `AVG`, because the repetition an
+interpreter adds is a signal average — the same acquisition, sampled again.
+`REP` is the frame counter of a dynamic series and means something else. Only
+where it changes: labels are sticky, so one extension per repetition is the
+whole cost, and it lands on the first block that repetition actually plays,
+which for every repetition after the first is the first block past the
+preparation. A sequence that already writes `AVG` is **refused** rather than
+overwritten — pass `label=` to choose another counter, or `label=""` for none.
+
+The flags are read per block rather than as sections, so a design whose
+preparation is not one contiguous run at the front expands the way it would
+have been played. `strip_once=False` keeps them: against Pulserver's own
+interpreter that costs nothing at playback — an expanded scan is `1` at the
+front, `0` through the middle and `2` at the end, the shape a single-pass
+sequence already has — and it preserves the preparation/cooldown split
+`pulseg` hands to its TR descriptor.
 
 ## Positioning the volume
 
@@ -204,3 +282,13 @@ unless they are in `STICKY_FLAGS`.
 `COUNTER_LABELS`, `FLAG_LABELS` and `STICKY_FLAGS` are that split as module
 constants: the ten ISMRMRD `EncodingCounters` fields, everything else, and the
 flags that outlive the module which set them.
+
+A third distinction cuts across the second, and it is the one to check before
+choosing a label: whether it **maps to data**. Every counter does. Among the
+flags, `NAV`, `REV`, `SMS`, `REF`, `IMA`, `NOISE` and `OFF` classify an
+acquisition and become fields a reconstruction reads; `NOROT`, `NOPOS`,
+`NOSCL`, `PMC`, `ONCE`, `TRID` and `MODULE` are instructions to the
+interpreter and stop at the scanner. Nothing downstream ever sees the second
+group, so a sequence with something to tell its own reconstruction cannot say
+it with one of them. {func}`~pulserver.pypulseq.get_supported_labels`
+tabulates all three groups with what each label means.

@@ -99,21 +99,33 @@ namespace pulseq
      * is, which frame of a time series, which saturation state of a
      * magnetisation-transfer pair, or which average -- all of those revisit the
      * *same* k-space position, and by the trajectory alone they are
-     * indistinguishable.  They are exactly what the repetition counter is
-     * currently lumping together: a scan with two echoes and ten frames gives
-     * `REP` running 0..19, which is arithmetic rather than an encoding.
+     * indistinguishable.  They are exactly what the repetition counter lumps
+     * together: a scan with two echoes and ten frames gives `REP` running
+     * 0..19, which is arithmetic rather than an encoding.
      *
-     * Declaring them splits that count back apart.  The list is ordered
-     * **fastest-varying first**, which is the order the repeats were acquired
-     * in: two echoes inside a TR then ten frames over the scan is
-     * `{{"ECO", 2}, {"REP", 10}}`, and the repetition count `r` of a k-space
-     * position becomes `ECO = r % 2`, `REP = (r / 2) % 10`.
+     * A name splits that count back apart.  Only the names are needed --
+     * `{"REP", "ECO"}`, **outermost loop first** -- because the *shape* of the
+     * nest is written in the acquisition order and can be read back:
+     * @ref detect_labels measures how far apart a k-space position's repeat
+     * visits are, and a dimension nested inside the k-space loop revisits
+     * after a short stride where one outside it revisits after a whole pass.
+     * Two echoes inside a TR then ten frames over the scan produces strides
+     * `1, 1, ..., L, 1, 1, ..., L` and there is only one nest that makes.
      *
-     * Nothing here is inferred, and nothing is checked against the data beyond
-     * arithmetic: if the declared sizes cannot account for the repeats that
-     * were found, @ref detect_labels raises rather than wrapping the counter
-     * round or padding it out.  A declaration is the caller stating what they
-     * built, and a mismatch means one of the two is wrong.
+     * ### What it refuses
+     *
+     * The reading is deliberately narrow, because a wrong split is not a
+     * degraded answer -- it puts two different acquisitions in one slot.  It
+     * requires the repeats to form a **rectangle**: every k-space position
+     * visited the same number of times, in the same pattern.  A scan where
+     * some positions are revisited and others are not has no nest to read
+     * (three navigators on one line are not a dimension), and that raises
+     * rather than resolving to something plausible.  So does a product that
+     * does not match the repeats found, and so does a size that contradicts
+     * one you gave explicitly.
+     *
+     * With one name there is nothing to read: it takes the whole count, and
+     * the answer is the old `REP` renamed.
      */
     struct RepeatDim
     {
@@ -128,10 +140,12 @@ namespace pulseq
         std::string name;
 
         /**
-         * How many values it takes.  Zero on the *last* entry means "whatever
-         * is left", which is the honest declaration when a time series runs
-         * until it is stopped; anywhere else it is an error, because a
-         * dimension of unknown size cannot have a faster one nested inside it.
+         * How many values it takes, or **0 to read it from the acquisition
+         * order** -- which is the ordinary case and what a bare name means.
+         *
+         * Give a number only to pin one down: it is then checked against what
+         * was read rather than trusted, so a disagreement is reported instead
+         * of silently preferring one of the two.
          */
         int size = 0;
     };
@@ -165,13 +179,36 @@ namespace pulseq
         double cartesian_tolerance = 1e-6;
 
         /**
-         * How the repetition count decomposes; see @ref RepeatDim.
+         * How the repetition count decomposes, **outermost loop first**; see
+         * @ref RepeatDim.
          *
          * Empty -- the default -- leaves it as a single `REP`, which is what
          * `autoLabel.m` produces and is correct for a scan that really does
          * just repeat.
          */
         std::vector<RepeatDim> repeat_dims;
+
+        /**
+         * Counters to leave alone: derived neither into the result nor onto
+         * the sequence.
+         *
+         * For the sequence that labelled some of its own axes as it was built
+         * and wants the geometric ones filled in around them.  Labels this
+         * does not derive at all -- `ECO`, `SET`, `AVG`, anything custom --
+         * already survive an @ref apply_labels pass untouched, so they need no
+         * mention here.  `REP` is the one that needs it: it is derived by
+         * default, and a design loop that separated its own contrasts or
+         * frames has already said something better than "these are repeats".
+         *
+         * Names must be counters this actually derives (`NOISE`, `SLC`,
+         * `REV`, `LIN`, `PAR`, `REP`); anything else is a typo rather than a
+         * no-op, and is refused.
+         *
+         * A definition that only means something in terms of a skipped
+         * counter goes with it -- `kSpaceCenterLine` without `LIN` would
+         * describe an index nothing wrote.
+         */
+        std::vector<std::string> skip;
     };
 
     /**

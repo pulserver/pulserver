@@ -32,10 +32,11 @@ def test_public_namespace_is_small_and_module_oriented():
         "denoisers",
         "density",
         "execution",
+        "optim",
         "physics",
+        "pics",
         "preprocessing",
         "simulation",
-        "pics",
     ]
     assert recon.pics is algorithms.pics
     assert "Connection" not in dir(recon)
@@ -51,6 +52,15 @@ import pulserver.recon
 loaded = [name for name in sys.modules if name.startswith("pulserver.recon._mrd")]
 if loaded:
     raise SystemExit(f"private MRD modules imported: {loaded}")
+"""
+    subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603
+
+
+def test_importing_algorithm_module_does_not_require_deepinverse():
+    code = """
+import sys
+sys.modules["deepinv"] = None
+import pulserver.recon.algorithms
 """
     subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603
 
@@ -81,16 +91,19 @@ class _IdentityPhysics:
 def test_pics_selects_cg_without_a_denoiser(monkeypatch):
     calls = {}
 
-    def conjugate_gradient(operator, rhs, **kwargs):
-        calls["normal"] = operator(np.ones_like(rhs))
-        calls.update(kwargs)
-        return rhs
+    class ConjugateGradient:
+        def __init__(self, **kwargs):
+            calls.update(kwargs)
 
-    module = SimpleNamespace(conjugate_gradient=conjugate_gradient)
+        def __call__(self, operator, rhs, **kwargs):
+            calls["normal"] = operator(np.ones_like(rhs))
+            calls["call_kwargs"] = kwargs
+            return rhs
+
     monkeypatch.setattr(
         algorithms,
-        "import_module",
-        lambda name: module if name == "deepinv.optim.linear" else None,
+        "_optim_class",
+        lambda name: ConjugateGradient if name == "ConjugateGradient" else None,
     )
     data = np.ones((1, 2, 4, 4))
     result = algorithms.pics(
@@ -98,6 +111,7 @@ def test_pics_selects_cg_without_a_denoiser(monkeypatch):
         _IdentityPhysics(),
         regularization=0.25,
         iterations=7,
+        init=np.zeros_like(data),
     )
     assert result is data
     np.testing.assert_allclose(calls["normal"], 1.25)
@@ -118,9 +132,13 @@ def test_pics_selects_fista_with_a_denoiser(monkeypatch):
             return "reconstructed"
 
     module = SimpleNamespace(
-        FISTA=FISTA,
         L2=lambda: "l2",
         PnP=lambda model: ("pnp", model),
+    )
+    monkeypatch.setattr(
+        algorithms,
+        "_optim_class",
+        lambda name: FISTA if name == "FISTA" else None,
     )
     monkeypatch.setattr(algorithms, "import_module", lambda _name: module)
     model = object()
@@ -142,33 +160,9 @@ def test_pics_selects_fista_with_a_denoiser(monkeypatch):
     assert calls["prior"] == ("pnp", model)
 
 
-def test_pics_averages_a_sequence_of_denoisers(monkeypatch):
-    calls = {}
-    averaged = object()
-
-    class FISTA:
-        def __init__(self, **kwargs):
-            calls.update(kwargs)
-
-        def __call__(self, *_args, **_kwargs):
-            return "reconstructed"
-
+def test_pics_rejects_ambiguous_denoiser_sequences():
     models = [object(), object()]
-    monkeypatch.setattr(
-        algorithms,
-        "AverageDenoiser",
-        lambda selected: calls.setdefault("models", selected) and averaged,
-    )
-    monkeypatch.setattr(
-        algorithms,
-        "import_module",
-        lambda _name: SimpleNamespace(
-            FISTA=FISTA,
-            L2=lambda: "l2",
-            PnP=lambda model: ("pnp", model),
-        ),
-    )
-    assert (
+    with pytest.raises(TypeError, match="StackedPrior"):
         algorithms.pics(
             object(),
             _IdentityPhysics(),
@@ -177,10 +171,6 @@ def test_pics_averages_a_sequence_of_denoisers(monkeypatch):
             iterations=2,
             stepsize=0.5,
         )
-        == "reconstructed"
-    )
-    assert calls["models"] is models
-    assert calls["prior"] == ("pnp", averaged)
 
 
 def test_polynomial_preconditioned_fista_uses_the_normal_operator():

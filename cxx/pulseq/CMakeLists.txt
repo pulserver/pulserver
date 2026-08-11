@@ -16,6 +16,7 @@ add_library(pulseqpp STATIC
     kspace.cpp
     kspace_sequence.cpp
     autolabel.cpp
+    expand.cpp
     # The vendored MD5, compiled as C for the [SIGNATURE] section. raw64.cpp
     # has its own copy inside its namespace; the two do not meet.
     ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/src/vendor/external_md5.c

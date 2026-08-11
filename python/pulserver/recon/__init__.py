@@ -15,22 +15,24 @@ transport machinery is intentionally private under :mod:`pulserver.recon._mrd`.
 
 from __future__ import annotations
 
-import importlib
-from typing import TYPE_CHECKING, Any
-
-_SUBMODULES = (
+__all__ = [
     "algorithms",
     "calibration",
     "corrections",
     "denoisers",
     "density",
     "execution",
+    "optim",
     "physics",
+    "pics",
     "preprocessing",
     "simulation",
-)
+]
 
-__all__ = [*_SUBMODULES, "pics"]
+import importlib
+from typing import TYPE_CHECKING, Any
+
+_SUBMODULES = tuple(name for name in __all__ if name != "pics")
 
 
 def __getattr__(name: str) -> Any:
@@ -54,6 +56,7 @@ if TYPE_CHECKING:
     from . import denoisers as denoisers
     from . import density as density
     from . import execution as execution
+    from . import optim as optim
     from . import physics as physics
     from . import preprocessing as preprocessing
     from . import simulation as simulation

@@ -14,6 +14,10 @@ from types import SimpleNamespace
 #: field each. These are what a :class:`~pulserver.ScanLoop` axis emits — the
 #: reconstruction sorts data by them, and the interpreter derives the
 #: ``FIRST_IN_*``/``LAST_IN_*`` MRD flags from their observed range.
+#:
+#: Every one of them maps to data. That is what separates them from the flags
+#: below, half of which are directives to the interpreter and never reach a
+#: reconstruction at all.
 COUNTER_LABELS = (
     "SLC",
     "SEG",
@@ -31,6 +35,14 @@ COUNTER_LABELS = (
 #: played or classified*, not where its data belongs. These are what a
 #: :class:`~pulserver.SequenceModule` emits, through
 #: :meth:`~pulserver.SequenceModule.set_state`.
+#:
+#: They divide again, and the division matters more than it looks. ``NAV``,
+#: ``REV``, ``SMS``, ``REF``, ``IMA``, ``NOISE`` and ``OFF`` **classify the
+#: data** and become acquisition flags a reconstruction reads. ``PMC``,
+#: ``NOROT``, ``NOPOS``, ``NOSCL``, ``ONCE``, ``TRID`` and ``MODULE``
+#: **instruct the interpreter** and stop there: nothing downstream of the
+#: scanner ever sees them, so a sequence cannot use one to say something to
+#: its own reconstruction.
 FLAG_LABELS = (
     "NAV",
     "REV",
@@ -71,70 +83,101 @@ def get_supported_labels() -> tuple[str, ...]:
     written through :meth:`pulserver.SequenceModule.set_state`, which tells them
     apart by name.
 
+    A third distinction cuts across the second and is the one worth knowing
+    before choosing a label: whether it **maps to data**. Every counter does,
+    and so do the flags that classify an acquisition — those become fields a
+    reconstruction reads. The remaining flags are instructions to the
+    interpreter and go no further than the scanner, so a sequence that needs
+    to tell its own reconstruction something cannot say it with one of those.
+
     .. list-table:: Counters — one ISMRMRD ``idx`` field each, set by a scan loop
        :header-rows: 1
-       :widths: 14 86
+       :widths: 12 88
 
        * - Label
          - Meaning
        * - ``LIN``
-         - In-plane phase-encoding line index (``kspace_encode_step_1``).
+         - Line counter in 2D and 3D acquisitions — the in-plane
+           phase-encoding step (``kspace_encode_step_1``).
        * - ``PAR``
-         - Through-plane partition index (``kspace_encode_step_2``).
+         - Partition counter: the phase-encoding step in the second,
+           through-slab direction of a 3D sequence (``kspace_encode_step_2``).
        * - ``SLC``
-         - Slice index.
+         - Slice counter, or slab counter for a 3D multi-slab sequence.
        * - ``ECO``
-         - Echo/contrast index. Owned by the readout, which knows its own train.
+         - Echo counter in a multi-echo sequence. Owned by the readout, which
+           knows its own train.
        * - ``PHS``
-         - Cardiac/respiratory phase, or phase-cycle index.
+         - Cardiac or respiratory phase counter.
        * - ``REP``
-         - Repetition index — the frame counter of a dynamic acquisition.
-       * - ``SET``
-         - Acquisition-set index — the usual home of a non-echo contrast
-           dimension (inversion time, b-value, saturation offset).
+         - Repetition counter — the frame index of a dynamic acquisition.
        * - ``AVG``
-         - Signal-average index.
+         - Averaging counter. What
+           :meth:`pulserver.pypulseq.Sequence.expand_repeats` stamps when it
+           writes the repetitions into the block table.
+       * - ``SET``
+         - Flexible counter with no firm assignment — in practice the usual
+           home of a non-echo contrast dimension (inversion time, b-value,
+           saturation offset).
        * - ``SEG``
-         - Segment or shot-within-repetition index.
+         - Segment counter, for a segmented FLASH or EPI.
        * - ``ACQ``
-         - Acquisition index.
+         - Spectroscopic acquisition counter.
 
-    .. list-table:: Flags — sticky block properties, set by a sequence module
+    .. list-table:: Flags that classify the data — these reach a reconstruction
        :header-rows: 1
-       :widths: 14 86
+       :widths: 12 88
+
+       * - Label
+         - Meaning
+       * - ``NAV``
+         - Navigator data flag; routes data to its own encoding space.
+       * - ``REV``
+         - The readout direction is reversed.
+       * - ``SMS``
+         - Simultaneous-multislice acquisition (group or band index).
+       * - ``REF``
+         - Parallel-imaging reference / auto-calibration data.
+       * - ``IMA``
+         - Parallel-imaging imaging data *within* the ACS region.
+       * - ``NOISE``
+         - Noise-adjust scan, e.g. for parallel-imaging acceleration.
+       * - ``OFF``
+         - Pulserver's own: discard the acquisition downstream — an ADC that
+           is played, so timing is unchanged, but whose data is dropped.
+
+    .. list-table:: Flags that instruct the interpreter — these stop at the scanner
+       :header-rows: 1
+       :widths: 12 88
 
        * - Label
          - Meaning
        * - ``NOROT``
-         - Suppress geometric rotation for the labelled block.
+         - Ignore the FOV rotation prescribed on the UI for these blocks.
        * - ``NOPOS``
-         - Suppress position-dependent frequency translation.
+         - Ignore the FOV offset prescribed on the UI for these blocks.
        * - ``NOSCL``
-         - Suppress geometric gradient scaling.
+         - Ignore the FOV scaling prescribed on the UI for these blocks.
        * - ``PMC``
-         - Prospective-motion-correction acquisition flag.
-       * - ``NAV``
-         - Navigator acquisition flag; routes data to its own encoding space.
-       * - ``REV``
-         - Reversed readout-polarity flag.
-       * - ``SMS``
-         - Simultaneous-multislice group or band index.
-       * - ``REF``
-         - Calibration/reference acquisition flag.
-       * - ``IMA``
-         - Imaging acquisition flag.
-       * - ``NOISE``
-         - Noise-only acquisition flag.
-       * - ``OFF``
-         - Discard the associated acquisition downstream — an ADC that is
-           played (so timing is unchanged) but whose data is dropped.
+         - Mark blocks that can or should be prospectively motion-corrected.
        * - ``ONCE``
-         - Section marker: ``1`` = preparation (played once, leading), ``2`` =
-           cooldown (played once, trailing), ``0`` = steady-state body.
+         - Three-state: alter the sequence when playing multiple repeats.
+           ``0`` plays on every repetition, ``1`` on the first only
+           (preparation), ``2`` on the last only (cooldown). Resolved into the
+           block table by
+           :meth:`pulserver.pypulseq.Sequence.expand_repeats`.
        * - ``TRID``
-         - Trigger identifier naming a repeating TR block.
+         - Counter marking the beginning of a repeatable module such as a TR.
+           Modules with different timing take different ``TRID`` values.
        * - ``MODULE``
-         - Sticky structural/safety module-group identifier.
+         - Pulserver's own: sticky structural/safety module-group identifier.
+
+    Notes
+    -----
+    ``ONCE`` and ``TRID`` are counters in Pulseq's own taxonomy rather than
+    booleans, and are grouped with the flags here because the split this
+    module draws is by *what a label is for*, not by what it holds: neither
+    says where an acquisition belongs, and neither reaches a reconstruction.
 
     See Also
     --------

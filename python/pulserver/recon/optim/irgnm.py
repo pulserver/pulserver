@@ -1,0 +1,258 @@
+"""Iteratively regularized Gauss--Newton composition for nonlinear MRI."""
+
+from __future__ import annotations
+
+__all__ = ["IRGNM"]
+
+from collections.abc import Callable, Iterable, Sequence
+from typing import Any
+
+import torch
+
+from ._base import _AlgorithmSchedule, _IterativeOptimizer, _unique_parameters
+from .cg import ConjugateGradient
+from .state import OptimState
+
+
+class IRGNM(_IterativeOptimizer):
+    r"""Linearize nonlinear physics around any Pulserver linear solver.
+
+    At outer iteration ``k``, this constructs the tangent data
+
+    ``y - physics.A(x_k) + J_k.A(x_k)``
+
+    and calls ``inner(tangent_data, J_k, init=x_k)``. Consequently the same
+    :class:`FISTA`, :class:`PDHG`, or :class:`ADMM` object can become an
+    IRGNM-FISTA, IRGNM-PDHG, or IRGNM-ADMM reconstruction without copying its
+    implementation.
+
+    Passing :class:`ConjugateGradient` selects IRGNM-CG. That path solves the
+    damped normal equation directly and regularizes towards the initial
+    estimate (or ``reference``).
+
+    Nonlinear physics should implement ``linearize(x)`` and return either a
+    Jacobian physics object or ``(prediction, jacobian)``. The Jacobian follows
+    the regular linear physics contract: ``A``, ``A_adjoint``, and optionally
+    ``A_adjoint_A``.
+
+    Parameters
+    ----------
+    inner
+        Linear Pulserver optimizer or :class:`ConjugateGradient`.
+    damping
+        Non-negative scalar or outer-iteration schedule used by IRGNM-CG.
+    max_iter
+        Number of Gauss--Newton linearizations.
+    reference
+        Tikhonov reference for IRGNM-CG. The initial estimate is used by
+        default.
+    linearize
+        Optional ``linearize(physics, x)`` override.
+    inner_kwargs
+        Fixed keyword arguments forwarded to non-CG inner solvers.
+    unfold
+        Enable differentiation through outer iterations.
+    """
+
+    def __init__(
+        self,
+        inner: torch.nn.Module,
+        *,
+        damping: float | Sequence[float] | torch.Tensor = 1e-3,
+        max_iter: int = 6,
+        crit_conv: str = "residual",
+        thres_conv: float = 1e-5,
+        early_stop: bool = False,
+        custom_init: Callable[[torch.Tensor, Any], Any] | None = None,
+        reference: torch.Tensor
+        | Callable[[torch.Tensor, Any], torch.Tensor]
+        | None = None,
+        linearize: Callable[[Any, torch.Tensor], Any] | None = None,
+        inner_kwargs: dict[str, Any] | None = None,
+        unfold: bool = False,
+        trainable_params: list[str] | None = None,
+    ) -> None:
+        if not isinstance(inner, torch.nn.Module):
+            raise TypeError("inner must be a torch.nn.Module")
+        if crit_conv != "residual":
+            raise ValueError("IRGNM currently supports crit_conv='residual' only")
+        if bool(torch.any(torch.as_tensor(damping) < 0.0)):
+            raise ValueError("damping must be non-negative")
+        if (
+            unfold
+            and not isinstance(inner, ConjugateGradient)
+            and hasattr(inner, "unfold")
+            and not inner.unfold
+        ):
+            raise ValueError("an unfolded IRGNM requires an unfolded inner optimizer")
+        super().__init__(
+            max_iter=max_iter,
+            early_stop=early_stop,
+            thres_conv=thres_conv,
+        )
+        self.inner = inner
+        self.params_algo = _AlgorithmSchedule(
+            {"damping": damping},
+            max_iter=max_iter,
+            unfold=unfold,
+            trainable_params=trainable_params,
+        )
+        self.custom_init = custom_init
+        self.__dict__["reference"] = reference
+        self.__dict__["linearize"] = linearize
+        self.inner_kwargs = dict(inner_kwargs or {})
+        self.unfold = bool(unfold)
+
+    def init_state(
+        self,
+        y: torch.Tensor,
+        physics: Any,
+        init: Any | None = None,
+    ) -> OptimState:
+        """Initialize the nonlinear estimate and Tikhonov reference."""
+        selected = self.custom_init if init is None else init
+        if callable(selected):
+            selected = selected(y, physics)
+        if isinstance(selected, OptimState):
+            return selected
+        if isinstance(selected, dict):
+            variables = dict(selected)
+            estimate = variables["est"][0]
+        else:
+            if isinstance(selected, tuple):
+                if not selected:
+                    raise ValueError("IRGNM tuple initialization cannot be empty")
+                selected = selected[0]
+            estimate = physics.A_adjoint(y) if selected is None else selected
+            variables = {"est": (estimate,), "cost": None}
+        if not isinstance(estimate, torch.Tensor):
+            raise TypeError("IRGNM initialization must resolve to a torch.Tensor")
+
+        reference = self.reference
+        if callable(reference):
+            reference = reference(y, physics)
+        if reference is None:
+            reference = estimate.clone()
+        elif not isinstance(reference, torch.Tensor):
+            raise TypeError("IRGNM reference must resolve to a torch.Tensor")
+        else:
+            reference = reference.to(device=estimate.device, dtype=estimate.dtype)
+        if reference.shape != estimate.shape:
+            raise ValueError("IRGNM reference and estimate must have the same shape")
+        variables["reference"] = reference
+        return OptimState(variables=variables)
+
+    def step(
+        self,
+        state: OptimState,
+        y: torch.Tensor,
+        physics: Any,
+        iteration: int | None = None,
+        *,
+        operator_parameters: Iterable[torch.Tensor] | None = None,
+        inner_kwargs: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> OptimState:
+        """Run one nonlinear linearize-and-solve iteration."""
+        index = state.iteration if iteration is None else iteration
+        if index >= self.max_iter:
+            raise IndexError("iteration exceeds max_iter")
+        estimate = state.estimate
+        prediction, jacobian = _linearization(
+            physics,
+            estimate,
+            self.linearize,
+        )
+        tangent_data = y - prediction + jacobian.A(estimate)
+        if isinstance(self.inner, ConjugateGradient):
+            damping = self.params_algo.at("damping", index)
+            reference = state.variables["reference"]
+            rhs = jacobian.A_adjoint(tangent_data) + damping * reference
+
+            def normal(value: torch.Tensor) -> torch.Tensor:
+                method = getattr(jacobian, "A_adjoint_A", None)
+                applied = (
+                    method(value)
+                    if method is not None
+                    else jacobian.A_adjoint(jacobian.A(value))
+                )
+                return applied + damping * value
+
+            parameters = list(self.physics_parameters(physics))
+            parameters.extend(self.physics_parameters(jacobian))
+            parameters.extend(self.algorithm_parameters())
+            if estimate.requires_grad:
+                parameters.append(estimate)
+            if operator_parameters is not None:
+                parameters.extend(operator_parameters)
+            updated = self.inner(
+                normal,
+                rhs,
+                init=estimate,
+                parameters=parameters,
+            )
+        else:
+            call_kwargs = {**self.inner_kwargs, **(inner_kwargs or {}), **kwargs}
+            updated = self.inner(
+                tangent_data,
+                jacobian,
+                init=estimate,
+                **call_kwargs,
+            )
+        variables = {
+            "est": (updated,),
+            "reference": state.variables["reference"],
+            "cost": None,
+        }
+        return OptimState(variables=variables, iteration=index + 1)
+
+    def prior_parameters(
+        self,
+        stages: Sequence[int] | None = None,
+    ) -> list[torch.nn.Parameter]:
+        """Return prior parameters owned by the inner optimizer."""
+        method = getattr(self.inner, "prior_parameters", None)
+        return [] if method is None else method(stages)
+
+    def transform_parameters(
+        self,
+        stages: Sequence[int] | None = None,
+    ) -> list[torch.nn.Parameter]:
+        """Return transform parameters owned by the inner optimizer."""
+        method = getattr(self.inner, "transform_parameters", None)
+        return [] if method is None else method(stages)
+
+    def algorithm_parameters(self) -> list[torch.nn.Parameter]:
+        """Return outer damping and inner algorithm parameters."""
+        parameters = list(self.params_algo.parameters())
+        method = getattr(self.inner, "algorithm_parameters", None)
+        if method is not None:
+            parameters.extend(method())
+        return _unique_parameters(parameters)
+
+
+# %% private module subroutines
+
+
+def _linearization(
+    physics: Any,
+    estimate: torch.Tensor,
+    override: Callable[[Any, torch.Tensor], Any] | None,
+) -> tuple[torch.Tensor, Any]:
+    result = (
+        override(physics, estimate)
+        if override is not None
+        else physics.linearize(estimate)
+    )
+    if isinstance(result, tuple):
+        if len(result) != 2:
+            raise ValueError(
+                "linearize must return a Jacobian or (prediction, Jacobian)"
+            )
+        prediction, jacobian = result
+    else:
+        prediction, jacobian = physics.A(estimate), result
+    for name in ("A", "A_adjoint"):
+        if not hasattr(jacobian, name):
+            raise TypeError(f"linearized physics must expose {name}")
+    return prediction, jacobian

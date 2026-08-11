@@ -117,6 +117,9 @@ target_compile_definitions(test_pulseq_autolabel PRIVATE
     PULSEQ_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../utils/expected")
 target_link_libraries(test_pulseq_autolabel PRIVATE pulseqpp GTest::gtest_main)
 
+add_executable(test_pulseq_expand test_pulseq_expand.cpp)
+target_link_libraries(test_pulseq_expand PRIVATE pulseqpp GTest::gtest_main)
+
 add_executable(test_pulseq_shape test_pulseq_shape.cpp)
 target_link_libraries(test_pulseq_shape PRIVATE pulseqpp GTest::gtest_main)
 
@@ -130,6 +133,7 @@ gtest_discover_tests(test_pulseq_roundtrip)
 gtest_discover_tests(test_pulseq_trajectory)
 gtest_discover_tests(test_pulseq_kspace)
 gtest_discover_tests(test_pulseq_autolabel)
+gtest_discover_tests(test_pulseq_expand)
 gtest_discover_tests(test_pulseq_shape)
 
 # ------------------------------------------------------------------

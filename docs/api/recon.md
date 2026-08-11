@@ -54,14 +54,16 @@ execution, see {doc}`../explanations/reconstruction/model_based`.
    pulserver.recon.preprocessing
    pulserver.recon.corrections
    pulserver.recon.execution
+   pulserver.recon.optim
    pulserver.recon.simulation
 ```
 
 ## Reconstruction algorithms
 
-`pics` selects conjugate gradients for an unregularized or quadratic problem
-and plug-and-play FISTA when a denoiser is supplied. A sequence of denoisers
-is combined with an equal-weight proximal average.
+`pics` selects implicitly differentiated conjugate gradients for an
+unregularized or quadratic problem and plug-and-play FISTA when one denoiser
+is supplied. The optimizer classes follow DeepInverse's constructor and
+`model(y, physics)` conventions.
 
 ```{eval-rst}
 .. autosummary::
@@ -71,6 +73,81 @@ is combined with an equal-weight proximal average.
    pulserver.recon.algorithms.pics
    pulserver.recon.algorithms.PolynomialPreconditioner
 ```
+
+### Multiple regularizers
+
+`StackedPrior` distinguishes simultaneous regularizers from DeepInverse's
+iteration-wise prior lists. FISTA accepts one proximal prior. PDHG and ADMM
+accept multiple transformed priors without silently replacing their proximal
+sum by an average.
+
+```python
+import deepinv as dinv
+import pulserver.recon as recon
+
+prior = recon.optim.StackedPrior(
+    priors=[dinv.optim.L1Prior(), dinv.optim.L1Prior()],
+    transforms=[wavelet_transform, finite_difference_transform],
+    weights=[1e-3, 2e-4],
+)
+model = recon.optim.PDHG(
+    data_fidelity=dinv.optim.L2(),
+    prior=prior,
+    stepsize=0.2,
+    stepsize_dual=0.2,
+    max_iter=50,
+)
+image = model(kspace, physics)
+```
+
+ADMM uses the physics' fast `A_adjoint_A` method for its image update, so a
+Toeplitz MRI physics remains active underneath the optimizer. Its CG solve has
+a manual implicit backward and does not retain the Krylov history.
+
+`IRGNM(inner=...)` is the nonlinear composition layer. Nonlinear physics
+provides `linearize(x)`, and the selected FISTA, PDHG, ADMM, or CG instance
+remains responsible for each linearized subproblem.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
+   pulserver.recon.optim.FISTA
+   pulserver.recon.optim.IRGNM
+   pulserver.recon.optim.PDHG
+   pulserver.recon.optim.ADMM
+   pulserver.recon.optim.StackedPrior
+   pulserver.recon.optim.ConjugateGradient
+   pulserver.recon.optim.OptimState
+   pulserver.recon.optim.OptimResult
+```
+
+### Advanced training loops
+
+The regular call remains `model(y, physics)`. Training strategies that need
+intermediate losses, truncated backpropagation, alternating data splits, or
+progressive freezing can use the same model one iteration at a time:
+
+```python
+import torch
+
+state = model.init_state(kspace, physics)
+for iteration in range(model.iterations):
+    state = model.step(state, kspace, physics, iteration)
+    if iteration in supervised_iterations:
+        loss = loss + criterion(model.get_output(state), target)
+    if (iteration + 1) % truncate_every == 0:
+        state = state.detach()
+
+model.set_trainable("prior", enabled=False)
+optimizer = torch.optim.AdamW(model.parameter_groups())
+```
+
+`return_info=True` with `record_iterations=(...)` is the concise alternative
+when only selected intermediate estimates are needed. This protocol is plain
+PyTorch, so Lightning can own the training schedule and TorchIO can own patch
+sampling without either becoming a Pulserver runtime dependency.
 
 ## Forward operators
 
