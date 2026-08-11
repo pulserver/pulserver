@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -flto=auto -shared  -o ../python/pulserver/_ext/_pulseqpp_wrapper.cpython-314-x86_64-linux-gnu.so CMakeFiles/_pulseqpp_wrapper.dir/python/pulserver/_ext/_pulseqpp_wrapper.cpp.o CMakeFiles/_pulseqpp_wrapper.dir/python/pulserver/_ext/_pulseqpp_eventtypes.cpp.o  pulseqpp_build/libpulseqpp.a -lpthread 

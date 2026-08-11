@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -flto=auto -shared  -o ../fastseq/_fastseq_wrapper.cpython-314-x86_64-linux-gnu.so CMakeFiles/_fastseq_wrapper.dir/fastseq/_fastseq_wrapper.cpp.o 
