@@ -12,6 +12,7 @@
 
 #include "pulseq/trajectory.hpp"
 
+#include "pulseq/kspace.hpp"
 #include "pulseq/shape.hpp"
 
 #include <algorithm>
@@ -329,56 +330,32 @@ namespace pulseq
     /*  Absolute k                                                        */
     /* ================================================================== */
 
-    std::vector<std::array<double, 3>> block_k_origins(const Sequence& seq)
+    /*
+     * One line of glue over the C89 core.  See the header for why there is no
+     * second implementation here any more.
+     *
+     * The core reports origins as a dense array indexed from `first_block`;
+     * this returns Pulseq's 1-based layout with an unused `[0]`, because that
+     * is what `absolute_trajectory` and `apply_fov_shift` index with.
+     */
+    std::vector<std::array<double, 3>> block_k_origins(Sequence& seq)
     {
-        const int blocks = seq.num_blocks();
-        std::vector<std::array<double, 3>> out(static_cast<size_t>(blocks) + 1,
+        KSpaceOptions options;
+        /* Logical frame: a rotation belongs to the block that carries it, and
+         * `dr . k` is invariant when both are rotated anyway. */
+        options.apply_rotation = false;
+        options.block_origins = true;
+        /* Nothing here reads a sample or an echo, and both are the expensive
+         * half of a plan. */
+        options.materialize_samples = false;
+        options.derive_center_sample = false;
+
+        const KSpace ks = calculate_kspace(seq, options);
+
+        std::vector<std::array<double, 3>> out(ks.block_origins.size() + 1,
                                                std::array<double, 3>{0.0, 0.0, 0.0});
-
-        std::array<double, 3> k{0.0, 0.0, 0.0};
-        for (int b = 1; b <= blocks; ++b)
-        {
-            out[static_cast<size_t>(b)] = k;
-
-            const Block block = seq.get_block(b);
-            const int32_t grads[3] = {block.gx, block.gy, block.gz};
-
-            Piecewise wave[3];
-            double amplitude[3] = {0.0, 0.0, 0.0};
-            for (int a = 0; a < 3; ++a)
-                wave[a] = unit_waveform(seq, grads[a], &amplitude[a]);
-
-            char use = 0;
-            double t_center = 0.0;
-            if (block.rf > 0 && block.rf <= seq.rf_library().size())
-            {
-                const double* rf = seq.rf_library().row(static_cast<int>(block.rf));
-                t_center = rf[5] + rf[4];  // delay + center
-                const std::vector<char>& uses = seq.rf_uses();
-                const size_t idx = static_cast<size_t>(block.rf) - 1;
-                if (idx < uses.size())
-                    use = uses[idx];
-            }
-
-            if (use == 'e' || use == 'r')
-            {
-                /* Split at the pulse centre so crushers on either side land on
-                 * the correct side of the reset or the sign flip. */
-                for (int a = 0; a < 3; ++a)
-                {
-                    const double before = wave[a].cumulative_at(t_center);
-                    double mid = k[a] + amplitude[a] * before;
-                    mid = (use == 'e') ? 0.0 : -mid;
-                    k[a] = mid + amplitude[a] * (wave[a].total() - before);
-                }
-            }
-            else
-            {
-                for (int a = 0; a < 3; ++a)
-                    k[a] += amplitude[a] * wave[a].total();
-            }
-        }
-
+        for (size_t b = 0; b < ks.block_origins.size(); ++b)
+            out[b + 1] = ks.block_origins[b];
         return out;
     }
 

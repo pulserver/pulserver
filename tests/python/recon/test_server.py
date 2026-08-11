@@ -1,10 +1,10 @@
-"""Tests for pulserver.recon.server — handler resolution logic."""
+"""Tests for private MRD server handler resolution."""
 
 import sys
 import types
 from unittest.mock import MagicMock, patch
 
-from pulserver.recon.server import Server, _NullHandler
+from pulserver.recon._mrd.server import Server, _NullHandler
 
 # ---------------------------------------------------------------------------
 # Handler resolution
@@ -23,6 +23,18 @@ def test_resolve_handler_from_importable_module():
     with patch.dict(sys.modules, {"fake_handler": fake_module}):
         result = server._resolve_handler("fake_handler")
     assert result is fake_module
+
+
+def test_resolve_handler_from_private_built_in_package():
+    """Bundled handlers remain available after moving behind the private API."""
+    server = Server.__new__(Server)
+    server.default_handler = "savedataonly"
+    server.handler_dirs = []
+
+    result = server._resolve_handler("simplefft")
+
+    assert result.__name__ == "pulserver.recon._mrd.handlers.simplefft"
+    assert callable(result.process)
 
 
 def test_resolve_handler_fallback_to_default():

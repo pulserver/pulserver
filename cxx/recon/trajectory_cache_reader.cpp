@@ -768,6 +768,24 @@ namespace mrdserver
         idx.segment = static_cast<uint16_t>(entry.seg);
 
         const_cast<ISMRMRD::AcquisitionHeader&>(acq.getHead()).flags = entry.flags;
+
+        /*
+         * A negative echo index means the cache could not derive one -- the
+         * readout's k does not move, so there is no sample that is the
+         * crossing.  It is refused rather than cast: `uint16_t(-1)` is 65535,
+         * a number a reconstruction would index k-space with.
+         *
+         * Reaching here means the sequence's canonical trajectory was flat
+         * across the ADC window, which is a gap in the cache rather than in
+         * the sequence.  The old code could not tell: it published
+         * num_samples / 2 whether or not anything had been derived.
+         */
+        if (entry.center_sample < 0)
+            throw std::runtime_error(
+                "trajectory cache: acquisition " + std::to_string(acquisition_index) +
+                " carries no derived echo index, so there is nothing to publish as "
+                "centre sample. The sequence's canonical k-space is flat across this "
+                "readout.");
         acq.center_sample() = static_cast<uint16_t>(entry.center_sample);
         acq.sample_time_us() = entry.sample_time_us;
         acq.encoding_space_ref() = static_cast<uint16_t>(entry.encoding_space_ref);

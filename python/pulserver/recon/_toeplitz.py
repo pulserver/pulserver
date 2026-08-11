@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from importlib import import_module
 from math import prod
 from typing import Any
@@ -49,6 +50,88 @@ def _triton_direct_matvecs() -> tuple[Any, Any]:
     return packed_real_matvec_direct, packed_complex_matvec_direct
 
 
+def _cuda_supports_bfloat16(device: Any) -> bool:
+    """Return whether ``device`` has native CUDA BF16 support."""
+    torch = _torch()
+    device = torch.device(device)
+    if device.type != "cuda":
+        return False
+    checker = getattr(torch.cuda, "is_bf16_supported", None)
+    if checker is None:
+        major, _ = torch.cuda.get_device_capability(device)
+        return major >= 8
+    with torch.cuda.device(device):
+        try:
+            return bool(checker(including_emulation=False))
+        except TypeError:
+            return bool(checker())
+
+
+def _resolved_cuda_precision(requested: str, device: Any) -> str:
+    """Select BF16 automatically when the CUDA device supports it natively."""
+    if requested == "auto":
+        return "bfloat16" if _cuda_supports_bfloat16(device) else "float32"
+    if requested == "bfloat16" and not _cuda_supports_bfloat16(device):
+        raise RuntimeError(f"native CUDA BF16 is unavailable on {device}; use float32")
+    return requested
+
+
+def _cuda_transfer_values(values: Any, precision: str, device: Any) -> Any:
+    """Encode real values while retaining complex kernels as complex64."""
+    torch = _torch()
+    dtype = {
+        "float32": torch.float32,
+        "float16": torch.float16,
+        "bfloat16": torch.bfloat16,
+    }[precision]
+    target_dtype = torch.complex64 if values.is_complex() else dtype
+    return values.to(device=device, dtype=target_dtype).contiguous()
+
+
+def _cuda_transfer_spec(
+    values: Any,
+    precision: str,
+    locations: int,
+) -> tuple[tuple[int, ...], Any]:
+    """Return shape and dtype for a packed CUDA transfer buffer."""
+    torch = _torch()
+    dtype = {
+        "float32": torch.float32,
+        "float16": torch.float16,
+        "bfloat16": torch.bfloat16,
+    }[precision]
+    if values.is_complex():
+        dtype = torch.complex64
+    return (values.shape[0], locations), dtype
+
+
+def _cpu_packed_matvec(packed: Any, spectrum: Any) -> Any | None:
+    """Use the precompiled CPU kernel when its zero-copy contract is met."""
+    torch = _torch()
+    if (
+        packed.device.type != "cpu"
+        or spectrum.device.type != "cpu"
+        or spectrum.dtype != torch.complex64
+        or packed.dtype not in {torch.float32, torch.complex64}
+        or packed.requires_grad
+        or spectrum.requires_grad
+    ):
+        return None
+    try:
+        from pulserver._ext import _recon_cpu_wrapper
+    except ImportError:
+        return None
+    packed = packed.contiguous()
+    spectrum = spectrum.contiguous()
+    result = torch.empty_like(spectrum)
+    _recon_cpu_wrapper.packed_hermitian_matvec(
+        packed.numpy(),
+        spectrum.numpy(),
+        result.numpy(),
+    )
+    return result
+
+
 def _packed_cuda_matvec(
     supported: Any,
     packed: Any,
@@ -57,9 +140,7 @@ def _packed_cuda_matvec(
     count: int,
 ) -> None:
     """Dispatch the required fused CUDA kernel."""
-    packed_real_matvec_inplace, packed_complex_matvec_inplace = (
-        _triton_matvecs()
-    )
+    packed_real_matvec_inplace, packed_complex_matvec_inplace = _triton_matvecs()
     implementation = (
         packed_complex_matvec_inplace
         if packed.is_complex()
@@ -80,9 +161,7 @@ def _packed_cuda_matvec_direct(
     indices: Any,
 ) -> str:
     """Dispatch the Julia-style direct padded-bank multiplication."""
-    packed_real_matvec_direct, packed_complex_matvec_direct = (
-        _triton_direct_matvecs()
-    )
+    packed_real_matvec_direct, packed_complex_matvec_direct = _triton_direct_matvecs()
     implementation = (
         packed_complex_matvec_direct
         if packed.is_complex()
@@ -199,10 +278,7 @@ class CompactToeplitzKernel:
             "auto",
             "float32",
         }:
-            raise ValueError(
-                "reduced CUDA transfer precision requires a real packed kernel"
-            )
-
+            raise ValueError("complex Toeplitz kernels require complex64 CUDA storage")
         rows, columns = torch.triu_indices(rank, rank, device=values.device)
         self.values = values.contiguous()
         self.indices = indices.contiguous()
@@ -221,6 +297,7 @@ class CompactToeplitzKernel:
         self._off_diagonal = rows != columns
         self._stream_workspaces: dict[tuple[Any, ...], dict[str, Any]] = {}
         self._resident_workspaces: dict[tuple[Any, ...], dict[str, Any]] = {}
+        self._cuda_value_cache: dict[tuple[Any, ...], Any] = {}
         self._last_cuda_mode: str | None = None
         self._last_cuda_algorithm: str | None = None
 
@@ -271,11 +348,76 @@ class CompactToeplitzKernel:
         device = torch.device(device)
         if self.values.device != device:
             self.values = self.values.to(device)
+            self._cuda_value_cache.clear()
+            self._stream_workspaces.clear()
+            self._resident_workspaces.clear()
+        self._metadata_to(device)
+        return self
+
+    def _metadata_to(self, device: Any) -> None:
+        """Move the small index metadata without moving canonical FP32 values."""
+        torch = _torch()
+        device = torch.device(device)
+        if self.indices.device != device:
             self.indices = self.indices.to(device)
             self._rows = self._rows.to(device)
             self._columns = self._columns.to(device)
             self._off_diagonal = self._off_diagonal.to(device)
-        return self
+
+    def _cuda_values_for(
+        self,
+        device: Any,
+        requested: str,
+    ) -> tuple[str, Any]:
+        """Return the cached CUDA representation for the precision policy."""
+        torch = _torch()
+        device = torch.device(device)
+        precision = self._cuda_precision(requested, device)
+        return precision, self._encoded_values_for(device, precision)
+
+    def _cuda_precision(
+        self,
+        requested: str,
+        device: Any,
+    ) -> str:
+        """Use automatic BF16 only for real packed coefficient kernels."""
+        torch = _torch()
+        device = torch.device(device)
+        if self.values.is_complex():
+            if requested not in {"auto", "float32"}:
+                raise ValueError(
+                    "complex Toeplitz kernels require complex64 CUDA storage"
+                )
+            return "float32"
+        return _resolved_cuda_precision(requested, device)
+
+    def _encoded_values_for(self, device: Any, precision: str) -> Any:
+        """Cache one encoded representation on a host or CUDA device."""
+        torch = _torch()
+        device = torch.device(device)
+        key = (
+            device,
+            precision,
+            self.values.device,
+            self.values.data_ptr(),
+            self.values._version,
+        )
+        encoded = self._cuda_value_cache.get(key)
+        if encoded is None:
+            encoded = _cuda_transfer_values(self.values, precision, device)
+            self._cuda_value_cache[key] = encoded
+        return encoded
+
+    def _cuda_storage_nbytes(self, precision: str) -> int:
+        """Bytes occupied by the encoded CUDA transfer."""
+        torch = _torch()
+        itemsize = {
+            "float32": torch.float32.itemsize,
+            "float16": torch.float16.itemsize,
+            "bfloat16": torch.bfloat16.itemsize,
+        }[precision]
+        components = 2 if self.values.is_complex() else 1
+        return self.values.numel() * itemsize * components
 
     def _unpack(self, packed: Any, dtype: Any) -> Any:
         """Unpack one location chunk to Hermitian matrices."""
@@ -296,6 +438,9 @@ class CompactToeplitzKernel:
         torch = _torch()
         if self.rank == 1:
             return spectrum * packed[0].to(spectrum.dtype)
+        accelerated = _cpu_packed_matvec(packed, spectrum)
+        if accelerated is not None:
+            return accelerated
         # Accumulate directly from packed rows.  On CPU this avoids a
         # location-by-K-by-K dense temporary and two real GEMMs for a real
         # transfer; on CUDA the fused Triton path below supersedes it.
@@ -326,7 +471,10 @@ class CompactToeplitzKernel:
             )
         if image.device.type == "cuda":
             _triton_matvecs()
-        self.to(image.device)
+        if image.device.type == "cuda":
+            self._metadata_to(image.device)
+        else:
+            self.to(image.device)
         if image.device.type == "cuda" and self.values.dtype in {
             torch.float16,
             torch.bfloat16,
@@ -369,55 +517,41 @@ class CompactToeplitzKernel:
         output = torch.fft.ifftn(output_flat.reshape_as(spectrum), dim=axes)
         return output[image_slices]
 
-    def _resident_transfer_dtype(self) -> Any:
-        """Return the packed dtype requested for the resident hot path."""
-        torch = _torch()
-        if self.values.is_complex() or self.cuda_transfer_precision == "auto":
-            return self.values.dtype
-        return {
-            "float32": torch.float32,
-            "float16": torch.float16,
-            "bfloat16": torch.bfloat16,
-        }[self.cuda_transfer_precision]
-
     def _resident_workspace_key(self, image: Any) -> tuple[Any, ...]:
         return (
             image.device,
             image.dtype,
             image.shape[0],
-            self._resident_transfer_dtype(),
+            self._cuda_precision(
+                self.cuda_transfer_precision,
+                image.device,
+            ),
         )
 
     def _resident_additional_bytes(self, image: Any) -> int:
         """Conservative peak bytes for two banks plus a cuFFT work bank."""
         bank_bytes = (
-            image.shape[0]
-            * self.rank
-            * prod(self.spatial_shape)
-            * image.element_size()
+            image.shape[0] * self.rank * prod(self.spatial_shape) * image.element_size()
         )
         result_bytes = image.numel() * image.element_size()
-        transfer_dtype = self._resident_transfer_dtype()
-        transfer_conversion = (
-            0
-            if transfer_dtype == self.values.dtype
-            else self.values.numel() * transfer_dtype.itemsize
+        transfer_precision = self._cuda_precision(
+            self.cuda_transfer_precision,
+            image.device,
         )
+        transfer_bytes = self._cuda_storage_nbytes(transfer_precision)
+        already_encoded = (
+            transfer_precision == "float32" and self.values.device == image.device
+        )
+        transfer_conversion = 0 if already_encoded else transfer_bytes
         transfer_residency = (
             0
-            if self.values.device == image.device
-            else self.values.numel() * self.values.element_size()
-            + self.indices.numel() * self.indices.element_size()
+            if self.indices.device == image.device
+            else self.indices.numel() * self.indices.element_size()
         )
         # cuFFT work areas depend on shape and CUDA version. Reserving one
         # additional bank keeps automatic selection conservative and prevents
         # a fast-path choice from turning into an allocator OOM.
-        return (
-            3 * bank_bytes
-            + result_bytes
-            + transfer_conversion
-            + transfer_residency
-        )
+        return 3 * bank_bytes + result_bytes + transfer_conversion + transfer_residency
 
     def _resident_fits(self, image: Any) -> tuple[bool, int, int]:
         """Return whether the Julia-style banks fit the configured VRAM budget."""
@@ -463,13 +597,14 @@ class CompactToeplitzKernel:
     ) -> Any:
         """Apply persistent batched banks, optionally fusing spatial factors."""
         torch = _torch()
-        self.to(image.device)
+        self._metadata_to(image.device)
         key = self._resident_workspace_key(image)
         workspace = self._resident_workspaces.get(key)
         if workspace is None:
-            transfer_dtype = self._resident_transfer_dtype()
-            if self.values.dtype != transfer_dtype:
-                self.values = self.values.to(dtype=transfer_dtype)
+            _, transfer_values = self._cuda_values_for(
+                image.device,
+                self.cuda_transfer_precision,
+            )
             workspace = {
                 "input": torch.empty(
                     (image.shape[0], self.rank, *self.spatial_shape),
@@ -482,7 +617,7 @@ class CompactToeplitzKernel:
                     device=image.device,
                 ),
                 "indices": self.indices.to(image.device, dtype=torch.int32),
-                "values": self.values,
+                "values": transfer_values,
             }
             self._resident_workspaces[key] = workspace
         input_bank = workspace["input"]
@@ -552,9 +687,13 @@ class CompactToeplitzKernel:
                 out=supported[:, coefficient],
             )
 
+        _, transfer_values = self._cuda_values_for(
+            image.device,
+            self.cuda_transfer_precision,
+        )
         _packed_cuda_matvec(
             supported,
-            self.values,
+            transfer_values,
             location_start=0,
             count=self.n_locations,
         )
@@ -578,10 +717,20 @@ class CompactToeplitzKernel:
         spectrum: Any,
         policy: Any,
     ) -> Any:
-        """Multiply host-resident supported spectra with two CUDA buffers."""
+        """Multiply host spectra by sample-parallel packed CUDA kernels."""
         torch = _torch()
         batch = spectrum.shape[0]
         chunk_size = min(policy.transfer_chunk_size, self.n_locations)
+        precision = self._cuda_precision(
+            policy.transfer_precision,
+            policy.torch_device,
+        )
+        encoded_host = self._encoded_values_for("cpu", precision)
+        packed_shape, packed_dtype = _cuda_transfer_spec(
+            self.values,
+            precision,
+            chunk_size,
+        )
         output = torch.empty_like(
             spectrum,
             device="cpu",
@@ -597,24 +746,16 @@ class CompactToeplitzKernel:
             )
             for _ in streams
         ]
-        resident_values = self.values.device.type == "cuda"
-        host_values = (
-            None
-            if resident_values
-            else [
-                torch.empty(
-                    (self.values.shape[0], chunk_size),
-                    dtype=self.values.dtype,
-                    pin_memory=policy.pin_memory,
-                )
-                for _ in streams
-            ]
-        )
+        host_values = [
+            torch.empty(
+                packed_shape,
+                dtype=packed_dtype,
+                pin_memory=policy.pin_memory,
+            )
+            for _ in streams
+        ]
         host_outputs = [torch.empty_like(item) for item in host_inputs]
-        pending: list[tuple[int, int] | None] = [None, None]
-        rows = self._rows.to(policy.torch_device)
-        columns = self._columns.to(policy.torch_device)
-        off_diagonal = self._off_diagonal.to(policy.torch_device)
+        pending: list[tuple[int, int] | None] = [None] * len(streams)
 
         def finish(slot: int) -> None:
             location = pending[slot]
@@ -631,49 +772,25 @@ class CompactToeplitzKernel:
             slot = chunk_index % policy.streams
             finish(slot)
             host_inputs[slot][:, :, :count].copy_(spectrum[:, :, start:stop])
-            if host_values is not None:
-                host_values[slot][:, :count].copy_(self.values[:, start:stop])
+            host_values[slot][:, :count].copy_(encoded_host[:, start:stop])
             stream = streams[slot]
             with torch.cuda.stream(stream):
                 selected = host_inputs[slot][:, :, :count].to(
                     policy.torch_device,
                     non_blocking=policy.pin_memory,
                 )
-                packed = (
-                    self.values[:, start:stop]
-                    if resident_values
-                    else host_values[slot][:, :count].to(
-                        policy.torch_device,
-                        non_blocking=policy.pin_memory,
-                    )
+                packed = host_values[slot][:, :count].to(
+                    policy.torch_device,
+                    non_blocking=policy.pin_memory,
                 )
-                if self.rank == 1:
-                    transformed = selected * packed[0].to(selected.dtype)
-                else:
-                    matrix = torch.zeros(
-                        (count, self.rank, self.rank),
-                        dtype=(selected.real.dtype if self.is_real else selected.dtype),
-                        device=policy.torch_device,
-                    )
-                    matrix[:, rows, columns] = packed.T.to(matrix.dtype)
-                    matrix[
-                        :,
-                        columns[off_diagonal],
-                        rows[off_diagonal],
-                    ] = packed[off_diagonal].T.conj().to(matrix.dtype)
-                    vectors = selected.permute(0, 2, 1).unsqueeze(-1)
-                    if self.is_real:
-                        real = torch.matmul(matrix[None], vectors.real).squeeze(-1)
-                        imaginary = torch.matmul(matrix[None], vectors.imag).squeeze(-1)
-                        transformed = torch.complex(real, imaginary).permute(0, 2, 1)
-                    else:
-                        transformed = (
-                            torch.matmul(matrix[None], vectors)
-                            .squeeze(-1)
-                            .permute(0, 2, 1)
-                        )
+                _packed_cuda_matvec(
+                    selected,
+                    packed,
+                    location_start=0,
+                    count=count,
+                )
                 host_outputs[slot][:, :, :count].copy_(
-                    transformed,
+                    selected,
                     non_blocking=policy.pin_memory,
                 )
             pending[slot] = (start, stop)
@@ -707,43 +824,35 @@ class CompactToeplitzKernel:
             torch.float32,
             torch.complex64,
         }
-        precision_dtypes = {
-            "float32": torch.float32,
-            "float16": torch.float16,
-            "bfloat16": torch.bfloat16,
-        }
-        transfer_dtype = (
-            self.values.dtype
-            if policy.transfer_precision == "auto"
-            else precision_dtypes[policy.transfer_precision]
+        transfer_precision = self._cuda_precision(
+            policy.transfer_precision,
+            policy.torch_device,
         )
-        if not self.is_real and transfer_dtype != self.values.dtype:
-            raise ValueError(
-                "reduced transfer precision requires a real packed Toeplitz kernel"
-            )
+        encoded_host = self._encoded_values_for("cpu", transfer_precision)
+        packed_shape, transfer_dtype = _cuda_transfer_spec(
+            self.values,
+            transfer_precision,
+            chunk_size,
+        )
 
         # Select a resident representation before allocating the workspace.
-        # ``auto`` preserves the source dtype.  Reduced precision is always an
-        # explicit policy choice because it changes the numerical operator.
+        # Automatic BF16 is encoded once and cached, rather than recast inside
+        # every normal-operator application.
         _, total_device_bytes = torch.cuda.mem_get_info(policy.torch_device)
         complex_size = image.element_size()
+        transfer_chunk_bytes = (
+            self._cuda_storage_nbytes(transfer_precision)
+            * chunk_size
+            // max(1, self.n_locations)
+        )
         base_workspace_bytes = (
-            image.shape[0]
-            * self.rank
-            * self.n_locations
-            * complex_size
+            image.shape[0] * self.rank * self.n_locations * complex_size
             # One persistent padded volume plus one cuFFT work/output volume.
             # The latter is not visible in the Python tensor graph but is a
             # real peak allocation even for an aliased ``out`` transform.
-            + 2
-            * image.shape[0]
-            * prod(self.spatial_shape)
-            * complex_size
+            + 2 * image.shape[0] * prod(self.spatial_shape) * complex_size
             + self.indices.numel() * torch.int32.itemsize
-            + policy.streams
-            * self.values.shape[0]
-            * chunk_size
-            * transfer_dtype.itemsize
+            + policy.streams * transfer_chunk_bytes
         )
         if not fused_packed:
             base_workspace_bytes += (
@@ -755,22 +864,14 @@ class CompactToeplitzKernel:
             base_workspace_bytes += (
                 image.shape[0] * prod(self.image_shape) * complex_size
             )
-        resident_dtype = None
-        if self.is_real and policy.kernel_residency != "host":
-            candidates = (transfer_dtype,)
+        resident_precision = None
+        if policy.kernel_residency != "host":
             capacity = int(total_device_bytes * policy.max_device_fraction)
-            for candidate in candidates:
-                kernel_bytes = self.values.numel() * candidate.itemsize
-                if base_workspace_bytes + kernel_bytes <= capacity:
-                    resident_dtype = candidate
-                    transfer_dtype = candidate
-                    break
-            if resident_dtype is None and policy.kernel_residency == "device":
-                minimum = min(
-                    base_workspace_bytes
-                    + self.values.numel() * candidate.itemsize
-                    for candidate in candidates
-                )
+            kernel_bytes = self._cuda_storage_nbytes(transfer_precision)
+            if base_workspace_bytes + kernel_bytes <= capacity:
+                resident_precision = transfer_precision
+            elif policy.kernel_residency == "device":
+                minimum = base_workspace_bytes + kernel_bytes
                 raise MemoryError(
                     "resident Toeplitz transfer requires approximately "
                     f"{minimum / 2**30:.2f} GiB, above the configured "
@@ -783,8 +884,8 @@ class CompactToeplitzKernel:
             chunk_size,
             policy.streams,
             policy.pin_memory,
-            transfer_dtype,
-            resident_dtype,
+            transfer_precision,
+            resident_precision,
         )
         workspace = self._stream_workspaces.get(workspace_key)
         if workspace is None:
@@ -839,7 +940,7 @@ class CompactToeplitzKernel:
                 ],
                 "host_packed": [
                     torch.empty(
-                        (self.values.shape[0], chunk_size),
+                        packed_shape,
                         dtype=transfer_dtype,
                         pin_memory=policy.pin_memory,
                     )
@@ -847,19 +948,18 @@ class CompactToeplitzKernel:
                 ],
                 "resident_packed": (
                     None
-                    if resident_dtype is None
-                    else self.values.to(
+                    if resident_precision is None
+                    else self._encoded_values_for(
                         policy.torch_device,
-                        dtype=resident_dtype,
-                        non_blocking=False,
+                        resident_precision,
                     )
                 ),
                 "device_packed": (
                     None
-                    if resident_dtype is not None
+                    if resident_precision is not None
                     else [
                         torch.empty(
-                            (self.values.shape[0], chunk_size),
+                            packed_shape,
                             dtype=transfer_dtype,
                             device=policy.torch_device,
                         )
@@ -886,10 +986,9 @@ class CompactToeplitzKernel:
                 ),
             }
             self._stream_workspaces[workspace_key] = workspace
-        elif (
-            (right_factor is not None or left_factor is not None)
-            and workspace["host_factor"] is None
-        ):
+        elif (right_factor is not None or left_factor is not None) and workspace[
+            "host_factor"
+        ] is None:
             workspace["host_factor"] = torch.empty(
                 (image.shape[0], *self.image_shape),
                 dtype=image.dtype,
@@ -939,9 +1038,7 @@ class CompactToeplitzKernel:
                 non_blocking=policy.pin_memory and image.is_pinned(),
             )
             if right_factor is not None:
-                padded[image_slices].mul_(
-                    stage_factor(right_factor, coefficient)
-                )
+                padded[image_slices].mul_(stage_factor(right_factor, coefficient))
             torch.fft.fftn(padded, dim=axes, out=fft_output)
             torch.index_select(
                 fft_output.flatten(start_dim=1),
@@ -980,9 +1077,7 @@ class CompactToeplitzKernel:
                     slot = chunk_index % policy.streams
                     if pending[slot]:
                         streams[slot].synchronize()
-                    host_packed[slot][:, :count].copy_(
-                        self.values[:, start:stop]
-                    )
+                    host_packed[slot][:, :count].copy_(encoded_host[:, start:stop])
                     with torch.cuda.stream(streams[slot]):
                         packed = device_packed[slot][:, :count]
                         packed.copy_(
@@ -1076,9 +1171,7 @@ class CompactToeplitzKernel:
                 out=padded,
             )
             if left_factor is not None:
-                padded[image_slices].mul_(
-                    stage_factor(left_factor, output_coefficient)
-                )
+                padded[image_slices].mul_(stage_factor(left_factor, output_coefficient))
             result[:, output_coefficient].copy_(
                 padded[image_slices],
                 non_blocking=policy.pin_memory,
@@ -1140,6 +1233,36 @@ class CompactToeplitzKernel:
                     f"{name} must be a CPU tensor with spatial, rank-spatial, "
                     "or batch-rank-spatial shape"
                 )
+        if policy.device_count > 1 and image.shape[0] > 1:
+            # Each leading batch item is an independent matrix-valued
+            # convolution. Keep the packed kernel on the host and let one
+            # single-device policy per worker own its streams/workspaces.
+            self.to("cpu")
+            device_count = min(policy.device_count, image.shape[0])
+            boundaries = [
+                (index * image.shape[0]) // device_count
+                for index in range(device_count + 1)
+            ]
+
+            def factor_slice(factor: Any | None, start: int, stop: int) -> Any | None:
+                if factor is None:
+                    return None
+                if factor.ndim == len(self.image_shape) + 2:
+                    return factor[start:stop]
+                return factor
+
+            def apply_part(index: int) -> Any:
+                start, stop = boundaries[index], boundaries[index + 1]
+                return self.apply_streamed(
+                    image[start:stop],
+                    policy.for_device(policy.torch_devices[index]),
+                    right_factor=factor_slice(right_factor, start, stop),
+                    left_factor=factor_slice(left_factor, start, stop),
+                )
+
+            with ThreadPoolExecutor(max_workers=device_count) as executor:
+                parts = list(executor.map(apply_part, range(device_count)))
+            return torch.cat(parts, dim=0)
         if image.shape[0] > policy.physics_batch_size:
             chunks = [
                 self.apply_streamed(
@@ -1149,9 +1272,7 @@ class CompactToeplitzKernel:
                         None
                         if right_factor is None
                         else (
-                            right_factor[
-                                start : start + policy.physics_batch_size
-                            ]
+                            right_factor[start : start + policy.physics_batch_size]
                             if right_factor.ndim == len(self.image_shape) + 2
                             else right_factor
                         )
@@ -1160,9 +1281,7 @@ class CompactToeplitzKernel:
                         None
                         if left_factor is None
                         else (
-                            left_factor[
-                                start : start + policy.physics_batch_size
-                            ]
+                            left_factor[start : start + policy.physics_batch_size]
                             if left_factor.ndim == len(self.image_shape) + 2
                             else left_factor
                         )
@@ -1172,8 +1291,16 @@ class CompactToeplitzKernel:
             ]
             return torch.cat(chunks, dim=0)
         chunk_size = min(policy.transfer_chunk_size, self.n_locations)
-        real_size = image.real.element_size()
         complex_size = image.element_size()
+        transfer_precision = self._cuda_precision(
+            policy.transfer_precision,
+            policy.torch_device,
+        )
+        transfer_chunk_bytes = (
+            self._cuda_storage_nbytes(transfer_precision)
+            * chunk_size
+            // max(1, self.n_locations)
+        )
         fused_packed = self.values.dtype in {
             torch.float16,
             torch.bfloat16,
@@ -1182,22 +1309,8 @@ class CompactToeplitzKernel:
         }
         fft_buffers = 1 if fused_packed else 2
         fft_bytes = (
-            fft_buffers
-            * image.shape[0]
-            * prod(self.spatial_shape)
-            * complex_size
+            fft_buffers * image.shape[0] * prod(self.spatial_shape) * complex_size
         )
-        multiply_bytes = (
-            policy.streams
-            * chunk_size
-            * (
-                self.rank * self.rank * real_size
-                + 2 * image.shape[0] * self.rank * complex_size
-            )
-        )
-        required_device_bytes = fft_bytes + multiply_bytes
-        if self.values.device.type != "cuda":
-            required_device_bytes += self.storage_nbytes
         free_device_bytes, total_device_bytes = torch.cuda.mem_get_info(
             policy.torch_device
         )
@@ -1211,7 +1324,7 @@ class CompactToeplitzKernel:
             * self.n_locations
             * complex_size
             + fft_bytes
-            + policy.streams * self.rank * chunk_size * self.values.element_size()
+            + policy.streams * transfer_chunk_bytes
         )
         workspace_prefix = (
             policy.torch_device,
@@ -1225,12 +1338,16 @@ class CompactToeplitzKernel:
             key[: len(workspace_prefix)] == workspace_prefix
             for key in self._stream_workspaces
         )
-        device_spectra = reusable_device_spectra or policy.spectrum_residency == "device" or (
-            policy.spectrum_residency == "auto"
-            and device_spectrum_bytes
-            <= min(
-                available_device_bytes,
-                int(total_device_bytes * policy.max_device_fraction),
+        device_spectra = (
+            reusable_device_spectra
+            or policy.spectrum_residency == "device"
+            or (
+                policy.spectrum_residency == "auto"
+                and device_spectrum_bytes
+                <= min(
+                    available_device_bytes,
+                    int(total_device_bytes * policy.max_device_fraction),
+                )
             )
         )
         if device_spectra:
@@ -1241,6 +1358,7 @@ class CompactToeplitzKernel:
                 left_factor=left_factor,
             )
         if right_factor is not None or left_factor is not None:
+
             def expanded_factor(factor: Any) -> Any:
                 if factor.ndim == len(self.image_shape):
                     return factor[None, None].expand_as(image)
@@ -1249,9 +1367,7 @@ class CompactToeplitzKernel:
                 return factor
 
             factored = (
-                image
-                if right_factor is None
-                else image * expanded_factor(right_factor)
+                image if right_factor is None else image * expanded_factor(right_factor)
             )
             transformed = self.apply_streamed(factored, policy)
             return (
@@ -1260,17 +1376,7 @@ class CompactToeplitzKernel:
                 else transformed * expanded_factor(left_factor)
             )
 
-        resident = policy.kernel_residency == "device" or (
-            policy.kernel_residency == "auto"
-            and required_device_bytes
-            <= min(
-                available_device_bytes,
-                int(total_device_bytes * policy.max_device_fraction),
-            )
-        )
-        if resident:
-            self.to(policy.torch_device)
-        elif self.values.device.type != "cpu":
+        if self.values.device.type != "cpu":
             self.to("cpu")
 
         indices_device = self.indices.to(

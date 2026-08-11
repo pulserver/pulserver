@@ -9,6 +9,7 @@ import triton.language as tl
 
 
 _DIRECT_CONFIGS = [
+    triton.Config({"block": 64}, num_warps=2),
     triton.Config({"block": 128}, num_warps=4),
     triton.Config({"block": 256}, num_warps=4),
     triton.Config({"block": 512}, num_warps=8),
@@ -40,9 +41,7 @@ def _packed_real_matvec_direct_reuse(
         real = tl.zeros((block,), dtype=tl.float32)
         imaginary = tl.zeros((block,), dtype=tl.float32)
         for input_coefficient in tl.static_range(0, rank):
-            spectrum_index = (
-                (batch * rank + input_coefficient) * n_grid + spatial_index
-            )
+            spectrum_index = (batch * rank + input_coefficient) * n_grid + spatial_index
             value_real = tl.load(
                 spectrum_ptr + 2 * spectrum_index,
                 mask=mask,
@@ -55,12 +54,7 @@ def _packed_real_matvec_direct_reuse(
             )
             lower = min(output_coefficient, input_coefficient)
             upper = max(output_coefficient, input_coefficient)
-            packed_index = (
-                lower * rank
-                - lower * (lower - 1) // 2
-                + upper
-                - lower
-            )
+            packed_index = lower * rank - lower * (lower - 1) // 2 + upper - lower
             weight = tl.load(
                 packed_ptr + packed_index * packed_stride + locations,
                 mask=mask,
@@ -71,9 +65,7 @@ def _packed_real_matvec_direct_reuse(
         output_real += (real,)
         output_imaginary += (imaginary,)
     for output_coefficient in tl.static_range(0, rank):
-        output_index = (
-            (batch * rank + output_coefficient) * n_grid + spatial_index
-        )
+        output_index = (batch * rank + output_coefficient) * n_grid + spatial_index
         tl.store(
             output_ptr + 2 * output_index,
             output_real[output_coefficient],
@@ -93,7 +85,8 @@ def _packed_complex_matvec_direct_reuse(
     spectrum_ptr,
     packed_ptr,
     indices_ptr,
-    packed_stride: tl.constexpr,
+    packed_row_stride: tl.constexpr,
+    packed_location_stride: tl.constexpr,
     n_grid: tl.constexpr,
     n_locations: tl.constexpr,
     rank: tl.constexpr,
@@ -110,9 +103,7 @@ def _packed_complex_matvec_direct_reuse(
         real = tl.zeros((block,), dtype=tl.float32)
         imaginary = tl.zeros((block,), dtype=tl.float32)
         for input_coefficient in tl.static_range(0, rank):
-            spectrum_index = (
-                (batch * rank + input_coefficient) * n_grid + spatial_index
-            )
+            spectrum_index = (batch * rank + input_coefficient) * n_grid + spatial_index
             value_real = tl.load(
                 spectrum_ptr + 2 * spectrum_index,
                 mask=mask,
@@ -125,35 +116,28 @@ def _packed_complex_matvec_direct_reuse(
             )
             lower = min(output_coefficient, input_coefficient)
             upper = max(output_coefficient, input_coefficient)
-            packed_index = (
-                lower * rank
-                - lower * (lower - 1) // 2
-                + upper
-                - lower
+            packed_index = lower * rank - lower * (lower - 1) // 2 + upper - lower
+            weight_index = (
+                packed_index * packed_row_stride + locations * packed_location_stride
             )
-            weight_index = packed_index * packed_stride + locations
             weight_real = tl.load(
-                packed_ptr + 2 * weight_index,
+                packed_ptr + weight_index,
                 mask=mask,
                 other=0.0,
             )
             weight_imaginary = tl.load(
-                packed_ptr + 2 * weight_index + 1,
+                packed_ptr + weight_index + 1,
                 mask=mask,
                 other=0.0,
             )
             if output_coefficient > input_coefficient:
                 weight_imaginary = -weight_imaginary
             real += weight_real * value_real - weight_imaginary * value_imaginary
-            imaginary += (
-                weight_real * value_imaginary + weight_imaginary * value_real
-            )
+            imaginary += weight_real * value_imaginary + weight_imaginary * value_real
         output_real += (real,)
         output_imaginary += (imaginary,)
     for output_coefficient in tl.static_range(0, rank):
-        output_index = (
-            (batch * rank + output_coefficient) * n_grid + spatial_index
-        )
+        output_index = (batch * rank + output_coefficient) * n_grid + spatial_index
         tl.store(
             output_ptr + 2 * output_index,
             output_real[output_coefficient],
@@ -189,9 +173,7 @@ def _packed_real_matvec_direct(
     real = tl.zeros((block,), dtype=tl.float32)
     imaginary = tl.zeros((block,), dtype=tl.float32)
     for input_coefficient in tl.static_range(0, rank):
-        spectrum_index = (
-            (batch * rank + input_coefficient) * n_grid + spatial_index
-        )
+        spectrum_index = (batch * rank + input_coefficient) * n_grid + spatial_index
         value_real = tl.load(
             spectrum_ptr + 2 * spectrum_index,
             mask=mask,
@@ -204,12 +186,7 @@ def _packed_real_matvec_direct(
         )
         lower = tl.minimum(output_coefficient, input_coefficient)
         upper = tl.maximum(output_coefficient, input_coefficient)
-        packed_index = (
-            lower * rank
-            - lower * (lower - 1) // 2
-            + upper
-            - lower
-        )
+        packed_index = lower * rank - lower * (lower - 1) // 2 + upper - lower
         weight = tl.load(
             packed_ptr + packed_index * packed_stride + locations,
             mask=mask,
@@ -229,7 +206,8 @@ def _packed_complex_matvec_direct(
     spectrum_ptr,
     packed_ptr,
     indices_ptr,
-    packed_stride: tl.constexpr,
+    packed_row_stride: tl.constexpr,
+    packed_location_stride: tl.constexpr,
     n_grid: tl.constexpr,
     n_locations: tl.constexpr,
     rank: tl.constexpr,
@@ -245,9 +223,7 @@ def _packed_complex_matvec_direct(
     real = tl.zeros((block,), dtype=tl.float32)
     imaginary = tl.zeros((block,), dtype=tl.float32)
     for input_coefficient in tl.static_range(0, rank):
-        spectrum_index = (
-            (batch * rank + input_coefficient) * n_grid + spatial_index
-        )
+        spectrum_index = (batch * rank + input_coefficient) * n_grid + spatial_index
         value_real = tl.load(
             spectrum_ptr + 2 * spectrum_index,
             mask=mask,
@@ -260,20 +236,17 @@ def _packed_complex_matvec_direct(
         )
         lower = tl.minimum(output_coefficient, input_coefficient)
         upper = tl.maximum(output_coefficient, input_coefficient)
-        packed_index = (
-            lower * rank
-            - lower * (lower - 1) // 2
-            + upper
-            - lower
+        packed_index = lower * rank - lower * (lower - 1) // 2 + upper - lower
+        weight_index = (
+            packed_index * packed_row_stride + locations * packed_location_stride
         )
-        weight_index = packed_index * packed_stride + locations
         weight_real = tl.load(
-            packed_ptr + 2 * weight_index,
+            packed_ptr + weight_index,
             mask=mask,
             other=0.0,
         )
         weight_imaginary = tl.load(
-            packed_ptr + 2 * weight_index + 1,
+            packed_ptr + weight_index + 1,
             mask=mask,
             other=0.0,
         )
@@ -310,9 +283,7 @@ def _packed_real_matvec_inplace(
         real = tl.zeros((block,), dtype=tl.float32)
         imaginary = tl.zeros((block,), dtype=tl.float32)
         for input_coefficient in tl.static_range(0, rank):
-            spectrum_index = (
-                (batch * rank + input_coefficient) * n_locations + absolute
-            )
+            spectrum_index = (batch * rank + input_coefficient) * n_locations + absolute
             value_real = tl.load(
                 supported_ptr + 2 * spectrum_index,
                 mask=mask,
@@ -325,12 +296,7 @@ def _packed_real_matvec_inplace(
             )
             lower = min(output_coefficient, input_coefficient)
             upper = max(output_coefficient, input_coefficient)
-            packed_index = (
-                lower * rank
-                - lower * (lower - 1) // 2
-                + upper
-                - lower
-            )
+            packed_index = lower * rank - lower * (lower - 1) // 2 + upper - lower
             weight = tl.load(
                 packed_ptr + packed_index * packed_stride + locations,
                 mask=mask,
@@ -341,9 +307,7 @@ def _packed_real_matvec_inplace(
         output_real += (real,)
         output_imaginary += (imaginary,)
     for output_coefficient in tl.static_range(0, rank):
-        output_index = (
-            (batch * rank + output_coefficient) * n_locations + absolute
-        )
+        output_index = (batch * rank + output_coefficient) * n_locations + absolute
         tl.store(
             supported_ptr + 2 * output_index,
             output_real[output_coefficient],
@@ -360,7 +324,8 @@ def _packed_real_matvec_inplace(
 def _packed_complex_matvec_inplace(
     supported_ptr,
     packed_ptr,
-    packed_stride: tl.constexpr,
+    packed_row_stride: tl.constexpr,
+    packed_location_stride: tl.constexpr,
     n_locations: tl.constexpr,
     location_offset: tl.constexpr,
     count: tl.constexpr,
@@ -377,9 +342,7 @@ def _packed_complex_matvec_inplace(
         real = tl.zeros((block,), dtype=tl.float32)
         imaginary = tl.zeros((block,), dtype=tl.float32)
         for input_coefficient in tl.static_range(0, rank):
-            spectrum_index = (
-                (batch * rank + input_coefficient) * n_locations + absolute
-            )
+            spectrum_index = (batch * rank + input_coefficient) * n_locations + absolute
             value_real = tl.load(
                 supported_ptr + 2 * spectrum_index,
                 mask=mask,
@@ -392,39 +355,28 @@ def _packed_complex_matvec_inplace(
             )
             lower = min(output_coefficient, input_coefficient)
             upper = max(output_coefficient, input_coefficient)
-            packed_index = (
-                lower * rank
-                - lower * (lower - 1) // 2
-                + upper
-                - lower
+            packed_index = lower * rank - lower * (lower - 1) // 2 + upper - lower
+            weight_index = (
+                packed_index * packed_row_stride + locations * packed_location_stride
             )
-            weight_index = packed_index * packed_stride + locations
             weight_real = tl.load(
-                packed_ptr + 2 * weight_index,
+                packed_ptr + weight_index,
                 mask=mask,
                 other=0.0,
             )
             weight_imaginary = tl.load(
-                packed_ptr + 2 * weight_index + 1,
+                packed_ptr + weight_index + 1,
                 mask=mask,
                 other=0.0,
             )
             if output_coefficient > input_coefficient:
                 weight_imaginary = -weight_imaginary
-            real += (
-                weight_real * value_real
-                - weight_imaginary * value_imaginary
-            )
-            imaginary += (
-                weight_real * value_imaginary
-                + weight_imaginary * value_real
-            )
+            real += weight_real * value_real - weight_imaginary * value_imaginary
+            imaginary += weight_real * value_imaginary + weight_imaginary * value_real
         output_real += (real,)
         output_imaginary += (imaginary,)
     for output_coefficient in tl.static_range(0, rank):
-        output_index = (
-            (batch * rank + output_coefficient) * n_locations + absolute
-        )
+        output_index = (batch * rank + output_coefficient) * n_locations + absolute
         tl.store(
             supported_ptr + 2 * output_index,
             output_real[output_coefficient],
@@ -479,10 +431,12 @@ def packed_complex_matvec_inplace(
         triton.cdiv(count, block),
         supported.shape[0],
     )
+    storage, row_stride, location_stride = _complex_storage(packed)
     _packed_complex_matvec_inplace[grid](
         supported.view(torch.float32),
-        packed.view(torch.float32),
-        packed_stride=packed.stride(0),
+        storage,
+        packed_row_stride=row_stride,
+        packed_location_stride=location_stride,
         n_locations=supported.shape[-1],
         location_offset=location_start,
         count=count,
@@ -549,6 +503,8 @@ def packed_complex_matvec_direct(
     """Apply complex packed matrices and return the autotuned algorithm name."""
     import torch
 
+    storage, row_stride, location_stride = _complex_storage(packed)
+
     def reuse() -> None:
         grid = lambda meta: (
             triton.cdiv(indices.numel(), meta["block"]),
@@ -557,9 +513,10 @@ def packed_complex_matvec_direct(
         _packed_complex_matvec_direct_reuse[grid](
             output.view(torch.float32),
             spectrum.view(torch.float32),
-            packed.view(torch.float32),
+            storage,
             indices,
-            packed_stride=packed.stride(0),
+            packed_row_stride=row_stride,
+            packed_location_stride=location_stride,
             n_grid=spectrum[0, 0].numel(),
             n_locations=indices.numel(),
             rank=spectrum.shape[1],
@@ -573,9 +530,10 @@ def packed_complex_matvec_direct(
         _packed_complex_matvec_direct[grid](
             output.view(torch.float32),
             spectrum.view(torch.float32),
-            packed.view(torch.float32),
+            storage,
             indices,
-            packed_stride=packed.stride(0),
+            packed_row_stride=row_stride,
+            packed_location_stride=location_stride,
             n_grid=spectrum[0, 0].numel(),
             n_locations=indices.numel(),
             rank=spectrum.shape[1],
@@ -587,6 +545,15 @@ def packed_complex_matvec_direct(
         indices,
         {"reuse": reuse, "independent": independent},
     )
+
+
+def _complex_storage(packed: Any) -> tuple[Any, int, int]:
+    """Expose interleaved complex64 components to Triton."""
+    import torch
+
+    if packed.dtype != torch.complex64 or packed.ndim != 2:
+        raise TypeError("packed complex CUDA kernels require complex64 storage")
+    return packed.view(torch.float32), packed.stride(0) * 2, 2
 
 
 def _autotuned_direct(
@@ -606,6 +573,7 @@ def _autotuned_direct(
         indices.numel(),
         packed.dtype,
         packed.is_complex(),
+        packed.ndim,
     )
     selected = _DIRECT_CHOICES.get(key)
     if selected is None:

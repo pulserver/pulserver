@@ -444,7 +444,7 @@ TEST(PulseqKOrigins, RefocusingNegatesK)
 
 TEST(PulseqKOrigins, InversionAndSaturationLeaveKAlone)
 {
-    for (char use : {'i', 's', 'p', 'u'})
+    for (char use : {'i', 's', 'p'})
     {
         Sequence seq;
         add_gradient(seq, 30000.0, 500e-6);
@@ -453,6 +453,29 @@ TEST(PulseqKOrigins, InversionAndSaturationLeaveKAlone)
         const auto origins = pulseq::block_k_origins(seq);
         EXPECT_NEAR(origins[2][0], 18.0, 1e-9) << "use '" << use << "'";
     }
+}
+
+/*
+ * A pulse that does not say what it is for is refused.
+ *
+ * This used to answer "it leaves k alone", which is the one guess that costs
+ * the most when it is wrong: an excitation resets k, so reading it as neutral
+ * means k never restarts and accumulates over the whole scan. Measured on a
+ * 32-line GRE whose rows carried no use, before that fixture was corrected:
+ * the last block's origin was 2.8e4 1/m against a k-max of the same size --
+ * a 98% error in the number TransformFOV builds its phase on, arrived at
+ * without a word.
+ *
+ * PyPulseq and Pulseq both guess "excitation" here. Refusing is the stricter
+ * reading and the one the `use` field exists to make possible.
+ */
+TEST(PulseqKOrigins, AnUndeclaredUseIsRefusedRatherThanGuessed)
+{
+    Sequence seq;
+    add_gradient(seq, 30000.0, 500e-6);
+    add_pulse(seq, 'u', 200e-6);
+
+    EXPECT_THROW(pulseq::block_k_origins(seq), std::runtime_error);
 }
 
 TEST(PulseqKOrigins, CrushersSplitAroundTheRefocusingCentre)

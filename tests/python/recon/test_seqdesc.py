@@ -6,7 +6,7 @@ import ismrmrd
 import numpy as np
 import pytest
 
-from pulserver.recon.bloch import (
+from pulserver.recon.simulation import (
     BSSFP,
     FSE,
     SPGR,
@@ -15,8 +15,6 @@ from pulserver.recon.bloch import (
     TissueProperties,
     make_interpreter,
     simulate_subspace,
-)
-from pulserver.recon.seqdesc import (
     AdcRole,
     EventType,
     RfUse,

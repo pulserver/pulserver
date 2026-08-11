@@ -1,4 +1,4 @@
-"""DeepInverse denoiser factories used by :func:`pulserver.recon.pics`."""
+"""DeepInverse-style denoiser classes used by :func:`pulserver.recon.pics`."""
 
 from __future__ import annotations
 
@@ -6,18 +6,17 @@ from collections.abc import Sequence
 from importlib import import_module
 from typing import Any
 
+try:
+    _ModuleBase = import_module("torch").nn.Module
+except ImportError:  # Keep the optional module importable without recon extras.
+    _ModuleBase = object
+
 __all__ = [
     "LLR",
     "TGV",
     "TV",
     "AverageDenoiser",
     "Wavelet",
-    "average",
-    "denoiser",
-    "llr",
-    "tgv",
-    "tv",
-    "wavelet",
 ]
 
 
@@ -31,7 +30,7 @@ def _models() -> Any:
         ) from error
 
 
-def wavelet(
+def _wavelet(
     *,
     dimension: int = 2,
     wavelet: str = "db8",
@@ -56,7 +55,29 @@ def wavelet(
     )
 
 
-Wavelet = wavelet
+class Wavelet(_ModuleBase):
+    """DeepInverse 2D or 3D orthogonal-wavelet denoiser."""
+
+    def __init__(
+        self,
+        *,
+        dimension: int = 2,
+        wavelet: str = "db8",
+        level: int = 3,
+        complex_data: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__()
+        self.model = _wavelet(
+            dimension=dimension,
+            wavelet=wavelet,
+            level=level,
+            complex_data=complex_data,
+            **kwargs,
+        )
+
+    def forward(self, x: Any, sigma: Any, **kwargs: Any) -> Any:
+        return self.model(x, sigma, **kwargs)
 
 
 def _model_arguments(models: tuple[Any, ...]) -> tuple[Any, ...]:
@@ -65,7 +86,7 @@ def _model_arguments(models: tuple[Any, ...]) -> tuple[Any, ...]:
     return models
 
 
-def average(*denoisers: Any) -> Any:
+def _average(*denoisers: Any) -> Any:
     """Create an equal-weight average of DeepInverse denoiser models.
 
     The returned model applies every input denoiser to the same ``(x, sigma)``
@@ -96,7 +117,19 @@ def average(*denoisers: Any) -> Any:
     return _AverageDenoiser()
 
 
-AverageDenoiser = average
+class AverageDenoiser(_ModuleBase):
+    """Construct an equal-weight ensemble of denoiser modules."""
+
+    def __init__(self, *denoisers: Any) -> None:
+        super().__init__()
+        implementation = _average(*denoisers)
+        self.models = implementation.models
+
+    def forward(self, x: Any, sigma: Any, **kwargs: Any) -> Any:
+        result = self.models[0](x, sigma, **kwargs)
+        for model in self.models[1:]:
+            result = result + model(x, sigma, **kwargs)
+        return result / len(self.models)
 
 
 # The LLR block/cycle-spinning design is adapted from SetsompopLab/MRF.
@@ -116,7 +149,7 @@ def _spatial_parameter(
     return result
 
 
-def llr(
+def _llr(
     *,
     dimension: int = 2,
     block_size: int | Sequence[int] = 8,
@@ -358,33 +391,58 @@ def llr(
     return _LLRDenoiser()
 
 
-LLR = llr
+class LLR(_ModuleBase):
+    """Construct the locally low-rank denoiser."""
+
+    def __init__(
+        self,
+        *,
+        dimension: int = 2,
+        block_size: int | Sequence[int] = 8,
+        stride: int | Sequence[int] | None = None,
+        cycle_spins: bool = True,
+        block_batch_size: int | None = 1024,
+    ) -> None:
+        super().__init__()
+        self.model = _llr(
+            dimension=dimension,
+            block_size=block_size,
+            stride=stride,
+            cycle_spins=cycle_spins,
+            block_batch_size=block_batch_size,
+        )
+
+    def forward(self, x: Any, sigma: Any, **kwargs: Any) -> Any:
+        return self.model(x, sigma, **kwargs)
 
 
-def tv(**kwargs: Any) -> Any:
+def _tv(**kwargs: Any) -> Any:
     """Create DeepInverse's spatially 2D/3D-agnostic TV denoiser."""
     return _models().TVDenoiser(**kwargs)
 
 
-TV = tv
+class TV(_ModuleBase):
+    """Construct DeepInverse's total-variation denoiser."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__()
+        self.model = _tv(**kwargs)
+
+    def forward(self, x: Any, sigma: Any, **kwargs: Any) -> Any:
+        return self.model(x, sigma, **kwargs)
 
 
-def tgv(**kwargs: Any) -> Any:
+def _tgv(**kwargs: Any) -> Any:
     """Create DeepInverse's spatially 2D/3D-agnostic TGV denoiser."""
     return _models().TGVDenoiser(**kwargs)
 
 
-TGV = tgv
+class TGV(_ModuleBase):
+    """Construct DeepInverse's total-generalized-variation denoiser."""
 
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__()
+        self.model = _tgv(**kwargs)
 
-def denoiser(name: str, **kwargs: Any) -> Any:
-    """Create a public ``wavelet``, ``llr``, ``tv``, or ``tgv`` denoiser."""
-    factories = {"wavelet": wavelet, "llr": llr, "tv": tv, "tgv": tgv}
-    try:
-        factory = factories[name.lower()]
-    except KeyError as error:
-        choices = ", ".join(factories)
-        raise ValueError(
-            f"Unknown denoiser {name!r}; choose one of {choices}"
-        ) from error
-    return factory(**kwargs)
+    def forward(self, x: Any, sigma: Any, **kwargs: Any) -> Any:
+        return self.model(x, sigma, **kwargs)

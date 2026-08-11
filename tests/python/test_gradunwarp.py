@@ -7,11 +7,11 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from pulserver.recon._mrd.gradunwarp import MrdCoefficientAccessor
 from pulserver.recon.gradunwarp import (
     GradientCoefficients,
     Gradunwarp,
     ImageGeometry,
-    MrdCoefficientAccessor,
     _evaluate_harmonics,
 )
 

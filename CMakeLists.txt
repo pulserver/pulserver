@@ -7,6 +7,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 find_package(pybind11 CONFIG REQUIRED)
 find_package(Python COMPONENTS Development.Module REQUIRED)
+find_package(Threads REQUIRED)
 
 # The standalone C++ Pulseq library.  Built before the extension modules
 # because _pulseqpp_wrapper links it.
@@ -50,6 +51,8 @@ set(PULSEG_C_SOURCES
     "${CMAKE_SOURCE_DIR}/csrc/src/pulseq/pulseq_parse.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/pulseq/pulseq_binary.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/pulseq/pulseq_names.c"
+    # The RF spectrum: pulseg's statistics call it, so it travels with them.
+    "${CMAKE_SOURCE_DIR}/csrc/src/pulseq/pulseq_rf.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_error.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/core/pulseg_math.c"
     "${CMAKE_SOURCE_DIR}/csrc/src/io/pulseg_opts.c"
@@ -137,6 +140,19 @@ file(GLOB SAMPLING_WRAPPERS
     "${CMAKE_CURRENT_BINARY_DIR}/python/pulserver/_ext/_sampling_wrapper*${CMAKE_SHARED_LIBRARY_SUFFIX}")
 install(FILES ${SAMPLING_WRAPPERS}
     DESTINATION ${CMAKE_SOURCE_DIR}/python/pulserver/_ext)
+
+# _recon_cpu_wrapper: small, ahead-of-time CPU kernels used by Torch through
+# zero-copy NumPy views. The binary contains a portable scalar path and, on
+# x86 GCC/Clang builds, AVX2/AVX-512 paths selected at runtime. Independent
+# frequency locations are partitioned across standard C++ threads.
+add_pybind_module(_recon_cpu_wrapper ""
+    SOURCES
+        "${CMAKE_SOURCE_DIR}/python/pulserver/_ext/_recon_cpu_wrapper.cpp"
+)
+target_link_libraries(_recon_cpu_wrapper PRIVATE Threads::Threads)
+
+install(TARGETS _recon_cpu_wrapper
+    DESTINATION pulserver/_ext)
 
 # _fastseq_wrapper: the fastseq block-writing loop plus its rounding and row
 # deduplication kernels. Optional at import time -- `fastseq.modules` falls back

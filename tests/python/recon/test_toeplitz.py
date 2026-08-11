@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from pulserver.recon import CudaStreaming
 from pulserver.recon._toeplitz import CompactToeplitzKernel, support_indices
+from pulserver.recon.execution import CudaStreaming
 import pulserver.recon.physics as physics
 
 
@@ -51,6 +51,56 @@ def _packed_kernel(transfer, image_shape, *, chunk_size=7):
         image_shape=image_shape,
         chunk_size=chunk_size,
     )
+
+
+@pytest.mark.parametrize("complex_transfer", [False, True])
+def test_precompiled_cpu_kernel_matches_torch_reference(complex_transfer):
+    extension = pytest.importorskip(
+        "pulserver._ext._recon_cpu_wrapper",
+        exc_type=ImportError,
+    )
+    generator = torch.Generator().manual_seed(2)
+    rank, locations = 4, 37
+    rows, columns = torch.triu_indices(rank, rank)
+    values = torch.randn(rows.numel(), locations, generator=generator)
+    if complex_transfer:
+        values = torch.complex(
+            values,
+            torch.randn(values.shape, generator=generator),
+        )
+    spectrum = torch.randn(
+        3,
+        rank,
+        locations,
+        dtype=torch.complex64,
+        generator=generator,
+    )
+    output = torch.empty_like(spectrum)
+    extension.packed_hermitian_matvec(
+        values.numpy(),
+        spectrum.numpy(),
+        output.numpy(),
+    )
+    matrix = torch.zeros(
+        locations,
+        rank,
+        rank,
+        dtype=values.dtype,
+    )
+    matrix[:, rows, columns] = values.T
+    off = rows != columns
+    matrix[:, columns[off], rows[off]] = values[off].T.conj()
+    reference = torch.einsum(
+        "lij,blj->bli",
+        matrix.to(spectrum.dtype),
+        spectrum.permute(0, 2, 1),
+    )
+    reference = reference.permute(0, 2, 1)
+
+    torch.testing.assert_close(output, reference, atol=2e-6, rtol=2e-6)
+    assert extension.simd_level() in {"scalar", "avx2", "avx512"}
+    assert extension.thread_count(1) == 1
+    assert extension.thread_count(32769) >= 1
 
 
 @pytest.mark.parametrize("real_transfer", [True, False])
@@ -509,6 +559,7 @@ def test_combined_subspace_off_resonance_matches_framewise_normal(monkeypatch):
         policy = CudaStreaming(
             transfer_chunk_size=3,
             physics_batch_size=1,
+            transfer_precision="float32",
         )
         streamed_kernel, streamed_factors = (
             physics._build_subspace_off_resonance_toeplitz(
@@ -553,6 +604,7 @@ def test_compact_kernel_cuda_matches_cpu():
     )
     cpu = _packed_kernel(transfer, image_shape, chunk_size=31)
     expected = cpu.apply(image)
+    cpu.cuda_transfer_precision = "float32"
     actual = cpu.apply(image.cuda()).cpu()
     torch.testing.assert_close(actual, expected, atol=3e-5, rtol=3e-5)
     assert cpu.last_cuda_mode == "resident"
@@ -572,9 +624,7 @@ def test_resident_cuda_banks_match_compact_cuda(real_transfer):
         generator=generator,
         dtype=torch.float32 if real_transfer else torch.complex64,
     )
-    transfer = 0.5 * (
-        raw + raw.movedim(0, 1).conj()
-    )
+    transfer = 0.5 * (raw + raw.movedim(0, 1).conj())
     rows, columns = torch.triu_indices(rank, rank)
     values = transfer[rows, columns].reshape(rows.numel(), -1).cuda()
     indices = support_indices(spatial_shape, support="full", device="cuda")
@@ -592,6 +642,7 @@ def test_resident_cuda_banks_match_compact_cuda(real_transfer):
         rank,
         image_shape=image_shape,
         cuda_mode="compact",
+        cuda_transfer_precision="float32",
     )
     resident = CompactToeplitzKernel(
         values.clone(),
@@ -600,6 +651,7 @@ def test_resident_cuda_banks_match_compact_cuda(real_transfer):
         rank,
         image_shape=image_shape,
         cuda_mode="resident",
+        cuda_transfer_precision="float32",
     )
 
     expected = compact.apply(image)
@@ -614,9 +666,9 @@ def test_resident_cuda_banks_match_compact_cuda(real_transfer):
     assert compact.last_cuda_mode == "compact"
     assert resident.last_cuda_mode == "resident"
     assert (
-        resident._resident_workspaces[
-            resident._resident_workspace_key(image)
-        ]["input"].data_ptr()
+        resident._resident_workspaces[resident._resident_workspace_key(image)][
+            "input"
+        ].data_ptr()
         == first_input.data_ptr()
     )
 
@@ -646,6 +698,7 @@ def test_resident_cuda_fp16_transfer_uses_fp32_accumulation():
         rank,
         image_shape=image_shape,
         cuda_mode="resident",
+        cuda_transfer_precision="float32",
     )
     fp16 = CompactToeplitzKernel(
         values.clone(),
@@ -663,6 +716,99 @@ def test_resident_cuda_fp16_transfer_uses_fp32_accumulation():
     torch.testing.assert_close(result, reference, atol=2e-3, rtol=2e-3)
     workspace = fp16._resident_workspaces[fp16._resident_workspace_key(image)]
     assert workspace["values"].dtype == torch.float16
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+@pytest.mark.skipif(
+    not torch.cuda.is_bf16_supported(),
+    reason="native CUDA BF16 is unavailable",
+)
+def test_resident_cuda_uses_cached_bfloat16_transfer():
+    generator = torch.Generator().manual_seed(53)
+    image_shape = (6, 5)
+    spatial_shape = (12, 10)
+    rank = 3
+    raw = torch.randn(
+        rank,
+        rank,
+        *spatial_shape,
+        generator=generator,
+        dtype=torch.float32,
+    )
+    transfer = 0.5 * (raw + raw.movedim(0, 1).conj())
+    rows, columns = torch.triu_indices(rank, rank)
+    values = transfer[rows, columns].reshape(rows.numel(), -1)
+    indices = support_indices(spatial_shape, support="full")
+    image = torch.randn(
+        1,
+        rank,
+        *image_shape,
+        generator=generator,
+        dtype=torch.complex64,
+    ).cuda()
+    reference = CompactToeplitzKernel(
+        values,
+        indices,
+        spatial_shape,
+        rank,
+        image_shape=image_shape,
+        cuda_mode="resident",
+        cuda_transfer_precision="float32",
+    )
+    automatic = CompactToeplitzKernel(
+        values,
+        indices,
+        spatial_shape,
+        rank,
+        image_shape=image_shape,
+        cuda_mode="resident",
+        cuda_transfer_precision="bfloat16",
+    )
+
+    expected = reference.apply(image)
+    result = automatic.apply(image)
+    workspace = automatic._resident_workspaces[automatic._resident_workspace_key(image)]
+    first_pointer = workspace["values"].data_ptr()
+    repeated = automatic.apply(image)
+
+    torch.testing.assert_close(result, expected, atol=5e-3, rtol=5e-3)
+    torch.testing.assert_close(repeated, result, atol=0, rtol=0)
+    assert workspace["values"].dtype == torch.bfloat16
+    assert workspace["values"].ndim == 2
+    assert (
+        automatic._resident_workspaces[automatic._resident_workspace_key(image)][
+            "values"
+        ].data_ptr()
+        == first_pointer
+    )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+@pytest.mark.skipif(
+    not torch.cuda.is_bf16_supported(),
+    reason="native CUDA BF16 is unavailable",
+)
+def test_cuda_auto_precision_uses_bfloat16_only_for_real_kernels():
+    rank, locations = 3, 8192
+    values = torch.randn(rank * (rank + 1) // 2, locations)
+    kernel = CompactToeplitzKernel(
+        values,
+        torch.arange(locations, dtype=torch.int32),
+        (locations,),
+        rank,
+        image_shape=(locations // 2,),
+    )
+
+    complex_kernel = CompactToeplitzKernel(
+        torch.complex(values, torch.randn_like(values)),
+        torch.arange(locations, dtype=torch.int32),
+        (locations,),
+        rank,
+        image_shape=(locations // 2,),
+    )
+
+    assert kernel._cuda_precision("auto", "cuda") == "bfloat16"
+    assert complex_kernel._cuda_precision("auto", "cuda") == "float32"
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
@@ -697,6 +843,7 @@ def test_resident_cuda_fuses_sense_factors_and_accumulation():
         rank,
         image_shape=image_shape,
         cuda_mode="compact",
+        cuda_transfer_precision="float32",
     )
     resident = CompactToeplitzKernel(
         values.clone(),
@@ -705,6 +852,7 @@ def test_resident_cuda_fuses_sense_factors_and_accumulation():
         rank,
         image_shape=image_shape,
         cuda_mode="resident",
+        cuda_transfer_precision="float32",
     )
 
     reference = physics._apply_sense_toeplitz(

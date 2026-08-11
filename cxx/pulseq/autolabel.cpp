@@ -1,0 +1,1079 @@
+/**
+ * @file autolabel.cpp
+ * @brief Deriving encoding counters from a trajectory.  See autolabel.hpp.
+ */
+
+#include "pulseq/autolabel.hpp"
+
+#include "pulseq/sequence.hpp"
+#include "pulseq/shape.hpp"
+
+/* The RF spectrum, at the C library's ordinary precision.  Safe here because
+ * this translation unit never sees raw64.hpp -- see the warning on that file. */
+#include "pulseq_rf.h"
+
+#include <algorithm>
+#include <cmath>
+#include <map>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace pulseq
+{
+    namespace
+    {
+        using Vec3 = std::array<double, 3>;
+
+        /** reflect, then reorder -- MATLAB's order, and it is not commutative. */
+        Vec3 orient(const Vec3& v, const AutoLabelOptions& o)
+        {
+            Vec3 reflected = v;
+            for (int a = 0; a < 3; ++a)
+            {
+                if (o.reflect[static_cast<size_t>(a)])
+                    reflected[static_cast<size_t>(a)] = -reflected[static_cast<size_t>(a)];
+            }
+            Vec3 out{{0.0, 0.0, 0.0}};
+            for (int a = 0; a < 3; ++a)
+            {
+                const int src = o.reorder[static_cast<size_t>(a)];
+                out[static_cast<size_t>(a)] = reflected[static_cast<size_t>(src)];
+            }
+            return out;
+        }
+
+        double norm3(const Vec3& v)
+        {
+            return std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+        }
+
+        double dot3(const Vec3& a, const Vec3& b)
+        {
+            return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        }
+
+        /** Index of the largest component by magnitude. */
+        int dominant(const Vec3& v)
+        {
+            int best = 0;
+            for (int a = 1; a < 3; ++a)
+            {
+                if (std::fabs(v[static_cast<size_t>(a)]) > std::fabs(v[static_cast<size_t>(best)]))
+                    best = a;
+            }
+            return best;
+        }
+
+        /**
+         * The unit normal a slice-select gradient defines.
+         *
+         * Signed so its dominant component is positive, which is what makes
+         * the offset of a slice independent of the sign the gradient happened
+         * to be played with -- a refocused or reversed slice select selects the
+         * same slice.
+         */
+        Vec3 slice_normal(const Vec3& g)
+        {
+            const double n = norm3(g);
+            Vec3 out{{0.0, 0.0, 0.0}};
+            if (n <= 0.0)
+                return out;
+            const double sign = (g[static_cast<size_t>(dominant(g))] < 0.0) ? -1.0 : 1.0;
+            for (int a = 0; a < 3; ++a)
+                out[static_cast<size_t>(a)] = sign * g[static_cast<size_t>(a)] / n;
+            return out;
+        }
+
+        double median_of(std::vector<double> v)
+        {
+            if (v.empty())
+                return 0.0;
+            const size_t mid = v.size() / 2;
+            std::nth_element(v.begin(), v.begin() + static_cast<long>(mid), v.end());
+            const double hi = v[mid];
+            if (v.size() % 2 == 1)
+                return hi;
+            const double lo = *std::max_element(v.begin(), v.begin() + static_cast<long>(mid));
+            return 0.5 * (lo + hi);
+        }
+
+        /**
+         * The spectral bandwidth of the RF pulse in block @p block_index, Hz.
+         *
+         * Rebuilds the complex pulse from the file's own three shapes --
+         * magnitude, phase and, when present, an explicit time base -- and
+         * hands it to the shared estimator in `csrc/src/pulseq/pulseq_rf.c`,
+         * the same one pulseg's RF statistics use.  The amplitude scalar is
+         * left out: the width is measured relative to the pulse's own peak, so
+         * scaling it cannot move the answer.
+         *
+         * Returns 0 when the block has no pulse or the spectrum is not
+         * measurable -- never an analytic stand-in, which at this layer would
+         * be indistinguishable from a measurement.
+         */
+        double rf_bandwidth(const Sequence& seq, int block_index)
+        {
+            const Block block = seq.get_block(block_index);
+            if (block.rf == 0)
+                return 0.0;
+
+            const double* row = seq.rf_library().row(block.rf);
+            const int mag_id = static_cast<int>(row[1]);
+            const int phase_id = static_cast<int>(row[2]);
+            const int time_id = static_cast<int>(row[3]);
+            const double center = row[4];
+            if (mag_id <= 0)
+                return 0.0;
+
+            const ShapeLibrary& shapes = seq.shape_library();
+            const std::vector<double> magnitude = decompress_shape(
+                shapes.samples(mag_id), shapes.num_compressed(mag_id),
+                shapes.num_uncompressed(mag_id));
+            const int n = static_cast<int>(magnitude.size());
+            if (n < 2)
+                return 0.0;
+
+            std::vector<double> phase;
+            if (phase_id > 0)
+            {
+                phase = decompress_shape(shapes.samples(phase_id),
+                                         shapes.num_compressed(phase_id),
+                                         shapes.num_uncompressed(phase_id));
+                if (static_cast<int>(phase.size()) != n)
+                    phase.clear();
+            }
+
+            /* Times in microseconds, which is what the estimator takes.  With
+             * no time shape the samples sit on the RF raster; with one, the
+             * shape holds raster counts, as the file format defines it. */
+            const double raster_us = seq.rf_raster_time() * 1e6;
+            std::vector<float> t(static_cast<size_t>(n));
+            if (time_id > 0)
+            {
+                const std::vector<double> tt = decompress_shape(
+                    shapes.samples(time_id), shapes.num_compressed(time_id),
+                    shapes.num_uncompressed(time_id));
+                if (static_cast<int>(tt.size()) != n)
+                    return 0.0;
+                for (int i = 0; i < n; ++i)
+                    t[static_cast<size_t>(i)] = static_cast<float>(tt[static_cast<size_t>(i)] *
+                                                                   raster_us);
+            }
+            else
+            {
+                for (int i = 0; i < n; ++i)
+                    t[static_cast<size_t>(i)] = static_cast<float>((i + 0.5) * raster_us);
+            }
+
+            /* Phase is carried in turns, so a full circle is 1. */
+            std::vector<float> re(static_cast<size_t>(n));
+            std::vector<float> im(static_cast<size_t>(n));
+            for (int i = 0; i < n; ++i)
+            {
+                const double m = magnitude[static_cast<size_t>(i)];
+                const double p =
+                    phase.empty() ? 0.0 : 2.0 * M_PI * phase[static_cast<size_t>(i)];
+                re[static_cast<size_t>(i)] = static_cast<float>(m * std::cos(p));
+                im[static_cast<size_t>(i)] = static_cast<float>(m * std::sin(p));
+            }
+
+            pulseq_rf_spectrum* plan = nullptr;
+            if (pulseq_rf_spectrum_create(&plan, static_cast<float>(raster_us),
+                                          static_cast<float>(PULSEQ_RF_DEFAULT_RESOLUTION_HZ)) < 0)
+                return 0.0;
+
+            double bandwidth = 0.0;
+            if (pulseq_rf_spectrum_run(plan, re.data(), im.data(), t.data(), n,
+                                       static_cast<float>(center * 1e6)) >= 0)
+                bandwidth = pulseq_rf_bandwidth(
+                    plan, static_cast<float>(PULSEQ_RF_DEFAULT_CUTOFF), nullptr);
+            pulseq_rf_spectrum_free(plan);
+            return bandwidth;
+        }
+
+        /** MATLAB's `any(x ~= 0)`: whether a counter is ever set. */
+        bool any_nonzero(const std::vector<int>& v)
+        {
+            for (size_t i = 0; i < v.size(); ++i)
+            {
+                if (v[i] != 0)
+                    return true;
+            }
+            return false;
+        }
+
+    }  // namespace
+
+    std::vector<std::pair<std::string, const std::vector<int>*>> AutoLabels::present() const
+    {
+        std::vector<std::pair<std::string, const std::vector<int>*>> out;
+        /* The order counters are emitted in.  Fixed rather than incidental so
+         * two runs produce the same extension library and a diff of two
+         * labelled files is about the labels. */
+        if (!noise.empty())
+            out.emplace_back("NOISE", &noise);
+        if (!slc.empty())
+            out.emplace_back("SLC", &slc);
+        if (!rev.empty())
+            out.emplace_back("REV", &rev);
+        if (!lin.empty())
+            out.emplace_back("LIN", &lin);
+        if (!par.empty())
+            out.emplace_back("PAR", &par);
+        if (!rep.empty())
+            out.emplace_back("REP", &rep);
+        /* Declaration order, after the derived counters: the caller chose it,
+         * and it is the order the dimensions vary in. */
+        for (size_t i = 0; i < named.size(); ++i)
+        {
+            if (!named[i].second.empty())
+                out.emplace_back(named[i].first, &named[i].second);
+        }
+        return out;
+    }
+
+    /* ================================================================== */
+    /*  Detection                                                         */
+    /* ================================================================== */
+
+    AutoLabelResult detect_labels(const KSpace& ks, const Sequence& seq,
+                                  const AutoLabelOptions& options)
+    {
+        /* A reorder that is not a permutation would silently duplicate one
+         * axis and drop another, and every number below would still look
+         * plausible. */
+        {
+            std::array<bool, 3> seen{{false, false, false}};
+            for (int a = 0; a < 3; ++a)
+            {
+                const int src = options.reorder[static_cast<size_t>(a)];
+                if (src < 0 || src > 2 || seen[static_cast<size_t>(src)])
+                    throw std::runtime_error("auto_label: reorder is not a permutation of 0,1,2");
+                seen[static_cast<size_t>(src)] = true;
+            }
+        }
+
+        /* The declared dimensions, checked before anything is computed: a
+         * declaration that cannot be honoured is the caller's mistake, and
+         * saying so before the work is done is cheaper for both of us. */
+        {
+            const std::vector<RepeatDim>& dims = options.repeat_dims;
+            for (size_t d = 0; d < dims.size(); ++d)
+            {
+                const std::string& name = dims[d].name;
+                if (name.empty())
+                    throw std::runtime_error("auto_label: a repeat dimension has no name");
+                if (name == "NOISE" || name == "SLC" || name == "REV" || name == "LIN" ||
+                    name == "PAR")
+                    throw std::runtime_error(
+                        "auto_label: " + name +
+                        " is derived from the trajectory, so it cannot also be a repeat "
+                        "dimension");
+                for (size_t e = 0; e < d; ++e)
+                {
+                    if (dims[e].name == name)
+                        throw std::runtime_error("auto_label: repeat dimension " + name +
+                                                 " is declared twice");
+                }
+                if (dims[d].size < 0)
+                    throw std::runtime_error("auto_label: repeat dimension " + name +
+                                             " has a negative size");
+                if (dims[d].size == 0 && d + 1 != dims.size())
+                    throw std::runtime_error(
+                        "auto_label: only the last repeat dimension may be open-ended, and " +
+                        name + " is not it -- a dimension of unknown size cannot have a faster "
+                               "one nested inside it");
+            }
+        }
+
+        AutoLabelResult result;
+        result.key_groups = ks.key_groups;
+        result.num_readouts = static_cast<int>(ks.readouts.size());
+
+        const int n_adc = static_cast<int>(ks.readouts.size());
+        if (n_adc == 0)
+            return result;
+
+        result.labels.adc_block.reserve(static_cast<size_t>(n_adc));
+        for (const Readout& r : ks.readouts)
+            result.labels.adc_block.push_back(r.block_index);
+
+        /* -- slice offsets --------------------------------------------- */
+        /*
+         * An excitation's frequency offset over its gradient is a position
+         * along the gradient direction; projecting the per-axis positions on
+         * the signed unit normal collapses the three into the one number that
+         * identifies the slice.
+         */
+        const int n_exc = static_cast<int>(ks.excitations.size());
+        std::vector<double> slice_offset(static_cast<size_t>(n_exc), 0.0);
+        for (int i = 0; i < n_exc; ++i)
+        {
+            const Vec3 g = orient(ks.excitations[static_cast<size_t>(i)].g, options);
+            const Vec3 pos = orient(ks.slice_pos[static_cast<size_t>(i)], options);
+            const Vec3 n = slice_normal(g);
+            const double offset = dot3(pos, n);
+            slice_offset[static_cast<size_t>(i)] = std::isfinite(offset) ? offset : 0.0;
+        }
+
+        /* -- noise scans ------------------------------------------------ */
+        /*
+         * An ADC before the first excitation has not sampled a signal, so it
+         * is not part of the encoding and is excluded from every counter
+         * derived below.  With no excitation at all there is no signal to
+         * label and the whole scan is noise.
+         */
+        int first_signal = n_adc;
+        if (n_exc > 0)
+        {
+            const double t_first = ks.excitations[0].t;
+            for (int i = 0; i < n_adc; ++i)
+            {
+                if (ks.readouts[static_cast<size_t>(i)].t0 > t_first)
+                {
+                    first_signal = i;
+                    break;
+                }
+            }
+        }
+        const int n_signal = n_adc - first_signal;
+
+        std::vector<int> noise(static_cast<size_t>(n_adc), 0);
+        for (int i = 0; i < first_signal; ++i)
+            noise[static_cast<size_t>(i)] = 1;
+        if (first_signal > 0)
+            result.labels.noise = noise;
+        if (n_signal <= 0)
+            return result;
+
+        /* -- slice counter per ADC -------------------------------------- */
+        /*
+         * The excitation an ADC belongs to is the last one before it.  Both
+         * lists are in time order, so one merge walk does it.
+         *
+         * Two things about the table this builds.
+         *
+         * **It covers the slices that were acquired**, not every excitation in
+         * the file.  A scan that plays dummy TRs before acquiring -- five of
+         * them in gre_2d_3sl_3avg -- would otherwise have those dummies claim
+         * slice indices, and a dummy at a position that is never acquired
+         * would put a slice in `SlicePositions` that the recon allocates and
+         * never fills.  `autoLabel.m:122` uniques over all of them and does
+         * carry that entry.
+         *
+         * **It is ordered by position, not by acquisition.**  SLC is a
+         * geometric index -- it says where a slice is, and `SlicePositions`
+         * beside it says where that is in metres -- so the counter has to
+         * follow the prescription and not the order the scanner chose to visit
+         * it in.  An interleaved acquisition (0, 2, 4, 1, 3) is the case that
+         * separates the two: indexing by first occurrence would number those
+         * five slices 0..4 in the order they arrive and hand the recon a stack
+         * shuffled into acquisition order.  Nothing about the prescription is
+         * assumed here -- not that the slices are evenly spaced, not that
+         * there are no gaps, not that they are contiguous.  The positions come
+         * from the pulses' own frequency offsets and are sorted; whatever
+         * spacing that produces is the answer.
+         *
+         * MATLAB computes both orderings (`sliceCountersAcquisitionOrder` and
+         * `sliceCountersSorted`, lines 122 and 128) and labels with the first.
+         *
+         * @warning The offsets are read from the RF frequency offsets *as
+         * authored*.  `TransformFOV` carries a translation as phase and leaves
+         * them alone, but a scale multiplies the slice-select gradient without
+         * touching the offset, so a slice that was at 5 mm reads as being
+         * somewhere else afterwards.  Label first, transform second.
+         *
+         * The tolerance replaces MATLAB's exact `unique`, which would split
+         * one slice in two over a last-bit difference between two excitations
+         * of it.  It is relative to the spread, so it scales with the scan;
+         * nanometres against millimetre slice spacing cannot merge two real
+         * slices.
+         */
+        std::vector<double> unique_slices;
+        std::vector<int> slice_of_adc(static_cast<size_t>(n_adc), 0);
+        {
+            double widest = 0.0;
+            for (int i = 0; i < n_exc; ++i)
+                widest = std::max(widest, std::fabs(slice_offset[static_cast<size_t>(i)]));
+            const double tol = (widest > 0.0) ? 1e-6 * widest : 1e-12;
+
+            /* Pass one: which distinct positions were acquired, and which one
+             * each ADC belongs to.  Grouped in arrival order for now -- the
+             * ranking is a second pass, because the last slice to arrive can
+             * still be the first one in space. */
+            std::vector<int> group_of_adc(static_cast<size_t>(n_adc), -1);
+            int e = 0;
+            for (int i = first_signal; i < n_adc; ++i)
+            {
+                const double t = ks.readouts[static_cast<size_t>(i)].t0;
+                while (e + 1 < n_exc && ks.excitations[static_cast<size_t>(e + 1)].t < t)
+                    ++e;
+                if (n_exc == 0)
+                    continue;
+
+                const double v = slice_offset[static_cast<size_t>(e)];
+                int found = -1;
+                for (size_t s = 0; s < unique_slices.size(); ++s)
+                {
+                    if (std::fabs(unique_slices[s] - v) <= tol)
+                    {
+                        found = static_cast<int>(s);
+                        break;
+                    }
+                }
+                if (found < 0)
+                {
+                    found = static_cast<int>(unique_slices.size());
+                    unique_slices.push_back(v);
+                }
+                group_of_adc[static_cast<size_t>(i)] = found;
+            }
+
+            /* Pass two: rank the positions and relabel.  `rank[g]` is where
+             * arrival-order group g sits once the positions are sorted. */
+            std::vector<int> order(unique_slices.size());
+            for (size_t s = 0; s < order.size(); ++s)
+                order[s] = static_cast<int>(s);
+            std::sort(order.begin(), order.end(), [&unique_slices](int a, int b) {
+                return unique_slices[static_cast<size_t>(a)] <
+                       unique_slices[static_cast<size_t>(b)];
+            });
+
+            std::vector<int> rank(unique_slices.size(), 0);
+            std::vector<double> sorted_positions(unique_slices.size(), 0.0);
+            for (size_t s = 0; s < order.size(); ++s)
+            {
+                rank[static_cast<size_t>(order[s])] = static_cast<int>(s);
+                sorted_positions[s] = unique_slices[static_cast<size_t>(order[s])];
+            }
+            unique_slices.swap(sorted_positions);
+
+            for (int i = first_signal; i < n_adc; ++i)
+            {
+                const int g = group_of_adc[static_cast<size_t>(i)];
+                if (g >= 0)
+                    slice_of_adc[static_cast<size_t>(i)] = rank[static_cast<size_t>(g)];
+            }
+        }
+
+        /* -- readout direction, polarity and the Cartesian test ---------- */
+        std::vector<Vec3> g_echo(static_cast<size_t>(n_adc));
+        std::vector<Vec3> k_echo(static_cast<size_t>(n_adc));
+        std::vector<int> sign_readout(static_cast<size_t>(n_adc), 0);
+
+        for (int i = 0; i < n_adc; ++i)
+        {
+            g_echo[static_cast<size_t>(i)] =
+                orient(ks.readouts[static_cast<size_t>(i)].g_echo, options);
+            k_echo[static_cast<size_t>(i)] =
+                orient(ks.readouts[static_cast<size_t>(i)].k_echo, options);
+        }
+
+        const Vec3& g_first = g_echo[static_cast<size_t>(first_signal)];
+        const double s_first =
+            (g_first[static_cast<size_t>(dominant(g_first))] < 0.0) ? -1.0 : 1.0;
+
+        for (int i = first_signal; i < n_adc; ++i)
+        {
+            const Vec3& g = g_echo[static_cast<size_t>(i)];
+            const double s = (g[static_cast<size_t>(dominant(g))] < 0.0) ? -1.0 : 1.0;
+            sign_readout[static_cast<size_t>(i)] = (s < 0.0) ? -1 : 1;
+
+            double diff = 0.0;
+            for (int a = 0; a < 3; ++a)
+            {
+                const double d = g[static_cast<size_t>(a)] * s -
+                                 g_first[static_cast<size_t>(a)] * s_first;
+                diff += d * d;
+            }
+            if (std::sqrt(diff) > options.cartesian_tolerance)
+            {
+                throw std::runtime_error(
+                    "auto_label: the readouts do not share a direction, so this sequence has no "
+                    "Cartesian encoding counters to derive (readout at block " +
+                    std::to_string(ks.readouts[static_cast<size_t>(i)].block_index) + ")");
+            }
+        }
+
+        /* -- the central readout, and the sampling step it defines -------- */
+        const int central = ks.central_readout;
+        if (central < 0 || central >= n_adc)
+            throw std::runtime_error("auto_label: no readout passes through the k-space centre");
+        if (ks.readouts[static_cast<size_t>(central)].center_sample < 0)
+            throw std::runtime_error(
+                "auto_label: the central readout has no echo, so the k-space centre is not a "
+                "sample of it");
+
+        const Readout& central_ro = ks.readouts[static_cast<size_t>(central)];
+        if (static_cast<int>(ks.k_central.size()) != 3 * central_ro.num_samples)
+            throw std::runtime_error("auto_label: the central readout's samples are missing");
+
+        /* Its samples projected on its own direction: one monotone coordinate
+         * standing in for the three, which is what makes a spacing a scalar. */
+        std::vector<double> projection(static_cast<size_t>(central_ro.num_samples), 0.0);
+        {
+            Vec3 dir = g_echo[static_cast<size_t>(central)];
+            const double n = norm3(dir);
+            if (n <= 0.0)
+                throw std::runtime_error("auto_label: the central readout has no gradient");
+            for (int a = 0; a < 3; ++a)
+                dir[static_cast<size_t>(a)] /= n;
+
+            for (int j = 0; j < central_ro.num_samples; ++j)
+            {
+                Vec3 k{{0.0, 0.0, 0.0}};
+                for (int a = 0; a < 3; ++a)
+                    k[static_cast<size_t>(a)] =
+                        ks.k_central[static_cast<size_t>(a) *
+                                         static_cast<size_t>(central_ro.num_samples) +
+                                     static_cast<size_t>(j)];
+                projection[static_cast<size_t>(j)] = dot3(orient(k, options), dir);
+            }
+        }
+
+        double dk_readout = 0.0;
+        {
+            std::vector<double> steps;
+            steps.reserve(projection.size());
+            for (size_t j = 1; j < projection.size(); ++j)
+                steps.push_back(projection[j] - projection[j - 1]);
+            dk_readout = median_of(steps);
+        }
+        if (dk_readout == 0.0)
+            throw std::runtime_error("auto_label: the central readout does not move through k");
+
+        /* -- ramp sampling ---------------------------------------------- */
+        /*
+         * A readout sampled on a trapezoid's ramps has a curved k, and a
+         * gridder cannot undo that without the ramp geometry.  The test is the
+         * second difference of the projection, scaled so it reads as a
+         * fraction of the readout: uniform sampling gives zero.
+         */
+        {
+            bool curved = false;
+            for (size_t j = 2; j < projection.size(); ++j)
+            {
+                const double second =
+                    projection[j] - 2.0 * projection[j - 1] + projection[j - 2];
+                if (std::fabs(second / dk_readout * static_cast<double>(projection.size())) > 0.1)
+                {
+                    curved = true;
+                    break;
+                }
+            }
+            if (curved)
+            {
+                const Block block = seq.get_block(central_ro.block_index);
+                /* The readout axis is the dominant one, and reorder would move
+                 * it -- MATLAB warns and gives up there, so do the same. */
+                const int axis = dominant(g_echo[static_cast<size_t>(central)]);
+                const int32_t grad_ids[3] = {block.gx, block.gy, block.gz};
+                const int32_t grad = grad_ids[axis];
+                if (options.reorder[static_cast<size_t>(axis)] == axis && grad != 0 &&
+                    seq.grad_kind(grad) == GradKind::Trap && block.adc != 0)
+                {
+                    const double* trap = seq.trap_library().row(seq.grad_row(grad));
+                    const double* adc = seq.adc_library().row(block.adc);
+                    result.aux.has_gridding = true;
+                    result.aux.trapezoid_gridding[0] = trap[1]; /* rise  */
+                    result.aux.trapezoid_gridding[1] = trap[2]; /* flat  */
+                    result.aux.trapezoid_gridding[2] = trap[3]; /* fall  */
+                    result.aux.trapezoid_gridding[3] = adc[2] - trap[4];
+                    result.aux.trapezoid_gridding[4] = adc[0] * adc[1];
+                    result.aux.target_gridded_samples = static_cast<int>(adc[0]);
+                }
+            }
+        }
+
+        /* -- reduce to one point per readout ----------------------------- */
+        /*
+         * From here the trajectory is the echo positions and nothing else.
+         * The readout axis vanishes with them -- every echo sits at the same
+         * place along it -- which is exactly why the surviving axes are the
+         * phase-encoded ones and why LIN comes off the first of them.
+         */
+        const double k_threshold = std::fabs(dk_readout / 50.0);
+        const Vec3 k_center = orient(ks.k_center, options);
+
+        std::array<bool, 3> encoded{{false, false, false}};
+        for (int a = 0; a < 3; ++a)
+        {
+            double extent = 0.0;
+            for (int i = first_signal; i < n_adc; ++i)
+                extent = std::max(extent, std::fabs(k_echo[static_cast<size_t>(i)]
+                                                        [static_cast<size_t>(a)] -
+                                                    k_center[static_cast<size_t>(a)]));
+            encoded[static_cast<size_t>(a)] = extent >= k_threshold;
+        }
+
+        std::vector<int> axes;
+        for (int a = 0; a < 3; ++a)
+        {
+            if (encoded[static_cast<size_t>(a)])
+                axes.push_back(a);
+        }
+
+        std::vector<int> lin(static_cast<size_t>(n_adc), 0);
+        std::vector<int> par(static_cast<size_t>(n_adc), 0);
+        std::vector<std::vector<int>> index(axes.size());
+
+        for (size_t ax = 0; ax < axes.size(); ++ax)
+        {
+            const int a = axes[ax];
+
+            /* The encoding step: the smallest spacing between distinct
+             * positions, averaged over every spacing that agrees with it.
+             * Averaging rather than taking the minimum outright is what keeps
+             * one noisy pair from setting the step for the whole scan. */
+            std::vector<double> sorted;
+            sorted.reserve(static_cast<size_t>(n_signal));
+            for (int i = first_signal; i < n_adc; ++i)
+                sorted.push_back(k_echo[static_cast<size_t>(i)][static_cast<size_t>(a)] -
+                                 k_center[static_cast<size_t>(a)]);
+            std::sort(sorted.begin(), sorted.end());
+
+            double dk_min = 0.0;
+            bool have_min = false;
+            for (size_t j = 1; j < sorted.size(); ++j)
+            {
+                const double d = sorted[j] - sorted[j - 1];
+                if (d < k_threshold)
+                    continue;
+                if (!have_min || d < dk_min)
+                {
+                    dk_min = d;
+                    have_min = true;
+                }
+            }
+
+            double dk = 0.0;
+            if (have_min)
+            {
+                double total = 0.0;
+                int count = 0;
+                for (size_t j = 1; j < sorted.size(); ++j)
+                {
+                    const double d = sorted[j] - sorted[j - 1];
+                    if (d < k_threshold || d - dk_min > k_threshold)
+                        continue;
+                    total += d;
+                    ++count;
+                }
+                dk = (count > 0) ? total / count : 0.0;
+            }
+
+            index[ax].assign(static_cast<size_t>(n_adc), 0);
+            if (dk == 0.0)
+                continue;
+
+            /*
+             * Indices are counted from the readout nearest the origin among
+             * the surviving axes -- not from `k_center`, which is a sample of
+             * the central readout and therefore carries whatever offset the
+             * readout axis has.  MATLAB does the same, and it is what makes
+             * the centre line an integer rather than a half-step.
+             */
+            int origin = first_signal;
+            double best = 0.0;
+            for (int i = first_signal; i < n_adc; ++i)
+            {
+                double d = 0.0;
+                for (size_t b = 0; b < axes.size(); ++b)
+                {
+                    const double v =
+                        k_echo[static_cast<size_t>(i)][static_cast<size_t>(axes[b])];
+                    d += v * v;
+                }
+                if (i == first_signal || d < best)
+                {
+                    best = d;
+                    origin = i;
+                }
+            }
+
+            const double base = k_echo[static_cast<size_t>(origin)][static_cast<size_t>(a)];
+            int lowest = 0;
+            for (int i = first_signal; i < n_adc; ++i)
+            {
+                const double v = k_echo[static_cast<size_t>(i)][static_cast<size_t>(a)] - base;
+                const int idx = static_cast<int>(std::floor(v / dk + 0.5));
+                index[ax][static_cast<size_t>(i)] = idx;
+                if (i == first_signal || idx < lowest)
+                    lowest = idx;
+            }
+            for (int i = first_signal; i < n_adc; ++i)
+                index[ax][static_cast<size_t>(i)] -= lowest;
+        }
+
+        if (!axes.empty())
+        {
+            for (int i = 0; i < n_adc; ++i)
+                lin[static_cast<size_t>(i)] = index[0][static_cast<size_t>(i)];
+        }
+        if (axes.size() > 1)
+        {
+            for (int i = 0; i < n_adc; ++i)
+                par[static_cast<size_t>(i)] = index[1][static_cast<size_t>(i)];
+        }
+
+        /* -- repetitions -------------------------------------------------- */
+        /*
+         * How many times this (slice, line, partition, ...) has already been
+         * acquired.  A map rather than a dense array over the index bounding
+         * box: an undersampled or non-rectangular 3D scan has a bounding box
+         * far larger than the number of readouts in it, and the count is a
+         * property of the readouts.
+         */
+        std::vector<int> rep(static_cast<size_t>(n_adc), 0);
+        {
+            std::map<std::vector<int>, int> seen;
+            std::vector<int> key(axes.size() + 1, 0);
+            for (int i = first_signal; i < n_adc; ++i)
+            {
+                key[0] = slice_of_adc[static_cast<size_t>(i)];
+                for (size_t ax = 0; ax < axes.size(); ++ax)
+                    key[ax + 1] = index[ax][static_cast<size_t>(i)];
+                int& count = seen[key];
+                rep[static_cast<size_t>(i)] = count;
+                ++count;
+            }
+        }
+
+        /* -- assemble ---------------------------------------------------- */
+        std::vector<int> slc(static_cast<size_t>(n_adc), 0);
+        for (int i = first_signal; i < n_adc; ++i)
+            slc[static_cast<size_t>(i)] = slice_of_adc[static_cast<size_t>(i)];
+
+        std::vector<int> rev(static_cast<size_t>(n_adc), 0);
+        for (int i = first_signal; i < n_adc; ++i)
+            rev[static_cast<size_t>(i)] = (sign_readout[static_cast<size_t>(i)] < 0) ? 1 : 0;
+
+        if (any_nonzero(slc))
+            result.labels.slc = slc;
+        if (any_nonzero(rev))
+            result.labels.rev = rev;
+        if (any_nonzero(lin))
+            result.labels.lin = lin;
+        if (any_nonzero(par))
+            result.labels.par = par;
+
+        /* -- splitting the repeat count into the declared dimensions ------- */
+        /*
+         * A mixed-radix digit extraction, fastest dimension first, which is
+         * the order the repeats arrived in.
+         *
+         * Everything about this is the caller's declaration rather than a
+         * measurement, so the only thing worth checking is that the two are
+         * consistent: a repeat count the declared sizes cannot represent means
+         * either the scan is not what was declared or the declaration missed a
+         * dimension.  Wrapping it round with a modulo would produce counters
+         * that look perfectly ordinary and put two different acquisitions in
+         * the same slot, so it raises instead.
+         */
+        if (options.repeat_dims.empty())
+        {
+            if (any_nonzero(rep))
+                result.labels.rep = rep;
+        }
+        else
+        {
+            const std::vector<RepeatDim>& dims = options.repeat_dims;
+            std::vector<std::vector<int>> split(dims.size(),
+                                                std::vector<int>(static_cast<size_t>(n_adc), 0));
+
+            long capacity = 1;
+            bool bounded = true;
+            for (size_t d = 0; d < dims.size(); ++d)
+            {
+                if (dims[d].size <= 0)
+                    bounded = false;
+                else
+                    capacity *= dims[d].size;
+            }
+
+            for (int i = first_signal; i < n_adc; ++i)
+            {
+                int remaining = rep[static_cast<size_t>(i)];
+                if (bounded && remaining >= capacity)
+                    throw std::runtime_error(
+                        "auto_label: the declared repeat dimensions hold " +
+                        std::to_string(capacity) + " acquisitions of one k-space position, but " +
+                        std::to_string(remaining + 1) + " were found (readout at block " +
+                        std::to_string(ks.readouts[static_cast<size_t>(i)].block_index) + ")");
+
+                for (size_t d = 0; d < dims.size(); ++d)
+                {
+                    const int size = dims[d].size;
+                    if (size > 0)
+                    {
+                        split[d][static_cast<size_t>(i)] = remaining % size;
+                        remaining /= size;
+                    }
+                    else
+                    {
+                        /* The open-ended last one takes the rest. */
+                        split[d][static_cast<size_t>(i)] = remaining;
+                        remaining = 0;
+                    }
+                }
+            }
+
+            for (size_t d = 0; d < dims.size(); ++d)
+            {
+                if (any_nonzero(split[d]))
+                    result.labels.named.emplace_back(dims[d].name, split[d]);
+            }
+        }
+
+        /* -- aux ---------------------------------------------------------- */
+        /*
+         * Indexed by the same readout the counters are, which is the bug noted
+         * in the header: MATLAB indexes a front-padded vector with a counter
+         * that starts at the first signal readout.
+         */
+        if (!result.labels.lin.empty())
+        {
+            result.aux.has_center_line = true;
+            result.aux.center_line = lin[static_cast<size_t>(central)];
+        }
+        if (!result.labels.par.empty())
+        {
+            result.aux.has_center_partition = true;
+            result.aux.center_partition = par[static_cast<size_t>(central)];
+        }
+        /*
+         * The echo index, quoted in the frame a reconstruction reads it in:
+         * after REV has been honoured.
+         *
+         * `Readout::center_sample` is an index into the readout as acquired,
+         * and on a bipolar train the two polarities differ by one -- 64 and 63
+         * on 128 samples -- because they reach the same point in k from
+         * opposite ends.  A single `kSpaceCenterSample` for the whole scan can
+         * only be true of one of those frames, and the useful one is the frame
+         * every line lands in once the reversed ones have been mirrored, which
+         * is where N/2 is the answer for a fully sampled readout.
+         *
+         * So a reverse central readout is mirrored here.  MATLAB quotes the
+         * raw index of whichever readout it happened to find first
+         * (`autoLabel.m:392`), which on an EPI beginning with a reverse
+         * navigator is 63 -- a number that is correct for that one navigator
+         * and wrong for the image lines it is quoted alongside.
+         */
+        result.aux.has_center_sample = true;
+        result.aux.center_sample =
+            (rev[static_cast<size_t>(central)] != 0)
+                ? (central_ro.num_samples - 1 - central_ro.center_sample)
+                : central_ro.center_sample;
+        if (unique_slices.size() > 1)
+            result.aux.slice_positions = unique_slices;
+
+        /* -- slice thickness and gap -------------------------------------- */
+        /*
+         * A slice-selective pulse excites a slab of bandwidth over gradient:
+         * the frequency offset that moves the slice is the gradient times the
+         * distance, so the spread of frequencies the pulse contains is the
+         * spread of positions it excites.
+         *
+         * Taken from the excitation that produced the first acquired readout,
+         * which is the same one the slice table is anchored on.  An excitation
+         * with no gradient is not slice-selective and has no thickness to
+         * report -- and a bandwidth the estimator could not measure is left
+         * unreported rather than replaced by an analytic guess.
+         */
+        {
+            int e = 0;
+            for (int i = 0; i < n_exc; ++i)
+            {
+                if (ks.excitations[static_cast<size_t>(i)].t <
+                    ks.readouts[static_cast<size_t>(first_signal)].t0)
+                    e = i;
+            }
+            if (n_exc > 0)
+            {
+                const Vec3 g = orient(ks.excitations[static_cast<size_t>(e)].g, options);
+                const double amplitude = norm3(g);
+                const double bandwidth =
+                    rf_bandwidth(seq, ks.excitations[static_cast<size_t>(e)].block_index);
+                if (amplitude > 0.0 && bandwidth > 0.0)
+                {
+                    result.aux.has_slice_thickness = true;
+                    result.aux.slice_thickness = bandwidth / amplitude;
+
+                    /*
+                     * The gap is what lies between two slices: their spacing
+                     * less one thickness.  Measured on the closest pair, which
+                     * is a neighbouring pair because the table is in position
+                     * order.  A negative result is a real answer --
+                     * overlapping slices -- and is reported as one.
+                     */
+                    if (unique_slices.size() > 1)
+                    {
+                        double closest = unique_slices[1] - unique_slices[0];
+                        for (size_t s = 2; s < unique_slices.size(); ++s)
+                            closest = std::min(closest,
+                                               unique_slices[s] - unique_slices[s - 1]);
+                        result.aux.has_slice_gap = true;
+                        result.aux.slice_gap = closest - result.aux.slice_thickness;
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /* ================================================================== */
+    /*  Application                                                       */
+    /* ================================================================== */
+
+    void apply_labels(Sequence& seq, const AutoLabels& labels, const AutoLabelAux& aux)
+    {
+        const std::vector<std::pair<std::string, const std::vector<int>*>> present =
+            labels.present();
+
+        if (!present.empty())
+        {
+            const int labelset = seq.extension_type_id("LABELSET");
+
+            /* The ids of the counters being written, so an earlier run's
+             * LABELSET for the same counter can be dropped rather than
+             * shadowed by a second one on the same block. */
+            std::vector<int> managed;
+            managed.reserve(present.size());
+            for (size_t f = 0; f < present.size(); ++f)
+                managed.push_back(seq.label_id(present[f].first));
+
+            /*
+             * One LABELSET row per distinct (value, counter), reused.
+             *
+             * `register_label_set` appends unconditionally -- the right default
+             * for building a scan, where deduplication happens once at the end
+             * -- but here the row count is bounded by the number of *values* a
+             * counter takes, not by how many readouts take them.  A 256-line
+             * scan wants 256 rows, not one per acquisition.  Seeded from what
+             * the sequence already holds, so applying twice reuses the first
+             * run's rows instead of laying down a second set.
+             */
+            std::map<std::pair<int32_t, int32_t>, int> label_rows;
+            for (int id = 1; id <= seq.label_set_library().size(); ++id)
+            {
+                const int32_t* row = seq.label_set_library().row(id);
+                label_rows.emplace(std::make_pair(row[0], row[1]), id);
+            }
+
+            for (size_t i = 0; i < labels.adc_block.size(); ++i)
+            {
+                const int block_index = labels.adc_block[i];
+                Block block = seq.get_block(block_index);
+
+                /* Rebuild the chain without the links this owns, keeping
+                 * everything else -- a rotation extension on a readout block
+                 * is not ours to discard.  Collected head-first, then relinked
+                 * in reverse so the surviving order is unchanged. */
+                std::vector<std::pair<int32_t, int32_t>> keep;
+                for (int32_t link = block.ext; link != 0;)
+                {
+                    const int32_t* row = seq.extensions_library().row(link);
+                    const int32_t type = row[0];
+                    const int32_t ref = row[1];
+                    const int32_t next = row[2];
+                    bool mine = false;
+                    if (type == labelset && ref != 0)
+                    {
+                        const int32_t label = seq.label_set_library().row(ref)[1];
+                        for (size_t m = 0; m < managed.size(); ++m)
+                        {
+                            if (managed[m] == label)
+                            {
+                                mine = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!mine)
+                        keep.emplace_back(type, ref);
+                    link = next;
+                }
+
+                int32_t head = 0;
+                for (size_t k = keep.size(); k-- > 0;)
+                    head = static_cast<int32_t>(
+                        seq.chain_extension(keep[k].first, keep[k].second, head));
+
+                /* Only where the value changes: that is what SET means, and a
+                 * scan that re-stated every counter on every readout would
+                 * carry one extension row per acquisition. */
+                for (size_t f = present.size(); f-- > 0;)
+                {
+                    const std::vector<int>& values = *present[f].second;
+                    const int value = values[i];
+                    const int previous = (i == 0) ? 0 : values[i - 1];
+                    if (value == previous)
+                        continue;
+                    const std::pair<int32_t, int32_t> key(static_cast<int32_t>(value),
+                                                          static_cast<int32_t>(managed[f]));
+                    std::map<std::pair<int32_t, int32_t>, int>::iterator it =
+                        label_rows.find(key);
+                    if (it == label_rows.end())
+                        it = label_rows
+                                 .emplace(key, seq.register_label_set(key.first, key.second))
+                                 .first;
+                    head = static_cast<int32_t>(
+                        seq.chain_extension(labelset, static_cast<int32_t>(it->second), head));
+                }
+
+                if (head != block.ext)
+                {
+                    block.ext = head;
+                    seq.set_block(block_index, block);
+                }
+            }
+        }
+
+        if (aux.has_center_line)
+            seq.set_definition("kSpaceCenterLine",
+                               Definition::integers({static_cast<double>(aux.center_line)}));
+        if (aux.has_center_partition)
+            seq.set_definition("kSpaceCenterPartition",
+                               Definition::integers({static_cast<double>(aux.center_partition)}));
+        if (aux.has_center_sample)
+            seq.set_definition("kSpaceCenterSample",
+                               Definition::integers({static_cast<double>(aux.center_sample)}));
+        if (!aux.slice_positions.empty())
+            seq.set_definition("SlicePositions", Definition(aux.slice_positions));
+        if (aux.has_slice_thickness)
+            seq.set_definition("SliceThickness", Definition(aux.slice_thickness));
+        if (aux.has_slice_gap)
+            seq.set_definition("SliceGap", Definition(aux.slice_gap));
+        if (aux.has_gridding)
+        {
+            seq.set_definition("TrapezoidGriddingParameters",
+                               Definition(std::vector<double>(aux.trapezoid_gridding.begin(),
+                                                              aux.trapezoid_gridding.end())));
+            seq.set_definition(
+                "TargetGriddedSamples",
+                Definition::integers({static_cast<double>(aux.target_gridded_samples)}));
+        }
+    }
+
+    /* ================================================================== */
+
+    AutoLabelResult auto_label(Sequence& seq, const AutoLabelOptions& options, bool apply)
+    {
+        KSpaceOptions ko;
+        ko.first_block = options.first_block;
+        ko.last_block = options.last_block;
+        ko.trajectory_delay = options.trajectory_delay;
+        ko.derive_center_sample = true;
+        /* One point per readout is the whole input; see the header. */
+        ko.materialize_samples = false;
+
+        const KSpace ks = calculate_kspace(seq, ko);
+        AutoLabelResult result = detect_labels(ks, seq, options);
+        if (apply)
+            apply_labels(seq, result.labels, result.aux);
+        return result;
+    }
+
+}  // namespace pulseq

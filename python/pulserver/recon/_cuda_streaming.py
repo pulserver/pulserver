@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib import import_module
 from math import prod
 from typing import Any
@@ -35,17 +35,21 @@ def _spatial_tuple(
 class CudaStreaming:
     """Configuration for host-backed double-buffered CUDA execution.
 
-    Reconstruction iterates and input k-space remain on CPU. Two CUDA streams
-    alternate pinned-host transfers and bounded GPU work. Toeplitz transforms
+    Reconstruction iterates and input k-space remain on CPU. By default every
+    visible GPU participates; ``cuda:N`` or ``devices=(...)`` constrains the
+    set explicitly. Each device owns ``streams`` CUDA streams which alternate
+    pinned-host transfers and bounded GPU work. Toeplitz transforms
     one full padded coefficient volume at a time and uses fused packed
     Hermitian CUDA multiplication. ``transfer_chunk_size`` bounds packed
-    transfer staging. ``transfer_precision`` preserves the source dtype in
-    ``"auto"`` mode; FP16/BF16 storage is explicit and still accumulates in
-    FP32. Denoisers operate on overlapping slabs along their first spatial
-    axis.
+    transfer staging. ``transfer_precision="auto"`` uses BF16 coefficient
+    storage for real Toeplitz kernels on natively capable GPUs and retains
+    complex64 for complex-Hermitian kernels. Spectra and accumulation remain
+    complex64/FP32. Denoisers operate on overlapping slabs along their first
+    spatial axis.
     """
 
     device: str = "cuda"
+    devices: tuple[str, ...] | None = None
     streams: int = 2
     pin_memory: bool = True
     transfer_chunk_size: int = 1048576
@@ -64,6 +68,15 @@ class CudaStreaming:
         device = torch.device(self.device)
         if device.type != "cuda":
             raise ValueError("CudaStreaming.device must be a CUDA device")
+        if self.devices is not None:
+            if not self.devices:
+                raise ValueError("CudaStreaming.devices cannot be empty")
+            normalized = tuple(str(torch.device(item)) for item in self.devices)
+            if any(torch.device(item).type != "cuda" for item in normalized):
+                raise ValueError("CudaStreaming.devices must contain CUDA devices")
+            if len(set(normalized)) != len(normalized):
+                raise ValueError("CudaStreaming.devices must be unique")
+            object.__setattr__(self, "devices", normalized)
         if self.streams not in {1, 2}:
             raise ValueError("CudaStreaming.streams must be one or two")
         if self.transfer_chunk_size < 1:
@@ -79,8 +92,7 @@ class CudaStreaming:
             "bfloat16",
         }:
             raise ValueError(
-                "transfer_precision must be 'auto', 'float32', 'float16', "
-                "or 'bfloat16'"
+                "transfer_precision must be 'auto', 'float32', 'float16', or 'bfloat16'"
             )
         if self.spectrum_residency not in {"auto", "host", "device"}:
             raise ValueError("spectrum_residency must be 'auto', 'host', or 'device'")
@@ -95,19 +107,59 @@ class CudaStreaming:
 
     @property
     def torch_device(self) -> Any:
-        """Configured :class:`torch.device`."""
+        """Primary configured :class:`torch.device`."""
+        return self.torch_devices[0]
+
+    @property
+    def torch_devices(self) -> tuple[Any, ...]:
+        """CUDA devices participating in streamed execution.
+
+        An explicit ``devices`` tuple always wins.  Otherwise ``cuda:N`` is
+        deliberately single-device, while the default unindexed ``cuda``
+        discovers every visible GPU.  This makes a two-GPU recon host useful
+        without changing application code and still gives callers a precise
+        opt-out.
+        """
         torch = _torch()
-        device = torch.device(self.device)
-        if device.index is None:
-            device = torch.device("cuda", torch.cuda.current_device())
-        return device
+        if self.devices is not None:
+            return tuple(torch.device(item) for item in self.devices)
+        configured = torch.device(self.device)
+        if configured.index is not None:
+            return (configured,)
+        count = torch.cuda.device_count()
+        if count:
+            return tuple(torch.device("cuda", index) for index in range(count))
+        return (torch.device("cuda", torch.cuda.current_device()),)
+
+    @property
+    def device_count(self) -> int:
+        """Number of GPUs selected by this policy."""
+        return len(self.torch_devices)
+
+    @property
+    def execution_devices(self) -> tuple[Any, ...]:
+        """One device entry per stream worker, ordered round-robin by GPU."""
+        return tuple(
+            device for device in self.torch_devices for _ in range(self.streams)
+        )
+
+    def for_device(self, device: Any, *, streams: int | None = None) -> CudaStreaming:
+        """Return an equivalent policy constrained to one CUDA device."""
+        selected = str(device)
+        return replace(
+            self,
+            device=selected,
+            devices=(selected,),
+            streams=self.streams if streams is None else streams,
+        )
 
     def ensure_available(self) -> None:
         """Raise a clear error when the configured CUDA device is unavailable."""
         torch = _torch()
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA streaming requested but CUDA is unavailable")
-        torch.empty(0, device=self.torch_device)
+        for device in self.torch_devices:
+            torch.empty(0, device=device)
 
     def configure_physics(self, physics: Any) -> Any:
         """Attach this policy to a Pulserver physics facade."""
@@ -127,7 +179,7 @@ class CudaStreaming:
 
 
 class CudaStreamedDenoiser:
-    """Run a denoiser on overlapping host-backed slabs using two CUDA streams.
+    """Run a denoiser on overlapping host-backed slabs across CUDA devices.
 
     Cropping each denoised slab to its non-overlapping core prevents blending
     seams. Local block denoisers are exact when the halo covers their block
@@ -139,7 +191,7 @@ class CudaStreamedDenoiser:
     def __init__(self, model: Any, policy: CudaStreaming) -> None:
         self.model = model
         self.policy = policy
-        self._models = (deepcopy(model), deepcopy(model))
+        self._models = tuple(deepcopy(model) for _ in policy.execution_devices)
 
     def __call__(self, x: Any, sigma: Any, **kwargs: Any) -> Any:
         return self.forward(x, sigma, **kwargs)
@@ -151,6 +203,10 @@ class CudaStreamedDenoiser:
                 setattr(model, name, None)
         if hasattr(model, "restart"):
             model.restart = True
+        children = getattr(model, "children", None)
+        if children is not None:
+            for child in children():
+                CudaStreamedDenoiser._clear_state(child)
 
     def _slabs(self, shape: tuple[int, ...]) -> list[tuple[int, int, int, int]]:
         depth = shape[0]
@@ -189,16 +245,15 @@ class CudaStreamedDenoiser:
             device="cpu",
             pin_memory=self.policy.pin_memory,
         )
-        streams = [
-            torch.cuda.Stream(device=self.policy.torch_device)
-            for _ in range(self.policy.streams)
-        ]
+        devices = self.policy.execution_devices
+        streams = [torch.cuda.Stream(device=device) for device in devices]
 
         def run_slot(slot: int) -> None:
-            torch.cuda.set_device(self.policy.torch_device)
-            model = self._models[slot].to(self.policy.torch_device)
+            device = devices[slot]
+            torch.cuda.set_device(device)
+            model = self._models[slot].to(device)
             stream = streams[slot]
-            for slab_index in range(slot, len(slabs), self.policy.streams):
+            for slab_index in range(slot, len(slabs), len(streams)):
                 core_start, core_stop, input_start, input_stop = slabs[slab_index]
                 source = x[:, :, input_start:input_stop]
                 host_input = torch.empty_like(
@@ -213,11 +268,11 @@ class CudaStreamedDenoiser:
                 )
                 with torch.cuda.stream(stream):
                     device_input = host_input.to(
-                        self.policy.torch_device,
+                        device,
                         non_blocking=self.policy.pin_memory,
                     )
                     device_sigma = (
-                        sigma.to(self.policy.torch_device, non_blocking=True)
+                        sigma.to(device, non_blocking=True)
                         if isinstance(sigma, torch.Tensor)
                         else sigma
                     )
@@ -234,10 +289,8 @@ class CudaStreamedDenoiser:
                 )
                 self._clear_state(model)
 
-        with ThreadPoolExecutor(max_workers=self.policy.streams) as executor:
-            futures = [
-                executor.submit(run_slot, slot) for slot in range(self.policy.streams)
-            ]
+        with ThreadPoolExecutor(max_workers=len(streams)) as executor:
+            futures = [executor.submit(run_slot, slot) for slot in range(len(streams))]
             for future in futures:
                 future.result()
 
@@ -251,11 +304,14 @@ class CudaStreamedDenoiser:
             if isinstance(self.policy.denoiser_halo, int)
             else self.policy.denoiser_halo[0]
         )
-        return self.policy.streams * (self.policy.denoiser_slab_size + 2 * halo)
+        return len(self.policy.execution_devices) * (
+            self.policy.denoiser_slab_size + 2 * halo
+        )
 
     def extra_repr(self) -> str:
         return (
-            f"device={self.policy.device}, slab={self.policy.denoiser_slab_size}, "
+            f"devices={tuple(map(str, self.policy.torch_devices))}, "
+            f"slab={self.policy.denoiser_slab_size}, "
             f"halo={self.policy.denoiser_halo}, streams={self.policy.streams}"
         )
 

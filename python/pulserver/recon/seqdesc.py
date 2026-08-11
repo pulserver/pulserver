@@ -2,7 +2,7 @@
 
 The scanner transports the sequence description as custom single-channel
 ISMRMRD waveforms.  This module only decodes that transport; sequence-specific
-physics is implemented in :mod:`pulserver.recon.bloch`.
+physics is exposed through :mod:`pulserver.recon.simulation`.
 """
 
 from __future__ import annotations

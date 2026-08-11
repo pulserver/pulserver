@@ -1,4 +1,12 @@
-# The ISMRMRD session contract
+---
+orphan: true
+---
+
+# Internal ISMRMRD session contract
+
+This page records the current private transport implementation. It is not a
+supported public API; the scientific reconstruction surface is documented in
+{doc}`../../api/recon`.
 
 Pulseq records the events required to play a scan; a reconstruction stream
 also needs encoding geometry, acquisition labels, trajectories and enough RF
@@ -10,7 +18,7 @@ rediscover them from raw data.
 ## What the session looks like
 
 A reconstruction connection is an ISMRMRD session in the literal, protocol
-sense: `pulserver.recon.connection.Connection` opens with an XML header,
+sense: `pulserver.recon._mrd.connection.Connection` opens with an XML header,
 streams a sequence of acquisitions and optional waveforms, then closes.
 
 - **The header** carries encoding spaces (encoded/recon matrix and FOV per
@@ -28,9 +36,8 @@ streams a sequence of acquisitions and optional waveforms, then closes.
   {doc}`simulator`.
 
 This makes the receiving handler independent of the scanner's native raw-data
-layout: `Connection` and the reader/writer classes in
-`pulserver.recon.readers`/`writers` speak ISMRMRD messages
-(`MessageType` in `pulserver/recon/connection.py`), not a vendor frame
+layout: `Connection` and the private reader/writer classes speak ISMRMRD
+messages (`MessageType` in `pulserver/recon/_mrd/connection.py`), not a vendor frame
 format, so a handler written against this contract does not change when the
 frame format on the wire does.
 

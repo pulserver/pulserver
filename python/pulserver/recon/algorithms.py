@@ -7,11 +7,11 @@ from importlib import import_module
 from math import isfinite
 from typing import Any
 
-from .denoisers import average
+from .denoisers import AverageDenoiser
 from .optimizers import PolynomialPreconditioner
 from .physics import MRIPhysics
 
-__all__ = ["pics"]
+__all__ = ["PolynomialPreconditioner", "pics"]
 
 
 def _linear_physics(physics: Any) -> Any:
@@ -224,7 +224,7 @@ def pics(
         return result
 
     if isinstance(denoiser, Sequence):
-        denoiser = average(denoiser)
+        denoiser = AverageDenoiser(denoiser)
     if streaming is not None:
         denoiser = streaming.wrap_denoiser(denoiser)
     if regularization <= 0:

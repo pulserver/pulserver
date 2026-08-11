@@ -122,6 +122,21 @@ _NOT_PORTED = (
 #: ``tr`` the window is the repetition time and nothing else.
 _UPSTREAM_WINDOW_WIDTH = 0.05
 
+def _per_axis(value, name: str) -> list[float]:
+    """One number or three, always as three.
+
+    Upstream takes either for ``trajectory_delay`` and ``gradient_offset``,
+    and the C core takes three, so the widening happens once here rather than
+    at each call site.
+    """
+    array = np.atleast_1d(np.asarray(value, dtype=float)).ravel()
+    if array.size == 1:
+        return [float(array[0])] * 3
+    if array.size == 3:
+        return [float(v) for v in array]
+    raise ValueError(f"{name} must be one value or three, got {array.size}")
+
+
 #: Blocks past which looking at a whole sequence is said out loud rather than
 #: simply attempted. Drawing this many is minutes of Matplotlib, and the caller
 #: who did not pass a ``time_range`` almost certainly did not mean to.
@@ -765,11 +780,257 @@ class Sequence:
         self,
         trajectory_delay: float | list[float] | np.ndarray = 0.0,
         gradient_offset: float | list[float] | np.ndarray = 0.0,
+        *,
+        block_range: tuple[int, int] | None = None,
+        frame: str = "physical",
+        sample_window_average: bool = False,
+        dense: bool = True,
     ):
-        """The k-space trajectory of the sequence. Not ported yet; see
-        upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.calculate_kspace`."""
-        raise NotImplementedError(_NOT_PORTED.format(what="calculate_kspace"))
+        """Where every ADC sample sits in k-space.
+
+        Returns upstream's five-tuple, ``(k_traj_adc, k_traj, t_excitation,
+        t_refocusing, t_adc)``, with ``k_traj_adc`` and ``k_traj`` shaped
+        ``(3, n)`` in 1/m and the times in seconds.
+
+        The arithmetic is the C library's -- ``csrc/src/pulseq/pulseq_ktraj.c``,
+        the same code the interpreter links -- rather than a second
+        implementation in Python. It integrates each distinct gradient shape
+        once instead of each block, so the cost follows the number of distinct
+        gradients rather than the length of the scan, and it memoizes on a
+        per-readout repeat key so a scan that plays one readout a hundred
+        thousand times pays for it once.
+
+        Parameters
+        ----------
+        trajectory_delay : float or array-like, optional
+            Gradient timing compensation in seconds, one value or one per
+            axis. Shifts the gradient time base only, never the ADC or RF
+            times -- those are synchronised with each other by construction.
+        gradient_offset : float or array-like, optional
+            A constant background gradient in Hz/m, one value or one per axis.
+        block_range : tuple of int, optional
+            ``(first, last)``, 1-based and inclusive, to analyse part of the
+            sequence. The whole of it by default.
+        frame : {'physical', 'logical'}, optional
+            Whether to resolve rotation extensions into the answer.
+            ``'physical'``, the default, is what upstream PyPulseq and Pulseq's
+            MATLAB ``calculateKspacePP`` both return and what a reconstruction
+            needs. ``'logical'`` leaves the rotation out, which is the frame
+            :class:`~pulserver.pypulseq.TransformFOV` works in.
+        sample_window_average : bool, optional
+            Give each sample the k averaged over its dwell rather than k at
+            the window's midpoint. An ADC sample integrates for a whole dwell,
+            so the average is the coordinate it physically belongs to; the two
+            differ by ``dwell**2 / 24 * dg/dt`` and so agree exactly wherever
+            the gradient is flat. Off by default, because PyPulseq, MRpro and
+            mri-nufft all sample at the midpoint and matching them is what
+            makes the answer comparable. Turn it on for a gridder.
+        dense : bool, optional
+            Also build ``k_traj``, k at every gradient breakpoint across the
+            range -- what a plot draws. It is the one output whose size grows
+            with the duration of the scan rather than with the acquisition, so
+            pass ``False`` when only the ADC samples are wanted.
+
+        Returns
+        -------
+        tuple
+            ``(k_traj_adc, k_traj, t_excitation, t_refocusing, t_adc)``.
+
+        See Also
+        --------
+        auto_label : the encoding counters derived from this trajectory.
+        """
+        result = self._kspace(
+            trajectory_delay=trajectory_delay,
+            gradient_offset=gradient_offset,
+            block_range=block_range,
+            frame=frame,
+            sample_window_average=sample_window_average,
+            dense=dense,
+        )
+        return (
+            result["k_adc"],
+            result["k_traj"],
+            result["t_excitation"],
+            result["t_refocusing"],
+            result["t_adc"],
+        )
+
+    def _kspace(
+        self,
+        *,
+        trajectory_delay=0.0,
+        gradient_offset=0.0,
+        block_range=None,
+        frame="physical",
+        sample_window_average=False,
+        dense=True,
+    ) -> dict:
+        """Everything the C core reports, not just upstream's five entries.
+
+        Kept separate because :meth:`calculate_kspace` has to return exactly
+        upstream's tuple, and the derived echo positions, the k-space centre
+        and the repeat-key statistics have nowhere in it to go.
+        """
+        if frame not in ("physical", "logical"):
+            raise ValueError(f"frame must be 'physical' or 'logical', not {frame!r}")
+
+        first, last = self._block_range(block_range)
+        return self._native.calculate_kspace(
+            _per_axis(trajectory_delay, "trajectory_delay"),
+            _per_axis(gradient_offset, "gradient_offset"),
+            first,
+            last,
+            frame == "physical",
+            bool(sample_window_average),
+            bool(dense),
+        )
+
+    def auto_label(
+        self,
+        *,
+        block_range: tuple[int, int] | None = None,
+        reflect: list[int] | None = None,
+        reorder: list[int] | None = None,
+        trajectory_delay: float | list[float] | np.ndarray = 0.0,
+        repeat_dims: list[tuple[str, int]] | None = None,
+        skip_apply: bool = False,
+    ) -> tuple[dict, dict]:
+        """Recover the encoding counters from the sequence's own trajectory.
+
+        A ``.seq`` written elsewhere carries no ``LABELSET`` extensions, so
+        nothing downstream knows which line, partition, slice or repetition an
+        acquisition belongs to. It is all still there, written into where the
+        readouts sit in k-space, and this reads it back out.
+
+        Same labels as Pulseq's MATLAB ``autoLabel``, by a cheaper route: that
+        one walks every ADC sample three times over, and here the echo search
+        is memoized per distinct readout and the rest reduces to one point per
+        readout, so nothing scales with the number of samples.
+
+        Parameters
+        ----------
+        block_range : tuple of int, optional
+            ``(first, last)``, 1-based and inclusive.
+        reflect : list of int, optional
+            Axes (0, 1, 2) whose k, slice positions and gradients to negate
+            before deriving anything. Applied before ``reorder``.
+        reorder : list of int, optional
+            A permutation of the axes, as source indices: ``[1, 0, 2]`` swaps
+            x and y.
+        trajectory_delay : float or array-like, optional
+            As for :meth:`calculate_kspace`.
+        repeat_dims : sequence of (str, int), optional
+            The dimensions the repetition counter is standing in for, named
+            by you and ordered **fastest-varying first**.
+
+            Where a readout sits in k says which line, partition and slice it
+            is. It cannot say which echo of a train, which frame of a time
+            series or which saturation state it is, because all of those
+            revisit the same k-space position -- so by default they are
+            counted together as ``REP``. ``[("ECO", 2), ("REP", 10)]`` says a
+            position was visited twice per repetition and there were ten
+            repetitions, and splits the count accordingly.
+
+            ``0`` as the size of the *last* entry means "however many there
+            turn out to be", for a series that runs until it is stopped.
+            Sizes that cannot account for the repeats actually found are an
+            error, not something to wrap around.
+        skip_apply : bool, optional
+            Return the counters without writing them onto the sequence. By
+            default they are written, as ``SET`` label extensions on each ADC
+            block where the value changes, and the derived definitions
+            (``kSpaceCenterLine``, ``SliceThickness`` and the rest) go into
+            ``[DEFINITIONS]``.
+
+        Returns
+        -------
+        labels : dict
+            Counter name to an array with one value per ADC, in acquisition
+            order. Only the counters that vary are present -- a single-slice
+            scan has no ``SLC``.
+        aux : dict
+            The derived definitions.
+
+        Raises
+        ------
+        RuntimeError
+            If the readouts do not share a direction. These are Cartesian
+            encoding counters, and a non-Cartesian trajectory has no honest
+            value for them -- which is what MATLAB's ``autoLabel`` also says.
+            Also if ``repeat_dims`` cannot account for the repeats found.
+
+        Notes
+        -----
+        ``SLC`` is a geometric index: slices are ranked by the position their
+        excitation's frequency offset puts them at, so ``SlicePositions[SLC]``
+        is where slice ``SLC`` sits whatever order the scan visited them in.
+        Those offsets are read as authored, and :class:`TransformFOV` scaling
+        rewrites the slice-select gradient without touching them -- so label
+        first and transform second.
+        """
+        first, last = self._block_range(block_range)
+
+        reflect_mask = [False, False, False]
+        for axis in reflect or ():
+            if axis not in (0, 1, 2):
+                raise ValueError(f"reflect axes must be 0, 1 or 2, not {axis!r}")
+            reflect_mask[axis] = True
+
+        order = [0, 1, 2]
+        if reorder is not None:
+            if sorted(reorder) != list(range(len(reorder))) or len(reorder) not in (2, 3):
+                raise ValueError(f"reorder must permute the first 2 or 3 axes, got {reorder!r}")
+            order[: len(reorder)] = list(reorder)
+
+        dims = []
+        for entry in repeat_dims or ():
+            try:
+                name, size = entry
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"repeat_dims entries are (name, size) pairs, got {entry!r}"
+                ) from None
+            dims.append((str(name), int(size)))
+
+        result = self._native.auto_label(
+            first,
+            last,
+            reflect_mask,
+            order,
+            _per_axis(trajectory_delay, "trajectory_delay"),
+            not skip_apply,
+            dims,
+        )
+        aux = result["aux"]
+        if not skip_apply:
+            # The C++ side wrote these onto the native sequence, which is right
+            # for a C++ caller and invisible here: this class keeps its own
+            # definitions and pushes them across when the sequence is written,
+            # so anything only the native side knows would be overwritten on
+            # the way out. Mirroring them is what makes them survive.
+            for key, value in aux.items():
+                self.set_definition(key, value.tolist() if hasattr(value, "tolist") else value)
+            self._touch()
+        return result["labels"], aux
+
+    def _block_range(self, block_range) -> tuple[int, int]:
+        """Upstream-style ``(first, last)`` as the C core's 1-based pair.
+
+        ``0`` for the last block is the core's "to the end", which is why the
+        default is not ``len(self)``: a range that ends at the end must stay
+        true if the sequence grows.
+        """
+        if block_range is None:
+            return 1, 0
+        first, last = block_range
+        first = int(first)
+        last = int(last)
+        if first < 1:
+            raise ValueError(f"block_range starts at block 1, not {first}")
+        if last != 0 and last < first:
+            raise ValueError(f"block_range {block_range!r} is empty")
+        return first, last
 
     def calculate_kspacePP(
         self,

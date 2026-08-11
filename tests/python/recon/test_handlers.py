@@ -1,5 +1,4 @@
-"""Tests for pulserver.recon.handlers — simplefft and fftrecon reconstruction."""
-
+"""Tests for private MRD FFT handlers."""
 
 import ismrmrd
 import numpy as np
@@ -43,7 +42,11 @@ def _make_acquisitions(
         for pe in range(n_pe):
             acq = ismrmrd.Acquisition()
             acq.resize(n_ro, n_channels)
-            acq.data[:] = np.random.default_rng().standard_normal((n_channels, n_ro)).astype(np.complex64)
+            acq.data[:] = (
+                np.random.default_rng()
+                .standard_normal((n_channels, n_ro))
+                .astype(np.complex64)
+            )
             acq.idx.kspace_encode_step_1 = pe
             acq.idx.slice = slc
 
@@ -111,7 +114,7 @@ def _make_metadata(
 
 
 def test_simplefft_produces_image():
-    from pulserver.recon.handlers.simplefft import _reconstruct
+    from pulserver.recon._mrd.handlers.simplefft import _reconstruct
 
     n_pe, n_ro, n_ch = 16, 32, 2
     acqs = _make_acquisitions(n_pe=n_pe, n_ro=n_ro, n_channels=n_ch, n_slices=1)
@@ -124,14 +127,14 @@ def test_simplefft_produces_image():
 
 
 def test_simplefft_empty_group():
-    from pulserver.recon.handlers.simplefft import _reconstruct
+    from pulserver.recon._mrd.handlers.simplefft import _reconstruct
 
     metadata = _make_metadata()
     assert _reconstruct([], metadata) is None
 
 
 def test_simplefft_output_dtype():
-    from pulserver.recon.handlers.simplefft import _reconstruct
+    from pulserver.recon._mrd.handlers.simplefft import _reconstruct
 
     acqs = _make_acquisitions(n_pe=8, n_ro=16, n_channels=1)
     metadata = _make_metadata(n_ro=16, n_pe=8)
@@ -146,7 +149,7 @@ def test_simplefft_output_dtype():
 
 
 def test_fftrecon_multi_slice():
-    from pulserver.recon.handlers.fftrecon import _reconstruct
+    from pulserver.recon._mrd.handlers.fftrecon import _reconstruct
 
     n_pe, n_ro, n_ch, n_slc = 8, 16, 2, 3
     acqs = _make_acquisitions(n_pe=n_pe, n_ro=n_ro, n_channels=n_ch, n_slices=n_slc)
@@ -159,7 +162,7 @@ def test_fftrecon_multi_slice():
 
 
 def test_fftrecon_single_slice():
-    from pulserver.recon.handlers.fftrecon import _reconstruct
+    from pulserver.recon._mrd.handlers.fftrecon import _reconstruct
 
     n_pe, n_ro = 8, 16
     acqs = _make_acquisitions(n_pe=n_pe, n_ro=n_ro, n_channels=1, n_slices=1)
@@ -170,7 +173,7 @@ def test_fftrecon_single_slice():
 
 
 def test_fftrecon_array2image():
-    from pulserver.recon.handlers.fftrecon import _array2image
+    from pulserver.recon._mrd.handlers.fftrecon import _array2image
 
     n_pe, n_ro = 8, 16
     data = np.random.default_rng().integers(0, 100, (n_ro, n_pe), dtype=np.int16)
@@ -218,7 +221,7 @@ def test_fftrecon_process_filters_interleaved_waveforms(monkeypatch):
     (no isinstance check, drops the LAST_IN_MEASUREMENT-flagged line) fails
     this test.
     """
-    from pulserver.recon.handlers import fftrecon
+    from pulserver.recon._mrd.handlers import fftrecon
 
     n_pe, n_ro = 8, 16
     acqs = _make_acquisitions(n_pe=n_pe, n_ro=n_ro, n_channels=1, n_slices=1)
@@ -228,7 +231,7 @@ def test_fftrecon_process_filters_interleaved_waveforms(monkeypatch):
 
     # Interleave: one waveform mid-stream, one right after the final
     # LAST_IN_MEASUREMENT-flagged acquisition (as the VRE client does).
-    stream = [*acqs[:n_pe // 2], waveform, *acqs[n_pe // 2:], waveform]
+    stream = [*acqs[: n_pe // 2], waveform, *acqs[n_pe // 2 :], waveform]
     conn = FakeConnection(stream)
     metadata = _make_metadata_kw(n_ro=n_ro, n_pe=n_pe)
 
@@ -246,12 +249,14 @@ def test_fftrecon_process_filters_interleaved_waveforms(monkeypatch):
     monkeypatch.setattr(fftrecon, "_reconstruct", _spy_reconstruct)
     monkeypatch.setattr(fftrecon, "_array2image", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
-        fftrecon, "MrdDicomBuilder", lambda _metadata: (lambda img: ("dset", img))
+        fftrecon, "MrdDicomBuilder", lambda _metadata: lambda img: ("dset", img)
     )
 
     fftrecon.process(conn, "recon1.py", metadata)  # must not raise
 
-    assert seen_group_sizes == [n_pe]  # all real acquisitions, no waveforms, none dropped
+    assert seen_group_sizes == [
+        n_pe
+    ]  # all real acquisitions, no waveforms, none dropped
     assert len(conn.sent) == 1
 
 
@@ -261,7 +266,7 @@ def test_fftrecon_process_filters_interleaved_waveforms(monkeypatch):
 
 
 def test_savedataonly_drains():
-    from pulserver.recon.handlers.savedataonly import process
+    from pulserver.recon._mrd.handlers.savedataonly import process
 
     acqs = _make_acquisitions(n_pe=4, n_ro=8, n_channels=1)
     conn = FakeConnection(acqs)

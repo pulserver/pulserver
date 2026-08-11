@@ -61,7 +61,7 @@ def cartesian_3d_to_2d(
 
     A centered inverse FFT is applied along readout. The returned readout
     positions can be moved into the batch dimension before constructing
-    :func:`pulserver.recon.Cartesian2D` physics.
+    :func:`pulserver.recon.physics.Cartesian2D` physics.
     """
     return _centered_fft(kspace, axis=readout_axis, inverse=True)
 

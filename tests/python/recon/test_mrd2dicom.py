@@ -1,4 +1,4 @@
-"""Tests for pulserver.recon.mrd2dicom — ISMRMRD to DICOM conversion."""
+"""Tests for private ISMRMRD-to-DICOM conversion."""
 
 from datetime import date, time
 
@@ -6,7 +6,7 @@ import ismrmrd
 import numpy as np
 import pydicom
 import pytest
-from pulserver.recon.mrd2dicom import (
+from pulserver.recon._mrd.mrd2dicom import (
     DicomWithName,
     MrdDicomBuilder,
     convert_string_vrs,
@@ -59,7 +59,9 @@ def minimal_mrd_image() -> ismrmrd.Image:
     """Create a minimal valid ISMRMRD image."""
     img = ismrmrd.Image()
     img.resize(256, 256, 1, 1)
-    img.data[:] = np.random.default_rng().integers(0, 4096, size=img.data.shape, dtype=np.int16)
+    img.data[:] = np.random.default_rng().integers(
+        0, 4096, size=img.data.shape, dtype=np.int16
+    )
     img.position = (0.0, 0.0, 0.0)
     img.read_dir = (1.0, 0.0, 0.0)
     img.phase_dir = (0.0, 1.0, 0.0)

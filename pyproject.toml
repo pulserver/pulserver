@@ -37,7 +37,9 @@ recon-cpu = [
 ]
 recon-cuda = [
   "pulserver[recon-cpu]",
-  "mri-nufft[cufinufft]; platform_system == 'Linux'",
+  # CUFINUFFT accepts Torch tensors directly. Avoid MRI-NUFFT's CuPy extra:
+  # Pulserver registers its private Torch-native adapter at runtime.
+  "cufinufft>=2.4; platform_system == 'Linux'",
 ]
 recon-nlinv = ["pulserver[recon-cpu]", "pygrog"]
 recon-sim = ["pulserver[recon]", "torchsim"]
@@ -145,18 +147,18 @@ convention = "numpy"
 "python/pulserver/design/_readout/_surgery.py" = ["ARG001"]
 "python/pulserver/design/_readout/fse.py" = ["ARG002"]
 "python/pulserver/io.py" = ["S324"]
-"python/pulserver/recon/connection.py" = ["A003", "PTH", "S108", "S110"]
-"python/pulserver/recon/constants.py" = ["A001"]
-"python/pulserver/recon/dicom2mrd.py" = ["S110"]
+"python/pulserver/recon/_mrd/connection.py" = ["A003", "PTH", "S108", "S110"]
+"python/pulserver/recon/_mrd/constants.py" = ["A001"]
+"python/pulserver/recon/_mrd/dicom2mrd.py" = ["S110"]
 "python/pulserver/recon/distortion.py" = ["S603"]
-"python/pulserver/recon/handlers/savedataonly.py" = ["ARG001"]
-"python/pulserver/recon/main.py" = ["PTH", "S104", "S108"]
-"python/pulserver/recon/mrdhelper.py" = ["A002"]
-"python/pulserver/recon/readers.py" = ["A002", "ARG001", "PTH123"]
-"python/pulserver/recon/replay.py" = ["PTH", "S110"]
-"python/pulserver/recon/rtp_connection.py" = ["S104"]
-"python/pulserver/recon/server.py" = ["ARG001", "ARG004", "PTH", "S104", "S110"]
-"python/pulserver/recon/writers.py" = ["A002"]
+"python/pulserver/recon/_mrd/handlers/savedataonly.py" = ["ARG001"]
+"python/pulserver/recon/_mrd/main.py" = ["PTH", "S104", "S108"]
+"python/pulserver/recon/_mrd/mrdhelper.py" = ["A002"]
+"python/pulserver/recon/_mrd/readers.py" = ["A002", "ARG001", "PTH123"]
+"python/pulserver/recon/_mrd/replay.py" = ["PTH", "S110"]
+"python/pulserver/recon/_mrd/rtp_connection.py" = ["S104"]
+"python/pulserver/recon/_mrd/server.py" = ["ARG001", "ARG004", "PTH", "S104", "S110"]
+"python/pulserver/recon/_mrd/writers.py" = ["A002"]
 "python/pulserver/sequences/_shim.py" = ["S102"]
 "tests/python/test_sequences_repl.py" = ["S603"]
 

@@ -64,7 +64,11 @@ def seq(system, num_trs):
     plays. That is the whole distinction ``tr=`` exists to make.
     """
     built = pp.Sequence(system=system)
-    rf = pp.make_block_pulse(flip_angle=np.pi / 6, duration=1e-3, system=system)
+    # `use` is not decoration: what a pulse does to k -- reset it, negate it,
+    # leave it -- is what it is for, and the trajectory refuses to guess.
+    rf = pp.make_block_pulse(
+        flip_angle=np.pi / 6, duration=1e-3, system=system, use="excitation"
+    )
     gx = pp.make_trapezoid(channel="x", area=2000, system=system)
     for index in range(num_trs):
         gy = pp.make_trapezoid(

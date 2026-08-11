@@ -240,7 +240,6 @@ def test_the_scan_structure_placeholders_are_gone_rather_than_stubbed(name):
 #: yet, with arguments named the way upstream names them -- so the call itself
 #: proves the signature matches, and the exception proves it is still a stub.
 _NOT_PORTED = [
-    ("calculate_kspace", (), {"trajectory_delay": 0.0, "gradient_offset": 0.0}),
     ("waveforms", (), {"append_RF": True, "time_range": [0.0, 1.0]}),
     ("waveforms_and_times", (), {"append_RF": False, "time_range": None}),
     ("check_timing", (), {"print_errors": True}),
@@ -264,7 +263,7 @@ def test_the_unported_methods_take_upstreams_arguments_and_say_they_are_stubs(
 #: Methods that *are* implemented, and still have to answer to upstream's
 #: signature -- a PyPulseq script has to run here unchanged whether or not the
 #: body underneath it is ours.
-_PORTED = ["plot", "calculate_pns", "calculate_gradient_spectrum"]
+_PORTED = ["plot", "calculate_pns", "calculate_gradient_spectrum", "calculate_kspace"]
 
 
 @pytest.mark.parametrize("name", [name for name, _, _ in _NOT_PORTED] + _PORTED)

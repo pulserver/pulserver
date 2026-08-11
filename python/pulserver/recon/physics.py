@@ -1,6 +1,6 @@
-"""MRI physics factories with a uniform DeepInverse-facing interface.
+"""MRI physics classes with a uniform DeepInverse-facing interface.
 
-The public factories own the mri-nufft/DeepInverse integration boundary.
+The public classes own the mri-nufft/DeepInverse integration boundary.
 Callers never need to construct an mri-nufft autodiff wrapper themselves.
 Subspace, off-resonance, and Toeplitz behavior are composed as decorators so
 that the API does not grow one class for every possible combination.
@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from importlib import import_module
 from math import prod
 from types import MethodType, SimpleNamespace
 from typing import Any
 
 from ._toeplitz import CompactToeplitzKernel, as_torch, support_indices
+from .linops import available_nufft_backends as _available_nufft_backends
 
 __all__ = [
     "Cartesian2D",
@@ -25,12 +27,7 @@ __all__ = [
     "OffResonance",
     "Subspace",
     "Toeplitz",
-    "cartesian_2d",
-    "noncartesian_2d",
-    "noncartesian_3d",
-    "off_resonance",
-    "subspace",
-    "toeplitz",
+    "available_nufft_backends",
 ]
 
 
@@ -46,12 +43,45 @@ def _require_deepinv() -> Any:
 
 def _require_mrinufft() -> Any:
     try:
-        return import_module("mrinufft")
+        module = import_module("mrinufft")
     except ImportError as error:
         raise ImportError(
             "Non-Cartesian MRI physics requires mri-nufft; install "
             "pulserver[recon-cpu] or pulserver[recon-cuda]."
         ) from error
+    from ._torch_cufinufft import register_torch_cufinufft
+
+    register_torch_cufinufft()
+    return module
+
+
+def available_nufft_backends() -> list[str]:
+    """Return available MRI-NUFFT backends, including Pulserver's Torch CUDA adapter."""
+    try:
+        _require_mrinufft()
+    except ImportError:
+        return []
+    public_names = {
+        "cufinufft" if name == "cufinufft-torch" else name
+        for name in _available_nufft_backends()
+    }
+    return sorted(public_names)
+
+
+def _resolve_nufft_backend(
+    backend: str,
+) -> str:
+    """Select FINUFFT on CPU and the private Torch CUFINUFFT adapter on CUDA."""
+    selected = backend.lower()
+    if selected == "cufinufft":
+        return "cufinufft-torch"
+    if selected != "auto":
+        return selected
+    try:
+        torch = import_module("torch")
+    except ImportError:
+        return "finufft"
+    return "cufinufft-torch" if torch.cuda.is_available() else "finufft"
 
 
 def _image_as_real(value: Any) -> Any:
@@ -169,6 +199,8 @@ class MRIPhysics:
         self.streaming_policy = None
         self._streaming_methods: set[str] = set()
         self._streaming_parameters: dict[str, Any] | None = None
+        self._replicate: Callable[[Any, Any], MRIPhysics] | None = None
+        self._streaming_replicas: dict[str, MRIPhysics] = {}
 
     @property
     def normal_mode(self) -> str:
@@ -216,16 +248,31 @@ class MRIPhysics:
         torch = import_module("torch")
         if not isinstance(value, torch.Tensor) or value.device.type != "cpu":
             return method(value, **kwargs)
+        if self._streaming_replicas:
+            devices = policy.torch_devices
+            worker_count = min(len(devices), value.shape[0])
+            boundaries = [
+                (index * value.shape[0]) // worker_count
+                for index in range(worker_count + 1)
+            ]
+
+            def apply_part(index: int) -> Any:
+                start, stop = boundaries[index], boundaries[index + 1]
+                replica = self._streaming_replicas[str(devices[index])]
+                return getattr(replica, name)(value[start:stop], **kwargs)
+
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                outputs = list(executor.map(apply_part, range(worker_count)))
+            return torch.cat(outputs, dim=0)
         if self._streaming_parameters is not None:
             starts = list(range(0, value.shape[0], policy.physics_batch_size))
             outputs: list[Any | None] = [None] * len(starts)
-            streams = [
-                torch.cuda.Stream(device=policy.torch_device)
-                for _ in range(policy.streams)
-            ]
+            devices = policy.execution_devices
+            streams = [torch.cuda.Stream(device=device) for device in devices]
             for chunk_index, start in enumerate(starts):
                 stop = min(start + policy.physics_batch_size, value.shape[0])
-                slot = chunk_index % policy.streams
+                slot = chunk_index % len(streams)
+                device = devices[slot]
                 streams[slot].synchronize()
                 host_parameters = {}
                 for parameter_name, parameter in self._streaming_parameters.items():
@@ -254,11 +301,11 @@ class MRIPhysics:
                     pinned = torch.empty_like(host, pin_memory=True)
                     pinned.copy_(host)
                     host = pinned
-                with torch.cuda.stream(streams[slot]):
+                with torch.cuda.device(device), torch.cuda.stream(streams[slot]):
                     device_parameters = {
                         parameter_name: (
                             parameter.to(
-                                policy.torch_device,
+                                device,
                                 non_blocking=(
                                     policy.pin_memory
                                     and isinstance(parameter, torch.Tensor)
@@ -271,7 +318,7 @@ class MRIPhysics:
                         for parameter_name, parameter in host_parameters.items()
                     }
                     device_value = host.to(
-                        policy.torch_device,
+                        device,
                         non_blocking=policy.pin_memory,
                     )
                     device_result = self._cartesian_device_call(
@@ -346,6 +393,23 @@ class MRIPhysics:
     ) -> Any:
         """Move one bounded call to CUDA and return a CPU tensor."""
         torch = import_module("torch")
+        if value.shape[0] > policy.physics_batch_size:
+            return torch.cat(
+                [
+                    MRIPhysics._stage_call(
+                        method,
+                        value[start : start + policy.physics_batch_size],
+                        policy,
+                        kwargs,
+                    )
+                    for start in range(
+                        0,
+                        value.shape[0],
+                        policy.physics_batch_size,
+                    )
+                ],
+                dim=0,
+            )
         if policy.pin_memory and not value.is_pinned():
             host = torch.empty_like(value, pin_memory=True)
             host.copy_(value)
@@ -385,6 +449,11 @@ class MRIPhysics:
     def enable_streaming(self, policy: Any) -> MRIPhysics:
         """Keep reconstruction state on CPU and use bounded CUDA workspaces."""
         self.streaming_policy = policy
+        if self._replicate is not None and getattr(policy, "device_count", 1) > 1:
+            self._streaming_replicas = {
+                str(device): self._replicate(device, policy.for_device(device))
+                for device in policy.torch_devices
+            }
         enable = getattr(self.operator, "enable_streaming", None)
         if enable is not None:
             enable(policy)
@@ -401,7 +470,7 @@ class MRIPhysics:
         trajectory: Any,
         frame_index: int | None = None,
     ) -> MRIPhysics:
-        """Rebuild a non-Cartesian factory for a frame-specific trajectory."""
+        """Rebuild non-Cartesian physics for a frame-specific trajectory."""
         if self._rebuild is None:
             return self
         return self._rebuild(trajectory, frame_index)
@@ -430,7 +499,7 @@ class _FramePhysicsProvider:
         result = self.physics.rebuild(self.trajectory[index], index)
         result.enable_streaming(self.policy)
         if self.toeplitz_options is not None:
-            toeplitz(result, **self.toeplitz_options)
+            _toeplitz(result, **self.toeplitz_options)
         self.cache[index] = result
         while len(self.cache) > self.policy.frame_cache_size:
             self.cache.popitem(last=False)
@@ -471,9 +540,7 @@ class _LazyFramePhysics:
 
     def enable_toeplitz(self, options: dict[str, Any]) -> None:
         self.provider.toeplitz_options = options
-        self.modifiers = tuple(
-            dict.fromkeys((*self.modifiers, "toeplitz"))
-        )
+        self.modifiers = tuple(dict.fromkeys((*self.modifiers, "toeplitz")))
 
 
 def _native_linear_physics(
@@ -642,6 +709,11 @@ def _apply_sense_toeplitz(
 ) -> Any:
     """Apply a compact transfer between optional spatial factor banks."""
     torch = import_module("torch")
+    if streaming is not None and streaming.device_count > 1:
+        # Coils are independent until their final SENSE reduction.  Group at
+        # least one coil per device so even a single-image reconstruction can
+        # fan its Toeplitz work across a multi-GPU recon host.
+        coil_batch_size = max(coil_batch_size, streaming.device_count)
     maps = _sense_maps(native_operator, image)
     batched_maps = maps.ndim == image.ndim
     if batched_maps:
@@ -723,9 +795,7 @@ def _apply_sense_toeplitz(
             )
             continue
         fused_streaming = (
-            streaming is not None
-            and image.device.type == "cpu"
-            and coil_count == 1
+            streaming is not None and image.device.type == "cpu" and coil_count == 1
         )
         if fused_streaming:
             maps_batch = (
@@ -1201,6 +1271,8 @@ def _apply_subspace_off_resonance_toeplitz(
 ) -> Any:
     """Apply a combined coefficient/segment transfer with SENSE maps."""
     torch = import_module("torch")
+    if streaming is not None and streaming.device_count > 1:
+        coil_batch_size = max(coil_batch_size, streaming.device_count)
     maps = _sense_maps(native_operator, image)
     segment_rank = kernel.rank // coefficient_rank
     spatial_factors = as_torch(
@@ -1235,7 +1307,7 @@ def _apply_subspace_off_resonance_toeplitz(
     return result
 
 
-def cartesian_2d(
+def _cartesian_2d(
     mask: Any,
     coil_maps: Any,
     *,
@@ -1274,7 +1346,25 @@ def cartesian_2d(
     return result
 
 
-Cartesian2D = cartesian_2d
+class Cartesian2D(MRIPhysics):
+    """Two-dimensional Cartesian SENSE physics."""
+
+    def __init__(
+        self,
+        mask: Any,
+        coil_maps: Any,
+        *,
+        toeplitz: bool | dict[str, Any] = False,
+        **kwargs: Any,
+    ) -> None:
+        self.__dict__.update(
+            _cartesian_2d(
+                mask,
+                coil_maps,
+                toeplitz=toeplitz,
+                **kwargs,
+            ).__dict__
+        )
 
 
 def _noncartesian(
@@ -1308,6 +1398,16 @@ def _noncartesian(
         raise ValueError("stacked trajectories are only supported by NonCartesian3D")
 
     mrinufft = _require_mrinufft()
+    backend = _resolve_nufft_backend(backend)
+    operator_kwargs = dict(operator_kwargs)
+    if backend == "cufinufft-torch" and "gpu_device_id" not in operator_kwargs:
+        selected_device = (
+            streaming.torch_device
+            if streaming is not None and hasattr(streaming, "torch_device")
+            else getattr(trajectory, "device", None)
+        )
+        if getattr(selected_device, "type", None) == "cuda":
+            operator_kwargs["gpu_device_id"] = selected_device.index or 0
     trajectory_shape = getattr(trajectory, "shape", ())
     frame_stacked = streaming is not None and len(trajectory_shape) >= 4
     native_trajectory = trajectory[0] if frame_stacked else trajectory
@@ -1402,12 +1502,35 @@ def _noncartesian(
         rebuild=rebuild,
         toeplitz_options=toeplitz_config if toeplitz_enabled else None,
     )
+
+    def replicate(device: Any, device_policy: Any) -> MRIPhysics:
+        replica_kwargs = dict(operator_kwargs)
+        replica_kwargs["gpu_device_id"] = device.index
+        return _noncartesian(
+            trajectory,
+            image_shape,
+            spatial_ndim=spatial_ndim,
+            coil_maps=coil_maps,
+            density=density,
+            backend=backend,
+            n_coils=n_coils,
+            n_batchs=n_batchs,
+            stacked=stacked,
+            z_index=z_index,
+            toeplitz=toeplitz,
+            viewed_as_real=viewed_as_real,
+            streaming=device_policy,
+            operator_kwargs=replica_kwargs,
+        )
+
+    if backend == "cufinufft-torch" and not stacked:
+        result._replicate = replicate
     if streaming is not None:
         result.enable_streaming(streaming)
     return result
 
 
-def noncartesian_2d(
+def _noncartesian_2d(
     trajectory: Any,
     image_shape: tuple[int, int],
     *,
@@ -1442,10 +1565,42 @@ def noncartesian_2d(
     return Toeplitz(result, **options) if enabled else result
 
 
-NonCartesian2D = noncartesian_2d
+class NonCartesian2D(MRIPhysics):
+    """Two-dimensional non-Cartesian MRI physics."""
+
+    def __init__(
+        self,
+        trajectory: Any,
+        image_shape: tuple[int, int],
+        *,
+        coil_maps: Any | None = None,
+        density: Any | None = None,
+        backend: str = "auto",
+        n_coils: int = 1,
+        n_batchs: int = 1,
+        toeplitz: bool | dict[str, Any] = False,
+        viewed_as_real: bool = True,
+        streaming: Any | None = None,
+        **kwargs: Any,
+    ) -> None:
+        self.__dict__.update(
+            _noncartesian_2d(
+                trajectory,
+                image_shape,
+                coil_maps=coil_maps,
+                density=density,
+                backend=backend,
+                n_coils=n_coils,
+                n_batchs=n_batchs,
+                toeplitz=toeplitz,
+                viewed_as_real=viewed_as_real,
+                streaming=streaming,
+                **kwargs,
+            ).__dict__
+        )
 
 
-def noncartesian_3d(
+def _noncartesian_3d(
     trajectory: Any,
     image_shape: tuple[int, int, int],
     *,
@@ -1482,7 +1637,43 @@ def noncartesian_3d(
     return Toeplitz(result, **options) if enabled else result
 
 
-NonCartesian3D = noncartesian_3d
+class NonCartesian3D(MRIPhysics):
+    """Three-dimensional or stack-of-stars non-Cartesian MRI physics."""
+
+    def __init__(
+        self,
+        trajectory: Any,
+        image_shape: tuple[int, int, int],
+        *,
+        coil_maps: Any | None = None,
+        density: Any | None = None,
+        backend: str = "auto",
+        n_coils: int = 1,
+        n_batchs: int = 1,
+        stacked: bool = False,
+        z_index: Any = "auto",
+        toeplitz: bool | dict[str, Any] = False,
+        viewed_as_real: bool = True,
+        streaming: Any | None = None,
+        **kwargs: Any,
+    ) -> None:
+        self.__dict__.update(
+            _noncartesian_3d(
+                trajectory,
+                image_shape,
+                coil_maps=coil_maps,
+                density=density,
+                backend=backend,
+                n_coils=n_coils,
+                n_batchs=n_batchs,
+                stacked=stacked,
+                z_index=z_index,
+                toeplitz=toeplitz,
+                viewed_as_real=viewed_as_real,
+                streaming=streaming,
+                **kwargs,
+            ).__dict__
+        )
 
 
 def _subspace_linear_physics(
@@ -1515,9 +1706,7 @@ def _subspace_linear_physics(
             self.toeplitz_kernel = None
             if all(item.kind == "cartesian2d" for item in frame_physics):
                 self._compact_toeplitz = "cartesian-subspace"
-            elif any(
-                isinstance(item, _LazyFramePhysics) for item in frame_physics
-            ):
+            elif any(isinstance(item, _LazyFramePhysics) for item in frame_physics):
                 self._compact_toeplitz = (
                     "subspace-off-resonance"
                     if "off_resonance" in frame_physics[0].modifiers
@@ -1558,7 +1747,7 @@ def _subspace_linear_physics(
                 if isinstance(item, _LazyFramePhysics):
                     item.enable_toeplitz(options)
                 else:
-                    toeplitz(item, **options)
+                    _toeplitz(item, **options)
             self.use_toeplitz = bool(self.frame_physics) and all(
                 item.normal_mode in {"toeplitz", "exact-fft"}
                 for item in self.frame_physics
@@ -1807,11 +1996,9 @@ def _subspace_linear_physics(
                     normal = frame_physics_item.A_adjoint_A(frame)
                     if frame_physics_item.viewed_as_real:
                         normal = self._image_as_cpx(normal)
-                    result += (
-                        basis_cpu[:, index]
-                        .reshape(1, -1, *([1] * (normal.ndim - 2)))
-                        * normal.to("cpu")
-                    )
+                    result += basis_cpu[:, index].reshape(
+                        1, -1, *([1] * (normal.ndim - 2))
+                    ) * normal.to("cpu")
                 return self._image_as_real(result) if self.viewed_as_real else result
             frames = self._expand(coefficients)
             normal_frames = []
@@ -1829,7 +2016,7 @@ def _subspace_linear_physics(
     return _SubspaceLinearPhysics()
 
 
-def subspace(
+def _subspace(
     physics: MRIPhysics,
     basis: Any,
     *,
@@ -1893,7 +2080,11 @@ def subspace(
     return result
 
 
-Subspace = subspace
+class Subspace(MRIPhysics):
+    """Subspace encoding composed with frame-wise MRI physics."""
+
+    def __init__(self, physics: MRIPhysics, basis: Any, **kwargs: Any) -> None:
+        self.__dict__.update(_subspace(physics, basis, **kwargs).__dict__)
 
 
 def _configure_off_resonance_toeplitz(
@@ -1948,7 +2139,7 @@ def _configure_off_resonance_toeplitz(
     return operator
 
 
-def off_resonance(
+def _off_resonance(
     physics: MRIPhysics,
     field_map: Any,
     readout_time: Any,
@@ -1976,9 +2167,7 @@ def off_resonance(
     corrected_readout_time = readout_time
     trajectory_shape = getattr(physics.trajectory, "shape", ())
     time_shape = getattr(readout_time, "shape", ())
-    frame_samples = (
-        prod(trajectory_shape[1:-1]) if len(trajectory_shape) >= 4 else 0
-    )
+    frame_samples = prod(trajectory_shape[1:-1]) if len(trajectory_shape) >= 4 else 0
     dynamic_readout = bool(
         frame_samples
         and time_shape
@@ -1988,10 +2177,7 @@ def off_resonance(
             or prod(time_shape) == trajectory_shape[0] * frame_samples
         )
     )
-    if (
-        physics.streaming_policy is not None
-        and dynamic_readout
-    ):
+    if physics.streaming_policy is not None and dynamic_readout:
         corrected_readout_time = (
             readout_time[0]
             if time_shape[0] == trajectory_shape[0]
@@ -2084,7 +2270,7 @@ def off_resonance(
                     temporal_factors[start : start + frame_samples],
                     native.C,
                 )
-        return off_resonance(
+        return OffResonance(
             physics.rebuild(new_trajectory, frame_index),
             field_map,
             frame_readout_time,
@@ -2109,10 +2295,27 @@ def off_resonance(
     return result
 
 
-OffResonance = off_resonance
+class OffResonance(MRIPhysics):
+    """Off-resonance-corrected non-Cartesian MRI physics."""
+
+    def __init__(
+        self,
+        physics: MRIPhysics,
+        field_map: Any,
+        readout_time: Any,
+        **kwargs: Any,
+    ) -> None:
+        self.__dict__.update(
+            _off_resonance(
+                physics,
+                field_map,
+                readout_time,
+                **kwargs,
+            ).__dict__
+        )
 
 
-def toeplitz(
+def _toeplitz(
     physics: MRIPhysics,
     *,
     support: str = "radial",
@@ -2152,4 +2355,8 @@ def toeplitz(
     return physics
 
 
-Toeplitz = toeplitz
+class Toeplitz(MRIPhysics):
+    """MRI physics with an accelerated Toeplitz normal operator."""
+
+    def __init__(self, physics: MRIPhysics, **kwargs: Any) -> None:
+        self.__dict__.update(_toeplitz(physics, **kwargs).__dict__)

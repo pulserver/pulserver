@@ -23,8 +23,8 @@ sys.meta_path[:] = [
 import torch
 
 import pulserver
-from pulserver.recon import CudaStreaming
 from pulserver.recon._toeplitz import CompactToeplitzKernel, support_indices
+from pulserver.recon.execution import CudaStreaming
 
 SOURCE = Path(pulserver.__file__).resolve()
 if REPO_ROOT not in SOURCE.parents:

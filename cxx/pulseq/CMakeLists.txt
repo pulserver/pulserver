@@ -13,9 +13,19 @@ add_library(pulseqpp STATIC
     read.cpp
     raw64.cpp
     trajectory.cpp
+    kspace.cpp
+    kspace_sequence.cpp
+    autolabel.cpp
     # The vendored MD5, compiled as C for the [SIGNATURE] section. raw64.cpp
     # has its own copy inside its namespace; the two do not meet.
     ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/src/vendor/external_md5.c
+    # The RF spectrum, at the library's ordinary (float) precision, and the
+    # transform under it.  Unlike the reader this is NOT compiled a second time
+    # inside raw64: a -6 dB width read off a hundred-thousand-point grid has
+    # nothing to gain from float64, and kissfft would have to be instantiated
+    # twice to give it that.
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/src/pulseq/pulseq_rf.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/src/vendor/external_kiss_fft.c
 )
 
 target_include_directories(pulseqpp PUBLIC

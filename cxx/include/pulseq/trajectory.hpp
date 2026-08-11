@@ -77,6 +77,19 @@ namespace pulseq
          * carries no shape information, so a consumer stores no base for it
          * and takes its k from the encoding counters instead -- the `-1`
          * trivial-shot case in the cache's trajectory table.
+         *
+         * @warning This is the **logical** frame, like everything else here,
+         * and flat is therefore not on its own a licence to drop the
+         * trajectory.  A radial spoke is a flat gradient plus a per-shot
+         * rotation extension: logically as constant as a Cartesian line,
+         * physically a line at an arbitrary angle, and with no encoding
+         * counter that locates it.  A consumer taking the trivial-shot route
+         * must carry the block's rotation with the amplitude and apply it --
+         * which is what the cache's `rotation_id` column is for, and what
+         * `pulseg_trajectory.c` means by "and applies any rotation".
+         * `pulseq_ktraj_readout::constant_axes` answers the same question in
+         * the frame its k is reported in, and says physically-not-constant
+         * for the same spoke.
          */
         bool constant = true;
     };
@@ -139,11 +152,14 @@ namespace pulseq
      *   walk back towards the origin, and leaving it out would put every
      *   echo of a train in the wrong half of k-space
      * - every other use, inversion and saturation included, leaves it alone
+     * - a pulse that declares **no** use raises, because guessing between
+     *   those is not a small error: read an excitation as neutral and k never
+     *   restarts, so it accumulates across the whole scan
      *
-     * Both happen at the pulse's centre (`delay + center`), not at the block
-     * boundary, so a block whose gradients straddle its RF -- a refocusing
-     * pulse between two crushers, the ordinary case -- is split there and each
-     * side accumulates on the correct side of the sign flip.
+     * The reset and the flip happen at the pulse's centre (`delay + center`),
+     * not at the block boundary, so a block whose gradients straddle its RF --
+     * a refocusing pulse between two crushers, the ordinary case -- is split
+     * there and each side accumulates on the correct side of the sign flip.
      *
      * ### The limit
      *
@@ -151,8 +167,21 @@ namespace pulseq
      * frame, matching `base_trajectory`.  Composing rotation is the consumer's
      * job precisely because `dr . k` is invariant when both are rotated, which
      * is what lets a logical-frame shift ignore rotation entirely.
+     *
+     * ### Where the arithmetic happens
+     *
+     * In `csrc/src/pulseq/pulseq_ktraj.c`, which is the only place it happens.
+     * This used to be a second implementation -- a `Piecewise` per block,
+     * written before the C89 core existed -- and the two agreed over every
+     * fixture in the repository to 4e-16 relative, which is what made it safe
+     * to delete one of them.  What survives is this name, because
+     * `TransformFOV` is built on it and "k at the start of each block" is the
+     * right thing for it to ask for.
+     *
+     * @note Non-const because reaching the core means serialising the
+     * sequence, and `write_binary` stamps `TotalDuration` on the way past.
      */
-    std::vector<std::array<double, 3>> block_k_origins(const Sequence& seq);
+    std::vector<std::array<double, 3>> block_k_origins(Sequence& seq);
 
     /**
      * A readout's absolute k, per axis, in 1/m -- origin plus amplitude times

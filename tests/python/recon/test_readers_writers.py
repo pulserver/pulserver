@@ -1,12 +1,12 @@
-"""Tests for pulserver.recon.readers and pulserver.recon.writers — roundtrip serialization."""
+"""Tests for private MRD reader/writer round trips."""
 
 import io
 import struct
 
 import ismrmrd
 import numpy as np
-from pulserver.recon import constants
-from pulserver.recon.readers import (
+from pulserver.recon._mrd import constants
+from pulserver.recon._mrd.readers import (
     read,
     read_acquisition,
     read_byte_string,
@@ -15,7 +15,7 @@ from pulserver.recon.readers import (
     read_vector,
     read_waveform,
 )
-from pulserver.recon.writers import (
+from pulserver.recon._mrd.writers import (
     write_acquisition,
     write_byte_string,
     write_image,

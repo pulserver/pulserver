@@ -11,7 +11,7 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from pulserver.recon import (
+from pulserver.recon.simulation import (
     BSSFP,
     FSE,
     SPGR,

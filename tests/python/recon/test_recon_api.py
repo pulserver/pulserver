@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import inspect
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
+import pulserver.recon as recon
 import pulserver.recon.algorithms as algorithms
 import pulserver.recon.denoisers as denoisers
 import pulserver.recon.density as density
@@ -18,6 +22,49 @@ from pulserver.recon.preprocessing import (
     noise_prewhiten,
     remove_readout_oversampling,
 )
+
+
+def test_public_namespace_is_small_and_module_oriented():
+    assert recon.__all__ == [
+        "algorithms",
+        "calibration",
+        "corrections",
+        "denoisers",
+        "density",
+        "execution",
+        "physics",
+        "preprocessing",
+        "simulation",
+        "pics",
+    ]
+    assert recon.pics is algorithms.pics
+    assert "Connection" not in dir(recon)
+    assert "Server" not in dir(recon)
+    assert "MrdMetadata" not in dir(recon)
+
+
+def test_importing_public_root_does_not_load_private_mrd_stack():
+    code = """
+import sys
+import pulserver.recon
+
+loaded = [name for name in sys.modules if name.startswith("pulserver.recon._mrd")]
+if loaded:
+    raise SystemExit(f"private MRD modules imported: {loaded}")
+"""
+    subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603
+
+
+def test_scientific_apis_expose_only_deepinverse_style_classes():
+    assert "Cartesian2D" in physics.__all__
+    assert "NonCartesian2D" in physics.__all__
+    assert "LLR" in denoisers.__all__
+    assert inspect.isclass(physics.Cartesian2D)
+    assert inspect.isclass(physics.NonCartesian2D)
+    assert inspect.isclass(denoisers.LLR)
+    assert "noncartesian_2d" not in physics.__all__
+    assert "llr" not in denoisers.__all__
+    assert "PipeMenonDCF" not in density.__all__
 
 
 class _IdentityPhysics:
@@ -109,7 +156,7 @@ def test_pics_averages_a_sequence_of_denoisers(monkeypatch):
     models = [object(), object()]
     monkeypatch.setattr(
         algorithms,
-        "average",
+        "AverageDenoiser",
         lambda selected: calls.setdefault("models", selected) and averaged,
     )
     monkeypatch.setattr(
@@ -161,18 +208,16 @@ def test_polynomial_preconditioned_fista_uses_the_normal_operator():
     assert np.linalg.norm(result - 1) < 0.1
 
 
-def test_denoiser_factories_hide_deepinverse_class_names(monkeypatch):
+def test_denoiser_classes_wrap_deepinverse_models(monkeypatch):
     models = SimpleNamespace(
         WaveletDenoiser=lambda **kwargs: ("wavelet", kwargs),
         TVDenoiser=lambda **kwargs: ("tv", kwargs),
         TGVDenoiser=lambda **kwargs: ("tgv", kwargs),
     )
     monkeypatch.setattr(denoisers, "import_module", lambda _name: models)
-    assert denoisers.denoiser("wavelet", dimension=3)[1]["wvdim"] == 3
-    assert denoisers.tv(n_it_max=4) == ("tv", {"n_it_max": 4})
-    assert denoisers.tgv(crit=1e-4) == ("tgv", {"crit": 1e-4})
-    with pytest.raises(ValueError, match="Unknown denoiser"):
-        denoisers.denoiser("invented")
+    assert denoisers.Wavelet(dimension=3).model[1]["wvdim"] == 3
+    assert denoisers.TV(n_it_max=4).model == ("tv", {"n_it_max": 4})
+    assert denoisers.TGV(crit=1e-4).model == ("tgv", {"crit": 1e-4})
 
 
 def test_average_denoiser_is_a_registered_torch_model(monkeypatch):
@@ -192,6 +237,7 @@ def test_average_denoiser_is_a_registered_torch_model(monkeypatch):
             return self.factor * value + sigma
 
     model = denoisers.AverageDenoiser([Scale(1), Scale(3)])
+    assert isinstance(model, denoisers.AverageDenoiser)
     result = model(torch.ones(2), 0.5)
     torch.testing.assert_close(result, torch.full((2,), 2.5))
     assert len(model.models) == 2
@@ -207,7 +253,7 @@ def test_llr_matches_direct_singular_value_thresholding(monkeypatch):
     generator = torch.Generator().manual_seed(8)
     value = torch.randn(2, 5, 4, 4, generator=generator, dtype=torch.complex64)
     threshold = torch.tensor([0.1, 0.2])
-    model = denoisers.llr(
+    model = denoisers.LLR(
         dimension=2,
         block_size=4,
         cycle_spins=False,
@@ -242,6 +288,7 @@ def test_llr_chunked_3d_cycle_spins_preserve_zero_threshold(monkeypatch):
         cycle_spins=True,
         block_batch_size=1,
     )
+    assert isinstance(model, denoisers.LLR)
     model(value, 0.0)
     shifted_result = model(value, 0.0)
     torch.testing.assert_close(
@@ -294,7 +341,7 @@ def test_cartesian_factory_returns_uniform_facade(monkeypatch):
     mask = SimpleNamespace(device="cpu")
     coil_maps = SimpleNamespace(device="cuda:0")
     result = physics.Cartesian2D(mask, coil_maps, toeplitz=True)
-    assert isinstance(result, physics.MRIPhysics)
+    assert isinstance(result, physics.Cartesian2D)
     assert result.kind == "cartesian2d"
     assert result.normal_mode == "exact-fft"
     assert calls["device"] == "cuda:0"

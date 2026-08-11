@@ -6,19 +6,31 @@ from types import SimpleNamespace
 
 import numpy as np
 import pulserver.recon.calibration as calibration
-import pulserver.recon.epi as epi
+import pulserver.recon._mrd.epi as epi
 import pulserver.recon.linops as linops
 import pulserver.recon.optimizers as optimizers
 import pulserver.recon.prox as prox
 import pytest
-from pulserver.recon.grouping import filter_acquisitions, group_by_labels, split_on_flag
-from pulserver.recon.metadata import MrdMetadata, acquisition_labels, has_acquisition_flag, user_parameter
+from pulserver.recon._mrd.grouping import (
+    filter_acquisitions,
+    group_by_labels,
+    split_on_flag,
+)
+from pulserver.recon._mrd.metadata import (
+    MrdMetadata,
+    acquisition_labels,
+    has_acquisition_flag,
+    user_parameter,
+)
 from pulserver.recon.sms import SmsEpiInputs
 
 
 def test_upstream_selectors_return_the_requested_implementation(monkeypatch):
     mrpro = SimpleNamespace(operators=SimpleNamespace(FourierOp=object))
-    deepinv_optim = SimpleNamespace(TVPrior=lambda **kwargs: ("tv", kwargs), FISTA=lambda **kwargs: ("fista", kwargs))
+    deepinv_optim = SimpleNamespace(
+        TVPrior=lambda **kwargs: ("tv", kwargs),
+        FISTA=lambda **kwargs: ("fista", kwargs),
+    )
 
     def fake_import(name):
         if name == "mrpro.operators":
@@ -33,7 +45,10 @@ def test_upstream_selectors_return_the_requested_implementation(monkeypatch):
 
     assert linops.mrpro_operator("fourier") is object
     assert prox.deepinverse_prior("tv", strength=0.1) == ("tv", {"strength": 0.1})
-    assert optimizers.deepinverse_optimizer("fista", max_iter=10) == ("fista", {"max_iter": 10})
+    assert optimizers.deepinverse_optimizer("fista", max_iter=10) == (
+        "fista",
+        {"max_iter": 10},
+    )
 
 
 def test_polynomial_preconditioner_degree_zero_and_call_count():
@@ -70,7 +85,9 @@ def test_nlinv_preserves_the_torch_like_input_object(monkeypatch):
 
     import sys
 
-    monkeypatch.setitem(sys.modules, "pygrog.utils", SimpleNamespace(nlinv_calib=nlinv_calib))
+    monkeypatch.setitem(
+        sys.modules, "pygrog.utils", SimpleNamespace(nlinv_calib=nlinv_calib)
+    )
     assert calibration.nlinv_sensitivities(kspace, mask=mask) is kspace
     assert calls["data"] is kspace
     assert calls["mask"] is mask
@@ -78,7 +95,15 @@ def test_nlinv_preserves_the_torch_like_input_object(monkeypatch):
 
 def _acquisition(slice_number: int, flags: int = 0):
     return SimpleNamespace(
-        idx=SimpleNamespace(slice=slice_number, repetition=0, contrast=0, phase=0, average=0, set=0, segment=0),
+        idx=SimpleNamespace(
+            slice=slice_number,
+            repetition=0,
+            contrast=0,
+            phase=0,
+            average=0,
+            set=0,
+            segment=0,
+        ),
         encoding_space_ref=0,
         flags=flags,
         is_flag_set=lambda flag: bool(flags & flag),
@@ -91,7 +116,9 @@ def test_grouping_and_flag_helpers():
     assert list(groups) == [(0, 0), (0, 1)]
     assert [len(group) for group in groups.values()] == [2, 1]
     assert [len(group) for group in split_on_flag(acquisitions, 2)] == [2, 1]
-    assert list(filter_acquisitions(acquisitions, require_flags=(2,))) == acquisitions[1:]
+    assert (
+        list(filter_acquisitions(acquisitions, require_flags=(2,))) == acquisitions[1:]
+    )
     assert has_acquisition_flag(acquisitions[1], 2)
     assert acquisition_labels(acquisitions[0])["slice"] == 0
 
@@ -105,7 +132,9 @@ def test_metadata_accessors_and_parameter_lookup():
     )
     header = SimpleNamespace(
         encoding=[encoding],
-        userParameters=SimpleNamespace(userParameterLong=[SimpleNamespace(name="BitsStored", value=12)]),
+        userParameters=SimpleNamespace(
+            userParameterLong=[SimpleNamespace(name="BitsStored", value=12)]
+        ),
     )
     metadata = MrdMetadata(header)
     assert metadata.encoded_matrix() == (64, 32, 1)
@@ -147,14 +176,21 @@ def test_sms_inputs_require_caipi_and_a_reconstruction_reference():
     with pytest.raises(ValueError, match="CAIPI"):
         SmsEpiInputs(imaging=object()).validate(multiband_factor=2)
     with pytest.raises(ValueError, match="coil maps or a single-band reference"):
-        SmsEpiInputs(imaging=object(), caipi_encoding=object()).validate(multiband_factor=2)
-    SmsEpiInputs(imaging=object(), caipi_encoding=object(), coil_maps=object()).validate(multiband_factor=2)
+        SmsEpiInputs(imaging=object(), caipi_encoding=object()).validate(
+            multiband_factor=2
+        )
+    SmsEpiInputs(
+        imaging=object(), caipi_encoding=object(), coil_maps=object()
+    ).validate(multiband_factor=2)
 
 
 def test_recon_examples_are_importable_from_pulserver():
     from pulserver.examples.recon import prepare_sms_epi
 
     inputs = prepare_sms_epi(
-        imaging=object(), multiband_factor=2, caipi_encoding=object(), coil_maps=object()
+        imaging=object(),
+        multiband_factor=2,
+        caipi_encoding=object(),
+        coil_maps=object(),
     )
     assert isinstance(inputs, SmsEpiInputs)

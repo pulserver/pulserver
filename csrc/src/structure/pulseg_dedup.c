@@ -17,7 +17,9 @@
 
 #include "pulseg_internal.h"
 #include "pulseg.h"
-#include "external_kiss_fft.h"
+/* The RF spectrum lives at the pulseq level -- pulseg links pulseq, and both
+ * this and pulseq's own slice-thickness derivation need the same transform. */
+#include "pulseq_rf.h"
 
 /* ================================================================== */
 /*  File-scope constants                                              */
@@ -825,53 +827,17 @@ fail:
 /*  RF statistics                                                     */
 /* ================================================================== */
 
-static float compute_rf_bandwidth_fft(
-    const float *rf_re,
-    const float *rf_im,
-    kiss_fft_cfg cfg,
-    int nn,
-    float cutoff,
-    float duration,
-    const float *w,
-    float *work_re,
-    float *work_im,
-    kiss_fft_cpx *fft_in,
-    kiss_fft_cpx *fft_out)
-{
-    int i;
-    float w1, w2, bw;
-    float fallback_bw;
-
-    fallback_bw = (duration > 0.0f) ? (3.12f / duration) : 0.0f;
-    if (!rf_re || !rf_im || !cfg || nn <= 0)
-        return fallback_bw;
-
-    for (i = 0; i < nn; ++i)
-    {
-        work_re[i] = rf_re[i];
-        work_im[i] = rf_im[i];
-    }
-    pulseg__fftshift_complex(work_re, work_im, nn);
-    for (i = 0; i < nn; ++i)
-    {
-        fft_in[i].r = work_re[i];
-        fft_in[i].i = work_im[i];
-    }
-
-    kiss_fft(cfg, fft_in, fft_out);
-
-    for (i = 0; i < nn; ++i)
-    {
-        work_re[i] = fft_out[i].r;
-        work_im[i] = fft_out[i].i;
-    }
-    pulseg__fftshift_complex(work_re, work_im, nn);
-
-    w1 = pulseg__get_spectrum_flank(w, work_re, work_im, nn, cutoff, 0);
-    w2 = pulseg__get_spectrum_flank(w, work_re, work_im, nn, cutoff, 1);
-    bw = w2 - w1;
-    return (bw > 0.0f) ? bw : fallback_bw;
-}
+/*
+ * The bandwidth estimator that used to live here now lives at the pulseq
+ * level, in csrc/src/pulseq/pulseq_rf.c.
+ *
+ * Two things in this repository need the transform of an RF pulse -- these
+ * statistics, and pulseq's own slice-thickness derivation -- and pulseg links
+ * pulseq rather than the reverse, so the shared piece has to sit on the pulseq
+ * side.  What is left here is the part that is pulseg's: the fallback when the
+ * spectrum is unmeasurable, and the multiband split, which reads the same
+ * spectrum the bandwidth was taken from.
+ */
 
 static int compute_rf_stats(
     const pulseq_file *seq,
@@ -891,7 +857,6 @@ static int compute_rf_stats(
     float *rf_im = NULL;
     float *rf_re_uniform = NULL;
     float *rf_im_uniform = NULL;
-    float *time_centered = NULL;
     int num_samples, num_uniform, num_real;
     int mag_id, phase_id, time_id;
     int has_phase, has_time;
@@ -900,18 +865,12 @@ static int compute_rf_stats(
     pulseg_rf_definition *rd;
 
     int nn;
-    float dw = 10.0f;
-    float cutoff = 0.5f;
+    float dw = (float)PULSEQ_RF_DEFAULT_RESOLUTION_HZ;
+    float cutoff = (float)PULSEQ_RF_DEFAULT_CUTOFF;
 
-    kiss_fft_cfg fft_cfg = NULL;
-    float *tt = NULL;
-    float *w = NULL;
-    float *rfs_re = NULL;
-    float *rfs_im = NULL;
+    pulseq_rf_spectrum *spectrum = NULL;
+    const float *w = NULL;
     float *work_re = NULL;
-    float *work_im = NULL;
-    kiss_fft_cpx *fft_in = NULL;
-    kiss_fft_cpx *fft_out = NULL;
     int fft_ready = 0;
 
     float rf_abs, sum_signed;
@@ -928,28 +887,17 @@ static int compute_rf_stats(
     else
         rf_raster_us = opts->rf_raster_us;
 
-    nn = (int)(1.0f / (dw * rf_raster_us * 1e-6f));
-    nn = kiss_fft_next_fast_size(nn);
-    if (nn < 2)
-        nn = 2;
-
-    tt = (float *)PULSEG_ALLOC(nn * sizeof(float));
-    w = (float *)PULSEG_ALLOC(nn * sizeof(float));
-    rfs_re = (float *)PULSEG_ALLOC(nn * sizeof(float));
-    rfs_im = (float *)PULSEG_ALLOC(nn * sizeof(float));
-    work_re = (float *)PULSEG_ALLOC(nn * sizeof(float));
-    work_im = (float *)PULSEG_ALLOC(nn * sizeof(float));
-    fft_in = (kiss_fft_cpx *)KISS_FFT_MALLOC(nn * sizeof(kiss_fft_cpx));
-    fft_out = (kiss_fft_cpx *)KISS_FFT_MALLOC(nn * sizeof(kiss_fft_cpx));
-    fft_cfg = kiss_fft_alloc(nn, 0, NULL, NULL);
-    if (tt && w && rfs_re && rfs_im && work_re && work_im && fft_in && fft_out && fft_cfg)
+    /* One plan for every pulse: the grid depends on the raster and the wanted
+     * resolution, not on the pulse, so a variable-flip train of two hundred
+     * distinct pulses shares it. */
+    if (PULSEQ_SUCCEEDED(pulseq_rf_spectrum_create(&spectrum, rf_raster_us, dw)))
     {
-        for (i = 0; i < nn; ++i)
-        {
-            tt[i] = (float)(i - nn / 2) * rf_raster_us;
-            w[i] = (float)(i - nn / 2) * dw;
-        }
-        fft_ready = 1;
+        nn = pulseq_rf_spectrum_size(spectrum);
+        w = pulseq_rf_spectrum_freq(spectrum);
+        /* Magnitudes for the multiband split, written once per pulse. */
+        work_re = (float *)PULSEG_ALLOC(nn * sizeof(float));
+        if (work_re)
+            fft_ready = 1;
     }
     if (!fft_ready)
     {
@@ -1016,7 +964,6 @@ static int compute_rf_stats(
         time_us = NULL;
         rf_re = NULL;
         rf_im = NULL;
-        time_centered = NULL;
         num_samples = 0;
         duration = 0.0f;
 
@@ -1318,34 +1265,24 @@ static int compute_rf_stats(
         /* bandwidth via FFT */
         if (fft_ready && time_us)
         {
-            time_centered = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
-            if (time_centered)
+            if (PULSEQ_SUCCEEDED(pulseq_rf_spectrum_run(
+                    spectrum, rf_re, rf_im, time_us, num_samples, time_center)))
             {
-                for (i = 0; i < num_samples; ++i)
-                    time_centered[i] = time_us[i] - time_center;
-                pulseg__interp1_linear_complex(
-                    rfs_re,
-                    rfs_im,
-                    tt,
-                    nn,
-                    time_centered,
-                    rf_re,
-                    rf_im,
-                    num_samples);
-                rd->stats.bandwidth_hz = compute_rf_bandwidth_fft(
-                    rfs_re,
-                    rfs_im,
-                    fft_cfg,
-                    nn,
-                    cutoff,
-                    duration * 1e-6f,
-                    w,
-                    work_re,
-                    work_im,
-                    fft_in,
-                    fft_out);
-                /* After compute_rf_bandwidth_fft, work_re[i]/work_im[i] contain the
-                 * fftshifted complex spectrum.  Reuse them for multiband detection. */
+                {
+                    const float *sre = pulseq_rf_spectrum_re(spectrum);
+                    const float *sim = pulseq_rf_spectrum_im(spectrum);
+                    rd->stats.bandwidth_hz = pulseq_rf_bandwidth(spectrum, cutoff, NULL);
+                    /* An unmeasurable spectrum is reported as zero rather than
+                     * guessed at; the analytic stand-in for a pulse of this
+                     * duration is pulseg's choice to make, not pulseq's. */
+                    if (!(rd->stats.bandwidth_hz > 0.0f))
+                        rd->stats.bandwidth_hz = (duration > 0.0f) ? (3.12f / (duration * 1e-6f))
+                                                                   : 0.0f;
+                    for (i = 0; i < nn; ++i)
+                        work_re[i] = (float)sqrt(sre[i] * sre[i] + sim[i] * sim[i]);
+                }
+                /* work_re now holds the spectrum magnitude, on the plan's own
+                 * frequency axis; the multiband split reads it. */
                 {
                     int num_b, in_band;
                     float peak_max_spec, threshold;
@@ -1353,7 +1290,6 @@ static int compute_rf_stats(
                     peak_max_spec = 0.0f;
                     for (i = 0; i < nn; ++i)
                     {
-                        work_re[i] = (float)sqrt(work_re[i] * work_re[i] + work_im[i] * work_im[i]);
                         if (work_re[i] > peak_max_spec)
                             peak_max_spec = work_re[i];
                     }
@@ -1389,8 +1325,6 @@ static int compute_rf_stats(
                             rd->stats.num_bands = num_b;
                     }
                 }
-                PULSEG_FREE(time_centered);
-                time_centered = NULL;
             }
         }
         if (rf_re)
@@ -1420,45 +1354,17 @@ static int compute_rf_stats(
         }
     }
 
-    if (tt)
-        PULSEG_FREE(tt);
-    if (w)
-        PULSEG_FREE(w);
-    if (rfs_re)
-        PULSEG_FREE(rfs_re);
-    if (rfs_im)
-        PULSEG_FREE(rfs_im);
     if (work_re)
         PULSEG_FREE(work_re);
-    if (work_im)
-        PULSEG_FREE(work_im);
-    if (fft_in)
-        KISS_FFT_FREE(fft_in);
-    if (fft_out)
-        KISS_FFT_FREE(fft_out);
-    if (fft_cfg)
-        kiss_fft_free(fft_cfg);
+    if (spectrum)
+        pulseq_rf_spectrum_free(spectrum);
     return PULSEG_SUCCESS;
 
 fail:
-    if (tt)
-        PULSEG_FREE(tt);
-    if (w)
-        PULSEG_FREE(w);
-    if (rfs_re)
-        PULSEG_FREE(rfs_re);
-    if (rfs_im)
-        PULSEG_FREE(rfs_im);
     if (work_re)
         PULSEG_FREE(work_re);
-    if (work_im)
-        PULSEG_FREE(work_im);
-    if (fft_in)
-        KISS_FFT_FREE(fft_in);
-    if (fft_out)
-        KISS_FFT_FREE(fft_out);
-    if (fft_cfg)
-        kiss_fft_free(fft_cfg);
+    if (spectrum)
+        pulseq_rf_spectrum_free(spectrum);
     if (magnitude)
         PULSEG_FREE(magnitude);
     if (phase)
@@ -1475,8 +1381,6 @@ fail:
         PULSEG_FREE(rf_re_uniform);
     if (rf_im_uniform)
         PULSEG_FREE(rf_im_uniform);
-    if (time_centered)
-        PULSEG_FREE(time_centered);
     if (mag_view)
         PULSEG_FREE(mag_view);
     if (phase_view)

@@ -2,14 +2,7 @@
 
 from __future__ import annotations
 
-__all__ = ["prepare_epi", "prepare_sms_epi", "run_epi_distortion_correction"]
-
-
-def prepare_epi(*args, **kwargs):
-    """Partition an EPI MRD stream for the upstream reconstruction backend."""
-    from .recon.epi import partition_epi_acquisitions
-
-    return partition_epi_acquisitions(*args, **kwargs)
+__all__ = ["prepare_sms_epi", "run_epi_distortion_correction"]
 
 
 def prepare_sms_epi(*args, **kwargs):
@@ -24,6 +17,6 @@ def prepare_sms_epi(*args, **kwargs):
 
 def run_epi_distortion_correction(*args, **kwargs):
     """Run the explicitly installed PyHySCO CLI on an opposite-PE NIfTI pair."""
-    from .recon.distortion import run_pyhysco
+    from .recon.corrections import run_pyhysco
 
     return run_pyhysco(*args, **kwargs)

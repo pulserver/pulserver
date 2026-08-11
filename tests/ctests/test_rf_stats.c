@@ -77,9 +77,26 @@ static int test_ge_rf_stats_cb(void *ctx, const pulseg_rf_view *rf, float out_st
  *   nom_pw          = 1000 us   -> ~999 us (N-1 raster samples)
  *   isodelay        = 500 us    -> ~499 us (int truncation)
  *   area            = 1.0       -> 0.001 s (duration_s * 1.0)
- *   nom_bw          = 3125 Hz   -> ~3123 Hz (fallback 3.12/duration_s)
  *   num_samples     = 2 (raw decompressed: block pulse has only
  *                       start + end samples in .seq file)
+ *
+ * The bandwidth is measured, and is **not** the GE struct's nom_bw of 3125 Hz.
+ *
+ * This assertion used to read 3123, which is `3.12 / duration` -- the analytic
+ * stand-in for a *sinc*, and near GE's nominal figure by coincidence rather
+ * than by agreement.  It was the fallback, and it fired because the resampling
+ * ahead of the transform clamped instead of zero-padding
+ * (`pulseg__interp1_linear` holds the first and last sample outside the source
+ * range, where `mr.calcRfBandwidth` uses `interp1(..., 'linear', 0)`).  A hard
+ * pulse is magnitude 1 at both ends, so clamping extended it to DC across the
+ * whole +-50 ms window, the spectrum collapsed onto a spike at zero, both
+ * flanks landed there, and the width came back non-positive.
+ *
+ * With the transform moved to pulseq_rf.c and the zero-padding restored, the
+ * answer is the physical one: a rect of duration T has a -6 dB full width of
+ * 1.2067 / T, which is 1207 Hz here, reported as 1200 on the 10 Hz grid.
+ * Verified independently against a Hamming-windowed sinc of TBW 8, which comes
+ * back at 8000 Hz.
  */
 
 MU_TEST(test_rf180_block_pulse_stats)
@@ -110,7 +127,8 @@ MU_TEST(test_rf180_block_pulse_stats)
     mu_assert(abs(stats.isodelay_us - 499) <= 2, "isodelay_us");
 
     mu_assert_float_near("area", 0.001f, stats.area, 1e-5f);
-    mu_assert_float_near("bandwidth", 3123.0f, stats.bandwidth_hz, 50.0f);
+    /* 1.2067 / 1 ms, on a 10 Hz grid.  See the header comment. */
+    mu_assert_float_near("bandwidth", 1200.0f, stats.bandwidth_hz, 20.0f);
 
     mu_assert_int_eq(2, stats.num_samples);
 

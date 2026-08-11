@@ -5,7 +5,7 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-__all__ = ["PipeMenonDCF", "pipe", "pipe_menon_dcf"]
+__all__ = ["pipe_menon_dcf"]
 
 
 def pipe_menon_dcf(

@@ -255,9 +255,8 @@ fail:
  * 4. Resample to ADC dwell time
  *
  * There is deliberately no re-centering step: k=0 comes from the excitation
- * reset baked into the canonical array, so the result is absolute.  The
- * kzero_index argument survives only as the memo key (a second occurrence of
- * the same block under a different anchor must not reuse the cached shot).
+ * reset baked into the canonical array, so the result is absolute -- which is
+ * what lets derive_center_sample() find the echo by an argmin over it.
  *
  * Returns per-axis k-space arrays of length adc_num_samples.
  */
@@ -320,6 +319,135 @@ static void traj_slice_canonical_axis(
     }
 }
 
+/*
+ * The echo: the sample of a readout that sits closest to k = 0.
+ *
+ * Derived from the readout's own k, which `compute_block_kspace` has just
+ * produced, rather than looked up from a design-time anchor.
+ *
+ * ### Why this replaced the anchor lookup
+ *
+ * The anchors were per-segment-occurrence and matched on
+ * `block_offset == b - seg_def->start_block` -- an offset into the segment's
+ * *canonical* start, not into the occurrence being walked.  So only a
+ * segment's first occurrence ever matched, and every later one silently took
+ * the `num_samples / 2` default.  Measured on
+ * mprage_noncart_3d_3sl_3avg_userotext1 and qalas_noncart: readout 0 got the
+ * right answer (0, a centre-out shot) and readouts 1..n all got 32 of 64 --
+ * half a readout of error in the index a reconstruction centres its FFT on.
+ * A `.seq` authored elsewhere has no anchors at all, so it got N/2 throughout.
+ *
+ * There is nothing to look up.  The k arrays are absolute -- the excitation
+ * reset is baked into the canonical array -- so the echo is an argmin over
+ * them, and it costs one pass over samples that are already in hand.
+ *
+ * ### The two conventions, which are pulseq_ktraj.c's and must stay so
+ *
+ * Distances are compared with a tolerance of 1% of the readout's own sampling
+ * step, because a symmetric readout's two central samples are exactly
+ * equidistant from the origin and letting float32 rounding pick between them
+ * would make the echo index a property of an error.  Within that tolerance the
+ * tie resolves towards **increasing k along the direction of travel**: the
+ * later sample going forwards, the earlier one going backwards.  On a bipolar
+ * EPI that is 64 and 63 of 128 -- the same point in k reached from opposite
+ * ends -- and mirroring the reverse lines brings both to 64.
+ *
+ * Axes whose gradient is *not* constant across the window were zeroed on the
+ * way in (the canonical ZERO_VAR array), which is not a limitation here: a
+ * phase encode adds the same offset to every sample of the readout and cannot
+ * move the argmin along it.
+ */
+static int derive_center_sample(const float *kx, const float *ky, const float *kz, int n)
+{
+    double best = 0.0;
+    double step = 0.0;
+    double span = 0.0;
+    double tol;
+    int best_j = 0;
+    int steps = 0;
+    int forward;
+    int j;
+
+    if (n <= 0)
+        return -1;
+    if (n == 1)
+        return 0;
+
+    /* The scale every "is this a tie" question is asked against.  k is in
+     * 1/m and a sequence's field of view is its own business, so an absolute
+     * tolerance would mean something different for every scan. */
+    for (j = 1; j < n; ++j)
+    {
+        double dx = (double)kx[j] - (double)kx[j - 1];
+        double dy = (double)ky[j] - (double)ky[j - 1];
+        double dz = (double)kz[j] - (double)kz[j - 1];
+        step += sqrt(dx * dx + dy * dy + dz * dz);
+        ++steps;
+    }
+    tol = (steps > 0) ? 1.0e-2 * step / (double)steps : 0.0;
+
+    /*
+     * A readout whose k does not move has no echo: every sample is the same
+     * distance from the origin, so there is no sample that is "the" crossing.
+     *
+     * -1, never 0 and never n / 2.  Inventing one here is indistinguishable
+     * from a derived answer at every layer above, and that is the failure
+     * this whole change exists to remove.  The caller refuses to write a
+     * trajectory section rather than pass a fabricated echo to a
+     * reconstruction.
+     */
+    for (j = 0; j < n; ++j)
+    {
+        double dx = (double)kx[j] - (double)kx[0];
+        double dy = (double)ky[j] - (double)ky[0];
+        double dz = (double)kz[j] - (double)kz[0];
+        double d = sqrt(dx * dx + dy * dy + dz * dz);
+        if (d > span)
+            span = d;
+    }
+    if (!(span > 0.0))
+        return -1;
+
+    /* Direction of travel: the sign of the dominant component of the
+     * displacement from the first sample to the last. */
+    {
+        double travel = 0.0;
+        double d[3];
+        int a;
+        d[0] = (double)kx[n - 1] - (double)kx[0];
+        d[1] = (double)ky[n - 1] - (double)ky[0];
+        d[2] = (double)kz[n - 1] - (double)kz[0];
+        for (a = 0; a < 3; ++a)
+        {
+            if (fabs(d[a]) > fabs(travel))
+                travel = d[a];
+        }
+        forward = (travel >= 0.0) ? 1 : 0;
+    }
+
+    for (j = 0; j < n; ++j)
+    {
+        double d = sqrt((double)kx[j] * (double)kx[j] + (double)ky[j] * (double)ky[j] +
+                        (double)kz[j] * (double)kz[j]);
+
+        if (j == 0 || d < best - tol)
+        {
+            best = d;
+            best_j = j;
+        }
+        else if (d <= best + tol)
+        {
+            /* Keep the smaller distance either way, so a long near-flat run
+             * cannot walk the answer along one tolerance at a time. */
+            if (d < best)
+                best = d;
+            if (forward)
+                best_j = j;
+        }
+    }
+    return best_j;
+}
+
 static int compute_block_kspace(
     const pulseg_sequence_descriptor *desc,
     float *out_kx,
@@ -333,7 +461,6 @@ static int compute_block_kspace(
     int *out_gy_const,
     int *out_gz_const,
     int block_table_idx,
-    int kzero_index,
     pulseg_diagnostic *diag)
 {
     const pulseg_block_table_element *bte;
@@ -344,8 +471,6 @@ static int compute_block_kspace(
     float grad_raster_us;
     int num_prep, tr_size, pos_in_tr;
     int i;
-
-    (void)kzero_index; /* no longer used -- canonical array carries its own k=0 */
 
     bte = &desc->block_table[block_table_idx];
     /* block_table[].adc_id holds the RAW seq ADC index (per-instance);
@@ -491,22 +616,27 @@ static int compute_block_kspace(
     tr_size = desc->tr_descriptor.tr_size;
     pos_in_tr = block_table_idx - num_prep;
 
-    /* The canonical array covers exactly one tr_size-block window. When the
-     * main TR pattern repeats back-to-back within a single pass (num_trs > 1
-     * -- e.g. a degenerate-prep sequence that plays one identical
-     * prep+readout+navigator unit per slice, with slice as the outer loop),
-     * wrap any repeat's position back into that window so repeat #2, #3, ...
-     * reuse the same canonical samples instead of falling "out of window"
-     * and silently degrading to an all-zero trajectory. Blocks beyond the
-     * last repeat (real cooldown) are deliberately left unwrapped, so they
-     * still degrade as documented below. */
+    /*
+     * The canonical array covers exactly one tr_size-block window, and the
+     * main TR pattern repeats back-to-back, so a block's k is read at its
+     * position *within* the TR whichever repeat it belongs to.
+     *
+     * This used to be bounded by `tr_size * num_trs`, with anything past the
+     * last counted repeat left unwrapped and degrading to an all-zero
+     * trajectory.  That made every readout's k a hostage to TR *detection*,
+     * which is the fragile part of this file -- a zero-duration counter block
+     * has collapsed num_trs to 1 before now.  Measured on gre_2d_1sl_1avg:
+     * tr_size 4, num_trs 8, readouts at blocks 22..50; the first three
+     * wrapped and the last five fell out of the window and came back with
+     * k identically zero.  Nothing noticed, because a Cartesian axis is
+     * stored as -1 and its samples are discarded -- until the echo index
+     * started being derived from them.
+     *
+     * Only ADC blocks reach here, and an ADC block is never cooldown, so
+     * there is nothing left for the bound to protect.
+     */
     if (tr_size > 0 && pos_in_tr >= 0)
-    {
-        int num_trs = (desc->tr_descriptor.num_trs > 0) ? desc->tr_descriptor.num_trs : 1;
-        int repeat_span = tr_size * num_trs;
-        if (pos_in_tr < repeat_span)
-            pos_in_tr = pos_in_tr % tr_size;
-    }
+        pos_in_tr = pos_in_tr % tr_size;
 
     if (desc->has_canonical_kspace && pos_in_tr >= 0 && pos_in_tr < tr_size)
     {
@@ -627,8 +757,10 @@ static int pulseg_compute_trajectory(
     /* Memoization: per-block_table-idx cached shot IDs and kzero so we
      * skip redundant compute_block_kspace calls when the same block is
      * referenced multiple times by the scan table (e.g. an EPI readout
-     * block that recurs once per phase-encode line).  Cache is keyed by
-     * (b, kzero); -2 means "not computed yet". */
+     * block that recurs once per phase-encode line).  Keyed by b alone:
+     * the echo index is now derived from the k arrays, which are a
+     * function of b, so it cannot vary between occurrences of one block.
+     * -2 means "not computed yet". */
     int *cached_kx_id = NULL;
     int *cached_ky_id = NULL;
     int *cached_kz_id = NULL;
@@ -740,29 +872,13 @@ static int pulseg_compute_trajectory(
 
             adc_nsamples = desc->adc_definitions[adc_def_idx].num_samples;
 
-            /* Find k-zero index from segment timing.
-             * Look up which segment this block belongs to and find the
-             * ADC anchor with matching block offset. */
-            kzero = adc_nsamples / 2; /* default: center */
-            {
-                int seg_idx = pulseg__exec_seg_id(desc, n);
-                if (seg_idx >= 0 && seg_idx < desc->num_unique_segments)
-                {
-                    const pulseg_virtual_segment *seg_def = &desc->segment_definitions[seg_idx];
-                    const pulseg_segment_timing *tim = &seg_def->timing;
-                    int a;
-                    for (a = 0; a < tim->num_adc_anchors; ++a)
-                    {
-                        if (tim->adc_anchors[a].block_offset == (b - seg_def->start_block))
-                        {
-                            kzero = tim->adc_anchors[a].kzero_index;
-                            break;
-                        }
-                    }
-                }
-            }
+            /* The echo comes from the readout's own k, below, once it has
+             * been computed.  It used to be read off a design-time anchor;
+             * see derive_center_sample() for what that got wrong and why a
+             * foreign .seq could never have supplied one anyway. */
+            kzero = -1;
 
-            /* Memo lookup keyed by block_table index + kzero.
+            /* Memo lookup keyed by block_table index.
              * (Not bte->id: base_blocks are deduped on the
              * underlying gradient definition ids — shape only — so two
              * scans with different per-slice rotations or amplitudes
@@ -770,12 +886,12 @@ static int pulseg_compute_trajectory(
              * Block-table indices are unique per scan-table row;
              * cross-block content equivalence is recovered by
              * kshot_library_add which dedups identical k arrays.) */
-            if (cached_kx_id && b >= 0 && b < desc->num_blocks && cached_kx_id[b] != -2 &&
-                cached_kzero[b] == kzero)
+            if (cached_kx_id && b >= 0 && b < desc->num_blocks && cached_kx_id[b] != -2)
             {
                 kx_id = cached_kx_id[b];
                 ky_id = cached_ky_id[b];
                 kz_id = cached_kz_id[b];
+                kzero = cached_kzero[b];
             }
             else
             {
@@ -790,10 +906,21 @@ static int pulseg_compute_trajectory(
                     &gy_const,
                     &gz_const,
                     b,
-                    kzero,
                     diag);
                 if (PULSEG_FAILED(rc))
                     goto compute_fail;
+
+                /* The echo, off the k just computed.  Before the shot ids
+                 * are taken, because a Cartesian axis is stored as -1 and
+                 * its samples would then be unavailable. */
+                kzero = derive_center_sample(kx_buf, ky_buf, kz_buf, adc_nsamples);
+                /* kzero may be -1 here, and that is written through as -1.
+                 * The section is still worth having -- the shots, the
+                 * gradient amplitudes and the labels are all still true --
+                 * and the one number that could not be derived says so
+                 * instead of carrying a plausible guess.  See
+                 * derive_center_sample(); the reader refuses to publish a
+                 * negative echo rather than casting it to 65535. */
 
                 /* Per-axis dedup into kshot library.  An axis is
                  * cartesian (kshot_id=-1) when g(t) is constant during

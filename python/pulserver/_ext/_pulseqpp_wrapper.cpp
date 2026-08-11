@@ -25,6 +25,8 @@
 #include "_pulseqpp_eventtypes.h"
 #include "_pulseqpp_events.h"
 
+#include "pulseq/autolabel.hpp"
+#include "pulseq/kspace.hpp"
 #include "pulseq/read.hpp"
 #include "pulseq/sequence.hpp"
 #include "pulseq/trajectory.hpp"
@@ -593,7 +595,7 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
              [](const Sequence& s) { return pulseq::has_base_trajectory(s); })
 
         .def("block_k_origins",
-             [](const Sequence& s) {
+             [](Sequence& s) {
                  const std::vector<std::array<double, 3>> origins = pulseq::block_k_origins(s);
                  py::array_t<double> out({static_cast<int>(origins.size()), 3});
                  double* dst = static_cast<double*>(out.request().ptr);
@@ -626,6 +628,179 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
                      for (size_t i = 0; i < src.size(); ++i)
                          dst[static_cast<size_t>(a) * n + i] = src[i];
                  }
+                 return out;
+             })
+
+        // The k-space trajectory.  Returns a dict rather than a tuple: the
+        // Python wrapper assembles upstream's five-tuple from it and would
+        // otherwise have to remember a positional order.
+        .def(
+            "calculate_kspace",
+            [](Sequence& self, std::array<double, 3> trajectory_delay,
+               std::array<double, 3> gradient_offset, int first_block, int last_block,
+               bool apply_rotation, bool sample_window_average, bool dense) {
+                pulseq::KSpaceOptions options;
+                options.trajectory_delay = trajectory_delay;
+                options.gradient_offset = gradient_offset;
+                options.first_block = first_block;
+                options.last_block = last_block;
+                options.apply_rotation = apply_rotation;
+                options.sample_window_average = sample_window_average;
+                options.dense = dense;
+
+                pulseq::KSpace ks;
+                {
+                    py::gil_scoped_release unlocked;
+                    ks = pulseq::calculate_kspace(self, options);
+                }
+
+                const auto rf_times = [](const std::vector<pulseq::RfEventTiming>& events) {
+                    py::array_t<double> out(static_cast<int>(events.size()));
+                    double* dst = static_cast<double*>(out.request().ptr);
+                    for (size_t i = 0; i < events.size(); ++i)
+                        dst[i] = events[i].t;
+                    return out;
+                };
+
+                // (3, n) throughout: upstream's orientation, and the one the
+                // stored layout already is.
+                py::array_t<double> k_adc({3, ks.total_samples});
+                {
+                    double* dst = static_cast<double*>(k_adc.request().ptr);
+                    const size_t n = static_cast<size_t>(ks.total_samples);
+                    for (const pulseq::Readout& r : ks.readouts)
+                    {
+                        if (r.num_samples <= 0)
+                            continue;
+                        const double* src =
+                            ks.k_adc.data() + static_cast<size_t>(r.sample_offset) * 3;
+                        for (int a = 0; a < 3; ++a)
+                            std::memcpy(dst + static_cast<size_t>(a) * n +
+                                            static_cast<size_t>(r.sample_offset),
+                                        src + static_cast<size_t>(a) *
+                                                  static_cast<size_t>(r.num_samples),
+                                        static_cast<size_t>(r.num_samples) * sizeof(double));
+                    }
+                }
+
+                const int dense_n = static_cast<int>(ks.t_ktraj.size());
+                py::array_t<double> k_traj({3, dense_n});
+                if (dense_n > 0)
+                    std::memcpy(k_traj.request().ptr, ks.k_ktraj.data(),
+                                ks.k_ktraj.size() * sizeof(double));
+
+                py::array_t<double> slice_pos({3, static_cast<int>(ks.slice_pos.size())});
+                {
+                    double* dst = static_cast<double*>(slice_pos.request().ptr);
+                    const size_t n = ks.slice_pos.size();
+                    for (size_t i = 0; i < n; ++i)
+                        for (int a = 0; a < 3; ++a)
+                            dst[static_cast<size_t>(a) * n + i] =
+                                ks.slice_pos[i][static_cast<size_t>(a)];
+                }
+
+                py::array_t<int> readout_block(static_cast<int>(ks.readouts.size()));
+                py::array_t<int> readout_samples(static_cast<int>(ks.readouts.size()));
+                py::array_t<int> readout_center(static_cast<int>(ks.readouts.size()));
+                py::array_t<int> readout_rotation(static_cast<int>(ks.readouts.size()));
+                {
+                    int* b = static_cast<int*>(readout_block.request().ptr);
+                    int* n = static_cast<int*>(readout_samples.request().ptr);
+                    int* c = static_cast<int*>(readout_center.request().ptr);
+                    int* r = static_cast<int*>(readout_rotation.request().ptr);
+                    for (size_t i = 0; i < ks.readouts.size(); ++i)
+                    {
+                        b[i] = ks.readouts[i].block_index;
+                        n[i] = ks.readouts[i].num_samples;
+                        c[i] = ks.readouts[i].center_sample;
+                        r[i] = ks.readouts[i].rotation_id;
+                    }
+                }
+
+                py::dict out;
+                out["k_adc"] = k_adc;
+                out["t_adc"] = py::array_t<double>(static_cast<int>(ks.t_adc.size()),
+                                                   ks.t_adc.data());
+                out["k_traj"] = k_traj;
+                out["t_ktraj"] = py::array_t<double>(dense_n, ks.t_ktraj.data());
+                out["t_excitation"] = rf_times(ks.excitations);
+                out["t_refocusing"] = rf_times(ks.refocusings);
+                out["slice_pos"] = slice_pos;
+                out["t_slice_pos"] = py::array_t<double>(
+                    static_cast<int>(ks.t_slice_pos.size()), ks.t_slice_pos.data());
+                out["readout_block"] = readout_block;
+                out["readout_samples"] = readout_samples;
+                out["readout_center_sample"] = readout_center;
+                out["readout_rotation"] = readout_rotation;
+                out["k_center"] = py::make_tuple(ks.k_center[0], ks.k_center[1], ks.k_center[2]);
+                out["central_readout"] = ks.central_readout;
+                out["rotations_vary"] = ks.rotations_vary;
+                out["key_groups"] = ks.key_groups;
+                out["total_duration"] = ks.total_duration;
+                return out;
+            })
+
+        // Encoding counters derived from the trajectory.  Also a dict; the
+        // wrapper turns it into the labels/aux pair.
+        .def("auto_label",
+             [](Sequence& self, int first_block, int last_block,
+                std::array<bool, 3> reflect, std::array<int, 3> reorder,
+                std::array<double, 3> trajectory_delay, bool apply,
+                const std::vector<std::pair<std::string, int>>& repeat_dims) {
+                 pulseq::AutoLabelOptions options;
+                 options.first_block = first_block;
+                 options.last_block = last_block;
+                 options.reflect = reflect;
+                 options.reorder = reorder;
+                 options.trajectory_delay = trajectory_delay;
+                 for (const auto& dim : repeat_dims)
+                 {
+                     pulseq::RepeatDim d;
+                     d.name = dim.first;
+                     d.size = dim.second;
+                     options.repeat_dims.push_back(d);
+                 }
+
+                 pulseq::AutoLabelResult r;
+                 {
+                     py::gil_scoped_release unlocked;
+                     r = pulseq::auto_label(self, options, apply);
+                 }
+
+                 py::dict labels;
+                 for (const auto& entry : r.labels.present())
+                     labels[py::str(entry.first)] = py::array_t<int>(
+                         static_cast<int>(entry.second->size()), entry.second->data());
+
+                 py::dict aux;
+                 if (r.aux.has_center_line)
+                     aux["kSpaceCenterLine"] = r.aux.center_line;
+                 if (r.aux.has_center_partition)
+                     aux["kSpaceCenterPartition"] = r.aux.center_partition;
+                 if (r.aux.has_center_sample)
+                     aux["kSpaceCenterSample"] = r.aux.center_sample;
+                 if (!r.aux.slice_positions.empty())
+                     aux["SlicePositions"] = py::array_t<double>(
+                         static_cast<int>(r.aux.slice_positions.size()),
+                         r.aux.slice_positions.data());
+                 if (r.aux.has_slice_thickness)
+                     aux["SliceThickness"] = r.aux.slice_thickness;
+                 if (r.aux.has_slice_gap)
+                     aux["SliceGap"] = r.aux.slice_gap;
+                 if (r.aux.has_gridding)
+                 {
+                     aux["TrapezoidGriddingParameters"] =
+                         py::array_t<double>(5, r.aux.trapezoid_gridding.data());
+                     aux["TargetGriddedSamples"] = r.aux.target_gridded_samples;
+                 }
+
+                 py::dict out;
+                 out["labels"] = labels;
+                 out["aux"] = aux;
+                 out["adc_block"] = py::array_t<int>(
+                     static_cast<int>(r.labels.adc_block.size()), r.labels.adc_block.data());
+                 out["key_groups"] = r.key_groups;
+                 out["num_readouts"] = r.num_readouts;
                  return out;
              });
 

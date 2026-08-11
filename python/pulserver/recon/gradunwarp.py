@@ -5,9 +5,8 @@ are adapted from the MIT-licensed HCP ``gradunwarp`` package and its older
 ``.dat`` converter. Cubic interpolation uses native SimpleITK B-spline
 resampling for both 2D and 3D images.
 
-No vendor coefficient table is bundled or persisted. A scanner integration
-can serialize private coefficient text into an MRD XML user parameter and
-retrieve it through :class:`MrdCoefficientAccessor`.
+No vendor coefficient table is bundled or persisted. Scanner-specific
+coefficient transport belongs to the private MRD integration layer.
 """
 
 from __future__ import annotations
@@ -26,7 +25,6 @@ __all__ = [
     "GradientCoefficients",
     "Gradunwarp",
     "ImageGeometry",
-    "MrdCoefficientAccessor",
 ]
 
 
@@ -86,51 +84,6 @@ class CoefficientAccessor(Protocol):
 
     def read_coefficients(self) -> CoefficientPayload:
         """Return coefficient-file contents without writing them to disk."""
-
-
-@dataclass(frozen=True)
-class MrdCoefficientAccessor:
-    """Read serialized coefficients from a keyed MRD XML string parameter.
-
-    Both the camelCase attributes produced by ``ismrmrd.xsd`` and the
-    snake_case attributes used by the newer ``mrd`` bindings are supported.
-    The parameter key is deliberately supplied by the caller because it is
-    part of the LiveSDK-to-MRD integration contract, not this public package.
-    """
-
-    header: Any = field(repr=False)
-    key: str
-
-    @property
-    def name(self) -> str:
-        """Return a non-sensitive source label for diagnostics."""
-        return f"MRD userParameterString {self.key!r}"
-
-    def read_coefficients(self) -> str:
-        """Return the coefficient payload or raise if ``key`` is absent."""
-        header = getattr(self.header, "header", self.header)
-        parameters = getattr(
-            header,
-            "userParameters",
-            getattr(header, "user_parameters", None),
-        )
-        if parameters is not None:
-            values = getattr(
-                parameters,
-                "userParameterString",
-                getattr(parameters, "user_parameter_string", ()),
-            )
-            for parameter in values or ():
-                name = getattr(parameter, "name", None)
-                if name == self.key:
-                    value = getattr(parameter, "value", None)
-                    if not isinstance(value, str):
-                        raise TypeError(
-                            f"MRD string parameter {self.key!r} has non-string value "
-                            f"{type(value).__name__}."
-                        )
-                    return value
-        raise KeyError(f"MRD userParameterString {self.key!r} was not found.")
 
 
 CoefficientSource: TypeAlias = (

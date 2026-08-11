@@ -1,4 +1,4 @@
-"""Tests for pulserver.recon.connection — Connection, MessageType, DataSaver."""
+"""Tests for private MRD connection machinery."""
 
 import contextlib
 import io
@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import ismrmrd
 import pytest
-from pulserver.recon import constants
-from pulserver.recon.connection import (
+from pulserver.recon._mrd import constants
+from pulserver.recon._mrd.connection import (
     MID_TO_TYPE,
     NAME_TO_TYPE,
     Connection,

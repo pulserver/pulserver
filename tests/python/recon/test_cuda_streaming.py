@@ -6,16 +6,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from pulserver.recon import (
+from pulserver.recon.algorithms import pics
+from pulserver.recon.denoisers import LLR, TGV, TV, Wavelet
+from pulserver.recon.execution import CudaStreaming
+from pulserver.recon.physics import (
     Cartesian2D,
-    CudaStreaming,
     MRIPhysics,
     Subspace,
-    llr,
-    pics,
-    tgv,
-    tv,
-    wavelet,
 )
 from pulserver.recon._cuda_streaming import tensor_nbytes
 from pulserver.recon._toeplitz import CompactToeplitzKernel, support_indices
@@ -32,6 +29,51 @@ def test_streaming_policy_validation_and_tensor_size():
         CudaStreaming(device="cpu")
     value = torch.empty(2, 3, 4, dtype=torch.complex64)
     assert tensor_nbytes(value) == 2 * 3 * 4 * 8
+
+
+def test_streaming_policy_discovers_devices_unless_one_is_explicit(monkeypatch):
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+    automatic = CudaStreaming()
+    explicit = CudaStreaming(device="cuda:1")
+
+    assert tuple(map(str, automatic.torch_devices)) == ("cuda:0", "cuda:1")
+    assert tuple(map(str, automatic.execution_devices)) == (
+        "cuda:0",
+        "cuda:0",
+        "cuda:1",
+        "cuda:1",
+    )
+    assert tuple(map(str, explicit.torch_devices)) == ("cuda:1",)
+    assert automatic.for_device("cuda:1").device_count == 1
+
+
+def test_physics_replicas_split_leading_batch_across_devices():
+    class Replica:
+        def __init__(self, offset):
+            self.offset = offset
+
+        def A(self, value):
+            return value + self.offset
+
+    selected = MRIPhysics(
+        SimpleNamespace(A=lambda value: value),
+        native_operator=None,
+        kind="test",
+        spatial_ndim=2,
+    )
+    selected.streaming_policy = SimpleNamespace(
+        torch_devices=(torch.device("cuda:0"), torch.device("cuda:1")),
+    )
+    selected._streaming_replicas = {
+        "cuda:0": Replica(10),
+        "cuda:1": Replica(20),
+    }
+    value = torch.arange(4)[:, None]
+
+    result = selected.A(value)
+
+    torch.testing.assert_close(result[:2], value[:2] + 10)
+    torch.testing.assert_close(result[2:], value[2:] + 20)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
@@ -66,6 +108,7 @@ def test_streamed_compact_toeplitz_matches_in_core_cuda():
         CudaStreaming(
             streams=2,
             transfer_chunk_size=29,
+            transfer_precision="float32",
         ),
     )
     reduced = kernel.apply_streamed(
@@ -73,7 +116,9 @@ def test_streamed_compact_toeplitz_matches_in_core_cuda():
         CudaStreaming(
             streams=2,
             transfer_chunk_size=29,
-            transfer_precision="float16",
+            transfer_precision=(
+                "bfloat16" if torch.cuda.is_bf16_supported() else "float32"
+            ),
         ),
     )
 
@@ -120,10 +165,11 @@ def test_streamed_complex_hermitian_toeplitz_matches_in_core_cuda():
     kernel.to("cpu")
     result = kernel.apply_streamed(
         image,
-        CudaStreaming(
-            streams=2,
-            transfer_chunk_size=29,
-        ),
+            CudaStreaming(
+                streams=2,
+                transfer_chunk_size=29,
+                transfer_precision="float32",
+            ),
     )
 
     torch.testing.assert_close(full_cuda, reference, atol=3e-5, rtol=3e-5)
@@ -172,6 +218,7 @@ def test_streamed_sense_fuses_spatial_factors_on_cuda():
         streaming=CudaStreaming(
             streams=2,
             transfer_chunk_size=29,
+            transfer_precision="float32",
         ),
     )
 
@@ -190,13 +237,13 @@ def test_streamed_llr_is_exact_for_aligned_nonoverlapping_slabs():
         generator=generator,
         dtype=torch.complex64,
     )
-    reference_model = llr(
+    reference_model = LLR(
         dimension=3,
         block_size=2,
         cycle_spins=False,
         block_batch_size=8,
     )
-    streamed_model = llr(
+    streamed_model = LLR(
         dimension=3,
         block_size=2,
         cycle_spins=False,
@@ -216,10 +263,10 @@ def test_streamed_llr_is_exact_for_aligned_nonoverlapping_slabs():
 @pytest.mark.parametrize(
     "model",
     [
-        pytest.param(tv(n_it_max=2, crit=0), id="tv"),
-        pytest.param(tgv(n_it_max=2, crit=0), id="tgv"),
+        pytest.param(TV(n_it_max=2, crit=0), id="tv"),
+        pytest.param(TGV(n_it_max=2, crit=0), id="tgv"),
         pytest.param(
-            wavelet(dimension=3, wavelet="db2", level=1),
+            Wavelet(dimension=3, wavelet="db2", level=1),
             id="wavelet",
         ),
     ],
