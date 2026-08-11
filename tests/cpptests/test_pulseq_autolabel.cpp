@@ -240,6 +240,167 @@ TEST(PulseqAutoLabel, SliceCountersRankByPositionNotByArrival)
             kPositions[kOrder[visit]], 1e-9);
 }
 
+namespace
+{
+    /** Positions and visiting order shared by the slice-sorting tests. */
+    const double kSortPositions[5] = {-10e-3, -3e-3, 0.0, +5e-3, +12e-3};
+    const int kSortOrder[5] = {0, 2, 4, 1, 3};
+
+    /** The same five interleaved slices as the test above, one readout each. */
+    pulseq::Sequence interleaved_slices()
+    {
+        const int kSamples = 16;
+        const double kReadout = 1e5;
+        const double kSliceSelect = 2e5;
+
+        pulseq::Sequence seq;
+        seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
+
+        std::vector<double> magnitude(100, 1.0);
+        const int mag_shape = seq.register_raw_shape(magnitude.data(), 100);
+
+        const double slice_grad[pulseq::TRAP_WIDTH] = {kSliceSelect, 100e-6, 100e-6, 100e-6, 0.0};
+        const double read[pulseq::TRAP_WIDTH] = {kReadout, 100e-6, 200e-6, 100e-6, 0.0};
+        const double prewind[pulseq::TRAP_WIDTH] = {-1.1 * kReadout, 100e-6, 100e-6, 100e-6, 0.0};
+        const int gz_slice = seq.register_trap(slice_grad);
+        const int gx_read = seq.register_trap(read);
+        const int gx_prewind = seq.register_trap(prewind);
+
+        const double adc[pulseq::ADC_WIDTH] = {static_cast<double>(kSamples), 10e-6, 100e-6,
+                                               0.0, 0.0, 0.0, 0.0, 0.0};
+        const int adc_id = seq.register_adc(adc);
+
+        for (int visit = 0; visit < 5; ++visit)
+        {
+            double rf[pulseq::RF_WIDTH] = {1000.0, static_cast<double>(mag_shape), 0.0, 0.0,
+                                           50e-6,  50e-6,                         0.0, 0.0,
+                                           0.0,    0.0};
+            rf[8] = kSliceSelect * kSortPositions[kSortOrder[visit]];
+
+            pulseq::Block excite;
+            excite.rf = seq.register_rf(rf, 'e');
+            excite.gz = gz_slice;
+            excite.duration = 300e-6;
+            seq.add_block(excite);
+
+            pulseq::Block encode;
+            encode.gx = gx_prewind;
+            encode.duration = 300e-6;
+            seq.add_block(encode);
+
+            pulseq::Block readout;
+            readout.gx = gx_read;
+            readout.adc = adc_id;
+            readout.duration = 400e-6;
+            seq.add_block(readout);
+        }
+        return seq;
+    }
+}  // namespace
+
+/*
+ * `sortSlices` decides which slice gets which index -- and under every one of
+ * the three, `SlicePositions[SLC]` is still where slice SLC is.  That
+ * invariant is the point: a reconstruction reading the pair together cannot be
+ * wrong, and only the numbering it sees changes.
+ *
+ * `acquisition` is MATLAB's default and this library's opt-in; the five
+ * interleaved slices come back numbered by arrival, and the position table
+ * comes back in arrival order to match.
+ */
+TEST(PulseqAutoLabel, AcquisitionSortingNumbersSlicesByArrival)
+{
+    pulseq::Sequence seq = interleaved_slices();
+    pulseq::AutoLabelOptions options;
+    options.sort_slices = pulseq::SliceSorting::Acquisition;
+    const pulseq::AutoLabelResult r = pulseq::auto_label(seq, options, false);
+
+    ASSERT_EQ(r.labels.slc.size(), 5u);
+    for (int visit = 0; visit < 5; ++visit)
+        EXPECT_EQ(r.labels.slc[static_cast<size_t>(visit)], visit) << "visit " << visit;
+
+    ASSERT_EQ(r.aux.slice_positions.size(), 5u);
+    for (int visit = 0; visit < 5; ++visit)
+        EXPECT_NEAR(r.aux.slice_positions[static_cast<size_t>(visit)],
+                    kSortPositions[kSortOrder[visit]], 1e-9);
+}
+
+TEST(PulseqAutoLabel, DescendingSortingReversesBothHalvesTogether)
+{
+    pulseq::Sequence seq = interleaved_slices();
+    pulseq::AutoLabelOptions options;
+    options.sort_slices = pulseq::SliceSorting::Descending;
+    const pulseq::AutoLabelResult r = pulseq::auto_label(seq, options, false);
+
+    ASSERT_EQ(r.aux.slice_positions.size(), 5u);
+    for (int s = 0; s < 5; ++s)
+        EXPECT_NEAR(r.aux.slice_positions[static_cast<size_t>(s)], kSortPositions[4 - s], 1e-9)
+            << "SlicePositions[" << s << "]";
+
+    ASSERT_EQ(r.labels.slc.size(), 5u);
+    for (int visit = 0; visit < 5; ++visit)
+    {
+        EXPECT_EQ(r.labels.slc[static_cast<size_t>(visit)], 4 - kSortOrder[visit]);
+        EXPECT_NEAR(r.aux.slice_positions[static_cast<size_t>(
+                        r.labels.slc[static_cast<size_t>(visit)])],
+                    kSortPositions[kSortOrder[visit]], 1e-9)
+            << "the two halves disagree at visit " << visit;
+    }
+}
+
+TEST(PulseqAutoLabel, TheSliceGapIsGeometryAndDoesNotFollowTheNumbering)
+{
+    /* Closest spacing is -3 to 0 mm, whichever end the counting starts from. */
+    double gap[3] = {0.0, 0.0, 0.0};
+    const pulseq::SliceSorting modes[3] = {pulseq::SliceSorting::Ascending,
+                                           pulseq::SliceSorting::Descending,
+                                           pulseq::SliceSorting::Acquisition};
+    for (int m = 0; m < 3; ++m)
+    {
+        pulseq::Sequence seq = interleaved_slices();
+        pulseq::AutoLabelOptions options;
+        options.sort_slices = modes[m];
+        const pulseq::AutoLabelResult r = pulseq::auto_label(seq, options, false);
+        ASSERT_TRUE(r.aux.has_slice_gap) << "mode " << m;
+        gap[m] = r.aux.slice_gap;
+        EXPECT_GT(gap[m] + r.aux.slice_thickness, 0.0) << "spacing must be positive, mode " << m;
+    }
+    EXPECT_DOUBLE_EQ(gap[0], gap[1]);
+    EXPECT_DOUBLE_EQ(gap[0], gap[2]);
+}
+
+/*
+ * `mirrorFourier` reverses the encoding directions and leaves the slices
+ * where they are.  That asymmetry is the whole content of the option: a
+ * `reflect` on all three axes would turn the slice stack over with them.
+ */
+TEST(PulseqAutoLabel, MirrorFourierTurnsTheEncodingOverButNotTheSlices)
+{
+    pulseq::Sequence plain_seq = interleaved_slices();
+    const pulseq::AutoLabelResult plain = pulseq::auto_label(plain_seq, {}, false);
+
+    pulseq::Sequence mirrored_seq = interleaved_slices();
+    pulseq::AutoLabelOptions options;
+    options.mirror_fourier = true;
+    const pulseq::AutoLabelResult mirrored = pulseq::auto_label(mirrored_seq, options, false);
+
+    ASSERT_EQ(mirrored.labels.slc.size(), plain.labels.slc.size());
+    for (size_t i = 0; i < plain.labels.slc.size(); ++i)
+        EXPECT_EQ(mirrored.labels.slc[i], plain.labels.slc[i]) << "slice counter moved at " << i;
+    ASSERT_EQ(mirrored.aux.slice_positions.size(), plain.aux.slice_positions.size());
+    for (size_t s = 0; s < plain.aux.slice_positions.size(); ++s)
+        EXPECT_NEAR(mirrored.aux.slice_positions[s], plain.aux.slice_positions[s], 1e-12);
+
+    /* The readout polarity is what did turn over. */
+    ASSERT_EQ(mirrored.aux.has_center_sample, plain.aux.has_center_sample);
+    if (!plain.labels.rev.empty() && !mirrored.labels.rev.empty())
+    {
+        ASSERT_EQ(mirrored.labels.rev.size(), plain.labels.rev.size());
+        for (size_t i = 0; i < plain.labels.rev.size(); ++i)
+            EXPECT_NE(mirrored.labels.rev[i], plain.labels.rev[i]) << "polarity unchanged at " << i;
+    }
+}
+
 /*
  * An EPI's navigators repeat one line; its train alternates polarity.
  *

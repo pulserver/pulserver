@@ -550,3 +550,130 @@ def test_the_definitions_match_matlab_autolabel(stem):
             )
         else:
             assert np.allclose(got, want, rtol=1e-4, atol=1e-8), f"{stem} {name}: {got} vs {want}"
+
+
+# --------------------------------------------------------------------------
+# The autoLabel surface
+# --------------------------------------------------------------------------
+#
+# `auto_label` is meant to be a drop-in for MATLAB Pulseq's `autoLabel`: every
+# one of its parameters accepted, under the Python spelling of its name, with
+# Pulserver's own additions after them rather than mixed in. Two defaults
+# differ deliberately and both are asserted here, so a change to either is a
+# decision rather than a drift.
+
+#: `autoLabel`'s parameter list, and what each is called here.
+AUTOLABEL_PARAMETERS = {
+    "blockRange": "block_range",
+    "useLabels": "use_labels",
+    "useAux": "use_aux",
+    "skipApply": "skip_apply",
+    "mirrorFourier": "mirror_fourier",
+    "reflect": "reflect",
+    "reorder": "reorder",
+    "sortSlices": "sort_slices",
+    "noPlots": "no_plots",
+}
+
+
+def test_every_autolabel_parameter_is_accepted():
+    import inspect
+
+    ours = inspect.signature(Sequence.auto_label).parameters
+    missing = [m for m, p in AUTOLABEL_PARAMETERS.items() if p not in ours]
+    assert not missing, f"autoLabel parameters with no equivalent here: {missing}"
+
+    # MATLAB's come first, in MATLAB's order; ours are appended.
+    names = [n for n in ours if n != "self"]
+    assert names[: len(AUTOLABEL_PARAMETERS)] == list(AUTOLABEL_PARAMETERS.values())
+    assert all(p.kind is inspect.Parameter.KEYWORD_ONLY for p in ours.values() if p.name != "self")
+
+
+def test_the_two_defaults_that_differ_from_matlab():
+    import inspect
+
+    defaults = inspect.signature(Sequence.auto_label).parameters
+    # MATLAB defaults to 'acquisition'; a geometric index is what makes
+    # SlicePositions[SLC] usable as a stack.
+    assert defaults["sort_slices"].default == "ascending"
+    # MATLAB defaults to False and draws figures; nothing here draws any.
+    assert defaults["no_plots"].default is True
+
+
+def test_asking_for_plots_is_refused_rather_than_ignored(gre):
+    with pytest.raises(ValueError, match="no_plots"):
+        gre.auto_label(no_plots=False)
+
+
+@pytest.mark.parametrize("mode", ["ascending", "descending", "acquisition"])
+def test_slice_positions_index_by_slc_under_every_sorting(mode):
+    """The invariant that makes the numbering a free choice."""
+    labels, aux = load("gre_2d_3sl_3avg").auto_label(skip_apply=True, sort_slices=mode)
+    positions = np.asarray(aux["SlicePositions"])
+    assert positions.size == 3
+    assert set(labels["SLC"]) == {0, 1, 2}
+    # Whatever the order, the table and the counters name the same three slices.
+    assert np.allclose(np.sort(positions), sorted([-5e-3, 0.0, 5e-3]))
+
+
+def test_descending_is_the_reverse_of_ascending():
+    up, aux_up = load("gre_2d_3sl_3avg").auto_label(skip_apply=True, sort_slices="ascending")
+    down, aux_down = load("gre_2d_3sl_3avg").auto_label(skip_apply=True, sort_slices="descending")
+
+    assert np.allclose(np.asarray(aux_down["SlicePositions"]),
+                       np.asarray(aux_up["SlicePositions"])[::-1])
+    assert np.array_equal(down["SLC"], 2 - np.asarray(up["SLC"]))
+    # The gap is geometry: it cannot depend on which end the counting starts.
+    assert aux_up["SliceGap"] == aux_down["SliceGap"]
+
+
+def test_an_unknown_sorting_is_refused(gre):
+    with pytest.raises(ValueError, match="sort_slices"):
+        gre.auto_label(sort_slices="interleaved")
+
+
+def test_mirror_fourier_turns_the_encoding_over_and_leaves_the_slices():
+    plain, _ = load("gre_2d_3sl_3avg").auto_label(skip_apply=True)
+    mirrored, _ = load("gre_2d_3sl_3avg").auto_label(skip_apply=True, mirror_fourier=True)
+
+    # Line order reverses ...
+    assert np.array_equal(mirrored["LIN"], plain["LIN"].max() - np.asarray(plain["LIN"]))
+    # ... and the slice stack does not, which is what separates this from
+    # reflect=[0, 1, 2].
+    assert np.array_equal(mirrored["SLC"], plain["SLC"])
+
+
+def test_use_labels_applies_what_detection_would_have():
+    """Detect once, apply anywhere -- byte for byte the same file."""
+    labels, aux = load("gre_2d_3sl_3avg").auto_label(skip_apply=True)
+
+    reused = load("gre_2d_3sl_3avg")
+    reused.auto_label(use_labels=labels, use_aux=aux)
+
+    direct = load("gre_2d_3sl_3avg")
+    direct.auto_label()
+
+    assert reused._to_text(create_signature=False) == direct._to_text(create_signature=False)
+
+
+def test_use_labels_carries_a_hand_corrected_counter_through():
+    labels, aux = load("gre_2d_3sl_3avg").auto_label(skip_apply=True)
+    edited = dict(labels)
+    edited["LIN"] = np.asarray(labels["LIN"])[::-1].copy()
+
+    seq = load("gre_2d_3sl_3avg")
+    got, _ = seq.auto_label(use_labels=edited, use_aux=aux)
+    assert np.array_equal(got["LIN"], edited["LIN"])
+    assert "SlicePositions" in seq.definitions
+
+
+def test_use_labels_with_a_detection_only_option_is_refused(gre):
+    labels, _ = gre.auto_label(skip_apply=True)
+    for option in ({"reflect": [0]}, {"reorder": [1, 0]}, {"mirror_fourier": True}):
+        with pytest.raises(ValueError, match="only affect detection"):
+            load("gre_2d_3sl_3avg").auto_label(use_labels=labels, **option)
+
+
+def test_use_labels_of_the_wrong_length_is_refused(gre):
+    with pytest.raises(ValueError, match="values for"):
+        gre.auto_label(use_labels={"LIN": [1, 2, 3]})

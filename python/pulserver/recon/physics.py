@@ -8,27 +8,35 @@ that the API does not grow one class for every possible combination.
 
 from __future__ import annotations
 
-from collections import OrderedDict
-from collections.abc import Callable, Sequence
-from concurrent.futures import ThreadPoolExecutor
-from importlib import import_module
-from math import prod
-from types import MethodType, SimpleNamespace
-from typing import Any
-
-from ._toeplitz import CompactToeplitzKernel, as_torch, support_indices
-from .linops import available_nufft_backends as _available_nufft_backends
-
 __all__ = [
     "Cartesian2D",
+    "Cartesian3D",
     "MRIPhysics",
     "NonCartesian2D",
     "NonCartesian3D",
     "OffResonance",
     "Subspace",
     "Toeplitz",
+    "WaveEncoding",
+    "WaveShuffling",
     "available_nufft_backends",
 ]
+
+from collections import OrderedDict
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from importlib import import_module
+from itertools import product
+from math import prod
+from types import MethodType, SimpleNamespace
+from typing import Any
+
+import deepinv
+
+from ._toeplitz import CompactToeplitzKernel, as_torch, support_indices
+from ._stacked import _StackedNUFFTLinearPhysics
+from ._wave import _WaveLinearPhysics
+from .linops import available_nufft_backends as _available_nufft_backends
 
 
 def _require_deepinv() -> Any:
@@ -116,7 +124,7 @@ def _kspace_as_cpx(value: Any) -> Any:
 
 def _toeplitz_options(
     *,
-    support: str = "radial",
+    support: str = "full",
     radius: float = 1.0,
     chunk_size: int = 65536,
     coil_batch_size: int = 1,
@@ -163,8 +171,8 @@ def _toeplitz_request(value: bool | dict[str, Any]) -> tuple[bool, dict[str, Any
     return bool(value), _toeplitz_options()
 
 
-class MRIPhysics:
-    """A small, transparent facade over a DeepInverse linear physics object.
+class MRIPhysics(deepinv.physics.LinearPhysics):
+    """DeepInverse-native facade over an MRI linear physics object.
 
     The facade records reconstruction-specific metadata and forwards the
     numerical contract (``A``, ``A_adjoint``, ``A_adjoint_A``, ``A_dagger``)
@@ -185,6 +193,7 @@ class MRIPhysics:
         rebuild: Callable[[Any, int | None], MRIPhysics] | None = None,
         toeplitz_options: dict[str, Any] | None = None,
     ) -> None:
+        super().__init__()
         self.operator = operator
         self.native_operator = native_operator
         self.kind = kind
@@ -204,9 +213,11 @@ class MRIPhysics:
 
     @property
     def normal_mode(self) -> str:
-        """Return ``"toeplitz"``, ``"exact-fft"``, or ``"exact"``."""
+        """Return the implementation used by the normal operator."""
+        if self.kind in {"wave", "wave-shuffling"}:
+            return "exact-hybrid"
         if "toeplitz" in self.modifiers:
-            if self.kind == "cartesian2d":
+            if self.kind.startswith("cartesian"):
                 return "exact-fft"
             if getattr(self.operator, "use_toeplitz", False):
                 return "toeplitz"
@@ -364,12 +375,14 @@ class MRIPhysics:
 
         def forward(image: Any) -> Any:
             coil_images = coil_maps * image_as_complex(image)[:, None]
-            spectrum = self.operator.fft(coil_images, dim=(-2, -1))
+            axes = tuple(range(-self.spatial_ndim, 0))
+            spectrum = self.operator.fft(coil_images, dim=axes)
             return mask[:, :, None] * image_as_real(spectrum)
 
         def adjoint(kspace: Any) -> Any:
             masked = image_as_complex(mask[:, :, None] * kspace)
-            coil_images = self.operator.ifft(masked, dim=(-2, -1))
+            axes = tuple(range(-self.spatial_ndim, 0))
+            coil_images = self.operator.ifft(masked, dim=axes)
             if kwargs.get("rss", False):
                 return self.operator.rss(image_as_real(coil_images), multicoil=True)
             image = (coil_maps.conj() * coil_images).sum(dim=1)
@@ -439,11 +452,14 @@ class MRIPhysics:
         return self.A(x, **kwargs)
 
     def __getattr__(self, name: str) -> Any:
-        return getattr(self.operator, name)
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(super().__getattr__("operator"), name)
 
     def to(self, *args: Any, **kwargs: Any) -> MRIPhysics:
         """Move the underlying Torch physics object and return ``self``."""
-        self.operator.to(*args, **kwargs)
+        super().to(*args, **kwargs)
         return self
 
     def enable_streaming(self, policy: Any) -> MRIPhysics:
@@ -519,7 +535,7 @@ class _LazyFramePhysics:
     @property
     def normal_mode(self) -> str:
         if "toeplitz" in self.modifiers:
-            return "exact-fft" if self.kind == "cartesian2d" else "toeplitz"
+            return "exact-fft" if self.kind.startswith("cartesian") else "toeplitz"
         return self.provider.physics.normal_mode
 
     @property
@@ -547,8 +563,6 @@ def _native_linear_physics(
     native_operator: Any,
     *,
     viewed_as_real: bool,
-    use_toeplitz: bool = False,
-    native_toeplitz_valid: bool = True,
 ) -> Any:
     """Adapt an mri-nufft operator to DeepInverse without exposing glue."""
     physics_module = _require_deepinv()
@@ -560,10 +574,10 @@ def _native_linear_physics(
         ) from error
 
     # Prefer mri-nufft's maintained DeepInverse/autograd interface. The custom
-    # adapter below is only needed for compositions (notably stacked NUFFT)
-    # that correctly implement forward/adjoint operations but do not expose
-    # an autograd wrapper. PICS itself uses explicit adjoints, so both paths
-    # have identical reconstruction semantics.
+    # adapter below is only needed for third-party operators that correctly
+    # implement forward/adjoint operations but do not expose an autograd
+    # wrapper. PICS itself uses explicit adjoints, so both paths have identical
+    # reconstruction semantics.
     if getattr(native_operator, "autograd_available", False):
         inner = native_operator.make_deepinv_phy()
 
@@ -572,7 +586,7 @@ def _native_linear_physics(
                 super().__init__()
                 self.__dict__["inner"] = inner
                 self.viewed_as_real = viewed_as_real
-                self.use_toeplitz = use_toeplitz and native_toeplitz_valid
+                self.use_toeplitz = False
 
             def A(self, x: Any, **kwargs: Any) -> Any:
                 if self.viewed_as_real:
@@ -594,12 +608,7 @@ def _native_linear_physics(
 
             def A_adjoint_A(self, x: Any, **kwargs: Any) -> Any:
                 del kwargs
-                if not self.use_toeplitz:
-                    return self.A_adjoint(self.A(x))
-                if self.viewed_as_real:
-                    x = _image_as_cpx(x)
-                normal = native_operator.gram_op(x, toeplitz=True)
-                return _image_as_real(normal) if self.viewed_as_real else normal
+                return self.A_adjoint(self.A(x))
 
         return _MRIViewPhysics()
 
@@ -608,7 +617,7 @@ def _native_linear_physics(
             super().__init__()
             self.__dict__["native_operator"] = native_operator
             self.viewed_as_real = viewed_as_real
-            self.use_toeplitz = use_toeplitz and native_toeplitz_valid
+            self.use_toeplitz = False
 
         def A(self, x: Any, **kwargs: Any) -> Any:
             del kwargs
@@ -626,12 +635,7 @@ def _native_linear_physics(
 
         def A_adjoint_A(self, x: Any, **kwargs: Any) -> Any:
             del kwargs
-            if not self.use_toeplitz:
-                return self.A_adjoint(self.A(x))
-            if self.viewed_as_real:
-                x = _image_as_cpx(x)
-            result = self.native_operator.gram_op(x, toeplitz=True)
-            return _image_as_real(result) if self.viewed_as_real else result
+            return self.A_adjoint(self.A(x))
 
     # Keep the explicit reference so static analyzers and mocked test modules
     # both validate that this is a DeepInverse physics implementation.
@@ -650,28 +654,171 @@ def _compute_toeplitz_transfer(
     *,
     complex_weights: bool = False,
 ) -> Any:
-    """Compute a scalar transfer, including complex cross-weight support."""
+    """Compute Pulserver's scalar transfer from MRI-NUFFT primitives."""
     if weights is None:
         method = getattr(native_operator, "compute_toeplitz_kernel", None)
-        if method is None:
-            raise RuntimeError(
-                "This mri-nufft version does not expose Toeplitz kernels. "
-                "Install a version providing compute_toeplitz_kernel()."
-            )
-        return method()
+        if method is not None:
+            return method()
 
     try:
         compute = import_module("mrinufft.operators.toeplitz").compute_toeplitz_kernel
-    except (ImportError, AttributeError) as error:
-        raise RuntimeError(
-            "This mri-nufft version does not expose weighted Toeplitz kernels."
-        ) from error
+    except (ImportError, AttributeError):
+        compute = _compute_toeplitz_transfer_from_adjoint
 
+    if weights is None:
+        return compute(native_operator)
     real_kernel = compute(native_operator, weights=weights.real)
     if not complex_weights:
         return real_kernel
     imaginary_kernel = compute(native_operator, weights=weights.imag)
     return real_kernel + 1j * imaginary_kernel
+
+
+def _compute_toeplitz_transfer_from_adjoint(
+    native_operator: Any,
+    weights: Any | None = None,
+) -> Any:
+    """Build a scalar Toeplitz spectrum using bounded native adjoints.
+
+    The construction needs two adjoints in 2D and four in 3D. It is kept here
+    because older MRI-NUFFT releases expose the required raw adjoint but not
+    their newer convenience function.
+    """
+    torch = import_module("torch")
+    numpy = import_module("numpy")
+    proper_trajectory = import_module("mrinufft._utils").proper_trajectory
+    shape = tuple(int(size) for size in native_operator.shape)
+    if len(shape) not in {2, 3}:
+        raise ValueError("Toeplitz kernels require a two- or three-dimensional NUFFT")
+    if any(size % 2 for size in shape):
+        raise ValueError(
+            f"Toeplitz kernel computation requires even image sizes, got {shape}"
+        )
+
+    samples = native_operator.samples
+    is_torch = isinstance(samples, torch.Tensor)
+    if is_torch:
+        real_dtype = torch.float64 if samples.dtype == torch.float64 else torch.float32
+        complex_dtype = (
+            torch.complex128 if real_dtype == torch.float64 else torch.complex64
+        )
+        omega = proper_trajectory(samples, normalize="pi").to(real_dtype)
+    else:
+        real_dtype = (
+            numpy.float64
+            if numpy.dtype(native_operator.dtype) == numpy.dtype(numpy.float64)
+            else numpy.float32
+        )
+        complex_dtype = (
+            numpy.complex128 if real_dtype == numpy.float64 else numpy.complex64
+        )
+        omega = numpy.asarray(
+            proper_trajectory(samples, normalize="pi"),
+            dtype=real_dtype,
+        )
+
+    density = getattr(native_operator, "density", None)
+    if weights is None:
+        weights = density
+    if weights is None:
+        weights = (
+            torch.ones(
+                native_operator.n_samples,
+                dtype=complex_dtype,
+                device=samples.device,
+            )
+            if is_torch
+            else numpy.ones(native_operator.n_samples, dtype=complex_dtype)
+        )
+    elif is_torch:
+        weights = torch.as_tensor(
+            weights,
+            dtype=complex_dtype,
+            device=samples.device,
+        ).reshape(-1)
+    else:
+        weights = numpy.asarray(weights, dtype=complex_dtype).reshape(-1)
+    weight_count = weights.numel() if is_torch else weights.size
+    if weight_count != native_operator.n_samples:
+        raise ValueError("Toeplitz weights must have one value per NUFFT sample")
+
+    spatial_shape = tuple(2 * size for size in shape)
+    kernel = (
+        torch.zeros(spatial_shape, dtype=complex_dtype, device=samples.device)
+        if is_torch
+        else numpy.zeros(spatial_shape, dtype=complex_dtype)
+    )
+    temporary = (
+        torch.empty(shape, dtype=complex_dtype, device=samples.device)
+        if is_torch
+        else numpy.empty(shape, dtype=complex_dtype)
+    )
+    halves = tuple(size // 2 for size in shape)
+
+    saved_density = density
+    saved_density_method = getattr(native_operator, "_density_method", None)
+    if density is not None:
+        native_operator.density = None
+        if hasattr(native_operator, "_density_method"):
+            native_operator._density_method = None
+    try:
+        for signs in product((1, -1), repeat=len(shape) - 1):
+            shifts = (
+                halves[0],
+                *(sign * half for sign, half in zip(signs, halves[1:], strict=True)),
+            )
+            if is_torch:
+                shift = torch.as_tensor(shifts, dtype=omega.dtype, device=omega.device)
+                modulated = (weights * torch.exp(1j * (omega @ shift))).to(
+                    complex_dtype
+                )
+            else:
+                shift = numpy.asarray(shifts, dtype=omega.dtype)
+                modulated = numpy.asarray(
+                    weights * numpy.exp(1j * (omega @ shift)),
+                    dtype=complex_dtype,
+                )
+            native_operator._adj_op(modulated, temporary)
+
+            target = [slice(0, shape[0])]
+            source = [slice(None)]
+            for axis, sign in enumerate(signs, start=1):
+                if sign > 0:
+                    target.append(slice(0, shape[axis]))
+                    source.append(slice(None))
+                else:
+                    target.append(slice(shape[axis] + 1, 2 * shape[axis]))
+                    source.append(slice(1, shape[axis]))
+            kernel[tuple(target)] = temporary[tuple(source)]
+    finally:
+        if saved_density is not None:
+            native_operator.density = saved_density
+            if hasattr(native_operator, "_density_method"):
+                native_operator._density_method = saved_density_method
+
+    axes = tuple(range(len(shape)))
+    if is_torch:
+        symmetric = torch.roll(
+            torch.flip(kernel, dims=axes),
+            shifts=(1,) * len(shape),
+            dims=axes,
+        ).conj()
+    else:
+        symmetric = numpy.roll(
+            numpy.flip(kernel, axis=axes),
+            shift=(1,) * len(shape),
+            axis=axes,
+        ).conj()
+    kernel[(slice(shape[0] + 1, None), *([slice(None)] * (len(shape) - 1)))] = (
+        symmetric[(slice(shape[0] + 1, None), *([slice(None)] * (len(shape) - 1)))]
+    )
+    kernel = kernel / native_operator.norm_factor
+    if is_torch:
+        return torch.fft.fftn(kernel, dim=axes, norm="ortho").real
+    return numpy.fft.fftn(kernel, axes=axes, norm="ortho").real.astype(
+        real_dtype,
+        copy=False,
+    )
 
 
 def _sense_maps(native_operator: Any, reference: Any) -> Any:
@@ -878,6 +1025,98 @@ def _selected_transfer(
     return selected.to("cpu") if streaming is not None else selected
 
 
+def _build_scalar_toeplitz(
+    native_operator: Any,
+    options: dict[str, Any],
+    streaming: Any | None = None,
+) -> CompactToeplitzKernel:
+    """Build Pulserver's compact rank-one NUFFT transfer."""
+    base = _base_fourier_operator(native_operator)
+    image_shape = tuple(int(size) for size in base.shape)
+    spatial_shape = tuple(2 * size for size in image_shape)
+    transfer = as_torch(_compute_toeplitz_transfer(base)).flatten()
+    indices = support_indices(
+        spatial_shape,
+        support=options["support"],
+        radius=options["radius"],
+        device="cpu" if streaming is not None else transfer.device,
+    )
+    values = _selected_transfer(transfer, indices, streaming=streaming).real[None]
+    return CompactToeplitzKernel(
+        values,
+        indices,
+        spatial_shape,
+        1,
+        image_shape=image_shape,
+        chunk_size=options["chunk_size"],
+        cuda_mode=options["cuda_mode"],
+        cuda_max_device_fraction=options["cuda_max_device_fraction"],
+        cuda_transfer_precision=options["cuda_transfer_precision"],
+    )
+
+
+def _configure_base_toeplitz(
+    operator: Any,
+    native_operator: Any,
+    *,
+    enabled: bool,
+    options: dict[str, Any],
+) -> Any:
+    """Install Pulserver's lazy scalar normal on a native NUFFT adapter."""
+    operator.use_toeplitz = enabled
+    operator.toeplitz_kernel = None
+    operator._toeplitz_options = dict(options)
+    operator.streaming_policy = None
+    operator.streaming_methods = {"A_adjoint_A"}
+
+    def enable_toeplitz(self: Any, new_options: dict[str, Any]) -> None:
+        self.use_toeplitz = True
+        self._toeplitz_options = dict(new_options)
+        self.toeplitz_kernel = None
+
+    def enable_streaming(self: Any, policy: Any) -> None:
+        self.streaming_policy = policy
+        self.toeplitz_kernel = None
+
+    def scalar_normal(self: Any, x: Any, **kwargs: Any) -> Any:
+        del kwargs
+        if not self.use_toeplitz:
+            return self.A_adjoint(self.A(x))
+        image = _image_as_cpx(x) if self.viewed_as_real else x
+        if self.toeplitz_kernel is None:
+            self.toeplitz_kernel = _build_scalar_toeplitz(
+                native_operator,
+                self._toeplitz_options,
+                self.streaming_policy,
+            )
+        base = _base_fourier_operator(native_operator)
+        if getattr(base, "uses_sense", False):
+            result = _apply_sense_toeplitz(
+                self.toeplitz_kernel,
+                image,
+                native_operator,
+                coil_batch_size=self._toeplitz_options["coil_batch_size"],
+                streaming=self.streaming_policy,
+            )
+        else:
+            batch, channels, *spatial = image.shape
+            flattened = image.reshape(batch * channels, 1, *spatial)
+            result = (
+                self.toeplitz_kernel.apply_streamed(
+                    flattened,
+                    self.streaming_policy,
+                )
+                if self.streaming_policy is not None and flattened.device.type == "cpu"
+                else self.toeplitz_kernel.apply(flattened)
+            ).reshape(batch, channels, *spatial)
+        return _image_as_real(result) if self.viewed_as_real else result
+
+    operator.enable_toeplitz = MethodType(enable_toeplitz, operator)
+    operator.enable_streaming = MethodType(enable_streaming, operator)
+    operator.A_adjoint_A = MethodType(scalar_normal, operator)
+    return operator
+
+
 def _build_subspace_toeplitz(
     frame_physics: Sequence[MRIPhysics | _LazyFramePhysics],
     basis: Any,
@@ -1003,12 +1242,14 @@ def _build_cartesian_subspace_toeplitz(
     if streaming is not None:
         mask = mask.to("cpu")
         maps = maps.to("cpu")
-    image_shape = tuple(int(size) for size in maps.shape[-2:])
+    spatial_ndim = getattr(frame_physics[0], "spatial_ndim", maps.ndim - 1)
+    image_shape = tuple(int(size) for size in maps.shape[-spatial_ndim:])
     # DeepInverse represents Cartesian masks as (batch, real/imag, H, W).
     # The two channels are identical; retain only one before interpreting the
     # leading dimension as shared/per-frame masks.
-    if mask.ndim >= 4 and mask.shape[-3] == 2:
-        mask = mask.select(-3, 0)
+    channel_axis = -(spatial_ndim + 1)
+    if mask.ndim >= spatial_ndim + 2 and mask.shape[channel_axis] == 2:
+        mask = mask.select(channel_axis, 0)
     masks = mask.reshape(-1, *image_shape)
     if masks.shape[0] == 1:
         masks = masks.expand(n_frames, *image_shape)
@@ -1307,14 +1548,15 @@ def _apply_subspace_off_resonance_toeplitz(
     return result
 
 
-def _cartesian_2d(
+def _cartesian(
     mask: Any,
     coil_maps: Any,
     *,
+    spatial_ndim: int,
     toeplitz: bool | dict[str, Any] = False,
     **kwargs: Any,
 ) -> MRIPhysics:
-    """Create 2D Cartesian SENSE physics.
+    """Create Cartesian SENSE physics.
 
     Leading dimensions are handled by DeepInverse as batch dimensions, so
     slices, contrasts, and dynamic frames are reconstructed independently.
@@ -1327,15 +1569,15 @@ def _cartesian_2d(
     operator = physics_module.MultiCoilMRI(
         mask=mask,
         coil_maps=coil_maps,
-        three_d=False,
+        three_d=spatial_ndim == 3,
         device=device,
         **kwargs,
     )
     result = MRIPhysics(
         operator,
         native_operator=None,
-        kind="cartesian2d",
-        spatial_ndim=2,
+        kind=f"cartesian{spatial_ndim}d",
+        spatial_ndim=spatial_ndim,
         modifiers=("toeplitz",) if toeplitz_enabled else (),
         toeplitz_options=options if toeplitz_enabled else None,
     )
@@ -1358,13 +1600,244 @@ class Cartesian2D(MRIPhysics):
         **kwargs: Any,
     ) -> None:
         self.__dict__.update(
-            _cartesian_2d(
+            _cartesian(
                 mask,
                 coil_maps,
+                spatial_ndim=2,
                 toeplitz=toeplitz,
                 **kwargs,
             ).__dict__
         )
+
+
+class Cartesian3D(MRIPhysics):
+    """Three-dimensional Cartesian SENSE physics."""
+
+    def __init__(
+        self,
+        mask: Any,
+        coil_maps: Any,
+        *,
+        toeplitz: bool | dict[str, Any] = False,
+        **kwargs: Any,
+    ) -> None:
+        self.__dict__.update(
+            _cartesian(
+                mask,
+                coil_maps,
+                spatial_ndim=3,
+                toeplitz=toeplitz,
+                **kwargs,
+            ).__dict__
+        )
+
+
+def _stacked_trajectory_bank(
+    trajectory: Any,
+    z_index: Any,
+    stack_size: int,
+) -> tuple[list[Any], Any, list[Any] | None]:
+    """Resolve shared or plane-specific 2D trajectories and stack indices."""
+    numpy = import_module("numpy")
+
+    def host(value: Any) -> Any:
+        if hasattr(value, "detach"):
+            value = value.detach().cpu()
+        return numpy.asarray(value)
+
+    shape = getattr(trajectory, "shape", ())
+    if not shape and isinstance(trajectory, (list, tuple)) and trajectory:
+        shape = getattr(trajectory[0], "shape", ())
+    coordinate_dim = shape[-1] if shape else None
+    if coordinate_dim == 3:
+        samples = host(trajectory).reshape(-1, 3)
+        z_coordinates = numpy.asarray(
+            import_module("mrinufft._utils").proper_trajectory(
+                samples[:, 2],
+                normalize="unit",
+            )
+        ).reshape(-1)
+        _, first = numpy.unique(z_coordinates, return_index=True)
+        ordered_z = z_coordinates[numpy.sort(first)]
+        groups = [
+            numpy.flatnonzero(numpy.isclose(z_coordinates, value))
+            for value in ordered_z
+        ]
+        planes = [samples[group, :2] for group in groups]
+        indices = numpy.rint(ordered_z * stack_size + stack_size // 2).astype(
+            numpy.int64
+        )
+        if numpy.any(indices < 0) or numpy.any(indices >= stack_size):
+            raise ValueError("stacked trajectory contains an out-of-grid z coordinate")
+        if numpy.unique(indices).size != indices.size:
+            raise ValueError("stacked trajectory maps multiple planes to one z index")
+        return planes, indices, groups
+    if coordinate_dim != 2:
+        raise ValueError("stacked trajectories must end in two or three coordinates")
+
+    if z_index is None or (isinstance(z_index, str) and z_index == "auto"):
+        indices = numpy.arange(stack_size, dtype=numpy.int64)
+    else:
+        try:
+            indices = numpy.arange(stack_size, dtype=numpy.int64)[host(z_index)]
+        except IndexError as error:
+            raise ValueError("z_index must select valid stack entries") from error
+        indices = numpy.asarray(indices, dtype=numpy.int64).reshape(-1)
+    if indices.size == 0:
+        raise ValueError("z_index must select at least one stack entry")
+    if numpy.unique(indices).size != indices.size:
+        raise ValueError("z_index must not contain duplicate stack entries")
+
+    explicit_sequence = isinstance(trajectory, (list, tuple))
+    array = None if explicit_sequence else host(trajectory)
+    banked_array = (
+        array is not None and array.ndim >= 4 and array.shape[0] == indices.size
+    )
+    if explicit_sequence or banked_array:
+        entries = list(trajectory) if explicit_sequence else list(array)
+        if len(entries) != indices.size:
+            raise ValueError("one 2D trajectory is required per selected stack plane")
+        planes = [host(entry).reshape(-1, 2) for entry in entries]
+    else:
+        shared = host(trajectory).reshape(-1, 2)
+        planes = [shared] * indices.size
+    return planes, indices, None
+
+
+def _stacked_density_bank(
+    density: Any | None,
+    trajectories: Sequence[Any],
+    sample_groups: Sequence[Any] | None,
+) -> list[Any | None]:
+    """Resolve shared, banked, or flattened stack density weights."""
+    if density is None:
+        return [None] * len(trajectories)
+    numpy = import_module("numpy")
+
+    def host(value: Any) -> Any:
+        if hasattr(value, "detach"):
+            value = value.detach().cpu()
+        return numpy.asarray(value)
+
+    counts = [int(numpy.asarray(item).reshape(-1, 2).shape[0]) for item in trajectories]
+    if isinstance(density, (list, tuple)):
+        if len(density) != len(trajectories):
+            raise ValueError("one density array is required per stack trajectory")
+        result = [host(item).reshape(-1) for item in density]
+    else:
+        weights = host(density)
+        if weights.size == counts[0] and all(count == counts[0] for count in counts):
+            result = [weights.reshape(-1)] * len(trajectories)
+        elif (
+            weights.ndim >= 2
+            and weights.shape[0] == len(trajectories)
+            and all(weights[index].size == count for index, count in enumerate(counts))
+        ):
+            result = [weights[index].reshape(-1) for index in range(len(counts))]
+        elif weights.size == sum(counts):
+            flattened = weights.reshape(-1)
+            if sample_groups is not None:
+                result = [flattened[group] for group in sample_groups]
+            else:
+                result = []
+                start = 0
+                for count in counts:
+                    result.append(flattened[start : start + count])
+                    start += count
+        else:
+            raise ValueError("stacked density does not match the trajectory bank")
+    if any(item.size != count for item, count in zip(result, counts, strict=True)):
+        raise ValueError("stacked density must have one weight per sample")
+    return result
+
+
+def _stacked_linear_physics(
+    mrinufft: Any,
+    trajectory: Any,
+    image_shape: tuple[int, int, int],
+    *,
+    coil_maps: Any | None,
+    density: Any | None,
+    backend: str,
+    n_coils: int,
+    n_batchs: int,
+    z_index: Any,
+    viewed_as_real: bool,
+    toeplitz_enabled: bool,
+    toeplitz_options: dict[str, Any],
+    operator_kwargs: dict[str, Any],
+) -> tuple[Any, Any]:
+    """Build shared-batch or independent plane NUFFTs for a stack."""
+    numpy = import_module("numpy")
+    trajectories, indices, groups = _stacked_trajectory_bank(
+        trajectory,
+        z_index,
+        image_shape[-1],
+    )
+    densities = _stacked_density_bank(density, trajectories, groups)
+    shared = all(
+        numpy.array_equal(trajectories[0], item) for item in trajectories[1:]
+    ) and all(
+        (densities[0] is None and item is None)
+        or (
+            densities[0] is not None
+            and item is not None
+            and numpy.array_equal(densities[0], item)
+        )
+        for item in densities[1:]
+    )
+
+    common = {
+        "shape": image_shape[:2],
+        "smaps": None,
+        "n_batchs": n_batchs,
+        "squeeze_dims": False,
+        **operator_kwargs,
+    }
+    if shared:
+        native_operators = [
+            mrinufft.get_operator(backend)(
+                samples=trajectories[0],
+                density=densities[0],
+                n_coils=n_coils * len(indices),
+                **common,
+            )
+        ]
+    else:
+        native_operators = [
+            mrinufft.get_operator(backend)(
+                samples=samples,
+                density=weights,
+                n_coils=n_coils,
+                **common,
+            )
+            for samples, weights in zip(trajectories, densities, strict=True)
+        ]
+    plane_physics = [
+        _native_linear_physics(native, viewed_as_real=False)
+        for native in native_operators
+    ]
+    operator = _StackedNUFFTLinearPhysics(
+        plane_physics,
+        native_operators,
+        indices,
+        image_shape,
+        coil_maps=coil_maps,
+        n_coils=n_coils,
+        viewed_as_real=viewed_as_real,
+        toeplitz=toeplitz_enabled,
+        toeplitz_options=toeplitz_options,
+        shared_operator=shared,
+    )
+    native_proxy = SimpleNamespace(
+        shape=image_shape,
+        smaps=coil_maps,
+        plane_operators=tuple(native_operators),
+        z_index=indices,
+        shared_trajectory=shared,
+        stacked=True,
+    )
+    return operator, native_proxy
 
 
 def _noncartesian(
@@ -1389,13 +1862,32 @@ def _noncartesian(
         raise ValueError(
             f"image_shape must have {spatial_ndim} entries, got {image_shape!r}"
         )
-    trajectory_dim = getattr(trajectory, "shape", (None,))[-1]
-    if trajectory_dim is not None and trajectory_dim != spatial_ndim:
+    trajectory_shape = getattr(trajectory, "shape", ())
+    if not trajectory_shape and isinstance(trajectory, (list, tuple)) and trajectory:
+        trajectory_shape = getattr(trajectory[0], "shape", ())
+    trajectory_dim = trajectory_shape[-1] if trajectory_shape else None
+    valid_dimensions = {2, 3} if stacked else {spatial_ndim}
+    if trajectory_dim is not None and trajectory_dim not in valid_dimensions:
         raise ValueError(
-            f"trajectory must end in {spatial_ndim} coordinates, got {trajectory_dim}"
+            f"trajectory must end in {sorted(valid_dimensions)} coordinates, "
+            f"got {trajectory_dim}"
         )
     if stacked and spatial_ndim != 3:
         raise ValueError("stacked trajectories are only supported by NonCartesian3D")
+    map_shape = getattr(coil_maps, "shape", ())
+    if coil_maps is not None:
+        if len(map_shape) == spatial_ndim + 1:
+            inferred_coils = int(map_shape[0])
+        elif len(map_shape) == spatial_ndim + 2:
+            inferred_coils = int(map_shape[1])
+        else:
+            raise ValueError(
+                "coil_maps must have shape (coils, *image_shape) or "
+                "(batch, coils, *image_shape)"
+            )
+        if n_coils not in {1, inferred_coils}:
+            raise ValueError("n_coils conflicts with the sensitivity-map bank")
+        n_coils = inferred_coils
 
     mrinufft = _require_mrinufft()
     backend = _resolve_nufft_backend(backend)
@@ -1408,8 +1900,14 @@ def _noncartesian(
         )
         if getattr(selected_device, "type", None) == "cuda":
             operator_kwargs["gpu_device_id"] = selected_device.index or 0
-    trajectory_shape = getattr(trajectory, "shape", ())
-    frame_stacked = streaming is not None and len(trajectory_shape) >= 4
+    native_coil_maps = coil_maps
+    if (
+        backend == "finufft"
+        and hasattr(coil_maps, "detach")
+        and getattr(coil_maps.device, "type", None) == "cpu"
+    ):
+        native_coil_maps = coil_maps.detach().numpy()
+    frame_stacked = not stacked and streaming is not None and len(trajectory_shape) >= 4
     native_trajectory = trajectory[0] if frame_stacked else trajectory
     native_density = density
     density_shape = getattr(density, "shape", ())
@@ -1420,34 +1918,40 @@ def _noncartesian(
         and density_shape[0] == trajectory_shape[0]
     ):
         native_density = density[0]
-    common = {
-        "samples": native_trajectory,
-        "shape": image_shape,
-        "smaps": coil_maps,
-        "n_coils": n_coils,
-        "n_batchs": n_batchs,
-        "squeeze_dims": False,
-        **operator_kwargs,
-    }
     if stacked:
-        native = mrinufft.get_operator("stacked")(
+        operator, native = _stacked_linear_physics(
+            mrinufft,
+            native_trajectory,
+            image_shape,
+            coil_maps=coil_maps,
+            density=native_density,
             backend=backend,
+            n_coils=n_coils,
+            n_batchs=n_batchs,
             z_index=z_index,
-            **common,
+            viewed_as_real=viewed_as_real,
+            toeplitz_enabled=toeplitz_enabled,
+            toeplitz_options=toeplitz_config,
+            operator_kwargs=operator_kwargs,
         )
     else:
-        native = mrinufft.get_operator(backend)(density=native_density, **common)
-
-    # mri-nufft's generic Toeplitz Gram implementation is valid for the base
-    # NUFFT. Stacked FFT/NUFFT composition currently has no equivalent native
-    # kernel, so it retains the exact normal operation.
-    native_toeplitz_valid = not stacked
-    operator = _native_linear_physics(
-        native,
-        viewed_as_real=viewed_as_real,
-        use_toeplitz=toeplitz_enabled,
-        native_toeplitz_valid=native_toeplitz_valid,
-    )
+        native = mrinufft.get_operator(backend)(
+            samples=native_trajectory,
+            shape=image_shape,
+            smaps=native_coil_maps,
+            density=native_density,
+            n_coils=n_coils,
+            n_batchs=n_batchs,
+            squeeze_dims=False,
+            **operator_kwargs,
+        )
+        operator = _native_linear_physics(native, viewed_as_real=viewed_as_real)
+        operator = _configure_base_toeplitz(
+            operator,
+            native,
+            enabled=toeplitz_enabled,
+            options=toeplitz_config,
+        )
 
     def rebuild(
         new_trajectory: Any,
@@ -1523,7 +2027,7 @@ def _noncartesian(
             operator_kwargs=replica_kwargs,
         )
 
-    if backend == "cufinufft-torch" and not stacked:
+    if backend == "cufinufft-torch":
         result._replicate = replicate
     if streaming is not None:
         result.enable_streaming(streaming)
@@ -1638,7 +2142,14 @@ def _noncartesian_3d(
 
 
 class NonCartesian3D(MRIPhysics):
-    """Three-dimensional or stack-of-stars non-Cartesian MRI physics."""
+    """Three-dimensional or stack-of-NUFFTs MRI physics.
+
+    With ``stacked=True``, one 2D trajectory array is batched across selected
+    stack-frequency planes. A Python sequence supplies independent plane
+    trajectories; a 3D-coordinate trajectory is grouped by its Cartesian
+    stack coordinate. Shared and plane-specific density layouts follow the
+    same convention.
+    """
 
     def __init__(
         self,
@@ -1704,8 +2215,13 @@ def _subspace_linear_physics(
                 else _toeplitz_options()
             )
             self.toeplitz_kernel = None
-            if all(item.kind == "cartesian2d" for item in frame_physics):
+            if all(item.kind.startswith("cartesian") for item in frame_physics):
                 self._compact_toeplitz = "cartesian-subspace"
+            elif any("stacked" in item.modifiers for item in frame_physics):
+                # Each frame already owns a compact plane-kernel bank. The
+                # general subspace loop composes those exact normals without
+                # materializing a dense rank-by-rank 3D transfer.
+                self._compact_toeplitz = None
             elif any(isinstance(item, _LazyFramePhysics) for item in frame_physics):
                 self._compact_toeplitz = (
                     "subspace-off-resonance"
@@ -2151,6 +2667,11 @@ def _off_resonance(
     """Decorate non-Cartesian physics with mri-nufft off-resonance correction."""
     if physics.native_operator is None:
         raise TypeError("OffResonance requires base non-Cartesian physics")
+    if "stacked" in physics.modifiers:
+        raise ValueError(
+            "OffResonance for stack-of-NUFFTs needs a stack-frequency field "
+            "model and is not yet a valid composition."
+        )
     if "subspace" in physics.modifiers:
         raise ValueError(
             "Apply OffResonance before Subspace so field correction occurs "
@@ -2223,8 +2744,6 @@ def _off_resonance(
     operator = _native_linear_physics(
         native,
         viewed_as_real=physics.viewed_as_real,
-        use_toeplitz=False,
-        native_toeplitz_valid=False,
     )
     operator = _configure_off_resonance_toeplitz(
         operator,
@@ -2318,7 +2837,7 @@ class OffResonance(MRIPhysics):
 def _toeplitz(
     physics: MRIPhysics,
     *,
-    support: str = "radial",
+    support: str = "full",
     radius: float = 1.0,
     chunk_size: int = 65536,
     coil_batch_size: int = 1,
@@ -2350,7 +2869,7 @@ def _toeplitz(
     enable = getattr(physics.operator, "enable_toeplitz", None)
     if enable is not None:
         enable(options)
-    elif physics.native_operator is not None and "stacked" not in physics.modifiers:
+    elif physics.native_operator is not None:
         physics.operator.use_toeplitz = True
     return physics
 
@@ -2360,3 +2879,94 @@ class Toeplitz(MRIPhysics):
 
     def __init__(self, physics: MRIPhysics, **kwargs: Any) -> None:
         self.__dict__.update(_toeplitz(physics, **kwargs).__dict__)
+
+
+class WaveShuffling(MRIPhysics):
+    """Three-dimensional Wave-Shuffling subspace physics.
+
+    ``sampling`` contains ``(phase, partition, echo)`` indices and ``basis``
+    follows Pulserver's ``(rank, echoes)`` convention. The forward and adjoint
+    gather/scatter only acquired lines. The normal operator uses the exact
+    packed temporal kernel in hybrid k-space and never materializes an echo
+    train or a dense ``rank x rank`` field.
+    """
+
+    def __init__(
+        self,
+        sampling: Any,
+        coil_maps: Any,
+        wave_psf: Any,
+        basis: Any,
+        *,
+        line_weights: Any | None = None,
+        viewed_as_real: bool = True,
+        coil_batch_size: int = 1,
+        cuda_transfer_precision: str = "auto",
+        streaming: Any | None = None,
+    ) -> None:
+        operator = _WaveLinearPhysics(
+            sampling,
+            coil_maps,
+            wave_psf,
+            basis,
+            line_weights=line_weights,
+            viewed_as_real=viewed_as_real,
+            coil_batch_size=coil_batch_size,
+            cuda_transfer_precision=cuda_transfer_precision,
+        )
+        super().__init__(
+            operator,
+            native_operator=None,
+            kind="wave-shuffling",
+            spatial_ndim=3,
+            viewed_as_real=viewed_as_real,
+            modifiers=("wave", "subspace"),
+        )
+        if streaming is not None:
+            self.enable_streaming(streaming)
+
+
+class WaveEncoding(MRIPhysics):
+    """Three-dimensional fixed-PSF Wave encoding physics."""
+
+    def __init__(
+        self,
+        sampling: Any,
+        coil_maps: Any,
+        wave_psf: Any,
+        *,
+        line_weights: Any | None = None,
+        viewed_as_real: bool = True,
+        coil_batch_size: int = 1,
+        cuda_transfer_precision: str = "auto",
+        streaming: Any | None = None,
+    ) -> None:
+        sampling_tensor = as_torch(sampling)
+        echoes = (
+            int(sampling_tensor[:, 2].max()) + 1
+            if sampling_tensor.ndim == 2
+            and sampling_tensor.shape[1] == 3
+            and sampling_tensor.shape[0]
+            else 1
+        )
+        basis = as_torch(coil_maps).real.new_ones((1, echoes))
+        operator = _WaveLinearPhysics(
+            sampling,
+            coil_maps,
+            wave_psf,
+            basis,
+            line_weights=line_weights,
+            viewed_as_real=viewed_as_real,
+            coil_batch_size=coil_batch_size,
+            cuda_transfer_precision=cuda_transfer_precision,
+        )
+        super().__init__(
+            operator,
+            native_operator=None,
+            kind="wave",
+            spatial_ndim=3,
+            viewed_as_real=viewed_as_real,
+            modifiers=("wave",),
+        )
+        if streaming is not None:
+            self.enable_streaming(streaming)

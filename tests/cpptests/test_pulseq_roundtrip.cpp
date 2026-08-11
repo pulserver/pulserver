@@ -159,6 +159,165 @@ namespace
         EXPECT_GT(seq.duration(), 0.0);
     }
 
+    /* ============================================================== */
+    /*  Rows longer than the reader's line buffer                     */
+    /* ============================================================== */
+    /*
+     * Two sections have rows whose length is set by the prescription rather
+     * than by the format: `[DEFINITIONS]` writes `SlicePositions` as one value
+     * per slice, and `[RF_SHIMS]` two per transmit channel.  Everything else
+     * is fixed-width or one value per line.
+     *
+     * The text reader reads with `fgets` into a 256-byte buffer, which does
+     * not fail on a longer row -- it returns the first 255 bytes and hands the
+     * rest back as the next line.  A 20-slice `SlicePositions` used to come
+     * back holding 18 values, with the remainder parsed as a definition named
+     * after whichever digits the cut landed between, and nothing anywhere
+     * raised.  The counts below straddle that: 16 slices fit in the old
+     * buffer, 20 did not.
+     *
+     * No fixture in the corpus is wide enough to reach this, which is why
+     * these build their sequences instead.
+     */
+
+    /** @p n slice positions, evenly spaced, at a spacing that does not round. */
+    std::vector<double> slice_positions(int n)
+    {
+        std::vector<double> out;
+        out.reserve(static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i)
+            out.push_back((i - (n - 1) / 2.0) * 5.1234567e-3);
+        return out;
+    }
+
+    class WideRowFixture : public testing::TestWithParam<int>
+    {
+    };
+
+    TEST_P(WideRowFixture, SlicePositionsSurviveTheTextFormat)
+    {
+        const std::vector<double> expected = slice_positions(GetParam());
+
+        pulseq::Sequence seq;
+        pulseq::Block block;
+        block.duration = 1e-3;
+        seq.add_block(block);
+        seq.set_definition("SlicePositions", pulseq::Definition(expected));
+
+        const pulseq::Sequence back = reread(pulseq::write_text(seq, false), ".seq");
+        const pulseq::Definition* got = back.definition("SlicePositions");
+        ASSERT_NE(got, nullptr);
+        ASSERT_EQ(got->numbers().size(), expected.size());
+        /* Definitions are written at `%0.9g`, so nine significant figures is
+         * all a round trip can promise -- and the binary format carries the
+         * same strings, so it promises exactly as much.  A mantissa leading
+         * with 1 spends most of a decade before the first digit changes, which
+         * is why the relative bound is 1e-8 and not 1e-9. */
+        for (size_t i = 0; i < expected.size(); ++i)
+            EXPECT_NEAR(got->numbers()[i], expected[i], 1e-8 * std::fabs(expected[i]) + 1e-15)
+                << "slice " << i;
+    }
+
+    TEST_P(WideRowFixture, SlicePositionsSurviveTheBinaryFormat)
+    {
+        const std::vector<double> expected = slice_positions(GetParam());
+
+        pulseq::Sequence seq;
+        pulseq::Block block;
+        block.duration = 1e-3;
+        seq.add_block(block);
+        seq.set_definition("SlicePositions", pulseq::Definition(expected));
+
+        const pulseq::Sequence back = reread(pulseq::write_binary(seq), ".bin");
+        const pulseq::Definition* got = back.definition("SlicePositions");
+        ASSERT_NE(got, nullptr);
+        ASSERT_EQ(got->numbers().size(), expected.size());
+        /* Definitions are written at `%0.9g`, so nine significant figures is
+         * all a round trip can promise -- and the binary format carries the
+         * same strings, so it promises exactly as much.  A mantissa leading
+         * with 1 spends most of a decade before the first digit changes, which
+         * is why the relative bound is 1e-8 and not 1e-9. */
+        for (size_t i = 0; i < expected.size(); ++i)
+            EXPECT_NEAR(got->numbers()[i], expected[i], 1e-8 * std::fabs(expected[i]) + 1e-15)
+                << "slice " << i;
+    }
+
+    TEST_P(WideRowFixture, ALongDefinitionDoesNotBecomeTwo)
+    {
+        /* The tail of a split row parses as a definition of its own, named
+         * after a fragment of a number.  Nothing else in the file can produce
+         * a key that is a number, so that is the whole test. */
+        pulseq::Sequence seq;
+        pulseq::Block block;
+        block.duration = 1e-3;
+        seq.add_block(block);
+        seq.set_definition("SlicePositions", pulseq::Definition(slice_positions(GetParam())));
+
+        const pulseq::Sequence back = reread(pulseq::write_text(seq, false), ".seq");
+        for (const auto& entry : back.definitions())
+        {
+            char* end = nullptr;
+            std::strtod(entry.first.c_str(), &end);
+            EXPECT_FALSE(end != nullptr && *end == '\0' && !entry.first.empty())
+                << "definition '" << entry.first << "' is a number, so it is a row fragment";
+        }
+    }
+
+    INSTANTIATE_TEST_SUITE_P(SliceCounts, WideRowFixture,
+                             testing::Values(1, 8, 16, 20, 32, 64, 200));
+
+    /** @p channels complex weights, as `[magnitude, phase]` pairs. */
+    std::vector<double> shim_weights(int channels)
+    {
+        std::vector<double> out;
+        out.reserve(static_cast<size_t>(2 * channels));
+        for (int c = 0; c < channels; ++c)
+        {
+            out.push_back(0.11111111 + 0.88888888 * c / (channels > 1 ? channels - 1 : 1));
+            out.push_back(-3.14159265 + 6.2831853 * c / (channels > 1 ? channels - 1 : 1));
+        }
+        return out;
+    }
+
+    class ShimWidthFixture : public testing::TestWithParam<int>
+    {
+    };
+
+    TEST_P(ShimWidthFixture, EveryChannelSurvivesBothFormats)
+    {
+        const int channels = GetParam();
+        const std::vector<double> expected = shim_weights(channels);
+
+        pulseq::Sequence seq;
+        const int shim = seq.register_rf_shim(expected.data(), static_cast<int>(expected.size()));
+        pulseq::Block block;
+        block.duration = 1e-3;
+        block.ext = static_cast<int32_t>(seq.chain_extension(
+            static_cast<int32_t>(seq.extension_type_id("RF_SHIMS")), static_cast<int32_t>(shim), 0));
+        seq.add_block(block);
+
+        const pulseq::Sequence from_text = reread(pulseq::write_text(seq, false), ".seq");
+        const pulseq::Sequence from_binary = reread(pulseq::write_binary(seq), ".bin");
+
+        ASSERT_EQ(from_text.rf_shim_library().length(1), static_cast<int>(expected.size()));
+        ASSERT_EQ(from_binary.rf_shim_library().length(1), static_cast<int>(expected.size()));
+        for (size_t i = 0; i < expected.size(); ++i)
+        {
+            /* Shim rows are written at plain `%g` -- six significant figures,
+             * which for a phase in radians is about 5e-6. */
+            const double tol = 1e-5 * std::fabs(expected[i]) + 1e-12;
+            EXPECT_NEAR(from_text.rf_shim_library().row(1)[i], expected[i], tol)
+                << "text, value " << i;
+            EXPECT_NEAR(from_binary.rf_shim_library().row(1)[i], expected[i], tol)
+                << "binary, value " << i;
+        }
+    }
+
+    /* 8 channels already exceeds the old buffer once written out; 64 is the
+     * reader's compile-time ceiling, and past it both formats refuse. */
+    INSTANTIATE_TEST_SUITE_P(ChannelCounts, ShimWidthFixture,
+                             testing::Values(2, 8, 16, 32, 64));
+
     INSTANTIATE_TEST_SUITE_P(
         AllFixtures,
         PulseqFixture,

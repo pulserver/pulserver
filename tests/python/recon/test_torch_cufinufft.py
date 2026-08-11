@@ -33,7 +33,10 @@ def test_public_auto_backend_uses_torch_cufinufft_without_cupy():
 
     kspace = physics.A(image)
     exact = physics.A_adjoint(kspace)
-    accelerated = Toeplitz(physics).A_adjoint_A(image)
+    accelerated = Toeplitz(
+        physics,
+        cuda_transfer_precision="float32",
+    ).A_adjoint_A(image)
 
     assert physics.native_operator.backend == "cufinufft-torch"
     assert kspace.device.type == "cuda"

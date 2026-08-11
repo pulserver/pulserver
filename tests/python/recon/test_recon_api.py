@@ -67,7 +67,10 @@ import pulserver.recon.algorithms
 
 def test_scientific_apis_expose_only_deepinverse_style_classes():
     assert "Cartesian2D" in physics.__all__
+    assert "Cartesian3D" in physics.__all__
     assert "NonCartesian2D" in physics.__all__
+    assert "WaveEncoding" in physics.__all__
+    assert "WaveShuffling" in physics.__all__
     assert "LLR" in denoisers.__all__
     assert inspect.isclass(physics.Cartesian2D)
     assert inspect.isclass(physics.NonCartesian2D)
@@ -339,7 +342,7 @@ def test_cartesian_factory_returns_uniform_facade(monkeypatch):
 
 def test_noncartesian_factory_owns_mrinufft_construction(monkeypatch):
     calls = {}
-    native = SimpleNamespace()
+    native = SimpleNamespace(gram_op=lambda value, **_kwargs: value)
 
     def constructor(**kwargs):
         calls.update(kwargs)

@@ -83,6 +83,11 @@ class _QuadraticPhysics:
         return self.A(value), _ScaledIdentity(2.0 * value)
 
 
+class _AutomaticQuadraticPhysics(deepinv.physics.Physics):
+    def A(self, value):
+        return value.square()
+
+
 def test_public_optim_namespace_is_deepinverse_shaped():
     assert recon.optim.__all__ == [
         "ADMM",
@@ -180,6 +185,28 @@ def test_irgnm_reuses_linear_inner_solvers(inner_kind):
         rtol=1e-5,
     )
     assert set(result.history) == {1, 5}
+
+
+def test_irgnm_linearizes_an_ordinary_deepinverse_physics():
+    model = IRGNM(
+        ConjugateGradient(max_iter=3, rtol=1e-8, batch_dim=0),
+        damping=0.0,
+        max_iter=5,
+    )
+    data = torch.full((1, 1, 4), 4.0)
+
+    result = model(
+        data,
+        _AutomaticQuadraticPhysics(),
+        init=torch.ones_like(data),
+    )
+
+    torch.testing.assert_close(
+        result,
+        torch.full_like(data, 2.0),
+        atol=1e-5,
+        rtol=1e-5,
+    )
 
 
 @pytest.mark.parametrize("algorithm", ["fista", "pdhg", "admm"])

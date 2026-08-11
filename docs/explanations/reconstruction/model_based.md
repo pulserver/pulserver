@@ -33,28 +33,56 @@ physics = recon.physics.Toeplitz(
 Off-resonance must precede subspace composition. In that order Pulserver can
 combine their temporal factors into one coefficient/interpolation-segment
 transfer when the spatial interpolation factors are shared. Cartesian FFT
-normal operations are already exact, and stacked NUFFT retains its exact
-normal operation.
+normal operations are already exact. Stack-of-NUFFTs physics uses one 2D
+Toeplitz transfer batched across stack-frequency planes when trajectories and
+density are shared. A sequence of plane-specific trajectories instead creates
+an independent compact transfer bank; both paths compose with subspace physics.
+For `NonCartesian3D(..., stacked=True)`, a single `(..., 2)` array is shared;
+a Python sequence supplies one possibly different 2D trajectory per selected
+`z_index`. A `(..., 3)` trajectory is grouped by its Cartesian stack
+coordinate automatically. Density weights accept the same shared, banked, or
+flattened layouts.
 
-For 3D Cartesian data, apply the exact one-dimensional FFT along the fully
-sampled axis and use batched 2D Cartesian physics for the resulting planes;
-{func}`pulserver.recon.preprocessing.cartesian_3d_to_2d` performs that first
-step.
+Three-dimensional Cartesian SENSE is represented directly by
+{class}`pulserver.recon.physics.Cartesian3D`. The hybrid-plane helper
+{func}`pulserver.recon.preprocessing.cartesian_3d_to_2d` remains useful when
+an application deliberately wants independent 2D problems.
+
+Wave-Shuffling uses a dedicated fused operator rather than expanding an echo
+train through the generic subspace decorator:
+
+```python
+physics = recon.physics.WaveShuffling(
+    sampling,       # (lines, 3): phase, partition, echo
+    coil_maps,
+    wave_psf,
+    basis,          # (rank, echoes)
+    coil_batch_size=1,
+    streaming=execution,
+)
+```
+
+Forward and adjoint operations gather and scatter only acquired lines. The
+exact normal operator applies the temporal sampling kernel as a packed
+Hermitian field over phase/partition locations in hybrid k-space. It does not
+allocate a full echo grid or a dense location-by-rank-by-rank kernel. Multiple
+ESPIRiT maps are summed in the SENSE forward and retained in its adjoint.
 
 ## Compact Toeplitz normal operators
 
-Base MRI-NUFFT operators use their native Toeplitz kernels. Dynamic subspace
-and off-resonance compositions use a Torch-native matrix-valued transfer on
-CPU or CUDA. The persistent representation applies three reductions:
+Pulserver owns scalar and matrix-valued Toeplitz normals; MRI-NUFFT supplies
+the bounded NUFFT adjoints used to construct their transfer spectra. This also
+works with MRI-NUFFT releases predating its public Toeplitz helpers. The
+persistent CPU/CUDA representation applies three reductions:
 
 - it stores only the Hermitian upper triangle;
 - it remains real when the temporal basis permits it;
 - with `support="radial"`, it retains only the centered circle or sphere in
   the oversampled Fourier grid.
 
-`support="full"` preserves the complete embedding. `radius` is normalized to
-the per-axis Nyquist radius. Radial support assumes the same circular or
-spherical filtering in the reconstruction model.
+The default `support="full"` preserves the complete embedding. `radius` is
+normalized to the per-axis Nyquist radius. Opting into radial support assumes
+the same circular or spherical filtering in the reconstruction model.
 
 The compact kernel is created lazily by the first normal-operator call. Its
 `storage_nbytes`, `dense_nbytes`, and `compression_ratio` attributes expose
@@ -62,7 +90,7 @@ the persistent memory footprint. `chunk_size` bounds temporary unpacking
 memory, while `coil_batch_size` trades working memory for throughput.
 
 On CPU, the packed Hermitian multiplication uses a small ahead-of-time C++
-extension distributed in the wheel. Independent frequency locations are
+extension distributed in the wheel. Independent batch-location samples are
 partitioned across standard C++ threads, while each worker dispatches at
 runtime between scalar, AVX2, and AVX-512 implementations for both real and
 complex64 kernels. Scanner hosts therefore need neither Numba nor a C++
@@ -101,22 +129,22 @@ With a denoiser it uses plug-and-play FISTA, where `regularization` is the
 denoiser threshold or noise level:
 
 ```python
-regularizers = [
+regularizer = recon.denoisers.AverageDenoiser([
     recon.denoisers.LLR(dimension=3, block_size=8, block_batch_size=1024),
     recon.denoisers.Wavelet(dimension=3, level=3, complex_data=True),
-]
+])
 
 coefficients = recon.pics(
     dynamic_kspace,
     physics,
-    denoiser=regularizers,
+    denoiser=regularizer,
     regularization=0.02,
     polynomial_degree=3,
     iterations=30,
 )
 ```
 
-A denoiser sequence is an equal-weight proximal average. A positive
+A positive
 `polynomial_degree` applies the L2-optimal polynomial preconditioner to the
 FISTA gradient. Degree $d$ adds $d$ normal-operator applications per
 iteration, so it is most useful when $A^H A$ is much cheaper than denoising.
@@ -125,6 +153,31 @@ LLR treats image channels as contrasts or subspace coefficients and applies
 nuclear soft-thresholding to local 2D or 3D blocks. It uses the smaller
 channel-channel Gram matrix when channels are fewer than block voxels, and
 `block_batch_size` bounds its workspace.
+
+## Nonlinear calibration
+
+{class}`pulserver.recon.calibration.NLINV` is a small composition rather than
+a separate reconstruction backend. `NLINVPhysics` supplies analytic JVP/VJP
+products for the joint image/coil model, `IRGNM` performs the outer
+linearization, and the implicit `ConjugateGradient` solves each damped normal
+equation. For non-Cartesian data the Jacobian normal calls Pulserver's compact
+Toeplitz operator independently of whether the installed MRI-NUFFT release
+provides its own Gram helper.
+
+```python
+calibrator = recon.calibration.NLINV(
+    spatial_ndim=3,
+    calibration_width=32,
+    max_iter=8,
+    cg_max_iter=12,
+)
+result = calibrator(kspace, return_info=True)
+coil_maps = result.sensitivities
+```
+
+Joint states use paired real channels at the DeepInverse boundary and
+complex64 internally. The public implementation does not depend on PyGROG or
+copy its IRGNM/CG loops.
 
 ## Host-backed CUDA execution
 

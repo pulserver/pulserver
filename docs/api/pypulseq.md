@@ -113,15 +113,45 @@ slice-selective — nothing is reported rather than a rule of thumb. A sequence
 whose readouts do not share a direction has no Cartesian counters and raises,
 as MATLAB's does.
 
+Every `autoLabel` parameter is accepted, under the Python spelling of its name
+and in its own order — `block_range`, `use_labels`, `use_aux`, `skip_apply`,
+`mirror_fourier`, `reflect`, `reorder`, `sort_slices`, `no_plots` — with
+Pulserver's additions (`trajectory_delay`, `repeat_dims`, `skip`) after them
+rather than mixed in. `use_labels` and `use_aux` skip detection and apply a
+result computed elsewhere, which is how one detection serves several variants
+of a sequence, or how a counter gets corrected by hand without recomputing the
+rest; combining them with `reflect`, `reorder` or `mirror_fourier` is refused,
+since those only affect detection and would look like they had done something.
+
+Two defaults differ from MATLAB's, both deliberately. `no_plots` is `True`
+here because `autoLabel` draws diagnostic figures and nothing here draws any —
+passing `False` raises rather than quietly producing nothing. `sort_slices`
+defaults to `"ascending"` where MATLAB uses `"acquisition"`; the reason is the
+next paragraph. `"acquisition"` reproduces MATLAB's numbering exactly, and
+`"descending"` is what `autoLabel`'s own notes recommend for a Siemens
+interpreter.
+
 Three details are worth knowing before you rely on the counters.
 
 `SLC` is a geometric index: slices are ranked by the position their
 excitation's frequency offset puts them at, so `SlicePositions[SLC]` is where
 slice `SLC` sits however the scan chose to visit them. Gaps, uneven spacing
 and interleaved orderings all come out of the offsets themselves — nothing is
-assumed about the prescription. Those offsets are read as authored, and
+assumed about the prescription. An interleaved acquisition (0, 2, 4, 1, 3)
+hands the reconstruction a shuffled stack under arrival order and an ordered
+one under this, which is why it is the default. `SlicePositions[SLC]` holds
+under all three sortings, so a reconstruction reading the pair together is
+right whichever you pick; only the index a slice is given changes, and so does
+nothing else — the slice gap is a spacing between adjacent positions and comes
+out the same under every one. Those offsets are read as authored, and
 `TransformFOV` scaling rewrites the slice-select gradient without touching
 them, so label first and transform second.
+
+`mirror_fourier` reverses the readout, phase and partition directions together
+— for a reconstruction that inverse-transforms where this assumes a forward
+transform — and is not the same as `reflect=[0, 1, 2]` in the one respect that
+matters: it leaves the slice positions and slice-select gradients alone, so
+slice ordering is unaffected.
 
 `kSpaceCenterSample` is quoted **after** `REV` has been honoured. A bipolar
 train's two polarities put their echo one sample apart — 64 and 63 of 128,

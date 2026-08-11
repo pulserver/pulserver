@@ -9,6 +9,8 @@ from typing import Any
 
 import torch
 
+import deepinv
+
 from ._base import _AlgorithmSchedule, _IterativeOptimizer, _unique_parameters
 from .cg import ConjugateGradient
 from .state import OptimState
@@ -30,10 +32,11 @@ class IRGNM(_IterativeOptimizer):
     damped normal equation directly and regularizes towards the initial
     estimate (or ``reference``).
 
-    Nonlinear physics should implement ``linearize(x)`` and return either a
-    Jacobian physics object or ``(prediction, jacobian)``. The Jacobian follows
-    the regular linear physics contract: ``A``, ``A_adjoint``, and optionally
-    ``A_adjoint_A``.
+    Nonlinear physics may implement ``linearize(x)`` and return either a
+    Jacobian physics object or ``(prediction, jacobian)`` for a fast analytic
+    path. Ordinary :class:`deepinv.physics.Physics` objects work directly:
+    Pulserver constructs their Jacobian with ``A_jvp``/``A_vjp`` when supplied
+    and otherwise uses :mod:`torch.func` without materializing a Jacobian.
 
     Parameters
     ----------
@@ -239,11 +242,15 @@ def _linearization(
     estimate: torch.Tensor,
     override: Callable[[Any, torch.Tensor], Any] | None,
 ) -> tuple[torch.Tensor, Any]:
-    result = (
-        override(physics, estimate)
-        if override is not None
-        else physics.linearize(estimate)
-    )
+    if override is not None:
+        result = override(physics, estimate)
+    else:
+        method = getattr(physics, "linearize", None)
+        result = (
+            method(estimate)
+            if method is not None
+            else (physics.A(estimate), _AutomaticJacobian(physics, estimate))
+        )
     if isinstance(result, tuple):
         if len(result) != 2:
             raise ValueError(
@@ -256,3 +263,38 @@ def _linearization(
         if not hasattr(jacobian, name):
             raise TypeError(f"linearized physics must expose {name}")
     return prediction, jacobian
+
+
+class _AutomaticJacobian(deepinv.physics.LinearPhysics):
+    """Matrix-free Jacobian of an ordinary DeepInverse physics object."""
+
+    def __init__(self, physics: Any, estimate: torch.Tensor) -> None:
+        super().__init__()
+        self.__dict__["physics"] = physics
+        self.__dict__["estimate"] = estimate
+
+    def A(self, vector: torch.Tensor, **kwargs: Any) -> torch.Tensor:
+        """Apply the Jacobian-vector product at the fixed estimate."""
+        del kwargs
+        method = getattr(self.physics, "A_jvp", None)
+        if method is not None:
+            return method(self.estimate, vector)
+        return torch.func.jvp(
+            self.physics.A,
+            (self.estimate,),
+            (vector,),
+        )[1]
+
+    def A_adjoint(self, vector: torch.Tensor, **kwargs: Any) -> torch.Tensor:
+        """Apply the vector-Jacobian product at the fixed estimate."""
+        del kwargs
+        method = getattr(self.physics, "A_vjp", None)
+        if method is not None:
+            return method(self.estimate, vector)
+        _, pullback = torch.func.vjp(self.physics.A, self.estimate)
+        return pullback(vector)[0]
+
+    def A_adjoint_A(self, vector: torch.Tensor, **kwargs: Any) -> torch.Tensor:
+        """Apply the Jacobian normal operator without storing intermediates."""
+        del kwargs
+        return self.A_adjoint(self.A(vector))

@@ -150,6 +150,24 @@ namespace pulseq
         int size = 0;
     };
 
+    /**
+     * Which slice gets which `SLC`.
+     *
+     * `SlicePositions[SLC]` is the position of slice `SLC` under all three,
+     * so a reconstruction reading the pair together is right either way.
+     * What changes is *which index* a slice is given.
+     */
+    enum class SliceSorting
+    {
+        /** Order of first excitation.  `autoLabel.m`'s default. */
+        Acquisition,
+        /** Ranked by position, most negative first.  The default here. */
+        Ascending,
+        /** Ranked by position, most positive first.  What a Siemens
+         *  interpreter wants, per `autoLabel.m`'s own note. */
+        Descending
+    };
+
     /** How the trajectory is read before the counters are derived. */
     struct AutoLabelOptions
     {
@@ -159,6 +177,31 @@ namespace pulseq
 
         /** Negate k, the slice positions and the gradients on these axes. */
         std::array<bool, 3> reflect{{false, false, false}};
+
+        /**
+         * Negate every Fourier-encoding direction at once -- readout, phase
+         * and partition -- for a reconstruction that inverse-transforms where
+         * this assumes a forward transform.
+         *
+         * Distinct from a `reflect` on all three axes in exactly one respect,
+         * and it is the respect that matters: the slice positions and the
+         * slice-select gradients are **not** touched, so slice ordering is
+         * unaffected.  Applied before `reflect`, which may then be combined
+         * with it freely.
+         */
+        bool mirror_fourier = false;
+
+        /**
+         * How `SLC` is assigned; see @ref SliceSorting.
+         *
+         * The default differs from `autoLabel.m`, which uses
+         * @ref SliceSorting::Acquisition.  A geometric index is what makes
+         * `SlicePositions[SLC]` usable as a stack: an interleaved
+         * acquisition (0, 2, 4, 1, 3) hands the reconstruction a shuffled
+         * volume under arrival order and an ordered one under this.  Pass
+         * @ref SliceSorting::Acquisition for MATLAB's numbering exactly.
+         */
+        SliceSorting sort_slices = SliceSorting::Ascending;
 
         /**
          * Permutation applied to the axes, as source indices: `{1, 0, 2}`

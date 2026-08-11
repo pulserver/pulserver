@@ -25,10 +25,25 @@ namespace pulseq
     {
         using Vec3 = std::array<double, 3>;
 
-        /** reflect, then reorder -- MATLAB's order, and it is not commutative. */
-        Vec3 orient(const Vec3& v, const AutoLabelOptions& o)
+        /**
+         * mirror, then reflect, then reorder -- MATLAB's order, and none of
+         * the three commutes with the others.
+         *
+         * @p mirror is what separates an encoding quantity from a slice one.
+         * `mirror_fourier` negates the Fourier directions and leaves slice
+         * ordering alone, so it applies to k and to readout gradients but not
+         * to slice positions or slice-select gradients; `reflect` and
+         * `reorder` apply to all of them.  Hence the flag rather than one
+         * function: the two groups differ in this and in nothing else.
+         */
+        Vec3 orient(const Vec3& v, const AutoLabelOptions& o, bool mirror)
         {
             Vec3 reflected = v;
+            if (mirror && o.mirror_fourier)
+            {
+                for (int a = 0; a < 3; ++a)
+                    reflected[static_cast<size_t>(a)] = -reflected[static_cast<size_t>(a)];
+            }
             for (int a = 0; a < 3; ++a)
             {
                 if (o.reflect[static_cast<size_t>(a)])
@@ -41,6 +56,18 @@ namespace pulseq
                 out[static_cast<size_t>(a)] = reflected[static_cast<size_t>(src)];
             }
             return out;
+        }
+
+        /** k, and the gradients that encode it: `mirror_fourier` applies. */
+        Vec3 orient_encoding(const Vec3& v, const AutoLabelOptions& o)
+        {
+            return orient(v, o, true);
+        }
+
+        /** Slice positions and slice-select gradients: it does not. */
+        Vec3 orient_slice(const Vec3& v, const AutoLabelOptions& o)
+        {
+            return orient(v, o, false);
         }
 
         double norm3(const Vec3& v)
@@ -510,8 +537,8 @@ namespace pulseq
         std::vector<double> slice_offset(static_cast<size_t>(n_exc), 0.0);
         for (int i = 0; i < n_exc; ++i)
         {
-            const Vec3 g = orient(ks.excitations[static_cast<size_t>(i)].g, options);
-            const Vec3 pos = orient(ks.slice_pos[static_cast<size_t>(i)], options);
+            const Vec3 g = orient_slice(ks.excitations[static_cast<size_t>(i)].g, options);
+            const Vec3 pos = orient_slice(ks.slice_pos[static_cast<size_t>(i)], options);
             const Vec3 n = slice_normal(g);
             const double offset = dot3(pos, n);
             slice_offset[static_cast<size_t>(i)] = std::isfinite(offset) ? offset : 0.0;
@@ -591,6 +618,9 @@ namespace pulseq
          * slices.
          */
         std::vector<double> unique_slices;
+        /** The same positions, always ascending: the slice gap is measured on
+         *  these whatever indexing @ref SliceSorting asked for. */
+        std::vector<double> ascending_slices;
         std::vector<int> slice_of_adc(static_cast<size_t>(n_adc), 0);
         {
             double widest = 0.0;
@@ -630,8 +660,17 @@ namespace pulseq
                 group_of_adc[static_cast<size_t>(i)] = found;
             }
 
-            /* Pass two: rank the positions and relabel.  `rank[g]` is where
-             * arrival-order group g sits once the positions are sorted. */
+            /*
+             * Pass two: decide which slice gets which index.  `rank[g]` is
+             * where arrival-order group g ends up, and `unique_slices` is
+             * reordered to match, so `unique_slices[SLC]` is the position of
+             * slice `SLC` under every sorting.
+             *
+             * The ascending order is computed regardless, because the slice
+             * gap is the closest spacing between adjacent positions and that
+             * is a geometric fact rather than an indexing choice -- MATLAB
+             * likewise measures it before it applies `descending`.
+             */
             std::vector<int> order(unique_slices.size());
             for (size_t s = 0; s < order.size(); ++s)
                 order[s] = static_cast<int>(s);
@@ -640,14 +679,31 @@ namespace pulseq
                        unique_slices[static_cast<size_t>(b)];
             });
 
-            std::vector<int> rank(unique_slices.size(), 0);
-            std::vector<double> sorted_positions(unique_slices.size(), 0.0);
+            ascending_slices.resize(order.size());
             for (size_t s = 0; s < order.size(); ++s)
+                ascending_slices[s] = unique_slices[static_cast<size_t>(order[s])];
+
+            if (options.sort_slices == SliceSorting::Descending)
+                std::reverse(order.begin(), order.end());
+
+            std::vector<int> rank(unique_slices.size(), 0);
+            if (options.sort_slices == SliceSorting::Acquisition)
             {
-                rank[static_cast<size_t>(order[s])] = static_cast<int>(s);
-                sorted_positions[s] = unique_slices[static_cast<size_t>(order[s])];
+                /* Arrival order: the group index is already the answer, and
+                 * the positions stay as they were met. */
+                for (size_t s = 0; s < rank.size(); ++s)
+                    rank[s] = static_cast<int>(s);
             }
-            unique_slices.swap(sorted_positions);
+            else
+            {
+                std::vector<double> sorted_positions(unique_slices.size(), 0.0);
+                for (size_t s = 0; s < order.size(); ++s)
+                {
+                    rank[static_cast<size_t>(order[s])] = static_cast<int>(s);
+                    sorted_positions[s] = unique_slices[static_cast<size_t>(order[s])];
+                }
+                unique_slices.swap(sorted_positions);
+            }
 
             for (int i = first_signal; i < n_adc; ++i)
             {
@@ -665,9 +721,9 @@ namespace pulseq
         for (int i = 0; i < n_adc; ++i)
         {
             g_echo[static_cast<size_t>(i)] =
-                orient(ks.readouts[static_cast<size_t>(i)].g_echo, options);
+                orient_encoding(ks.readouts[static_cast<size_t>(i)].g_echo, options);
             k_echo[static_cast<size_t>(i)] =
-                orient(ks.readouts[static_cast<size_t>(i)].k_echo, options);
+                orient_encoding(ks.readouts[static_cast<size_t>(i)].k_echo, options);
         }
 
         const Vec3& g_first = g_echo[static_cast<size_t>(first_signal)];
@@ -728,7 +784,7 @@ namespace pulseq
                         ks.k_central[static_cast<size_t>(a) *
                                          static_cast<size_t>(central_ro.num_samples) +
                                      static_cast<size_t>(j)];
-                projection[static_cast<size_t>(j)] = dot3(orient(k, options), dir);
+                projection[static_cast<size_t>(j)] = dot3(orient_encoding(k, options), dir);
             }
         }
 
@@ -794,7 +850,7 @@ namespace pulseq
          * phase-encoded ones and why LIN comes off the first of them.
          */
         const double k_threshold = std::fabs(dk_readout / 50.0);
-        const Vec3 k_center = orient(ks.k_center, options);
+        const Vec3 k_center = orient_encoding(ks.k_center, options);
 
         std::array<bool, 3> encoded{{false, false, false}};
         for (int a = 0; a < 3; ++a)
@@ -1138,7 +1194,7 @@ namespace pulseq
             }
             if (n_exc > 0)
             {
-                const Vec3 g = orient(ks.excitations[static_cast<size_t>(e)].g, options);
+                const Vec3 g = orient_slice(ks.excitations[static_cast<size_t>(e)].g, options);
                 const double amplitude = norm3(g);
                 const double bandwidth =
                     rf_bandwidth(seq, ks.excitations[static_cast<size_t>(e)].block_index);
@@ -1154,12 +1210,12 @@ namespace pulseq
                      * order.  A negative result is a real answer --
                      * overlapping slices -- and is reported as one.
                      */
-                    if (unique_slices.size() > 1)
+                    if (ascending_slices.size() > 1)
                     {
-                        double closest = unique_slices[1] - unique_slices[0];
-                        for (size_t s = 2; s < unique_slices.size(); ++s)
+                        double closest = ascending_slices[1] - ascending_slices[0];
+                        for (size_t s = 2; s < ascending_slices.size(); ++s)
                             closest = std::min(closest,
-                                               unique_slices[s] - unique_slices[s - 1]);
+                                               ascending_slices[s] - ascending_slices[s - 1]);
                         result.aux.has_slice_gap = true;
                         result.aux.slice_gap = closest - result.aux.slice_thickness;
                     }

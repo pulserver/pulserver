@@ -51,23 +51,48 @@ namespace
         return std::min(available, useful);
     }
 
-    template <typename Worker> void parallel_locations(std::size_t locations, Worker worker)
+    std::size_t sample_thread_count(std::size_t batches, std::size_t locations)
     {
-        const std::size_t workers = location_thread_count(locations);
+        constexpr std::size_t minimum_samples_per_thread = 16384;
+        const std::size_t available = std::max<std::size_t>(1, std::thread::hardware_concurrency());
+        const std::size_t samples = batches * locations;
+        const std::size_t useful = std::max<std::size_t>(
+            1,
+            (samples + minimum_samples_per_thread - 1) / minimum_samples_per_thread);
+        return std::min(available, useful);
+    }
+
+    template <typename Worker>
+    void parallel_samples(std::size_t batches, std::size_t locations, Worker worker)
+    {
+        const std::size_t workers = sample_thread_count(batches, locations);
         if (workers == 1)
         {
-            worker(0, locations);
+            worker(0, batches, 0, locations);
             return;
         }
         std::vector<std::thread> threads;
         threads.reserve(workers - 1);
-        for (std::size_t index = 1; index < workers; ++index)
+        if (batches >= workers)
         {
-            const std::size_t begin = index * locations / workers;
-            const std::size_t end = (index + 1) * locations / workers;
-            threads.emplace_back(worker, begin, end);
+            for (std::size_t index = 1; index < workers; ++index)
+            {
+                const std::size_t begin = index * batches / workers;
+                const std::size_t end = (index + 1) * batches / workers;
+                threads.emplace_back(worker, begin, end, 0, locations);
+            }
+            worker(0, batches / workers, 0, locations);
         }
-        worker(0, locations / workers);
+        else
+        {
+            for (std::size_t index = 1; index < workers; ++index)
+            {
+                const std::size_t begin = index * locations / workers;
+                const std::size_t end = (index + 1) * locations / workers;
+                threads.emplace_back(worker, 0, batches, begin, end);
+            }
+            worker(0, batches, 0, locations / workers);
+        }
         for (auto& thread : threads)
         {
             thread.join();
@@ -550,10 +575,17 @@ namespace
         const auto* complex =
             complex_values ? static_cast<const complex64*>(values.data()) : nullptr;
         py::gil_scoped_release release;
-        parallel_locations(
+        parallel_samples(
+            batches,
             locations,
-            [&](std::size_t begin, std::size_t end)
+            [&](std::size_t batch_begin,
+                std::size_t batch_end,
+                std::size_t begin,
+                std::size_t end)
             {
+                const std::size_t worker_batches = batch_end - batch_begin;
+                const complex64* worker_input = input + batch_begin * rank * locations;
+                complex64* worker_result = result + batch_begin * rank * locations;
 #if PULSERVER_X86_TARGETS
                 if (supports_avx512())
                 {
@@ -561,9 +593,9 @@ namespace
                     {
                         avx512_real_matvec(
                             real,
-                            input,
-                            result,
-                            batches,
+                            worker_input,
+                            worker_result,
+                            worker_batches,
                             rank,
                             locations,
                             begin,
@@ -573,9 +605,9 @@ namespace
                     {
                         avx512_complex_matvec(
                             complex,
-                            input,
-                            result,
-                            batches,
+                            worker_input,
+                            worker_result,
+                            worker_batches,
                             rank,
                             locations,
                             begin,
@@ -587,15 +619,23 @@ namespace
                 {
                     if (real_values)
                     {
-                        avx2_real_matvec(real, input, result, batches, rank, locations, begin, end);
+                        avx2_real_matvec(
+                            real,
+                            worker_input,
+                            worker_result,
+                            worker_batches,
+                            rank,
+                            locations,
+                            begin,
+                            end);
                     }
                     else
                     {
                         avx2_complex_matvec(
                             complex,
-                            input,
-                            result,
-                            batches,
+                            worker_input,
+                            worker_result,
+                            worker_batches,
                             rank,
                             locations,
                             begin,
@@ -606,11 +646,27 @@ namespace
 #endif
                 if (real_values)
                 {
-                    scalar_matvec(real, input, result, batches, rank, locations, begin, end);
+                    scalar_matvec(
+                        real,
+                        worker_input,
+                        worker_result,
+                        worker_batches,
+                        rank,
+                        locations,
+                        begin,
+                        end);
                 }
                 else
                 {
-                    scalar_matvec(complex, input, result, batches, rank, locations, begin, end);
+                    scalar_matvec(
+                        complex,
+                        worker_input,
+                        worker_result,
+                        worker_batches,
+                        rank,
+                        locations,
+                        begin,
+                        end);
                 }
             });
     }
@@ -637,4 +693,9 @@ PYBIND11_MODULE(_recon_cpu_wrapper, module)
             return supports_avx2() ? "avx2" : "scalar";
         });
     module.def("thread_count", &location_thread_count, py::arg("locations"));
+    module.def(
+        "sample_thread_count",
+        &sample_thread_count,
+        py::arg("batches"),
+        py::arg("locations"));
 }

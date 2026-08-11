@@ -1036,13 +1036,20 @@ class Sequence:
     def auto_label(
         self,
         *,
+        # -- MATLAB Pulseq's autoLabel parameters, under Python names --------
         block_range: tuple[int, int] | None = None,
+        use_labels: dict | None = None,
+        use_aux: dict | None = None,
+        skip_apply: bool = False,
+        mirror_fourier: bool = False,
         reflect: list[int] | None = None,
         reorder: list[int] | None = None,
+        sort_slices: str = "ascending",
+        no_plots: bool = True,
+        # -- Pulserver's own, on top -----------------------------------------
         trajectory_delay: float | list[float] | np.ndarray = 0.0,
         repeat_dims: list[str | tuple[str, int]] | None = None,
         skip: list[str] | None = None,
-        skip_apply: bool = False,
     ) -> tuple[dict, dict]:
         """Recover the encoding counters from the sequence's own trajectory.
 
@@ -1056,16 +1063,69 @@ class Sequence:
         is memoized per distinct readout and the rest reduces to one point per
         readout, so nothing scales with the number of samples.
 
+        Every ``autoLabel`` parameter is accepted, under the Python spelling
+        of its name and in its own order; Pulserver's additions come after
+        them. Two defaults differ, and both are called out below --
+        ``sort_slices`` and ``no_plots``.
+
         Parameters
         ----------
         block_range : tuple of int, optional
             ``(first, last)``, 1-based and inclusive.
+        use_labels : dict, optional
+            Skip detection and apply these counters instead -- the labels
+            half of a previous call's return value, or a set computed some
+            other way. Keys are counter names, values one entry per ADC in
+            acquisition order.
+
+            For applying one detection to several variants of a sequence, and
+            for correcting a counter by hand without recomputing the rest.
+            Cannot be combined with ``reflect``, ``reorder`` or
+            ``mirror_fourier``, which only affect detection -- MATLAB refuses
+            that combination too, and it would silently do nothing.
+        use_aux : dict, optional
+            The definitions to write, in the same spirit: the ``aux`` half of
+            a previous return. Usable on its own or alongside ``use_labels``.
+        skip_apply : bool, optional
+            Return the counters without writing them onto the sequence. By
+            default they are written, as ``SET`` label extensions on each ADC
+            block where the value changes, and the derived definitions
+            (``kSpaceCenterLine``, ``SliceThickness`` and the rest) go into
+            ``[DEFINITIONS]``.
+        mirror_fourier : bool, optional
+            Negate every Fourier-encoding direction at once -- readout, phase
+            and partition -- for a reconstruction that inverse-transforms
+            where this assumes a forward transform.
+
+            Not the same as ``reflect=[0, 1, 2]``, in the one way that
+            matters: the slice positions and slice-select gradients are left
+            alone, so slice ordering is unaffected. Applied before
+            ``reflect``, and freely combined with it.
         reflect : list of int, optional
             Axes (0, 1, 2) whose k, slice positions and gradients to negate
             before deriving anything. Applied before ``reorder``.
         reorder : list of int, optional
             A permutation of the axes, as source indices: ``[1, 0, 2]`` swaps
             x and y.
+        sort_slices : {"ascending", "descending", "acquisition"}, optional
+            How ``SLC`` is assigned. ``SlicePositions[SLC]`` is the position
+            of slice ``SLC`` under all three, so a reconstruction reading the
+            pair together is right either way; what changes is which index a
+            slice is given.
+
+            **The default differs from MATLAB's**, which is
+            ``"acquisition"``. A geometric index is what makes the slice
+            table usable as a stack: an interleaved acquisition (0, 2, 4, 1,
+            3) hands the reconstruction a shuffled volume under arrival order
+            and an ordered one under ``"ascending"``. Pass ``"acquisition"``
+            for MATLAB's numbering exactly. ``"descending"`` is what
+            ``autoLabel``'s own notes recommend for a Siemens interpreter.
+        no_plots : bool, optional
+            **The default differs from MATLAB's**, which is ``False``.
+            ``autoLabel`` draws diagnostic figures; nothing here does, so
+            there is nothing to suppress and ``True`` is the only truthful
+            value. Passing ``False`` raises rather than quietly drawing
+            nothing -- it is a request for output that will not appear.
         trajectory_delay : float or array-like, optional
             As for :meth:`calculate_kspace`.
         repeat_dims : sequence of str, optional
@@ -1101,12 +1161,6 @@ class Sequence:
             it is derived by default, so a design loop that separated its
             own contrasts or frames should pass ``skip=["REP"]`` or its own
             labelling is overwritten by a bare repeat count.
-        skip_apply : bool, optional
-            Return the counters without writing them onto the sequence. By
-            default they are written, as ``SET`` label extensions on each ADC
-            block where the value changes, and the derived definitions
-            (``kSpaceCenterLine``, ``SliceThickness`` and the rest) go into
-            ``[DEFINITIONS]``.
 
         Returns
         -------
@@ -1136,7 +1190,57 @@ class Sequence:
         rewrites the slice-select gradient without touching them -- so label
         first and transform second.
         """
+        if not no_plots:
+            raise ValueError(
+                "auto_label(): no_plots=False asks for the diagnostic figures MATLAB's "
+                "autoLabel draws, and nothing here draws any. Leave it at True and plot "
+                "from the returned labels if you need a picture."
+            )
+        if sort_slices not in ("ascending", "descending", "acquisition"):
+            raise ValueError(
+                f"auto_label(): sort_slices must be 'ascending', 'descending' or "
+                f"'acquisition', got {sort_slices!r}"
+            )
+
         first, last = self._block_range(block_range)
+
+        # Detection-only options against a caller who has skipped detection.
+        # MATLAB raises on the same combination, and for the same reason: it
+        # would look like it did something.
+        if (use_labels is not None or use_aux is not None) and (
+            reflect or reorder or mirror_fourier
+        ):
+            raise ValueError(
+                "auto_label(): reflect, reorder and mirror_fourier only affect detection, "
+                "so they cannot be combined with use_labels or use_aux."
+            )
+
+        if use_labels is not None or use_aux is not None:
+            labels = dict(use_labels or {})
+            aux = dict(use_aux or {})
+            if not skip_apply:
+                blocks = [
+                    index
+                    for index in range(first, (last or self._native.num_blocks()) + 1)
+                    if self._native.block_events()[index - 1][4] != 0
+                ]
+                ordered = [
+                    (name, [int(v) for v in np.atleast_1d(values)])
+                    for name, values in labels.items()
+                ]
+                for name, values in ordered:
+                    if len(values) != len(blocks):
+                        raise ValueError(
+                            f"auto_label(): use_labels['{name}'] has {len(values)} values "
+                            f"for {len(blocks)} ADCs in range"
+                        )
+                self._native.apply_labels(blocks, ordered, aux)
+                for key, value in aux.items():
+                    self.set_definition(
+                        key, value.tolist() if hasattr(value, "tolist") else value
+                    )
+                self._touch()
+            return labels, aux
 
         reflect_mask = [False, False, False]
         for axis in reflect or ():
@@ -1176,6 +1280,8 @@ class Sequence:
             not skip_apply,
             dims,
             [str(name) for name in (skip or ())],
+            bool(mirror_fourier),
+            sort_slices,
         )
         aux = result["aux"]
         if not skip_apply:

@@ -774,13 +774,21 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
                 std::array<bool, 3> reflect, std::array<int, 3> reorder,
                 std::array<double, 3> trajectory_delay, bool apply,
                 const std::vector<std::pair<std::string, int>>& repeat_dims,
-                const std::vector<std::string>& skip) {
+                const std::vector<std::string>& skip, bool mirror_fourier,
+                const std::string& sort_slices) {
                  pulseq::AutoLabelOptions options;
                  options.first_block = first_block;
                  options.last_block = last_block;
                  options.reflect = reflect;
                  options.reorder = reorder;
                  options.trajectory_delay = trajectory_delay;
+                 options.mirror_fourier = mirror_fourier;
+                 if (sort_slices == "acquisition")
+                     options.sort_slices = pulseq::SliceSorting::Acquisition;
+                 else if (sort_slices == "descending")
+                     options.sort_slices = pulseq::SliceSorting::Descending;
+                 else
+                     options.sort_slices = pulseq::SliceSorting::Ascending;
                  for (const auto& dim : repeat_dims)
                  {
                      pulseq::RepeatDim d;
@@ -831,6 +839,80 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
                  out["key_groups"] = r.key_groups;
                  out["num_readouts"] = r.num_readouts;
                  return out;
+             })
+
+        // Labels computed elsewhere, applied here -- autoLabel.m's
+        // 'useLabels'/'useAux'.  The six derived counters go into their own
+        // fields so the emission order is the one detection would have used;
+        // anything else keeps the caller's order after them.
+        .def("apply_labels",
+             [](Sequence& self, const std::vector<int>& adc_block,
+                const std::vector<std::pair<std::string, std::vector<int>>>& labels,
+                const py::dict& aux) {
+                 pulseq::AutoLabels out;
+                 out.adc_block = adc_block;
+                 for (const auto& entry : labels)
+                 {
+                     if (entry.first == "NOISE")
+                         out.noise = entry.second;
+                     else if (entry.first == "SLC")
+                         out.slc = entry.second;
+                     else if (entry.first == "REV")
+                         out.rev = entry.second;
+                     else if (entry.first == "LIN")
+                         out.lin = entry.second;
+                     else if (entry.first == "PAR")
+                         out.par = entry.second;
+                     else if (entry.first == "REP")
+                         out.rep = entry.second;
+                     else
+                         out.named.emplace_back(entry.first, entry.second);
+                 }
+
+                 pulseq::AutoLabelAux a;
+                 if (aux.contains("kSpaceCenterLine"))
+                 {
+                     a.has_center_line = true;
+                     a.center_line = aux["kSpaceCenterLine"].cast<int>();
+                 }
+                 if (aux.contains("kSpaceCenterPartition"))
+                 {
+                     a.has_center_partition = true;
+                     a.center_partition = aux["kSpaceCenterPartition"].cast<int>();
+                 }
+                 if (aux.contains("kSpaceCenterSample"))
+                 {
+                     a.has_center_sample = true;
+                     a.center_sample = aux["kSpaceCenterSample"].cast<int>();
+                 }
+                 if (aux.contains("SlicePositions"))
+                     a.slice_positions = aux["SlicePositions"].cast<std::vector<double>>();
+                 if (aux.contains("SliceThickness"))
+                 {
+                     a.has_slice_thickness = true;
+                     a.slice_thickness = aux["SliceThickness"].cast<double>();
+                 }
+                 if (aux.contains("SliceGap"))
+                 {
+                     a.has_slice_gap = true;
+                     a.slice_gap = aux["SliceGap"].cast<double>();
+                 }
+                 if (aux.contains("TrapezoidGriddingParameters"))
+                 {
+                     const std::vector<double> g =
+                         aux["TrapezoidGriddingParameters"].cast<std::vector<double>>();
+                     if (g.size() != 5)
+                         throw std::runtime_error(
+                             "apply_labels: TrapezoidGriddingParameters needs 5 values");
+                     a.has_gridding = true;
+                     for (size_t i = 0; i < 5; ++i)
+                         a.trapezoid_gridding[i] = g[i];
+                     if (aux.contains("TargetGriddedSamples"))
+                         a.target_gridded_samples = aux["TargetGriddedSamples"].cast<int>();
+                 }
+
+                 py::gil_scoped_release unlocked;
+                 pulseq::apply_labels(self, out, a);
              });
 
     m.def(

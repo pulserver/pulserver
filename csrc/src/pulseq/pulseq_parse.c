@@ -374,6 +374,91 @@ void pulseq_file_set_free(pulseq_file_set *coll)
 }
 
 /* ================================================================== */
+/*  Whole-line reading                                                */
+/* ================================================================== */
+
+/**
+ * @brief One whole logical line, however long.
+ *
+ * @c fgets stops at the end of its buffer and hands the remainder back on the
+ * next call.  For a section whose rows are bounded that never happens; for one
+ * whose rows are not, a long row silently becomes two, and the tail is read as
+ * a row of its own.  Two sections here are unbounded by construction:
+ * @c [DEFINITIONS] carries one value per slice (@c SlicePositions) and
+ * @c [RF_SHIMS] two per transmit channel.  Nothing raises: the file parses,
+ * the values past the cut are gone, and the tail arrives as a definition
+ * named after whichever digits the split landed between.
+ *
+ * The common path allocates nothing -- a row that fits is returned in @p buf,
+ * which is every row in every other section.  Only a row that did not fit
+ * reaches the heap, and the block is reused across calls, so a section of long
+ * rows allocates a handful of times rather than once per row.
+ *
+ * @param buf       caller's stack buffer, used whenever the row fits.
+ * @param heap      reused overflow block; the caller frees it once, after the
+ *                  section.  Must be @c NULL and @p heap_cap 0 on first use.
+ * @param oom       set to 1 if the overflow block could not be grown -- so a
+ *                  caller can tell "the section ended" from "the row was lost".
+ *
+ * @return the line, NUL-terminated, or @c NULL at end of file or on failure.
+ */
+static char *read_full_line(
+    FILE *f,
+    char *buf,
+    size_t buf_size,
+    char **heap,
+    size_t *heap_cap,
+    int *oom)
+{
+    size_t len, used, need;
+    char *grown;
+
+    *oom = 0;
+    if (!fgets(buf, (int)buf_size, f))
+        return NULL;
+
+    len = strlen(buf);
+    /* Short of the buffer's end means fgets stopped for a reason of its own --
+     * a newline, or the end of the file -- so the row is whole either way. */
+    if (len + 1 < buf_size || (len > 0 && buf[len - 1] == '\n'))
+        return buf;
+
+    used = 0;
+    for (;;)
+    {
+        need = used + len + 1;
+        if (need > *heap_cap)
+        {
+            size_t cap = (*heap_cap > 0) ? *heap_cap : buf_size;
+            while (cap < need)
+                cap *= 2;
+            grown = (char *)PULSEQ_ALLOC(cap);
+            if (!grown)
+            {
+                *oom = 1;
+                return NULL;
+            }
+            if (*heap)
+            {
+                memcpy(grown, *heap, used);
+                PULSEQ_FREE(*heap);
+            }
+            *heap = grown;
+            *heap_cap = cap;
+        }
+        memcpy(*heap + used, buf, len + 1);
+        used += len;
+
+        if (used > 0 && (*heap)[used - 1] == '\n')
+            break;
+        if (!fgets(buf, (int)buf_size, f))
+            break;
+        len = strlen(buf);
+    }
+    return *heap;
+}
+
+/* ================================================================== */
 /*  Library init helpers (static)                                     */
 /* ================================================================== */
 
@@ -438,6 +523,10 @@ static int init_definitions_library(
     long offset)
 {
     char line[PULSEQ_MAX_LINE_LENGTH];
+    char *heap = NULL;
+    size_t heap_cap = 0;
+    int oom = 0;
+    char *row;
     int count = 0;
     char *p;
     char *name_tok;
@@ -447,11 +536,15 @@ static int init_definitions_library(
         return 1;
     if (fseek(f, offset, SEEK_SET) != 0)
         return 1;
-    if (!fgets(line, sizeof(line), f))
-        return 1;
-    while (fgets(line, sizeof(line), f))
+    if (!read_full_line(f, line, sizeof(line), &heap, &heap_cap, &oom))
     {
-        p = line;
+        if (heap)
+            PULSEQ_FREE(heap);
+        return 1;
+    }
+    while ((row = read_full_line(f, line, sizeof(line), &heap, &heap_cap, &oom)) != NULL)
+    {
+        p = row;
         while (isspace((unsigned char)*p))
             p++;
         if (*p == '[' || *p == 'e')
@@ -462,6 +555,10 @@ static int init_definitions_library(
         if (name_tok)
             count++;
     }
+    if (heap)
+        PULSEQ_FREE(heap);
+    if (oom)
+        return 1;
     if (count == 0)
     {
         *target = NULL;
@@ -600,6 +697,10 @@ static int init_rf_shim_library(
     long offset)
 {
     char line[PULSEQ_MAX_LINE_LENGTH];
+    char *heap = NULL;
+    size_t heap_cap = 0;
+    int oom = 0;
+    char *row;
     int max_idx = -1;
     char *p;
     int idx, i;
@@ -609,11 +710,15 @@ static int init_rf_shim_library(
         return 1;
     if (fseek(f, offset, SEEK_SET) != 0)
         return 1;
-    if (!fgets(line, sizeof(line), f))
-        return 1;
-    while (fgets(line, sizeof(line), f))
+    if (!read_full_line(f, line, sizeof(line), &heap, &heap_cap, &oom))
     {
-        p = line;
+        if (heap)
+            PULSEQ_FREE(heap);
+        return 1;
+    }
+    while ((row = read_full_line(f, line, sizeof(line), &heap, &heap_cap, &oom)) != NULL)
+    {
+        p = row;
         while (*p == ' ' || *p == '\t')
             p++;
         if (*p == '[' || *p == 'e')
@@ -623,6 +728,10 @@ static int init_rf_shim_library(
         if (sscanf(p, "%d", &idx) == 1 && idx > max_idx)
             max_idx = idx;
     }
+    if (heap)
+        PULSEQ_FREE(heap);
+    if (oom)
+        return 1;
     if (max_idx <= 0)
     {
         *target = NULL;
@@ -867,6 +976,10 @@ static void read_definitions_library(pulseq_file *seq, FILE *f)
 {
     int ret;
     char line[PULSEQ_MAX_LINE_LENGTH];
+    char *heap = NULL;
+    size_t heap_cap = 0;
+    int oom = 0;
+    char *row;
     int def_index = 0;
     char *p;
     char *name_tok;
@@ -893,12 +1006,16 @@ static void read_definitions_library(pulseq_file *seq, FILE *f)
 
     if (fseek(f, seq->offsets.definitions, SEEK_SET) != 0)
         return;
-    if (!fgets(line, sizeof(line), f))
-        return;
-
-    while (fgets(line, sizeof(line), f))
+    if (!read_full_line(f, line, sizeof(line), &heap, &heap_cap, &oom))
     {
-        p = line;
+        if (heap)
+            PULSEQ_FREE(heap);
+        return;
+    }
+
+    while ((row = read_full_line(f, line, sizeof(line), &heap, &heap_cap, &oom)) != NULL)
+    {
+        p = row;
         while (isspace((unsigned char)*p))
             p++;
         if (*p == '\0' || *p == '\n' || *p == '\r' || *p == '#')
@@ -929,6 +1046,8 @@ static void read_definitions_library(pulseq_file *seq, FILE *f)
         }
         seq->definitions_library[def_index++] = def;
     }
+    if (heap)
+        PULSEQ_FREE(heap);
     seq->is_definitions_library_parsed = 1;
 }
 
@@ -1474,6 +1593,11 @@ static int read_rf_shim_library(
     long offset)
 {
     char line[PULSEQ_MAX_LINE_LENGTH];
+    char *heap = NULL;
+    size_t heap_cap = 0;
+    int oom = 0;
+    char *row;
+    int status = 0;
     char *p;
     int idx, n_ch, i, consumed;
     PULSEQ_REAL val;
@@ -1482,12 +1606,16 @@ static int read_rf_shim_library(
         return 1;
     if (fseek(f, offset, SEEK_SET) != 0)
         return 1;
-    if (!fgets(line, sizeof(line), f))
-        return 1;
-
-    while (fgets(line, sizeof(line), f))
+    if (!read_full_line(f, line, sizeof(line), &heap, &heap_cap, &oom))
     {
-        p = line;
+        if (heap)
+            PULSEQ_FREE(heap);
+        return 1;
+    }
+
+    while ((row = read_full_line(f, line, sizeof(line), &heap, &heap_cap, &oom)) != NULL)
+    {
+        p = row;
         while (*p == ' ' || *p == '\t')
             p++;
         if (*p == '[' || *p == 'e')
@@ -1508,8 +1636,16 @@ static int read_rf_shim_library(
         while (*p == ' ')
             p++;
 
+        /* Past the compile-time channel cap there is nowhere to put the
+         * values.  Returning 2 rather than 1 says so: the caller distinguishes
+         * "this section held nothing" -- ordinary, most files have no shims --
+         * from "this section held something that cannot be read", which the
+         * binary reader already reports as a read failure. */
         if (n_ch > PULSEQ_MAX_RF_SHIM_CHANNELS)
-            return 1;
+        {
+            status = 2;
+            break;
+        }
         target[idx - 1].num_channels = n_ch;
         for (i = 0; i < 2 * n_ch; i++)
         {
@@ -1521,11 +1657,29 @@ static int read_rf_shim_library(
             while (*p == ' ' || *p == '\t')
                 p++;
         }
+        /* A row that ran out of numbers before its declared channel count is
+         * a truncated row, not a shorter shim -- the values that are missing
+         * would otherwise be read as whatever the array last held. */
+        if (i < 2 * n_ch)
+        {
+            status = 2;
+            break;
+        }
     }
-    return 0;
+    if (heap)
+        PULSEQ_FREE(heap);
+    if (oom)
+        status = 2;
+    return status;
 }
 
-static void read_extensions_library(pulseq_file *seq, FILE *f)
+/**
+ * @return @c PULSEQ_SUCCESS, or an error for a section that is present but
+ *         cannot be read.  An *absent* section is not an error -- most files
+ *         carry no shims and no triggers -- which is why the early returns
+ *         below are successes and only the shim reader's fatal code is not.
+ */
+static int read_extensions_library(pulseq_file *seq, FILE *f)
 {
     int ret, n;
     static const PULSEQ_REAL ext_vals[3] = {1, 1, 1};
@@ -1541,11 +1695,11 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
     rot_s.values = (PULSEQ_REAL *)rot_vals;
 
     if (seq->is_extensions_library_parsed)
-        return;
+        return PULSEQ_SUCCESS;
     if (seq->offsets.extensions < 0)
     {
         seq->is_extensions_library_parsed = 1;
-        return;
+        return PULSEQ_SUCCESS;
     }
 
     /* Init & read extensions list */
@@ -1557,7 +1711,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
         1,
         3);
     if (ret != 0)
-        return;
+        return PULSEQ_SUCCESS;
 
     if (seq->offsets.triggers >= 0)
     {
@@ -1569,7 +1723,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             1,
             4);
         if (ret != 0)
-            return;
+            return PULSEQ_SUCCESS;
     }
     if (seq->offsets.rotations >= 0)
     {
@@ -1581,7 +1735,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             1,
             4);
         if (ret != 0)
-            return;
+            return PULSEQ_SUCCESS;
     }
     if (seq->offsets.labelset >= 0)
     {
@@ -1593,7 +1747,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             1,
             2);
         if (ret != 0)
-            return;
+            return PULSEQ_SUCCESS;
     }
     if (seq->offsets.labelinc >= 0)
     {
@@ -1605,7 +1759,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             1,
             2);
         if (ret != 0)
-            return;
+            return PULSEQ_SUCCESS;
     }
     if (seq->offsets.delays >= 0)
     {
@@ -1617,7 +1771,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             1,
             4);
         if (ret != 0)
-            return;
+            return PULSEQ_SUCCESS;
     }
     if (seq->offsets.rfshim >= 0)
     {
@@ -1627,7 +1781,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             f,
             seq->offsets.rfshim);
         if (ret != 0)
-            return;
+            return PULSEQ_SUCCESS;
     }
 
     /* Read data */
@@ -1640,7 +1794,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
         ext_s,
         -1);
     if (ret != 0)
-        return;
+        return PULSEQ_SUCCESS;
 
     if (seq->offsets.triggers >= 0)
     {
@@ -1653,7 +1807,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             trig_s,
             -1);
         if (ret != 0)
-            return;
+            return PULSEQ_SUCCESS;
     }
 
     if (seq->offsets.rotations >= 0)
@@ -1667,7 +1821,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             rot_s,
             -1);
         if (ret != 0)
-            return;
+            return PULSEQ_SUCCESS;
         /* The quaternion is kept exactly as the file wrote it.
          *
          * It used to be normalized here, which was both lossy and inconsistent:
@@ -1693,7 +1847,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             seq->offsets.labelset,
             2);
         if (ret != 0)
-            return;
+            return PULSEQ_SUCCESS;
     }
     if (seq->offsets.labelinc >= 0)
     {
@@ -1705,7 +1859,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             seq->offsets.labelinc,
             2);
         if (ret != 0)
-            return;
+            return PULSEQ_SUCCESS;
     }
     if (seq->offsets.delays >= 0)
     {
@@ -1717,7 +1871,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             seq->offsets.delays,
             4);
         if (ret != 0)
-            return;
+            return PULSEQ_SUCCESS;
     }
     if (seq->offsets.rfshim >= 0)
     {
@@ -1726,8 +1880,10 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
             seq->rf_shim_library_size,
             f,
             seq->offsets.rfshim);
+        if (ret == 2)
+            return PULSEQ_ERR_FILE_READ_FAILED;
         if (ret != 0)
-            return;
+            return PULSEQ_SUCCESS;
     }
 
     /* Build extension LUT */
@@ -1747,6 +1903,7 @@ static void read_extensions_library(pulseq_file *seq, FILE *f)
     }
 
     seq->is_extensions_library_parsed = 1;
+    return PULSEQ_SUCCESS;
 }
 
 /* ================================================================== */
@@ -1863,8 +2020,7 @@ int pulseq_read_from_buffer(pulseq_file *seq, FILE *f)
     read_grad_library(seq, f);
     read_adc_library(seq, f);
     read_shapes_library(seq, f);
-    read_extensions_library(seq, f);
-    return PULSEQ_SUCCESS;
+    return read_extensions_library(seq, f);
 }
 
 int pulseq_read(pulseq_file *seq, const char *file_path)

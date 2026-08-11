@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+__all__: list[str] = []
+
 from concurrent.futures import ThreadPoolExecutor
 from importlib import import_module
 from math import prod
@@ -435,23 +437,13 @@ class CompactToeplitzKernel:
 
     def _matmul(self, packed: Any, spectrum: Any) -> Any:
         """Multiply packed matrices by ``(batch, rank, locations)`` data."""
-        torch = _torch()
-        if self.rank == 1:
-            return spectrum * packed[0].to(spectrum.dtype)
-        accelerated = _cpu_packed_matvec(packed, spectrum)
-        if accelerated is not None:
-            return accelerated
-        # Accumulate directly from packed rows.  On CPU this avoids a
-        # location-by-K-by-K dense temporary and two real GEMMs for a real
-        # transfer; on CUDA the fused Triton path below supersedes it.
-        result = torch.zeros_like(spectrum)
-        for packed_index, (row, column) in enumerate(self._packed_coordinates):
-            weight = packed[packed_index].to(spectrum.dtype)
-            result[:, row].add_(spectrum[:, column] * weight)
-            if row != column:
-                reverse = weight if self.is_real else weight.conj()
-                result[:, column].add_(spectrum[:, row] * reverse)
-        return result
+        from ._packed import packed_hermitian_matvec
+
+        return packed_hermitian_matvec(
+            packed,
+            spectrum,
+            coordinates=self._packed_coordinates,
+        )
 
     def apply(self, image: Any) -> Any:
         """Apply the zero-padded matrix-valued convolution to coefficient images."""

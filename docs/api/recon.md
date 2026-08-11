@@ -32,10 +32,9 @@ coefficients = recon.pics(
 Install `pulserver[recon-cpu]` for the portable numerical stack or
 `pulserver[recon-cuda]` for Torch-native CUFINUFFT support without CuPy. The
 default non-Cartesian `backend="auto"` chooses FINUFFT when CUDA is unavailable
-and CUFINUFFT on a CUDA host. The opt-in extras
-`recon-nlinv`, `recon-distortion`, and `recon-sim` add NLINV calibration,
-reverse-polarity distortion correction, and TorchSim EPG simulation,
-respectively.
+and CUFINUFFT on a CUDA host. NLINV is part of the CPU/CUDA numerical stack;
+the opt-in `recon-distortion` and `recon-sim` extras add reverse-polarity
+distortion correction and TorchSim EPG simulation, respectively.
 
 For operator composition, Toeplitz behavior, and bounded-memory CUDA
 execution, see {doc}`../explanations/reconstruction/model_based`.
@@ -104,9 +103,11 @@ ADMM uses the physics' fast `A_adjoint_A` method for its image update, so a
 Toeplitz MRI physics remains active underneath the optimizer. Its CG solve has
 a manual implicit backward and does not retain the Krylov history.
 
-`IRGNM(inner=...)` is the nonlinear composition layer. Nonlinear physics
-provides `linearize(x)`, and the selected FISTA, PDHG, ADMM, or CG instance
-remains responsible for each linearized subproblem.
+`IRGNM(inner=...)` is the nonlinear composition layer. An analytic
+`linearize(x)` is used when available. An ordinary DeepInverse `Physics`
+works without extra glue: Pulserver builds matrix-free JVP/VJP products with
+`torch.func`. The selected FISTA, PDHG, ADMM, or CG instance remains
+responsible for each linearized subproblem.
 
 ```{eval-rst}
 .. autosummary::
@@ -151,8 +152,9 @@ sampling without either becoming a Pulserver runtime dependency.
 
 ## Forward operators
 
-Classes return a common `MRIPhysics` facade. Start with a Cartesian or
-non-Cartesian acquisition operator, then compose dynamic subspace,
+Every class is a DeepInverse `LinearPhysics`, with MRI metadata and execution
+policy supplied by the common `MRIPhysics` base. Start with a Cartesian,
+non-Cartesian, or Wave acquisition operator, then compose dynamic subspace,
 off-resonance, and Toeplitz behavior explicitly.
 
 ```{eval-rst}
@@ -162,8 +164,11 @@ off-resonance, and Toeplitz behavior explicitly.
 
    pulserver.recon.physics.MRIPhysics
    pulserver.recon.physics.Cartesian2D
+   pulserver.recon.physics.Cartesian3D
    pulserver.recon.physics.NonCartesian2D
    pulserver.recon.physics.NonCartesian3D
+   pulserver.recon.physics.WaveEncoding
+   pulserver.recon.physics.WaveShuffling
    pulserver.recon.physics.Subspace
    pulserver.recon.physics.OffResonance
    pulserver.recon.physics.Toeplitz
@@ -195,8 +200,9 @@ modules compatible with its plug-and-play optimizers.
    :nosignatures:
 
    pulserver.recon.density.pipe_menon_dcf
-   pulserver.recon.calibration.estimate_sensitivities
-   pulserver.recon.calibration.nlinv_sensitivities
+   pulserver.recon.calibration.NLINV
+   pulserver.recon.calibration.NLINVPhysics
+   pulserver.recon.calibration.NLINVResult
 ```
 
 ## Preprocessing

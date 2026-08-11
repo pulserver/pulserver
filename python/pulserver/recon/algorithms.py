@@ -10,12 +10,9 @@ from math import isfinite
 from typing import Any
 
 from .optimizers import PolynomialPreconditioner
-from .physics import MRIPhysics
 
 
 def _linear_physics(physics: Any) -> Any:
-    if isinstance(physics, MRIPhysics):
-        return physics
     required = ("A", "A_adjoint", "A_adjoint_A")
     if not all(hasattr(physics, name) for name in required):
         raise TypeError(

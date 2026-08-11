@@ -73,24 +73,10 @@ def test_polynomial_preconditioner_degree_zero_and_call_count():
     assert len(calls) == 3
 
 
-def test_nlinv_preserves_the_torch_like_input_object(monkeypatch):
-    calls = {}
-    kspace = SimpleNamespace(ndim=3, device="cuda:0")
-    mask = object()
-
-    def nlinv_calib(data, **kwargs):
-        calls["data"] = data
-        calls.update(kwargs)
-        return data
-
-    import sys
-
-    monkeypatch.setitem(
-        sys.modules, "pygrog.utils", SimpleNamespace(nlinv_calib=nlinv_calib)
-    )
-    assert calibration.nlinv_sensitivities(kspace, mask=mask) is kspace
-    assert calls["data"] is kspace
-    assert calls["mask"] is mask
+def test_nlinv_public_api_is_class_based():
+    assert calibration.__all__ == ["NLINV", "NLINVPhysics", "NLINVResult"]
+    assert not hasattr(calibration, "nlinv_sensitivities")
+    assert not hasattr(calibration, "estimate_sensitivities")
 
 
 def _acquisition(slice_number: int, flags: int = 0):

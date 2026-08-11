@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from os import cpu_count
 from types import SimpleNamespace
 
 import numpy as np
@@ -101,6 +102,47 @@ def test_precompiled_cpu_kernel_matches_torch_reference(complex_transfer):
     assert extension.simd_level() in {"scalar", "avx2", "avx512"}
     assert extension.thread_count(1) == 1
     assert extension.thread_count(32769) >= 1
+    assert extension.sample_thread_count(1, 1) == 1
+    assert extension.sample_thread_count(32769, 1) >= 1
+
+
+def test_precompiled_cpu_kernel_parallelizes_independent_batches():
+    extension = pytest.importorskip(
+        "pulserver._ext._recon_cpu_wrapper",
+        exc_type=ImportError,
+    )
+    generator = torch.Generator().manual_seed(7)
+    batch, rank, locations = 32, 3, 1024
+    rows, columns = torch.triu_indices(rank, rank)
+    values = torch.randn(rows.numel(), locations, generator=generator)
+    spectrum = torch.randn(
+        batch,
+        rank,
+        locations,
+        dtype=torch.complex64,
+        generator=generator,
+    )
+    output = torch.empty_like(spectrum)
+
+    extension.packed_hermitian_matvec(
+        values.numpy(),
+        spectrum.numpy(),
+        output.numpy(),
+    )
+
+    matrix = torch.zeros(locations, rank, rank)
+    matrix[:, rows, columns] = values.T
+    off_diagonal = rows != columns
+    matrix[:, columns[off_diagonal], rows[off_diagonal]] = values[off_diagonal].T
+    reference = torch.einsum(
+        "lij,blj->bli",
+        matrix.to(spectrum.dtype),
+        spectrum.permute(0, 2, 1),
+    ).permute(0, 2, 1)
+
+    torch.testing.assert_close(output, reference, atol=2e-6, rtol=2e-6)
+    expected_workers = 2 if (cpu_count() or 1) > 1 else 1
+    assert extension.sample_thread_count(batch, locations) >= expected_workers
 
 
 @pytest.mark.parametrize("real_transfer", [True, False])
@@ -325,6 +367,103 @@ def test_cartesian_subspace_public_factory_handles_batched_sensitivity_maps():
     torch.testing.assert_close(result, reference, atol=3e-5, rtol=3e-5)
     assert compact.normal_mode == "exact-fft"
     assert compact.operator.toeplitz_kernel.is_real
+
+
+@pytest.mark.parametrize("use_sense", [False, True])
+def test_public_scalar_toeplitz_is_owned_by_pulserver(use_sense):
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    generator = torch.Generator().manual_seed(91)
+    rng = np.random.default_rng(91)
+    image_shape = (4, 6)
+    batch, coils = 2, 3
+    trajectory = rng.uniform(-0.45, 0.45, (29, 2)).astype(np.float32)
+    density = np.linspace(0.6, 1.4, trajectory.shape[0], dtype=np.float32)
+    maps = None
+    channels = coils
+    if use_sense:
+        maps = torch.randn(
+            coils,
+            *image_shape,
+            generator=generator,
+            dtype=torch.complex64,
+        )
+        maps /= torch.linalg.vector_norm(maps, dim=0, keepdim=True)
+        channels = 1
+    image = torch.randn(
+        batch,
+        channels,
+        *image_shape,
+        generator=generator,
+        dtype=torch.complex64,
+    )
+    compact = physics.NonCartesian2D(
+        trajectory,
+        image_shape,
+        coil_maps=maps,
+        density=density,
+        backend="finufft",
+        n_coils=coils,
+        n_batchs=batch,
+        viewed_as_real=False,
+        toeplitz=True,
+    )
+
+    reference = compact.A_adjoint(compact.A(image))
+    result = compact.A_adjoint_A(image)
+
+    torch.testing.assert_close(result, reference, atol=3e-5, rtol=3e-5)
+    assert compact.normal_mode == "toeplitz"
+    assert not hasattr(compact.native_operator, "gram_op")
+    assert compact.operator.toeplitz_kernel.is_real
+
+
+@pytest.mark.parametrize("shared", [True, False])
+def test_stacked_nufft_uses_shared_or_independent_toeplitz_bank(shared):
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    generator = torch.Generator().manual_seed(103)
+    rng = np.random.default_rng(103)
+    image_shape = (4, 6, 4)
+    batch, coils = 2, 2
+    if shared:
+        trajectories = rng.uniform(-0.45, 0.45, (19, 2)).astype(np.float32)
+        density = np.linspace(0.7, 1.2, 19, dtype=np.float32)
+    else:
+        trajectories = [
+            rng.uniform(-0.45, 0.45, (17 + index, 2)).astype(np.float32)
+            for index in range(image_shape[-1])
+        ]
+        density = [
+            np.linspace(0.7, 1.2, len(item), dtype=np.float32) for item in trajectories
+        ]
+    image = torch.randn(
+        batch,
+        coils,
+        *image_shape,
+        generator=generator,
+        dtype=torch.complex64,
+    )
+    compact = physics.NonCartesian3D(
+        trajectories,
+        image_shape,
+        density=density,
+        backend="finufft",
+        n_coils=coils,
+        n_batchs=batch,
+        stacked=True,
+        z_index=None,
+        viewed_as_real=False,
+        toeplitz=True,
+    )
+
+    reference = compact.A_adjoint(compact.A(image))
+    result = compact.A_adjoint_A(image)
+
+    torch.testing.assert_close(result, reference, atol=3e-5, rtol=3e-5)
+    assert compact.normal_mode == "toeplitz"
+    assert compact.native_operator.shared_trajectory is shared
+    assert len(compact.operator.toeplitz_kernels) == (1 if shared else image_shape[-1])
 
 
 def test_off_resonance_builder_matches_segmented_normal(monkeypatch):
