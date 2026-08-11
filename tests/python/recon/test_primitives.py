@@ -5,12 +5,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
+
+import pulserver.recon.algorithms as algorithms
 import pulserver.recon.calibration as calibration
 import pulserver.recon._mrd.epi as epi
-import pulserver.recon.linops as linops
-import pulserver.recon.optimizers as optimizers
-import pulserver.recon.prox as prox
-import pytest
 from pulserver.recon._mrd.grouping import (
     filter_acquisitions,
     group_by_labels,
@@ -25,34 +24,8 @@ from pulserver.recon._mrd.metadata import (
 from pulserver.recon.sms import SmsEpiInputs
 
 
-def test_upstream_selectors_return_the_requested_implementation(monkeypatch):
-    mrpro = SimpleNamespace(operators=SimpleNamespace(FourierOp=object))
-    deepinv_optim = SimpleNamespace(
-        TVPrior=lambda **kwargs: ("tv", kwargs),
-        FISTA=lambda **kwargs: ("fista", kwargs),
-    )
-
-    def fake_import(name):
-        if name == "mrpro.operators":
-            return mrpro.operators
-        if name == "deepinv.optim":
-            return deepinv_optim
-        raise ImportError(name)
-
-    monkeypatch.setattr(linops, "import_module", fake_import)
-    monkeypatch.setattr(prox, "import_module", fake_import)
-    monkeypatch.setattr(optimizers, "import_module", fake_import)
-
-    assert linops.mrpro_operator("fourier") is object
-    assert prox.deepinverse_prior("tv", strength=0.1) == ("tv", {"strength": 0.1})
-    assert optimizers.deepinverse_optimizer("fista", max_iter=10) == (
-        "fista",
-        {"max_iter": 10},
-    )
-
-
 def test_polynomial_preconditioner_degree_zero_and_call_count():
-    degree_zero = optimizers.PolynomialPreconditioner(
+    degree_zero = algorithms.PolynomialPreconditioner(
         lambda value: 2 * value,
         degree=0,
     )
@@ -64,7 +37,7 @@ def test_polynomial_preconditioner_degree_zero_and_call_count():
         calls.append(value)
         return 2 * value
 
-    polynomial = optimizers.PolynomialPreconditioner(
+    polynomial = algorithms.PolynomialPreconditioner(
         normal,
         degree=3,
         scale=0.5,
@@ -74,7 +47,15 @@ def test_polynomial_preconditioner_degree_zero_and_call_count():
 
 
 def test_nlinv_public_api_is_class_based():
-    assert calibration.__all__ == ["NLINV", "NLINVPhysics", "NLINVResult"]
+    assert calibration.__all__ == [
+        "NLINV",
+        "NLINVPhysics",
+        "NLINVResult",
+        "PhasePoleCorrection",
+        "WavePSF",
+        "WavePSFCalibration",
+        "WavePSFResult",
+    ]
     assert not hasattr(calibration, "nlinv_sensitivities")
     assert not hasattr(calibration, "estimate_sensitivities")
 
@@ -128,11 +109,6 @@ def test_metadata_accessors_and_parameter_lookup():
     assert metadata.field_of_view_mm() == (220.0, 180.0, 5.0)
     assert metadata.user_parameter("BitsStored") == 12
     assert user_parameter(header, "missing", "fallback") == "fallback"
-
-
-def test_unknown_upstream_role_is_rejected():
-    with pytest.raises(ValueError, match="Unknown MRPro operator"):
-        linops.mrpro_operator("invented")
 
 
 def test_partition_epi_acquisitions_uses_standard_roles(monkeypatch):

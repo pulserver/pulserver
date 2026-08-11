@@ -16,6 +16,9 @@ import pulserver.recon.denoisers as denoisers
 import pulserver.recon.density as density
 import pulserver.recon.physics as physics
 from pulserver.recon.preprocessing import (
+    EPIPhaseCorrection,
+    Homodyne,
+    POCS,
     cartesian_3d_to_2d,
     correct_epi_eddy_currents,
     epi_ramp_interpolate,
@@ -32,6 +35,7 @@ def test_public_namespace_is_small_and_module_oriented():
         "denoisers",
         "density",
         "execution",
+        "motion",
         "optim",
         "physics",
         "pics",
@@ -71,7 +75,9 @@ def test_scientific_apis_expose_only_deepinverse_style_classes():
     assert "NonCartesian2D" in physics.__all__
     assert "WaveEncoding" in physics.__all__
     assert "WaveShuffling" in physics.__all__
+    assert "SMS" in physics.__all__
     assert "LLR" in denoisers.__all__
+    assert "Positive" in denoisers.__all__
     assert inspect.isclass(physics.Cartesian2D)
     assert inspect.isclass(physics.NonCartesian2D)
     assert inspect.isclass(denoisers.LLR)
@@ -211,6 +217,136 @@ def test_denoiser_classes_wrap_deepinverse_models(monkeypatch):
     assert denoisers.Wavelet(dimension=3).model[1]["wvdim"] == 3
     assert denoisers.TV(n_it_max=4).model == ("tv", {"n_it_max": 4})
     assert denoisers.TGV(crit=1e-4).model == ("tgv", {"crit": 1e-4})
+
+
+def test_positive_prior_projects_native_and_paired_complex_values():
+    torch = pytest.importorskip("torch")
+    value = torch.tensor([[-2.0 + 3.0j, 4.0 - 1.0j]])
+    native = denoisers.Positive()
+    torch.testing.assert_close(
+        native.prox(value),
+        torch.tensor([[0.0 + 0.0j, 4.0 + 0.0j]]),
+    )
+
+    paired = torch.view_as_real(value).reshape(1, 4)
+    projected = denoisers.Positive(viewed_as_real=True).prox(paired)
+    restored = torch.view_as_complex(projected.reshape(1, 2, 2).contiguous())
+    torch.testing.assert_close(restored, native.prox(value))
+
+
+def test_positive_prior_projects_onto_a_fixed_phase_ray():
+    torch = pytest.importorskip("torch")
+    phase = torch.tensor(torch.pi / 2)
+    model = denoisers.Positive(phase)
+    value = torch.tensor([[2.0 + 3.0j, -1.0 - 2.0j]])
+
+    result = model.prox(value)
+
+    torch.testing.assert_close(result, torch.tensor([[0.0 + 3.0j, 0.0 + 0.0j]]))
+    assert torch.isfinite(model(result, None)).all()
+    assert torch.isinf(model(value, None)).all()
+
+
+@pytest.mark.parametrize("library", ["numpy", "torch"])
+def test_partial_fourier_reconstructors_preserve_fully_sampled_data(library):
+    generator = np.random.default_rng(42)
+    image = generator.normal(size=(2, 12, 14)) + 1j * generator.normal(size=(2, 12, 14))
+    kspace = np.fft.fftshift(
+        np.fft.fftn(
+            np.fft.ifftshift(image, axes=(-2, -1)), axes=(-2, -1), norm="ortho"
+        ),
+        axes=(-2, -1),
+    )
+    if library == "torch":
+        torch = pytest.importorskip("torch")
+        image = torch.as_tensor(image)
+        kspace = torch.as_tensor(kspace)
+
+    homodyne = Homodyne(dimension=2, partial_axis=-2)(kspace)
+    pocs = POCS(dimension=2, partial_axis=-2, iterations=2)(kspace)
+
+    if library == "torch":
+        torch.testing.assert_close(homodyne, image, atol=1e-10, rtol=1e-10)
+        torch.testing.assert_close(pocs, image, atol=1e-10, rtol=1e-10)
+    else:
+        np.testing.assert_allclose(homodyne, image, atol=1e-10, rtol=1e-10)
+        np.testing.assert_allclose(pocs, image, atol=1e-10, rtol=1e-10)
+
+
+def test_pocs_keeps_acquired_partial_fourier_lines_exact():
+    generator = np.random.default_rng(17)
+    image = np.exp(1j * 0.25) * generator.random((10, 12))
+    kspace = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(image), norm="ortho"))
+    mask = np.zeros(10, dtype=bool)
+    mask[:8] = True
+    partial = kspace.copy()
+    partial[~mask] = 0
+
+    result = POCS(iterations=6)(partial, mask)
+    recovered = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(result), norm="ortho"))
+
+    np.testing.assert_allclose(recovered[mask], kspace[mask], atol=1e-10)
+
+
+@pytest.mark.parametrize("library", ["numpy", "torch"])
+def test_epi_phase_correction_tracks_independent_shot_drift(library):
+    coordinate = np.linspace(-1, 1, 32)
+    true_phase = np.stack(
+        [0.1 + 0.3 * coordinate, -0.25 + 0.15 * coordinate],
+    )
+    signal = np.ones((2, 3, 32), dtype=np.complex64)
+    positive = signal * np.exp(0.5j * true_phase[:, None])
+    negative = signal * np.exp(-0.5j * true_phase[:, None])
+    if library == "torch":
+        torch = pytest.importorskip("torch")
+        positive = torch.as_tensor(positive)
+        negative = torch.as_tensor(negative)
+        expected = torch.as_tensor(true_phase, dtype=positive.real.dtype)
+    else:
+        expected = true_phase
+
+    model = EPIPhaseCorrection(shot_axis=0, readout_axis=-1)
+    phase = model.fit(positive, negative)
+    corrected_positive, corrected_negative, _ = model.correct(
+        positive,
+        negative,
+        phase,
+    )
+
+    if library == "torch":
+        torch.testing.assert_close(phase, expected, atol=2e-6, rtol=2e-6)
+        torch.testing.assert_close(
+            corrected_positive,
+            corrected_negative,
+            atol=2e-6,
+            rtol=2e-6,
+        )
+    else:
+        np.testing.assert_allclose(phase, expected, atol=2e-6, rtol=2e-6)
+        np.testing.assert_allclose(
+            corrected_positive,
+            corrected_negative,
+            atol=2e-6,
+            rtol=2e-6,
+        )
+
+
+def test_epi_phase_correction_supports_nonleading_shot_axis():
+    coordinate = np.linspace(-1, 1, 24)
+    phase = np.stack([0.2 * coordinate, 0.1 - 0.3 * coordinate])
+    positive = np.exp(0.5j * phase[:, None]).transpose(2, 1, 0)
+    negative = np.exp(-0.5j * phase[:, None]).transpose(2, 1, 0)
+    model = EPIPhaseCorrection(shot_axis=2, readout_axis=0)
+
+    fitted = model.fit(positive, negative)
+    corrected_positive, corrected_negative, broadcast_phase = model(
+        positive,
+        negative,
+        fitted,
+    )
+
+    assert broadcast_phase.shape == (24, 1, 2)
+    np.testing.assert_allclose(corrected_positive, corrected_negative, atol=1e-7)
 
 
 def test_average_denoiser_is_a_registered_torch_model(monkeypatch):

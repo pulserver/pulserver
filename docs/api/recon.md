@@ -53,6 +53,7 @@ execution, see {doc}`../explanations/reconstruction/model_based`.
    pulserver.recon.preprocessing
    pulserver.recon.corrections
    pulserver.recon.execution
+   pulserver.recon.motion
    pulserver.recon.optim
    pulserver.recon.simulation
 ```
@@ -167,6 +168,7 @@ off-resonance, and Toeplitz behavior explicitly.
    pulserver.recon.physics.Cartesian3D
    pulserver.recon.physics.NonCartesian2D
    pulserver.recon.physics.NonCartesian3D
+   pulserver.recon.physics.SMS
    pulserver.recon.physics.WaveEncoding
    pulserver.recon.physics.WaveShuffling
    pulserver.recon.physics.Subspace
@@ -187,6 +189,7 @@ modules compatible with its plug-and-play optimizers.
 
    pulserver.recon.denoisers.AverageDenoiser
    pulserver.recon.denoisers.LLR
+   pulserver.recon.denoisers.Positive
    pulserver.recon.denoisers.Wavelet
    pulserver.recon.denoisers.TV
    pulserver.recon.denoisers.TGV
@@ -200,9 +203,13 @@ modules compatible with its plug-and-play optimizers.
    :nosignatures:
 
    pulserver.recon.density.pipe_menon_dcf
+   pulserver.recon.calibration.WavePSF
+   pulserver.recon.calibration.WavePSFCalibration
+   pulserver.recon.calibration.WavePSFResult
    pulserver.recon.calibration.NLINV
    pulserver.recon.calibration.NLINVPhysics
    pulserver.recon.calibration.NLINVResult
+   pulserver.recon.calibration.PhasePoleCorrection
 ```
 
 ## Preprocessing
@@ -222,6 +229,25 @@ connection or streaming server.
    pulserver.recon.preprocessing.epi_ramp_interpolate
    pulserver.recon.preprocessing.estimate_epi_eddy_phase
    pulserver.recon.preprocessing.correct_epi_eddy_currents
+   pulserver.recon.preprocessing.EPIPhaseCorrection
+   pulserver.recon.preprocessing.Homodyne
+   pulserver.recon.preprocessing.POCS
+```
+
+## Rigid motion tracking
+
+Registration is a thin SimpleITK wrapper for 2D and 3D magnitude images. The
+EKF uses registration as its nonlinear measurement and maintains a
+constant-velocity pose state suitable for prospective motion correction.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
+   pulserver.recon.motion.RigidMotionEstimate
+   pulserver.recon.motion.RigidRegistration
+   pulserver.recon.motion.RigidMotionEKF
 ```
 
 ## Image corrections

@@ -3,6 +3,7 @@
 #include <pybind11/pybind11.h>
 
 #include <algorithm>
+#include <cmath>
 #include <complex>
 #include <cstddef>
 #include <stdexcept>
@@ -671,6 +672,68 @@ namespace
             });
     }
 
+    void wave_psf(py::array phase, py::array y_axis, py::array z_axis, py::array output)
+    {
+        if (phase.ndim() != 3 || y_axis.ndim() != 1 || z_axis.ndim() != 1 || output.ndim() != 4)
+        {
+            throw std::invalid_argument(
+                "expected phase (models, 2, readout), axes (phase)/(partition), and output "
+                "(models, readout, phase, partition)");
+        }
+        if (!py::dtype::of<float>().is(phase.dtype()) ||
+            !py::dtype::of<float>().is(y_axis.dtype()) ||
+            !py::dtype::of<float>().is(z_axis.dtype()) ||
+            !py::dtype::of<complex64>().is(output.dtype()))
+        {
+            throw std::invalid_argument("phase/axes must be float32 and output must be complex64");
+        }
+        if (!(phase.flags() & py::array::c_style) || !(y_axis.flags() & py::array::c_style) ||
+            !(z_axis.flags() & py::array::c_style) || !(output.flags() & py::array::c_style))
+        {
+            throw std::invalid_argument("all arrays must be C-contiguous");
+        }
+
+        const std::size_t models = static_cast<std::size_t>(phase.shape(0));
+        const std::size_t readout = static_cast<std::size_t>(phase.shape(2));
+        const std::size_t phase_size = static_cast<std::size_t>(y_axis.shape(0));
+        const std::size_t partition_size = static_cast<std::size_t>(z_axis.shape(0));
+        if (phase.shape(1) != 2 || output.shape(0) != phase.shape(0) ||
+            output.shape(1) != phase.shape(2) || output.shape(2) != y_axis.shape(0) ||
+            output.shape(3) != z_axis.shape(0))
+        {
+            throw std::invalid_argument("phase, axes, and output shapes disagree");
+        }
+
+        const auto* phase_values = static_cast<const float*>(phase.data());
+        const auto* y_values = static_cast<const float*>(y_axis.data());
+        const auto* z_values = static_cast<const float*>(z_axis.data());
+        auto* result = static_cast<complex64*>(output.mutable_data());
+        const std::size_t rows = models * readout * phase_size;
+        py::gil_scoped_release release;
+        parallel_samples(
+            1,
+            rows,
+            [&](std::size_t, std::size_t, std::size_t begin, std::size_t end)
+            {
+                for (std::size_t row = begin; row < end; ++row)
+                {
+                    const std::size_t y_index = row % phase_size;
+                    const std::size_t model_readout = row / phase_size;
+                    const std::size_t readout_index = model_readout % readout;
+                    const std::size_t model = model_readout / readout;
+                    const float phase_y = phase_values[(model * 2) * readout + readout_index];
+                    const float phase_z = phase_values[(model * 2 + 1) * readout + readout_index];
+                    complex64* output_row = result + row * partition_size;
+                    const float y_phase = phase_y * y_values[y_index];
+                    for (std::size_t z_index = 0; z_index < partition_size; ++z_index)
+                    {
+                        const float angle = -(y_phase + phase_z * z_values[z_index]);
+                        output_row[z_index] = complex64(std::cos(angle), std::sin(angle));
+                    }
+                }
+            });
+    }
+
 } // namespace
 
 PYBIND11_MODULE(_recon_cpu_wrapper, module)
@@ -692,6 +755,13 @@ PYBIND11_MODULE(_recon_cpu_wrapper, module)
             }
             return supports_avx2() ? "avx2" : "scalar";
         });
+    module.def(
+        "wave_psf",
+        &wave_psf,
+        py::arg("phase"),
+        py::arg("y_axis"),
+        py::arg("z_axis"),
+        py::arg("output"));
     module.def("thread_count", &location_thread_count, py::arg("locations"));
     module.def(
         "sample_thread_count",

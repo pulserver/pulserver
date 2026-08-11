@@ -1,8 +1,18 @@
-"""Decode LiveSDK SEQDESC waveforms into a Python event model.
+"""The LiveSDK SEQDESC transport, in both directions.
 
-The scanner transports the sequence description as custom single-channel
-ISMRMRD waveforms.  This module only decodes that transport; sequence-specific
-physics is exposed through :mod:`pulserver.recon.simulation`.
+The scanner carries the sequence description as custom single-channel ISMRMRD
+waveforms.  This module owns that transport and nothing else -- sequence
+physics lives in :mod:`pulserver.recon.simulation`, and the description itself
+is produced either here (:meth:`SequenceDescriptionCollection.from_mrd`, from a
+stream) or by :meth:`pulserver.pypulseq.Sequence.sequence_descriptor` (from a
+sequence that has not been run yet).  Both routes end in the same objects.
+
+:meth:`~SequenceDescriptionCollection.to_mrd` is the inverse, word for word:
+its output decodes back through :func:`decode_sequence_description` to an equal
+object.  That matters because it lets a description built at design time be
+handed to anything that expects a scanner stream -- a simulator, a recon under
+test, a fixture -- without a second encoder existing to drift from
+``cxx/recon/trajectory_cache_reader.cpp``, which is what the scanner runs.
 """
 
 from __future__ import annotations
@@ -49,13 +59,25 @@ class EventType(IntEnum):
 
 
 class RfUse(IntEnum):
-    """Pulseq RF-use tag."""
+    """Pulseq RF-use tag.
+
+    All seven of Pulseq's uses, because all seven reach here. The parser
+    decodes the RF library row's trailing ``e/r/i/s/p/o`` tag
+    (``pulseq_parse.c``, ``pulseq_binary.c``) and the SEQDESC writer copies
+    ``rf_use`` through verbatim, so a sequence carrying a preparation or
+    "other" pulse arrives with a 5 or a 6 in the field. Stopping this
+    enumeration at ``SATURATION`` made that a ``ValueError`` at decode time --
+    a whole scan failing to decode over a pulse tag that changes nothing about
+    how the pulse is played.
+    """
 
     UNKNOWN = 0
     EXCITATION = 1
     REFOCUSING = 2
     INVERSION = 3
     SATURATION = 4
+    PREPARATION = 5
+    OTHER = 6
 
 
 class AdcRole(IntEnum):
@@ -239,6 +261,43 @@ class SequenceDescription:
 
         return tuple(event for event in self.events if event.type is EventType.ADC)
 
+    def to_mrd(
+        self, *, measurement_uid: int = 0, scan_counter: int = 0
+    ) -> list[Any]:
+        """This subsequence as the three ISMRMRD waveforms that carry it.
+
+        Events (1000), RF shapes (1002) and shims (1005) -- but **not** the
+        scan-global header (999), which describes the whole scan rather than
+        one subsequence. A stream without it does not decode, so use
+        :meth:`SequenceDescriptionCollection.to_mrd` for something a reader
+        can consume on its own.
+        """
+        return [
+            _waveform(
+                WAVEFORM_ID_SEQDESC_EVENTS,
+                _encode_events(self),
+                measurement_uid,
+                scan_counter,
+            ),
+            _waveform(
+                WAVEFORM_ID_SEQDESC_RF_SHAPES,
+                _encode_rf_definitions(self),
+                measurement_uid,
+                scan_counter,
+            ),
+            _waveform(
+                WAVEFORM_ID_SEQDESC_SHIMS,
+                _encode_shims(self),
+                measurement_uid,
+                scan_counter,
+            ),
+        ]
+
+    @classmethod
+    def from_mrd(cls, waveforms: Iterable[Any], index: int = 0) -> SequenceDescription:
+        """One subsequence decoded out of an MRD stream."""
+        return decode_sequence_description(waveforms).subsequence(index)
+
 
 @dataclass(frozen=True)
 class SequenceDescriptionCollection:
@@ -254,6 +313,41 @@ class SequenceDescriptionCollection:
             return self.subsequences[index]
         except KeyError as exc:
             raise KeyError(f"SEQDESC has no subsequence {index}") from exc
+
+    def to_mrd(self, *, measurement_uid: int = 0, scan_counter: int = 0) -> list[Any]:
+        """The whole description as ISMRMRD waveforms a reader can consume.
+
+        The scan-global header first, then each subsequence's three waveforms.
+        Round-trips: ``from_mrd(x.to_mrd()) == x``, which is what makes a
+        design-time description usable anywhere a scanner stream is expected.
+
+        Requires ``ismrmrd``; decoding does not, because it only duck-types the
+        ``waveform_id``/``data`` attributes it reads.
+        """
+        waveforms = [
+            _waveform(
+                WAVEFORM_ID_SEQDESC_HEADER,
+                _encode_header(self.parameters),
+                measurement_uid,
+                scan_counter,
+            )
+        ]
+        for _index, description in sorted(self.subsequences.items()):
+            waveforms.extend(
+                description.to_mrd(
+                    measurement_uid=measurement_uid, scan_counter=scan_counter
+                )
+            )
+        return waveforms
+
+    @classmethod
+    def from_mrd(cls, waveforms: Iterable[Any]) -> SequenceDescriptionCollection:
+        """Decode every SEQDESC waveform in an MRD stream.
+
+        The named constructor for :func:`decode_sequence_description`, which
+        stays as the function the streaming recon already calls.
+        """
+        return decode_sequence_description(waveforms)
 
 
 def decompress_shape(
@@ -526,3 +620,130 @@ def _decode_shims(
             f"SEQDESC shim payload has {words.size - cursor} trailing words"
         )
     return subseq, shims
+
+
+# ── Encoding ────────────────────────────────────────────────────────────
+#
+# The inverse of the decoders above, word for word. The authority for this
+# wire format is `cxx/recon/trajectory_cache_reader.cpp` -- what the scanner
+# actually emits -- so when the two disagree, that file is right and this is
+# the bug. Keep the field order here matched to `_decode_*` below it; a test
+# asserts the round trip, which is what catches a drift in either direction.
+
+
+#: How many band frequency offsets an RF definition carries on the wire,
+#: whatever the definition itself has (``PULSEG_MAX_BANDS``).
+_WIRE_BANDS = 8
+
+
+def _u4(value: int) -> np.uint32:
+    """One integer as its wire word."""
+    return np.uint32(int(value))
+
+
+def _f4(value: float) -> np.uint32:
+    """One float as the uint32 its bits spell -- the decoder's ``_float``."""
+    return np.asarray([float(value)], dtype="<f4").view("<u4")[0]
+
+
+def _samples(shape: RfShape) -> list[np.uint32]:
+    """A shape's samples as wire words, float32 bit patterns."""
+    packed = np.ascontiguousarray(np.asarray(shape.samples, dtype="<f4"))
+    return list(packed.view("<u4"))
+
+
+def _waveform(waveform_id: int, words: list[np.uint32], measurement_uid: int, scan_counter: int):
+    """One single-channel uint32 ISMRMRD waveform carrying ``words``."""
+    import ismrmrd
+
+    waveform = ismrmrd.Waveform.from_array(
+        np.asarray([words], dtype=np.uint32), waveform_id=waveform_id
+    )
+    # Set through the header when the installed ismrmrd exposes one; older
+    # builds carry these as plain attributes.
+    header = getattr(waveform, "_head", None)
+    for name, value in (
+        ("measurement_uid", measurement_uid),
+        ("scan_counter", scan_counter),
+    ):
+        target = header if header is not None and hasattr(header, name) else waveform
+        try:
+            setattr(target, name, value)
+        except AttributeError:  # pragma: no cover - depends on the ismrmrd build
+            pass
+    return waveform
+
+
+def _encode_header(parameters: SequenceParameters) -> list[np.uint32]:
+    return [
+        _u4(parameters.num_subsequences),
+        _f4(parameters.min_te_us),
+        _f4(parameters.min_tr_us),
+        _f4(parameters.max_tr_us),
+        _f4(parameters.max_flip_angle_deg),
+        _f4(parameters.total_scan_time_us),
+    ]
+
+
+def _encode_events(description: SequenceDescription) -> list[np.uint32]:
+    words = [
+        _u4(description.subsequence_index),
+        _f4(description.tr_duration_us),
+        _u4(len(description.events)),
+    ]
+    for event in description.events:
+        words.append(_u4(int(event.type)))
+        words.append(_f4(event.timestamp_us))
+        # Always seven, whatever the event carries: the row is fixed width.
+        params = list(event.params) + [0.0] * (7 - len(event.params))
+        words.extend(_f4(value) for value in params[:7])
+    return words
+
+
+def _encode_rf_definitions(description: SequenceDescription) -> list[np.uint32]:
+    definitions = description.rf_definitions
+    words = [_u4(description.subsequence_index), _u4(len(definitions))]
+
+    # Headers for every definition first, then every definition's samples --
+    # the order the decoder reads them back in.
+    for _id, definition in sorted(definitions.items()):
+        offsets = list(definition.band_frequency_offsets_hz)[:_WIRE_BANDS]
+        offsets += [0.0] * (_WIRE_BANDS - len(offsets))
+
+        words.append(_u4(definition.id))
+        words.append(_f4(definition.bandwidth_hz))
+        words.append(_u4(definition.num_bands))
+        words.extend(_f4(value) for value in offsets)
+        words.append(_f4(definition.band_bandwidth_hz))
+        words.append(_f4(definition.total_b1sq_power))
+
+        words.append(_u4(definition.magnitude.num_uncompressed))
+        words.append(_u4(len(definition.magnitude.samples)))
+        for optional in (definition.phase, definition.time):
+            words.append(_u4(1 if optional is not None else 0))
+            if optional is not None:
+                words.append(_u4(optional.num_uncompressed))
+                words.append(_u4(len(optional.samples)))
+
+        words.extend(_samples(definition.magnitude))
+        for optional in (definition.phase, definition.time):
+            if optional is not None:
+                words.extend(_samples(optional))
+    return words
+
+
+def _encode_shims(description: SequenceDescription) -> list[np.uint32]:
+    """The shim definitions, which the scanner currently always sends empty.
+
+    ``make_seqdesc_shims_waveform`` writes ``num_shims = 0`` unconditionally --
+    shims left the cache section and have not come back. Anything held here is
+    still encoded, because dropping data on the way out would make the round
+    trip lossy for a description that did not come off a scanner.
+    """
+    words = [_u4(description.subsequence_index), _u4(len(description.shim_definitions))]
+    for _id, shim in sorted(description.shim_definitions.items()):
+        words.append(_u4(shim.id))
+        words.append(_u4(len(shim.magnitudes)))
+        words.extend(_f4(value) for value in shim.magnitudes)
+        words.extend(_f4(value) for value in shim.phases_rad)
+    return words

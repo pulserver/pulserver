@@ -337,6 +337,85 @@ namespace pulseg
             return w;
         }
 
+        // ── Sequence description (state-machine event rows) ──────────
+
+        /**
+         * One subsequence's canonical-TR event table: one row per block,
+         * carrying RF use / amplitude / phase / frequency, ADC role and
+         * k-space-zero timing, or nothing for a block that plays neither.
+         *
+         * This is the same table the .pge cache's SEQDESC section stores and
+         * the reconstruction reads back, produced here from a loaded
+         * collection rather than from a file -- so a sequence can be described
+         * before it has ever been written, let alone run.
+         */
+        SequenceDescription get_sequence_description(int ss = 0) const
+        {
+            pulseg_sequence_description desc;
+            memset(&desc, 0, sizeof(desc));
+            check(pulseg_get_sequence_description(&desc, coll_, ss));
+
+            SequenceDescription out;
+            out.subseq_idx = desc.subseq_idx;
+            out.tr_duration_us = desc.tr_duration_us;
+            if (desc.num_rows > 0 && desc.rows)
+                out.rows.assign(desc.rows, desc.rows + desc.num_rows);
+
+            pulseg_sequence_description_free(&desc);
+            return out;
+        }
+
+        /**
+         * One RF definition's decompressed shapes, keyed by the rf_def_id an
+         * RF row carries in params[0].
+         *
+         * Units are the file's, not physics': the magnitude is normalised to
+         * a peak of about 1 and scales by the row's amplitude, the phase is in
+         * *turns* rather than radians (Pulseq's shape convention), and the
+         * time points, when the definition has any, are in microseconds. The
+         * getters hand back exactly what the shape library holds -- converting
+         * here would put a second convention in play.
+         */
+        RfDefinitionShapes get_rf_definition(int subseq_idx, int rf_def_id) const
+        {
+            RfDefinitionShapes out;
+            int channels = 0;
+            int samples = 0;
+
+            float** magnitude =
+                pulseg_get_rf_def_magnitude(coll_, &channels, &samples, subseq_idx, rf_def_id);
+            if (magnitude && channels > 0 && samples > 0)
+            {
+                out.num_channels = channels;
+                out.magnitude.assign(magnitude[0], magnitude[0] + channels * samples);
+            }
+
+            channels = samples = 0;
+            float** phase =
+                pulseg_get_rf_def_phase(coll_, &channels, &samples, subseq_idx, rf_def_id);
+            if (phase && channels > 0 && samples > 0)
+                out.phase_turns.assign(phase[0], phase[0] + channels * samples);
+
+            samples = 0;
+            float* times = pulseg_get_rf_def_time(coll_, &samples, subseq_idx, rf_def_id);
+            if (times)
+            {
+                if (samples > 0)
+                    out.time_us.assign(times, times + samples);
+                PULSEG_FREE(times);
+            }
+            return out;
+        }
+
+        /** Scan-global parameters aggregated over every loaded subsequence. */
+        pulseg_sequence_parameters get_sequence_parameters() const
+        {
+            pulseg_sequence_parameters params;
+            memset(&params, 0, sizeof(params));
+            check(pulseg_get_sequence_parameters(&params, coll_));
+            return params;
+        }
+
         // ── Native-timing TR waveforms (for plotting) ────────────────
 
         TrWaveforms get_tr_waveforms(

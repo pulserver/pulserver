@@ -322,3 +322,60 @@ interpreter and stop at the scanner. Nothing downstream ever sees the second
 group, so a sequence with something to tell its own reconstruction cannot say
 it with one of them. {func}`~pulserver.pypulseq.get_supported_labels`
 tabulates all three groups with what each label means.
+
+## Analysis results
+
+Every analysis method on `Sequence` takes a keyword-only `compat`. Left alone
+it is `True` and the method returns exactly what upstream PyPulseq returns,
+including upstream's omissions — that is what lets an unchanged PyPulseq
+script keep its unchanged meaning. Passing `compat=False` returns one object
+instead, carrying the same information under names plus what upstream's tuple
+has nowhere to put.
+
+The flag exists rather than a longer tuple because a tuple return is unpacked
+positionally: `a, b, c = seq.waveforms_and_times()` breaks the moment a fourth
+element appears, and it breaks at the caller's line. So these objects
+deliberately **cannot** be unpacked — they have no `__iter__` and no
+`__getitem__`, and fields are added over time without any call site changing.
+
+| method | `compat=True` | `compat=False` |
+| --- | --- | --- |
+| `waveforms` | list of `(2, n)` arrays | {class}`~pulserver.pypulseq.Waveforms` |
+| `waveforms_and_times` | 5-tuple | {class}`~pulserver.pypulseq.WaveformsAndTimes` |
+| `rf_times` | 4-tuple | {class}`~pulserver.pypulseq.RfTimes` |
+| `adc_times` | 2-tuple | {class}`~pulserver.pypulseq.AdcTimes` |
+| `calculate_kspace` | 5-tuple | {class}`~pulserver.pypulseq.KSpace` |
+| `calculate_pns` | 4-tuple | {class}`~pulserver.pypulseq.Pns` |
+| `calculate_gradient_spectrum` | 4-tuple | {class}`~pulserver.pypulseq.GradientSpectrum` |
+
+What only `compat=False` can tell you:
+
+- **Every RF use, not two.** Upstream sorts RF into excitation and refocusing
+  and silently drops inversion, saturation, preparation and other — an
+  inversion pulse does not appear in its answer at all. `RfTimes` is one flat
+  table with the tag kept, and `of("inversion")` selects.
+- **Per-sample ADC phase and phase modulation.** MATLAB returns `pm_adc` as a
+  sixth output; PyPulseq returns nothing. `AdcTimes.phase_modulation` is that
+  array, and `sample_phase` is the phase each sample is actually acquired
+  with, ppm terms and modulation folded in.
+- **Echo centres.** `AdcTimes.echo_center_time` is when each readout reaches
+  k-space zero, found by the C core walking the real trajectory rather than by
+  MATLAB's `2*t_refocusing - t_excitation` approximation. Computed on first
+  read, since it needs that trajectory.
+- **The breakpoint-grid trajectory.** `KSpace.k_traj_breakpoints` describes the
+  same curve as `k_traj` in five to ten times fewer points.
+- **Acoustic resonance lines.** `GradientSpectrum.resonance_lines`, which used
+  to be smuggled out as a fifth tuple element.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated
+
+   pulserver.pypulseq.Waveforms
+   pulserver.pypulseq.WaveformsAndTimes
+   pulserver.pypulseq.RfTimes
+   pulserver.pypulseq.AdcTimes
+   pulserver.pypulseq.KSpace
+   pulserver.pypulseq.Pns
+   pulserver.pypulseq.GradientSpectrum
+```

@@ -53,6 +53,9 @@ class IRGNM(_IterativeOptimizer):
         Optional ``linearize(physics, x)`` override.
     inner_kwargs
         Fixed keyword arguments forwarded to non-CG inner solvers.
+    iteration_callback
+        Optional ``callback(estimate, physics, completed_iterations)`` hook.
+        It may return a gauge-equivalent or otherwise projected estimate.
     unfold
         Enable differentiation through outer iterations.
     """
@@ -72,6 +75,8 @@ class IRGNM(_IterativeOptimizer):
         | None = None,
         linearize: Callable[[Any, torch.Tensor], Any] | None = None,
         inner_kwargs: dict[str, Any] | None = None,
+        iteration_callback: Callable[[torch.Tensor, Any, int], torch.Tensor]
+        | None = None,
         unfold: bool = False,
         trainable_params: list[str] | None = None,
     ) -> None:
@@ -104,6 +109,7 @@ class IRGNM(_IterativeOptimizer):
         self.__dict__["reference"] = reference
         self.__dict__["linearize"] = linearize
         self.inner_kwargs = dict(inner_kwargs or {})
+        self.__dict__["iteration_callback"] = iteration_callback
         self.unfold = bool(unfold)
 
     def init_state(
@@ -202,6 +208,13 @@ class IRGNM(_IterativeOptimizer):
                 init=estimate,
                 **call_kwargs,
             )
+        if self.iteration_callback is not None:
+            projected = self.iteration_callback(updated, physics, index + 1)
+            if not isinstance(projected, torch.Tensor):
+                raise TypeError("iteration_callback must return a torch.Tensor")
+            if projected.shape != updated.shape:
+                raise ValueError("iteration_callback must preserve the estimate shape")
+            updated = projected
         variables = {
             "est": (updated,),
             "reference": state.variables["reference"],

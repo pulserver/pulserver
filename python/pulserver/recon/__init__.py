@@ -22,6 +22,7 @@ __all__ = [
     "denoisers",
     "density",
     "execution",
+    "motion",
     "optim",
     "physics",
     "pics",
@@ -56,6 +57,7 @@ if TYPE_CHECKING:
     from . import denoisers as denoisers
     from . import density as density
     from . import execution as execution
+    from . import motion as motion
     from . import optim as optim
     from . import physics as physics
     from . import preprocessing as preprocessing

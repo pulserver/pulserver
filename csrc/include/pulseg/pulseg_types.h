@@ -28,14 +28,19 @@
 
 /* ================================================================== */
 /*  RF use codes (pulseg_seq_event.params[1] for RF rows).            */
-/*  Aliases of the raw Pulseq RF library's trailing e/r/i/s use tag,  */
-/*  which the pulseq module owns.                                     */
+/*  Aliases of the raw Pulseq RF library's trailing e/r/i/s/p/o use   */
+/*  tag, which the pulseq module owns.  All seven are aliased because */
+/*  the parser produces all seven and seqdesc copies the field        */
+/*  through verbatim -- a consumer switching on these must be able to */
+/*  name the two that nothing here treats specially.                  */
 /* ================================================================== */
 #define PULSEG_RF_USE_UNKNOWN PULSEQ_RF_USE_UNKNOWN
 #define PULSEG_RF_USE_EXCITATION PULSEQ_RF_USE_EXCITATION
 #define PULSEG_RF_USE_REFOCUSING PULSEQ_RF_USE_REFOCUSING
 #define PULSEG_RF_USE_INVERSION PULSEQ_RF_USE_INVERSION
 #define PULSEG_RF_USE_SATURATION PULSEQ_RF_USE_SATURATION
+#define PULSEG_RF_USE_PREPARATION PULSEQ_RF_USE_PREPARATION
+#define PULSEG_RF_USE_OTHER PULSEQ_RF_USE_OTHER
 
 /* ================================================================== */
 /*  Error codes                                                       */

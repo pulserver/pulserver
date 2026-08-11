@@ -209,6 +209,27 @@ def test_irgnm_linearizes_an_ordinary_deepinverse_physics():
     )
 
 
+def test_irgnm_iteration_callback_can_apply_a_state_projection():
+    completed = []
+
+    def project(estimate, _physics, iteration):
+        completed.append(iteration)
+        return estimate.clamp_max(1.8)
+
+    model = IRGNM(
+        ConjugateGradient(max_iter=3, rtol=1e-8, batch_dim=0),
+        damping=0.0,
+        max_iter=3,
+        iteration_callback=project,
+    )
+    data = torch.full((1, 1, 4), 4.0)
+
+    result = model(data, _QuadraticPhysics(), init=torch.ones_like(data))
+
+    assert completed == [1, 2, 3]
+    assert bool(torch.all(result <= 1.8))
+
+
 @pytest.mark.parametrize("algorithm", ["fista", "pdhg", "admm"])
 def test_optimizers_match_identity_l1_solution(algorithm):
     physics = _IdentityPhysics()

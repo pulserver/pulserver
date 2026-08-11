@@ -240,8 +240,6 @@ def test_the_scan_structure_placeholders_are_gone_rather_than_stubbed(name):
 #: yet, with arguments named the way upstream names them -- so the call itself
 #: proves the signature matches, and the exception proves it is still a stub.
 _NOT_PORTED = [
-    ("waveforms", (), {"append_RF": True, "time_range": [0.0, 1.0]}),
-    ("waveforms_and_times", (), {"append_RF": False, "time_range": None}),
     ("check_timing", (), {"print_errors": True}),
     ("test_report", (), {}),
     ("evaluate_labels", (), {"init": None, "evolution": "adc"}),
@@ -260,10 +258,46 @@ def test_the_unported_methods_take_upstreams_arguments_and_say_they_are_stubs(
         getattr(seq, name)(*args, **kwargs)
 
 
+def test_install_refuses_rather_than_pretending_to_be_pending(seq):
+    """``install`` is not unfinished, it is out of scope -- and says which."""
+    with pytest.raises(NotImplementedError, match="Siemens scanner transfer"):
+        seq.install()
+
+
 #: Methods that *are* implemented, and still have to answer to upstream's
 #: signature -- a PyPulseq script has to run here unchanged whether or not the
 #: body underneath it is ours.
-_PORTED = ["plot", "calculate_pns", "calculate_gradient_spectrum", "calculate_kspace"]
+_PORTED = [
+    "plot",
+    "calculate_pns",
+    "calculate_gradient_spectrum",
+    "calculate_kspace",
+    "waveforms",
+    "waveforms_and_times",
+    "rf_times",
+    "adc_times",
+    "get_gradients",
+    "paper_plot",
+    "install",
+    "get_extension_type_ID",
+    "get_extension_type_string",
+    "set_extension_string_ID",
+    "get_raw_block_content_IDs",
+    "rf_from_lib_data",
+]
+
+
+def test_every_public_upstream_method_exists_here():
+    """Absent is worse than unimplemented: it is an AttributeError at the call
+    site instead of a message saying what is missing and why."""
+    missing = [
+        name
+        for name in dir(upstream.Sequence)
+        if not name.startswith("_")
+        and callable(getattr(upstream.Sequence, name, None))
+        and not hasattr(pp.Sequence, name)
+    ]
+    assert missing == []
 
 
 @pytest.mark.parametrize("name", [name for name, _, _ in _NOT_PORTED] + _PORTED)

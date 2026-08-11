@@ -37,6 +37,15 @@ from ._make_rf_shim import make_rf_shim as _make_rf_shim
 from ._make_rotation import make_rotation as _make_rotation
 from ._opts import Opts as _Opts
 from ._sequence import Sequence as _Sequence
+from ._results import (
+    AdcTimes as _AdcTimes,
+    GradientSpectrum as _GradientSpectrum,
+    KSpace as _KSpace,
+    Pns as _Pns,
+    RfTimes as _RfTimes,
+    Waveforms as _Waveforms,
+    WaveformsAndTimes as _WaveformsAndTimes,
+)
 from ._transform_fov import TransformFOV as _TransformFOV
 
 #: Upstream names Pulserver deliberately does not re-export: the adiabatic
@@ -57,6 +66,13 @@ del _name
 
 Sequence = _Sequence
 TransformFOV = _TransformFOV
+AdcTimes = _AdcTimes
+GradientSpectrum = _GradientSpectrum
+KSpace = _KSpace
+Pns = _Pns
+RfTimes = _RfTimes
+Waveforms = _Waveforms
+WaveformsAndTimes = _WaveformsAndTimes
 Opts = _Opts
 get_supported_labels = _get_supported_labels
 make_label = _make_label
@@ -77,8 +93,23 @@ del _name
 #: replacements for upstream objects, plus the extension events upstream has
 #: no equivalent for.  This set is the single source of truth for both the
 #: API reference page and the contract test that guards it.
+#: What the analysis methods return under ``compat=False``.  Exported so a
+#: caller can annotate or isinstance-check a result they were handed.
+RESULTS = frozenset(
+    {
+        "AdcTimes",
+        "GradientSpectrum",
+        "KSpace",
+        "Pns",
+        "RfTimes",
+        "Waveforms",
+        "WaveformsAndTimes",
+    }
+)
+
 OVERRIDES = frozenset(
     {
+        *RESULTS,
         "COUNTER_LABELS",
         "FLAG_LABELS",
         "STICKY_FLAGS",

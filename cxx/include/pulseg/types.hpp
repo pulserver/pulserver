@@ -460,6 +460,38 @@ namespace pulseg
         float total_duration_us = 0.0f;
     };
 
+    // ── Sequence description (state-machine event rows) ──────────────────────────────
+
+    /**
+     * One subsequence's canonical-TR event table, as
+     * pulseg_get_sequence_description() builds it.
+     *
+     * The rows cross as the C row type rather than being unpacked here: it is
+     * a POD of a tag, a timestamp and seven floats whose meaning depends on
+     * the tag (see pulseg_types.h), and re-describing that layout in C++
+     * would give it a second place to drift.
+     */
+    struct SequenceDescription
+    {
+        int subseq_idx = 0;
+        float tr_duration_us = 0.0f;
+        std::vector<pulseg_seq_event> rows;
+    };
+
+    /**
+     * One RF definition's decompressed shapes, in the file's own units:
+     * magnitude normalised to a peak near 1, phase in turns, times in us.
+     * Channel-major when num_channels > 1.  Empty vectors mean the definition
+     * carries no such shape (a common phase, or a uniform time raster).
+     */
+    struct RfDefinitionShapes
+    {
+        int num_channels = 1;
+        std::vector<float> magnitude;
+        std::vector<float> phase_turns;
+        std::vector<float> time_us;
+    };
+
     // ── Mechanical resonances spectra ────────────────────────────────────────────────
 
     struct MechResonancesSpectra

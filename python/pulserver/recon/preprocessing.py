@@ -6,10 +6,10 @@ MRPro containers are delegated to their maintained methods when applicable.
 
 from __future__ import annotations
 
-from importlib import import_module
-from typing import Any
-
 __all__ = [
+    "POCS",
+    "EPIPhaseCorrection",
+    "Homodyne",
     "cartesian_3d_to_2d",
     "coil_compress",
     "correct_epi_eddy_currents",
@@ -18,6 +18,246 @@ __all__ = [
     "noise_prewhiten",
     "remove_readout_oversampling",
 ]
+
+from importlib import import_module
+from typing import Any
+
+
+class EPIPhaseCorrection:
+    """Shot-resolved odd/even EPI navigator phase correction.
+
+    The estimator fits the readout phase independently for every shot after
+    combining all remaining navigator dimensions. Optional causal smoothing
+    acts on the polynomial coefficients, retaining slow drift without merging
+    genuinely distinct shot offsets.
+
+    Parameters
+    ----------
+    polynomial_order
+        Readout phase-polynomial order.
+    shot_axis
+        Navigator shot axis. ``None`` estimates one global correction.
+    readout_axis
+        Readout sample axis.
+    temporal_smoothing
+        Causal coefficient smoothing in ``[0, 1)``. Zero disables smoothing.
+    """
+
+    def __init__(
+        self,
+        *,
+        polynomial_order: int = 1,
+        shot_axis: int | None = 0,
+        readout_axis: int = -1,
+        temporal_smoothing: float = 0.0,
+    ) -> None:
+        if polynomial_order < 0:
+            raise ValueError("polynomial_order must be non-negative")
+        if not 0.0 <= temporal_smoothing < 1.0:
+            raise ValueError("temporal_smoothing must lie in [0, 1)")
+        self.polynomial_order = int(polynomial_order)
+        self.shot_axis = shot_axis
+        self.readout_axis = int(readout_axis)
+        self.temporal_smoothing = float(temporal_smoothing)
+
+    def fit(self, positive_navigator: Any, negative_navigator: Any) -> Any:
+        """Estimate one smooth odd/even phase curve per navigator shot."""
+        if positive_navigator.shape != negative_navigator.shape:
+            raise ValueError("positive and negative navigators must have equal shape")
+        if self.shot_axis is None:
+            return estimate_epi_eddy_phase(
+                positive_navigator,
+                negative_navigator,
+                readout_axis=self.readout_axis,
+                polynomial_order=self.polynomial_order,
+            )
+        xp, is_torch = _matching_libraries(
+            positive_navigator,
+            negative_navigator,
+        )
+        shot_axis = self.shot_axis % positive_navigator.ndim
+        readout_axis = self.readout_axis % positive_navigator.ndim
+        if shot_axis == readout_axis:
+            raise ValueError("shot_axis and readout_axis must be distinct")
+        cross = positive_navigator * negative_navigator.conj()
+        if is_torch:
+            cross = cross.movedim((shot_axis, readout_axis), (0, -1))
+            if cross.ndim > 2:
+                cross = cross.sum(dim=tuple(range(1, cross.ndim - 1)))
+        else:
+            cross = xp.moveaxis(cross, (shot_axis, readout_axis), (0, -1))
+            if cross.ndim > 2:
+                cross = cross.sum(axis=tuple(range(1, cross.ndim - 1)))
+        phase = _unwrap_last(xp.angle(cross), xp, is_torch)
+        return _fit_phase_curves(
+            phase,
+            self.polynomial_order,
+            self.temporal_smoothing,
+            xp,
+            is_torch,
+        )
+
+    def correct(
+        self,
+        positive_readouts: Any,
+        negative_readouts: Any,
+        phase: Any | None = None,
+    ) -> tuple[Any, Any, Any]:
+        """Apply symmetric phase correction to shot-resolved polarities."""
+        if positive_readouts.shape != negative_readouts.shape:
+            raise ValueError("positive and negative readouts must have equal shape")
+        if phase is None:
+            phase = self.fit(positive_readouts, negative_readouts)
+        xp, is_torch = _matching_libraries(positive_readouts, negative_readouts)
+        phase = (
+            xp.as_tensor(
+                phase,
+                device=positive_readouts.device,
+                dtype=positive_readouts.real.dtype,
+            )
+            if is_torch
+            else xp.asarray(phase, dtype=positive_readouts.real.dtype)
+        )
+        shape = [1] * positive_readouts.ndim
+        readout_axis = self.readout_axis % positive_readouts.ndim
+        shape[readout_axis] = positive_readouts.shape[readout_axis]
+        if self.shot_axis is not None:
+            shot_axis = self.shot_axis % positive_readouts.ndim
+            shape[shot_axis] = positive_readouts.shape[shot_axis]
+            expected = (shape[shot_axis], shape[readout_axis])
+            if phase.shape != expected:
+                raise ValueError(f"shot-resolved phase must have shape {expected}")
+            phase = phase.reshape(
+                *phase.shape,
+                *([1] * (positive_readouts.ndim - 2)),
+            )
+            phase = (
+                phase.movedim((0, 1), (shot_axis, readout_axis))
+                if is_torch
+                else xp.moveaxis(phase, (0, 1), (shot_axis, readout_axis))
+            )
+        elif phase.ndim != 1:
+            raise ValueError("global EPI phase must be one-dimensional")
+        else:
+            phase = phase.reshape(shape)
+        return (
+            positive_readouts * xp.exp(-0.5j * phase),
+            negative_readouts * xp.exp(0.5j * phase),
+            phase,
+        )
+
+    def __call__(
+        self,
+        positive_readouts: Any,
+        negative_readouts: Any,
+        phase: Any | None = None,
+    ) -> tuple[Any, Any, Any]:
+        return self.correct(positive_readouts, negative_readouts, phase)
+
+
+class Homodyne:
+    """Homodyne reconstruction for one-sided Cartesian partial Fourier.
+
+    Parameters
+    ----------
+    dimension
+        Number of spatial Fourier dimensions.
+    partial_axis
+        Axis containing the partial-Fourier acquisition.
+    """
+
+    def __init__(self, *, dimension: int = 2, partial_axis: int = -2) -> None:
+        if dimension not in {1, 2, 3}:
+            raise ValueError("dimension must be 1, 2, or 3")
+        self.dimension = int(dimension)
+        self.partial_axis = int(partial_axis)
+
+    def __call__(self, kspace: Any, mask: Any | None = None) -> Any:
+        """Reconstruct an image from partial-Fourier Cartesian k-space."""
+        axes, partial_axis = _spatial_axes(
+            kspace.ndim,
+            self.dimension,
+            self.partial_axis,
+        )
+        acquired = _partial_fourier_mask(kspace, mask, partial_axis)
+        lowpass, weight = _homodyne_masks(acquired)
+        lowpass = _broadcast_line(lowpass, kspace.ndim, partial_axis)
+        weight = _broadcast_line(weight, kspace.ndim, partial_axis)
+        reference = _centered_fftn(kspace * lowpass, axes=axes, inverse=True)
+        phase = _unit_phase(reference)
+        weighted = _centered_fftn(kspace * weight, axes=axes, inverse=True)
+        projected = (weighted * phase.conj()).real
+        return projected * phase
+
+
+class POCS:
+    """Projection-onto-convex-sets partial-Fourier reconstruction.
+
+    Parameters
+    ----------
+    dimension
+        Number of spatial Fourier dimensions.
+    partial_axis
+        Axis containing the partial-Fourier acquisition.
+    iterations
+        Maximum number of data-consistency/phase-projection iterations.
+    tolerance
+        Relative iterate-change tolerance. Set to zero for a fixed count.
+    positive
+        Also project the demodulated image onto the non-negative real cone.
+    """
+
+    def __init__(
+        self,
+        *,
+        dimension: int = 2,
+        partial_axis: int = -2,
+        iterations: int = 12,
+        tolerance: float = 1e-5,
+        positive: bool = True,
+    ) -> None:
+        if dimension not in {1, 2, 3}:
+            raise ValueError("dimension must be 1, 2, or 3")
+        if iterations <= 0:
+            raise ValueError("iterations must be positive")
+        if tolerance < 0.0:
+            raise ValueError("tolerance must be non-negative")
+        self.dimension = int(dimension)
+        self.partial_axis = int(partial_axis)
+        self.iterations = int(iterations)
+        self.tolerance = float(tolerance)
+        self.positive = bool(positive)
+
+    def __call__(self, kspace: Any, mask: Any | None = None) -> Any:
+        """Reconstruct an image while preserving every acquired sample."""
+        xp, is_torch = _torch_or_numpy(kspace)
+        axes, partial_axis = _spatial_axes(
+            kspace.ndim,
+            self.dimension,
+            self.partial_axis,
+        )
+        acquired = _partial_fourier_mask(kspace, mask, partial_axis)
+        lowpass, _ = _homodyne_masks(acquired)
+        acquired = _broadcast_line(acquired, kspace.ndim, partial_axis)
+        lowpass = _broadcast_line(lowpass, kspace.ndim, partial_axis)
+        phase = _unit_phase(_centered_fftn(kspace * lowpass, axes=axes, inverse=True))
+        estimate = kspace.copy() if not is_torch else kspace.clone()
+        previous = _centered_fftn(estimate, axes=axes, inverse=True)
+        for _ in range(self.iterations):
+            demodulated = (previous * phase.conj()).real
+            if self.positive:
+                demodulated = (
+                    demodulated.clamp_min(0) if is_torch else xp.maximum(demodulated, 0)
+                )
+            projected = demodulated * phase
+            proposed = _centered_fftn(projected, axes=axes, inverse=False)
+            estimate = xp.where(acquired, kspace, proposed)
+            updated = _centered_fftn(estimate, axes=axes, inverse=True)
+            if self.tolerance and _relative_change(updated, previous) <= self.tolerance:
+                previous = updated
+                break
+            previous = updated
+        return previous
 
 
 def _torch_or_numpy(array: Any) -> tuple[Any, bool]:
@@ -311,3 +551,189 @@ def correct_epi_eddy_currents(
         negative_readouts * negative_factor,
         phase.reshape(-1),
     )
+
+
+# %% private module subroutines
+
+
+def _spatial_axes(
+    ndim: int,
+    dimension: int,
+    partial_axis: int,
+) -> tuple[tuple[int, ...], int]:
+    if ndim < dimension:
+        raise ValueError("input has fewer dimensions than the spatial transform")
+    axes = tuple(range(ndim - dimension, ndim))
+    selected = partial_axis % ndim
+    if selected not in axes:
+        raise ValueError("partial_axis must be one of the spatial dimensions")
+    return axes, selected
+
+
+def _centered_fftn(
+    data: Any,
+    *,
+    axes: tuple[int, ...],
+    inverse: bool,
+) -> Any:
+    xp, is_torch = _torch_or_numpy(data)
+    if is_torch:
+        shifted = xp.fft.ifftshift(data, dim=axes)
+        transform = xp.fft.ifftn if inverse else xp.fft.fftn
+        return xp.fft.fftshift(
+            transform(shifted, dim=axes, norm="ortho"),
+            dim=axes,
+        )
+    shifted = xp.fft.ifftshift(data, axes=axes)
+    transform = xp.fft.ifftn if inverse else xp.fft.fftn
+    return xp.fft.fftshift(
+        transform(shifted, axes=axes, norm="ortho"),
+        axes=axes,
+    )
+
+
+def _partial_fourier_mask(data: Any, mask: Any | None, axis: int) -> Any:
+    xp, is_torch = _torch_or_numpy(data)
+    if mask is None:
+        occupied = data.abs() > 0 if is_torch else xp.abs(data) > 0
+        reduce_axes = tuple(index for index in range(data.ndim) if index != axis)
+        acquired = (
+            occupied.any(dim=reduce_axes)
+            if is_torch
+            else occupied.any(axis=reduce_axes)
+        )
+    else:
+        acquired = (
+            xp.as_tensor(mask, device=data.device, dtype=xp.bool)
+            if is_torch
+            else xp.asarray(mask, dtype=bool)
+        )
+    if acquired.ndim != 1 or acquired.shape[0] != data.shape[axis]:
+        raise ValueError("partial-Fourier mask must be one-dimensional")
+    indices = (
+        acquired.nonzero(as_tuple=False).reshape(-1)
+        if is_torch
+        else xp.flatnonzero(acquired)
+    )
+    count = indices.numel() if is_torch else indices.size
+    if count == 0:
+        raise ValueError("partial-Fourier mask contains no acquired samples")
+    first = int(indices[0])
+    last = int(indices[-1])
+    if count != last - first + 1:
+        raise ValueError("partial-Fourier samples must form one contiguous interval")
+    if first != 0 and last != acquired.shape[0] - 1:
+        raise ValueError("partial-Fourier samples must omit only one k-space edge")
+    center = acquired.shape[0] // 2
+    if not bool(acquired[center]):
+        raise ValueError("partial-Fourier samples must include the k-space center")
+    return acquired
+
+
+def _homodyne_masks(acquired: Any) -> tuple[Any, Any]:
+    xp, is_torch = _torch_or_numpy(acquired)
+    count = acquired.shape[0]
+    indices = xp.arange(count, device=acquired.device) if is_torch else xp.arange(count)
+    center = count // 2
+    partner = (2 * center - indices) % count
+    symmetric = acquired & acquired[partner]
+    weight = acquired.to(dtype=xp.float32) if is_torch else acquired.astype(float)
+    partner_values = (
+        acquired[partner].to(dtype=weight.dtype)
+        if is_torch
+        else acquired[partner].astype(weight.dtype)
+    )
+    weight = weight * (2 - partner_values)
+    return symmetric, weight
+
+
+def _broadcast_line(line: Any, ndim: int, axis: int) -> Any:
+    shape = [1] * ndim
+    shape[axis] = line.shape[0]
+    return line.reshape(shape)
+
+
+def _unit_phase(image: Any) -> Any:
+    xp, is_torch = _torch_or_numpy(image)
+    magnitude = image.abs() if is_torch else xp.abs(image)
+    epsilon = xp.finfo(image.real.dtype).eps
+    return (
+        image / magnitude.clip(min=epsilon)
+        if is_torch
+        else image
+        / xp.clip(
+            magnitude,
+            epsilon,
+            None,
+        )
+    )
+
+
+def _relative_change(current: Any, previous: Any) -> float:
+    xp, is_torch = _torch_or_numpy(current)
+    if is_torch:
+        numerator = xp.linalg.vector_norm((current - previous).reshape(-1))
+        denominator = xp.linalg.vector_norm(previous.reshape(-1)).clamp_min(1e-12)
+        return float((numerator / denominator).detach().cpu())
+    numerator = xp.linalg.norm((current - previous).reshape(-1))
+    denominator = max(float(xp.linalg.norm(previous.reshape(-1))), 1e-12)
+    return float(numerator / denominator)
+
+
+def _matching_libraries(first: Any, second: Any) -> tuple[Any, bool]:
+    xp, is_torch = _torch_or_numpy(first)
+    second_xp, second_is_torch = _torch_or_numpy(second)
+    if xp is not second_xp and is_torch != second_is_torch:
+        raise TypeError("arrays must use the same array library")
+    return xp, is_torch
+
+
+def _unwrap_last(phase: Any, xp: Any, is_torch: bool) -> Any:
+    if not is_torch:
+        return xp.unwrap(phase, axis=-1)
+    delta = phase[..., 1:] - phase[..., :-1]
+    wrapped = (delta + xp.pi) % (2 * xp.pi) - xp.pi
+    wrapped = xp.where((wrapped == -xp.pi) & (delta > 0), xp.pi, wrapped)
+    correction = xp.cumsum(wrapped - delta, dim=-1)
+    result = phase.clone()
+    result[..., 1:] += correction
+    return result
+
+
+def _fit_phase_curves(
+    phase: Any,
+    order: int,
+    smoothing: float,
+    xp: Any,
+    is_torch: bool,
+) -> Any:
+    coordinate = (
+        xp.linspace(
+            -1,
+            1,
+            phase.shape[-1],
+            device=phase.device,
+            dtype=phase.dtype,
+        )
+        if is_torch
+        else xp.linspace(-1, 1, phase.shape[-1], dtype=phase.dtype)
+    )
+    design = (
+        xp.stack([coordinate**degree for degree in range(order + 1)], dim=1)
+        if is_torch
+        else xp.stack([coordinate**degree for degree in range(order + 1)], axis=1)
+    )
+    coefficients = (
+        xp.linalg.lstsq(design, phase.T).solution.T
+        if is_torch
+        else xp.linalg.lstsq(design, phase.T, rcond=None)[0].T
+    )
+    if smoothing:
+        filtered = coefficients.clone() if is_torch else coefficients.copy()
+        for index in range(1, filtered.shape[0]):
+            filtered[index] = (
+                smoothing * filtered[index - 1]
+                + (1.0 - smoothing) * coefficients[index]
+            )
+        coefficients = filtered
+    return coefficients @ design.T

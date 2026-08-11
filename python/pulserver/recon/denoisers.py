@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+__all__ = [
+    "LLR",
+    "TGV",
+    "TV",
+    "AverageDenoiser",
+    "Positive",
+    "Wavelet",
+]
+
 from collections.abc import Sequence
 from importlib import import_module
 from typing import Any
@@ -10,14 +19,6 @@ try:
     _ModuleBase = import_module("torch").nn.Module
 except ImportError:  # Keep the optional module importable without recon extras.
     _ModuleBase = object
-
-__all__ = [
-    "LLR",
-    "TGV",
-    "TV",
-    "AverageDenoiser",
-    "Wavelet",
-]
 
 
 def _models() -> Any:
@@ -130,6 +131,149 @@ class AverageDenoiser(_ModuleBase):
         for model in self.models[1:]:
             result = result + model(x, sigma, **kwargs)
         return result / len(self.models)
+
+
+class Positive(_ModuleBase):
+    r"""Indicator prior for the non-negative real or fixed-phase cone.
+
+    The proximity operator is an orthogonal projection, so this module can be
+    used directly with Pulserver's FISTA, ADMM, and PDHG implementations. For
+    complex data, positivity means a non-negative magnitude along ``phase``.
+    When no phase is supplied, it means a non-negative real value with zero
+    imaginary component.
+
+    Parameters
+    ----------
+    phase
+        Fixed complex phase map or real phase in radians. It must broadcast to
+        the complex-valued input.
+    viewed_as_real
+        Interpret channel pairs ``(real, imaginary)`` along dimension one as
+        complex channels, matching Pulserver's default MRI physics interface.
+    tolerance
+        Numerical tolerance used only when evaluating the indicator cost.
+    """
+
+    def __init__(
+        self,
+        phase: Any | None = None,
+        *,
+        viewed_as_real: bool = False,
+        tolerance: float = 1e-7,
+    ) -> None:
+        super().__init__()
+        if tolerance < 0.0:
+            raise ValueError("tolerance must be non-negative")
+        torch = import_module("torch")
+        selected_phase = None
+        if phase is not None:
+            selected_phase = torch.as_tensor(phase)
+            if not selected_phase.is_complex():
+                if not selected_phase.is_floating_point():
+                    selected_phase = selected_phase.to(torch.float32)
+                selected_phase = torch.polar(
+                    torch.ones_like(selected_phase),
+                    selected_phase,
+                )
+            else:
+                magnitude = selected_phase.abs()
+                epsilon = torch.finfo(selected_phase.real.dtype).eps
+                selected_phase = torch.where(
+                    magnitude > epsilon,
+                    selected_phase / magnitude.clamp_min(epsilon),
+                    torch.ones_like(selected_phase),
+                )
+        self.register_buffer("phase", selected_phase)
+        self.viewed_as_real = bool(viewed_as_real)
+        self.tolerance = float(tolerance)
+
+    def forward(self, value: Any, *_args: Any, **_kwargs: Any) -> Any:
+        """Evaluate the positivity indicator independently for each batch."""
+        torch = import_module("torch")
+        complex_value, restore = self._complex_view(value)
+        rotated = self._demodulate(complex_value)
+        feasible = rotated.real >= -self.tolerance
+        if rotated.is_complex():
+            feasible = feasible & (rotated.imag.abs() <= self.tolerance)
+        axes = tuple(range(1, feasible.ndim))
+        feasible = feasible.all(dim=axes) if axes else feasible
+        zero = torch.zeros_like(feasible, dtype=value.real.dtype)
+        infinity = torch.full_like(zero, torch.inf)
+        del restore
+        return torch.where(feasible, zero, infinity)
+
+    def prox(
+        self,
+        value: Any,
+        *_args: Any,
+        gamma: Any | None = None,
+        **_kwargs: Any,
+    ) -> Any:
+        """Project ``value`` onto the configured positivity cone."""
+        del gamma
+        complex_value, restore = self._complex_view(value)
+        phase = self._phase_for(complex_value)
+        rotated = complex_value if phase is None else complex_value * phase.conj()
+        projected = rotated.real.clamp_min(0)
+        if complex_value.is_complex():
+            projected = projected.to(complex_value.dtype)
+        if phase is not None:
+            projected = projected * phase
+        return restore(projected)
+
+    def prox_conjugate(
+        self,
+        value: Any,
+        *_args: Any,
+        gamma: Any,
+        lamb: Any = 1.0,
+        **_kwargs: Any,
+    ) -> Any:
+        """Project onto the convex conjugate through Moreau's identity."""
+        torch = import_module("torch")
+        selected_lambda = torch.as_tensor(
+            lamb,
+            device=value.device,
+            dtype=value.real.dtype,
+        )
+        if not bool(torch.all(selected_lambda > 0)):
+            if bool(torch.all(selected_lambda == 0)):
+                return torch.zeros_like(value)
+            raise ValueError("positivity weights must be non-negative")
+        return value - gamma * self.prox(value / gamma)
+
+    # %% private module subroutines
+
+    def _complex_view(self, value: Any) -> tuple[Any, Any]:
+        torch = import_module("torch")
+        if not self.viewed_as_real:
+            return value, lambda result: result
+        if value.ndim < 2 or value.shape[1] % 2:
+            raise ValueError(
+                "paired-real positivity requires an even channel dimension"
+            )
+        batch, channels, *spatial = value.shape
+        paired = value.reshape(batch, channels // 2, 2, *spatial).movedim(2, -1)
+        complex_value = torch.view_as_complex(paired.contiguous())
+
+        def restore(result: Any) -> Any:
+            result = torch.view_as_real(result).movedim(-1, 2)
+            return result.reshape(batch, channels, *spatial)
+
+        return complex_value, restore
+
+    def _phase_for(self, value: Any) -> Any | None:
+        if self.phase is None:
+            return None
+        if not value.is_complex():
+            raise TypeError(
+                "fixed-phase positivity requires complex or paired-real input"
+            )
+        return self.phase.to(device=value.device, dtype=value.dtype)
+
+    def _demodulate(self, value: Any) -> Any:
+        phase = self._phase_for(value)
+        return value if phase is None else value * phase.conj()
 
 
 # The LLR block/cycle-spinning design is adapted from SetsompopLab/MRF.

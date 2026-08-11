@@ -89,8 +89,9 @@ import pypulseq as pp
 from scipy.spatial.transform import Rotation
 
 from .._ext import _pulseqpp_wrapper as _cxx
-from . import _safety
+from . import _results, _safety
 from ._pulseqpp import to_upstream
+from ._results import RF_USES, AdcTimes, RfTimes, Waveforms, WaveformsAndTimes
 from ._rotate3d import rotate3D
 from ._transform_fov import TransformFOV
 
@@ -889,6 +890,7 @@ class Sequence:
         frame: str = "physical",
         sample_window_average: bool = False,
         dense: bool = True,
+        compat: bool = True,
     ):
         """Where every ADC sample sits in k-space.
 
@@ -971,7 +973,9 @@ class Sequence:
             block_range=block_range,
             frame=frame,
             sample_window_average=sample_window_average,
-            dense=False,
+            # The breakpoint-grid trajectory has nowhere to go in upstream's
+            # tuple, so it is only asked for when there is somewhere to put it.
+            dense=not compat,
         )
 
         k_traj = np.zeros((3, 0))
@@ -995,12 +999,24 @@ class Sequence:
                 gradient_offset=gradient_offset,
             )[1]
 
-        return (
-            result["k_adc"],
-            k_traj,
-            result["t_excitation"],
-            result["t_refocusing"],
-            result["t_adc"],
+        if compat:
+            return (
+                result["k_adc"],
+                k_traj,
+                result["t_excitation"],
+                result["t_refocusing"],
+                result["t_adc"],
+            )
+        return _results.KSpace(
+            k_traj_adc=result["k_adc"],
+            k_traj=k_traj,
+            t_excitation=result["t_excitation"],
+            t_refocusing=result["t_refocusing"],
+            t_adc=result["t_adc"],
+            k_traj_breakpoints=result["k_traj"],
+            t_breakpoints=result["t_ktraj"],
+            k_center=result["k_center"],
+            readout_center_sample=result["readout_center_sample"],
         )
 
     def _kspace(
@@ -1324,16 +1340,308 @@ class Sequence:
             "Sequence.calculate_kspacePP has been deprecated, use calculate_kspace instead"
         )
 
-    def waveforms(self, append_RF: bool = False, time_range: list[float] | None = None):
-        """The sequence's gradient waveforms. Not ported yet; see upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.waveforms`."""
-        raise NotImplementedError(_NOT_PORTED.format(what="waveforms"))
+    def waveforms(
+        self,
+        append_RF: bool = False,
+        time_range: list[float] | None = None,
+        *,
+        compat: bool = True,
+    ):
+        """The gradient waveforms, decompressed onto one time axis per channel.
 
-    def waveforms_and_times(self, append_RF: bool = False, time_range: list[float] | None = None):
-        """The sequence's waveforms with their time axes. Not ported yet; see
-        upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.waveforms_and_times`."""
-        raise NotImplementedError(_NOT_PORTED.format(what="waveforms_and_times"))
+        Parameters
+        ----------
+        append_RF : bool, optional
+            Append the complex RF waveform as a fourth channel.
+        time_range : list of float, optional
+            ``[start, stop]`` in seconds. The whole sequence by default.
+        compat : bool, optional
+            Upstream's return -- a list of ``(2, n)`` arrays -- by default.
+            ``False`` returns a :class:`~._results.Waveforms` instead, whose
+            channels are named rather than positional.
+
+        Notes
+        -----
+        An arbitrary gradient stored on the centres raster has its raster-edge
+        samples reconstructed here, which upstream leaves as a ``TODO``. A
+        trapezoid that was converted to a shape therefore comes back with its
+        corners where the sequence put them, rather than rounded over a raster
+        interval -- exactly, on a fixture, against upstream's 1.25% at the
+        corner, and in four samples rather than eighty-two. See
+        :class:`~._pulseqpp.RestoringSequence`.
+        """
+        first, last = self._window_for(time_range)
+        channels = self._upstream_window(first, last).waveforms(append_RF=append_RF)
+
+        if compat:
+            return channels
+        return Waveforms(
+            gx=channels[0],
+            gy=channels[1],
+            gz=channels[2],
+            rf=channels[3] if append_RF and len(channels) > 3 else None,
+        )
+
+    def waveforms_and_times(
+        self,
+        append_RF: bool = False,
+        time_range: list[float] | None = None,
+        *,
+        compat: bool = True,
+    ):
+        """The waveforms, plus when the RF pulses and ADC samples happen.
+
+        Parameters
+        ----------
+        append_RF : bool, optional
+            Append the complex RF waveform as a fourth gradient channel.
+        time_range : list of float, optional
+            ``[start, stop]`` in seconds. The whole sequence by default.
+        compat : bool, optional
+            Upstream's five-tuple ``(wave_data, tfp_excitation, tfp_refocusing,
+            t_adc, fp_adc)`` by default. ``False`` returns a
+            :class:`~._results.WaveformsAndTimes`.
+
+        Notes
+        -----
+        **Upstream's tuple cannot say everything the sequence knows**, and
+        ``compat=False`` is where the rest of it comes out:
+
+        - *Every* RF use, not two. Upstream sorts RF into excitation and
+          refocusing and silently drops inversion, saturation, preparation and
+          "other" -- an inversion pulse does not appear in its answer at all.
+        - ``pm_adc``, the per-sample ADC phase modulation, which MATLAB returns
+          as a sixth output and PyPulseq does not return at all.
+        - The echo centres, which neither returns. MATLAB reconstructs
+          ``2*t_refocusing - t_excitation`` in ``calcMomentsBtensor`` and
+          carries its own ``TODO: fixme for double-refocused sequences``; the
+          value here is the ADC sample nearest k-space zero, found by the C
+          core walking the real trajectory. It is computed on first read, not
+          with the rest, because it needs that trajectory.
+        """
+        first, last = self._window_for(time_range)
+        window = self._upstream_window(first, last)
+
+        channels = window.waveforms(append_RF=append_RF)
+        # The window carries the time in front of it as a lead-in block
+        # numbered 0, so walking it from zero already gives absolute times.
+        rf = self._rf_times_of(window, 0.0)
+        adc = self._adc_times_of(window, 0.0, block_range=(first, last))
+
+        if compat:
+            return (
+                channels,
+                rf.of("excitation", "undefined").tfp,
+                rf.of("refocusing").tfp,
+                adc.t,
+                adc.fp,
+            )
+        return WaveformsAndTimes(
+            waveforms=Waveforms(
+                gx=channels[0],
+                gy=channels[1],
+                gz=channels[2],
+                rf=channels[3] if append_RF and len(channels) > 3 else None,
+            ),
+            rf=rf,
+            adc=adc,
+        )
+
+    def rf_times(self, time_range: list[float] | None = None, *, compat: bool = True):
+        """When each RF pulse reaches its centre, and with what phase.
+
+        Parameters
+        ----------
+        time_range : list of float, optional
+            ``[start, stop]`` in seconds. The whole sequence by default.
+        compat : bool, optional
+            Upstream's ``(t_excitation, fp_excitation, t_refocusing,
+            fp_refocusing)`` by default, which describes two of Pulseq's seven
+            RF uses and drops the rest. ``False`` returns a
+            :class:`~._results.RfTimes` covering all of them.
+        """
+        first, last = self._window_for(time_range)
+        window = self._upstream_window(first, last)
+        pulses = self._rf_times_of(window, 0.0)
+
+        if not compat:
+            return pulses
+
+        # Upstream counts an untagged pulse as an excitation.
+        excitation = pulses.of("excitation", "undefined")
+        refocusing = pulses.of("refocusing")
+        return (
+            list(excitation.t),
+            np.vstack((excitation.freq_offset, excitation.phase_offset)),
+            list(refocusing.t),
+            np.vstack((refocusing.freq_offset, refocusing.phase_offset)),
+        )
+
+    def adc_times(self, time_range: list[float] | None = None, *, compat: bool = True):
+        """When every ADC sample is taken.
+
+        Parameters
+        ----------
+        time_range : list of float, optional
+            ``[start, stop]`` in seconds. The whole sequence by default.
+        compat : bool, optional
+            Upstream's ``(t_adc, fp_adc)`` by default, where ``fp_adc`` is one
+            row per ADC *event* carrying its raw frequency and phase offsets.
+            ``False`` returns an :class:`~._results.AdcTimes`, which adds the
+            per-*sample* phase -- ppm terms, phase modulation and accumulated
+            ``2*pi*f*t`` folded in, the number a demodulator wants.
+        """
+        first, last = self._window_for(time_range)
+        window = self._upstream_window(first, last)
+        samples = self._adc_times_of(window, 0.0, block_range=(first, last))
+        return samples if not compat else (samples.t, samples.fp)
+
+    def get_gradients(
+        self,
+        trajectory_delay: float | list[float] | np.ndarray = 0,
+        gradient_offset: float | list[float] | np.ndarray = 0,
+        time_range: list[float] | None = None,
+    ) -> list:
+        """The gradients as :class:`scipy.interpolate.PPoly` piecewise polynomials.
+
+        Upstream's, evaluated on this class's waveforms -- so the raster-edge
+        reconstruction :meth:`waveforms` performs is in them, and in everything
+        built on them.
+        """
+        first, last = self._window_for(time_range)
+        return self._upstream_window(first, last).get_gradients(
+            trajectory_delay=trajectory_delay,
+            gradient_offset=gradient_offset,
+        )
+
+    # -- the walk behind rf_times / adc_times ----------------------------
+
+    def _window_for(self, time_range) -> tuple[int, int]:
+        """``time_range`` as a 1-based inclusive block range."""
+        if time_range is None:
+            return 1, self.num_blocks
+        if len(time_range) != 2:
+            raise ValueError("Time range must be list of two elements")
+        if time_range[0] > time_range[1]:
+            raise ValueError("End time of time_range must be after begin time")
+        return self._blocks_over(float(time_range[0]), float(time_range[1]))
+
+    def _rf_times_of(self, window: pp.Sequence, elapsed: float) -> RfTimes:
+        """Walk a window's RF pulses into one flat table, use tags kept.
+
+        The centre is :func:`pypulseq.calc_rf_center`'s, and the phase carries
+        the ``2*pi*f*t_centre`` term to it -- upstream's convention and
+        MATLAB's, so ``compat=True`` reproduces upstream exactly.
+        """
+        from pypulseq.calc_rf_center import calc_rf_center
+
+        gamma_b0 = self.system.gamma * self.system.B0
+        times: list[float] = []
+        frequencies: list[float] = []
+        phases: list[float] = []
+        uses: list[str] = []
+        blocks: list[int] = []
+
+        for number in window.block_events:
+            block = window.get_block(number)
+            rf = getattr(block, "rf", None)
+            if rf is not None:
+                centre = calc_rf_center(rf)[0]
+                frequency = rf.freq_offset + rf.freq_ppm * 1e-6 * gamma_b0
+                phase = rf.phase_offset + rf.phase_ppm * 1e-6 * gamma_b0
+
+                times.append(elapsed + rf.delay + centre)
+                frequencies.append(frequency)
+                phases.append(phase + 2 * np.pi * frequency * centre)
+                uses.append(_rf_use(rf))
+                blocks.append(number)
+            elapsed += window.block_durations[number]
+
+        return RfTimes(
+            t=np.asarray(times, dtype=float),
+            freq_offset=np.asarray(frequencies, dtype=float),
+            phase_offset=np.asarray(phases, dtype=float),
+            use=tuple(uses),
+            block=np.asarray(blocks, dtype=int),
+        )
+
+    def _adc_times_of(
+        self, window: pp.Sequence, elapsed: float, *, block_range: tuple[int, int]
+    ) -> AdcTimes:
+        """Walk a window's ADC events into sample times and per-sample phase."""
+        gamma_b0 = self.system.gamma * self.system.B0
+        sample_times: list[np.ndarray] = []
+        sample_phases: list[np.ndarray] = []
+        modulations: list[np.ndarray] = []
+        frequencies: list[float] = []
+        phases: list[float] = []
+        blocks: list[int] = []
+        counts: list[int] = []
+
+        for number in window.block_events:
+            block = window.get_block(number)
+            adc = getattr(block, "adc", None)
+            if adc is not None:
+                count = int(adc.num_samples)
+                # Samples sit half a dwell into their window -- Siemens' and
+                # Pulseq's shared convention, not a midpoint approximation.
+                within = (np.arange(count) + 0.5) * adc.dwell
+                frequency = adc.freq_offset + adc.freq_ppm * 1e-6 * gamma_b0
+                phase = adc.phase_offset + adc.phase_ppm * 1e-6 * gamma_b0
+
+                modulation = getattr(adc, "phase_modulation", None)
+                if modulation is None or len(modulation) == 0:
+                    modulation = np.zeros(count)
+                modulation = np.asarray(modulation, dtype=float).ravel()
+
+                sample_times.append(elapsed + adc.delay + within)
+                sample_phases.append(phase + modulation + 2 * np.pi * frequency * within)
+                modulations.append(modulation)
+                # Upstream's fp_adc is the raw event offsets, no ppm folded in.
+                frequencies.append(adc.freq_offset)
+                phases.append(adc.phase_offset)
+                blocks.append(number)
+                counts.append(count)
+            elapsed += window.block_durations[number]
+
+        def _stack(pieces, width=None):
+            if pieces:
+                return np.concatenate(pieces)
+            return np.zeros(0) if width is None else np.zeros((0, width))
+
+        return AdcTimes(
+            t=_stack(sample_times),
+            freq_offset=np.asarray(frequencies, dtype=float),
+            phase_offset=np.asarray(phases, dtype=float),
+            phase_modulation=_stack(modulations),
+            sample_phase=_stack(sample_phases),
+            block=np.asarray(blocks, dtype=int),
+            num_samples=np.asarray(counts, dtype=int),
+            _echoes=lambda: self._echo_centers(block_range),
+        )
+
+    def _echo_centers(self, block_range: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
+        """``(sample index, time)`` of the k-space centre of each readout.
+
+        The C core already reports which sample of each readout is nearest
+        k-space zero -- ``readout_center_sample``, which it derives while
+        integrating the trajectory. Reading it back is cheaper and more honest
+        than re-deriving it here, and it is the same number the recon and the
+        scanner use.
+        """
+        first, last = block_range
+        result = self._kspace(block_range=(first, last), dense=False)
+
+        centers = np.asarray(result["readout_center_sample"], dtype=int)
+        counts = np.asarray(result["readout_samples"], dtype=int)
+        starts = np.concatenate(([0], np.cumsum(counts)[:-1])).astype(int)
+        t_adc = np.asarray(result["t_adc"], dtype=float)
+
+        absolute = starts + centers
+        inside = (absolute >= 0) & (absolute < t_adc.size)
+        times = np.full(absolute.shape, np.nan)
+        times[inside] = t_adc[absolute[inside]]
+        return centers, times
 
     def check_timing(self, print_errors: bool = False):
         """Check every block's timing against the raster. Not ported yet;
@@ -1353,6 +1661,7 @@ class Sequence:
         do_plots: bool = True,
         *,
         tr: str | int | None = None,
+        compat: bool = True,
     ):
         """Peripheral nerve stimulation over the sequence, or over one TR.
 
@@ -1429,7 +1738,7 @@ class Sequence:
                 # current, so the thresholds go on afterwards rather than
                 # forking its plotting.
                 _safety.overlay_pns_thresholds()
-            return answer
+            return answer if compat else _results.Pns(*answer)
 
         if time_range is not None:
             raise ValueError(
@@ -1453,7 +1762,8 @@ class Sequence:
         if do_plots:
             self._plot_pns(structure.waveform(tr), components, raster)
 
-        return bool(np.all(norm < 1)), norm, components, times
+        verdict = (bool(np.all(norm < 1)), norm, components, times)
+        return verdict if compat else _results.Pns(*verdict)
 
     @staticmethod
     def _native_pns(structure: _Structure, hardware: object, mode: int, index: int) -> dict:
@@ -1507,6 +1817,7 @@ class Sequence:
         tr: str | int | None = None,
         resonance_lines: bool = False,
         bands: list | None = None,
+        compat: bool = True,
     ):
         """The gradient spectrum of the sequence, or of one TR.
 
@@ -1595,7 +1906,7 @@ class Sequence:
                     "spectrum exists only for a repetition time, not for a stretch of timeline"
                 )
             first, last = self._blocks_over(*_span(time_range if time_range else (0.0, np.inf)))
-            return calculate_gradient_spectrum(
+            spectrum = calculate_gradient_spectrum(
                 self._upstream_window(first, last),
                 max_frequency=max_frequency,
                 window_width=window_width,
@@ -1606,6 +1917,7 @@ class Sequence:
                 use_derivative=use_derivative,
                 acoustic_resonances=acoustic_resonances,
             )
+            return spectrum if compat else _results.GradientSpectrum(*spectrum)
 
         if time_range is not None:
             raise ValueError(
@@ -1640,7 +1952,7 @@ class Sequence:
             acoustic_resonances=acoustic_resonances,
         )
         if not resonance_lines:
-            return spectrum
+            return spectrum if compat else _results.GradientSpectrum(*spectrum)
 
         if bands is None:
             bands = [
@@ -1656,6 +1968,12 @@ class Sequence:
         if plot and combine_mode != "none":
             _safety.overlay_resonance_lines(resonances, max_frequency=max_frequency)
 
+        if not compat:
+            return _results.GradientSpectrum(*spectrum, resonance_lines=resonances)
+        # Upstream's four-tuple with a fifth element on the end. This is the
+        # shape compat=False exists to retire -- it changes the length of the
+        # caller's unpack -- and it survives only because it is what
+        # resonance_lines already returned before the flag existed.
         return (*spectrum, resonances)
 
     def _resonance_lines(
@@ -1719,6 +2037,203 @@ class Sequence:
         upstream
         :meth:`pypulseq.Sequence.sequence.Sequence.find_block_by_time`."""
         raise NotImplementedError(_NOT_PORTED.format(what="find_block_by_time"))
+
+    def install(self, target: str | None = None, clear_cache: bool = False, **kwargs) -> None:
+        """Copy the sequence to a scanner. Not ported; see upstream
+        :meth:`pypulseq.Sequence.sequence.Sequence.install`.
+
+        Deliberately not implemented rather than pending: upstream's installer
+        speaks to Siemens scanners over their own transports, and this project
+        reaches its scanner through the interpreter and the PSD instead. Write
+        the file and take it there.
+        """
+        raise NotImplementedError(
+            "Sequence.install is upstream PyPulseq's Siemens scanner transfer and has "
+            "no meaning here -- write() the sequence and deploy it through the "
+            "interpreter instead."
+        )
+
+    def paper_plot(
+        self,
+        time_range: tuple[float] = (0, np.inf),
+        line_width: float = 1.2,
+        axes_color: tuple[float] = (0.5, 0.5, 0.5),
+        rf_color: str = "black",
+        gx_color: str = "blue",
+        gy_color: str = "red",
+        gz_color: tuple[float] = (0, 0.5, 0.3),
+        rf_plot: str = "abs",
+    ):
+        """Upstream's publication-style pulse-diagram plot, over a window.
+
+        Drawn by upstream from the same decoded window :meth:`plot` uses, so
+        rotations and RF shims are resolved into what it shows.
+        """
+        start, stop = _span(time_range)
+        first, last = self._blocks_over(start, stop)
+        return self._upstream_window(first, last).paper_plot(
+            time_range=time_range,
+            line_width=line_width,
+            axes_color=axes_color,
+            rf_color=rf_color,
+            gx_color=gx_color,
+            gy_color=gy_color,
+            gz_color=gz_color,
+            rf_plot=rf_plot,
+        )
+
+    def get_extension_type_ID(self, extension_string: str) -> int:
+        """The numeric id for an extension name, assigning one if it is new."""
+        return int(self._native.extension_type_id(str(extension_string)))
+
+    def get_extension_type_string(self, extension_id: int) -> str:
+        """The extension name for a numeric id."""
+        name = self._native.extension_type_name(int(extension_id))
+        if not name:
+            raise ValueError(f"Extension for the given ID {extension_id} is unknown")
+        return name
+
+    def set_extension_string_ID(self, extension_str: str, extension_id: int) -> None:
+        """Bind an extension name to a numeric id."""
+        native = self._native
+        if native.find_extension_type_id(str(extension_str)) or native.extension_type_name(
+            int(extension_id)
+        ):
+            raise ValueError("Numeric or string ID has already been used")
+        native.set_extension_type_id(str(extension_str), int(extension_id))
+        self._touch()
+
+    def get_raw_block_content_IDs(self, block_index: int) -> SimpleNamespace:
+        """One block's raw library ids, without decoding any of them.
+
+        The block table already *is* this, so it is read straight out rather
+        than assembled: the row is ``(rf, gx, gy, gz, adc, extension)``, and
+        upstream's leading legacy delay id is always zero from Pulseq 1.4 on.
+        """
+        if not 1 <= int(block_index) <= self.num_blocks:
+            raise IndexError(f"no block {block_index} in a sequence of {self.num_blocks}")
+        row = self._native.block_events()[int(block_index) - 1]
+        return SimpleNamespace(
+            block_duration=float(self._native.block_durations()[int(block_index) - 1]),
+            rf=int(row[0]),
+            gx=int(row[1]),
+            gy=int(row[2]),
+            gz=int(row[3]),
+            adc=int(row[4]),
+            ext=int(row[5]),
+        )
+
+    def sequence_descriptor(self, *, subsequence: int = 0):
+        """The state-machine description of one repetition time.
+
+        Returns a :class:`~pulserver.recon.seqdesc.SequenceDescription`: one
+        event per block over the canonical pass, each carrying what a Bloch or
+        EPG simulation needs and nothing it does not -- RF use, flip
+        amplitude, phase and frequency for the pulses; role, k-space-zero
+        timing and echo flag for the readouts.
+
+        Notes
+        -----
+        **This is the same object the reconstruction receives**, not a
+        parallel description of it.
+        :func:`~pulserver.recon.seqdesc.decode_sequence_description` builds one
+        from the SEQDESC waveforms the scanner streams; this builds one from a
+        sequence that has not been written yet, let alone run. Both come out of
+        ``pulseg_get_sequence_description`` in the C core, so a simulation
+        driven from a design script and a simulation driven from a scan see
+        the same numbers -- which is the only reason comparing them means
+        anything.
+
+        **Gradient waveforms are never decompressed here.** A simulation wants
+        flip angles, repetition times, phases and ADC roles; making it pay for
+        the waveform decompression it would immediately discard is the one
+        performance mistake this method could make.
+
+        The description is cached against the sequence's revision, so asking
+        repeatedly costs one build.
+        """
+        from ..recon.seqdesc import (
+            AdcRole,
+            EventType,
+            RfDefinition,
+            RfShape,
+            RfUse,
+            SequenceDescription,
+            SequenceEvent,
+        )
+        from .._ext._pulseg_wrapper import _get_rf_definitions, _get_sequence_description
+
+        structure = self._structure_for("sequence_descriptor")
+        raw = _get_sequence_description(structure.collection, int(subsequence))
+
+        events = tuple(
+            SequenceEvent(
+                type=EventType(int(kind)),
+                timestamp_us=float(stamp),
+                params=tuple(float(value) for value in row),
+            )
+            for kind, stamp, row in zip(raw["type"], raw["timestamp_us"], raw["params"])
+        )
+
+        definitions = {}
+        for entry in _get_rf_definitions(structure.collection, int(subsequence)):
+            channels = max(int(entry["num_channels"]), 1)
+            magnitude = np.asarray(entry["magnitude"], dtype=np.float32)
+            # Channel-major; a simulation reads the first transmit channel,
+            # and a shim is a per-channel scaling on top of it.
+            samples = magnitude.size // channels
+            phase = np.asarray(entry["phase_turns"], dtype=np.float32)
+            times = np.asarray(entry["time_us"], dtype=np.float32)
+
+            definitions[int(entry["rf_def_id"])] = RfDefinition(
+                id=int(entry["rf_def_id"]),
+                # Bandwidth is a cache-section field, derived when the
+                # description is written for recon rather than held on the
+                # collection. Nothing a simulation does needs it -- it
+                # classifies slice selectivity -- so it is left at zero rather
+                # than guessed at.
+                bandwidth_hz=0.0,
+                num_bands=1,
+                # Eight slots, all zero -- the width the SEQDESC wire format
+                # carries (PULSEG_MAX_BANDS), so a description built here and
+                # one decoded from a scanner stream compare equal instead of
+                # differing over a field neither of them uses.
+                band_frequency_offsets_hz=(0.0,) * 8,
+                band_bandwidth_hz=0.0,
+                total_b1sq_power=0.0,
+                magnitude=RfShape(samples, magnitude[:samples]),
+                phase=RfShape(samples, phase[:samples]) if phase.size else None,
+                time=RfShape(times.size, times) if times.size else None,
+            )
+
+        return SequenceDescription(
+            subsequence_index=int(raw["subseq_idx"]),
+            tr_duration_us=float(raw["tr_duration_us"]),
+            events=events,
+            rf_definitions=definitions,
+            shim_definitions={},
+        )
+
+    def sequence_parameters(self) -> dict:
+        """Scan-global timing and flip-angle extremes, from the C core.
+
+        ``min_te_us``, ``min_tr_us``, ``max_tr_us``, ``max_flip_angle_deg`` and
+        ``total_scan_time_us``, aggregated over every subsequence.
+        """
+        from .._ext._pulseg_wrapper import _get_sequence_parameters
+
+        return _get_sequence_parameters(self._structure_for("sequence_parameters").collection)
+
+    def rf_from_lib_data(self, lib_data: list, use: str = "") -> SimpleNamespace:
+        """Decode one raw RF library row into an event, upstream's way.
+
+        The row layout is shared, so this is upstream's own decoder run against
+        this sequence's rasters rather than a second implementation of it.
+        """
+        carrier = pp.Sequence(system=self.system)
+        carrier.rf_raster_time = self._native.rf_raster_time
+        carrier.shape_library = self._upstream_window(1, self.num_blocks).shape_library
+        return carrier.rf_from_lib_data(lib_data, use)
 
     # -- internals -------------------------------------------------------
 
@@ -1981,6 +2496,22 @@ class _Structure:
                 f"tr={index} is out of range; the sequence holds {self.num_instances} {named}"
             )
         return _safety.AMPLITUDE_MODES["actual"], index
+
+
+def _rf_use(rf: SimpleNamespace) -> str:
+    """One decoded RF pulse's use tag, as one of :data:`~._results.RF_USES`.
+
+    A row with no use character reads back as ``"undefined"``, which is a
+    distinct thing from ``"other"``: ``"other"`` was chosen by whoever wrote
+    the sequence, ``"undefined"`` means nobody said. Upstream folds the latter
+    in with excitation, and :meth:`Sequence.rf_times` reproduces that under
+    ``compat=True`` -- but the tag itself is kept, so a caller who wants to
+    know can find out.
+    """
+    use = getattr(rf, "use", None)
+    if use in RF_USES:
+        return use
+    return "undefined"
 
 
 def _span(time_range) -> tuple[float, float]:

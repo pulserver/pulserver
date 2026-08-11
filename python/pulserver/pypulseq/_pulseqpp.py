@@ -24,14 +24,18 @@ their ids cross with them.
 
 from __future__ import annotations
 
-__all__ = ["to_native", "to_upstream"]
+__all__ = ["RestoringSequence", "to_native", "to_upstream"]
 
+import warnings
 from collections.abc import Mapping
 
 import numpy as np
 import pypulseq as pp
+from pypulseq import eps
+from pypulseq.utils.cumsum import cumsum
 
 from .._ext import _pulseqpp_wrapper as _cxx
+from ._shapes import restore_additional_shape_samples
 
 #: Extension section name -> the attribute a PyPulseq sequence keeps it under.
 _SPECIFICATIONS = {
@@ -415,7 +419,7 @@ def to_upstream(seq, *, first: int = 1, last: int | None = None, numbers=None, l
     if lead_in is None:
         lead_in = float(durations[: first - 1].sum())
 
-    upstream = pp.Sequence(system=seq.system)
+    upstream = RestoringSequence(system=seq.system)
     # The rasters the blocks were laid out on, which after a read are the
     # file's rather than the system's.
     upstream.rf_raster_time = native.rf_raster_time
@@ -661,3 +665,178 @@ def _take_extension_row(native, upstream, name: str, reference: int) -> bool:
     library = upstream.label_set_library if name == "LABELSET" else upstream.label_inc_library
     library.data[reference] = np.array([value, label_id], dtype=float)
     return True
+
+
+class RestoringSequence(pp.Sequence):
+    """A PyPulseq sequence whose ``waveforms()`` restores raster-edge samples.
+
+    Upstream's :meth:`pypulseq.Sequence.waveforms` carries a
+    ``TODO: Implement restoreAdditionalShapeSamples`` where MATLAB reconstructs
+    the samples on the gradient raster *edges* of an arbitrary gradient stored
+    on the centres raster. Without that reconstruction a trapezoid that was
+    converted to a shape comes back with its corners rounded over one raster
+    interval, and the peak slew rate read off it is lower than the one the
+    sequence asks for.
+
+    Overriding ``waveforms()`` and nothing else is deliberate, and follows
+    :class:`~._safety.TRSequence`: every upstream analysis path reaches the
+    gradients through ``waveforms()`` -> ``get_gradients()`` -> ``PPoly``, so
+    ``calculate_pns`` and ``calculate_gradient_spectrum`` inherit the
+    reconstruction without knowing this class exists.
+
+    On a shape the reconstruction does not describe -- a spiral, most often --
+    :func:`~._shapes.restore_additional_shape_samples` falls back to the
+    waveform as stored, which is what upstream returns unconditionally. So this
+    agrees with upstream everywhere except on the shapes upstream approximates.
+    """
+
+    def waveforms(self, append_RF: bool = False, time_range=None) -> tuple[np.ndarray, ...]:
+        """Upstream's signature and upstream's return, on MATLAB's assembler."""
+        pieces: list[list[np.ndarray]] = [[] for _ in range(4 if append_RF else 3)]
+
+        # A time_range starts the clock at its first block's start, not at zero,
+        # so the times returned stay absolute.
+        elapsed = self._elapsed_before(time_range)
+        for number in self._blocks_in(time_range):
+            block = self.get_block(number)
+            for axis, channel in enumerate(("gx", "gy", "gz")):
+                gradient = getattr(block, channel)
+                if gradient is not None:
+                    piece = self._gradient_piece(gradient, elapsed, number)
+                    if piece is not None:
+                        pieces[axis].append(piece)
+
+            if append_RF and block.rf is not None:
+                pieces[-1].append(self._rf_piece(block.rf, elapsed))
+
+            elapsed += self.block_durations[number]
+
+        return [self._join(piece) for piece in pieces]
+
+    # -- internals -------------------------------------------------------
+
+    def _blocks_in(self, time_range) -> list:
+        """The block numbers overlapping ``time_range``, upstream's way.
+
+        Reproduced rather than called because upstream inlines this identically
+        into ``waveforms``, ``rf_times`` and ``adc_times``, and the three have
+        to agree about which blocks they are looking at or their outputs do not
+        line up with each other.
+        """
+        if time_range is None:
+            return list(self.block_events)
+        if len(time_range) != 2:
+            raise ValueError('Time range must be list of two elements')
+        if time_range[0] > time_range[1]:
+            raise ValueError('End time of time_range must be after begin time')
+
+        spans = np.array(list(self.block_durations.values()))
+        ends = np.cumsum(spans)
+        first = np.searchsorted(ends, time_range[0])
+        last = np.searchsorted(ends - spans, time_range[1], side='right')
+        return list(self.block_durations.keys())[first:last]
+
+    def _elapsed_before(self, time_range) -> float:
+        """The time in front of the first block ``_blocks_in`` returns."""
+        if time_range is None:
+            return 0.0
+        spans = np.array(list(self.block_durations.values()))
+        ends = np.cumsum(spans)
+        first = np.searchsorted(ends, time_range[0])
+        if first >= spans.size:
+            return 0.0
+        return float(ends[first] - spans[first])
+
+    def _gradient_piece(self, gradient, elapsed: float, number: int):
+        """One gradient's ``(2, n)`` contribution to its channel."""
+        if gradient.type == 'grad':
+            on_centres = gradient.tt / self.grad_raster_time + 0.5
+            if np.all(np.abs(on_centres - np.arange(1, len(on_centres) + 1)) < eps):
+                # Arbitrary gradient on the centres raster: the case upstream
+                # approximates and MATLAB reconstructs.
+                times, amplitudes = restore_additional_shape_samples(
+                    gradient.tt,
+                    gradient.waveform,
+                    gradient.first,
+                    gradient.last,
+                    self.grad_raster_time,
+                    number,
+                )
+                return np.array([elapsed + gradient.delay + times, amplitudes])
+
+            if abs(on_centres[0] - 1.0) < eps:
+                # An oversampled rasterised gradient: its first sample sits on
+                # the half raster, so the stored shape is missing the endpoints.
+                # MATLAB adds them back; upstream's else-branch does not.
+                return np.array(
+                    [
+                        elapsed
+                        + gradient.delay
+                        + np.concatenate(([0.0], gradient.tt, [gradient.shape_dur])),
+                        np.concatenate(([gradient.first], gradient.waveform, [gradient.last])),
+                    ]
+                )
+
+            # An extended trapezoid, already on the raster edges.
+            return np.array([elapsed + gradient.delay + gradient.tt, gradient.waveform])
+
+        if abs(gradient.flat_time) > eps:
+            return np.vstack(
+                (
+                    cumsum(
+                        elapsed + gradient.delay,
+                        gradient.rise_time,
+                        gradient.flat_time,
+                        gradient.fall_time,
+                    ),
+                    gradient.amplitude * np.array([0, 1, 1, 0]),
+                )
+            )
+
+        if abs(gradient.rise_time) > eps and abs(gradient.fall_time) > eps:
+            return np.vstack(
+                (
+                    cumsum(elapsed + gradient.delay, gradient.rise_time, gradient.fall_time),
+                    gradient.amplitude * np.array([0, 1, 0]),
+                )
+            )
+
+        if abs(gradient.amplitude) > eps:
+            warnings.warn(
+                f"'empty' gradient with non-zero magnitude in block {number}",
+                stacklevel=2,
+            )
+        return None
+
+    def _rf_piece(self, rf, elapsed: float) -> np.ndarray:
+        """One RF pulse as complex samples, zero-padded at both ends."""
+        gamma_b0 = self.system.gamma * self.system.B0
+        frequency = rf.freq_offset + rf.freq_ppm * 1e-6 * gamma_b0
+        phase = rf.phase_offset + rf.phase_ppm * 1e-6 * gamma_b0
+
+        piece = np.array(
+            [
+                elapsed + rf.delay + rf.t,
+                rf.signal * np.exp(1j * (phase + 2 * np.pi * frequency * rf.t)),
+            ]
+        )
+        # A pulse that starts or ends away from zero would otherwise be drawn,
+        # and integrated, as though it stepped there instantaneously.
+        if abs(rf.signal[0]) > 0:
+            lead = np.array([[piece[0, 0] - 0.1 * self.system.rf_raster_time], [0]])
+            piece = np.hstack((lead, piece))
+        if abs(rf.signal[-1]) > 0:
+            tail = np.array([[piece[0, -1] + 0.1 * self.system.rf_raster_time], [0]])
+            piece = np.hstack((piece, tail))
+        return piece
+
+    @staticmethod
+    def _join(pieces: list[np.ndarray]) -> np.ndarray:
+        """Concatenate one channel's pieces, dropping duplicated join samples."""
+        if not pieces:
+            return np.zeros((2, 0))
+        joined = [pieces[0]] + [
+            current if previous[0, -1] + eps < current[0, 0] else current[:, 1:]
+            for previous, current in zip(pieces[:-1], pieces[1:])
+        ]
+        return np.concatenate(joined, axis=1)

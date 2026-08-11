@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-__all__ = ["NLINV", "NLINVPhysics", "NLINVResult"]
+__all__ = [
+    "NLINV",
+    "NLINVPhysics",
+    "NLINVResult",
+    "PhasePoleCorrection",
+    "WavePSF",
+    "WavePSFCalibration",
+    "WavePSFResult",
+]
 
 from dataclasses import dataclass
 from math import prod
@@ -14,6 +22,8 @@ import deepinv
 
 from .optim import IRGNM, ConjugateGradient
 from .physics import NonCartesian2D, NonCartesian3D
+from ._phase_poles import PhasePoleCorrection
+from ._wave_psf import WavePSF, WavePSFCalibration, WavePSFResult
 
 
 @dataclass(frozen=True)
@@ -133,6 +143,18 @@ class NLINVPhysics(deepinv.physics.Physics):
         state[:, 0] = 1.0
         return self._join_state(state[:, :1], state[:, 1:])
 
+    def state_from_physical(
+        self,
+        image: torch.Tensor,
+        coils: torch.Tensor,
+    ) -> torch.Tensor:
+        """Encode an image and physical coil maps into the joint state."""
+        if image.shape != (coils.shape[0], 1, *self.image_shape):
+            raise ValueError("image shape does not match NLINV physics")
+        if coils.shape != (image.shape[0], self.n_coils, *self.image_shape):
+            raise ValueError("coil-map shape does not match NLINV physics")
+        return self._join_state(image, self._sobolev_inverse(coils))
+
     # %% private module subroutines
 
     def _split_state(self, state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -175,6 +197,15 @@ class NLINVPhysics(deepinv.physics.Physics):
         axes = tuple(range(-len(self.image_shape), 0))
         return self.sobolev_weights.to(coils.dtype).conj() * _fftc(coils, axes)
 
+    def _sobolev_inverse(self, coils: torch.Tensor) -> torch.Tensor:
+        axes = tuple(range(-len(self.image_shape), 0))
+        weights = self.sobolev_weights.to(
+            device=coils.device,
+            dtype=coils.real.dtype,
+        )
+        epsilon = torch.finfo(weights.dtype).tiny
+        return _fftc(coils, axes) / weights.clamp_min(epsilon)
+
 
 class NLINV(torch.nn.Module):
     """Estimate coil sensitivities with IRGNM-CG.
@@ -202,6 +233,9 @@ class NLINV(torch.nn.Module):
         Enable the mri-nufft Toeplitz normal for non-Cartesian calibration.
     backend
         MRI-NUFFT backend. ``"auto"`` selects FINUFFT or Torch CUFINUFFT.
+    phase_pole_iteration
+        Apply BART-style phase-pole correction after this outer iteration.
+        Zero applies it after every iteration and ``None`` disables it.
     """
 
     def __init__(
@@ -218,6 +252,7 @@ class NLINV(torch.nn.Module):
         sobolev_degree: int = 32,
         toeplitz: bool = True,
         backend: str = "auto",
+        phase_pole_iteration: int | None = None,
     ) -> None:
         super().__init__()
         if spatial_ndim not in {2, 3}:
@@ -232,6 +267,11 @@ class NLINV(torch.nn.Module):
             raise ValueError("damping must be non-negative and decay must be in (0, 1]")
         if sobolev_width <= 0.0 or sobolev_degree <= 0:
             raise ValueError("Sobolev width and degree must be positive")
+        if (
+            phase_pole_iteration is not None
+            and not 0 <= phase_pole_iteration <= max_iter
+        ):
+            raise ValueError("phase_pole_iteration must lie between zero and max_iter")
         self.spatial_ndim = spatial_ndim
         self.calibration_width = calibration_width
         self.max_iter = max_iter
@@ -243,6 +283,8 @@ class NLINV(torch.nn.Module):
         self.sobolev_degree = int(sobolev_degree)
         self.toeplitz = bool(toeplitz)
         self.backend = backend
+        self.phase_pole_iteration = phase_pole_iteration
+        self.phase_poles = PhasePoleCorrection(spatial_ndim=spatial_ndim)
 
     def forward(
         self,
@@ -321,6 +363,7 @@ class NLINV(torch.nn.Module):
             ),
             damping=damping,
             max_iter=self.max_iter,
+            iteration_callback=self._phase_pole_callback,
         )
         state = solver(scaled_data, physics, init=initialization)
         image, coils = physics.physical(state)
@@ -368,6 +411,19 @@ class NLINV(torch.nn.Module):
             image=reconstructed,
             calibration=calibration,
         )
+
+    def _phase_pole_callback(
+        self,
+        state: torch.Tensor,
+        physics: NLINVPhysics,
+        completed: int,
+    ) -> torch.Tensor:
+        selected = self.phase_pole_iteration
+        if selected is None or (selected != 0 and selected != completed):
+            return state
+        image, coils = physics.physical(state)
+        image, coils = self.phase_poles(image, coils)
+        return physics.state_from_physical(image, coils)
 
     # %% private module subroutines
 

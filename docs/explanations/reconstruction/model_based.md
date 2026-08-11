@@ -68,6 +68,62 @@ Hermitian field over phase/partition locations in hybrid k-space. It does not
 allocate a full echo grid or a dense location-by-rank-by-rank kernel. Multiple
 ESPIRiT maps are summed in the SENSE forward and retained in its adjoint.
 
+### Wave PSF calibration
+
+{class}`pulserver.recon.calibration.WavePSF` builds the theoretical hybrid-space
+PSF from phase accrual. Measured or designed gradient waveforms use
+`phase_from_gradients`; `sinusoidal_phase` provides separate
+`"wave-caipi"` and `"wave-shuffling"` initializations. The former follows
+BART `wavepsf`'s sine/cosine prephasing and centered Fourier resampling, while
+the latter uses the quadrature convention of the Wave-Shuffling reference.
+Physical inputs should normally use SI units.
+
+```python
+phase = recon.calibration.WavePSF.sinusoidal_phase(
+    wave_readout,
+    readout_duration=3e-3,
+    cycles=6,
+    max_gradient=(0.08, 0.08),       # T/m
+    max_slew=(170.0, 170.0),         # T/m/s
+    variant="wave-shuffling",
+)
+wave_psf = recon.calibration.WavePSF(y_positions, z_positions)(phase)
+```
+
+{class}`pulserver.recon.calibration.WavePSFCalibration` implements the
+data-driven hardware-error step used by Wave-Shuffling. It fits a small bank of
+sparse readout harmonics and phase/partition isocenter offsets against
+normalized central profiles of a preliminary reconstruction. The default fit
+is one shared hardware PSF; `coefficient_specific=True` produces the optional
+rank-specific PSF bank already understood by `WaveShuffling`.
+
+```python
+calibrator = recon.calibration.WavePSFCalibration(
+    y_positions,
+    z_positions,
+    n_harmonics=1,
+    alternations=2,
+)
+calibration = calibrator(
+    preliminary_coefficients,
+    phase,
+    return_info=True,
+)
+physics = recon.physics.WaveShuffling(
+    sampling,
+    coil_maps,
+    calibration,
+    basis,
+)
+```
+
+The fit is a bounded, low-dimensional Torch LBFGS optimization rather than a
+copy of the reference MATLAB Nelder-Mead loop. It uses native Torch FFTs and
+remains device-agnostic. PSF materialization dispatches over independent
+readout/phase/partition samples: a precompiled multithreaded C++ kernel on CPU
+and a fused Triton kernel on CUDA avoid storing the full real-valued angle
+array. Autograd-enabled PSF synthesis retains the native Torch path.
+
 ## Compact Toeplitz normal operators
 
 Pulserver owns scalar and matrix-valued Toeplitz normals; MRI-NUFFT supplies

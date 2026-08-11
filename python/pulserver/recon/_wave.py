@@ -32,7 +32,7 @@ class _WaveLinearPhysics(deepinv.physics.LinearPhysics):
         super().__init__()
         sampling = torch.as_tensor(sampling)
         coil_maps = torch.as_tensor(coil_maps)
-        wave_psf = torch.as_tensor(wave_psf)
+        wave_psf = torch.as_tensor(getattr(wave_psf, "psf", wave_psf))
         basis = torch.as_tensor(basis)
         if sampling.ndim != 2 or sampling.shape[1] not in {2, 3}:
             raise ValueError("sampling must have shape (lines, 2) or (lines, 3)")

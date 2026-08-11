@@ -9,6 +9,7 @@ that the API does not grow one class for every possible combination.
 from __future__ import annotations
 
 __all__ = [
+    "SMS",
     "Cartesian2D",
     "Cartesian3D",
     "MRIPhysics",
@@ -36,7 +37,7 @@ import deepinv
 from ._toeplitz import CompactToeplitzKernel, as_torch, support_indices
 from ._stacked import _StackedNUFFTLinearPhysics
 from ._wave import _WaveLinearPhysics
-from .linops import available_nufft_backends as _available_nufft_backends
+from .sms import _SMSLinearPhysics
 
 
 def _require_deepinv() -> Any:
@@ -69,9 +70,10 @@ def available_nufft_backends() -> list[str]:
         _require_mrinufft()
     except ImportError:
         return []
+    list_backends = import_module("mrinufft.operators").list_backends
     public_names = {
         "cufinufft" if name == "cufinufft-torch" else name
-        for name in _available_nufft_backends()
+        for name in list_backends(available_only=True)
     }
     return sorted(public_names)
 
@@ -1632,6 +1634,51 @@ class Cartesian3D(MRIPhysics):
         )
 
 
+class SMS(MRIPhysics):
+    """Model-based simultaneous-multislice MRI physics.
+
+    A shared base physics is vectorized over the product of batch and slice
+    axes, allowing its existing dual-GPU streaming policy to distribute all
+    slices together. A sequence of physics objects represents slices with
+    distinct trajectories or sampling operators and is composed exactly.
+
+    Parameters
+    ----------
+    physics
+        One shared MRI physics object or one object per simultaneously excited
+        slice.
+    caipi_encoding
+        Complex CAIPI modulation or phase in radians. Its first axis is slice;
+        remaining axes broadcast over the trailing measurement dimensions.
+    n_slices
+        Slice count when a shared physics and no encoding tensor are supplied.
+    streaming
+        Optional Pulserver CUDA streaming policy forwarded to the base physics.
+    """
+
+    def __init__(
+        self,
+        physics: MRIPhysics | Sequence[MRIPhysics],
+        caipi_encoding: Any | None = None,
+        *,
+        n_slices: int | None = None,
+        streaming: Any | None = None,
+    ) -> None:
+        selected = list(physics) if isinstance(physics, Sequence) else physics
+        operator = _SMSLinearPhysics(selected, caipi_encoding, n_slices)
+        base = selected[0] if isinstance(selected, list) else selected
+        super().__init__(
+            operator,
+            native_operator=None,
+            kind="sms",
+            spatial_ndim=int(getattr(base, "spatial_ndim", 2)),
+            viewed_as_real=operator.viewed_as_real,
+            modifiers=tuple(dict.fromkeys((*getattr(base, "modifiers", ()), "sms"))),
+        )
+        if streaming is not None:
+            self.enable_streaming(streaming)
+
+
 def _stacked_trajectory_bank(
     trajectory: Any,
     z_index: Any,
@@ -2888,7 +2935,8 @@ class WaveShuffling(MRIPhysics):
     follows Pulserver's ``(rank, echoes)`` convention. The forward and adjoint
     gather/scatter only acquired lines. The normal operator uses the exact
     packed temporal kernel in hybrid k-space and never materializes an echo
-    train or a dense ``rank x rank`` field.
+    train or a dense ``rank x rank`` field. ``wave_psf`` accepts a tensor or
+    :class:`pulserver.recon.calibration.WavePSFResult`.
     """
 
     def __init__(
@@ -2927,7 +2975,7 @@ class WaveShuffling(MRIPhysics):
 
 
 class WaveEncoding(MRIPhysics):
-    """Three-dimensional fixed-PSF Wave encoding physics."""
+    """Three-dimensional Wave encoding physics with a tensor or calibrated PSF."""
 
     def __init__(
         self,
