@@ -37,9 +37,15 @@
 /* Bumped again for the interior static/dynamic pure-delay split: each
  * pulseg_virtual_segment gained an is_dynamic_delay[num_blocks] array (written
  * right after has_adc), changing COMMON's per-segment on-disk layout. */
-/* Bumped again for the safety-group MODULE label: pulseg_block_table_element
- * gained module_id (written/read right after rf_shim_id), changing the
- * block-table's per-entry on-disk layout. */
+/* Bumped again for the safety-group label: pulseg_block_table_element gained
+ * a sticky group id (written/read right after rf_shim_id), changing the
+ * block-table's per-entry on-disk layout.  That field was later renamed from
+ * module_id to trid when Pulserver's own MODULE label was dropped in favour of
+ * Pulseq's TRID, which means the same thing and does not raise the file to
+ * revision 1.5.2 -- a rename only, same int in the same word, so **no bump for
+ * that**: the word count is unchanged and a cache written before it reads
+ * back identically.  Every cache older than the rename carries zero there in
+ * any case, because nothing ever wrote a MODULE label. */
 /* Bumped again for the per-instance/definition split: the O(scan-length)
  * event tables (block/rf/grad/adc tables and the label table) moved out of
  * COMMON into the new INSTANCES section, COMMON's collection scalars gained

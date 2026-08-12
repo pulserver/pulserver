@@ -28,6 +28,7 @@
 #include "pulseq/autolabel.hpp"
 #include "pulseq/expand.hpp"
 #include "pulseq/kspace.hpp"
+#include "pulseq/moments.hpp"
 #include "pulseq/read.hpp"
 #include "pulseq/sequence.hpp"
 #include "pulseq/trajectory.hpp"
@@ -773,6 +774,65 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
                 out["rotations_vary"] = ks.rotations_vary;
                 out["key_groups"] = ks.key_groups;
                 out["total_duration"] = ks.total_duration;
+                return out;
+            })
+
+        // The b-tensor and gradient moments, one entry per excitation.  A
+        // dict again, and for the same reason -- and here the shape is not
+        // upstream's at all: the tensor comes back in three parts, because
+        // NOROT splits a shot into what the console's prescription turns and
+        // what it does not.  See moments.hpp.
+        .def(
+            "calc_moments",
+            [](Sequence& self, bool calc_b, bool calc_m1, bool calc_m2, bool calc_m3,
+               int n_dummy, int first_block, int last_block) {
+                pulseq::MomentsOptions options;
+                options.calc_b = calc_b;
+                options.calc_m1 = calc_m1;
+                options.calc_m2 = calc_m2;
+                options.calc_m3 = calc_m3;
+                options.n_dummy = n_dummy;
+                options.first_block = first_block;
+                options.last_block = last_block;
+
+                pulseq::Moments m;
+                {
+                    py::gil_scoped_release unlocked;
+                    m = pulseq::calc_moments(self, options);
+                }
+
+                const int shots = m.num_shots();
+
+                const auto tensors = [](const std::vector<pulseq::BTensorParts>& src,
+                                        pulseq::Matrix3 pulseq::BTensorParts::*part) {
+                    py::array_t<double> out({static_cast<int>(src.size()), 3, 3});
+                    double* dst = static_cast<double*>(out.request().ptr);
+                    for (size_t i = 0; i < src.size(); ++i)
+                        std::memcpy(dst + i * 9, (src[i].*part).data(), 9 * sizeof(double));
+                    return out;
+                };
+                const auto vectors = [](const std::vector<std::array<double, 3>>& src) {
+                    py::array_t<double> out({static_cast<int>(src.size()), 3});
+                    double* dst = static_cast<double*>(out.request().ptr);
+                    for (size_t i = 0; i < src.size(); ++i)
+                        std::memcpy(dst + i * 3, src[i].data(), 3 * sizeof(double));
+                    return out;
+                };
+
+                py::dict out;
+                out["t_excitation"] = py::array_t<double>(shots, m.t_excitation.data());
+                out["t_echo"] = py::array_t<double>(shots, m.t_echo.data());
+                out["b_fixed"] = tensors(m.b, &pulseq::BTensorParts::fixed);
+                out["b_rotatable"] = tensors(m.b, &pulseq::BTensorParts::rotatable);
+                out["b_cross"] = tensors(m.b, &pulseq::BTensorParts::cross);
+                out["m1"] = vectors(m.m1);
+                out["m2"] = vectors(m.m2);
+                out["m3"] = vectors(m.m3);
+                out["table_fixed"] = tensors(m.table, &pulseq::BTensorParts::fixed);
+                out["table_rotatable"] = tensors(m.table, &pulseq::BTensorParts::rotatable);
+                out["table_cross"] = tensors(m.table, &pulseq::BTensorParts::cross);
+                out["table_index"] = py::array_t<int>(static_cast<int>(m.table_index.size()),
+                                                      m.table_index.data());
                 return out;
             })
 

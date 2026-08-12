@@ -1,9 +1,7 @@
 # Pulseq sequence file
-# Hand-authored fixture for pulserver MODULE-label ctests (test_module_labels.c)
-# One MODULE spanning the entire (single-block) TR, loaded with num_averages=3
-# to test that NEX/pass repeats of the SAME module_id across a TR boundary are
-# split into separate occurrences (scan_table_tr_start fix), not merged into
-# one giant run.
+# Hand-authored fixture for pulserver TRID safety-group ctests (test_trid_labels.c)
+# Two TRID-labeled groups within one pass: group 1 spans blocks 1-2
+# (100us + 100us = 200us), group 2 is block 3 alone (50us).
 
 [VERSION]
 major 1
@@ -20,13 +18,17 @@ RadiofrequencyRasterTime 1e-06
 # NUM DUR RF  GX  GY  GZ  ADC  EXT
 [BLOCKS]
 1 10   0   0   0   0  0  1
+2 10   0   0   0   0  0  0
+3 5    0   0   0   0  0  2
 
 # id type ref next_id
 [EXTENSIONS]
 1 1 1 0
+2 1 2 0
 
 extension LABELSET 1
-1 1 MODULE
+1 1 TRID
+2 2 TRID
 
 [SIGNATURE]
 Type md5

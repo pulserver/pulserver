@@ -671,9 +671,9 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
         /* Set repetition count */
         (*out_pulses)[n].num_instances = num_instances;
 
-        /* Safety-group module label rides on the per-occurrence block-table
+        /* The safety group (TRID) rides on the per-occurrence block-table
          * entry, never on the deduplicated rfdef->stats hard-copied above. */
-        (*out_pulses)[n].module_id = bte->module_id;
+        (*out_pulses)[n].trid = bte->trid;
 
         n++;
     }
@@ -804,7 +804,7 @@ int pulseg_get_rf_event_array(
 }
 
 /* ================================================================== */
-/*  MODULE (safety-group) accessors                                   */
+/*  TRID (safety-group) accessors                                     */
 /* ================================================================== */
 
 /* Structural content signature for one scan-table position: identifies a
@@ -812,7 +812,7 @@ int pulseg_get_rf_event_array(
  * block-definition id, plus ADC separately since BLOCK_DEF_COLS excludes
  * it) -- deliberately excludes amplitude/phase/rotation, which may
  * legitimately vary per repeat/slice. */
-static void module_block_signature(
+static void tr_group_block_signature(
     const pulseg_sequence_descriptor *desc,
     int *out_block_def_id,
     int *out_adc_def_id,
@@ -825,22 +825,23 @@ static void module_block_signature(
         : -1;
 }
 
-int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_modules, int subseq_idx)
+int pulseg_get_tr_groups(const pulseg_collection *coll, pulseg_tr_group **out_groups,
+                         int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    int *run_module_id = NULL;
+    int *run_trid = NULL;
     int *run_start = NULL;
     int *run_len = NULL;
     int num_runs = 0;
     int *distinct_ids = NULL;
     int num_distinct = 0;
-    pulseg_module *mods = NULL;
+    pulseg_tr_group *groups = NULL;
     int i, m;
     int ret = 0;
 
-    if (!coll || !out_modules)
+    if (!coll || !out_groups)
         return PULSEG_ERR_NULL_POINTER;
-    *out_modules = NULL;
+    *out_groups = NULL;
     if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
@@ -849,12 +850,12 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
         return 0;
 
     /* ---- Pass 1: split the materialized scan table into maximal runs of
-     * consecutive positions sharing the same non-zero module_id. Worst
+     * consecutive positions sharing the same non-zero TRID. Worst
      * case one run per position, so this bound is always safe. ---- */
-    run_module_id = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
+    run_trid = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
     run_start = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
     run_len = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
-    if (!run_module_id || !run_start || !run_len)
+    if (!run_trid || !run_start || !run_len)
     {
         ret = PULSEG_ERR_ALLOC_FAILED;
         goto cleanup;
@@ -865,19 +866,19 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
         for (i = 0; i < desc->exec_stream_len; ++i)
         {
             int blk = pulseg__exec_block_idx(desc, i);
-            int mid = desc->block_table[blk].module_id;
+            int mid = desc->block_table[blk].trid;
             /* A run also breaks at every main-region TR boundary
-             * (exec_stream_tr_start[i]==1), not just on a module_id
+             * (exec_stream_tr_start[i]==1), not just on a TRID
              * transition -- otherwise adjacent NEX/pass repeats of the
-             * same main-region module (identical module_id across the
-             * repeat boundary, since MODULE is sticky and the author
-             * never re-SETs it) would silently merge into one giant run
-             * instead of being counted as separate occurrences. */
+             * same main-region group (identical TRID across the repeat
+             * boundary, since TRID is sticky and the author never re-SETs
+             * it) would silently merge into one giant run instead of being
+             * counted as separate occurrences. */
             int is_tr_start = pulseg__exec_tr_start(desc, i);
             if (mid != 0 && (mid != prev_mid || is_tr_start))
             {
                 /* New run starts here. */
-                run_module_id[num_runs] = mid;
+                run_trid[num_runs] = mid;
                 run_start[num_runs] = i;
                 run_len[num_runs] = 0;
                 num_runs++;
@@ -894,7 +895,7 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
         goto cleanup;
     }
 
-    /* ---- Pass 2: distinct module ids, first-seen order (num_runs is a
+    /* ---- Pass 2: distinct TRIDs, first-seen order (num_runs is a
      * safe upper bound). ---- */
     distinct_ids = (int *)PULSEG_ALLOC((size_t)num_runs * sizeof(int));
     if (!distinct_ids)
@@ -907,24 +908,24 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
         int found = 0;
         for (m = 0; m < num_distinct; ++m)
         {
-            if (distinct_ids[m] == run_module_id[i])
+            if (distinct_ids[m] == run_trid[i])
             {
                 found = 1;
                 break;
             }
         }
         if (!found)
-            distinct_ids[num_distinct++] = run_module_id[i];
+            distinct_ids[num_distinct++] = run_trid[i];
     }
 
-    mods = (pulseg_module *)PULSEG_ALLOC((size_t)num_distinct * sizeof(pulseg_module));
-    if (!mods)
+    groups = (pulseg_tr_group *)PULSEG_ALLOC((size_t)num_distinct * sizeof(pulseg_tr_group));
+    if (!groups)
     {
         ret = PULSEG_ERR_ALLOC_FAILED;
         goto cleanup;
     }
 
-    /* ---- Per distinct module id: verify every occurrence after the first
+    /* ---- Per distinct TRID: verify every occurrence after the first
      * is structurally identical to the first, then dedup. ---- */
     for (m = 0; m < num_distinct; ++m)
     {
@@ -937,7 +938,7 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
 
         for (r = 0; r < num_runs; ++r)
         {
-            if (run_module_id[r] != mid)
+            if (run_trid[r] != mid)
                 continue;
 
             if (ref_run < 0)
@@ -958,7 +959,7 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
                  * (length, and per-position content signature + order). */
                 if (run_len[r] != ref_len)
                 {
-                    ret = PULSEG_ERR_MODULE_STRUCTURAL_MISMATCH;
+                    ret = PULSEG_ERR_TRID_STRUCTURAL_MISMATCH;
                     goto cleanup;
                 }
                 for (i = 0; i < ref_len; ++i)
@@ -967,12 +968,12 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
                     int cur_blk = pulseg__exec_block_idx(desc, run_start[r] + i);
                     int ref_def, ref_adc, cur_def, cur_adc;
 
-                    module_block_signature(desc, &ref_def, &ref_adc, ref_blk);
-                    module_block_signature(desc, &cur_def, &cur_adc, cur_blk);
+                    tr_group_block_signature(desc, &ref_def, &ref_adc, ref_blk);
+                    tr_group_block_signature(desc, &cur_def, &cur_adc, cur_blk);
 
                     if (ref_def != cur_def || ref_adc != cur_adc)
                     {
-                        ret = PULSEG_ERR_MODULE_STRUCTURAL_MISMATCH;
+                        ret = PULSEG_ERR_TRID_STRUCTURAL_MISMATCH;
                         goto cleanup;
                     }
                 }
@@ -980,9 +981,9 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
             n_inst++;
         }
 
-        mods[m].module_id = mid;
-        mods[m].one_instance_duration_us = one_instance_duration_us;
-        mods[m].num_instances = n_inst;
+        groups[m].trid = mid;
+        groups[m].one_instance_duration_us = one_instance_duration_us;
+        groups[m].num_instances = n_inst;
         {
             /* n_inst * one_instance_duration_us can overflow a 32-bit int
              * for large num_trs even when one_instance_duration_us alone
@@ -992,25 +993,25 @@ int pulseg_get_modules(const pulseg_collection *coll, pulseg_module **out_module
             double total_d = (double)n_inst * (double)one_instance_duration_us;
             if (total_d > 2.0e9)
                 total_d = 2.0e9;
-            mods[m].total_duration_us = (int)total_d;
+            groups[m].total_duration_us = (int)total_d;
         }
     }
 
-    *out_modules = mods;
-    mods = NULL; /* ownership transferred to caller */
+    *out_groups = groups;
+    groups = NULL; /* ownership transferred to caller */
     ret = num_distinct;
 
 cleanup:
-    if (run_module_id)
-        PULSEG_FREE(run_module_id);
+    if (run_trid)
+        PULSEG_FREE(run_trid);
     if (run_start)
         PULSEG_FREE(run_start);
     if (run_len)
         PULSEG_FREE(run_len);
     if (distinct_ids)
         PULSEG_FREE(distinct_ids);
-    if (mods)
-        PULSEG_FREE(mods);
+    if (groups)
+        PULSEG_FREE(groups);
     return ret;
 }
 
@@ -3013,8 +3014,8 @@ static int resolve_block_instance(
     /* RF shimming */
     inst->rf_shim_id = bte->rf_shim_id;
 
-    /* Safety-group module label */
-    inst->module_id = bte->module_id;
+    /* Safety group (TRID) */
+    inst->trid = bte->trid;
 
     /* Variable-amplitude flags (TR-level) */
     {

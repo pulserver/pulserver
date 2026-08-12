@@ -2255,7 +2255,6 @@ static void raw_extension_init(pulseq_raw_extension *re)
     memset(&re->labelset, 0, sizeof(re->labelset));
     memset(&re->labelinc, 0, sizeof(re->labelinc));
     re->flag.trid = -1;
-    re->flag.module_id = -1;
     re->flag.nav = -1;
     re->flag.rev = -1;
     re->flag.sms = -1;
@@ -2370,9 +2369,6 @@ void pulseq_get_raw_extension(
                     break;
                 case PULSEQ_LABEL_TRID:
                     re->flag.trid = label_value;
-                    break;
-                case PULSEQ_LABEL_MODULE:
-                    re->flag.module_id = label_value;
                     break;
                 default:
                     break;

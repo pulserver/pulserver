@@ -1,8 +1,8 @@
 # Pulseq sequence file
-# Hand-authored fixture for pulserver MODULE-label ctests (test_module_labels.c)
-# MODULE 1 appears twice (blocks 1 and 3) with DIFFERENT durations (100us vs
+# Hand-authored fixture for pulserver TRID safety-group ctests (test_trid_labels.c)
+# TRID 1 appears twice (blocks 1 and 3) with DIFFERENT durations (100us vs
 # 200us) -- an intentionally ill-formed label placement that
-# pulseg_get_modules() must hard-fail with PULSEG_ERR_MODULE_STRUCTURAL_MISMATCH,
+# pulseg_get_tr_groups() must hard-fail with PULSEG_ERR_TRID_STRUCTURAL_MISMATCH,
 # not silently average/dedup.
 
 [VERSION]
@@ -30,9 +30,9 @@ RadiofrequencyRasterTime 1e-06
 3 1 3 0
 
 extension LABELSET 1
-1 1 MODULE
-2 2 MODULE
-3 1 MODULE
+1 1 TRID
+2 2 TRID
+3 1 TRID
 
 [SIGNATURE]
 Type md5

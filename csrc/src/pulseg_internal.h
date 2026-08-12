@@ -262,7 +262,7 @@ typedef struct pulseg_block_table_element
     int pmc_flag;
     int nav_flag;
     int rf_shim_id;  /* index into rf_shim_definitions, or -1 */
-    int module_id;   /* sticky MODULE label id, 0 = ungrouped (default) */
+    int trid;        /* sticky pulseq TRID, 0 = ungrouped (default) */
 } pulseg_block_table_element;
 
 /* NOTE: digitalout_id occupies the former trigger_id position */

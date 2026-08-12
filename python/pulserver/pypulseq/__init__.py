@@ -40,6 +40,7 @@ from ._sequence import Sequence as _Sequence
 from ._results import (
     AdcTimes as _AdcTimes,
     BTensor as _BTensor,
+    DiffusionTable as _DiffusionTable,
     GradientSpectrum as _GradientSpectrum,
     KSpace as _KSpace,
     Pns as _Pns,
@@ -91,6 +92,7 @@ Sequence = _Sequence
 TransformFOV = _TransformFOV
 AdcTimes = _AdcTimes
 BTensor = _BTensor
+DiffusionTable = _DiffusionTable
 GradientSpectrum = _GradientSpectrum
 KSpace = _KSpace
 Pns = _Pns
@@ -125,6 +127,7 @@ RESULTS = frozenset(
     {
         "AdcTimes",
         "BTensor",
+        "DiffusionTable",
         "GradientSpectrum",
         "KSpace",
         "Pns",

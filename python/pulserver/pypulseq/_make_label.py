@@ -39,7 +39,7 @@ COUNTER_LABELS = (
 #: They divide again, and the division matters more than it looks. ``NAV``,
 #: ``REV``, ``SMS``, ``REF``, ``IMA``, ``NOISE`` and ``OFF`` **classify the
 #: data** and become acquisition flags a reconstruction reads. ``PMC``,
-#: ``NOROT``, ``NOPOS``, ``NOSCL``, ``ONCE``, ``TRID`` and ``MODULE``
+#: ``NOROT``, ``NOPOS``, ``NOSCL``, ``ONCE`` and ``TRID``
 #: **instruct the interpreter** and stop there: nothing downstream of the
 #: scanner ever sees them, so a sequence cannot use one to say something to
 #: its own reconstruction.
@@ -57,14 +57,13 @@ FLAG_LABELS = (
     "OFF",
     "ONCE",
     "TRID",
-    "MODULE",
 )
 
 #: Flags whose meaning spans more than the module that sets them, so they are
 #: *not* auto-reset at the module's last block: ``ONCE`` delimits a whole
-#: prep/cooldown section, ``MODULE`` groups consecutive modules under one
-#: safety id, ``TRID`` names a repeating TR block for the interpreter.
-STICKY_FLAGS = ("ONCE", "MODULE", "TRID")
+#: prep/cooldown section, and ``TRID`` names a repeating unit -- a TR, or a
+#: whole contrast of a multi-contrast scan -- for the interpreter.
+STICKY_FLAGS = ("ONCE", "TRID")
 
 _SUPPORTED_LABELS = COUNTER_LABELS + FLAG_LABELS
 
@@ -72,9 +71,9 @@ _SUPPORTED_LABELS = COUNTER_LABELS + FLAG_LABELS
 def get_supported_labels() -> tuple[str, ...]:
     """Return every counter and flag understood by Pulserver.
 
-    This extends the Pulseq/PyPulseq set with ``OFF`` (discard an acquisition)
-    and ``MODULE`` (mark module scope), both consumed by Pulserver's
-    interpreter.
+    This extends the Pulseq/PyPulseq set with ``OFF`` (discard an
+    acquisition), which Pulserver's interpreter consumes and which is the one
+    name here that Pulseq does not define.
 
     The set splits in two, and the split is the design toolbox's division of
     labour: :data:`COUNTER_LABELS` say *where an acquisition belongs* and come
@@ -167,10 +166,16 @@ def get_supported_labels() -> tuple[str, ...]:
            block table by
            :meth:`pulserver.pypulseq.Sequence.expand_repeats`.
        * - ``TRID``
-         - Counter marking the beginning of a repeatable module such as a TR.
-           Modules with different timing take different ``TRID`` values.
-       * - ``MODULE``
-         - Pulserver's own: sticky structural/safety module-group identifier.
+         - Sticky id naming the repeating unit a block belongs to — a TR, or
+           a whole contrast of a multi-contrast scan. Units with different
+           timing take different ``TRID`` values. Pulseq defines it as "an
+           integer ID of the TR (sequence segment) used by the GE interpreter
+           (and some others) to optimize the execution on the scanner", and
+           MATLAB's ``seq.addTRID('fat_suppression')`` is how a design names
+           one. Pulserver reads it as **the safety group**: a hyper-TR made
+           of several contrasts is checked per contrast against the 10 s SAR
+           limit and as a whole against the 6 min one, rather than as one
+           long lump.
 
     Notes
     -----

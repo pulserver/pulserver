@@ -540,6 +540,36 @@ namespace mrdserver
         strs.push_back(p);
     }
 
+    void add_diffusion_parameters(ISMRMRD::IsmrmrdHeader& hdr, const SequenceCache& cache)
+    {
+        static const char* const KEYS[] = {"bTensorFixed", "bTensorRotatable", "bTensorCross",
+                                           "bTensorAxis"};
+
+        for (const char* key : KEYS)
+        {
+            auto it = cache.definitions.find(key);
+            if (it == cache.definitions.end() || it->second.empty())
+                continue;
+
+            // Verbatim, joined the way the definition was written.  Nothing is
+            // parsed and nothing is composed here on purpose: the b-tensor
+            // comes in three parts precisely because the console's FOV
+            // rotation is not in the .seq, and putting that rotation together
+            // with them needs a convention -- which MRD already states, in the
+            // acquisition's direction cosines.  A wrong b-vector is invisible
+            // downstream, so the composition happens once, on the
+            // reconstruction side, where it is tested.
+            std::string joined;
+            for (size_t i = 0; i < it->second.size(); ++i)
+            {
+                if (i)
+                    joined += ' ';
+                joined += it->second[i];
+            }
+            set_user_parameter_string(hdr, key, joined);
+        }
+    }
+
     void add_sequence_resource_paths(
         ISMRMRD::IsmrmrdHeader& hdr,
         int tensor_index,
@@ -564,6 +594,8 @@ namespace mrdserver
 
     void enrich_ismrmrd_header(ISMRMRD::IsmrmrdHeader& hdr, const SequenceCache& cache)
     {
+        add_diffusion_parameters(hdr, cache);
+
         // --- Sequence parameters from definitions ---
         {
             ISMRMRD::SequenceParameters seqp;

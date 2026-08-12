@@ -217,19 +217,19 @@ def test_flags_are_scoped_to_the_module_and_sticky_ones_left_open():
     module.set_state(lin_idx=7)
     plain = module.num_blocks
 
-    assert module.set_state(OFF=1, NAV=True, ONCE=1, MODULE=4) is module
+    assert module.set_state(OFF=1, NAV=True, ONCE=1, TRID=4) is module
     assert module.num_blocks == plain
-    assert module.flags == {"OFF": 1, "NAV": 1, "ONCE": 1, "MODULE": 4}
+    assert module.flags == {"OFF": 1, "NAV": 1, "ONCE": 1, "TRID": 4}
 
     # Scoped flags open on the first block and reset on the last, so they
     # cannot leak into whatever the sequence plays next...
     for name in ("OFF", "NAV"):
         assert _label_pairs(module.blocks[0], name) == [("labelset", 1)]
         assert _label_pairs(module.blocks[-1], name) == [("labelset", 0)]
-    # ...while ONCE (a whole prep section) and MODULE (a group id) stay set.
+    # ...while ONCE (a whole prep section) and TRID (a group id) stay set.
     assert _label_pairs(module.blocks[0], "ONCE") == [("labelset", 1)]
-    assert _label_pairs(module.blocks[0], "MODULE") == [("labelset", 4)]
-    assert _label_pairs(module.blocks[-1], "ONCE") == _label_pairs(module.blocks[-1], "MODULE") == []
+    assert _label_pairs(module.blocks[0], "TRID") == [("labelset", 4)]
+    assert _label_pairs(module.blocks[-1], "ONCE") == _label_pairs(module.blocks[-1], "TRID") == []
 
     # Clearing a flag is setting it to zero: the event stays, because it is
     # part of the structure the template recorded.

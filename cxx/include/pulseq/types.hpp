@@ -103,7 +103,6 @@ namespace pulseq
         Once = PULSEQ_LABEL_ONCE,
         Trid = PULSEQ_LABEL_TRID,
         Off = PULSEQ_LABEL_OFF,
-        Module = PULSEQ_LABEL_MODULE,
     };
 
     /** Numeric id for a soft-delay hint name (see hint_id_for_name()). */

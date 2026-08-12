@@ -15,6 +15,7 @@ import pulserver.recon.algorithms as algorithms
 import pulserver.recon.denoisers as denoisers
 import pulserver.recon.density as density
 import pulserver.recon.physics as physics
+from pulserver.recon._mrd import metadata
 from pulserver.recon.preprocessing import (
     EPIPhaseCorrection,
     Homodyne,
@@ -41,6 +42,11 @@ def test_public_namespace_is_small_and_module_oriented():
         "corrections",
         "denoisers",
         "density",
+        # A function, like `pics`: reading the diffusion gradient table out of
+        # an MRD header is the first thing a diffusion pipeline does, and the
+        # reader itself stays private under _mrd with the rest of the
+        # transport.
+        "diffusion_table",
         "execution",
         "motion",
         "optim",
@@ -50,6 +56,7 @@ def test_public_namespace_is_small_and_module_oriented():
         "simulation",
     ]
     assert recon.pics is algorithms.pics
+    assert recon.diffusion_table is metadata.diffusion_table
     assert "Connection" not in dir(recon)
     assert "Server" not in dir(recon)
     assert "MrdMetadata" not in dir(recon)

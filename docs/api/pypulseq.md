@@ -317,7 +317,7 @@ A third distinction cuts across the second, and it is the one to check before
 choosing a label: whether it **maps to data**. Every counter does. Among the
 flags, `NAV`, `REV`, `SMS`, `REF`, `IMA`, `NOISE` and `OFF` classify an
 acquisition and become fields a reconstruction reads; `NOROT`, `NOPOS`,
-`NOSCL`, `PMC`, `ONCE`, `TRID` and `MODULE` are instructions to the
+`NOSCL`, `PMC`, `ONCE` and `TRID` are instructions to the
 interpreter and stop at the scanner. Nothing downstream ever sees the second
 group, so a sequence with something to tell its own reconstruction cannot say
 it with one of them. {func}`~pulserver.pypulseq.get_supported_labels`
@@ -384,6 +384,23 @@ What only `compat=False` can tell you:
 current value together with the range it may be set over. `float()` on it is
 the value, so it drops straight back into `apply_soft_delay`.
 
+{class}`~pulserver.pypulseq.DiffusionTable` is not one either. It is the short,
+consumer-facing form of `BTensor`: one row per *distinct* encoding rather than
+one per shot, plus the name of the MRD counter whose value is the row index.
+`Sequence.write_diffusion_definitions(axis="SET")` computes it, checks that the
+named counter really does index it, and stores it in `[DEFINITIONS]`;
+`mrdserver::add_diffusion_parameters` copies those entries into the MRD header
+on the scanner, and `DiffusionTable.from_definitions` reads them back. The same
+type on both sides, so a table written by a design script and one recovered
+from a scan are comparable.
+
+The b-tensor comes out of that path in **three matrices, not one**, because the
+FOV rotation the radiographer prescribes is not in the `.seq`: `NOROT` is how a
+block opts out of it, which is what a product diffusion preparation does, while
+the imaging gradients of the same shot do not — so `b_fixed`, `b_rotatable` and
+`b_cross` are carried separately and `BTensor.compose(R)` puts them together
+once the prescription is known.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: generated
@@ -398,4 +415,5 @@ the value, so it drops straight back into `apply_soft_delay`.
    pulserver.pypulseq.RfPower
    pulserver.pypulseq.SoftDelay
    pulserver.pypulseq.BTensor
+   pulserver.pypulseq.DiffusionTable
 ```

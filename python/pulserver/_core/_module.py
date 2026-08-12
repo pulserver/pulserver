@@ -224,7 +224,7 @@ class SequenceModule(Sequence[Block], ABC):
         - **UPPERCASE** names are labels: a counter (``SLC``, ``REP``,
           ``SET``, ``PHS``, ``AVG``, ``SEG``) saying where this acquisition
           belongs, or a flag (``NOROT``, ``NOPOS``, ``OFF``, ``ONCE``,
-          ``NAV``, ``PMC``, ``MODULE``) saying how these blocks are played.
+          ``NAV``, ``PMC``, ``TRID``) saying how these blocks are played.
           Unlike the numbers these **persist**: a label keeps its value until
           another call changes it, because the event carrying it is part of
           the module's structure from the moment it is first named. Pass
@@ -257,7 +257,7 @@ class SequenceModule(Sequence[Block], ABC):
         module that sets it. ``'module'`` scope (the default for most) emits
         the value on the first block and ``0`` on the last, so a fat-sat's
         ``NOPOS`` cannot escape into the readout that follows; ``'sticky'``
-        scope (the default for ``ONCE``, ``MODULE`` and ``TRID``) emits it
+        scope (the default for ``ONCE`` and ``TRID``) emits it
         once and never resets, because those deliberately span more than one
         module. Pass ``flag_scope=`` at construction to override.
 

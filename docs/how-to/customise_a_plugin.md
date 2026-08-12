@@ -298,16 +298,19 @@ for _ in range(n_dummies):
 ```
 
 Group consecutive modules under one id so the safety model treats them as a
-unit:
+unit. `TRID` is Pulseq's own label for the repeating unit of a sequence, and
+Pulserver reads it as the safety group — so a hyper-TR made of several
+contrasts is checked per contrast against the short-term SAR limit rather than
+as one long lump:
 
 ```python
-fatsat.set_state(MODULE=1)
-excitation.set_state(MODULE=2)
+fatsat.set_state(TRID=1)
+excitation.set_state(TRID=2)
 ```
 
 Pulseq labels are sticky, so flags are scoped by default: the value goes on the
 module's first block and `0` on its last, and it cannot leak into whatever
-follows. `ONCE`, `MODULE` and `TRID` are exempt — they deliberately span
+follows. `ONCE` and `TRID` are exempt — they deliberately span
 modules, which is why `once=1` above stays set across both the excitation and
 the readout while `OFF` clears at the end of the readout it belongs to. Override
 with `flag_scope="sticky"` or `flag_scope="module"` at construction.

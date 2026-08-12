@@ -3,17 +3,18 @@
  * @brief Base k-space for a block's ADC window.  See trajectory.hpp.
  *
  * Both gradient kinds reduce to the same thing: a piecewise-linear normalised
- * waveform on a grid of breakpoints.  A trapezoid is four breakpoints written
- * down; an arbitrary gradient is its samples with `first`/`last` closing the
- * ends.  Once in that form the cumulative integral is exact segment by segment
- * and evaluating it at an ADC sample centre is one interpolation, so nothing
- * is resampled onto a raster it was not already on.
+ * waveform on a grid of breakpoints -- see waveform.hpp, which holds that
+ * reduction and is shared with moments.cpp.  Once in that form the cumulative
+ * integral is exact segment by segment and evaluating it at an ADC sample
+ * centre is one interpolation, so nothing is resampled onto a raster it was
+ * not already on.
  */
 
 #include "pulseq/trajectory.hpp"
 
 #include "pulseq/kspace.hpp"
 #include "pulseq/shape.hpp"
+#include "waveform.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -24,207 +25,8 @@ namespace pulseq
 
     namespace
     {
-
-        /**
-         * A normalised waveform as breakpoints: value `v[i]` at time `t[i]`,
-         * linear in between, zero outside.  `c[i]` is the integral from `t[0]`
-         * to `t[i]`, so evaluating the cumulative anywhere is a lookup plus the
-         * area of one partial trapezoid.
-         */
-        struct Piecewise
-        {
-            std::vector<double> t;
-            std::vector<double> v;
-            std::vector<double> c;
-
-            bool empty() const { return t.size() < 2; }
-
-            void integrate()
-            {
-                c.assign(t.size(), 0.0);
-                for (size_t i = 1; i < t.size(); ++i)
-                    c[i] = c[i - 1] + 0.5 * (v[i] + v[i - 1]) * (t[i] - t[i - 1]);
-            }
-
-            double total() const { return c.empty() ? 0.0 : c.back(); }
-
-            /** The waveform at @p x, holding the end values outside. */
-            double value_at(double x) const
-            {
-                if (empty())
-                    return 0.0;
-                if (x <= t.front())
-                    return v.front();
-                if (x >= t.back())
-                    return v.back();
-                const size_t hi =
-                    static_cast<size_t>(std::upper_bound(t.begin(), t.end(), x) - t.begin());
-                const size_t lo = hi - 1;
-                const double span = t[hi] - t[lo];
-                if (span <= 0.0)
-                    return v[hi];
-                return v[lo] + (v[hi] - v[lo]) * (x - t[lo]) / span;
-            }
-
-            /** The integral from `t[0]` to @p x. */
-            double cumulative_at(double x) const
-            {
-                if (empty())
-                    return 0.0;
-                if (x <= t.front())
-                    return 0.0;
-                if (x >= t.back())
-                    return c.back();
-                const size_t hi =
-                    static_cast<size_t>(std::upper_bound(t.begin(), t.end(), x) - t.begin());
-                const size_t lo = hi - 1;
-                const double span = t[hi] - t[lo];
-                if (span <= 0.0)
-                    return c[hi];
-                const double frac = (x - t[lo]) / span;
-                const double v_x = v[lo] + (v[hi] - v[lo]) * frac;
-                return c[lo] + 0.5 * (v[lo] + v_x) * (x - t[lo]);
-            }
-        };
-
-        /* A trapezoid at unit amplitude: flat at 1 between its ramps. */
-        Piecewise unit_trapezoid(const double* row)
-        {
-            const double rise = row[1];
-            const double flat = row[2];
-            const double fall = row[3];
-            const double delay = row[4];
-
-            Piecewise p;
-            double at = delay;
-            p.t.push_back(at);
-            p.v.push_back(0.0);
-            at += rise;
-            p.t.push_back(at);
-            p.v.push_back(1.0);
-            if (flat > 0.0)
-            {
-                at += flat;
-                p.t.push_back(at);
-                p.v.push_back(1.0);
-            }
-            at += fall;
-            p.t.push_back(at);
-            p.v.push_back(0.0);
-
-            p.integrate();
-            return p;
-        }
-
-        /*
-         * An arbitrary gradient at unit amplitude.
-         *
-         * The shape library holds the waveform already normalised, so the
-         * samples are used as they stand.  `first` and `last` are absolute
-         * (Hz/m) and close the ends at the block's own boundaries; they are
-         * divided back down by the amplitude to stay in the same units as the
-         * samples.  With `time_shape_id == 0` the samples sit at raster
-         * centres, which is the convention the file's own header states.
-         */
-        Piecewise unit_arbitrary(const Sequence& seq, const double* row)
-        {
-            const double amplitude = row[0];
-            const double first = row[1];
-            const double last = row[2];
-            const int shape_id = static_cast<int>(row[3]);
-            const int time_shape_id = static_cast<int>(row[4]);
-            const double delay = row[5];
-            const double raster = seq.grad_raster_time();
-
-            Piecewise p;
-            if (shape_id <= 0 || shape_id > seq.shape_library().size())
-                return p;
-
-            /* A sequence read from a file holds its shapes encoded, and one
-             * built in memory may not have been through compress_shapes() yet.
-             * Both are normal, so decode on demand rather than demanding a
-             * particular state. */
-            const ShapeLibrary& shapes = seq.shape_library();
-            const int n = shapes.num_uncompressed(shape_id);
-            if (n <= 0)
-                return p;
-
-            std::vector<double> decoded;
-            const double* w = shapes.samples(shape_id);
-            if (shapes.is_compressed(shape_id))
-            {
-                decoded = decompress_shape(w, shapes.num_compressed(shape_id), n);
-                if (static_cast<int>(decoded.size()) != n)
-                    return p;
-                w = decoded.data();
-            }
-
-            std::vector<double> tt;
-            tt.reserve(static_cast<size_t>(n));
-            if (time_shape_id > 0 && time_shape_id <= shapes.size())
-            {
-                const int nt = shapes.num_uncompressed(time_shape_id);
-                const double* ts = shapes.samples(time_shape_id);
-                for (int i = 0; i < std::min(n, nt); ++i)
-                    tt.push_back(delay + ts[i] * raster);
-            }
-            else
-            {
-                for (int i = 0; i < n; ++i)
-                    tt.push_back(delay + (static_cast<double>(i) + 0.5) * raster);
-            }
-            if (tt.empty())
-                return p;
-
-            const double scale = (amplitude != 0.0) ? 1.0 / amplitude : 0.0;
-
-            p.t.push_back(delay);
-            p.v.push_back(first * scale);
-            for (size_t i = 0; i < tt.size(); ++i)
-            {
-                p.t.push_back(tt[i]);
-                p.v.push_back(w[i]);
-            }
-            const double end = (time_shape_id > 0) ? tt.back() : delay + static_cast<double>(n) * raster;
-            if (end > p.t.back())
-            {
-                p.t.push_back(end);
-                p.v.push_back(last * scale);
-            }
-
-            p.integrate();
-            return p;
-        }
-
-        /** The unit waveform behind a gradient id, empty when there is none. */
-        Piecewise unit_waveform(const Sequence& seq, int32_t grad_id, double* out_amplitude)
-        {
-            if (out_amplitude)
-                *out_amplitude = 0.0;
-            if (grad_id <= 0)
-                return Piecewise{};
-
-            const int row = seq.grad_row(static_cast<int>(grad_id));
-            switch (seq.grad_kind(static_cast<int>(grad_id)))
-            {
-            case GradKind::Trap:
-            {
-                const double* d = seq.trap_library().row(row);
-                if (out_amplitude)
-                    *out_amplitude = d[0];
-                return unit_trapezoid(d);
-            }
-            case GradKind::Arbitrary:
-            {
-                const double* d = seq.arb_library().row(row);
-                if (out_amplitude)
-                    *out_amplitude = d[0];
-                return unit_arbitrary(seq, d);
-            }
-            default:
-                return Piecewise{};
-            }
-        }
+        using detail::Piecewise;
+        using detail::unit_waveform;
 
         /*
          * Flat across [t0, t1]?

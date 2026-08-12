@@ -399,6 +399,35 @@ namespace mrdserver
         const std::string& value);
 
     /**
+     * @brief Copy the diffusion gradient table from the cache into the header.
+     *
+     * Adds `bTensorFixed`, `bTensorRotatable`, `bTensorCross` and
+     * `bTensorAxis` as UserParameterStrings, taken **verbatim** from the
+     * sequence's `[DEFINITIONS]` -- which is where
+     * `Sequence.write_diffusion_definitions()` put them on the design side.
+     * A part that was identically zero is not written and so is not copied;
+     * `bTensorFixed` and `bTensorAxis` are always present when the sequence
+     * carries a table at all, and their absence simply means it does not.
+     *
+     * The tensor is in three parts because the console's FOV rotation is not
+     * in the `.seq`: `NOROT` exempts a block from it, which is what a
+     * diffusion preparation does, while the imaging gradients of the same shot
+     * do not. Composing them needs that rotation, and this deliberately does
+     * **not** do it -- MRD already carries the orientation in the
+     * acquisition's direction cosines, and one composition on the
+     * reconstruction side, where it can be tested, beats a second convention
+     * here. `pulserver.pypulseq.DiffusionTable.from_definitions` is the
+     * reader.
+     *
+     * Called by @ref enrich_ismrmrd_header, so a caller that already uses that
+     * needs no change.
+     *
+     * @param hdr    Header to modify in-place.
+     * @param cache  Populated SequenceCache.
+     */
+    void add_diffusion_parameters(ISMRMRD::IsmrmrdHeader& hdr, const SequenceCache& cache);
+
+    /**
      * @brief Resolve and inject sequence-description path UserParameters.
      *
      * Adds:

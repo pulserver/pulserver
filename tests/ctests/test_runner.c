@@ -18,7 +18,7 @@ int test_sequences_main(void);
 int test_protocol_main(void);
 int test_recon_main(void);
 int test_ptx_getters_main(void);
-int test_module_labels_main(void);
+int test_trid_labels_main(void);
 int test_block_instance_main(void);
 int test_pulsegen_cache_main(void);
 int test_pulseq_binary_main(void);
@@ -49,8 +49,8 @@ int main(void)
     printf("\n==== test_ptx_getters ====\n");
     failed += test_ptx_getters_main();
 
-    printf("\n==== test_module_labels ====\n");
-    failed += test_module_labels_main();
+    printf("\n==== test_trid_labels ====\n");
+    failed += test_trid_labels_main();
 
     printf("\n==== test_block_instance ====\n");
     failed += test_block_instance_main();

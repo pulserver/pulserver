@@ -93,7 +93,7 @@ def test_pulserver_base_overrides_are_vendor_neutral_and_callable() -> None:
     assert system.rf_dead_time == system.rf_ringdown_time == system.adc_dead_time == 0.0
     assert system.rf_raster_time == system.adc_raster_time == pytest.approx(2e-6)
     assert system.grad_raster_time == system.block_duration_raster == pytest.approx(10e-6)
-    assert {"OFF", "MODULE"} <= set(pp.get_supported_labels())
+    assert "OFF" in pp.get_supported_labels()
 
 
 def test_upstream_shape_codec_helpers_are_not_re_exported() -> None:
@@ -174,10 +174,37 @@ def test_label_set_partitions_into_loop_counters_and_module_flags() -> None:
     # Counters are the ten ISMRMRD EncodingCounters fields the interpreter
     # tracks; everything else is a sticky block property.
     assert set(pp.COUNTER_LABELS) == {"LIN", "PAR", "SLC", "ECO", "PHS", "REP", "SET", "AVG", "SEG", "ACQ"}
-    assert {"ONCE", "MODULE", "OFF", "NOROT", "NOPOS", "PMC"} <= set(pp.FLAG_LABELS)
+    assert {"ONCE", "TRID", "OFF", "NOROT", "NOPOS", "PMC"} <= set(pp.FLAG_LABELS)
     # Flags that outlive the module that sets them are never auto-reset.
-    assert set(pp.STICKY_FLAGS) == {"ONCE", "MODULE", "TRID"}
+    assert set(pp.STICKY_FLAGS) == {"ONCE", "TRID"}
     assert set(pp.STICKY_FLAGS) <= set(pp.FLAG_LABELS)
+    # OFF is the one name here Pulseq does not define, and using it is what
+    # raises a file to revision 1.5.2 -- which is why the safety group is
+    # spelled TRID, Pulseq's own label for a repeating unit, rather than
+    # under a name of this project's own.
+    assert "MODULE" not in pp.get_supported_labels()
+
+
+def test_a_trid_safety_group_does_not_raise_the_file_revision(tmp_path) -> None:
+    """The conformance half of using Pulseq's own label.
+
+    `TRID` is in Pulseq's built-in set, so a sequence that groups its blocks
+    for the safety model writes a plain 1.5.0 file that any interpreter reads.
+    `OFF`, which Pulseq does not define, is the contrast: it costs 1.5.2.
+    """
+
+    def revision_of(label):
+        seq = pp.Sequence()
+        seq.add_block(pp.make_delay(1e-3), pp.make_label(label=label, type="SET", value=1))
+        path = tmp_path / f"{label}.seq"
+        seq.write(str(path))
+        for line in path.read_text().splitlines():
+            if line.startswith("revision"):
+                return int(line.split()[1])
+        raise AssertionError("no [VERSION] revision in the written file")
+
+    assert revision_of("TRID") == 0
+    assert revision_of("OFF") == 2
 
 
 def test_every_counter_can_drive_a_scan_loop() -> None:

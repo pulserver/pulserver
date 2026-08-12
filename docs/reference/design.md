@@ -59,12 +59,12 @@ excitation.set_state(freq_offset_hz=offsets[s], **slices.label_state(s), **frame
 ```
 
 **Flags** — `NOROT`, `NOPOS`, `NOSCL`, `PMC`, `NAV`, `REV`, `SMS`, `REF`,
-`IMA`, `NOISE`, `OFF`, `ONCE`, `TRID`, `MODULE` — say *how a block is played or
+`IMA`, `NOISE`, `OFF`, `ONCE`, `TRID` — say *how a block is played or
 classified*:
 
 ```python
 readout.set_state(lin_idx=ky, adc_flag=False)   # play the ADC, discard the data
-excitation.set_state(once=1, MODULE=2)          # a preparation TR, in safety group 2
+excitation.set_state(once=1, TRID=2)            # a preparation TR, in safety group 2
 fatsat.set_state(NOPOS=1, NOROT=1)              # exempt from the FOV transform
 ```
 
@@ -73,11 +73,12 @@ fatsat.set_state(NOPOS=1, NOROT=1)              # exempt from the FOV transform
 Pulseq labels are sticky — a value set at one block persists until some later
 block sets it again — so a flag has to be *scoped* or it leaks into whatever
 the sequence plays next. Scoping is by default: the value is emitted on the
-module's first block and `0` on its last. The three flags that deliberately
+module's first block and `0` on its last. The two flags that deliberately
 outlive their module are exempt, and listed in `STICKY_FLAGS`: `ONCE` delimits
-a whole preparation or cooldown *section*, `MODULE` groups consecutive modules
-under one safety id, `TRID` names a repeating TR. Pass `flag_scope="sticky"` or
-`flag_scope="module"` at construction to override.
+a whole preparation or cooldown *section*, and `TRID` names a repeating unit —
+a TR, or a whole contrast — which is also the group the safety model checks
+SAR over. Pass `flag_scope="sticky"` or `flag_scope="module"` at construction
+to override.
 
 A label is **structure** from the moment it is first named: the event carrying
 it is built once and only its value moves afterwards, which is what lets a TR

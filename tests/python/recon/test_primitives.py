@@ -18,6 +18,7 @@ from pulserver.recon._mrd.grouping import (
 from pulserver.recon._mrd.metadata import (
     MrdMetadata,
     acquisition_labels,
+    diffusion_table,
     has_acquisition_flag,
     user_parameter,
 )
@@ -109,6 +110,76 @@ def test_metadata_accessors_and_parameter_lookup():
     assert metadata.field_of_view_mm() == (220.0, 180.0, 5.0)
     assert metadata.user_parameter("BitsStored") == 12
     assert user_parameter(header, "missing", "fallback") == "fallback"
+
+
+def _header_with(**parameters):
+    """A header carrying `parameters` as UserParameterStrings."""
+    return SimpleNamespace(
+        userParameters=SimpleNamespace(
+            userParameterString=[
+                SimpleNamespace(name=name, value=value)
+                for name, value in parameters.items()
+            ]
+        )
+    )
+
+
+def test_the_diffusion_table_comes_back_out_of_the_header():
+    """What the scanner wrote verbatim, read back as the design-side type.
+
+    The tensor is a linear encoding along x with a b-value of 1000 s/mm^2,
+    written in s/m^2 the way `write_diffusion_definitions` writes it.
+    """
+    tensor = np.zeros((2, 3, 3))
+    tensor[0, 0, 0] = 1.0e9
+    tensor[1, 1, 1] = 5.0e8
+
+    table = diffusion_table(
+        _header_with(
+            bTensorFixed=" ".join(f"{v!r}" for v in tensor.reshape(-1).tolist()),
+            bTensorAxis="SET",
+        )
+    )
+    assert table.axis == "SET"
+    np.testing.assert_allclose(table.b_values, [1000.0, 500.0], rtol=1e-12)
+    np.testing.assert_allclose(np.abs(table.b_vectors), np.eye(3)[:2], atol=1e-12)
+    # Linear encoding: one non-zero eigenvalue, so b_delta is 1.
+    np.testing.assert_allclose(table.b_delta, [1.0, 1.0], rtol=1e-12)
+    np.testing.assert_allclose(
+        table.mrtrix_table()[:, 3], table.b_values, rtol=1e-12
+    )
+
+
+def test_a_scan_without_a_diffusion_table_reads_as_none():
+    assert diffusion_table(SimpleNamespace(userParameters=None)) is None
+    assert diffusion_table(_header_with(bTensorAxis="SET")) is None
+
+
+def test_the_prescription_turns_the_rotatable_part_only():
+    """`NOROT` is why there are two arrays, and this is what it buys.
+
+    The fixed half is what the diffusion preparation played under `NOROT`, so
+    the console's FOV rotation must leave it alone; the other half is the
+    imaging gradients, which it turns.
+    """
+    fixed = np.zeros((1, 3, 3))
+    fixed[0, 0, 0] = 1.0e9
+    rotatable = np.zeros((1, 3, 3))
+    rotatable[0, 1, 1] = 1.0e8
+
+    header = _header_with(
+        bTensorFixed=" ".join(f"{v!r}" for v in fixed.reshape(-1).tolist()),
+        bTensorRotatable=" ".join(f"{v!r}" for v in rotatable.reshape(-1).tolist()),
+        bTensorAxis="SET",
+    )
+    # A quarter turn about z takes the rotatable y term onto x.
+    R = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    turned = diffusion_table(header, rotation=R).b_tensors[0]
+
+    expected = (fixed[0] + R @ rotatable[0] @ R.T) * 1e-6
+    np.testing.assert_allclose(turned, expected, atol=1e-12)
+    assert turned[0, 0] == pytest.approx(1100.0, rel=1e-12)
+    assert turned[1, 1] == pytest.approx(0.0, abs=1e-9)
 
 
 def test_partition_epi_acquisitions_uses_standard_roles(monkeypatch):

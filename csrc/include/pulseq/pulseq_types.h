@@ -92,7 +92,6 @@
 #define PULSEQ_LABEL_ONCE 21
 #define PULSEQ_LABEL_TRID 22
 #define PULSEQ_LABEL_OFF 23
-#define PULSEQ_LABEL_MODULE 24
 
 /* Ids above the built-in list are handed out by pulseq_label_register_name()
  * to names the file uses and Pulseq does not define.  Nothing switches on
@@ -175,11 +174,16 @@ typedef struct pulseq_label_event
 /** @brief Boolean flags (plus the two sticky ids) carried by one block. */
 typedef struct pulseq_flag_event
 {
+    /* TRID: a sticky int id, not a boolean.  Pulseq's own definition is
+     * "an integer ID of the TR (sequence segment) used by the GE interpreter
+     * (and some others) to optimize the execution on the scanner", and
+     * MATLAB's addTRID('fat_suppression') names the repeating units of a
+     * multi-contrast scan with it.  Pulserver reads it as exactly that: the
+     * safety group a block belongs to, so a hyper-TR made of several
+     * contrasts can be checked per contrast rather than as one 32-second
+     * lump.  It lives here rather than with the counters because
+     * LABELMAP_COUNTER's LABELINC-increment semantics do not apply to it. */
     int trid;
-    int module_id; /* MODULE: sticky int id, not boolean -- same non-flag
-                    * treatment as trid above; both live here only because
-                    * LABELMAP_COUNTER's LABELINC-increment semantics don't
-                    * apply to either. */
     int nav;
     int rev;
     int sms;

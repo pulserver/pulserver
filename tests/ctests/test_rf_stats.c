@@ -528,7 +528,7 @@ static int build_divergent_variable_rf_collection(pulseg_collection *coll, pulse
         blocks[i].digitalout_id = -1;
         blocks[i].rotation_id = -1;
         blocks[i].rf_shim_id = -1;
-        blocks[i].module_id = 0;
+        blocks[i].trid = 0;
     }
 
     *desc = (pulseg_sequence_descriptor)PULSEG_SEQUENCE_DESCRIPTOR_INIT;

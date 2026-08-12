@@ -36,7 +36,6 @@ static const pulseq_table_entry label_table[] = {
     {"ONCE", PULSEQ_LABEL_ONCE},
     {"TRID", PULSEQ_LABEL_TRID},
     {"OFF", PULSEQ_LABEL_OFF},
-    {"MODULE", PULSEQ_LABEL_MODULE},
     {NULL, -1}};
 
 /*

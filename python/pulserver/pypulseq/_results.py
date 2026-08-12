@@ -32,6 +32,7 @@ import numpy as np
 __all__ = [
     "AdcTimes",
     "BTensor",
+    "DiffusionTable",
     "GradientSpectrum",
     "KSpace",
     "Pns",
@@ -288,6 +289,27 @@ class BTensor:
     ``b_delta`` is the normalised anisotropy that distinguishes b-tensor
     encodings -- 1 for linear, 0 for spherical, -0.5 for planar -- computed
     from the eigenvalues rather than assumed from the sequence's name.
+
+    **The prescription is not in the sequence, so the tensor comes in three
+    parts.** A ``ROTATIONS`` extension is part of the waveform and is already
+    resolved in ``B``; the FOV rotation set on the console is not, and
+    ``NOROT`` is how a block opts out of it -- which is exactly what a product
+    diffusion preparation does, so that the b-matrix does not swing with the
+    prescribed slice orientation. The imaging gradients of the same shot are
+    not ``NOROT``, though, and their cross terms with the diffusion lobes are
+    real, so no single frame describes the shot. Writing @f$R@f$ for the
+    prescription::
+
+        B(R) = b_fixed + b_cross @ R.T + R @ b_cross.T + R @ b_rotatable @ R.T
+
+    which :meth:`compose` evaluates. ``B`` is that at ``R = I``, which is what
+    MATLAB returns. An all-``NOROT`` shot has ``b_rotatable == 0`` and does not
+    move with the prescription at all.
+
+    ``b_tensor_table`` is the distinct tensors in first-seen order and
+    ``table_index`` says which row each shot used -- a diffusion scan plays a
+    few dozen directions over many thousands of shots, and the short list is
+    what a reconstruction and an MRD header want.
     """
 
     B: np.ndarray
@@ -301,6 +323,24 @@ class BTensor:
     b_tensors: np.ndarray
     eigenvalues: np.ndarray
     b_delta: np.ndarray
+    b_fixed: np.ndarray
+    b_rotatable: np.ndarray
+    b_cross: np.ndarray
+    b_tensor_table: np.ndarray
+    table_index: np.ndarray
+
+    def compose(self, rotation: np.ndarray) -> np.ndarray:
+        """``B`` under a prescription rotation, ``(N, 3, 3)`` in s/m^2.
+
+        Parameters
+        ----------
+        rotation : np.ndarray
+            The console's FOV rotation as a ``(3, 3)`` matrix taking logical
+            axes to physical ones.
+        """
+        R = np.asarray(rotation, dtype=float).reshape(3, 3)
+        cross = self.b_cross @ R.T
+        return self.b_fixed + cross + np.swapaxes(cross, -1, -2) + R @ self.b_rotatable @ R.T
 
     @classmethod
     def of(
@@ -312,6 +352,11 @@ class BTensor:
         m3: np.ndarray,
         excitation_times: np.ndarray,
         echo_times: np.ndarray,
+        b_fixed: np.ndarray | None = None,
+        b_rotatable: np.ndarray | None = None,
+        b_cross: np.ndarray | None = None,
+        b_tensor_table: np.ndarray | None = None,
+        table_index: np.ndarray | None = None,
     ) -> BTensor:
         """Derive the diffusion-facing fields from the tensors."""
         # s/m^2 to s/mm^2. The tensor is symmetric by construction, so eigh
@@ -355,7 +400,135 @@ class BTensor:
             b_tensors=tensors,
             eigenvalues=values,
             b_delta=delta,
+            b_fixed=_or_zeros(b_fixed, B),
+            b_rotatable=_or_zeros(b_rotatable, B),
+            b_cross=_or_zeros(b_cross, B),
+            b_tensor_table=_or_zeros(b_tensor_table, B),
+            table_index=(
+                np.arange(len(np.asarray(B)))
+                if table_index is None
+                else np.asarray(table_index, dtype=int)
+            ),
         )
+
+
+def _or_zeros(value: np.ndarray | None, like: np.ndarray) -> np.ndarray:
+    """@p value as float64, or a zeroed array shaped like @p like."""
+    if value is None:
+        return np.zeros_like(np.asarray(like, dtype=float))
+    return np.asarray(value, dtype=float)
+
+
+@dataclass(frozen=True)
+class DiffusionTable:
+    """A scan's distinct diffusion encodings, and the counter that selects one.
+
+    The short, consumer-facing form of :class:`BTensor`: one row per *distinct*
+    encoding rather than one per shot, since a diffusion scan plays a few dozen
+    directions over many thousands of shots and every tool downstream indexes
+    by volume.
+
+    ``axis`` names the MRD counter whose value is the row index -- ``"SET"``,
+    ``"ECO"``, whichever the design's :class:`~pulserver.ScanLoop` declared for
+    its diffusion dimension. It is carried rather than guessed because nothing
+    in the tensors themselves says which counter moved with them.
+
+    Units are the diffusion community's throughout: ``b_tensors`` is
+    ``(N, 3, 3)`` in **s/mm^2** with trace equal to the b-value, which is
+    exactly what DIPY's ``gradient_table(..., btens=)`` takes -- the full
+    tensor, not normalised to unit trace. MRtrix3's ``-grad`` table is
+    ``numpy.column_stack((b_vectors, b_values))``; for ``-fslgrad`` it is
+    ``b_vectors.T`` and ``b_values``.
+
+    Two producers build this and they must agree: the design side, from
+    :meth:`BTensor.diffusion_table`, and the reconstruction side, from the MRD
+    header the scanner wrote. A second type for the second producer is the
+    mistake this one exists to avoid.
+    """
+
+    b_tensors: np.ndarray
+    b_values: np.ndarray
+    b_vectors: np.ndarray
+    b_delta: np.ndarray
+    axis: str
+
+    @classmethod
+    def of(cls, tensors: np.ndarray, *, axis: str) -> DiffusionTable:
+        """Derive the b-values, b-vectors and shape from ``(N, 3, 3)`` s/m^2."""
+        derived = BTensor.of(
+            B=np.asarray(tensors, dtype=float).reshape(-1, 3, 3),
+            m1=np.zeros((0, 3)),
+            m2=np.zeros((0, 3)),
+            m3=np.zeros((0, 3)),
+            excitation_times=np.zeros(0),
+            echo_times=np.zeros(0),
+        )
+        return cls(
+            b_tensors=derived.b_tensors,
+            b_values=derived.b_values,
+            b_vectors=derived.b_vectors,
+            b_delta=derived.b_delta,
+            axis=str(axis),
+        )
+
+    @classmethod
+    def from_definitions(
+        cls, definitions: dict, *, rotation: np.ndarray | None = None
+    ) -> DiffusionTable:
+        """Read back what ``write_diffusion_definitions`` wrote.
+
+        The one parser, used by both readers: the design side, from a
+        sequence's ``[DEFINITIONS]``, and the reconstruction side, from the MRD
+        header the scanner copied them into. Values may be lists of numbers or
+        the whitespace-joined strings an ISMRMRD ``userParameterString`` holds
+        -- the wire form is a detail of how they travelled, not of what they
+        mean.
+
+        Parameters
+        ----------
+        definitions : dict
+            Keyed by ``bTensorFixed`` / ``bTensorRotatable`` / ``bTensorCross``
+            / ``bTensorAxis``. Only ``bTensorFixed`` and ``bTensorAxis`` are
+            required; a part that was identically zero is not written.
+        rotation : np.ndarray, optional
+            The console's FOV rotation as ``(3, 3)``. Without it the table is
+            in the frame the ``.seq`` describes, which is the right answer only
+            for a preparation played entirely under ``NOROT``.
+        """
+
+        def rows(key):
+            value = definitions.get(key)
+            if value is None:
+                return None
+            if isinstance(value, str):
+                value = value.split()
+            return np.asarray([float(v) for v in value], dtype=float).reshape(-1, 3, 3)
+
+        fixed = rows("bTensorFixed")
+        if fixed is None or "bTensorAxis" not in definitions:
+            raise ValueError(
+                "DiffusionTable.from_definitions(): no bTensorFixed/bTensorAxis entry, so "
+                "this sequence carries no diffusion gradient table. Call "
+                "Sequence.write_diffusion_definitions() on the design side."
+            )
+
+        rotatable = rows("bTensorRotatable")
+        cross = rows("bTensorCross")
+        R = np.eye(3) if rotation is None else np.asarray(rotation, float).reshape(3, 3)
+
+        tensors = np.array(fixed)
+        if rotatable is not None:
+            tensors = tensors + R @ rotatable @ R.T
+        if cross is not None:
+            turned = cross @ R.T
+            tensors = tensors + turned + np.swapaxes(turned, -1, -2)
+
+        axis = definitions["bTensorAxis"]
+        return cls.of(tensors, axis=axis if isinstance(axis, str) else str(axis))
+
+    def mrtrix_table(self) -> np.ndarray:
+        """``(N, 4)`` of ``[x y z b]``, which is MRtrix3's ``-grad``."""
+        return np.column_stack((self.b_vectors, self.b_values))
 
 
 @dataclass(frozen=True)

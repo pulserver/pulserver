@@ -1600,7 +1600,7 @@ int pulseg__get_unique_blocks(
     pulseq_raw_block raw;
     pulseq_raw_extension ext;
     int norot_flag, nopos_flag, once_flag, pmc_flag, nav_flag, once_counter;
-    int module_id;
+    int trid;
     int has_prep, has_cooldown, ctrl;
 
     if (!seq || !desc)
@@ -1810,7 +1810,7 @@ int pulseg__get_unique_blocks(
     pmc_flag = 1;
     nav_flag = 0;
     once_counter = 0;
-    module_id = 0;
+    trid = 0;
     has_prep = 0;
     has_cooldown = 0;
 
@@ -1858,13 +1858,13 @@ int pulseg__get_unique_blocks(
                 has_prep = 1;
             else if (ext.flag.once == 2)
                 has_cooldown = 1;
-            /* MODULE: sticky (pulseq LABEL semantics) -- SET at a block
+            /* TRID: sticky (pulseq LABEL semantics) -- SET at a block
              * persists until the next SET, exactly like norot/nopos/pmc/nav
-             * above. 0 = ungrouped (no MODULE label seen yet). Lives on the
+             * above. 0 = ungrouped (no TRID seen yet). Lives on the
              * per-occurrence block-table entry, never on the deduplicated
              * block definition (int_rows/BLOCK_DEF_COLS above excludes it),
              * so it has zero dedup footprint by construction. */
-            module_id = (ext.flag.module_id >= 0) ? ext.flag.module_id : module_id;
+            trid = (ext.flag.trid >= 0) ? ext.flag.trid : trid;
         }
         else
         {
@@ -1877,7 +1877,7 @@ int pulseg__get_unique_blocks(
         tmp_blk_tab[n].pmc_flag = pmc_flag;
         tmp_blk_tab[n].once_flag = once_flag;
         tmp_blk_tab[n].nav_flag = nav_flag;
-        tmp_blk_tab[n].module_id = module_id;
+        tmp_blk_tab[n].trid = trid;
     }
 
     /* step 3: dedup blocks */

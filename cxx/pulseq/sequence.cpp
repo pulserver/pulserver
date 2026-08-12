@@ -32,10 +32,12 @@ namespace pulseq
     const std::vector<std::string>& Sequence::builtin_labels()
     {
         // Pulseq's own list, in the order that numbers it.  Deliberately the
-        // 22 names PyPulseq exposes and not the 24 the C reader's table
-        // carries: the two extra there (OFF, MODULE) are this project's, and a
-        // sequence using one is using a name Pulseq does not define -- which
-        // is precisely what raises the file to revision 1.5.2.
+        // 22 names PyPulseq exposes and not the 23 the C reader's table
+        // carries: the extra one there (OFF) is this project's, and a sequence
+        // using it is using a name Pulseq does not define -- which is
+        // precisely what raises the file to revision 1.5.2.  TRID is in this
+        // list and so costs nothing, which is one reason Pulserver's
+        // safety-group label is TRID and not a name of its own.
         static const std::vector<std::string> names{
             "SLC", "SEG", "REP", "AVG", "SET",   "ECO", "PHS",   "LIN",
             "PAR", "ACQ", "NAV", "REV", "SMS",   "REF", "IMA",   "NOISE",

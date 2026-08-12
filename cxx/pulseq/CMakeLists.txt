@@ -15,6 +15,7 @@ add_library(pulseqpp STATIC
     trajectory.cpp
     kspace.cpp
     kspace_sequence.cpp
+    moments.cpp
     autolabel.cpp
     expand.cpp
     # The vendored MD5, compiled as C for the [SIGNATURE] section. raw64.cpp

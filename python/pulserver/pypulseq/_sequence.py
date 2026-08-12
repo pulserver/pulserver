@@ -1816,7 +1816,9 @@ class Sequence:
             MATLAB's ``(B, m1, m2, m3)`` by default -- ``B`` shaped
             ``(R, 3, 3)`` in s/m^2, the moments ``(R, 3)``. ``False`` returns a
             :class:`~._results.BTensor`, which adds the b-values, b-vectors and
-            per-shot tensors in the units and shapes a diffusion pipeline takes.
+            per-shot tensors in the units and shapes a diffusion pipeline
+            takes, the deduplicated table, and the split by what the console's
+            prescription rotates.
 
         Returns
         -------
@@ -1834,100 +1836,74 @@ class Sequence:
         trajectory; the number is the same one the reconstruction and the
         scanner use. So a twice-refocused, an oscillating-gradient or a
         free-waveform sequence is handled by the same code as a Stejskal-Tanner
-        one, with no special case.
+        one, with no special case. The two-pulse formula is still the fallback
+        for a design that has no readout yet, and only when it lands inside the
+        shot's own interval.
 
-        MATLAB flips the gradient sign once, at the first refocusing pulse in
-        the interval. The sign here flips at *every* refocusing pulse, which is
-        the same answer for one and the right one for two.
+        The integration is exact rather than sampled: a Pulseq gradient is
+        piecewise linear, so ``q`` is piecewise quadratic and ``q_i q_j``
+        piecewise quartic, and each piece is integrated in closed form. An
+        arbitrary gradient stored on the centres raster has its raster-edge
+        samples restored first, as :meth:`waveforms` does.
 
-        The waveforms are this class's, so an arbitrary gradient stored on the
-        centres raster has its raster-edge samples restored -- see
-        :meth:`waveforms`. The integration is exact rather than sampled: a
-        Pulseq gradient is piecewise linear, so ``q`` is piecewise quadratic
-        and ``q_i q_j`` piecewise quartic, and each piece is integrated in
-        closed form.
+        The arithmetic is :func:`pulseq::calc_moments`, in ``cxx/pulseq``, so
+        LiveSDK computes the same numbers from the same ``.seq`` and a
+        diffusion gradient table can reach the MRD stream. It is **not** in the
+        C89 core: the interpreter plays gradients and never needs a b-value,
+        and only the reconstruction does.
 
         See Also
         --------
         Sequence.calculate_kspace : the trajectory the echo positions come from.
+        Sequence.write_diffusion_definitions : put the table in the ``.seq``.
         """
         first, last = self._window_for(time_range)
-        window = self._upstream_window(first, last)
+        result = self._native.calc_moments(
+            bool(calc_b), bool(calc_m1), bool(calc_m2), bool(calc_m3), int(n_dummy), first, last
+        )
 
-        channels = window.waveforms()
-        pulses = self._rf_times_of(window, 0.0)
-        excitations = np.sort(pulses.of("excitation", "undefined").t)
-        refocusings = np.sort(pulses.of("refocusing").t)
-
-        if n_dummy:
-            excitations = excitations[int(n_dummy) :]
-        if excitations.size == 0:
+        shots = result["t_excitation"].size
+        if shots == 0:
             raise ValueError(
                 "calc_moments_btensor(): the window holds no excitation pulse, so there "
                 "is nothing to integrate from. A b-tensor is per excitation."
             )
 
-        _, echoes = self._echo_centers((first, last))
-        echoes = np.asarray(echoes, dtype=float)
-        echoes = np.sort(echoes[np.isfinite(echoes)])
+        def _tensor(name: str) -> np.ndarray:
+            value = result[name]
+            return value if value.size else np.zeros((shots, 3, 3))
 
-        ends = np.concatenate((excitations[1:], [self._window_end(channels)]))
-        moments = [order for order, wanted in ((1, calc_m1), (2, calc_m2), (3, calc_m3)) if wanted]
+        def _vector(name: str) -> np.ndarray:
+            value = result[name]
+            return value if value.size else np.zeros((shots, 3))
 
-        b_tensor = np.zeros((excitations.size, 3, 3))
-        gradient_moments = {order: np.zeros((excitations.size, 3)) for order in (1, 2, 3)}
-        echo_times = np.full(excitations.size, np.nan)
-
-        for shot, (start, limit) in enumerate(zip(excitations, ends)):
-            echo = self._echo_for(start, limit, echoes, refocusings)
-            echo_times[shot] = echo
-            if not np.isfinite(echo) or echo <= start:
-                continue
-
-            pieces = _gradient_pieces(channels, start, echo, refocusings)
-            if calc_b:
-                b_tensor[shot] = _b_tensor_over(pieces)
-            for order in moments:
-                gradient_moments[order][shot] = _moment_over(pieces, order)
+        fixed, rotatable, cross = _tensor("b_fixed"), _tensor("b_rotatable"), _tensor("b_cross")
+        b_tensor = fixed + rotatable + cross + np.swapaxes(cross, -1, -2)
+        m1, m2, m3 = _vector("m1"), _vector("m2"), _vector("m3")
 
         if compat:
-            return (
-                b_tensor,
-                gradient_moments[1],
-                gradient_moments[2],
-                gradient_moments[3],
-            )
+            return (b_tensor, m1, m2, m3)
+
+        table_cross = result["table_cross"]
+        table = (
+            result["table_fixed"]
+            + result["table_rotatable"]
+            + table_cross
+            + np.swapaxes(table_cross, -1, -2)
+        )
         return _results.BTensor.of(
             B=b_tensor,
-            m1=gradient_moments[1],
-            m2=gradient_moments[2],
-            m3=gradient_moments[3],
-            excitation_times=excitations,
-            echo_times=echo_times,
+            m1=m1,
+            m2=m2,
+            m3=m3,
+            excitation_times=result["t_excitation"],
+            echo_times=result["t_echo"],
+            b_fixed=fixed,
+            b_rotatable=rotatable,
+            b_cross=cross,
+            b_tensor_table=table,
+            table_index=result["table_index"],
         )
-
-    @staticmethod
-    def _window_end(channels: list[np.ndarray]) -> float:
-        """The last time any gradient channel carries, seconds."""
-        ends = [channel[0, -1] for channel in channels if channel.shape[1]]
-        return float(max(ends)) if ends else 0.0
-
-    @staticmethod
-    def _echo_for(start: float, limit: float, echoes: np.ndarray, refocusings: np.ndarray) -> float:
-        """When this shot's echo happens.
-
-        The first measured echo centre in the interval, and only if there is
-        none does this fall back to MATLAB's ``2*t_refocusing - t_excitation``
-        -- which is there for a sequence with no ADC at all (a design being
-        checked before its readout is attached), not as an equal alternative.
-        """
-        inside = echoes[(echoes > start) & (echoes <= limit)]
-        if inside.size:
-            return float(inside[0])
-        refocused = refocusings[(refocusings > start) & (refocusings < limit)]
-        if refocused.size:
-            return float(2.0 * refocused[0] - start)
-        return float("nan")
 
     def check_timing(self, print_errors: bool = False):  # noqa: ARG002 - upstream's signature
         """Check every block's timing against the raster. Not ported, deliberately.
@@ -1967,6 +1943,163 @@ class Sequence:
         the one to quote.
         """
         return self._upstream_window(1, self.num_blocks).test_report()
+
+    #: The ``[DEFINITIONS]`` keys :meth:`Sequence.write_diffusion_definitions`
+    #: writes, and the ones the reconstruction reads back out of the MRD
+    #: header. Named once so the two sides cannot drift.
+    DIFFUSION_DEFINITIONS = ("bTensorFixed", "bTensorRotatable", "bTensorCross", "bTensorAxis")
+
+    def diffusion_definitions(
+        self,
+        *,
+        axis: str,
+        n_dummy: int = 0,
+        time_range: list[float] | None = None,
+    ) -> dict[str, object]:
+        """The diffusion gradient table as ``[DEFINITIONS]`` entries.
+
+        Parameters
+        ----------
+        axis : str
+            The label counter whose value selects a row -- ``"SET"``,
+            ``"ECO"``, whichever the design's
+            :class:`~pulserver.ScanLoop` declared for its diffusion dimension.
+        n_dummy : int, default 0
+            Leading excitations to skip.
+        time_range : list of float, optional
+            ``[start, stop]`` in seconds. The whole sequence by default.
+
+        Returns
+        -------
+        dict
+            ``{key: value}`` for :meth:`set_definition`. ``bTensorRotatable``
+            and ``bTensorCross`` are omitted when identically zero, which is
+            the case for a preparation played entirely under ``NOROT``.
+
+        Raises
+        ------
+        ValueError
+            When ``axis`` does not index the tensors: its values are not
+            ``0..N-1``, or two shots that share a value do not share a tensor.
+            Both mean the table would be indexed wrongly by whoever reads it,
+            and a wrong b-vector is not something a pipeline can notice.
+
+        Notes
+        -----
+        Three matrices rather than one, because the console's FOV rotation is
+        not in the ``.seq`` -- see :class:`~._results.BTensor`. They are
+        written verbatim into the MRD header by
+        ``mrdserver::add_diffusion_parameters`` and composed with the
+        acquisition's direction cosines on the reconstruction side, so the
+        scanner never has to know a rotation convention.
+
+        See Also
+        --------
+        Sequence.write_diffusion_definitions : this, stored on the sequence.
+        Sequence.calc_moments_btensor : where the tensors come from.
+        """
+        result = self.calc_moments_btensor(
+            n_dummy=n_dummy, time_range=time_range, compat=False
+        )
+        counters = self._counter_at(axis, result.echo_times, result.excitation_times)
+        order = self._diffusion_rows(axis, counters, result)
+
+        definitions: dict[str, object] = {"bTensorAxis": axis}
+        for key, part in (
+            ("bTensorFixed", result.b_fixed),
+            ("bTensorRotatable", result.b_rotatable),
+            ("bTensorCross", result.b_cross),
+        ):
+            rows = np.asarray(part, dtype=float)[order]
+            if key != "bTensorFixed" and not np.any(rows):
+                continue
+            definitions[key] = rows.reshape(-1).tolist()
+        return definitions
+
+    def write_diffusion_definitions(
+        self, *, axis: str, n_dummy: int = 0
+    ) -> _results.DiffusionTable:
+        """Compute the diffusion table, check it, and store it on the sequence.
+
+        Parameters
+        ----------
+        axis : str
+            The label counter whose value selects a row.
+        n_dummy : int, default 0
+            Leading excitations to skip.
+
+        Returns
+        -------
+        DiffusionTable
+            The table as written, in the units a diffusion pipeline takes.
+
+        See Also
+        --------
+        Sequence.diffusion_definitions : the entries, without storing them.
+        """
+        definitions = self.diffusion_definitions(axis=axis, n_dummy=n_dummy)
+        for key, value in definitions.items():
+            self.set_definition(key, value)
+        return _results.DiffusionTable.from_definitions(definitions)
+
+    def _counter_at(
+        self, axis: str, echoes: np.ndarray, excitations: np.ndarray
+    ) -> np.ndarray:
+        """The value of label ``axis`` in force at each shot's echo.
+
+        The echo rather than the excitation, because a counter is normally set
+        just before the readout it labels; a shot whose echo was not found
+        falls back to its excitation, which is the best that is left.
+        """
+        evolution = self.evaluate_labels(evolution="blocks").get(axis)
+        if evolution is None:
+            raise ValueError(
+                f"diffusion_definitions(): the sequence never sets a {axis!r} label, so "
+                f"there is nothing for a reconstruction to index the table by. Give the "
+                f"ScanLoop an axis for the diffusion dimension, or name the one it has."
+            )
+
+        ends = np.cumsum(np.asarray(self.block_durations, dtype=float))
+        times = np.where(np.isfinite(echoes), echoes, excitations)
+        blocks = np.clip(np.searchsorted(ends, times, side="left"), 0, len(evolution) - 1)
+        return np.asarray(evolution, dtype=int)[blocks]
+
+    @staticmethod
+    def _diffusion_rows(axis: str, counters: np.ndarray, result) -> np.ndarray:
+        """One shot index per counter value, having checked that is well posed."""
+        values = np.unique(counters)
+        expected = np.arange(values.size)
+        if not np.array_equal(values, expected):
+            raise ValueError(
+                f"diffusion_definitions(): {axis} takes values {values.tolist()}, which do "
+                f"not index a table -- a consumer reads row {axis} of it, so the values "
+                f"have to be 0..{values.size - 1}. Renumber the axis, or name the counter "
+                f"that really varies with the diffusion encoding."
+            )
+
+        parts = np.concatenate(
+            (
+                np.asarray(result.b_fixed, dtype=float).reshape(len(counters), 9),
+                np.asarray(result.b_rotatable, dtype=float).reshape(len(counters), 9),
+                np.asarray(result.b_cross, dtype=float).reshape(len(counters), 9),
+            ),
+            axis=1,
+        )
+        scale = max(float(np.abs(parts).max()), np.finfo(float).tiny)
+
+        first = np.zeros(values.size, dtype=int)
+        for value in values.tolist():
+            shots = np.flatnonzero(counters == value)
+            first[value] = shots[0]
+            spread = float(np.abs(parts[shots] - parts[shots[0]]).max()) / scale
+            if spread > 1e-6:
+                raise ValueError(
+                    f"diffusion_definitions(): shots {shots.tolist()} all carry {axis}="
+                    f"{value} but their b-tensors differ by {spread:.3g} of the largest "
+                    f"element, so one row cannot describe them. {axis} is not the axis the "
+                    f"diffusion encoding varies along."
+                )
+        return first
 
     def calc_rf_power(
         self,
@@ -3276,121 +3409,6 @@ class _Structure:
                 f"tr={index} is out of range; the sequence holds {self.num_instances} {named}"
             )
         return _safety.AMPLITUDE_MODES["actual"], index
-
-
-class _Pieces:
-    """One shot's gradients as straight-line pieces, refocusing folded in.
-
-    ``offsets`` and ``widths`` locate each piece relative to the excitation;
-    ``start`` and ``slope`` are its gradient in Hz/m and Hz/m/s. Between two
-    nodes each channel is a single straight line, which is what lets the
-    integrals below be closed-form rather than sampled.
-
-    **The sign belongs to the piece, not to the node.** A refocusing pulse
-    inverts the phase accumulated so far, which is the same as inverting every
-    gradient after it -- but the node *at* the pulse is the end of one piece
-    and the start of the next, and those two want opposite signs. So the flip
-    is counted per piece, from its own start time, and the sign multiplies
-    both of that piece's endpoints. Every refocusing instant is forced into
-    the grid, so no piece ever straddles one.
-
-    The flip happens at *every* refocusing pulse rather than only the first,
-    which is the same answer for a Stejskal-Tanner pair and the right one for
-    a twice-refocused sequence -- where MATLAB's single flip is wrong, and
-    says so in its own ``TODO``.
-    """
-
-    __slots__ = ("offsets", "widths", "start", "slope")
-
-    def __init__(self, times: np.ndarray, gradients: np.ndarray, flips: np.ndarray) -> None:
-        widths = np.diff(times)
-        keep = widths > 0
-        self.widths = widths[keep]
-        self.offsets = (times[:-1] - times[0])[keep]
-
-        signs = ((-1.0) ** np.searchsorted(flips, times[:-1], side="right"))[keep, None]
-        first = gradients[:-1][keep] * signs
-        last = gradients[1:][keep] * signs
-        self.start = first
-        self.slope = np.divide(
-            last - first, self.widths[:, None], out=np.zeros_like(first), where=self.widths[:, None] > 0
-        )
-
-    def __len__(self) -> int:
-        return int(self.widths.size)
-
-
-def _gradient_pieces(
-    channels: list[np.ndarray], start: float, stop: float, refocusings: np.ndarray
-) -> _Pieces:
-    """The three gradients over ``start..stop`` as :class:`_Pieces`.
-
-    The grid is the union of every channel's own nodes with the interval ends
-    and the refocusing instants.
-    """
-    inside = refocusings[(refocusings > start) & (refocusings < stop)]
-    nodes = [np.array([start, stop], dtype=float), inside]
-    for channel in channels[:3]:
-        if channel.shape[1]:
-            nodes.append(channel[0])
-
-    times = np.unique(np.concatenate(nodes))
-    times = times[(times >= start) & (times <= stop)]
-
-    gradients = np.zeros((times.size, 3))
-    for axis, channel in enumerate(channels[:3]):
-        if channel.shape[1]:
-            gradients[:, axis] = np.interp(times, channel[0], channel[1], left=0.0, right=0.0)
-    return _Pieces(times, gradients, inside)
-
-
-def _b_tensor_over(pieces: _Pieces) -> np.ndarray:
-    """``(3, 3)`` of ``integral q_i q_j dt`` in s/m^2, exactly.
-
-    ``q = 2*pi*integral g dt`` in rad/m. A Pulseq gradient is piecewise
-    linear, so ``q`` is piecewise quadratic and the product of two of its
-    components is a quartic -- integrated in closed form per piece rather than
-    sampled, which is what makes the answer independent of any raster.
-    """
-    if not len(pieces):
-        return np.zeros((3, 3))
-
-    widths = pieces.widths
-    # q(tau) = q0 + 2*pi*(a*tau + b*tau**2/2), as coefficients in tau.
-    increments = 2 * np.pi * (
-        pieces.start * widths[:, None] + 0.5 * pieces.slope * widths[:, None] ** 2
-    )
-    origins = np.zeros_like(increments)
-    origins[1:] = np.cumsum(increments, axis=0)[:-1]
-    coefficients = np.stack(
-        (origins, 2 * np.pi * pieces.start, np.pi * pieces.slope), axis=-1
-    )  # (n, 3, 3)
-
-    # The integral of tau**(p+q) over a piece, as a weight per coefficient pair.
-    powers = np.arange(3)
-    orders = powers[:, None] + powers[None, :] + 1
-    weights = widths[:, None, None] ** orders / orders
-    return np.einsum("nip,njq,npq->ij", coefficients, coefficients, weights)
-
-
-def _moment_over(pieces: _Pieces, order: int) -> np.ndarray:
-    """``2*pi*integral g(t) * (t - t0)**order dt`` per axis, exactly.
-
-    Units are rad/m times seconds to the ``order``. The weight is measured
-    from the excitation, which is where MATLAB measures it from.
-    """
-    from math import comb
-
-    if not len(pieces):
-        return np.zeros(3)
-
-    total = np.zeros(3)
-    for power in range(order + 1):
-        # (offset + tau)**order expanded, times the piece's own (a + b*tau).
-        weight = comb(order, power) * pieces.offsets ** (order - power)
-        for degree, coefficient in ((power, pieces.start), (power + 1, pieces.slope)):
-            total += weight * pieces.widths ** (degree + 1) / (degree + 1) @ coefficient
-    return 2 * np.pi * total
 
 
 def _worst_window(durations: np.ndarray, values: np.ndarray, width: float) -> float:

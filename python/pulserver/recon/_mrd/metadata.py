@@ -13,9 +13,15 @@ __all__ = [
     "MrdMetadata",
     "acquisition_label",
     "acquisition_labels",
+    "diffusion_table",
     "has_acquisition_flag",
     "user_parameter",
 ]
+
+#: The header entries a Pulserver sequence carries its diffusion encoding in.
+#: Named on this side too, and only here, so the reader and
+#: ``Sequence.DIFFUSION_DEFINITIONS`` cannot drift apart silently.
+DIFFUSION_PARAMETERS = ("bTensorFixed", "bTensorRotatable", "bTensorCross", "bTensorAxis")
 
 
 def user_parameter(metadata: Any, name: str, default: Any = None) -> Any:
@@ -52,6 +58,62 @@ def acquisition_label(acquisition: Any, name: str, default: Any = None) -> Any:
     if index is not None and hasattr(index, name):
         return getattr(index, name)
     return getattr(acquisition, name, default)
+
+
+def diffusion_table(metadata: Any, *, rotation: Any = None) -> Any:
+    """The scan's diffusion gradient table, or ``None`` if it carries none.
+
+    Reads the ``bTensor*`` user parameters the scanner copied out of the
+    sequence's ``[DEFINITIONS]`` (``mrdserver::add_diffusion_parameters``) and
+    returns a :class:`~pulserver.pypulseq.DiffusionTable` -- the same type the
+    design side produces, so a table recovered from a scan and one computed
+    from the script that made it are directly comparable.
+
+    Parameters
+    ----------
+    metadata : object
+        A parsed ISMRMRD header, or anything with a ``userParameters``.
+    rotation : array_like, optional
+        The prescription as a ``(3, 3)`` matrix taking the sequence's logical
+        axes to physical ones -- in MRD terms
+        ``numpy.stack((read_dir, phase_dir, slice_dir))`` from any acquisition
+        of the scan. The b-tensor is carried in three parts because the
+        console's FOV rotation is not in the ``.seq``, and this is what puts
+        them together. Leaving it out is right only when the diffusion
+        preparation was played entirely under ``NOROT``, which is the usual
+        case and the one the design should aim for.
+
+    Returns
+    -------
+    DiffusionTable or None
+
+    Examples
+    --------
+    Feeding DIPY, which wants the unnormalised tensor whose trace is the
+    b-value::
+
+        table = diffusion_table(header)
+        gtab = gradient_table(table.b_values, table.b_vectors,
+                              btens=table.b_tensors)
+
+    and MRtrix3, whose ``-grad`` table is ``[x y z b]``::
+
+        numpy.savetxt("grad.b", table.mrtrix_table())
+
+    ``table.axis`` names the MRD counter whose value indexes a row, so an
+    acquisition's encoding is ``table.b_tensors[acq.idx.set]`` when it is
+    ``"SET"``.
+    """
+    from pulserver.pypulseq import DiffusionTable
+
+    found = {}
+    for name in DIFFUSION_PARAMETERS:
+        value = user_parameter(metadata, name)
+        if value is not None:
+            found[name] = value
+    if "bTensorFixed" not in found:
+        return None
+    return DiffusionTable.from_definitions(found, rotation=rotation)
 
 
 def acquisition_labels(acquisition: Any) -> dict[str, Any]:

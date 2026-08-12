@@ -268,8 +268,8 @@ typedef struct pulseg_rf_stats
      *     vendor variants, a sibling struct may be added later and
      *     selected via this field) ---                                 */
     int vendor; /**< PULSEG_VENDOR_* constant (0 = unspecified -> GEHC for back-compat) */
-    /* --- safety-group module label (appended; do not reorder above) --- */
-    int module_id; /**< sticky MODULE label id of the originating block, 0 = ungrouped */
+    /* --- safety-group label (appended; do not reorder above) --- */
+    int trid; /**< sticky pulseq TRID of the originating block, 0 = ungrouped */
 } pulseg_rf_stats;
 
 /* clang-format off */
@@ -280,18 +280,25 @@ typedef struct pulseg_rf_stats
 /* clang-format on */
 
 /**
- * @brief One entry per distinct MODULE-labeled group in a subsequence,
- * as identified/verified/deduplicated by pulseg_get_modules() from the
- * materialized scan table. See pulseg_get_modules() for the identify ->
+ * @brief One entry per distinct TRID-labeled group in a subsequence, as
+ * identified/verified/deduplicated by pulseg_get_tr_groups() from the
+ * materialized scan table. See pulseg_get_tr_groups() for the identify ->
  * verify-structural-identity -> dedup algorithm.
+ *
+ * TRID is Pulseq's own label for "the repeating unit of the sequence"
+ * (mr.getSupportedLabels: "an integer ID of the TR (sequence segment) used by
+ * the GE interpreter (and some others) to optimize the execution on the
+ * scanner"), which is exactly the grouping a per-contrast SAR check wants --
+ * see the NeuroMix scheme, where each contrast is evaluated against the 10 s
+ * limit and the whole run against the 6 min one.
  */
-typedef struct pulseg_module
+typedef struct pulseg_tr_group
 {
-    int module_id;                /**< sticky MODULE label id (>=1)      */
+    int trid;                     /**< sticky pulseq TRID (>=1)          */
     int one_instance_duration_us; /**< duration of the validated reference occurrence */
     int total_duration_us;        /**< num_instances * one_instance_duration_us */
     int num_instances;            /**< count of structurally-identical occurrences */
-} pulseg_module;
+} pulseg_tr_group;
 
 /* ================================================================== */
 /*  TR region selectors (for freq-mod plan)                           */
@@ -768,8 +775,8 @@ typedef struct pulseg_block_instance
     float adc_freq_hz;   /**< ADC frequency offset (Hz)         */
     float adc_phase_rad; /**< ADC phase offset (rad)            */
 
-    /* Safety-group module label (sticky pulseq MODULE, 0 = ungrouped) */
-    int module_id;
+    /* Safety group (sticky pulseq TRID, 0 = ungrouped) */
+    int trid;
 } pulseg_block_instance;
 
 /* clang-format off */

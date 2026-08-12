@@ -28,6 +28,7 @@ __all__ = [
     "corrections",
     "denoisers",
     "density",
+    "diffusion_table",
     "execution",
     "motion",
     "optim",
@@ -72,6 +73,10 @@ def __getattr__(name: str) -> Any:
         return getattr(importlib.import_module(f"{__name__}.app"), name)
     if name == "pics":
         return importlib.import_module(f"{__name__}.algorithms").pics
+    if name == "diffusion_table":
+        # In _mrd because it reads an MRD header, public because reading one
+        # is what a diffusion pipeline does first.
+        return importlib.import_module(f"{__name__}._mrd.metadata").diffusion_table
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

@@ -125,7 +125,7 @@ static void assert_matches_tables(
     }
 
     mu_assert_int_eq(bte->rf_shim_id, inst->rf_shim_id);
-    mu_assert_int_eq(bte->module_id, inst->module_id);
+    mu_assert_int_eq(bte->trid, inst->trid);
     mu_assert_int_eq(bte->norot_flag, inst->norot_flag);
     mu_assert_int_eq(bte->nopos_flag, inst->nopos_flag);
 }
